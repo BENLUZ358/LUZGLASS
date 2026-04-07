@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LuzGlass — סקיצה טכנית</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#f7f4ef; --bg2:#ede9e1; --surface:#fff;
+    --border:rgba(0,0,0,0.08); --text:#1a1714; --muted:#8a8278; --gold:#b8922a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;}
+
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px 10px;position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;}
+  .topbar-info .title{font-size:15px;font-weight:700;}
+  .topbar-info .sub{font-size:11px;color:var(--muted);margin-top:1px;}
+  .topbar-logo{font-size:16px;font-weight:900;color:var(--text);}
+  .topbar-logo span{color:var(--gold);}
+
+  .canvas-wrap{background:var(--surface);margin:12px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);overflow:hidden;}
+  canvas{display:block;width:100%;height:auto;}
+
+  .controls{margin:0 12px 12px;display:flex;flex-direction:column;gap:2px;}
+  .ctrl-section{background:var(--surface);border:1px solid var(--border);overflow:hidden;}
+  .ctrl-head{padding:13px 16px;font-size:10px;font-weight:600;letter-spacing:0.2em;color:var(--gold);text-transform:uppercase;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;background:var(--bg);}
+  .ctrl-head .arr{font-size:10px;transition:transform 0.2s;color:var(--muted);}
+  .ctrl-head.open .arr{transform:rotate(180deg);}
+  .ctrl-body{padding:14px 16px;display:none;flex-direction:column;gap:10px;border-top:1px solid var(--border);}
+  .ctrl-body.open{display:flex;}
+
+  .row{display:flex;align-items:center;gap:10px;}
+  .row label{font-size:13px;color:var(--muted);flex:1;}
+  .row input,.row select{width:88px;padding:9px 10px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:14px;color:var(--text);outline:none;text-align:center;-webkit-appearance:none;border-radius:0;}
+  .row input:focus,.row select:focus{border-color:var(--gold);}
+  .unit{font-size:11px;color:var(--muted);width:22px;text-align:right;}
+
+  .tog{display:flex;gap:6px;}
+  .tog-btn{flex:1;padding:10px;background:var(--bg);border:1px solid transparent;font-family:'Heebo',sans-serif;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;text-align:center;transition:all 0.15s;}
+  .tog-btn.active{background:var(--bg2);border-color:var(--gold);color:var(--text);}
+
+  .specs{background:var(--surface);border:1px solid var(--border);margin:0 12px;padding:14px 16px;font-size:13px;line-height:1.9;color:var(--muted);border-right:3px solid var(--gold);}
+  .specs strong{color:var(--text);font-weight:700;font-size:13px;display:block;margin-bottom:4px;}
+
+  .btn-dl{display:block;margin:12px;padding:16px;background:var(--text);color:var(--bg);font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;border:none;cursor:pointer;text-align:center;width:calc(100% - 24px);transition:background 0.2s;}
+  .btn-dl:active{background:var(--gold);}
+  .spacer{height:28px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-info">
+    <div class="title">חזית — קבוע ודלת</div>
+    <div class="sub">סקיצה טכנית אינטראקטיבית</div>
+  </div>
+  <div class="topbar-logo">Luz<span>Glass</span></div>
+</div>
+
+<div class="canvas-wrap"><canvas id="sk"></canvas></div>
+
+<div class="controls">
+
+  <div class="ctrl-section">
+    <div class="ctrl-head open" onclick="tog(this)"><span>מידות</span><span class="arr">▾</span></div>
+    <div class="ctrl-body open">
+      <div class="row"><label>רוחב קבוע</label><input type="number" id="fW" value="50" min="20" max="150" oninput="draw()"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>רוחב דלת</label><input type="number" id="dW" value="80" min="40" max="150" oninput="draw()"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>גובה</label><input type="number" id="hH" value="200" min="100" max="300" oninput="draw()"><span class="unit">ס״מ</span></div>
+    </div>
+  </div>
+
+  <div class="ctrl-section">
+    <div class="ctrl-head" onclick="tog(this)"><span>צירים E400</span><span class="arr">▾</span></div>
+    <div class="ctrl-body">
+      <div class="row"><label>מרחק מלמעלה</label><input type="number" id="hgT" value="20" min="5" max="60" oninput="draw()"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>מרחק מלמטה</label><input type="number" id="hgB" value="20" min="5" max="60" oninput="draw()"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>מספר צירים</label>
+        <select id="hgN" onchange="draw()" style="width:110px">
+          <option value="2">2 (סטנדרט)</option>
+          <option value="3">3 (גדולה)</option>
+        </select><span class="unit"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctrl-section">
+    <div class="ctrl-head" onclick="tog(this)"><span>ידית</span><span class="arr">▾</span></div>
+    <div class="ctrl-body">
+      <div class="tog">
+        <button class="tog-btn active" id="bKnob" onclick="setH('knob')">כפתור</button>
+        <button class="tog-btn" id="bTowel" onclick="setH('towel')">מגבת</button>
+      </div>
+      <div class="row"><label>מרחק מקצה</label><input type="number" id="hEd" value="6" min="3" max="20" oninput="draw()"><span class="unit">ס״מ</span></div>
+      <div class="row" id="tSRow" style="display:none"><label>מרחק בין חורים</label><input type="number" id="tSp" value="55" min="30" max="100" oninput="draw()"><span class="unit">ס״מ</span></div>
+    </div>
+  </div>
+
+  <div class="ctrl-section">
+    <div class="ctrl-head" onclick="tog(this)"><span>זוויות קבוע</span><span class="arr">▾</span></div>
+    <div class="ctrl-body">
+      <div class="row"><label>מרחק מלמעלה</label><input type="number" id="brT" value="20" min="5" max="60" oninput="draw()"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>מרחק מלמטה</label><input type="number" id="brB" value="20" min="5" max="60" oninput="draw()"><span class="unit">ס״מ</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="specs" id="specs"><strong>פרטי הזמנה</strong>טוען...</div>
+<button class="btn-dl" onclick="dlPNG()">📥 הורד סקיצה (PNG)</button>
+<div class="spacer"></div>
+
+<script>
+const C = document.getElementById('sk');
+const cx = C.getContext('2d');
+let hType = 'knob';
+
+function tog(h) {
+  h.classList.toggle('open');
+  h.nextElementSibling.classList.toggle('open');
+}
+function setH(t) {
+  hType = t;
+  document.getElementById('bKnob').classList.toggle('active', t==='knob');
+  document.getElementById('bTowel').classList.toggle('active', t==='towel');
+  document.getElementById('tSRow').style.display = t==='towel' ? 'flex' : 'none';
+  draw();
+}
+const v = id => parseFloat(document.getElementById(id).value)||0;
+
+function draw() {
+  const fW=v('fW'), dW=v('dW'), hH=v('hH');
+  const hgT=v('hgT'), hgB=v('hgB'), hgN=parseInt(document.getElementById('hgN').value);
+  const hEd=v('hEd'), tSp=v('tSp'), brT=v('brT'), brB=v('brB');
+  const totW = fW+dW;
+
+  const DPR = window.devicePixelRatio||1;
+  const cW = C.parentElement.clientWidth;
+  const MG = 54;
+  const sc = (cW - MG*2) / totW;
+  const cH = hH*sc + MG*2 + 30;
+
+  C.width = cW*DPR; C.height = cH*DPR;
+  C.style.width = cW+'px'; C.style.height = cH+'px';
+  cx.scale(DPR, DPR);
+
+  const ox = MG + (cW-MG*2-totW*sc)/2;
+  const oy = MG - 8;
+  const FW=fW*sc, DWp=dW*sc, H=hH*sc;
+
+  cx.clearRect(0,0,cW,cH);
+  cx.fillStyle='#fff'; cx.fillRect(0,0,cW,cH);
+
+  // grid
+  cx.strokeStyle='rgba(0,0,0,0.03)'; cx.lineWidth=1;
+  const gs=Math.max(8,8*sc);
+  for(let x=0;x<cW;x+=gs){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,cH);cx.stroke();}
+  for(let y=0;y<cH;y+=gs){cx.beginPath();cx.moveTo(0,y);cx.lineTo(cW,y);cx.stroke();}
+
+  // glass panel
+  function gRect(x,y,w,h,door){
+    cx.fillStyle=door?'rgba(180,215,240,0.2)':'rgba(180,215,240,0.1)';
+    cx.fillRect(x,y,w,h);
+    cx.strokeStyle='#2a5a8a'; cx.lineWidth=door?2.5:2;
+    cx.strokeRect(x,y,w,h);
+    cx.strokeStyle='rgba(42,90,138,0.1)'; cx.lineWidth=1;
+    for(let i=0;i<w;i+=10){
+      cx.beginPath();cx.moveTo(x+i,y);cx.lineTo(x+i+5,y+5);cx.stroke();
+      cx.beginPath();cx.moveTo(x+i,y+h);cx.lineTo(x+i+5,y+h-5);cx.stroke();
+    }
+  }
+
+  function hinge(x,y){
+    const hw=Math.max(6,sc*0.65),hh=Math.max(13,sc*1.3);
+    cx.fillStyle='#b8922a'; cx.fillRect(x-hw/2,y-hh/2,hw,hh);
+    cx.strokeStyle='#7a5e10'; cx.lineWidth=1; cx.strokeRect(x-hw/2,y-hh/2,hw,hh);
+    cx.fillStyle='#fff'; cx.beginPath(); cx.arc(x,y,1.8,0,Math.PI*2); cx.fill();
+  }
+
+  function bracket(x,y){
+    const s=Math.max(9,sc*0.75);
+    cx.strokeStyle='#b8922a'; cx.lineWidth=2.5;
+    cx.beginPath(); cx.moveTo(x+s,y); cx.lineTo(x,y); cx.lineTo(x,y+s); cx.stroke();
+    cx.fillStyle='#b8922a'; cx.beginPath(); cx.arc(x,y,2.8,0,Math.PI*2); cx.fill();
+  }
+
+  function hole(x,y){
+    const r=Math.max(3.5,sc*0.32);
+    cx.beginPath(); cx.arc(x,y,r,0,Math.PI*2);
+    cx.fillStyle='rgba(184,146,42,0.15)'; cx.fill();
+    cx.strokeStyle='#b8922a'; cx.lineWidth=1.5; cx.stroke();
+    cx.beginPath(); cx.moveTo(x-r+1,y); cx.lineTo(x+r-1,y); cx.stroke();
+    cx.beginPath(); cx.moveTo(x,y-r+1); cx.lineTo(x,y+r-1); cx.stroke();
+  }
+
+  function dim(x1,y1,x2,y2,txt,off,horiz){
+    cx.save();
+    cx.strokeStyle='#b8922a'; cx.fillStyle='#b8922a';
+    cx.lineWidth=0.8; cx.setLineDash([3,3]);
+    const ox2=horiz?0:off, oy2=horiz?off:0;
+    cx.beginPath();cx.moveTo(x1,y1);cx.lineTo(x1+ox2,y1+oy2);cx.stroke();
+    cx.beginPath();cx.moveTo(x2,y2);cx.lineTo(x2+ox2,y2+oy2);cx.stroke();
+    cx.setLineDash([]);
+    cx.beginPath();cx.moveTo(x1+ox2,y1+oy2);cx.lineTo(x2+ox2,y2+oy2);cx.stroke();
+    const ang=Math.atan2((y2+oy2)-(y1+oy2),(x2+ox2)-(x1+ox2));
+    const al=7;
+    [[x1+ox2,y1+oy2,ang+Math.PI],[x2+ox2,y2+oy2,ang]].forEach(([ax,ay,a])=>{
+      cx.beginPath();cx.moveTo(ax,ay);
+      cx.lineTo(ax+Math.cos(a-0.3)*al,ay+Math.sin(a-0.3)*al);
+      cx.lineTo(ax+Math.cos(a+0.3)*al,ay+Math.sin(a+0.3)*al);
+      cx.closePath();cx.fill();
+    });
+    const mx=(x1+ox2+x2+ox2)/2, my=(y1+oy2+y2+oy2)/2;
+    const fs=Math.max(8,Math.min(11,sc*1.4));
+    cx.font=`bold ${fs}px Heebo,sans-serif`;
+    cx.textAlign='center'; cx.textBaseline='middle';
+    const tw=cx.measureText(txt).width+6;
+    cx.fillStyle='rgba(247,244,239,0.95)'; cx.fillRect(mx-tw/2,my-6.5,tw,13);
+    cx.fillStyle='#1a1714'; cx.fillText(txt,mx,my);
+    cx.restore();
+  }
+
+  // panels
+  gRect(ox, oy, FW, H, false);
+  gRect(ox+FW, oy, DWp, H, true);
+
+  // swing
+  cx.save(); cx.strokeStyle='rgba(42,90,138,0.2)'; cx.lineWidth=1; cx.setLineDash([4,4]);
+  cx.beginPath(); cx.arc(ox+FW, oy+H, DWp, -Math.PI/2, -Math.PI/2+Math.PI/3); cx.stroke();
+  cx.restore();
+
+  // hinges
+  const hPos=[oy+hgT*sc, oy+H-hgB*sc];
+  if(hgN===3) hPos.push(oy+H/2);
+  hPos.forEach(hy=>hinge(ox+FW, hy));
+
+  // handle
+  const hx = ox+FW+DWp - hEd*sc;
+  const hy_h = hH>200 ? oy+100*sc : oy+(hH/2)*sc;
+  if(hType==='knob'){
+    hole(hx, hy_h);
+  } else {
+    const sp=tSp*sc;
+    const h1=hy_h-sp/2, h2=hy_h+sp/2;
+    if(h1>oy+10 && h2<oy+H-10){ hole(hx,h1); hole(hx,h2); dim(hx+16,h1,hx+16,h2,`${tSp}`,14,false); }
+  }
+
+  // brackets
+  bracket(ox, oy+brT*sc);
+  bracket(ox, oy+H-brB*sc);
+
+  // dim lines
+  dim(ox,oy, ox+FW,oy, `${fW}`, -26, true);
+  dim(ox+FW,oy, ox+FW+DWp,oy, `${dW}`, -26, true);
+  dim(ox,oy, ox+FW+DWp,oy, `${fW+dW} ס״מ`, -40, true);
+  dim(ox+FW+DWp,oy, ox+FW+DWp,oy+H, `${hH} ס״מ`, 26, false);
+  dim(ox+FW-18,oy, ox+FW-18,oy+hgT*sc, `${hgT}`, -15, false);
+  dim(ox+FW-18,oy+H-hgB*sc, ox+FW-18,oy+H, `${hgB}`, -15, false);
+
+  // labels
+  const lfs=Math.max(10,Math.min(13,sc*1.1));
+  cx.font=`bold ${lfs}px Heebo,sans-serif`;
+  cx.textAlign='center'; cx.fillStyle='#2a5a8a';
+  cx.fillText('קבוע', ox+FW/2, oy+H/2);
+  cx.fillText('דלת', ox+FW+DWp/2, oy+H/2);
+  cx.font=`${Math.max(8,sc*0.7)}px Heebo,sans-serif`;
+  cx.fillStyle='#b8922a'; cx.textAlign='right';
+  hPos.forEach(hy=>cx.fillText('E400',ox+FW-12,hy+3));
+  cx.textAlign='left'; cx.fillStyle='#b8922a';
+  cx.fillText('זווית',ox+8,oy+brT*sc-5);
+  cx.fillText('זווית',ox+8,oy+H-brB*sc-5);
+
+  // title
+  const ty2=cH-26;
+  cx.fillStyle='#f7f4ef'; cx.fillRect(0,ty2,cW,26);
+  cx.strokeStyle='rgba(0,0,0,0.08)'; cx.lineWidth=1;
+  cx.beginPath();cx.moveTo(0,ty2);cx.lineTo(cW,ty2);cx.stroke();
+  cx.font='bold 11px Heebo,sans-serif'; cx.fillStyle='#b8922a'; cx.textAlign='right';
+  cx.fillText('LuzGlass',cW-10,ty2+17);
+  cx.font='10px Heebo,sans-serif'; cx.fillStyle='#8a8278'; cx.textAlign='center';
+  cx.fillText(`חזית קבוע ודלת · ${fW+dW}×${hH} ס״מ`,cW/2,ty2+17);
+
+  // specs
+  document.getElementById('specs').innerHTML=`<strong>פרטי הזמנה</strong>
+    קבוע: ${fW} ס״מ &nbsp;·&nbsp; דלת: ${dW} ס״מ<br>
+    גובה: ${hH} ס״מ<br>
+    צירים: ${hgN}× E400 (${hgT} / ${hgB} ס״מ)<br>
+    ידית: ${hType==='knob'?'כפתור':'מגבת'}<br>
+    זוויות: 2× קיר-זכוכית (${brT} / ${brB} ס״מ)<br>
+    שטח: ${(((fW+dW)*hH)/10000).toFixed(2)} מ״ר`;
+}
+
+function dlPNG(){
+  const l=document.createElement('a');
+  l.download=`luzglass-${Date.now()}.png`;
+  l.href=C.toDataURL();l.click();
+}
+
+window.addEventListener('resize',draw);
+draw();
+</script>
+</body>
+</html>
