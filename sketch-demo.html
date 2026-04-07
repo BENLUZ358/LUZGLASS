@@ -1,0 +1,2100 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LuzGlass — סקיצה טכנית</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 16px;position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;}
+  .topbar .ti{font-size:15px;font-weight:700;}.topbar .su{font-size:11px;color:var(--muted);margin-top:1px;}
+  .logo{font-size:17px;font-weight:900;}.logo span{color:var(--gold);}
+  .canvas-wrap{background:var(--surface);margin:12px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);overflow:hidden;}
+  canvas{display:block;width:100%;height:auto;}
+  .controls{margin:0 12px 12px;display:flex;flex-direction:column;gap:2px;}
+  .cs{background:var(--surface);border:1px solid var(--border);overflow:hidden;}
+  .ch{padding:13px 16px;font-size:10px;font-weight:600;letter-spacing:0.2em;color:var(--gold);text-transform:uppercase;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;background:var(--bg);}
+  .ch .arr{font-size:10px;transition:transform 0.2s;color:var(--muted);}
+  .ch.open .arr{transform:rotate(180deg);}
+  .cb{padding:14px 16px;display:none;flex-direction:column;gap:10px;border-top:1px solid var(--border);}
+  .cb.open{display:flex;}
+  .row{display:flex;align-items:center;gap:10px;}
+  .row label{font-size:13px;color:var(--muted);flex:1;}
+  .row input[type=number],.row input[type=text],.row select{padding:9px 10px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:14px;color:var(--text);outline:none;-webkit-appearance:none;border-radius:0;}
+  .row input[type=number]{width:80px;text-align:center;}
+  .row input[type=text]{flex:1;}
+  .row select{flex:1;}
+  .row input:focus,.row select:focus{border-color:var(--gold);}
+  .unit{font-size:11px;color:var(--muted);width:22px;}
+  textarea{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);outline:none;border-radius:0;resize:vertical;min-height:64px;}
+  textarea:focus{border-color:var(--gold);}
+  .tog{display:flex;gap:6px;}
+  .tb{flex:1;padding:10px;background:var(--bg);border:1px solid transparent;font-family:'Heebo',sans-serif;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;text-align:center;transition:all 0.15s;}
+  .tb.active{background:var(--bg2);border-color:var(--gold);color:var(--text);}
+  /* type selector grid */
+  .type-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;}
+  .type-btn{padding:10px 8px;background:var(--bg);border:1px solid transparent;font-family:'Heebo',sans-serif;font-size:11px;font-weight:500;color:var(--muted);cursor:pointer;text-align:center;transition:all 0.15s;line-height:1.4;}
+  .type-btn.active{background:var(--bg2);border-color:var(--gold);color:var(--text);font-weight:700;}
+  .type-btn .cat{font-size:9px;color:var(--muted);display:block;margin-bottom:2px;}
+  .type-btn.active .cat{color:var(--gold);}
+  /* panel dims */
+  .panel-dims{display:flex;flex-direction:column;gap:8px;}
+  .panel-block{background:var(--bg2);border:1px solid rgba(184,146,42,0.2);padding:10px 12px;display:flex;flex-direction:column;gap:8px;}
+  .panel-block-title{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;}
+  .panel-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  .pf{display:flex;flex-direction:column;gap:3px;}
+  .pf label{font-size:10px;color:var(--muted);}
+  .pf input{padding:7px 8px;background:var(--surface);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);outline:none;text-align:center;border-radius:0;width:100%;}
+  .pf input:focus{border-color:var(--gold);}
+  .slope-tog{display:flex;gap:4px;margin-top:2px;}
+  .slope-tog .tb{font-size:10px;padding:6px 4px;}
+  /* swatches */
+  .sw-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;}
+  .sw{cursor:pointer;background:none;border:2px solid transparent;padding:4px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;border-radius:3px;transition:all 0.15s;}
+  .sw:hover{border-color:rgba(184,146,42,0.3);}.sw.active{border-color:var(--gold);}
+  .sw-dot{width:32px;height:32px;border-radius:50%;border:1px solid rgba(0,0,0,0.1);}
+  .sw-name{font-size:9px;color:var(--muted);text-align:center;line-height:1.3;}
+  .sw-price{font-size:9px;color:var(--gold);font-weight:700;}
+  .sw.active .sw-name{color:var(--text);font-weight:600;}
+  /* holes */
+  .hole-list{display:flex;flex-direction:column;gap:6px;}
+  .hole-item{background:var(--bg2);border:1px solid rgba(184,146,42,0.2);padding:10px 12px;position:relative;display:flex;flex-direction:column;gap:7px;}
+  .hole-hdr{display:flex;align-items:center;justify-content:space-between;}
+  .hole-hdr span{font-size:11px;font-weight:700;color:var(--gold);}
+  .hole-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 4px;}
+  .hole-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  .hf{display:flex;flex-direction:column;gap:3px;}
+  .hf label{font-size:10px;color:var(--muted);}
+  .hf input,.hf select{padding:7px 8px;background:var(--surface);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);outline:none;border-radius:0;width:100%;-webkit-appearance:none;}
+  .hf input:focus,.hf select:focus{border-color:var(--gold);}
+  .btn-add-hole{padding:9px;background:var(--bg);border:1px dashed rgba(184,146,42,0.4);font-family:'Heebo',sans-serif;font-size:12px;color:var(--gold);cursor:pointer;width:100%;text-align:center;}
+  .divider{height:1px;background:var(--border);}
+  .specs{background:var(--surface);border:1px solid var(--border);margin:0 12px;padding:14px 16px;font-size:12px;line-height:1.9;color:var(--muted);border-right:3px solid var(--gold);}
+  .specs strong{color:var(--text);font-weight:700;font-size:13px;display:block;margin-bottom:4px;}
+  .btns{margin:12px;display:flex;gap:8px;}
+  .btn-add{flex:2;padding:15px;background:var(--gold);color:#fff;font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;}
+  .btn-dl{flex:1;padding:15px;background:var(--text);color:var(--bg);font-family:'Heebo',sans-serif;font-size:13px;font-weight:600;border:none;cursor:pointer;}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#f7f4ef;padding:13px 22px;font-size:14px;font-weight:600;border-right:3px solid var(--gold);opacity:0;transition:all 0.3s;z-index:99;white-space:nowrap;}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+  .spacer{height:28px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div><div class="ti" id="topTitle">סקיצה טכנית</div><div class="su" id="orderBadge">LuzGlass · בחר סוג מקלחון</div></div>
+  <div class="logo">Luz<span>Glass</span></div>
+</div>
+<!-- MODE SWITCHER -->
+<div style="background:var(--surface);border-bottom:2px solid var(--border);display:flex;">
+  <button id="modeShower" onclick="setMode('shower')"
+    style="flex:1;padding:12px 8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;border-bottom:3px solid var(--gold);background:var(--bg2);color:var(--text);transition:all 0.15s">
+    🚿 בניית מקלחון
+  </button>
+  <button id="modePiece" onclick="setMode('piece')"
+    style="flex:1;padding:12px 8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;border-bottom:3px solid transparent;background:var(--surface);color:var(--muted);transition:all 0.15s">
+    ⬡ בניית פריטים
+  </button>
+</div>
+
+<!-- ORDER BAR -->
+<div id="orderBar" style="background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+  <div style="flex:1;min-width:0">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">הזמנה פעילה</div>
+    <div id="orderBarInfo" style="font-size:13px;font-weight:700;color:var(--text);">—</div>
+  </div>
+  <div id="orderBarCount" style="font-size:11px;color:var(--gold);font-weight:700;white-space:nowrap;"></div>
+  <button onclick="viewOrder()" style="padding:8px 14px;background:var(--text);color:var(--bg);font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;white-space:nowrap;">צפה בהזמנה ←</button>
+  <button onclick="newOrder()" style="padding:8px 14px;background:transparent;color:var(--muted);font-family:Heebo,sans-serif;font-size:12px;border:1px solid var(--border);cursor:pointer;white-space:nowrap;">הזמנה חדשה</button>
+</div>
+
+<div class="canvas-wrap"><canvas id="sk"></canvas></div>
+
+<div class="controls">
+
+  <!-- פרטי הזמנה -->
+  <div class="cs">
+    <div class="ch open" onclick="tog(this)"><span>פרטי הזמנה</span><span class="arr">▾</span></div>
+    <div class="cb open">
+      <div class="row"><label>שם לקוח / הזמנה</label><input type="text" id="clientName" placeholder="בן-דוד" oninput="onOrderInfoChange()"></div>
+      <div class="row"><label>מס׳ הזמנה</label><input type="text" id="orderNum" placeholder="2024-001" oninput="onOrderInfoChange()"></div>
+      <div class="row"><label>שם / מס׳ סקיצה</label><input type="text" id="skName" placeholder="חדר רחצה ראשי" oninput="draw()"></div>
+    </div>
+  </div>
+
+  <!-- סוג מקלחון -->
+  <div class="cs">
+    <div class="ch open" onclick="tog(this)"><span>סוג מקלחון</span><span class="arr">▾</span></div>
+    <div class="cb open">
+      <div class="type-grid" id="typeGrid"></div>
+    </div>
+  </div>
+
+  <!-- מידות פאנלים -->
+  <div class="cs">
+    <div class="ch open" onclick="tog(this)"><span>מידות</span><span class="arr">▾</span></div>
+    <div class="cb open panel-dims" id="panelDims"></div>
+  </div>
+
+  <!-- צירים -->
+  <div class="cs">
+    <div class="ch" onclick="tog(this)"><span>צירים (E400)</span><span class="arr">▾</span></div>
+    <div class="cb" id="hingeCtrls">
+      <div class="row" style="margin-bottom:4px">
+        <label style="font-size:11px;color:var(--muted)">שנה גובה עבור</label>
+        <select id="hingeTargetPanel" onchange="onHingeTargetChange()" style="flex:1;padding:7px 8px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none">
+          <option value="all">כל הדלתות</option>
+        </select>
+      </div>
+      <div class="row"><label>מרחק מלמעלה</label><input type="number" id="hgT" value="20" min="5" max="80" oninput="saveCurrentTargetAndDraw('hinge')"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>מרחק מלמטה</label><input type="number" id="hgB" value="20" min="5" max="80" oninput="saveCurrentTargetAndDraw('hinge')"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>כמות</label>
+        <select id="hgN" onchange="onHN();saveCurrentTargetAndDraw('hinge')" style="flex:1">
+          <option value="2">2 צירים</option>
+          <option value="3">3 צירים</option>
+        </select><span class="unit"></span>
+      </div>
+      <div class="row" id="hg3R" style="display:none"><label>ציר 3 מלמעלה</label><input type="number" id="hg3" value="40" min="10" max="200" oninput="saveCurrentTargetAndDraw('hinge')"><span class="unit">ס״מ</span></div>
+    </div>
+  </div>
+
+  <!-- זוויות -->
+  <div class="cs">
+    <div class="ch" onclick="tog(this)"><span>זוויות קבועים</span><span class="arr">▾</span></div>
+    <div class="cb">
+      <div class="row" style="margin-bottom:4px">
+        <label style="font-size:11px;color:var(--muted)">שנה גובה עבור</label>
+        <select id="bracketTargetPanel" onchange="onBracketTargetChange()" style="flex:1;padding:7px 8px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none">
+          <option value="all">כל הקבועים</option>
+        </select>
+      </div>
+      <div class="row"><label>מרחק מלמעלה</label><input type="number" id="brT" value="20" min="5" max="80" oninput="saveCurrentTargetAndDraw('bracket')"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>מרחק מלמטה</label><input type="number" id="brB" value="20" min="5" max="80" oninput="saveCurrentTargetAndDraw('bracket')"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>כמות</label>
+        <select id="brN" onchange="onBN();saveCurrentTargetAndDraw('bracket')" style="flex:1">
+          <option value="2">2 סטנדרט</option><option value="3">3</option>
+        </select><span class="unit"></span>
+      </div>
+      <div class="row" id="br3R" style="display:none"><label>זווית 3 מלמעלה</label><input type="number" id="br3" value="40" min="10" max="200" oninput="saveCurrentTargetAndDraw('bracket')"><span class="unit">ס״מ</span></div>
+      <div class="row"><label>סוג זווית</label>
+        <select id="brType" onchange="draw()" style="flex:1"><option value="normal">רגילה</option><option value="open">פתוחה</option></select><span class="unit"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ידית -->
+  <div class="cs">
+    <div class="ch" onclick="tog(this)"><span>ידית</span><span class="arr">▾</span></div>
+    <div class="cb">
+      <div class="tog">
+        <button class="tb active" id="bKn" onclick="setH('knob')">כפתור</button>
+        <button class="tb" id="bTw" onclick="setH('towel')">מגבת</button>
+      </div>
+      <div class="row"><label>מרחק מקצה</label><input type="number" id="hEd" value="6" min="3" max="30" oninput="draw()"><span class="unit">ס״מ</span></div>
+      <div class="row" id="tSR" style="display:none"><label>מרחק בין חורים</label><input type="number" id="tSp" value="55" min="20" max="120" oninput="draw()"><span class="unit">ס״מ</span></div>
+    </div>
+  </div>
+
+  <!-- זכוכית -->
+  <div class="cs">
+    <div class="ch" onclick="tog(this)"><span>זכוכית</span><span class="arr">▾</span></div>
+    <div class="cb"><div class="sw-grid" id="gSw"></div></div>
+  </div>
+
+  <!-- פרזול -->
+  <div class="cs">
+    <div class="ch" onclick="tog(this)"><span>פרזול</span><span class="arr">▾</span></div>
+    <div class="cb">
+      <div class="tog" style="margin-bottom:10px">
+        <button class="tb active" id="bWithF" onclick="setFarzel(true)">עם פרזול</button>
+        <button class="tb" id="bNoF" onclick="setFarzel(false)">ללא פרזול</button>
+      </div>
+      <div id="farzelSection">
+        <div class="sw-grid" id="fSw"></div>
+        <div class="tog" style="margin-top:4px">
+          <button class="tb active" id="bZ" onclick="setQ('zamak')">זאמק</button>
+          <button class="tb" id="bP" onclick="setQ('pliz')">פליז ✦</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- תוספות -->
+  <div class="cs">
+    <div class="ch" onclick="tog(this)"><span>תוספות</span><span class="arr">▾</span></div>
+    <div class="cb">
+      <div class="tog"><button class="tb" id="bSand" onclick="toggleSand()">התזת חול</button></div>
+    </div>
+  </div>
+
+  <!-- חורים מיוחדים -->
+  <div class="cs">
+    <div class="ch" onclick="tog(this)"><span>חורים מיוחדים</span><span class="arr">▾</span></div>
+    <div class="cb">
+      <div class="hole-list" id="holesList"></div>
+      <button class="btn-add-hole" onclick="addHole()">＋ הוסף חור</button>
+    </div>
+  </div>
+
+  <!-- הערות -->
+  <div class="cs">
+    <div class="ch" onclick="tog(this)"><span>הערות</span><span class="arr">▾</span></div>
+    <div class="cb"><textarea id="notes" placeholder="הערות חופשיות..." oninput="updateSpecs()"></textarea></div>
+  </div>
+
+</div>
+
+<div class="specs" id="specs"><strong>פרטי הזמנה</strong> — בחר סוג מקלחון</div>
+<div class="btns">
+  <button class="btn-add" onclick="addToOrder()">＋ הוסף להזמנה</button>
+  <button class="btn-dl" onclick="dlPNG()">📥 PNG</button>
+</div>
+<div style="padding:0 16px 8px;display:flex;gap:8px;flex-wrap:wrap;">
+  <button onclick="finishOrder()" style="flex:1;padding:12px;background:var(--gold);color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:4px;">✓ סיים הזמנה</button>
+  <button onclick="showSketchGallery()" style="padding:12px 16px;background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:1px solid var(--border);cursor:pointer;border-radius:4px;">📐 הסקיצות שלי</button>
+</div>
+<div class="toast" id="toast">✓ נוסף להזמנה!</div>
+<div class="spacer"></div>
+
+<!-- PIECE BUILDER -->
+<div id="pieceBuilder" style="display:none">
+
+  <!-- Piece list at top -->
+  <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--muted);font-weight:600">פריטים בסקיצה:</span>
+    <div id="pieceList" style="display:flex;gap:5px;flex-wrap:wrap;flex:1"></div>
+    <span id="pieceTotalArea" style="font-size:11px;color:var(--gold);font-weight:700"></span>
+  </div>
+
+  <!-- Piece canvas -->
+  <div class="canvas-wrap"><canvas id="pieceSk"></canvas></div>
+
+  <!-- Piece controls -->
+  <div class="controls">
+
+    <!-- סוג פריט -->
+    <div class="cs">
+      <div class="ch open" onclick="tog(this)"><span>סוג פריט</span><span class="arr">▾</span></div>
+      <div class="cb open">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px" id="pieceTypeGrid"></div>
+      </div>
+    </div>
+
+    <!-- מידות -->
+    <div class="cs">
+      <div class="ch open" onclick="tog(this)"><span>מידות</span><span class="arr">▾</span></div>
+      <div class="cb open">
+        <div class="row"><label>רוחב</label><input type="number" id="pW" value="80" min="10" max="400" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+        <div class="row"><label>גובה</label><input type="number" id="pH" value="200" min="10" max="400" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+        <!-- slope -->
+        <div class="tog" style="margin-top:4px">
+          <button class="tb" id="pSlopeBtn" onclick="togglePieceSlope()">📐 שיפוע</button>
+        </div>
+        <div id="pSlopeFields" style="display:none;flex-direction:column;gap:8px;margin-top:8px">
+          <div style="display:flex;gap:5px">
+            <button class="tb active" id="pSlopeR" onclick="setPieceSlope('right')">שיפוע ימין</button>
+            <button class="tb" id="pSlopeL" onclick="setPieceSlope('left')">שיפוע שמאל</button>
+          </div>
+          <div class="row"><label>גובה ימין</label><input type="number" id="pHR" value="200" min="10" max="400" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+          <div class="row"><label>גובה שמאל</label><input type="number" id="pHL" value="180" min="10" max="400" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- פרזול וחורים לפי סוג -->
+    <div class="cs" id="pieceFittingsSection">
+      <div class="ch open" id="pFittingsHeader" onclick="tog(this)"><span>חורים ופרזול</span><span class="arr">▾</span></div>
+      <div class="cb open">
+        <!-- Hinge holes -->
+        <div id="pHingeSection" style="display:none">
+          <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;margin-bottom:8px">צירים (E400)</div>
+          <div class="row"><label>מרחק מלמעלה</label><input type="number" id="pHgT" value="20" min="5" max="80" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+          <div class="row"><label>מרחק מלמטה</label><input type="number" id="pHgB" value="20" min="5" max="80" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+          <div class="row"><label>כמות</label>
+            <select id="pHgN" onchange="onPHgN()" style="flex:1"><option value="2">2 צירים</option><option value="3">3 צירים</option></select>
+          </div>
+          <div class="row" id="pHg3Row" style="display:none"><label>ציר 3 מלמעלה</label><input type="number" id="pHg3" value="40" min="10" max="200" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+          <div class="row"><label>צד הציר</label>
+            <select id="pHgSide" onchange="drawPiece()" style="flex:1"><option value="right">ימין</option><option value="left">שמאל</option></select>
+          </div>
+        </div>
+        <!-- Bracket holes -->
+        <div id="pBracketSection" style="display:none;margin-top:8px">
+          <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;margin-bottom:8px">זוויות קבועים</div>
+          <div class="row"><label>מרחק מלמעלה</label><input type="number" id="pBrT" value="20" min="5" max="80" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+          <div class="row"><label>מרחק מלמטה</label><input type="number" id="pBrB" value="20" min="5" max="80" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+          <div class="row" id="pBrSideRow"><label>צד</label>
+            <select id="pBrSide" onchange="drawPiece()" style="flex:1"><option value="right">ימין</option><option value="left">שמאל</option><option value="both">שניהם</option></select>
+          </div>
+          <div id="pBrAutoNote" style="display:none;font-size:10px;color:var(--muted);padding:5px 8px;background:rgba(184,146,42,0.07);border-right:2px solid var(--gold)">
+            זווית אוטומטית בצד הקיר (נגדי לציר)
+          </div>
+        </div>
+        <!-- Handle -->
+        <div id="pHandleSection" style="display:none;margin-top:8px">
+          <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;margin-bottom:8px">ידית</div>
+          <div class="tog">
+            <button class="tb active" id="pHKnob" onclick="setPieceHandle('knob')">כפתור</button>
+            <button class="tb" id="pHTowel" onclick="setPieceHandle('towel')">מגבת</button>
+          </div>
+          <div class="row"><label>מרחק מקצה</label><input type="number" id="pHEd" value="6" min="3" max="30" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+          <div class="row" id="pTowelRow" style="display:none"><label>מרחק בין חורים</label><input type="number" id="pTSp" value="55" min="20" max="120" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+        </div>
+        <!-- Cutout (פינוי) for mirror -->
+        <div id="pCutoutSection" style="display:none;margin-top:8px">
+          <div style="height:1px;background:var(--border);margin-bottom:10px"></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-size:11px;font-weight:700;color:var(--gold)">פינוי / חור</span>
+            <button class="tb" id="pCutActiveBtn" onclick="togglePCutActive()">+ הוסף</button>
+          </div>
+          <div id="pCutFields" style="display:none;flex-direction:column;gap:0">
+            <div class="tog" style="margin-bottom:8px">
+              <button class="tb active" id="pCutTypeRect" onclick="setPCutType('rect')">◱ פינוי מלבני</button>
+              <button class="tb" id="pCutTypeHole" onclick="setPCutType('hole')">○ חור עגול</button>
+            </div>
+            <div id="pCutRectFields">
+              <div class="row"><label>רוחב פינוי</label><input type="number" id="pCutW" value="12" min="2" max="60" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+              <div class="row"><label>גובה פינוי</label><input type="number" id="pCutH" value="9" min="2" max="60" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+            </div>
+            <div id="pCutHoleFields" style="display:none">
+              <div class="row"><label>קוטר חור</label><input type="number" id="pCutDiam" value="14" min="4" max="50" oninput="drawPiece()"><span class="unit">מ״מ</span></div>
+            </div>
+            <div class="row"><label>מרחק מהקצה</label><input type="number" id="pCutEdge" value="10" min="1" max="200" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+            <div class="row"><label>מרחק מהתחתית</label><input type="number" id="pCutBottom" value="30" min="1" max="400" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+            <div style="font-size:10px;color:var(--muted);padding:5px 8px;background:rgba(0,0,0,0.03);margin-bottom:4px">
+              מרחק מהתחתית ומהקצה = למרכז הפינוי/חור
+            </div>
+          </div>
+        </div>
+
+        <!-- Floor bracket -->
+        <div style="margin-top:8px">
+          <button class="tb" id="pFloorBtn" onclick="togglePieceFloor()">⊥ זווית רצפה</button>
+          <div id="pFloorFields" style="display:none;margin-top:6px">
+            <div class="row"><label>מרחק מקצה</label><input type="number" id="pFloorDist" value="10" min="2" max="50" oninput="drawPiece()"><span class="unit">ס״מ</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- זכוכית -->
+    <div class="cs">
+      <div class="ch" onclick="tog(this)"><span>זכוכית</span><span class="arr">▾</span></div>
+      <div class="cb"><div class="sw-grid" id="pGlassSw"></div></div>
+    </div>
+
+    <!-- הערות -->
+    <div class="cs">
+      <div class="ch" onclick="tog(this)"><span>הערות</span><span class="arr">▾</span></div>
+      <div class="cb"><textarea id="pNotes" placeholder="הערות לפריט זה..." oninput="updatePieceSpecs()" style="width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;outline:none;border-radius:0;resize:vertical;min-height:60px"></textarea></div>
+    </div>
+
+  </div>
+
+  <!-- Piece specs -->
+  <div class="specs" id="pieceSpecs">בחר סוג פריט</div>
+
+  <!-- Piece actions -->
+  <div class="btns">
+    <button class="btn-add" onclick="addPieceToSketch()">＋ הוסף פריט לסקיצה</button>
+    <button class="btn-dl" onclick="dlPiecePNG()">📥 PNG</button>
+  </div>
+
+  <div class="spacer"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  SHOWER TYPES — modular panel definitions
+// ═══════════════════════════════════════════
+// Panel types: 'fixed' | 'door' | 'slider' | 'corner'
+// wallSide: which side of fixed touches wall ('right'|'left'|'both'|null)
+// hingeTo: 'prev'|'next'|'wall' — what the door hinges connect to
+// For corner: draws diagonal line indicating 90°
+
+const TYPES = [
+  // ── פינתי ──
+  { id:'pin-2k-2d', cat:'פינתי', name:'2 קבועים 2 דלתות',
+    panels:[
+      {t:'fixed', label:'קבוע א', wallSide:'right', key:'f1'},
+      {t:'door',  label:'דלת א', hingeTo:'prev',    key:'d1'},
+      {t:'corner'},
+      {t:'door',  label:'דלת ב', hingeTo:'next',    key:'d2'},
+      {t:'fixed', label:'קבוע ב', wallSide:'left',  key:'f2'},
+    ]
+  },
+  { id:'pin-k-d', cat:'פינתי', name:'קבוע ודלת',
+    panels:[
+      {t:'fixed', label:'קבוע', wallSide:'right', key:'f1'},
+      {t:'door',  label:'דלת', hingeTo:'prev',    key:'d1'},
+      {t:'corner'},
+    ]
+  },
+  { id:'pin-k-2d', cat:'פינתי', name:'קבוע 2 דלתות',
+    panels:[
+      {t:'fixed', label:'קבוע', wallSide:'right', key:'f1'},
+      {t:'door',  label:'דלת א', hingeTo:'prev',  key:'d1'},
+      {t:'corner'},
+      {t:'door',  label:'דלת ב', hingeTo:'wall',  key:'d2'},
+    ]
+  },
+  // ── חזיתי ──
+  { id:'haz-2k-2d', cat:'חזיתי', name:'2 קבוע 2 דלת',
+    panels:[
+      {t:'fixed', label:'קבוע א', wallSide:'right', key:'f1'},
+      {t:'door',  label:'דלת א', hingeTo:'prev',    key:'d1'},
+      {t:'door',  label:'דלת ב', hingeTo:'next',    key:'d2'},
+      {t:'fixed', label:'קבוע ב', wallSide:'left',  key:'f2'},
+    ]
+  },
+  { id:'haz-2k-d', cat:'חזיתי', name:'2 קבוע ודלת',
+    panels:[
+      {t:'fixed', label:'קבוע א', wallSide:'right', key:'f1'},
+      {t:'door',  label:'דלת',   hingeTo:'prev',    key:'d1'},
+      {t:'fixed', label:'קבוע ב', wallSide:'left',  key:'f2'},
+    ]
+  },
+  { id:'haz-2d', cat:'חזיתי', name:'2 דלת',
+    panels:[
+      {t:'door', label:'דלת א', hingeTo:'wall', key:'d1'},
+      {t:'door', label:'דלת ב', hingeTo:'wall', key:'d2'},
+    ]
+  },
+  { id:'haz-k-d', cat:'חזיתי', name:'קבוע ודלת',
+    panels:[
+      {t:'fixed', label:'קבוע', wallSide:'right', key:'f1'},
+      {t:'door',  label:'דלת', hingeTo:'prev',    key:'d1'},
+    ]
+  },
+  { id:'kavua', cat:'קבוע', name:'קבוע בלבד',
+    panels:[
+      {t:'fixed', label:'קבוע', wallSide:'both', key:'f1'},
+    ]
+  },
+  // ── הזזה ──
+  { id:'haz2-2k-d', cat:'הזזה', name:'2 קבוע ודלת',
+    panels:[
+      {t:'fixed',  label:'קבוע א', wallSide:'right', key:'f1'},
+      {t:'slider', label:'הזזה',                      key:'s1'},
+      {t:'fixed',  label:'קבוע ב', wallSide:'left',  key:'f2'},
+    ]
+  },
+  { id:'haz2-k-d', cat:'הזזה', name:'קבוע ודלת',
+    panels:[
+      {t:'fixed',  label:'קבוע', wallSide:'right', key:'f1'},
+      {t:'slider', label:'הזזה',                    key:'s1'},
+    ]
+  },
+  // ── אמבטיון ──
+  { id:'amb-full', cat:'אמבטיון', name:'סגירה מלאה',
+    panels:[
+      {t:'fixed', label:'קבוע א', wallSide:'right', key:'f1'},
+      {t:'door',  label:'דלת',   hingeTo:'prev',    key:'d1'},
+      {t:'fixed', label:'קבוע ב', wallSide:'left',  key:'f2'},
+    ]
+  },
+  { id:'amb-d-k', cat:'אמבטיון', name:'דלת וקבוע',
+    panels:[
+      {t:'fixed', label:'קבוע', wallSide:'right', key:'f1'},
+      {t:'door',  label:'דלת', hingeTo:'prev',    key:'d1'},
+    ]
+  },
+  { id:'amb-k', cat:'אמבטיון', name:'קבוע',
+    panels:[
+      {t:'fixed', label:'קבוע', wallSide:'both', key:'f1'},
+    ]
+  },
+  { id:'amb-d', cat:'אמבטיון', name:'דלת',
+    panels:[
+      {t:'door', label:'דלת', hingeTo:'wall', key:'d1'},
+    ]
+  },
+  { id:'amb-haz', cat:'אמבטיון', name:'הזזה',
+    panels:[
+      {t:'fixed',  label:'קבוע', wallSide:'right', key:'f1'},
+      {t:'slider', label:'הזזה',                    key:'s1'},
+    ]
+  },
+];
+
+const GLASSES=[
+  {id:'shafu', name:'שקוף',      price:200,dot:'rgba(210,230,245,0.6)'},
+  {id:'klir',  name:'קליר',      price:260,dot:'rgba(195,225,245,0.9)'},
+  {id:'granit',name:'גרניט',     price:260,dot:'linear-gradient(135deg,#bbb,#d5d5d5,#a0a0a0)'},
+  {id:'asid',  name:'אסיד',      price:260,dot:'rgba(245,245,250,0.8)',b:'2px solid rgba(200,200,215,0.8)'},
+  {id:'afor',  name:'אפור',      price:260,dot:'rgba(120,125,135,0.7)'},
+  {id:'bronze',name:'ברונזה',    price:260,dot:'rgba(130,90,50,0.6)'},
+  {id:'pipita',name:'פיפיטה',    price:260,dot:'repeating-linear-gradient(45deg,rgba(160,160,160,0.5) 0,rgba(160,160,160,0.5) 2px,rgba(230,230,230,0.7) 2px,rgba(230,230,230,0.7) 8px)'},
+  {id:'asidk', name:'אסיד קליר', price:320,dot:'rgba(242,244,250,0.8)',b:'2px solid rgba(220,225,240,0.9)'},
+  {id:'gals',  name:'גלינה שקוף',price:350,dot:'linear-gradient(135deg,rgba(195,220,240,0.8),rgba(175,210,235,0.95))'},
+  {id:'galk',  name:'גלינה קליר',price:400,dot:'linear-gradient(135deg,rgba(200,228,248,0.9),rgba(215,238,252,1))'},
+];
+const FINISHES=[
+  {id:'shahor',name:'שחור מט',  dot:'#2a2a2a',                                  pZ:800, pP:1400},
+  {id:'zahavM',name:'זהב מוברש',dot:'linear-gradient(135deg,#b8932a,#a07820)', pZ:900, pP:1600},
+  {id:'zahav', name:'זהב',      dot:'linear-gradient(135deg,#d4af37,#f0d060)', pZ:900, pP:1600},
+  {id:'grafit',name:'גרפיט',   dot:'linear-gradient(135deg,#52525e,#6a6a78)', pZ:850, pP:1500},
+  {id:'rose',  name:'רוז גולד', dot:'linear-gradient(135deg,#c0748a,#d8909e)',pZ:950, pP:1700},
+];
+
+// ═══════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════
+const C=document.getElementById('sk'), cx=C.getContext('2d');
+let selType = TYPES[0];
+let panelVals = {}; // {key: {w,h,wT,wB,hR,hL,slope}}
+let selG='shafu', selF='shahor', selQ='zamak', hType='knob', sand=false;
+let holes=[], holeCnt=0;
+let SC=1; // global scale
+
+// ═══════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════
+function tog(h){
+  h.classList.toggle('open');
+  const cb=h.nextElementSibling;
+  if(cb.classList.contains('open')){
+    cb.classList.remove('open');
+    cb.style.display='none';
+  } else {
+    cb.classList.add('open');
+    cb.style.display='flex';
+    // if this is panelDims, re-render so content appears
+    if(cb.id==='panelDims'){
+      renderPanelDims();
+    }
+  }
+}
+function v(id){return parseFloat(document.getElementById(id)?.value)||0;}
+function vs(id){return document.getElementById(id)?.value||'';}
+function setH(t){hType=t;document.getElementById('bKn').classList.toggle('active',t==='knob');document.getElementById('bTw').classList.toggle('active',t==='towel');document.getElementById('tSR').style.display=t==='towel'?'flex':'none';draw();}
+function setQ(q){selQ=q;document.getElementById('bZ').classList.toggle('active',q==='zamak');document.getElementById('bP').classList.toggle('active',q==='pliz');updateSpecs();}
+
+let withFarzel=true;
+function setFarzel(v){
+  withFarzel=v;
+  document.getElementById('bWithF').classList.toggle('active',v);
+  document.getElementById('bNoF').classList.toggle('active',!v);
+  document.getElementById('farzelSection').style.display=v?'block':'none';
+  updateSpecs();
+}
+function toggleSand(){sand=!sand;document.getElementById('bSand').classList.toggle('active',sand);updateSpecs();}
+function onHN(){document.getElementById('hg3R').style.display=parseInt(document.getElementById('hgN').value)===3?'flex':'none';draw();}
+function onBN(){document.getElementById('br3R').style.display=parseInt(document.getElementById('brN').value)===3?'flex':'none';draw();}
+
+// ═══════════════════════════════════════════
+//  TYPE SELECTOR
+// ═══════════════════════════════════════════
+function renderTypes(){
+  const g=document.getElementById('typeGrid');
+  g.innerHTML=TYPES.map(t=>`
+    <button class="type-btn ${t.id===selType.id?'active':''}" onclick="selectType('${t.id}')">
+      <span class="cat">${t.cat}</span>${t.name}
+    </button>`).join('');
+}
+
+function selectType(id){
+  selType=TYPES.find(t=>t.id===id);
+  panelVals={};
+  document.getElementById('topTitle').textContent=selType.name;
+  renderTypes();
+  renderPanelDims();
+  updateTargetDropdowns();
+  draw();
+}
+
+function saveCurrentTargetAndDraw(type){
+  const hTarget=document.getElementById('hingeTargetPanel')?.value||'all';
+  const bTarget=document.getElementById('bracketTargetPanel')?.value||'all';
+  if(type==='hinge' && hTarget!=='all') saveHingeToPanel(hTarget);
+  else if(type==='hinge'){
+    // apply to all doors
+    selType.panels.filter(p=>p.t==='door').forEach(p=>saveHingeToPanel(p.key));
+  }
+  if(type==='bracket' && bTarget!=='all') saveBracketToPanel(bTarget);
+  else if(type==='bracket'){
+    // clear own values so global applies
+    selType.panels.filter(p=>p.t==='fixed').forEach(p=>{
+      if(panelVals[p.key]){delete panelVals[p.key].ownBrT;delete panelVals[p.key].ownBrB;}
+    });
+  }
+  draw();
+}
+
+function onBracketTargetChange(){
+  // save current UI values to previously selected panel, then switch
+  draw();
+}
+function onHingeTargetChange(){
+  draw();
+}
+function saveBracketToPanel(key){
+  if(!panelVals[key]) panelVals[key]={};
+  panelVals[key].ownBrT = v('brT');
+  panelVals[key].ownBrB = v('brB');
+  panelVals[key].ownBrN = parseInt(document.getElementById('brN').value);
+  panelVals[key].ownBr3 = v('br3');
+}
+function saveHingeToPanel(key){
+  if(!panelVals[key]) panelVals[key]={};
+  panelVals[key].ownHgT = v('hgT');
+  panelVals[key].ownHgB = v('hgB');
+  panelVals[key].ownHgN = parseInt(document.getElementById('hgN').value);
+  panelVals[key].ownHg3 = v('hg3');
+}
+
+function updateTargetDropdowns(){
+  const doors=selType.panels.filter(p=>p.t==='door');
+  const fixed=selType.panels.filter(p=>p.t==='fixed');
+  const hSel=document.getElementById('hingeTargetPanel');
+  const bSel=document.getElementById('bracketTargetPanel');
+  if(hSel){
+    hSel.innerHTML='<option value="all">כל הדלתות</option>'+
+      doors.map(p=>`<option value="${p.key}">${p.label}</option>`).join('');
+  }
+  if(bSel){
+    bSel.innerHTML='<option value="all">כל הקבועים</option>'+
+      fixed.map(p=>`<option value="${p.key}">${p.label}</option>`).join('');
+  }
+}
+
+// ═══════════════════════════════════════════
+//  PANEL DIMS UI
+// ═══════════════════════════════════════════
+function renderPanelDims(){
+  const el=document.getElementById('panelDims');
+  const realPanels=selType.panels.filter(p=>p.t!=='corner');
+  el.innerHTML='';
+  realPanels.forEach(p=>{
+    // init defaults
+    if(!panelVals[p.key]) panelVals[p.key]={w:p.t==='fixed'?50:80, h:200, wT:null,wB:null,hR:null,hL:null, slope:false};
+    const pv=panelVals[p.key];
+    const isFixed=p.t==='fixed', isDoor=p.t==='door', isSlider=p.t==='slider';
+    const label=isFixed?'קבוע':isDoor?'דלת':'הזזה';
+    const block=document.createElement('div');
+    block.className='panel-block';
+    block.innerHTML=`
+      <div class="panel-block-title">${p.label} (${label})</div>
+      <div class="panel-grid">
+        <div class="pf"><label>רוחב</label><input type="number" id="pw_${p.key}" value="${pv.w}" min="20" max="250" oninput="pvSet('${p.key}','w',this.value)"></div>
+        <div class="pf">
+          <label>גובה ${isDoor?'<span style=\"font-size:9px;color:var(--gold)\">(קבוע-1)</span>':''}</label>
+          <input type="number" id="ph_${p.key}" value="${pv.h}" min="80" max="320" oninput="pvSet('${p.key}','h',this.value)">
+        </div>
+      </div>
+      ${isFixed?`
+      <div style="margin-top:6px;padding:8px;background:rgba(184,146,42,0.06);border-right:2px solid rgba(184,146,42,0.3)">
+        <div style="font-size:9px;font-weight:700;color:var(--gold);letter-spacing:0.1em;margin-bottom:6px">ידית על קבוע (אופציונלי)</div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <button class="tb ${pv.fixedHandle?'active':''}" style="font-size:10px;flex:1" onclick="pvSet('${p.key}','fixedHandle',${pv.fixedHandle?'0':'1'});renderPanelDims();draw()">
+            ${pv.fixedHandle?'✓ ':''}ידית על קבוע
+          </button>
+        </div>
+        ${pv.fixedHandle?`
+        <div class="panel-grid" style="margin-top:4px">
+          <div class="pf"><label>סוג</label>
+            <select id="fhType_${p.key}" onchange="pvSet('${p.key}','fixedHandleType',this.value);draw()" style="padding:5px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;width:100%">
+              <option value="knob" ${(pv.fixedHandleType||'knob')==='knob'?'selected':''}>כפתור</option>
+              <option value="towel" ${pv.fixedHandleType==='towel'?'selected':''}>מגבת</option>
+            </select>
+          </div>
+          <div class="pf"><label>גובה מרצפה</label><input type="number" id="fhH_${p.key}" value="${pv.fixedHandleH||100}" min="20" max="300" oninput="pvSet('${p.key}','fixedHandleH',this.value);draw()"></div>
+          <div class="pf"><label>מרחק מקצה</label><input type="number" id="fhE_${p.key}" value="${pv.fixedHandleEdge||6}" min="2" max="30" oninput="pvSet('${p.key}','fixedHandleEdge',this.value);draw()"></div>
+          ${pv.fixedHandleType==='towel'?`<div class="pf"><label>בין חורים</label><input type="number" id="fhS_${p.key}" value="${pv.fixedHandleSpan||40}" min="20" max="120" oninput="pvSet('${p.key}','fixedHandleSpan',this.value);draw()"></div>`:''}
+        </div>`:''}`:''}
+      <div class="slope-tog" style="gap:6px">
+        <button class="tb ${pv.slope?'active':''}" id="sl_${p.key}" onclick="togglePanelSlope('${p.key}')">📐 שיפוע</button>
+        ${p.t==='fixed'?`<button class="tb ${pv.floorBracket?'active':''}" id="fb_${p.key}" onclick="toggleFloorBracket('${p.key}')">⊥ זווית רצפה</button>`:''}
+      </div>
+      ${pv.floorBracket?`<div style="margin-top:6px;padding:8px 10px;background:rgba(184,146,42,0.08);border-right:2px solid var(--gold)">
+        <div style="font-size:10px;color:var(--gold);font-weight:700;margin-bottom:6px">⊥ זווית רצפה</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="font-size:11px;color:var(--muted)">מרחק מקצה</label>
+          <input type="number" id="pfd_${p.key}" value="${pv.floorBracketDist||10}" min="2" max="50" oninput="pvSet('${p.key}','floorBracketDist',this.value);draw()"
+            style="width:60px;padding:5px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;text-align:center;outline:none">
+          <span style="font-size:11px;color:var(--muted)">ס"מ</span>
+        </div>
+      </div>`:''}
+      <div id="slp_${p.key}" style="display:${pv.slope?'block':'none'}">
+        <div style="display:flex;gap:5px;margin-top:6px;margin-bottom:8px">
+          <button class="tb ${(pv.slopeCorner||'right')==='right'?'active':''}" style="font-size:10px;flex:1" 
+            onclick="pvSet('${p.key}','slopeCorner','right');renderPanelDims();draw()">
+            📐 שיפוע ימין<br><span style="font-size:9px;opacity:0.7">גובה ימין < שמאל</span>
+          </button>
+          <button class="tb ${(pv.slopeCorner||'right')==='left'?'active':''}" style="font-size:10px;flex:1"
+            onclick="pvSet('${p.key}','slopeCorner','left');renderPanelDims();draw()">
+            📐 שיפוע שמאל<br><span style="font-size:9px;opacity:0.7">גובה שמאל < ימין</span>
+          </button>
+        </div>
+        <div class="panel-grid">
+          <div class="pf"><label>רוחב עליון</label><input type="number" id="pwT_${p.key}" value="${pv.wT||pv.w}" min="5" max="250" oninput="pvSet('${p.key}','wT',this.value)"></div>
+          <div class="pf"><label>רוחב תחתון</label><input type="number" id="pwB_${p.key}" value="${pv.wB||pv.w}" min="5" max="250" oninput="pvSet('${p.key}','wB',this.value)"></div>
+          <div class="pf"><label>גובה ימין</label><input type="number" id="phR_${p.key}" value="${pv.hR||pv.h}" min="50" max="320" oninput="pvSet('${p.key}','hR',this.value)"></div>
+          <div class="pf"><label>גובה שמאל</label><input type="number" id="phL_${p.key}" value="${pv.hL||pv.h}" min="50" max="320" oninput="pvSet('${p.key}','hL',this.value)"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;padding:6px;background:rgba(184,146,42,0.08);">
+          💡 ימין = שיפוע בצד הזוויות/קיר · שמאל = שיפוע בצד החיצוני
+        </div>
+      </div>`;
+    el.appendChild(block);
+  });
+}
+
+function pvSet(key,field,val){
+  if(!panelVals[key]) panelVals[key]={};
+  if(field==='slopeCorner'||field==='fixedHandleType'){
+    panelVals[key][field]=val;
+  } else {
+    panelVals[key][field]=parseFloat(val)||0;
+  }
+  // Auto: when fixed panel height changes → set all doors to h-1
+  if(field==='h'){
+    const panel=selType.panels.find(p=>p.key===key);
+    if(panel&&panel.t==='fixed'){
+      const fixedH=parseFloat(val)||0;
+      selType.panels.forEach(p=>{
+        if(p.t==='door'){
+          if(!panelVals[p.key]) panelVals[p.key]={w:80,h:199,slope:false};
+          panelVals[p.key].h=Math.max(1,fixedH-1);
+          const el=document.getElementById('ph_'+p.key);
+          if(el) el.value=panelVals[p.key].h;
+        }
+      });
+    }
+    // Also: if door height changes manually, don't override
+  }
+  draw();
+}
+
+function toggleFloorBracket(key){
+  if(!panelVals[key]) panelVals[key]={};
+  panelVals[key].floorBracket = !panelVals[key].floorBracket;
+  renderPanelDims();
+  draw();
+}
+
+function togglePanelSlope(key){
+  panelVals[key].slope=!panelVals[key].slope;
+  const btn=document.getElementById('sl_'+key);
+  const panel=document.getElementById('slp_'+key);
+  btn.classList.toggle('active',panelVals[key].slope);
+  panel.style.display=panelVals[key].slope?'block':'none';
+  // init slope values from base
+  if(panelVals[key].slope){
+    const pv=panelVals[key];
+    if(!pv.wT){pv.wT=pv.w;document.getElementById('pwT_'+key).value=pv.w;}
+    if(!pv.wB){pv.wB=pv.w;document.getElementById('pwB_'+key).value=pv.w;}
+    if(!pv.hR){pv.hR=pv.h;document.getElementById('phR_'+key).value=pv.h;}
+    if(!pv.hL){pv.hL=pv.h;document.getElementById('phL_'+key).value=pv.h;}
+  }
+  draw();
+}
+
+function getPV(key){
+  const pv=panelVals[key]||{w:60,h:200,slope:false};
+  const slope=pv.slope;
+  const sc3=pv.slopeCorner||'right';
+  // raw values from user inputs
+  const rawHR=slope?(pv.hR||pv.h):pv.h;
+  const rawHL=slope?(pv.hL||pv.h):pv.h;
+  // slopeCorner='right' → right side sloped (lower) → use as-is
+  // slopeCorner='left'  → left side sloped (lower)  → swap hR and hL for drawing
+  const finalHR = (slope && sc3==='left') ? rawHL : rawHR;
+  const finalHL = (slope && sc3==='left') ? rawHR : rawHL;
+  return {
+    w:  pv.w,
+    h:  pv.h,
+    wT: slope?(pv.wT||pv.w):pv.w,
+    wB: slope?(pv.wB||pv.w):pv.w,
+    hR: finalHR,
+    hL: finalHL,
+    slope,
+    slopeCorner: sc3,
+    // pass through all extra props
+    floorBracket:      !!pv.floorBracket,
+    floorBracketDist:  pv.floorBracketDist||10,
+    fixedHandle:       !!pv.fixedHandle,
+    fixedHandleType:   pv.fixedHandleType||'knob',
+    fixedHandleH:      pv.fixedHandleH||100,
+    fixedHandleEdge:   pv.fixedHandleEdge||6,
+    fixedHandleSpan:   pv.fixedHandleSpan||40,
+  };
+}
+
+// ═══════════════════════════════════════════
+//  SWATCHES
+// ═══════════════════════════════════════════
+function renderSw(){
+  document.getElementById('gSw').innerHTML=GLASSES.map(g=>`
+    <button class="sw ${g.id===selG?'active':''}" onclick="selG='${g.id}';renderSw();updateSpecs()">
+      <div class="sw-dot" style="background:${g.dot};${g.b?'border:'+g.b:''}"></div>
+      <div class="sw-name">${g.name}</div><div class="sw-price">₪${g.price}</div>
+    </button>`).join('');
+  document.getElementById('fSw').innerHTML=FINISHES.map(f=>`
+    <button class="sw ${f.id===selF?'active':''}" onclick="selF='${f.id}';renderSw();updateSpecs()">
+      <div class="sw-dot" style="background:${f.dot}"></div>
+      <div class="sw-name">${f.name}</div>
+    </button>`).join('');
+}
+
+// ═══════════════════════════════════════════
+//  HOLES UI
+// ═══════════════════════════════════════════
+function addHole(){
+  const id='h'+(++holeCnt);
+  // panel options from current type
+  const pOpts=selType.panels.filter(p=>p.t!=='corner').map(p=>`<option value="${p.key}">${p.label}</option>`).join('');
+  holes.push({id});
+  const list=document.getElementById('holesList');
+  const div=document.createElement('div');
+  div.className='hole-item'; div.id='hi_'+id;
+  div.innerHTML=`
+    <div class="hole-hdr"><span>חור ${holeCnt}</span><button class="hole-del" onclick="removeHole('${id}')">✕</button></div>
+    <div class="hole-grid">
+      <div class="hf"><label>פאנל</label><select id="${id}-panel" onchange="draw()">${pOpts}</select></div>
+      <div class="hf"><label>קוטר (מ״מ)</label><input type="number" id="${id}-diam" value="12" min="4" max="100" oninput="draw()"></div>
+      <div class="hf"><label>מלמטה (ס״מ)</label><input type="number" id="${id}-fb" value="30" min="1" max="300" oninput="draw()"></div>
+      <div class="hf"><label>מהצד (ס״מ)</label><input type="number" id="${id}-fs" value="10" min="1" max="200" oninput="draw()"></div>
+      <div class="hf"><label>צד</label><select id="${id}-side" onchange="draw()"><option value="right">ימין</option><option value="left">שמאל</option></select></div>
+    </div>`;
+  list.appendChild(div);
+  draw();
+}
+function removeHole(id){
+  holes=holes.filter(h=>h.id!==id);
+  document.getElementById('hi_'+id)?.remove();
+  draw();
+}
+function hv(id,f){return parseFloat(document.getElementById(id+'-'+f)?.value)||0;}
+function hs(id,f){return document.getElementById(id+'-'+f)?.value||'';}
+
+// ═══════════════════════════════════════════
+//  CANVAS DRAWING PRIMITIVES
+// ═══════════════════════════════════════════
+function drawGlassPanel(pts, isDoor, isSlider){
+  cx.beginPath(); cx.moveTo(pts[0].x,pts[0].y);
+  pts.slice(1).forEach(p=>cx.lineTo(p.x,p.y)); cx.closePath();
+  if(isSlider) cx.fillStyle='rgba(200,230,210,0.2)';
+  else if(isDoor) cx.fillStyle='rgba(180,215,240,0.22)';
+  else cx.fillStyle='rgba(180,215,240,0.1)';
+  cx.fill();
+  cx.strokeStyle='#2a5a8a'; cx.lineWidth=isDoor||isSlider?2.5:2; cx.stroke();
+  // hatch top/bottom
+  cx.strokeStyle='rgba(42,90,138,0.1)'; cx.lineWidth=1;
+  const dx=pts[1].x-pts[0].x, dy=pts[1].y-pts[0].y, len=Math.sqrt(dx*dx+dy*dy);
+  for(let i=0;i<len;i+=10){const t=i/len;cx.beginPath();cx.moveTo(pts[0].x+dx*t,pts[0].y+dy*t);cx.lineTo(pts[0].x+dx*t+4,pts[0].y+dy*t+4);cx.stroke();}
+  // slider pattern
+  if(isSlider){
+    cx.strokeStyle='rgba(42,138,80,0.25)'; cx.lineWidth=1.5; cx.setLineDash([6,4]);
+    cx.beginPath(); cx.moveTo(pts[0].x,pts[0].y); cx.lineTo(pts[3].x,pts[3].y); cx.stroke();
+    cx.setLineDash([]);
+  }
+}
+
+function drawCorner(x, y1, y2, size){
+  const sz=size;
+  // vertical divider line
+  cx.strokeStyle='rgba(42,90,138,0.4)'; cx.lineWidth=1.5; cx.setLineDash([4,3]);
+  cx.beginPath(); cx.moveTo(x,y1); cx.lineTo(x,y2); cx.stroke();
+  cx.setLineDash([]);
+  // 90° arc at top corner
+  const arcR=Math.min(sz*0.7, 14);
+  cx.strokeStyle='#2a5a8a'; cx.lineWidth=1.5;
+  // top-right corner arc
+  cx.beginPath(); cx.arc(x, y1, arcR, 0, Math.PI/2); cx.stroke();
+  // small square in corner
+  cx.strokeStyle='rgba(42,90,138,0.6)'; cx.lineWidth=1;
+  const sq=arcR*0.4;
+  cx.beginPath();
+  cx.moveTo(x+sq,y1); cx.lineTo(x+sq,y1+sq); cx.lineTo(x,y1+sq);
+  cx.stroke();
+}
+
+function drawHinge(x,y,onRight){
+  // Simple rectangle with dot — like handdrawn sketch
+  const rw = Math.max(8, SC*0.55);   // rect width (into glass)
+  const rh = Math.max(12, SC*1.0);   // rect height
+  const rx = onRight ? x - rw : x;   // rect starts from glass edge
+  cx.save();
+  cx.fillStyle='rgba(184,146,42,0.18)';
+  cx.fillRect(rx, y-rh/2, rw, rh);
+  cx.strokeStyle='#b8922a'; cx.lineWidth=1.5;
+  cx.strokeRect(rx, y-rh/2, rw, rh);
+  // center dot
+  cx.fillStyle='#b8922a';
+  cx.beginPath(); cx.arc(rx+rw/2, y, 2, 0, Math.PI*2); cx.fill();
+  cx.restore();
+}
+
+function drawHingeOnFixed(x,y,onRight){
+  // Matching rectangle on fixed panel (mirror of door hinge)
+  const rw = Math.max(8, SC*0.55);
+  const rh = Math.max(12, SC*1.0);
+  const rx = onRight ? x - rw : x;
+  cx.save();
+  cx.fillStyle='rgba(184,146,42,0.18)';
+  cx.fillRect(rx, y-rh/2, rw, rh);
+  cx.strokeStyle='#b8922a'; cx.lineWidth=1.5;
+  cx.strokeRect(rx, y-rh/2, rw, rh);
+  cx.fillStyle='#b8922a';
+  cx.beginPath(); cx.arc(rx+rw/2, y, 2, 0, Math.PI*2); cx.fill();
+  cx.restore();
+}
+
+function drawBracket(x,y,open){
+  const s=Math.max(8,SC*0.7);
+  cx.strokeStyle='#b8922a'; cx.lineWidth=2;
+  if(open){
+    cx.setLineDash([3,3]);
+    cx.beginPath();cx.moveTo(x+s*2.2,y);cx.lineTo(x,y);cx.stroke();
+    cx.setLineDash([]);
+    cx.beginPath();cx.moveTo(x,y);cx.lineTo(x,y+s);cx.stroke();
+  } else {
+    cx.beginPath();cx.moveTo(x+s,y);cx.lineTo(x,y);cx.lineTo(x,y+s);cx.stroke();
+  }
+  cx.fillStyle='#b8922a'; cx.beginPath(); cx.arc(x,y,2.5,0,Math.PI*2); cx.fill();
+}
+
+function drawHandleHole(x,y){
+  const r=Math.max(3,SC*0.28);
+  cx.beginPath();cx.arc(x,y,r,0,Math.PI*2);
+  cx.fillStyle='rgba(184,146,42,0.15)';cx.fill();
+  cx.strokeStyle='#b8922a';cx.lineWidth=1.5;cx.stroke();
+  cx.beginPath();cx.moveTo(x-r+1,y);cx.lineTo(x+r-1,y);cx.stroke();
+  cx.beginPath();cx.moveTo(x,y-r+1);cx.lineTo(x,y+r-1);cx.stroke();
+}
+
+function drawSpecialHole(x,y,diamMM,fromBottom,fromSide,side,panelBottomY,panelSideX){
+  const r=Math.max(3,(diamMM/10)*SC/2), al=5;
+  cx.beginPath();cx.arc(x,y,r,0,Math.PI*2);
+  cx.fillStyle='rgba(220,50,50,0.12)';cx.fill();
+  cx.strokeStyle='#c0392b';cx.lineWidth=1.5;cx.setLineDash([]);cx.stroke();
+  cx.strokeStyle='rgba(192,57,43,0.5)';cx.lineWidth=0.8;
+  cx.beginPath();cx.moveTo(x-r,y);cx.lineTo(x+r,y);cx.stroke();
+  cx.beginPath();cx.moveTo(x,y-r);cx.lineTo(x,y+r);cx.stroke();
+  const fs=Math.max(7,Math.min(10,SC*0.8));
+  cx.font=`bold ${fs}px Heebo,sans-serif`;cx.fillStyle='#c0392b';cx.textAlign='center';cx.textBaseline='bottom';
+  cx.fillText(`ø${diamMM}מ"מ`,x,y-r-2);
+  cx.save();cx.strokeStyle='#c0392b';cx.fillStyle='#c0392b';cx.lineWidth=0.8;
+  // vertical dim: hole → bottom
+  const vX=side==='right'?x-r-10:x+r+10;
+  cx.setLineDash([2,3]);
+  cx.beginPath();cx.moveTo(x,y);cx.lineTo(vX,y);cx.stroke();
+  cx.beginPath();cx.moveTo(x,panelBottomY);cx.lineTo(vX,panelBottomY);cx.stroke();
+  cx.setLineDash([]);
+  cx.beginPath();cx.moveTo(vX,y);cx.lineTo(vX,panelBottomY);cx.stroke();
+  [[vX,y,-Math.PI/2],[vX,panelBottomY,Math.PI/2]].forEach(([ax,ay,a])=>{
+    cx.beginPath();cx.moveTo(ax,ay);cx.lineTo(ax+Math.cos(a-0.3)*al,ay+Math.sin(a-0.3)*al);cx.lineTo(ax+Math.cos(a+0.3)*al,ay+Math.sin(a+0.3)*al);cx.closePath();cx.fill();
+  });
+  const mVY=(y+panelBottomY)/2,t1=`${fromBottom}`,tw1=cx.measureText(t1).width+4;
+  cx.fillStyle='rgba(255,255,255,0.93)';cx.fillRect(vX-tw1/2,mVY-6,tw1,12);
+  cx.fillStyle='#c0392b';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(t1,vX,mVY);
+  // horizontal dim: side edge → hole center (outside, above hole)
+  const hY=y-r-12;
+  const hEdge=panelSideX, hHole=x;
+  const hL=Math.min(hEdge,hHole), hR=Math.max(hEdge,hHole);
+  cx.setLineDash([2,3]);
+  cx.beginPath();cx.moveTo(hEdge,y);cx.lineTo(hEdge,hY);cx.stroke();
+  cx.beginPath();cx.moveTo(hHole,y);cx.lineTo(hHole,hY);cx.stroke();
+  cx.setLineDash([]);
+  cx.beginPath();cx.moveTo(hL,hY);cx.lineTo(hR,hY);cx.stroke();
+  [[hL,hY,0],[hR,hY,Math.PI]].forEach(([ax,ay,a])=>{
+    cx.beginPath();cx.moveTo(ax,ay);cx.lineTo(ax+Math.cos(a-0.3)*al,ay+Math.sin(a-0.3)*al);cx.lineTo(ax+Math.cos(a+0.3)*al,ay+Math.sin(a+0.3)*al);cx.closePath();cx.fill();
+  });
+  const mHX=(hL+hR)/2,t2=`${fromSide}`,tw2=cx.measureText(t2).width+4;
+  cx.fillStyle='rgba(255,255,255,0.93)';cx.fillRect(mHX-tw2/2,hY-6,tw2,12);
+  cx.fillStyle='#c0392b';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(t2,mHX,hY);
+  cx.restore();
+}
+
+function dim(x1,y1,x2,y2,txt,off,horiz,fieldId){
+  cx.save();
+  cx.strokeStyle='rgba(184,146,42,0.85)';cx.fillStyle='rgba(184,146,42,0.9)';cx.lineWidth=0.8;cx.setLineDash([3,3]);
+  const ox=horiz?0:off, oy2=horiz?off:0;
+  cx.beginPath();cx.moveTo(x1,y1);cx.lineTo(x1+ox,y1+oy2);cx.stroke();
+  cx.beginPath();cx.moveTo(x2,y2);cx.lineTo(x2+ox,y2+oy2);cx.stroke();
+  cx.setLineDash([]);
+  cx.beginPath();cx.moveTo(x1+ox,y1+oy2);cx.lineTo(x2+ox,y2+oy2);cx.stroke();
+  const ang=Math.atan2((y2+oy2)-(y1+oy2),(x2+ox)-(x1+ox)),al=6;
+  [[x1+ox,y1+oy2,ang+Math.PI],[x2+ox,y2+oy2,ang]].forEach(([ax,ay,a])=>{
+    cx.beginPath();cx.moveTo(ax,ay);cx.lineTo(ax+Math.cos(a-0.3)*al,ay+Math.sin(a-0.3)*al);cx.lineTo(ax+Math.cos(a+0.3)*al,ay+Math.sin(a+0.3)*al);cx.closePath();cx.fill();
+  });
+  const mx=(x1+ox+x2+ox)/2,my=(y1+oy2+y2+oy2)/2;
+  const fs=Math.max(8,Math.min(11,SC*1.3));
+  cx.font=`bold ${fs}px Heebo,sans-serif`;cx.textAlign='center';cx.textBaseline='middle';
+  const tw=cx.measureText(txt).width+5;
+  // highlight if clickable
+  cx.fillStyle=fieldId?'rgba(240,230,210,0.97)':'rgba(247,244,239,0.95)';
+  cx.fillRect(mx-tw/2,my-7,tw,14);
+  cx.fillStyle=fieldId?'#7a5e10':'#1a1714';
+  cx.fillText(txt,mx,my);
+  // register click zone
+  if(fieldId) clickZones.push({x1:mx-tw/2,y1:my-7,x2:mx+tw/2,y2:my+7,fieldId});
+  cx.restore();
+}
+
+function panelLabel(cx2,x,y,label,sub){
+  const fs=Math.max(9,Math.min(12,SC));
+  cx2.font=`bold ${fs}px Heebo,sans-serif`;cx2.fillStyle='#2a5a8a';cx2.textAlign='center';cx2.textBaseline='middle';
+  cx2.fillText(label,x,sub?y-7:y);
+  if(sub){cx2.font=`${Math.max(8,fs-2)}px Heebo,sans-serif`;cx2.fillStyle='rgba(230,126,34,0.7)';cx2.fillText('▲ שיפוע',x,y+7);}
+}
+
+// ═══════════════════════════════════════════
+//  CLICK ZONES — for tapping dim labels
+// ═══════════════════════════════════════════
+let clickZones=[];
+
+C.addEventListener('click', function(e){
+  const rect=C.getBoundingClientRect();
+  const DPR=window.devicePixelRatio||1;
+  const mx=(e.clientX-rect.left)*(C.width/rect.width)/DPR;
+  const my=(e.clientY-rect.top)*(C.height/rect.height)/DPR;
+  for(const z of clickZones){
+    if(mx>=z.x1&&mx<=z.x2&&my>=z.y1&&my<=z.y2){
+      const el=document.getElementById(z.fieldId);
+      if(el){
+        el.scrollIntoView({behavior:'smooth',block:'center'});
+        el.focus();
+        el.select();
+      }
+      break;
+    }
+  }
+});
+
+// ═══════════════════════════════════════════
+//  MAIN DRAW
+// ═══════════════════════════════════════════
+function draw(){
+  clickZones=[];
+  const hgT=v('hgT'),hgB=v('hgB'),hgN=parseInt(document.getElementById('hgN').value),hg3=v('hg3');
+  const brT=v('brT'),brB=v('brB'),brN=parseInt(document.getElementById('brN').value),br3=v('br3');
+  const brType=document.getElementById('brType').value;
+  const hEd=v('hEd'),tSp=v('tSp');
+  const isOpen=brType==='open';
+
+  // collect real panels (no corners)
+  const realPanels=selType.panels.filter(p=>p.t!=='corner');
+
+  // compute scale
+  const totalW=realPanels.reduce((s,p)=>s+Math.max(getPV(p.key).wT,getPV(p.key).wB),0)
+    + selType.panels.filter(p=>p.t==='corner').length*20; // corner space
+  const maxH=realPanels.reduce((mh,p)=>{const pv=getPV(p.key);return Math.max(mh,pv.hR,pv.hL);}
+  ,0);
+
+  const DPR=window.devicePixelRatio||1;
+  const cW=C.parentElement.clientWidth;
+  const MG=80, sc=(cW-MG*2)/totalW, cH=maxH*sc+MG*2+32;
+  SC=sc;
+
+  C.width=cW*DPR; C.height=cH*DPR;
+  C.style.width=cW+'px'; C.style.height=cH+'px';
+  cx.scale(DPR,DPR);
+
+  const oy=MG-10;
+  cx.clearRect(0,0,cW,cH); cx.fillStyle='#fff'; cx.fillRect(0,0,cW,cH);
+
+  // grid
+  cx.strokeStyle='rgba(0,0,0,0.03)'; cx.lineWidth=1;
+  const gs=Math.max(8,8*sc);
+  for(let x=0;x<cW;x+=gs){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,cH);cx.stroke();}
+  for(let y=0;y<cH;y+=gs){cx.beginPath();cx.moveTo(0,y);cx.lineTo(cW,y);cx.stroke();}
+
+  // ── Layout: place panels left-to-right starting from right side (RTL) ──
+  // We'll build panel positions: {x, pts, key, type, wallSide, hingeTo, label}
+  const panelPos=[]; // computed positions
+  const cornerSz=20*sc;
+
+  let curX=MG+(cW-MG*2-totalW*sc)/2;
+
+  selType.panels.forEach((p,i)=>{
+    if(p.t==='corner'){
+      panelPos.push({type:'corner', x:curX, sz:cornerSz});
+      curX+=cornerSz/sc*sc; // small gap
+      return;
+    }
+    const pv=getPV(p.key);
+    const wT=pv.wT*sc, wB=pv.wB*sc;
+    let hR=pv.hR*sc, hL=pv.hL*sc;
+    // Slope: show proportionally, min 10px so it's visible but not dramatic
+    if(pv.slope && Math.abs(hR-hL) > 0.5){
+      const minVisualDiff = Math.max(10, sc*0.5);
+      const diff = hR - hL;
+      if(Math.abs(diff) < minVisualDiff){
+        const sign = diff > 0 ? 1 : -1;
+        const center = (hR+hL)/2;
+        hR = center + sign*minVisualDiff/2;
+        hL = center - sign*minVisualDiff/2;
+      }
+    }
+    const maxW=Math.max(wT,wB);
+    const pts=[
+      {x:curX,    y:oy},        // top-right
+      {x:curX+wT, y:oy},        // top-left  
+      {x:curX+wB, y:oy+hL},     // bottom-left
+      {x:curX,    y:oy+hR},     // bottom-right
+    ];
+    panelPos.push({type:p.t, key:p.key, pts, pv, wallSide:p.wallSide, hingeTo:p.hingeTo, label:p.label, x:curX, w:maxW, hR, hL, wT, wB});
+    curX+=maxW;
+  });
+
+  // ── Draw panels ──
+  panelPos.forEach(pp=>{
+    if(pp.type==='corner'){
+      // vertical line with 90° symbol
+      const prevPanel=panelPos.filter(p=>p.type!=='corner' && p.x<pp.x).pop();
+      const nextPanel=panelPos.filter(p=>p.type!=='corner' && p.x>pp.x)[0];
+      const cx2=cx, x=pp.x;
+      const y1=prevPanel?oy:oy;
+      const y2=prevPanel?oy+Math.max(prevPanel.hR,prevPanel.hL):oy+200*sc;
+      drawCorner(x,y1,y2,pp.sz);
+      return;
+    }
+    drawGlassPanel(pp.pts, pp.type==='door', pp.type==='slider');
+  });
+
+  // ── LAYER 1: Hinges + Brackets (symbols only, no dims yet) ──
+  // Store positions for dim lines drawn separately to avoid overlap
+  const hingeDims=[], bracketDims=[];
+
+  panelPos.forEach((pp,i)=>{
+    if(pp.type==='corner') return;
+
+    // BRACKETS
+    if(pp.type==='fixed'){
+      const isRightWall=pp.wallSide==='right'||pp.wallSide==='both';
+      const isLeftWall=pp.wallSide==='left'||pp.wallSide==='both';
+      // per-panel bracket heights (if target selector matches)
+      // each panel has own saved brT/brB or falls back to global
+      const useBrT = panelVals[pp.key]?.ownBrT ?? brT;
+      const useBrB = panelVals[pp.key]?.ownBrB ?? brB;
+      const useBrN = panelVals[pp.key]?.ownBrN ?? brN;
+      const useBr3 = panelVals[pp.key]?.ownBr3 ?? br3;
+      const bPos=[oy+useBrT*sc, oy+pp.hR-useBrB*sc];
+      if(useBrN===3) bPos.push(oy+useBr3*sc);
+      if(isRightWall){
+        bPos.forEach(by=>drawBracket(pp.x,by,isOpen));
+        bracketDims.push({x:pp.x, side:'right', hR:pp.hR, brT:useBrT, brB:useBrB, br3:useBr3, brN:useBrN});
+      }
+      if(isLeftWall){
+        const rx=pp.x+pp.wT;
+        bPos.forEach(by=>drawBracket(rx,by,isOpen));
+        bracketDims.push({x:rx, side:'left', hR:pp.hR, brT:useBrT, brB:useBrB, br3:useBr3, brN:useBrN});
+      }
+      // floor bracket per panel
+      if(pp.pv && pp.pv.floorBracket){
+        const floorDist = (pp.pv.floorBracketDist||10)*sc;
+        // place on OPPOSITE side from wall brackets
+        const floorX = isRightWall ? pp.x+pp.wT-floorDist : pp.x+floorDist;
+        const floorY = oy+pp.hR;
+        const hw=Math.max(8,sc*0.7), vw=4, vh=14;
+        cx.save();
+        cx.fillStyle='#b8922a';
+        // vertical part
+        cx.fillRect(floorX-vw/2, floorY-vh, vw, vh);
+        // horizontal arm going toward center
+        const armDir = isRightWall ? -1 : 1;
+        cx.fillRect(floorX-vw/2, floorY-vw, armDir>0?hw:0, vw);
+        cx.fillRect(isRightWall?floorX-hw:floorX-vw/2, floorY-vw, hw, vw);
+        cx.strokeStyle='#7a5e10'; cx.lineWidth=0.8;
+        cx.strokeRect(floorX-vw/2, floorY-vh, vw, vh);
+        // screw dot
+        cx.fillStyle='rgba(255,255,255,0.7)';
+        cx.beginPath(); cx.arc(floorX, floorY-vh/2, 1.5, 0, Math.PI*2); cx.fill();
+        // label
+        cx.font='bold 8px Heebo,sans-serif';
+        cx.fillStyle='rgba(184,146,42,0.8)';
+        cx.textAlign='center'; cx.textBaseline='top';
+        cx.fillText('רצפה', floorX, floorY+3);
+        // dim
+        const fdist = pp.pv.floorBracketDist||10;
+        const edgeX = isRightWall ? pp.x+pp.wT : pp.x;
+        dim(Math.min(floorX,edgeX), floorY-24, Math.max(floorX,edgeX), floorY-24, fdist, 0, true, null);
+        cx.restore();
+      }
+    }
+
+    // HINGES
+    if(pp.type==='door'){
+      const prevReal=panelPos.filter(p=>p.type!=='corner'&&p.x<pp.x).pop();
+      const nextReal=panelPos.filter(p=>p.type!=='corner'&&p.x>pp.x)[0];
+      const hingeOnRight = pp.hingeTo==='prev'&&prevReal || pp.hingeTo==='wall'&&!prevReal;
+      const hingeX=hingeOnRight?pp.x:pp.x+pp.wT;
+      // each door uses its own saved values or global
+      const useHgT = panelVals[pp.key]?.ownHgT ?? hgT;
+      const useHgB = panelVals[pp.key]?.ownHgB ?? hgB;
+      const useHgN = panelVals[pp.key]?.ownHgN ?? hgN;
+      const useHg3 = panelVals[pp.key]?.ownHg3 ?? hg3;
+      const hPos=[oy+useHgT*sc, oy+pp.hR-useHgB*sc];
+      if(useHgN===3) hPos.push(oy+useHg3*sc);
+      hPos.forEach(hy=>drawHinge(hingeX,hy,hingeOnRight));
+      hingeDims.push({x:hingeX, onRight:hingeOnRight, hR:pp.hR, hgT:useHgT, hgB:useHgB, hg3:useHg3, hgN:useHgN});
+      // draw matching holes on adjacent FIXED panel (not wall)
+      const adjFixed = hingeOnRight ? prevReal : nextReal;
+      if(adjFixed && adjFixed.type==='fixed' && pp.hingeTo!=='wall'){
+        const adjX = hingeOnRight ? adjFixed.x+adjFixed.wT : adjFixed.x;
+        hPos.forEach(hy=>drawHingeOnFixed(adjX, hy, !hingeOnRight));
+      }
+
+      // HANDLE
+      const handleX=hingeOnRight ? pp.x+pp.wT-hEd*sc : pp.x+hEd*sc;
+      const handleY=pp.pv.h>200?oy+100*sc:oy+pp.hR/2;
+      if(hType==='knob'){
+        drawHandleHole(handleX,handleY);
+      } else {
+        const dir=hingeOnRight?-1:1;
+        const hx2=handleX+dir*tSp*sc;
+        const inBounds=hingeOnRight?(hx2>pp.x+4):(hx2<pp.x+pp.wT-4);
+        if(inBounds){
+          drawHandleHole(handleX,handleY);
+          drawHandleHole(hx2,handleY);
+          dim(Math.min(handleX,hx2),handleY-20,Math.max(handleX,hx2),handleY-20,`${tSp}`,0,true);
+        }
+      }
+
+      // swing arc
+      cx.save(); cx.strokeStyle='rgba(42,90,138,0.15)'; cx.lineWidth=1; cx.setLineDash([4,4]);
+      cx.beginPath();
+      cx.arc(hingeOnRight?pp.x:pp.x+pp.wT, oy+pp.hR, pp.wB,
+        -Math.PI/2, -Math.PI/2+(hingeOnRight?1:-1)*Math.PI/3);
+      cx.stroke(); cx.restore();
+    }
+
+    // HANDLE ON FIXED PANEL
+    if(pp.type==='fixed' && pp.pv.fixedHandle){
+      const fhType=pp.pv.fixedHandleType||'knob';
+      const fhH=pp.pv.fixedHandleH||100;
+      const fhEdge=pp.pv.fixedHandleEdge||6;
+      const fhSpan=pp.pv.fixedHandleSpan||40;
+      // position: fhH from bottom, fhEdge from non-wall edge
+      const fhY=oy+pp.hR-fhH*sc;
+      // handle goes on the FREE side (opposite wall)
+      const onRight=pp.wallSide==='right'||pp.wallSide==='both';
+      const fhX=onRight ? pp.x+pp.wT-fhEdge*sc : pp.x+fhEdge*sc;
+      if(fhType==='knob'){
+        drawHandleHole(fhX,fhY);
+      } else {
+        // towel bar — 2 holes
+        const h1=fhX-fhSpan*sc/2, h2=fhX+fhSpan*sc/2;
+        drawHandleHole(h1,fhY);
+        drawHandleHole(h2,fhY);
+        cx.strokeStyle='rgba(184,146,42,0.5)';cx.lineWidth=1.5;cx.setLineDash([]);
+        cx.beginPath();cx.moveTo(h1,fhY);cx.lineTo(h2,fhY);cx.stroke();
+        dim(h1,fhY-18,h2,fhY-18,`${fhSpan}`,0,true,'fhS_'+pp.key);
+      }
+      // height dim — from bottom
+      dim(pp.x-4,fhY,pp.x-4,oy+pp.hR,`${fhH}`,-18,false,null);
+    }
+  });
+
+  // ══════════════════════════════════════════
+  // DIMENSION ZONES — clear separation
+  // ══════════════════════════════════════════
+  // TOP: row -1 = individual widths (-36)
+  //      row -2 = total width (-56)
+  // RIGHT side (outside each panel):
+  //   Each panel gets its OWN right-edge column, staggered by panel index
+  //   Col 0 (closest, +28): panel heights
+  // INSIDE panel near wall edge:
+  //   Bracket dims: small offset inside (±12) — INSIDE the panel area
+  // INSIDE door near hinge:
+  //   Hinge dims: small offset (±12) — INSIDE the door
+  // ══════════════════════════════════════════
+
+  clickZones=[];
+
+  // ── TOP row -1: individual panel widths ──
+  panelPos.forEach(pp=>{
+    if(pp.type==='corner') return;
+    dim(pp.x, oy, pp.x+pp.wT, oy, `${pp.pv.wT}`, -36, true, 'pw_'+pp.key);
+  });
+
+  // ── TOP row -2: total width ──
+  const firstX=panelPos.find(p=>p.type!=='corner').x;
+  const lastPP=panelPos.filter(p=>p.type!=='corner').pop();
+  const totW2=realPanels.reduce((s,p)=>s+getPV(p.key).wT,0);
+  dim(firstX, oy, lastPP.x+lastPP.wT, oy, `${totW2} ס"מ`, -56, true, null);
+
+  // ── BOTTOM: slope wB ──
+  panelPos.forEach(pp=>{
+    if(pp.type==='corner') return;
+    if(pp.pv.slope){
+      const rawHR=pp.pv.hR||pp.pv.h, rawHL=pp.pv.hL||pp.pv.h;
+      const maxH=Math.max(rawHR,rawHL)*sc;
+      dim(pp.x, oy+maxH, pp.x+(pp.pv.wB||pp.pv.w), oy+maxH, `${pp.pv.wB||pp.pv.w}`, 22, true, 'pw_'+pp.key);
+    }
+  });
+
+  // ── HEIGHTS: logical outer edge per panel ──
+  // Logic: find the GLOBAL leftmost X and GLOBAL rightmost X of all panels.
+  // Any panel whose RIGHT edge = global right → draw height on RIGHT (outside).
+  // Any panel whose LEFT edge  = global left  → draw height on LEFT  (outside).
+  // All other panels → draw height INSIDE the panel (between its own edges).
+
+  const realPanelPos = panelPos.filter(p=>p.type!=='corner');
+  const globalRight = Math.max(...realPanelPos.map(p=>p.x+p.wT));
+  const globalLeft  = Math.min(...realPanelPos.map(p=>p.x));
+  const H_OUT = 28; // offset outside the drawing
+  const H_IN  = 12; // small indent when inside
+
+  realPanelPos.forEach(pp=>{
+    const pv2=pp.pv;
+    const rawH = pv2.hR||pv2.h;
+    const isFixed = pp.type==='fixed';
+    const lbl = `${isFixed?'ק':'ד'}: ${rawH}`;
+
+    const onRightEdge = Math.abs((pp.x+pp.wT) - globalRight) < 2;
+    const onLeftEdge  = Math.abs(pp.x - globalLeft) < 2;
+
+    if(onRightEdge){
+      // this panel touches the right wall — draw height outside to the right
+      dim(pp.x+pp.wT, oy, pp.x+pp.wT, oy+pp.hR,
+          lbl, H_OUT, false, 'ph_'+pp.key);
+    }
+    if(onLeftEdge && !onRightEdge){
+      // this panel touches the left wall — draw height outside to the left
+      dim(pp.x, oy, pp.x, oy+pp.hR,
+          lbl, -H_OUT, false, 'ph_'+pp.key);
+    }
+    if(!onRightEdge && !onLeftEdge){
+      // middle panel — draw height INSIDE, along its right inner edge
+      dim(pp.x+pp.wT, oy, pp.x+pp.wT, oy+pp.hR,
+          lbl, H_IN, false, 'ph_'+pp.key);
+    }
+  });
+
+  // ── BRACKET dims: INSIDE the glass area, close to wall ──
+  bracketDims.forEach(b=>{
+    // draw dim lines just inside the panel (not outside where heights are)
+    const inOff = b.side==='right' ? 10 : -10;
+    dim(b.x, oy, b.x, oy+b.brT*sc, `${b.brT}`, inOff, false, 'brT');
+    dim(b.x, oy+b.hR-b.brB*sc, b.x, oy+b.hR, `${b.brB}`, inOff, false, 'brB');
+    if(b.brN===3) dim(b.x, oy, b.x, oy+b.br3*sc, `${b.br3}`, inOff*2, false, 'br3');
+  });
+
+  // ── HINGE dims: INSIDE the door panel, close to hinge side ──
+  hingeDims.forEach(h=>{
+    // draw just inside the door
+    const inOff = h.onRight ? 10 : -10;
+    dim(h.x, oy, h.x, oy+h.hgT*sc, `${h.hgT}`, inOff, false, 'hgT');
+    dim(h.x, oy+h.hR-h.hgB*sc, h.x, oy+h.hR, `${h.hgB}`, inOff, false, 'hgB');
+    if(h.hgN===3) dim(h.x, oy, h.x, oy+h.hg3*sc, `${h.hg3}`, inOff*2, false, 'hg3');
+  });
+
+  // ── LAYER 3: Panel labels ──
+  panelPos.forEach(pp=>{
+    if(pp.type==='corner') return;
+    const lx=pp.x+pp.wT/2;
+    const ly=oy+pp.hR*0.3; // upper third
+    panelLabel(cx, lx, ly, pp.label, pp.pv.slope);
+  });
+
+  // ── LAYER 4: Special holes ──
+  panelPos.forEach(pp=>{
+    if(pp.type==='corner') return;
+    holes.forEach(h=>{
+      if(hs(h.id,'panel')!==pp.key) return;
+      const diam=hv(h.id,'diam'), fb=hv(h.id,'fb'), fs2=hv(h.id,'fs'), side=hs(h.id,'side');
+      const hY=oy+pp.hR-fb*sc;
+      const hX=side==='right'?pp.x+pp.wT-fs2*sc:pp.x+fs2*sc;
+      if(hY>oy+4&&hY<oy+pp.hR-4)
+        drawSpecialHole(hX,hY,diam,fb,fs2,side,oy+pp.hR,side==='right'?pp.x+pp.wT:pp.x);
+    });
+  });
+
+  // ── Title bar ──
+  const skName=vs('skName');
+  const clientNameVal=vs('clientName');
+  const ty=cH-26;
+  cx.fillStyle='#f7f4ef'; cx.fillRect(0,ty,cW,26);
+  cx.strokeStyle='rgba(0,0,0,0.07)'; cx.lineWidth=1;
+  cx.beginPath();cx.moveTo(0,ty);cx.lineTo(cW,ty);cx.stroke();
+  cx.font='bold 11px Heebo,sans-serif';cx.fillStyle='#b8922a';cx.textAlign='right';
+  cx.fillText('LuzGlass',cW-10,ty+17);
+  cx.font='10px Heebo,sans-serif';cx.fillStyle='#8a8278';cx.textAlign='center';
+  const ttl=(clientNameVal?clientNameVal+' · ':'')+selType.name+(skName?' · '+skName:'');
+  cx.fillText(ttl,cW/2,ty+17);
+  cx.font='10px Heebo,sans-serif';cx.fillStyle='#8a8278';cx.textAlign='left';
+  cx.fillText(new Date().toLocaleDateString('he-IL'),10,ty+17);
+
+  updateSpecs();
+}
+
+// ═══════════════════════════════════════════
+//  SPECS + ORDER
+// ═══════════════════════════════════════════
+function updateSpecs(){
+  const g=GLASSES.find(x=>x.id===selG), f=FINISHES.find(x=>x.id===selF);
+  const realPanels=selType.panels.filter(p=>p.t!=='corner');
+  const totalArea=realPanels.reduce((s,p)=>{
+    const pv=getPV(p.key);
+    return s+(pv.wT+pv.wB)/2*pv.h/10000;
+  },0).toFixed(2);
+  const glassTotal=Math.round(totalArea*g.price);
+  const finishTotal=selQ==='zamak'?f.pZ:f.pP;
+  const total=glassTotal+finishTotal;
+  const sk=vs('skName'),cl=vs('clientName'),nt=vs('notes');
+  const panelSummary=realPanels.map(p=>{const pv=getPV(p.key);return `${p.label}: ${pv.wT}×${pv.h}`;}).join(' | ');
+  document.getElementById('specs').innerHTML=`<strong>פרטי הזמנה${sk?' — '+sk:''}</strong>
+    ${cl?'לקוח: '+cl+'<br>':''}
+    סוג: ${selType.cat} — ${selType.name}<br>
+    ${panelSummary}<br>
+    זכוכית: ${g.name} 8מ"מ מחוסם — ₪${g.price}/מ"ר<br>
+    ${withFarzel?`פרזול: ${f.name} (${selQ==='zamak'?'זאמק':'פליז'})${sand?' · התזת חול':''}`:' ⬡ ללא פרזול'}<br>
+    שטח כולל: ${totalArea} מ"ר<br>
+    <strong style="color:var(--gold)">סה"כ משוער: ₪${total.toLocaleString()}</strong>
+    ${nt?'<br><em style="font-size:12px;color:var(--muted)">📝 '+nt+'</em>':''}`;
+}
+
+// ── ORDER MANAGEMENT ──
+let activeOrderId = null;
+
+function getOrderKey(){ return activeOrderId||'default'; }
+
+function onOrderInfoChange(){
+  const client=vs('clientName'), num=vs('orderNum');
+  if(client||num){
+    if(!activeOrderId) activeOrderId = 'ord_'+Date.now();
+    updateOrderBar();
+  }
+  updateSpecs();
+}
+
+function updateOrderBar(){
+  const client=vs('clientName'), num=vs('orderNum');
+  const info=document.getElementById('orderBarInfo');
+  const badge=document.getElementById('orderBarCount');
+  const label=[client,num].filter(Boolean).join(' · ');
+  info.textContent=label||'—';
+  // count items in this order
+  const all=JSON.parse(localStorage.getItem('lgOrders')||'[]');
+  const count=all.filter(o=>o.orderId===activeOrderId).length;
+  badge.textContent=count>0?count+' פריטים':'';
+}
+
+function newOrder(){
+  if(confirm('להתחיל הזמנה חדשה? ההזמנה הנוכחית נשמרת.')){
+    activeOrderId='ord_'+Date.now();
+    document.getElementById('clientName').value='';
+    document.getElementById('orderNum').value='';
+    document.getElementById('skName').value='';
+    updateOrderBar();
+  }
+}
+
+function viewOrder(){
+  const id=activeOrderId||'default';
+  window.open('order-view.html?order='+encodeURIComponent(id),'_blank');
+}
+
+function addToOrder(){
+  const g=GLASSES.find(x=>x.id===selG),f=FINISHES.find(x=>x.id===selF);
+  const realPanels=selType.panels.filter(p=>p.t!=='corner');
+  const totalArea=realPanels.reduce((s,p)=>{const pv=getPV(p.key);return s+(pv.wT+pv.wB)/2*pv.h/10000;},0).toFixed(2);
+  const glassTotal=Math.round(totalArea*g.price);
+  const finishTotal=selQ==='zamak'?f.pZ:f.pP;
+  if(!activeOrderId) activeOrderId='ord_'+Date.now();
+  const all=JSON.parse(localStorage.getItem('lgOrders')||'[]');
+  all.push({
+    id:Date.now(),
+    orderId:activeOrderId,
+    orderClient:vs('clientName'),
+    orderNum:vs('orderNum'),
+    sketchName:vs('skName'),
+    notes:vs('notes'),
+    type:selType.name, cat:selType.cat,
+    panels:realPanels.map(p=>({label:p.label,...getPV(p.key)})),
+    glass:g.name,glassPrice:g.price,finish:withFarzel?f.name:'ללא פרזול',quality:selQ,sand,withFarzel,
+    area:totalArea,total:glassTotal+finishTotal,
+    date:new Date().toLocaleDateString('he-IL'),
+    sketch:C.toDataURL('image/png',0.6)
+  });
+  localStorage.setItem('lgOrders',JSON.stringify(all));
+  updateOrderBar();
+  const t=document.getElementById('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+function dlPNG(){
+  const l=document.createElement('a');
+  const client=vs('clientName');
+  const skn=vs('skName')||selType.id||Date.now();
+  l.download=`luzglass-${client?client+'-':''}${skn}.png`;
+  l.href=C.toDataURL();l.click();
+}
+
+function finishOrder(){
+  if(!activeOrderId){ alert('לא נוספו פריטים להזמנה.'); return; }
+  const all=JSON.parse(localStorage.getItem('lgOrders')||'[]');
+  const items=all.filter(o=>o.orderId===activeOrderId);
+  if(!items.length){ alert('לא נוספו פריטים להזמנה.'); return; }
+  showFinishModal(items);
+}
+
+function showFinishModal(items){
+  const client=items[0]?.orderClient||'—';
+  const num=items[0]?.orderNum||'—';
+  const total=items.reduce((s,o)=>s+(o.total||0),0);
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML=`
+    <div style="background:#fff;border-radius:8px;max-width:500px;width:100%;padding:0;overflow:hidden;font-family:Heebo,sans-serif;direction:rtl;">
+      <div style="background:#1a1714;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;">
+        <span style="color:#c9a84c;font-weight:900;font-size:16px;">✓ סיכום הזמנה</span>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:20px;">
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px;">${client}</div>
+        <div style="font-size:12px;color:#888;margin-bottom:16px;">הזמנה ${num}</div>
+        ${items.map((o,i)=>`
+          <div style="border:1px solid #eee;border-radius:6px;padding:12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;">
+            <div style="width:64px;height:48px;flex-shrink:0;border-radius:4px;overflow:hidden;background:#f5f5f5;">
+              ${o.sketch?`<img src="${o.sketch}" style="width:100%;height:100%;object-fit:cover;">`:'<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px;">📐</div>'}
+            </div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700;color:#1a1714;">${o.sketchName||o.type}</div>
+              <div style="font-size:11px;color:#888;">${o.type} · ${o.glass||''} · ${o.area||''}מ"ר</div>
+              <div style="font-size:12px;font-weight:700;color:#b8922a;margin-top:3px;">₪${(o.total||0).toLocaleString()}</div>
+            </div>
+            <button onclick="dlSketch('${o.id}',event)" style="padding:4px 10px;background:#f5f5f5;border:1px solid #ddd;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;white-space:nowrap;">📥 הורד</button>
+          </div>`).join('')}
+        <div style="border-top:2px solid #eee;margin-top:12px;padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:15px;font-weight:900;color:#1a1714;">סה"כ: ₪${total.toLocaleString()}</span>
+          <span style="font-size:11px;color:#888;">${items.length} סקיצות</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button onclick="sendOrderWhatsApp()" style="flex:1;padding:12px;background:#25d366;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:4px;">📲 שלח בוואטסאפ</button>
+          <button onclick="this.closest('[style*=fixed]').remove()" style="padding:12px 20px;background:#f5f5f5;border:1px solid #ddd;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;border-radius:4px;">סגור</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function dlSketch(itemId, e){
+  e.stopPropagation();
+  const all=JSON.parse(localStorage.getItem('lgOrders')||'[]');
+  const item=all.find(o=>String(o.id)===String(itemId));
+  if(!item||!item.sketch){ alert('אין תמונה'); return; }
+  const a=document.createElement('a');
+  a.download=`luzglass-${item.orderClient||''}-${item.sketchName||item.type||itemId}.png`;
+  a.href=item.sketch; a.click();
+}
+
+function sendOrderWhatsApp(){
+  const all=JSON.parse(localStorage.getItem('lgOrders')||'[]');
+  const items=all.filter(o=>o.orderId===activeOrderId);
+  if(!items.length) return;
+  const client=items[0].orderClient||'';
+  const total=items.reduce((s,o)=>s+(o.total||0),0);
+  const lines=items.map(o=>`• ${o.sketchName||o.type}: ₪${(o.total||0).toLocaleString()}`).join('%0A');
+  const msg=`שלום LuzGlass!%0Aהזמנה עבור: ${encodeURIComponent(client)}%0A${lines}%0Aסה"כ: ₪${total.toLocaleString()}`;
+  window.open('https://wa.me/972XXXXXXXXX?text='+msg,'_blank');
+}
+
+function showSketchGallery(){
+  const all=JSON.parse(localStorage.getItem('lgOrders')||'[]');
+  // Get current user from session
+  const sess=JSON.parse(sessionStorage.getItem('lgSession')||'{}');
+  const myOrders = sess.role==='admin' ? all :
+    all.filter(o=>o.orderClient===sess.name||o.userId===sess.id);
+  if(!myOrders.length){ alert('אין סקיצות עדיין. הוסף לפחות סקיצה אחת.'); return; }
+
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;overflow-y:auto;padding:20px;font-family:Heebo,sans-serif;direction:rtl;';
+  const grouped={};
+  myOrders.forEach(o=>{ const k=o.orderId||o.id; if(!grouped[k]) grouped[k]=[]; grouped[k].push(o); });
+
+  const cards=Object.entries(grouped).map(([oid,items])=>{
+    const client=items[0].orderClient||'—';
+    const num=items[0].orderNum||'—';
+    const date=items[0].date||'';
+    const total=items.reduce((s,o)=>s+(o.total||0),0);
+    const thumbs=items.map(o=>o.sketch?`<img src="${o.sketch}" style="width:80px;height:60px;object-fit:cover;border-radius:4px;border:2px solid #333;">`:'<div style="width:80px;height:60px;background:#2a2a2a;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:22px;">📐</div>').join('');
+    return `
+      <div style="background:#1e1e1e;border-radius:8px;padding:14px;margin-bottom:12px;border:1px solid #333;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+          <div>
+            <div style="font-size:15px;font-weight:900;color:#f0ede8;">${client}</div>
+            <div style="font-size:11px;color:#888;">${num} · ${date} · ${items.length} סקיצות</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:#c9a84c;">₪${total.toLocaleString()}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">${thumbs}</div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="loadOrderToSketch('${oid}',event)" style="flex:1;padding:8px;background:#c9a84c;color:#1a1714;font-family:Heebo,sans-serif;font-size:12px;font-weight:900;border:none;cursor:pointer;border-radius:4px;">המשך לעבוד</button>
+          <button onclick="dlAllSketches('${oid}',event)" style="padding:8px 14px;background:#2a2a2a;color:#888;font-family:Heebo,sans-serif;font-size:12px;border:1px solid #333;cursor:pointer;border-radius:4px;">📥 הורד הכל</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  modal.innerHTML=`
+    <div style="max-width:560px;margin:0 auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <span style="color:#c9a84c;font-size:17px;font-weight:900;">📐 הסקיצות שלי</span>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:#888;font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      ${cards}
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function loadOrderToSketch(orderId,e){
+  e.stopPropagation();
+  activeOrderId=orderId;
+  const all=JSON.parse(localStorage.getItem('lgOrders')||'[]');
+  const items=all.filter(o=>o.orderId===orderId);
+  if(items.length){
+    const first=items[0];
+    document.getElementById('clientName').value=first.orderClient||'';
+    document.getElementById('orderNum').value=first.orderNum||'';
+    updateOrderBar();
+  }
+  document.querySelector('[style*=fixed]').remove();
+}
+
+function dlAllSketches(orderId,e){
+  e.stopPropagation();
+  const all=JSON.parse(localStorage.getItem('lgOrders')||'[]');
+  const items=all.filter(o=>o.orderId===orderId);
+  items.forEach((o,i)=>{
+    if(!o.sketch) return;
+    setTimeout(()=>{
+      const a=document.createElement('a');
+      a.download=`luzglass-${o.orderClient||''}-${o.sketchName||o.type||i}.png`;
+      a.href=o.sketch; a.click();
+    },i*300);
+  });
+}
+
+
+// ═══════════════════════════════════════════
+//  PIECE BUILDER
+// ═══════════════════════════════════════════
+let currentMode = 'shower';
+const PIECE_TYPES = [
+  {id:'fixed-bracket',  icon:'⬡', label:'קבוע + זוויות',  hinges:false,brackets:true, handle:false},
+  {id:'fixed-hinge',    icon:'⬡', label:'קבוע + ציר',     hinges:true, brackets:true, handle:false},
+  {id:'door-hinge',     icon:'🚪',label:'דלת',            hinges:true, brackets:false,handle:true},
+  {id:'slider',         icon:'↔', label:'הזזה',           hinges:false,brackets:false,handle:true},
+  {id:'mirror',         icon:'🪞',label:'מראה',           hinges:false,brackets:false,handle:false},
+  {id:'glass-only',     icon:'◻', label:'זכוכית בלבד',    hinges:false,brackets:false,handle:false},
+];
+let pieces=[]; let selPieceType=PIECE_TYPES[0];
+let pieceSlopeActive=false; let pieceSlopeCorner='right';
+let pieceFloorActive=false; let pieceHandleType='knob';
+let selPGlass='shafu'; let pieceInited=false;
+
+function setMode(mode){
+  currentMode=mode;
+  const isS=mode==='shower';
+  ['shower','piece'].forEach(m=>{
+    const btn=document.getElementById('mode'+m.charAt(0).toUpperCase()+m.slice(1));
+    if(btn){
+      btn.style.borderBottomColor=currentMode===m?'var(--gold)':'transparent';
+      btn.style.background=currentMode===m?'var(--bg2)':'var(--surface)';
+      btn.style.color=currentMode===m?'var(--text)':'var(--muted)';
+    }
+  });
+  document.querySelector('.canvas-wrap').style.display=isS?'block':'none';
+  document.querySelector('.controls').style.display=isS?'flex':'none';
+  document.querySelector('.specs').style.display=isS?'block':'none';
+  document.querySelector('.btns').style.display=isS?'flex':'none';
+  document.getElementById('pieceBuilder').style.display=isS?'none':'block';
+  if(!isS&&!pieceInited)initPieceBuilder();
+  else if(!isS)drawPiece();
+}
+
+function initPieceBuilder(){
+  pieceInited=true;
+  document.getElementById('pieceTypeGrid').innerHTML=PIECE_TYPES.map(t=>
+    '<button class="type-btn '+(t.id===selPieceType.id?'active':'')+'" onclick="selectPieceType(\''+t.id+'\')">'+
+    '<span style="font-size:16px">'+t.icon+'</span><br>'+t.label+'</button>').join('');
+  renderPGlass();
+  updatePieceFittings();
+  drawPiece();
+}
+
+function renderPGlass(){
+  document.getElementById('pGlassSw').innerHTML=GLASSES.map(g=>
+    '<button class="sw '+(g.id===selPGlass?'active':'')+'" onclick="selPGlass=\''+g.id+'\';renderPGlass();updatePieceSpecs()">'+
+    '<div class="sw-dot" style="background:'+g.dot+(g.b?';border:'+g.b:'')+';"></div>'+
+    '<div class="sw-name">'+g.name+'</div><div class="sw-price">&#8362;'+g.price+'</div></button>').join('');
+}
+
+function selectPieceType(id){
+  selPieceType=PIECE_TYPES.find(t=>t.id===id)||PIECE_TYPES[0];
+  document.getElementById('pieceTypeGrid').innerHTML=PIECE_TYPES.map(t=>
+    '<button class="type-btn '+(t.id===selPieceType.id?'active':'')+'" onclick="selectPieceType(\''+t.id+'\')">'+
+    '<span style="font-size:16px">'+t.icon+'</span><br>'+t.label+'</button>').join('');
+  updatePieceFittings();
+  const isFixedHinge=selPieceType.id==='fixed-hinge';
+  const sr=document.getElementById('pBrSideRow');
+  const an=document.getElementById('pBrAutoNote');
+  if(sr)sr.style.display=isFixedHinge?'none':'flex';
+  if(an)an.style.display=isFixedHinge?'block':'none';
+  drawPiece();
+}
+
+let pCutType='rect';
+let pCutActive=false;
+
+function togglePCutActive(){
+  pCutActive=!pCutActive;
+  const btn=document.getElementById('pCutActiveBtn');
+  const fields=document.getElementById('pCutFields');
+  if(btn){btn.textContent=pCutActive?'✕ הסר':'+ הוסף';btn.classList.toggle('active',pCutActive);}
+  if(fields)fields.style.display=pCutActive?'flex':'none';
+  drawPiece();
+}
+
+function setPCutType(type){
+  pCutType=type;
+  document.getElementById('pCutTypeRect').classList.toggle('active',type==='rect');
+  document.getElementById('pCutTypeHole').classList.toggle('active',type==='hole');
+  document.getElementById('pCutRectFields').style.display=type==='rect'?'block':'none';
+  document.getElementById('pCutHoleFields').style.display=type==='hole'?'block':'none';
+  drawPiece();
+}
+
+function updatePieceFittings(){
+  const t=selPieceType;
+  document.getElementById('pHingeSection').style.display=t.hinges?'block':'none';
+  document.getElementById('pBracketSection').style.display=t.brackets?'block':'none';
+  document.getElementById('pHandleSection').style.display=t.handle?'block':'none';
+  // show cutout for mirror and glass-only
+  const showCut=t.id==='mirror'||t.id==='glass-only';
+  document.getElementById('pCutoutSection').style.display=showCut?'block':'none';
+}
+
+function onPHgN(){
+  const n=parseInt(document.getElementById('pHgN')?.value)||2;
+  const row=document.getElementById('pHg3Row');
+  if(row) row.style.display=n===3?'flex':'none';
+  drawPiece();
+}
+
+function togglePieceSlope(){
+  pieceSlopeActive=!pieceSlopeActive;
+  document.getElementById('pSlopeBtn').classList.toggle('active',pieceSlopeActive);
+  document.getElementById('pSlopeFields').style.display=pieceSlopeActive?'flex':'none';
+  drawPiece();
+}
+function setPieceSlope(s){
+  pieceSlopeCorner=s;
+  document.getElementById('pSlopeR').classList.toggle('active',s==='right');
+  document.getElementById('pSlopeL').classList.toggle('active',s==='left');
+  drawPiece();
+}
+function togglePieceFloor(){
+  pieceFloorActive=!pieceFloorActive;
+  document.getElementById('pFloorBtn').classList.toggle('active',pieceFloorActive);
+  document.getElementById('pFloorFields').style.display=pieceFloorActive?'flex':'none';
+  drawPiece();
+}
+function setPieceHandle(t){
+  pieceHandleType=t;
+  document.getElementById('pHKnob').classList.toggle('active',t==='knob');
+  document.getElementById('pHTowel').classList.toggle('active',t==='towel');
+  document.getElementById('pTowelRow').style.display=t==='towel'?'flex':'none';
+  drawPiece();
+}
+
+function pv2(id){return parseFloat(document.getElementById(id)?.value)||0;}
+function ps2(id){return document.getElementById(id)?.value||'';}
+
+function drawPiece(){
+  const canvas=document.getElementById('pieceSk');
+  if(!canvas||currentMode!=='piece')return;
+  const pcx=canvas.getContext('2d');
+  const DPR=window.devicePixelRatio||1;
+  const cW=canvas.parentElement.clientWidth;
+  const MG=75;
+  const W=pv2('pW')||80, H=pv2('pH')||200;
+  const HR=pieceSlopeActive?(pv2('pHR')||H):H;
+  const HL=pieceSlopeActive?(pv2('pHL')||H):H;
+  // amplify slope
+  let visHR=HR,visHL=HL;
+  if(pieceSlopeActive&&Math.abs(HR-HL)>0.5){
+    const minD=40,diff=HR-HL,sign=diff>0?1:-1,ctr=(HR+HL)/2;
+    if(Math.abs(diff)<minD){visHR=ctr+sign*minD/2;visHL=ctr-sign*minD/2;}
+  }
+  const sc=(cW-MG*2)/W;
+  const cH=Math.max(visHR,visHL)*sc+MG*2+40;
+  canvas.width=cW*DPR;canvas.height=cH*DPR;
+  canvas.style.width=cW+'px';canvas.style.height=cH+'px';
+  pcx.scale(DPR,DPR);
+  pcx.clearRect(0,0,cW,cH);pcx.fillStyle='#fff';pcx.fillRect(0,0,cW,cH);
+  // grid
+  pcx.strokeStyle='rgba(0,0,0,0.03)';pcx.lineWidth=1;
+  const gs=Math.max(8,8*sc);
+  for(let x=0;x<cW;x+=gs){pcx.beginPath();pcx.moveTo(x,0);pcx.lineTo(x,cH);pcx.stroke();}
+  for(let y=0;y<cH;y+=gs){pcx.beginPath();pcx.moveTo(0,y);pcx.lineTo(cW,y);pcx.stroke();}
+  const oy=MG,x0=MG+(cW-MG*2-W*sc)/2,x1=x0+W*sc;
+  // swap for slopeCorner
+  let dHR=visHR*sc,dHL=visHL*sc;
+  if(pieceSlopeActive&&pieceSlopeCorner==='left'){[dHR,dHL]=[dHL,dHR];}
+  // glass
+  const isDoor=selPieceType.id.includes('door');
+  const isSlider=selPieceType.id==='slider';
+  pcx.beginPath();pcx.moveTo(x0,oy);pcx.lineTo(x1,oy);pcx.lineTo(x1,oy+dHL);pcx.lineTo(x0,oy+dHR);pcx.closePath();
+  pcx.fillStyle=isDoor?'rgba(180,215,240,0.22)':isSlider?'rgba(200,230,210,0.2)':'rgba(180,215,240,0.1)';
+  pcx.fill();pcx.strokeStyle='#2a5a8a';pcx.lineWidth=isDoor?2.5:2;pcx.stroke();
+  // slider rails
+  if(isSlider){
+    pcx.strokeStyle='rgba(42,138,80,0.3)';pcx.lineWidth=3;
+    pcx.beginPath();pcx.moveTo(x0,oy+3);pcx.lineTo(x1,oy+3);pcx.stroke();
+    pcx.beginPath();pcx.moveTo(x0,oy+dHR-3);pcx.lineTo(x1,oy+dHL-3);pcx.stroke();
+  }
+  // hinges
+  if(selPieceType.hinges){
+    const hgT=pv2('pHgT')||20,hgB=pv2('pHgB')||20,hgN=parseInt(ps2('pHgN'))||2;
+    const onR=ps2('pHgSide')==='right';
+    const hx=onR?x0:x1;
+    const hPos=[oy+hgT*sc,oy+dHR-hgB*sc];
+    if(hgN===3){const hg3p=pv2('pHg3')||40;hPos.push(oy+hg3p*sc);}
+    hPos.forEach(hy=>{
+      const rw=Math.max(8,sc*0.55),rh=Math.max(12,sc*1.0);
+      const rx=onR?hx-rw:hx;
+      pcx.fillStyle='rgba(184,146,42,0.18)';pcx.fillRect(rx,hy-rh/2,rw,rh);
+      pcx.strokeStyle='#b8922a';pcx.lineWidth=1.5;pcx.strokeRect(rx,hy-rh/2,rw,rh);
+      pcx.fillStyle='#b8922a';pcx.beginPath();pcx.arc(rx+rw/2,hy,2,0,Math.PI*2);pcx.fill();
+    });
+    pDim(pcx,hx,oy,hx,oy+hgT*sc,''+hgT,onR?-14:14,sc);
+    pDim(pcx,hx,oy+dHR-hgB*sc,hx,oy+dHR,''+hgB,onR?-14:14,sc);
+  }
+  // brackets
+  if(selPieceType.brackets){
+    const brT=pv2('pBrT')||20,brB=pv2('pBrB')||20;
+    // for fixed-hinge: bracket on WALL side (opposite from hinge/door side)
+    // for fixed-bracket: use pBrSide selector
+    let sides;
+    if(selPieceType.id==='fixed-hinge'){
+      // hinge is on door-facing side, bracket on wall side = opposite
+      const hingeSide=ps2('pHgSide')||'right';
+      const wallSide=hingeSide==='right'?'left':'right';
+      sides=[wallSide];
+    } else {
+      sides=ps2('pBrSide')==='both'?['right','left']:[ps2('pBrSide')||'right'];
+    }
+    sides.forEach(side=>{
+      const bx=side==='right'?x0:x1,onR2=side==='right';
+      const s=Math.max(8,sc*0.7);
+      [oy+brT*sc,oy+dHR-brB*sc].forEach(by=>{
+        pcx.strokeStyle='#b8922a';pcx.lineWidth=2;
+        pcx.beginPath();
+        if(onR2){pcx.moveTo(bx+s*2,by);pcx.lineTo(bx,by);pcx.lineTo(bx,by+s);}
+        else{pcx.moveTo(bx-s*2,by);pcx.lineTo(bx,by);pcx.lineTo(bx,by+s);}
+        pcx.stroke();
+        pcx.fillStyle='#b8922a';pcx.beginPath();pcx.arc(bx,by,2.5,0,Math.PI*2);pcx.fill();
+      });
+      pDim(pcx,bx,oy,bx,oy+brT*sc,''+brT,onR2?-14:14,sc);
+      pDim(pcx,bx,oy+dHR-brB*sc,bx,oy+dHR,''+brB,onR2?-14:14,sc);
+    });
+    // also show hinge holes on the hinge side of fixed-hinge
+    if(selPieceType.id==='fixed-hinge'){
+      const hgT=pv2('pHgT')||20,hgB=pv2('pHgB')||20,hgN=parseInt(ps2('pHgN'))||2;
+      const onR=ps2('pHgSide')==='right';
+      const hx=onR?x0:x1;
+      const hPos=[oy+hgT*sc,oy+dHR-hgB*sc];
+      if(hgN===3){const hg3p=pv2('pHg3')||40;hPos.push(oy+hg3p*sc);}
+      hPos.forEach(hy=>{
+        const rw=Math.max(8,sc*0.55),rh=Math.max(12,sc*1.0);
+        const rx=onR?hx-rw:hx;
+        pcx.fillStyle='rgba(184,146,42,0.18)';pcx.fillRect(rx,hy-rh/2,rw,rh);
+        pcx.strokeStyle='#b8922a';pcx.lineWidth=1.5;pcx.strokeRect(rx,hy-rh/2,rw,rh);
+        pcx.fillStyle='#b8922a';pcx.beginPath();pcx.arc(rx+rw/2,hy,2,0,Math.PI*2);pcx.fill();
+      });
+    }
+  }
+  // handle
+  if(selPieceType.handle){
+    const hEd=pv2('pHEd')||6;
+    const onR=ps2('pHgSide')==='right';
+    const hx2=onR?x1-hEd*sc:x0+hEd*sc,hy2=oy+dHR/2;
+    const r=Math.max(3,sc*0.28);
+    if(pieceHandleType==='knob'){
+      pHole(pcx,hx2,hy2,r);
+    } else {
+      const tSp=pv2('pTSp')||55,hx3=hx2+(onR?-1:1)*tSp*sc;
+      pHole(pcx,hx2,hy2,r);pHole(pcx,hx3,hy2,r);
+      pDim(pcx,Math.min(hx2,hx3),hy2-18,Math.max(hx2,hx3),hy2-18,''+tSp,0,sc);
+    }
+  }
+  // cutout / hole (for mirror and glass-only)
+  const showCut2=(selPieceType.id==='mirror'||selPieceType.id==='glass-only')&&pCutActive;
+  if(showCut2){
+    const cutEdge=pv2('pCutEdge')||10;
+    const cutBot=pv2('pCutBottom')||30;
+    const cx2val=x0+cutEdge*sc; // from left edge
+    const cy2val=oy+dHR-cutBot*sc; // from bottom, to CENTER
+    if(pCutType==='rect'){
+      const cw=pv2('pCutW')||12, ch=pv2('pCutH')||9;
+      const crx=cx2val-cw*sc/2, cry=cy2val-ch*sc/2;
+      // draw cutout rectangle
+      pcx.save();
+      pcx.fillStyle='rgba(255,255,255,0.9)';
+      pcx.fillRect(crx,cry,cw*sc,ch*sc);
+      pcx.strokeStyle='#c0392b'; pcx.lineWidth=2; pcx.setLineDash([]);
+      pcx.strokeRect(crx,cry,cw*sc,ch*sc);
+      // crosshair center
+      pcx.strokeStyle='rgba(192,57,43,0.4)'; pcx.lineWidth=0.8;
+      pcx.beginPath();pcx.moveTo(cx2val-6,cy2val);pcx.lineTo(cx2val+6,cy2val);pcx.stroke();
+      pcx.beginPath();pcx.moveTo(cx2val,cy2val-6);pcx.lineTo(cx2val,cy2val+6);pcx.stroke();
+      pcx.restore();
+      // dim: from left edge to center of cutout
+      pDim(pcx,x0,cy2val,cx2val,cy2val,''+cutEdge+' cm',8,sc);
+      // dim: from bottom of glass to center of cutout
+      pDim(pcx,cx2val,oy+dHR,cx2val,cy2val,''+cutBot+' cm',-(DO+14),sc);
+      // size label inside/above cutout
+      pcx.font='bold '+(Math.max(7,sc*0.65))+'px Heebo,sans-serif';
+      pcx.fillStyle='#c0392b';
+      pcx.textAlign='center'; pcx.textBaseline='bottom';
+      pcx.fillText(cw+'x'+ch,cx2val,cry-2);
+    } else {
+      // hole
+      const diam=pv2('pCutDiam')||14;
+      const hr=diam/10*sc/2; // radius in canvas units
+      pcx.save();
+      pcx.beginPath();pcx.arc(cx2val,cy2val,hr,0,Math.PI*2);
+      pcx.fillStyle='rgba(255,255,255,0.9)';pcx.fill();
+      pcx.strokeStyle='#c0392b';pcx.lineWidth=1.5;pcx.stroke();
+      pcx.strokeStyle='rgba(192,57,43,0.4)';pcx.lineWidth=0.7;
+      pcx.beginPath();pcx.moveTo(cx2val-hr*1.5,cy2val);pcx.lineTo(cx2val+hr*1.5,cy2val);pcx.stroke();
+      pcx.beginPath();pcx.moveTo(cx2val,cy2val-hr*1.5);pcx.lineTo(cx2val,cy2val+hr*1.5);pcx.stroke();
+      pcx.font='bold 8px Heebo,sans-serif';pcx.fillStyle='#c0392b';
+      pcx.textAlign='center';pcx.textBaseline='bottom';
+      pcx.fillText('o'+diam+'mm',cx2val,cy2val-hr-2);
+      pcx.restore();
+      pDim(pcx,x0,cy2val,cx2val,cy2val,''+cutEdge,8,sc);
+      pDim(pcx,cx2val,oy+dHR,cx2val,cy2val,''+cutBot,-10,sc);
+    }
+  }
+
+  // floor bracket
+  if(pieceFloorActive){
+    const flD=pv2('pFloorDist')||10,flX=x0+flD*sc,flY=oy+dHR;
+    pcx.fillStyle='#b8922a';pcx.fillRect(flX-3,flY-14,6,14);pcx.fillRect(flX-3,flY-5,16,5);
+    pcx.font='bold 9px Heebo,sans-serif';pcx.fillStyle='rgba(184,146,42,0.8)';
+    pcx.textAlign='center';pcx.textBaseline='top';pcx.fillText('רצפה',flX,flY+3);
+    pDim(pcx,x0,flY-20,flX,flY-20,''+flD,0,sc);
+  }
+  // dims
+  const DO=32;
+  pDim(pcx,x0,oy,x1,oy,''+W,-DO,sc);
+  if(pieceSlopeActive){
+    const rawHR2=pieceSlopeCorner==='left'?HL:HR,rawHL2=pieceSlopeCorner==='left'?HR:HL;
+    pDim(pcx,x1,oy,x1,oy+dHL,''+rawHR2+' cm',DO+8,sc);
+    pDim(pcx,x0,oy,x0,oy+dHR,''+rawHL2+' cm',-(DO+8),sc);
+    pDim(pcx,x0,oy+Math.max(dHR,dHL),x1,oy+Math.max(dHR,dHL),''+W,DO+10,sc);
+  } else {
+    pDim(pcx,x1,oy,x1,oy+dHR,''+HR+' cm',DO+8,sc);
+  }
+  // label
+  const g=GLASSES.find(x=>x.id===selPGlass);
+  pcx.font='bold '+Math.max(10,sc*1.1)+'px Heebo,sans-serif';
+  pcx.fillStyle='#2a5a8a';pcx.textAlign='center';pcx.textBaseline='middle';
+  pcx.fillText(selPieceType.label+(g?' · '+g.name:''),x0+(x1-x0)/2,oy+dHR/2);
+  // footer
+  const ty2=cH-24;
+  pcx.fillStyle='#f7f4ef';pcx.fillRect(0,ty2,cW,24);
+  pcx.strokeStyle='rgba(0,0,0,0.07)';pcx.lineWidth=1;
+  pcx.beginPath();pcx.moveTo(0,ty2);pcx.lineTo(cW,ty2);pcx.stroke();
+  pcx.font='bold 10px Heebo,sans-serif';pcx.fillStyle='#b8922a';
+  pcx.textAlign='left';pcx.fillText('LuzGlass',10,ty2+16);
+  updatePieceSpecs();
+}
+
+function pHole(pcx,x,y,r){
+  pcx.beginPath();pcx.arc(x,y,r,0,Math.PI*2);
+  pcx.fillStyle='rgba(184,146,42,0.15)';pcx.fill();
+  pcx.strokeStyle='#b8922a';pcx.lineWidth=1.5;pcx.stroke();
+  pcx.beginPath();pcx.moveTo(x-r+1,y);pcx.lineTo(x+r-1,y);pcx.stroke();
+  pcx.beginPath();pcx.moveTo(x,y-r+1);pcx.lineTo(x,y+r-1);pcx.stroke();
+}
+
+function pDim(pcx,x1,y1,x2,y2,txt,off,sc){
+  const isH=Math.abs(y2-y1)<2,ox=isH?0:off,oy2=isH?off:0;
+  pcx.save();
+  pcx.strokeStyle='rgba(184,146,42,0.8)';pcx.fillStyle='rgba(184,146,42,0.9)';
+  pcx.lineWidth=0.8;pcx.setLineDash([3,3]);
+  pcx.beginPath();pcx.moveTo(x1,y1);pcx.lineTo(x1+ox,y1+oy2);pcx.stroke();
+  pcx.beginPath();pcx.moveTo(x2,y2);pcx.lineTo(x2+ox,y2+oy2);pcx.stroke();
+  pcx.setLineDash([]);
+  pcx.beginPath();pcx.moveTo(x1+ox,y1+oy2);pcx.lineTo(x2+ox,y2+oy2);pcx.stroke();
+  const mx=(x1+ox+x2+ox)/2,my=(y1+oy2+y2+oy2)/2;
+  const fs=Math.max(8,Math.min(11,sc*1.2));
+  pcx.font='bold '+fs+'px Heebo,sans-serif';pcx.textAlign='center';pcx.textBaseline='middle';
+  const tw=pcx.measureText(txt).width+5;
+  pcx.fillStyle='rgba(247,244,239,0.95)';pcx.fillRect(mx-tw/2,my-6,tw,12);
+  pcx.fillStyle='#1a1714';pcx.fillText(txt,mx,my);
+  pcx.restore();
+}
+
+function updatePieceSpecs(){
+  const g=GLASSES.find(x=>x.id===selPGlass);
+  const W=pv2('pW')||80,H=pv2('pH')||200;
+  const HR=pieceSlopeActive?pv2('pHR'):H,HL=pieceSlopeActive?pv2('pHL'):H;
+  const area=((W*(HR+HL)/2)/10000).toFixed(2);
+  const price=Math.round(area*(g?.price||200));
+  const el=document.getElementById('pieceSpecs');
+  if(el)el.innerHTML='<strong>'+selPieceType.label+'</strong>'+(g?' · '+g.name:'')+
+    '<br>'+W+'x'+H+' cm'+
+    (pieceSlopeActive?' ('+HR+'/'+HL+')':'')+' · '+area+' m<br>'+
+    '<strong style="color:var(--gold)">&#8362;'+price.toLocaleString()+'</strong>';
+}
+
+function addPieceToSketch(){
+  const canvas=document.getElementById('pieceSk');
+  const g=GLASSES.find(x=>x.id===selPGlass);
+  const W=pv2('pW')||80,H=pv2('pH')||200;
+  const HR=pieceSlopeActive?pv2('pHR'):H,HL=pieceSlopeActive?pv2('pHL'):H;
+  const area=((W*(HR+HL)/2)/10000).toFixed(2);
+  pieces.push({id:'p'+Date.now(),type:selPieceType.id,label:selPieceType.label,
+    icon:selPieceType.icon,w:W,h:H,hR:HR,hL:HL,slope:pieceSlopeActive,
+    glass:g?.name||'',glassPrice:g?.price||200,area,
+    sketch:canvas.toDataURL('image/png',0.7)});
+  renderPieceList();
+  const t=document.getElementById('toast');
+  t.textContent='+ פריט נוסף!';t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2000);
+}
+
+function renderPieceList(){
+  const el=document.getElementById('pieceList');
+  if(!el)return;
+  const tot=pieces.reduce((s,p)=>s+parseFloat(p.area),0).toFixed(2);
+  el.innerHTML=pieces.map(p=>
+    '<div style="display:flex;align-items:center;gap:4px;padding:3px 8px;background:var(--bg2);border:1px solid var(--border);font-size:11px">'+
+    p.icon+' '+p.label+' '+p.w+'x'+p.h+
+    ' <span style="color:#c0392b;cursor:pointer;margin-right:2px" onclick="removePiece(\''+p.id+'\')">&#10005;</span></div>').join('');
+  const sa=document.getElementById('pieceTotalArea');
+  if(sa)sa.textContent=pieces.length?tot+' m | '+pieces.length+' '+'\u05e4\u05e8\u05d9\u05d8\u05d9\u05dd':'';
+}
+
+function removePiece(id){pieces=pieces.filter(p=>p.id!==id);renderPieceList();}
+
+function dlPiecePNG(){
+  const a=document.createElement('a');
+  a.download='piece-'+selPieceType.id+'.png';
+  a.href=document.getElementById('pieceSk').toDataURL();a.click();
+}
+
+// ═══════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════
+renderTypes();
+renderSw();
+renderPanelDims();
+updateTargetDropdowns();
+window.addEventListener('resize',draw);
+// init order
+activeOrderId='ord_'+Date.now();
+updateOrderBar();
+draw();
+</script>
+</body>
+</html>
