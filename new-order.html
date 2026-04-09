@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LuzGlass — הזמנה חדשה</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;min-height:100vh;}
+
+  nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:center;justify-content:space-between;}
+  .logo{font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:#f7f4ef;}
+  .logo span{color:var(--gold);}
+  .nav-back{font-size:13px;color:rgba(247,244,239,0.5);text-decoration:none;transition:color 0.15s;}
+  .nav-back:hover{color:#f7f4ef;}
+
+  .hero{padding:36px 20px 28px;text-align:center;}
+  .hero h1{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;margin-bottom:8px;}
+  .hero h1 em{font-style:normal;color:var(--gold);}
+  .hero p{font-size:14px;color:var(--muted);font-weight:300;}
+
+  .cards{padding:0 16px;display:flex;flex-direction:column;gap:12px;max-width:500px;margin:0 auto;}
+
+  .order-card{background:var(--surface);border:1px solid var(--border);padding:24px 20px;cursor:pointer;transition:all 0.2s;text-decoration:none;display:block;position:relative;overflow:hidden;}
+  .order-card::before{content:'';position:absolute;top:0;right:0;bottom:0;width:4px;background:var(--gold);transform:scaleY(0);transition:transform 0.2s;transform-origin:bottom;}
+  .order-card:hover{border-color:rgba(184,146,42,0.4);box-shadow:0 4px 20px rgba(0,0,0,0.06);}
+  .order-card:hover::before{transform:scaleY(1);}
+  .order-card:active{transform:scale(0.98);}
+
+  .oc-icon{font-size:36px;margin-bottom:14px;}
+  .oc-title{font-size:18px;font-weight:700;margin-bottom:6px;}
+  .oc-desc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px;}
+  .oc-examples{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px;}
+  .oc-tag{padding:3px 10px;background:var(--bg2);font-size:11px;color:var(--muted);border-radius:2px;}
+  .oc-arrow{display:flex;align-items:center;justify-content:space-between;}
+  .oc-arrow span{font-size:12px;font-weight:700;color:var(--gold);}
+  .oc-arrow .arr{font-size:18px;color:var(--gold);}
+
+  .divider{display:flex;align-items:center;gap:12px;padding:4px 16px;max-width:500px;margin:0 auto;}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+  .divider span{font-size:11px;color:var(--muted);}
+
+  .upload-card{background:rgba(184,146,42,0.04);border:1px dashed rgba(184,146,42,0.3);padding:18px 20px;cursor:pointer;transition:all 0.2s;text-decoration:none;display:flex;align-items:center;gap:14px;max-width:500px;margin:12px auto 0;}
+  .upload-card:hover{background:rgba(184,146,42,0.07);border-color:var(--gold);}
+  .uc-icon{font-size:24px;flex-shrink:0;}
+  .uc-info{flex:1;}
+  .uc-title{font-size:14px;font-weight:700;margin-bottom:3px;}
+  .uc-desc{font-size:12px;color:var(--muted);}
+
+  .bottom-note{text-align:center;padding:28px 20px;font-size:12px;color:var(--muted);}
+  .bottom-note a{color:var(--gold);text-decoration:none;}
+</style>
+</head>
+<body>
+<script>
+// Read client from session - runs after body exists
+const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
+</script>
+
+<nav>
+  <div class="logo">Luz<span>Glass</span></div>
+  <a href="portal.html" class="nav-back">← חזרה לפורטל</a>
+</nav>
+
+<div class="hero">
+  <h1>הזמנה <em>חדשה</em></h1>
+  <p>בחר את סוג ההזמנה שלך</p>
+</div>
+
+<div class="cards">
+
+  <a href="sketch-demo.html" class="order-card">
+    <div class="oc-icon">📐</div>
+    <div class="oc-title">בניית סקיצה טכנית</div>
+    <div class="oc-desc">
+      בנה סקיצה מדויקת עם מידות, צירים, זוויות ופרזול.
+      מתאים למקלחונים, מחיצות ומוצרים מורכבים.
+    </div>
+    <div class="oc-examples">
+      <span class="oc-tag">מקלחון פינתי</span>
+      <span class="oc-tag">מקלחון חזיתי</span>
+      <span class="oc-tag">מקלחון הזזה</span>
+      <span class="oc-tag">אמבטיון</span>
+      <span class="oc-tag">מחיצה</span>
+    </div>
+    <div class="oc-arrow">
+      <span>התחל לבנות</span>
+      <span class="arr">←</span>
+    </div>
+  </a>
+
+  <div class="divider"><span>או</span></div>
+
+  <a href="portal.html#quote" class="order-card" onclick="localStorage.setItem('portalTab','quote')">
+    <div class="oc-icon">📏</div>
+    <div class="oc-title">הזמנת זכוכית לפי מידה</div>
+    <div class="oc-desc">
+      הזן מידות ובחר סוג זכוכית. מתאים לפריטים פשוטים
+      שלא דורשים סקיצה טכנית מלאה.
+    </div>
+    <div class="oc-examples">
+      <span class="oc-tag">מראה</span>
+      <span class="oc-tag">זכוכית שטוחה</span>
+      <span class="oc-tag">מחוסם</span>
+      <span class="oc-tag">מלוטש</span>
+      <span class="oc-tag">צורה פשוטה</span>
+    </div>
+    <div class="oc-arrow">
+      <span>הזן מידות</span>
+      <span class="arr">←</span>
+    </div>
+  </a>
+
+</div>
+
+<a href="upload.html" class="upload-card">
+  <div class="uc-icon">📎</div>
+  <div class="uc-info">
+    <div class="uc-title">העלאת סקיצה / שרטוט ידני</div>
+    <div class="uc-desc">יש לך שרטוט ידני או קובץ? העלה אותו ונטפל בזה</div>
+  </div>
+  <span style="font-size:18px;color:var(--gold)">←</span>
+</a>
+
+<div class="bottom-note">
+  צריך עזרה? <a href="portal.html">שלח לנו הודעה</a>
+</div>
+
+</body>
+</html>
