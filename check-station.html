@@ -357,16 +357,37 @@ function load(){
   notes=JSON.parse(safeStorage.getItem('lgOrderNotes')||'{}');
   const saved=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
   const wd=JSON.parse(safeStorage.getItem('lgWorkDay')||'{}');
-  const inW=wd.inWork||[],inC=wd.inChisum||[];
+  const inW=(wd.inWork||[]).map(String), inC=(wd.inChisum||[]).map(String);
   orders=saved.filter(o=>
-    inW.includes(o.id) ||
-    inC.includes(o.id) ||
+    inW.includes(String(o.id)) ||
+    inC.includes(String(o.id)) ||
     o.status==='ירד לביצוע' ||
     o.status==='ביום עבודה' ||
     o.status==='ב-OptyWay' ||
     o.status==='נשלח לחיסום' ||
     o.status==='בתחנת בדיקה'
   );
+  // הוסף גם sub_ orders שעברו לתחנת בדיקה
+  const subsList = JSON.parse(safeStorage.getItem('lgSubmissions')||'[]');
+  subsList.forEach((s,i)=>{
+    const sid='sub_'+i;
+    if(
+      inW.includes(sid) || inC.includes(sid) ||
+      s.status==='בתחנת בדיקה' || s.status==='נשלח לחיסום'
+    ){
+      if(!orders.find(o=>String(o.id)===sid)){
+        orders.push({
+          id:sid, orderClient:s.client||'—', orderNum:s.refNum||'',
+          sketchName:s.sketchName||'העלאה', status:s.status||'בתחנת בדיקה',
+          phone:s.phone||'', date:s.date||'',
+          glass:s.glassFullName||s.glass||'', glassFullName:s.glassFullName||s.glass||'',
+          finish:s.finish||'', source:'upload',
+          sketch:(s.files&&s.files[0])?s.files[0].data:null,
+          items:s.items||[]
+        });
+      }
+    }
+  });
   // לא מזריקים דמו — אם אין הזמנות מציגים ריק
   buildClients();
 }
