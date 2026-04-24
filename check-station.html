@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>LuzGlass — תחנת בדיקה</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#1a1a1a;--surface:#242424;--s2:#2e2e2e;--border:rgba(255,255,255,0.08);--text:#f0ede8;--muted:#888;--gold:#c9a84c;--green:#27ae60;--purple:#8e44ad;--red:#c0392b;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;height:100%;overflow:hidden;}
+.app{display:flex;flex-direction:column;height:100vh;}
+.topbar{flex-shrink:0;height:52px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;display:flex;align-items:center;gap:7px;z-index:20;}
+.tb-logo{font-size:15px;font-weight:900;white-space:nowrap;}.tb-logo span{color:var(--gold);}
+.tb-title{font-size:13px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tb-btn{padding:6px 10px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;display:flex;align-items:center;gap:4px;}
+.tb-out{background:transparent;color:var(--muted);border:1px solid var(--border);}
+.tb-green{background:var(--green);color:#fff;}
+.tb-purple{background:var(--purple);color:#fff;}
+/* FILTERS */
+.filters{flex-shrink:0;background:var(--s2);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;gap:6px;flex-wrap:wrap;}
+.fi{flex:1;min-width:80px;padding:7px 9px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;border-radius:4px;-webkit-appearance:none;}
+.fi::placeholder{color:var(--muted);}.fi:focus{border-color:var(--gold);}
+/* LIST */
+.list-view{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.list-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:12px;padding:40px;text-align:center;}
+.order-card{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 14px 12px 14px;cursor:pointer;transition:background 0.12s;position:relative;}
+.order-card:active{background:var(--s2);}
+.order-card.done-card{border-right:4px solid var(--green);}
+.order-card.partial-card{border-right:4px solid var(--gold);}
+.oc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
+.oc-client{font-size:15px;font-weight:900;}
+.oc-badge{font-size:9px;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap;}
+.b-new{background:rgba(136,136,136,0.15);color:var(--muted);}
+.b-done{background:rgba(39,174,96,0.2);color:var(--green);}
+.b-prog{background:rgba(201,168,76,0.2);color:var(--gold);}
+.oc-meta{font-size:11px;color:var(--muted);margin-bottom:7px;}
+.oc-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;}
+.oc-tag{font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;}
+.tg{background:rgba(41,128,185,0.15);color:#5dade2;}
+.tc{background:rgba(142,68,173,0.15);color:#a569bd;}
+.tm{background:rgba(255,255,255,0.06);color:var(--muted);}
+.oc-prog{display:flex;align-items:center;gap:8px;}
+.oc-bar{flex:1;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;}
+.oc-fill{height:100%;border-radius:2px;transition:width 0.3s;}
+.oc-cnt{font-size:10px;font-weight:700;white-space:nowrap;}
+.oc-note{font-size:10px;color:var(--gold);background:rgba(201,168,76,0.08);padding:4px 8px;border-right:2px solid var(--gold);margin-top:6px;border-radius:0 3px 3px 0;}
+.note-btn-inline{background:rgba(201,168,76,0.15);border:none;color:var(--gold);font-size:13px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1;}
+.note-btn-inline:hover{background:rgba(201,168,76,0.3);}
+/* SKETCH VIEW */
+.sketch-view{flex:1;display:none;flex-direction:column;overflow:hidden;}
+.sketch-hdr{flex-shrink:0;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);}
+.sh-client{font-size:14px;font-weight:900;color:var(--gold);}
+.sh-meta{font-size:10px;color:var(--muted);margin-top:1px;}
+.sh-note{font-size:11px;color:var(--gold);background:rgba(201,168,76,0.08);padding:3px 8px;border-right:2px solid var(--gold);margin-top:4px;}
+.sketch-area{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#0d0d0d;position:relative;min-height:0;touch-action:none;}
+.sketch-wrap{width:100%;height:100%;display:flex;align-items:center;justify-content:center;transform-origin:center center;}
+.sketch-wrap svg,.sketch-wrap img{width:100%;height:100%;object-fit:contain;display:block;}
+.btmbar{flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.zbtn{width:34px;height:34px;border-radius:4px;background:var(--s2);border:1px solid var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.sp{flex:1;}
+.icnt{font-size:12px;color:var(--muted);}.icnt strong{color:var(--gold);}
+.prog-wrap{display:flex;align-items:center;gap:6px;}
+.prog-text{font-size:12px;font-weight:700;color:var(--gold);}
+.prog-bar{width:55px;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:var(--green);border-radius:3px;transition:width 0.3s;}
+.banner{position:absolute;inset:0;background:rgba(39,174,96,0.96);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;z-index:20;}
+.banner h2{font-size:22px;font-weight:900;color:#fff;}
+.ban-btn{padding:11px 22px;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:5px;}
+/* SHEET */
+.sheet{position:absolute;bottom:0;right:0;left:0;background:var(--surface);border-top:2px solid var(--gold);max-height:60%;overflow-y:auto;transform:translateY(100%);transition:transform 0.28s;z-index:10;}
+.sheet.open{transform:translateY(0);}
+.sh-head{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);}
+.sh-hdr-t{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;}
+.si{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;}
+.si:active{background:var(--s2);}.si.on{background:rgba(39,174,96,0.08);}
+.si-chk{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.si.on .si-chk{background:var(--green);border-color:var(--green);color:#fff;}
+.si-name{font-size:13px;font-weight:700;flex:1;}.si-dim{font-size:10px;color:var(--muted);}
+.si-tag{font-size:9px;padding:2px 7px;border-radius:2px;font-weight:700;}
+.note-area{padding:12px 14px;background:var(--s2);}
+.note-area textarea{width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;border-radius:4px;resize:vertical;min-height:64px;}
+.note-area textarea:focus{border-color:var(--gold);}
+.note-save{margin-top:6px;padding:8px 16px;background:var(--gold);color:#1a1714;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;}
+/* OVERLAYS */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:400;display:none;align-items:center;justify-content:center;padding:20px;}
+.overlay.open{display:flex;}
+.np-box{background:#fff;border-radius:12px;padding:28px 24px;max-width:340px;width:100%;text-align:center;font-family:Heebo,sans-serif;direction:rtl;}
+.np-icon{font-size:44px;margin-bottom:12px;}.np-title{font-size:15px;font-weight:900;color:var(--red);margin-bottom:8px;}
+.np-text{font-size:15px;color:#1a1714;line-height:1.6;margin-bottom:20px;font-weight:600;}
+.np-ok{width:100%;padding:14px;background:var(--red);color:#fff;font-family:Heebo,sans-serif;font-size:15px;font-weight:900;border:none;cursor:pointer;border-radius:6px;}
+.qn-box{background:var(--surface);border-radius:10px;padding:20px;max-width:320px;width:100%;direction:rtl;}
+.qn-box h3{font-size:14px;font-weight:900;color:var(--gold);margin-bottom:12px;}
+.qn-box textarea{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:14px;color:var(--text);outline:none;border-radius:6px;resize:vertical;min-height:80px;}
+.qn-btns{display:flex;gap:7px;margin-top:10px;}
+.qn-save{flex:1;padding:10px;background:var(--gold);color:#1a1714;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:5px;}
+.qn-cancel{padding:10px 14px;background:var(--s2);color:var(--muted);font-family:Heebo,sans-serif;font-size:12px;border:1px solid var(--border);cursor:pointer;border-radius:5px;}
+.adv-box{background:#fff;border-radius:12px;padding:24px 20px;max-width:300px;width:100%;text-align:center;font-family:Heebo,sans-serif;direction:rtl;}
+.cb-box{background:var(--surface);max-width:480px;width:100%;max-height:85vh;overflow-y:auto;border-radius:10px;}
+.cb-hdr{padding:16px 18px;background:var(--purple);display:flex;align-items:center;justify-content:space-between;border-radius:10px 10px 0 0;}
+.cb-hdr h3{font-size:15px;font-weight:900;color:#fff;}
+.cb-body{padding:16px 18px;}
+.cb-item{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.cb-foot{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px;}
+/* EDITOR */
+#csEd{display:none;position:fixed;inset:0;z-index:500;background:#1a1714;flex-direction:column;direction:rtl;}
+#csEd.open{display:flex;}
+.ed-top{flex-shrink:0;height:48px;background:#242424;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;gap:7px;padding:0 13px;}
+.ed-ttl{font-size:12px;font-weight:700;color:#f0ede8;flex:1;}
+.ed-tools{flex-shrink:0;background:#1e1b18;border-bottom:1px solid rgba(255,255,255,0.07);padding:7px 12px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
+.eb{padding:5px 10px;border-radius:4px;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;border:1px solid rgba(255,255,255,0.1);cursor:pointer;background:rgba(255,255,255,0.07);color:rgba(247,244,239,0.7);}
+.eb.on{background:var(--gold);color:#1a1714;border-color:var(--gold);}
+.esep{width:1px;height:22px;background:rgba(255,255,255,0.08);flex-shrink:0;}
+.ecol{width:24px;height:24px;border-radius:50%;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);}
+.ecol.on{border-color:#fff;transform:scale(1.1);}
+.erw{display:flex;align-items:center;gap:4px;}
+.erw label{font-size:9px;color:rgba(247,244,239,0.35);white-space:nowrap;}
+.erw input[type=range]{width:60px;cursor:pointer;}
+.erw span{font-size:9px;color:rgba(247,244,239,0.4);min-width:16px;}
+.ed-txtbar{flex-shrink:0;background:#1e1b18;border-bottom:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:none;align-items:center;gap:7px;}
+.ed-txtbar input{flex:1;padding:6px 9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#f0ede8;font-family:Heebo,sans-serif;font-size:14px;border-radius:4px;outline:none;}
+.ed-canvas{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#111;touch-action:none;}
+#edBg{position:absolute;max-width:100%;max-height:100%;object-fit:contain;user-select:none;pointer-events:none;}
+#edCvs{position:absolute;touch-action:none;}
+.eact{padding:6px 13px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;}
+.esave{background:var(--green);color:#fff;}.ecancel{background:transparent;color:rgba(247,244,239,0.4);border:1px solid rgba(255,255,255,0.1);}
+.eundo,.eclear{background:rgba(255,255,255,0.07);color:rgba(247,244,239,0.7);border:1px solid rgba(255,255,255,0.1);}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;z-index:600;box-shadow:0 4px 20px rgba(0,0,0,0.4);pointer-events:none;}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tb-logo">Luz<span>Glass</span></div>
+  <div class="tb-title" id="tbTitle">תחנת בדיקה</div>
+  <div class="prog-wrap" id="progWrap" style="display:none">
+    <span class="prog-text" id="progText">0/0</span>
+    <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
+  </div>
+  <button class="tb-btn tb-out" id="btnBack" onclick="goBack()" style="display:none">← רשימה</button>
+  <button class="tb-btn tb-out" id="btnSheet" onclick="toggleSheet()" style="display:none">📋 פריטים</button>
+  <a href="workday.html" class="tb-btn tb-out" style="text-decoration:none">← חזור</a>
+</div>
+
+<!-- FILTERS - always visible -->
+<div class="filters" id="filtersBar">
+  <input class="fi" id="fSearch" placeholder="🔍 חיפוש..." oninput="renderList()">
+  <select class="fi" id="fGlass" onchange="renderList()">
+    <option value="">כל הזכוכיות</option>
+    <optgroup label="8 מ&quot;מ">
+      <option value="8מ&quot;מ שקוף">8מ"מ שקוף</option>
+      <option value="8מ&quot;מ קליר">8מ"מ קליר</option>
+      <option value="8מ&quot;מ גרניט">8מ"מ גרניט</option>
+      <option value="8מ&quot;מ אסיד">8מ"מ אסיד</option>
+      <option value="8מ&quot;מ אפור">8מ"מ אפור</option>
+      <option value="8מ&quot;מ ברונזה">8מ"מ ברונזה</option>
+      <option value="8מ&quot;מ פיפיטה">8מ"מ פיפיטה</option>
+      <option value="8 אסיד קליר">8 אסיד קליר</option>
+      <option value="8 גלינה שקוף">8 גלינה שקוף</option>
+      <option value="8 גלינה קליר">8 גלינה קליר</option>
+    </optgroup>
+    <optgroup label="שקוף מלוטש">
+      <option value="4מ&quot;מ שקוף">4מ"מ שקוף</option>
+      <option value="5מ&quot;מ שקוף">5מ"מ שקוף</option>
+      <option value="6מ&quot;מ שקוף">6מ"מ שקוף</option>
+      <option value="8מ&quot;מ שקוף מלוטש">8מ"מ שקוף מלוטש</option>
+      <option value="10מ&quot;מ שקוף">10מ"מ שקוף</option>
+      <option value="12מ&quot;מ שקוף">12מ"מ שקוף</option>
+      <option value="12מ&quot;מ קליר">12מ"מ קליר</option>
+    </optgroup>
+    <optgroup label="מחוסם">
+      <option value="10מ&quot;מ קליר">10מ"מ קליר</option>
+      <option value="10מ&quot;מ אפור">10מ"מ אפור</option>
+      <option value="10מ&quot;מ אסיד">10מ"מ אסיד</option>
+      <option value="15מ&quot;מ קליר">15מ"מ קליר</option>
+    </optgroup>
+    <optgroup label="מראות">
+      <option value="5מ&quot;מ מראה מלוטש">5מ"מ מראה מלוטש</option>
+      <option value="5מ&quot;מ מראה אפורה">5מ"מ מראה אפורה</option>
+      <option value="5מ&quot;מ מראה ברונזה">5מ"מ מראה ברונזה</option>
+      <option value="5מ&quot;מ מראה צורתית">5מ"מ מראה צורתית</option>
+    </optgroup>
+  </select>
+  <select class="fi" id="fClient" onchange="renderList()">
+    <option value="">כל הלקוחות</option>
+  </select>
+  <select class="fi" id="fSort" onchange="renderList()">
+    <option value="">ללא מיון</option>
+    <option value="desc">גדול לקטן</option>
+    <option value="asc">קטן לגדול</option>
+  </select>
+</div>
+<!-- STATUS TABS -->
+<div id="tabsBar" style="display:flex;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;">
+  <button id="tabActive" onclick="setTab('active')"
+    style="flex:1;padding:10px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;background:none;color:var(--gold);border-bottom:2px solid var(--gold);">
+    ⏳ ממתינות
+  </button>
+  <button id="tabDone" onclick="setTab('done')"
+    style="flex:1;padding:10px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;background:none;color:var(--muted);border-bottom:2px solid transparent;">
+    ✅ הושלמו
+  </button>
+</div>
+
+<!-- LIST VIEW -->
+<div class="list-view" id="listView"></div>
+
+<!-- SKETCH VIEW -->
+<div class="sketch-view" id="sketchView">
+  <div class="sketch-hdr">
+    <div class="sh-client" id="shClient"></div>
+    <div class="sh-meta" id="shMeta"></div>
+    <!-- note removed -->
+  </div>
+  <div class="sketch-area" id="skArea">
+    <div class="sketch-wrap" id="skWrap"></div>
+    <div class="banner" id="banner">
+      <div style="font-size:48px">✅</div>
+      <h2>כל הפריטים נבדקו!</h2>
+      <p id="bannerName" style="font-size:13px;color:rgba(255,255,255,0.8)"></p>
+      <div style="display:flex;gap:10px;margin-top:6px">
+        <button class="ban-btn" style="background:var(--purple);color:#fff" onclick="openAdvModal()">🔥 שלח לחיסום</button>
+        <button class="ban-btn" style="background:#fff;color:var(--green)" onclick="hideBanner()">המשך →</button>
+      </div>
+    </div>
+  </div>
+  <div class="btmbar">
+    <button class="zbtn" onclick="doZoom(0.25)">+</button>
+    <button class="zbtn" onclick="doZoom(-0.25)">−</button>
+    <button class="zbtn" onclick="resetZoom()">↺</button>
+    <div class="sp"></div>
+    <div class="icnt" id="iCnt"></div>
+    <button class="tb-btn tb-out" onclick="openEditor()">✏️ ערוך</button>
+    <button class="tb-btn tb-green" id="finishBtn" onclick="finishSketch()" style="display:flex">✅ סיים</button>
+    <button class="tb-btn tb-purple" id="advBtn" onclick="openAdvModal()" style="display:none">🔥 חיסום</button>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- SHEET -->
+<div class="sheet" id="sheet">
+  <div class="sh-head">
+    <span class="sh-hdr-t" id="shTitle">פריטים</span>
+    <button style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer" onclick="closeSheet()">✕</button>
+  </div>
+  <div id="shBody"></div>
+</div>
+
+<!-- NOTE POPUP -->
+<div class="overlay" id="notePopup">
+  <div class="np-box">
+    <div class="np-icon">⚠️</div>
+    <div class="np-title">הערה חשובה!</div>
+    <div class="np-text" id="npText"></div>
+    <button class="np-ok" onclick="dismissNote()">הבנתי ✓</button>
+  </div>
+</div>
+
+<!-- QUEUE NOTE MODAL -->
+<div class="overlay" id="qnModal">
+  <div class="qn-box">
+    <h3 id="qnTitle">הערה לסקיצה</h3>
+    <textarea id="qnText" placeholder="הוסף הערה שתוצג כשפותחים..."></textarea>
+    <div class="qn-btns">
+      <button class="qn-save" onclick="saveQN()">שמור</button>
+      <button class="qn-cancel" onclick="document.getElementById('qnModal').classList.remove('open')">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADVANCE MODAL -->
+<div class="overlay" id="advModal">
+  <div class="adv-box">
+    <div style="font-size:36px;margin-bottom:10px">🔥</div>
+    <div style="font-size:15px;font-weight:900;color:#1a1714;margin-bottom:6px">שלח לחיסום?</div>
+    <div id="advSub" style="font-size:12px;color:#888;margin-bottom:20px"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="doAdvance()" style="flex:1;padding:12px;background:var(--purple);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:5px">כן, שלח</button>
+      <button onclick="document.getElementById('advModal').classList.remove('open')" style="flex:1;padding:12px;background:#f0f0f0;color:#555;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;border-radius:5px">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHISUM REPORT -->
+<div class="overlay" id="chisReport">
+  <div class="cb-box">
+    <div class="cb-hdr"><h3>🔥 דוח חיסום</h3><button style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer" onclick="document.getElementById('chisReport').classList.remove('open')">✕</button></div>
+    <div class="cb-body" id="cbBody"></div>
+    <div class="cb-foot">
+      <button style="flex:1;padding:12px;background:var(--purple);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;border-radius:4px" onclick="printChisum()">🖨️ הדפס</button>
+      <button style="padding:12px 18px;background:var(--s2);color:var(--muted);font-family:Heebo,sans-serif;font-size:13px;border:1px solid var(--border);cursor:pointer;border-radius:4px" onclick="document.getElementById('chisReport').classList.remove('open')">סגור</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDITOR -->
+<div id="csEd">
+  <div class="ed-top">
+    <div class="ed-ttl" id="edTitle">✏️ עריכה</div>
+    <button class="eact eundo" onclick="edUndo()">↩</button>
+    <button class="eact eclear" onclick="edClear()">🗑</button>
+    <button class="eact ecancel" onclick="closeEditor()">ביטול</button>
+    <button class="eact esave" onclick="edSave()">שמור ✓</button>
+  </div>
+  <div class="ed-tools">
+    <button class="eb on" id="ebDraw" onclick="edTool('draw')">✏️ ציור</button>
+    <button class="eb" id="ebText" onclick="edTool('text')">T כתב</button>
+    <button class="eb" id="ebErase" onclick="edTool('erase')">🧹 מחק</button>
+    <div class="esep"></div>
+    <div class="ecol on" style="background:#e74c3c" onclick="edColor('#e74c3c',this)"></div>
+    <div class="ecol" style="background:#2980b9" onclick="edColor('#2980b9',this)"></div>
+    <div class="ecol" style="background:#27ae60" onclick="edColor('#27ae60',this)"></div>
+    <div class="ecol" style="background:#f39c12" onclick="edColor('#f39c12',this)"></div>
+    <div class="ecol" style="background:#8e44ad" onclick="edColor('#8e44ad',this)"></div>
+    <div class="ecol" style="background:#fff" onclick="edColor('#fff',this)"></div>
+    <div class="esep"></div>
+    <div class="erw"><label>עובי</label><input type="range" id="edSzR" min="1" max="28" value="5" oninput="edSz=+this.value;document.getElementById('edSzN').textContent=edSz"><span id="edSzN">5</span></div>
+    <div class="erw" id="edFtW" style="display:none"><label>גודל</label><input type="range" id="edFtR" min="10" max="72" value="26" oninput="edFt=+this.value;document.getElementById('edFtN').textContent=edFt"><span id="edFtN">26</span></div>
+  </div>
+  <div class="ed-txtbar" id="edTxtBar"><span style="font-size:10px;color:rgba(247,244,239,0.35);white-space:nowrap">לחץ בסקיצה:</span><input type="text" id="edTxtIn" placeholder="רשום כאן..." maxlength="40"></div>
+  <div class="ed-canvas" id="edWrap"><img id="edBg" src="" alt=""><canvas id="edCvs"></canvas></div>
+</div>
+
+<script>
+const safeStorage = {
+  _mem: {},
+  getItem(k){ try{ return localStorage.getItem(k); }catch(e){ return this._mem[k]||null; } },
+  setItem(k,v){ try{ localStorage.setItem(k,v); }catch(e){ this._mem[k]=v; } },
+  removeItem(k){ try{ localStorage.removeItem(k); }catch(e){ delete this._mem[k]; } }
+};
+
+// STATE
+let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[];
+let activeTab='active'; // 'active' | 'done'
+
+function setTab(t){
+  activeTab=t;
+  const tA=document.getElementById('tabActive');
+  const tD=document.getElementById('tabDone');
+  tA.style.color=t==='active'?'var(--gold)':'var(--muted)';
+  tA.style.borderBottomColor=t==='active'?'var(--gold)':'transparent';
+  tD.style.color=t==='done'?'var(--green)':'var(--muted)';
+  tD.style.borderBottomColor=t==='done'?'var(--green)':'transparent';
+  renderList();
+}
+
+
+function isMirrorItem(item){
+  return (item.name||'').includes('מראה');
+}
+
+function load(){
+  cs=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');
+  notes=JSON.parse(safeStorage.getItem('lgOrderNotes')||'{}');
+  const saved=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
+  const wd=JSON.parse(safeStorage.getItem('lgWorkDay')||'{}');
+  // המר לפורמט אחיד 'ord_X'
+  const normalizeId = id => { const s=String(id); return (s.startsWith('ord_')||s.startsWith('sub_'))?s:'ord_'+s; };
+  const inW=(wd.inWork  ||[]).map(normalizeId);
+  const inC=(wd.inChisum||[]).map(normalizeId);
+  // סינון לפי items.chisum — רק הזמנות עם פריטי חיסום
+  // הוסף גם sub_ מ-lgSubmissions
+  const subs = JSON.parse(safeStorage.getItem('lgSubmissions')||'[]');
+  subs.forEach((s,i)=>{
+    const sid = 'sub_'+i;
+    if(!saved.find(o=>String(o.id)===sid)){
+      saved.push({
+        id: sid,
+        orderClient: s.client||'—',
+        orderNum: s.refNum||'',
+        sketchName: s.sketchName||'העלאה',
+        status: s.status||'',
+        workdayStatus: s.workdayStatus||'',
+        inspectionStatus: s.inspectionStatus||'',
+        phone: s.phone||'',
+        date: s.date||'',
+        glass: s.glassFullName||s.glass||'',
+        glassFullName: s.glassFullName||s.glass||'',
+        finish: s.finish||'',
+        source: 'upload',
+        sketch: (s.files&&s.files[0]) ? s.files[0].data : null,
+        items: s.items||[]
+      });
+    }
+  });
+
+  // המר כל id מ-lgOrders לפורמט אחיד 'ord_X' / 'sub_X'
+  const savedNorm = saved.map(o=>({...o, id: normalizeId(o.id)}));
+
+  orders=savedNorm.filter(o=>
+    o.workdayStatus === 'active' &&
+    (o.items||[]).some(i=>i.chisum===true)
+  );
+  // sub_ כבר נטענו בתחילת load() — אין צורך בטעינה כפולה
+  // לא מזריקים דמו — אם אין הזמנות מציגים ריק
+  buildClients();
+}
+
+function demos(){return[
+  {id:2001,orderClient:'בן-דוד',orderNum:'2026-001',sketchName:'חדר רחצה',glassFullName:'8מ"מ שקוף',isSystemSketch:true,items:[{name:'8מ"מ שקוף',w:80,h:200},{name:'8מ"מ שקוף',w:50,h:200}],sketch:null},
+  {id:2002,orderClient:'כהן שיפוצים',orderNum:'2026-002',sketchName:'אורחים',glassFullName:'10מ"מ קליר',isSystemSketch:false,items:[{name:'10מ"מ קליר',w:80,h:210,chisum:true},{name:'10מ"מ קליר',w:40,h:210}],sketch:null},
+  {id:2003,orderClient:'לוי קבלן',orderNum:'2026-003',sketchName:'ת"א יח 1',glassFullName:'8מ"מ אפור',isSystemSketch:true,items:[{name:'8מ"מ אפור',w:90,h:210,chisum:true},{name:'8מ"מ אפור',w:60,h:210,chisum:true},{name:'8מ"מ שקוף',w:80,h:200}],sketch:null},
+  {id:2004,orderClient:'מזרחי',orderNum:'2026-004',sketchName:'וילה',glassFullName:'גלינה קליר',isSystemSketch:true,items:[{name:'גלינה קליר',w:70,h:220},{name:'גלינה קליר',w:90,h:220}],sketch:null},
+];}
+
+function saveCS(){safeStorage.setItem('lgCheckState',JSON.stringify(cs));}
+function saveNotes(){safeStorage.setItem('lgOrderNotes',JSON.stringify(notes));}
+function area(o){return(o.items||[]).reduce((s,i)=>s+(i.w||0)*(i.h||0)/10000,0);}
+function buildClients(){
+  const cl=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))];
+  document.getElementById('fClient').innerHTML='<option value="">כל הלקוחות</option>'+cl.map(c=>`<option value="${c}">${c}</option>`).join('');
+}
+
+// FILTER + RENDER LIST
+function isDone(o){
+  const items=o.items||[];
+  if(!items.length) return false;
+  return items.every((_,i)=>cs[o.id]?.[i]);
+}
+
+function getFiltered(){
+  const q=(document.getElementById('fSearch')?.value||'').toLowerCase();
+  const gf=document.getElementById('fGlass')?.value||'';
+  const cf=document.getElementById('fClient')?.value||'';
+  const sort=document.getElementById('fSort')?.value||'';
+  let list=orders.filter(o=>{
+    // tab filter
+    if(activeTab==='active' && isDone(o)) return false;
+    if(activeTab==='done'   && !isDone(o)) return false;
+    if(q&&!(o.orderClient+o.sketchName+o.orderNum+(o.glassFullName||'')).toLowerCase().includes(q))return false;
+    if(gf&&!(o.glassFullName||'').includes(gf))return false;
+    if(cf&&o.orderClient!==cf)return false;
+    return true;
+  });
+  if(sort==='desc') list=[...list].sort((a,b)=>{
+    const mA=Math.max(...(a.items||[{w:1,h:1}]).map(i=>(i.w||0)*(i.h||0)));
+    const mB=Math.max(...(b.items||[{w:1,h:1}]).map(i=>(i.w||0)*(i.h||0)));
+    return mB-mA;
+  });
+  if(sort==='asc') list=[...list].sort((a,b)=>{
+    const mA=Math.max(...(a.items||[{w:1,h:1}]).map(i=>(i.w||0)*(i.h||0)));
+    const mB=Math.max(...(b.items||[{w:1,h:1}]).map(i=>(i.w||0)*(i.h||0)));
+    return mA-mB;
+  });
+
+  return list;
+}
+
+function renderList(){
+  const list=getFiltered();
+  const el=document.getElementById('listView');
+  if(!list.length){
+    el.innerHTML=`<div class="list-empty"><div style="font-size:44px">🔍</div><p style="font-size:14px">אין הזמנות תואמות לסינון</p></div>`;
+    return;
+  }
+  el.innerHTML=list.map(o=>{
+    const items=o.items||[],total=items.length||1;
+    const checked=items.filter((_,i)=>cs[o.id]?.[i]).length;
+    const pct=Math.round(checked/total*100),done=pct===100,fresh=checked===0;
+    const note=notes[o.id]||'';
+    const hasChis=items.some(i=>i.chisum);
+    const badgeCls=done?'b-done':fresh?'b-new':'b-prog';
+    const badgeTxt=done?'✓ הושלם':fresh?'ממתין':`${checked}/${total}`;
+    const cardCls=done?'done-card':checked>0?'partial-card':'';
+    return `<div class="order-card ${cardCls}" onclick="selectOrder('${o.id}')">
+      <div class="oc-top">
+        <div class="oc-client">${o.orderClient}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <button class="note-btn-inline" onclick="event.stopPropagation();openQN('${o.id}')">📝</button>
+          <span class="oc-badge ${badgeCls}">${badgeTxt}</span>
+        </div>
+      </div>
+      <div class="oc-meta">${o.orderNum||'—'} · ${o.sketchName||o.type||''}</div>
+      ${o.sketch?`<img src="${o.sketch}" style="width:100%;max-height:120px;object-fit:cover;border-top:1px solid var(--border);border-bottom:1px solid var(--border);" alt="סקיצה">` : ''}
+      <div class="oc-tags">
+        <span class="oc-tag tg">${o.glassFullName||o.glass||''}</span>
+        ${hasChis?'<span class="oc-tag tc">🔥 חיסום</span>':'<span class="oc-tag tg">✂️ ליטוש</span>'}
+        ${o.isSystemSketch===false?'<span class="oc-tag tm">📎 ידנית</span>':''}
+      </div>
+      <div class="oc-prog">
+        <div class="oc-bar"><div class="oc-fill" style="width:${pct}%;background:${done?'var(--green)':'var(--gold)'}"></div></div>
+        <span class="oc-cnt" style="color:${done?'var(--green)':'var(--muted)'}">${checked}/${total} פריטים</span>
+      </div>
+      ${note?`<div class="oc-note">📌 ${note.slice(0,60)}${note.length>60?'...':''}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// VIEW SWITCH
+function showList(){
+  document.getElementById('listView').style.display='flex';
+  document.getElementById('sketchView').style.display='none';
+  document.getElementById('filtersBar').style.display='flex';
+  document.getElementById('tabsBar').style.display='flex';
+  document.getElementById('btnBack').style.display='none';
+  document.getElementById('btnSheet').style.display='none';
+  document.getElementById('progWrap').style.display='none';
+  document.getElementById('tbTitle').textContent='תחנת בדיקה';
+  renderList();
+}
+function showSketch(){
+  document.getElementById('listView').style.display='none';
+  document.getElementById('sketchView').style.display='flex';
+  // HIDE filters and tabs — clean focused sketch view
+  document.getElementById('filtersBar').style.display='none';
+  document.getElementById('tabsBar').style.display='none';
+  document.getElementById('btnBack').style.display='flex';
+  document.getElementById('btnSheet').style.display='flex';
+  document.getElementById('progWrap').style.display='flex';
+  // finishBtn always visible and enabled
+  const fb = document.getElementById('finishBtn');
+  if(fb){ fb.style.display='flex'; fb.disabled=false; }
+}
+function goBack(){ cur=null; showList(); }
+
+// SELECT ORDER
+function selectOrder(id){ id = String(id);
+  cur=orders.find(o=>o.id===id); if(!cur)return;
+  if(!cs[id])cs[id]={};
+  document.getElementById('tbTitle').textContent=cur.orderClient;
+  document.getElementById('shClient').textContent=cur.orderClient;
+  document.getElementById('shMeta').textContent=[cur.orderNum,cur.sketchName,cur.glassFullName].filter(Boolean).join(' · ');
+  // note display removed
+  showSketch();
+  renderSketch();
+  updateProg();
+  if(note) setTimeout(()=>showNotePopup(note),300);
+}
+
+// SKETCH
+function renderSketch(){
+  const el=document.getElementById('skWrap');
+  scl=1;px=0;py=0;el.style.transform='';
+  const src=cur._editedSketch||cur.sketch;
+  el.innerHTML=src?`<img src="${src}" style="width:100%;height:100%;object-fit:contain">`:buildSVG(cur);
+  setupPan();
+}
+
+function buildSVG(o){
+  const items=o.items||[];
+  if(!items.length)return'<div style="color:#555;padding:20px;font-size:13px">אין פריטים</div>';
+  const n=items.length,cols=Math.min(n,3),rows=Math.ceil(n/cols);
+  const PW=150,PH=230,GAP=22,PX=50,PY=55,HDR=44,FTR=26;
+  const W=PX*2+cols*PW+(cols-1)*GAP,H=HDR+PY+rows*PH+(rows-1)*GAP+PY*0.5+FTR;
+  let p='';
+  items.forEach((item,i)=>{
+    const col=i%cols,row=Math.floor(i/cols),x=PX+col*(PW+GAP),y=HDR+PY+row*(PH+GAP);
+    const ck=!!(cs[o.id]?.[i]),ch=item.chisum;
+    const stk=ck?'#27ae60':ch?'#8e44ad':'#1a6fa8',fl=ck?'rgba(39,174,96,0.12)':ch?'rgba(142,68,173,0.07)':'rgba(26,111,168,0.07)';
+    const mx=x+PW/2,my=y+PH/2;
+    p+=`<rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="4" fill="${fl}" stroke="${stk}" stroke-width="1.8" onclick="checkItem(${i})" style="cursor:pointer"/>`;
+    if(ck)p+=`<text x="${mx}" y="${my-14}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="24" fill="#27ae60">✓</text>`;
+    p+=`<text x="${mx}" y="${ck?my+8:my-2}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="12" font-weight="700" fill="${ck?'#27ae60':'#1a1714'}">${item.name||''}</text>`;
+    if(item.w&&item.h)p+=`<text x="${mx}" y="${ck?my+22:my+13}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="11" fill="#666">${item.w}×${item.h} ס"מ</text>`;
+    p+=`<line x1="${x}" y1="${y-6}" x2="${x+PW}" y2="${y-6}" stroke="rgba(201,168,76,0.5)" stroke-width="0.8"/>`;
+    if(item.w)p+=`<text x="${mx}" y="${y-9}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" fill="rgba(201,168,76,0.9)">${item.w}</text>`;
+    p+=`<line x1="${x+PW+5}" y1="${y}" x2="${x+PW+5}" y2="${y+PH}" stroke="rgba(201,168,76,0.5)" stroke-width="0.8"/>`;
+    if(item.h)p+=`<text x="${x+PW+17}" y="${my}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" fill="rgba(201,168,76,0.9)" transform="rotate(90,${x+PW+17},${my})">${item.h}</text>`;
+    p+=`<rect x="${mx-30}" y="${y+PH-19}" width="60" height="14" rx="3" fill="${ch?'rgba(142,68,173,0.12)':'rgba(26,111,168,0.1)'}"/>`;
+    p+=`<text x="${mx}" y="${y+PH-8}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" font-weight="700" fill="${ch?'#8e44ad':'#1a6fa8'}">${ch?'🔥 חיסום':'✂️ ליטוש'}</text>`;
+  });
+  return`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;max-width:100%;max-height:100%">
+    <rect width="${W}" height="${H}" fill="white"/>
+    <rect x="0" y="0" width="${W}" height="${HDR}" fill="#1a1714"/>
+    <text x="${W/2}" y="18" text-anchor="middle" font-family="Heebo,sans-serif" font-size="12" font-weight="700" fill="#c9a84c">${o.orderClient}</text>
+    <text x="${W/2}" y="34" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" fill="rgba(247,244,239,0.4)">${[o.orderNum,o.glassFullName].filter(Boolean).join(' · ')}</text>
+    ${p}
+    <text x="${W-8}" y="${H-8}" text-anchor="end" font-family="Heebo,sans-serif" font-size="8" font-weight="700" fill="#b8922a">LuzGlass</text>
+  </svg>`;
+}
+
+// CHECK
+function checkItem(i){
+  if(!cur)return;
+  cs[cur.id][i]=!cs[cur.id][i];
+  saveCS();renderSketch();updateProg();
+  const items=cur.items||[];
+  if(items.length&&items.every((_,j)=>cs[cur.id]?.[j])){
+    showBanner();
+    // update tab count in background
+    setTimeout(updateTabCounts,300);
+  }
+}
+
+function updateTabCounts(){
+  const active=orders.filter(o=>!isDone(o)).length;
+  const done=orders.filter(o=>isDone(o)).length;
+  document.getElementById('tabActive').textContent=`⏳ ממתינות (${active})`;
+  document.getElementById('tabDone').textContent=`✅ הושלמו (${done})`;
+}
+
+function updateProg(){
+  if(!cur)return;
+  const items=cur.items||[],total=items.length;
+  const checked=items.filter((_,i)=>cs[cur.id]?.[i]).length;
+  const pct=total?Math.round(checked/total*100):0;
+  document.getElementById('progText').textContent=`${checked}/${total}`;
+  document.getElementById('progFill').style.width=pct+'%';
+  document.getElementById('progFill').style.background=pct===100?'var(--green)':'var(--gold)';
+  document.getElementById('iCnt').innerHTML=`<strong>${checked}</strong>/<strong>${total}</strong>`;
+  document.getElementById('advBtn').style.display=pct===100?'flex':'none';
+  document.getElementById('finishBtn').style.display='flex'; // always visible
+}
+
+// BANNER + ADVANCE
+function showBanner(){document.getElementById('banner').style.display='flex';document.getElementById('bannerName').textContent=cur.orderClient+' ✓';}
+function hideBanner(){document.getElementById('banner').style.display='none';}
+function openAdvModal(){hideBanner();document.getElementById('advSub').textContent=(cur?.orderClient||'')+' — '+(cur?.sketchName||'');document.getElementById('advModal').classList.add('open');}
+
+function doAdvance(){
+  document.getElementById('advModal').classList.remove('open');
+  if(!cur)return;
+  const all=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
+  const o=all.find(x=>String(x.id)===String(cur.id));
+  if(o){
+    const items=cur.items||[];
+    const hasMirror=items.every(i=>(i.name||'').includes('מראה'));
+    const hasChisum=items.some(i=>i.chisum&&!(i.name||'').includes('מראה'));
+    const hasLitush=items.some(i=>!i.chisum)||(hasMirror);
+    // מראות וליטוש בלבד → מוכן לאיסוף
+    // מחוסם בלבד / מעורב → נשלח לחיסום
+    if(!hasChisum){
+      o.status='מוכן לאיסוף'; // ליטוש/מראה — לא צריך חיסום
+    } else {
+      o.status='נשלח לחיסום';
+    }
+    safeStorage.setItem('lgOrders',JSON.stringify(all));
+  }
+  const wd=JSON.parse(safeStorage.getItem('lgWorkDay')||'{}');
+  wd.inWork=(wd.inWork||[]).filter(id=>id!==cur.id);
+  if(!wd.inChisum)wd.inChisum=[];
+  if(!wd.inChisum.includes(cur.id))wd.inChisum.push(cur.id);
+  safeStorage.setItem('lgWorkDay',JSON.stringify(wd));
+  chDone.push(cur);
+  toast('נשלח לחיסום ✓');
+  load();goBack();
+  // offerChisum removed
+}
+
+function finishSketch(){
+  if(!cur)return;
+  // עדכן סטטוס להזמנה
+  const all=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
+  const o=all.find(x=>String(x.id)===String(cur.id));
+  if(o){
+    const items=cur.items||[];
+    const hasMirror=items.every(i=>(i.name||'').includes('מראה'));
+    const hasChisum=items.some(i=>i.chisum&&!(i.name||'').includes('מראה'));
+    const hasLitush=items.some(i=>!i.chisum)||(hasMirror);
+    // מראות וליטוש בלבד → מוכן לאיסוף
+    // מחוסם בלבד / מעורב → נשלח לחיסום
+    if(!hasChisum){
+      o.status='מוכן לאיסוף'; // ליטוש/מראה — לא צריך חיסום
+    } else {
+      o.status='נשלח לחיסום';
+    }
+    safeStorage.setItem('lgOrders',JSON.stringify(all));
+  }
+  // הסר מיום עבודה
+  const wd=JSON.parse(safeStorage.getItem('lgWorkDay')||'{}');
+  wd.inWork=(wd.inWork||[]).filter(id=>String(id)!==String(cur.id));
+  if(!wd.inChisum)wd.inChisum=[];
+  if(!wd.inChisum.map(String).includes(String(cur.id)))wd.inChisum.push(cur.id);
+  safeStorage.setItem('lgWorkDay',JSON.stringify(wd));
+  // עדכן סטטוס ל'בתחנת בדיקה' כדי שלא יחזור לרשימה
+  const allCS=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
+  const oCS=allCS.find(x=>String(x.id)===String(cur.id));
+  if(oCS && oCS.status!=='נשלח לחיסום' && oCS.status!=='מוכן לאיסוף'){
+    oCS.status='בתחנת בדיקה';
+    safeStorage.setItem('lgOrders',JSON.stringify(allCS));
+  }
+  // הסר מרשימת תחנת בדיקה
+  orders=orders.filter(x=>String(x.id)!==String(cur.id));
+  chDone.push(cur);
+  toast('✓ עבר לממתין לחיסום');
+  cur=null;
+  showList();
+}
+
+// CHISUM REPORT
+function offerChisum(){
+  const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
+  if(!items.length)return;
+  document.getElementById('cbBody').innerHTML=`<p style="font-size:12px;color:var(--muted);margin-bottom:14px">סה"כ ${items.length} פריטים לחיסום</p>`+items.map((item,i)=>`<div class="cb-item"><div style="font-size:18px;color:var(--purple);font-weight:900;min-width:24px">${i+1}</div><div><div style="font-size:13px;font-weight:700">${item.name||'—'} · ${item.w||''}×${item.h||''} ס"מ</div><div style="font-size:11px;color:var(--muted)">${item.client} · ${item.orderNum||''}</div></div></div>`).join('');
+  document.getElementById('chisReport').classList.add('open');
+}
+function printChisum(){
+  const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
+  const w=window.open('','_blank');
+  w.document.write(`<html dir="rtl"><head><title>דוח חיסום</title><style>body{font-family:Heebo,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:9px;border:1px solid #ddd;text-align:right}th{background:#f5f5f5}</style></head><body><h2>🔥 דוח חיסום — ${new Date().toLocaleDateString('he-IL')}</h2><table><thead><tr><th>#</th><th>זכוכית</th><th>מידות</th><th>לקוח</th><th>הזמנה</th></tr></thead><tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${item.name||'—'}</td><td>${item.w||''}×${item.h||''}</td><td>${item.client}</td><td>${item.orderNum||''}</td></tr>`).join('')}</tbody></table></body></html>`);
+  w.document.close();w.print();
+}
+
+// NOTES
+function showNotePopup(note){document.getElementById('npText').textContent=note;document.getElementById('notePopup').classList.add('open');}
+function dismissNote(){document.getElementById('notePopup').classList.remove('open');}
+function openQN(id){qnId=id;const o=orders.find(x=>x.id===id);document.getElementById('qnTitle').textContent='הערה: '+(o?.orderClient||'');document.getElementById('qnText').value=notes[id]||'';document.getElementById('qnModal').classList.add('open');}
+function saveQN(){if(!qnId)return;const txt=document.getElementById('qnText').value.trim();if(txt)notes[qnId]=txt;else delete notes[qnId];saveNotes();document.getElementById('qnModal').classList.remove('open');renderList();toast('הערה נשמרה ✓');}
+
+// SHEET
+function toggleSheet(){document.getElementById('sheet').classList.toggle('open');renderSheet();}
+function closeSheet(){document.getElementById('sheet').classList.remove('open');}
+function renderSheet(){
+  if(!cur){document.getElementById('shBody').innerHTML='<div style="padding:14px;color:var(--muted)">בחר הזמנה</div>';return;}
+  const items=cur.items||[];
+  const isSystem=cur.isSystemSketch!==false; // true or undefined = system
+  document.getElementById('shTitle').textContent=cur.orderClient+' — '+items.length+' פריטים';
+  const note=notes[cur.id]||'';
+
+  // Always show note field
+  let html=`<div class="note-area">
+    <div style="font-size:10px;color:var(--muted);margin-bottom:4px">📝 הערה לסקיצה:</div>
+    <textarea id="skNoteTA" placeholder="הוסף הערה...">${note}</textarea>
+    <button class="note-save" onclick="saveSkNote()">שמור</button>
+  </div>`;
+
+  // Always show items if they exist (regardless of system/manual)
+  if(items.length){
+    html+=`<div style="padding:8px 14px;font-size:9px;font-weight:700;color:var(--gold);letter-spacing:0.15em;background:var(--s2);border-bottom:1px solid var(--border)">פריטים — לחץ לסימון</div>`;
+    html+=items.map((item,i)=>{
+      const ck=cs[cur.id]?.[i];
+      return`<div class="si ${ck?'on':''}" onclick="checkItem(${i})">
+        <div class="si-chk">${ck?'✓':''}</div>
+        <div style="flex:1">
+          <div class="si-name">${item.name||'—'}</div>
+          <div class="si-dim">${item.w||''}${item.w&&item.h?'×':''}${item.h||''} ס"מ</div>
+        </div>
+        <div class="si-tag ${item.chisum && !isMirrorItem(item)?'tc':'tg'}">${item.chisum && !isMirrorItem(item)?'🔥 חיסום':'✂️ ליטוש'}</div>
+      </div>`;
+    }).join('');
+  } else if(!isSystem){
+    // manual sketch with no items — show edit hint
+    html+=`<div style="padding:16px;font-size:13px;color:var(--muted);text-align:center">
+      <div style="font-size:28px;margin-bottom:8px">📎</div>
+      סקיצה ידנית — לחץ "ערוך" לסימון ידני על הסקיצה
+    </div>`;
+  }
+
+  document.getElementById('shBody').innerHTML=html;
+}
+function saveSkNote(){if(!cur)return;const txt=document.getElementById('skNoteTA')?.value.trim();if(txt)notes[cur.id]=txt;else delete notes[cur.id];saveNotes();renderList();closeSheet();toast('הערה נשמרה ✓');}
+
+// ZOOM/PAN
+function doZoom(d){scl=Math.max(0.3,Math.min(5,scl+d));applyTr();}
+function resetZoom(){scl=1;px=0;py=0;applyTr();}
+function applyTr(){const el=document.getElementById('skWrap');el.style.transform=`translate(${px}px,${py}px) scale(${scl})`;el.style.transformOrigin='center center';}
+function setupPan(){
+  const a=document.getElementById('skArea');
+  let lx=0,ly=0,pan=false,ld=0,pinch=false;
+  a.ontouchstart=e=>{if(e.touches.length===2){pinch=true;ld=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}else{pan=true;lx=e.touches[0].clientX;ly=e.touches[0].clientY;}};
+  a.ontouchmove=e=>{e.preventDefault();if(pinch&&e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);scl=Math.max(0.3,Math.min(5,scl*(d/ld)));ld=d;applyTr();}else if(pan){px+=e.touches[0].clientX-lx;py+=e.touches[0].clientY-ly;lx=e.touches[0].clientX;ly=e.touches[0].clientY;applyTr();}};
+  a.ontouchend=()=>{pan=false;pinch=false;};
+}
+
+// EDITOR
+let edTl='draw',edCl='#e74c3c',edSz=5,edFt=26,edDrw=false,edHist=[],edCtx=null,edCvs=null,edBgW=0,edBgH=0;
+function openEditor(){if(!cur)return;document.getElementById('edTitle').textContent='✏️ '+cur.orderClient;edCvs=document.getElementById('edCvs');edCtx=edCvs.getContext('2d');edHist=[];const bg=document.getElementById('edBg');const src=cur._editedSketch||cur.sketch;if(src){bg.style.display='block';bg.src=src;if(bg.complete&&bg.naturalWidth){edResize();edSnap();}else bg.onload=()=>{edResize();edSnap();};}else{bg.style.display='block';const s=buildSVG(cur).match(/<svg[\s\S]*<\/svg>/)?.[0]||'<svg/>';bg.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s);bg.onload=()=>{edResize();edSnap();};}edTool('draw');edBindEv();document.getElementById('csEd').classList.add('open');}
+function closeEditor(){document.getElementById('csEd').classList.remove('open');edDrw=false;}
+function edResize(){const bg=document.getElementById('edBg'),wrap=document.getElementById('edWrap'),dpr=window.devicePixelRatio||1,wr=wrap.getBoundingClientRect();let bw,bh;if(bg.naturalWidth){const r=bg.naturalWidth/bg.naturalHeight;bh=Math.min(wr.height,bg.naturalHeight);bw=bh*r;if(bw>wr.width){bw=wr.width;bh=bw/r;}}else{bw=wr.width;bh=wr.height;}edBgW=bw;edBgH=bh;edCvs.width=bw*dpr;edCvs.height=bh*dpr;edCvs.style.width=bw+'px';edCvs.style.height=bh+'px';edCvs.style.left=(wr.width-bw)/2+'px';edCvs.style.top=(wr.height-bh)/2+'px';edCtx.scale(dpr,dpr);}
+function edSnap(){if(edCvs.width>0)edHist.push(edCtx.getImageData(0,0,edCvs.width,edCvs.height));if(edHist.length>50)edHist.shift();}
+function edUndo(){if(edHist.length<=1)return;edHist.pop();edCtx.putImageData(edHist[edHist.length-1],0,0);}
+function edClear(){edCtx.clearRect(0,0,edBgW,edBgH);edHist=[];edSnap();}
+function edTool(t){edTl=t;['Draw','Text','Erase'].forEach(n=>{const b=document.getElementById('eb'+n);if(b)b.classList.toggle('on',t.toLowerCase()===n.toLowerCase());});document.getElementById('edTxtBar').style.display=t==='text'?'flex':'none';document.getElementById('edFtW').style.display=t==='text'?'flex':'none';document.getElementById('edWrap').style.cursor=t==='erase'?'cell':t==='text'?'text':'crosshair';}
+function edColor(col,el){edCl=col;document.querySelectorAll('.ecol').forEach(e=>e.classList.remove('on'));el.classList.add('on');}
+function edPos(e){const r=edCvs.getBoundingClientRect(),s=e.touches?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
+function edBindEv(){const old=edCvs,nc=old.cloneNode(true);old.parentNode.replaceChild(nc,old);edCvs=nc;edCtx=nc.getContext('2d');edCtx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);nc.addEventListener('mousedown',edStart);nc.addEventListener('mousemove',edMove);nc.addEventListener('mouseup',edEnd);nc.addEventListener('touchstart',edStart,{passive:false});nc.addEventListener('touchmove',edMove,{passive:false});nc.addEventListener('touchend',edEnd,{passive:false});}
+function edStart(e){e.preventDefault();const{x,y}=edPos(e);if(edTl==='text'){const txt=document.getElementById('edTxtIn').value.trim();if(!txt)return;edCtx.font=`bold ${edFt}px Heebo,Arial,sans-serif`;edCtx.fillStyle=edCl;edCtx.textAlign='right';edCtx.fillText(txt,x,y);edSnap();return;}edDrw=true;edCtx.beginPath();edCtx.moveTo(x,y);}
+function edMove(e){e.preventDefault();if(!edDrw)return;const{x,y}=edPos(e);if(edTl==='erase'){edCtx.clearRect(x-edSz*2,y-edSz*2,edSz*4,edSz*4);}else{edCtx.strokeStyle=edCl;edCtx.lineWidth=edSz;edCtx.lineCap='round';edCtx.lineJoin='round';edCtx.lineTo(x,y);edCtx.stroke();edCtx.beginPath();edCtx.moveTo(x,y);}}
+function edEnd(){if(!edDrw)return;edDrw=false;edSnap();}
+function edSave(){const bg=document.getElementById('edBg'),merge=document.createElement('canvas');const bw=bg.naturalWidth||edBgW,bh=bg.naturalHeight||edBgH,W=Math.max(bw*2,1200),H=Math.round(W*(bh/bw));merge.width=W;merge.height=H;const mx=merge.getContext('2d');mx.imageSmoothingEnabled=true;mx.imageSmoothingQuality='high';if(bg.naturalWidth)mx.drawImage(bg,0,0,W,H);mx.save();mx.scale(W/edBgW,H/edBgH);mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();const newSrc=merge.toDataURL('image/png',1.0);if(cur){cur._editedSketch=newSrc;const s=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');if(!s[cur.id])s[cur.id]={};s[cur.id]._editedSketch=newSrc;safeStorage.setItem('lgCheckState',JSON.stringify(s));const all=JSON.parse(safeStorage.getItem('lgOrders')||'[]');const o=all.find(x=>String(x.id)===String(cur.id));if(o){o._editedSketch=newSrc;safeStorage.setItem('lgOrders',JSON.stringify(all));}renderSketch();}closeEditor();toast('נשמר ✓');}
+window.addEventListener('resize',()=>{if(document.getElementById('csEd').classList.contains('open'))edResize();});
+
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
+
+// INIT
+load();
+
+// טען מחדש כשהדף מקבל focus (לאחר מעבר מworkday)
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible') load();
+});
+window.addEventListener('focus', () => load());
