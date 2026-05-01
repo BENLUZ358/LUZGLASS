@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LuzGlass — יום עבודה</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;--cut:#2980b9;--chisum:#8e44ad;--mixed:#e67e22;}
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;min-height:100vh;}
+  .layout{display:flex;min-height:100vh;}
+
+  /* SIDEBAR */
+  .sidebar{width:210px;flex-shrink:0;background:var(--text);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;}
+  .sb-logo{padding:22px 18px 18px;border-bottom:1px solid rgba(255,255,255,0.07);}
+  .sb-logo .lg{font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:#f7f4ef;}
+  .sb-logo .lg span{color:var(--gold);}
+  .sb-logo .sub{font-size:9px;color:rgba(247,244,239,0.3);letter-spacing:0.28em;text-transform:uppercase;margin-top:3px;}
+  .nav{padding:14px 0;flex:1;}
+  .nav-sec{padding:14px 18px 5px;font-size:9px;letter-spacing:0.2em;color:rgba(247,244,239,0.2);text-transform:uppercase;}
+  .nav-a{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;font-weight:500;color:rgba(247,244,239,0.5);cursor:pointer;transition:all 0.15s;text-decoration:none;border-right:3px solid transparent;}
+  .nav-a:hover{color:rgba(247,244,239,0.85);background:rgba(255,255,255,0.04);}
+  .nav-a.active{color:#f7f4ef;border-right-color:var(--gold);background:rgba(255,255,255,0.06);}
+  .nav-a .ic{font-size:14px;width:18px;text-align:center;}
+
+  /* TOPBAR */
+  .main{flex:1;overflow-x:hidden;}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+  .topbar-left{display:flex;align-items:center;gap:14px;}
+  .topbar-title{font-size:15px;font-weight:700;}
+  .date-badge{padding:5px 12px;background:var(--bg2);font-size:12px;font-weight:600;color:var(--muted);}
+  .topbar-right{display:flex;gap:8px;}
+
+  /* PHASE TABS */
+  .phase-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);padding:0 24px;}
+  .phase-tab{padding:14px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.15s;display:flex;align-items:center;gap:8px;}
+  .phase-tab:hover{color:var(--text);}
+  .phase-tab.active{color:var(--text);border-bottom-color:var(--gold);}
+  .phase-tab .cnt{font-size:11px;padding:2px 7px;border-radius:10px;font-weight:700;}
+
+  /* CONTENT */
+  .content{padding:20px 24px;}
+
+  /* COLUMNS */
+  .work-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
+
+  /* COLUMN */
+  .work-col{display:flex;flex-direction:column;gap:0;}
+  .col-header{padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);}
+  .col-icon{font-size:18px;}
+  .col-title{font-size:12px;font-weight:700;flex:1;}
+  .col-count{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;color:#fff;}
+  .col-body{min-height:200px;}
+
+  /* CUT */
+  .col-cut .col-header{background:rgba(41,128,185,0.06);border-right:3px solid var(--cut);}
+  .col-cut .col-title{color:var(--cut);}
+  .col-cut .col-count{background:var(--cut);}
+  /* CHISUM */
+  .col-chisum .col-header{background:rgba(142,68,173,0.06);border-right:3px solid var(--chisum);}
+  .col-chisum .col-title{color:var(--chisum);}
+  .col-chisum .col-count{background:var(--chisum);}
+  /* MIXED */
+  .col-mixed .col-header{background:rgba(230,126,34,0.06);border-right:3px solid var(--mixed);}
+  .col-mixed .col-title{color:var(--mixed);}
+  .col-mixed .col-count{background:var(--mixed);}
+
+  /* AVAILABLE ORDERS */
+  .available-section{margin-bottom:20px;}
+  .avail-title{font-size:10px;font-weight:600;letter-spacing:0.2em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;}
+  .avail-title::after{content:'';flex:1;height:1px;background:var(--border);}
+  .avail-grid{display:flex;flex-direction:column;gap:5px;}
+
+  /* ORDER CARD */
+  .order-card{background:var(--surface);border:1px solid var(--border);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all 0.15s;user-select:none;}
+  .order-card:hover{border-color:var(--gold);background:var(--bg);}
+  .order-card.selected{border-color:var(--gold);background:rgba(184,146,42,0.04);}
+  .order-card.in-work{opacity:0.5;cursor:default;}
+  .oc-check{width:20px;height:20px;border:2px solid var(--border);border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all 0.15s;}
+  .order-card.selected .oc-check{background:var(--gold);border-color:var(--gold);color:#fff;}
+  .oc-info{flex:1;min-width:0;}
+  .oc-client{font-size:13px;font-weight:700;}
+  .oc-desc{font-size:11px;color:var(--muted);margin-top:2px;}
+  .oc-tags{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
+  .tag{padding:2px 7px;font-size:9px;font-weight:700;border-radius:2px;}
+  .tag-cut{background:rgba(41,128,185,0.1);color:var(--cut);}
+  .tag-chisum{background:rgba(142,68,173,0.1);color:var(--chisum);}
+  .tag-mixed{background:rgba(230,126,34,0.1);color:var(--mixed);}
+  .tag-glass{background:rgba(0,0,0,0.05);color:var(--muted);}
+  .oc-right{text-align:left;flex-shrink:0;}
+  .oc-price{font-size:12px;font-weight:700;color:var(--gold);}
+  .oc-num{font-size:10px;color:var(--muted);margin-top:2px;}
+
+  /* WORK ITEM (in column) */
+  .work-item{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--surface);}
+  .work-item:last-child{border-bottom:none;}
+  .wi-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .wi-info{flex:1;min-width:0;}
+  .wi-client{font-size:12px;font-weight:700;}
+  .wi-desc{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .wi-remove{background:none;border:none;color:rgba(192,57,43,0.4);cursor:pointer;font-size:13px;padding:2px 4px;}
+  .wi-remove:hover{color:#c0392b;}
+
+  /* BUTTONS */
+  .btn{padding:10px 20px;font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;}
+  .btn-gold{background:var(--gold);color:#fff;}
+  .btn-gold:hover{background:#9a7520;}
+  .btn-dark{background:var(--text);color:#f7f4ef;}
+  .btn-dark:hover{background:#333;}
+  .btn-outline{background:transparent;color:var(--muted);border:1px solid var(--border);}
+  .btn-outline:hover{border-color:var(--text);color:var(--text);}
+  .btn-green{background:#27ae60;color:#fff;}
+  .btn-green:hover{background:#219a52;}
+  .btn-purple{background:var(--chisum);color:#fff;}
+  .btn-purple:hover{background:#7d3c98;}
+  .btn:disabled{opacity:0.45;cursor:not-allowed;}
+
+  /* SUMMARY BAR */
+  .summary-bar{background:var(--surface);border-top:2px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px;position:sticky;bottom:0;}
+  .sum-item{display:flex;align-items:center;gap:6px;font-size:12px;}
+  .sum-dot{width:10px;height:10px;border-radius:50%;}
+  .sum-count{font-weight:700;}
+  .sum-label{color:var(--muted);}
+  .sum-spacer{flex:1;}
+
+  /* CHISUM ARRIVED */
+  .chisum-bar{background:rgba(142,68,173,0.08);border:1px solid rgba(142,68,173,0.2);padding:14px 20px;display:flex;align-items:center;gap:14px;margin-bottom:16px;}
+  .chisum-bar .cb-text{flex:1;font-size:13px;}
+  .chisum-bar .cb-text strong{color:var(--chisum);}
+
+  /* EMPTY STATE */
+  .empty{text-align:center;padding:40px 20px;color:var(--muted);}
+  .empty-icon{font-size:32px;margin-bottom:10px;}
+  .empty p{font-size:13px;}
+
+  /* MODAL */
+  .overlay{position:fixed;inset:0;background:rgba(26,23,20,0.55);z-index:100;display:none;align-items:center;justify-content:center;padding:20px;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--surface);width:100%;max-width:500px;animation:su 0.2s ease;}
+  @keyframes su{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  .mhdr{padding:18px 22px;background:var(--text);color:#f7f4ef;display:flex;align-items:center;justify-content:space-between;}
+  .mhdr h2{font-size:15px;font-weight:700;}
+  .mcl{background:none;border:none;color:rgba(247,244,239,0.45);font-size:19px;cursor:pointer;}
+  .mbody{padding:22px;}
+  .mfoot{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:8px;}
+
+  /* WA MESSAGE PREVIEW */
+  .wa-preview{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.7;color:#1b5e20;margin-top:14px;white-space:pre-wrap;}
+  .wa-preview-title{font-size:10px;font-weight:700;color:#388e3c;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;}
+
+  .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#f7f4ef;padding:12px 22px;font-size:14px;font-weight:600;border-right:3px solid var(--gold);opacity:0;transition:all 0.3s;z-index:200;white-space:nowrap;}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+
+  /* ITEMS PANEL */
+  .items-panel{display:none;border-top:1px solid var(--border);background:var(--bg);padding:10px 12px;flex-direction:column;gap:6px;}
+  .items-panel.open{display:flex;}
+  .item-row-wd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all 0.15s;}
+  .item-row-wd:hover{border-color:rgba(184,146,42,0.3);}
+  .item-row-wd.item-sel{background:rgba(184,146,42,0.06);border-color:var(--gold);}
+  .item-row-wd.item-dimmed{opacity:0.4;}
+  .item-check{width:18px;height:18px;border:2px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;transition:all 0.15s;}
+  .item-row-wd.item-sel .item-check{background:var(--gold);border-color:var(--gold);color:#fff;}
+  .item-glass{font-size:12px;font-weight:700;flex:1;}
+  .item-dims{font-size:11px;color:var(--muted);}
+  .item-process{font-size:10px;padding:2px 7px;border-radius:2px;font-weight:700;flex-shrink:0;}
+  .ip-cut{background:rgba(41,128,185,0.1);color:#2980b9;}
+  .ip-chisum{background:rgba(142,68,173,0.1);color:#8e44ad;}
+  .items-actions{display:flex;gap:6px;margin-top:4px;padding-top:8px;border-top:1px solid var(--border);}
+  .ia{flex:1;padding:8px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all 0.15s;}
+  .ia-add{background:var(--gold);color:#fff;}
+  .ia-add:hover{background:#9a7520;}
+  .ia-cancel{background:var(--bg2);color:var(--muted);border:1px solid var(--border);}
+  .ia-cancel:hover{color:var(--text);}
+  .add-item-form{padding:10px;background:var(--bg2);border:1px dashed rgba(184,146,42,0.3);display:flex;flex-direction:column;gap:7px;}
+  .add-item-form .ai-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+  .ai-input{padding:7px 9px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none;border-radius:0;width:100%;}
+  .ai-input:focus{border-color:var(--gold);}
+  .ai-select{padding:7px 9px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none;border-radius:0;width:100%;cursor:pointer;}
+
+  @media(max-width:860px){
+    .sidebar{display:none;}
+    .work-cols{grid-template-columns:1fr;}
+    .content{padding:14px 14px;}
+    .topbar{padding:0 14px;}
+    .summary-bar{padding:12px 14px;flex-wrap:wrap;gap:8px;}
+    .phase-tabs{padding:0 14px;}
+  }
+
+/* ═══ UNIFIED NAV ═══ */
+.unav-sidebar{width:210px;flex-shrink:0;background:#1a1714;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;z-index:50;}
+.unav-logo{padding:20px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.07);}
+.unav-logo .lg{font-family:'Playfair Display',serif;font-size:18px;font-weight:900;color:#f7f4ef;}
+.unav-logo .lg span{color:#b8922a;}
+.unav-logo .sub{font-size:10px;color:rgba(247,244,239,0.3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
+.unav-nav{flex:1;padding:8px 0;}
+.unav-sec{font-size:9px;font-weight:700;letter-spacing:0.15em;color:rgba(247,244,239,0.25);text-transform:uppercase;padding:12px 16px 4px;}
+.unav-a{display:flex;align-items:center;gap:10px;padding:9px 16px;color:rgba(247,244,239,0.55);font-size:13px;text-decoration:none;transition:all 0.15s;cursor:pointer;border:none;background:none;width:100%;text-align:right;font-family:Heebo,sans-serif;}
+.unav-a:hover{background:rgba(255,255,255,0.05);color:#f7f4ef;}
+.unav-a.active{background:rgba(184,146,42,0.15);color:#b8922a;font-weight:700;}
+.unav-a .ic{font-size:15px;flex-shrink:0;}
+.unav-bot{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.07);}
+.unav-bot a{display:block;font-size:11px;color:rgba(192,57,43,0.55);text-decoration:none;padding:4px 0;}
+.unav-bot a:hover{color:#e74c3c;}
+.unav-topbar{display:none;background:#1a1714;padding:0 16px;height:52px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.unav-topbar .lg{font-family:'Playfair Display',serif;font-size:16px;font-weight:900;color:#f7f4ef;}
+.unav-topbar .lg span{color:#b8922a;}
+.unav-burger{background:none;border:none;cursor:pointer;padding:6px;display:flex;flex-direction:column;gap:4px;}
+.unav-burger span{display:block;width:20px;height:2px;background:#f7f4ef;border-radius:1px;}
+.unav-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:90;}
+.unav-overlay.open{display:block;}
+.unav-sidebar.mobile-open{transform:translateX(0)!important;}
+@media(max-width:768px){
+  .unav-sidebar{position:fixed;top:0;right:0;height:100vh;transform:translateX(100%);transition:transform 0.25s;z-index:95;}
+  .unav-topbar{display:flex;}
+}
+</style>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-db.js"></script>
+</head>
+<body>
+<div class="layout">
+
+<!-- SIDEBAR -->
+<div class="unav-sidebar" id="unavSidebar">
+  <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
+  <nav class="unav-nav">
+    <div class="unav-sec">מנהל עבודה</div>
+    <a class="unav-a" href="admin.html"><span class="ic">⬡</span>לוח הזמנות</a>
+    <a class="unav-a" href="admin.html"><span class="ic">💰</span>מחירונים</a>
+    <a class="unav-a" href="admin.html"><span class="ic">📅</span>לוח איסופים</a>
+    <div class="unav-sec">תחנות עבודה</div>
+    <a class="unav-a" href="admin.html"><span class="ic">📐</span>תור סקיצות</a>
+    <a class="unav-a" href="drafter.html"><span class="ic">✏️</span>שרטט</a>
+    <a class="unav-a" href="check-station.html"><span class="ic">🔍</span>תחנת בדיקה</a>
+    <a class="unav-a active" href="workday.html"><span class="ic">🏭</span>יום עבודה</a>
+  </nav>
+  <div class="unav-bot"><a href="#" onclick="unavResetAll()">🔄 אפס הכל</a></div>
+</div>
+<div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
+<div class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title">יום עבודה</div>
+      <div class="date-badge" id="dateBadge"></div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-outline" onclick="resetDay()">🔄 אפס יום</button>
+      <button class="btn btn-gold" id="addBtn" onclick="addSelected()" style="display:none">+ הוסף לעבודה</button>
+    </div>
+  </div>
+
+  <!-- PHASE TABS -->
+  <div class="phase-tabs">
+    <div class="phase-tab active" id="tab-build" onclick="setTab('build')">
+      <span>🔨</span> בנה יום עבודה
+      <span class="cnt" id="cnt-build" style="background:var(--bg2);color:var(--muted)">0</span>
+    </div>
+    <div class="phase-tab" id="tab-work" onclick="setTab('work')">
+      <span>▶️</span> יום עבודה פעיל
+      <span class="cnt" id="cnt-work" style="background:var(--gold)">0</span>
+    </div>
+    <div class="phase-tab" id="tab-chisum" onclick="setTab('chisum')">
+      <span>🔥</span> חיסום
+      <span class="cnt" id="cnt-chisum" style="background:var(--chisum)">0</span>
+    </div>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div id="filterBar" style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <span style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:0.1em">סינון:</span>
+    <select id="fGlass" onchange="renderAll()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;-webkit-appearance:none;min-width:150px">
+      <option value="">כל הזכוכיות</option>
+      <optgroup label="שקוף">
+        <option value='4מ"מ שקוף'>4מ"מ שקוף</option>
+        <option value='5מ"מ שקוף'>5מ"מ שקוף</option>
+        <option value='6מ"מ שקוף'>6מ"מ שקוף</option>
+        <option value='8מ"מ שקוף'>8מ"מ שקוף</option>
+        <option value='10מ"מ שקוף'>10מ"מ שקוף</option>
+        <option value='12מ"מ שקוף'>12מ"מ שקוף</option>
+      </optgroup>
+      <optgroup label="קליר">
+        <option value='6מ"מ קליר'>6מ"מ קליר</option>
+        <option value='8מ"מ קליר'>8מ"מ קליר</option>
+        <option value='10מ"מ קליר'>10מ"מ קליר</option>
+        <option value='12מ"מ קליר'>12מ"מ קליר</option>
+        <option value='15מ"מ קליר'>15מ"מ קליר</option>
+      </optgroup>
+      <optgroup label="גרניט">
+        <option value='8מ"מ גרניט'>8מ"מ גרניט</option>
+      </optgroup>
+      <optgroup label="אסיד">
+        <option value='8מ"מ אסיד'>8מ"מ אסיד</option>
+        <option value='8מ"מ אסיד קליר'>8מ"מ אסיד קליר</option>
+        <option value='10מ"מ אסיד'>10מ"מ אסיד</option>
+      </optgroup>
+      <optgroup label="אפור">
+        <option value='8מ"מ אפור'>8מ"מ אפור</option>
+        <option value='10מ"מ אפור'>10מ"מ אפור</option>
+      </optgroup>
+      <optgroup label="ברונזה">
+        <option value='8מ"מ ברונזה'>8מ"מ ברונזה</option>
+      </optgroup>
+      <optgroup label="פיפיטה">
+        <option value='8מ"מ פיפיטה'>8מ"מ פיפיטה</option>
+        <option value='6מ"מ פיפיטה'>6מ"מ פיפיטה</option>
+      </optgroup>
+      <optgroup label="גלינה">
+        <option value='8מ"מ גלינה שקוף'>8מ"מ גלינה שקוף</option>
+        <option value='8מ"מ גלינה קליר'>8מ"מ גלינה קליר</option>
+        <option value='10מ"מ גלינה קליר'>10מ"מ גלינה קליר</option>
+      </optgroup>
+      <optgroup label="מראה">
+        <option value='5מ"מ מראה'>5מ"מ מראה</option>
+        <option value='5מ"מ מראה אפורה'>5מ"מ מראה אפורה</option>
+        <option value='5מ"מ מראה ברונזה'>5מ"מ מראה ברונזה</option>
+      </optgroup>
+    </select>
+    <select id="fMachine" onchange="renderAll()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;-webkit-appearance:none;min-width:130px">
+      <option value="">כל המכונות</option>
+      <option value="A">🔵 מכונה א׳</option>
+      <option value="B">🟠 מכונה ב׳</option>
+    </select>
+    <select id="fType" onchange="renderAll()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;-webkit-appearance:none;min-width:130px">
+      <option value="">כל הסוגים</option>
+      <option value="cut">✂️ מלוטש / חיתוך</option>
+      <option value="chisum">🔥 חיסום</option>
+    </select>
+    <input type="text" id="fClient" placeholder="🔍 שם לקוח..." oninput="renderAll()"
+      style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;min-width:140px">
+    <button onclick="clearFilters()" style="padding:6px 12px;background:transparent;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:11px;color:var(--muted);cursor:pointer;">✕ נקה</button>
+    <span id="filterCount" style="font-size:11px;color:var(--gold);font-weight:700;margin-right:4px"></span>
+    <!-- SELECT ALL -->
+    <button id="selectAllBtn" onclick="selectAllFiltered()" style="margin-right:auto;padding:6px 14px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;display:none">
+      ☑️ בחר הכל
+    </button>
+  </div>
+
+  <div class="content">
+
+    <!-- TAB: BUILD -->
+    <div id="view-build">
+      <div class="available-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <div class="avail-title" style="margin-bottom:0">הזמנות ממתינות לביצוע</div>
+          <div style="display:flex;gap:4px">
+            <button id="bvItems" onclick="setBuildView('items')"
+              style="padding:5px 12px;border:1px solid var(--border);background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+              פריטים
+            </button>
+            <button id="bvOrders" onclick="setBuildView('orders')"
+              style="padding:5px 12px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:11px;cursor:pointer">
+              הזמנות
+            </button>
+          </div>
+        </div>
+        <div class="avail-grid" id="availableOrders"></div>
+      </div>
+    </div>
+
+    <!-- TAB: WORK -->
+    <div id="view-work" style="display:none">
+
+      <!-- WORK FILTER BAR -->
+      <div style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input id="wSearch" placeholder="🔍 חיפוש..." oninput="renderWorkActive()"
+          style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;min-width:140px">
+        <select id="wType" onchange="renderWorkActive()"
+          style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer">
+          <option value="">הכל</option>
+          <option value="cut">✂️ מלוטש / חיתוך</option>
+          <option value="chisum">🔥 מחוסם</option>
+          <option value="mixed">⚡ מעורב</option>
+        </select>
+        <select id="wGlass" onchange="renderWorkActive()"
+          style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;min-width:130px">
+          <option value="">כל הזכוכיות</option>
+        </select>
+        <div style="margin-right:auto;display:flex;gap:6px">
+          <button onclick="setWorkView('list')" id="wViewList"
+            style="padding:6px 10px;border:1px solid var(--border);background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;font-weight:700">☰ רשימה</button>
+          <button onclick="setWorkView('table')" id="wViewTable"
+            style="padding:6px 10px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;">⊞ טבלה</button>
+        </div>
+      </div>
+
+      <!-- WORK CONTENT -->
+      <div id="workActiveContent" style="padding:12px"></div>
+
+      <!-- hidden placeholders so JS doesn't crash -->
+      <div id="col-cut-body" style="display:none"></div>
+      <div id="col-chisum-body" style="display:none"></div>
+      <div id="col-mixed-body" style="display:none"></div>
+      <span id="cnt-cut">0</span>
+      <span id="cnt-chisum-col">0</span>
+      <span id="cnt-mixed-col">0</span>
+    </div>
+
+    <!-- TAB: CHISUM -->
+    <div id="view-chisum" style="display:none">
+      <!-- כפתור חיסום הגיע -->
+      <div id="chisumArrivedBar" style="display:none;margin:12px 12px 0;padding:14px 16px;background:rgba(142,68,173,0.08);border:1px solid rgba(142,68,173,0.25);border-radius:8px;display:none;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span style="font-size:22px">🔥</span>
+        <div style="flex:1;">
+          <strong style="color:var(--chisum)">הגיע חיסום!</strong><br>
+          <span id="chisumArrivedCount" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <button class="btn btn-purple" onclick="resetChisumList()" style="white-space:nowrap">✓ חיסום הגיע — אפס רשימה</button>
+      </div>
+      <div class="available-section">
+        <div class="avail-title">רשימת חיסום</div>
+        <div class="avail-grid" id="chisumOrders"></div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <!-- SUMMARY BAR -->
+  <div class="summary-bar">
+    <div class="sum-item">
+      <div class="sum-dot" style="background:var(--cut)"></div>
+      <span class="sum-count" id="sb-cut">0</span>
+      <span class="sum-label">חיתוך/ליטוש</span>
+    </div>
+    <div class="sum-item">
+      <div class="sum-dot" style="background:var(--chisum)"></div>
+      <span class="sum-count" id="sb-chisum">0</span>
+      <span class="sum-label">חיסום</span>
+    </div>
+    <div class="sum-item">
+      <div class="sum-dot" style="background:var(--mixed)"></div>
+      <span class="sum-count" id="sb-mixed">0</span>
+      <span class="sum-label">מעורב</span>
+    </div>
+    <div class="sum-spacer"></div>
+    <button id="startWorkBtn" onclick="handleWorkdayStart()" disabled
+      style="background:var(--gold);color:#1a1714;border:none;padding:10px 20px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-left:8px;opacity:0.5;">
+      ▶ הורד לעבודה
+    </button>
+    <button class="btn btn-dark" id="finishBtn" onclick="finishDay()" disabled>
+      ✅ סיים יום עבודה
+    </button>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- FINISH DAY MODAL -->
+<div class="overlay" id="finishOv" onclick="if(event.target===this)closeFinish()">
+  <div class="modal">
+    <div class="mhdr">
+      <h2>✅ סיום יום עבודה</h2>
+      <button class="mcl" onclick="closeFinish()">✕</button>
+    </div>
+    <div class="mbody" id="finishBody"></div>
+    <div class="mfoot">
+      <button class="btn btn-green" onclick="confirmFinish()" style="flex:1">שלח הודעות ✓</button>
+      <button class="btn btn-outline" onclick="closeFinish()">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHISUM MODAL -->
+<div class="overlay" id="chisumOv" onclick="if(event.target===this)closeChisum()">
+  <div class="modal">
+    <div class="mhdr" style="background:var(--chisum)">
+      <h2>🔥 חיסום הגיע</h2>
+      <button class="mcl" onclick="closeChisum()">✕</button>
+    </div>
+    <div class="mbody" id="chisumBody"></div>
+    <div class="mfoot">
+      <button class="btn btn-purple" onclick="confirmChisum()" style="flex:1">שלח הודעות ✓</button>
+      <button class="btn btn-outline" onclick="closeChisum()">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════
+let allOrders = [];
+// Safe storage wrapper for Safari file:// compatibility
+const safeStorage = {
+  _mem: {},
+  getItem(k){ try{ return localStorage.getItem(k); }catch(e){ return this._mem[k]||null; } },
+  setItem(k,v){ try{ localStorage.setItem(k,v); }catch(e){ this._mem[k]=v; } },
+  removeItem(k){ try{ localStorage.removeItem(k); }catch(e){ delete this._mem[k]; } }
+};
+
+// workDay — יוטען מ-Firebase ב-initWorkDay()
+let workDay = {
+  date:     today(),
+  selected: [],
+  inWork:   [],
+  inChisum: [],
+  itemsSel: {}
+};
+let _workDayLoaded = false;
+
+async function initWorkDay(){
+  try {
+    const wd = await getWorkDay();
+    workDay.date     = wd.date     || today();
+    workDay.selected = wd.selected || [];
+    workDay.inWork   = (wd.inWork   || []).map(String);
+    workDay.inChisum = (wd.inChisum || []).map(String);
+    workDay.itemsSel = (wd.itemsSel && !Array.isArray(wd.itemsSel)) ? wd.itemsSel : {};
+  } catch(e) {
+    console.warn('initWorkDay:', e.message);
+  }
+  _workDayLoaded = true;
+}
+let selectedIds = new Set();
+let currentTab = 'build';
+
+function today(){
+  return new Date().toLocaleDateString('he-IL');
+}
+
+// ═══════════════════════════════════════
+//  CLASSIFY ORDER
+// ═══════════════════════════════════════
+function isMirrorOrder(o){
+  // מראות לא עוברות חיסום לעולם
+  const items = o.items||[];
+  const name = (o.glassFullName||o.glass||o.name||'').toLowerCase();
+  return name.includes('מראה') || items.every(i=>(i.name||'').includes('מראה'));
+}
+
+// [תיקון באג 2] — מקבל activeItems אופציונלי: מסווג לפי הפריטים שנבחרו בלבד
+function classifyOrder(o, activeItems){
+  const items = activeItems || o.items || [];
+  // מראות — תמיד ליטוש בלבד
+  if(isMirrorOrder(o)) return 'cut';
+  // אם אין פריטים בכלל — הסתמך על שדות ה-order הישנים
+  if(!items.length){
+    const hasChisum = o.chisum;
+    const hasLitush = o.litush || !o.chisum;
+    if(hasChisum && hasLitush) return 'mixed';
+    if(hasChisum) return 'chisum';
+    return 'cut';
+  }
+  // בדוק פריטים פעילים בלבד
+  const hasChisum = items.some(i=>i.chisum===true);
+  const hasLitush = items.some(i=>i.chisum!==true);
+  // אם יש רק פריטי חיסום — chisum. אם יש גם וגם — mixed. אחרת — cut
+  if(hasChisum && hasLitush) return 'mixed';
+  if(hasChisum) return 'chisum';
+  return 'cut';
+}
+
+// ═══════════════════════════════════════
+//  LOAD
+// ═══════════════════════════════════════
+let _workdayUnsub = null;
+
+async function load(){
+  // טען workDay מ-Firebase לפני הכל
+  if(!_workDayLoaded) await initWorkDay();
+  if(_workdayUnsub) _workdayUnsub();
+  // האזן ל-Firebase — stage==='workday' בלבד
+  _workdayUnsub = listenAllOrders(function(fbOrders){
+    // allOrders = opty (זמינות לבחירה) + workday (ביום עבודה)
+    allOrders = fbOrders
+      .filter(o => o.stage === 'opty' || o.stage === 'workday')
+      .map(o => ({
+        ...o,
+        id: o.id,
+      }));
+    renderAll();
+    updateCounter();
+  });
+}
+
+
+// ── SKETCH POPUP ──
+function showSketchPopup(orderId){
+  const o = allOrders.find(x=>String(x.id)===String(orderId));
+  if(!o||!o.sketch) return;
+  let modal = document.getElementById('sketchPopupModal');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'sketchPopupModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.onclick = ()=>modal.style.display='none';
+    modal.innerHTML = '<div onclick="event.stopPropagation()" style="background:#fff;max-width:600px;width:100%;max-height:90vh;overflow:auto;position:relative">' +
+      '<div style="padding:10px 14px;background:#1a1714;color:#f7f4ef;display:flex;justify-content:space-between;align-items:center">' +
+      '<span id="spTitle" style="font-size:13px;font-weight:700"></span>' +
+      '<button onclick="document.getElementById(\'sketchPopupModal\').style.display=\'none\'" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">✕</button>' +
+      '</div><img id="spImg" style="width:100%;display:block"></div>';
+    document.body.appendChild(modal);
+  }
+  document.getElementById('spTitle').textContent = o.orderClient+' — '+o.orderNum;
+  document.getElementById('spImg').src = o.sketch;
+  modal.style.display = 'flex';
+}
+
+function saveWorkDay(){
+  // שמור ל-Firebase
+  firebase.database().ref('workday').set({
+    ...workDay,
+    updatedAt: Date.now()
+  }).catch(e=>console.error('saveWorkDay:', e));
+}
+
+// ═══════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════
+function setTab(tab){
+  currentTab = tab;
+  ['build','work','chisum'].forEach(t=>{
+    document.getElementById('view-'+t).style.display = t===tab?'block':'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+  const fb = document.getElementById('filterBar');
+  if(fb) fb.style.display = tab==='build'?'flex':'none';
+  // הצג כפתורים נכונים לפי לשונית
+  const finishBtn = document.getElementById('finishBtn');
+  const startBtn  = document.getElementById('startWorkBtn');
+  if(finishBtn) finishBtn.style.display = tab==='build' ? 'none' : '';
+  if(startBtn)  startBtn.style.display  = tab==='build' ? ''     : 'none';
+  renderAll();
+}
+
+// ═══════════════════════════════════════
+//  RENDER ALL
+// ═══════════════════════════════════════
+// [תיקון באג 3] — מציג הודעה כשיש העלאות שממתינות לאישור בניהול
+function getPendingUploadsNotice(){
+  // בדוק ב-Firebase — הזמנות עם stage ריק שלא עברו עדיין
+  const pending = (typeof allOrders !== 'undefined' ? allOrders : [])
+    .filter(o => (!o.stage || o.stage === '') && o.source === 'upload');
+  if(!pending.length) return '';
+  return `<div style="margin-top:16px;padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.25);text-align:right">
+    <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:4px">📎 ${pending.length} העלאות ממתינות לאישור</div>
+    <div style="font-size:11px;color:var(--muted)">כנס ל<a href="admin.html" style="color:var(--gold)">לוח ניהול</a> → קבל העלאות → הן יופיעו כאן לאחר מעבר OptyWay</div>
+  </div>`;
+}
+
+function renderAll(){
+  renderAvailable();
+  renderWorkCols(); renderWorkActive();
+  renderChisumTab();
+  updateCounts();
+  updateSummaryBar();
+  checkChisumArrived();
+}
+
+// ═══════════════════════════════════════
+//  AVAILABLE ORDERS
+// ═══════════════════════════════════════
+const MACHINE_B = [
+  'מראה אפורה',
+  '6מ"מ גרניט','8מ"מ גרניט',
+  '8מ"מ מאסטר ליין','8מ"מ מאסטר ליין קליר',
+  '4מ"מ שקוף','5מ"מ שקוף',
+  '8מ"מ פיפיטה','6מ"מ פיפיטה','8מ"מ פפיטה','6מ"מ פפיטה'
+];
+
+function getMachine(o){
+  const g = (o.glassFullName || ((o.thickness||'') + ' ' + (o.glass||''))).trim();
+  return MACHINE_B.some(x => g.includes(x) || (o.glass||'').includes(x)) ? 'B' : 'A';
+}
+
+function getFiltered(){
+  const glass  = document.getElementById('fGlass')?.value || '';
+  const type   = document.getElementById('fType')?.value  || '';
+  const client = (document.getElementById('fClient')?.value || '').toLowerCase();
+
+  // stages — Firebase הוא מקור האמת, allOrders כבר מסונן לפי stage='workday'
+  const sqStages = {};  // לא נדרש — אחיד עם Firebase
+
+  return allOrders.filter(o=>{
+    // הצג רק אם stage === 'opty' (השרטט הכניס ל-OptyWay)
+    const sid = String(o.id);
+    const ordKey = sid.startsWith('ord_') ? sid : 'ord_'+sid;
+    const subKey = sid.startsWith('sub_') ? sid : null;
+    const stage = sqStages[ordKey] || sqStages[sid] || (subKey && sqStages[subKey]) || '';
+    if(stage !== 'opty' && stage !== 'workday') return false;
+    // אל תציג אם כבר ב-inChisum
+    if(workDay.inChisum.includes(sid)) return false;
+    // אם ב-inWork — בדוק אם יש עדיין פריטים שלא נבחרו
+    if(workDay.inWork.includes(sid)){
+      const selIdxs = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
+      const totalItems = (o.items||[]).length;
+      // אם כל הפריטים כבר נבחרו — הסתר
+      const uniqueSel = [...new Set(selIdxs.map(Number))];
+      if(uniqueSel.length === totalItems) return false;
+      // אחרת — המשך להציג (יש פריטים שלא נבחרו עדיין)
+    }
+    if(glass){
+      const glassLow = glass.toLowerCase();
+      const fullGlass = (o.glassFullName || '').toLowerCase();
+      const baseGlass = (o.glass || '').toLowerCase();
+      // חיפוש חלקי — אם הפילטר כלול בשם הזכוכית
+      const match = fullGlass.includes(glassLow) || baseGlass.includes(glassLow) ||
+                    glassLow.includes(fullGlass) || glassLow.includes(baseGlass) ||
+                    (o.items||[]).some(it=>(it.glassFullName||it.name||'').toLowerCase().includes(glassLow));
+      if(!match) return false;
+    }
+    const machine = document.getElementById('fMachine')?.value || '';
+    if(machine && getMachine(o) !== machine) return false;
+    if(type === 'chisum' && classifyOrder(o) !== 'chisum' && classifyOrder(o) !== 'mixed') return false;
+    else if(type && type !== 'chisum' && classifyOrder(o) !== type) return false;
+    if(client){
+      const searchIn = [
+        o.orderClient, o.client, o.customerName,
+        o.orderNum, o.refNum,
+        o.sketchName, o.sketchNumber,
+        o.description, o.type,
+        String(o.id||'')
+      ].map(v=>String(v||'').toLowerCase());
+      // חפש גם בתוך שמות הפריטים
+      (o.items||[]).forEach(it=>{
+        searchIn.push(String(it.name||'').toLowerCase());
+        searchIn.push(String(it.glassFullName||'').toLowerCase());
+      });
+      if(!searchIn.some(v=>v.includes(client))) return false;
+    }
+    return true;
+  });
+}
+
+function clearFilters(){
+  document.getElementById('fGlass').value='';
+  document.getElementById('fType').value='';
+  document.getElementById('fMachine').value='';
+  document.getElementById('fClient').value='';
+  renderAll();
+}
+
+function selectAllFiltered(){
+  const filtered = getFiltered();
+  const glassFilter = document.getElementById('fGlass')?.value || '';
+  let added = 0;
+  filtered.forEach(o=>{
+    if(o.items && o.items.length){
+      // auto-select matching items
+      if(!selectedItems[o.id]) selectedItems[o.id] = new Set();
+      o.items.forEach((item,i)=>{
+        const fg = item.glassFullName||item.name||'';
+        if(!glassFilter || fg.includes(glassFilter)){
+          selectedItems[o.id].add(i);
+          added++;
+        }
+      });
+      if(!workDay.inWork.map(String).includes(String(o.id))) workDay.inWork.push(String(o.id));
+      if(!workDay.itemsSel) workDay.itemsSel = {};
+      workDay.itemsSel[String(o.id)] = [...selectedItems[o.id]];
+    } else {
+      if(!workDay.inWork.map(String).includes(String(o.id))) workDay.inWork.push(String(o.id));
+      added++;
+    }
+  });
+  selectedItems = {};
+  saveWorkDay();
+  document.getElementById('finishBtn').disabled = workDay.inWork.length === 0;
+  showToast(`✓ ${added} פריטים נוספו לעבודה`);
+  setTab('work');
+}
+
+function renderAvailable(){
+  const el = document.getElementById('availableOrders');
+  const filtered = getFiltered();
+  const total = allOrders.filter(o=>
+    (o.status==='ירד לביצוע'||o.status==='ב-OptyWay') &&
+    !workDay.inWork.map(String).includes(String(o.id)) &&
+    !workDay.inChisum.map(String).includes(String(o.id))
+  ).length;
+
+  // update filter count
+  const fc = document.getElementById('filterCount');
+  if(fc) fc.textContent = filtered.length < total ? `${filtered.length} מתוך ${total}` : `${total} הזמנות`;
+
+  // show/hide select all
+  const sab = document.getElementById('selectAllBtn');
+  if(sab) sab.style.display = filtered.length > 0 ? 'block' : 'none';
+
+  // show/hide filter bar only on build tab
+  const fb = document.getElementById('filterBar');
+  if(fb) fb.style.display = currentTab==='build' ? 'flex' : 'none';
+
+  if(!filtered.length){
+    const hasAny = total > 0;
+    el.innerHTML = hasAny
+      ? `<div class="empty"><div class="empty-icon">🔍</div><p>אין תוצאות לסינון זה<br><button onclick="clearFilters()" style="margin-top:8px;padding:6px 14px;background:var(--gold);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">נקה סינון</button></p></div>`
+      : `<div class="empty" style="text-align:center;padding:40px 20px"><div class="empty-icon">📋</div><p style="color:var(--muted);font-size:14px">אין הזמנות זמינות<br><span style="font-size:12px;opacity:0.6">הזמנות יופיעו כאן לאחר שיעברו OptyWay</span></p>${getPendingUploadsNotice()}</div>`;
+    return;
+  }
+
+  // group by glass type for better OptyWay alignment
+  const byGlass = {};
+  filtered.forEach(o=>{
+    const g = o.glassFullName || ((o.thickness||o.mm||'') + (o.thickness||o.mm?' ':'' ) + (o.glass||'אחר')).trim();
+    const machine = getMachine(o);
+    const key = `${machine}__${g}`;
+    if(!byGlass[key]) byGlass[key]={machine, glass:g, orders:[]};
+    byGlass[key].orders.push(o);
+  });
+
+  const glassFilter = document.getElementById('fGlass')?.value;
+  const machineFilter = document.getElementById('fMachine')?.value;
+
+  if(glassFilter || machineFilter || Object.keys(byGlass).length === 1){
+    // flat list when filtering
+    el.innerHTML = filtered.map(o=>orderCardHTML(o)).join('');
+  } else {
+    // group by machine then glass
+    const machineA = Object.entries(byGlass).filter(([k,v])=>v.machine==='A');
+    const machineB = Object.entries(byGlass).filter(([k,v])=>v.machine==='B');
+
+    const renderMachine = (entries, label, color, icon) => {
+      if(!entries.length) return '';
+      const total = entries.reduce((s,[,v])=>s+v.orders.length,0);
+      return `
+        <div style="margin-bottom:20px">
+          <div style="padding:10px 14px;background:${color};border-right:4px solid;border-color:${color.includes('41,128')?'#2980b9':'#e67e22'};margin-bottom:6px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:14px">${icon}</span>
+            <span style="font-size:12px;font-weight:700;color:${color.includes('41,128')?'#2980b9':'#e67e22'}">${label}</span>
+            <span style="font-size:11px;color:var(--muted);margin-right:auto">${total} הזמנות</span>
+          </div>
+          ${entries.map(([k,v])=>`
+            <div style="margin-bottom:12px">
+              <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.12em;padding:5px 10px;background:rgba(184,146,42,0.07);border-right:3px solid var(--gold);margin-bottom:3px">
+                ⬡ ${v.glass} · ${v.orders.length} הזמנות
+              </div>
+              ${v.orders.map(o=>orderCardHTML(o)).join('')}
+            </div>`).join('')}
+        </div>`;
+    };
+
+    el.innerHTML =
+      renderMachine(machineA, 'מכונה א׳', 'rgba(41,128,185,0.07)', '🔵') +
+      renderMachine(machineB, 'מכונה ב׳', 'rgba(230,126,34,0.07)', '🟠');
+  }
+}
+
+// Track which orders have expanded items panel
+let expandedOrders = new Set();
+// Track selected items per order: {orderId: Set of itemIdx}
+let selectedItems = {};
+
+function orderCardHTML(o){
+  const glassFilter = document.getElementById('fGlass')?.value || '';
+  const hasItems = o.items && o.items.length > 0;
+  const ordKey = String(o.id);
+  const isOrderOpen = expandedOrders.has('order_'+ordKey);
+
+  // כותרת ההזמנה (תמיד מוצגת)
+  const orderHeader = `
+    <div style="background:var(--bg2);border:1px solid var(--border);margin-bottom:2px;overflow:hidden">
+      <div style="padding:10px 14px;display:flex;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">${o.orderClient}</div>
+          <div style="font-size:11px;color:var(--muted)">${o.sketchName||o.type||''} · ${o.orderNum||''}</div>
+        </div>
+        <button onclick="addWholeOrder('${ordKey}')" style="padding:5px 10px;background:rgba(184,146,42,0.15);color:var(--gold);border:1px solid var(--gold);font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף הזמנה שלמה</button>
+        <button onclick="toggleOrderExpand('${ordKey}')" style="padding:5px 8px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;color:var(--muted)">${isOrderOpen?'▲':'▾ ראה פריטים'}</button>
+      </div>
+      ${isOrderOpen && o.sketch ? `<button onclick="showSketchPopup('${ordKey}')" style="display:block;margin:8px 14px;padding:6px 14px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">🖼 ראה סקיצה</button>` : ''}
+    </div>`;
+
+  if(!hasItems) return orderHeader;
+
+  // במצב "הזמנות" — לא מציגים פריטים בודדים
+  if(buildViewMode === 'orders') return orderHeader;
+
+  // פריטים בודדים
+  const itemRows = o.items.map((item, i) => {
+    const fullGlass = item.glassFullName || item.name || '';
+    if(glassFilter && !fullGlass.includes(glassFilter)) return '';
+    // אל תציג פריט שכבר נבחר (נמצא ב-itemsSel)
+    const _selIdxs = (workDay.itemsSel && workDay.itemsSel[ordKey]) || [];
+    if(_selIdxs.includes(i) || _selIdxs.map(Number).includes(i)) return '';
+    const isChisum = item.chisum === true;
+    const processLabel = isChisum ? 'מחוסם' : 'מלוטש';
+    const processBg    = isChisum ? 'rgba(142,68,173,0.12)' : 'rgba(41,128,185,0.12)';
+    const processColor = isChisum ? '#8e44ad' : '#2980b9';
+    const detailKey = ordKey+'_'+i;
+    const isDetailOpen = expandedOrders.has(detailKey);
+    return `
+    <div style="background:var(--surface);border:1px solid var(--border);border-top:none;margin-bottom:2px;overflow:hidden">
+      <div style="padding:9px 14px 9px 20px;display:flex;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--text)">${fullGlass}</div>
+          <div style="font-size:11px;color:var(--muted)">${item.w||'?'}×${item.h||'?'} ס"מ</div>
+        </div>
+        <span style="font-size:10px;font-weight:700;padding:2px 7px;background:${processBg};color:${processColor};flex-shrink:0">${processLabel}</span>
+        <button onclick="addSingleItem('${ordKey}',${i})" style="padding:5px 10px;background:var(--gold);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף</button>
+        <button onclick="toggleItemDetail('${ordKey}',${i})" style="padding:5px 7px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:10px;cursor:pointer;color:var(--muted)">${isDetailOpen?'▲':'▾'}</button>
+      </div>
+      ${isDetailOpen ? `
+      <div style="padding:10px 14px 10px 20px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px">
+        <div style="display:flex;flex-wrap:wrap;gap:8px;color:var(--muted);margin-bottom:8px">
+          <span><b>לקוח:</b> ${o.orderClient}</span>
+          <span><b>הזמנה:</b> ${o.orderNum||'—'}</span>
+          <span><b>סקיצה:</b> ${o.sketchName||'—'}</span>
+          <span><b>פרזול:</b> ${o.finish||'—'}</span>
+        </div>
+        <div style="font-size:11px;font-weight:700;margin-bottom:5px">כל הפריטים:</div>
+        ${(o.items||[]).map((it,j)=>`
+          <div style="display:flex;gap:8px;padding:4px 8px;font-size:11px;${j===i?'background:rgba(184,146,42,0.1);font-weight:700;border-right:3px solid var(--gold)':''}">
+            <span style="flex:1">${it.glassFullName||it.name||'—'}</span>
+            <span>${it.w||'?'}×${it.h||'?'} ס"מ</span>
+            <span style="color:${it.chisum?'#8e44ad':'#2980b9'}">${it.chisum?'מחוסם':'מלוטש'}</span>
+          </div>`).join('')}
+        ${o.sketch?`<button onclick="showSketchPopup('${ordKey}')" style="margin-top:8px;padding:5px 12px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer">🖼 פתח סקיצה</button>`:''}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+
+  // במצב 'פריטים' — תמיד הצג פריטים (לא צריך לפתוח)
+  return orderHeader + itemRows;
+}
+
+function setBuildView(mode){
+  buildViewMode = mode;
+  document.getElementById('bvItems').style.background  = mode==='items'  ? 'var(--gold)' : 'var(--bg2)';
+  document.getElementById('bvItems').style.color       = mode==='items'  ? '#fff'        : 'var(--text)';
+  document.getElementById('bvOrders').style.background = mode==='orders' ? 'var(--gold)' : 'var(--bg2)';
+  document.getElementById('bvOrders').style.color      = mode==='orders' ? '#fff'        : 'var(--text)';
+  renderAvailable();
+}
+
+function toggleOrderExpand(ordId){
+  const key = 'order_'+ordId;
+  if(expandedOrders.has(key)) expandedOrders.delete(key);
+  else expandedOrders.add(key);
+  renderAvailable();
+}
+
+function itemsHTML(o, glassFilter){ return orderCardHTML(o); }
+
+function noItemsHTML(o){
+  return `
+    <div style="font-size:12px;color:var(--muted);padding:4px 0 8px">
+      אין פריטים מוזנים — הזן ידנית או המתן לחיבור חשבשבת
+    </div>
+    <div class="add-item-form" id="aif_${o.id}">
+      <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em">+ פריט חדש</div>
+      <div class="ai-row">
+        <input class="ai-input" type="text" id="ai_glass_${o.id}" placeholder='סוג זכוכית (8מ"מ שקוף)'>
+        <select class="ai-select" id="ai_proc_${o.id}">
+          <option value="litush">מלוטש ✂️</option>
+          <option value="chisum">מחוסם 🔥</option>
+        </select>
+      </div>
+      <div class="ai-row">
+        <input class="ai-input" type="number" id="ai_w_${o.id}" placeholder="רוחב ס"מ">
+        <input class="ai-input" type="number" id="ai_h_${o.id}" placeholder="גובה ס"מ">
+      </div>
+      <button class="ia ia-add" onclick="saveManualItem(${o.id})">שמור פריט</button>
+    </div>
+    <div class="items-actions" style="margin-top:4px">
+      <button class="ia ia-add" onclick="addWholeOrder(${o.id})">+ הוסף הזמנה שלמה</button>
+    </div>`;
+}
+
+function toggleExpand(id){
+  if(expandedOrders.has(id)) expandedOrders.delete(id);
+  else expandedOrders.add(id);
+  renderAvailable();
+}
+
+function toggleItemDetail(orderId, itemIdx){
+  const key = String(orderId)+'_'+itemIdx;
+  if(expandedOrders.has(key)) expandedOrders.delete(key);
+  else expandedOrders.add(key);
+  renderAvailable();
+}
+
+
+
+// ═══════════════════════════════════════
+//  WORKFLOW STATUS HELPERS
+// ═══════════════════════════════════════
+function setOrderWorkflowStatus(o, hasChisum){
+  // הוסף שדות workflow חדשים — לא מוחק status ישן
+  o.workdayStatus   = 'active';
+  o.inspectionStatus = hasChisum ? 'pending'      : 'not_required';
+  o.temperingStatus  = hasChisum ? 'waiting'      : 'not_required';
+  o.readyStatus      = 'blocked';
+  o.status           = 'ביום עבודה'; // תאימות לאחור
+}
+
+function saveOrderToStorage(o){
+  const sid = String(o.id);
+  const workflowFields = {
+    workdayStatus:    o.workdayStatus,
+    inspectionStatus: o.inspectionStatus,
+    temperingStatus:  o.temperingStatus,
+    readyStatus:      o.readyStatus,
+    status:           o.status
+  };
+  // עדכן זיכרון מקומי
+  const memIdx = allOrders.findIndex(x=>String(x.id)===sid);
+  if(memIdx>-1) Object.assign(allOrders[memIdx], workflowFields);
+  // שמור ל-Firebase
+  updateOrder(sid, workflowFields).catch(e=>console.error('saveOrderToStorage:', e));
+}
+
+// ── שלח לתחנת בדיקה אם יש פריטי חיסום ──
+// syncToCheckStation — הוסר. handleWorkdayStart מטפל בכל עדכוני הסטטוס
+
+function markStageWorkday(sid){
+  // עדכן stage ל-'workday' (ב-lgSQState — מקור האמת)
+  markStageValue(sid, 'workday');
+}
+
+// כותב stage произвольный ל-lgSQState
+function markStageValue(sid, stage){
+  // עדכן stage ב-Firebase (מקור האמת היחיד)
+  const ordKey = sid.startsWith('ord_')||sid.startsWith('sub_') ? sid : 'ord_'+sid;
+  updateStage(ordKey, stage).catch(e=>console.error('markStageValue:', e));
+}
+
+// [תיקון באג 1] — סימון סופי לאחר סיום יום עבודה, מונע חזרה לרשימה
+function markStageDone(sid){
+  markStageValue(sid, 'done');
+}
+
+function addSingleItem(orderId, itemIdx){
+  const sid = String(orderId);
+  if(!workDay.itemsSel) workDay.itemsSel = {};
+  if(!workDay.inWork.includes(sid)) workDay.inWork.push(sid);
+  if(!workDay.itemsSel[sid]) workDay.itemsSel[sid] = [];
+  if(!workDay.itemsSel[sid].map(Number).includes(Number(itemIdx))) workDay.itemsSel[sid].push(Number(itemIdx));
+  // סמן stage רק אם כל הפריטים נבחרו
+  const _o = allOrders.find(x=>x.id===sid);
+  if(_o && workDay.itemsSel[sid].length === (_o.items||[]).length){
+    markStageWorkday(sid);
+  }
+  saveWorkDay();
+  document.getElementById('finishBtn').disabled = false;
+  const swb=document.getElementById('startWorkBtn');
+  if(swb){swb.disabled=false;swb.style.opacity='1';}
+  showToast('✓ פריט נוסף ליום העבודה');
+  renderAll();
+}
+
+function toggleItem(orderId, itemIdx){
+  if(!selectedItems[orderId]) selectedItems[orderId] = new Set();
+  const s = selectedItems[orderId];
+  if(s.has(itemIdx)) s.delete(itemIdx);
+  else s.add(itemIdx);
+  renderAvailable();
+}
+
+function addAllMatching(orderId){
+  const o = allOrders.find(x=>x.id===orderId);
+  if(!o||!o.items) return;
+  const glassFilter = document.getElementById('fGlass')?.value || '';
+  if(!selectedItems[orderId]) selectedItems[orderId] = new Set();
+  o.items.forEach((item,i)=>{
+    const fullGlass = item.glassFullName||item.name||'';
+    if(!glassFilter || fullGlass.includes(glassFilter))
+      selectedItems[orderId].add(i);
+  });
+  renderAvailable();
+}
+
+function addItemsToWork(orderId){
+  const o = allOrders.find(x=>x.id===orderId);
+  if(!o) return;
+  const selSet = selectedItems[orderId] || new Set();
+  if(!selSet.size){ showToast('בחר פריטים קודם'); return; }
+  // add order with only selected items to workDay
+  const sid = String(orderId);
+  if(!workDay.inWork.includes(sid)){
+    workDay.inWork.push(sid);
+    if(!workDay.itemsSel) workDay.itemsSel = {};
+    workDay.itemsSel[sid] = [...selSet];
+  }
+  expandedOrders.delete(orderId);
+  selectedItems[orderId] = new Set();
+  saveWorkDay();
+  document.getElementById('finishBtn').disabled = false;
+  const swb3=document.getElementById('startWorkBtn');
+  if(swb3){swb3.disabled=false;swb3.style.opacity='1';}
+  showToast(`✓ ${selSet.size} פריטים נוספו לעבודה`);
+  renderAll();
+}
+
+function addWholeOrder(orderId){
+  const sid = String(orderId);
+  const o = allOrders.find(x=>x.id===sid);
+  if(!workDay.inWork.includes(sid)) workDay.inWork.push(sid);
+  // מלא itemsSel קודם, ואז סמן stage
+  if(!workDay.itemsSel) workDay.itemsSel = {};
+  if(o && o.items && o.items.length){
+    workDay.itemsSel[sid] = o.items.map((_,i)=>i);
+  } else {
+    workDay.itemsSel[sid] = [];
+  }
+  markStageWorkday(sid); // stage רק אחרי מילוי itemsSel
+  expandedOrders.delete(orderId);
+  saveWorkDay();
+  document.getElementById('finishBtn').disabled = false;
+  const swb2=document.getElementById('startWorkBtn');
+  if(swb2){swb2.disabled=false;swb2.style.opacity='1';}
+  showToast('✓ הזמנה שלמה נוספה');
+  renderAll();
+}
+
+function saveManualItem(orderId){
+  const glass = document.getElementById('ai_glass_'+orderId)?.value?.trim();
+  const proc  = document.getElementById('ai_proc_'+orderId)?.value;
+  const w     = parseFloat(document.getElementById('ai_w_'+orderId)?.value)||0;
+  const h     = parseFloat(document.getElementById('ai_h_'+orderId)?.value)||0;
+  if(!glass){ showToast('הזן סוג זכוכית'); return; }
+  const o = allOrders.find(x=>x.id===orderId);
+  if(!o) return;
+  if(!o.items) o.items = [];
+  o.items.push({name:glass, glassFullName:glass, w, h, litush:proc==='litush', chisum:proc==='chisum'});
+  updateOrder(String(o.id), { items: o.items }).catch(e=>console.error('addItem:', e));
+  showToast('✓ פריט נשמר');
+  renderAvailable();
+}
+
+function toggleSelect(id){
+  // now handled by expand/items panel
+  toggleExpand(id);
+}
+
+function addSelected(){
+  // now handled per-item
+  showToast('לחץ על הזמנה כדי לבחור פריטים');
+}
+
+// ═══════════════════════════════════════
+//  WORK COLUMNS
+// ═══════════════════════════════════════
+
+// ═══════════════════════════════════════
+//  WORK ACTIVE TAB — יום עבודה פעיל
+// ═══════════════════════════════════════
+let workViewMode = 'list'; // 'list' | 'table'
+
+// מיפוי קוד → מילות חיפוש לסינון זכוכית
+const GLASS_SEARCH_MAP = {
+  'שקוף':  ['שקוף','SMH','SM','8S','6S','10S'],
+  'קליר':  ['קליר','CMH','CM','8C','6C','10C'],
+  'אפור':  ['אפור','AMH','AM','8A'],
+  'ברונזה':['ברונזה','BMH','BM','8B'],
+  'גרניט': ['גרניט','GH','8G'],
+  'אסיד':  ['אסיד','AC','8AC'],
+  'גלינה': ['גלינה','GS','GC'],
+  'מראה':  ['מראה','5M'],
+};
+function glassMatches(item, filter){
+  if(!filter) return true;
+  const name = (item.glassFullName||item.name||'').toLowerCase();
+  const f = filter.toLowerCase();
+  if(name.includes(f)) return true;
+  const keys = GLASS_SEARCH_MAP[filter]||[];
+  return keys.some(k=>name.toUpperCase().includes(k.toUpperCase()));
+}
+let buildViewMode = 'items'; // 'items' | 'orders'
+
+function setWorkView(mode){
+  workViewMode = mode;
+  document.getElementById('wViewList').style.background = mode==='list' ? 'var(--gold)' : 'var(--bg2)';
+  document.getElementById('wViewList').style.color = mode==='list' ? '#fff' : 'var(--text)';
+  document.getElementById('wViewTable').style.background = mode==='table' ? 'var(--gold)' : 'var(--bg2)';
+  document.getElementById('wViewTable').style.color = mode==='table' ? '#fff' : 'var(--text)';
+  renderWorkActive();
+}
+
+function renderWorkActive(){
+  const container = document.getElementById('workActiveContent');
+  if(!container) return;
+
+  const search = (document.getElementById('wSearch')?.value||'').trim().toLowerCase();
+  const typeFilter = document.getElementById('wType')?.value||'';
+  const glassFilter = document.getElementById('wGlass')?.value||'';
+
+  // בנה רשימת פריטים מworkDay.inWork + itemsSel
+  const items = [];
+  workDay.inWork.forEach(ordId => {
+    const o = allOrders.find(x=>x.id===ordId);
+    if(!o) return;
+    const sid2 = String(ordId);
+    const selIdxs = workDay.itemsSel ? workDay.itemsSel[sid2] : undefined;
+    const ordItems = o.items||[];
+    if(selIdxs && selIdxs.length){
+      // הצג רק פריטים שנבחרו — itemsSel הוא מקור האמת
+      selIdxs.forEach(rawIdx=>{
+        const numIdx = Number(rawIdx);
+        const item = ordItems[numIdx];
+        if(!item) return;
+        items.push({o, item, idx: numIdx});
+      });
+    }
+    // אם אין itemsSel או ריק — לא מציגים כלום (ללא fallback)
+  });
+
+  // עדכן גלאס filter — בנה מחדש תמיד
+  const glassEl = document.getElementById('wGlass');
+  if(glassEl){
+    const currentVal = glassEl.value;
+    glassEl.innerHTML = '<option value="">כל הזכוכיות</option>';
+    const glasses = [...new Set(items.map(({item})=>item.glassFullName||item.name||'').filter(Boolean))];
+    glasses.forEach(g=>{
+      const opt = document.createElement('option');
+      opt.value = g; opt.textContent = g;
+      if(g === currentVal) opt.selected = true;
+      glassEl.appendChild(opt);
+    });
+  }
+
+  // סינון
+  const filtered = items.filter(({o, item})=>{
+    const glass = item.glassFullName||item.name||'';
+    const cls = item.chisum ? 'chisum' : 'cut';
+    if(typeFilter && cls !== typeFilter) return false;
+    if(glassFilter && !glassMatches(item, glassFilter)) return false;
+    if(search){
+      const fields = [
+        glass, o.orderClient, o.orderNum, o.refNum,
+        o.sketchName, o.sketchNumber, o.type, o.description,
+        item.name, item.glassFullName
+      ].map(v=>String(v||'').toLowerCase());
+      if(!fields.some(f=>f.includes(search))) return false;
+    }
+    return true;
+  });
+
+  if(!filtered.length){
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:14px">אין פריטים ביום עבודה הפעיל</div>';
+    return;
+  }
+
+  if(workViewMode === 'table'){
+    container.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="background:var(--bg2)">
+          <th style="padding:8px 12px;text-align:right;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border)">זכוכית</th>
+          <th style="padding:8px 12px;text-align:right;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border)">מידות</th>
+          <th style="padding:8px 12px;text-align:right;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border)">סוג</th>
+          <th style="padding:8px 12px;text-align:right;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border)">לקוח</th>
+          <th style="padding:8px 12px;text-align:right;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border)">הזמנה</th>
+          <th style="padding:8px 12px;text-align:right;font-weight:600;color:var(--muted);border-bottom:1px solid var(--border)"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map(({o,item,idx})=>`
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:9px 12px;font-weight:700">${item.glassFullName||item.name||'—'}</td>
+          <td style="padding:9px 12px">${item.w||'?'}×${item.h||'?'} ס"מ</td>
+          <td style="padding:9px 12px">
+            <span style="font-size:10px;font-weight:700;padding:2px 7px;background:${item.chisum?'rgba(142,68,173,0.12)':'rgba(41,128,185,0.12)'};color:${item.chisum?'#8e44ad':'#2980b9'}">
+              ${item.chisum?'מחוסם':'מלוטש'}
+            </span>
+          </td>
+          <td style="padding:9px 12px;color:var(--muted)">${o.orderClient}</td>
+          <td style="padding:9px 12px;color:var(--muted)">${o.sketchName||o.orderNum||'—'}</td>
+          <td style="padding:9px 12px">
+            <button onclick="showWorkItemDetail('${o.id}',${idx})" style="padding:3px 8px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:10px;cursor:pointer;color:var(--muted)">ראה עוד</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  } else {
+    container.innerHTML = filtered.map(({o,item,idx})=>{
+      const detailKey = 'work_'+o.id+'_'+idx;
+      const isOpen = expandedOrders.has(detailKey);
+      return `
+      <div style="background:var(--surface);border:1px solid var(--border);margin-bottom:4px;overflow:hidden">
+        <div style="padding:10px 14px;display:flex;align-items:center;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:900;color:var(--text)">${o.orderClient}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--text);margin-top:1px">${item.glassFullName||item.name||'—'}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px">
+              <span style="background:rgba(184,146,42,0.15);color:var(--gold);padding:1px 6px;font-weight:700;font-size:11px">${o.sketchName||o.refNum||o.orderNum||o.sketchNumber||'—'}</span>
+              &nbsp;·&nbsp;${item.w||'?'}×${item.h||'?'} ס"מ
+            </div>
+          </div>
+          <span style="font-size:10px;font-weight:700;padding:3px 7px;background:${item.chisum?'rgba(142,68,173,0.12)':'rgba(41,128,185,0.12)'};color:${item.chisum?'#8e44ad':'#2980b9'};flex-shrink:0">
+            ${item.chisum?'מחוסם':'מלוטש'}
+          </span>
+          <button onclick="toggleWorkItemDetail('${o.id}',${idx})" style="padding:5px 8px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;color:var(--muted)">
+            ${isOpen?'▲':'▾ ראה עוד'}
+          </button>
+        </div>
+        ${isOpen ? `
+        <div style="padding:10px 14px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;color:var(--muted);margin-bottom:8px">
+            <span><b>לקוח:</b> ${o.orderClient}</span>
+            <span><b>הזמנה:</b> ${o.orderNum||'—'}</span>
+            <span><b>סקיצה:</b> ${o.sketchName||'—'}</span>
+          </div>
+          <div style="font-size:11px;font-weight:700;margin-bottom:5px">כל פריטי הסקיצה:</div>
+          ${(o.items||[]).map((it,j)=>`
+            <div style="display:flex;gap:8px;padding:4px 8px;font-size:11px;${j===idx?'background:rgba(184,146,42,0.1);font-weight:700;border-right:3px solid var(--gold)':''}">
+              <span style="flex:1">${it.glassFullName||it.name||'—'}</span>
+              <span>${it.w||'?'}×${it.h||'?'} ס"מ</span>
+              <span style="color:${it.chisum?'#8e44ad':'#2980b9'}">${it.chisum?'מחוסם':'מלוטש'}</span>
+            </div>`).join('')}
+          ${o.sketch?`<button onclick="showSketchPopup('${o.id}')" style="margin-top:12px;padding:8px 18px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🖼 פתח סקיצה</button>`:''}
+        </div>` : ''}
+      </div>`;
+    }).join('');
+  }
+}
+
+function toggleWorkItemDetail(ordId, itemIdx){
+  const key = 'work_'+ordId+'_'+itemIdx;
+  if(expandedOrders.has(key)) expandedOrders.delete(key);
+  else expandedOrders.add(key);
+  renderWorkActive();
+}
+
+function showWorkItemDetail(ordId, itemIdx){
+  toggleWorkItemDetail(ordId, itemIdx);
+}
+
+// [תיקון באג 2] — מחשב activeItems לפי itemsSel, מסווג לפי פריטים שנבחרו בפועל
+function getActiveItemsForOrder(o){
+  const sid = String(o.id);
+  const selIdxs = workDay.itemsSel && workDay.itemsSel[sid];
+  if(!selIdxs || !selIdxs.length) return o.items || [];
+  return selIdxs.map(i=>(o.items||[])[Number(i)]).filter(Boolean);
+}
+
+function renderWorkCols(){
+  const inWork = allOrders.filter(o => workDay.inWork.map(String).includes(String(o.id)));
+  // [תיקון באג 2] — מסווג לפי הפריטים הנבחרים בלבד
+  const cut    = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'cut');
+  const chisumAll = inWork.filter(o => {
+    const cls = classifyOrder(o, getActiveItemsForOrder(o));
+    return cls === 'chisum' || cls === 'mixed';
+  });
+
+  document.getElementById('col-cut-body').innerHTML    = colItems(cut,    '#2980b9');
+  document.getElementById('col-chisum-body').innerHTML = colItems(chisumAll, '#8e44ad');
+  document.getElementById('cnt-cut').textContent       = cut.length;
+  document.getElementById('cnt-chisum-col').textContent = chisumAll.length;
+}
+
+function colItems(orders, color){
+  if(!orders.length) return `<div class="empty" style="padding:24px"><div class="empty-icon" style="font-size:24px">—</div><p style="font-size:12px">אין הזמנות</p></div>`;
+  const rows = [];
+  orders.forEach(o=>{
+    const selIdxs = workDay.itemsSel && workDay.itemsSel[String(o.id)];
+    const items = o.items||[];
+    if(selIdxs && selIdxs.length){
+      // הצג רק פריטים שנבחרו
+      selIdxs.forEach(idx=>{
+        const item = items[idx];
+        if(!item) return;
+        const name = item.glassFullName||item.name||o.glassFullName||o.glass||'';
+        const dims = (item.w&&item.h) ? `${item.w}×${item.h} ס"מ` : '';
+        rows.push(`
+    <div class="work-item">
+      <div class="wi-dot" style="background:${color}"></div>
+      <div class="wi-info">
+        <div class="wi-client">${o.orderClient}</div>
+        <div class="wi-desc">${name}${dims?' · '+dims:''} · ${o.orderNum||''}</div>
+      </div>
+      <button class="wi-remove" onclick="removeFromWork('${o.id}')" title="הסר">✕</button>
+    </div>`);
+      });
+    }
+    // אם אין itemsSel — לא מציגים כלום (ללא fallback)
+  });
+  return rows.join('');
+}
+
+function removeFromWork(id){
+  workDay.inWork = workDay.inWork.filter(x => String(x) !== String(id));
+  saveWorkDay();
+  document.getElementById('finishBtn').disabled = workDay.inWork.length === 0;
+  renderAll();
+}
+
+// ═══════════════════════════════════════
+//  CHISUM TAB
+// ═══════════════════════════════════════
+let brokenItems = {}; // {orderId: [itemIdx,...]}
+let chisumOpen = {}; // {orderId: bool}
+
+function toggleChisumOpen(ordId){
+  const id = String(ordId);
+  chisumOpen[id] = !chisumOpen[id];
+  renderChisumTab();
+}
+
+function renderChisumTab(){
+  const el = document.getElementById('chisumOrders');
+  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  if(!inChisum.length){
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔥</div><p>אין הזמנות בחיסום כרגע</p></div>`;
+    document.getElementById('resetChisumBtn')&&(document.getElementById('resetChisumBtn').style.display='none');
+    return;
+  }
+  if(document.getElementById('resetChisumBtn')) document.getElementById('resetChisumBtn').style.display='flex';
+  
+  el.innerHTML = inChisum.map(o=>{
+    const allChisumItems = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>it.chisum);
+    const hasBroken = (brokenItems[String(o.id)]||[]).length > 0;
+    const brokenCount = (brokenItems[String(o.id)]||[]).length;
+    const isOpen = chisumOpen[String(o.id)]||false;
+
+    const itemsHtml = allChisumItems.map(it=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);background:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'rgba(231,76,60,0.04)':'#fff'}">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;${(brokenItems[o.id]||[]).includes(it.globalIdx)?'color:#e74c3c;text-decoration:line-through':'color:#1a1714'}">${it.name||''}</div>
+          <div style="font-size:11px;color:#8a8278;margin-top:1px">${it.w||''}×${it.h||''} ס"מ</div>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${(brokenItems[o.id]||[]).includes(it.globalIdx)?'#e74c3c':'rgba(0,0,0,0.12)'};background:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'rgba(231,76,60,0.08)':'rgba(0,0,0,0.02)'}">
+          <input type="checkbox" style="width:15px;height:15px;accent-color:#e74c3c;cursor:pointer;"
+            onchange="toggleBroken('${o.id}',${it.globalIdx},this.checked)"
+            ${(brokenItems[o.id]||[]).includes(it.globalIdx)?'checked':''}>
+          <span style="font-size:12px;font-weight:600;color:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'#e74c3c':'#8a8278'}">${(brokenItems[o.id]||[]).includes(it.globalIdx)?'נשבר':'הגיע'}</span>
+        </label>
+      </div>`).join('');
+
+    return `
+    <div style="background:#fff;border:1.5px solid ${hasBroken?'#e74c3c':'rgba(142,68,173,0.3)'};border-radius:10px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.06);">
+      <!-- HEADER - always visible, click to toggle -->
+      <div data-oid="${o.id}" onclick="toggleChisumOpen(this.dataset.oid)" style="padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:${hasBroken?'rgba(231,76,60,0.04)':'#fff'}">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+            <span style="font-size:14px;font-weight:900;color:#1a1714">${o.orderClient}</span>
+            <span style="font-size:11px;color:#b8922a;font-weight:700;background:rgba(184,146,42,0.1);padding:1px 7px;border-radius:3px">${o.orderNum||''}</span>
+          </div>
+          <div style="font-size:12px;color:#8a8278">${o.sketchName||o.type||''} · ${o.glass||''}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
+            <span style="font-size:11px;font-weight:700;color:#8e44ad;background:rgba(142,68,173,0.1);padding:2px 8px;border-radius:4px">🔥 ${allChisumItems.length} פריטים</span>
+            ${hasBroken?`<span style="font-size:11px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,0.1);padding:2px 8px;border-radius:4px">❌ ${brokenCount} נשברו</span>`:'<span style="font-size:11px;color:#27ae60;background:rgba(39,174,96,0.1);padding:2px 8px;border-radius:4px">✓ הכל הגיע</span>'}
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px">
+          <span style="font-size:13px;font-weight:700;color:#b8922a">₪${(o.total||0).toLocaleString()}</span>
+          <span style="font-size:20px;color:#8a8278;transition:transform 0.2s;display:block;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
+        </div>
+      </div>
+      <!-- ITEMS - visible when open -->
+      ${isOpen ? `
+      <div style="border-top:1.5px solid ${hasBroken?'#e74c3c':'rgba(142,68,173,0.2)'};background:#fafafa;">
+        <div style="padding:8px 16px 4px;font-size:10px;font-weight:700;color:#8a8278;letter-spacing:0.1em;text-transform:uppercase">סמן פריטים שנשברו / לא הגיעו</div>
+        ${itemsHtml||'<div style="padding:12px 16px;font-size:12px;color:#8a8278">אין פריטי חיסום בהזמנה זו</div>'}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function toggleBroken(orderId, itemIdx, checked){
+  const id = String(orderId);
+  if(!brokenItems[id]) brokenItems[id]=[];
+  const idx = parseInt(itemIdx);
+  if(checked){
+    if(!brokenItems[id].includes(idx)) brokenItems[id].push(idx);
+  } else {
+    brokenItems[id] = brokenItems[id].filter(i=>i!==idx);
+  }
+  // update broken count badge without full re-render
+  renderChisumTab();
+}
+
+function resetChisumList(){
+  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  if(!inChisum.length){showToast('אין הזמנות בחיסום');return;}
+  
+  // Build preview
+  const okOrders = inChisum.filter(o=>!(brokenItems[o.id]||[]).length);
+  const brokenOrders = inChisum.filter(o=>(brokenItems[o.id]||[]).length>0);
+  
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;max-width:380px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;">
+        <h3 style="color:#f0ede8;font-size:15px;margin:0;">אפס רשימת חיסום</h3>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
+        ${okOrders.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
+          <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">✅ ${okOrders.length} הזמנות מוכנות — תישלח הודעה</div>
+          ${okOrders.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
+        </div>`:''}
+        ${brokenOrders.length?`<div style="padding:10px 14px;background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:6px;">
+          <div style="font-size:12px;font-weight:700;color:#e74c3c;margin-bottom:6px;">❌ ${brokenOrders.length} הזמנות עם נשברים — לא יישלחו הודעות</div>
+          ${brokenOrders.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
+        </div>`:''}
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button onclick="confirmResetChisum()" style="flex:2;padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+            ✓ שלח הודעות ואפס
+          </button>
+          <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:13px;background:#f5f2ed;color:#555;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.1);cursor:pointer;border-radius:6px;">
+            ביטול
+          </button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+function confirmResetChisum(){
+  document.querySelectorAll('[style*=fixed]').forEach(el=>el.remove());
+  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  const okOrders = inChisum.filter(o=>!(brokenItems[o.id]||[]).length);
+  const brokenOrds = inChisum.filter(o=>(brokenItems[o.id]||[]).length>0);
+  
+  // Send WhatsApp to OK orders
+  okOrders.forEach((o,i)=>{
+    setTimeout(()=>{
+      window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
+    }, i*600);
+  });
+  
+  // Send broken notifications
+  brokenOrds.forEach((o,i)=>{
+    const brk = (o.items||[]).filter((_,idx)=>(brokenItems[o.id]||[]).includes(idx));
+    setTimeout(()=>{
+      window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'broken',brk))}`, '_blank');
+    }, (okOrders.length+i)*600);
+  });
+  
+  // Update statuses - broken is at ITEM level, not order level
+  allOrders.forEach(o=>{
+    if(!workDay.inChisum.map(String).includes(String(o.id))) return;
+    const brokenIdxs = brokenItems[String(o.id)]||[];
+    if(brokenIdxs.length>0){
+      // יש פריטים נשברים — ההזמנה חוזרת לייצור חלקי
+      o.status = 'ירד לביצוע';
+      // סמן אלו פריטים נשברו
+      (o.items||[]).forEach((it,idx)=>{
+        if(brokenIdxs.includes(idx)) it.broken=true;
+      });
+    } else if(classifyOrder(o)==='mixed'){
+      o.status = 'חזר מחיסום';
+    } else {
+      o.status = 'מוכן לאיסוף';
+    }
+  });
+  okOrders.forEach(o => saveOrderToStorage(o)); // Firebase
+  
+  // הסר מ-inChisum רק הזמנות שהושלמו (ללא שבורים)
+  const okIds = okOrders.map(o=>String(o.id));
+  workDay.inChisum = workDay.inChisum.filter(id=>!okIds.includes(String(id)));
+  // [תיקון באג 1] — סמן stage='done' להזמנות שסיימו חיסום
+  okOrds.forEach(o => markStageDone(String(o.id)));
+
+  // שמור brokenItems רק להזמנות שנשארו
+  const remainingIds = workDay.inChisum.map(String);
+  Object.keys(brokenItems).forEach(id=>{
+    if(!remainingIds.includes(String(id))) delete brokenItems[id];
+  });
+  saveWorkDay();
+  const pendingMsg = brokenOrds.length ? ` · ${brokenOrds.length} ממתינות לפריטים חסרים` : '';
+  showToast(`✓ ${okOrders.length} הודעות נשלחו${pendingMsg}`);
+  renderAll();
+}
+
+function checkChisumArrived(){
+  const bar = document.getElementById('chisumArrivedBar');
+  const cnt = workDay.inChisum.length;
+  if(cnt > 0){
+    bar.style.display = 'flex';
+    document.getElementById('chisumArrivedCount').textContent =
+      `${cnt} הזמנות — סמן נשברים ולחץ אפס`;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+// ═══════════════════════════════════════
+//  COUNTS + SUMMARY
+// ═══════════════════════════════════════
+function updateCounts(){
+  const avail = allOrders.filter(o=>(o.status==='ירד לביצוע'||o.status==='ב-OptyWay')&&!workDay.inWork.map(String).includes(String(o.id))&&!workDay.inChisum.map(String).includes(String(o.id)));
+  document.getElementById('cnt-build').textContent = avail.length;
+  document.getElementById('cnt-work').textContent  = workDay.inWork.length;
+  document.getElementById('cnt-chisum').textContent = workDay.inChisum.length;
+}
+
+function updateSummaryBar(){
+  // [תיקון באג 2] — ספור פריטים לפי הנבחרים בפועל (itemsSel)
+  let cutCount=0, chisumCount=0, mixedCount=0;
+  workDay.inWork.forEach(ordId=>{
+    const o = allOrders.find(x=>x.id===ordId);
+    if(!o) return;
+    // השתמש ב-getActiveItemsForOrder לעקביות
+    const activeItems = getActiveItemsForOrder(o);
+    activeItems.forEach(item=>{
+      if(item.chisum) chisumCount++;
+      else cutCount++;
+    });
+  });
+  document.getElementById('sb-cut').textContent    = cutCount;
+  document.getElementById('sb-chisum').textContent = chisumCount;
+  if(document.getElementById('sb-mixed')) document.getElementById('sb-mixed').textContent = mixedCount;
+  document.getElementById('finishBtn').disabled = workDay.inWork.length === 0;
+}
+
+// ═══════════════════════════════════════
+//  FINISH DAY
+// ═══════════════════════════════════════
+function finishDay(){
+  const inWork = allOrders.filter(o => workDay.inWork.map(String).includes(String(o.id)));
+  // [תיקון באג 2] — סיווג לפי פריטים שנבחרו בפועל
+  const cut    = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'cut');
+  const chisumOrds = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'chisum');
+  const mixed  = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'mixed');
+
+  // cut + mixed get "מוכן" message today
+  // chisum-only go to chisum
+  const readyNow   = [...cut, ...mixed]; // mixed waits for chisum but will get one message
+  const toChisum   = [...chisumOrds];
+
+  const cutMsg   = cut.map(o=>waMessage(o, 'ready')).join('\n\n---\n\n');
+  const chisumMsg= chisumOrds.length ? `\n🔥 ${chisumOrds.length} הזמנות יישלחו לחיסום ויהיו מוכנות מחר` : '';
+  const mixedMsg = mixed.length ? `\n⚡ ${mixed.length} הזמנות (מעורב) — יישלחו הודעה מחר עם החיסום` : '';
+
+  document.getElementById('finishBody').innerHTML = `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="color:var(--cut);font-weight:700">✂️ ${cut.length}</span> הזמנות מלוטש — הודעה נשלחת עכשיו
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="color:var(--chisum);font-weight:700">🔥 ${chisumOrds.length}</span> הזמנות חיסום — נשלחות מחר
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="color:var(--mixed);font-weight:700">⚡ ${mixed.length}</span> מעורב — הודעה מחר עם החיסום
+        </div>
+      </div>
+    </div>
+    ${cut.length ? `
+    <div class="wa-preview-title">📱 דוגמת הודעה — מלוטש</div>
+    <div class="wa-preview">${waMessage(cut[0], 'ready')}</div>` : ''}
+    ${chisumOrds.length ? `
+    <div class="wa-preview-title" style="margin-top:12px">📱 הודעה מחר — חיסום</div>
+    <div class="wa-preview">${waMessage(chisumOrds[0], 'chisum_ready')}</div>` : ''}`;
+
+  document.getElementById('finishOv').classList.add('open');
+}
+
+
+// ═══════════════════════════════════════
+//  HANDLE WORKDAY START
+// ═══════════════════════════════════════
+function handleWorkdayStart(){
+  // עובד על workDay.inWork — הרשימה הקבועה
+  console.log('handleWorkdayStart: inWork=', workDay.inWork);
+  console.log('handleWorkdayStart: allOrders IDs=', allOrders.map(x=>x.id));
+  workDay.inWork.forEach(ordId => {
+    const o = allOrders.find(x => x.id === ordId);
+    if(!o){
+      console.warn('handleWorkdayStart: NOT FOUND in allOrders:', ordId);
+      return;
+    }
+    if(o.workdayStatus === 'active'){
+      console.log('handleWorkdayStart: already active, skip', ordId);
+      return;
+    }
+    const hasChisum = (o.items||[]).some(i => i.chisum === true);
+    o.workdayStatus    = 'active';
+    o.inspectionStatus = hasChisum ? 'pending'      : 'not_required';
+    o.temperingStatus  = hasChisum ? 'waiting'      : 'not_required';
+    o.readyStatus      = 'blocked';
+    o.status           = 'ביום עבודה';
+    saveOrderToStorage(o);
+    // סנכרן stage='workday' ל-lgSQState
+    markStageValue(String(ordId), 'workday');
+    console.log('handleWorkdayStart: SAVED', ordId, 'hasChisum:', hasChisum);
+    // שמירה נעשתה דרך saveOrderToStorage → updateOrder → Firebase;
+  });
+
+  saveWorkDay();
+
+  // נטרל כפתור הורדה, אפשר סיום
+  const swb = document.getElementById('startWorkBtn');
+  if(swb){swb.disabled=true;swb.style.opacity='0.5';}
+
+  showToast('✓ הורד לעבודה — ' + workDay.inWork.length + ' הזמנות');
+  setTab('work');
+  renderAll();
+}
+
+function confirmFinish(){
+  const inWork = allOrders.filter(o => workDay.inWork.map(String).includes(String(o.id)));
+  // [תיקון באג 2] — סיווג לפי פריטים שנבחרו בפועל
+  const cut    = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'cut');
+  const chisumOrds = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'chisum');
+  const mixed  = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'mixed');
+
+  // Open WhatsApp for each cut order
+  cut.forEach((o,i) => {
+    setTimeout(()=>{
+      window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`, '_blank');
+    }, i * 600);
+  });
+
+  // עדכן workflow statuses
+  allOrders.forEach(o => {
+    if(cut.find(x=>x.id===o.id)){
+      o.workdayStatus  = 'done';
+      o.readyStatus    = 'eligible';
+      o.status         = 'מוכן לאיסוף'; // תאימות לאחור
+    }
+    if(chisumOrds.find(x=>x.id===o.id) || mixed.find(x=>x.id===o.id)){
+      o.workdayStatus  = 'done';
+      o.readyStatus    = 'blocked_chisum';
+      o.status         = 'נשלח לחיסום'; // stage='chisum' — תואם ל-admin
+    }
+  });
+  // עדכון ב-Firebase נעשה דרך saveOrderToStorage + markStageValue
+  // allOrders עודכן כבר בזיכרון, Firebase יתעדכן אסינכרונית
+
+  // [תיקון באג 1] — סמן stage='done' לחיתוך (לא יחזרו לרשימה)
+  cut.forEach(o => markStageDone(String(o.id)));
+  // עדכן status בזיכרון לחיתוך (לתצוגה עקבית)
+  cut.forEach(o => { o.status = 'מוכן לאיסוף'; });
+
+  // [תיקון באג 1] — סמן stage='chisum' לחיסום/מעורב (ימתינו לאישור חיסום)
+  // סמן chisum ב-Firebase דרך markStageValue
+  [...chisumOrds, ...mixed].forEach(o => {
+    markStageValue(String(o.id), 'chisum');
+  });
+
+  // העבר חיסום/מעורב ל-inChisum (לשונית חיסום ביום עבודה)
+  const chisumIds = [...chisumOrds, ...mixed].map(o=>o.id);
+  workDay.inChisum = [...(workDay.inChisum||[]), ...chisumIds];
+  workDay.inWork = [];
+  saveWorkDay();
+
+  closeFinish();
+  showToast(`✓ ${cut.length} הודעות נשלחו · ${chisumIds.length} ממתינים לחיסום`);
+  setTab('chisum');
+}
+
+function closeFinish(){
+  document.getElementById('finishOv').classList.remove('open');
+}
+
+// ═══════════════════════════════════════
+//  CHISUM ARRIVED
+// ═══════════════════════════════════════
+function chisumArrived(){
+  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  document.getElementById('chisumBody').innerHTML = `
+    <div style="margin-bottom:14px;font-size:13px">
+      <strong style="color:var(--chisum)">${inChisum.filter(o=>classifyOrder(o)!=='mixed').length} הזמנות</strong> יסומנו כ"מוכן לאיסוף".<br>
+      ${inChisum.filter(o=>classifyOrder(o)==='mixed').length ? '<span style="color:var(--mixed)">⚡ '+inChisum.filter(o=>classifyOrder(o)=='mixed').length+' הזמנות מעורבות</span> יסומנו כ"חזר מחיסום" עד שהחלק המלוטש יושלם.' : ''}
+    </div>
+    ${inChisum.length ? `
+    <div class="wa-preview-title">📱 דוגמת הודעה</div>
+    <div class="wa-preview">${waMessage(inChisum[0], 'chisum_ready')}</div>` : ''}`;
+  document.getElementById('chisumOv').classList.add('open');
+}
+
+function confirmChisum(){
+  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  // Open WhatsApp for each
+  inChisum.forEach((o,i) => {
+    setTimeout(()=>{
+      window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
+    }, i * 600);
+  });
+  // עדכן workflow statuses — חיסום הגיע
+  allOrders.forEach(o => {
+    if(!workDay.inChisum.map(String).includes(String(o.id))) return;
+    // guard: אל תבצע פעמיים
+    if(o.temperingStatus === 'returned') return;
+    o.temperingStatus = 'returned';
+    // אם יום עבודה כבר הסתיים → ready
+    if(o.workdayStatus === 'done'){
+      o.readyStatus = 'eligible';
+      o.status      = 'מוכן לאיסוף'; // תאימות לאחור
+    } else {
+      // יום עבודה עדיין פעיל → blocked עד שיסתיים
+      o.readyStatus = 'blocked';
+      o.status      = 'חזר מחיסום'; // תאימות לאחור
+    }
+  });
+  // עדכון ב-Firebase נעשה דרך saveOrderToStorage + markStageValue
+  // [תיקון באג 1] — סמן stage='done' לכל הזמנות החיסום שחזרו
+  inChisum.forEach(o => markStageDone(String(o.id)));
+
+  workDay.inChisum = [];
+  saveWorkDay();
+  closeChisum();
+  showToast(`✓ ${inChisum.length} הודעות נשלחו — כל ההזמנות מוכנות!`);
+  renderAll();
+}
+
+function closeChisum(){
+  document.getElementById('chisumOv').classList.remove('open');
+}
+
+// ═══════════════════════════════════════
+//  WHATSAPP MESSAGE
+// ═══════════════════════════════════════
+function waMessage(o, type, broken){
+  const name = o.orderClient || 'לקוח';
+  const num  = o.orderNum || '—';
+  const desc = [o.sketchName, o.type].filter(Boolean).join(' — ');
+  const items = (o.items||[]).map(i=>`• ${i.name||''} ${i.w||''}×${i.h||''} ס"מ`).join('\n');
+  if(type === 'broken'){
+    // הודעה על חתיכה שנשברה
+    const brokenList = (broken||[]).map(i=>`• ${i.name||''} ${i.w||''}×${i.h||''} ס"מ`).join('\n');
+    return `שלום ${name} 👋\n\nלצערנו, חתיכה מהזמנתך נשברה במהלך עיבוד החיסום.\n\n📋 מספר הזמנה: ${num}\n🔲 ${desc}\n\n❌ פריטים שנשברו:\n${brokenList}\n\nאנו בייצור מחדש ונעדכן בהקדם.\n\nLuzGlass 📞`;
+  }
+  if(type === 'ready'){
+    return `שלום ${name} 👋\n\nההזמנה שלך מוכנה לאיסוף! ✅\n\n📋 מספר הזמנה: ${num}\n🔲 ${desc}\n${items?'\n'+items:''}\n\nניתן לאסוף בשעות הפעילות.\n\nLuzGlass 📞`;
+  } else {
+    return `שלום ${name} 👋\n\nהזמנתך הושלמה ומוכנה לאיסוף! ✅\n\n📋 מספר הזמנה: ${num}\n🔲 ${desc}\n${items?'\n'+items:''}\n\nניתן לאסוף בשעות הפעילות.\n\nLuzGlass 📞`;
+  }
+}
+
+function cleanPhone(phone){
+  if(!phone) return '';
+  return phone.replace(/[-\s]/g,'').replace(/^0/,'');
+}
+
+// ═══════════════════════════════════════
+//  RESET
+// ═══════════════════════════════════════
+function resetDay(){
+  if(!confirm('לאפס את יום העבודה? ההזמנות יחזרו לרשימה.')) return;
+  workDay = {date:today(), selected:[], inWork:[], inChisum:[]};
+  saveWorkDay();
+  selectedIds.clear();
+  setTab('build');
+  showToast('יום העבודה אופס');
+}
+
+// ═══════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ═══════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════
+load();
+setTab('build'); // אתחול נכון — build מוצג, finishBtn מוסתר
+renderAll();
+document.getElementById('finishBtn').disabled = workDay.inWork.length === 0;
+
+function unavOpen(){document.getElementById('unavSidebar').classList.add('mobile-open');document.getElementById('unavOverlay').classList.add('open');}
+function unavClose(){document.getElementById('unavSidebar').classList.remove('mobile-open');document.getElementById('unavOverlay').classList.remove('open');}
+function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();return;}if(typeof resetDay==='function'){resetDay();return;}if(confirm('לאפס?')){localStorage.clear();location.reload();}}
+</script>
+</body>
+</html>
