@@ -1680,50 +1680,8 @@ function finishDay(){
     <div class="wa-preview">${waMessage(cut[0], 'ready')}</div>` : ''}
     ${chisumOrds.length ? `
     <div class="wa-preview-title" style="margin-top:12px">📱 הודעה מחר — חיסום</div>
-    <div class="wa-preview">${waMessage(chisumOrds[0], 'chisum_ready')}</div>` : ''}
-    ${(()=>{
-      const chisItems=[];
-      workDay.inChisum.forEach(id=>{
-        const o=allOrders.find(x=>String(x.id)===String(id));
-        if(!o) return;
-        const selIdxs=(workDay.itemsSel&&workDay.itemsSel[String(id)])||[];
-        const items=selIdxs.length?selIdxs.map(i=>(o.items||[])[Number(i)]).filter(Boolean):(o.items||[]);
-        items.filter(it=>it&&it.chisum).forEach(it=>chisItems.push({glass:it.name||it.glass||'—',w:it.w||0,h:it.h||0,client:o.orderClient}));
-      });
-      if(!chisItems.length) return '';
-      return `<div style="margin-top:14px;padding:12px;background:rgba(142,68,173,0.08);border:1px solid rgba(142,68,173,0.2);border-radius:6px">
-        <div style="font-size:12px;font-weight:700;color:#8e44ad;margin-bottom:8px">🔥 דוח חיסום — ${chisItems.length} פריטים לשליחה למפעל</div>
-        <table style="width:100%;border-collapse:collapse;font-size:11px">
-          <thead><tr style="background:rgba(0,0,0,0.04)">
-            <th style="padding:4px 7px;text-align:right;border:1px solid rgba(0,0,0,0.08)">#</th>
-            <th style="padding:4px 7px;text-align:right;border:1px solid rgba(0,0,0,0.08)">זכוכית</th>
-            <th style="padding:4px 7px;text-align:right;border:1px solid rgba(0,0,0,0.08)">מידות</th>
-            <th style="padding:4px 7px;text-align:right;border:1px solid rgba(0,0,0,0.08)">לקוח</th>
-          </tr></thead>
-          <tbody>${chisItems.map((it,i)=>`<tr style="${i%2===0?'background:rgba(255,255,255,0.5)':''}">
-            <td style="padding:4px 7px;border:1px solid rgba(0,0,0,0.06)">${i+1}</td>
-            <td style="padding:4px 7px;border:1px solid rgba(0,0,0,0.06);font-weight:700">${it.glass}</td>
-            <td style="padding:4px 7px;border:1px solid rgba(0,0,0,0.06)">${it.w}×${it.h}</td>
-            <td style="padding:4px 7px;border:1px solid rgba(0,0,0,0.06);color:#888">${it.client}</td>
-          </tr>`).join('')}</tbody>
-        </table>
-        <button onclick="window._printChisum&&window._printChisum()" style="margin-top:8px;padding:6px 12px;background:#8e44ad;color:#fff;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;border:none;cursor:pointer;border-radius:4px">🖨️ הדפס דוח</button>
-      </div>`;
-    })()}`;
+    <div class="wa-preview">${waMessage(chisumOrds[0], 'chisum_ready')}</div>` : ''}`;
 
-  window._printChisum=function(){
-    const chisItems=[];
-    workDay.inChisum.forEach(id=>{
-      const o=allOrders.find(x=>String(x.id)===String(id));
-      if(!o) return;
-      const selIdxs=(workDay.itemsSel&&workDay.itemsSel[String(id)])||[];
-      const items=selIdxs.length?selIdxs.map(i=>(o.items||[])[Number(i)]).filter(Boolean):(o.items||[]);
-      items.filter(it=>it&&it.chisum).forEach(it=>chisItems.push({glass:it.name||it.glass||'—',w:it.w||0,h:it.h||0,client:o.orderClient,num:o.orderNum||''}));
-    });
-    const w=window.open('','_blank');
-    w.document.write(`<html dir="rtl"><head><title>דוח חיסום</title><style>body{font-family:Arial,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #ddd;text-align:right}th{background:#f0e8ff}h2{color:#8e44ad}</style></head><body><h2>🔥 דוח חיסום — ${new Date().toLocaleDateString('he-IL')}</h2><p>סה"כ ${chisItems.length} פריטים</p><table><thead><tr><th>#</th><th>סוג זכוכית</th><th>מידות (ס"מ)</th><th>לקוח</th><th>הזמנה</th></tr></thead><tbody>${chisItems.map((it,i)=>`<tr><td>${i+1}</td><td>${it.glass}</td><td>${it.w}×${it.h}</td><td>${it.client}</td><td>${it.num}</td></tr>`).join('')}</tbody></table></body></html>`);
-    w.document.close();w.print();
-  };
   document.getElementById('finishOv').classList.add('open');
 }
 

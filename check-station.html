@@ -728,6 +728,7 @@ function doAdvance(){
   }
   _removeFromChisumStation(cur.id);
   chDone.push(cur);
+  _updatePrintReportBtn();
   toast('נשלח לחיסום ✓');
   cur=null; showList();
 }
@@ -743,8 +744,26 @@ function finishSketch(){
   }
   _removeFromChisumStation(cur.id);
   chDone.push(cur);
+  _updatePrintReportBtn();
   toast('✓ עבר לממתין לחיסום');
   cur=null; showList();
+}
+
+function _updatePrintReportBtn(){
+  let btn = document.getElementById('csReportBtn');
+  if(!btn){
+    btn = document.createElement('button');
+    btn.id = 'csReportBtn';
+    btn.className = 'tb-btn tb-purple';
+    btn.onclick = printChisum;
+    document.querySelector('.topbar').insertBefore(btn, document.querySelector('.topbar a[href="workday.html"]'));
+  }
+  if(chDone.length > 0){
+    btn.style.display = 'flex';
+    btn.textContent = `🖨️ דוח חיסום (${chDone.length})`;
+  } else {
+    btn.style.display = 'none';
+  }
 }
 
 // CHISUM REPORT
