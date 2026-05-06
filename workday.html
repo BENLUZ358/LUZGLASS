@@ -586,8 +586,10 @@ async function load(){
     const fbWorkIds = allOrders
       .filter(o => o.stage === 'workday')
       .map(o => String(o.id));
-    // הוסף הזמנות שב-Firebase כ-workday
+    // הוסף הזמנות שב-Firebase כ-workday — אל תוסיף הזמנות שכבר בתחנת הבדיקה
     fbWorkIds.forEach(id => {
+      if(workDay.inChisum.map(String).includes(String(id))) return;
+      if((workDay.pendingChisum||[]).map(String).includes(String(id))) return;
       if(!workDay.inWork.includes(id)) workDay.inWork.push(id);
     });
     // הסר מ-inWork רק הזמנות שנעלמו לחלוטין מ-Firebase (לא opty ולא workday)
@@ -1699,11 +1701,18 @@ function handleWorkdayStart(){
       console.warn('handleWorkdayStart: NOT FOUND in allOrders:', ordId);
       return;
     }
-    if(o.workdayStatus === 'active'){
-      console.log('handleWorkdayStart: already active, skip', ordId);
-      return;
-    }
     const _sid = String(ordId);
+    if(o.workdayStatus === 'active'){
+      // אם הזמנה "active" אבל לא בתחנת בדיקה ולא יש לה פריטים ב-itemsSel — ייתכן שאופס היום — עבד מחדש
+      const alreadyHandled = workDay.inChisum.map(String).includes(_sid)
+                          || (workDay.pendingChisum||[]).map(String).includes(_sid)
+                          || (workDay.itemsSel&&workDay.itemsSel[_sid]&&workDay.itemsSel[_sid].length>0);
+      if(alreadyHandled){
+        console.log('handleWorkdayStart: already active & handled, skip', ordId);
+        return;
+      }
+      console.log('handleWorkdayStart: active but state was reset — reprocess', ordId);
+    }
     if(!workDay.itemsSel) workDay.itemsSel = {};
 
     // קבל את כל הפריטים שנבחרו עבור הזמנה זו
@@ -1730,12 +1739,17 @@ function handleWorkdayStart(){
     markStageValue(String(ordId), 'workday');
 
     // הוסף לתחנת בדיקה — אם ריקה כנס ישירות, אחרת ממתין
+    // בדוק קודם שהזמנה לא כבר שם (מנע כפילות)
     if(hasChisum){
-      if(workDay.inChisum.length === 0){
-        if(!workDay.inChisum.includes(_sid)) workDay.inChisum.push(_sid);
-      } else {
-        if(!workDay.pendingChisum) workDay.pendingChisum = [];
-        if(!workDay.pendingChisum.includes(_sid)) workDay.pendingChisum.push(_sid);
+      const alreadyIn = workDay.inChisum.map(String).includes(_sid)
+                     || (workDay.pendingChisum||[]).map(String).includes(_sid);
+      if(!alreadyIn){
+        if(workDay.inChisum.length === 0){
+          workDay.inChisum.push(_sid);
+        } else {
+          if(!workDay.pendingChisum) workDay.pendingChisum = [];
+          workDay.pendingChisum.push(_sid);
+        }
       }
     }
   });
@@ -1891,10 +1905,21 @@ function cleanPhone(phone){
 // ═══════════════════════════════════════
 function resetDay(){
   if(!confirm('לאפס את יום העבודה? ההזמנות יחזרו לרשימה.')) return;
-  workDay = {date:today(), selected:[], inWork:[], inChisum:[]};
+  // נקה workdayStatus מ-Firebase לכל הזמנה שהייתה ביום — אחרת handleWorkdayStart ידלג עליהן
+  const toReset = [...new Set([
+    ...workDay.inWork.map(String),
+    ...workDay.inChisum.map(String),
+    ...(workDay.pendingChisum||[]).map(String)
+  ])];
+  toReset.forEach(id => {
+    updateOrder(id, {workdayStatus:'', readyStatus:'', inspectionStatus:'', temperingStatus:''})
+      .catch(e => console.error('resetDay updateOrder:', e));
+  });
+  workDay = {date:today(), selected:[], inWork:[], inChisum:[], pendingChisum:[], itemsSel:{}};
   saveWorkDay();
   selectedIds.clear();
   setTab('build');
+  renderAll();
   showToast('יום העבודה אופס');
 }
 
