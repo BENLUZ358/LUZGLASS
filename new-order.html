@@ -51,7 +51,29 @@
 
   .bottom-note{text-align:center;padding:28px 20px;font-size:12px;color:var(--muted);}
   .bottom-note a{color:var(--gold);text-decoration:none;}
+
+  .measure-form{display:none;background:var(--surface);border:1px solid var(--border);padding:20px 16px;max-width:500px;margin:12px auto 0;}
+  .measure-form.open{display:block;}
+  .mf-title{font-size:15px;font-weight:700;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+  .mf-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
+  .mf-label{font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--gold);text-transform:uppercase;}
+  .mf-input{padding:10px 12px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:14px;color:var(--text);outline:none;width:100%;-webkit-appearance:none;border-radius:0;}
+  .mf-input:focus{border-color:var(--gold);}
+  .mf-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .mf-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);margin-bottom:4px;font-size:12px;}
+  .mf-item-info{flex:1;}
+  .mf-item-del{background:none;border:none;color:#c0392b;cursor:pointer;font-size:14px;padding:0 4px;font-family:'Heebo',sans-serif;}
+  .mf-add-btn{width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;margin-bottom:14px;}
+  .mf-submit{width:100%;padding:14px;background:var(--gold);color:#fff;font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;border:none;cursor:pointer;}
+  .mf-submit:disabled{background:#ccc;cursor:not-allowed;}
+  .mf-success{text-align:center;padding:28px 20px;}
+  .mf-success-icon{font-size:48px;margin-bottom:14px;}
+  .mf-success-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;margin-bottom:8px;}
+  .mf-success-sub{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;}
 </style>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-db.js"></script>
 </head>
 <body>
 <script>
@@ -93,7 +115,7 @@ const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
 
   <div class="divider"><span>או</span></div>
 
-  <a href="portal.html#quote" class="order-card" onclick="localStorage.setItem('portalTab','quote')">
+  <a href="#measureForm" class="order-card" onclick="event.preventDefault();showMeasureForm()">
     <div class="oc-icon">📏</div>
     <div class="oc-title">הזמנת זכוכית לפי מידה</div>
     <div class="oc-desc">
@@ -115,6 +137,67 @@ const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
 
 </div>
 
+<div class="measure-form" id="measureForm">
+  <div id="mfFormContent">
+    <div class="mf-title">📏 הזמנת זכוכית לפי מידה</div>
+
+    <div class="mf-field">
+      <div class="mf-label">סוג זכוכית</div>
+      <select id="mfGlass" class="mf-input">
+        <option value='שקוף 8מ"מ'>שקוף 8מ"מ</option>
+        <option value='שקוף 6מ"מ'>שקוף 6מ"מ</option>
+        <option value='שקוף 10מ"מ'>שקוף 10מ"מ</option>
+        <option value='קליר 8מ"מ'>קליר 8מ"מ</option>
+        <option value='קליר 6מ"מ'>קליר 6מ"מ</option>
+        <option value='קליר 10מ"מ'>קליר 10מ"מ</option>
+        <option value='אפור 8מ"מ'>אפור 8מ"מ</option>
+        <option value='ברונזה 8מ"מ'>ברונזה 8מ"מ</option>
+        <option value='מראה 5מ"מ'>מראה 5מ"מ</option>
+        <option value='אסיד קליר 8מ"מ'>אסיד קליר 8מ"מ</option>
+        <option value='גלינה שקוף 8מ"מ'>גלינה שקוף 8מ"מ</option>
+      </select>
+    </div>
+
+    <div class="mf-field">
+      <div class="mf-label">עיבוד</div>
+      <select id="mfProc" class="mf-input">
+        <option value="ליטוש">ליטוש</option>
+        <option value="חיסום">חיסום</option>
+        <option value="חיתוך בלבד">חיתוך בלבד</option>
+      </select>
+    </div>
+
+    <div class="mf-row">
+      <div class="mf-field">
+        <div class="mf-label">רוחב (ס"מ)</div>
+        <input type="number" id="mfW" class="mf-input" placeholder="80" min="1" max="999" onkeydown="if(event.key==='Enter'){event.preventDefault();mfAddItem();}">
+      </div>
+      <div class="mf-field">
+        <div class="mf-label">גובה (ס"מ)</div>
+        <input type="number" id="mfH" class="mf-input" placeholder="200" min="1" max="999" onkeydown="if(event.key==='Enter'){event.preventDefault();mfAddItem();}">
+      </div>
+    </div>
+
+    <button class="mf-add-btn" onclick="mfAddItem()">+ הוסף פריט</button>
+
+    <div id="mfItemList"></div>
+
+    <div class="mf-field">
+      <div class="mf-label">הערות</div>
+      <textarea id="mfNotes" class="mf-input" rows="3" placeholder="פרזול, צורה מיוחדת, דחיפות..." style="resize:none;line-height:1.6;"></textarea>
+    </div>
+
+    <button class="mf-submit" id="mfSubmit" onclick="mfSubmit()">שלח הזמנה ←</button>
+  </div>
+
+  <div id="mfSuccess" class="mf-success" style="display:none">
+    <div class="mf-success-icon">✅</div>
+    <div class="mf-success-title">ההזמנה נשלחה!</div>
+    <div class="mf-success-sub" id="mfSuccessRef">קיבלנו את הזמנתך ונחזור אליך בהקדם.</div>
+    <a href="portal.html" style="display:inline-block;padding:12px 28px;background:var(--text);color:var(--bg);font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;text-decoration:none;">→ חזרה לפורטל</a>
+  </div>
+</div>
+
 <a href="upload.html" class="upload-card">
   <div class="uc-icon">📎</div>
   <div class="uc-info">
@@ -127,6 +210,99 @@ const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
 <div class="bottom-note">
   צריך עזרה? <a href="portal.html">שלח לנו הודעה</a>
 </div>
+
+<script>
+let mfItems = [];
+
+function showMeasureForm() {
+  const f = document.getElementById('measureForm');
+  f.classList.toggle('open');
+  if (f.classList.contains('open')) {
+    setTimeout(() => f.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+  }
+}
+
+function mfAddItem() {
+  const glass = document.getElementById('mfGlass').value;
+  const proc  = document.getElementById('mfProc').value;
+  const w     = parseInt(document.getElementById('mfW').value) || 0;
+  const h     = parseInt(document.getElementById('mfH').value) || 0;
+  if (!w || !h) { alert('נא למלא רוחב וגובה'); return; }
+  mfItems.push({ glass, proc, w, h });
+  mfRender();
+  document.getElementById('mfW').value = '';
+  document.getElementById('mfH').value = '';
+  document.getElementById('mfW').focus();
+}
+
+function mfRemove(i) {
+  mfItems.splice(i, 1);
+  mfRender();
+}
+
+function mfRender() {
+  const list = document.getElementById('mfItemList');
+  if (!mfItems.length) { list.innerHTML = ''; return; }
+  list.innerHTML = mfItems.map((it, i) => `
+    <div class="mf-item">
+      <div class="mf-item-info">${it.glass} · ${it.proc} · ${it.w}×${it.h} ס"מ</div>
+      <button class="mf-item-del" onclick="mfRemove(${i})">✕</button>
+    </div>`).join('');
+}
+
+async function mfSubmit() {
+  if (!mfItems.length) { alert('נא להוסיף לפחות פריט אחד'); return; }
+
+  const btn = document.getElementById('mfSubmit');
+  btn.disabled = true;
+  btn.textContent = 'שולח...';
+
+  const sess    = JSON.parse(sessionStorage.getItem('lgSession') || '{}');
+  const name    = sess.name || sess.id || 'לקוח';
+  const phone   = sess.phone || '';
+  const notes   = document.getElementById('mfNotes').value.trim();
+  const refNum  = 'ORD-' + Date.now().toString().slice(-6);
+  const now     = new Date();
+  const dateStr = now.toLocaleDateString('he-IL');
+  const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+
+  const itemsDesc = mfItems.map(it => `${it.glass} · ${it.proc} · ${it.w}×${it.h}ס"מ`).join('\n');
+
+  try {
+    await saveSubmission({
+      refNum,
+      orderClient: name,
+      client:      name,
+      phone,
+      sketchName:  'הזמנת זכוכית לפי מידה',
+      orderNum:    refNum,
+      notes:       itemsDesc + (notes ? '\n' + notes : ''),
+      items:       mfItems.map(it => ({
+        name:   it.glass + ' ' + it.proc,
+        glass:  it.glass,
+        w:      it.w,
+        h:      it.h,
+        chisum: it.proc === 'חיסום',
+        litush: it.proc === 'ליטוש'
+      })),
+      type:  'measure',
+      read:  false,
+      sketch: null,
+      files:  [],
+      date:   dateStr,
+      time:   timeStr
+    });
+
+    document.getElementById('mfFormContent').style.display = 'none';
+    document.getElementById('mfSuccess').style.display = 'block';
+    document.getElementById('mfSuccessRef').textContent = 'מספר פנייה: ' + refNum + ' — קיבלנו את הזמנתך ונחזור אליך בהקדם.';
+  } catch (e) {
+    alert('שגיאה בשליחה: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'שלח הזמנה ←';
+  }
+}
+</script>
 
 </body>
 </html>
