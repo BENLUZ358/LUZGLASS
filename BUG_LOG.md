@@ -245,8 +245,27 @@ handleWorkdayStart הכניס תמיד ל-inChisum בלי לבדוק אם התח
 ```
 workDay.inChisum = תור תחנת בדיקה (stage='workday')
 stage='chisum'   = לאחר תחנת בדיקה, נשלח למפעל
+itemsSel         = מכיל רק פריטי ליטוש/חיתוך (לא חיסום)
 ```
 אין לערבב את שניהם.
+
+---
+
+# 🐞 Bug 14 — פריטי חיסום הופיעו ב"יום עבודה פעיל"
+
+## תיאור
+פריטי חיסום מוצגים ב-renderWorkActive() אחרי "הורד לעבודה"
+
+## סיבות:
+1. `handleWorkdayStart()` לא ניקה את `itemsSel` מפריטי חיסום — הם נשארו בפנים
+2. `renderWorkActive()` הציג את כל `itemsSel` ללא סינון
+3. `getActiveItemsForOrder()` החזירה `o.items` כ-fallback (כולל חיסום)
+
+## פתרון:
+- `handleWorkdayStart()`: מבנה מחדש — `itemsSel` מכיל רק ליטוש אחרי "הורד לעבודה"
+- `renderWorkActive()`: מסנן `item.chisum === true` (רשת בטחון)
+- `getActiveItemsForOrder()`: fallback שב ל-`[]` ומסנן chisum תמיד
+- הזמנות שנשארו ללא פריטי ליטוש מוצאות מ-inWork לגמרי
 
 ---
 

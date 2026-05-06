@@ -1224,6 +1224,7 @@ function renderWorkActive(){
         const numIdx = Number(rawIdx);
         const item = ordItems[numIdx];
         if(!item) return;
+        if(item.chisum === true) return; // פריטי חיסום → תחנת בדיקה בלבד
         items.push({o, item, idx: numIdx});
       });
     }
@@ -1351,12 +1352,12 @@ function showWorkItemDetail(ordId, itemIdx){
   toggleWorkItemDetail(ordId, itemIdx);
 }
 
-// [תיקון באג 2] — מחשב activeItems לפי itemsSel, מסווג לפי פריטים שנבחרו בפועל
+// מחזיר רק פריטי ליטוש מ-itemsSel — פריטי חיסום שייכים לתחנת בדיקה
 function getActiveItemsForOrder(o){
   const sid = String(o.id);
   const selIdxs = workDay.itemsSel && workDay.itemsSel[sid];
-  if(!selIdxs || !selIdxs.length) return o.items || [];
-  return selIdxs.map(i=>(o.items||[])[Number(i)]).filter(Boolean);
+  if(!selIdxs || !selIdxs.length) return [];
+  return selIdxs.map(i=>(o.items||[])[Number(i)]).filter(it => it && it.chisum !== true);
 }
 
 function renderWorkCols(){
@@ -1744,25 +1745,33 @@ function handleWorkdayStart(){
       console.log('handleWorkdayStart: already active, skip', ordId);
       return;
     }
-    // בדוק חיסום לפי הפריטים שנבחרו ב-itemsSel בלבד
     const _sid = String(ordId);
-    const _selIdxs = (workDay.itemsSel && workDay.itemsSel[_sid]) || [];
-    const _itemsToCheck = _selIdxs.length
-      ? _selIdxs.map(i => (o.items||[])[Number(i)]).filter(Boolean)
-      : (o.items||[]);
+    if(!workDay.itemsSel) workDay.itemsSel = {};
+
+    // קבל את כל הפריטים שנבחרו עבור הזמנה זו
+    const _allSelIdxs = (workDay.itemsSel[_sid] && workDay.itemsSel[_sid].length)
+      ? workDay.itemsSel[_sid]
+      : (o.items||[]).map((_,i)=>i);
+
+    // בדוק אם יש פריטי חיסום
+    const _itemsToCheck = _allSelIdxs.map(i => (o.items||[])[Number(i)]).filter(Boolean);
     const hasChisum = _itemsToCheck.some(i => i && i.chisum === true);
+
+    // הפרד itemsSel: שמור רק פריטי ליטוש — חיסום עובר לתחנת בדיקה
+    workDay.itemsSel[_sid] = _allSelIdxs.filter(i => {
+      const item = (o.items||[])[Number(i)];
+      return item && item.chisum !== true;
+    });
+
     o.workdayStatus    = 'active';
     o.inspectionStatus = hasChisum ? 'pending'      : 'not_required';
     o.temperingStatus  = hasChisum ? 'waiting'      : 'not_required';
     o.readyStatus      = 'blocked';
     o.status           = 'ביום עבודה';
     saveOrderToStorage(o);
-    // סנכרן stage='workday' ל-lgSQState
     markStageValue(String(ordId), 'workday');
-    console.log('handleWorkdayStart: SAVED', ordId, 'hasChisum:', hasChisum);
-    // שמירה נעשתה דרך saveOrderToStorage → updateOrder → Firebase;
 
-    // הוסף לחיסום — אם תחנת הבדיקה ריקה כנס ישירות, אחרת ממתין
+    // הוסף לתחנת בדיקה — אם ריקה כנס ישירות, אחרת ממתין
     if(hasChisum){
       if(workDay.inChisum.length === 0){
         if(!workDay.inChisum.includes(_sid)) workDay.inChisum.push(_sid);
@@ -1773,12 +1782,12 @@ function handleWorkdayStart(){
     }
   });
 
-  // הוצא מ-inWork כל הזמנה שעברה ל-inChisum או pendingChisum
-  const _allChisumIds = [
-    ...workDay.inChisum.map(String),
-    ...(workDay.pendingChisum||[]).map(String)
-  ];
-  workDay.inWork = workDay.inWork.filter(id => !_allChisumIds.includes(String(id)));
+  // הוצא מ-inWork הזמנות שלא נשארו להן פריטי ליטוש
+  // הזמנות עם גם ליטוש וגם חיסום — נשארות ב-inWork עם ליטוש בלבד
+  workDay.inWork = workDay.inWork.filter(id => {
+    const litushItems = (workDay.itemsSel||{})[String(id)] || [];
+    return litushItems.length > 0;
+  });
 
   saveWorkDay();
 
