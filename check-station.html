@@ -612,10 +612,10 @@ function selectOrder(id){ id = String(id);
   document.getElementById('tbTitle').textContent=cur.orderClient;
   document.getElementById('shClient').textContent=cur.orderClient;
   document.getElementById('shMeta').textContent=[cur.orderNum,cur.sketchName,cur.glassFullName].filter(Boolean).join(' · ');
-  // note display removed
   showSketch();
   renderSketch();
   updateProg();
+  const note=notes[id]||'';
   if(note) setTimeout(()=>showNotePopup(note),300);
 }
 
@@ -669,10 +669,9 @@ function checkItem(i){
   if(!cur)return;
   cs[cur.id][i]=!cs[cur.id][i];
   saveCS();renderSketch();updateProg();
-  const items=cur.items||[];
-  if(items.length&&items.every((_,j)=>cs[cur.id]?.[j])){
+  const idxs=chisumIdxs(cur);
+  if(idxs.length&&idxs.every(j=>cs[cur.id]?.[j])){
     showBanner();
-    // update tab count in background
     setTimeout(updateTabCounts,300);
   }
 }
