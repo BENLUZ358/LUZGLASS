@@ -1482,6 +1482,37 @@ function sqSaveNotes(id){
   showToast('✓ הערה נשמרה');
 }
 
+// ── MEASURE ORDER LIST SVG ──
+function makeMeasureListSVG(o){
+  const items=o.items||[];
+  if(!items.length) return null;
+  const W=400,PAD=12,ROW=30,HEAD=42,COLH=24,FOOT=16;
+  const H=HEAD+COLH+items.length*ROW+FOOT;
+  const rows=items.map((it,i)=>{
+    const y=HEAD+COLH+i*ROW;
+    const bg=i%2===0?'#f9f7f3':'#fff';
+    const pc=it.chisum?'#8e44ad':'#2980b9';
+    const pl=it.chisum?'🔥 חיסום':'✂ ליטוש';
+    return `<rect x="${PAD}" y="${y}" width="${W-PAD*2}" height="${ROW}" fill="${bg}"/>
+    <text x="${PAD+8}" y="${y+20}" font-family="Heebo,Arial" font-size="11" font-weight="700" fill="#1a1714">${it.name||it.glass||''}</text>
+    <text x="${W/2}" y="${y+20}" text-anchor="middle" font-family="Heebo,Arial" font-size="13" fill="#333" font-weight="600">${it.w||0} × ${it.h||0}</text>
+    <text x="${W-PAD-8}" y="${y+20}" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="${pc}" font-weight="700">${pl}</text>`;
+  }).join('');
+  const num=o.orderNum||o.refNum||'';
+  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="background:#fff">
+    <rect width="${W}" height="${HEAD}" fill="#1a1714"/>
+    <text x="${W-PAD}" y="19" text-anchor="end" font-family="Heebo,Arial" font-size="13" font-weight="900" fill="#c9a84c">📋 הזמנת זכוכית לפי מידה</text>
+    <text x="${W-PAD}" y="33" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="rgba(247,244,239,0.5)">${o.client||''}${o.client&&num?' · ':''}${num} · ${items.length} פריטים</text>
+    <rect x="0" y="${HEAD}" width="${W}" height="${COLH}" fill="rgba(184,146,42,0.12)"/>
+    <text x="${PAD+8}" y="${HEAD+16}" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">סוג זכוכית</text>
+    <text x="${W/2}" y="${HEAD+16}" text-anchor="middle" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">מידות (ס"מ)</text>
+    <text x="${W-PAD-8}" y="${HEAD+16}" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">עיבוד</text>
+    ${rows}
+    <rect x="0" y="${H-FOOT}" width="${W}" height="${FOOT}" fill="#f5f2ed"/>
+    <text x="${W-PAD}" y="${H-4}" text-anchor="end" font-family="Heebo,Arial" font-size="9" font-weight="700" fill="#b8922a">LuzGlass</text>
+  </svg>`);
+}
+
 // ── DEMO SKETCH GENERATOR ──
 function makeDemoSketch(title,client,glass,dims,color){
   const W=420,H=300,padX=36,padY=52,gap=8;
@@ -1605,7 +1636,9 @@ function buildSQItems(){
       panels:       o.panels || [],
       notes:        o.notes || '',
       sketch:       o.sketch || null,
-      files:        o.files || []
+      files:        o.files || [],
+      items:        o.items || [],
+      type:         o.type  || '',
     });
   });
 }
@@ -1713,8 +1746,15 @@ function sqShowDetail(){
 
   const img=document.getElementById('sqImg');
   const noimg=document.getElementById('sqNoImg');
-  if(o.sketch){img.src=o.sketch;img.style.display='block';noimg.style.display='none';}
-  else{img.style.display='none';noimg.style.display='flex';}
+  if(o.sketch){
+    img.src=o.sketch;img.style.display='block';noimg.style.display='none';
+  } else if(o.type==='measure' && o.items && o.items.length){
+    const svg=makeMeasureListSVG(o);
+    if(svg){img.src=svg;img.style.display='block';noimg.style.display='none';}
+    else{img.style.display='none';noimg.style.display='flex';}
+  } else{
+    img.style.display='none';noimg.style.display='flex';
+  }
 
   sqUpdateBtns(o.id);
 

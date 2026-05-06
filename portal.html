@@ -357,8 +357,40 @@ function renderOrders(){
 }
 
 
+function makeMeasureListSVG(o){
+  const items=o.items||[];
+  if(!items.length) return null;
+  const W=300,PAD=10,ROW=26,HEAD=38,COLH=22,FOOT=16;
+  const H=HEAD+COLH+items.length*ROW+FOOT;
+  const rows=items.map((it,i)=>{
+    const y=HEAD+COLH+i*ROW;
+    const bg=i%2===0?'#f9f7f3':'#fff';
+    const pc=it.chisum?'#8e44ad':'#2980b9';
+    const pl=it.chisum?'חיסום':'ליטוש';
+    const nm=(it.name||it.glass||'').replace(/ ?\d+מ"מ/,'');
+    return `<rect x="0" y="${y}" width="${W}" height="${ROW}" fill="${bg}"/>
+    <text x="${PAD}" y="${y+17}" font-family="Heebo,Arial" font-size="10" font-weight="700" fill="#1a1714">${nm}</text>
+    <text x="${W/2}" y="${y+17}" text-anchor="middle" font-family="Heebo,Arial" font-size="11" fill="#333" font-weight="600">${it.w||0}×${it.h||0}</text>
+    <text x="${W-PAD}" y="${y+17}" text-anchor="end" font-family="Heebo,Arial" font-size="9" fill="${pc}" font-weight="700">${pl}</text>`;
+  }).join('');
+  const num=o.num||o.orderNum||'';
+  return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="background:#fff">
+    <rect width="${W}" height="${HEAD}" fill="#1a1714"/>
+    <text x="${W-PAD}" y="18" text-anchor="end" font-family="Heebo,Arial" font-size="12" font-weight="900" fill="#c9a84c">הזמנת זכוכית לפי מידה</text>
+    <text x="${W-PAD}" y="30" text-anchor="end" font-family="Heebo,Arial" font-size="9" fill="rgba(247,244,239,0.5)">${num}${num?' · ':''}${items.length} פריטים</text>
+    <rect x="0" y="${HEAD}" width="${W}" height="${COLH}" fill="rgba(184,146,42,0.12)"/>
+    <text x="${PAD}" y="${HEAD+15}" font-family="Heebo,Arial" font-size="9" fill="#b8922a" font-weight="700">סוג זכוכית</text>
+    <text x="${W/2}" y="${HEAD+15}" text-anchor="middle" font-family="Heebo,Arial" font-size="9" fill="#b8922a" font-weight="700">מידות</text>
+    <text x="${W-PAD}" y="${HEAD+15}" text-anchor="end" font-family="Heebo,Arial" font-size="9" fill="#b8922a" font-weight="700">עיבוד</text>
+    ${rows}
+    <rect x="0" y="${H-FOOT}" width="${W}" height="${FOOT}" fill="#f5f2ed"/>
+    <text x="${W-PAD}" y="${H-4}" text-anchor="end" font-family="Heebo,Arial" font-size="8" font-weight="700" fill="#b8922a">LuzGlass</text>
+  </svg>`);
+}
+
 // Auto-generate SVG sketch from order items when no real sketch exists
 function makeAutoSketch(o){
+  if(o.type==='measure') return makeMeasureListSVG(o);
   const items = o.items||[];
   if(!items.length) return null;
   const PAD=28, GAP=8, H=160, TITLE=22;
