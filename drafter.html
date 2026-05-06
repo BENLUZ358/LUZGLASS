@@ -231,28 +231,6 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
       <button class="btm-btn btn-edit" onclick="openEditor()">✏️ עריכה</button>
       <button class="btm-btn btn-finish" onclick="finishSketch()">✓ סיים סקיצה — שלח ל-OptyWay</button>
     </div>
-    <div id="editBar" style="display:none;background:#fff;border-top:1px solid rgba(0,0,0,0.08);padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <div style="flex:1;min-width:140px">
-        <div style="font-size:10px;font-weight:600;color:#b8922a;margin-bottom:4px;letter-spacing:0.08em">זכוכית ✏️</div>
-        <select id="draftGlassSel" onchange="draftUpdateField('glass',this.value)"
-          style="width:100%;padding:7px 10px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.1);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;direction:rtl;">
-          <option value="">-- בחר זכוכית --</option>
-          <option>8מ"מ שקוף</option><option>8מ"מ קליר</option><option>8מ"מ גרניט</option>
-          <option>8מ"מ אסיד</option><option>8מ"מ אפור</option><option>8מ"מ ברונזה</option>
-          <option>8מ"מ פיפיטה</option><option>8מ"מ אסיד קליר</option><option>8מ"מ גלינה שקוף</option>
-          <option>8מ"מ גלינה קליר</option><option>10מ"מ קליר</option><option>6מ"מ שקוף</option><option>5מ"מ מראה</option>
-        </select>
-      </div>
-      <div style="flex:1;min-width:140px">
-        <div style="font-size:10px;font-weight:600;color:#b8922a;margin-bottom:4px;letter-spacing:0.08em">פרזול ✏️</div>
-        <select id="draftFinishSel" onchange="draftUpdateField('finish',this.value)"
-          style="width:100%;padding:7px 10px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.1);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;direction:rtl;">
-          <option value="">-- בחר פרזול --</option>
-          <option>שחור מט</option><option>זהב מוברש</option><option>זהב</option>
-          <option>גרפיט</option><option>רוז גולד</option>
-        </select>
-      </div>
-    </div>
   </div>
 
 </div>
@@ -335,15 +313,6 @@ function showOrder(o){
   document.getElementById('doneBanner').classList.remove('show');
   document.getElementById('sketchMeta').style.display='flex';
   document.getElementById('btmBar').style.display='flex';
-  // הצג ועדכן שדות עריכה
-  const eb=document.getElementById('editBar');
-  if(eb){
-    eb.style.display='flex';
-    const gs=document.getElementById('draftGlassSel');
-    const fs=document.getElementById('draftFinishSel');
-    if(gs) gs.value=o.glassFullName||o.glass||'';
-    if(fs) fs.value=o.finish||'';
-  }
   document.getElementById('smClient').textContent=o.orderClient||'לקוח';
   document.getElementById('smNum').textContent=o.orderNum||'—';
   document.getElementById('smDesc').textContent=[o.sketchName,o.type,o.glass].filter(Boolean).join(' · ');
@@ -442,17 +411,6 @@ function buildAutoSVG(o){
 }
 
 
-function draftUpdateField(field, value){
-  if(!curOrder) return;
-  if(field==='glass'){ curOrder.glassFullName=value; curOrder.glass=value.replace(/^\d+מ"מ\s*/,''); }
-  if(field==='finish'){ curOrder.finish=value; }
-  const fb={};
-  if(field==='glass'){ fb.glassFullName=value; fb.glass=value.replace(/^\d+מ"מ\s*/,''); }
-  if(field==='finish'){ fb.finish=value; }
-  updateOrder(curOrder.id, fb).catch(e=>console.error('draftUpdateField:',e));
-  // עדכן תיאור בראש
-  document.getElementById('smDesc').textContent=[curOrder.sketchName,curOrder.type,curOrder.glassFullName].filter(Boolean).join(' · ');
-}
 function showAllDone(){
   document.getElementById('sketchMeta').style.display='none';
   document.getElementById('btmBar').style.display='none';
