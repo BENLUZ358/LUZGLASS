@@ -1424,7 +1424,8 @@ function toggleChisumOpen(ordId){
 
 function renderChisumTab(){
   const el = document.getElementById('chisumOrders');
-  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  // הטאב מציג רק הזמנות שעברו תחנת בדיקה (stage='chisum') — לא הזמנות שעדיין בתחנה
+  const inChisum = allOrders.filter(o => (o.stage||'') === 'chisum');
   if(!inChisum.length){
     el.innerHTML = `<div class="empty"><div class="empty-icon">🔥</div><p>אין הזמנות בחיסום כרגע</p></div>`;
     document.getElementById('resetChisumBtn')&&(document.getElementById('resetChisumBtn').style.display='none');
@@ -1496,7 +1497,7 @@ function toggleBroken(orderId, itemIdx, checked){
 }
 
 function resetChisumList(){
-  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  const inChisum = allOrders.filter(o => (o.stage||'') === 'chisum');
   if(!inChisum.length){showToast('אין הזמנות בחיסום');return;}
   
   // Build preview
@@ -1535,7 +1536,7 @@ function resetChisumList(){
 
 function confirmResetChisum(){
   document.querySelectorAll('[style*=fixed]').forEach(el=>el.remove());
-  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  const inChisum = allOrders.filter(o => (o.stage||'') === 'chisum');
   const okOrders = inChisum.filter(o=>!(brokenItems[o.id]||[]).length);
   const brokenOrds = inChisum.filter(o=>(brokenItems[o.id]||[]).length>0);
   
@@ -1556,7 +1557,7 @@ function confirmResetChisum(){
   
   // Update statuses - broken is at ITEM level, not order level
   allOrders.forEach(o=>{
-    if(!workDay.inChisum.map(String).includes(String(o.id))) return;
+    if((o.stage||'') !== 'chisum') return;
     const brokenIdxs = brokenItems[String(o.id)]||[];
     if(brokenIdxs.length>0){
       // יש פריטים נשברים — ההזמנה חוזרת לייצור חלקי
@@ -1592,7 +1593,7 @@ function confirmResetChisum(){
 
 function checkChisumArrived(){
   const bar = document.getElementById('chisumArrivedBar');
-  const cnt = workDay.inChisum.length;
+  const cnt = allOrders.filter(o => (o.stage||'') === 'chisum').length;
   if(cnt > 0){
     bar.style.display = 'flex';
     document.getElementById('chisumArrivedCount').textContent =
@@ -1609,11 +1610,12 @@ function updateCounts(){
   const avail = allOrders.filter(o=>(o.status==='ירד לביצוע'||o.status==='ב-OptyWay')&&!workDay.inWork.map(String).includes(String(o.id))&&!workDay.inChisum.map(String).includes(String(o.id)));
   document.getElementById('cnt-build').textContent = avail.length;
   document.getElementById('cnt-work').textContent  = workDay.inWork.length;
+  // הטאב "חיסום" מציג הזמנות עם stage='chisum' (אחרי תחנת בדיקה)
+  const chisumOrdsForCount = allOrders.filter(o => (o.stage||'') === 'chisum');
   let chisumItemCount = 0;
-  workDay.inChisum.forEach(id => {
-    const o = allOrders.find(x => String(x.id) === String(id));
-    if(!o) return;
-    const selIdxs = (workDay.itemsSel && workDay.itemsSel[id]) || [];
+  chisumOrdsForCount.forEach(o => {
+    const sid = String(o.id);
+    const selIdxs = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
     const items = selIdxs.length ? selIdxs.map(i=>(o.items||[])[Number(i)]).filter(Boolean) : (o.items||[]);
     chisumItemCount += items.filter(it=>it&&it.chisum===true).length;
   });
@@ -1771,10 +1773,12 @@ function handleWorkdayStart(){
     }
   });
 
-  // הוצא מ-inWork כל הזמנה שעברה ל-inChisum (chisum ו-mixed)
-  workDay.inWork = workDay.inWork.filter(
-    id => !workDay.inChisum.map(String).includes(String(id))
-  );
+  // הוצא מ-inWork כל הזמנה שעברה ל-inChisum או pendingChisum
+  const _allChisumIds = [
+    ...workDay.inChisum.map(String),
+    ...(workDay.pendingChisum||[]).map(String)
+  ];
+  workDay.inWork = workDay.inWork.filter(id => !_allChisumIds.includes(String(id)));
 
   saveWorkDay();
 
@@ -1822,21 +1826,13 @@ function confirmFinish(){
   // עדכן status בזיכרון לחיתוך (לתצוגה עקבית)
   cut.forEach(o => { o.status = 'מוכן לאיסוף'; });
 
-  // [תיקון באג 1] — סמן stage='chisum' לחיסום/מעורב (ימתינו לאישור חיסום)
-  // סמן chisum ב-Firebase דרך markStageValue
-  [...chisumOrds, ...mixed].forEach(o => {
-    markStageValue(String(o.id), 'chisum');
-  });
-
-  // העבר חיסום/מעורב ל-inChisum (לשונית חיסום ביום עבודה)
-  const chisumIds = [...chisumOrds, ...mixed].map(o=>o.id);
-  workDay.inChisum = [...(workDay.inChisum||[]), ...chisumIds];
+  // חיסום ומעורב — stage נשאר 'workday', יעבור ל-'chisum' רק לאחר תחנת בדיקה
   workDay.inWork = [];
   saveWorkDay();
 
   closeFinish();
-  showToast(`✓ ${cut.length} הודעות נשלחו · ${chisumIds.length} ממתינים לחיסום`);
-  setTab('chisum');
+  showToast(`✓ ${cut.length} הזמנות ליטוש הושלמו`);
+  setTab('work');
 }
 
 function closeFinish(){

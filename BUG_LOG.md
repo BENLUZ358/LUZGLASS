@@ -226,22 +226,27 @@ handleWorkdayStart הכניס תמיד ל-inChisum בלי לבדוק אם התח
 
 ---
 
-# 🐞 Bug 13 — חיסום דילג על תחנת בדיקה
+# 🐞 Bug 13 — חיסום דילג על תחנת בדיקה ✅ תוקן
 
 ## תיאור
 פריטי חיסום עברו ישירות ל-stage='chisum' מבלי לעבור תחנת בדיקה
 
-## סיבה
-`confirmFinish()` ב-workday.html קורא ל:
-```js
-markStageValue(String(o.id), 'chisum')
-```
-על הזמנות חיסום — בשלב "סיים יום עבודה", לפני שנבדקו בתחנת הבדיקה
+## סיבות (שלושה):
+1. `confirmFinish()` קרא ל-`markStageValue(id, 'chisum')` ישירות
+2. `handleWorkdayStart()` לא סינן `pendingChisum` מ-`inWork` → הזמנות pending נשארו ב-inWork ועברו stage='chisum' בסיום
+3. `renderChisumTab()` ופונקציות נוספות השתמשו ב-`workDay.inChisum` (= תחנת בדיקה) במקום `stage==='chisum'` (= שלב מפעל חיסום)
 
-## פתרון הנדרש (טרם בוצע)
-`confirmFinish()` **לא אמור לשנות stage לחיסום**  
-רק `finishSketch()` ב-check-station.html מורשה לקרוא ל-`updateStage(id, 'chisum')`  
-`confirmFinish()` צריך להשאיר את פריטי החיסום ב-stage='workday' (הם כבר ב-inChisum וממתינים לתחנה)
+## פתרון:
+- `confirmFinish()`: הוסרו שורות stage='chisum' — רק `finishSketch()` ב-check-station.html מעדכן stage
+- `handleWorkdayStart()`: מסנן עכשיו גם `pendingChisum` מ-`inWork`
+- `renderChisumTab()`, `resetChisumList()`, `confirmResetChisum()`, `checkChisumArrived()`, `updateCounts()`: עברו לשימוש ב-`stage==='chisum'` במקום `workDay.inChisum`
+
+## כלל חשוב שנוסף:
+```
+workDay.inChisum = תור תחנת בדיקה (stage='workday')
+stage='chisum'   = לאחר תחנת בדיקה, נשלח למפעל
+```
+אין לערבב את שניהם.
 
 ---
 
