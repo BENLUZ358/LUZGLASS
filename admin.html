@@ -2462,17 +2462,7 @@ function iwSave(){
 }
 
 function lgLogout(){sessionStorage.removeItem('lgSession');window.location.href='login.html';}
-<script>
-function iwSave(){
-  if(!sqCurrent) return;
-  updateOrder(sqCurrent.id, { items: sqCurrentItems });
-  sqCurrent.items = sqCurrentItems;
-}
 
-function lgLogout(){
-  sessionStorage.removeItem('lgSession');
-  window.location.href = 'login.html';
-}
 </script>
 
 </body>
