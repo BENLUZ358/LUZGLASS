@@ -226,6 +226,25 @@ handleWorkdayStart הכניס תמיד ל-inChisum בלי לבדוק אם התח
 
 ---
 
+# 🐞 Bug 13 — חיסום דילג על תחנת בדיקה
+
+## תיאור
+פריטי חיסום עברו ישירות ל-stage='chisum' מבלי לעבור תחנת בדיקה
+
+## סיבה
+`confirmFinish()` ב-workday.html קורא ל:
+```js
+markStageValue(String(o.id), 'chisum')
+```
+על הזמנות חיסום — בשלב "סיים יום עבודה", לפני שנבדקו בתחנת הבדיקה
+
+## פתרון הנדרש (טרם בוצע)
+`confirmFinish()` **לא אמור לשנות stage לחיסום**  
+רק `finishSketch()` ב-check-station.html מורשה לקרוא ל-`updateStage(id, 'chisum')`  
+`confirmFinish()` צריך להשאיר את פריטי החיסום ב-stage='workday' (הם כבר ב-inChisum וממתינים לתחנה)
+
+---
+
 # 📌 כלל זהב
 
 אם באג כבר קרה פעם אחת  
