@@ -195,11 +195,34 @@ String(id)
 
 להוסיף בפורמט:
 
-## 🐞 Bug X — שם הבאג
+---
 
-תיאור  
-סיבה  
-פתרון  
+# 🐞 Bug 11 — תחנת בדיקה הציגה ריק
+
+## תיאור
+check-station.html לא הציגה הזמנות שהיו ב-inChisum
+
+## סיבה
+`load()` קרא מ-localStorage בלבד, אבל workday.html כותב ל-Firebase בלבד
+
+## פתרון
+שינוי check-station.html לשימוש ב-`listenAllOrders` + Firebase workday listener  
+סינון לפי `workDay.inChisum` מ-Firebase (לא workdayStatus מ-localStorage)
+
+---
+
+# 🐞 Bug 12 — התנגשות בתחנת בדיקה
+
+## תיאור
+הזמנות חדשות עם פריטי חיסום נכנסו לתחנה בזמן שהתחנה כבר הייתה פעילה
+
+## סיבה
+handleWorkdayStart הכניס תמיד ל-inChisum בלי לבדוק אם התחנה פנויה
+
+## פתרון
+אם inChisum ריק → נכנס ישירות  
+אם inChisum לא ריק → נכנס ל-pendingChisum  
+כשהתחנה מתרוקנת → pendingChisum עולים אוטומטית ל-inChisum
 
 ---
 

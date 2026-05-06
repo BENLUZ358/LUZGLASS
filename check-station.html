@@ -155,6 +155,9 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   .unav-topbar{display:flex;}
 }
 </style>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="firebase-db.js"></script>
 </head>
 <body>
 <div class="unav-topbar"><div class="lg">Luz<span>Glass</span></div><button class="unav-burger" onclick="unavOpen()"><span></span><span></span><span></span></button></div>
@@ -383,6 +386,8 @@ const safeStorage = {
 // STATE
 let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[];
 let activeTab='active'; // 'active' | 'done'
+let pendingOrders=[], wdInChisum=[], wdPendingChisum=[];
+let _csUnsub=null, _wdRef=null;
 
 function setTab(t){
   activeTab=t;
@@ -400,51 +405,81 @@ function isMirrorItem(item){
   return (item.name||'').includes('מראה');
 }
 
+function mapFirebaseOrder(o){
+  return {
+    id:           String(o.id),
+    orderClient:  o.orderClient||o.client||'—',
+    orderNum:     o.orderNum||o.refNum||'',
+    sketchName:   o.sketchName||o.type||'',
+    type:         o.type||'',
+    glass:        o.glassFullName||o.glass||'',
+    glassFullName:o.glassFullName||o.glass||'',
+    finish:       o.finish||'',
+    source:       o.source||'sketch',
+    sketch:       o.sketch||(o.files&&o.files.f0&&o.files.f0.data)||null,
+    _editedSketch:o._editedSketch||null,
+    items:        o.items||[],
+    panels:       o.panels||[],
+  };
+}
+
 function load(){
   cs=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');
   notes=JSON.parse(safeStorage.getItem('lgOrderNotes')||'{}');
-  const saved=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
-  const wd=JSON.parse(safeStorage.getItem('lgWorkDay')||'{}');
-  // המר לפורמט אחיד 'ord_X'
-  const normalizeId = id => { const s=String(id); return (s.startsWith('ord_')||s.startsWith('sub_'))?s:'ord_'+s; };
-  const inW=(wd.inWork  ||[]).map(normalizeId);
-  const inC=(wd.inChisum||[]).map(normalizeId);
-  // סינון לפי items.chisum — רק הזמנות עם פריטי חיסום
-  // הוסף גם sub_ מ-lgSubmissions
-  const subs = JSON.parse(safeStorage.getItem('lgSubmissions')||'[]');
-  subs.forEach((s,i)=>{
-    const sid = 'sub_'+i;
-    if(!saved.find(o=>String(o.id)===sid)){
-      saved.push({
-        id: sid,
-        orderClient: s.client||'—',
-        orderNum: s.refNum||'',
-        sketchName: s.sketchName||'העלאה',
-        status: s.status||'',
-        workdayStatus: s.workdayStatus||'',
-        inspectionStatus: s.inspectionStatus||'',
-        phone: s.phone||'',
-        date: s.date||'',
-        glass: s.glassFullName||s.glass||'',
-        glassFullName: s.glassFullName||s.glass||'',
-        finish: s.finish||'',
-        source: 'upload',
-        sketch: (s.files&&s.files[0]) ? s.files[0].data : null,
-        items: s.items||[]
-      });
-    }
+
+  // Subscribe to workday — inChisum + pendingChisum
+  if(_wdRef) firebase.database().ref('workday').off('value', _wdRef);
+  _wdRef = firebase.database().ref('workday').on('value', snap=>{
+    const wd = snap.val()||{};
+    function objToArr(v){ return v ? Object.values(v).map(String) : []; }
+    wdInChisum      = objToArr(wd.inChisum);
+    wdPendingChisum = objToArr(wd.pendingChisum);
+    _filterOrders();
   });
 
-  // המר כל id מ-lgOrders לפורמט אחיד 'ord_X' / 'sub_X'
-  const savedNorm = saved.map(o=>({...o, id: normalizeId(o.id)}));
+  // Subscribe to all orders
+  if(_csUnsub) _csUnsub();
+  _csUnsub = listenAllOrders(function(fbOrders){
+    window._allCsOrders = fbOrders;
+    _filterOrders();
+  });
+}
 
-  orders=savedNorm.filter(o=>
-    o.workdayStatus === 'active' &&
-    (o.items||[]).some(i=>i.chisum===true)
-  );
-  // sub_ כבר נטענו בתחילת load() — אין צורך בטעינה כפולה
-  // לא מזריקים דמו — אם אין הזמנות מציגים ריק
+function _filterOrders(){
+  const fbOrders = window._allCsOrders || [];
+  orders        = fbOrders.filter(o=>wdInChisum.includes(String(o.id))).map(mapFirebaseOrder);
+  pendingOrders = fbOrders.filter(o=>wdPendingChisum.includes(String(o.id))).map(mapFirebaseOrder);
   buildClients();
+  renderList();
+  renderPendingBadge();
+  updateTabCounts();
+}
+
+function renderPendingBadge(){
+  let badge = document.getElementById('pendingImportBtn');
+  if(!badge){
+    badge = document.createElement('button');
+    badge.id = 'pendingImportBtn';
+    badge.className = 'tb-btn tb-green';
+    badge.style.display = 'none';
+    badge.onclick = importPending;
+    document.querySelector('.topbar').insertBefore(badge, document.querySelector('.topbar a[href="workday.html"]'));
+  }
+  if(wdPendingChisum.length > 0){
+    badge.style.display = 'flex';
+    badge.textContent = `📥 ייבוא ${wdPendingChisum.length} ממתינות`;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function importPending(){
+  if(!wdPendingChisum.length) return;
+  const merged = [...new Set([...wdInChisum, ...wdPendingChisum])];
+  const obj={}; merged.forEach((v,i)=>{obj[i]=v;});
+  firebase.database().ref('workday').update({ inChisum: obj, pendingChisum: {} })
+    .then(()=>toast(`✓ יובאו ${wdPendingChisum.length} סקיצות חדשות`))
+    .catch(e=>console.error('importPending:', e));
 }
 
 function demos(){return[
@@ -658,74 +693,50 @@ function showBanner(){document.getElementById('banner').style.display='flex';doc
 function hideBanner(){document.getElementById('banner').style.display='none';}
 function openAdvModal(){hideBanner();document.getElementById('advSub').textContent=(cur?.orderClient||'')+' — '+(cur?.sketchName||'');document.getElementById('advModal').classList.add('open');}
 
+function _removeFromChisumStation(ordId){
+  // מסיר הזמנה מ-workday.inChisum ב-Firebase
+  const updated = wdInChisum.filter(id=>id!==String(ordId));
+  const obj={}; updated.forEach((v,i)=>{obj[i]=v;});
+  // אם אין עוד פריטים בתחנה ויש ממתינות — ייבא אוטומטית
+  if(updated.length===0 && wdPendingChisum.length>0){
+    const pend={}; wdPendingChisum.forEach((v,i)=>{pend[i]=v;});
+    firebase.database().ref('workday').update({inChisum:pend, pendingChisum:{}})
+      .catch(e=>console.error('_removeFromChisumStation pending:', e));
+  } else {
+    firebase.database().ref('workday').update({inChisum:obj})
+      .catch(e=>console.error('_removeFromChisumStation:', e));
+  }
+}
+
 function doAdvance(){
   document.getElementById('advModal').classList.remove('open');
-  if(!cur)return;
-  const all=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
-  const o=all.find(x=>String(x.id)===String(cur.id));
-  if(o){
-    const items=cur.items||[];
-    const hasMirror=items.every(i=>(i.name||'').includes('מראה'));
-    const hasChisum=items.some(i=>i.chisum&&!(i.name||'').includes('מראה'));
-    const hasLitush=items.some(i=>!i.chisum)||(hasMirror);
-    // מראות וליטוש בלבד → מוכן לאיסוף
-    // מחוסם בלבד / מעורב → נשלח לחיסום
-    if(!hasChisum){
-      o.status='מוכן לאיסוף'; // ליטוש/מראה — לא צריך חיסום
-    } else {
-      o.status='נשלח לחיסום';
-    }
-    safeStorage.setItem('lgOrders',JSON.stringify(all));
+  if(!cur) return;
+  const items=cur.items||[];
+  const hasChisum=items.some(i=>i.chisum&&!(i.name||'').includes('מראה'));
+  if(hasChisum){
+    updateStage(cur.id,'chisum').catch(e=>console.error('doAdvance stage:',e));
+  } else {
+    updateStage(cur.id,'done').catch(e=>console.error('doAdvance stage:',e));
   }
-  const wd=JSON.parse(safeStorage.getItem('lgWorkDay')||'{}');
-  wd.inWork=(wd.inWork||[]).filter(id=>id!==cur.id);
-  if(!wd.inChisum)wd.inChisum=[];
-  if(!wd.inChisum.includes(cur.id))wd.inChisum.push(cur.id);
-  safeStorage.setItem('lgWorkDay',JSON.stringify(wd));
+  _removeFromChisumStation(cur.id);
   chDone.push(cur);
   toast('נשלח לחיסום ✓');
-  load();goBack();
-  // offerChisum removed
+  cur=null; showList();
 }
 
 function finishSketch(){
-  if(!cur)return;
-  // עדכן סטטוס להזמנה
-  const all=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
-  const o=all.find(x=>String(x.id)===String(cur.id));
-  if(o){
-    const items=cur.items||[];
-    const hasMirror=items.every(i=>(i.name||'').includes('מראה'));
-    const hasChisum=items.some(i=>i.chisum&&!(i.name||'').includes('מראה'));
-    const hasLitush=items.some(i=>!i.chisum)||(hasMirror);
-    // מראות וליטוש בלבד → מוכן לאיסוף
-    // מחוסם בלבד / מעורב → נשלח לחיסום
-    if(!hasChisum){
-      o.status='מוכן לאיסוף'; // ליטוש/מראה — לא צריך חיסום
-    } else {
-      o.status='נשלח לחיסום';
-    }
-    safeStorage.setItem('lgOrders',JSON.stringify(all));
+  if(!cur) return;
+  const items=cur.items||[];
+  const hasChisum=items.some(i=>i.chisum&&!(i.name||'').includes('מראה'));
+  if(hasChisum){
+    updateStage(cur.id,'chisum').catch(e=>console.error('finishSketch stage:',e));
+  } else {
+    updateStage(cur.id,'done').catch(e=>console.error('finishSketch stage:',e));
   }
-  // הסר מיום עבודה
-  const wd=JSON.parse(safeStorage.getItem('lgWorkDay')||'{}');
-  wd.inWork=(wd.inWork||[]).filter(id=>String(id)!==String(cur.id));
-  if(!wd.inChisum)wd.inChisum=[];
-  if(!wd.inChisum.map(String).includes(String(cur.id)))wd.inChisum.push(cur.id);
-  safeStorage.setItem('lgWorkDay',JSON.stringify(wd));
-  // עדכן סטטוס ל'בתחנת בדיקה' כדי שלא יחזור לרשימה
-  const allCS=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
-  const oCS=allCS.find(x=>String(x.id)===String(cur.id));
-  if(oCS && oCS.status!=='נשלח לחיסום' && oCS.status!=='מוכן לאיסוף'){
-    oCS.status='בתחנת בדיקה';
-    safeStorage.setItem('lgOrders',JSON.stringify(allCS));
-  }
-  // הסר מרשימת תחנת בדיקה
-  orders=orders.filter(x=>String(x.id)!==String(cur.id));
+  _removeFromChisumStation(cur.id);
   chDone.push(cur);
   toast('✓ עבר לממתין לחיסום');
-  cur=null;
-  showList();
+  cur=null; showList();
 }
 
 // CHISUM REPORT
@@ -846,9 +857,3 @@ function toast(msg){const t=document.createElement('div');t.className='toast';t.
 
 // INIT
 load();
-
-// טען מחדש כשהדף מקבל focus (לאחר מעבר מworkday)
-document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'visible') load();
-});
-window.addEventListener('focus', () => load());
