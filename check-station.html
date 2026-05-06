@@ -406,6 +406,11 @@ function isMirrorItem(item){
 }
 
 function mapFirebaseOrder(o){
+  // Firebase מחזיר לפעמים items כאובייקט {0:{..},1:{..}} — הבטח מערך
+  const rawItems = o.items;
+  const itemsArr = Array.isArray(rawItems) ? rawItems
+    : (rawItems && typeof rawItems === 'object') ? Object.values(rawItems)
+    : [];
   return {
     id:           String(o.id),
     orderClient:  o.orderClient||o.client||'—',
@@ -418,8 +423,8 @@ function mapFirebaseOrder(o){
     source:       o.source||'sketch',
     sketch:       o.sketch||(o.files&&o.files.f0&&o.files.f0.data)||null,
     _editedSketch:o._editedSketch||null,
-    items:        o.items||[],
-    panels:       o.panels||[],
+    items:        itemsArr,
+    panels:       Array.isArray(o.panels)?o.panels:Object.values(o.panels||{}),
   };
 }
 
@@ -491,7 +496,9 @@ function demos(){return[
 
 function saveCS(){safeStorage.setItem('lgCheckState',JSON.stringify(cs));}
 function saveNotes(){safeStorage.setItem('lgOrderNotes',JSON.stringify(notes));}
-function area(o){return(o.items||[]).reduce((s,i)=>s+(i.w||0)*(i.h||0)/10000,0);}
+// מחזיר רק indices של פריטי חיסום (לא ליטוש)
+function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>(o.items||[])[i]?.chisum===true); }
+function area(o){return chisumIdxs(o).reduce((s,i)=>{const it=(o.items||[])[i];return s+(it?.w||0)*(it?.h||0)/10000;},0);}
 function buildClients(){
   const cl=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))];
   document.getElementById('fClient').innerHTML='<option value="">כל הלקוחות</option>'+cl.map(c=>`<option value="${c}">${c}</option>`).join('');
@@ -499,9 +506,9 @@ function buildClients(){
 
 // FILTER + RENDER LIST
 function isDone(o){
-  const items=o.items||[];
-  if(!items.length) return false;
-  return items.every((_,i)=>cs[o.id]?.[i]);
+  const idxs = chisumIdxs(o);
+  if(!idxs.length) return false;
+  return idxs.every(i => cs[o.id]?.[i]);
 }
 
 function getFiltered(){
@@ -540,11 +547,10 @@ function renderList(){
     return;
   }
   el.innerHTML=list.map(o=>{
-    const items=o.items||[],total=items.length||1;
-    const checked=items.filter((_,i)=>cs[o.id]?.[i]).length;
+    const idxs=chisumIdxs(o),total=idxs.length||1;
+    const checked=idxs.filter(i=>cs[o.id]?.[i]).length;
     const pct=Math.round(checked/total*100),done=pct===100,fresh=checked===0;
     const note=notes[o.id]||'';
-    const hasChis=items.some(i=>i.chisum);
     const badgeCls=done?'b-done':fresh?'b-new':'b-prog';
     const badgeTxt=done?'✓ הושלם':fresh?'ממתין':`${checked}/${total}`;
     const cardCls=done?'done-card':checked>0?'partial-card':'';
@@ -560,8 +566,8 @@ function renderList(){
       ${o.sketch?`<img src="${o.sketch}" style="width:100%;max-height:120px;object-fit:cover;border-top:1px solid var(--border);border-bottom:1px solid var(--border);" alt="סקיצה">` : ''}
       <div class="oc-tags">
         <span class="oc-tag tg">${o.glassFullName||o.glass||''}</span>
-        ${hasChis?'<span class="oc-tag tc">🔥 חיסום</span>':'<span class="oc-tag tg">✂️ ליטוש</span>'}
-        ${o.isSystemSketch===false?'<span class="oc-tag tm">📎 ידנית</span>':''}
+        <span class="oc-tag tc">🔥 חיסום · ${total} פריטים</span>
+        ${o.source==='upload'?'<span class="oc-tag tm">📎 העלאה</span>':''}
       </div>
       <div class="oc-prog">
         <div class="oc-bar"><div class="oc-fill" style="width:${pct}%;background:${done?'var(--green)':'var(--gold)'}"></div></div>
@@ -623,18 +629,21 @@ function renderSketch(){
 }
 
 function buildSVG(o){
-  const items=o.items||[];
-  if(!items.length)return'<div style="color:#555;padding:20px;font-size:13px">אין פריטים</div>';
-  const n=items.length,cols=Math.min(n,3),rows=Math.ceil(n/cols);
+  // מציג רק פריטי חיסום — index מקורי שמור ב-i
+  const idxs = chisumIdxs(o);
+  const allItems = o.items||[];
+  if(!idxs.length) return '<div style="color:#555;padding:20px;font-size:13px;text-align:center">אין פריטי חיסום</div>';
+  const n=idxs.length,cols=Math.min(n,3),rows=Math.ceil(n/cols);
   const PW=150,PH=230,GAP=22,PX=50,PY=55,HDR=44,FTR=26;
   const W=PX*2+cols*PW+(cols-1)*GAP,H=HDR+PY+rows*PH+(rows-1)*GAP+PY*0.5+FTR;
   let p='';
-  items.forEach((item,i)=>{
-    const col=i%cols,row=Math.floor(i/cols),x=PX+col*(PW+GAP),y=HDR+PY+row*(PH+GAP);
-    const ck=!!(cs[o.id]?.[i]),ch=item.chisum;
-    const stk=ck?'#27ae60':ch?'#8e44ad':'#1a6fa8',fl=ck?'rgba(39,174,96,0.12)':ch?'rgba(142,68,173,0.07)':'rgba(26,111,168,0.07)';
+  idxs.forEach((origIdx, pos)=>{
+    const item=allItems[origIdx];
+    const col=pos%cols,row=Math.floor(pos/cols),x=PX+col*(PW+GAP),y=HDR+PY+row*(PH+GAP);
+    const ck=!!(cs[o.id]?.[origIdx]);
+    const stk=ck?'#27ae60':'#8e44ad',fl=ck?'rgba(39,174,96,0.12)':'rgba(142,68,173,0.07)';
     const mx=x+PW/2,my=y+PH/2;
-    p+=`<rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="4" fill="${fl}" stroke="${stk}" stroke-width="1.8" onclick="checkItem(${i})" style="cursor:pointer"/>`;
+    p+=`<rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="4" fill="${fl}" stroke="${stk}" stroke-width="1.8" onclick="checkItem(${origIdx})" style="cursor:pointer"/>`;
     if(ck)p+=`<text x="${mx}" y="${my-14}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="24" fill="#27ae60">✓</text>`;
     p+=`<text x="${mx}" y="${ck?my+8:my-2}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="12" font-weight="700" fill="${ck?'#27ae60':'#1a1714'}">${item.name||''}</text>`;
     if(item.w&&item.h)p+=`<text x="${mx}" y="${ck?my+22:my+13}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="11" fill="#666">${item.w}×${item.h} ס"מ</text>`;
@@ -642,14 +651,14 @@ function buildSVG(o){
     if(item.w)p+=`<text x="${mx}" y="${y-9}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" fill="rgba(201,168,76,0.9)">${item.w}</text>`;
     p+=`<line x1="${x+PW+5}" y1="${y}" x2="${x+PW+5}" y2="${y+PH}" stroke="rgba(201,168,76,0.5)" stroke-width="0.8"/>`;
     if(item.h)p+=`<text x="${x+PW+17}" y="${my}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" fill="rgba(201,168,76,0.9)" transform="rotate(90,${x+PW+17},${my})">${item.h}</text>`;
-    p+=`<rect x="${mx-30}" y="${y+PH-19}" width="60" height="14" rx="3" fill="${ch?'rgba(142,68,173,0.12)':'rgba(26,111,168,0.1)'}"/>`;
-    p+=`<text x="${mx}" y="${y+PH-8}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" font-weight="700" fill="${ch?'#8e44ad':'#1a6fa8'}">${ch?'🔥 חיסום':'✂️ ליטוש'}</text>`;
+    p+=`<rect x="${mx-30}" y="${y+PH-19}" width="60" height="14" rx="3" fill="rgba(142,68,173,0.12)"/>`;
+    p+=`<text x="${mx}" y="${y+PH-8}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" font-weight="700" fill="#8e44ad">🔥 חיסום</text>`;
   });
   return`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;max-width:100%;max-height:100%">
     <rect width="${W}" height="${H}" fill="white"/>
     <rect x="0" y="0" width="${W}" height="${HDR}" fill="#1a1714"/>
     <text x="${W/2}" y="18" text-anchor="middle" font-family="Heebo,sans-serif" font-size="12" font-weight="700" fill="#c9a84c">${o.orderClient}</text>
-    <text x="${W/2}" y="34" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" fill="rgba(247,244,239,0.4)">${[o.orderNum,o.glassFullName].filter(Boolean).join(' · ')}</text>
+    <text x="${W/2}" y="34" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" fill="rgba(247,244,239,0.4)">${[o.orderNum,o.sketchName||o.type].filter(Boolean).join(' · ')} · ${n} פריטי חיסום</text>
     ${p}
     <text x="${W-8}" y="${H-8}" text-anchor="end" font-family="Heebo,sans-serif" font-size="8" font-weight="700" fill="#b8922a">LuzGlass</text>
   </svg>`;
@@ -677,15 +686,15 @@ function updateTabCounts(){
 
 function updateProg(){
   if(!cur)return;
-  const items=cur.items||[],total=items.length;
-  const checked=items.filter((_,i)=>cs[cur.id]?.[i]).length;
+  const idxs=chisumIdxs(cur),total=idxs.length;
+  const checked=idxs.filter(i=>cs[cur.id]?.[i]).length;
   const pct=total?Math.round(checked/total*100):0;
   document.getElementById('progText').textContent=`${checked}/${total}`;
   document.getElementById('progFill').style.width=pct+'%';
   document.getElementById('progFill').style.background=pct===100?'var(--green)':'var(--gold)';
-  document.getElementById('iCnt').innerHTML=`<strong>${checked}</strong>/<strong>${total}</strong>`;
+  document.getElementById('iCnt').innerHTML=`<strong>${checked}</strong>/<strong>${total}</strong> חיסום`;
   document.getElementById('advBtn').style.display=pct===100?'flex':'none';
-  document.getElementById('finishBtn').style.display='flex'; // always visible
+  document.getElementById('finishBtn').style.display='flex';
 }
 
 // BANNER + ADVANCE
@@ -785,37 +794,36 @@ function toggleSheet(){document.getElementById('sheet').classList.toggle('open')
 function closeSheet(){document.getElementById('sheet').classList.remove('open');}
 function renderSheet(){
   if(!cur){document.getElementById('shBody').innerHTML='<div style="padding:14px;color:var(--muted)">בחר הזמנה</div>';return;}
-  const items=cur.items||[];
-  const isSystem=cur.isSystemSketch!==false; // true or undefined = system
-  document.getElementById('shTitle').textContent=cur.orderClient+' — '+items.length+' פריטים';
+  const idxs=chisumIdxs(cur);
+  const allItems=cur.items||[];
+  document.getElementById('shTitle').textContent=cur.orderClient+' — '+idxs.length+' פריטי חיסום';
   const note=notes[cur.id]||'';
 
-  // Always show note field
   let html=`<div class="note-area">
-    <div style="font-size:10px;color:var(--muted);margin-bottom:4px">📝 הערה לסקיצה:</div>
+    <div style="font-size:10px;color:var(--muted);margin-bottom:4px">📝 הערה:</div>
     <textarea id="skNoteTA" placeholder="הוסף הערה...">${note}</textarea>
     <button class="note-save" onclick="saveSkNote()">שמור</button>
   </div>`;
 
-  // Always show items if they exist (regardless of system/manual)
-  if(items.length){
-    html+=`<div style="padding:8px 14px;font-size:9px;font-weight:700;color:var(--gold);letter-spacing:0.15em;background:var(--s2);border-bottom:1px solid var(--border)">פריטים — לחץ לסימון</div>`;
-    html+=items.map((item,i)=>{
-      const ck=cs[cur.id]?.[i];
-      return`<div class="si ${ck?'on':''}" onclick="checkItem(${i})">
+  // הצג רק פריטי חיסום — לחץ לסימון
+  if(idxs.length){
+    html+=`<div style="padding:8px 14px;font-size:9px;font-weight:700;color:var(--gold);letter-spacing:0.15em;background:var(--s2);border-bottom:1px solid var(--border)">🔥 פריטי חיסום — לחץ לסימון בדיקה</div>`;
+    html+=idxs.map(origIdx=>{
+      const item=allItems[origIdx];
+      const ck=cs[cur.id]?.[origIdx];
+      return`<div class="si ${ck?'on':''}" onclick="checkItem(${origIdx})">
         <div class="si-chk">${ck?'✓':''}</div>
         <div style="flex:1">
-          <div class="si-name">${item.name||'—'}</div>
-          <div class="si-dim">${item.w||''}${item.w&&item.h?'×':''}${item.h||''} ס"מ</div>
+          <div class="si-name">${item?.name||'—'}</div>
+          <div class="si-dim">${item?.w||''}${item?.w&&item?.h?'×':''}${item?.h||''} ס"מ</div>
         </div>
-        <div class="si-tag ${item.chisum && !isMirrorItem(item)?'tc':'tg'}">${item.chisum && !isMirrorItem(item)?'🔥 חיסום':'✂️ ליטוש'}</div>
+        <div class="si-tag tc">🔥 חיסום</div>
       </div>`;
     }).join('');
-  } else if(!isSystem){
-    // manual sketch with no items — show edit hint
+  } else {
     html+=`<div style="padding:16px;font-size:13px;color:var(--muted);text-align:center">
-      <div style="font-size:28px;margin-bottom:8px">📎</div>
-      סקיצה ידנית — לחץ "ערוך" לסימון ידני על הסקיצה
+      <div style="font-size:28px;margin-bottom:8px">📋</div>
+      אין פריטי חיסום בהזמנה זו
     </div>`;
   }
 
