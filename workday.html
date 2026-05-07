@@ -1777,9 +1777,44 @@ function handleWorkdayStart(){
   const swb = document.getElementById('startWorkBtn');
   if(swb){swb.disabled=true;swb.style.opacity='0.5';}
 
-  showToast('✓ הורד לעבודה — ' + workDay.inWork.length + ' הזמנות');
-  setTab('work');
+  const _chisumSent = workDay.inChisum.length + (workDay.pendingChisum||[]).length;
+  const _litushCount = workDay.inWork.length;
+
+  if(_chisumSent > 0 && _litushCount === 0){
+    // רק חיסום — הסבר ברור למשתמש
+    showToast('✓ ' + _chisumSent + ' הזמנות חיסום → נשלחו לתחנת הבדיקה');
+    setTab('build');
+    // הצג באנר שמוביל לתחנת בדיקה
+    _showChisumBanner(_chisumSent);
+  } else if(_chisumSent > 0){
+    showToast('✓ ' + _litushCount + ' ליטוש | ' + _chisumSent + ' חיסום → תחנת בדיקה');
+    setTab('work');
+  } else {
+    showToast('✓ הורד לעבודה — ' + _litushCount + ' הזמנות');
+    setTab('work');
+  }
   renderAll();
+}
+
+function _showChisumBanner(count){
+  let banner = document.getElementById('chisumSentBanner');
+  if(!banner){
+    banner = document.createElement('div');
+    banner.id = 'chisumSentBanner';
+    banner.style.cssText = 'margin:16px 24px;padding:16px 20px;background:rgba(142,68,173,0.1);border:2px solid #8e44ad;border-radius:8px;display:flex;align-items:center;gap:14px;font-family:Heebo,sans-serif;direction:rtl;';
+    banner.innerHTML = `
+      <span style="font-size:28px">🔍</span>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:900;color:#8e44ad" id="chisumBannerText"></div>
+        <div style="font-size:12px;color:#888;margin-top:3px">הזמנות חיסום ממתינות לבדיקה פיזית לפני שליחה למפעל</div>
+      </div>
+      <a href="check-station.html" style="padding:10px 18px;background:#8e44ad;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;text-decoration:none;border-radius:6px;white-space:nowrap;">🔍 עבור לתחנה</a>
+      <button onclick="document.getElementById('chisumSentBanner').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;padding:0 4px;">✕</button>
+    `;
+    const content = document.getElementById('view-build') || document.querySelector('.content');
+    if(content) content.insertAdjacentElement('afterbegin', banner);
+  }
+  document.getElementById('chisumBannerText').textContent = count + ' הזמנות נשלחו לתחנת הבדיקה!';
 }
 
 function confirmFinish(){
