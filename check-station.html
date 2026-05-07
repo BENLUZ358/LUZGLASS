@@ -700,27 +700,10 @@ function sendAllToFactory(){
   const obj = {}; remaining.forEach((v,i) => {obj[i]=v;});
   firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null})
     .catch(e=>console.error('sendAllToFactory remove:', e));
-  _updatePrintReportBtn();
   printChisum();
   toast(`✓ ${doneOrds.length} הזמנות נשלחו לחיסום — הדוח מודפס`);
 }
 
-function _updatePrintReportBtn(){
-  let btn = document.getElementById('csReportBtn');
-  if(!btn){
-    btn = document.createElement('button');
-    btn.id = 'csReportBtn';
-    btn.className = 'tb-btn tb-purple';
-    btn.onclick = printChisum;
-    document.querySelector('.topbar').insertBefore(btn, document.querySelector('.topbar a[href="workday.html"]'));
-  }
-  if(chDone.length > 0){
-    btn.style.display = 'flex';
-    btn.textContent = `🖨️ דוח חיסום (${chDone.length})`;
-  } else {
-    btn.style.display = 'none';
-  }
-}
 
 // CHISUM REPORT
 function offerChisum(){
@@ -819,7 +802,27 @@ function setupPan(){
 
 // EDITOR
 let edTl='draw',edCl='#e74c3c',edSz=5,edFt=26,edDrw=false,edHist=[],edCtx=null,edCvs=null,edBgW=0,edBgH=0;
-function openEditor(){if(!cur)return;document.getElementById('edTitle').textContent='✏️ '+cur.orderClient;edCvs=document.getElementById('edCvs');edCtx=edCvs.getContext('2d');edHist=[];const bg=document.getElementById('edBg');const src=cur._editedSketch||cur.sketch;if(src){bg.style.display='block';bg.src=src;if(bg.complete&&bg.naturalWidth){edResize();edSnap();}else bg.onload=()=>{edResize();edSnap();};}else{bg.style.display='block';const s=buildSVG(cur).match(/<svg[\s\S]*<\/svg>/)?.[0]||'<svg/>';bg.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s);bg.onload=()=>{edResize();edSnap();};}edTool('draw');edBindEv();document.getElementById('csEd').classList.add('open');}
+function openEditor(){
+  if(!cur)return;
+  // פתח קודם — כדי ש-edResize יוכל לחשב גדלים נכונים (display:none נותן 0)
+  document.getElementById('csEd').classList.add('open');
+  document.getElementById('edTitle').textContent='✏️ '+cur.orderClient;
+  edCvs=document.getElementById('edCvs');edCtx=edCvs.getContext('2d');edHist=[];
+  const bg=document.getElementById('edBg');
+  const src=cur._editedSketch||cur.sketch;
+  if(src){
+    bg.style.display='block';bg.src=src;
+    if(bg.complete&&bg.naturalWidth){
+      requestAnimationFrame(()=>{edResize();edSnap();}); // rAF מבטיח שה-layout בוצע
+    } else { bg.onload=()=>{edResize();edSnap();}; }
+  } else {
+    bg.style.display='block';
+    const s=buildSVG(cur).match(/<svg[\s\S]*<\/svg>/)?.[0]||'<svg/>';
+    bg.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s);
+    bg.onload=()=>{edResize();edSnap();};
+  }
+  edTool('draw');edBindEv();
+}
 function closeEditor(){document.getElementById('csEd').classList.remove('open');edDrw=false;}
 function edResize(){const bg=document.getElementById('edBg'),wrap=document.getElementById('edWrap'),dpr=window.devicePixelRatio||1,wr=wrap.getBoundingClientRect();let bw,bh;if(bg.naturalWidth){const r=bg.naturalWidth/bg.naturalHeight;bh=Math.min(wr.height,bg.naturalHeight);bw=bh*r;if(bw>wr.width){bw=wr.width;bh=bw/r;}}else{bw=wr.width;bh=wr.height;}edBgW=bw;edBgH=bh;edCvs.width=bw*dpr;edCvs.height=bh*dpr;edCvs.style.width=bw+'px';edCvs.style.height=bh+'px';edCvs.style.left=(wr.width-bw)/2+'px';edCvs.style.top=(wr.height-bh)/2+'px';edCtx.scale(dpr,dpr);}
 function edSnap(){if(edCvs.width>0)edHist.push(edCtx.getImageData(0,0,edCvs.width,edCvs.height));if(edHist.length>50)edHist.shift();}
