@@ -439,7 +439,6 @@ function load(){
     function objToArr(v){ return v ? Object.values(v).map(String) : []; }
     wdInChisum      = objToArr(wd.inChisum);
     wdPendingChisum = objToArr(wd.pendingChisum);
-    console.log('[CS] workday update → inChisum:', wdInChisum, '| pending:', wdPendingChisum);
     _filterOrders();
   });
 
@@ -447,17 +446,13 @@ function load(){
   if(_csUnsub) _csUnsub();
   _csUnsub = listenAllOrders(function(fbOrders){
     window._allCsOrders = fbOrders;
-    console.log('[CS] orders update → count:', fbOrders.length, '| IDs:', fbOrders.map(o=>o.id));
     _filterOrders();
   });
 }
 
 function _filterOrders(){
   const fbOrders = window._allCsOrders || [];
-  console.log('[CS] _filterOrders → wdInChisum:', wdInChisum, '| fbOrders IDs:', fbOrders.map(o=>o.id));
-  const matched = fbOrders.filter(o=>wdInChisum.includes(String(o.id)));
-  console.log('[CS] matched orders:', matched.map(o=>o.id));
-  orders        = matched.map(mapFirebaseOrder);
+  orders = fbOrders.filter(o=>wdInChisum.includes(String(o.id))).map(mapFirebaseOrder);
   pendingOrders = fbOrders.filter(o=>wdPendingChisum.includes(String(o.id))).map(mapFirebaseOrder);
   buildClients();
   renderList();

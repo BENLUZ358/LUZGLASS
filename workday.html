@@ -1692,25 +1692,29 @@ function finishDay(){
 // ═══════════════════════════════════════
 function handleWorkdayStart(){
   // עובד על workDay.inWork — הרשימה הקבועה
-  console.log('handleWorkdayStart: inWork=', workDay.inWork);
-  console.log('handleWorkdayStart: allOrders IDs=', allOrders.map(x=>x.id));
   workDay.inWork.forEach(ordId => {
     const o = allOrders.find(x => x.id === ordId);
-    if(!o){
-      console.warn('handleWorkdayStart: NOT FOUND in allOrders:', ordId);
-      return;
-    }
+    if(!o) return;
     const _sid = String(ordId);
     if(o.workdayStatus === 'active'){
       // אם הזמנה "active" אבל לא בתחנת בדיקה ולא יש לה פריטים ב-itemsSel — ייתכן שאופס היום — עבד מחדש
       const alreadyHandled = workDay.inChisum.map(String).includes(_sid)
-                          || (workDay.pendingChisum||[]).map(String).includes(_sid)
-                          || (workDay.itemsSel&&workDay.itemsSel[_sid]&&workDay.itemsSel[_sid].length>0);
+                          || (workDay.pendingChisum||[]).map(String).includes(_sid);
       if(alreadyHandled){
-        console.log('handleWorkdayStart: already active & handled, skip', ordId);
+        // גם כשדולגים — נקה itemsSel ל-ליטוש בלבד (מונע הופעת פריטי חיסום ביום עבודה)
+        if(workDay.itemsSel && workDay.itemsSel[_sid]){
+          const _itmsTmp = Array.isArray(o.items) ? o.items
+            : (o.items && typeof o.items === 'object') ? Object.values(o.items) : [];
+          const _selTmp = workDay.itemsSel[_sid];
+          const _selArrTmp = Array.isArray(_selTmp) ? _selTmp
+            : (_selTmp && typeof _selTmp === 'object') ? Object.values(_selTmp).map(Number) : [];
+          workDay.itemsSel[_sid] = _selArrTmp.filter(i => {
+            const item = _itmsTmp[Number(i)];
+            return item && item.chisum !== true;
+          });
+        }
         return;
       }
-      console.log('handleWorkdayStart: active but state was reset — reprocess', ordId);
     }
     if(!workDay.itemsSel) workDay.itemsSel = {};
 
