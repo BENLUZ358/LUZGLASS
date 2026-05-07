@@ -902,9 +902,10 @@ function orderCardHTML(o){
   const itemRows = o.items.map((item, i) => {
     const fullGlass = item.glassFullName || item.name || '';
     if(glassFilter && !fullGlass.includes(glassFilter)) return '';
-    // אל תציג פריט שכבר נבחר (נמצא ב-itemsSel)
-    const _selIdxs = (workDay.itemsSel && workDay.itemsSel[ordKey]) || [];
-    if(_selIdxs.includes(i) || _selIdxs.map(Number).includes(i)) return '';
+    // אל תציג פריט שכבר נבחר (נמצא ב-itemsSel) — נרמל Firebase object ל-array
+    const _selRaw = (workDay.itemsSel && workDay.itemsSel[ordKey]) || [];
+    const _selIdxs = Array.isArray(_selRaw) ? _selRaw.map(Number) : Object.values(_selRaw).map(Number);
+    if(_selIdxs.includes(i)) return '';
     // סנן פריטים שכבר בטיוטה
     if(draftItems.some(d => d.orderId === ordKey && d.itemIdx === i)) return '';
     const isChisum = item.chisum === true;
@@ -1125,11 +1126,9 @@ function addWholeOrder(orderId){
   if(!workDay.inWork.includes(sid)) workDay.inWork.push(sid);
   // מלא itemsSel קודם, ואז סמן stage
   if(!workDay.itemsSel) workDay.itemsSel = {};
-  if(o && o.items && o.items.length){
-    workDay.itemsSel[sid] = o.items.map((_,i)=>i);
-  } else {
-    workDay.itemsSel[sid] = [];
-  }
+  const _oi = o ? (Array.isArray(o.items) ? o.items
+    : (o.items && typeof o.items === 'object') ? Object.values(o.items) : []) : [];
+  workDay.itemsSel[sid] = _oi.map((_,i)=>i);
   markStageWorkday(sid); // stage רק אחרי מילוי itemsSel
   expandedOrders.delete(orderId);
   saveWorkDay();
@@ -1715,18 +1714,29 @@ function handleWorkdayStart(){
     }
     if(!workDay.itemsSel) workDay.itemsSel = {};
 
+    // נרמל o.items — Firebase מחזיר לפעמים object {0:{...}} במקום array
+    const _oItems = Array.isArray(o.items) ? o.items
+      : (o.items && typeof o.items === 'object') ? Object.values(o.items)
+      : [];
+
+    // נרמל itemsSel — Firebase מחזיר לפעמים {0:1} במקום [1]
+    const _rawSel = workDay.itemsSel[_sid];
+    const _selArr = Array.isArray(_rawSel) ? _rawSel
+      : (_rawSel && typeof _rawSel === 'object') ? Object.values(_rawSel).map(Number)
+      : null;
+
     // קבל את כל הפריטים שנבחרו עבור הזמנה זו
-    const _allSelIdxs = (workDay.itemsSel[_sid] && workDay.itemsSel[_sid].length)
-      ? workDay.itemsSel[_sid]
-      : (o.items||[]).map((_,i)=>i);
+    const _allSelIdxs = (_selArr && _selArr.length)
+      ? _selArr
+      : _oItems.map((_,i)=>i);
 
     // בדוק אם יש פריטי חיסום
-    const _itemsToCheck = _allSelIdxs.map(i => (o.items||[])[Number(i)]).filter(Boolean);
+    const _itemsToCheck = _allSelIdxs.map(i => _oItems[Number(i)]).filter(Boolean);
     const hasChisum = _itemsToCheck.some(i => i && i.chisum === true);
 
     // הפרד itemsSel: שמור רק פריטי ליטוש — חיסום עובר לתחנת בדיקה
     workDay.itemsSel[_sid] = _allSelIdxs.filter(i => {
-      const item = (o.items||[])[Number(i)];
+      const item = _oItems[Number(i)];
       return item && item.chisum !== true;
     });
 
@@ -2051,33 +2061,17 @@ function clearDraft(){
   closeDraftPreview();
 }
 
-// "הורד לעבודה" מתוך הטיוטה — מעביר את כל הפריטים לעבודה הפעילה
+// "הורד לעבודה" מתוך הטיוטה — מכין את הפריטים ואז מפעיל handleWorkdayStart
 function commitDraftToWork(){
   if(!draftItems.length){ showToast('הטיוטה ריקה'); return; }
   draftItems.forEach(d => {
     addSingleItem(d.orderId, d.itemIdx);
   });
-
-  // הוסף ל-inChisum הזמנות שיש להן פריטי חיסום — לפי itemsSel בלבד
-  const processedIds = [...new Set(draftItems.map(d => d.orderId))];
-  processedIds.forEach(sid => {
-    const o = allOrders.find(x => x.id === sid);
-    if(!o) return;
-    const selIdxs = (workDay.itemsSel && workDay.itemsSel[String(sid)]) || [];
-    const hasChisum = selIdxs.some(idx => {
-      const item = (o.items||[])[Number(idx)];
-      return item && (item.chisum === true || item.type === 'חיסום');
-    });
-    if(hasChisum && !workDay.inChisum.map(String).includes(String(sid))){
-      workDay.inChisum.push(String(sid));
-    }
-  });
-  saveWorkDay();
-
   draftItems = [];
   updateDraftBadge();
   closeDraftPreview();
-  showToast('✓ כל פריטי הטיוטה הועברו ליום עבודה');
+  // handleWorkdayStart מטפל ב-inChisum + saveWorkDay — מקור אמת אחד
+  handleWorkdayStart();
 }
 
 </script>
