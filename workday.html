@@ -574,9 +574,9 @@ async function load(){
   if(_workdayUnsub) _workdayUnsub();
   // האזן ל-Firebase — stage==='workday' בלבד
   _workdayUnsub = listenAllOrders(function(fbOrders){
-    // allOrders = opty (זמינות לבחירה) + workday (ביום עבודה)
+    // allOrders = opty + workday + chisum (לטאב חיסום)
     allOrders = fbOrders
-      .filter(o => o.stage === 'opty' || o.stage === 'workday')
+      .filter(o => o.stage === 'opty' || o.stage === 'workday' || o.stage === 'chisum')
       .map(o => ({
         ...o,
         id: o.id,
