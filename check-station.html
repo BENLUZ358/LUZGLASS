@@ -888,3 +888,13 @@ function toast(msg){const t=document.createElement('div');t.className='toast';t.
 
 // INIT
 load();
+
+function unavOpen(){document.getElementById('unavSidebar').classList.add('mobile-open');document.getElementById('unavOverlay').classList.add('open');}
+function unavClose(){document.getElementById('unavSidebar').classList.remove('mobile-open');document.getElementById('unavOverlay').classList.remove('open');}
+function unavResetAll(){if(confirm('לאפס את המצב?')){localStorage.clear();location.reload();}}
+</script>
+
+</div><!-- /flex:1;overflow-y:auto -->
+</div><!-- /display:flex;height:100vh -->
+</body>
+</html>
