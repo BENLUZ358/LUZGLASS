@@ -692,6 +692,9 @@ function sendAllToFactory(){
   doneOrds.forEach(o => {
     const hasRealChisum = (o.items||[]).some(i => i.chisum && !(i.name||'').includes('מראה'));
     updateStage(o.id, hasRealChisum ? 'chisum' : 'done').catch(e=>console.error('sendAllToFactory:',e));
+    if(hasRealChisum){
+      updateOrder(String(o.id), {chisumArrived: false}).catch(e=>console.error('sendAllToFactory chisumArrived:',e));
+    }
     chDone.push(o);
   });
   // הסר מ-inChisum ב-Firebase

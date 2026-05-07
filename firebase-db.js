@@ -250,8 +250,9 @@ function lgNormalizeOrder(o) {
     cat:           o.cat          || '',
     quality:       o.quality      || '',
     sand:          o.sand         || false,
-    workdayStatus: o.workdayStatus|| '',
-    readyStatus:   o.readyStatus  || '',
+    workdayStatus:  o.workdayStatus  || '',
+    readyStatus:    o.readyStatus    || '',
+    chisumArrived:  o.chisumArrived  || false,
     createdAt:     o.createdAt    || 0,
     updatedAt:     o.updatedAt    || 0,
     _isSub:        String(o.id).startsWith('sub_')
