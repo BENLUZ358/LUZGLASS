@@ -199,6 +199,30 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
   .unav-sidebar{position:fixed;top:0;right:0;height:100vh;transform:translateX(100%);transition:transform 0.25s;z-index:95;}
   .unav-topbar{display:flex;}
 }
+
+/* ── אייפון ── */
+@media(max-width:600px){
+  /* topbar: הסתר חיפוש ו-toggle — נשאר: המבורגר + כותרת + כפתור חדש */
+  .search-wrap{display:none;}
+  .view-toggle{display:none;}
+  .topbar{height:52px;padding:0 12px;}
+  .topbar-title{font-size:14px;}
+  .btn-new{font-size:12px;padding:8px 12px;white-space:nowrap;}
+  /* stats — עמודה אחת */
+  .stats{grid-template-columns:repeat(2,1fr);margin:10px 12px 0;gap:1px;}
+  .stat .n{font-size:22px;}
+  /* פילטרים */
+  .filters{margin:10px 12px 0;}
+  .fb{padding:5px 10px;font-size:11px;}
+  /* kanban — עמודה אחת גלילה אופקית */
+  .kanban{margin:10px 12px 16px;grid-template-columns:repeat(2,minmax(150px,1fr));}
+  /* טבלה — גלילה אופקית */
+  .table-wrap{margin:10px 12px 16px;}
+  /* modal — מלא מסך */
+  .modal{max-width:100%;margin:0;}
+  .mbody{padding:16px;}
+  .mgrid{grid-template-columns:1fr;}
+}
 </style>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -229,10 +253,10 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
 
 <!-- MAIN -->
 <div class="main">
-  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="unavClose()"></div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:12px;">
-      <div class="hamburger" onclick="toggleSidebar()"><span></span><span></span><span></span></div>
+      <div class="hamburger" onclick="unavOpen()"><span></span><span></span><span></span></div>
       <div class="topbar-title" id="pgTitle">לוח הזמנות</div>
     </div>
     <div class="topbar-right">
