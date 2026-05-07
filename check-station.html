@@ -247,7 +247,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 <div id="tabsBar" style="display:flex;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;">
   <button id="tabActive" onclick="setTab('active')"
     style="flex:1;padding:10px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;background:none;color:var(--gold);border-bottom:2px solid var(--gold);">
-    ⏳ ממתינות
+    🔍 לבדיקה
   </button>
   <button id="tabDone" onclick="setTab('done')"
     style="flex:1;padding:10px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;background:none;color:var(--muted);border-bottom:2px solid transparent;">
@@ -272,8 +272,8 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
       <h2>כל הפריטים נבדקו!</h2>
       <p id="bannerName" style="font-size:13px;color:rgba(255,255,255,0.8)"></p>
       <div style="display:flex;gap:10px;margin-top:6px">
-        <button class="ban-btn" style="background:var(--purple);color:#fff" onclick="openAdvModal()">🔥 שלח לחיסום</button>
-        <button class="ban-btn" style="background:#fff;color:var(--green)" onclick="hideBanner()">המשך →</button>
+        <button class="ban-btn" style="background:#fff;color:var(--green)" onclick="finishSketch()">✅ סיים סקיצה</button>
+        <button class="ban-btn" style="background:rgba(255,255,255,0.2);color:#fff" onclick="hideBanner()">המשך →</button>
       </div>
     </div>
   </div>
@@ -284,8 +284,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
     <div class="sp"></div>
     <div class="icnt" id="iCnt"></div>
     <button class="tb-btn tb-out" onclick="openEditor()">✏️ ערוך</button>
-    <button class="tb-btn tb-green" id="finishBtn" onclick="finishSketch()" style="display:flex">✅ סיים</button>
-    <button class="tb-btn tb-purple" id="advBtn" onclick="openAdvModal()" style="display:none">🔥 חיסום</button>
+    <button class="tb-btn tb-green" id="finishBtn" onclick="finishSketch()" style="display:flex">✅ סיים סקיצה</button>
   </div>
 </div>
 
@@ -322,18 +321,6 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   </div>
 </div>
 
-<!-- ADVANCE MODAL -->
-<div class="overlay" id="advModal">
-  <div class="adv-box">
-    <div style="font-size:36px;margin-bottom:10px">🔥</div>
-    <div style="font-size:15px;font-weight:900;color:#1a1714;margin-bottom:6px">שלח לחיסום?</div>
-    <div id="advSub" style="font-size:12px;color:#888;margin-bottom:20px"></div>
-    <div style="display:flex;gap:8px">
-      <button onclick="doAdvance()" style="flex:1;padding:12px;background:var(--purple);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:5px">כן, שלח</button>
-      <button onclick="document.getElementById('advModal').classList.remove('open')" style="flex:1;padding:12px;background:#f0f0f0;color:#555;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;border-radius:5px">ביטול</button>
-    </div>
-  </div>
-</div>
 
 <!-- CHISUM REPORT -->
 <div class="overlay" id="chisReport">
@@ -386,7 +373,7 @@ const safeStorage = {
 // STATE
 let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[];
 let activeTab='active'; // 'active' | 'done'
-let pendingOrders=[], wdInChisum=[], wdPendingChisum=[];
+let wdInChisum=[];
 let _csUnsub=null, _wdRef=null;
 
 function setTab(t){
@@ -432,13 +419,12 @@ function load(){
   cs=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');
   notes=JSON.parse(safeStorage.getItem('lgOrderNotes')||'{}');
 
-  // Subscribe to workday — inChisum + pendingChisum
+  // Subscribe to workday — inChisum
   if(_wdRef) firebase.database().ref('workday').off('value', _wdRef);
   _wdRef = firebase.database().ref('workday').on('value', snap=>{
     const wd = snap.val()||{};
     function objToArr(v){ return v ? Object.values(v).map(String) : []; }
-    wdInChisum      = objToArr(wd.inChisum);
-    wdPendingChisum = objToArr(wd.pendingChisum);
+    wdInChisum = objToArr(wd.inChisum);
     _filterOrders();
   });
 
@@ -453,38 +439,9 @@ function load(){
 function _filterOrders(){
   const fbOrders = window._allCsOrders || [];
   orders = fbOrders.filter(o=>wdInChisum.includes(String(o.id))).map(mapFirebaseOrder);
-  pendingOrders = fbOrders.filter(o=>wdPendingChisum.includes(String(o.id))).map(mapFirebaseOrder);
   buildClients();
   renderList();
-  renderPendingBadge();
   updateTabCounts();
-}
-
-function renderPendingBadge(){
-  let badge = document.getElementById('pendingImportBtn');
-  if(!badge){
-    badge = document.createElement('button');
-    badge.id = 'pendingImportBtn';
-    badge.className = 'tb-btn tb-green';
-    badge.style.display = 'none';
-    badge.onclick = importPending;
-    document.querySelector('.topbar').insertBefore(badge, document.querySelector('.topbar a[href="workday.html"]'));
-  }
-  if(wdPendingChisum.length > 0){
-    badge.style.display = 'flex';
-    badge.textContent = `📥 ייבוא ${wdPendingChisum.length} ממתינות`;
-  } else {
-    badge.style.display = 'none';
-  }
-}
-
-function importPending(){
-  if(!wdPendingChisum.length) return;
-  const merged = [...new Set([...wdInChisum, ...wdPendingChisum])];
-  const obj={}; merged.forEach((v,i)=>{obj[i]=v;});
-  firebase.database().ref('workday').update({ inChisum: obj, pendingChisum: {} })
-    .then(()=>toast(`✓ יובאו ${wdPendingChisum.length} סקיצות חדשות`))
-    .catch(e=>console.error('importPending:', e));
 }
 
 function demos(){return[
@@ -497,7 +454,7 @@ function demos(){return[
 function saveCS(){safeStorage.setItem('lgCheckState',JSON.stringify(cs));}
 function saveNotes(){safeStorage.setItem('lgOrderNotes',JSON.stringify(notes));}
 // מחזיר רק indices של פריטי חיסום (לא ליטוש)
-function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>(o.items||[])[i]?.chisum===true); }
+function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>!!(o.items||[])[i]?.chisum); }
 function area(o){return chisumIdxs(o).reduce((s,i)=>{const it=(o.items||[])[i];return s+(it?.w||0)*(it?.h||0)/10000;},0);}
 function buildClients(){
   const cl=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))];
@@ -543,10 +500,19 @@ function renderList(){
   const list=getFiltered();
   const el=document.getElementById('listView');
   if(!list.length){
-    el.innerHTML=`<div class="list-empty"><div style="font-size:44px">🔍</div><p style="font-size:14px">אין הזמנות תואמות לסינון</p></div>`;
+    const emptyMsg = activeTab==='done'
+      ? `<div class="list-empty"><div style="font-size:44px">✅</div><p style="font-size:14px">אין הזמנות שהושלמו עדיין</p><p style="font-size:12px;color:var(--muted)">סמן פריטים ולחץ "סיים סקיצה" כדי להעביר לכאן</p></div>`
+      : `<div class="list-empty"><div style="font-size:44px">🔍</div><p style="font-size:14px">אין הזמנות לבדיקה</p></div>`;
+    el.innerHTML = emptyMsg;
     return;
   }
-  el.innerHTML=list.map(o=>{
+  // כפתור "שלח לחיסום" בטאב הושלמו
+  const sendBtn = activeTab==='done' ? `<div style="padding:12px 14px;background:rgba(142,68,173,0.1);border-bottom:2px solid var(--purple);">
+    <button onclick="sendAllToFactory()" style="width:100%;padding:13px;background:var(--purple);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+      🔥 סיים יום — שלח ${list.length} הזמנות לחיסום והוצא דוח
+    </button>
+  </div>` : '';
+  el.innerHTML = sendBtn + list.map(o=>{
     const idxs=chisumIdxs(o),total=idxs.length||1;
     const checked=idxs.filter(i=>cs[o.id]?.[i]).length;
     const pct=Math.round(checked/total*100),done=pct===100,fresh=checked===0;
@@ -679,7 +645,7 @@ function checkItem(i){
 function updateTabCounts(){
   const active=orders.filter(o=>!isDone(o)).length;
   const done=orders.filter(o=>isDone(o)).length;
-  document.getElementById('tabActive').textContent=`⏳ ממתינות (${active})`;
+  document.getElementById('tabActive').textContent=`🔍 לבדיקה (${active})`;
   document.getElementById('tabDone').textContent=`✅ הושלמו (${done})`;
 }
 
@@ -692,61 +658,51 @@ function updateProg(){
   document.getElementById('progFill').style.width=pct+'%';
   document.getElementById('progFill').style.background=pct===100?'var(--green)':'var(--gold)';
   document.getElementById('iCnt').innerHTML=`<strong>${checked}</strong>/<strong>${total}</strong> חיסום`;
-  document.getElementById('advBtn').style.display=pct===100?'flex':'none';
   document.getElementById('finishBtn').style.display='flex';
 }
 
 // BANNER + ADVANCE
 function showBanner(){document.getElementById('banner').style.display='flex';document.getElementById('bannerName').textContent=cur.orderClient+' ✓';}
 function hideBanner(){document.getElementById('banner').style.display='none';}
-function openAdvModal(){hideBanner();document.getElementById('advSub').textContent=(cur?.orderClient||'')+' — '+(cur?.sketchName||'');document.getElementById('advModal').classList.add('open');}
 
 function _removeFromChisumStation(ordId){
-  // מסיר הזמנה מ-workday.inChisum ב-Firebase
   const updated = wdInChisum.filter(id=>id!==String(ordId));
   const obj={}; updated.forEach((v,i)=>{obj[i]=v;});
-  // אם אין עוד פריטים בתחנה ויש ממתינות — ייבא אוטומטית
-  if(updated.length===0 && wdPendingChisum.length>0){
-    const pend={}; wdPendingChisum.forEach((v,i)=>{pend[i]=v;});
-    firebase.database().ref('workday').update({inChisum:pend, pendingChisum:{}})
-      .catch(e=>console.error('_removeFromChisumStation pending:', e));
-  } else {
-    firebase.database().ref('workday').update({inChisum:obj})
-      .catch(e=>console.error('_removeFromChisumStation:', e));
-  }
+  firebase.database().ref('workday').update({inChisum: updated.length ? obj : null})
+    .catch(e=>console.error('_removeFromChisumStation:', e));
 }
 
-function doAdvance(){
-  document.getElementById('advModal').classList.remove('open');
-  if(!cur) return;
-  const items=cur.items||[];
-  const hasChisum=items.some(i=>i.chisum&&!(i.name||'').includes('מראה'));
-  if(hasChisum){
-    updateStage(cur.id,'chisum').catch(e=>console.error('doAdvance stage:',e));
-  } else {
-    updateStage(cur.id,'done').catch(e=>console.error('doAdvance stage:',e));
-  }
-  _removeFromChisumStation(cur.id);
-  chDone.push(cur);
-  _updatePrintReportBtn();
-  toast('נשלח לחיסום ✓');
-  cur=null; showList();
-}
 
 function finishSketch(){
   if(!cur) return;
-  const items=cur.items||[];
-  const hasChisum=items.some(i=>i.chisum&&!(i.name||'').includes('מראה'));
-  if(hasChisum){
-    updateStage(cur.id,'chisum').catch(e=>console.error('finishSketch stage:',e));
-  } else {
-    updateStage(cur.id,'done').catch(e=>console.error('finishSketch stage:',e));
-  }
-  _removeFromChisumStation(cur.id);
-  chDone.push(cur);
+  if(!cs[cur.id]) cs[cur.id] = {};
+  chisumIdxs(cur).forEach(i => { cs[cur.id][i] = true; });
+  saveCS();
+  hideBanner();
+  cur = null;
+  setTab('done'); // מעבר אוטומטי לטאב הושלמו
+  showList();
+  toast('✓ הסקיצה הושלמה — ראה בטאב הושלמו');
+}
+
+// שלח את כל ההזמנות שהושלמו למפעל + הדפס דוח
+function sendAllToFactory(){
+  const doneOrds = orders.filter(isDone);
+  if(!doneOrds.length){ toast('אין הזמנות שהושלמו'); return; }
+  doneOrds.forEach(o => {
+    const hasRealChisum = (o.items||[]).some(i => i.chisum && !(i.name||'').includes('מראה'));
+    updateStage(o.id, hasRealChisum ? 'chisum' : 'done').catch(e=>console.error('sendAllToFactory:',e));
+    chDone.push(o);
+  });
+  // הסר מ-inChisum ב-Firebase
+  const doneIds = new Set(doneOrds.map(o => String(o.id)));
+  const remaining = wdInChisum.filter(id => !doneIds.has(String(id)));
+  const obj = {}; remaining.forEach((v,i) => {obj[i]=v;});
+  firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null})
+    .catch(e=>console.error('sendAllToFactory remove:', e));
   _updatePrintReportBtn();
-  toast('✓ עבר לממתין לחיסום');
-  cur=null; showList();
+  printChisum();
+  toast(`✓ ${doneOrds.length} הזמנות נשלחו לחיסום — הדוח מודפס`);
 }
 
 function _updatePrintReportBtn(){

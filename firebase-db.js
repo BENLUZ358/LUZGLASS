@@ -77,7 +77,7 @@ function lgStatusToStage(status) { return LG_STATUS_TO_STAGE[status] ?? ''; }
 // ─── 3. updateStage — הפונקציה המרכזית לשינוי סטטוס ────────────────
 //  כל שינוי סטטוס במערכת חייב לעבור כאן בלבד
 async function updateStage(id, stage) {
-  if (!id) throw new Error('updateStage: id חסר');
+  if (!id || id === 'null' || id === 'undefined') throw new Error('updateStage: id לא תקין — ' + id);
   const status = lgStageToStatus(stage);
   await _lgDb.ref('orders/' + id).update({ stage, status, updatedAt: Date.now() });
   return { id, stage, status };
@@ -131,7 +131,7 @@ async function saveSubmission(data) {
 }
 
 async function updateOrder(id, fields) {
-  if (!id) throw new Error('updateOrder: id חסר');
+  if (!id || id === 'null' || id === 'undefined') throw new Error('updateOrder: id לא תקין — ' + id);
   const update = _lgClean({ ...fields, updatedAt: Date.now() });
   if (fields.stage !== undefined) update.status = lgStageToStatus(fields.stage);
   await _lgDb.ref('orders/' + id).update(update);
@@ -237,7 +237,9 @@ function lgNormalizeOrder(o) {
     total:         Number(o.total)|| 0,
     date:          o.date         || '',
     phone:         o.phone        || '',
-    items:         o.items        || [],
+    items:         Array.isArray(o.items) ? o.items
+                   : (o.items && typeof o.items === 'object') ? Object.values(o.items)
+                   : [],
     panels:        o.panels       || [],
     notes:         o.notes        || '',
     source:        o.source       || 'sketch',
