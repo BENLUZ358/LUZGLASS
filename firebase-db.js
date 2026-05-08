@@ -252,7 +252,9 @@ function lgNormalizeOrder(o) {
     sand:          o.sand         || false,
     workdayStatus:  o.workdayStatus  || '',
     readyStatus:    o.readyStatus    || '',
-    chisumArrived:  o.chisumArrived  || false,
+    chisumArrived:   o.chisumArrived   || false,
+    chisumReportId:  o.chisumReportId  || null,
+    chisumReportNum: o.chisumReportNum || null,
     createdAt:     o.createdAt    || 0,
     updatedAt:     o.updatedAt    || 0,
     _isSub:        String(o.id).startsWith('sub_')

@@ -1399,6 +1399,49 @@ function toggleChisumOpen(ordId){
   renderChisumTab();
 }
 
+// בונה html לכרטיס הזמנה בודדת בתוך דוח שחזר
+function _chisumOrderCardHtml(o){
+  const allChisumItems = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>!!it.chisum);
+  const hasBroken  = (brokenItems[String(o.id)]||[]).length > 0;
+  const brokenCount = (brokenItems[String(o.id)]||[]).length;
+  const isOpen = chisumOpen[String(o.id)]||false;
+  const itemsHtml = allChisumItems.map(it=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);background:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'rgba(231,76,60,0.04)':'#fff'}">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;${(brokenItems[o.id]||[]).includes(it.globalIdx)?'color:#e74c3c;text-decoration:line-through':'color:#1a1714'}">${it.name||''}</div>
+        <div style="font-size:11px;color:#8a8278;margin-top:1px">${it.w||''}×${it.h||''} ס"מ</div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${(brokenItems[o.id]||[]).includes(it.globalIdx)?'#e74c3c':'rgba(0,0,0,0.12)'};background:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'rgba(231,76,60,0.08)':'rgba(0,0,0,0.02)'}">
+        <input type="checkbox" style="width:15px;height:15px;accent-color:#e74c3c;cursor:pointer;"
+          onchange="toggleBroken('${o.id}',${it.globalIdx},this.checked)"
+          ${(brokenItems[o.id]||[]).includes(it.globalIdx)?'checked':''}>
+        <span style="font-size:12px;font-weight:600;color:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'#e74c3c':'#8a8278'}">${(brokenItems[o.id]||[]).includes(it.globalIdx)?'נשבר':'הגיע'}</span>
+      </label>
+    </div>`).join('');
+  return `
+  <div style="border-bottom:1px solid rgba(0,0,0,0.06);">
+    <div data-oid="${o.id}" onclick="toggleChisumOpen(this.dataset.oid)" style="padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:${hasBroken?'rgba(231,76,60,0.04)':'#fff'}">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+          <span style="font-size:13px;font-weight:700;color:#1a1714">${o.orderClient}</span>
+          <span style="font-size:10px;color:#b8922a;font-weight:700;background:rgba(184,146,42,0.1);padding:1px 6px;border-radius:3px">${o.orderNum||''}</span>
+        </div>
+        <div style="font-size:11px;color:#8a8278">${o.sketchName||o.type||''}</div>
+        <div style="display:flex;align-items:center;gap:5px;margin-top:4px">
+          <span style="font-size:10px;font-weight:700;color:#8e44ad;background:rgba(142,68,173,0.1);padding:1px 6px;border-radius:3px">🔥 ${allChisumItems.length} פריטים</span>
+          ${hasBroken?`<span style="font-size:10px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,0.1);padding:1px 6px;border-radius:3px">❌ ${brokenCount} נשברו</span>`:'<span style="font-size:10px;color:#27ae60;background:rgba(39,174,96,0.1);padding:1px 6px;border-radius:3px">✓ הכל הגיע</span>'}
+        </div>
+      </div>
+      <span style="font-size:18px;color:#8a8278;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
+    </div>
+    ${isOpen ? `
+    <div style="background:#fafafa;padding:4px 0;">
+      <div style="padding:6px 16px 4px;font-size:9px;font-weight:700;color:#8a8278;letter-spacing:0.1em;text-transform:uppercase">סמן פריטים שנשברו / לא הגיעו</div>
+      ${itemsHtml||'<div style="padding:10px 16px;font-size:12px;color:#8a8278">אין פריטי חיסום</div>'}
+    </div>` : ''}
+  </div>`;
+}
+
 function renderChisumTab(){
   const el = document.getElementById('chisumOrders');
   const all = allOrders.filter(o => (o.stage||'') === 'chisum');
@@ -1409,91 +1452,106 @@ function renderChisumTab(){
     return;
   }
 
-  const awaiting = all.filter(o => !o.chisumArrived);
-  const arrived  = all.filter(o => !!o.chisumArrived);
+  // קבץ לפי reportId — הזמנות ישנות ללא reportId מוצגות כדוח "legacy"
+  const reportMap = {};
+  all.forEach(o => {
+    const key = o.chisumReportId || ('__legacy__' + o.id);
+    if(!reportMap[key]) reportMap[key] = { reportId: o.chisumReportId||null, reportNum: o.chisumReportNum||null, orders: [] };
+    reportMap[key].orders.push(o);
+  });
 
+  // האם יש הזמנות שחזרו — לכפתור "אפס רשימה"
+  const hasArrived = all.some(o => !!o.chisumArrived);
   const rsb = document.getElementById('resetChisumBtn');
-  if(rsb) rsb.style.display = arrived.length ? 'flex' : 'none';
+  if(rsb) rsb.style.display = hasArrived ? 'flex' : 'none';
 
-  let html = '';
+  let awaitingHtml = '';
+  let arrivedHtml  = '';
 
-  // ── ממתינות לחזרה מהמפעל ──
-  if(awaiting.length){
-    html += `<div style="margin:12px 12px 16px;padding:14px 16px;background:rgba(142,68,173,0.06);border:1px solid rgba(142,68,173,0.2);border-radius:8px;">
-      <div style="font-size:12px;font-weight:700;color:var(--chisum);margin-bottom:10px;">⏳ ${awaiting.length} הזמנות נשלחו למפעל — ממתינות לחזרה</div>
-      ${awaiting.map(o=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(142,68,173,0.1);">
-          <div style="flex:1;">
-            <span style="font-size:13px;font-weight:700;color:var(--text)">${o.orderClient}</span>
-            <span style="font-size:11px;color:var(--muted);margin-right:8px;">${o.orderNum||''} · ${o.sketchName||o.type||''}</span>
+  Object.values(reportMap).forEach(group => {
+    const { reportId, reportNum, orders } = group;
+    const allArrived = orders.every(o => !!o.chisumArrived);
+    const label      = reportNum || 'דוח ישן';
+
+    if(!allArrived){
+      // ── כרטיס דוח ממתין ──
+      awaitingHtml += `
+      <div style="margin:0 12px 14px;border:1.5px solid rgba(142,68,173,0.25);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">
+        <div style="padding:14px 16px;background:rgba(142,68,173,0.05);display:flex;align-items:center;gap:10px;">
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:900;color:var(--chisum)">📦 ${label}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">⏳ נשלח למפעל · ${orders.length} הזמנות</div>
           </div>
-          <button onclick="markChisumArrived('${o.id}')" style="padding:7px 14px;background:var(--chisum);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:5px;white-space:nowrap;">
-            📦 קיבלתי
+          <button onclick="markChisumReportArrived('${reportId||''}','${label}')"
+            style="padding:8px 16px;background:var(--chisum);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:6px;white-space:nowrap;">
+            📦 קיבלתי את הדוח
           </button>
-        </div>`).join('')}
-    </div>`;
-  }
-
-  // ── חזרו מהמפעל — לעיבוד ──
-  if(arrived.length){
-    if(awaiting.length){
-      html += `<div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.15em;text-transform:uppercase;padding:0 12px 8px;">חזרו מהמפעל — ${arrived.length} הזמנות</div>`;
-    }
-    html += arrived.map(o=>{
-      const allChisumItems = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>!!it.chisum);
-      const hasBroken = (brokenItems[String(o.id)]||[]).length > 0;
-      const brokenCount = (brokenItems[String(o.id)]||[]).length;
-      const isOpen = chisumOpen[String(o.id)]||false;
-
-      const itemsHtml = allChisumItems.map(it=>`
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);background:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'rgba(231,76,60,0.04)':'#fff'}">
+        </div>
+        <div style="border-top:1px solid rgba(142,68,173,0.1);">
+          ${orders.map(o=>`
+            <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(0,0,0,0.04);">
+              <span style="font-size:12px;font-weight:700;color:var(--text)">${o.orderClient}</span>
+              <span style="font-size:10px;color:var(--muted)">${o.orderNum||''} · ${o.sketchName||o.type||''}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
+    } else {
+      // ── כרטיס דוח שחזר — לעיבוד נשברים ──
+      arrivedHtml += `
+      <div style="margin:0 12px 14px;border:1.5px solid rgba(39,174,96,0.3);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">
+        <div style="padding:12px 16px;background:rgba(39,174,96,0.05);display:flex;align-items:center;gap:10px;">
           <div style="flex:1">
-            <div style="font-size:13px;font-weight:700;${(brokenItems[o.id]||[]).includes(it.globalIdx)?'color:#e74c3c;text-decoration:line-through':'color:#1a1714'}">${it.name||''}</div>
-            <div style="font-size:11px;color:#8a8278;margin-top:1px">${it.w||''}×${it.h||''} ס"מ</div>
-          </div>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${(brokenItems[o.id]||[]).includes(it.globalIdx)?'#e74c3c':'rgba(0,0,0,0.12)'};background:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'rgba(231,76,60,0.08)':'rgba(0,0,0,0.02)'}">
-            <input type="checkbox" style="width:15px;height:15px;accent-color:#e74c3c;cursor:pointer;"
-              onchange="toggleBroken('${o.id}',${it.globalIdx},this.checked)"
-              ${(brokenItems[o.id]||[]).includes(it.globalIdx)?'checked':''}>
-            <span style="font-size:12px;font-weight:600;color:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'#e74c3c':'#8a8278'}">${(brokenItems[o.id]||[]).includes(it.globalIdx)?'נשבר':'הגיע'}</span>
-          </label>
-        </div>`).join('');
-
-      return `
-      <div style="background:#fff;border:1.5px solid ${hasBroken?'#e74c3c':'rgba(142,68,173,0.3)'};border-radius:10px;margin:0 12px 10px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.06);">
-        <div data-oid="${o.id}" onclick="toggleChisumOpen(this.dataset.oid)" style="padding:14px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:${hasBroken?'rgba(231,76,60,0.04)':'#fff'}">
-          <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-              <span style="font-size:14px;font-weight:900;color:#1a1714">${o.orderClient}</span>
-              <span style="font-size:11px;color:#b8922a;font-weight:700;background:rgba(184,146,42,0.1);padding:1px 7px;border-radius:3px">${o.orderNum||''}</span>
-            </div>
-            <div style="font-size:12px;color:#8a8278">${o.sketchName||o.type||''} · ${o.glass||''}</div>
-            <div style="display:flex;align-items:center;gap:6px;margin-top:6px">
-              <span style="font-size:11px;font-weight:700;color:#8e44ad;background:rgba(142,68,173,0.1);padding:2px 8px;border-radius:4px">🔥 ${allChisumItems.length} פריטים</span>
-              ${hasBroken?`<span style="font-size:11px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,0.1);padding:2px 8px;border-radius:4px">❌ ${brokenCount} נשברו</span>`:'<span style="font-size:11px;color:#27ae60;background:rgba(39,174,96,0.1);padding:2px 8px;border-radius:4px">✓ הכל הגיע</span>'}
-            </div>
-          </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px">
-            <span style="font-size:13px;font-weight:700;color:#b8922a">₪${(o.total||0).toLocaleString()}</span>
-            <span style="font-size:20px;color:#8a8278;transition:transform 0.2s;display:block;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
+            <div style="font-size:13px;font-weight:900;color:var(--green)">✅ ${label} — חזר מהמפעל</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:1px">${orders.length} הזמנות · סמן פריטים שנשברו</div>
           </div>
         </div>
-        ${isOpen ? `
-        <div style="border-top:1.5px solid ${hasBroken?'#e74c3c':'rgba(142,68,173,0.2)'};background:#fafafa;">
-          <div style="padding:8px 16px 4px;font-size:10px;font-weight:700;color:#8a8278;letter-spacing:0.1em;text-transform:uppercase">סמן פריטים שנשברו / לא הגיעו</div>
-          ${itemsHtml||'<div style="padding:12px 16px;font-size:12px;color:#8a8278">אין פריטי חיסום בהזמנה זו</div>'}
-        </div>` : ''}
+        ${orders.map(o => _chisumOrderCardHtml(o)).join('')}
       </div>`;
-    }).join('');
-  }
+    }
+  });
 
+  let html = '';
+  if(awaitingHtml) html += `<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">⏳ ממתינות לחזרה מהמפעל</div>` + awaitingHtml;
+  if(arrivedHtml)  html += `<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">✅ חזרו מהמפעל — לסימון נשברים</div>` + arrivedHtml;
   el.innerHTML = html;
 }
 
-function markChisumArrived(orderId){
-  updateOrder(String(orderId), {chisumArrived: true})
-    .then(()=>showToast('✓ הגיע מהמפעל'))
-    .catch(e=>console.error('markChisumArrived:', e));
+// קיבלתי את הדוח — עם אישור לפני הפעולה
+function markChisumReportArrived(reportId, reportNum){
+  const reportOrders = allOrders.filter(o =>
+    (o.stage||'') === 'chisum' &&
+    (reportId ? o.chisumReportId === reportId : !o.chisumReportId)
+  );
+  if(!reportOrders.length){ showToast('לא נמצאו הזמנות בדוח'); return; }
+
+  // דיאלוג אישור — מגן מפני ערבוב דוחות
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:24px 22px;">
+      <div style="font-size:22px;text-align:center;margin-bottom:12px;">📦</div>
+      <div style="font-size:15px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">קיבלת את ${reportNum}?</div>
+      <div style="font-size:13px;color:#8a8278;margin-bottom:20px;text-align:center;line-height:1.5;">
+        כל ${reportOrders.length} ההזמנות בדוח יעברו לסטטוס "חזר מהמפעל".<br>
+        ניתן לסמן נשברים לאחר מכן.
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="(function(){
+          const orders=[${reportOrders.map(o=>`'${o.id}'`).join(',')}];
+          orders.forEach(id=>updateOrder(id,{chisumArrived:true}).catch(e=>console.error('markReport:',e)));
+          showToast('✓ ${reportNum} — ${reportOrders.length} הזמנות הגיעו מהמפעל');
+          this.closest('[style*=fixed]').remove();
+        }).call(this)"
+          style="flex:2;padding:12px;background:var(--chisum);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">
+          ✓ כן, קיבלתי
+        </button>
+        <button onclick="this.closest('[style*=fixed]').remove()"
+          style="flex:1;padding:12px;background:#f0ede8;color:#555;font-family:Heebo,sans-serif;font-size:13px;font-weight:600;border:1px solid rgba(0,0,0,0.1);cursor:pointer;border-radius:6px;">
+          ביטול
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
 }
 
 function toggleBroken(orderId, itemIdx, checked){

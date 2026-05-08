@@ -150,9 +150,33 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 .unav-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:90;}
 .unav-overlay.open{display:block;}
 .unav-sidebar.mobile-open{transform:translateX(0)!important;}
+/* ── אייפד / מובייל ── */
+@media(max-width:1024px){
+  /* כפתורים גדולים יותר למגע */
+  .zbtn{width:44px;height:44px;font-size:20px;}
+  .tb-btn{min-height:44px;padding:10px 16px;font-size:13px;}
+}
 @media(max-width:768px){
   .unav-sidebar{position:fixed;top:0;right:0;height:100vh;transform:translateX(100%);transition:transform 0.25s;z-index:95;}
-  .unav-topbar{display:flex;}
+  /* fixed — לא דוחף תוכן למטה */
+  .unav-topbar{display:flex;position:fixed;top:0;left:0;right:0;}
+  /* פיצוי לגובה: flex-wrap מתחיל מתחת ל-topbar */
+  #csFlexWrap{margin-top:52px;height:calc(100vh - 52px) !important;}
+  .app{height:calc(100vh - 52px);}
+  /* btmbar קבוע לתחתית — לא נחתך */
+  .btmbar{
+    position:fixed;bottom:0;left:0;right:0;z-index:30;
+    padding:10px 14px;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));
+    background:var(--surface);
+    border-top:1px solid var(--border);
+  }
+  /* מרווח מהכפתורים הקבועים */
+  .sketch-area{padding-bottom:72px;}
+  /* כפתור "סיים סקיצה" — רחב ובולט */
+  #finishBtn{flex:1;font-size:15px;padding:12px 16px;justify-content:center;}
+  /* הסתר כפתורי zoom על אייפד — ניתן לזום עם אצבעות */
+  .zbtn-zoom{display:none;}
 }
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -161,7 +185,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 </head>
 <body>
 <div class="unav-topbar"><div class="lg">Luz<span>Glass</span></div><button class="unav-burger" onclick="unavOpen()"><span></span><span></span><span></span></button></div>
-<div style="display:flex;height:100vh;overflow:hidden">
+<div id="csFlexWrap" style="display:flex;height:100vh;overflow:hidden">
 <div class="unav-sidebar" id="unavSidebar">
   <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
   <nav class="unav-nav">
@@ -278,9 +302,9 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
     </div>
   </div>
   <div class="btmbar">
-    <button class="zbtn" onclick="doZoom(0.25)">+</button>
-    <button class="zbtn" onclick="doZoom(-0.25)">−</button>
-    <button class="zbtn" onclick="resetZoom()">↺</button>
+    <button class="zbtn zbtn-zoom" onclick="doZoom(0.25)">+</button>
+    <button class="zbtn zbtn-zoom" onclick="doZoom(-0.25)">−</button>
+    <button class="zbtn zbtn-zoom" onclick="resetZoom()">↺</button>
     <div class="sp"></div>
     <div class="icnt" id="iCnt"></div>
     <button class="tb-btn tb-out" onclick="openEditor()">✏️ ערוך</button>
@@ -685,26 +709,45 @@ function finishSketch(){
   toast('✓ הסקיצה הושלמה — ראה בטאב הושלמו');
 }
 
-// שלח את כל ההזמנות שהושלמו למפעל + הדפס דוח
+// יצירת מספר דוח חיסום
+function _createReportNum(){
+  const now = new Date();
+  const d = String(now.getDate()).padStart(2,'0');
+  const m = String(now.getMonth()+1).padStart(2,'0');
+  const suffix = String(Date.now()).slice(-3);
+  return 'CH-' + d + m + '-' + suffix;
+}
+
+// שלח את כל ההזמנות שהושלמו למפעל + הפק דוח ממוספר
 function sendAllToFactory(){
   const doneOrds = orders.filter(isDone);
   if(!doneOrds.length){ toast('אין הזמנות שהושלמו'); return; }
+
+  const reportId  = 'chisum_' + Date.now();
+  const reportNum = _createReportNum();
+
   doneOrds.forEach(o => {
     const hasRealChisum = (o.items||[]).some(i => i.chisum && !(i.name||'').includes('מראה'));
     updateStage(o.id, hasRealChisum ? 'chisum' : 'done').catch(e=>console.error('sendAllToFactory:',e));
     if(hasRealChisum){
-      updateOrder(String(o.id), {chisumArrived: false}).catch(e=>console.error('sendAllToFactory chisumArrived:',e));
+      updateOrder(String(o.id), {
+        chisumArrived:   false,
+        chisumReportId:  reportId,
+        chisumReportNum: reportNum,
+      }).catch(e=>console.error('sendAllToFactory fields:',e));
     }
     chDone.push(o);
   });
+
   // הסר מ-inChisum ב-Firebase
   const doneIds = new Set(doneOrds.map(o => String(o.id)));
   const remaining = wdInChisum.filter(id => !doneIds.has(String(id)));
   const obj = {}; remaining.forEach((v,i) => {obj[i]=v;});
   firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null})
     .catch(e=>console.error('sendAllToFactory remove:', e));
-  printChisum();
-  toast(`✓ ${doneOrds.length} הזמנות נשלחו לחיסום — הדוח מודפס`);
+
+  printChisum(reportNum);
+  toast(`✓ דוח ${reportNum} — ${doneOrds.length} הזמנות נשלחו למפעל`);
 }
 
 
@@ -715,10 +758,13 @@ function offerChisum(){
   document.getElementById('cbBody').innerHTML=`<p style="font-size:12px;color:var(--muted);margin-bottom:14px">סה"כ ${items.length} פריטים לחיסום</p>`+items.map((item,i)=>`<div class="cb-item"><div style="font-size:18px;color:var(--purple);font-weight:900;min-width:24px">${i+1}</div><div><div style="font-size:13px;font-weight:700">${item.name||'—'} · ${item.w||''}×${item.h||''} ס"מ</div><div style="font-size:11px;color:var(--muted)">${item.client} · ${item.orderNum||''}</div></div></div>`).join('');
   document.getElementById('chisReport').classList.add('open');
 }
-function printChisum(){
+function printChisum(reportNum){
   const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
+  const label = reportNum ? `דוח ${reportNum}` : 'דוח חיסום';
   const w=window.open('','_blank');
-  w.document.write(`<html dir="rtl"><head><title>דוח חיסום</title><style>body{font-family:Heebo,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:9px;border:1px solid #ddd;text-align:right}th{background:#f5f5f5}</style></head><body>
+  w.document.write(`<html dir="rtl"><head><title>${label}</title><style>body{font-family:Heebo,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:9px;border:1px solid #ddd;text-align:right}th{background:#f5f5f5}.report-num{font-size:11px;color:#888;margin-bottom:4px}.report-title{font-size:18px;font-weight:700;margin-bottom:16px}</style></head><body>
+<div class="report-num">מספר דוח:</div>
+<div class="report-title">🔥 ${label} — ${new Date().toLocaleDateString('he-IL')}</div>
 <div class="unav-topbar"><div class="lg">Luz<span>Glass</span></div><button class="unav-burger" onclick="unavOpen()"><span></span><span></span><span></span></button></div>
 <div style="display:flex;height:100vh;overflow:hidden">
 <div class="unav-sidebar" id="unavSidebar">
@@ -738,7 +784,7 @@ function printChisum(){
 </div>
 <div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
 <div style="flex:1;overflow-y:auto">
-<h2>🔥 דוח חיסום — ${new Date().toLocaleDateString('he-IL')}</h2><table><thead><tr><th>#</th><th>זכוכית</th><th>מידות</th><th>לקוח</th><th>הזמנה</th></tr></thead><tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${item.name||'—'}</td><td>${item.w||''}×${item.h||''}</td><td>${item.client}</td><td>${item.orderNum||''}</td></tr>`).join('')}</tbody></table></div></div>
+<table><thead><tr><th>#</th><th>זכוכית</th><th>מידות</th><th>לקוח</th><th>הזמנה</th></tr></thead><tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${item.name||'—'}</td><td>${item.w||''}×${item.h||''}</td><td>${item.client}</td><td>${item.orderNum||''}</td></tr>`).join('')}</tbody></table></div></div>
 </body></html>`);
   w.document.close();w.print();
 }
