@@ -1455,7 +1455,7 @@ function renderChisumTab(){
   // קבץ לפי reportId — הזמנות ישנות ללא reportId מוצגות כדוח "legacy"
   const reportMap = {};
   all.forEach(o => {
-    const key = o.chisumReportId || ('__legacy__' + o.id);
+    const key = o.chisumReportId || '__legacy__';
     if(!reportMap[key]) reportMap[key] = { reportId: o.chisumReportId||null, reportNum: o.chisumReportNum||null, orders: [] };
     reportMap[key].orders.push(o);
   });
