@@ -894,58 +894,37 @@ function orderCardHTML(o){
 
   if(!hasItems) return orderHeader;
 
-  // במצב "הזמנות" — לא מציגים פריטים בודדים
+  // במצב "הזמנות" — כותרת בלבד
   if(buildViewMode === 'orders') return orderHeader;
 
-  // פריטים בודדים
+  // ── מצב "פריטים" — רשימה שטוחה, ללא כותרת הזמנה ──
+  // כל פריט מוצג כשורה עצמאית עם context של לקוח + סקיצה
   const itemRows = o.items.map((item, i) => {
     const fullGlass = item.glassFullName || item.name || '';
     if(glassFilter && !fullGlass.includes(glassFilter)) return '';
-    // אל תציג פריט שכבר נבחר (נמצא ב-itemsSel) — נרמל Firebase object ל-array
     const _selRaw = (workDay.itemsSel && workDay.itemsSel[ordKey]) || [];
     const _selIdxs = Array.isArray(_selRaw) ? _selRaw.map(Number) : Object.values(_selRaw).map(Number);
     if(_selIdxs.includes(i)) return '';
-    // סנן פריטים שכבר בטיוטה
     if(draftItems.some(d => d.orderId === ordKey && d.itemIdx === i)) return '';
     const isChisum = !!item.chisum;
     const processLabel = isChisum ? 'מחוסם' : 'מלוטש';
     const processBg    = isChisum ? 'rgba(142,68,173,0.12)' : 'rgba(41,128,185,0.12)';
     const processColor = isChisum ? '#8e44ad' : '#2980b9';
-    const detailKey = ordKey+'_'+i;
-    const isDetailOpen = expandedOrders.has(detailKey);
     return `
-    <div style="background:var(--surface);border:1px solid var(--border);border-top:none;margin-bottom:2px;overflow:hidden">
-      <div style="padding:9px 14px 9px 20px;display:flex;align-items:center;gap:8px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:700;color:var(--text)">${fullGlass}</div>
-          <div style="font-size:11px;color:var(--muted)">${item.w||'?'}×${item.h||'?'} ס"מ</div>
+    <div style="background:var(--surface);border:1px solid var(--border);margin-bottom:2px;padding:10px 14px;display:flex;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">${fullGlass}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">
+          <span style="color:var(--gold);font-weight:600">${o.orderClient}</span>
+          · ${o.sketchName||o.orderNum||'—'}
+          · ${item.w||'?'}×${item.h||'?'} ס"מ
         </div>
-        <span style="font-size:10px;font-weight:700;padding:2px 7px;background:${processBg};color:${processColor};flex-shrink:0">${processLabel}</span>
-        <button onclick="addToDraft('${ordKey}',${i})" style="padding:5px 10px;background:var(--gold);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף</button>
-        <button onclick="toggleItemDetail('${ordKey}',${i})" style="padding:5px 7px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:10px;cursor:pointer;color:var(--muted)">${isDetailOpen?'▲':'▾'}</button>
       </div>
-      ${isDetailOpen ? `
-      <div style="padding:10px 14px 10px 20px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px">
-        <div style="display:flex;flex-wrap:wrap;gap:8px;color:var(--muted);margin-bottom:8px">
-          <span><b>לקוח:</b> ${o.orderClient}</span>
-          <span><b>הזמנה:</b> ${o.orderNum||'—'}</span>
-          <span><b>סקיצה:</b> ${o.sketchName||'—'}</span>
-          <span><b>פרזול:</b> ${o.finish||'—'}</span>
-        </div>
-        <div style="font-size:11px;font-weight:700;margin-bottom:5px">כל הפריטים:</div>
-        ${(o.items||[]).map((it,j)=>`
-          <div style="display:flex;gap:8px;padding:4px 8px;font-size:11px;${j===i?'background:rgba(184,146,42,0.1);font-weight:700;border-right:3px solid var(--gold)':''}">
-            <span style="flex:1">${it.glassFullName||it.name||'—'}</span>
-            <span>${it.w||'?'}×${it.h||'?'} ס"מ</span>
-            <span style="color:${it.chisum?'#8e44ad':'#2980b9'}">${it.chisum?'מחוסם':'מלוטש'}</span>
-          </div>`).join('')}
-        ${o.sketch?`<button onclick="showSketchPopup('${ordKey}')" style="margin-top:8px;padding:5px 12px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer">🖼 פתח סקיצה</button>`:''}
-      </div>` : ''}
+      <span style="font-size:10px;font-weight:700;padding:2px 7px;background:${processBg};color:${processColor};flex-shrink:0">${processLabel}</span>
+      <button onclick="addToDraft('${ordKey}',${i})" style="padding:6px 12px;background:var(--gold);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף</button>
     </div>`;
-  }).join('');
-
-  // במצב 'פריטים' — תמיד הצג פריטים (לא צריך לפתוח)
-  return orderHeader + itemRows;
+  }).filter(r=>r).join('');
+  return itemRows;
 }
 
 function setBuildView(mode){
@@ -1644,7 +1623,19 @@ function checkChisumArrived(){
 //  COUNTS + SUMMARY
 // ═══════════════════════════════════════
 function updateCounts(){
-  const avail = allOrders.filter(o=>(o.status==='ירד לביצוע'||o.status==='ב-OptyWay')&&!workDay.inWork.map(String).includes(String(o.id))&&!workDay.inChisum.map(String).includes(String(o.id)));
+  // ספירה לפי stage (לא status) — תואמת ל-getFiltered()
+  const avail = allOrders.filter(o => {
+    const sid = String(o.id);
+    const stage = o.stage || '';
+    if(stage !== 'opty' && stage !== 'workday') return false;
+    if(workDay.inChisum.map(String).includes(sid)) return false;
+    if(workDay.inWork.includes(sid)){
+      const _sr = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
+      const _si = Array.isArray(_sr) ? _sr.map(Number) : Object.values(_sr).map(Number);
+      if([...new Set(_si)].length >= (o.items||[]).length && (o.items||[]).length > 0) return false;
+    }
+    return true;
+  });
   document.getElementById('cnt-build').textContent = avail.length;
   document.getElementById('cnt-work').textContent  = workDay.inWork.length;
   // הטאב "חיסום" מציג הזמנות עם stage='chisum' (אחרי תחנת בדיקה)
