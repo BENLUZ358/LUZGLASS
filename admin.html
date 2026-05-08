@@ -1783,8 +1783,12 @@ function sqShowDetail(){
   sqUpdateBtns(o.id);
 
   // בנה אפשרויות עריכה
-  const glassOpts=['8מ"מ שקוף','8מ"מ קליר','8מ"מ גרניט','8מ"מ אסיד','8מ"מ אפור','8מ"מ ברונזה','8מ"מ פיפיטה','8מ"מ אסיד קליר','8מ"מ גלינה שקוף','8מ"מ גלינה קליר','10מ"מ קליר','6מ"מ שקוף','5מ"מ מראה']
-    .map(g=>`<option value="${g}" ${(o.glassFullName||'')=== g?'selected':''}>${g}</option>`).join('');
+  // רשימת זכוכיות מלאה לפי LG_SKU_MAP (מוגדר ב-firebase-db.js)
+  const _allGlassNames = typeof LG_SKU_MAP !== 'undefined'
+    ? [...new Set(Object.values(LG_SKU_MAP))]
+    : ['8 מ"מ שקוף מלוטש','8 מ"מ קליר מלוטש','8 מ"מ אפור מלוטש','8 מ"מ ברונזה מלוטש'];
+  const glassOpts = _allGlassNames
+    .map(g=>`<option value="${g}" ${(o.glassFullName||o.glass||'')=== g?'selected':''}>${g}</option>`).join('');
   const finishOpts=['שחור מט','זהב מוברש','זהב','גרפיט','רוז גולד','—']
     .map(f=>`<option value="${f}" ${(o.finish||'')=== f?'selected':''}>${f}</option>`).join('');
   const selStyle='width:100%;padding:7px 10px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.1);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;direction:rtl;';

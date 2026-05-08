@@ -960,7 +960,16 @@ function noItemsHTML(o){
     <div class="add-item-form" id="aif_${o.id}">
       <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em">+ פריט חדש</div>
       <div class="ai-row">
-        <input class="ai-input" type="text" id="ai_glass_${o.id}" placeholder='סוג זכוכית (8מ"מ שקוף)'>
+        <div style="flex:1;display:flex;flex-direction:column;gap:3px;">
+          <input class="ai-input" type="text" id="ai_glass_${o.id}" placeholder="מק&quot;ט או שם (8SM / 8מ&quot;מ שקוף)"
+            oninput="(function(el){
+              const hint=document.getElementById('ai_glass_hint_${o.id}');
+              if(!hint)return;
+              const resolved=typeof lgSkuToName==='function'?lgSkuToName(el.value.trim()):'';
+              hint.textContent=(resolved&&resolved!==el.value.trim())?'→ '+resolved:'';
+            })(this)">
+          <span id="ai_glass_hint_${o.id}" style="font-size:10px;color:#27ae60;font-weight:600;padding:0 2px;min-height:14px;display:block"></span>
+        </div>
         <select class="ai-select" id="ai_proc_${o.id}">
           <option value="litush">מלוטש ✂️</option>
           <option value="chisum">מחוסם 🔥</option>
@@ -1127,7 +1136,9 @@ function saveManualItem(orderId){
   const o = allOrders.find(x=>x.id===orderId);
   if(!o) return;
   if(!o.items) o.items = [];
-  o.items.push({name:glass, glassFullName:glass, w, h, litush:proc==='litush', chisum:proc==='chisum'});
+  // תרגם מק"ט לשם מלא (lgSkuToName מוגדר ב-firebase-db.js)
+  const fullName = (typeof lgSkuToName === 'function') ? lgSkuToName(glass) : glass;
+  o.items.push({name:fullName, glassFullName:fullName, w, h, litush:proc==='litush', chisum:proc==='chisum'});
   updateOrder(String(o.id), { items: o.items }).catch(e=>console.error('addItem:', e));
   showToast('✓ פריט נשמר');
   renderAvailable();
