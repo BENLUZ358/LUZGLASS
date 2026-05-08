@@ -1669,41 +1669,57 @@ function updateSummaryBar(){
 // ═══════════════════════════════════════
 //  FINISH DAY
 // ═══════════════════════════════════════
-function finishDay(){
+function _getFinishDayGroups(){
   const inWork = allOrders.filter(o => workDay.inWork.map(String).includes(String(o.id)));
-  // [תיקון באג 2] — סיווג לפי פריטים שנבחרו בפועל
-  const cut    = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'cut');
+  const cut      = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'cut');
   const chisumOrds = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'chisum');
-  const mixed  = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'mixed');
+  const mixed    = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'mixed');
 
-  // cut + mixed get "מוכן" message today
-  // chisum-only go to chisum
-  const readyNow   = [...cut, ...mixed]; // mixed waits for chisum but will get one message
-  const toChisum   = [...chisumOrds];
+  // הזמנה שנמצאת ב-inChisum או כבר ב-stage=chisum — יש לה פריטי חיסום בתהליך.
+  // הלקוח לא יקבל הודעה עד שכל הפריטים בסקיצה יהיו מוכנים.
+  const inChisumIds = new Set(workDay.inChisum.map(String));
+  const cutReady   = cut.filter(o => !inChisumIds.has(String(o.id)) && (o.stage||'') !== 'chisum');
+  const cutPending = cut.filter(o =>  inChisumIds.has(String(o.id)) || (o.stage||'') === 'chisum');
 
-  const cutMsg   = cut.map(o=>waMessage(o, 'ready')).join('\n\n---\n\n');
-  const chisumMsg= chisumOrds.length ? `\n🔥 ${chisumOrds.length} הזמנות יישלחו לחיסום ויהיו מוכנות מחר` : '';
-  const mixedMsg = mixed.length ? `\n⚡ ${mixed.length} הזמנות (מעורב) — יישלחו הודעה מחר עם החיסום` : '';
+  return { cutReady, cutPending, chisumOrds, mixed };
+}
+
+function finishDay(){
+  const { cutReady, cutPending, chisumOrds, mixed } = _getFinishDayGroups();
 
   document.getElementById('finishBody').innerHTML = `
     <div style="margin-bottom:14px">
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-          <span style="color:var(--cut);font-weight:700">✂️ ${cut.length}</span> הזמנות מלוטש — הודעה נשלחת עכשיו
+          <span style="color:var(--cut);font-weight:700">✂️ ${cutReady.length}</span>
+          הזמנות מלוטש מוכנות — הודעה נשלחת עכשיו
         </div>
+        ${cutPending.length ? `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-          <span style="color:var(--chisum);font-weight:700">🔥 ${chisumOrds.length}</span> הזמנות חיסום — נשלחות מחר
-        </div>
+          <span style="color:var(--mixed);font-weight:700">⏳ ${cutPending.length}</span>
+          מלוטש + חיסום ממתין — הודעה תישלח כשהחיסום יחזור מהמפעל
+        </div>` : ''}
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-          <span style="color:var(--mixed);font-weight:700">⚡ ${mixed.length}</span> מעורב — הודעה מחר עם החיסום
+          <span style="color:var(--chisum);font-weight:700">🔥 ${chisumOrds.length}</span>
+          הזמנות חיסום בלבד — יישלח כשיחזרו מהמפעל
         </div>
+        ${mixed.length ? `
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="color:var(--mixed);font-weight:700">⚡ ${mixed.length}</span>
+          מעורב — הודעה מחר עם החיסום
+        </div>` : ''}
       </div>
     </div>
-    ${cut.length ? `
-    <div class="wa-preview-title">📱 דוגמת הודעה — מלוטש</div>
-    <div class="wa-preview">${waMessage(cut[0], 'ready')}</div>` : ''}
+    ${cutReady.length ? `
+    <div class="wa-preview-title">📱 דוגמת הודעה — מלוטש מוכן</div>
+    <div class="wa-preview">${waMessage(cutReady[0], 'ready')}</div>` : ''}
+    ${cutPending.length ? `
+    <div style="margin-top:10px;padding:10px 14px;background:rgba(230,126,34,0.08);border:1px solid rgba(230,126,34,0.2);border-radius:4px;font-size:12px;color:var(--muted)">
+      ⚠️ ${cutPending.length} הזמנות <b>לא יקבלו הודעה עכשיו</b> — יש להן פריטי חיסום שעדיין לא חזרו מהמפעל.
+      ההודעה תישלח אוטומטית כשהחיסום יסתיים.
+    </div>` : ''}
     ${chisumOrds.length ? `
-    <div class="wa-preview-title" style="margin-top:12px">📱 הודעה מחר — חיסום</div>
+    <div class="wa-preview-title" style="margin-top:12px">📱 הודעה בסיום חיסום</div>
     <div class="wa-preview">${waMessage(chisumOrds[0], 'chisum_ready')}</div>` : ''}`;
 
   document.getElementById('finishOv').classList.add('open');
@@ -1830,46 +1846,48 @@ function _showChisumBanner(count){
 }
 
 function confirmFinish(){
-  const inWork = allOrders.filter(o => workDay.inWork.map(String).includes(String(o.id)));
-  // [תיקון באג 2] — סיווג לפי פריטים שנבחרו בפועל
-  const cut    = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'cut');
-  const chisumOrds = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'chisum');
-  const mixed  = inWork.filter(o => classifyOrder(o, getActiveItemsForOrder(o)) === 'mixed');
+  const { cutReady, cutPending, chisumOrds, mixed } = _getFinishDayGroups();
 
-  // Open WhatsApp for each cut order
-  cut.forEach((o,i) => {
+  // שלח הודעה רק להזמנות שכל פריטיהן מוכנים (ללא חיסום ממתין)
+  cutReady.forEach((o,i) => {
     setTimeout(()=>{
       window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`, '_blank');
     }, i * 600);
   });
 
-  // עדכן workflow statuses
+  // עדכן statuses
   allOrders.forEach(o => {
-    if(cut.find(x=>x.id===o.id)){
+    if(cutReady.find(x=>x.id===o.id)){
       o.workdayStatus  = 'done';
       o.readyStatus    = 'eligible';
-      o.status         = 'מוכן לאיסוף'; // תאימות לאחור
+      o.status         = 'מוכן לאיסוף';
+    }
+    if(cutPending.find(x=>x.id===o.id)){
+      // ליטוש הסתיים אבל חיסום ממתין — לא מוכן עדיין ללקוח
+      o.workdayStatus  = 'done';
+      o.readyStatus    = 'blocked_chisum';
+      o.status         = 'ממתין לחיסום';
     }
     if(chisumOrds.find(x=>x.id===o.id) || mixed.find(x=>x.id===o.id)){
       o.workdayStatus  = 'done';
       o.readyStatus    = 'blocked_chisum';
-      o.status         = 'נשלח לחיסום'; // stage='chisum' — תואם ל-admin
+      o.status         = 'נשלח לחיסום';
     }
   });
-  // עדכון ב-Firebase נעשה דרך saveOrderToStorage + markStageValue
-  // allOrders עודכן כבר בזיכרון, Firebase יתעדכן אסינכרונית
 
-  // [תיקון באג 1] — סמן stage='done' לחיתוך (לא יחזרו לרשימה)
-  cut.forEach(o => markStageDone(String(o.id)));
-  // עדכן status בזיכרון לחיתוך (לתצוגה עקבית)
-  cut.forEach(o => { o.status = 'מוכן לאיסוף'; });
+  // stage='done' רק להזמנות שכל פריטיהן מוכנים
+  cutReady.forEach(o => markStageDone(String(o.id)));
+  cutReady.forEach(o => { o.status = 'מוכן לאיסוף'; });
+  // cutPending + chisumOrds: stage נשאר כמו שהוא — תחנת בדיקה וחיסום יטפלו בו
 
-  // חיסום ומעורב — stage נשאר 'workday', יעבור ל-'chisum' רק לאחר תחנת בדיקה
   workDay.inWork = [];
   saveWorkDay();
 
   closeFinish();
-  showToast(`✓ ${cut.length} הזמנות ליטוש הושלמו`);
+  const msg = cutReady.length
+    ? `✓ ${cutReady.length} הזמנות הושלמו${cutPending.length ? ` · ${cutPending.length} ממתינות לחיסום` : ''}`
+    : `✓ יום עבודה הסתיים${cutPending.length ? ` · ${cutPending.length} ממתינות לחיסום` : ''}`;
+  showToast(msg);
   setTab('work');
 }
 
