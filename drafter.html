@@ -240,6 +240,8 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 
 let queue=[], curIdx=0, curOrder=null;
 let edTl='draw', edCl='#f0ede8', edDrw=false, edHist=[], edCvs, edCtx, edBgW=0, edBgH=0;
+// מונע מה-Firebase listener לנווט בזמן שבאנר "הסתיים" מוצג
+let _showingDoneBanner = false;
 
 // ═══ LOAD ═══
 let _drafterUnsub = null;
@@ -271,6 +273,9 @@ function load(){
     // Sort: urgent first
     queue.sort((a,b)=>(b.urgent?1:0)-(a.urgent?1:0));
     renderSidebar();
+    updateCounter();
+    // אם באנר "הסתיים" מוצג — רק עדכן סידבר, אל תנווט (setTimeout ינווט)
+    if(_showingDoneBanner) return;
     if(queue.length>0){
       const stillThere = prevId ? queue.findIndex(o=>o.id===prevId) : -1;
       if(stillThere>=0){ curIdx=stillThere; }
@@ -278,7 +283,6 @@ function load(){
     } else {
       showAllDone();
     }
-    updateCounter();
   });
 }
 
@@ -436,16 +440,15 @@ function finishSketch(){
   if(!curOrder) return;
   const finishedId=curOrder.id;
   const finishedClient=curOrder.orderClient;
-  // עדכן stage ל-opty ב-Firebase (מקור האמת היחיד)
+  _showingDoneBanner = true;
   updateStage(finishedId,'opty').catch(e=>console.error('finishSketch:',e));
-  // נקה סקיצה ישנה מיד
   document.getElementById('sketchCanvas').querySelectorAll('img.sketch-img').forEach(el=>el.remove());
-  // Show done banner
   document.getElementById('doneTitle').textContent=finishedClient+' — עובר ל-OptyWay ✓';
   document.getElementById('doneBanner').classList.add('show');
-  // Remove from queue and jump to next (listenAllOrders יעדכן אוטומטית)
+  // הסר מהתור המקומי מיידית (Firebase listener יסנכרן בנפרד)
   queue.splice(curIdx,1);
   setTimeout(()=>{
+    _showingDoneBanner = false;
     document.getElementById('doneBanner').classList.remove('show');
     if(queue.length>0){
       if(curIdx>=queue.length) curIdx=queue.length-1;

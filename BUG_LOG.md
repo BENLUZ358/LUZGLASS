@@ -269,6 +269,36 @@ itemsSel         = מכיל רק פריטי ליטוש/חיתוך (לא חיסו
 
 ---
 
+# 🐞 Bug 15 — הזמנה הבאה נעלמת בשרטט אחרי "סיים סקיצה"
+
+## תיאור
+לאחר לחיצה על "סיים סקיצה", ההזמנה שאחרי ה-נעלמת מהסידבר.
+בטעינה מחדש — חוזרת. הנתונים ב-Firebase תקינים.
+
+## סיבה
+**Race condition בין `finishSketch()` לבין `listenAllOrders` callback:**
+
+1. `finishSketch()` קורא ל-`queue.splice(curIdx,1)` ולאחר 1600ms ל-`showOrder()`
+2. בינתיים, Firebase listener יורה (אחרי `updateStage`)
+3. Listener מוצא שה-`prevId` (ההזמנה שסיימנו) לא בתור → מבצע `curIdx=0; showOrder(queue[0])` באמצע הבאנר
+4. עכשיו `showOrder` נקרא פעמיים: פעם מהlistener ופעם מה-setTimeout
+5. הקריאה הכפולה גורמת לרנדור לא עקבי של הסידבר
+
+## פתרון
+דגל `_showingDoneBanner`:
+- מופעל ב-`finishSketch()` לפני הבאנר
+- כבה ב-setTimeout לאחר 1600ms
+- Firebase listener בודק: אם `_showingDoneBanner=true` — מרנדר סידבר בלבד, לא מנווט
+- רק ה-setTimeout מנווט לאחר הבאנר
+
+## כלל חדש
+```
+כשיש animation/banner פעיל — Firebase listener לא ינווט.
+רק setTimeout/callback מפורש ינווט בסיומו.
+```
+
+---
+
 # 📌 כלל זהב
 
 אם באג כבר קרה פעם אחת  
