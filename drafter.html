@@ -437,9 +437,11 @@ function jumpTo(i){
 
 // ═══ FINISH SKETCH ═══
 function finishSketch(){
-  if(!curOrder) return;
+  // מגן כנגד קריאה כפולה: Enter (keydown) + click של כפתור ב-focus = 2 קריאות
+  if(!curOrder || _showingDoneBanner) return;
   const finishedId=curOrder.id;
   const finishedClient=curOrder.orderClient;
+  curOrder = null; // חסום כל קריאה נוספת לפני setTimeout
   _showingDoneBanner = true;
   updateStage(finishedId,'opty').catch(e=>console.error('finishSketch:',e));
   document.getElementById('sketchCanvas').querySelectorAll('img.sketch-img').forEach(el=>el.remove());
@@ -533,7 +535,10 @@ document.addEventListener('keydown',e=>{
   if(document.getElementById('edOverlay').classList.contains('open')) return;
   if(e.key==='ArrowLeft'||e.key==='ArrowDown') navSketch(+1);
   if(e.key==='ArrowRight'||e.key==='ArrowUp') navSketch(-1);
-  if(e.key==='Enter') finishSketch();
+  if(e.key==='Enter'){
+    e.preventDefault(); // מונע click נוסף על כפתור ב-focus
+    finishSketch();
+  }
 });
 
 load();

@@ -276,25 +276,33 @@ itemsSel         = מכיל רק פריטי ליטוש/חיתוך (לא חיסו
 בטעינה מחדש — חוזרת. הנתונים ב-Firebase תקינים.
 
 ## סיבה
-**Race condition בין `finishSketch()` לבין `listenAllOrders` callback:**
+**שתי בעיות שרשרת:**
 
-1. `finishSketch()` קורא ל-`queue.splice(curIdx,1)` ולאחר 1600ms ל-`showOrder()`
-2. בינתיים, Firebase listener יורה (אחרי `updateStage`)
-3. Listener מוצא שה-`prevId` (ההזמנה שסיימנו) לא בתור → מבצע `curIdx=0; showOrder(queue[0])` באמצע הבאנר
-4. עכשיו `showOrder` נקרא פעמיים: פעם מהlistener ופעם מה-setTimeout
-5. הקריאה הכפולה גורמת לרנדור לא עקבי של הסידבר
+### בעיה עיקרית — קריאה כפולה ל-`finishSketch()`
+כשהכפתור "סיים סקיצה" ב-**focus** ומשתמש לוחץ Enter:
+1. `keydown` listener → `finishSketch()` קריאה #1
+2. Browser גם מפעיל `click` על כפתור ב-focus → `onclick` → `finishSketch()` קריאה #2
+
+כך `queue.splice(curIdx, 1)` רץ פעמיים:
+- splice #1: מוחק את A → queue=[B, C]
+- splice #2: מוחק את B → queue=[C]
+
+רק C נשאר!
+
+### בעיה משנית — race condition עם Firebase listener
+Firebase listener יורה בזמן הבאנר ומנסה לנווט לפני ה-setTimeout.
 
 ## פתרון
-דגל `_showingDoneBanner`:
-- מופעל ב-`finishSketch()` לפני הבאנר
-- כבה ב-setTimeout לאחר 1600ms
-- Firebase listener בודק: אם `_showingDoneBanner=true` — מרנדר סידבר בלבד, לא מנווט
-- רק ה-setTimeout מנווט לאחר הבאנר
+**שלושה שכבות הגנה:**
+1. `if(!curOrder || _showingDoneBanner) return;` בתחילת `finishSketch()` — חוסם קריאה כפולה
+2. `curOrder = null` מיד בתחילת הפונקציה — חוסם כל קריאה נוספת
+3. `e.preventDefault()` ב-keydown Enter — מונע `click` משוכפל מהכפתור
+4. `_showingDoneBanner` flag — מגביל Firebase listener לסידבר בלבד בזמן הבאנר
 
 ## כלל חדש
 ```
-כשיש animation/banner פעיל — Firebase listener לא ינווט.
-רק setTimeout/callback מפורש ינווט בסיומו.
+Enter על כפתור ב-focus = keydown + click = שתי קריאות!
+תמיד להוסיף e.preventDefault() וגם guard בפונקציה.
 ```
 
 ---
