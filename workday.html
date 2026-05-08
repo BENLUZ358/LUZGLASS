@@ -408,7 +408,7 @@
           <strong style="color:var(--chisum)">הגיע חיסום!</strong><br>
           <span id="chisumArrivedCount" style="font-size:12px;color:var(--muted)"></span>
         </div>
-        <button class="btn btn-purple" onclick="resetChisumList()" style="white-space:nowrap">✓ חיסום הגיע — אפס רשימה</button>
+        <button class="btn btn-purple" onclick="resetChisumList()" style="white-space:nowrap">✓ סיום בדיקה ואיפוס רשימה</button>
       </div>
       <div class="available-section">
         <div class="avail-title">רשימת חיסום</div>
@@ -1390,57 +1390,104 @@ function removeFromWork(id){
 // ═══════════════════════════════════════
 //  CHISUM TAB
 // ═══════════════════════════════════════
-let brokenItems = {}; // {orderId: [itemIdx,...]}
-let chisumOpen = {}; // {orderId: bool}
+let arrivedItems = {}; // {orderId: [itemIdx,...]} — סימוני "הגיע" של הסשן הנוכחי
+let chisumOpen   = {}; // {clientKey: bool}
 
-function toggleChisumOpen(ordId){
-  const id = String(ordId);
-  chisumOpen[id] = !chisumOpen[id];
+function toggleChisumOpen(key){
+  chisumOpen[key] = !chisumOpen[key];
   renderChisumTab();
 }
 
-// בונה html לכרטיס הזמנה בודדת בתוך דוח שחזר
-function _chisumOrderCardHtml(o){
-  const allChisumItems = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>!!it.chisum);
-  const hasBroken  = (brokenItems[String(o.id)]||[]).length > 0;
-  const brokenCount = (brokenItems[String(o.id)]||[]).length;
-  const isOpen = chisumOpen[String(o.id)]||false;
-  const itemsHtml = allChisumItems.map(it=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);background:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'rgba(231,76,60,0.04)':'#fff'}">
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:700;${(brokenItems[o.id]||[]).includes(it.globalIdx)?'color:#e74c3c;text-decoration:line-through':'color:#1a1714'}">${it.name||''}</div>
-        <div style="font-size:11px;color:#8a8278;margin-top:1px">${it.w||''}×${it.h||''} ס"מ</div>
-      </div>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${(brokenItems[o.id]||[]).includes(it.globalIdx)?'#e74c3c':'rgba(0,0,0,0.12)'};background:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'rgba(231,76,60,0.08)':'rgba(0,0,0,0.02)'}">
-        <input type="checkbox" style="width:15px;height:15px;accent-color:#e74c3c;cursor:pointer;"
-          onchange="toggleBroken('${o.id}',${it.globalIdx},this.checked)"
-          ${(brokenItems[o.id]||[]).includes(it.globalIdx)?'checked':''}>
-        <span style="font-size:12px;font-weight:600;color:${(brokenItems[o.id]||[]).includes(it.globalIdx)?'#e74c3c':'#8a8278'}">${(brokenItems[o.id]||[]).includes(it.globalIdx)?'נשבר':'הגיע'}</span>
-      </label>
-    </div>`).join('');
-  return `
-  <div style="border-bottom:1px solid rgba(0,0,0,0.06);">
-    <div data-oid="${o.id}" onclick="toggleChisumOpen(this.dataset.oid)" style="padding:12px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:${hasBroken?'rgba(231,76,60,0.04)':'#fff'}">
-      <div style="flex:1">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
-          <span style="font-size:13px;font-weight:700;color:#1a1714">${o.orderClient}</span>
-          <span style="font-size:10px;color:#b8922a;font-weight:700;background:rgba(184,146,42,0.1);padding:1px 6px;border-radius:3px">${o.orderNum||''}</span>
+function toggleArrived(orderId, itemIdx, checked){
+  const id  = String(orderId);
+  const idx = parseInt(itemIdx);
+  if(!arrivedItems[id]) arrivedItems[id] = [];
+  if(checked){ if(!arrivedItems[id].includes(idx)) arrivedItems[id].push(idx); }
+  else        { arrivedItems[id] = arrivedItems[id].filter(i => i !== idx); }
+  renderChisumTab();
+}
+
+function markAllClientArrived(clientKey, reportId, clientName){
+  const reportOrders = allOrders.filter(o =>
+    (o.stage||'') === 'chisum' &&
+    !!o.chisumArrived &&
+    o.orderClient === clientName &&
+    (reportId ? o.chisumReportId === reportId : !o.chisumReportId)
+  );
+  reportOrders.forEach(o => {
+    const sid = String(o.id);
+    const existingArrived = new Set((o.chisumArrivedIdxs||[]).map(Number));
+    const pendingIdxs = (o.items||[])
+      .map((it,i) => (!!it.chisum && !existingArrived.has(i)) ? i : -1)
+      .filter(i => i >= 0);
+    if(!arrivedItems[sid]) arrivedItems[sid] = [];
+    pendingIdxs.forEach(idx => { if(!arrivedItems[sid].includes(idx)) arrivedItems[sid].push(idx); });
+  });
+  renderChisumTab();
+}
+
+// כרטיס לקוח בתוך דוח בדיקה — מציג רק פריטים שטרם הגיעו
+function _chisumClientCardHtml(clientName, orders, reportId){
+  const clientKey = (reportId||'legacy') + '_' + clientName;
+  const isOpen    = chisumOpen[clientKey] !== false; // פתוח כברירת מחדל
+
+  let totalPending        = 0;
+  let sessionArrivedCount = 0;
+  let orderRows           = '';
+
+  orders.forEach(o => {
+    const sid             = String(o.id);
+    const existingArrived = new Set((o.chisumArrivedIdxs||[]).map(Number));
+    const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
+    const allChisumItems  = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>!!it.chisum);
+    const pendingItems    = allChisumItems.filter(it => !existingArrived.has(it.globalIdx));
+    if(!pendingItems.length) return;
+
+    totalPending        += pendingItems.length;
+    sessionArrivedCount += pendingItems.filter(it => sessionArrived.has(it.globalIdx)).length;
+
+    const itemsHtml = pendingItems.map(it => {
+      const isChecked = sessionArrived.has(it.globalIdx);
+      return `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${isChecked?'rgba(39,174,96,0.04)':'#fff'}">
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:700;color:${isChecked?'#27ae60':'#1a1714'}">${it.name||''}</div>
+          <div style="font-size:10px;color:#8a8278">${it.w||''}×${it.h||''} ס"מ</div>
         </div>
-        <div style="font-size:11px;color:#8a8278">${o.sketchName||o.type||''}</div>
-        <div style="display:flex;align-items:center;gap:5px;margin-top:4px">
-          <span style="font-size:10px;font-weight:700;color:#8e44ad;background:rgba(142,68,173,0.1);padding:1px 6px;border-radius:3px">🔥 ${allChisumItems.length} פריטים</span>
-          ${hasBroken?`<span style="font-size:10px;font-weight:700;color:#e74c3c;background:rgba(231,76,60,0.1);padding:1px 6px;border-radius:3px">❌ ${brokenCount} נשברו</span>`:'<span style="font-size:10px;color:#27ae60;background:rgba(39,174,96,0.1);padding:1px 6px;border-radius:3px">✓ הכל הגיע</span>'}
-        </div>
-      </div>
-      <span style="font-size:18px;color:#8a8278;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${isChecked?'#27ae60':'rgba(0,0,0,0.12)'};background:${isChecked?'rgba(39,174,96,0.08)':'rgba(0,0,0,0.02)'}">
+          <input type="checkbox" style="width:15px;height:15px;accent-color:#27ae60;cursor:pointer;"
+            onchange="toggleArrived('${o.id}',${it.globalIdx},this.checked)"
+            ${isChecked?'checked':''}>
+          <span style="font-size:11px;font-weight:600;color:${isChecked?'#27ae60':'#8a8278'}">${isChecked?'הגיע ✓':'ממתין'}</span>
+        </label>
+      </div>`;
+    }).join('');
+
+    orderRows += `
+    <div style="padding:5px 16px 2px;font-size:10px;font-weight:700;color:#b8922a;letter-spacing:0.05em;background:#fafaf8;border-bottom:1px solid rgba(0,0,0,0.04);">
+      ${o.sketchName||o.type||'סקיצה'}${o.orderNum?' · '+o.orderNum:''}
     </div>
-    ${isOpen ? `
-    <div style="background:#fafafa;padding:4px 0;">
-      <div style="padding:6px 16px 4px;font-size:9px;font-weight:700;color:#8a8278;letter-spacing:0.1em;text-transform:uppercase">סמן פריטים שנשברו / לא הגיעו</div>
-      ${itemsHtml||'<div style="padding:10px 16px;font-size:12px;color:#8a8278">אין פריטי חיסום</div>'}
-    </div>` : ''}
+    ${itemsHtml}`;
+  });
+
+  if(!totalPending) return '';
+
+  const allChecked = sessionArrivedCount === totalPending;
+  return `
+  <div style="border-top:1px solid rgba(142,68,173,0.1);">
+    <div onclick="toggleChisumOpen('${clientKey}')" style="padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:rgba(142,68,173,0.02);">
+      <div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <span style="font-size:13px;font-weight:900;color:#1a1714">👤 ${clientName}</span>
+        <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:rgba(142,68,173,0.1);color:#8e44ad'}">${sessionArrivedCount}/${totalPending} הגיעו</span>
+      </div>
+      <button onclick="event.stopPropagation();markAllClientArrived('${clientKey}','${reportId||''}','${clientName}')"
+        style="padding:4px 10px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:10px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ סמן הכל</button>
+      <span style="font-size:16px;color:#8a8278;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
+    </div>
+    ${isOpen?`<div style="background:#fff;">${orderRows}</div>`:''}
   </div>`;
 }
+
 
 function renderChisumTab(){
   const el = document.getElementById('chisumOrders');
@@ -1496,23 +1543,43 @@ function renderChisumTab(){
         </div>
       </div>`;
     } else {
-      // ── כרטיס דוח שחזר — לעיבוד נשברים ──
+      // ── כרטיס דוח שחזר — בדיקה פעילה לפי לקוחות ──
+      const clientMap = {};
+      orders.forEach(o => {
+        const c = o.orderClient || '—';
+        if(!clientMap[c]) clientMap[c] = [];
+        clientMap[c].push(o);
+      });
+      const clientCardsHtml = Object.entries(clientMap)
+        .map(([cn, ords]) => _chisumClientCardHtml(cn, ords, reportId))
+        .filter(Boolean)
+        .join('');
+
+      // ספור כמה פריטים בסשן זה כבר סומנו
+      let totalPend = 0, sessionMrk = 0;
+      orders.forEach(o => {
+        const sid = String(o.id);
+        const ex = new Set((o.chisumArrivedIdxs||[]).map(Number));
+        const pend = (o.items||[]).filter((it,i) => !!it.chisum && !ex.has(i)).length;
+        totalPend   += pend;
+        sessionMrk  += Math.min((arrivedItems[sid]||[]).length, pend);
+      });
+      const progressTxt = totalPend ? `${sessionMrk}/${totalPend} פריטים סומנו` : 'כל הפריטים הגיעו';
+
       arrivedHtml += `
       <div style="margin:0 12px 14px;border:1.5px solid rgba(39,174,96,0.3);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">
-        <div style="padding:12px 16px;background:rgba(39,174,96,0.05);display:flex;align-items:center;gap:10px;">
-          <div style="flex:1">
-            <div style="font-size:13px;font-weight:900;color:var(--green)">✅ ${label} — חזר מהמפעל</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:1px">${orders.length} הזמנות · סמן פריטים שנשברו</div>
-          </div>
+        <div style="padding:12px 16px;background:rgba(39,174,96,0.05);">
+          <div style="font-size:13px;font-weight:900;color:var(--green)">✅ ${label} — בדיקה פעילה</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">${orders.length} סקיצות · ${progressTxt}</div>
         </div>
-        ${orders.map(o => _chisumOrderCardHtml(o)).join('')}
+        ${clientCardsHtml || '<div style="padding:12px 16px;font-size:12px;color:#27ae60">✓ כל הפריטים סומנו — לחץ סיום בדיקה</div>'}
       </div>`;
     }
   });
 
   let html = '';
   if(awaitingHtml) html += `<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">⏳ ממתינות לחזרה מהמפעל</div>` + awaitingHtml;
-  if(arrivedHtml)  html += `<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">✅ חזרו מהמפעל — לסימון נשברים</div>` + arrivedHtml;
+  if(arrivedHtml)  html += `<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">🔍 בדיקה פעילה — סמן פריטים שהגיעו</div>` + arrivedHtml;
   el.innerHTML = html;
 }
 
@@ -1554,47 +1621,50 @@ function markChisumReportArrived(reportId, reportNum){
   document.body.appendChild(ov);
 }
 
-function toggleBroken(orderId, itemIdx, checked){
-  const id = String(orderId);
-  if(!brokenItems[id]) brokenItems[id]=[];
-  const idx = parseInt(itemIdx);
-  if(checked){
-    if(!brokenItems[id].includes(idx)) brokenItems[id].push(idx);
-  } else {
-    brokenItems[id] = brokenItems[id].filter(i=>i!==idx);
-  }
-  // update broken count badge without full re-render
-  renderChisumTab();
-}
-
 function resetChisumList(){
-  const inChisum = allOrders.filter(o => (o.stage||'') === 'chisum' && !!o.chisumArrived);
-  if(!inChisum.length){showToast('אין הזמנות בחיסום');return;}
-  
-  // Build preview
-  const okOrders = inChisum.filter(o=>!(brokenItems[o.id]||[]).length);
-  const brokenOrders = inChisum.filter(o=>(brokenItems[o.id]||[]).length>0);
-  
-  const ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
-  ov.innerHTML=`
+  const chisumOrds = allOrders.filter(o => (o.stage||'') === 'chisum' && !!o.chisumArrived);
+  if(!chisumOrds.length){ showToast('אין הזמנות בבדיקה'); return; }
+
+  const doneOrds = [], partialOrds = [], unchangedOrds = [];
+
+  chisumOrds.forEach(o => {
+    const sid             = String(o.id);
+    const existingArrived = new Set((o.chisumArrivedIdxs||[]).map(Number));
+    const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
+    const allArrivedNow   = new Set([...existingArrived, ...sessionArrived]);
+    const chisumIdxs      = (o.items||[]).reduce((a,it,i)=>{ if(!!it.chisum) a.push(i); return a; },[]);
+    if(!chisumIdxs.length) return;
+
+    const allDone = chisumIdxs.every(i => allArrivedNow.has(i));
+    if(allDone)                   doneOrds.push(o);
+    else if(sessionArrived.size)  partialOrds.push(o);
+    else                          unchangedOrds.push(o);
+  });
+
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML = `
     <div style="background:#fff;border-radius:12px;max-width:380px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
       <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;">
-        <h3 style="color:#f0ede8;font-size:15px;margin:0;">אפס רשימת חיסום</h3>
+        <h3 style="color:#f0ede8;font-size:15px;margin:0;">סיום בדיקה ואיפוס רשימה</h3>
         <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
       </div>
       <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
-        ${okOrders.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
-          <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">✅ ${okOrders.length} הזמנות מוכנות — תישלח הודעה</div>
-          ${okOrders.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
+        ${doneOrds.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
+          <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">✅ ${doneOrds.length} סקיצות הושלמו — תישלח הודעה ללקוח</div>
+          ${doneOrds.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
         </div>`:''}
-        ${brokenOrders.length?`<div style="padding:10px 14px;background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:6px;">
-          <div style="font-size:12px;font-weight:700;color:#e74c3c;margin-bottom:6px;">❌ ${brokenOrders.length} הזמנות עם נשברים — לא יישלחו הודעות</div>
-          ${brokenOrders.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
+        ${partialOrds.length?`<div style="padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.2);border-radius:6px;">
+          <div style="font-size:12px;font-weight:700;color:#b8922a;margin-bottom:6px;">⚠️ ${partialOrds.length} סקיצות חלקיות — פריטים שהגיעו יישמרו, החסרים ישארו</div>
+          ${partialOrds.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
         </div>`:''}
+        ${unchangedOrds.length?`<div style="padding:10px 14px;background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);border-radius:6px;">
+          <div style="font-size:12px;font-weight:700;color:#8a8278;margin-bottom:6px;">⏳ ${unchangedOrds.length} סקיצות — לא סומנו, אין שינוי</div>
+        </div>`:''}
+        ${!doneOrds.length&&!partialOrds.length?`<div style="padding:12px;text-align:center;color:#8a8278;font-size:13px;">לא סומנו פריטים בסשן זה</div>`:''}
         <div style="display:flex;gap:8px;margin-top:4px;">
           <button onclick="confirmResetChisum()" style="flex:2;padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
-            ✓ שלח הודעות ואפס
+            ✓ אשר סיום בדיקה
           </button>
           <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:13px;background:#f5f2ed;color:#555;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.1);cursor:pointer;border-radius:6px;">
             ביטול
@@ -1606,59 +1676,44 @@ function resetChisumList(){
 }
 
 function confirmResetChisum(){
-  document.querySelectorAll('[style*=fixed]').forEach(el=>el.remove());
-  const inChisum = allOrders.filter(o => (o.stage||'') === 'chisum' && !!o.chisumArrived);
-  const okOrders = inChisum.filter(o=>!(brokenItems[o.id]||[]).length);
-  const brokenOrds = inChisum.filter(o=>(brokenItems[o.id]||[]).length>0);
-  
-  // Send WhatsApp to OK orders
-  okOrders.forEach((o,i)=>{
-    setTimeout(()=>{
-      window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
-    }, i*600);
-  });
-  
-  // Send broken notifications
-  brokenOrds.forEach((o,i)=>{
-    const brk = (o.items||[]).filter((_,idx)=>(brokenItems[o.id]||[]).includes(idx));
-    setTimeout(()=>{
-      window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'broken',brk))}`, '_blank');
-    }, (okOrders.length+i)*600);
-  });
-  
-  // Update statuses - broken is at ITEM level, not order level
-  allOrders.forEach(o=>{
-    if((o.stage||'') !== 'chisum') return;
-    const brokenIdxs = brokenItems[String(o.id)]||[];
-    if(brokenIdxs.length>0){
-      // יש פריטים נשברים — ההזמנה חוזרת לייצור חלקי
-      o.status = 'ירד לביצוע';
-      // סמן אלו פריטים נשברו
-      (o.items||[]).forEach((it,idx)=>{
-        if(brokenIdxs.includes(idx)) it.broken=true;
-      });
-    } else if(classifyOrder(o)==='mixed'){
-      o.status = 'חזר מחיסום';
-    } else {
-      o.status = 'מוכן לאיסוף';
+  document.querySelectorAll('[style*=fixed]').forEach(el => el.remove());
+  const chisumOrds  = allOrders.filter(o => (o.stage||'') === 'chisum' && !!o.chisumArrived);
+  let doneCount     = 0;
+  let partialCount  = 0;
+  let msgCount      = 0;
+
+  chisumOrds.forEach(o => {
+    const sid             = String(o.id);
+    const existingArrived = new Set((o.chisumArrivedIdxs||[]).map(Number));
+    const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
+    const allArrivedNow   = new Set([...existingArrived, ...sessionArrived]);
+    const chisumIdxs      = (o.items||[]).reduce((a,it,i)=>{ if(!!it.chisum) a.push(i); return a; },[]);
+    if(!chisumIdxs.length) return;
+
+    const allDone = chisumIdxs.every(i => allArrivedNow.has(i));
+
+    if(allDone){
+      doneCount++;
+      // כל הפריטים הגיעו — הזמנה מוכנה לאיסוף + הודעה
+      updateOrder(sid, { stage: 'done', chisumArrivedIdxs: null })
+        .catch(e => console.error('confirmReset done:', e));
+      setTimeout(() => {
+        window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
+      }, msgCount++ * 600);
+    } else if(sessionArrived.size > 0){
+      partialCount++;
+      // פריטים חלקיים — שמור התקדמות ב-Firebase, ההזמנה נשארת בחיסום
+      const obj = {};
+      allArrivedNow.forEach(i => { obj[i] = true; });
+      updateOrder(sid, { chisumArrivedIdxs: obj })
+        .catch(e => console.error('confirmReset partial:', e));
     }
   });
-  okOrders.forEach(o => saveOrderToStorage(o)); // Firebase
-  
-  // הסר מ-inChisum רק הזמנות שהושלמו (ללא שבורים)
-  const okIds = okOrders.map(o=>String(o.id));
-  workDay.inChisum = workDay.inChisum.filter(id=>!okIds.includes(String(id)));
-  // [תיקון באג 1] — סמן stage='done' להזמנות שסיימו חיסום
-  okOrders.forEach(o => markStageDone(String(o.id)));
 
-  // שמור brokenItems רק להזמנות שנשארו
-  const remainingIds = workDay.inChisum.map(String);
-  Object.keys(brokenItems).forEach(id=>{
-    if(!remainingIds.includes(String(id))) delete brokenItems[id];
-  });
-  saveWorkDay();
-  const pendingMsg = brokenOrds.length ? ` · ${brokenOrds.length} ממתינות לפריטים חסרים` : '';
-  showToast(`✓ ${okOrders.length} הודעות נשלחו${pendingMsg}`);
+  arrivedItems = {};
+  const msg  = doneCount   ? `✓ ${doneCount} סקיצות הושלמו` : '';
+  const msg2 = partialCount ? ` · ${partialCount} עם פריטים חסרים` : '';
+  showToast((msg || '✓ בדיקה הושלמה') + msg2);
   renderAll();
 }
 
@@ -1668,7 +1723,7 @@ function checkChisumArrived(){
   if(cnt > 0){
     bar.style.display = 'flex';
     document.getElementById('chisumArrivedCount').textContent =
-      `${cnt} הזמנות חזרו — סמן נשברים ולחץ אפס`;
+      `${cnt} סקיצות בבדיקה — סמן פריטים שהגיעו`;
   } else {
     bar.style.display = 'none';
   }
