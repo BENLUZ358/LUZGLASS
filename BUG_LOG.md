@@ -276,33 +276,34 @@ itemsSel         = מכיל רק פריטי ליטוש/חיתוך (לא חיסו
 בטעינה מחדש — חוזרת. הנתונים ב-Firebase תקינים.
 
 ## סיבה
-**שתי בעיות שרשרת:**
+**Firebase Realtime Database מפעיל listener סינכרונית בתוך `.update()`**
 
-### בעיה עיקרית — קריאה כפולה ל-`finishSketch()`
-כשהכפתור "סיים סקיצה" ב-**focus** ומשתמש לוחץ Enter:
-1. `keydown` listener → `finishSketch()` קריאה #1
-2. Browser גם מפעיל `click` על כפתור ב-focus → `onclick` → `finishSketch()` קריאה #2
+הסדר המדויק:
+1. `finishSketch()` רץ, קורא ל-`updateStage(A,'opty')`
+2. **בתוך** `updateStage`, הקריאה ל-`_lgDb.ref(...).update()` מפעילה
+   את ה-`on('value')` listener **סינכרונית** (עוד לפני שה-await מחזיר)
+3. Listener בונה מחדש: `queue = [B, C]` — כי A כבר stage='opty' לוקלית
+4. חזרנו ל-`finishSketch()` — `queue` כבר `[B,C]`
+5. `queue.splice(0, 1)` על `[B,C]` → מוחק את **B**! queue=`[C]`
 
-כך `queue.splice(curIdx, 1)` רץ פעמיים:
-- splice #1: מוחק את A → queue=[B, C]
-- splice #2: מוחק את B → queue=[C]
-
-רק C נשאר!
-
-### בעיה משנית — race condition עם Firebase listener
-Firebase listener יורה בזמן הבאנר ומנסה לנווט לפני ה-setTimeout.
+הסיבה שהבאג עקבי (לא race condition): Firebase מפעיל listener **תמיד** סינכרונית לפני שה-splice רץ.
 
 ## פתרון
-**שלושה שכבות הגנה:**
-1. `if(!curOrder || _showingDoneBanner) return;` בתחילת `finishSketch()` — חוסם קריאה כפולה
-2. `curOrder = null` מיד בתחילת הפונקציה — חוסם כל קריאה נוספת
-3. `e.preventDefault()` ב-keydown Enter — מונע `click` משוכפל מהכפתור
-4. `_showingDoneBanner` flag — מגביל Firebase listener לסידבר בלבד בזמן הבאנר
+**הסרת `queue.splice()` לחלוטין מ-`finishSketch()`.**
 
-## כלל חדש
+Firebase listener כבר מוחק את ההזמנה המסיימת מה-queue סינכרונית.
+ה-`queue.splice()` היה מיותר ומזיק — מחק את ההזמנה הבאה.
+
+בגיבוי (אם Firebase איטי), ה-setTimeout מסנן את ההזמנה המסיימת:
+```js
+queue = queue.filter(o => o.id !== finishedId);
 ```
-Enter על כפתור ב-focus = keydown + click = שתי קריאות!
-תמיד להוסיף e.preventDefault() וגם guard בפונקציה.
+
+## כללים חדשים
+```
+1. Firebase listener יורה סינכרונית בתוך update() — queue מתעדכן לפני שורת הקוד הבאה.
+2. לעולם לא לשנות queue ידנית אחרי updateStage() — Firebase כבר עשה זאת.
+3. אם צריך לנקות queue ב-setTimeout — להשתמש ב-filter לפי ID, לא splice לפי index.
 ```
 
 ---

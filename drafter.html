@@ -437,21 +437,23 @@ function jumpTo(i){
 
 // ═══ FINISH SKETCH ═══
 function finishSketch(){
-  // מגן כנגד קריאה כפולה: Enter (keydown) + click של כפתור ב-focus = 2 קריאות
   if(!curOrder || _showingDoneBanner) return;
   const finishedId=curOrder.id;
   const finishedClient=curOrder.orderClient;
-  curOrder = null; // חסום כל קריאה נוספת לפני setTimeout
+  curOrder = null;
   _showingDoneBanner = true;
+  // updateStage מפעיל את ה-Firebase listener סינכרונית —
+  // ה-listener כבר מסיר את ההזמנה מה-queue.
+  // אסור לקרוא ל-queue.splice() אחרי זה — זה ימחק את ההזמנה הבאה.
   updateStage(finishedId,'opty').catch(e=>console.error('finishSketch:',e));
   document.getElementById('sketchCanvas').querySelectorAll('img.sketch-img').forEach(el=>el.remove());
   document.getElementById('doneTitle').textContent=finishedClient+' — עובר ל-OptyWay ✓';
   document.getElementById('doneBanner').classList.add('show');
-  // הסר מהתור המקומי מיידית (Firebase listener יסנכרן בנפרד)
-  queue.splice(curIdx,1);
   setTimeout(()=>{
     _showingDoneBanner = false;
     document.getElementById('doneBanner').classList.remove('show');
+    // נקה את ההזמנה המסיימת אם Firebase איטי ועדיין לא הסיר אותה
+    queue = queue.filter(o => o.id !== finishedId);
     if(queue.length>0){
       if(curIdx>=queue.length) curIdx=queue.length-1;
       showOrder(queue[curIdx]);
