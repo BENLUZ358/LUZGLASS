@@ -308,6 +308,32 @@ queue = queue.filter(o => o.id !== finishedId);
 
 ---
 
+# 🐞 Bug 16 — "בחר הכל" מוחק הזמנות מהרשימה
+
+## תיאור
+לחיצה על "☑️ בחר הכל" בטאב "בנה יום עבודה" גרמה להיעלמות של כל ההזמנות מהרשימה.
+
+## סיבה
+`selectAllFiltered()` כתבה ישירות ל-`workDay.inWork` ו-`workDay.itemsSel`,
+קראה ל-`saveWorkDay()` (Firebase), ואז ניווטה ל-`setTab('work')`.
+כתוצאה מכך, ההזמנות "הועברו לעבודה" וסוננו מרשימת הבנייה.
+הפונקציה עקפה לחלוטין את זרימת הטיוטה.
+
+## פתרון
+שכתוב `selectAllFiltered()` כך שתוסיף לטיוטה בלבד (כמו `addToDraft()`):
+- לולאה על `getFiltered()` + פילטר זכוכית
+- דילוג על פריטים שכבר בטיוטה או ב-`itemsSel`
+- `draftItems.push(...)` בלבד — אין כתיבה ל-Firebase, אין שינוי `inWork`
+- `updateDraftBadge()` + `renderAll()` + toast
+
+## כלל
+```
+selectAll / בחר הכל = הוספה לטיוטה בלבד.
+לעולם לא לכתוב ל-inWork/Firebase ישירות מ-selectAll.
+```
+
+---
+
 # 📌 כלל זהב
 
 אם באג כבר קרה פעם אחת  

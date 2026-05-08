@@ -758,30 +758,40 @@ function selectAllFiltered(){
   const filtered = getFiltered();
   const glassFilter = document.getElementById('fGlass')?.value || '';
   let added = 0;
-  filtered.forEach(o=>{
-    if(o.items && o.items.length){
-      // auto-select matching items
-      if(!selectedItems[o.id]) selectedItems[o.id] = new Set();
-      o.items.forEach((item,i)=>{
-        const fg = item.glassFullName||item.name||'';
-        if(!glassFilter || fg.includes(glassFilter)){
-          selectedItems[o.id].add(i);
-          added++;
-        }
+
+  filtered.forEach(o => {
+    const sid = String(o.id);
+    if(!o.items || !o.items.length) return;
+
+    o.items.forEach((item, i) => {
+      // כבד את פילטר הזכוכית
+      const fg = item.glassFullName || item.name || '';
+      if(glassFilter && !fg.includes(glassFilter)) return;
+      // דלג על פריטים שכבר בטיוטה
+      if(draftItems.some(d => d.orderId === sid && d.itemIdx === i)) return;
+      // דלג על פריטים שכבר ב-itemsSel
+      const _sr = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
+      const _si = Array.isArray(_sr) ? _sr.map(Number) : Object.values(_sr).map(Number);
+      if(_si.includes(i)) return;
+
+      const itemType = item.chisum ? 'חיסום' : (item.litush ? 'ליטוש' : 'חיתוך');
+      draftItems.push({
+        orderId:   sid,
+        itemIdx:   i,
+        orderName: o.sketchName || o.orderNum || sid,
+        glass:     item.glassFullName || item.name || o.glass || '',
+        type:      itemType,
+        w:         item.w || '',
+        h:         item.h || '',
       });
-      if(!workDay.inWork.map(String).includes(String(o.id))) workDay.inWork.push(String(o.id));
-      if(!workDay.itemsSel) workDay.itemsSel = {};
-      workDay.itemsSel[String(o.id)] = [...selectedItems[o.id]];
-    } else {
-      if(!workDay.inWork.map(String).includes(String(o.id))) workDay.inWork.push(String(o.id));
       added++;
-    }
+    });
   });
-  selectedItems = {};
-  saveWorkDay();
-  document.getElementById('finishBtn').disabled = workDay.inWork.length === 0;
-  showToast(`✓ ${added} פריטים נוספו לעבודה`);
-  setTab('work');
+
+  if(!added){ showToast('אין פריטים חדשים להוסיף'); return; }
+  updateDraftBadge();
+  renderAll();
+  showToast(`✓ ${added} פריטים נוספו לטיוטה`);
 }
 
 function renderAvailable(){
