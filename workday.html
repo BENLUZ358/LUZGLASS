@@ -420,20 +420,22 @@
 
   <!-- SUMMARY BAR -->
   <div class="summary-bar">
-    <div class="sum-item">
-      <div class="sum-dot" style="background:var(--cut)"></div>
-      <span class="sum-count" id="sb-cut">0</span>
-      <span class="sum-label">חיתוך/ליטוש</span>
-    </div>
-    <div class="sum-item">
-      <div class="sum-dot" style="background:var(--chisum)"></div>
-      <span class="sum-count" id="sb-chisum">0</span>
-      <span class="sum-label">חיסום</span>
-    </div>
-    <div class="sum-item">
-      <div class="sum-dot" style="background:var(--mixed)"></div>
-      <span class="sum-count" id="sb-mixed">0</span>
-      <span class="sum-label">מעורב</span>
+    <div id="sumTypeBar" style="display:flex;align-items:center;gap:12px;">
+      <div class="sum-item">
+        <div class="sum-dot" style="background:var(--cut)"></div>
+        <span class="sum-count" id="sb-cut">0</span>
+        <span class="sum-label">חיתוך/ליטוש</span>
+      </div>
+      <div class="sum-item">
+        <div class="sum-dot" style="background:var(--chisum)"></div>
+        <span class="sum-count" id="sb-chisum">0</span>
+        <span class="sum-label">חיסום</span>
+      </div>
+      <div class="sum-item">
+        <div class="sum-dot" style="background:var(--mixed)"></div>
+        <span class="sum-count" id="sb-mixed">0</span>
+        <span class="sum-label">מעורב</span>
+      </div>
     </div>
     <div class="sum-spacer"></div>
     <button id="draftPreviewBtn" onclick="openDraftPreview()"
@@ -649,6 +651,8 @@ function setTab(tab){
   if(fb) fb.style.display = tab==='build'?'flex':'none';
   const finishBtn = document.getElementById('finishBtn');
   if(finishBtn) finishBtn.style.display = (tab==='build' || tab==='chisum') ? 'none' : '';
+  const stb = document.getElementById('sumTypeBar');
+  if(stb) stb.style.display = (tab === 'chisum') ? 'none' : 'flex';
   renderAll();
 }
 
@@ -1751,16 +1755,25 @@ function updateCounts(){
     }
     return true;
   });
-  document.getElementById('cnt-build').textContent = avail.length;
-  document.getElementById('cnt-work').textContent  = workDay.inWork.length;
-  // הטאב "חיסום" מציג הזמנות עם stage='chisum' (אחרי תחנת בדיקה)
-  const chisumOrdsForCount = allOrders.filter(o => (o.stage||'') === 'chisum');
+  // cnt-build: ספירת פריטים (לא הזמנות) — כל הפריטים של הזמנות זמינות
+  let buildItemCount = 0;
+  avail.forEach(o => { buildItemCount += (o.items||[]).length; });
+  document.getElementById('cnt-build').textContent = buildItemCount;
+
+  // cnt-work: ספירת פריטים פעילים (ליטוש בלבד) ביום עבודה
+  let workItemCount = 0;
+  workDay.inWork.forEach(sid => {
+    const o = allOrders.find(x => String(x.id) === String(sid));
+    if(o) workItemCount += getActiveItemsForOrder(o).length;
+  });
+  document.getElementById('cnt-work').textContent = workItemCount;
+
+  // cnt-chisum: ספירת פריטי חיסום שטרם הגיעו (מחסיר פריטים שכבר סומנו כ"הגיע")
   let chisumItemCount = 0;
-  chisumOrdsForCount.forEach(o => {
-    const sid = String(o.id);
-    const selIdxs = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
-    const items = selIdxs.length ? selIdxs.map(i=>(o.items||[])[Number(i)]).filter(Boolean) : (o.items||[]);
-    chisumItemCount += items.filter(it=>it&&!!it.chisum).length;
+  allOrders.filter(o => (o.stage||'') === 'chisum').forEach(o => {
+    const chisumItems   = (o.items||[]).filter(it => !!it.chisum);
+    const arrivedCount  = (o.chisumArrivedIdxs||[]).length;
+    chisumItemCount += Math.max(0, chisumItems.length - arrivedCount);
   });
   document.getElementById('cnt-chisum').textContent = chisumItemCount;
 }
