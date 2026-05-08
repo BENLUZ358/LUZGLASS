@@ -440,10 +440,6 @@
       style="background:#fff;color:#1a1714;border:1px solid #ccc;padding:10px 16px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-left:8px;display:none;">
       📋 טיוטה <span id="draftCount" style="background:var(--gold);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-right:4px;">0</span>
     </button>
-    <button id="startWorkBtn" onclick="handleWorkdayStart()" disabled
-      style="background:var(--gold);color:#1a1714;border:none;padding:10px 20px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-left:8px;opacity:0.5;">
-      ▶ הורד לעבודה
-    </button>
     <button class="btn btn-dark" id="finishBtn" onclick="finishDay()" disabled>
       ✅ סיים יום עבודה
     </button>
@@ -651,11 +647,8 @@ function setTab(tab){
   });
   const fb = document.getElementById('filterBar');
   if(fb) fb.style.display = tab==='build'?'flex':'none';
-  // הצג כפתורים נכונים לפי לשונית
   const finishBtn = document.getElementById('finishBtn');
-  const startBtn  = document.getElementById('startWorkBtn');
   if(finishBtn) finishBtn.style.display = (tab==='build' || tab==='chisum') ? 'none' : '';
-  if(startBtn)  startBtn.style.display  = tab==='build' ? ''     : 'none';
   renderAll();
 }
 
@@ -1049,8 +1042,6 @@ function addSingleItem(orderId, itemIdx){
   }
   saveWorkDay();
   document.getElementById('finishBtn').disabled = false;
-  const swb=document.getElementById('startWorkBtn');
-  if(swb){swb.disabled=false;swb.style.opacity='1';}
   showToast('✓ פריט נוסף ליום העבודה');
   renderAll();
 }
@@ -1092,8 +1083,6 @@ function addItemsToWork(orderId){
   selectedItems[orderId] = new Set();
   saveWorkDay();
   document.getElementById('finishBtn').disabled = false;
-  const swb3=document.getElementById('startWorkBtn');
-  if(swb3){swb3.disabled=false;swb3.style.opacity='1';}
   showToast(`✓ ${selSet.size} פריטים נוספו לעבודה`);
   renderAll();
 }
@@ -1111,8 +1100,6 @@ function addWholeOrder(orderId){
   expandedOrders.delete(orderId);
   saveWorkDay();
   document.getElementById('finishBtn').disabled = false;
-  const swb2=document.getElementById('startWorkBtn');
-  if(swb2){swb2.disabled=false;swb2.style.opacity='1';}
   showToast('✓ הזמנה שלמה נוספה');
   renderAll();
 }
@@ -1791,10 +1778,6 @@ function handleWorkdayStart(){
   });
 
   saveWorkDay();
-
-  // נטרל כפתור הורדה, אפשר סיום
-  const swb = document.getElementById('startWorkBtn');
-  if(swb){swb.disabled=true;swb.style.opacity='0.5';}
 
   const _chisumSent = workDay.inChisum.length + (workDay.pendingChisum||[]).length;
   const _litushCount = workDay.inWork.length;
