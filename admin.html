@@ -372,6 +372,132 @@ function load() {
 }
 
 // ══════════════════════════════════════════════════
+//  מחירון — חישוב וחשבונית
+// ══════════════════════════════════════════════════
+
+// מצא price-item id לפי שם זכוכית (התאמה לפי מילות מפתח)
+function findPriceItem(glassName){
+  if(!glassName) return null;
+  const n = glassName.toLowerCase().replace(/"/g,'');
+  if(n.includes('מראה') || n.includes('mir')){
+    if(n.includes('ברונז')||n.includes('brnz')) return 'mir-5-brnz';
+    if(n.includes('אפור')||n.includes('gray')||n.includes('gr')) return 'mir-5-gray';
+    return 'mir-5-pol';
+  }
+  const mmM = n.match(/(\d+)\s*מ/) || n.match(/^(\d+)/);
+  const mm  = mmM ? parseInt(mmM[1]) : 8;
+  const isTmp = n.includes('מחוסם')||n.includes('smh')||n.endsWith('mh')||n.includes('חיסום');
+  const isKlir= n.includes('קליר')||n.includes('klir')||n.includes('cm');
+  const isAfor= n.includes('אפור')||n.includes('gray');
+  if(isTmp){
+    if(mm<=6) return 'tmp-6';
+    if(mm>=15&&isKlir) return 'tmp-15-klir';
+    if(mm>=10&&isAfor) return 'tmp-10-gray';
+    if(isKlir) return mm>=10?'tmp-10':'tmp-8-klir';
+    return mm>=10?'tmp-10':'tmp-8';
+  }
+  const map={4:'cl-4-pol',5:'cl-5-pol',6:'cl-6-pol',8:'cl-8-pol',10:'cl-10-pol',12:'cl-12-pol'};
+  return map[mm]||'cl-8-pol';
+}
+
+// חשב מחיר להזמנה לפי פריטים ומחירון
+function lgCalcOrderTotal(order){
+  if(!(order.items||[]).length) return order.total||0;
+  const clientName = order.orderClient||'';
+  const cp = clientPrices[clientName]||{};
+  let total=0;
+  (order.items||[]).forEach(item=>{
+    const name = item.glassFullName||item.name||'';
+    const pid  = findPriceItem(name);
+    if(!pid) return;
+    const ppm2 = parseFloat(cp[pid]||globalPrices[pid]||0);
+    if(!ppm2) return;
+    const area = ((item.w||0)/100) * ((item.h||0)/100);
+    total += area * ppm2;
+  });
+  return Math.round(total);
+}
+
+// Popup שאלה: "האם להעביר לתשלום/חשבונית?" לפני stage=done
+function showInvoicePrompt(order, newStage){
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="font-size:26px;text-align:center;margin-bottom:12px;">🧾</div>
+      <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">האם להעביר לתשלום / חשבונית?</div>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${order.orderClient||''} · ${order.orderNum||''}</div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}');"
+          style="flex:1;padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ כן</button>
+        <button onclick="this.closest('[style*=fixed]').remove();updateStage('${order.id}','${newStage}').catch(e=>console.error(e));"
+          style="flex:1;padding:13px;background:#f0ede8;color:#555;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">לא</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+// מסך תצוגת חשבונית (מוכן לחיבור API)
+function openInvoicePreview(orderId){
+  const o = orders.find(x => x.id === String(orderId));
+  if(!o) return;
+  const clientName = o.orderClient||'';
+  const cp = clientPrices[clientName]||{};
+  let itemsHtml='', calcTotal=0;
+  (o.items||[]).forEach(item=>{
+    const name = item.glassFullName||item.name||'—';
+    const pid  = findPriceItem(name);
+    const ppm2 = pid ? parseFloat(cp[pid]||globalPrices[pid]||0) : 0;
+    const area = ((item.w||0)/100)*((item.h||0)/100);
+    const price = ppm2 ? Math.round(area*ppm2) : null;
+    if(price) calcTotal+=price;
+    itemsHtml+=`
+    <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px;">
+      <div style="flex:1">
+        <div style="font-weight:700">${name}</div>
+        <div style="color:#8a8278;margin-top:1px">${item.w||''}×${item.h||''} ס"מ · ${area.toFixed(2)} מ"ר</div>
+      </div>
+      <div style="font-weight:700;color:#b8922a;white-space:nowrap">${price?'₪'+price.toLocaleString():'לפי הצעה'}</div>
+    </div>`;
+  });
+  if(!itemsHtml) itemsHtml='<div style="padding:14px;color:#8a8278;text-align:center;font-size:13px">אין פריטים מוזנים</div>';
+  const displayTotal = calcTotal || o.total || 0;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:601;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:460px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.35);display:flex;flex-direction:column;">
+      <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+        <span style="font-size:15px;font-weight:900;color:#f0ede8;">🧾 תצוגת חשבונית</span>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:18px 20px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+          <span style="font-size:14px;font-weight:900">${clientName}</span>
+          <span style="font-size:11px;color:#8a8278">${o.orderNum||''} · ${o.date||''}</span>
+        </div>
+        <div style="font-size:11px;color:#8a8278;margin-bottom:16px">${o.sketchName||o.type||''}</div>
+        <div style="border:1px solid rgba(0,0,0,0.08);border-radius:6px;overflow:hidden;margin-bottom:16px;">${itemsHtml}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f7f4ef;border-radius:6px;margin-bottom:18px;">
+          <span style="font-size:13px;font-weight:700;">סה"כ</span>
+          <span style="font-size:22px;font-weight:900;color:#b8922a;">₪${displayTotal.toLocaleString()}</span>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button onclick="invoiceMarkDone('${o.id}');this.closest('[style*=fixed]').remove();"
+            style="flex:2;padding:13px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ מוכן לאיסוף</button>
+          <button onclick="alert('חיבור API לחשבשבת — בקרוב!')"
+            style="flex:1;padding:13px;background:#f0ede8;color:#1a1714;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">🧾 הוצא חשבונית</button>
+        </div>
+        <button onclick="this.closest('[style*=fixed]').remove();" style="width:100%;margin-top:8px;padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+async function invoiceMarkDone(orderId){
+  await updateStage(String(orderId),'done').catch(e=>console.error('invoiceMarkDone:',e));
+}
+
+// ══════════════════════════════════════════════════
 //  advance — שינוי stage דרך updateStage (מקור האמת)
 // ══════════════════════════════════════════════════
 async function advance(id) {
@@ -380,6 +506,8 @@ async function advance(id) {
   const nxt = NEXT[o.status];
   if (!nxt) return;
   const newStage = statusToStage(nxt) || '';
+  // אם עוברים ל"מוכן לאיסוף" — שאל על חשבונית
+  if(newStage === 'done'){ showInvoicePrompt(o, newStage); return; }
   await updateStage(String(id), newStage);
   // listenAllOrders יעדכן אוטומטית
 }
@@ -407,6 +535,13 @@ async function saveMod() {
   }
 
   const newStage = statusToStage(newStatus) || '';
+  // אם עוברים ל"מוכן לאיסוף" — שאל על חשבונית
+  if(newStage === 'done'){
+    const oForInv = orders.find(x => x.id === eid);
+    closeMod();
+    showInvoicePrompt(oForInv||{id:eid,orderClient:'',orderNum:''}, 'done');
+    return;
+  }
   // עדכן stage בלבד — כל שאר הנתונים (items, sketch וכו') נשמרים ב-Firebase כמו שהם
   await updateStage(eid, newStage);
   if (o.urgent !== undefined) await updateOrder(eid, { urgent: o.urgent });

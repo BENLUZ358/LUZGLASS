@@ -216,7 +216,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <div id="view-orders">
     <div style="height:14px"></div>
     <div id="debtBar" style="display:none"><div class="debt-bar">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:4px">יתרת חוב</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px">סכום הזמנות שלא שולמו</div>
       <div class="debt-amt" id="debtAmount">&#8362;0</div>
       <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.7" id="debtDetail"></div>
       <button class="btn-pay" onclick="contactUs()">&#128222; צור קשר לתשלום</button>
@@ -331,24 +331,35 @@ function init(){
 }
 function renderAll(){renderStats();renderOrders();renderReady();renderInvoices();renderChat();}
 
+// "מוכן לאיסוף" ו"נאסף" = שולם — לא נספרים בחוב
+function _calcUnpaidTotal(){
+  return ORDERS
+    .filter(o => o.status !== 'מוכן לאיסוף' && o.status !== 'נאסף')
+    .reduce((s, o) => s + (Number(o.total) || 0), 0);
+}
+
 function renderStats(){
   const active=ORDERS.filter(o=>o.status!=="נאסף").length;
   const ready=ORDERS.filter(o=>o.readyStatus==="eligible"||o.readyStatus==="sent"||o.status==="מוכן לאיסוף").length;
+  const unpaid = _calcUnpaidTotal();
   document.getElementById("statActive").textContent=active;
   document.getElementById("statReady").textContent=ready;
-  document.getElementById("statDebt").innerHTML="&#8362;"+CLIENT.debt.toLocaleString();
+  document.getElementById("statDebt").innerHTML="&#8362;"+(unpaid||0).toLocaleString();
   document.getElementById("badge-orders").textContent=active;
   document.getElementById("badge-ready").textContent=ready;
   const al=document.getElementById("liveAlert");
-  // רק אם יש הזמנות מוכנות שטרם נאספו מעל יום אחד
-  al.style.display="none"; // לא להציג אוטומטית
+  al.style.display="none";
 }
 
 function renderOrders(){
-  if(CLIENT.debt>0){
+  const unpaid = _calcUnpaidTotal();
+  const unpaidOrders = ORDERS.filter(o => o.status !== 'מוכן לאיסוף' && o.status !== 'נאסף' && (o.total||0) > 0);
+  if(unpaid > 0){
     document.getElementById("debtBar").style.display="block";
-    document.getElementById("debtAmount").innerHTML="&#8362;"+CLIENT.debt.toLocaleString();
-    document.getElementById("debtDetail").textContent=CLIENT.debtDetail;
+    document.getElementById("debtAmount").innerHTML="&#8362;"+unpaid.toLocaleString();
+    document.getElementById("debtDetail").textContent = "סכום הזמנות שלא שולמו · " + unpaidOrders.length + " הזמנות";
+  } else {
+    document.getElementById("debtBar").style.display="none";
   }
   const active=ORDERS.filter(o=>o.status!=="נאסף");
   const history=ORDERS.filter(o=>o.status==="נאסף");
