@@ -437,8 +437,36 @@ function showInvoicePrompt(order, newStage){
   document.body.appendChild(ov);
 }
 
-// מסך תצוגת חשבונית (מוכן לחיבור API)
-function openInvoicePreview(orderId){
+// ── popup "העבר לנאסף" — שתי אפשרויות ────────────────────────────────
+function showCollectedPrompt(order){
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="font-size:26px;text-align:center;margin-bottom:12px;">📦</div>
+      <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">העבר לנאסף</div>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${order.orderClient||''} · ${order.orderNum||''}</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}','collected');"
+          style="padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+          🧾 הפק חשבונית / קבלה
+        </button>
+        <button onclick="this.closest('[style*=fixed]').remove();updateStage('${order.id}','collected').catch(e=>console.error(e));"
+          style="padding:13px;background:#f0ede8;color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">
+          ✓ העבר לנאסף ללא פעולות נוספות
+        </button>
+        <button onclick="this.closest('[style*=fixed]').remove();"
+          style="padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">
+          ביטול
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+// מסך תצוגת חשבונית — targetStage: 'done' (מוכן לאיסוף) או 'collected' (נאסף)
+function openInvoicePreview(orderId, targetStage){
+  const stage = targetStage || 'done';
   const o = orders.find(x => x.id === String(orderId));
   if(!o) return;
   const clientName = o.orderClient||'';
@@ -462,12 +490,17 @@ function openInvoicePreview(orderId){
   });
   if(!itemsHtml) itemsHtml='<div style="padding:14px;color:#8a8278;text-align:center;font-size:13px">אין פריטים מוזנים</div>';
   const displayTotal = calcTotal || o.total || 0;
+  // כפתור פעולה לפי stage
+  const actionLabel = stage==='collected' ? '✓ העבר לנאסף' : '✓ מוכן לאיסוף';
+  const actionOnclick = stage==='collected'
+    ? `updateStage('${o.id}','collected').catch(e=>console.error(e));this.closest('[style*=fixed]').remove();`
+    : `invoiceMarkDone('${o.id}');this.closest('[style*=fixed]').remove();`;
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:601;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
   ov.innerHTML=`
     <div style="background:#fff;border-radius:12px;width:100%;max-width:460px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.35);display:flex;flex-direction:column;">
       <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-        <span style="font-size:15px;font-weight:900;color:#f0ede8;">🧾 תצוגת חשבונית</span>
+        <span style="font-size:15px;font-weight:900;color:#f0ede8;">🧾 ${stage==='collected'?'קבלה / חשבונית — מסירה':'תצוגת חשבונית'}</span>
         <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
       </div>
       <div style="padding:18px 20px;">
@@ -482,8 +515,8 @@ function openInvoicePreview(orderId){
           <span style="font-size:22px;font-weight:900;color:#b8922a;">₪${displayTotal.toLocaleString()}</span>
         </div>
         <div style="display:flex;gap:10px;">
-          <button onclick="invoiceMarkDone('${o.id}');this.closest('[style*=fixed]').remove();"
-            style="flex:2;padding:13px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ מוכן לאיסוף</button>
+          <button onclick="${actionOnclick}"
+            style="flex:2;padding:13px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">${actionLabel}</button>
           <button onclick="alert('חיבור API לחשבשבת — בקרוב!')"
             style="flex:1;padding:13px;background:#f0ede8;color:#1a1714;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">🧾 הוצא חשבונית</button>
         </div>
@@ -506,8 +539,10 @@ async function advance(id) {
   const nxt = NEXT[o.status];
   if (!nxt) return;
   const newStage = statusToStage(nxt) || '';
-  // אם עוברים ל"מוכן לאיסוף" — שאל על חשבונית
+  // מוכן לאיסוף — שאל על חשבונית לפני המעבר
   if(newStage === 'done'){ showInvoicePrompt(o, newStage); return; }
+  // נאסף — שאל על חשבונית/קבלה לפני המעבר
+  if(newStage === 'collected'){ showCollectedPrompt(o); return; }
   await updateStage(String(id), newStage);
   // listenAllOrders יעדכן אוטומטית
 }
@@ -535,11 +570,18 @@ async function saveMod() {
   }
 
   const newStage = statusToStage(newStatus) || '';
-  // אם עוברים ל"מוכן לאיסוף" — שאל על חשבונית
+  // מוכן לאיסוף — שאל על חשבונית לפני המעבר
   if(newStage === 'done'){
     const oForInv = orders.find(x => x.id === eid);
     closeMod();
     showInvoicePrompt(oForInv||{id:eid,orderClient:'',orderNum:''}, 'done');
+    return;
+  }
+  // נאסף — שאל על חשבונית/קבלה לפני המעבר
+  if(newStage === 'collected'){
+    const oForColl = orders.find(x => x.id === eid);
+    closeMod();
+    showCollectedPrompt(oForColl||{id:eid,orderClient:'',orderNum:''});
     return;
   }
   // עדכן stage בלבד — כל שאר הנתונים (items, sketch וכו') נשמרים ב-Firebase כמו שהם
