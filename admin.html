@@ -315,6 +315,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
     <div class="mbody" id="mbody"></div>
     <div class="mfoot">
       <button onclick="deleteOrderById(eid)" style="margin-left:auto;padding:10px 16px;background:transparent;color:#c0392b;border:1px solid rgba(192,57,43,0.3);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onmouseover="this.style.background='rgba(192,57,43,0.08)'" onmouseout="this.style.background='transparent'">🗑 מחק הזמנה</button>
+      <button id="modalAdvBtn" style="display:none;padding:10px 16px;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;" onclick="doModalAdvance()"></button>
       <button class="btn-save" onclick="saveMod()">שמור</button>
       <button class="btn-cancel" onclick="closeMod()">ביטול</button>
     </div>
@@ -570,21 +571,8 @@ async function saveMod() {
   }
 
   const newStage = statusToStage(newStatus) || '';
-  // מוכן לאיסוף — שאל על חשבונית לפני המעבר
-  if(newStage === 'done'){
-    const oForInv = orders.find(x => x.id === eid);
-    closeMod();
-    showInvoicePrompt(oForInv||{id:eid,orderClient:'',orderNum:''}, 'done');
-    return;
-  }
-  // נאסף — שאל על חשבונית/קבלה לפני המעבר
-  if(newStage === 'collected'){
-    const oForColl = orders.find(x => x.id === eid);
-    closeMod();
-    showCollectedPrompt(oForColl||{id:eid,orderClient:'',orderNum:''});
-    return;
-  }
-  // עדכן stage בלבד — כל שאר הנתונים (items, sketch וכו') נשמרים ב-Firebase כמו שהם
+  // שמור = עדכון stage בלבד, ללא חלוניות נוספות
+  // (חלוניות חשבונית/קבלה מופעלות רק דרך כפתור "קדם" הייעודי)
   await updateStage(eid, newStage);
   if (o.urgent !== undefined) await updateOrder(eid, { urgent: o.urgent });
   closeMod();
@@ -669,8 +657,37 @@ function openMod(id) {
   if (urgBtn) urgBtn.classList.toggle('active',  !!o.urgent);
   if (nrmBtn) nrmBtn.classList.toggle('active', !o.urgent);
 
+  // כפתור "קדם" — מציג את השלב הבא הרלוונטי לפי סטטוס נוכחי
+  const advBtn = document.getElementById('modalAdvBtn');
+  if(advBtn){
+    const nxt = NEXT[o.status];
+    if(nxt){
+      advBtn.style.display = '';
+      if(nxt === 'נאסף'){
+        advBtn.textContent = '📦 סיים והעבר לנאסף';
+        advBtn.style.background = '#27ae60';
+      } else if(nxt === 'מוכן לאיסוף'){
+        advBtn.textContent = '✓ מוכן לאיסוף';
+        advBtn.style.background = '#b8922a';
+      } else {
+        advBtn.textContent = `✓ קדם ל${nxt}`;
+        advBtn.style.background = '#555';
+      }
+    } else {
+      advBtn.style.display = 'none';
+    }
+  }
+
   const modEl = document.getElementById('ov');
   if (modEl) modEl.classList.add('open');
+}
+
+// מבצע את ה"קדם" מהמודאל — סוגר אותו ומפעיל את advance עם הפרומפט הנכון
+function doModalAdvance(){
+  const o = orders.find(x => x.id === eid);
+  if(!o) return;
+  closeMod();
+  advance(o.id);
 }
 
 function closeMod(e) {
