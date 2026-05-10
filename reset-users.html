@@ -3,87 +3,83 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LuzGlass — אתחול משתמשים</title>
+<title>LuzGlass — איפוס משתמשים</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   body{font-family:Heebo,sans-serif;direction:rtl;background:#1a1714;display:flex;align-items:flex-start;justify-content:center;min-height:100vh;padding:30px 20px;}
-  .card{background:#242424;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:32px 28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
+  .card{background:#242424;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:32px 28px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5);}
   .logo{font-size:20px;font-weight:900;color:#f7f4ef;margin-bottom:4px;}
   .logo span{color:#b8922a;}
-  .subtitle{font-size:11px;color:#555;margin-bottom:24px;letter-spacing:0.08em;}
-  h3{font-size:13px;font-weight:700;color:#b8922a;margin:20px 0 10px;letter-spacing:0.06em;text-transform:uppercase;}
-  .user-block{background:rgba(184,146,42,0.07);border:1px solid rgba(184,146,42,0.2);border-radius:6px;padding:12px 14px;margin-bottom:10px;font-size:12px;color:#ddd;}
-  .user-block .role{font-size:10px;color:#b8922a;font-weight:700;margin-bottom:3px;}
-  .user-block div{margin-bottom:2px;}
-  .btn{width:100%;padding:13px;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;margin-top:8px;transition:background 0.15s;}
-  .btn-go{background:#27ae60;color:#fff;}
-  .btn-go:hover{background:#219a52;}
+  .sub{font-size:11px;color:#555;margin-bottom:24px;letter-spacing:0.08em;}
+  h3{font-size:11px;font-weight:700;color:#b8922a;margin:18px 0 10px;letter-spacing:0.1em;text-transform:uppercase;}
+  .ublock{background:rgba(184,146,42,0.07);border:1px solid rgba(184,146,42,0.2);border-radius:6px;padding:11px 14px;margin-bottom:8px;font-size:12px;color:#ccc;line-height:1.8;}
+  .ublock .role{font-size:10px;color:#b8922a;font-weight:700;}
+  .btn{width:100%;padding:13px;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;margin-top:10px;}
+  .btn-go{background:#e74c3c;color:#fff;}
   .btn-go:disabled{background:#444;cursor:not-allowed;}
-  .btn-login{background:#b8922a;color:#1a1714;}
-  .btn-login:hover{background:#c9a84c;}
-  .log{margin-top:18px;font-size:12px;line-height:2;display:none;}
-  .log .ok{color:#27ae60;}
-  .log .err{color:#e74c3c;font-weight:700;}
-  .log .info{color:#b8922a;}
-  .log .warn{color:#e67e22;}
-  .log .data{color:#aaa;font-family:monospace;font-size:11px;}
-  .done-box{display:none;margin-top:18px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.3);border-radius:8px;padding:16px;font-size:13px;color:#27ae60;text-align:center;line-height:1.9;}
-  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-left:6px;}
+  .btn-login{background:#27ae60;color:#fff;}
+  .log{margin-top:16px;font-size:12px;line-height:2;display:none;}
+  .ok{color:#27ae60;} .err{color:#e74c3c;font-weight:700;} .info{color:#b8922a;} .data{color:#888;font-family:monospace;font-size:11px;}
+  .done{display:none;margin-top:16px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.3);border-radius:8px;padding:18px;text-align:center;color:#27ae60;font-size:13px;line-height:2;}
+  .sp{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px;}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="logo">Luz<span>Glass</span></div>
-  <div class="subtitle">אתחול משתמשים — כלי פנימי</div>
+  <div class="sub">כלי פנימי — איפוס משתמשים</div>
 
-  <h3>משתמשים שייווצרו</h3>
+  <h3>⚠️ פעולה זו תמחק את כל המשתמשים ותשאיר:</h3>
 
-  <div class="user-block">
-    <div class="role">ADMIN MAIN ★</div>
-    <div><strong>שם:</strong> בן לוז</div>
-    <div><strong>טלפון:</strong> 0547725552</div>
-    <div><strong>סיסמה:</strong> 781578</div>
+  <div class="ublock">
+    <div class="role">ADMIN MAIN</div>
+    שם: בן לוז &nbsp;|&nbsp; טלפון: 0547725552 &nbsp;|&nbsp; סיסמה: 781578
   </div>
 
-  <div class="user-block">
-    <div class="role">CLIENT</div>
-    <div><strong>שם:</strong> א.מ מראות</div>
-    <div><strong>טלפון:</strong> 0548000775</div>
-    <div><strong>סיסמה:</strong> 0548000775</div>
-  </div>
+  <div id="extraUsersBlock"></div>
 
-  <button class="btn btn-go" id="goBtn" onclick="runSetup()">
-    ▶ בדוק + כתוב משתמשים
+  <button class="btn btn-go" id="goBtn" onclick="runReset()">
+    🗑 מחק הכל ואתחל מחדש
   </button>
 
   <div class="log" id="log"></div>
-  <div class="done-box" id="doneBox"></div>
+  <div class="done" id="done"></div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="firebase-db.js"></script>
 <script>
-const USERS_TO_CREATE = [
+// ── משתמשים שייווצרו לאחר האיפוס ──────────────────────────────────────
+// הוסף כאן משתמשים נוספים לפי הצורך
+const SEED_USERS = [
   {
-    id:          'admin_main',
-    name:        'בן לוז',
     phone:       '0547725552',
+    id:          '0547725552',
+    name:        'בן לוז',
     password:    '781578',
     role:        'admin',
     isMainAdmin: true
   },
+  // לקוחות:
   {
-    id:          'c_am_mirrors',
-    name:        'א.מ מראות',
     phone:       '0548000775',
+    id:          '0548000775',
+    name:        'א.מ מראות',
+    businessName:'א.מ מראות',
     password:    '0548000775',
     role:        'client',
     isMainAdmin: false
   }
 ];
+
+// הצג משתמשים שייווצרו (לקוחות בלבד — האדמין כבר מוצג למעלה)
+document.getElementById('extraUsersBlock').innerHTML = SEED_USERS
+  .filter(u => u.role === 'client')
+  .map(u => `<div class="ublock"><div class="role">CLIENT</div>שם: ${u.name} &nbsp;|&nbsp; טלפון: ${u.phone} &nbsp;|&nbsp; סיסמה: ${u.password}</div>`)
+  .join('');
 
 function log(msg, cls='info'){
   const el = document.getElementById('log');
@@ -91,101 +87,108 @@ function log(msg, cls='info'){
   el.innerHTML += `<div class="${cls}">${msg}</div>`;
 }
 
-async function runSetup(){
+async function runReset(){
   const btn = document.getElementById('goBtn');
   btn.disabled = true;
-  btn.innerHTML = 'עובד...<span class="spinner"></span>';
+  btn.innerHTML = '<span class="sp"></span>מבצע איפוס...';
 
   const db = firebase.database();
 
-  // ── שלב 1: בדיקת חיבור ──
-  log('── שלב 1: בדיקת חיבור Firebase ──', 'info');
+  // 1. בדיקת חיבור בסיסית
+  log('שלב 1 — בדיקת חיבור Firebase', 'info');
   try {
-    const testRef = '_diag_' + Date.now();
-    await db.ref('_test/' + testRef).set({ok: true, ts: Date.now()});
-    await db.ref('_test/' + testRef).remove();
-    log('✓ Firebase מגיב — כתיבה וקריאה ב-/_test תקינות', 'ok');
-  } catch(e){
-    log('✗ Firebase לא מגיב: ' + e.message, 'err');
-    log('→ בדוק שהרשאות ה-Database הוגדרו כ: ".read":true, ".write":true', 'warn');
-    btn.disabled = false; btn.innerHTML = '▶ נסה שוב';
+    const tid = '_diag_' + Date.now();
+    await db.ref('_test/' + tid).set({ ts: Date.now() });
+    await db.ref('_test/' + tid).remove();
+    log('✓ Firebase מגיב', 'ok');
+  } catch(e) {
+    log('✗ Firebase לא נגיש: ' + e.message, 'err');
+    log('פתח קונסול Firebase → Database → Rules והגדר ".read":true, ".write":true', 'err');
+    btn.disabled = false; btn.innerHTML = '🗑 נסה שוב';
     return;
   }
 
-  // ── שלב 2: קריאת /users ──
-  log('── שלב 2: קריאת /users ──', 'info');
+  // 2. קרא ורשום מה קיים
+  log('שלב 2 — קריאת /users קיים', 'info');
   try {
     const snap = await db.ref('users').once('value');
-    if(snap.exists()){
+    if (snap.exists()) {
       const users = Object.values(snap.val());
-      log(`נמצאו ${users.length} משתמשים קיימים:`, 'info');
-      users.forEach(u => {
-        log(`&nbsp;&nbsp;· [${u.role||'?'}] ${u.name||'?'} — טלפון: "${u.phone||'?'}" — סיסמה: "${u.password||'?'}"`, 'data');
-      });
+      log(`נמצאו ${users.length} רשומות (יימחקו כולן):`, 'info');
+      users.forEach(u => log(`&nbsp;&nbsp;· path: users/${u.id||'?'} · phone:"${u.phone||'?'}" · pass:"${u.password||'?'}"`, 'data'));
     } else {
-      log('צומת /users ריק לחלוטין', 'warn');
+      log('אין רשומות ב-/users', 'info');
     }
-  } catch(e){
-    log('✗ לא ניתן לקרוא /users: ' + e.message, 'err');
-    log('→ Firebase rules חוסמים קריאת /users — עדכן את הכללים', 'warn');
-    btn.disabled = false; btn.innerHTML = '▶ נסה שוב';
+  } catch(e) {
+    log('⚠ לא ניתן לקרוא /users: ' + e.message + ' — ממשיך בכל מקרה', 'info');
+  }
+
+  // 3. מחק /users לגמרי
+  log('שלב 3 — מוחק /users', 'info');
+  try {
+    await db.ref('users').remove();
+    log('✓ /users נמחק', 'ok');
+  } catch(e) {
+    log('✗ מחיקה נכשלה: ' + e.message, 'err');
+    btn.disabled = false; btn.innerHTML = '🗑 נסה שוב';
     return;
   }
 
-  // ── שלב 3: כתיבת /users ──
-  log('── שלב 3: כותב משתמשים ──', 'info');
-  let ok = 0;
-  for(const u of USERS_TO_CREATE){
+  // 4. כתוב כל משתמש — הטלפון הוא ה-ID
+  log('שלב 4 — כותב משתמשים', 'info');
+  let written = 0;
+  for (const u of SEED_USERS) {
+    const phone = String(u.phone).replace(/[-\s]/g, '');
+    const record = { ...u, id: phone, phone, createdAt: Date.now(), updatedAt: Date.now() };
     try {
-      await db.ref('users/' + u.id).set({
-        ...u,
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
-      log(`✓ נכתב: [${u.role}] ${u.name} — ${u.phone}`, 'ok');
-      ok++;
-    } catch(e){
+      await db.ref('users/' + phone).set(record);
+      log(`✓ נכתב: users/${phone} → ${u.name} [${u.role}]`, 'ok');
+      written++;
+    } catch(e) {
       log(`✗ כישלון בכתיבת ${u.name}: ${e.message}`, 'err');
     }
   }
 
-  if(ok === 0){
-    log('✗ כל הכתיבות נכשלו — בדוק Firebase rules', 'err');
-    btn.disabled = false; btn.innerHTML = '▶ נסה שוב';
-    return;
+  // 5. אמת — קרא מחדש ובדוק שהנתיב הישיר עובד
+  log('שלב 5 — אימות', 'info');
+  for (const u of SEED_USERS) {
+    const phone = String(u.phone).replace(/[-\s]/g, '');
+    try {
+      const snap = await db.ref('users/' + phone).once('value');
+      const saved = snap.val();
+      if (saved && saved.password === u.password && saved.role === u.role) {
+        log(`✓ אומת: users/${phone} — ${saved.name} [${saved.role}]`, 'ok');
+      } else {
+        log(`✗ אימות כשל עבור ${u.name}`, 'err');
+      }
+    } catch(e) {
+      log(`✗ קריאת אימות נכשלה: ${e.message}`, 'err');
+    }
   }
 
-  // ── שלב 4: אימות ──
-  log('── שלב 4: אימות נתונים שנשמרו ──', 'info');
-  try {
-    const snap2 = await db.ref('users').once('value');
-    const saved  = snap2.exists() ? Object.values(snap2.val()) : [];
-    log(`נמצאו ${saved.length} משתמשים ב-Firebase לאחר הכתיבה:`, 'info');
-    saved.forEach(u => {
-      log(`&nbsp;&nbsp;· [${u.role||'?'}] ${u.name||'?'} — טלפון: "${u.phone||'?'}"`, 'data');
-    });
-  } catch(e){
-    log('⚠ לא ניתן לאמת: ' + e.message, 'warn');
-  }
-
-  // ── סיום ──
+  // 6. נקה session
   sessionStorage.removeItem('lgSession');
+  localStorage.removeItem('lgSession');
   log('✓ session ישן נוקה', 'ok');
-  log('✅ הגדרה הושלמה!', 'ok');
 
-  btn.style.display = 'none';
-  document.getElementById('doneBox').style.display = 'block';
-  document.getElementById('doneBox').innerHTML = `
-    ✅ המשתמשים נוצרו בהצלחה<br><br>
-    <div style="font-size:12px;color:#aaa;margin-bottom:14px;line-height:2;">
-      <strong style="color:#f0ede8">אדמין:</strong> 0547725552 / 781578<br>
-      <strong style="color:#f0ede8">א.מ מראות:</strong> 0548000775 / 0548000775
-    </div>
-    <button onclick="window.location.href='login.html'"
-      style="padding:10px 28px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">
-      → כנס ללוגין
-    </button>
-  `;
+  // סיום
+  if (written === SEED_USERS.length) {
+    document.getElementById('done').style.display = 'block';
+    document.getElementById('done').innerHTML = `
+      ✅ איפוס הושלם בהצלחה<br><br>
+      <div style="font-size:12px;color:#aaa;line-height:2;margin-bottom:14px;">
+        ${SEED_USERS.map(u=>`<strong style="color:#f0ede8">${u.name}:</strong> ${u.phone} / ${u.password}`).join('<br>')}
+      </div>
+      <button onclick="window.location.href='login.html'"
+        style="padding:10px 28px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">
+        → כנס ללוגין
+      </button>
+    `;
+    btn.style.display = 'none';
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = '🗑 נסה שוב';
+  }
 }
 </script>
 </body>

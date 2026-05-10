@@ -314,59 +314,63 @@ async function lgTest() {
 }
 
 // ─── 11. ניהול משתמשים ───────────────────────────────────────────────
+//
+//  ארכיטקטורה: מספר הטלפון המנורמל הוא ה-ID של המסמך.
+//  users/0547725552  →  אדמין ראשי
+//  users/0548000775  →  לקוח א.מ מראות
+//
+//  יתרונות:
+//  · אין כפילויות — אותו טלפון = אותו מסמך (כתיבה מחדש)
+//  · התחברות = GET ישיר, לא סריקה
+//  · ללא תלות ב-Firebase index
 
-// אתחל אדמין ראשי ב-Firebase — תמיד מוודא שהנתון תקין (נקרא בעמוד login בלבד)
+const LG_MAIN_ADMIN_PHONE = '0547725552';
+
+function _lgNormalizePhone(p){ return String(p||'').replace(/[-\s]/g,''); }
+
+// אתחל אדמין ראשי (נקרא בעמוד login בלבד)
 async function lgInitMainAdmin() {
-  const snap = await _lgDb.ref('users/admin_main').once('value');
-  const existing = snap.val();
-  // דייק: אם הנתון חסר OR הטלפון שגוי OR isMainAdmin חסר — כתוב מחדש
-  const needsWrite = !existing
-    || existing.phone !== '0547725552'
-    || !existing.isMainAdmin
-    || existing.role  !== 'admin';
-
-  if (needsWrite) {
-    await _lgDb.ref('users/admin_main').set({
-      id:          'admin_main',
+  const phone = LG_MAIN_ADMIN_PHONE;
+  const snap  = await _lgDb.ref('users/' + phone).once('value');
+  const ex    = snap.val();
+  if (!ex || ex.role !== 'admin' || !ex.isMainAdmin || ex.password !== '781578') {
+    await _lgDb.ref('users/' + phone).set({
+      id:          phone,
       name:        'בן לוז',
-      phone:       '0547725552',
+      phone,
       password:    '781578',
       role:        'admin',
       isMainAdmin: true,
-      createdAt:   existing?.createdAt || Date.now(),
+      createdAt:   ex?.createdAt || Date.now(),
       updatedAt:   Date.now()
     });
     console.log('[LuzGlass] אדמין ראשי נכתב / עודכן');
   }
 }
 
-// התחברות לפי טלפון + סיסמה — מחזיר אובייקט משתמש או null
-// full-scan במקום orderByChild — לא תלוי ב-Firebase index, עובד תמיד
+// התחברות — GET ישיר לפי טלפון, ללא סריקה
 async function lgLoginByPhone(phone, password) {
-  const p    = String(phone).replace(/[-\s]/g, '');
-  const snap = await _lgDb.ref('users').once('value');
+  const p    = _lgNormalizePhone(phone);
+  const snap = await _lgDb.ref('users/' + p).once('value');
   if (!snap.exists()) return null;
-  return Object.values(snap.val()).find(u =>
-    String(u.phone || '').replace(/[-\s]/g, '') === p &&
-    String(u.password) === String(password)
-  ) || null;
+  const u = snap.val();
+  return String(u.password) === String(password) ? u : null;
 }
 
-// שמירת משתמש (חדש או עדכון) — מחזיר id
-// שדות לקוח: id (=customerId בחשבשבת), name, businessName, phone, password, role:'client'
-// שדות אדמין: name, phone, password, role:'admin', isMainAdmin:false
+// שמירת משתמש — הטלפון הוא ה-ID, כפילויות בלתי אפשריות
 async function lgSaveUser(data) {
   if (!data.phone) throw new Error('lgSaveUser: phone חסר');
-  const id     = data.id || (data.role === 'client' ? 'c_' + Date.now() : 'u_' + Date.now());
+  const phone  = _lgNormalizePhone(data.phone);
   const record = _lgClean({
     ...data,
-    id,
-    phone:     String(data.phone).replace(/[-\s]/g, ''),
-    createdAt: data.createdAt || Date.now(),
-    updatedAt: Date.now()
+    id:        phone,          // phone = document id
+    phone,
+    customerId: data.customerId || '',
+    createdAt:  data.createdAt || Date.now(),
+    updatedAt:  Date.now()
   });
-  await _lgDb.ref('users/' + id).set(record);
-  return id;
+  await _lgDb.ref('users/' + phone).set(record);
+  return phone;
 }
 
 // קבלת כל המשתמשים
@@ -376,10 +380,12 @@ async function lgGetAllUsers() {
   return Object.values(snap.val());
 }
 
-// מחיקת משתמש (אסור למחוק את האדמין הראשי)
+// מחיקת משתמש (אדמין ראשי מוגן)
 async function lgDeleteUser(id) {
-  if (!id || id === 'admin_main') throw new Error('לא ניתן למחוק את האדמין הראשי');
-  await _lgDb.ref('users/' + id).remove();
+  const phone = _lgNormalizePhone(id);
+  if (!phone || phone === LG_MAIN_ADMIN_PHONE)
+    throw new Error('לא ניתן למחוק את האדמין הראשי');
+  await _lgDb.ref('users/' + phone).remove();
 }
 
 // ─── 12. מק"ט → שם פריט (מקור יחיד לכל המערכת) ─────────────────────
