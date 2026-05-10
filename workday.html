@@ -801,8 +801,9 @@ function selectAllFiltered(){
 function renderAvailable(){
   const el = document.getElementById('availableOrders');
   const filtered = getFiltered();
+  // השתמש ב-stage (כמו getFiltered) — לא בשדה status שיכול להיות ישן
   const total = allOrders.filter(o=>
-    (o.status==='ירד לביצוע'||o.status==='ב-OptyWay') &&
+    (o.stage === 'opty' || o.stage === 'workday') &&
     !workDay.inWork.map(String).includes(String(o.id)) &&
     !workDay.inChisum.map(String).includes(String(o.id))
   ).length;
@@ -1113,11 +1114,18 @@ function addItemsToWork(orderId){
 function addWholeOrder(orderId){
   const sid = String(orderId);
   const o = allOrders.find(x=>x.id===sid);
+  const _oi = o ? (Array.isArray(o.items) ? o.items
+    : (o.items && typeof o.items === 'object') ? Object.values(o.items) : []) : [];
+  // [תיקון באג 18] — הזמנה ללא פריטים לא נכנסת ל-inWork:
+  //   getFiltered מסתיר אותה (uniqueSel.length===totalItems שניהם 0)
+  //   וב"יום עבודה פעיל" אין מה להציג, אז ההזמנה נעלמת לגמרי.
+  if(!_oi.length){
+    showToast('הזמנה זו אין לה פריטים — הוסף פריטים ידנית תחילה');
+    return;
+  }
   if(!workDay.inWork.includes(sid)) workDay.inWork.push(sid);
   // מלא itemsSel קודם, ואז סמן stage
   if(!workDay.itemsSel) workDay.itemsSel = {};
-  const _oi = o ? (Array.isArray(o.items) ? o.items
-    : (o.items && typeof o.items === 'object') ? Object.values(o.items) : []) : [];
   workDay.itemsSel[sid] = _oi.map((_,i)=>i);
   markStageWorkday(sid); // stage רק אחרי מילוי itemsSel
   expandedOrders.delete(orderId);
