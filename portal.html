@@ -12,13 +12,11 @@ const safeStorage = {
 (function(){
   try{
     const s=JSON.parse(sessionStorage.getItem('lgSession')||'{}');
-    if(!s.role){
-      sessionStorage.setItem('lgSession',JSON.stringify({id:'am_mirrors',name:'א.מ מראות',role:'client'}));
-    } else if(s.role!=='admin' && s.role!=='client'){
+    if(!s.role || (s.role!=='admin' && s.role!=='client')){
       window.location.href='login.html'; return;
     }
-    window._lgSession=JSON.parse(sessionStorage.getItem('lgSession'));
-  } catch(e){ window._lgSession={id:'am_mirrors',name:'א.מ מראות',role:'client'}; }
+    window._lgSession=s;
+  } catch(e){ window.location.href='login.html'; }
 })();
 </script>
 
@@ -256,7 +254,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   </div>
 <button class="fab" onclick="window.location.href='new-order.html'">+</button>
 <script>
-const CLIENT={name:"כהן שיפוצים",phone:"052-9876543",debt:4800,debtDetail:"חשבונית 2026-003: 2,800 + חשבונית 2026-004: 2,000"};
+// CLIENT הוסר — כל נתוני הלקוח מגיעים מ-session (lgGetSession) בלבד
 const ORDERS=[
   {id:"o1",num:"2026-007",name:"מקלחון פינתי סוויטה",glass:'8מ"מ אסיד קליר',finish:"זהב מוברש",area:"2.40",total:5200,date:"02/04/2026",status:"ירד לביצוע",sketch:null,items:[{name:'8מ"מ אסיד קליר',w:90,h:220,chisum:true},{name:'8מ"מ שקוף',w:90,h:220,litush:true}]},
   {id:"o2",num:"2026-006",name:"מראה חדר שינה",glass:'5מ"מ מראה',finish:"—",area:"0.72",total:980,date:"01/04/2026",status:"ירד לביצוע",sketch:null,items:[{name:'5מ"מ מראה',w:80,h:90,litush:true}]},
@@ -295,7 +293,7 @@ let _portalUnsub = null;
 
 function init(){
   const sess = window._lgSession || {};
-  const clientName = sess.name || CLIENT.name;
+  const clientName = sess.name || '';
 
   document.getElementById("navName").textContent = clientName;
   document.getElementById("heroName").textContent = clientName;
@@ -578,14 +576,14 @@ function sendMsg(){
   const text=inp.value.trim();if(!text)return;
   const now=new Date();
   const time=now.getDate()+"/"+(now.getMonth()+1)+" "+String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
-  CHAT.push({from:CLIENT.name,text,time});inp.value="";renderChat();
+  CHAT.push({from:(window._lgSession&&window._lgSession.name)||'לקוח',text,time});inp.value="";renderChat();
   setTimeout(()=>{CHAT.push({from:"LuzGlass",text:"תודה! נחזור אליך בהקדם",time});renderChat();},1200);
 }
 
 function renderClientPrice(){
   const el = document.getElementById('clientPriceList');
   if(!el) return;
-  const clientName = CLIENT.name;
+  const clientName = (window._lgSession&&window._lgSession.name)||'';
   // מחירים — Firebase primary, localStorage fallback
   const _gpRaw = typeof firebase !== 'undefined' ? {} : {};
   const globalPrices = JSON.parse(safeStorage.getItem('lgPricesGlobal')||'{}');

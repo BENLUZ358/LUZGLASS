@@ -341,11 +341,15 @@ async function lgInitMainAdmin() {
 }
 
 // התחברות לפי טלפון + סיסמה — מחזיר אובייקט משתמש או null
+// full-scan במקום orderByChild — לא תלוי ב-Firebase index, עובד תמיד
 async function lgLoginByPhone(phone, password) {
   const p    = String(phone).replace(/[-\s]/g, '');
-  const snap = await _lgDb.ref('users').orderByChild('phone').equalTo(p).once('value');
+  const snap = await _lgDb.ref('users').once('value');
   if (!snap.exists()) return null;
-  return Object.values(snap.val()).find(u => String(u.password) === String(password)) || null;
+  return Object.values(snap.val()).find(u =>
+    String(u.phone || '').replace(/[-\s]/g, '') === p &&
+    String(u.password) === String(password)
+  ) || null;
 }
 
 // שמירת משתמש (חדש או עדכון) — מחזיר id
