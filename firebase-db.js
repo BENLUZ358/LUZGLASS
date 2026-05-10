@@ -315,10 +315,17 @@ async function lgTest() {
 
 // ─── 11. ניהול משתמשים ───────────────────────────────────────────────
 
-// אתחל אדמין ראשי ב-Firebase אם לא קיים (נקרא בעמוד login בלבד)
+// אתחל אדמין ראשי ב-Firebase — תמיד מוודא שהנתון תקין (נקרא בעמוד login בלבד)
 async function lgInitMainAdmin() {
   const snap = await _lgDb.ref('users/admin_main').once('value');
-  if (!snap.exists()) {
+  const existing = snap.val();
+  // דייק: אם הנתון חסר OR הטלפון שגוי OR isMainAdmin חסר — כתוב מחדש
+  const needsWrite = !existing
+    || existing.phone !== '0547725552'
+    || !existing.isMainAdmin
+    || existing.role  !== 'admin';
+
+  if (needsWrite) {
     await _lgDb.ref('users/admin_main').set({
       id:          'admin_main',
       name:        'בן לוז',
@@ -326,10 +333,10 @@ async function lgInitMainAdmin() {
       password:    '781578',
       role:        'admin',
       isMainAdmin: true,
-      createdAt:   Date.now(),
+      createdAt:   existing?.createdAt || Date.now(),
       updatedAt:   Date.now()
     });
-    console.log('[LuzGlass] אדמין ראשי אותחל');
+    console.log('[LuzGlass] אדמין ראשי נכתב / עודכן');
   }
 }
 
