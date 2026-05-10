@@ -404,6 +404,38 @@ getFiltered וה-total counter חייבים להשתמש באותה לוגיקת
 
 ---
 
+# 🐞 Bug 20 — חוסר סנכרון בין מכשירים בתחנת הבדיקה
+
+## תיאור
+אותה הזמנה הופיעה בטאב "הושלמו" באייפד (Safari) ובטאב "בדיקה" בכרום (PC).
+
+## סיבה
+`cs` (checkState — מה שנבדק בתחנה) נשמר ב-**localStorage בלבד**.  
+`isDone(o)` בודק `cs[o.id][itemIdx]` — ולכן כל מכשיר מחשב "הושלם?" בצורה עצמאית.  
+Safari וכרום אינם חולקים localStorage → תוצאה שונה לאותה הזמנה.
+
+## שורש הבעיה — קוד מקורי
+```js
+// saveCS — כתב רק ל-localStorage
+function saveCS(){ safeStorage.setItem('lgCheckState', JSON.stringify(cs)); }
+
+// load — קרא רק מ-localStorage, לא הקשיב ל-Firebase
+cs = JSON.parse(safeStorage.getItem('lgCheckState')||'{}');
+```
+
+## פתרון
+- `saveCS()` כותב גם ל-`/workday/checkState` ב-Firebase
+- הlistener `_wdRef` (שכבר מאזין ל-`/workday`) קורא `wd.checkState` ומשים ב-`cs`
+- localStorage עדיין משמש כ-cache מקומי בלבד — Firebase הוא מקור האמת
+
+## כלל
+```
+כל state שמשפיע על תצוגה (isDone, tab placement) חייב לגור ב-Firebase.
+localStorage = cache בלבד, לא מקור אמת.
+```
+
+---
+
 # 📌 כלל זהב
 
 אם באג כבר קרה פעם אחת  

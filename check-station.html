@@ -440,15 +440,21 @@ function mapFirebaseOrder(o){
 }
 
 function load(){
+  // cs נטען מ-Firebase (ב-_wdRef) — localStorage משמש כ-fallback בלבד עד שהנתון מגיע
   cs=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');
   notes=JSON.parse(safeStorage.getItem('lgOrderNotes')||'{}');
 
-  // Subscribe to workday — inChisum
+  // Subscribe to workday — inChisum + checkState (מקור אמת אחד לכל המכשירים)
   if(_wdRef) firebase.database().ref('workday').off('value', _wdRef);
   _wdRef = firebase.database().ref('workday').on('value', snap=>{
     const wd = snap.val()||{};
     function objToArr(v){ return v ? Object.values(v).map(String) : []; }
     wdInChisum = objToArr(wd.inChisum);
+    // checkState מגיע מ-Firebase — דורס localStorage ומבטיח אחידות בין מכשירים
+    if(wd.checkState && typeof wd.checkState === 'object'){
+      cs = wd.checkState;
+      safeStorage.setItem('lgCheckState', JSON.stringify(cs)); // עדכן cache לוקלי
+    }
     _filterOrders();
   });
 
@@ -475,7 +481,12 @@ function demos(){return[
   {id:2004,orderClient:'מזרחי',orderNum:'2026-004',sketchName:'וילה',glassFullName:'גלינה קליר',isSystemSketch:true,items:[{name:'גלינה קליר',w:70,h:220},{name:'גלינה קליר',w:90,h:220}],sketch:null},
 ];}
 
-function saveCS(){safeStorage.setItem('lgCheckState',JSON.stringify(cs));}
+function saveCS(){
+  safeStorage.setItem('lgCheckState',JSON.stringify(cs)); // cache לוקלי
+  // כתוב ל-Firebase — מקור האמת שכל המכשירים קוראים ממנו
+  firebase.database().ref('workday/checkState').set(cs)
+    .catch(e=>console.error('[CS] saveCS Firebase error:',e));
+}
 function saveNotes(){safeStorage.setItem('lgOrderNotes',JSON.stringify(notes));}
 // מחזיר רק indices של פריטי חיסום (לא ליטוש)
 function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>!!(o.items||[])[i]?.chisum); }
