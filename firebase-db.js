@@ -313,7 +313,65 @@ async function lgTest() {
   console.groupEnd();
 }
 
-// ─── 11. מק"ט → שם פריט (מקור יחיד לכל המערכת) ─────────────────────
+// ─── 11. ניהול משתמשים ───────────────────────────────────────────────
+
+// אתחל אדמין ראשי ב-Firebase אם לא קיים (נקרא בעמוד login בלבד)
+async function lgInitMainAdmin() {
+  const snap = await _lgDb.ref('users/admin_main').once('value');
+  if (!snap.exists()) {
+    await _lgDb.ref('users/admin_main').set({
+      id:          'admin_main',
+      name:        'בן לוז',
+      phone:       '0547725552',
+      password:    '781578',
+      role:        'admin',
+      isMainAdmin: true,
+      createdAt:   Date.now(),
+      updatedAt:   Date.now()
+    });
+    console.log('[LuzGlass] אדמין ראשי אותחל');
+  }
+}
+
+// התחברות לפי טלפון + סיסמה — מחזיר אובייקט משתמש או null
+async function lgLoginByPhone(phone, password) {
+  const p    = String(phone).replace(/[-\s]/g, '');
+  const snap = await _lgDb.ref('users').orderByChild('phone').equalTo(p).once('value');
+  if (!snap.exists()) return null;
+  return Object.values(snap.val()).find(u => String(u.password) === String(password)) || null;
+}
+
+// שמירת משתמש (חדש או עדכון) — מחזיר id
+// שדות לקוח: id (=customerId בחשבשבת), name, businessName, phone, password, role:'client'
+// שדות אדמין: name, phone, password, role:'admin', isMainAdmin:false
+async function lgSaveUser(data) {
+  if (!data.phone) throw new Error('lgSaveUser: phone חסר');
+  const id     = data.id || (data.role === 'client' ? 'c_' + Date.now() : 'u_' + Date.now());
+  const record = _lgClean({
+    ...data,
+    id,
+    phone:     String(data.phone).replace(/[-\s]/g, ''),
+    createdAt: data.createdAt || Date.now(),
+    updatedAt: Date.now()
+  });
+  await _lgDb.ref('users/' + id).set(record);
+  return id;
+}
+
+// קבלת כל המשתמשים
+async function lgGetAllUsers() {
+  const snap = await _lgDb.ref('users').once('value');
+  if (!snap.exists()) return [];
+  return Object.values(snap.val());
+}
+
+// מחיקת משתמש (אסור למחוק את האדמין הראשי)
+async function lgDeleteUser(id) {
+  if (!id || id === 'admin_main') throw new Error('לא ניתן למחוק את האדמין הראשי');
+  await _lgDb.ref('users/' + id).remove();
+}
+
+// ─── 12. מק"ט → שם פריט (מקור יחיד לכל המערכת) ─────────────────────
 
 const LG_SKU_MAP = {
   // שקוף (S)
@@ -380,5 +438,5 @@ function _lgClean(obj) {
 function _lgToday() { return new Date().toLocaleDateString('he-IL'); }
 
 // ─── הודעת טעינה ─────────────────────────────────────────────────────
-console.log('%c[LuzGlass] firebase-db.js v2.0 ✓', 'color:#b8922a;font-weight:bold');
+console.log('%c[LuzGlass] firebase-db.js v2.1 ✓', 'color:#b8922a;font-weight:bold');
 console.log('  לבדיקת חיבור: lgTest()');

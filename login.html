@@ -114,95 +114,64 @@
     <div class="spinner" id="spinner"></div>
   </button>
 
-  <div class="demo-hint">
-    <strong>אדמין:</strong> admin / admin1234<br>
-    <strong>לקוחות:</strong><br>
-    א.מ מראות: 054-8000775 / 1234<br>
-    כהן שיפוצים: 052-9876543 / 5678<br>
-    לוי קבלן: 050-1112233 / 9012<br>
-    מזרחי עיצוב: 054-7725552 / 241199
-  </div>
 </div>
 
 <div class="footer-text">© 2026 LuzGlass · כל הזכויות שמורות</div>
 
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="firebase-db.js"></script>
 <script>
-// ─── USERS DATABASE ───
-const CLIENTS = [
-  {id:'c001', name:'א.מ מראות',    phone:'054-8000775', password:'1234'},
-  {id:'c002', name:'כהן שיפוצים', phone:'052-9876543', password:'5678'},
-  {id:'c003', name:'לוי קבלן',    phone:'050-1112233', password:'9012'},
-  {id:'c004', name:'מזרחי עיצוב', phone:'054-7725552', password:'241199'},
-];
-localStorage.setItem('lgClients', JSON.stringify(CLIENTS));
+// אתחל אדמין ראשי ב-Firebase (רק בפעם הראשונה)
+lgInitMainAdmin().catch(e => console.warn('[login] init admin:', e));
 
-const USERS = [
-  {
-    id:'admin',
-    username:'admin',
-    password:'admin1234',
-    name:'מנהל',
-    role:'admin',
-    redirect:'admin.html'
-  },
-  ...CLIENTS.map(c=>({
-    id: c.id,
-    username: c.phone,
-    password: c.password,
-    name: c.name,
-    phone: c.phone,
-    role: 'client',
-    redirect: 'portal.html'
-  }))
-];
+// redirect אם כבר מחובר
+const _sess = lgGetSession();
+if(_sess.role === 'admin')  window.location.href = 'admin.html';
+else if(_sess.role === 'client') window.location.href = 'portal.html';
 
-function doLogin(){
-  const u = document.getElementById('username').value.trim();
-  const p = document.getElementById('password').value.trim();
-  const errEl = document.getElementById('errMsg');
-  errEl.style.display='none';
+async function doLogin(){
+  const phone    = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value.trim();
+  const errEl    = document.getElementById('errMsg');
+  errEl.style.display = 'none';
 
-  if(!u || !p){
-    errEl.textContent='נא למלא שם משתמש וסיסמה';
-    errEl.style.display='block';
+  if(!phone || !password){
+    errEl.textContent = 'נא למלא מספר טלפון וסיסמה';
+    errEl.style.display = 'block';
     return;
   }
 
-  // show spinner
-  document.getElementById('btnLabel').style.display='none';
-  document.getElementById('spinner').style.display='block';
+  document.getElementById('btnLabel').style.display = 'none';
+  document.getElementById('spinner').style.display  = 'block';
 
-  setTimeout(()=>{
-    const user = USERS.find(x =>
-      (x.username === u || x.phone === u) && x.password === p
-    );
-
+  try {
+    const user = await lgLoginByPhone(phone, password);
     if(!user){
-      document.getElementById('btnLabel').style.display='block';
-      document.getElementById('spinner').style.display='none';
-      errEl.textContent='שם משתמש או סיסמה שגויים';
-      errEl.style.display='block';
-      document.getElementById('password').value='';
+      document.getElementById('btnLabel').style.display = 'block';
+      document.getElementById('spinner').style.display  = 'none';
+      errEl.textContent = 'מספר טלפון או סיסמה שגויים';
+      errEl.style.display = 'block';
+      document.getElementById('password').value = '';
       return;
     }
-
-    // Save session
-    sessionStorage.setItem('lgSession', JSON.stringify({
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      phone: user.phone||'',
-      loginTime: Date.now()
-    }));
-
-    window.location.href = user.redirect;
-  }, 600);
+    lgSetSession({
+      id:          user.id,
+      name:        user.name,
+      role:        user.role,
+      phone:       user.phone || '',
+      isMainAdmin: !!user.isMainAdmin,
+      loginTime:   Date.now()
+    });
+    window.location.href = user.role === 'admin' ? 'admin.html' : 'portal.html';
+  } catch(err){
+    console.error('[login] error:', err);
+    document.getElementById('btnLabel').style.display = 'block';
+    document.getElementById('spinner').style.display  = 'none';
+    errEl.textContent = 'שגיאת חיבור — נסה שוב';
+    errEl.style.display = 'block';
+  }
 }
-
-// If already logged in, redirect
-const sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
-if(sess.role === 'admin') window.location.href='admin.html';
-else if(sess.role === 'client') window.location.href='portal.html';
 </script>
 </body>
 </html>

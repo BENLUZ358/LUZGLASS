@@ -12,14 +12,11 @@ const safeStorage = {
 (function(){
   try{
     const s=JSON.parse(sessionStorage.getItem('lgSession')||'{}');
-    if(!s.role){
-      // אם אין session — הגדר אדמין אוטומטי (לפיתוח/תצוגה)
-      sessionStorage.setItem('lgSession',JSON.stringify({id:'admin',name:'מנהל',role:'admin'}));
-    } else if(s.role!=='admin'){
+    if(!s.role || s.role!=='admin'){
       window.location.href='login.html'; return;
     }
-    window._lgSession=JSON.parse(sessionStorage.getItem('lgSession'));
-  } catch(e){ window._lgSession={id:'admin',name:'מנהל',role:'admin'}; }
+    window._lgSession=s;
+  } catch(e){ window.location.href='login.html'; }
 })();
 
 function unavOpen(){document.getElementById('unavSidebar').classList.add('mobile-open');document.getElementById('unavOverlay').classList.add('open');}
@@ -245,8 +242,14 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
     <a class="unav-a" href="drafter.html"><span class="ic">✏️</span>שרטט</a>
     <a class="unav-a" href="check-station.html"><span class="ic">🔍</span>תחנת בדיקה</a>
     <a class="unav-a" href="workday.html"><span class="ic">🏭</span>יום עבודה</a>
+    <div class="unav-sec" id="navSecUsers" style="display:none">מערכת</div>
+    <a class="unav-a" id="navUsers" href="#" style="display:none" onclick="openUserMgmt()"><span class="ic">👥</span>משתמשים</a>
   </nav>
-  <div class="unav-bot"><a href="#" onclick="unavResetAll()">🔄 אפס הכל</a></div>
+  <div class="unav-bot">
+    <div style="font-size:11px;color:rgba(247,244,239,0.45);padding:4px 0 8px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:8px;" id="sidebarUserName"></div>
+    <a href="#" onclick="lgLogout()">↩ יציאה</a>
+    <a href="#" onclick="unavResetAll()">🔄 אפס הכל</a>
+  </div>
 </div>
 <div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
 
@@ -269,6 +272,8 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
         <button class="vt" id="vtT" onclick="setView('table',this)">☰ טבלה</button>
       </div>
       <a href="sketch-demo.html" class="btn-new">+ סקיצה חדשה</a>
+      <span id="topbarUserName" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
+      <button onclick="lgLogout()" style="padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="יציאה">↩ יציאה</button>
     </div>
   </div>
 
@@ -2529,9 +2534,168 @@ function iwSave(){
   sqCurrent.items = sqCurrentItems;
 }
 
-function lgLogout(){sessionStorage.removeItem('lgSession');window.location.href='login.html';}
+function lgLogout(){lgClearSession();window.location.href='login.html';}
+
+// ─── אתחול תצוגת משתמש ───────────────────────────────────────────────
+(function initUserDisplay(){
+  const sess = window._lgSession || {};
+  if(!sess.name) return;
+  // sidebar
+  const sn = document.getElementById('sidebarUserName');
+  if(sn) sn.textContent = '👤 ' + sess.name;
+  // topbar
+  const tn = document.getElementById('topbarUserName');
+  if(tn){ tn.textContent = sess.name; tn.style.display = ''; }
+  // הצג ניהול משתמשים רק לאדמין ראשי
+  if(sess.isMainAdmin){
+    const ns = document.getElementById('navSecUsers');
+    const nu = document.getElementById('navUsers');
+    if(ns) ns.style.display = '';
+    if(nu) nu.style.display = '';
+  }
+})();
+
+// ─── ניהול משתמשים ───────────────────────────────────────────────────
+
+let _umTab = 'clients'; // טאב פעיל: 'clients' | 'admins'
+
+function openUserMgmt(){
+  document.getElementById('userMgmtOv').style.display = 'flex';
+  unavClose();
+  _loadUsers();
+}
+function closeUserMgmt(){
+  document.getElementById('userMgmtOv').style.display = 'none';
+}
+function setUmTab(tab){
+  _umTab = tab;
+  document.getElementById('umTabClients').style.display = tab==='clients' ? '' : 'none';
+  document.getElementById('umTabAdmins').style.display  = tab==='admins'  ? '' : 'none';
+  document.getElementById('umBtnClients').style.fontWeight = tab==='clients' ? '900' : '600';
+  document.getElementById('umBtnAdmins').style.fontWeight  = tab==='admins'  ? '900' : '600';
+  document.getElementById('umBtnClients').style.borderBottom = tab==='clients' ? '2px solid var(--gold)' : '2px solid transparent';
+  document.getElementById('umBtnAdmins').style.borderBottom  = tab==='admins'  ? '2px solid var(--gold)' : '2px solid transparent';
+  // שדות ייחודיים ללקוח (עסק + מזהה חשבשבת)
+  const clientFields = ['umBusiness','umCustomerId'];
+  clientFields.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = tab==='clients' ? '' : 'none';
+  });
+  // עדכן כפתור
+  const btn = document.getElementById('umCreateBtn');
+  if(btn) btn.textContent = tab==='clients' ? '+ צור לקוח' : '+ צור אדמין';
+}
+
+async function _loadUsers(){
+  try {
+    const users   = await lgGetAllUsers();
+    const clients = users.filter(u => u.role === 'client');
+    const admins  = users.filter(u => u.role === 'admin');
+    _renderUserList(clients, 'umListClients');
+    _renderUserList(admins,  'umListAdmins');
+  } catch(e){ console.error('loadUsers:', e); }
+}
+
+function _renderUserList(users, elId){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  if(!users.length){ el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:12px 0">אין משתמשים</div>'; return; }
+  el.innerHTML = users.map(u => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px;">
+      <div style="flex:1">
+        <div style="font-weight:700">${u.name}${u.isMainAdmin?' <span style="font-size:10px;color:var(--gold)">★ ראשי</span>':''}</div>
+        <div style="font-size:11px;color:var(--muted)">${u.phone||''}${u.businessName?' · '+u.businessName:''}${u.customerId?' · מזהה: '+u.customerId:''}</div>
+      </div>
+      ${!u.isMainAdmin ? `<button onclick="umDeleteUser('${u.id}','${u.name}')"
+        style="padding:4px 10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.2);color:#c0392b;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;">מחק</button>` : ''}
+    </div>`).join('');
+}
+
+async function umDeleteUser(id, name){
+  if(!confirm(`למחוק את "${name}"?`)) return;
+  try {
+    await lgDeleteUser(id);
+    showToast('✓ משתמש נמחק');
+    _loadUsers();
+  } catch(e){ showToast('שגיאה: ' + e.message); }
+}
+
+async function umCreateUser(){
+  const role = _umTab === 'clients' ? 'client' : 'admin';
+  const name     = document.getElementById('umName').value.trim();
+  const phone    = document.getElementById('umPhone').value.trim();
+  const password = document.getElementById('umPass').value.trim();
+  if(!name || !phone || !password){ showToast('נא למלא שם, טלפון וסיסמה'); return; }
+
+  const data = { name, phone, password, role };
+  if(role === 'client'){
+    data.businessName = (document.getElementById('umBusiness')||{}).value?.trim() || '';
+    data.customerId   = (document.getElementById('umCustomerId')||{}).value?.trim() || ''; // מזהה חשבשבת
+  } else {
+    data.isMainAdmin = false;
+  }
+
+  try {
+    await lgSaveUser(data);
+    showToast('✓ משתמש נוצר בהצלחה');
+    // נקה טופס
+    ['umName','umPhone','umPass','umBusiness','umCustomerId'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.value='';
+    });
+    _loadUsers();
+  } catch(e){ showToast('שגיאה: ' + e.message); }
+}
 
 </script>
+
+<!-- USER MANAGEMENT OVERLAY -->
+<div id="userMgmtOv" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:500;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.35);display:flex;flex-direction:column;">
+    <!-- header -->
+    <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+      <span style="font-size:15px;font-weight:900;color:#f0ede8;">👥 ניהול משתמשים</span>
+      <button onclick="closeUserMgmt()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <!-- tabs -->
+    <div style="display:flex;border-bottom:1px solid #eee;flex-shrink:0;">
+      <button id="umBtnClients" onclick="setUmTab('clients')"
+        style="flex:1;padding:12px;background:none;border:none;border-bottom:2px solid var(--gold);font-family:Heebo,sans-serif;font-size:13px;font-weight:900;cursor:pointer;">לקוחות</button>
+      <button id="umBtnAdmins" onclick="setUmTab('admins')"
+        style="flex:1;padding:12px;background:none;border:none;border-bottom:2px solid transparent;font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">אדמינים</button>
+    </div>
+    <!-- body -->
+    <div style="padding:16px 20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;">
+
+      <!-- CLIENTS TAB -->
+      <div id="umTabClients">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת לקוחות</div>
+        <div id="umListClients" style="margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ לקוח חדש</div>
+      </div>
+
+      <!-- ADMINS TAB -->
+      <div id="umTabAdmins" style="display:none;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת אדמינים</div>
+        <div id="umListAdmins" style="margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;"></div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ אדמין חדש</div>
+      </div>
+
+      <!-- SHARED FORM (משותף לשני הטאבים) -->
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <input id="umName"       placeholder="שם מלא *" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <input id="umBusiness"   placeholder="שם עסק" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <input id="umPhone"      placeholder="מספר טלפון * (שם משתמש לכניסה)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <input id="umCustomerId" placeholder="מזהה חשבשבת (לחיבור API עתידי)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <input id="umPass"       placeholder="סיסמה *" type="password" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <button id="umCreateBtn" onclick="umCreateUser()"
+          style="padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+          + צור לקוח
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 </body>
 </html>
