@@ -387,10 +387,12 @@ function findPriceItem(glassName){
   }
   const mmM = n.match(/(\d+)\s*מ/) || n.match(/^(\d+)/);
   const mm  = mmM ? parseInt(mmM[1]) : 8;
-  const isTmp = n.includes('מחוסם')||n.includes('smh')||n.endsWith('mh')||n.includes('חיסום');
-  const isKlir= n.includes('קליר')||n.includes('klir')||n.includes('cm');
-  const isAfor= n.includes('אפור')||n.includes('gray');
+  const isTmp   = n.includes('מחוסם')||n.includes('smh')||n.endsWith('mh')||n.includes('חיסום');
+  const isKlir  = n.includes('קליר')||n.includes('klir')||n.includes('cm');
+  const isAfor  = n.includes('אפור')||n.includes('gray');
+  const isGranit= n.includes('גרניט')||n.includes('granit');
   if(isTmp){
+    if(isGranit) return 'tmp-8-granit';
     if(mm<=6) return 'tmp-6';
     if(mm>=15&&isKlir) return 'tmp-15-klir';
     if(mm>=10&&isAfor) return 'tmp-10-gray';
@@ -938,12 +940,13 @@ const PRICE_ITEMS = [
   {cat:'שקוף מלוטש', id:'cl-8-pol',  name:'שקוף 8מ"מ מלוטש'},
   {cat:'שקוף מלוטש', id:'cl-10-pol', name:'שקוף 10מ"מ מלוטש'},
   {cat:'שקוף מלוטש', id:'cl-12-pol', name:'שקוף 12מ"מ מלוטש'},
-  {cat:'מחוסם', id:'tmp-6',       name:'מחוסם 6מ"מ שקוף'},
-  {cat:'מחוסם', id:'tmp-8',       name:'מחוסם 8מ"מ שקוף'},
-  {cat:'מחוסם', id:'tmp-8-klir',  name:'מחוסם 8מ"מ קליר'},
-  {cat:'מחוסם', id:'tmp-10',      name:'מחוסם 10מ"מ קליר'},
-  {cat:'מחוסם', id:'tmp-10-gray', name:'מחוסם 10מ"מ אפור'},
-  {cat:'מחוסם', id:'tmp-15-klir', name:'מחוסם 15מ"מ קליר'},
+  {cat:'מחוסם', id:'tmp-6',        name:'מחוסם 6מ"מ שקוף'},
+  {cat:'מחוסם', id:'tmp-8',        name:'מחוסם 8מ"מ שקוף'},
+  {cat:'מחוסם', id:'tmp-8-klir',   name:'מחוסם 8מ"מ קליר'},
+  {cat:'מחוסם', id:'tmp-8-granit', name:'מחוסם 8מ"מ גרניט'},
+  {cat:'מחוסם', id:'tmp-10',       name:'מחוסם 10מ"מ קליר'},
+  {cat:'מחוסם', id:'tmp-10-gray',  name:'מחוסם 10מ"מ אפור'},
+  {cat:'מחוסם', id:'tmp-15-klir',  name:'מחוסם 15מ"מ קליר'},
 ];
 
 let pricingTab = 'global';
@@ -1666,7 +1669,7 @@ load();renderAll();
                 <option value="8AM">8מ"מ אפור מלוטש</option>
                 <option value="8BMH">8מ"מ ברונזה מחוסם</option>
                 <option value="8BM">8מ"מ ברונזה מלוטש</option>
-                <option value="8GH">8מ"מ גרניט מחוסם</option>
+                <option value="8GMH">8מ"מ גרניט מחוסם</option>
                 <option value="8AC">8מ"מ אסיד קליר מחוסם</option>
                 <option value="8GS">8מ"מ גלינה שקוף מלוטש</option>
                 <option value="8GC">8מ"מ גלינה קליר מלוטש</option>
@@ -2609,9 +2612,11 @@ const IW_CODES = {
   '8BM': {glass:'ברונזה',mm:8, proc:'litush', label:'8מ"מ ברונזה מלוטש'},
   '8BMH':{glass:'ברונזה',mm:8, proc:'chisum', label:'8מ"מ ברונזה מחוסם'},
   // גרניט
-  'G':   {glass:'גרניט', mm:8, proc:'chisum', label:'8מ"מ גרניט מחוסם'},
-  'GH':  {glass:'גרניט', mm:8, proc:'chisum', label:'8מ"מ גרניט מחוסם'},
-  '8G':  {glass:'גרניט', mm:8, proc:'chisum', label:'8מ"מ גרניט מחוסם'},
+  'G':    {glass:'גרניט', mm:8, proc:'chisum', label:'8מ"מ גרניט מחוסם'},
+  'GH':   {glass:'גרניט', mm:8, proc:'chisum', label:'8מ"מ גרניט מחוסם'},
+  '8G':   {glass:'גרניט', mm:8, proc:'chisum', label:'8מ"מ גרניט מחוסם'},
+  '8GM':  {glass:'גרניט', mm:8, proc:'litush', label:'8מ"מ גרניט מלוטש'},
+  '8GMH': {glass:'גרניט', mm:8, proc:'chisum', label:'8מ"מ גרניט מחוסם'},
   // אסיד
   'AC':  {glass:'אסיד קליר',mm:8,proc:'chisum',label:'8מ"מ אסיד קליר מחוסם'},
   'ACH': {glass:'אסיד קליר',mm:8,proc:'chisum',label:'8מ"מ אסיד קליר מחוסם'},
