@@ -87,7 +87,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
   .vt.active{background:var(--text);color:#f7f4ef;border-color:var(--text);}
 
   /* KANBAN */
-  .kanban{margin:14px 24px 24px;display:grid;grid-template-columns:repeat(8,minmax(160px,1fr));gap:6px;overflow-x:auto;padding-bottom:4px;}
+  .kanban{margin:14px 24px 24px;display:grid;grid-template-columns:repeat(9,minmax(160px,1fr));gap:6px;overflow-x:auto;padding-bottom:4px;}
   .kcol{display:flex;flex-direction:column;gap:5px;min-width:170px;}
   .khdr{padding:9px 11px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--cc);}
   .khdr .ct{font-size:10px;font-weight:700;color:var(--cc);letter-spacing:0.04em;}
@@ -294,6 +294,8 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
     <button class="fb" onclick="setSF('ירד לביצוע',this)">בביצוע</button>
     <button class="fb" onclick="setSF('נשלח לחיסום',this)">בחיסום</button>
     <button class="fb" onclick="setSF('חזר מחיסום',this)">חזר מחיסום</button>
+    <button class="fb" onclick="setSF('בגרפיקה',this)">🖼 גרפיקה</button>
+    <button class="fb" onclick="setSF('ממתין להובלה',this)">🚚 הובלות</button>
     <button class="fb" onclick="setSF('מוכן לאיסוף',this)">מוכן לאיסוף</button>
     <button class="fb" onclick="setSF('נאסף',this)">נאסף</button>
     <select class="fsel" id="gf" onchange="renderAll()">
@@ -338,6 +340,8 @@ const ST=[
   {id:'מחכה ל-OptyWay',  c:'#e67e22'},
   {id:'ירד לביצוע',      c:'#2980b9'},
   {id:'נשלח לחיסום',     c:'#8e44ad'},
+  {id:'בגרפיקה',         c:'#27ae60', label:'🖼 גרפיקה'},
+  {id:'ממתין להובלה',    c:'#2980b9', label:'🚚 הובלות'},
   {id:'מוכן לאיסוף',     c:'#b8922a'},
   {id:'נאסף',            c:'#95a5a6'},
 ];
@@ -844,7 +848,7 @@ function renderAll(){renderStats();if(cv==='kanban')renderKanban();else renderTa
 function renderStats(){
   const f=filtered();
   const tot=f.reduce((s,o)=>s+(o.total||0),0);
-  const inP=f.filter(o=>['ירד לביצוע','נשלח לחיסום','חזר מחיסום'].includes(o.status)).length;
+  const inP=f.filter(o=>['ירד לביצוע','נשלח לחיסום','חזר מחיסום','בגרפיקה','ממתין להובלה'].includes(o.status)).length;
   const rdy=f.filter(o=>o.status==='מוכן לאיסוף').length;
   const urg=f.filter(o=>o.urgent).length;
   document.getElementById('stats').innerHTML=`
