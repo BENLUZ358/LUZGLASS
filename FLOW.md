@@ -1,227 +1,202 @@
-# LuzGlass Flow
-
-## 🎯 מטרה
-להגדיר את זרימת העבודה המלאה של המערכת.
-
-כל שינוי חייב לשמור על הזרימה הזו.
+# LuzGlass — זרימת עבודה מלאה
+_עדכון אחרון: 11/05/2026_
 
 ---
 
-# 🔄 זרימת עבודה כללית
+## כלל הברזל
 
-לקוח → סקיצה → שרטט → OptyWay → יום עבודה → **תחנת בדיקה** → חיסום → מוכן → נאסף
+כל שינוי `stage` חייב לעבור **`updateStage(id, stage)`** בלבד.
+אין כתיבה ישירה ל-Firebase. אין שינוי `status` ישירות.
+`status` הוא תמיד תוצר של `lgStageToStatus(stage)`.
 
+---
+
+## טבלת שלבים
+
+| stage | status | מי מגדיר | טאב בworkday |
+|-------|--------|----------|--------------|
+| `''` / `pending` | ממתין לאישור | אוטומטי בהגשה | — |
+| `drafter` | אצל שרטט | שרטט | — |
+| `opty` | מחכה ל-OptyWay | שרטט (סיום) | רשימה זמינה |
+| `workday` | ירד לביצוע | יום עבודה (הורד) | יום עבודה פעיל |
+| `chisum` | נשלח לחיסום | תחנת בדיקה (שלח למפעל) | חיסום |
+| `graphic` | בגרפיקה | confirmResetChisum / markStageDone | גרפיקה |
+| `delivery` | ממתין להובלה | confirmResetChisum / markStageDone | הובלות |
+| `done` | מוכן לאיסוף | confirmResetChisum / markStageDone | — |
+| `collected` | נאסף | דשבורד (נאסף) | — |
+
+---
+
+## זרימות מלאות לפי סוג הזמנה
+
+### 1. ליטוש בלבד — לקוח רגיל
 ```
-ליטוש/חיתוך:  הורד לעבודה → יום עבודה פעיל → סיים יום → done
-חיסום:         הורד לעבודה → תחנת בדיקה → stage=chisum → טאב חיסום → done
+opty → workday → [confirmFinish] → done → collected
 ```
 
-⚠️ חיסום חייב לעבור תחנת בדיקה לפני שנשלח למפעל. אין קיצורים.
+### 2. ליטוש בלבד — לקוח הובלות
+```
+opty → workday → [confirmFinish] → delivery → collected
+```
+
+### 3. ליטוש + גרפיקה — לקוח רגיל
+```
+opty → workday → [confirmFinish] → graphic → done → collected
+```
+
+### 4. ליטוש + גרפיקה — לקוח הובלות
+```
+opty → workday → [confirmFinish] → graphic → delivery → collected
+```
+
+### 5. חיסום בלבד — לקוח רגיל
+```
+opty → workday → [תחנת בדיקה → שלח למפעל] → chisum
+     → [confirmResetChisum, allDone] → done → collected
+```
+
+### 6. חיסום + גרפיקה — לקוח רגיל
+```
+opty → workday → [תחנת בדיקה] → chisum
+     → [confirmResetChisum, allDone] → graphic → done → collected
+```
+
+### 7. חיסום + גרפיקה — לקוח הובלות
+```
+opty → workday → [תחנת בדיקה] → chisum
+     → [confirmResetChisum, allDone] → graphic → delivery → collected
+```
+
+### 8. מעורב (ליטוש + חיסום) — לקוח רגיל
+```
+opty → workday
+  ↓ פריטי ליטוש: inWork (יום עבודה פעיל)
+  ↓ פריטי חיסום: inChisum (תחנת בדיקה)
+[confirmFinish: ליטוש הסתיים, stage נשאר workday/chisum]
+[תחנת בדיקה → שלח למפעל] → chisum
+[confirmResetChisum, allDone] → done/graphic/delivery
+```
 
 ---
 
-# 📦 שלב 1 — העלאת סקיצה
+## הפונקציה המרכזית: `lgNextStage(order, isDelivery)`
 
-- לקוח מעלה סקיצה
-- נוצרת הזמנה ב-Firebase
-- stage = sketch
+**מיקום:** `firebase-db.js` — מקור אמת אחד לכל המערכת.
 
----
-
-# ✏️ שלב 2 — שרטט
-
-- ההזמנה נכנסת לתור סקיצות
-- שרטט עובד על הסקיצה
-- שומר sketch
-- לוחץ "סיום שרטוט"
-
-✔ מתבצע:
+**לוגיקה:**
 ```js
-updateStage(id, "opty")
+hasChisum  = items.some(i => !!i.chisum)
+hasGraphic = items.some(i => !!i.graphic || name.includes('גרפיקה'))
+finalStage = isDelivery ? 'delivery' : 'done'
+
+switch (stage):
+  'workday' → hasChisum ? 'chisum' : hasGraphic ? 'graphic' : finalStage
+  'chisum'  → hasGraphic ? 'graphic' : finalStage
+  'graphic' → finalStage
+  'done' / 'delivery' → 'collected'
 ```
 
----
-
-# 🧾 שלב 3 — דשבורד
-
-- ההזמנה מופיעה בדשבורד
-- ניתן לצפות בפרטים
-- ניתן לשנות סטטוס דרך מודאל בלבד
-
-✔ אין שינוי סטטוס ישיר מהכרטיס
+**חשוב:** `hasGraphic` בודק גם `item.graphic === true` וגם שם הפריט מכיל "גרפיקה".
+זה מבטיח תאימות לאחור עם פריטים ישנים שנוצרו לפני שנוסף הדגל.
 
 ---
 
-# ⚙️ שלב 4 — OptyWay
+## זיהוי לקוח הובלות
 
-- ההזמנה ממתינה לעיבוד
-- עדיין Orders Mode
-
----
-
-# 🏗️ שלב 5 — בנה יום עבודה
-
-- המשתמש רואה הזמנות
-- נכנס לפריטים
-- לוחץ "הוסף"
-
-✔ פריטים נכנסים ל-draft  
-✔ נעלמים מהרשימה  
+- **מקור:** `users/<phone>/isDelivery: true`
+- **קאש:** `_deliveryClientNames` ב-workday.html (נטען פעם אחת ב-startup)
+- **פונקציה:** `_isDeliveryClient(orderClient)` — בדיקת שם לקוח
+- **דנורמליזציה:** `order.deliveryClient: true` — ניתן לשמור על ההזמנה לאחר שהלקוח סומן
 
 ---
 
-# ✏️ שלב 6 — טיוטה
+## דוחות חיסום (chisumReport)
 
-- ניתן לצפות בטיוטה
-- ניתן להסיר פריטים
-- ניתן להחזיר לרשימה
+**עיקרון:** כל קריאה ל-`sendAllToFactory()` יוצרת `reportId` חדש ועצמאי.
 
-✔ עדיין לא נשמר ב-Firebase  
+**מחזור חיים:**
+1. `sendAllToFactory()` → יוצר `reportId = 'chisum_' + Date.now()` + `reportNum = 'CH-DDMM-XXX'`
+2. כל הזמנה שהושלמה בתחנה → `updateOrder(id, { stage: 'chisum', chisumReportId, chisumReportNum })`
+3. הזמנות מוסרות מ-`workday/inChisum`
+4. workday.html מציג הזמנות ב-**קבוצות לפי reportId**
+5. כשכל פריטי הזמנה מגיעים → `stage='graphic'/'done'/'delivery'`
 
----
-
-# ▶️ שלב 7 — הורד לעבודה
-
-כאשר לוחצים "הורד לעבודה":
-
-✔ נשמר ב-itemsSel  
-✔ פריטי ליטוש/חיתוך — נכנסים ל-inWork (יום עבודה פעיל)  
-✔ פריטי חיסום — נכנסים ל-inChisum (תחנת בדיקה), **לא** ישירות לחיסום
-
-```
-אם workDay.inChisum ריק → נכנסים ישירות ל-inChisum
-אם workDay.inChisum לא ריק → נכנסים ל-pendingChisum (ממתין לתחנה)
-```
-
-❌ אסור: לעדכן stage='chisum' בשלב זה  
-✔ מותר: לעדכן stage='workday' בלבד  
+**אי-ערבוב:** כל הזמנה שייכת לדוח אחד בלבד. `sendAllToFactory` מעבד רק הזמנות שנמצאות כרגע ב-`wdInChisum` — הזמנות שכבר נשלחו בדוח קודם אינן ב-`wdInChisum` ולכן לא נכנסות לדוח חדש.
 
 ---
 
-# 🏭 שלב 8 — יום עבודה פעיל
+## תחנת בדיקה — מה זמני ומה קבוע
 
-## פריטי ליטוש/חיתוך:
-- מוצגים ב-inWork
-- בסיום יום עבודה → stage='done'
-
-## פריטי חיסום:
-- **אינם ביום עבודה הפעיל** — הם ב-inChisum (תחנת בדיקה)
-- ממתינים לאישור תחנת בדיקה לפני שנשלחים למפעל
-
-✔ תמיד מבוסס על itemsSel  
+| מה | איפה נשמר | מחיקה |
+|----|-----------|--------|
+| אילו פריטים נבדקו (`checkState`) | `workday/checkState` ב-Firebase | נשמר עד שההזמנה עוברת שלב |
+| ציורי הערות על סקיצה | `checkEdits/<orderId>` ב-Firebase | נמחק אוטומטית ב-`sendAllToFactory` |
+| הסקיצה המקורית (`sketch`) | `orders/<id>/sketch` | **לעולם לא נוגעים בה מהבדיקה** |
 
 ---
 
-# 🔍 שלב 9 — תחנת בדיקה (check-station)
+## WhatsApp — מתי נשלח ומתי לא
 
-**זהו השלב שבין יום עבודה לחיסום. אין לדלג עליו.**
-
-- מציג הזמנות מ-`workDay.inChisum` בלבד (Firebase)
-- כל הזמנה: סקיצה/רשימת פריטים + סימון פריטים כ"נבדק"
-
-## זרימה בתחנה:
-1. לוחצים על הזמנה → רואים פריטים/סקיצה
-2. מסמנים כל פריט שנבדק
-3. לוחצים "סיים" → **רק כאן** מתבצע `updateStage(id, 'chisum')` + הסרה מ-inChisum
-
-## ממתינות:
-- כפתור "ייבוא ממתינות" מופיע כשיש `pendingChisum`
-- כשהתחנה מתרוקנת → pendingChisum עולים אוטומטית ל-inChisum
-
-❌ אסור: לשנות stage='chisum' מכל מקום אחר חוץ מ-finishSketch() בתחנת בדיקה  
+| מצב | הודעה |
+|-----|--------|
+| `confirmFinish` + `lgNextStage = 'done'` | ✅ שלח "מוכן לאיסוף" |
+| `confirmFinish` + `lgNextStage = 'graphic'` | ❌ אל תשלח — עדיין בגרפיקה |
+| `confirmFinish` + `lgNextStage = 'delivery'` | ❌ אל תשלח — הובלה |
+| `confirmResetChisum` + `nextSt = 'done'` | ✅ שלח "הגיע חיסום / מוכן" |
+| `confirmResetChisum` + `nextSt = 'graphic'` | ❌ אל תשלח |
+| `confirmResetChisum` + `nextSt = 'delivery'` | ❌ אל תשלח |
+| `completeGraphic` + `nextSt = 'done'` | ✅ שלח "מוכן לאיסוף" |
+| `completeGraphic` + `nextSt = 'delivery'` | ❌ אל תשלח |
 
 ---
 
-# 🔥 שלב 10 — חיסום (טאב בעבודה פעילה)
+## inWork ו-inChisum — כללי ניהול
 
-**מגיע רק אחרי אישור תחנת בדיקה. stage='chisum' כבר עודכן.**
+**`workDay.inWork`:** רשימת הזמנות פעילות ביום עבודה הנוכחי.
+- מותר stages: `opty`, `workday`, `chisum` (מעורב — ליטוש עדיין בתהליך)
+- אסור: `graphic`, `delivery`, `done`, `collected`
+- נוקה: `confirmFinish` מוחק הכל → `workDay.inWork = []`
 
-- מציג הזמנות שחזרו מהמפעל
-- מסמנים: מה הגיע תקין / מה נשבר
-- לאחר סימון → ממשיכים לשלב הבא
+**`workDay.inChisum`:** הזמנות שנמצאות בתחנת הבדיקה.
+- מתמלא: `handleWorkdayStart` כש-`hasChisum === true`
+- מתרוקן: `sendAllToFactory` ב-check-station → `firebase.update({inChisum: remaining})`
+- מנוקה חלקית: `confirmResetChisum` → מסיר הזמנות שהושלמו
 
-✔ לא מציג הזמנות ריקות  
-✔ לא מציג פריטים שלא נבחרו  
-
----
-
-# ✅ שלב 11 — סיום יום עבודה
-
-- "סיים יום עבודה" — מופק דוח חיסום (זכוכית + מידות) לשליחה למפעל
-- ליטוש: stage='done'  
-- חיסום: **ממתין** — stage='chisum' כבר עודכן ע"י תחנת בדיקה, לא ע"י סיום יום
-
-❌ אסור: confirmFinish לא יעדכן stage='chisum' — זה כבר נעשה בתחנת הבדיקה  
+**`checkState` (Firebase):** `{orderId: {itemIdx: true/false}}`
+- מקור אמת: Firebase `workday/checkState`
+- מגובה: localStorage `lgCSEdits` (fallback)
+- recovery: אם Firebase חסר — משוחזר מ-localStorage בטעינה
 
 ---
 
-# 📦 שלב 11 — מוכן לאיסוף
+## Firebase Realtime — עקרונות
 
-- stage = done
-- מופיע בפורטל לקוח
-
----
-
-# 🚚 שלב 12 — נאסף
-
-- stage = collected
-
----
-
-# 🌐 פורטל לקוח
-
-- מאזין ל-Firebase
-- מציג לפי stage
-- מתעדכן בזמן אמת
-
-✔ אין לוגיקה מקומית  
-✔ אין localStorage  
+| מה | כיצד |
+|----|------|
+| `workday` node | `.update()` — לא `.set()` (מונע מחיקת checkState) |
+| `orders/<id>` | `updateOrder()` / `updateStage()` בלבד |
+| stage + status | תמיד יחד ב-`updateStage()` — לעולם לא בנפרד |
+| checkState | נכתב ב-`saveCS()` → `workday/checkState.set(cs)` |
+| checkEdits | נכתב ב-`edSave()` → `checkEdits/<orderId>.set(src)` |
 
 ---
 
-# 🔁 מעבר בין מצבים
+## מקורות אמת
 
-## Orders Mode → Items Mode
-
-מתרחש כאשר:
-- נכנסים ליום עבודה
-- בוחרים פריטים
-
-✔ עובר לעבוד עם itemsSel  
-
----
-
-# ⚠️ חוק קריטי
-
-לאחר המעבר:
-
-❌ אסור להשתמש ב-o.items  
-✔ חובה להשתמש ב-itemsSel  
+| נתון | מקור אמת |
+|------|----------|
+| `stage` / `status` | Firebase `orders/<id>/stage` |
+| פריטים שנבדקו | Firebase `workday/checkState` |
+| ציורי בדיקה | Firebase `checkEdits/<id>` |
+| יום עבודה פעיל | Firebase `workday/inWork, inChisum, itemsSel` |
+| לקוח הובלות | Firebase `users/<phone>/isDelivery` |
 
 ---
 
-# 🚫 אסור
+## חוקים קריטיים
 
-- לדלג על שלבים  
-- לעדכן סטטוס לא דרך updateStage  
-- להכניס פריטים בלי טיוטה  
-- להציג נתונים שלא נשמרו  
-
----
-
-# 🧪 בדיקות זרימה
-
-אחרי כל שינוי:
-
-1. הזמנה עוברת שלבים נכון  
-2. פריטים נכנסים לטיוטה  
-3. הורד לעבודה עובד  
-4. יום עבודה מציג נכון  
-5. חיסום מציג נכון  
-6. פורטל מעודכן  
-
----
-
-# 📌 כלל זהב
-
-אם שינוי שובר את הזרימה — הוא לא תקין
+1. **stage='chisum' נקבע אך ורק ב-`sendAllToFactory` בתחנת הבדיקה** — לא מ-workday ולא מהדשבורד ידנית.
+2. **graphic מזוהה מ-`item.graphic===true` OR שם מכיל "גרפיקה"** — שני המקרים נתמכים.
+3. **לא לשלוח WhatsApp לפני שכל השלבים של ההזמנה הושלמו** — גרפיקה/הובלה עדיין לא מוכנים.
+4. **כל דוח חיסום הוא קבוצה עצמאית** — `reportId` נוצר בשלח למפעל, לא ניתן לשנות.
+5. **`workday.set()` מוחלף ב-`workday.update()`** — מונע מחיקת `checkState`.

@@ -636,9 +636,13 @@ async function load(){
       if(workDay.inChisum.map(String).includes(String(id))) return;
       if(!workDay.inWork.includes(id)) workDay.inWork.push(id);
     });
-    // הסר מ-inWork רק הזמנות שנעלמו לחלוטין מ-Firebase (לא opty ולא workday)
-    const allKnownIds = allOrders.map(o => String(o.id));
-    workDay.inWork = workDay.inWork.filter(id => allKnownIds.includes(id));
+    // הסר מ-inWork הזמנות שעברו שלב (done/graphic/delivery/collected)
+    // chisum נשאר חוקי — הזמנות מעורבות (mixed) יכולות להיות ב-inWork גם כשstage='chisum'
+    const validWorkStages = new Set(['opty', 'workday', 'chisum']);
+    workDay.inWork = workDay.inWork.filter(id => {
+      const o = allOrders.find(x => String(x.id) === String(id));
+      return o && validWorkStages.has(o.stage || '');
+    });
 
     renderAll();
     updateCounts();
