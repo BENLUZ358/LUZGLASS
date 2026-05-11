@@ -398,8 +398,10 @@ const safeStorage = {
 let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[];
 let activeTab='active'; // 'active' | 'done'
 let wdInChisum=[];
-let _csUnsub=null, _wdRef=null;
+let _csUnsub=null, _wdRef=null, _checkEditsRef=null;
 let _wdReady=false, _ordersReady=false; // דגלי טעינה — מונעים render לפני שהכל מוכן
+// סימונים זמניים לבדיקה — נשמרים ב-Firebase בנתיב נפרד, לא נוגעים ב-orders
+window._csCheckEdits = {};
 
 function setTab(t){
   activeTab=t;
@@ -434,8 +436,10 @@ function mapFirebaseOrder(o){
     finish:       o.finish||'',
     source:       o.source||'sketch',
     sketch:       o.sketch||(o.files&&o.files.f0&&o.files.f0.data)||null,
-    // ציור בדיקה זמני — מגיע מ-localStorage בלבד, לא מ-Firebase
-    _editedSketch: (()=>{ try{ const m=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}'); return m[String(o.id)]||null; }catch(e){ return null; } })(),
+    // ציור בדיקה זמני — מגיע מ-checkEdits Firebase (נתיב נפרד, לא נוגע ב-orders)
+    // fallback: localStorage אם Firebase עדיין לא נטען
+    _editedSketch: window._csCheckEdits[String(o.id)] ||
+                   (()=>{ try{ return JSON.parse(safeStorage.getItem('lgCSEdits')||'{}')[String(o.id)]||null; }catch(e){ return null; } })(),
     items:        itemsArr,
     panels:       Array.isArray(o.panels)?o.panels:Object.values(o.panels||{}),
   };
@@ -465,6 +469,16 @@ function load(){
 
     _wdReady = true;
     if(_ordersReady) _filterOrders();
+  });
+
+  // Subscribe to checkEdits — סימונים זמניים בנתיב נפרד לגמרי מ-orders
+  if(_checkEditsRef) firebase.database().ref('checkEdits').off('value', _checkEditsRef);
+  _checkEditsRef = firebase.database().ref('checkEdits').on('value', snap=>{
+    window._csCheckEdits = snap.val() || {};
+    // עדכן גם localStorage כ-fallback
+    try{ safeStorage.setItem('lgCSEdits', JSON.stringify(window._csCheckEdits)); }catch(e){}
+    // רענן סקיצה אם פתוחה
+    if(cur) renderSketch();
   });
 
   // Subscribe to all orders
@@ -766,7 +780,11 @@ function sendAllToFactory(){
   firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null})
     .catch(e=>console.error('sendAllToFactory remove:', e));
 
-  // נקה ציורי בדיקה זמניים — ההזמנות עברו לשלב הבא
+  // מחק סימוני בדיקה זמניים — ההזמנות עברו לשלב הבא
+  doneOrds.forEach(o => {
+    firebase.database().ref('checkEdits/' + o.id).remove()
+      .catch(e=>console.error('[CS] removeCheckEdit:', e));
+  });
   _clearCSEditsForOrders(doneOrds.map(o=>o.id));
   printChisum(reportNum);
   toast(`✓ דוח ${reportNum} — ${doneOrds.length} הזמנות נשלחו למפעל`);
@@ -920,6 +938,10 @@ function edSave(){
   const newSrc=merge.toDataURL('image/jpeg',0.82);
   if(cur){
     cur._editedSketch=newSrc;
+    // שמור ב-Firebase/checkEdits — נפרד לחלוטין מ-orders, זמני לבדיקה בלבד
+    firebase.database().ref('checkEdits/' + cur.id).set(newSrc)
+      .catch(e=>console.error('[CS] edSave:', e));
+    // localStorage כ-fallback (iPad offline / טרם Firebase)
     try{
       const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
       s[cur.id]=newSrc;
