@@ -2904,7 +2904,7 @@ async function umCreateUser(){
     await lgSaveUser(data);
     // אם לקוח הובלות — עדכן גם הזמנות קיימות
     if(role === 'client' && data.isDelivery){
-      await _propagateDeliveryToOrders(data.name || data.businessName, true);
+      await _propagateDeliveryToOrders(data.phone, true);
     }
     showToast('✓ משתמש נוצר/עודכן בהצלחה');
     // נקה טופס
@@ -2917,24 +2917,26 @@ async function umCreateUser(){
 }
 
 // מעדכן את כל הזמנות הלקוח עם deliveryClient — כולל ישנות
-async function _propagateDeliveryToOrders(clientName, isDelivery){
-  if(!clientName) return 0;
-  const name = (clientName||'').trim();
+// מעדכן deliveryClient על הזמנות לפי טלפון (מזהה קבוע — לא שם)
+// phone = הטלפון של הלקוח כפי שרשום ב-Firebase users/<phone>
+async function _propagateDeliveryToOrders(phone, isDelivery){
+  if(!phone) return 0;
+  const normPhone = String(phone).replace(/[-\s]/g, '');
   let updated = 0;
   try {
     const allOrds = await getAllOrders();
-    const clientOrders = allOrds.filter(o =>
-      (o.orderClient||'').trim() === name ||
-      (o.orderClient||'').trim().includes(name) ||
-      name.includes((o.orderClient||'').trim())
-    );
+    // תאם לפי שדה phone של ההזמנה (הטלפון של הלקוח, שמשמש גם ל-WhatsApp)
+    const clientOrders = allOrds.filter(o => {
+      const op = String(o.phone||'').replace(/[-\s]/g,'');
+      return op && op === normPhone;
+    });
     for(const o of clientOrders){
       if(!!o.deliveryClient !== !!isDelivery){
         await updateOrder(o.id, { deliveryClient: !!isDelivery });
         updated++;
       }
     }
-    if(updated > 0) showToast(`🚚 עודכנו ${updated} הזמנות של ${name}`);
+    if(updated > 0) showToast(`🚚 עודכנו ${updated} הזמנות`);
   } catch(e){ console.error('propagateDelivery:', e); }
   return updated;
 }
@@ -2952,7 +2954,7 @@ async function umToggleDelivery(userId, clientName, currentVal){
     await firebase.database().ref('users/' + userId).update({ isDelivery: newVal, updatedAt: Date.now() });
     // עדכן הזמנות רק כשמגדירים כהובלות
     if(newVal){
-      await _propagateDeliveryToOrders(user.businessName || user.name, true);
+      await _propagateDeliveryToOrders(user.phone, true);
     }
     showToast(`✓ ${clientName} עודכן ל${label}`);
     _loadUsers();

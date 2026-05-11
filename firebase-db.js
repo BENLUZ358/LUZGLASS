@@ -86,12 +86,15 @@ function _lgItemHasGraphic(item) {
 }
 
 // ─── חישוב השלב הבא — לוגיקה דינמית לפי פריטים + לקוח הובלות ──────
-//  isDelivery: אם מוגדר — עוקף את order.deliveryClient
+//  שני מקורות לזיהוי לקוח הובלות (OR — מספיק שאחד מהם נכון):
+//    1. order.deliveryClient = true  (denormalized על ההזמנה)
+//    2. isDelivery = true            (מה-cache של משתמשים בworkday.html)
 function lgNextStage(order, isDelivery) {
   const items      = order.items || [];
   const hasChisum  = items.some(i => !!i.chisum);
   const hasGraphic = items.some(i => _lgItemHasGraphic(i));
-  const deliveryFl = isDelivery != null ? !!isDelivery : !!order.deliveryClient;
+  // OR בין שני המקורות — לא מאפשרים ל-false מה-cache לדרוס deliveryClient=true על ההזמנה
+  const deliveryFl = !!order.deliveryClient || (isDelivery === true);
   const finalStage = deliveryFl ? 'delivery' : 'done';
 
   switch (order.stage || '') {
@@ -502,5 +505,5 @@ function _lgClean(obj) {
 function _lgToday() { return new Date().toLocaleDateString('he-IL'); }
 
 // ─── הודעת טעינה ─────────────────────────────────────────────────────
-console.log('%c[LuzGlass] firebase-db.js v2.2 ✓', 'color:#b8922a;font-weight:bold');
+console.log('%c[LuzGlass] firebase-db.js v2.3 ✓', 'color:#b8922a;font-weight:bold');
 console.log('  לבדיקת חיבור: lgTest()');
