@@ -78,12 +78,19 @@ const LG_STATUS_TO_STAGE = {
 function lgStageToStatus(stage)  { return LG_STAGE_TO_STATUS[stage]  ?? LG_STAGE_TO_STATUS['']; }
 function lgStatusToStage(status) { return LG_STATUS_TO_STAGE[status] ?? ''; }
 
+// ─── זיהוי פריט גרפיקה — flag ישיר או שם המכיל "גרפיקה" (תאימות לאחור) ──
+function _lgItemHasGraphic(item) {
+  if (!!item.graphic) return true;
+  const n = (item.name || item.glassFullName || '').toLowerCase();
+  return n.includes('גרפיקה');
+}
+
 // ─── חישוב השלב הבא — לוגיקה דינמית לפי פריטים + לקוח הובלות ──────
 //  isDelivery: אם מוגדר — עוקף את order.deliveryClient
 function lgNextStage(order, isDelivery) {
   const items      = order.items || [];
   const hasChisum  = items.some(i => !!i.chisum);
-  const hasGraphic = items.some(i => !!i.graphic);
+  const hasGraphic = items.some(i => _lgItemHasGraphic(i));
   const deliveryFl = isDelivery != null ? !!isDelivery : !!order.deliveryClient;
   const finalStage = deliveryFl ? 'delivery' : 'done';
 

@@ -1903,9 +1903,11 @@ function confirmResetChisum(){
       doneCount++;
       // כל הפריטים הגיעו — חשב שלב הבא לפי לוגיקה דינמית
       const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient));
-      updateOrder(sid, { stage: nextSt, chisumArrivedIdxs: null })
+      updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null })
         .catch(e => console.error('confirmReset done:', e));
-      // הודעה ללקוח רק אם עובר לשלב סופי (לא גרפיקה ולא הובלה)
+      // נקה מ-inChisum
+      workDay.inChisum = workDay.inChisum.filter(id => String(id) !== sid);
+      // הודעה ללקוח רק אם עובר ל-done (לא גרפיקה, לא הובלה)
       if(nextSt === 'done'){
         setTimeout(() => {
           window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
@@ -1922,6 +1924,7 @@ function confirmResetChisum(){
   });
 
   arrivedItems = {};
+  if(doneCount > 0) saveWorkDay(); // שמור ניקוי inChisum
   const msg  = doneCount   ? `✓ ${doneCount} סקיצות הושלמו` : '';
   const msg2 = partialCount ? ` · ${partialCount} עם פריטים חסרים` : '';
   showToast((msg || '✓ בדיקה הושלמה') + msg2);
@@ -2029,23 +2032,39 @@ function _getFinishDayGroups(){
 
 function finishDay(){
   const { cutReady, cutPending, chisumOrds, mixed } = _getFinishDayGroups();
+  // חלק cutReady לפי השלב הבא
+  const cutReadyDone    = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient)) === 'done');
+  const cutReadyGraph   = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient)) === 'graphic');
+  const cutReadyDeliv   = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient)) === 'delivery');
 
   document.getElementById('finishBody').innerHTML = `
     <div style="margin-bottom:14px">
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        ${cutReadyDone.length ? `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
-          <span style="color:var(--cut);font-weight:700">✂️ ${cutReady.length}</span>
-          הזמנות מלוטש מוכנות — הודעה נשלחת עכשיו
-        </div>
+          <span style="color:var(--cut);font-weight:700">✂️ ${cutReadyDone.length}</span>
+          מלוטש מוכן — הודעה נשלחת עכשיו
+        </div>` : ''}
+        ${cutReadyGraph.length ? `
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="color:#27ae60;font-weight:700">🖼 ${cutReadyGraph.length}</span>
+          מלוטש + גרפיקה — עובר לטאב גרפיקה (אין הודעה עדיין)
+        </div>` : ''}
+        ${cutReadyDeliv.length ? `
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="color:#2980b9;font-weight:700">🚚 ${cutReadyDeliv.length}</span>
+          לקוח הובלות — עובר לטאב הובלות
+        </div>` : ''}
         ${cutPending.length ? `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
           <span style="color:var(--mixed);font-weight:700">⏳ ${cutPending.length}</span>
           מלוטש + חיסום ממתין — הודעה תישלח כשהחיסום יחזור מהמפעל
         </div>` : ''}
+        ${chisumOrds.length ? `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
           <span style="color:var(--chisum);font-weight:700">🔥 ${chisumOrds.length}</span>
-          הזמנות חיסום בלבד — יישלח כשיחזרו מהמפעל
-        </div>
+          חיסום בלבד — יישלח כשיחזרו מהמפעל
+        </div>` : ''}
         ${mixed.length ? `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
           <span style="color:var(--mixed);font-weight:700">⚡ ${mixed.length}</span>
@@ -2053,13 +2072,12 @@ function finishDay(){
         </div>` : ''}
       </div>
     </div>
-    ${cutReady.length ? `
+    ${cutReadyDone.length ? `
     <div class="wa-preview-title">📱 דוגמת הודעה — מלוטש מוכן</div>
-    <div class="wa-preview">${waMessage(cutReady[0], 'ready')}</div>` : ''}
+    <div class="wa-preview">${waMessage(cutReadyDone[0], 'ready')}</div>` : ''}
     ${cutPending.length ? `
     <div style="margin-top:10px;padding:10px 14px;background:rgba(230,126,34,0.08);border:1px solid rgba(230,126,34,0.2);border-radius:4px;font-size:12px;color:var(--muted)">
       ⚠️ ${cutPending.length} הזמנות <b>לא יקבלו הודעה עכשיו</b> — יש להן פריטי חיסום שעדיין לא חזרו מהמפעל.
-      ההודעה תישלח אוטומטית כשהחיסום יסתיים.
     </div>` : ''}
     ${chisumOrds.length ? `
     <div class="wa-preview-title" style="margin-top:12px">📱 הודעה בסיום חיסום</div>
@@ -2261,36 +2279,28 @@ function chisumArrived(){
 
 function confirmChisum(){
   const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
-  // Open WhatsApp for each
-  inChisum.forEach((o,i) => {
-    setTimeout(()=>{
-      window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
-    }, i * 600);
-  });
-  // עדכן workflow statuses — חיסום הגיע
-  allOrders.forEach(o => {
-    if(!workDay.inChisum.map(String).includes(String(o.id))) return;
-    // guard: אל תבצע פעמיים
-    if(o.temperingStatus === 'returned') return;
-    o.temperingStatus = 'returned';
-    // אם יום עבודה כבר הסתיים → ready
-    if(o.workdayStatus === 'done'){
-      o.readyStatus = 'eligible';
-      o.status      = 'מוכן לאיסוף'; // תאימות לאחור
-    } else {
-      // יום עבודה עדיין פעיל → blocked עד שיסתיים
-      o.readyStatus = 'blocked';
-      o.status      = 'חזר מחיסום'; // תאימות לאחור
+  // שלח WhatsApp רק להזמנות שעוברות ישירות ל-done (לא גרפיקה, לא הובלה)
+  let waIdx = 0;
+  inChisum.forEach(o => {
+    const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient));
+    if(nextSt === 'done'){
+      const i = waIdx++;
+      setTimeout(()=>{
+        window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
+      }, i * 600);
     }
   });
-  // עדכון ב-Firebase נעשה דרך saveOrderToStorage + markStageValue
-  // [תיקון באג 1] — סמן stage='done' לכל הזמנות החיסום שחזרו
+  // עדכן Firebase — שלב הבא לפי לוגיקה דינמית (markStageDone משתמש ב-lgNextStage)
   inChisum.forEach(o => markStageDone(String(o.id)));
 
   workDay.inChisum = [];
   saveWorkDay();
   closeChisum();
-  showToast(`✓ ${inChisum.length} הודעות נשלחו — כל ההזמנות מוכנות!`);
+  const doneCount = inChisum.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient)) === 'done').length;
+  const msg = doneCount
+    ? `✓ ${doneCount} הזמנות מוכנות — הודעות נשלחו`
+    : `✓ חיסום הושלם — ממשיך לשלב הבא`;
+  showToast(msg);
   renderAll();
 }
 
