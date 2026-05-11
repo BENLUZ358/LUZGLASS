@@ -1857,10 +1857,25 @@ function resetChisumList(){
         <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
       </div>
       <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
-        ${doneOrds.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
-          <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">✅ ${doneOrds.length} סקיצות הושלמו — תישלח הודעה ללקוח</div>
-          ${doneOrds.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
-        </div>`:''}
+        ${doneOrds.length?(()=>{
+          // חלק לפי השלב הבא: done / graphic / delivery
+          const toMsg   = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient))==='done');
+          const toGraph = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient))==='graphic');
+          const toDeliv = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient))==='delivery');
+          return `
+          ${toMsg.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
+            <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">✅ ${toMsg.length} סקיצות הושלמו — תישלח הודעה ללקוח</div>
+            ${toMsg.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
+          </div>`:''}
+          ${toGraph.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
+            <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">🖼 ${toGraph.length} סקיצות הושלמו — עוברות לשלב גרפיקה (אין הודעה עדיין)</div>
+            ${toGraph.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
+          </div>`:''}
+          ${toDeliv.length?`<div style="padding:10px 14px;background:rgba(41,128,185,0.08);border:1px solid rgba(41,128,185,0.2);border-radius:6px;">
+            <div style="font-size:12px;font-weight:700;color:#2980b9;margin-bottom:6px;">🚚 ${toDeliv.length} סקיצות הושלמו — עוברות לטאב הובלות</div>
+            ${toDeliv.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
+          </div>`:''}`;
+        })():''}
         ${partialOrds.length?`<div style="padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.2);border-radius:6px;">
           <div style="font-size:12px;font-weight:700;color:#b8922a;margin-bottom:6px;">⚠️ ${partialOrds.length} סקיצות חלקיות — פריטים שהגיעו יישמרו, החסרים ישארו</div>
           ${partialOrds.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${o.orderClient} · ${o.orderNum||''}</div>`).join('')}
@@ -2266,14 +2281,18 @@ function closeFinish(){
 // ═══════════════════════════════════════
 function chisumArrived(){
   const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
+  const goingDone  = inChisum.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient))==='done');
+  const goingGraph = inChisum.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient))==='graphic');
+  const goingDeliv = inChisum.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient))==='delivery');
   document.getElementById('chisumBody').innerHTML = `
-    <div style="margin-bottom:14px;font-size:13px">
-      <strong style="color:var(--chisum)">${inChisum.filter(o=>classifyOrder(o)!=='mixed').length} הזמנות</strong> יסומנו כ"מוכן לאיסוף".<br>
-      ${inChisum.filter(o=>classifyOrder(o)==='mixed').length ? '<span style="color:var(--mixed)">⚡ '+inChisum.filter(o=>classifyOrder(o)=='mixed').length+' הזמנות מעורבות</span> יסומנו כ"חזר מחיסום" עד שהחלק המלוטש יושלם.' : ''}
+    <div style="margin-bottom:14px;font-size:13px;display:flex;flex-direction:column;gap:6px;">
+      ${goingDone.length  ? `<div>✅ <strong style="color:#27ae60">${goingDone.length}</strong> הזמנות — מוכנות לאיסוף, תישלח הודעה</div>` : ''}
+      ${goingGraph.length ? `<div>🖼 <strong style="color:#27ae60">${goingGraph.length}</strong> הזמנות — עוברות לגרפיקה, <b>אין הודעה עדיין</b></div>` : ''}
+      ${goingDeliv.length ? `<div>🚚 <strong style="color:#2980b9">${goingDeliv.length}</strong> הזמנות — עוברות לטאב הובלות</div>` : ''}
     </div>
-    ${inChisum.length ? `
-    <div class="wa-preview-title">📱 דוגמת הודעה</div>
-    <div class="wa-preview">${waMessage(inChisum[0], 'chisum_ready')}</div>` : ''}`;
+    ${goingDone.length ? `
+    <div class="wa-preview-title">📱 דוגמת הודעה — מוכן לאיסוף</div>
+    <div class="wa-preview">${waMessage(goingDone[0], 'chisum_ready')}</div>` : ''}`;
   document.getElementById('chisumOv').classList.add('open');
 }
 
