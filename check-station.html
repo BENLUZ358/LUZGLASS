@@ -399,6 +399,7 @@ let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[];
 let activeTab='active'; // 'active' | 'done'
 let wdInChisum=[];
 let _csUnsub=null, _wdRef=null;
+let _wdReady=false, _ordersReady=false; // דגלי טעינה — מונעים render לפני שהכל מוכן
 
 function setTab(t){
   activeTab=t;
@@ -433,7 +434,8 @@ function mapFirebaseOrder(o){
     finish:       o.finish||'',
     source:       o.source||'sketch',
     sketch:       o.sketch||(o.files&&o.files.f0&&o.files.f0.data)||null,
-    _editedSketch:o._editedSketch||null,
+    // ציור בדיקה זמני — מגיע מ-localStorage בלבד, לא מ-Firebase
+    _editedSketch: (()=>{ try{ const m=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}'); return m[String(o.id)]||null; }catch(e){ return null; } })(),
     items:        itemsArr,
     panels:       Array.isArray(o.panels)?o.panels:Object.values(o.panels||{}),
   };
@@ -444,25 +446,33 @@ function load(){
   cs=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');
   notes=JSON.parse(safeStorage.getItem('lgOrderNotes')||'{}');
 
-  // Subscribe to workday — inChisum + checkState (מקור אמת אחד לכל המכשירים)
+  // Subscribe to workday — inChisum + checkState
   if(_wdRef) firebase.database().ref('workday').off('value', _wdRef);
   _wdRef = firebase.database().ref('workday').on('value', snap=>{
     const wd = snap.val()||{};
     function objToArr(v){ return v ? Object.values(v).map(String) : []; }
     wdInChisum = objToArr(wd.inChisum);
-    // checkState מגיע מ-Firebase — דורס localStorage ומבטיח אחידות בין מכשירים
+
     if(wd.checkState && typeof wd.checkState === 'object'){
+      // Firebase יש נתון — השתמש בו (יותר חדש מ-localStorage)
       cs = wd.checkState;
-      safeStorage.setItem('lgCheckState', JSON.stringify(cs)); // עדכן cache לוקלי
+      safeStorage.setItem('lgCheckState', JSON.stringify(cs));
+    } else if(Object.keys(cs).length > 0){
+      // Firebase חסר checkState (ייתכן שworkday מחק אותו) — שחזר מ-localStorage
+      firebase.database().ref('workday/checkState').set(cs)
+        .catch(e=>console.error('[CS] checkState recovery:', e));
     }
-    _filterOrders();
+
+    _wdReady = true;
+    if(_ordersReady) _filterOrders();
   });
 
   // Subscribe to all orders
   if(_csUnsub) _csUnsub();
   _csUnsub = listenAllOrders(function(fbOrders){
     window._allCsOrders = fbOrders;
-    _filterOrders();
+    _ordersReady = true;
+    if(_wdReady) _filterOrders();
   });
 }
 
@@ -482,12 +492,11 @@ function demos(){return[
 ];}
 
 function saveCS(){
-  safeStorage.setItem('lgCheckState',JSON.stringify(cs)); // cache לוקלי
-  // כתוב ל-Firebase — מקור האמת שכל המכשירים קוראים ממנו
+  safeStorage.setItem('lgCheckState',JSON.stringify(cs));
   firebase.database().ref('workday/checkState').set(cs)
     .catch(e=>console.error('[CS] saveCS Firebase error:',e));
 }
-function saveNotes(){safeStorage.setItem('lgOrderNotes',JSON.stringify(notes));}
+function saveNotes(){ safeStorage.setItem('lgOrderNotes',JSON.stringify(notes)); }
 // מחזיר רק indices של פריטי חיסום (לא ליטוש)
 function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>!!(o.items||[])[i]?.chisum); }
 function area(o){return chisumIdxs(o).reduce((s,i)=>{const it=(o.items||[])[i];return s+(it?.w||0)*(it?.h||0)/10000;},0);}
@@ -757,6 +766,8 @@ function sendAllToFactory(){
   firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null})
     .catch(e=>console.error('sendAllToFactory remove:', e));
 
+  // נקה ציורי בדיקה זמניים — ההזמנות עברו לשלב הבא
+  _clearCSEditsForOrders(doneOrds.map(o=>o.id));
   printChisum(reportNum);
   toast(`✓ דוח ${reportNum} — ${doneOrds.length} הזמנות נשלחו למפעל`);
 }
@@ -895,7 +906,39 @@ function edBindEv(){const old=edCvs,nc=old.cloneNode(true);old.parentNode.replac
 function edStart(e){e.preventDefault();const{x,y}=edPos(e);if(edTl==='text'){const txt=document.getElementById('edTxtIn').value.trim();if(!txt)return;edCtx.font=`bold ${edFt}px Heebo,Arial,sans-serif`;edCtx.fillStyle=edCl;edCtx.textAlign='right';edCtx.fillText(txt,x,y);edSnap();return;}edDrw=true;edCtx.beginPath();edCtx.moveTo(x,y);}
 function edMove(e){e.preventDefault();if(!edDrw)return;const{x,y}=edPos(e);if(edTl==='erase'){edCtx.clearRect(x-edSz*2,y-edSz*2,edSz*4,edSz*4);}else{edCtx.strokeStyle=edCl;edCtx.lineWidth=edSz;edCtx.lineCap='round';edCtx.lineJoin='round';edCtx.lineTo(x,y);edCtx.stroke();edCtx.beginPath();edCtx.moveTo(x,y);}}
 function edEnd(){if(!edDrw)return;edDrw=false;edSnap();}
-function edSave(){const bg=document.getElementById('edBg'),merge=document.createElement('canvas');const bw=bg.naturalWidth||edBgW,bh=bg.naturalHeight||edBgH,W=Math.max(bw*2,1200),H=Math.round(W*(bh/bw));merge.width=W;merge.height=H;const mx=merge.getContext('2d');mx.imageSmoothingEnabled=true;mx.imageSmoothingQuality='high';if(bg.naturalWidth)mx.drawImage(bg,0,0,W,H);mx.save();mx.scale(W/edBgW,H/edBgH);mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();const newSrc=merge.toDataURL('image/png',1.0);if(cur){cur._editedSketch=newSrc;const s=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');if(!s[cur.id])s[cur.id]={};s[cur.id]._editedSketch=newSrc;safeStorage.setItem('lgCheckState',JSON.stringify(s));const all=JSON.parse(safeStorage.getItem('lgOrders')||'[]');const o=all.find(x=>String(x.id)===String(cur.id));if(o){o._editedSketch=newSrc;safeStorage.setItem('lgOrders',JSON.stringify(all));}renderSketch();}closeEditor();toast('נשמר ✓');}
+function edSave(){
+  const bg=document.getElementById('edBg'),merge=document.createElement('canvas');
+  const bw=bg.naturalWidth||edBgW,bh=bg.naturalHeight||edBgH;
+  const W=Math.max(bw*2,1200),H=Math.round(W*(bh/bw));
+  merge.width=W;merge.height=H;
+  const mx=merge.getContext('2d');
+  mx.imageSmoothingEnabled=true;mx.imageSmoothingQuality='high';
+  if(bg.naturalWidth) mx.drawImage(bg,0,0,W,H);
+  mx.save();mx.scale(W/edBgW,H/edBgH);mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();
+  // סקיצת בדיקה זמנית — נשמרת רק ב-localStorage (לא ב-Firebase)
+  // מנוקה אוטומטית כשההזמנה עוברת לשלב הבא
+  const newSrc=merge.toDataURL('image/jpeg',0.82);
+  if(cur){
+    cur._editedSketch=newSrc;
+    try{
+      const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
+      s[cur.id]=newSrc;
+      safeStorage.setItem('lgCSEdits',JSON.stringify(s));
+    }catch(e){}
+    renderSketch();
+  }
+  closeEditor();
+  toast('סומן ✓');
+}
+
+// נקה ציורי בדיקה זמניים להזמנות שעברו לשלב הבא
+function _clearCSEditsForOrders(ids){
+  try{
+    const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
+    ids.forEach(id=>{ delete s[String(id)]; });
+    safeStorage.setItem('lgCSEdits',JSON.stringify(s));
+  }catch(e){}
+}
 window.addEventListener('resize',()=>{if(document.getElementById('csEd').classList.contains('open'))edResize();});
 
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}

@@ -675,7 +675,8 @@ function saveWorkDay(){
     selected:  arrToObj(workDay.selected),
     updatedAt: Date.now()
   };
-  firebase.database().ref('workday').set(toSave)
+  // update (לא set) — מונע מחיקת checkState שנכתב על-ידי תחנת הבדיקה
+  firebase.database().ref('workday').update(toSave)
     .catch(e=>console.error('saveWorkDay:', e));
 }
 
