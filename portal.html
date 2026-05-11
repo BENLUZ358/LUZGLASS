@@ -145,6 +145,11 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <script src="firebase-db.js?v=20260511b"></script>
 </head>
 <body>
+<div id="lgLoading" style="position:fixed;inset:0;background:#f7f4ef;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
+  <div style="font-family:'Playfair Display',serif;font-size:28px;color:#1a1714;margin-bottom:20px;">Luz<span style="color:#b8922a">Glass</span></div>
+  <div style="width:32px;height:32px;border:3px solid rgba(184,146,42,0.2);border-top-color:#b8922a;border-radius:50%;animation:lgSpin 0.8s linear infinite;"></div>
+</div>
+<style>@keyframes lgSpin{to{transform:rotate(360deg)}}</style>
 <nav>
   <div class="logo">Luz<span>Glass</span></div>
   <div style="display:flex;align-items:center;gap:10px">
@@ -327,6 +332,8 @@ function init(){
       });
     });
     renderAll();
+    const ov = document.getElementById('lgLoading');
+    if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
   });
 }
 function renderAll(){renderStats();renderOrders();renderReady();renderInvoices();renderChat();}
