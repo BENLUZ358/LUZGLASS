@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- מניעת cache — Safari, Chrome, כל דפדפן -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>LuzGlass — כניסה</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 <style>
@@ -113,16 +117,28 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="firebase-db.js"></script>
+<script src="firebase-db.js?v=20260511"></script>
 <script>
-// אתחל אדמין ראשי ב-Firebase (רק בפעם הראשונה)
-lgInitMainAdmin().catch(e => console.warn('[login] init admin:', e));
+// ── redirect אם כבר מחובר (sessionStorage — לא דורש Firebase) ──────────
+(function(){
+  const s = lgGetSession();
+  if(s.role === 'admin')  { window.location.href = 'admin.html';  return; }
+  if(s.role === 'client') { window.location.href = 'portal.html'; return; }
+})();
 
-// redirect אם כבר מחובר
-const _sess = lgGetSession();
-if(_sess.role === 'admin')  window.location.href = 'admin.html';
-else if(_sess.role === 'client') window.location.href = 'portal.html';
+// ── אתחול Firebase — לפני שהכפתור פעיל ───────────────────────────────
+const _loginBtn = document.querySelector('.btn-login');
+_loginBtn.disabled = true;
+document.getElementById('btnLabel').textContent = 'מתחבר...';
 
+lgInitMainAdmin()
+  .catch(e => console.warn('[login] init admin:', e))
+  .finally(() => {
+    _loginBtn.disabled = false;
+    document.getElementById('btnLabel').textContent = 'כניסה';
+  });
+
+// ── התחברות ────────────────────────────────────────────────────────────
 async function doLogin(){
   const phone    = document.getElementById('username').value.trim();
   const password = document.getElementById('password').value.trim();
@@ -137,17 +153,21 @@ async function doLogin(){
 
   document.getElementById('btnLabel').style.display = 'none';
   document.getElementById('spinner').style.display  = 'block';
+  _loginBtn.disabled = true;
 
   try {
     const user = await lgLoginByPhone(phone, password);
+
     if(!user){
       document.getElementById('btnLabel').style.display = 'block';
       document.getElementById('spinner').style.display  = 'none';
+      _loginBtn.disabled = false;
       errEl.textContent = 'מספר טלפון או סיסמה שגויים';
       errEl.style.display = 'block';
       document.getElementById('password').value = '';
       return;
     }
+
     lgSetSession({
       id:          user.id,
       name:        user.name,
@@ -157,11 +177,13 @@ async function doLogin(){
       loginTime:   Date.now()
     });
     window.location.href = user.role === 'admin' ? 'admin.html' : 'portal.html';
+
   } catch(err){
     console.error('[login] error:', err);
     document.getElementById('btnLabel').style.display = 'block';
     document.getElementById('spinner').style.display  = 'none';
-    errEl.textContent = 'שגיאת חיבור — נסה שוב';
+    _loginBtn.disabled = false;
+    errEl.textContent = 'שגיאת חיבור לשרת — בדוק חיבור אינטרנט ונסה שוב';
     errEl.style.display = 'block';
   }
 }
