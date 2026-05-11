@@ -610,11 +610,22 @@ function classifyOrder(o, activeItems){
 //  LOAD
 // ═══════════════════════════════════════
 let _workdayUnsub = null;
+let _inChisumSyncRef = null; // listener לסנכרון inChisum מ-Firebase בזמן אמת
 
 async function load(){
   // טען workDay מ-Firebase + מטמון לקוחות הובלות
   if(!_workDayLoaded) await initWorkDay();
-  _loadDeliveryClients(); // fire-and-forget — מטמון יהיה מוכן לפני שמשתמש מבצע פעולה
+  _loadDeliveryClients();
+
+  // סנכרן inChisum מ-Firebase — מונע מצב שבו saveWorkDay מחזיר הזמנות שתחנת הבדיקה הסירה
+  if(_inChisumSyncRef) firebase.database().ref('workday/inChisum').off('value', _inChisumSyncRef);
+  _inChisumSyncRef = firebase.database().ref('workday/inChisum').on('value', snap => {
+    function objToArrLocal(v){ return v ? Object.values(v).map(String) : []; }
+    const fbChisum = objToArrLocal(snap.val());
+    // עדכן state מקומי — saveWorkDay הבא ישתמש בערך הנכון
+    workDay.inChisum = fbChisum;
+  });
+
   if(_workdayUnsub) _workdayUnsub();
   // האזן ל-Firebase — stage==='workday' בלבד
   _workdayUnsub = listenAllOrders(function(fbOrders){

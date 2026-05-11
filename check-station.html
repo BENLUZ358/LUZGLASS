@@ -762,32 +762,33 @@ function _createReportNum(){
 }
 
 // שלח את כל ההזמנות שהושלמו למפעל + הפק דוח ממוספר
-function sendAllToFactory(){
+async function sendAllToFactory(){
   const doneOrds = orders.filter(isDone);
   if(!doneOrds.length){ toast('אין הזמנות שהושלמו'); return; }
 
   const reportId  = 'chisum_' + Date.now();
   const reportNum = _createReportNum();
 
-  doneOrds.forEach(o => {
+  // שלב 1: עדכן כל ההזמנות ב-Firebase — המתן לסיום לפני עדכון inChisum
+  // (מונע מצב שבו inChisum מתעדכן לפני שה-stage של ההזמנה מוכן)
+  await Promise.all(doneOrds.map(o => {
     const hasRealChisum = (o.items||[]).some(i => i.chisum && !(i.name||'').includes('מראה'));
     const targetStage   = hasRealChisum ? 'chisum' : 'done';
-    // כל השדות בעדכון אחד אטומי — מונע מ-listener לראות stage='chisum' בלי reportId
-    updateOrder(String(o.id), {
+    chDone.push(o);
+    return updateOrder(String(o.id), {
       stage:           targetStage,
       chisumArrived:   hasRealChisum ? false : undefined,
       chisumReportId:  hasRealChisum ? reportId  : undefined,
       chisumReportNum: hasRealChisum ? reportNum : undefined,
-    }).catch(e=>console.error('sendAllToFactory:',e));
-    chDone.push(o);
-  });
+    }).catch(e=>console.error('sendAllToFactory updateOrder:',e));
+  }));
 
-  // הסר מ-inChisum ב-Firebase
+  // שלב 2: רק אחרי שכל ה-stages עודכנו — הסר מ-inChisum
   const doneIds = new Set(doneOrds.map(o => String(o.id)));
   const remaining = wdInChisum.filter(id => !doneIds.has(String(id)));
   const obj = {}; remaining.forEach((v,i) => {obj[i]=v;});
-  firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null})
-    .catch(e=>console.error('sendAllToFactory remove:', e));
+  await firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null})
+    .catch(e=>console.error('sendAllToFactory inChisum:', e));
 
   // מחק סימוני בדיקה זמניים — ההזמנות עברו לשלב הבא
   doneOrds.forEach(o => {
