@@ -217,7 +217,7 @@
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260511"></script>
+  <script src="firebase-db.js?v=20260511b"></script>
 </head>
 <body>
 <div class="layout">
@@ -266,6 +266,14 @@
     <div class="phase-tab" id="tab-chisum" onclick="setTab('chisum')">
       <span>🔥</span> חיסום
       <span class="cnt" id="cnt-chisum" style="background:var(--chisum)">0</span>
+    </div>
+    <div class="phase-tab" id="tab-graphic" onclick="setTab('graphic')">
+      <span>🖼</span> גרפיקה
+      <span class="cnt" id="cnt-graphic" style="background:#27ae60">0</span>
+    </div>
+    <div class="phase-tab" id="tab-delivery" onclick="setTab('delivery')">
+      <span>🚚</span> הובלות
+      <span class="cnt" id="cnt-delivery" style="background:#2980b9">0</span>
     </div>
   </div>
 
@@ -416,6 +424,22 @@
       </div>
     </div>
 
+    <!-- TAB: GRAPHIC -->
+    <div id="view-graphic" style="display:none">
+      <div class="available-section">
+        <div class="avail-title">🖼 הזמנות בגרפיקה</div>
+        <div id="graphicOrders"></div>
+      </div>
+    </div>
+
+    <!-- TAB: DELIVERY -->
+    <div id="view-delivery" style="display:none">
+      <div class="available-section">
+        <div class="avail-title">🚚 הובלות ממתינות</div>
+        <div id="deliveryOrders"></div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 
   <!-- SUMMARY BAR -->
@@ -487,6 +511,21 @@
 //  STATE
 // ═══════════════════════════════════════
 let allOrders = [];
+// מטמון שמות לקוחות הובלות — טוען פעם אחת בסטארטאפ
+let _deliveryClientNames = new Set();
+async function _loadDeliveryClients(){
+  try {
+    const users = await lgGetAllUsers();
+    _deliveryClientNames = new Set(
+      users.filter(u => u.isDelivery)
+           .map(u => (u.businessName || u.name || '').trim())
+           .filter(Boolean)
+    );
+  } catch(e){ console.warn('loadDeliveryClients:', e); }
+}
+function _isDeliveryClient(orderClient){
+  return _deliveryClientNames.has((orderClient || '').trim());
+}
 // Safe storage wrapper for Safari file:// compatibility
 const safeStorage = {
   _mem: {},
@@ -567,14 +606,16 @@ function classifyOrder(o, activeItems){
 let _workdayUnsub = null;
 
 async function load(){
-  // טען workDay מ-Firebase לפני הכל
+  // טען workDay מ-Firebase + מטמון לקוחות הובלות
   if(!_workDayLoaded) await initWorkDay();
+  _loadDeliveryClients(); // fire-and-forget — מטמון יהיה מוכן לפני שמשתמש מבצע פעולה
   if(_workdayUnsub) _workdayUnsub();
   // האזן ל-Firebase — stage==='workday' בלבד
   _workdayUnsub = listenAllOrders(function(fbOrders){
-    // allOrders = opty + workday + chisum (לטאב חיסום)
+    // allOrders = opty + workday + chisum + graphic + delivery
     allOrders = fbOrders
-      .filter(o => o.stage === 'opty' || o.stage === 'workday' || o.stage === 'chisum')
+      .filter(o => o.stage === 'opty' || o.stage === 'workday' || o.stage === 'chisum'
+                || o.stage === 'graphic' || o.stage === 'delivery')
       .map(o => ({
         ...o,
         id: o.id,
@@ -643,16 +684,20 @@ function saveWorkDay(){
 // ═══════════════════════════════════════
 function setTab(tab){
   currentTab = tab;
-  ['build','work','chisum'].forEach(t=>{
-    document.getElementById('view-'+t).style.display = t===tab?'block':'none';
-    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  ['build','work','chisum','graphic','delivery'].forEach(t=>{
+    const vEl = document.getElementById('view-'+t);
+    const tEl = document.getElementById('tab-'+t);
+    if(vEl) vEl.style.display = t===tab?'block':'none';
+    if(tEl) tEl.classList.toggle('active', t===tab);
   });
   const fb = document.getElementById('filterBar');
   if(fb) fb.style.display = tab==='build'?'flex':'none';
   const finishBtn = document.getElementById('finishBtn');
-  if(finishBtn) finishBtn.style.display = (tab==='build' || tab==='chisum') ? 'none' : '';
+  const hideFinish = ['build','chisum','graphic','delivery'];
+  if(finishBtn) finishBtn.style.display = hideFinish.includes(tab) ? 'none' : '';
   const stb = document.getElementById('sumTypeBar');
-  if(stb) stb.style.display = (tab === 'chisum') ? 'none' : 'flex';
+  const hideSumBar = ['chisum','graphic','delivery'];
+  if(stb) stb.style.display = hideSumBar.includes(tab) ? 'none' : 'flex';
   renderAll();
 }
 
@@ -675,6 +720,8 @@ function renderAll(){
   renderAvailable();
   renderWorkCols(); renderWorkActive();
   renderChisumTab();
+  renderGraphicTab();
+  renderDeliveryTab();
   updateCounts();
   updateSummaryBar();
   checkChisumArrived();
@@ -1048,9 +1095,12 @@ function markStageValue(sid, stage){
   updateStage(ordKey, stage).catch(e=>console.error('markStageValue:', e));
 }
 
-// [תיקון באג 1] — סימון סופי לאחר סיום יום עבודה, מונע חזרה לרשימה
+// סימון סופי — שלב הבא לפי לוגיקה דינמית (done / graphic / delivery)
 function markStageDone(sid){
-  markStageValue(sid, 'done');
+  const o = allOrders.find(x => String(x.id) === String(sid));
+  if(!o){ markStageValue(sid, 'done'); return; }
+  const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient));
+  markStageValue(sid, nextSt || 'done');
 }
 
 function addSingleItem(orderId, itemIdx){
@@ -1146,7 +1196,14 @@ function saveManualItem(orderId){
   if(!o.items) o.items = [];
   // תרגם מק"ט לשם מלא (lgSkuToName מוגדר ב-firebase-db.js)
   const fullName = (typeof lgSkuToName === 'function') ? lgSkuToName(glass) : glass;
-  o.items.push({name:fullName, glassFullName:fullName, w, h, litush:proc==='litush', chisum:proc==='chisum'});
+  // זהה graphic מהמק"ט (אם ה-SKU מכיל G לפני MH/M — גרפיקה)
+  const skuUpper = glass.toUpperCase().trim();
+  const isGraphicSku = /[SC]G(MH?)?$/.test(skuUpper) || fullName.includes('גרפיקה');
+  o.items.push({name:fullName, glassFullName:fullName, w, h,
+    litush:  proc==='litush',
+    chisum:  proc==='chisum',
+    graphic: isGraphicSku
+  });
   updateOrder(String(o.id), { items: o.items }).catch(e=>console.error('addItem:', e));
   showToast('✓ פריט נשמר');
   renderAvailable();
@@ -1517,6 +1574,128 @@ function _chisumClientCardHtml(clientName, orders, reportId){
 }
 
 
+// ═══════════════════════════════════════
+//  GRAPHIC TAB
+// ═══════════════════════════════════════
+function renderGraphicTab(){
+  const el = document.getElementById('graphicOrders');
+  if(!el) return;
+  const ords = allOrders.filter(o => (o.stage||'') === 'graphic');
+  if(!ords.length){
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🖼</div><p>אין הזמנות בגרפיקה כרגע</p></div>`;
+    return;
+  }
+  el.innerHTML = ords.map(o => {
+    const graphicItems = (o.items||[]).filter(it => !!it.graphic);
+    const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient));
+    const nextLabel = nextSt === 'delivery' ? '🚚 העבר להובלה' : '✅ גרפיקה הושלמה — מוכן לאיסוף';
+    const nextBg    = nextSt === 'delivery' ? '#2980b9' : '#27ae60';
+    const itemsHtml = graphicItems.length
+      ? graphicItems.map(it => `<div style="font-size:11px;color:#555;padding:2px 0;">🖼 ${it.name||''} ${it.w||''}×${it.h||''} ס"מ</div>`).join('')
+      : `<div style="font-size:11px;color:#888;">כל הפריטים</div>`;
+    const sketchHtml = o.sketch
+      ? `<img src="${o.sketch}" style="width:100%;max-height:110px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:8px;display:block;">`
+      : '';
+    return `<div style="background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:14px 16px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <div style="font-weight:700;font-size:14px;">${o.orderClient||'—'}</div>
+          <div style="font-size:11px;color:#8a8278;">${o.orderNum||''} · ${o.sketchName||o.type||''}</div>
+        </div>
+        <span style="font-size:10px;padding:3px 8px;background:rgba(39,174,96,0.1);color:#27ae60;border-radius:3px;font-weight:700;">גרפיקה</span>
+      </div>
+      ${sketchHtml}
+      <div style="margin-bottom:10px;">${itemsHtml}</div>
+      <button onclick="completeGraphic('${o.id}')"
+        style="width:100%;padding:10px;background:${nextBg};color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+        ${nextLabel}
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function completeGraphic(orderId){
+  const o = allOrders.find(x => String(x.id) === String(orderId));
+  if(!o) return;
+  const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient));
+  if(nextSt === 'done'){
+    // שלח הודעת "מוכן" ללקוח
+    window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`, '_blank');
+  }
+  await updateStage(String(orderId), nextSt || 'done');
+  showToast(`✓ גרפיקה הושלמה — הועבר ל${lgStageToStatus(nextSt||'done')}`);
+}
+
+// ═══════════════════════════════════════
+//  DELIVERY TAB
+// ═══════════════════════════════════════
+function renderDeliveryTab(){
+  const el = document.getElementById('deliveryOrders');
+  if(!el) return;
+  const ords = allOrders.filter(o => (o.stage||'') === 'delivery');
+  if(!ords.length){
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🚚</div><p>אין הובלות ממתינות כרגע</p></div>`;
+    return;
+  }
+  el.innerHTML = ords.map(o => {
+    const sketchHtml = o.sketch
+      ? `<img src="${o.sketch}" style="width:100%;max-height:110px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:8px;display:block;">`
+      : '';
+    const itemsHtml = (o.items||[]).length
+      ? (o.items||[]).map(it => `<div style="font-size:11px;color:#555;padding:2px 0;">• ${it.name||''} ${it.w||''}×${it.h||''} ס"מ</div>`).join('')
+      : '';
+    return `<div style="background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:14px 16px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div>
+          <div style="font-weight:700;font-size:14px;">${o.orderClient||'—'}</div>
+          <div style="font-size:11px;color:#8a8278;">${o.orderNum||''} · ${o.sketchName||o.type||''}</div>
+        </div>
+        <span style="font-size:10px;padding:3px 8px;background:rgba(41,128,185,0.1);color:#2980b9;border-radius:3px;font-weight:700;">🚚 הובלה</span>
+      </div>
+      ${sketchHtml}
+      <div style="margin-bottom:10px;">${itemsHtml}</div>
+      <button onclick="showDeliveryCompletePrompt('${o.id}')"
+        style="width:100%;padding:10px;background:#2980b9;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+        🚚 סיים הובלה
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function showDeliveryCompletePrompt(orderId){
+  const o = allOrders.find(x => String(x.id) === String(orderId));
+  if(!o) return;
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="font-size:26px;text-align:center;margin-bottom:12px;">🚚</div>
+      <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">סיים הובלה</div>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${o.orderClient||''} · ${o.orderNum||''}</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button onclick="this.closest('[style*=fixed]').remove();finalizeDelivery('${orderId}', true)"
+          style="padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+          🧾 הפק חשבונית / קבלה
+        </button>
+        <button onclick="this.closest('[style*=fixed]').remove();finalizeDelivery('${orderId}', false)"
+          style="padding:13px;background:#f0ede8;color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">
+          ✓ סיים ללא חשבונית
+        </button>
+        <button onclick="this.closest('[style*=fixed]').remove()"
+          style="padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+}
+
+async function finalizeDelivery(orderId, withInvoice){
+  await updateStage(String(orderId), 'collected');
+  showToast('✓ הובלה הושלמה — הועבר לנאסף');
+  if(withInvoice){
+    showToast('פתח דשבורד להפקת חשבונית');
+  }
+}
+
 function renderChisumTab(){
   const el = document.getElementById('chisumOrders');
   const all = allOrders.filter(o => (o.stage||'') === 'chisum');
@@ -1722,12 +1901,16 @@ function confirmResetChisum(){
 
     if(allDone){
       doneCount++;
-      // כל הפריטים הגיעו — הזמנה מוכנה לאיסוף + הודעה
-      updateOrder(sid, { stage: 'done', chisumArrivedIdxs: null })
+      // כל הפריטים הגיעו — חשב שלב הבא לפי לוגיקה דינמית
+      const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient));
+      updateOrder(sid, { stage: nextSt, chisumArrivedIdxs: null })
         .catch(e => console.error('confirmReset done:', e));
-      setTimeout(() => {
-        window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
-      }, msgCount++ * 600);
+      // הודעה ללקוח רק אם עובר לשלב סופי (לא גרפיקה ולא הובלה)
+      if(nextSt === 'done'){
+        setTimeout(() => {
+          window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
+        }, msgCount++ * 600);
+      }
     } else if(sessionArrived.size > 0){
       partialCount++;
       // פריטים חלקיים — שמור התקדמות ב-Firebase, ההזמנה נשארת בחיסום
@@ -1787,14 +1970,24 @@ function updateCounts(){
   });
   document.getElementById('cnt-work').textContent = workItemCount;
 
-  // cnt-chisum: ספירת פריטי חיסום שטרם הגיעו (מחסיר פריטים שכבר סומנו כ"הגיע")
+  // cnt-chisum: פריטי חיסום שטרם הגיעו
   let chisumItemCount = 0;
   allOrders.filter(o => (o.stage||'') === 'chisum').forEach(o => {
-    const chisumItems   = (o.items||[]).filter(it => !!it.chisum);
-    const arrivedCount  = (o.chisumArrivedIdxs||[]).length;
+    const chisumItems  = (o.items||[]).filter(it => !!it.chisum);
+    const arrivedCount = (o.chisumArrivedIdxs||[]).length;
     chisumItemCount += Math.max(0, chisumItems.length - arrivedCount);
   });
   document.getElementById('cnt-chisum').textContent = chisumItemCount;
+
+  // cnt-graphic: הזמנות בשלב גרפיקה
+  const graphicCount = allOrders.filter(o => (o.stage||'') === 'graphic').length;
+  const gcEl = document.getElementById('cnt-graphic');
+  if(gcEl) gcEl.textContent = graphicCount;
+
+  // cnt-delivery: הזמנות ממתינות להובלה
+  const deliveryCount = allOrders.filter(o => (o.stage||'') === 'delivery').length;
+  const dcEl = document.getElementById('cnt-delivery');
+  if(dcEl) dcEl.textContent = deliveryCount;
 }
 
 function updateSummaryBar(){
@@ -1998,11 +2191,16 @@ function _showChisumBanner(count){
 function confirmFinish(){
   const { cutReady, cutPending, chisumOrds, mixed } = _getFinishDayGroups();
 
-  // שלח הודעה רק להזמנות שכל פריטיהן מוכנים (ללא חיסום ממתין)
-  cutReady.forEach((o,i) => {
-    setTimeout(()=>{
-      window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`, '_blank');
-    }, i * 600);
+  // שלח הודעה רק להזמנות שעוברות ישירות ל-done (לא גרפיקה, לא הובלה)
+  let waIdx = 0;
+  cutReady.forEach(o => {
+    const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient));
+    if(nextSt === 'done'){
+      const i = waIdx++;
+      setTimeout(()=>{
+        window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`, '_blank');
+      }, i * 600);
+    }
   });
 
   // עדכן statuses

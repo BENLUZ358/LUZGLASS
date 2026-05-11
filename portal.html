@@ -142,7 +142,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260511"></script>
+  <script src="firebase-db.js?v=20260511b"></script>
 </head>
 <body>
 <nav>
@@ -274,17 +274,19 @@ let CHAT=[
   {from:"LuzGlass",text:"הזמנה 2026-007 בייצור, צפי מחר-מחרתיים",time:"01/04 09:35"},
 ];
 const SCFG={
-  "הזמנה חדשה":  {cls:"s-wait", label:"בקבלה",      dot:"#e74c3c",step:0},
-  "ממתין לאישור":{cls:"s-wait", label:"בקבלה",       dot:"#6b7fa3",step:0},
-  "אצל שרטט":    {cls:"s-wait", label:"בשרטוט",      dot:"#c0392b",step:1},
-  "מחכה ל-OptyWay":{cls:"s-wait",label:"בתור",       dot:"#e67e22",step:1},
-  "ירד לביצוע":  {cls:"s-prod", label:"בייצור",      dot:"#2980b9",step:2},
-  "נשלח לחיסום": {cls:"s-chis", label:"בחיסום",      dot:"#8e44ad",step:3},
-  "חזר מחיסום":  {cls:"s-prod", label:"בעיבוד",      dot:"#e67e22",step:3},
-  "מוכן לאיסוף": {cls:"s-ready",label:"מוכן לאיסוף", dot:"#27ae60",step:4},
-  "נאסף":        {cls:"s-done", label:"נאסף",         dot:"#95a5a6",step:5}
+  "הזמנה חדשה":    {cls:"s-wait",  label:"בקבלה",        dot:"#e74c3c",step:0},
+  "ממתין לאישור":  {cls:"s-wait",  label:"בקבלה",         dot:"#6b7fa3",step:0},
+  "אצל שרטט":      {cls:"s-wait",  label:"בשרטוט",        dot:"#c0392b",step:1},
+  "מחכה ל-OptyWay":{cls:"s-wait",  label:"בתור",          dot:"#e67e22",step:1},
+  "ירד לביצוע":    {cls:"s-prod",  label:"בייצור",        dot:"#2980b9",step:2},
+  "נשלח לחיסום":   {cls:"s-chis",  label:"בחיסום",        dot:"#8e44ad",step:3},
+  "חזר מחיסום":    {cls:"s-prod",  label:"בעיבוד",        dot:"#e67e22",step:3},
+  "בגרפיקה":       {cls:"s-chis",  label:"בגרפיקה",       dot:"#27ae60",step:4},
+  "ממתין להובלה":  {cls:"s-ready", label:"בדרך אליך",     dot:"#2980b9",step:5},
+  "מוכן לאיסוף":   {cls:"s-ready", label:"מוכן לאיסוף",   dot:"#27ae60",step:5},
+  "נאסף":          {cls:"s-done",  label:"נאסף",           dot:"#95a5a6",step:6}
 };
-const STEPS=["התקבלה","בתור","בייצור","חיסום","מוכן","נאסף"];
+const STEPS=["התקבלה","בתור","בייצור","חיסום","גרפיקה","מוכן","נאסף"];
 let expanded=new Set();
 let pickupDates=JSON.parse(safeStorage.getItem("lgPickupDates")||"{}");
 

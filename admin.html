@@ -224,7 +224,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260511"></script>
+  <script src="firebase-db.js?v=20260511b"></script>
 </head>
 <body>
 <div class="layout">
@@ -421,14 +421,17 @@ function lgCalcOrderTotal(order){
   return Math.round(total);
 }
 
-// Popup שאלה: "האם להעביר לתשלום/חשבונית?" לפני stage=done
+// Popup שאלה: "האם להעביר לתשלום/חשבונית?" לפני stage=done או delivery
 function showInvoicePrompt(order, newStage){
+  const isDelivery = newStage === 'delivery';
+  const title = isDelivery ? 'העבר להובלה — האם להוציא חשבונית?' : 'האם להעביר לתשלום / חשבונית?';
+  const icon  = isDelivery ? '🚚' : '🧾';
   const ov = document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
   ov.innerHTML=`
     <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-      <div style="font-size:26px;text-align:center;margin-bottom:12px;">🧾</div>
-      <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">האם להעביר לתשלום / חשבונית?</div>
+      <div style="font-size:26px;text-align:center;margin-bottom:12px;">${icon}</div>
+      <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">${title}</div>
       <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${order.orderClient||''} · ${order.orderNum||''}</div>
       <div style="display:flex;gap:10px;">
         <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}');"
@@ -535,19 +538,30 @@ async function invoiceMarkDone(orderId){
 
 // ══════════════════════════════════════════════════
 //  advance — שינוי stage דרך updateStage (מקור האמת)
+//  workday ומעלה: לוגיקה דינמית לפי פריטים + deliveryClient
 // ══════════════════════════════════════════════════
 async function advance(id) {
   const o = orders.find(x => x.id === String(id));
   if (!o) return;
-  const nxt = NEXT[o.status];
-  if (!nxt) return;
-  const newStage = statusToStage(nxt) || '';
-  // מוכן לאיסוף — שאל על חשבונית לפני המעבר
-  if(newStage === 'done'){ showInvoicePrompt(o, newStage); return; }
-  // נאסף — שאל על חשבונית/קבלה לפני המעבר
-  if(newStage === 'collected'){ showCollectedPrompt(o); return; }
+
+  // שלבים לפני workday — NEXT סטטי
+  const earlyStages = ['', 'pending', 'chash', 'drafter', 'opty'];
+  if (earlyStages.includes(o.stage || '')) {
+    const nxt = NEXT[o.status];
+    if (!nxt) return;
+    await updateStage(String(id), statusToStage(nxt) || '');
+    return;
+  }
+
+  // workday ומעלה — לוגיקה דינמית
+  const newStage = lgNextStage(o);
+  if (!newStage) return;
+
+  if (newStage === 'done')     { showInvoicePrompt(o, 'done');     return; }
+  if (newStage === 'delivery') { showInvoicePrompt(o, 'delivery'); return; }
+  if (newStage === 'collected'){ showCollectedPrompt(o);           return; }
+
   await updateStage(String(id), newStage);
-  // listenAllOrders יעדכן אוטומטית
 }
 
 // ══════════════════════════════════════════════════
@@ -648,7 +662,7 @@ function openMod(id) {
     // בנה אפשרויות לפי NEXT map — קדימה ואחורה
     const STATUS_LIST = [
       'ממתין לאישור','אצל שרטט','מחכה ל-OptyWay',
-      'ירד לביצוע','נשלח לחיסום','מוכן לאיסוף','נאסף'
+      'ירד לביצוע','נשלח לחיסום','בגרפיקה','ממתין להובלה','מוכן לאיסוף','נאסף'
     ];
     sel.innerHTML = STATUS_LIST.map(s =>
       `<option value="${s}" ${s === o.status ? 'selected' : ''}>${s}</option>`
@@ -659,20 +673,33 @@ function openMod(id) {
   if (urgBtn) urgBtn.classList.toggle('active',  !!o.urgent);
   if (nrmBtn) nrmBtn.classList.toggle('active', !o.urgent);
 
-  // כפתור "קדם" — מציג את השלב הבא הרלוונטי לפי סטטוס נוכחי
+  // כפתור "קדם" — מציג את השלב הבא הרלוונטי לפי לוגיקה דינמית
   const advBtn = document.getElementById('modalAdvBtn');
   if(advBtn){
-    const nxt = NEXT[o.status];
-    if(nxt){
+    const earlyStages = ['', 'pending', 'chash', 'drafter', 'opty'];
+    let nxtStage = null;
+    if(earlyStages.includes(o.stage||'')){
+      nxtStage = statusToStage(NEXT[o.status]||'') || '';
+    } else {
+      nxtStage = lgNextStage(o);
+    }
+    if(nxtStage){
+      const nxtLabel = lgStageToStatus(nxtStage);
       advBtn.style.display = '';
-      if(nxt === 'נאסף'){
+      if(nxtStage === 'collected'){
         advBtn.textContent = '📦 סיים והעבר לנאסף';
         advBtn.style.background = '#27ae60';
-      } else if(nxt === 'מוכן לאיסוף'){
+      } else if(nxtStage === 'done'){
         advBtn.textContent = '✓ מוכן לאיסוף';
         advBtn.style.background = '#b8922a';
+      } else if(nxtStage === 'delivery'){
+        advBtn.textContent = '🚚 העבר להובלה';
+        advBtn.style.background = '#2980b9';
+      } else if(nxtStage === 'graphic'){
+        advBtn.textContent = '🖼 העבר לגרפיקה';
+        advBtn.style.background = '#27ae60';
       } else {
-        advBtn.textContent = `✓ קדם ל${nxt}`;
+        advBtn.textContent = `✓ קדם ל${nxtLabel}`;
         advBtn.style.background = '#555';
       }
     } else {
@@ -1538,6 +1565,7 @@ load();renderAll();
 .iw-item-proc{font-size:10px;padding:2px 6px;border-radius:2px;font-weight:700;}
 .iw-proc-chis{background:rgba(142,68,173,0.1);color:#8e44ad;}
 .iw-proc-lit{background:rgba(41,128,185,0.1);color:#2980b9;}
+.iw-proc-gfx{background:rgba(39,174,96,0.1);color:#27ae60;}
 .iw-item-del{background:none;border:none;color:rgba(192,57,43,0.4);cursor:pointer;font-size:13px;padding:0 4px;}
 .iw-item-del:hover{color:#c0392b;}
 .iw-empty{font-size:12px;color:#bbb;padding:8px 0;text-align:center;}
@@ -2625,8 +2653,25 @@ const IW_CODES = {
   'GS':  {glass:'גלינה שקוף',mm:8,proc:'litush',label:'8מ"מ גלינה שקוף מלוטש'},
   'GC':  {glass:'גלינה קליר',mm:8,proc:'litush',label:'8מ"מ גלינה קליר מלוטש'},
   // מראה
-  'M':   {glass:'מראה', mm:5,  proc:'litush', label:'5מ"מ מראה מלוטש'},
-  '5M':  {glass:'מראה', mm:5,  proc:'litush', label:'5מ"מ מראה מלוטש'},
+  'M':      {glass:'מראה', mm:5,  proc:'litush', label:'5מ"מ מראה מלוטש'},
+  '5M':     {glass:'מראה', mm:5,  proc:'litush', label:'5מ"מ מראה מלוטש'},
+  '5MIRM':  {glass:'מראה', mm:5,  proc:'litush', label:'מראה 5 מ"מ מלוטש'},
+  '4MIRM':  {glass:'מראה', mm:4,  proc:'litush', label:'מראה 4 מ"מ מלוטש'},
+  '6MIRM':  {glass:'מראה', mm:6,  proc:'litush', label:'מראה 6 מ"מ מלוטש'},
+  // גרפיקה שקוף (G = graphic)
+  '6SGM': {glass:'שקוף', mm:6,  proc:'litush', graphic:true, label:'6מ"מ שקוף גרפיקה מלוטש'},
+  '6SGMH':{glass:'שקוף', mm:6,  proc:'chisum', graphic:true, label:'6מ"מ שקוף גרפיקה מחוסם'},
+  '8SGM': {glass:'שקוף', mm:8,  proc:'litush', graphic:true, label:'8מ"מ שקוף גרפיקה מלוטש'},
+  '8SGMH':{glass:'שקוף', mm:8,  proc:'chisum', graphic:true, label:'8מ"מ שקוף גרפיקה מחוסם'},
+  '10SGM':{glass:'שקוף', mm:10, proc:'litush', graphic:true, label:'10מ"מ שקוף גרפיקה מלוטש'},
+  '10SGMH':{glass:'שקוף',mm:10, proc:'chisum', graphic:true, label:'10מ"מ שקוף גרפיקה מחוסם'},
+  // גרפיקה קליר
+  '6CGM': {glass:'קליר', mm:6,  proc:'litush', graphic:true, label:'6מ"מ קליר גרפיקה מלוטש'},
+  '6CGMH':{glass:'קליר', mm:6,  proc:'chisum', graphic:true, label:'6מ"מ קליר גרפיקה מחוסם'},
+  '8CGM': {glass:'קליר', mm:8,  proc:'litush', graphic:true, label:'8מ"מ קליר גרפיקה מלוטש'},
+  '8CGMH':{glass:'קליר', mm:8,  proc:'chisum', graphic:true, label:'8מ"מ קליר גרפיקה מחוסם'},
+  '10CGM':{glass:'קליר', mm:10, proc:'litush', graphic:true, label:'10מ"מ קליר גרפיקה מלוטש'},
+  '10CGMH':{glass:'קליר',mm:10, proc:'chisum', graphic:true, label:'10מ"מ קליר גרפיקה מחוסם'},
 };
 
 function iwResolve(code){
@@ -2672,7 +2717,7 @@ function iwRender(){
         onchange="iwEditDim(${i},'h',this.value)" onclick="event.stopPropagation()"
         onkeydown="event.stopPropagation()">
       <span style="font-size:10px;color:#aaa">ס"מ</span>
-      <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום ✦':'ליטוש ✂'}</span>
+      <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
       <button class="iw-item-del" onclick="event.stopPropagation();iwRemove(${i})" title="מחק">✕</button>
     </div>`).join('');
 }
@@ -2689,8 +2734,9 @@ function iwAdd(){
     glass: r.glass,
     mm: r.mm,
     w, h,
-    chisum: r.proc==='chisum',
-    litush: r.proc==='litush'
+    chisum:  r.proc === 'chisum',
+    litush:  r.proc === 'litush',
+    graphic: !!r.graphic
   };
   sqCurrentItems.push(item);
   iwSave();
@@ -2802,7 +2848,7 @@ function _renderUserList(users, elId){
   el.innerHTML = users.map(u => `
     <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px;">
       <div style="flex:1">
-        <div style="font-weight:700">${u.name}${u.isMainAdmin?' <span style="font-size:10px;color:var(--gold)">★ ראשי</span>':''}</div>
+        <div style="font-weight:700">${u.name}${u.isMainAdmin?' <span style="font-size:10px;color:var(--gold)">★ ראשי</span>':''}${u.isDelivery?' <span style="font-size:10px;color:#2980b9">🚚 הובלות</span>':''}</div>
         <div style="font-size:11px;color:var(--muted)">${u.phone||''}${u.businessName?' · '+u.businessName:''}${u.customerId?' · מזהה: '+u.customerId:''}</div>
       </div>
       ${!u.isMainAdmin ? `<button onclick="umDeleteUser('${u.id}','${u.name}')"
@@ -2829,7 +2875,8 @@ async function umCreateUser(){
   const data = { name, phone, password, role };
   if(role === 'client'){
     data.businessName = (document.getElementById('umBusiness')||{}).value?.trim() || '';
-    data.customerId   = (document.getElementById('umCustomerId')||{}).value?.trim() || ''; // מזהה חשבשבת
+    data.customerId   = (document.getElementById('umCustomerId')||{}).value?.trim() || '';
+    data.isDelivery   = !!(document.getElementById('umIsDelivery')||{}).checked;
   } else {
     data.isMainAdmin = false;
   }
@@ -2841,6 +2888,7 @@ async function umCreateUser(){
     ['umName','umPhone','umPass','umBusiness','umCustomerId'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
+    const dEl = document.getElementById('umIsDelivery'); if(dEl) dEl.checked = false;
     _loadUsers();
   } catch(e){ showToast('שגיאה: ' + e.message); }
 }
@@ -2886,6 +2934,10 @@ async function umCreateUser(){
         <input id="umPhone"      placeholder="מספר טלפון * (שם משתמש לכניסה)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
         <input id="umCustomerId" placeholder="מזהה חשבשבת (לחיבור API עתידי)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
         <input id="umPass"       placeholder="סיסמה *" type="password" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#555;padding:4px 0;cursor:pointer;">
+          <input type="checkbox" id="umIsDelivery" style="width:16px;height:16px;cursor:pointer;">
+          🚚 לקוח הובלות (ההזמנות יעברו לטאב הובלות במקום "מוכן לאיסוף")
+        </label>
         <button id="umCreateBtn" onclick="umCreateUser()"
           style="padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
           + צור לקוח

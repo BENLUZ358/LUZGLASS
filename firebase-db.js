@@ -50,29 +50,60 @@ const LG_STAGE_TO_STATUS = {
   'opty':      'מחכה ל-OptyWay',
   'workday':   'ירד לביצוע',
   'chisum':    'נשלח לחיסום',
+  'graphic':   'בגרפיקה',
+  'delivery':  'ממתין להובלה',
   'done':      'מוכן לאיסוף',
   'collected': 'נאסף'
 };
 
 const LG_STATUS_TO_STAGE = {
-  'ממתין לאישור':   '',
-  'הזמנה חדשה':     '',
-  'התקבלה':         '',
-  'בתור שרטט':      'chash',
-  'אצל שרטט':       'drafter',
-  'מחכה ל-OptyWay': 'opty',
-  'ב-OptyWay':      'opty',
-  'ירד לביצוע':     'workday',
-  'ביום עבודה':     'workday',
-  'נשלח לחיסום':    'chisum',
-  'בתחנת בדיקה':    'chisum',
-  'חזר מחיסום':     'chisum',
-  'מוכן לאיסוף':    'done',
-  'נאסף':           'collected'
+  'ממתין לאישור':    '',
+  'הזמנה חדשה':      '',
+  'התקבלה':          '',
+  'בתור שרטט':       'chash',
+  'אצל שרטט':        'drafter',
+  'מחכה ל-OptyWay':  'opty',
+  'ב-OptyWay':       'opty',
+  'ירד לביצוע':      'workday',
+  'ביום עבודה':      'workday',
+  'נשלח לחיסום':     'chisum',
+  'בתחנת בדיקה':     'chisum',
+  'חזר מחיסום':      'chisum',
+  'בגרפיקה':         'graphic',
+  'ממתין להובלה':    'delivery',
+  'מוכן לאיסוף':     'done',
+  'נאסף':            'collected'
 };
 
 function lgStageToStatus(stage)  { return LG_STAGE_TO_STATUS[stage]  ?? LG_STAGE_TO_STATUS['']; }
 function lgStatusToStage(status) { return LG_STATUS_TO_STAGE[status] ?? ''; }
+
+// ─── חישוב השלב הבא — לוגיקה דינמית לפי פריטים + לקוח הובלות ──────
+//  isDelivery: אם מוגדר — עוקף את order.deliveryClient
+function lgNextStage(order, isDelivery) {
+  const items      = order.items || [];
+  const hasChisum  = items.some(i => !!i.chisum);
+  const hasGraphic = items.some(i => !!i.graphic);
+  const deliveryFl = isDelivery != null ? !!isDelivery : !!order.deliveryClient;
+  const finalStage = deliveryFl ? 'delivery' : 'done';
+
+  switch (order.stage || '') {
+    case 'workday':
+      if (hasChisum)  return 'chisum';
+      if (hasGraphic) return 'graphic';
+      return finalStage;
+    case 'chisum':
+      if (hasGraphic) return 'graphic';
+      return finalStage;
+    case 'graphic':
+      return finalStage;
+    case 'done':
+    case 'delivery':
+      return 'collected';
+    default:
+      return null;
+  }
+}
 
 // ─── 3. updateStage — הפונקציה המרכזית לשינוי סטטוס ────────────────
 //  כל שינוי סטטוס במערכת חייב לעבור כאן בלבד
@@ -258,6 +289,7 @@ function lgNormalizeOrder(o) {
     chisumArrivedIdxs: o.chisumArrivedIdxs
       ? Object.keys(o.chisumArrivedIdxs).map(Number)
       : [],
+    deliveryClient: !!o.deliveryClient,
     createdAt:     o.createdAt    || 0,
     updatedAt:     o.updatedAt    || 0,
     _isSub:        String(o.id).startsWith('sub_')
@@ -422,6 +454,14 @@ const LG_SKU_MAP = {
   // גרניט (G)
   '6GM':'6 מ"מ גרניט מלוטש',  '6GMH':'6 מ"מ גרניט מחוסם',
   '8GM':'8 מ"מ גרניט מלוטש',  '8GMH':'8 מ"מ גרניט מחוסם',
+  // גרפיקה שקוף (SG) — מלוטש + גרפיקה  /  מחוסם + גרפיקה
+  '6SGM': '6 מ"מ שקוף גרפיקה מלוטש',  '6SGMH': '6 מ"מ שקוף גרפיקה מחוסם',
+  '8SGM': '8 מ"מ שקוף גרפיקה מלוטש',  '8SGMH': '8 מ"מ שקוף גרפיקה מחוסם',
+  '10SGM':'10 מ"מ שקוף גרפיקה מלוטש', '10SGMH':'10 מ"מ שקוף גרפיקה מחוסם',
+  // גרפיקה קליר (CG)
+  '6CGM': '6 מ"מ קליר גרפיקה מלוטש',  '6CGMH': '6 מ"מ קליר גרפיקה מחוסם',
+  '8CGM': '8 מ"מ קליר גרפיקה מלוטש',  '8CGMH': '8 מ"מ קליר גרפיקה מחוסם',
+  '10CGM':'10 מ"מ קליר גרפיקה מלוטש', '10CGMH':'10 מ"מ קליר גרפיקה מחוסם',
   // פיפטה (P)
   '8PM':'8 מ"מ פיפטה מלוטש',  '8PMH':'8 מ"מ פיפטה מחוסם',
   // גלינה (GL)
@@ -455,5 +495,5 @@ function _lgClean(obj) {
 function _lgToday() { return new Date().toLocaleDateString('he-IL'); }
 
 // ─── הודעת טעינה ─────────────────────────────────────────────────────
-console.log('%c[LuzGlass] firebase-db.js v2.1 ✓', 'color:#b8922a;font-weight:bold');
+console.log('%c[LuzGlass] firebase-db.js v2.2 ✓', 'color:#b8922a;font-weight:bold');
 console.log('  לבדיקת חיבור: lgTest()');
