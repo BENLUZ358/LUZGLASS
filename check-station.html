@@ -805,6 +805,8 @@ async function sendAllToFactory(){
   chDone = []; // אפס לפני כל שליחה חדשה
   const sendBtn = document.querySelector('button[onclick="sendAllToFactory()"]');
   if(sendBtn){ sendBtn.disabled=true; sendBtn.textContent='⏳ שולח...'; }
+  // פתח חלון דוח עכשיו (sync, בתוך gesture) — browsers חוסמים window.open אחרי await
+  const printWin = window.open('', '_blank');
   try {
   const doneOrds = orders.filter(isDone);
   if(!doneOrds.length){ toast('אין הזמנות שהושלמו'); return; }
@@ -839,10 +841,11 @@ async function sendAllToFactory(){
       .catch(e=>console.error('[CS] removeCheckEdit:', e));
   });
   _clearCSEditsForOrders(doneOrds.map(o=>o.id));
-  printChisum(reportNum);
+  printChisum(reportNum, printWin);
   toast(`✓ דוח ${reportNum} — ${doneOrds.length} הזמנות נשלחו למפעל`);
   } catch(e) {
     console.error('[CS] sendAllToFactory error:', e);
+    if(printWin && !printWin.closed) printWin.close();
     toast('שגיאה בשליחה — נסה שוב');
   } finally {
     _sendingToFactory = false;
@@ -858,10 +861,10 @@ function offerChisum(){
   document.getElementById('cbBody').innerHTML=`<p style="font-size:12px;color:var(--muted);margin-bottom:14px">סה"כ ${items.length} פריטים לחיסום</p>`+items.map((item,i)=>`<div class="cb-item"><div style="font-size:18px;color:var(--purple);font-weight:900;min-width:24px">${i+1}</div><div><div style="font-size:13px;font-weight:700">${item.name||'—'} · ${item.w||''}×${item.h||''} ס"מ</div><div style="font-size:11px;color:var(--muted)">${item.client} · ${item.orderNum||''}</div></div></div>`).join('');
   document.getElementById('chisReport').classList.add('open');
 }
-function printChisum(reportNum){
+function printChisum(reportNum, w){
+  if(!w){ toast('⚠️ חלון הדוח נחסם — אשר popup ונסה שוב'); return; }
   const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
   const label = reportNum ? `דוח ${reportNum}` : 'דוח חיסום';
-  const w=window.open('','_blank');
   w.document.write(`<html dir="rtl"><head><title>${label}</title><style>body{font-family:Heebo,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:9px;border:1px solid #ddd;text-align:right}th{background:#f5f5f5}.report-num{font-size:11px;color:#888;margin-bottom:4px}.report-title{font-size:18px;font-weight:700;margin-bottom:16px}</style></head><body>
 <div class="report-num">מספר דוח:</div>
 <div class="report-title">🔥 ${label} — ${new Date().toLocaleDateString('he-IL')}</div>
