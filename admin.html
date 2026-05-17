@@ -570,8 +570,9 @@ async function advance(id) {
 //  saveMod — שמירת עריכה ידנית
 // ══════════════════════════════════════════════════
 async function saveMod() {
-  if (!eid) return;
-  const o = orders.find(x => x.id === eid);
+  const id = eid; // capture before any await — eid can be nulled by concurrent closeMod
+  if (!id) return;
+  const o = orders.find(x => x.id === id);
   if (!o) return;
   const newStatus = document.getElementById('mst').value;
 
@@ -589,10 +590,8 @@ async function saveMod() {
   }
 
   const newStage = statusToStage(newStatus) || '';
-  // שמור = עדכון stage בלבד, ללא חלוניות נוספות
-  // (חלוניות חשבונית/קבלה מופעלות רק דרך כפתור "קדם" הייעודי)
-  await updateStage(eid, newStage);
-  if (o.urgent !== undefined) await updateOrder(eid, { urgent: o.urgent });
+  await updateStage(id, newStage);
+  if (o.urgent !== undefined) await updateOrder(id, { urgent: o.urgent });
   closeMod();
 }
 
@@ -1298,6 +1297,14 @@ function renderPickupBoard(){
 
 
 load(); // renderAll() נקרא על-ידי listenAllOrders כשהנתונים מגיעים מ-Firebase
+
+// כשהטאב חוזר לפורגראונד אחרי שהיה נסתר — כפה re-subscribe למנע sync gaps
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
+    _unsubscribe = listenAllOrders(remoteOrders => { orders = remoteOrders; renderAll(); });
+  }
+});
 </script>
 
 <!-- PRICING MODAL -->

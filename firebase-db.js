@@ -212,11 +212,13 @@ function listenAllOrders(callback) {
 }
 
 // האזנה לפי לקוח — לפורטל
+// מסנן client-side (לא server-side) כדי שעדכוני status בזמן אמת יגיעו תמיד
 function listenClientOrders(clientName, callback) {
-  const ref     = _lgDb.ref('orders').orderByChild('orderClient').equalTo(clientName);
+  const ref     = _lgDb.ref('orders');
   const handler = snap => {
     if (!snap.exists()) { callback([]); return; }
-    callback(Object.values(snap.val()).map(lgNormalizeOrder).filter(Boolean));
+    const all = Object.values(snap.val()).map(lgNormalizeOrder).filter(Boolean);
+    callback(all.filter(o => o.orderClient === clientName));
   };
   ref.on('value', handler);
   return () => ref.off('value', handler);

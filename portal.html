@@ -324,9 +324,12 @@ function init(){
   });
 
   // האזנה בזמן אמת ל-Firebase — כל שינוי מהאדמין מתעדכן מיד
+  _subscribePortalOrders(clientName);
+}
+
+function _subscribePortalOrders(clientName) {
   if (_portalUnsub) _portalUnsub();
   _portalUnsub = listenClientOrders(clientName, function(fbOrders){
-    // המר מבנה Firebase למבנה שהפורטל מצפה לו
     ORDERS.length = 0;
     fbOrders.forEach(o => {
       ORDERS.push({
@@ -338,7 +341,7 @@ function init(){
         area:       o.area      || '',
         total:      lgCalcOrderTotal(o, _portalGlobalPrices, _portalClientPrices) || Number(o.total) || 0,
         _rawTotal:  Number(o.total) || 0,
-        _totalFinal:o.totalFinal   || 0,   // מחיר נעול — משמש ב-listenAllPrices recalc
+        _totalFinal:o.totalFinal   || 0,
         orderClient:o.orderClient || clientName,
         date:       o.date      || '',
         status:     o.status    || lgStageToStatus(o.stage || ''),
@@ -718,6 +721,14 @@ function sendQuoteWA(){
 }
 
 init();
+
+// כשהטאב חוזר לפורגראונד — כפה re-subscribe למנע sync gaps בטאבים ברקע
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    const clientName = (window._lgSession || {}).name || '';
+    if (clientName) _subscribePortalOrders(clientName);
+  }
+});
 </script>
 </body>
 </html>
