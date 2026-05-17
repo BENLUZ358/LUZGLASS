@@ -480,10 +480,13 @@ function orderCard(o){
   const displayStatus = (o.status==='נשלח לחיסום'&&isMirrorOrd) ? 'ירד לביצוע' : o.status;
   const cfg=SCFG[displayStatus]||SCFG["ממתין לאישור"];
   const isExp=expanded.has(o.id);
-  const stepIdx=cfg.step;
   const isDone=o.status==="נאסף";
+  const hasGraphic=(o.items||[]).some(i=>_lgItemHasGraphic(i))||o.status==='בגרפיקה';
+  const orderSteps=hasGraphic?STEPS:["התקבלה","בתור","בייצור","חיסום","מוכן","נאסף"];
+  const rawStep=cfg.step;
+  const stepIdx=hasGraphic?rawStep:(rawStep>=5?rawStep-1:rawStep);
   let stepper='<div class="stepper">';
-  STEPS.forEach((s,i)=>{
+  orderSteps.forEach((s,i)=>{
     if(i>0)stepper+='<div class="st-line '+(i<=stepIdx?"done":"")+'"></div>';
     const cl=i<stepIdx?"done":i===stepIdx?"active":"pending";
     stepper+='<div class="st-item"><div class="st-circle '+cl+'">'+(i<stepIdx?"&#10003;":i+1)+'</div><div class="st-label '+(i===stepIdx?"active":"")+'">'+ s+'</div></div>';
