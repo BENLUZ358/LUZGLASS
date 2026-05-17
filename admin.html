@@ -129,7 +129,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.7}}
 
   /* MODAL */
-  .overlay{position:fixed;inset:0;background:rgba(26,23,20,0.55);z-index:100;display:none;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
+  .overlay{position:fixed;inset:0;background:rgba(26,23,20,0.55);z-index:550;display:none;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;}
   .overlay.open{display:flex;}
   .modal{background:var(--surface);width:100%;max-width:580px;margin:auto;animation:su 0.22s ease;}
   @keyframes su{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
@@ -297,7 +297,6 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
     <button class="fb" onclick="setSF('מחכה ל-OptyWay',this)">OptyWay</button>
     <button class="fb" onclick="setSF('ירד לביצוע',this)">בביצוע</button>
     <button class="fb" onclick="setSF('נשלח לחיסום',this)">בחיסום</button>
-    <button class="fb" onclick="setSF('חזר מחיסום',this)">חזר מחיסום</button>
     <button class="fb" onclick="setSF('בגרפיקה',this)">🖼 גרפיקה</button>
     <button class="fb" onclick="setSF('ממתין להובלה',this)">🚚 הובלות</button>
     <button class="fb" onclick="setSF('מוכן לאיסוף',this)">מוכן לאיסוף</button>
@@ -611,8 +610,12 @@ async function deleteOrderById(id) {
 //  openMod — פתח מודאל עריכה (stage בלבד — דשבורד צפייה)
 // ══════════════════════════════════════════════════
 function openMod(id) {
+  // סגור תור סקיצות אם פתוח — מונע ש-overlay המודאל יישאר מאחוריו (z-index)
+  const sqEl = document.getElementById('sqOverlay');
+  if(sqEl && sqEl.style.display !== 'none') sqEl.style.display = 'none';
+
   const o = orders.find(x => x.id === String(id));
-  if (!o) return;
+  if (!o) { console.warn('[openMod] order not found:', id, '| orders count:', orders.length); return; }
   eid = o.id;
   document.getElementById('mtitle').textContent = (o.orderClient||'') + ' — ' + (o.sketchName||o.type||'');
 
