@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>LuzGlass — תחנת בדיקה</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
@@ -181,7 +184,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260511b"></script>
+  <script src="firebase-db.js?v=20260512b"></script>
 </head>
 <body>
 <div id="lgLoading" style="position:fixed;inset:0;background:#1a1a1a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
@@ -406,6 +409,7 @@ let activeTab='active'; // 'active' | 'done'
 let wdInChisum=[];
 let _csUnsub=null, _wdRef=null, _checkEditsRef=null;
 let _wdReady=false, _ordersReady=false; // דגלי טעינה — מונעים render לפני שהכל מוכן
+let _sendingToFactory=false; // מונע double-tap על "שלח למפעל"
 // סימונים זמניים לבדיקה — נשמרים ב-Firebase בנתיב נפרד, לא נוגעים ב-orders
 window._csCheckEdits = {};
 
@@ -463,11 +467,11 @@ function load(){
     function objToArr(v){ return v ? Object.values(v).map(String) : []; }
     wdInChisum = objToArr(wd.inChisum);
 
-    if(wd.checkState && typeof wd.checkState === 'object'){
-      // Firebase יש נתון — השתמש בו (יותר חדש מ-localStorage)
+    if(!_csLocalPending && wd.checkState && typeof wd.checkState === 'object'){
+      // Firebase יש נתון — השתמש בו, אלא אם כן אנחנו באמצע כתיבה מקומית
       cs = wd.checkState;
       safeStorage.setItem('lgCheckState', JSON.stringify(cs));
-    } else if(Object.keys(cs).length > 0){
+    } else if(!_csLocalPending && Object.keys(cs).length > 0){
       // Firebase חסר checkState (ייתכן שworkday מחק אותו) — שחזר מ-localStorage
       firebase.database().ref('workday/checkState').set(cs)
         .catch(e=>console.error('[CS] checkState recovery:', e));
@@ -514,10 +518,19 @@ function demos(){return[
   {id:2004,orderClient:'מזרחי',orderNum:'2026-004',sketchName:'וילה',glassFullName:'גלינה קליר',isSystemSketch:true,items:[{name:'גלינה קליר',w:70,h:220},{name:'גלינה קליר',w:90,h:220}],sketch:null},
 ];}
 
-function saveCS(){
-  safeStorage.setItem('lgCheckState',JSON.stringify(cs));
-  firebase.database().ref('workday/checkState').set(cs)
-    .catch(e=>console.error('[CS] saveCS Firebase error:',e));
+// _csLocalPending: מונע מה-listener לדרוס cs בזמן שאנחנו כותבים ל-Firebase
+let _csLocalPending = false;
+
+async function saveCS(){
+  _csLocalPending = true;
+  safeStorage.setItem('lgCheckState', JSON.stringify(cs));
+  try {
+    await firebase.database().ref('workday/checkState').set(cs);
+  } catch(e) {
+    console.error('[CS] saveCS Firebase error:', e);
+  } finally {
+    _csLocalPending = false;
+  }
 }
 function saveNotes(){ safeStorage.setItem('lgOrderNotes',JSON.stringify(notes)); }
 // מחזיר רק indices של פריטי חיסום (לא ליטוש)
@@ -657,7 +670,22 @@ function renderSketch(){
   const el=document.getElementById('skWrap');
   scl=1;px=0;py=0;el.style.transform='';
   const src=cur._editedSketch||cur.sketch;
-  el.innerHTML=src?`<img src="${src}" style="width:100%;height:100%;object-fit:contain">`:buildSVG(cur);
+  if(src){
+    el.innerHTML=`<img src="${src}" style="width:100%;height:100%;object-fit:contain">`;
+  } else {
+    el.innerHTML=buildSVG(cur);
+    // iOS fix: SVG onclick לפעמים מקבל 300ms delay — touchend מיידי עוקף אותו
+    el.querySelectorAll('rect[onclick]').forEach(rect=>{
+      const m=(rect.getAttribute('onclick')||'').match(/checkItem\((\d+)\)/);
+      if(!m) return;
+      const idx=parseInt(m[1]);
+      rect.addEventListener('touchend', e=>{
+        e.preventDefault();  // בטל 300ms delay ואת ה-click הכפול
+        e.stopPropagation(); // מנע bubbling ל-setupPan
+        checkItem(idx);
+      },{passive:false,once:true});
+    });
+  }
   setupPan();
 }
 
@@ -740,34 +768,42 @@ function _removeFromChisumStation(ordId){
 }
 
 
-function finishSketch(){
+async function finishSketch(){
   if(!cur) return;
+  const btn = document.getElementById('finishBtn');
+  if(btn) btn.disabled = true; // חסום מיד — מונע double-tap
   if(!cs[cur.id]) cs[cur.id] = {};
   chisumIdxs(cur).forEach(i => { cs[cur.id][i] = true; });
-  saveCS();
+  await saveCS(); // חכה שה-write ל-Firebase יסתיים לפני שממשיכים
   hideBanner();
   cur = null;
-  setTab('done'); // מעבר אוטומטי לטאב הושלמו
+  setTab('done');
   showList();
   toast('✓ הסקיצה הושלמה — ראה בטאב הושלמו');
 }
 
-// יצירת מספר דוח חיסום
-function _createReportNum(){
-  const now = new Date();
-  const d = String(now.getDate()).padStart(2,'0');
-  const m = String(now.getMonth()+1).padStart(2,'0');
-  const suffix = String(Date.now()).slice(-3);
-  return 'CH-' + d + m + '-' + suffix;
+// מספר רץ לדוחות חיסום — נשמר ב-Firebase כדי שיהיה עקבי בין מכשירים
+async function _createReportNum(){
+  const ref = firebase.database().ref('meta/chisumCounter');
+  const snap = await ref.once('value');
+  const next = (snap.val() || 0) + 1;
+  await ref.set(next);
+  return String(next);
 }
 
 // שלח את כל ההזמנות שהושלמו למפעל + הפק דוח ממוספר
 async function sendAllToFactory(){
+  if(_sendingToFactory) return; // מונע double-tap
+  _sendingToFactory = true;
+  chDone = []; // אפס לפני כל שליחה חדשה
+  const sendBtn = document.querySelector('button[onclick="sendAllToFactory()"]');
+  if(sendBtn){ sendBtn.disabled=true; sendBtn.textContent='⏳ שולח...'; }
+  try {
   const doneOrds = orders.filter(isDone);
   if(!doneOrds.length){ toast('אין הזמנות שהושלמו'); return; }
 
   const reportId  = 'chisum_' + Date.now();
-  const reportNum = _createReportNum();
+  const reportNum = await _createReportNum();
 
   // שלב 1: עדכן כל ההזמנות ב-Firebase — המתן לסיום לפני עדכון inChisum
   // (מונע מצב שבו inChisum מתעדכן לפני שה-stage של ההזמנה מוכן)
@@ -798,6 +834,13 @@ async function sendAllToFactory(){
   _clearCSEditsForOrders(doneOrds.map(o=>o.id));
   printChisum(reportNum);
   toast(`✓ דוח ${reportNum} — ${doneOrds.length} הזמנות נשלחו למפעל`);
+  } catch(e) {
+    console.error('[CS] sendAllToFactory error:', e);
+    toast('שגיאה בשליחה — נסה שוב');
+  } finally {
+    _sendingToFactory = false;
+    if(sendBtn){ sendBtn.disabled=false; sendBtn.textContent='🔥 שלח למפעל'; }
+  }
 }
 
 

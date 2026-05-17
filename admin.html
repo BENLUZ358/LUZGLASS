@@ -26,6 +26,9 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>LuzGlass — ניהול הזמנות</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -224,7 +227,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260511b"></script>
+  <script src="firebase-db.js?v=20260512b"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -244,6 +247,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
     <a class="unav-a active" href="#" onclick="setView('kanban',this)"><span class="ic">⬡</span>לוח הזמנות</a>
     <a class="unav-a" href="#" onclick="openPricing()"><span class="ic">💰</span>מחירונים</a>
     <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic">📅</span>לוח איסופים</a>
+    <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic">📊</span>סיכום יום</a>
     <div class="unav-sec">תחנות עבודה</div>
     <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic">📐</span>תור סקיצות</a>
     <a class="unav-a" href="drafter.html"><span class="ic">✏️</span>שרטט</a>
@@ -372,6 +376,10 @@ let orders = [], eid = null, sf = 'all', cv = 'kanban';
 const statusToStage = (typeof lgStatusToStage === 'function') ? lgStatusToStage : (s => '');
 let _unsubscribe = null; // פונקציית ניתוק מ-Firebase listener
 
+// מחירים — מסונכרנים מ-Firebase בזמן אמת
+let globalPrices = {};
+let clientPrices = {};
+
 // ══════════════════════════════════════════════════
 //  LOAD — מאזין ל-Firebase בזמן אמת
 // ══════════════════════════════════════════════════
@@ -384,56 +392,30 @@ function load() {
     const ov = document.getElementById('lgLoading');
     if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
   });
+  listenAllPrices((gp, cp) => {
+    globalPrices = gp;
+    clientPrices = cp;
+    // migrate localStorage → Firebase (one-time, if Firebase is empty)
+    if(Object.keys(gp).length === 0){
+      const stored = JSON.parse(safeStorage.getItem('lgPricesGlobal')||'{}');
+      if(Object.keys(stored).length) savePricesGlobal(stored).catch(()=>{});
+    }
+    if(Object.keys(cp).length === 0){
+      const stored = JSON.parse(safeStorage.getItem('lgPricesClient')||'{}');
+      for(const [name, prices] of Object.entries(stored)){
+        if(Object.keys(prices||{}).length) saveClientPrices(name, prices).catch(()=>{});
+      }
+    }
+    renderAll(); // מחירים נטענו — צייר מחדש כדי שהחישובים יתעדכנו
+  });
 }
 
 // ══════════════════════════════════════════════════
 //  מחירון — חישוב וחשבונית
 // ══════════════════════════════════════════════════
 
-// מצא price-item id לפי שם זכוכית (התאמה לפי מילות מפתח)
-function findPriceItem(glassName){
-  if(!glassName) return null;
-  const n = glassName.toLowerCase().replace(/"/g,'');
-  if(n.includes('מראה') || n.includes('mir')){
-    if(n.includes('ברונז')||n.includes('brnz')) return 'mir-5-brnz';
-    if(n.includes('אפור')||n.includes('gray')||n.includes('gr')) return 'mir-5-gray';
-    return 'mir-5-pol';
-  }
-  const mmM = n.match(/(\d+)\s*מ/) || n.match(/^(\d+)/);
-  const mm  = mmM ? parseInt(mmM[1]) : 8;
-  const isTmp   = n.includes('מחוסם')||n.includes('smh')||n.endsWith('mh')||n.includes('חיסום');
-  const isKlir  = n.includes('קליר')||n.includes('klir')||n.includes('cm');
-  const isAfor  = n.includes('אפור')||n.includes('gray');
-  const isGranit= n.includes('גרניט')||n.includes('granit');
-  if(isTmp){
-    if(isGranit) return 'tmp-8-granit';
-    if(mm<=6) return 'tmp-6';
-    if(mm>=15&&isKlir) return 'tmp-15-klir';
-    if(mm>=10&&isAfor) return 'tmp-10-gray';
-    if(isKlir) return mm>=10?'tmp-10':'tmp-8-klir';
-    return mm>=10?'tmp-10':'tmp-8';
-  }
-  const map={4:'cl-4-pol',5:'cl-5-pol',6:'cl-6-pol',8:'cl-8-pol',10:'cl-10-pol',12:'cl-12-pol'};
-  return map[mm]||'cl-8-pol';
-}
-
-// חשב מחיר להזמנה לפי פריטים ומחירון
-function lgCalcOrderTotal(order){
-  if(!(order.items||[]).length) return order.total||0;
-  const clientName = order.orderClient||'';
-  const cp = clientPrices[clientName]||{};
-  let total=0;
-  (order.items||[]).forEach(item=>{
-    const name = item.glassFullName||item.name||'';
-    const pid  = findPriceItem(name);
-    if(!pid) return;
-    const ppm2 = parseFloat(cp[pid]||globalPrices[pid]||0);
-    if(!ppm2) return;
-    const area = ((item.w||0)/100) * ((item.h||0)/100);
-    total += area * ppm2;
-  });
-  return Math.round(total);
-}
+// findPriceItem ו-lgCalcOrderTotal מוגדרים ב-firebase-db.js (lgFindPriceItem / lgCalcOrderTotal)
+function findPriceItem(name){ return lgFindPriceItem(name); }
 
 // Popup שאלה: "האם להעביר לתשלום/חשבונית?" לפני stage=done או delivery
 function showInvoicePrompt(order, newStage){
@@ -450,7 +432,7 @@ function showInvoicePrompt(order, newStage){
       <div style="display:flex;gap:10px;">
         <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}');"
           style="flex:1;padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ כן</button>
-        <button onclick="this.closest('[style*=fixed]').remove();updateStage('${order.id}','${newStage}').catch(e=>console.error(e));"
+        <button onclick="this.closest('[style*=fixed]').remove();invoiceMarkDone('${order.id}').catch(e=>console.error(e));"
           style="flex:1;padding:13px;background:#f0ede8;color:#555;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">לא</button>
       </div>
     </div>`;
@@ -547,7 +529,14 @@ function openInvoicePreview(orderId, targetStage){
 }
 
 async function invoiceMarkDone(orderId){
-  await updateStage(String(orderId),'done').catch(e=>console.error('invoiceMarkDone:',e));
+  const o = orders.find(x => x.id === String(orderId));
+  const target = o ? (lgNextStage(o) || 'done') : 'done';
+  if(o && (target === 'done' || target === 'delivery')){
+    await lgLockAndAdvance(String(orderId), o, globalPrices, clientPrices, target)
+      .catch(e=>console.error('invoiceMarkDone:',e));
+  } else {
+    await updateStage(String(orderId), target).catch(e=>console.error('invoiceMarkDone:',e));
+  }
 }
 
 // ══════════════════════════════════════════════════
@@ -774,7 +763,7 @@ function card(o) {
     </div>
     <div class="c-foot">
       <span class="c-area">${o.area||'—'} מ״ר</span>
-      <span class="c-price">₪${(o.total||0).toLocaleString()}</span>
+      <span class="c-price">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</span>
     </div>
     <div class="c-acts" onclick="event.stopPropagation()">
       ${o.sketch ? `<button class="cb-btn" onclick="previewSketch('${o.id}')">🖼️ סקיצה</button>` : ''}
@@ -847,7 +836,7 @@ function renderAll(){renderStats();if(cv==='kanban')renderKanban();else renderTa
 
 function renderStats(){
   const f=filtered();
-  const tot=f.reduce((s,o)=>s+(o.total||0),0);
+  const tot=f.reduce((s,o)=>s+(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0),0);
   const inP=f.filter(o=>['ירד לביצוע','נשלח לחיסום','חזר מחיסום','בגרפיקה','ממתין להובלה'].includes(o.status)).length;
   const rdy=f.filter(o=>o.status==='מוכן לאיסוף').length;
   const urg=f.filter(o=>o.urgent).length;
@@ -913,7 +902,7 @@ function renderTable(){
       <td><span class="tag tg">${o.glass}</span></td>
       <td><span class="tag tf">${o.finish}</span></td>
       <td style="font-size:12px">${o.area} מ״ר</td>
-      <td style="font-weight:700;color:var(--gold)">₪${(o.total||0).toLocaleString()}</td>
+      <td style="font-weight:700;color:var(--gold)">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</td>
       <td><span class="badge" style="background:${s.c}">${o.status}</span></td>
       <td style="font-size:11px;color:var(--muted)">${o.date||''}</td>
       <td><button class="cb-btn" style="padding:5px 8px" onclick="openMod('${o.id}')">פרטים</button></td>
@@ -970,29 +959,7 @@ function exportCSV(){
 // ═══════════════════════════════════════
 //  PRICING
 // ═══════════════════════════════════════
-const PRICE_ITEMS = [
-  {cat:'מראות', id:'mir-5-pol',   name:'מראה 5מ"מ מלוטש'},
-  {cat:'מראות', id:'mir-5-gray',  name:'מראה אפורה 5מ"מ מלוטש'},
-  {cat:'מראות', id:'mir-5-brnz',  name:'מראה ברונזה 5מ"מ מלוטש'},
-  {cat:'מראות', id:'mir-5-shape', name:'מראה 5מ"מ צורתית'},
-  {cat:'שקוף מלוטש', id:'cl-4-pol',  name:'שקוף 4מ"מ מלוטש'},
-  {cat:'שקוף מלוטש', id:'cl-5-pol',  name:'שקוף 5מ"מ מלוטש'},
-  {cat:'שקוף מלוטש', id:'cl-6-pol',  name:'שקוף 6מ"מ מלוטש'},
-  {cat:'שקוף מלוטש', id:'cl-8-pol',  name:'שקוף 8מ"מ מלוטש'},
-  {cat:'שקוף מלוטש', id:'cl-10-pol', name:'שקוף 10מ"מ מלוטש'},
-  {cat:'שקוף מלוטש', id:'cl-12-pol', name:'שקוף 12מ"מ מלוטש'},
-  {cat:'מחוסם', id:'tmp-6',        name:'מחוסם 6מ"מ שקוף'},
-  {cat:'מחוסם', id:'tmp-8',        name:'מחוסם 8מ"מ שקוף'},
-  {cat:'מחוסם', id:'tmp-8-klir',   name:'מחוסם 8מ"מ קליר'},
-  {cat:'מחוסם', id:'tmp-8-granit', name:'מחוסם 8מ"מ גרניט'},
-  {cat:'מחוסם', id:'tmp-10',       name:'מחוסם 10מ"מ קליר'},
-  {cat:'מחוסם', id:'tmp-10-gray',  name:'מחוסם 10מ"מ אפור'},
-  {cat:'מחוסם', id:'tmp-15-klir',  name:'מחוסם 15מ"מ קליר'},
-];
-
 let pricingTab = 'global';
-let globalPrices = JSON.parse(safeStorage.getItem('lgPricesGlobal')||'{}');
-let clientPrices = JSON.parse(safeStorage.getItem('lgPricesClient')||'{}');
 
 function openPricing(){
   document.getElementById('pricingOv').classList.add('open');
@@ -1014,7 +981,7 @@ function renderPricing(){
   const el=document.getElementById('pricingBody');
   if(pricingTab==='global'){
     const cats={};
-    PRICE_ITEMS.forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});
+    LG_PRICE_ITEMS.forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});
     el.innerHTML=`
       <p style="font-size:12px;color:var(--muted);margin-bottom:14px">מחיר ל-מ"ר. ריק = "לפי הצעה"</p>
       <table class="price-table">
@@ -1036,7 +1003,7 @@ function renderPricing(){
     const clients=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))];
     const selClient=document.getElementById('clientSel')?.value||clients[0]||'';
     const cats={};
-    PRICE_ITEMS.forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});
+    LG_PRICE_ITEMS.forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});
     const cp=clientPrices[selClient]||{};
     el.innerHTML=`
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">מחיר מיוחד ללקוח. ריק = מחירון כללי</p>
@@ -1064,26 +1031,24 @@ function renderPricing(){
 
 function savePricing(){
   if(pricingTab==='global'){
-    PRICE_ITEMS.forEach(p=>{
+    const gp={};
+    LG_PRICE_ITEMS.forEach(p=>{
       const v=document.getElementById('gp_'+p.id)?.value;
       const n=document.getElementById('gn_'+p.id)?.value;
-      if(v) globalPrices[p.id]=parseFloat(v);
-      else delete globalPrices[p.id];
-      if(n) globalPrices[p.id+'_note']=n;
-      else delete globalPrices[p.id+'_note'];
+      if(v) gp[p.id]=parseFloat(v);
+      if(n) gp[p.id+'_note']=n;
     });
-    safeStorage.setItem('lgPricesGlobal',JSON.stringify(globalPrices));
+    savePricesGlobal(gp).catch(e=>console.error('savePricesGlobal',e));
   } else {
     let client=document.getElementById('clientSel')?.value;
     if(client==='__new__') client=document.getElementById('newClientName')?.value;
     if(!client) return;
     const cp={};
-    PRICE_ITEMS.forEach(p=>{
+    LG_PRICE_ITEMS.forEach(p=>{
       const v=document.getElementById('cp_'+p.id)?.value;
       if(v) cp[p.id]=parseFloat(v);
     });
-    clientPrices[client]=cp;
-    safeStorage.setItem('lgPricesClient',JSON.stringify(clientPrices));
+    saveClientPrices(client, cp).catch(e=>console.error('saveClientPrices',e));
   }
   closePricing();
   const t=document.getElementById('toast')||document.createElement('div');
@@ -1205,6 +1170,63 @@ setInterval(checkInboxBadge,30000);
 function openPickupBoard(){
   document.getElementById('pickupOv').classList.add('open');
   renderPickupBoard();
+}
+
+// ═══════════════════════════════════════
+//  DAILY SUMMARY — סיכום יום
+// ═══════════════════════════════════════
+function openDailySummary(){
+  const todayStr = new Date().toLocaleDateString('he-IL');
+  const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+
+  // הזמנות שעודכנו היום
+  const todayOrders = orders.filter(o => {
+    if(!o.updatedAt) return false;
+    return new Date(o.updatedAt) >= todayStart;
+  });
+
+  // קטגוריות
+  const doneToday      = todayOrders.filter(o => o.stage === 'done' || o.stage === 'delivery');
+  const collectedToday = todayOrders.filter(o => o.stage === 'collected');
+  const newToday       = todayOrders.filter(o => !o.stage || o.stage === '' || o.stage === 'pending');
+  const inWorkToday    = todayOrders.filter(o => o.stage === 'workday');
+
+  // סכומים
+  const doneTotal      = doneToday.reduce((s,o)=>s+(lgCalcOrderTotal(o,globalPrices,clientPrices)||0),0);
+  const collectedTotal = collectedToday.reduce((s,o)=>s+(lgCalcOrderTotal(o,globalPrices,clientPrices)||0),0);
+
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:flex-start;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:20px 16px;overflow-y:auto;';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin-top:20px;">
+      <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-size:15px;font-weight:900;color:#f0ede8;">📊 סיכום יום — ${todayStr}</span>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
+      </div>
+      <div style="padding:20px 22px;display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;">
+        ${_dsStat('✅ הושלמו היום', doneToday.length, doneTotal ? '₪'+doneTotal.toLocaleString() : '', '#27ae60')}
+        ${_dsStat('📦 נאספו היום', collectedToday.length, collectedTotal ? '₪'+collectedTotal.toLocaleString() : '', '#b8922a')}
+        ${_dsStat('🆕 הזמנות חדשות', newToday.length, '', '#2980b9')}
+        ${_dsStat('🏭 בייצור', inWorkToday.length, '', '#8e44ad')}
+      </div>
+      ${doneToday.length ? `
+      <div style="padding:0 22px 20px;">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:10px;">הזמנות שהושלמו היום</div>
+        ${doneToday.map(o=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;">
+            <div style="flex:1"><strong>${o.orderClient||'—'}</strong> · <span style="color:var(--muted)">${o.orderNum||''}</span></div>
+            <div style="font-weight:700;color:#27ae60">${lgCalcOrderTotal(o,globalPrices,clientPrices)?'₪'+(lgCalcOrderTotal(o,globalPrices,clientPrices)).toLocaleString():''}</div>
+          </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+  document.body.appendChild(ov);
+}
+function _dsStat(label, count, sub, color){
+  return `<div style="background:#f7f4ef;border-radius:8px;padding:14px 16px;border-right:3px solid ${color};">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${label}</div>
+    <div style="font-size:24px;font-weight:900;color:${color}">${count}</div>
+    ${sub?`<div style="font-size:12px;color:var(--muted);margin-top:2px">${sub}</div>`:''}
+  </div>`;
 }
 function closePickup(){
   document.getElementById('pickupOv').classList.remove('open');

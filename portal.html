@@ -5,8 +5,8 @@
 const safeStorage = {
   _mem: {},
   getItem(k){ try{ return localStorage.getItem(k); }catch(e){ return this._mem[k]||null; } },
-  setItem(k,v){ try{ safeStorage.setItem(k,v); }catch(e){ this._mem[k]=v; } },
-  removeItem(k){ try{ safeStorage.removeItem(k); }catch(e){ delete this._mem[k]; } }
+  setItem(k,v){ try{ localStorage.setItem(k,v); }catch(e){ this._mem[k]=v; } },
+  removeItem(k){ try{ localStorage.removeItem(k); }catch(e){ delete this._mem[k]; } }
 };
 
 (function(){
@@ -22,6 +22,9 @@ const safeStorage = {
 
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>LuzGlass &#8212; הפורטל שלי</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -142,7 +145,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260511b"></script>
+  <script src="firebase-db.js?v=20260512b"></script>
 </head>
 <body>
 <div id="lgLoading" style="position:fixed;inset:0;background:#f7f4ef;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
@@ -298,12 +301,27 @@ let pickupDates=JSON.parse(safeStorage.getItem("lgPickupDates")||"{}");
 // פונקציית ניתוק listener
 let _portalUnsub = null;
 
+// מחירים — מסונכרנים מ-Firebase בזמן אמת
+let _portalGlobalPrices = {};
+let _portalClientPrices = {};
+
 function init(){
   const sess = window._lgSession || {};
   const clientName = sess.name || '';
 
   document.getElementById("navName").textContent = clientName;
   document.getElementById("heroName").textContent = clientName;
+
+  listenAllPrices((gp, cp) => {
+    _portalGlobalPrices = gp;
+    _portalClientPrices = cp;
+    ORDERS.forEach(o => {
+      // העבר totalFinal כדי ש-lgCalcOrderTotal יחזיר מחיר נעול לנאספות
+      const calc = lgCalcOrderTotal({items: o.items, orderClient: o.orderClient, totalFinal: o._totalFinal}, gp, cp);
+      o.total = calc || o._rawTotal || 0;
+    });
+    renderAll();
+  });
 
   // האזנה בזמן אמת ל-Firebase — כל שינוי מהאדמין מתעדכן מיד
   if (_portalUnsub) _portalUnsub();
@@ -318,7 +336,10 @@ function init(){
         glass:      o.glass     || '',
         finish:     o.finish    || '',
         area:       o.area      || '',
-        total:      Number(o.total) || 0,
+        total:      lgCalcOrderTotal(o, _portalGlobalPrices, _portalClientPrices) || Number(o.total) || 0,
+        _rawTotal:  Number(o.total) || 0,
+        _totalFinal:o.totalFinal   || 0,   // מחיר נעול — משמש ב-listenAllPrices recalc
+        orderClient:o.orderClient || clientName,
         date:       o.date      || '',
         status:     o.status    || lgStageToStatus(o.stage || ''),
         stage:      o.stage     || '',
@@ -338,10 +359,10 @@ function init(){
 }
 function renderAll(){renderStats();renderOrders();renderReady();renderInvoices();renderChat();}
 
-// "מוכן לאיסוף" ו"נאסף" = שולם — לא נספרים בחוב
+// חוב = כל ההזמנות שלא נאספו עדיין (נאסף = שולם/נסגר)
 function _calcUnpaidTotal(){
   return ORDERS
-    .filter(o => o.status !== 'מוכן לאיסוף' && o.status !== 'נאסף')
+    .filter(o => o.status !== 'נאסף')
     .reduce((s, o) => s + (Number(o.total) || 0), 0);
 }
 
@@ -593,31 +614,15 @@ function renderClientPrice(){
   const el = document.getElementById('clientPriceList');
   if(!el) return;
   const clientName = (window._lgSession&&window._lgSession.name)||'';
-  // מחירים — Firebase primary, localStorage fallback
-  const _gpRaw = typeof firebase !== 'undefined' ? {} : {};
-  const globalPrices = JSON.parse(safeStorage.getItem('lgPricesGlobal')||'{}');
-  const allClientPrices = JSON.parse(safeStorage.getItem('lgPricesClient')||'{}');
-  const myPrices = allClientPrices[clientName]||{};
-  const PRICE_ITEMS = [
-    {cat:'מראות',       id:'mir-5-pol',   name:'מראה 5מ"מ מלוטש'},
-    {cat:'מראות',       id:'mir-5-gray',  name:'מראה אפורה 5מ"מ מלוטש'},
-    {cat:'מראות',       id:'mir-5-brnz',  name:'מראה ברונזה 5מ"מ מלוטש'},
-    {cat:'מראות',       id:'mir-5-shape', name:'מראה 5מ"מ צורתית'},
-    {cat:'שקוף מלוטש', id:'cl-6-pol',    name:'שקוף 6מ"מ מלוטש'},
-    {cat:'שקוף מלוטש', id:'cl-8-pol',    name:'שקוף 8מ"מ מלוטש'},
-    {cat:'שקוף מלוטש', id:'cl-10-pol',   name:'שקוף 10מ"מ מלוטש'},
-    {cat:'מחוסם',       id:'tmp-6',       name:'מחוסם 6מ"מ שקוף'},
-    {cat:'מחוסם',       id:'tmp-8',       name:'מחוסם 8מ"מ שקוף'},
-    {cat:'מחוסם',       id:'tmp-8-klir',  name:'מחוסם 8מ"מ קליר'},
-    {cat:'מחוסם',       id:'tmp-10',      name:'מחוסם 10מ"מ קליר'},
-  ];
+  const myPrices = _portalClientPrices[clientName]||{};
+  const gp = _portalGlobalPrices;
   const cats = {};
-  PRICE_ITEMS.forEach(p=>{ if(!cats[p.cat]) cats[p.cat]=[]; cats[p.cat].push(p); });
+  LG_PRICE_ITEMS.forEach(p=>{ if(!cats[p.cat]) cats[p.cat]=[]; cats[p.cat].push(p); });
   el.innerHTML = Object.entries(cats).map(([cat,items])=>`
     <div style="margin-bottom:18px">
       <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;padding:6px 0;border-bottom:2px solid rgba(184,146,42,0.2);margin-bottom:8px">${cat}</div>
       ${items.map(p=>{
-        const price = myPrices[p.id] || globalPrices[p.id];
+        const price = myPrices[p.id] || gp[p.id];
         return price ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px">
           <span>${p.name}</span>
           <span style="font-weight:700;color:var(--gold)">₪${price}<span style="font-size:11px;font-weight:400;color:var(--muted)">/מ"ר</span></span>

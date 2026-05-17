@@ -193,6 +193,38 @@ switch (stage):
 
 ---
 
+## נעילת מחיר סופי — `totalFinal`
+
+### מתי המחיר דינמי ומתי קבוע?
+
+| מצב | סוג מחיר | מקור |
+|-----|----------|------|
+| שלבים: `opty`, `workday`, `chisum`, `graphic`, `delivery` | **דינמי** | מחושב בזמן אמת מ-`lgCalcOrderTotal` |
+| שלב `done` / `collected` | **קבוע** | `order.totalFinal` — נשמר פעם אחת |
+
+### מתי נועל?
+נעילה מתרחשת **לפני** שינוי ה-stage ל-`done` או `delivery`, מ-4 נקודות:
+1. `markStageDone()` ב-workday.html — סיום יום עבודה
+2. `completeGraphic()` ב-workday.html — סיום גרפיקה
+3. `confirmResetChisum()` ב-workday.html — כל פריטי החיסום הגיעו
+4. `invoiceMarkDone()` ב-admin.html — מעבר ידני מהדשבורד
+
+### מה נשמר?
+```js
+order.totalFinal     // ₪ — המחיר הסופי הנעול
+order.totalM2        // מ"ר — שטח כולל מחושב מפריטים
+order.pricesLockedAt // timestamp של זמן הנעילה
+```
+
+### לוגיקת תצוגה
+`lgCalcOrderTotal(order, globalP, clientP)`:
+- אם `order.totalFinal` קיים → מחזיר אותו ישירות (מחיר נעול)
+- אחרת → מחשב מ-items × מחירון × מ"ר
+
+**חוק:** שינוי מחירון אחרי `done` **לא** ישפיע על הזמנות שכבר נעולות.
+
+---
+
 ## חוקים קריטיים
 
 1. **stage='chisum' נקבע אך ורק ב-`sendAllToFactory` בתחנת הבדיקה** — לא מ-workday ולא מהדשבורד ידנית.
@@ -200,3 +232,4 @@ switch (stage):
 3. **לא לשלוח WhatsApp לפני שכל השלבים של ההזמנה הושלמו** — גרפיקה/הובלה עדיין לא מוכנים.
 4. **כל דוח חיסום הוא קבוצה עצמאית** — `reportId` נוצר בשלח למפעל, לא ניתן לשנות.
 5. **`workday.set()` מוחלף ב-`workday.update()`** — מונע מחיקת `checkState`.
+6. **`totalFinal` נכתב פעם אחת בלבד** — אחרי שנשמר, לא ניתן לשינוי אוטומטי. שינוי ידני רק ע"י admin ישירות ב-Firebase.

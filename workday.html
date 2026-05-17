@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>LuzGlass — יום עבודה</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
 <style>
@@ -217,7 +220,7 @@
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260511b"></script>
+  <script src="firebase-db.js?v=20260512b"></script>
 </head>
 <body>
 <div id="lgLoading" style="position:fixed;inset:0;background:#1a1714;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
@@ -517,6 +520,8 @@
 //  STATE
 // ═══════════════════════════════════════
 let allOrders = [];
+// מחירים — נטענים כדי שנוכל לנעול מחיר סופי בעת מעבר ל-done/delivery
+let _wdGlobalPrices = {}, _wdClientPrices = {};
 // מטמון שמות לקוחות הובלות — טוען פעם אחת בסטארטאפ
 // מטמון הובלות — מזוהים לפי מספר טלפון (מזהה קבוע), לא לפי שם
 let _deliveryPhones = new Set(); // Set של טלפונים מנורמלים: '0522578559'
@@ -632,6 +637,9 @@ async function load(){
     // עדכן state מקומי — saveWorkDay הבא ישתמש בערך הנכון
     workDay.inChisum = fbChisum;
   });
+
+  // האזן למחירים — נדרש לנעילת מחיר סופי
+  listenAllPrices((gp, cp) => { _wdGlobalPrices = gp; _wdClientPrices = cp; });
 
   if(_workdayUnsub) _workdayUnsub();
   // האזן ל-Firebase — stage==='workday' בלבד
@@ -1130,9 +1138,13 @@ function markStageValue(sid, stage){
 // סימון סופי — שלב הבא לפי לוגיקה דינמית (done / graphic / delivery)
 function markStageDone(sid){
   const o = allOrders.find(x => String(x.id) === String(sid));
-  if(!o){ markStageValue(sid, 'done'); return; }
-  const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
-  markStageValue(sid, nextSt || 'done');
+  const nextSt = o ? lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) : 'done';
+  if(o && (nextSt === 'done' || nextSt === 'delivery')){
+    // write אטומי אחד: נועל מחיר + מעביר stage
+    lgLockAndAdvance(String(o.id), o, _wdGlobalPrices, _wdClientPrices, nextSt).catch(e=>console.error('markStageDone:',e));
+  } else {
+    markStageValue(sid, nextSt || 'done');
+  }
 }
 
 function addSingleItem(orderId, itemIdx){
@@ -1651,10 +1663,13 @@ async function completeGraphic(orderId){
   if(!o) return;
   const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
   if(nextSt === 'done'){
-    // שלח הודעת "מוכן" ללקוח
-    window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`, '_blank');
+    lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`);
   }
-  await updateStage(String(orderId), nextSt || 'done');
+  if(nextSt === 'done' || nextSt === 'delivery'){
+    await lgLockAndAdvance(String(orderId), o, _wdGlobalPrices, _wdClientPrices, nextSt);
+  } else {
+    await updateStage(String(orderId), nextSt || 'done');
+  }
   showToast(`✓ גרפיקה הושלמה — הועבר ל${lgStageToStatus(nextSt||'done')}`);
 }
 
@@ -1758,6 +1773,7 @@ function renderChisumTab(){
     const { reportId, reportNum, orders } = group;
     const allArrived = orders.every(o => !!o.chisumArrived);
     const label      = reportNum || 'דוח ישן';
+    const totalItems = orders.reduce((s, o) => s + (o.items||[]).length, 0);
 
     if(!allArrived){
       // ── כרטיס דוח ממתין ──
@@ -1765,8 +1781,8 @@ function renderChisumTab(){
       <div style="margin:0 12px 14px;border:1.5px solid rgba(142,68,173,0.25);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">
         <div style="padding:14px 16px;background:rgba(142,68,173,0.05);display:flex;align-items:center;gap:10px;">
           <div style="flex:1">
-            <div style="font-size:14px;font-weight:900;color:var(--chisum)">📦 ${label}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">⏳ נשלח למפעל · ${orders.length} הזמנות</div>
+            <div style="font-size:14px;font-weight:900;color:var(--chisum)">📦 דוח ${label}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">⏳ נשלח למפעל · ${orders.length} הזמנות · ${totalItems} פריטים</div>
           </div>
           <button onclick="markChisumReportArrived('${reportId||''}','${label}')"
             style="padding:8px 16px;background:var(--chisum);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:6px;white-space:nowrap;">
@@ -1808,8 +1824,8 @@ function renderChisumTab(){
       arrivedHtml += `
       <div style="margin:0 12px 14px;border:1.5px solid rgba(39,174,96,0.3);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">
         <div style="padding:12px 16px;background:rgba(39,174,96,0.05);">
-          <div style="font-size:13px;font-weight:900;color:var(--green)">✅ ${label} — בדיקה פעילה</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:1px">${orders.length} סקיצות · ${progressTxt}</div>
+          <div style="font-size:13px;font-weight:900;color:var(--green)">✅ דוח ${label} — בדיקה פעילה</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:1px">${orders.length} הזמנות · ${totalItems} פריטים · ${progressTxt}</div>
         </div>
         ${clientCardsHtml || '<div style="padding:12px 16px;font-size:12px;color:#27ae60">✓ כל הפריטים סומנו — לחץ סיום בדיקה</div>'}
       </div>`;
@@ -1836,7 +1852,7 @@ function markChisumReportArrived(reportId, reportNum){
   ov.innerHTML = `
     <div style="background:#fff;border-radius:12px;max-width:360px;width:100%;padding:24px 22px;">
       <div style="font-size:22px;text-align:center;margin-bottom:12px;">📦</div>
-      <div style="font-size:15px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">קיבלת את ${reportNum}?</div>
+      <div style="font-size:15px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">קיבלת את דוח ${reportNum}?</div>
       <div style="font-size:13px;color:#8a8278;margin-bottom:20px;text-align:center;line-height:1.5;">
         כל ${reportOrders.length} ההזמנות בדוח יעברו לסטטוס "חזר מהמפעל".<br>
         ניתן לסמן נשברים לאחר מכן.
@@ -1845,7 +1861,7 @@ function markChisumReportArrived(reportId, reportNum){
         <button onclick="(function(){
           const orders=[${reportOrders.map(o=>`'${o.id}'`).join(',')}];
           orders.forEach(id=>updateOrder(id,{chisumArrived:true}).catch(e=>console.error('markReport:',e)));
-          showToast('✓ ${reportNum} — ${reportOrders.length} הזמנות הגיעו מהמפעל');
+          showToast('✓ דוח ${reportNum} — ${reportOrders.length} הזמנות הגיעו מהמפעל');
           this.closest('[style*=fixed]').remove();
         }).call(this)"
           style="flex:2;padding:12px;background:var(--chisum);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">
@@ -1950,14 +1966,21 @@ function confirmResetChisum(){
       doneCount++;
       // כל הפריטים הגיעו — חשב שלב הבא לפי לוגיקה דינמית
       const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
-      updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null })
-        .catch(e => console.error('confirmReset done:', e));
+      if(nextSt === 'done' || nextSt === 'delivery'){
+        // write אטומי: נועל מחיר + stage + מנקה chisumArrivedIdxs
+        lgLockAndAdvance(sid, o, _wdGlobalPrices, _wdClientPrices, nextSt)
+          .then(()=> updateOrder(sid, { chisumArrivedIdxs: null }).catch(()=>{}))
+          .catch(e => console.error('confirmReset lockAndAdvance:', e));
+      } else {
+        updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null })
+          .catch(e => console.error('confirmReset done:', e));
+      }
       // נקה מ-inChisum
       workDay.inChisum = workDay.inChisum.filter(id => String(id) !== sid);
       // הודעה ללקוח רק אם עובר ל-done (לא גרפיקה, לא הובלה)
       if(nextSt === 'done'){
         setTimeout(() => {
-          window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
+          lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`);
         }, msgCount++ * 600);
       }
     } else if(sessionArrived.size > 0){
@@ -2268,7 +2291,7 @@ function confirmFinish(){
     if(nextSt === 'done'){
       const i = waIdx++;
       setTimeout(()=>{
-        window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`, '_blank');
+        lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`);
       }, i * 600);
     }
   });
@@ -2342,7 +2365,7 @@ function confirmChisum(){
     if(nextSt === 'done'){
       const i = waIdx++;
       setTimeout(()=>{
-        window.open(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`, '_blank');
+        lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`);
       }, i * 600);
     }
   });
@@ -2419,6 +2442,38 @@ function showToast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// פותח WhatsApp — אם נחסם ע"י הדפדפן, מציג banner עם קישור ידני
+function lgOpenWhatsApp(url){
+  const w = window.open(url, '_blank');
+  if(!w || w.closed || typeof w.closed === 'undefined'){
+    _showWaBanner(url);
+  }
+}
+
+// ה-banner נשמר בתור אם יש מספר הודעות
+let _waBannerQueue = [];
+let _waBannerShowing = false;
+function _showWaBanner(url){
+  _waBannerQueue.push(url);
+  if(!_waBannerShowing) _renderWaBanner();
+}
+function _renderWaBanner(){
+  if(!_waBannerQueue.length){ _waBannerShowing=false; return; }
+  _waBannerShowing = true;
+  const url = _waBannerQueue.shift();
+  const bar = document.createElement('div');
+  bar.style.cssText='position:fixed;bottom:70px;right:16px;left:16px;max-width:420px;margin:0 auto;background:#25d366;color:#fff;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.25);font-family:Heebo,sans-serif;direction:rtl;';
+  bar.innerHTML=`
+    <span style="font-size:20px">📱</span>
+    <div style="flex:1;font-size:13px;font-weight:700">הדפדפן חסם WhatsApp — לחץ לשלוח ידנית</div>
+    <a href="${url}" target="_blank" onclick="this.closest('[style]').remove();setTimeout(_renderWaBanner,300);"
+       style="padding:7px 14px;background:#fff;color:#25d366;font-weight:900;border-radius:6px;font-size:13px;text-decoration:none;white-space:nowrap;">פתח</a>
+    <button onclick="this.closest('[style]').remove();setTimeout(_renderWaBanner,300);"
+       style="background:none;border:none;color:rgba(255,255,255,0.7);font-size:18px;cursor:pointer;padding:0 4px;">✕</button>`;
+  document.body.appendChild(bar);
+  setTimeout(()=>{ if(bar.parentNode){ bar.remove(); setTimeout(_renderWaBanner,300); }}, 12000);
 }
 
 // ═══════════════════════════════════════

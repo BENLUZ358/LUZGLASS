@@ -130,12 +130,16 @@ async function saveOrder(data) {
   const id     = data.id || ('ord_' + Date.now());
   const stage  = data.stage ?? lgStatusToStage(data.status || '') ?? '';
   const status = lgStageToStatus(stage);
+  const normPhone = _lgNormalizePhone(data.phone || '');
   const record = _lgClean({
     ...data, id, stage, status,
-    source:    data.source    || 'sketch',
-    date:      data.date      || _lgToday(),
-    createdAt: data.createdAt || Date.now(),
-    updatedAt: Date.now()
+    phone:         normPhone,
+    clientPhone:   normPhone,
+    paymentStatus: data.paymentStatus || 'unpaid',
+    source:        data.source        || 'sketch',
+    date:          data.date          || _lgToday(),
+    createdAt:     data.createdAt     || Date.now(),
+    updatedAt:     Date.now()
   });
   await _lgDb.ref('orders/' + id).set(record);
   return id;
@@ -152,18 +156,21 @@ async function saveSubmission(data) {
     data.files.forEach((f, i) => { filesObj['f' + i] = f; });
   }
 
+  const normPhone = _lgNormalizePhone(data.phone || '');
   const record = _lgClean({
     ...data,
     id,
-    stage:     '',
-    status:    lgStageToStatus(''),
-    source:    'upload',
-    date:      now.toLocaleDateString('he-IL'),
-    time:      now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    // files כ-object (לא array)
-    files:     Object.keys(filesObj).length ? filesObj : undefined,
+    stage:         '',
+    status:        lgStageToStatus(''),
+    phone:         normPhone,
+    clientPhone:   normPhone,
+    paymentStatus: 'unpaid',
+    source:        'upload',
+    date:          now.toLocaleDateString('he-IL'),
+    time:          now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
+    createdAt:     Date.now(),
+    updatedAt:     Date.now(),
+    files:         Object.keys(filesObj).length ? filesObj : undefined,
   });
 
   await _lgDb.ref('orders/' + id).set(record);
@@ -504,6 +511,186 @@ function _lgClean(obj) {
 
 function _lgToday() { return new Date().toLocaleDateString('he-IL'); }
 
+// ─── 13. מספרי הזמנות — מונה רץ ב-Firebase ──────────────────────────────
+
+// מחזיר מספר הזמנה רץ ייחודי (L1000, L1001, ...)
+// runTransaction מבטיח אטומיות — אין כפילויות גם אם שני לקוחות שולחים בו-זמנית
+async function lgNextOrderNum() {
+  const ref = _lgDb.ref('meta/orderCounter');
+  const result = await ref.transaction(current => {
+    return Math.max(current || 0, 999) + 1;
+  });
+  return 'L' + result.snapshot.val();
+}
+
+// ─── 14. מחירים — Firebase כמקור אמת ──────────────────────────────────
+
+function _lgPriceKey(name){ return String(name||'').replace(/[.#$\[\]\/]/g,'_'); }
+
+const LG_PRICE_ITEMS = [
+  {cat:'מראות',        id:'mir-5-pol',    name:'מראה 5מ"מ מלוטש'},
+  {cat:'מראות',        id:'mir-5-gray',   name:'מראה אפורה 5מ"מ מלוטש'},
+  {cat:'מראות',        id:'mir-5-brnz',   name:'מראה ברונזה 5מ"מ מלוטש'},
+  {cat:'מראות',        id:'mir-5-shape',  name:'מראה 5מ"מ צורתית'},
+  {cat:'שקוף מלוטש',   id:'cl-4-pol',    name:'שקוף 4מ"מ מלוטש'},
+  {cat:'שקוף מלוטש',   id:'cl-5-pol',    name:'שקוף 5מ"מ מלוטש'},
+  {cat:'שקוף מלוטש',   id:'cl-6-pol',    name:'שקוף 6מ"מ מלוטש'},
+  {cat:'שקוף מלוטש',   id:'cl-8-pol',    name:'שקוף 8מ"מ מלוטש'},
+  {cat:'שקוף מלוטש',   id:'cl-10-pol',   name:'שקוף 10מ"מ מלוטש'},
+  {cat:'שקוף מלוטש',   id:'cl-12-pol',   name:'שקוף 12מ"מ מלוטש'},
+  {cat:'מחוסם',        id:'tmp-6',        name:'מחוסם 6מ"מ שקוף'},
+  {cat:'מחוסם',        id:'tmp-8',        name:'מחוסם 8מ"מ שקוף'},
+  {cat:'מחוסם',        id:'tmp-8-klir',   name:'מחוסם 8מ"מ קליר'},
+  {cat:'מחוסם',        id:'tmp-8-granit', name:'מחוסם 8מ"מ גרניט'},
+  {cat:'מחוסם',        id:'tmp-10',       name:'מחוסם 10מ"מ קליר'},
+  {cat:'מחוסם',        id:'tmp-10-gray',  name:'מחוסם 10מ"מ אפור'},
+  {cat:'מחוסם',        id:'tmp-15-klir',  name:'מחוסם 15מ"מ קליר'},
+];
+
+function lgFindPriceItem(glassName){
+  if(!glassName) return null;
+  const n = glassName.toLowerCase().replace(/"/g,'');
+  if(n.includes('מראה')||n.includes('mir')){
+    if(n.includes('ברונז')||n.includes('brnz')) return 'mir-5-brnz';
+    if(n.includes('אפור')||n.includes('gray')||n.includes('gr')) return 'mir-5-gray';
+    return 'mir-5-pol';
+  }
+  const mmM = n.match(/(\d+)\s*מ/)||n.match(/^(\d+)/);
+  const mm  = mmM ? parseInt(mmM[1]) : 8;
+  const isTmp    = n.includes('מחוסם')||n.includes('smh')||n.endsWith('mh')||n.includes('חיסום');
+  const isKlir   = n.includes('קליר')||n.includes('klir')||n.includes('cm');
+  const isAfor   = n.includes('אפור')||n.includes('gray');
+  const isGranit = n.includes('גרניט')||n.includes('granit');
+  if(isTmp){
+    if(isGranit) return 'tmp-8-granit';
+    if(mm<=6) return 'tmp-6';
+    if(mm>=15&&isKlir) return 'tmp-15-klir';
+    if(mm>=10&&isAfor) return 'tmp-10-gray';
+    if(isKlir) return mm>=10?'tmp-10':'tmp-8-klir';
+    return mm>=10?'tmp-10':'tmp-8';
+  }
+  const map={4:'cl-4-pol',5:'cl-5-pol',6:'cl-6-pol',8:'cl-8-pol',10:'cl-10-pol',12:'cl-12-pol'};
+  return map[mm]||'cl-8-pol';
+}
+
+// מחשב מ"ר כולל של כל פריטי ההזמנה
+function lgCalcOrderM2(order){
+  return Math.round(((order.items||[]).reduce((s,item)=>{
+    return s + ((item.w||0)/100)*((item.h||0)/100);
+  }, 0)) * 100) / 100;
+}
+
+// globalP = { 'mir-5-pol': 200, ... }
+// clientP = { 'clientName': { 'mir-5-pol': 180, ... }, ... }
+function lgCalcOrderTotal(order, globalP, clientP){
+  // מחיר נעול — ההזמנה כבר עברה ל-done/delivery/collected, המחיר קבוע
+  if(order.totalFinal) return order.totalFinal;
+  if(!(order.items||[]).length) return order.total||0;
+  const cp = (clientP||{})[order.orderClient||'']||{};
+  const gp = globalP||{};
+  let total = 0;
+  let priced = 0;
+  (order.items||[]).forEach(item=>{
+    const name = item.glassFullName||item.name||'';
+    const pid  = lgFindPriceItem(name);
+    if(!pid) return;
+    const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
+    if(!ppm2) return;
+    priced++;
+    const area = ((item.w||0)/100)*((item.h||0)/100);
+    total += area * ppm2;
+  });
+  if(!priced) return order.total||0;
+  return Math.round(total);
+}
+
+// ── lgLockAndAdvance: מעביר stage + נועל מחיר — write אטומי אחד ──────────
+// זהו ה-API המומלץ לכל מעבר ל-done/delivery.
+// מבטיח: אין מצב שבו done ללא totalFinal, ולא totalFinal בשלב הלא נכון.
+async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
+  const status = lgStageToStatus(nextStage);
+  const update = { stage: nextStage, status, updatedAt: Date.now() };
+  // נעל מחיר רק אם עדיין לא נעול
+  if(!order.totalFinal){
+    const cp = (clientP||{})[order.orderClient||'']||{};
+    const gp = globalP||{};
+    let total=0, priced=0;
+    const items = order.items||[];
+    const lockedItems = [];
+    items.forEach(item=>{
+      const name = item.glassFullName||item.name||'';
+      const pid  = lgFindPriceItem(name);
+      if(!pid) return;
+      const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
+      if(!ppm2) return;
+      priced++;
+      const area = Math.round(((item.w||0)/100)*((item.h||0)/100)*1000)/1000;
+      const lineTotal = Math.round(area*ppm2);
+      total += lineTotal;
+      lockedItems.push({ name, sku: item.sku||pid, w:item.w||0, h:item.h||0, area, pricePerM2:ppm2, lineTotal });
+    });
+    if(priced && total){
+      update.totalFinal     = total;
+      update.totalM2        = lgCalcOrderM2(order);
+      update.pricesLockedAt = Date.now();
+      update.lockedItems    = lockedItems;
+    }
+  }
+  await _lgDb.ref('orders/'+orderId).update(update);
+}
+
+// lgLockPrice — שומר תאימות לאחור; מומלץ להשתמש ב-lgLockAndAdvance
+async function lgLockPrice(orderId, order, globalP, clientP){
+  if(order.totalFinal) return;
+  const total = lgCalcOrderTotal(order, globalP, clientP);
+  if(!total) return;
+  const m2 = lgCalcOrderM2(order);
+  await _lgDb.ref('orders/'+orderId).update({
+    totalFinal:      total,
+    totalM2:         m2,
+    pricesLockedAt:  Date.now()
+  });
+}
+
+async function savePricesGlobal(prices){
+  await _lgDb.ref('prices/global').set(prices||{});
+}
+
+async function saveClientPrices(clientName, prices){
+  const key = _lgPriceKey(clientName);
+  await _lgDb.ref('prices/clients/'+key).set(prices||{});
+  await _lgDb.ref('prices/clientKeys/'+key).set(clientName);
+}
+
+function listenAllPrices(callback){
+  _lgDb.ref('prices').on('value', snap=>{
+    const data = snap.val()||{};
+    const globalP  = data.global||{};
+    const rawClients = data.clients||{};
+    const keyMap   = data.clientKeys||{};
+    const clientP  = {};
+    for(const [key, prices] of Object.entries(rawClients)){
+      const name = keyMap[key]||key;
+      clientP[name] = prices;
+    }
+    callback(globalP, clientP);
+  });
+}
+
+async function getAllPrices(){
+  const snap = await _lgDb.ref('prices').once('value');
+  const data  = snap.val()||{};
+  const globalP  = data.global||{};
+  const rawClients = data.clients||{};
+  const keyMap   = data.clientKeys||{};
+  const clientP  = {};
+  for(const [key, prices] of Object.entries(rawClients)){
+    const name = keyMap[key]||key;
+    clientP[name] = prices;
+  }
+  return { globalP, clientP };
+}
+
 // ─── הודעת טעינה ─────────────────────────────────────────────────────
-console.log('%c[LuzGlass] firebase-db.js v2.3 ✓', 'color:#b8922a;font-weight:bold');
+console.log('%c[LuzGlass] firebase-db.js v2.6 ✓', 'color:#b8922a;font-weight:bold');
 console.log('  לבדיקת חיבור: lgTest()');
