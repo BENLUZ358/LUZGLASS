@@ -639,15 +639,15 @@ function showList(){
 function showSketch(){
   document.getElementById('listView').style.display='none';
   document.getElementById('sketchView').style.display='flex';
-  // HIDE filters and tabs — clean focused sketch view
   document.getElementById('filtersBar').style.display='none';
   document.getElementById('tabsBar').style.display='none';
   document.getElementById('btnBack').style.display='flex';
-  document.getElementById('btnSheet').style.display='flex';
-  document.getElementById('progWrap').style.display='flex';
-  // finishBtn always visible and enabled
+  const readOnly = cur && isDone(cur);
+  // פריטים שהושלמו — תצוגה בלבד, בלי כפתורי עריכה
+  document.getElementById('btnSheet').style.display = readOnly ? 'none' : 'flex';
+  document.getElementById('progWrap').style.display = readOnly ? 'none' : 'flex';
   const fb = document.getElementById('finishBtn');
-  if(fb){ fb.style.display='flex'; fb.disabled=false; }
+  if(fb){ fb.style.display = readOnly ? 'none' : 'flex'; fb.disabled = false; }
 }
 function goBack(){ cur=null; showList(); }
 
@@ -670,27 +670,27 @@ function renderSketch(){
   const el=document.getElementById('skWrap');
   scl=1;px=0;py=0;el.style.transform='';
   const src=cur._editedSketch||cur.sketch;
+  const readOnly=isDone(cur);
   if(src){
     el.innerHTML=`<img src="${src}" style="width:100%;height:100%;object-fit:contain">`;
   } else {
-    el.innerHTML=buildSVG(cur);
-    // iOS fix: SVG onclick לפעמים מקבל 300ms delay — touchend מיידי עוקף אותו
-    el.querySelectorAll('rect[onclick]').forEach(rect=>{
-      const m=(rect.getAttribute('onclick')||'').match(/checkItem\((\d+)\)/);
-      if(!m) return;
-      const idx=parseInt(m[1]);
-      rect.addEventListener('touchend', e=>{
-        e.preventDefault();  // בטל 300ms delay ואת ה-click הכפול
-        e.stopPropagation(); // מנע bubbling ל-setupPan
-        checkItem(idx);
-      },{passive:false,once:true});
-    });
+    el.innerHTML=buildSVG(cur, readOnly);
+    if(!readOnly){
+      // iOS fix: SVG onclick לפעמים מקבל 300ms delay — touchend מיידי עוקף אותו
+      el.querySelectorAll('rect[data-idx]').forEach(rect=>{
+        const idx=parseInt(rect.getAttribute('data-idx'));
+        rect.addEventListener('touchend', e=>{
+          e.preventDefault();
+          e.stopPropagation();
+          checkItem(idx);
+        },{passive:false,once:true});
+      });
+    }
   }
   setupPan();
 }
 
-function buildSVG(o){
-  // מציג רק פריטי חיסום — index מקורי שמור ב-i
+function buildSVG(o, readOnly=false){
   const idxs = chisumIdxs(o);
   const allItems = o.items||[];
   if(!idxs.length) return '<div style="color:#555;padding:20px;font-size:13px;text-align:center">אין פריטי חיסום</div>';
@@ -704,7 +704,7 @@ function buildSVG(o){
     const ck=!!(cs[o.id]?.[origIdx]);
     const stk=ck?'#27ae60':'#8e44ad',fl=ck?'rgba(39,174,96,0.12)':'rgba(142,68,173,0.07)';
     const mx=x+PW/2,my=y+PH/2;
-    p+=`<rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="4" fill="${fl}" stroke="${stk}" stroke-width="1.8" onclick="checkItem(${origIdx})" style="cursor:pointer"/>`;
+    p+=`<rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="4" fill="${fl}" stroke="${stk}" stroke-width="1.8" ${readOnly?'':'data-idx="'+origIdx+'" onclick="checkItem('+origIdx+')"'} style="cursor:${readOnly?'default':'pointer'}"/>`;
     if(ck)p+=`<text x="${mx}" y="${my-14}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="24" fill="#27ae60">✓</text>`;
     p+=`<text x="${mx}" y="${ck?my+8:my-2}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="12" font-weight="700" fill="${ck?'#27ae60':'#1a1714'}">${item.name||''}</text>`;
     if(item.w&&item.h)p+=`<text x="${mx}" y="${ck?my+22:my+13}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="11" fill="#666">${item.w}×${item.h} ס"מ</text>`;
@@ -768,13 +768,14 @@ function _removeFromChisumStation(ordId){
 }
 
 
-async function finishSketch(){
+function finishSketch(){
   if(!cur) return;
   const btn = document.getElementById('finishBtn');
-  if(btn) btn.disabled = true; // חסום מיד — מונע double-tap
+  if(btn) btn.disabled = true;
   if(!cs[cur.id]) cs[cur.id] = {};
   chisumIdxs(cur).forEach(i => { cs[cur.id][i] = true; });
-  await saveCS(); // חכה שה-write ל-Firebase יסתיים לפני שממשיכים
+  // _csLocalPending מוגדר סינכרוני בתוך saveCS — בטוח לנווט מיד בלי await
+  saveCS();
   hideBanner();
   cur = null;
   setTab('done');
