@@ -799,10 +799,10 @@ function openQueueFilter(status, btn){
 }
 
 function setSF(s,btn){
+  console.log('[setSF] filter changed to:', JSON.stringify(s), '| stack:', new Error().stack.split('\n')[2]?.trim());
   sf=s;
   document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
-  // switch to kanban if not already
   if(cv!=='kanban') setView('kanban',document.getElementById('vtK'));
   renderAll();
 }
@@ -818,11 +818,10 @@ function setView(v,btn){
 }
 
 function filtered(){
-  const q=document.getElementById('srch').value.toLowerCase();
-  const g=document.getElementById('gf').value;
-  return orders.filter(o=>{
+  const q=document.getElementById('srch')?.value?.toLowerCase()||'';
+  const g=document.getElementById('gf')?.value||'';
+  const result = orders.filter(o=>{
     if(sf!=='all'){
-      // תור סקיצות = ממתין לאישור + הזמנה חדשה
       if(sf==='ממתין לאישור'){
         if(o.status!=='ממתין לאישור'&&o.status!=='הזמנה חדשה') return false;
       } else {
@@ -833,9 +832,13 @@ function filtered(){
     if(q){const h=((o.orderClient||'')+(o.orderNum||'')+(o.sketchName||'')+(o.type||'')).toLowerCase();if(!h.includes(q))return false;}
     return true;
   });
+  return result;
 }
 
-function renderAll(){renderStats();if(cv==='kanban')renderKanban();else renderTable();}
+function renderAll(){
+  console.log('[renderAll] orders.length='+orders.length+' sf='+sf+' filtered='+filtered().length);
+  renderStats();if(cv==='kanban')renderKanban();else renderTable();
+}
 
 function renderStats(){
   const f=filtered();
