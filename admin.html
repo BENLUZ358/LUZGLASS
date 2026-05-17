@@ -136,7 +136,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
   .mhdr{padding:18px 22px;background:var(--text);color:#f7f4ef;display:flex;align-items:center;justify-content:space-between;}
   .mhdr h2{font-size:15px;font-weight:700;}
   .mcl{background:none;border:none;color:rgba(247,244,239,0.45);font-size:19px;cursor:pointer;}
-  .mbody{padding:20px 22px;}
+  .mbody{padding:20px 22px;max-height:calc(100vh - 160px);overflow-y:auto;}
   .msec{margin-bottom:18px;}
   .msec-t{font-size:10px;font-weight:600;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;margin-bottom:8px;}
   .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
@@ -719,6 +719,19 @@ function openMod(id) {
 
   const modEl = document.getElementById('ov');
   if (modEl) modEl.classList.add('open');
+}
+
+function showAllItems(){
+  const o = orders.find(x => x.id === eid);
+  if(!o) return;
+  const items = o.items || [];
+  document.getElementById('itemsPreview').innerHTML = items.map(i => `
+    <div style="font-size:12px;margin-bottom:5px;padding:5px 8px;background:var(--bg2);border-radius:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+      <span style="font-weight:600">${i.name||''}</span>
+      ${i.w?`<span style="color:var(--muted)">${i.w}×${i.h} ס"מ</span>`:''}
+      ${i.chisum?'<span style="font-size:10px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
+      ${i.graphic?'<span style="font-size:10px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
+    </div>`).join('');
 }
 
 // מבצע את ה"קדם" מהמודאל — סוגר אותו ומפעיל את advance עם הפרומפט הנכון
