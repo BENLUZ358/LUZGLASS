@@ -590,7 +590,12 @@ async function saveMod() {
   }
 
   const newStage = statusToStage(newStatus) || '';
-  await updateStage(id, newStage);
+  const lockStages = ['done', 'delivery', 'collected'];
+  if(lockStages.includes(newStage)){
+    await lgLockAndAdvance(id, o, globalPrices, clientPrices, newStage);
+  } else {
+    await updateStage(id, newStage);
+  }
   if (o.urgent !== undefined) await updateOrder(id, { urgent: o.urgent });
   closeMod();
 }

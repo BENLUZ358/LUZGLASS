@@ -631,12 +631,12 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
       total += lineTotal;
       lockedItems.push({ name, sku: item.sku||pid, w:item.w||0, h:item.h||0, area, pricePerM2:ppm2, lineTotal });
     });
-    if(priced && total){
-      update.totalFinal     = total;
-      update.totalM2        = lgCalcOrderM2(order);
-      update.pricesLockedAt = Date.now();
-      update.lockedItems    = lockedItems;
-    }
+    // תמיד נועל totalFinal — גם אם המחיר 0 (אין תמחור) כדי שהשדה תמיד יהיה ב-Firebase
+    const finalTotal = (priced && total) ? total : (lgCalcOrderTotal(order, gp, cp) || order.total || 0);
+    update.totalFinal     = finalTotal;
+    update.totalM2        = lgCalcOrderM2(order);
+    update.pricesLockedAt = Date.now();
+    if(lockedItems.length) update.lockedItems = lockedItems;
   }
   await _lgDb.ref('orders/'+orderId).update(update);
 }
