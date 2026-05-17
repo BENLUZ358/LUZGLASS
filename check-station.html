@@ -635,25 +635,31 @@ function showList(){
   document.getElementById('progWrap').style.display='none';
   document.getElementById('tbTitle').textContent='תחנת בדיקה';
   renderList();
+  // מנע ghost-click iOS (300ms delayed click) מלפגוע בכפתורים שהופיעו זה עתה
+  const lv=document.getElementById('listView');
+  lv.style.pointerEvents='none';
+  setTimeout(()=>lv.style.pointerEvents='',380);
 }
+let curReadOnly = false; // נקבע ב-selectOrder לפי הטאב הפעיל — לא תלוי בזמן ריצה של cs
+
 function showSketch(){
   document.getElementById('listView').style.display='none';
   document.getElementById('sketchView').style.display='flex';
   document.getElementById('filtersBar').style.display='none';
   document.getElementById('tabsBar').style.display='none';
   document.getElementById('btnBack').style.display='flex';
-  const readOnly = cur && isDone(cur);
-  // פריטים שהושלמו — תצוגה בלבד, בלי כפתורי עריכה
-  document.getElementById('btnSheet').style.display = readOnly ? 'none' : 'flex';
-  document.getElementById('progWrap').style.display = readOnly ? 'none' : 'flex';
+  // curReadOnly נקבע ב-selectOrder — יציב ואינו תלוי ב-cs שעשוי להתעדכן מ-Firebase
+  document.getElementById('btnSheet').style.display = curReadOnly ? 'none' : 'flex';
+  document.getElementById('progWrap').style.display = curReadOnly ? 'none' : 'flex';
   const fb = document.getElementById('finishBtn');
-  if(fb){ fb.style.display = readOnly ? 'none' : 'flex'; fb.disabled = false; }
+  if(fb){ fb.style.display = curReadOnly ? 'none' : 'flex'; fb.disabled = false; }
 }
-function goBack(){ cur=null; showList(); }
+function goBack(){ cur=null; curReadOnly=false; showList(); }
 
 // SELECT ORDER
 function selectOrder(id){ id = String(id);
   cur=orders.find(o=>o.id===id); if(!cur)return;
+  curReadOnly = (activeTab==='done'); // הושלמו = תצוגה בלבד
   if(!cs[id])cs[id]={};
   document.getElementById('tbTitle').textContent=cur.orderClient;
   document.getElementById('shClient').textContent=cur.orderClient;
@@ -670,7 +676,7 @@ function renderSketch(){
   const el=document.getElementById('skWrap');
   scl=1;px=0;py=0;el.style.transform='';
   const src=cur._editedSketch||cur.sketch;
-  const readOnly=isDone(cur);
+  const readOnly=curReadOnly;
   if(src){
     el.innerHTML=`<img src="${src}" style="width:100%;height:100%;object-fit:contain">`;
   } else {
