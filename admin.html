@@ -276,7 +276,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
     <div class="topbar-right">
       <div class="search-wrap">
         <span style="color:var(--muted)">🔍</span>
-        <input type="text" id="srch" placeholder="חיפוש..." oninput="renderAll()">
+        <input type="text" id="srch" placeholder="חיפוש..." oninput="renderAll()" autocomplete="off" name="admin-search">
       </div>
       <div class="view-toggle">
         <button class="vt active" id="vtK" onclick="setView('kanban',this)">⬡ לוח</button>
@@ -799,7 +799,6 @@ function openQueueFilter(status, btn){
 }
 
 function setSF(s,btn){
-  console.log('[setSF] filter changed to:', JSON.stringify(s), '| stack:', new Error().stack.split('\n')[2]?.trim());
   sf=s;
   document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
@@ -829,29 +828,13 @@ function filtered(){
       }
     }
     if(g&&o.glass!==g)return false;
-    if(q){const h=((o.orderClient||'')+(o.orderNum||'')+(o.sketchName||'')+(o.type||'')).toLowerCase();if(!h.includes(q))return false;}
+    if(q){const h=((o.orderClient||'')+(o.orderNum||'')+(o.sketchName||'')+(o.type||'')+(o.phone||'')).toLowerCase();if(!h.includes(q))return false;}
     return true;
   });
-  if(result.length===0&&orders.length>0){
-    console.warn('[filtered] ZERO! sf='+JSON.stringify(sf)+' g='+JSON.stringify(g)+' q='+JSON.stringify(q));
-    console.warn('[filtered] srch el exists:',!!document.getElementById('srch'),' gf el exists:',!!document.getElementById('gf'));
-    console.warn('[filtered] first order status:',orders[0]?.status,' glass:',orders[0]?.glass);
-    orders.forEach((o,i)=>{
-      let why='';
-      if(sf!=='all'){
-        if(sf==='ממתין לאישור'){if(o.status!=='ממתין לאישור'&&o.status!=='הזמנה חדשה')why='status:'+o.status;}
-        else{if(o.status!==sf)why='status:'+o.status+'!=sf:'+sf;}
-      }
-      if(!why&&g&&o.glass!==g)why='glass:'+o.glass+'!=g:'+g;
-      if(!why&&q){const h=((o.orderClient||'')+(o.orderNum||'')+(o.sketchName||'')+(o.type||'')).toLowerCase();if(!h.includes(q))why='search:'+q+'notIn:'+h.slice(0,40);}
-      if(why)console.warn('[filtered] order['+i+'] excluded:',why);
-    });
-  }
   return result;
 }
 
 function renderAll(){
-  console.log('[renderAll] orders.length='+orders.length+' sf='+sf+' filtered='+filtered().length);
   renderStats();if(cv==='kanban')renderKanban();else renderTable();
 }
 
