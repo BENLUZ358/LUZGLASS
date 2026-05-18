@@ -503,6 +503,14 @@ function load(){
 function _filterOrders(){
   const fbOrders = window._allCsOrders || [];
   orders = fbOrders.filter(o=>wdInChisum.includes(String(o.id))).map(mapFirebaseOrder);
+  // אם יש הזמנה פתוחה — עדכן cur לאובייקט החדש אבל שמר _editedSketch אם כבר טעון
+  if(cur){
+    const rebuilt = orders.find(o => o.id === cur.id);
+    if(rebuilt){
+      if(!rebuilt._editedSketch && cur._editedSketch) rebuilt._editedSketch = cur._editedSketch;
+      cur = rebuilt;
+    }
+  }
   buildClients();
   renderList();
   updateTabCounts();
@@ -675,7 +683,10 @@ function selectOrder(id){ id = String(id);
 function renderSketch(){
   const el=document.getElementById('skWrap');
   scl=1;px=0;py=0;el.style.transform='';
-  const src=cur._editedSketch||cur.sketch;
+  // תמיד קרא _editedSketch בזמן אמת — מונע snapshot ישן אחרי rebuild של orders
+  const liveEdited = (window._csCheckEdits||{})[String(cur.id)] || cur._editedSketch || null;
+  if(liveEdited && liveEdited !== cur._editedSketch) cur._editedSketch = liveEdited;
+  const src = liveEdited || cur.sketch;
   const readOnly=curReadOnly;
   if(src){
     el.innerHTML=`<img src="${src}" style="width:100%;height:100%;object-fit:contain">`;
@@ -961,7 +972,9 @@ function openEditor(){
   document.getElementById('edTitle').textContent='✏️ '+cur.orderClient;
   edCvs=document.getElementById('edCvs');edCtx=edCvs.getContext('2d');edHist=[];
   const bg=document.getElementById('edBg');
-  const src=cur._editedSketch||cur.sketch;
+  const liveEdited=(window._csCheckEdits||{})[String(cur.id)]||cur._editedSketch||null;
+  if(liveEdited) cur._editedSketch=liveEdited;
+  const src=liveEdited||cur.sketch;
   if(src){
     bg.style.display='block';bg.src=src;
     if(bg.complete&&bg.naturalWidth){
@@ -1018,6 +1031,8 @@ function edSave(){
 
 // נקה ציורי בדיקה זמניים להזמנות שעברו לשלב הבא
 function _clearCSEditsForOrders(ids){
+  // נקה גם מהמצב בזמן אמת — מונע שימוש ב-snapshot ישן אחרי sendAllToFactory
+  ids.forEach(id=>{ delete (window._csCheckEdits||{})[String(id)]; });
   try{
     const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
     ids.forEach(id=>{ delete s[String(id)]; });
