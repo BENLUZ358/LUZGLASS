@@ -588,9 +588,12 @@ function renderList(){
   const list=getFiltered();
   const el=document.getElementById('listView');
   if(!list.length){
+    const doneCount = orders.filter(isDone).length;
     const emptyMsg = activeTab==='done'
       ? `<div class="list-empty"><div style="font-size:44px">✅</div><p style="font-size:14px">אין הזמנות שהושלמו עדיין</p><p style="font-size:12px;color:var(--muted)">סמן פריטים ולחץ "סיים סקיצה" כדי להעביר לכאן</p></div>`
-      : `<div class="list-empty"><div style="font-size:44px">🔍</div><p style="font-size:14px">אין הזמנות לבדיקה</p></div>`;
+      : doneCount>0
+        ? `<div class="list-empty"><div style="font-size:44px">🎉</div><p style="font-size:14px;font-weight:700">כל הסקיצות הושלמו!</p><p style="font-size:12px;color:var(--muted)">עבור לטאב "הושלמו" כדי לשלוח דוח לחיסום</p></div>`
+        : `<div class="list-empty"><div style="font-size:44px">🔍</div><p style="font-size:14px">אין הזמנות לבדיקה</p></div>`;
     el.innerHTML = emptyMsg;
     return;
   }
@@ -816,13 +819,14 @@ function finishSketch(){
   if(btn) btn.disabled = true;
   if(!cs[cur.id]) cs[cur.id] = {};
   chisumIdxs(cur).forEach(i => { cs[cur.id][i] = true; });
-  // _csLocalPending מוגדר סינכרוני בתוך saveCS — בטוח לנווט מיד בלי await
   saveCS();
   hideBanner();
   cur = null;
-  setTab('done');
+  // נשאר בטאב "לבדיקה" — הסקיצה שהושלמה נעלמת אוטומטית מהרשימה (isDone מסנן אותה)
+  // אין מעבר ל"הושלמו" — מונע לחיצה כפולה בטעות על אותה סקיצה
+  setTab('active');
   showList();
-  toast('✓ הסקיצה הושלמה — ראה בטאב הושלמו');
+  toast('✓ הסקיצה הושלמה');
 }
 
 // מספר רץ לדוחות חיסום — נשמר ב-Firebase כדי שיהיה עקבי בין מכשירים
