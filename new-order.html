@@ -275,8 +275,6 @@ async function mfSubmit() {
   const dateStr = now.toLocaleDateString('he-IL');
   const timeStr = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 
-  const itemsDesc = mfItems.map(it => `${it.glass} · ${it.proc} · ${it.w}×${it.h}ס"מ`).join('\n');
-
   try {
     await saveSubmission({
       refNum,
@@ -285,7 +283,7 @@ async function mfSubmit() {
       phone,
       sketchName:  orderName || 'הזמנת זכוכית לפי מידה',
       orderNum:    refNum,
-      notes:       itemsDesc + (notes ? '\n' + notes : ''),
+      notes:       notes || '', // הערות הלקוח בלבד — הפריטים נשמרים ב-items[]
       items:       mfItems.map(it => ({
         name:         it.glass + ' ' + it.proc,
         glassFullName:it.glass,
