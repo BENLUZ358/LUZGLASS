@@ -409,9 +409,9 @@ function load() {
     }
     renderAll(); // מחירים נטענו — צייר מחדש כדי שהחישובים יתעדכנו
   });
-  // טעינת לקוחות רשומים — כדי שמחירונים יוצגו גם ללקוחות ללא הזמנות
+  // טעינת לקוחות פעילים — לרשימות עבודה ומחירונים (active !== false = backwards compat)
   lgGetAllUsers().then(users => {
-    _allRegisteredClients = users.filter(u => u.role === 'client');
+    _allRegisteredClients = users.filter(u => u.role === 'client' && u.active !== false);
   }).catch(() => {});
 }
 
@@ -2894,8 +2894,8 @@ function setUmTab(tab){
   document.getElementById('umBtnAdmins').style.fontWeight  = tab==='admins'  ? '900' : '600';
   document.getElementById('umBtnClients').style.borderBottom = tab==='clients' ? '2px solid var(--gold)' : '2px solid transparent';
   document.getElementById('umBtnAdmins').style.borderBottom  = tab==='admins'  ? '2px solid var(--gold)' : '2px solid transparent';
-  // שדות ייחודיים ללקוח (עסק + מזהה חשבשבת)
-  const clientFields = ['umBusiness','umCustomerId'];
+  // שדות ייחודיים ללקוח (עסק + מזהה חשבשבת + ע"מ)
+  const clientFields = ['umBusiness','umCustomerId','umVatId'];
   clientFields.forEach(id => {
     const el = document.getElementById(id);
     if(el) el.style.display = tab==='clients' ? '' : 'none';
@@ -2919,20 +2919,37 @@ function _renderUserList(users, elId){
   const el = document.getElementById(elId);
   if(!el) return;
   if(!users.length){ el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:12px 0">אין משתמשים</div>'; return; }
-  el.innerHTML = users.map(u => `
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px;">
-      <div style="flex:1">
-        <div style="font-weight:700">${u.name}${u.isMainAdmin?' <span style="font-size:10px;color:var(--gold)">★ ראשי</span>':''}${u.isDelivery?' <span style="font-size:10px;color:#2980b9">🚚 הובלות</span>':''}</div>
-        <div style="font-size:11px;color:var(--muted)">${u.phone||''}${u.businessName?' · '+u.businessName:''}${u.customerId?' · מזהה: '+u.customerId:''}</div>
+  el.innerHTML = users.map(u => {
+    const isActive = u.active !== false; // backwards compat: missing = active
+    return `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px;opacity:${isActive?1:0.55}">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+          ${u.name}
+          ${u.isMainAdmin?'<span style="font-size:10px;color:var(--gold)">★ ראשי</span>':''}
+          ${u.isDelivery?'<span style="font-size:10px;color:#2980b9">🚚 הובלות</span>':''}
+          ${!isActive?'<span style="font-size:10px;background:rgba(0,0,0,0.07);color:var(--muted);padding:1px 6px;border-radius:3px">לא פעיל</span>':''}
+          ${u.source==='hashavshevet'?'<span style="font-size:10px;background:rgba(184,146,42,0.12);color:var(--gold);padding:1px 6px;border-radius:3px">חשבשבת</span>':''}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+          ${u.phone||''}${u.businessName?' · '+u.businessName:''}${u.customerId?' · מפתח: '+u.customerId:''}${u.vatId?' · ע"מ: '+u.vatId:''}
+        </div>
       </div>
-      <div style="display:flex;gap:5px;align-items:center;">
-        ${u.role==='client' ? `<button onclick="umToggleDelivery('${u.id}','${u.businessName||u.name}',${!!u.isDelivery})"
-          title="${u.isDelivery ? 'בטל הובלות' : 'הגדר כהובלות'}"
-          style="padding:4px 8px;background:${u.isDelivery ? 'rgba(41,128,185,0.15)' : 'rgba(0,0,0,0.04)'};border:1px solid ${u.isDelivery ? 'rgba(41,128,185,0.4)' : 'rgba(0,0,0,0.1)'};color:${u.isDelivery ? '#2980b9' : '#aaa'};font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;">🚚</button>` : ''}
+      <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+        ${u.role==='client' ? `
+          <button onclick="umToggleActive('${u.id}','${u.name}',${isActive})"
+            title="${isActive ? 'השבת לקוח' : 'הפעל לקוח'}"
+            style="padding:4px 8px;background:${isActive?'rgba(39,174,96,0.12)':'rgba(0,0,0,0.04)'};border:1px solid ${isActive?'rgba(39,174,96,0.35)':'rgba(0,0,0,0.1)'};color:${isActive?'#27ae60':'#aaa'};font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;"
+          >${isActive?'✓ פעיל':'○ לא פעיל'}</button>
+          <button onclick="umToggleDelivery('${u.id}','${u.businessName||u.name}',${!!u.isDelivery})"
+            title="${u.isDelivery ? 'בטל הובלות' : 'הגדר כהובלות'}"
+            style="padding:4px 8px;background:${u.isDelivery?'rgba(41,128,185,0.15)':'rgba(0,0,0,0.04)'};border:1px solid ${u.isDelivery?'rgba(41,128,185,0.4)':'rgba(0,0,0,0.1)'};color:${u.isDelivery?'#2980b9':'#aaa'};font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;">🚚</button>
+        ` : ''}
         ${!u.isMainAdmin ? `<button onclick="umDeleteUser('${u.id}','${u.name}')"
           style="padding:4px 10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.2);color:#c0392b;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;">מחק</button>` : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function umDeleteUser(id, name){
@@ -2955,7 +2972,10 @@ async function umCreateUser(){
   if(role === 'client'){
     data.businessName = (document.getElementById('umBusiness')||{}).value?.trim() || '';
     data.customerId   = (document.getElementById('umCustomerId')||{}).value?.trim() || '';
+    data.vatId        = (document.getElementById('umVatId')||{}).value?.trim() || '';
     data.isDelivery   = !!(document.getElementById('umIsDelivery')||{}).checked;
+    data.active       = true;      // לקוחות ידניים תמיד פעילים
+    data.source       = 'manual';  // מקור: ידני (לעתיד: 'hashavshevet')
   } else {
     data.isMainAdmin = false;
   }
@@ -2968,7 +2988,7 @@ async function umCreateUser(){
     }
     showToast('✓ משתמש נוצר/עודכן בהצלחה');
     // נקה טופס
-    ['umName','umPhone','umPass','umBusiness','umCustomerId'].forEach(id=>{
+    ['umName','umPhone','umPass','umBusiness','umCustomerId','umVatId'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
     const dEl = document.getElementById('umIsDelivery'); if(dEl) dEl.checked = false;
@@ -3021,6 +3041,23 @@ async function umToggleDelivery(userId, clientName, currentVal){
   } catch(e){ showToast('שגיאה: ' + e.message); }
 }
 
+// הפעל / השבת לקוח — קובע אם מופיע ברשימות העבודה והמחירונים
+async function umToggleActive(userId, clientName, currentlyActive){
+  const newActive = !currentlyActive;
+  const label = newActive ? 'פעיל' : 'לא פעיל';
+  if(!confirm(`לשנות את "${clientName}" ל${label}?\n${newActive ? 'הלקוח יופיע בכל רשימות העבודה.' : 'הלקוח יוסתר מרשימות העבודה (ניתן להפעיל מחדש בכל עת).'}`)) return;
+  try {
+    await firebase.database().ref('users/' + userId).update({ active: newActive, updatedAt: Date.now() });
+    // עדכן גם את המטמון המקומי כדי שהמחירונים יתרעננו מיד
+    lgGetAllUsers().then(users => {
+      _allRegisteredClients = users.filter(u => u.role === 'client' && u.active !== false);
+    }).catch(()=>{});
+    showToast(`✓ ${clientName} מוגדר כ${label}`);
+    _loadUsers();
+  } catch(e){ showToast('שגיאה: ' + e.message); }
+}
+
+
 </script>
 
 <!-- USER MANAGEMENT OVERLAY -->
@@ -3060,7 +3097,8 @@ async function umToggleDelivery(userId, clientName, currentVal){
         <input id="umName"       placeholder="שם מלא *" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
         <input id="umBusiness"   placeholder="שם עסק" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
         <input id="umPhone"      placeholder="מספר טלפון * (שם משתמש לכניסה)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-        <input id="umCustomerId" placeholder="מזהה חשבשבת (לחיבור API עתידי)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <input id="umCustomerId" placeholder="מפתח חשבשבת (customerId)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <input id="umVatId"      placeholder="מספר ע״מ" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
         <input id="umPass"       placeholder="סיסמה *" type="password" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#555;padding:4px 0;cursor:pointer;">
           <input type="checkbox" id="umIsDelivery" style="width:16px;height:16px;cursor:pointer;">

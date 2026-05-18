@@ -431,6 +431,14 @@ async function lgGetAllUsers() {
   return Object.values(snap.val());
 }
 
+// קבלת לקוחות פעילים בלבד — active !== false (backwards compat: חסר = פעיל)
+// זהו ה-API שיש להשתמש בו בכל מקום שמציג רשימות עבודה / מחירונים
+// לעתיד: כשיתווסף חיבור חשבשבת, לקוחות מסונכרנים יגיעו עם active:false עד שמפעילים אותם ידנית
+async function lgGetActiveClients() {
+  const users = await lgGetAllUsers();
+  return users.filter(u => u.role === 'client' && u.active !== false);
+}
+
 // מחיקת משתמש (אדמין ראשי מוגן)
 async function lgDeleteUser(id) {
   const phone = _lgNormalizePhone(id);
