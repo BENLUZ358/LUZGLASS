@@ -2091,10 +2091,9 @@ function sqShowDetail(){
 
   sqUpdateBtns(o.id);
 
-  // שטח כולל — חישוב דינמי מהפריטים (לא מ-o.area שיכול להיות ישן)
-  const _sqItems = sqCurrentItems||[];
-  const _totalM2 = Math.round(_sqItems.reduce((s,it)=>s+((it.w||0)/100)*((it.h||0)/100),0)*100)/100;
-  const _areaStr = _totalM2 ? _totalM2+' מ"ר' : (o.area?o.area+' מ"ר':'—');
+  // שטח + סכום — אותן פונקציות שמשמשות בכל שאר המסכים (source of truth אחד)
+  const _totalM2  = lgCalcOrderM2(o);
+  const _areaStr  = _totalM2 ? _totalM2+' מ"ר' : '—';
   const _totalPrice = lgCalcOrderTotal(o, globalPrices, clientPrices);
 
   const selStyle='width:100%;padding:7px 10px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.1);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;direction:rtl;';
