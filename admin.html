@@ -370,6 +370,16 @@ const DEMO=[];
 // STAGE_STATUS_MAP, STATUS_STAGE_MAP, stageToStatus(), statusToStage()
 // updateStage(), listenAllOrders(), etc. — כולם ב-firebase-db.js
 
+function showToast(msg){
+  const t=document.getElementById('_lgToast')||document.createElement('div');
+  t.id='_lgToast';
+  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1714;color:#f7f4ef;padding:10px 20px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;z-index:9999;border-radius:4px;white-space:nowrap;transition:opacity 0.3s;';
+  t.textContent=msg;t.style.opacity='1';
+  document.body.appendChild(t);
+  clearTimeout(t._to);
+  t._to=setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),350);},2500);
+}
+
 let orders = [], eid = null, sf = 'all', cv = 'kanban';
 // fallback בטוח — נמנע קריסה אם firebase-db.js לא נטען עדיין
 const statusToStage = (typeof lgStatusToStage === 'function') ? lgStatusToStage : (s => '');
@@ -1081,11 +1091,7 @@ function savePricing(){
     saveClientPrices(client, cp).catch(e=>console.error('saveClientPrices',e));
   }
   closePricing();
-  const t=document.getElementById('toast')||document.createElement('div');
-  t.textContent='✓ מחירים נשמרו';
-  t.className='toast show';
-  if(!t.id){t.id='toast';document.body.appendChild(t);}
-  setTimeout(()=>t.classList.remove('show'),2500);
+  showToast('✓ מחירים נשמרו');
 }
 
 
