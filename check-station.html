@@ -296,7 +296,10 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   <div class="sketch-hdr">
     <div class="sh-client" id="shClient"></div>
     <div class="sh-meta" id="shMeta"></div>
-    <!-- note removed -->
+  </div>
+  <!-- מוצג רק בטאב "הושלמו" — מחליף את סרגל הכלים הפעיל -->
+  <div id="doneBadge" style="display:none;background:var(--green);color:#fff;padding:8px 16px;font-size:12px;font-weight:700;font-family:Heebo,sans-serif;text-align:center;direction:rtl;letter-spacing:0.02em;">
+    ✅ הסקיצה הושלמה ונבדקה — ממתינה לשליחה לחיסום
   </div>
   <div class="sketch-area" id="skArea">
     <div class="sketch-wrap" id="skWrap"></div>
@@ -654,18 +657,22 @@ function showList(){
 let curReadOnly = false;
 
 function showSketch(){
-  // מחשב curReadOnly מחדש בכל פתיחה — מונע stale value מ-selectOrder
   curReadOnly = (activeTab==='done');
   document.getElementById('listView').style.display='none';
   document.getElementById('sketchView').style.display='flex';
   document.getElementById('filtersBar').style.display='none';
   document.getElementById('tabsBar').style.display='none';
   document.getElementById('btnBack').style.display='flex';
+  // כלי עבודה — מוסתרים בהושלמו
   document.getElementById('btnSheet').style.display = curReadOnly ? 'none' : 'flex';
   document.getElementById('progWrap').style.display = curReadOnly ? 'none' : 'flex';
   const fb = document.getElementById('finishBtn');
   if(fb){ fb.style.display = curReadOnly ? 'none' : 'flex'; fb.disabled = false; }
-  // ודא שה-banner נסגר תמיד — לא אמור להיות פתוח בכניסה לסקיצה חדשה
+  // ספירת פריטים — מוסתרת בהושלמו (מחליפה ב-doneBadge)
+  const ic = document.getElementById('iCnt');
+  if(ic) ic.style.display = curReadOnly ? 'none' : '';
+  // banner done / active
+  document.getElementById('doneBadge').style.display = curReadOnly ? 'block' : 'none';
   hideBanner();
 }
 function goBack(){ cur=null; curReadOnly=false; hideBanner(); showList(); }
