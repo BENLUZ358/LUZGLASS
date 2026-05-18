@@ -992,24 +992,50 @@ function setupPan(){
 let edTl='draw',edCl='#e74c3c',edSz=5,edFt=26,edDrw=false,edHist=[],edCtx=null,edCvs=null,edBgW=0,edBgH=0;
 function openEditor(){
   if(!cur)return;
-  // פתח קודם — כדי ש-edResize יוכל לחשב גדלים נכונים (display:none נותן 0)
   document.getElementById('csEd').classList.add('open');
   document.getElementById('edTitle').textContent='✏️ '+cur.orderClient;
   edCvs=document.getElementById('edCvs');edCtx=edCvs.getContext('2d');edHist=[];
   const bg=document.getElementById('edBg');
+  // נקה handlers ישנים + src — מונע שימוש ב-state ישן מ-order קודם
+  bg.onload=null;bg.onerror=null;bg.src='';
+
   const liveEdited=(window._csCheckEdits||{})[String(cur.id)]||cur._editedSketch||null;
   if(liveEdited) cur._editedSketch=liveEdited;
-  const src=liveEdited||cur.sketch;
-  if(src){
-    bg.style.display='block';bg.src=src;
-    if(bg.complete&&bg.naturalWidth){
-      requestAnimationFrame(()=>{edResize();edSnap();}); // rAF מבטיח שה-layout בוצע
-    } else { bg.onload=()=>{edResize();edSnap();}; }
-  } else {
+
+  function _tryLoadBg(src, isFallback){
+    bg.onload=()=>{ requestAnimationFrame(()=>{edResize();edSnap();}); };
+    bg.onerror=()=>{
+      console.warn('[CS] editor bg failed to load, isFallback='+isFallback+' src.length='+(src&&src.length));
+      if(!isFallback && cur.sketch && src!==cur.sketch){
+        // הסקיצה הערוכה פגומה — נקה מ-Firebase ונסה original
+        firebase.database().ref('checkEdits/'+cur.id).remove().catch(()=>{});
+        delete (window._csCheckEdits||{})[String(cur.id)];
+        cur._editedSketch=null;
+        _tryLoadBg(cur.sketch, true);
+      } else {
+        // גם original נכשל — fallback ל-SVG
+        bg.onerror=null;
+        const svgSrc='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildSVG(cur,false));
+        bg.onload=()=>{ requestAnimationFrame(()=>{edResize();edSnap();}); };
+        bg.src=svgSrc;
+      }
+    };
     bg.style.display='block';
-    const s=buildSVG(cur).match(/<svg[\s\S]*<\/svg>/)?.[0]||'<svg/>';
-    bg.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s);
-    bg.onload=()=>{edResize();edSnap();};
+    bg.src=src;
+    // תמונה כבר cache-ד — onload לא יירה, trigger ידני
+    if(bg.complete&&bg.naturalWidth>0){
+      requestAnimationFrame(()=>{edResize();edSnap();});
+    }
+  }
+
+  if(liveEdited||cur.sketch){
+    _tryLoadBg(liveEdited||cur.sketch, false);
+  } else {
+    // אין תמונה כלל — SVG
+    bg.onerror=null;
+    const svgSrc='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildSVG(cur,false));
+    bg.onload=()=>{ requestAnimationFrame(()=>{edResize();edSnap();}); };
+    bg.style.display='block';bg.src=svgSrc;
   }
   edTool('draw');edBindEv();
 }
@@ -1034,7 +1060,7 @@ function edSave(){
   const mx=merge.getContext('2d');
   mx.imageSmoothingEnabled=true;mx.imageSmoothingQuality='high';
   if(bg.naturalWidth) mx.drawImage(bg,0,0,W,H);
-  mx.save();mx.scale(W/Math.max(edBgW,1));mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();
+  mx.save();mx.scale(W/Math.max(edBgW,1),H/Math.max(edBgH,1));mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();
 
   // דחוס ל-JPEG עם quality מדורג — מבטיח <5MB (≈6.7MB base64) לשמירה בטוחה ב-Firebase
   let quality=0.82, newSrc=merge.toDataURL('image/jpeg',quality);
