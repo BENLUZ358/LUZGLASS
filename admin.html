@@ -227,7 +227,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260512b"></script>
+  <script src="firebase-db.js?v=20260518"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -378,6 +378,8 @@ let _unsubscribe = null; // פונקציית ניתוק מ-Firebase listener
 // מחירים — מסונכרנים מ-Firebase בזמן אמת
 let globalPrices = {};
 let clientPrices = {};
+// לקוחות רשומים — נטענים מ-Firebase users ב-load()
+let _allRegisteredClients = [];
 
 // ══════════════════════════════════════════════════
 //  LOAD — מאזין ל-Firebase בזמן אמת
@@ -407,6 +409,10 @@ function load() {
     }
     renderAll(); // מחירים נטענו — צייר מחדש כדי שהחישובים יתעדכנו
   });
+  // טעינת לקוחות רשומים — כדי שמחירונים יוצגו גם ללקוחות ללא הזמנות
+  lgGetAllUsers().then(users => {
+    _allRegisteredClients = users.filter(u => u.role === 'client');
+  }).catch(() => {});
 }
 
 // ══════════════════════════════════════════════════
@@ -1020,8 +1026,11 @@ function renderPricing(){
         </tbody>
       </table>`;
   } else {
-    // get unique clients from orders
-    const clients=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))];
+    // איחוד: לקוחות מהזמנות + לקוחות עם מחירון קיים + משתמשים רשומים
+    const fromOrders = orders.map(o=>o.orderClient).filter(Boolean);
+    const fromPrices = Object.keys(clientPrices);
+    const fromUsers  = (_allRegisteredClients||[]).map(u=>u.name).filter(Boolean);
+    const clients = [...new Set([...fromOrders, ...fromPrices, ...fromUsers])].sort();
     const selClient=document.getElementById('clientSel')?.value||clients[0]||'';
     const cats={};
     LG_PRICE_ITEMS.forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});

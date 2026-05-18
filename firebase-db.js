@@ -659,40 +659,41 @@ async function savePricesGlobal(prices){
 }
 
 async function saveClientPrices(clientName, prices){
-  const key = _lgPriceKey(clientName);
-  await _lgDb.ref('prices/clients/'+key).set(prices||{});
+  const key  = _lgPriceKey(clientName);
+  const data = prices && Object.keys(prices).length ? prices : null;
+  // שמור מחירים (null → Firebase מסיר את ה-node, זו ההתנהגות הנכונה לניקוי)
+  await _lgDb.ref('prices/clients/'+key).set(data);
+  // תמיד שמור את שם הלקוח ב-clientKeys — גם כשאין מחירים, כדי שהלקוח יישאר ברשימה
   await _lgDb.ref('prices/clientKeys/'+key).set(clientName);
+}
+
+function _buildClientP(rawClients, keyMap){
+  const clientP = {};
+  // לקוחות עם מחירים שמורים
+  for(const [key, prices] of Object.entries(rawClients||{})){
+    const name = keyMap[key]||key;
+    clientP[name] = prices||{};
+  }
+  // לקוחות שנרשמו ב-clientKeys אך אין להם מחירים עדיין — מופיעים עם {} ריק
+  for(const [key, name] of Object.entries(keyMap||{})){
+    if(!clientP[name]) clientP[name] = {};
+  }
+  return clientP;
 }
 
 function listenAllPrices(callback){
   _lgDb.ref('prices').on('value', snap=>{
     const data = snap.val()||{};
-    const globalP  = data.global||{};
-    const rawClients = data.clients||{};
-    const keyMap   = data.clientKeys||{};
-    const clientP  = {};
-    for(const [key, prices] of Object.entries(rawClients)){
-      const name = keyMap[key]||key;
-      clientP[name] = prices;
-    }
-    callback(globalP, clientP);
+    callback(data.global||{}, _buildClientP(data.clients, data.clientKeys));
   });
 }
 
 async function getAllPrices(){
   const snap = await _lgDb.ref('prices').once('value');
   const data  = snap.val()||{};
-  const globalP  = data.global||{};
-  const rawClients = data.clients||{};
-  const keyMap   = data.clientKeys||{};
-  const clientP  = {};
-  for(const [key, prices] of Object.entries(rawClients)){
-    const name = keyMap[key]||key;
-    clientP[name] = prices;
-  }
-  return { globalP, clientP };
+  return { globalP: data.global||{}, clientP: _buildClientP(data.clients, data.clientKeys) };
 }
 
 // ─── הודעת טעינה ─────────────────────────────────────────────────────
-console.log('%c[LuzGlass] firebase-db.js v2.6 ✓', 'color:#b8922a;font-weight:bold');
+console.log('%c[LuzGlass] firebase-db.js v2.7 ✓', 'color:#b8922a;font-weight:bold');
 console.log('  לבדיקת חיבור: lgTest()');
