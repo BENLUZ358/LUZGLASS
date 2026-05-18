@@ -651,31 +651,33 @@ function showList(){
   lv.style.pointerEvents='none';
   setTimeout(()=>lv.style.pointerEvents='',380);
 }
-let curReadOnly = false; // נקבע ב-selectOrder לפי הטאב הפעיל — לא תלוי בזמן ריצה של cs
+let curReadOnly = false;
 
 function showSketch(){
+  // מחשב curReadOnly מחדש בכל פתיחה — מונע stale value מ-selectOrder
+  curReadOnly = (activeTab==='done');
   document.getElementById('listView').style.display='none';
   document.getElementById('sketchView').style.display='flex';
   document.getElementById('filtersBar').style.display='none';
   document.getElementById('tabsBar').style.display='none';
   document.getElementById('btnBack').style.display='flex';
-  // curReadOnly נקבע ב-selectOrder — יציב ואינו תלוי ב-cs שעשוי להתעדכן מ-Firebase
   document.getElementById('btnSheet').style.display = curReadOnly ? 'none' : 'flex';
   document.getElementById('progWrap').style.display = curReadOnly ? 'none' : 'flex';
   const fb = document.getElementById('finishBtn');
   if(fb){ fb.style.display = curReadOnly ? 'none' : 'flex'; fb.disabled = false; }
+  // ודא שה-banner נסגר תמיד — לא אמור להיות פתוח בכניסה לסקיצה חדשה
+  hideBanner();
 }
-function goBack(){ cur=null; curReadOnly=false; showList(); }
+function goBack(){ cur=null; curReadOnly=false; hideBanner(); showList(); }
 
 // SELECT ORDER
 function selectOrder(id){ id = String(id);
   cur=orders.find(o=>o.id===id); if(!cur)return;
-  curReadOnly = (activeTab==='done'); // הושלמו = תצוגה בלבד
   if(!cs[id])cs[id]={};
   document.getElementById('tbTitle').textContent=cur.orderClient;
   document.getElementById('shClient').textContent=cur.orderClient;
   document.getElementById('shMeta').textContent=[cur.orderNum,cur.sketchName,cur.glassFullName].filter(Boolean).join(' · ');
-  showSketch();
+  showSketch(); // showSketch מגדיר curReadOnly לפי activeTab הנוכחי
   renderSketch();
   updateProg();
   const note=notes[id]||'';
@@ -772,7 +774,7 @@ function buildSVG(o, readOnly=false){
 
 // CHECK
 function checkItem(i){
-  if(!cur)return;
+  if(!cur||curReadOnly)return; // אסור לסמן פריטים בסקיצה שהושלמה
   cs[cur.id][i]=!cs[cur.id][i];
   saveCS();renderSketch();updateProg();
   const idxs=chisumIdxs(cur);
@@ -802,7 +804,11 @@ function updateProg(){
 }
 
 // BANNER + ADVANCE
-function showBanner(){document.getElementById('banner').style.display='flex';document.getElementById('bannerName').textContent=cur.orderClient+' ✓';}
+function showBanner(){
+  if(curReadOnly)return; // לא מציג banner בסקיצות שהושלמו
+  document.getElementById('banner').style.display='flex';
+  document.getElementById('bannerName').textContent=cur.orderClient+' ✓';
+}
 function hideBanner(){document.getElementById('banner').style.display='none';}
 
 function _removeFromChisumStation(ordId){
