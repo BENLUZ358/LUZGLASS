@@ -680,29 +680,54 @@ function selectOrder(id){ id = String(id);
 }
 
 // SKETCH
+function _attachSVGTouchHandlers(el){
+  el.querySelectorAll('rect[data-idx]').forEach(rect=>{
+    const idx=parseInt(rect.getAttribute('data-idx'));
+    rect.addEventListener('touchend', e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      checkItem(idx);
+    },{passive:false,once:true});
+  });
+}
+
+function _showSketchImg(el, src, fallbackSrc, readOnly){
+  el.innerHTML='';
+  const img=document.createElement('img');
+  img.style.cssText='width:100%;height:100%;object-fit:contain;display:block;';
+  img.onerror=()=>{
+    // תמונה נפגמה — נסה original sketch כ-fallback
+    if(fallbackSrc && img.src !== fallbackSrc){
+      console.warn('[CS] edited sketch failed to load, falling back to original');
+      img.src=fallbackSrc;
+    } else {
+      // גם original לא זמין — הצג SVG
+      el.innerHTML=buildSVG(cur, readOnly);
+      if(!readOnly) _attachSVGTouchHandlers(el);
+      setupPan();
+    }
+  };
+  img.src=src;
+  el.appendChild(img);
+}
+
 function renderSketch(){
   const el=document.getElementById('skWrap');
   scl=1;px=0;py=0;el.style.transform='';
   // תמיד קרא _editedSketch בזמן אמת — מונע snapshot ישן אחרי rebuild של orders
   const liveEdited = (window._csCheckEdits||{})[String(cur.id)] || cur._editedSketch || null;
   if(liveEdited && liveEdited !== cur._editedSketch) cur._editedSketch = liveEdited;
-  const src = liveEdited || cur.sketch;
   const readOnly=curReadOnly;
-  if(src){
-    el.innerHTML=`<img src="${src}" style="width:100%;height:100%;object-fit:contain">`;
+  if(liveEdited){
+    // edited sketch עם fallback ל-original אם נפגמה
+    _showSketchImg(el, liveEdited, cur.sketch, readOnly);
+  } else if(cur.sketch){
+    // original sketch בלבד
+    _showSketchImg(el, cur.sketch, null, readOnly);
   } else {
+    // אין תמונה — הצג SVG
     el.innerHTML=buildSVG(cur, readOnly);
-    if(!readOnly){
-      // iOS fix: SVG onclick לפעמים מקבל 300ms delay — touchend מיידי עוקף אותו
-      el.querySelectorAll('rect[data-idx]').forEach(rect=>{
-        const idx=parseInt(rect.getAttribute('data-idx'));
-        rect.addEventListener('touchend', e=>{
-          e.preventDefault();
-          e.stopPropagation();
-          checkItem(idx);
-        },{passive:false,once:true});
-      });
-    }
+    if(!readOnly) _attachSVGTouchHandlers(el);
   }
   setupPan();
 }
@@ -1003,21 +1028,31 @@ function edEnd(){if(!edDrw)return;edDrw=false;edSnap();}
 function edSave(){
   const bg=document.getElementById('edBg'),merge=document.createElement('canvas');
   const bw=bg.naturalWidth||edBgW,bh=bg.naturalHeight||edBgH;
-  const W=Math.max(bw*2,1200),H=Math.round(W*(bh/bw));
+  // מגביל רוחב ל-1400px — מונע JPEG >5MB שיוביל לכישלון Firebase (גבול 10MB/node)
+  const W=Math.min(Math.max(bw,1200),1400),H=Math.round(W*(bh/Math.max(bw,1)));
   merge.width=W;merge.height=H;
   const mx=merge.getContext('2d');
   mx.imageSmoothingEnabled=true;mx.imageSmoothingQuality='high';
   if(bg.naturalWidth) mx.drawImage(bg,0,0,W,H);
-  mx.save();mx.scale(W/edBgW,H/edBgH);mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();
-  // סקיצת בדיקה זמנית — נשמרת רק ב-localStorage (לא ב-Firebase)
-  // מנוקה אוטומטית כשההזמנה עוברת לשלב הבא
-  const newSrc=merge.toDataURL('image/jpeg',0.82);
+  mx.save();mx.scale(W/Math.max(edBgW,1));mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();
+
+  // דחוס ל-JPEG עם quality מדורג — מבטיח <5MB (≈6.7MB base64) לשמירה בטוחה ב-Firebase
+  let quality=0.82, newSrc=merge.toDataURL('image/jpeg',quality);
+  while(newSrc.length>6_500_000 && quality>0.3){
+    quality=Math.round((quality-0.15)*100)/100;
+    newSrc=merge.toDataURL('image/jpeg',quality);
+  }
+  if(newSrc.length>6_500_000){
+    toast('⚠️ תמונה גדולה מדי לשמירה');
+    closeEditor();
+    return;
+  }
+
   if(cur){
     cur._editedSketch=newSrc;
-    // שמור ב-Firebase/checkEdits — נפרד לחלוטין מ-orders, זמני לבדיקה בלבד
-    firebase.database().ref('checkEdits/' + cur.id).set(newSrc)
-      .catch(e=>console.error('[CS] edSave:', e));
-    // localStorage כ-fallback (iPad offline / טרם Firebase)
+    window._csCheckEdits[String(cur.id)]=newSrc; // עדכן מיד בזמן אמת — לא מחכה ל-Firebase
+    firebase.database().ref('checkEdits/'+cur.id).set(newSrc)
+      .catch(e=>console.error('[CS] edSave Firebase:', e));
     try{
       const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
       s[cur.id]=newSrc;
