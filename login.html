@@ -168,9 +168,11 @@ async function doLogin(){
       return;
     }
 
+    // שם עסקי = primaryName לכל המערכת (orderClient, מחירונים, פורטל)
+    const primaryName = (user.businessName||'').trim() || user.name;
     lgSetSession({
       id:          user.id,
-      name:        user.name,
+      name:        primaryName,
       role:        user.role,
       phone:       user.phone || '',
       isMainAdmin: !!user.isMainAdmin,

@@ -3057,6 +3057,59 @@ async function umToggleActive(userId, clientName, currentlyActive){
   } catch(e){ showToast('שגיאה: ' + e.message); }
 }
 
+// ══════════════════════════════════════════════════
+//  מיגרציה: שמות עסק → orderClient + מחירונים
+//  מריץ פעם אחת כשרוצים שהמערכת תעבוד לפי שם עסק
+// ══════════════════════════════════════════════════
+async function migrateToBusinessNames(){
+  const users = await lgGetAllUsers();
+  const clients = users.filter(u => u.role === 'client');
+
+  // מפה: שם ישן → שם חדש לכל לקוח שיש לו שם עסק שונה מהשם האישי
+  const renames = {};
+  for(const u of clients){
+    const oldName = u.name || '';
+    const newName = (u.businessName||'').trim() || u.name || '';
+    if(oldName && newName && oldName !== newName) renames[oldName] = newName;
+  }
+
+  if(!Object.keys(renames).length){
+    showToast('אין שינויי שם — הכל מסונכרן');
+    return;
+  }
+
+  const allOrders = await getAllOrders();
+  let ordersUpdated = 0;
+  let pricesUpdated = 0;
+  const priceKey = n => String(n||'').replace(/[.#$\[\]\/]/g,'_');
+
+  for(const [oldName, newName] of Object.entries(renames)){
+    // עדכון הזמנות
+    const toUpdate = allOrders.filter(o => o.orderClient === oldName);
+    for(const o of toUpdate){
+      await updateOrder(o.id, { orderClient: newName }).catch(()=>{});
+      ordersUpdated++;
+    }
+
+    // העברת מחירון לפי מפתח חדש
+    const oldKey = priceKey(oldName);
+    const newKey = priceKey(newName);
+    if(oldKey !== newKey){
+      const snap = await firebase.database().ref('prices/clients/'+oldKey).once('value');
+      const data = snap.val();
+      if(data){ await firebase.database().ref('prices/clients/'+newKey).set(data); pricesUpdated++; }
+      await firebase.database().ref('prices/clientKeys/'+newKey).set(newName);
+      await firebase.database().ref('prices/clients/'+oldKey).remove();
+      await firebase.database().ref('prices/clientKeys/'+oldKey).remove();
+    } else {
+      // מפתח זהה — רק עדכן clientKeys
+      await firebase.database().ref('prices/clientKeys/'+newKey).set(newName);
+    }
+  }
+
+  showToast(`✓ מיגרציה הושלמה — ${ordersUpdated} הזמנות, ${pricesUpdated} מחירונים`);
+}
+
 
 </script>
 
@@ -3108,6 +3161,18 @@ async function umToggleActive(userId, clientName, currentlyActive){
           style="padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
           + צור לקוח
         </button>
+      </div>
+
+      <!-- מיגרציה: שמות עסק → מחירונים + הזמנות קיימות -->
+      <div style="border-top:1px solid #eee;padding:14px 0 0;margin-top:4px;">
+        <div style="font-size:11px;color:#999;margin-bottom:8px;">סנכרון שמות עסק — חד-פעמי</div>
+        <button onclick="migrateToBusinessNames()"
+          style="width:100%;padding:10px;background:rgba(0,0,0,0.04);border:1px solid #ddd;font-family:Heebo,sans-serif;font-size:12px;color:#555;cursor:pointer;border-radius:6px;">
+          🔄 סנכרן שמות עסק → הזמנות + מחירונים
+        </button>
+        <div style="font-size:10px;color:#aaa;margin-top:6px;line-height:1.5;">
+          מעדכן הזמנות קיימות ומחירונים לעבוד לפי שם עסק במקום שם פרטי. פעולה בטוחה — ניתן לבדוק קודם ב-Firebase.
+        </div>
       </div>
 
     </div>

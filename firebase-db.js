@@ -431,6 +431,12 @@ async function lgGetAllUsers() {
   return Object.values(snap.val());
 }
 
+// השם העסקי הקנוני של לקוח — businessName כשקיים, אחרת name
+// זהו השם שמשמש ב-orderClient, מחירונים, פורטל, וחשבשבת API
+function lgClientDisplayName(user){
+  return (user && (user.businessName||'').trim()) || (user && user.name) || '';
+}
+
 // קבלת לקוחות פעילים בלבד — active !== false (backwards compat: חסר = פעיל)
 // זהו ה-API שיש להשתמש בו בכל מקום שמציג רשימות עבודה / מחירונים
 // לעתיד: כשיתווסף חיבור חשבשבת, לקוחות מסונכרנים יגיעו עם active:false עד שמפעילים אותם ידנית
