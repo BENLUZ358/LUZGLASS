@@ -313,7 +313,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
       </div>
     </div>
   </div>
-  <div class="btmbar">
+  <div class="btmbar" id="btmbar">
     <button class="zbtn zbtn-zoom" onclick="doZoom(0.25)">+</button>
     <button class="zbtn zbtn-zoom" onclick="doZoom(-0.25)">−</button>
     <button class="zbtn zbtn-zoom" onclick="resetZoom()">↺</button>
@@ -663,15 +663,12 @@ function showSketch(){
   document.getElementById('filtersBar').style.display='none';
   document.getElementById('tabsBar').style.display='none';
   document.getElementById('btnBack').style.display='flex';
-  // כלי עבודה — מוסתרים בהושלמו
+  // סרגל עבודה עליון — מוסתר בהושלמו
   document.getElementById('btnSheet').style.display = curReadOnly ? 'none' : 'flex';
   document.getElementById('progWrap').style.display = curReadOnly ? 'none' : 'flex';
-  const fb = document.getElementById('finishBtn');
-  if(fb){ fb.style.display = curReadOnly ? 'none' : 'flex'; fb.disabled = false; }
-  // ספירת פריטים — מוסתרת בהושלמו (מחליפה ב-doneBadge)
-  const ic = document.getElementById('iCnt');
-  if(ic) ic.style.display = curReadOnly ? 'none' : '';
-  // banner done / active
+  // סרגל תחתון — נסתר לגמרי בהושלמו (כל ה-workflow של עריכה/סיום שייך ל"לבדיקה" בלבד)
+  document.getElementById('btmbar').style.display = curReadOnly ? 'none' : 'flex';
+  // badge סטטוס — מוצג במקום הסרגל בהושלמו
   document.getElementById('doneBadge').style.display = curReadOnly ? 'block' : 'none';
   hideBanner();
 }
