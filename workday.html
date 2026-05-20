@@ -1629,31 +1629,47 @@ function renderGraphicTab(){
     el.innerHTML = `<div class="empty"><div class="empty-icon">🖼</div><p>אין הזמנות בגרפיקה כרגע</p></div>`;
     return;
   }
-  el.innerHTML = ords.map(o => {
-    const graphicItems = (o.items||[]).filter(it => !!it.graphic);
-    const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
-    const nextLabel = nextSt === 'delivery' ? '🚚 העבר להובלה' : '✅ גרפיקה הושלמה — מוכן לאיסוף';
-    const nextBg    = nextSt === 'delivery' ? '#2980b9' : '#27ae60';
-    const itemsHtml = graphicItems.length
-      ? graphicItems.map(it => `<div style="font-size:11px;color:#555;padding:2px 0;">🖼 ${it.name||''} ${it.w||''}×${it.h||''} ס"מ</div>`).join('')
-      : `<div style="font-size:11px;color:#888;">כל הפריטים</div>`;
-    const sketchHtml = o.sketch
-      ? `<img src="${o.sketch}" style="width:100%;max-height:110px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:8px;display:block;">`
-      : '';
-    return `<div style="background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:14px 16px;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div>
-          <div style="font-weight:700;font-size:14px;">${o.orderClient||'—'}</div>
-          <div style="font-size:11px;color:#8a8278;">${o.orderNum||''} · ${o.sketchName||o.type||''}</div>
+  // group by client — computed view, same data, no new state
+  const clientMap = {};
+  ords.forEach(o => { const c = o.orderClient||'—'; if(!clientMap[c]) clientMap[c]=[]; clientMap[c].push(o); });
+  el.innerHTML = Object.entries(clientMap).map(([cn, cOrds]) => {
+    const totalItems   = cOrds.reduce((s,o)=>s+(o.items||[]).length, 0);
+    const graphicCount = cOrds.reduce((s,o)=>s+(o.items||[]).filter(it=>!!it.graphic).length, 0);
+    const ordersHtml = cOrds.map(o => {
+      const gItems   = (o.items||[]).filter(it=>!!it.graphic);
+      const nextSt   = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
+      const nextLabel = nextSt==='delivery' ? '🚚 העבר להובלה' : '✅ גרפיקה הושלמה — מוכן לאיסוף';
+      const nextBg    = nextSt==='delivery' ? '#2980b9' : '#27ae60';
+      const itsHtml   = gItems.length
+        ? gItems.map(it=>`<div style="font-size:11px;color:#555;padding:1px 0;">🖼 ${it.name||''} ${it.w||''}×${it.h||''} ס"מ</div>`).join('')
+        : `<div style="font-size:11px;color:#888;">כל הפריטים</div>`;
+      const sk = o.sketch ? `<img src="${o.sketch}" style="width:100%;max-height:100px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:6px;display:block;">` : '';
+      return `<div style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+          <span style="font-size:12px;font-weight:700;">${o.orderNum||o.sketchName||o.type||'—'}</span>
+          <span style="font-size:10px;color:#8a8278;">${gItems.length||'כל'} פריטי גרפיקה</span>
         </div>
-        <span style="font-size:10px;padding:3px 8px;background:rgba(39,174,96,0.1);color:#27ae60;border-radius:3px;font-weight:700;">גרפיקה</span>
+        ${sk}<div style="margin-bottom:7px;">${itsHtml}</div>
+        <button onclick="completeGraphic('${o.id}')"
+          style="width:100%;padding:9px;background:${nextBg};color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">
+          ${nextLabel}
+        </button>
+      </div>`;
+    }).join('');
+    return `<div style="background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:10px;overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+      <div style="padding:14px 16px;background:rgba(39,174,96,0.04);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:16px;font-weight:900;">${cn}</div>
+            <div style="font-size:11px;color:#8a8278;margin-top:2px;">${cOrds.length} הזמנות · ${graphicCount||totalItems} פריטי גרפיקה</div>
+          </div>
+          <span style="font-size:10px;padding:3px 8px;background:rgba(39,174,96,0.1);color:#27ae60;border-radius:3px;font-weight:700;">🖼 גרפיקה</span>
+        </div>
       </div>
-      ${sketchHtml}
-      <div style="margin-bottom:10px;">${itemsHtml}</div>
-      <button onclick="completeGraphic('${o.id}')"
-        style="width:100%;padding:10px;background:${nextBg};color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
-        ${nextLabel}
-      </button>
+      <details style="border-top:1px solid rgba(0,0,0,0.05);">
+        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;color:#27ae60;cursor:pointer;outline:none;direction:rtl;text-align:right;">ראה עוד</summary>
+        ${ordersHtml}
+      </details>
     </div>`;
   }).join('');
 }
@@ -1684,29 +1700,49 @@ function renderDeliveryTab(){
     el.innerHTML = `<div class="empty"><div class="empty-icon">🚚</div><p>אין הובלות ממתינות כרגע</p></div>`;
     return;
   }
-  el.innerHTML = ords.map(o => {
-    const sketchHtml = o.sketch
-      ? `<img src="${o.sketch}" style="width:100%;max-height:110px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:8px;display:block;">`
-      : '';
-    const itemsHtml = (o.items||[]).length
-      ? (o.items||[]).map(it => `<div style="font-size:11px;color:#555;padding:2px 0;">• ${it.name||''} ${it.w||''}×${it.h||''} ס"מ</div>`).join('')
-      : '';
-    return `<div style="background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;padding:14px 16px;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div>
-          <div style="font-weight:700;font-size:14px;">${o.orderClient||'—'}</div>
-          <div style="font-size:11px;color:#8a8278;">${o.orderNum||''} · ${o.sketchName||o.type||''}</div>
+  // group by client — computed view, same data, no new state
+  const clientMap = {};
+  ords.forEach(o => { const c = o.orderClient||'—'; if(!clientMap[c]) clientMap[c]=[]; clientMap[c].push(o); });
+  el.innerHTML = Object.entries(clientMap).map(([cn, cOrds]) => {
+    const totalItems = cOrds.reduce((s,o)=>s+(o.items||[]).length, 0);
+    const ids = cOrds.map(o=>String(o.id)).join(',');
+    const ordersHtml = cOrds.map(o => {
+      const sk  = o.sketch ? `<img src="${o.sketch}" style="width:100%;max-height:100px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:6px;display:block;">` : '';
+      const its = (o.items||[]).map(it=>`<div style="font-size:11px;color:#555;padding:1px 0;">• ${it.name||''} ${it.w||''}×${it.h||''} ס"מ</div>`).join('');
+      return `<div style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+          <span style="font-size:12px;font-weight:700;">${o.orderNum||o.sketchName||o.type||'—'}</span>
+          <span style="font-size:10px;color:#8a8278;">${(o.items||[]).length} פריטים</span>
         </div>
-        <span style="font-size:10px;padding:3px 8px;background:rgba(41,128,185,0.1);color:#2980b9;border-radius:3px;font-weight:700;">🚚 הובלה</span>
+        ${sk}<div>${its}</div>
+      </div>`;
+    }).join('');
+    return `<div style="background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:10px;overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+      <div style="padding:14px 16px;background:rgba(41,128,185,0.04);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:16px;font-weight:900;">${cn}</div>
+            <div style="font-size:11px;color:#8a8278;margin-top:2px;">${cOrds.length} הזמנות · ${totalItems} פריטים</div>
+          </div>
+          <span style="font-size:10px;padding:3px 8px;background:rgba(41,128,185,0.1);color:#2980b9;border-radius:3px;font-weight:700;">🚚 הובלה</span>
+        </div>
       </div>
-      ${sketchHtml}
-      <div style="margin-bottom:10px;">${itemsHtml}</div>
-      <button onclick="showDeliveryCompletePrompt('${o.id}')"
-        style="width:100%;padding:10px;background:#2980b9;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
-        🚚 סיים הובלה
-      </button>
+      <details style="border-top:1px solid rgba(0,0,0,0.05);">
+        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;color:#2980b9;cursor:pointer;outline:none;direction:rtl;text-align:right;">ראה עוד</summary>
+        ${ordersHtml}
+      </details>
+      <div style="padding:10px 14px;">
+        <button data-ids="${ids}"
+          style="width:100%;padding:11px;background:#2980b9;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+          🚚 סיים הובלה${cOrds.length>1?` (${cOrds.length} הזמנות)`:''}
+        </button>
+      </div>
     </div>`;
   }).join('');
+  // wire client delivery buttons via data attribute — avoids inline-JS escaping issues
+  el.querySelectorAll('button[data-ids]').forEach(btn =>
+    btn.addEventListener('click', () => showClientDeliveryPrompt(btn.dataset.ids))
+  );
 }
 
 function showDeliveryCompletePrompt(orderId){
@@ -1732,6 +1768,33 @@ function showDeliveryCompletePrompt(orderId){
           style="padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול</button>
       </div>
     </div>`;
+  document.body.appendChild(ov);
+}
+
+// client-level delivery prompt — same modal as showDeliveryCompletePrompt,
+// but loops through all orders in the client group
+function showClientDeliveryPrompt(orderIdsCommaSep){
+  const orderIds = orderIdsCommaSep.split(',').filter(Boolean);
+  if(!orderIds.length) return;
+  const firstO = allOrders.find(o => String(o.id) === orderIds[0]);
+  const clientName = firstO?.orderClient || '—';
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="font-size:26px;text-align:center;margin-bottom:12px;">🚚</div>
+      <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">סיים הובלה</div>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${clientName} · ${orderIds.length} הזמנות</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button id="_cldInv"  style="padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">🧾 הפק חשבונית / קבלה</button>
+        <button id="_cldNoInv" style="padding:13px;background:#f0ede8;color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">✓ סיים ללא חשבונית</button>
+        <button id="_cldCancel" style="padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול</button>
+      </div>
+    </div>`;
+  ov.querySelector('#_cldInv').onclick    = () => { ov.remove(); orderIds.forEach(id => finalizeDelivery(id, true)); };
+  ov.querySelector('#_cldNoInv').onclick  = () => { ov.remove(); orderIds.forEach(id => finalizeDelivery(id, false)); };
+  ov.querySelector('#_cldCancel').onclick = () => ov.remove();
+  ov.addEventListener('click', e => { if(e.target===ov) ov.remove(); });
   document.body.appendChild(ov);
 }
 
