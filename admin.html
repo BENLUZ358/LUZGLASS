@@ -869,6 +869,16 @@ function filtered(){
 
 function renderAll(){
   renderStats();if(cv==='kanban')renderKanban();else renderTable();
+  // keep sketch queue in sync — same approach as kanban cards (always from live orders[])
+  if(sqCurrent && document.getElementById('sqOverlay')?.style.display!=='none'){
+    const _live = orders.find(o => o.id === sqCurrent.id);
+    if(_live){
+      sqCurrent.total       = _live.total;
+      sqCurrent.totalFinal  = _live.totalFinal;
+      sqCurrent.orderClient = _live.orderClient;
+    }
+    sqRefreshMetrics();
+  }
 }
 
 function renderStats(){
@@ -1959,12 +1969,14 @@ function buildSQItems(){
       id:           o.id,
       source:       o.source || 'sketch',
       client:       o.orderClient || '—',
+      orderClient:  o.orderClient || '',   // needed by lgCalcOrderTotal for client price lookup
       orderNum:     o.orderNum || '',
       sketchName:   o.sketchName || o.type || '',
       glassFullName:o.glassFullName || o.glass || '',
       finish:       o.finish || '',
       area:         o.area || '',
       total:        o.total || 0,
+      totalFinal:   o.totalFinal || 0,
       date:         o.date || '',
       panels:       o.panels || [],
       notes:        o.notes || '',
@@ -2091,16 +2103,11 @@ function sqShowDetail(){
 
   sqUpdateBtns(o.id);
 
-  // שטח + סכום — אותן פונקציות שמשמשות בכל שאר המסכים (source of truth אחד)
-  const _totalM2  = lgCalcOrderM2(o);
-  const _areaStr  = _totalM2 ? _totalM2+' מ"ר' : '—';
-  const _totalPrice = lgCalcOrderTotal(o, globalPrices, clientPrices);
-
   const selStyle='width:100%;padding:7px 10px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.1);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;direction:rtl;';
   document.getElementById('sqInfoGrid').innerHTML=`
     <div class="sq-field"><div class="sq-flabel">לקוח</div><div class="sq-fval">${o.client}</div></div>
-    <div class="sq-field"><div class="sq-flabel">שטח</div><div class="sq-fval">${_areaStr}</div></div>
-    <div class="sq-field"><div class="sq-flabel">סכום</div><div class="sq-fval" style="color:var(--gold);font-weight:700">${_totalPrice?'₪'+_totalPrice.toLocaleString():'—'}</div></div>
+    <div class="sq-field"><div class="sq-flabel">שטח</div><div class="sq-fval" id="sqMetricArea">—</div></div>
+    <div class="sq-field"><div class="sq-flabel">סכום</div><div class="sq-fval" style="color:var(--gold);font-weight:700" id="sqMetricPrice">—</div></div>
   `;
 
   const pw=document.getElementById('sqPanelsWrap');
@@ -2138,8 +2145,7 @@ function sqShowDetail(){
       badge.style.background=checked===total?'rgba(39,174,96,0.12)':'rgba(184,146,42,0.1)';
       badge.style.color=checked===total?'#27ae60':'#b8922a';
       badge.style.borderColor=checked===total?'rgba(39,174,96,0.25)':'rgba(184,146,42,0.25)';
-      // sync edited sketch
-      if(csEntry._editedSketch){ o.sketch=csEntry._editedSketch; }
+      // (check-station edits are NOT merged here — those stay in check-station only)
     } else {
       badge.style.display='none';
     }
@@ -2171,17 +2177,13 @@ function sqUpdateBtns(id){
 
   // כפתור opty ישן — מוסתר
   bO.style.display='none';
-  // edit button — show for uploads OR any item with sketch
+  // edit button — show whenever the image is visible (sketch OR measure SVG)
   const editBtn=document.getElementById('sqEditBtn');
-  if(editBtn) editBtn.style.display=(item&&item.sketch)?'flex':'none';
-  // check if sketch was edited in check-station
-  const cs=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');
-  const editedSrc=sqCurrent&&cs[sqCurrent.id.replace('ord_','')]?._editedSketch;
-  if(editedSrc&&sqCurrent){
-    sqCurrent.sketch=editedSrc;
-    const img=document.getElementById('sqImg');
-    if(img&&img.style.display!=='none') img.src=editedSrc;
-  }
+  const sqImg=document.getElementById('sqImg');
+  const hasVisibleImg = sqImg && sqImg.style.display!=='none' && sqImg.src;
+  if(editBtn) editBtn.style.display=hasVisibleImg?'flex':'none';
+  // check-station _editedSketch is intentionally NOT reflected here:
+  // sketch queue always shows the canonical order.sketch from Firebase
 }
 
 function sqSetStage(stage){
@@ -2447,10 +2449,14 @@ let etCtx=null, etCanvas=null;
 let etBgImg=null, etBgW=0, etBgH=0;
 
 function sqOpenEditor(){
-  if(!sqCurrent||!sqCurrent.sketch) return;
+  if(!sqCurrent) return;
+  // use saved sketch if available, otherwise fall back to whatever the view is showing
+  const viewImg = document.getElementById('sqImg');
+  const bgSrc = sqCurrent.sketch || (viewImg && viewImg.style.display!=='none' ? viewImg.src : '');
+  if(!bgSrc) return;
   document.getElementById('sqEdTitle').textContent='✏️ ' + sqCurrent.client + ' — ' + (sqCurrent.sketchName||'');
   document.getElementById('sqEditor').style.display='flex';
-  document.getElementById('sqEdBg').src=sqCurrent.sketch;
+  document.getElementById('sqEdBg').src=bgSrc;
 
   etCanvas=document.getElementById('sqEdCanvas');
   etCtx=etCanvas.getContext('2d');
@@ -2607,24 +2613,20 @@ function sqSaveEdit(){
   mx.drawImage(etCanvas,0,0,etBgW,etBgH);
   mx.restore();
 
-  const newSrc=merge.toDataURL('image/png',1.0);
+  // compress to JPEG — progressive quality until under 6.5 MB base64
+  const MAX_B64 = 6.5 * 1024 * 1024;
+  let newSrc, q = 0.92;
+  do {
+    newSrc = merge.toDataURL('image/jpeg', q);
+    q -= 0.1;
+  } while(newSrc.length > MAX_B64 && q > 0.3);
 
-  // save back to item
-  sqCurrent.sketch=newSrc;
+  // update in-memory object immediately
+  sqCurrent.sketch = newSrc;
 
-  // save to localStorage if it's a real order
+  // persist permanently to Firebase as the canonical sketch
   if(sqCurrent.id.startsWith('ord_')){
-    // שמור סקיצה ב-Firebase
     updateOrder(sqCurrent.id, { sketch: newSrc });
-    // (Firebase listener יעדכן orders אוטומטית)
-    if(o){ o.sketch=newSrc; safeStorage.setItem('lgOrders',JSON.stringify(all)); }
-  } else if(sqCurrent.id.startsWith('sub_')){
-    const idx=parseInt(sqCurrent.id.replace('sub_',''));
-    const subs=JSON.parse(safeStorage.getItem('lgSubmissions')||'[]');
-    if(subs[idx]&&subs[idx].files&&subs[idx].files[0]){
-      subs[idx].files[0].data=newSrc;
-      safeStorage.setItem('lgSubmissions',JSON.stringify(subs));
-    }
   }
 
   sqCloseEditor();
@@ -2757,37 +2759,68 @@ function iwPreview(code){
 
 let sqCurrentItems = []; // פריטי ההזמנה הנוכחית
 
+function sqRefreshMetrics(){
+  if(!sqCurrent) return;
+
+  // שטח — inline, ללא תלות חיצונית
+  const areaEl = document.getElementById('sqMetricArea');
+  if(areaEl){
+    const m2 = Math.round(sqCurrentItems.reduce(
+      (s,it) => s + ((it.w||0)/100)*((it.h||0)/100), 0
+    ) * 100) / 100;
+    areaEl.textContent = m2 > 0 ? m2+' מ"ר' : '—';
+  }
+
+  // סכום — sqCurrent מסונכרן מ-renderAll עם live orders[]
+  // אותו חישוב כמו כרטיסי הקנבן: lgCalcOrderTotal || total || 0
+  const priceEl = document.getElementById('sqMetricPrice');
+  if(priceEl){
+    const liveO   = {...sqCurrent, items: sqCurrentItems};
+    const display = lgCalcOrderTotal(liveO, globalPrices, clientPrices) || sqCurrent.total || 0;
+    priceEl.textContent = display > 0 ? '₪'+display.toLocaleString() : '—';
+  }
+}
+
 function iwLoad(o){
-  // טען פריטים קיימים מההזמנה
   sqCurrentItems = (o.items||[]).map(it=>({...it}));
-  iwRender();
+  iwRender(); // → calls sqRefreshMetrics()
 }
 
 function iwRender(){
+  // area update — always runs first, before any early return
+  const _ae = document.getElementById('sqMetricArea');
+  if(_ae){
+    const _m2 = Math.round(sqCurrentItems.reduce(
+      (s,it) => s + ((it.w||0)/100)*((it.h||0)/100), 0
+    ) * 100) / 100;
+    _ae.textContent = _m2 > 0 ? _m2+' מ"ר' : '—';
+  }
+
   const list = document.getElementById('iwList');
   const cnt = document.getElementById('sqItemCount');
   if(!list) return;
   if(cnt) cnt.textContent = sqCurrentItems.length;
   if(!sqCurrentItems.length){
     list.innerHTML = '<div class="iw-empty">אין פריטים — הוסף באמצעות הקוד למעלה</div>';
-    return;
+  } else {
+    list.innerHTML = sqCurrentItems.map((it,i)=>`
+      <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${i}">
+        <div class="iw-item-name">${it.name||it.label||'פריט'}</div>
+        <input type="number" value="${it.w||''}" min="1" max="999"
+          style="width:48px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
+          onchange="iwEditDim(${i},'w',this.value)" onclick="event.stopPropagation()"
+          onkeydown="event.stopPropagation()">
+        <span style="font-size:11px;color:#aaa">×</span>
+        <input type="number" value="${it.h||''}" min="1" max="999"
+          style="width:48px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
+          onchange="iwEditDim(${i},'h',this.value)" onclick="event.stopPropagation()"
+          onkeydown="event.stopPropagation()">
+        <span style="font-size:10px;color:#aaa">ס"מ</span>
+        <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
+        <button class="iw-item-del" onclick="event.stopPropagation();iwRemove(${i})" title="מחק">✕</button>
+      </div>`).join('');
   }
-  list.innerHTML = sqCurrentItems.map((it,i)=>`
-    <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${i}">
-      <div class="iw-item-name">${it.name||it.label||'פריט'}</div>
-      <input type="number" value="${it.w||''}" min="1" max="999"
-        style="width:48px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
-        onchange="iwEditDim(${i},'w',this.value)" onclick="event.stopPropagation()"
-        onkeydown="event.stopPropagation()">
-      <span style="font-size:11px;color:#aaa">×</span>
-      <input type="number" value="${it.h||''}" min="1" max="999"
-        style="width:48px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
-        onchange="iwEditDim(${i},'h',this.value)" onclick="event.stopPropagation()"
-        onkeydown="event.stopPropagation()">
-      <span style="font-size:10px;color:#aaa">ס"מ</span>
-      <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
-      <button class="iw-item-del" onclick="event.stopPropagation();iwRemove(${i})" title="מחק">✕</button>
-    </div>`).join('');
+  sqRefreshMetrics();
 }
 
 function iwAdd(){
@@ -2808,7 +2841,7 @@ function iwAdd(){
   };
   sqCurrentItems.push(item);
   iwSave();
-  iwRender();
+  iwRender(); // → calls sqRefreshMetrics()
   // גלול לרשימת הפריטים כדי לראות את החדש
   setTimeout(()=>{
     const lastItem = document.querySelector('#iwList .iw-item:last-child');
@@ -2831,13 +2864,14 @@ function iwEditDim(i, field, val){
   if(!sqCurrentItems[i]) return;
   sqCurrentItems[i][field] = parseInt(val)||0;
   iwSave();
+  sqRefreshMetrics();
   // לא עושים iwRender() כדי לא לאבד focus
 }
 
 function iwRemove(i){
   sqCurrentItems.splice(i,1);
   iwSave();
-  iwRender();
+  iwRender(); // → calls sqRefreshMetrics()
 }
 
 function iwSave(){

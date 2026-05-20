@@ -160,12 +160,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   .tb-btn{min-height:44px;padding:10px 16px;font-size:13px;}
 }
 @media(max-width:768px){
-  .unav-sidebar{position:fixed;top:0;right:0;height:100vh;transform:translateX(100%);transition:transform 0.25s;z-index:95;}
-  /* fixed — לא דוחף תוכן למטה */
-  .unav-topbar{display:flex;position:fixed;top:0;left:0;right:0;}
-  /* פיצוי לגובה: flex-wrap מתחיל מתחת ל-topbar */
-  #csFlexWrap{margin-top:52px;height:calc(100vh - 52px) !important;}
-  .app{height:calc(100vh - 52px);}
+  .app{height:100vh;}
   /* btmbar קבוע לתחתית — לא נחתך */
   .btmbar{
     position:fixed;bottom:0;left:0;right:0;z-index:30;
@@ -193,25 +188,6 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   <div style="font-size:12px;color:#666;margin-top:16px;">טוען תחנת בדיקה...</div>
 </div>
 <style>@keyframes lgSpin{to{transform:rotate(360deg)}}</style>
-<div class="unav-topbar"><div class="lg">Luz<span>Glass</span></div><button class="unav-burger" onclick="unavOpen()"><span></span><span></span><span></span></button></div>
-<div id="csFlexWrap" style="display:flex;height:100vh;overflow:hidden">
-<div class="unav-sidebar" id="unavSidebar">
-  <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
-  <nav class="unav-nav">
-    <div class="unav-sec">מנהל עבודה</div>
-    <a class="unav-a" href="admin.html"><span class="ic">⬡</span>לוח הזמנות</a>
-    <a class="unav-a" href="admin.html"><span class="ic">💰</span>מחירונים</a>
-    <a class="unav-a" href="admin.html"><span class="ic">📅</span>לוח איסופים</a>
-    <div class="unav-sec">תחנות עבודה</div>
-    <a class="unav-a" href="admin.html"><span class="ic">📐</span>תור סקיצות</a>
-    <a class="unav-a" href="drafter.html"><span class="ic">✏️</span>שרטט</a>
-    <a class="unav-a active" href="check-station.html"><span class="ic">🔍</span>תחנת בדיקה</a>
-    <a class="unav-a" href="workday.html"><span class="ic">🏭</span>יום עבודה</a>
-  </nav>
-  <div class="unav-bot"><a href="#" onclick="unavResetAll()">🔄 אפס הכל</a></div>
-</div>
-<div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
-<div style="flex:1;overflow-y:auto">
 
 <div class="app">
 
@@ -225,7 +201,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   </div>
   <button class="tb-btn tb-out" id="btnBack" onclick="goBack()" style="display:none">← רשימה</button>
   <button class="tb-btn tb-out" id="btnSheet" onclick="toggleSheet()" style="display:none">📋 פריטים</button>
-  <a href="workday.html" class="tb-btn tb-out" style="text-decoration:none">← חזור</a>
+  <a href="admin.html" class="tb-btn tb-out" id="csExitBtn" style="text-decoration:none;font-size:18px;font-weight:900;padding:6px 12px;line-height:1;" title="יציאה מתחנת הבדיקה">✕</a>
 </div>
 
 <!-- FILTERS - always visible -->
@@ -1126,7 +1102,5 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 function unavResetAll(){if(confirm('לאפס את המצב?')){localStorage.clear();location.reload();}}
 </script>
 
-</div><!-- /flex:1;overflow-y:auto -->
-</div><!-- /display:flex;height:100vh -->
 </body>
 </html>
