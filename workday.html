@@ -1553,7 +1553,7 @@ function markAllClientArrived(clientKey, reportId, clientName){
 // כרטיס לקוח בתוך דוח בדיקה — מציג רק פריטים שטרם הגיעו
 function _chisumClientCardHtml(clientName, orders, reportId){
   const clientKey = (reportId||'legacy') + '_' + clientName;
-  const isOpen    = chisumOpen[clientKey] !== false; // פתוח כברירת מחדל
+  const isOpen    = chisumOpen[clientKey] === true;   // סגור כברירת מחדל
 
   let totalPending        = 0;
   let sessionArrivedCount = 0;
