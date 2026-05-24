@@ -1618,6 +1618,16 @@ function _chisumClientCardHtml(clientName, orders, reportId){
 }
 
 
+// lightbox פשוט — לפתיחת סקיצה בגודל מלא בלחיצה
+function _openSketchFull(src){
+  if(!src) return;
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+  ov.innerHTML = `<img src="${src}" style="max-width:95vw;max-height:92vh;object-fit:contain;border-radius:4px;">`;
+  ov.onclick = () => ov.remove();
+  document.body.appendChild(ov);
+}
+
 // ═══════════════════════════════════════
 //  GRAPHIC TAB
 // ═══════════════════════════════════════
@@ -1643,7 +1653,7 @@ function renderGraphicTab(){
       const itsHtml   = gItems.length
         ? gItems.map(it=>`<div style="font-size:11px;color:#555;padding:1px 0;">🖼 ${it.name||''} ${it.w||''}×${it.h||''} ס"מ</div>`).join('')
         : `<div style="font-size:11px;color:#888;">כל הפריטים</div>`;
-      const sk = o.sketch ? `<img src="${o.sketch}" style="width:100%;max-height:100px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:6px;display:block;">` : '';
+      const sk = o.sketch ? `<img src="${o.sketch}" onclick="_openSketchFull(this.src)" style="width:100%;max-height:100px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:6px;display:block;cursor:zoom-in;">` : '';
       return `<div style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
           <span style="font-size:12px;font-weight:700;">${o.orderNum||o.sketchName||o.type||'—'}</span>
