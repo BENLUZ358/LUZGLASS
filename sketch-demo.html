@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>LuzGlass — בונה סקיצות</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="lg-parse.js"></script>
 <style>
 :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;--blue:#2980b9;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -27,7 +28,8 @@ canvas{display:block;width:100%;height:auto;cursor:pointer;}
 .cb.open{display:flex;}
 .row{display:flex;align-items:center;gap:8px;}
 .row label{font-size:13px;color:var(--muted);flex:1;}
-.row input[type=number],.row select{width:80px;padding:8px 9px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:14px;color:var(--text);outline:none;text-align:center;-webkit-appearance:none;border-radius:0;}
+.row input[type=number],.row input[type=text],.row select{width:80px;padding:8px 9px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:14px;color:var(--text);outline:none;text-align:center;-webkit-appearance:none;border-radius:0;}
+.dim-prev{font-size:10px;color:var(--gold);min-width:44px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .row input:focus,.row select:focus{border-color:var(--gold);}
 .row input.hi{border-color:var(--gold);background:rgba(184,146,42,0.07);}
 .unit{font-size:11px;color:var(--muted);width:20px;}
@@ -298,7 +300,7 @@ let panelState={}, items=[], dimHits=[];
 
 function mkPS(panel){
   return {
-    w:panel.type==='door'?80:panel.type==='slider'?80:50, h:200,
+    w:panel.type==='door'?800:panel.type==='slider'?800:500, h:2000,
     // hinge
     extraHinge:false,hinge3pos:40,
     // brackets
@@ -309,8 +311,8 @@ function mkPS(panel){
     hasSlope:false,
     slopeAxis:'height',   // 'height' or 'width'
     slopeSide:'right',    // which side is SHORTER (right/left for height, top/bottom for width)
-    slopeH1:200,          // main height (left side for height-slope, or top for width-slope)
-    slopeH2:180,          // other side
+    slopeH1:2000,         // main height (left side for height-slope, or top for width-slope)
+    slopeH2:1800,         // other side
     // holes
     holes:[],
     // recess
@@ -328,7 +330,22 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 
 function getPS(pfx,i){return pfx==='combo'?panelState[i]:items[i];}
 
-function setPSv(pfx,i,k,el){const ps=getPS(pfx,i);if(!ps)return;ps[k]=parseFloat(el.value)||0;draw();}
+function setPSv(pfx,i,k,el){
+  const ps=getPS(pfx,i);if(!ps)return;
+  if(k==='w'||k==='h'||k==='slopeH1'||k==='slopeH2'){
+    const r=lgParseDimensionInput(el.value);
+    const span=el.nextElementSibling;
+    if(span&&span.classList&&span.classList.contains('dim-prev')){
+      span.textContent=r.ok?el.value.trim()+' → '+r.mm+' מ"מ':r.error;
+      span.style.color=r.ok?'var(--gold)':'#c0392b';
+    }
+    if(!r.ok)return;
+    ps[k]=r.mm;
+  }else{
+    ps[k]=parseFloat(el.value)||0;
+  }
+  draw();
+}
 function setPSb(pfx,i,k,val){const ps=getPS(pfx,i);if(!ps)return;ps[k]=val;if(pfx==='combo')renderPanelCtrl();else renderItemList();draw();}
 function setPSs(pfx,i,k,val){const ps=getPS(pfx,i);if(!ps)return;ps[k]=typeof val==='string'?val:val.value;if(pfx==='combo')renderPanelCtrl();else renderItemList();draw();}
 function addHole(pfx,i){const ps=getPS(pfx,i);if(!ps)return;if(!ps.holes)ps.holes=[];ps.holes.push({diam:12,fromTop:100,fromRight:10});if(pfx==='combo')renderPanelCtrl();else renderItemList();draw();}
@@ -383,11 +400,11 @@ function buildSlope(ps,i,pfx){
       </select><span class="unit"></span></div>
     ${isH?`
     <div class="row"><label>גובה צד שמאל</label>
-      <input type="number" value="${ps.slopeH1}" min="20" max="400" oninput="setPSv('${pfx}',${i},'slopeH1',this)">
-      <span class="unit">ס״מ</span></div>
+      <input type="text" value="${lgMmToMeterStr(ps.slopeH1)}" oninput="setPSv('${pfx}',${i},'slopeH1',this)">
+      <span class="unit dim-prev"></span></div>
     <div class="row"><label>גובה צד ימין</label>
-      <input type="number" value="${ps.slopeH2}" min="20" max="400" oninput="setPSv('${pfx}',${i},'slopeH2',this)">
-      <span class="unit">ס״מ</span></div>
+      <input type="text" value="${lgMmToMeterStr(ps.slopeH2)}" oninput="setPSv('${pfx}',${i},'slopeH2',this)">
+      <span class="unit dim-prev"></span></div>
     <div class="row"><label>צד קצר (שיפוע)</label>
       <select onchange="setPSs('${pfx}',${i},'slopeSide',this)" style="width:110px">
         <option value="right" ${ps.slopeSide==='right'?'selected':''}>ימין</option>
@@ -395,11 +412,11 @@ function buildSlope(ps,i,pfx){
       </select><span class="unit"></span></div>
     `:`
     <div class="row"><label>גובה עליון</label>
-      <input type="number" value="${ps.slopeH1}" min="20" max="400" oninput="setPSv('${pfx}',${i},'slopeH1',this)">
-      <span class="unit">ס״מ</span></div>
+      <input type="text" value="${lgMmToMeterStr(ps.slopeH1)}" oninput="setPSv('${pfx}',${i},'slopeH1',this)">
+      <span class="unit dim-prev"></span></div>
     <div class="row"><label>גובה תחתון</label>
-      <input type="number" value="${ps.slopeH2}" min="20" max="400" oninput="setPSv('${pfx}',${i},'slopeH2',this)">
-      <span class="unit">ס״מ</span></div>
+      <input type="text" value="${lgMmToMeterStr(ps.slopeH2)}" oninput="setPSv('${pfx}',${i},'slopeH2',this)">
+      <span class="unit dim-prev"></span></div>
     <div class="row"><label>צד קצר</label>
       <select onchange="setPSs('${pfx}',${i},'slopeSide',this)" style="width:110px">
         <option value="bottom" ${ps.slopeSide==='bottom'?'selected':''}>תחתון</option>
@@ -448,13 +465,13 @@ function buildPanelHTML(panel,ps,i,pfx){
   const isDoor=panel.type==='door',isFixed=panel.type==='fixed'||panel.type==='mirror',isMirror=panel.type==='mirror';
   let h=`
     <div class="row"><label>רוחב</label>
-      <input type="number" id="${pfx}_w_${i}" value="${ps.w}" min="10" max="300"
+      <input type="text" id="${pfx}_w_${i}" value="${lgMmToMeterStr(ps.w)}"
         oninput="setPSv('${pfx}',${i},'w',this);this.classList.add('hi')" onblur="this.classList.remove('hi')">
-      <span class="unit">ס״מ</span></div>
+      <span class="unit dim-prev"></span></div>
     <div class="row"><label>גובה${ps.hasSlope&&ps.slopeAxis==='height'?' (שמאל)':''}</label>
-      <input type="number" id="${pfx}_h_${i}" value="${ps.h}" min="50" max="400"
+      <input type="text" id="${pfx}_h_${i}" value="${lgMmToMeterStr(ps.h)}"
         oninput="setPSv('${pfx}',${i},'h',this);this.classList.add('hi')" onblur="this.classList.remove('hi')">
-      <span class="unit">ס״מ</span></div>`;
+      <span class="unit dim-prev"></span></div>`;
 
   if(isDoor){
     h+=`
@@ -576,10 +593,10 @@ function draw(){
 
 function drawComboMode(panels,pss,DPR,cW){
   const MG=64;
-  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||50),0);
+  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
   // max height considering slopes
   const maxH=Math.max(...panels.map((_,i)=>{
-    const ps=pss[i]||{}; return Math.max(ps.h||200, ps.slopeH1||0, ps.slopeH2||0);
+    const ps=pss[i]||{}; return Math.max(ps.h||2000, ps.slopeH1||0, ps.slopeH2||0);
   }));
   const sc=(cW-MG*2)/Math.max(totalW,1);
   const cH=maxH*sc+MG*2+36;
@@ -592,7 +609,7 @@ function drawComboMode(panels,pss,DPR,cW){
   const oy=MG;
 
   panels.forEach((panel,i)=>{
-    const ps=pss[i]||{}; const pw=(ps.w||50)*sc;
+    const ps=pss[i]||{}; const pw=(ps.w||500)*sc;
     const {ph,poly}=getPanelShape(ps,pw,sc);
     drawSinglePanel(panel,ps,curX,oy,pw,ph,sc,poly,i,'combo',panels,pss);
     curX+=pw;
@@ -609,8 +626,8 @@ function drawItemMode(panels,pss,DPR,cW){
   const MG=50, GAP=16;
   if(!panels.length){drawEmpty();return;}
   // Calculate total width and max height for scaling
-  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||50),0);
-  const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||200,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):200;
+  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
+  const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||2000,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):2000;
   // Scale so all items fit side-by-side
   const availW=cW-MG*2-GAP*(panels.length-1);
   const scByW=availW/Math.max(totalW,1);
@@ -623,13 +640,13 @@ function drawItemMode(panels,pss,DPR,cW){
   dimHits=[];
 
   // Draw side by side, centered
-  const renderedW=panels.reduce((s,_,i)=>s+(pss[i]?.w||50)*sc,0)+GAP*(panels.length-1);
+  const renderedW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500)*sc,0)+GAP*(panels.length-1);
   let curX=MG+(cW-MG*2-renderedW)/2;
   const oy=MG;
 
   panels.forEach((panel,i)=>{
     const ps=pss[i]||{};
-    const pw=(ps.w||50)*sc;
+    const pw=(ps.w||500)*sc;
     const {ph,poly}=getPanelShape(ps,pw,sc);
     drawSinglePanel(panel,ps,curX,oy,pw,ph,sc,poly,i,'item',panels,pss);
     curX+=pw+GAP;
@@ -667,11 +684,11 @@ function drawEmpty(){
 }
 
 function getPanelShape(ps,pw,sc){
-  const baseH=(ps.h||200)*sc;
+  const baseH=(ps.h||2000)*sc;
   if(!ps.hasSlope) return {ph:baseH,poly:null};
 
-  const h1=(ps.slopeH1||200)*sc;
-  const h2=(ps.slopeH2||180)*sc;
+  const h1=(ps.slopeH1||2000)*sc;
+  const h2=(ps.slopeH2||1800)*sc;
 
   // For HEIGHT slope: left side = h1, right side = h2 (or vice versa based on slopeSide)
   // For WIDTH slope: top width=full, bottom is angled
@@ -808,7 +825,7 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // Handle
     const hEdge=(ps.handleEdge||6)*sc;
     const handleX=panel.handleSide==='right'?x+pw-hEdge:x+hEdge;
-    const handleY=(ps.h||200)>200?y+100*sc:y+ph/2;
+    const handleY=(ps.h||2000)>200?y+100*sc:y+ph/2;
     if(ps.handleType==='towel'){
       const sp=(ps.towelSpacing||55)*sc;
       const hx2=panel.handleSide==='right'?handleX-sp:handleX+sp;
@@ -826,10 +843,10 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
       if(adjIdx>=0&&adjIdx<allPanels.length&&allPanels[adjIdx].type==='fixed'){
         const adjPS=allPS[adjIdx]||{};
         // calc adjacent panel x position
-        let adjX=MG+(C.width/(window.devicePixelRatio||1)-MG*2-allPanels.reduce((s,_,pi)=>s+(allPS[pi]?.w||50),0)*sc)/2;
-        for(let pi=0;pi<adjIdx;pi++) adjX+=(allPS[pi]?.w||50)*sc;
-        const adjPW=(adjPS.w||50)*sc;
-        const adjPH=(adjPS.h||200)*sc;
+        let adjX=MG+(C.width/(window.devicePixelRatio||1)-MG*2-allPanels.reduce((s,_,pi)=>s+(allPS[pi]?.w||500),0)*sc)/2;
+        for(let pi=0;pi<adjIdx;pi++) adjX+=(allPS[pi]?.w||500)*sc;
+        const adjPW=(adjPS.w||500)*sc;
+        const adjPH=(adjPS.h||2000)*sc;
         // hinge marks on the side of adjacent fixed that touches this door
         const adjHX=panel.hingeOnFixed==='prev'?adjX+adjPW:adjX;
         const adjHPos=[y+20*sc,y+ph-20*sc];
@@ -1021,12 +1038,12 @@ function updateSpecs(){
   const panels=getPanels(),pss=getPStates();
   if(!panels.length){document.getElementById('specs').innerHTML='<strong>פרטי הזמנה</strong>הוסף פריטים';return;}
   const g=GL.find(x=>x.id===selG),f=FN.find(x=>x.id===selF);
-  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||50),0);
-  const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||200,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):200;
-  const area=(totalW*maxH/10000).toFixed(2);
+  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
+  const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||2000,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):2000;
+  const area=(totalW*maxH/1000000).toFixed(2);
   const total=Math.round(parseFloat(area)*g.price)+(selQ==='zamak'?f.pZ:f.pP);
   const sn=document.getElementById('sketchName')?.value;
-  const det=panels.map((p,i)=>`${p.label||p.type}: ${pss[i]?.w||50}×${pss[i]?.h||200}`).join(' | ');
+  const det=panels.map((p,i)=>`${p.label||p.type}: ${pss[i]?.w||500}×${pss[i]?.h||2000} מ"מ`).join(' | ');
   document.getElementById('specs').innerHTML=`<strong>פרטי הזמנה</strong>
     ${sn?`<span style="color:var(--gold);font-weight:700">${sn}</span><br>`:''}
     ${det}<br>
@@ -1054,12 +1071,12 @@ function addComboToSketch(){
   if(!panels.length){showToast('בחר קומבינציה תחילה');return;}
   if(sketchParts.length>=3){showToast('ניתן להוסיף עד 3 מקלחונים לסקיצה');return;}
   const g=GL.find(x=>x.id===selG),f=FN.find(x=>x.id===selF);
-  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||50),0);
-  const maxH=Math.max(...panels.map((_,i)=>pss[i]?.h||200));
-  const area=(totalW*maxH/10000).toFixed(2);
+  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
+  const maxH=Math.max(...panels.map((_,i)=>pss[i]?.h||2000));
+  const area=(totalW*maxH/1000000).toFixed(2);
   sketchParts.push({
     label:curCombo.label,
-    panels:panels.map((p,i)=>({...p,w:pss[i]?.w||50,h:pss[i]?.h||200,...pss[i]})),
+    panels:panels.map((p,i)=>({...p,w:pss[i]?.w||500,h:pss[i]?.h||2000,...pss[i]})),
     glass:g.name,area,
     sketch:(()=>{try{return C.toDataURL('image/png',0.6);}catch(e){return null;}})()
   });
@@ -1071,9 +1088,9 @@ function saveAndSendOrder(){
   // בקומבינציה תמיד יש פאנלים - רק בפריט פריט בודקים
   if(appMode==='item' && !items.length && !sketchParts.length){showToast('הוסף פריטים תחילה');return null;}
   const g=GL.find(x=>x.id===selG),f=FN.find(x=>x.id===selF);
-  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||50),0);
-  const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||200,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):200;
-  const area=(totalW*maxH/10000).toFixed(2);
+  const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
+  const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||2000,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):2000;
+  const area=(totalW*maxH/1000000).toFixed(2);
   const total=Math.round(parseFloat(area)*g.price)+(selQ==='zamak'?f.pZ:f.pP);
   const orders=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
   const _s = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
@@ -1093,7 +1110,7 @@ function saveAndSendOrder(){
     source:'system',
     type:appMode==='combo'?(sketchParts.length>0?'סקיצה מרובה':curCombo.label):'פריט פריט',
     glass:g.name,glassPrice:g.price,finish:f.name,quality:selQ,sand,area,total,
-    panels:panels.map((p,i)=>({label:p.label||p.type,type:p.type,w:pss[i]?.w||50,h:pss[i]?.h||200})),
+    panels:panels.map((p,i)=>({label:p.label||p.type,type:p.type,w:pss[i]?.w||500,h:pss[i]?.h||2000})),
     parts:sketchParts,
     date:new Date().toLocaleDateString('he-IL'),
     status:'התקבלה',

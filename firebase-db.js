@@ -23,6 +23,14 @@
 //  listenClientOrders(name, cb)   ← זמן אמת — פורטל לקוח
 //  getWorkDay() / saveWorkDay()   ← יום עבודה
 //  lgTest()                       ← בדיקת חיבור מהקונסול
+//
+//  כלי מידות (כל המערכת עובדת במ"מ שלמים):
+//  ─────────────────────────────────────────────
+//  lgParseDimensionInput(str)     ← קלט חופשי → { ok, mm } | { ok:false, error }
+//  lgMmToMeterStr(mm)             ← 885 → "0.885"  (לשדות עריכה)
+//  lgDimPreviewText(raw)          ← "195" → "195 → 1950 מ"מ"  (תצוגה חיה)
+//  lgCalcAreaM2(wMm, hMm)        ← 1900,800 → 1.52  (מ"ר, 3 ספרות)
+//  lgFormatMm(mm)                 ← 885 → "885"  (לתצוגה בכרטיסים)
 // ═══════════════════════════════════════════════════════════════════
 
 'use strict';
@@ -589,10 +597,10 @@ function lgFindPriceItem(glassName){
   return map[mm]||'cl-8-pol';
 }
 
-// מחשב מ"ר כולל של כל פריטי ההזמנה
+// מחשב מ"ר כולל של כל פריטי ההזמנה (w,h במ"מ שלמים)
 function lgCalcOrderM2(order){
   return Math.round(((order.items||[]).reduce((s,item)=>{
-    return s + ((item.w||0)/100)*((item.h||0)/100);
+    return s + lgCalcAreaM2(item.w||0, item.h||0);
   }, 0)) * 100) / 100;
 }
 
@@ -613,7 +621,7 @@ function lgCalcOrderTotal(order, globalP, clientP){
     const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
     if(!ppm2) return;
     priced++;
-    const area = ((item.w||0)/100)*((item.h||0)/100);
+    const area = lgCalcAreaM2(item.w||0, item.h||0);
     total += area * ppm2;
   });
   if(!priced) return order.total||0;
@@ -640,7 +648,7 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
       const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
       if(!ppm2) return;
       priced++;
-      const area = Math.round(((item.w||0)/100)*((item.h||0)/100)*1000)/1000;
+      const area = lgCalcAreaM2(item.w||0, item.h||0);
       const lineTotal = Math.round(area*ppm2);
       total += lineTotal;
       lockedItems.push({ name, sku: item.sku||pid, w:item.w||0, h:item.h||0, area, pricePerM2:ppm2, lineTotal });
@@ -708,6 +716,64 @@ async function getAllPrices(){
   return { globalP: data.global||{}, clientP: _buildClientP(data.clients, data.clientKeys) };
 }
 
+// ─── כלי מידות — חוק הפירוש המאושר ─────────────────────────────────────────
+//
+//  חוק הפירוש (מאושר):
+//  • קלט עם נקודה  → מטרים × 1000   (.885 → 885,   1.95 → 1950, 3.5 → 3500)
+//  • שלם ≤ 300     → ס"מ × 10        (195  → 1950,  44   → 440,  300 → 3000)
+//  • שלם > 300     → מ"מ ישיר        (445  → 445,   885  → 885,  1957 → 1957)
+//
+//  הגבול 300 הוא לפירוש הקלט בלבד, לא גבול עסקי.
+//  ולידציה עסקית כברירת מחדל: 1–5000 מ"מ.
+//  שדות ספציפיים (ידית, ציר, recess) מגדירים גבולות משלהם בנפרד.
+
+function lgParseDimensionInput(rawStr) {
+  const s = String(rawStr ?? '').trim().replace(',', '.');
+  if (!s) return { ok: false, error: 'יש להזין מידה' };
+
+  const hasDecimal = s.includes('.');
+  const n = parseFloat(s);
+
+  if (isNaN(n) || !isFinite(n)) return { ok: false, error: 'יש להזין מספר תקין' };
+  if (n <= 0) return { ok: false, error: 'יש להזין מידה חיובית' };
+
+  let mm;
+  if (hasDecimal) {
+    mm = Math.round(n * 1000);
+  } else {
+    const intVal = Math.trunc(n);
+    mm = intVal <= 300 ? intVal * 10 : intVal;
+  }
+
+  if (mm < 1)    return { ok: false, error: `מידה קטנה מדי (${mm} מ"מ)` };
+  if (mm > 5000) return { ok: false, error: `מידה גדולה מדי — ${mm} מ"מ (מקסימום 5000 מ"מ)` };
+
+  return { ok: true, mm };
+}
+
+// 885 → "0.885" / 1900 → "1.9" / 2000 → "2"  (לשדות עריכה — ללא trailing zeros)
+function lgMmToMeterStr(mm) {
+  if (mm == null || mm === '') return '';
+  return (mm / 1000).toString();
+}
+
+// חישוב שטח — הפונקציה היחידה בכל המערכת (קלט: מ"מ שלמים, פלט: מ"ר ל-3 ספרות)
+// lgCalcAreaM2(1900, 800) → 1.52    lgCalcAreaM2(885, 1200) → 1.062
+function lgCalcAreaM2(widthMm, heightMm) {
+  return Math.round((widthMm || 0) * (heightMm || 0) / 1000) / 1000;
+}
+
+// עיצוב מ"מ לתצוגה בכרטיסים (ללא יחידה — הקורא מוסיף " מ"מ")
+function lgFormatMm(mm) { return String(mm || 0); }
+
+// "195" → "195 → 1950 מ"מ"  /  "abc" → הודעת שגיאה  /  "" → ""
+function lgDimPreviewText(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  const r = lgParseDimensionInput(s);
+  return r.ok ? s + ' → ' + r.mm + ' מ"מ' : r.error;
+}
+
 // ─── הודעת טעינה ─────────────────────────────────────────────────────
-console.log('%c[LuzGlass] firebase-db.js v2.7 ✓', 'color:#b8922a;font-weight:bold');
+console.log('%c[LuzGlass] firebase-db.js v2.9 ✓', 'color:#b8922a;font-weight:bold');
 console.log('  לבדיקת חיבור: lgTest()');

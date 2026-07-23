@@ -652,14 +652,14 @@ function logout(){window.location.href="login.html";}
 
 // QUOTE
 const QT=[
-  {id:"pin-k-d",label:"פינתי קבוע+דלת",panels:[{l:"קבוע",w:50,h:200},{l:"דלת",w:80,h:200}]},
-  {id:"pin-2k-2d",label:"פינתי 2K+2D",panels:[{l:"קבוע א",w:50,h:200},{l:"דלת א",w:80,h:200},{l:"דלת ב",w:80,h:200},{l:"קבוע ב",w:50,h:200}]},
-  {id:"haz-k-d",label:"חזיתי קבוע+דלת",panels:[{l:"קבוע",w:50,h:200},{l:"דלת",w:80,h:200}]},
-  {id:"haz-2k-2d",label:"חזיתי 2K+2D",panels:[{l:"קבוע א",w:50,h:200},{l:"דלת",w:80,h:200},{l:"קבוע ב",w:50,h:200}]},
-  {id:"haz-2d",label:"חזיתי 2 דלתות",panels:[{l:"דלת א",w:80,h:200},{l:"דלת ב",w:80,h:200}]},
-  {id:"amb",label:"אמבטיון",panels:[{l:"פאנל",w:80,h:150}]},
-  {id:"kavua",label:"קבוע בלבד",panels:[{l:"קבוע",w:100,h:200}]},
-  {id:"mirror",label:"מראה",panels:[{l:"מראה",w:80,h:100}]},
+  {id:"pin-k-d",label:"פינתי קבוע+דלת",panels:[{l:"קבוע",w:500,h:2000},{l:"דלת",w:800,h:2000}]},
+  {id:"pin-2k-2d",label:"פינתי 2K+2D",panels:[{l:"קבוע א",w:500,h:2000},{l:"דלת א",w:800,h:2000},{l:"דלת ב",w:800,h:2000},{l:"קבוע ב",w:500,h:2000}]},
+  {id:"haz-k-d",label:"חזיתי קבוע+דלת",panels:[{l:"קבוע",w:500,h:2000},{l:"דלת",w:800,h:2000}]},
+  {id:"haz-2k-2d",label:"חזיתי 2K+2D",panels:[{l:"קבוע א",w:500,h:2000},{l:"דלת",w:800,h:2000},{l:"קבוע ב",w:500,h:2000}]},
+  {id:"haz-2d",label:"חזיתי 2 דלתות",panels:[{l:"דלת א",w:800,h:2000},{l:"דלת ב",w:800,h:2000}]},
+  {id:"amb",label:"אמבטיון",panels:[{l:"פאנל",w:800,h:1500}]},
+  {id:"kavua",label:"קבוע בלבד",panels:[{l:"קבוע",w:1000,h:2000}]},
+  {id:"mirror",label:"מראה",panels:[{l:"מראה",w:800,h:1000}]},
 ];
 const QG=[{id:"shafu",name:"שקוף",price:200},{id:"klir",name:"קליר",price:260},{id:"asid",name:"אסיד",price:260},{id:"afor",name:"אפור",price:260},{id:"gal",name:'גלינה קליר',price:400},{id:"mirror",name:'מראה 5מ"מ',price:180}];
 const QF=[{id:"none",name:"ללא פרזול",pZ:0,pP:0},{id:"black",name:"שחור מט",pZ:800,pP:1400},{id:"gold",name:"זהב",pZ:900,pP:1600},{id:"goldB",name:"זהב מוברש",pZ:900,pP:1600},{id:"grafit",name:"גרפיט",pZ:850,pP:1500},{id:"rose",name:"רוז גולד",pZ:950,pP:1700}];
@@ -673,13 +673,28 @@ function initQ(){
   document.getElementById("qFinishGrid").innerHTML=QF.map(f=>'<button class="qb" id="qf_'+f.id+'" data-id="'+f.id+'" onclick="qSelF(this.dataset.id)">'+f.name+"</button>").join("");
   qSelT("pin-k-d");qSelG("shafu");qSelF("black");
 }
+function qPanelDim(panelIdx, dim, el) {
+  const raw = el.value;
+  const r = lgParseDimensionInput(raw);
+  const prev = document.getElementById('qp'+dim+panelIdx);
+  if (prev) {
+    prev.textContent = r.ok ? raw.trim()+' → '+r.mm+' מ"מ' : r.error;
+    prev.style.color = r.ok ? 'var(--gold)' : '#c0392b';
+  }
+  if (r.ok) { qState.panels[panelIdx][dim] = r.mm; calcQ(); }
+}
+
 function qSelT(id){
   qState.type=id;qState.panels=QT.find(x=>x.id===id).panels.map(p=>({...p}));
   QT.forEach(x=>{const b=document.getElementById("qt_"+x.id);if(b)b.className="qb"+(x.id===id?" active":"");});
   const g=document.getElementById("qDimsGrid");
   g.innerHTML=qState.panels.map((p,i)=>
-    '<div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+p.l+' — רוחב</div><input type="number" value="'+p.w+'" min="20" max="300" oninput="qState.panels['+i+'].w=parseInt(this.value)||0;calcQ()" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;text-align:center"></div>'+
-    '<div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+p.l+' — גובה</div><input type="number" value="'+p.h+'" min="50" max="320" oninput="qState.panels['+i+'].h=parseInt(this.value)||0;calcQ()" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;text-align:center"></div>'
+    '<div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+p.l+' — רוחב (מ"מ)</div>'
+    +'<input type="text" value="'+lgMmToMeterStr(p.w)+'" oninput="qPanelDim('+i+',\'w\',this)" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;text-align:center">'
+    +'<div id="qpw'+i+'" style="font-size:11px;color:var(--gold);text-align:center;min-height:16px;margin-top:3px;"></div></div>'
+    +'<div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+p.l+' — גובה (מ"מ)</div>'
+    +'<input type="text" value="'+lgMmToMeterStr(p.h)+'" oninput="qPanelDim('+i+',\'h\',this)" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;text-align:center">'
+    +'<div id="qph'+i+'" style="font-size:11px;color:var(--gold);text-align:center;min-height:16px;margin-top:3px;"></div></div>'
   ).join("");calcQ();
 }
 function qSelG(id){qState.glass=id;QG.forEach(x=>{const b=document.getElementById("qg_"+x.id);if(b)b.className="qb"+(x.id===id?" active":"");});calcQ();}
@@ -688,13 +703,13 @@ function calcQ(){
   const g=QG.find(x=>x.id===qState.glass);
   const f=QF.find(x=>x.id===qState.finish);
   if(!g||!f)return;
-  const area=qState.panels.reduce((s,p)=>s+(p.w*p.h/10000),0);
+  const area=qState.panels.reduce((s,p)=>s+lgCalcAreaM2(p.w||0,p.h||0),0);
   const gT=Math.round(area*g.price),fT=f.pZ;
   const total=gT+fT;
   qState.total=total;
   document.getElementById("qResult").style.display="block";
   document.getElementById("qTotalDisplay").innerHTML="&#8362;"+total.toLocaleString();
-  const desc=qState.panels.map(p=>p.l+": "+p.w+"x"+p.h).join(" · ");
+  const desc=qState.panels.map(p=>p.l+": "+p.w+"\xD7"+p.h+' מ"מ').join(" · ");
   document.getElementById("qBreakdown").innerHTML=desc+"<br>זכוכית "+g.name+": &#8362;"+gT.toLocaleString()+" ("+area.toFixed(2)+' מ"ר)'+(f.id!=="none"?"<br>פרזול "+f.name+": &#8362;"+fT.toLocaleString():"");
   qState.desc=document.getElementById("qBreakdown").textContent;
 }

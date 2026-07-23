@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LuzGlass — קונפיגורטור מקלחונים</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="lg-parse.js"></script>
 <style>
   :root {
     --bg: #f7f4ef;
@@ -256,6 +257,7 @@
   }
   .dim-field input:focus { border-color: var(--gold); }
   .dim-field .unit { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .dim-prev { font-size: 11px; color: var(--gold); margin-top: 3px; min-height: 16px; }
 
   /* EXTRAS */
   .extras-list { display: flex; flex-direction: column; gap: 8px; }
@@ -409,22 +411,25 @@
 
       <!-- 5. DIMENSIONS -->
       <div class="ctrl-section">
-        <div class="ctrl-label">מידות (ס״מ)</div>
+        <div class="ctrl-label">מידות (מ"מ)</div>
         <div class="dims-grid">
           <div class="dim-field">
             <label>רוחב</label>
-            <input type="number" id="dimW" value="90" min="40" max="250" oninput="updatePrice()">
-            <div class="unit">ס״מ</div>
+            <input type="text" id="dimW" value="900" autocomplete="off"
+              oninput="updatePrice();mekhlDimPrev('dimW','dimWPrev')">
+            <div class="dim-prev" id="dimWPrev"></div>
           </div>
           <div class="dim-field">
             <label>עומק</label>
-            <input type="number" id="dimD" value="90" min="40" max="250" oninput="updatePrice()">
-            <div class="unit">ס״מ</div>
+            <input type="text" id="dimD" value="900" autocomplete="off"
+              oninput="updatePrice();mekhlDimPrev('dimD','dimDPrev')">
+            <div class="dim-prev" id="dimDPrev"></div>
           </div>
           <div class="dim-field">
             <label>גובה</label>
-            <input type="number" id="dimH" value="200" min="100" max="300" oninput="updatePrice()">
-            <div class="unit">ס״מ</div>
+            <input type="text" id="dimH" value="2000" autocomplete="off"
+              oninput="updatePrice();mekhlDimPrev('dimH','dimHPrev')">
+            <div class="dim-prev" id="dimHPrev"></div>
           </div>
         </div>
       </div>
@@ -633,21 +638,35 @@ function updateCombo() {
 // ═══════════════════════════════════════
 //  PRICE
 // ═══════════════════════════════════════
+function mekhlDimPrev(inputId, prevId) {
+  const raw = document.getElementById(inputId)?.value || '';
+  const prev = document.getElementById(prevId);
+  if (!prev) return;
+  if (!raw.trim()) { prev.textContent = ''; return; }
+  const r = lgParseDimensionInput(raw);
+  prev.textContent = r.ok ? raw.trim() + ' → ' + r.mm + ' מ"מ' : r.error;
+  prev.style.color = r.ok ? 'var(--gold)' : '#c0392b';
+}
+
 function updatePrice() {
-  const w = parseFloat(document.getElementById('dimW').value) || 0;
-  const d = parseFloat(document.getElementById('dimD').value) || 0;
-  const h = parseFloat(document.getElementById('dimH').value) || 0;
+  const rW = lgParseDimensionInput(document.getElementById('dimW').value);
+  const rD = lgParseDimensionInput(document.getElementById('dimD').value);
+  const rH = lgParseDimensionInput(document.getElementById('dimH').value);
 
   const g = GLASSES.find(x => x.id === state.glass);
   const f = FINISHES.find(x => x.id === state.finish);
   if (!g || !f) return;
 
-  // Area in m²: for corner shower use (w+d)*h, for front use w*h
+  const wMm = rW.ok ? rW.mm : 0;
+  const dMm = rD.ok ? rD.mm : 0;
+  const hMm = rH.ok ? rH.mm : 0;
+
+  // שטח במ"ר: פינתי = (רוחב+עומק)×גובה / 1,000,000  /  חזיתי = רוחב×גובה / 1,000,000
   const t = TYPES.find(x => x.id === state.type);
   const isCorner = t && t.cat === 'פינתי';
   const areaM2 = isCorner
-    ? ((w + d) * h) / 10000
-    : (w * h) / 10000;
+    ? Math.round((wMm + dMm) * hMm / 1000) / 1000
+    : Math.round(wMm * hMm / 1000) / 1000;
 
   const glassTotal = Math.round(areaM2 * g.price);
   const finishTotal = state.quality === 'zamak' ? f.priceZamak : f.prizePliz;
@@ -663,13 +682,22 @@ function updatePrice() {
 //  ORDER
 // ═══════════════════════════════════════
 function sendOrder() {
+  const rW = lgParseDimensionInput(document.getElementById('dimW').value);
+  const rD = lgParseDimensionInput(document.getElementById('dimD').value);
+  const rH = lgParseDimensionInput(document.getElementById('dimH').value);
+  if (!rW.ok) { alert(rW.error); return; }
+  if (!rH.ok) { alert(rH.error); return; }
+
   const t = TYPES.find(x => x.id === state.type);
   const g = GLASSES.find(x => x.id === state.glass);
   const f = FINISHES.find(x => x.id === state.finish);
   const total = document.getElementById('priceTotal').textContent;
-  const w = document.getElementById('dimW').value;
-  const d = document.getElementById('dimD').value;
-  const h = document.getElementById('dimH').value;
+
+  const wMm = rW.mm, hMm = rH.mm, dMm = rD.ok ? rD.mm : 0;
+  const isCorner = t && t.cat === 'פינתי';
+  const areaM2 = isCorner
+    ? Math.round((wMm + dMm) * hMm / 1000) / 1000
+    : Math.round(wMm * hMm / 1000) / 1000;
 
   // שמור להזמנות עם שם הלקוח מה-session
   const _s = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
@@ -687,15 +715,15 @@ function sendOrder() {
     glassPrice: g?.price || 0,
     finish: f?.name || '',
     quality: state.quality,
-    area: ((parseFloat(w)*parseFloat(h))/10000).toFixed(2),
+    area: areaM2.toFixed(2),
     total: parseInt(total.replace(/[^\d]/g,''))||0,
     date: new Date().toLocaleDateString('he-IL'),
     status: 'התקבלה',
-    items: [{name:(g?.mm||8)+'מ"מ '+(g?.name||''), w:parseFloat(w)||0, h:parseFloat(h)||0, chisum:true}]
+    items: [{name:(g?.mm||8)+'מ"מ '+(g?.name||''), w: wMm, h: hMm, chisum:true}]
   });
   localStorage.setItem('lgOrders', JSON.stringify(orders));
 
-  const msg = `שלום, אני מעוניין בהצעת מחיר:\n\nסוג: ${t?.name}\nזכוכית: ${g?.name} (${g?.mm}מ״מ)\nפרזול: ${f?.name} - ${state.quality === 'pliz' ? 'פליז' : 'זאמק'}\nמידות: ${w}×${d}×${h} ס״מ\nמחיר משוער: ₪${total}`;
+  const msg = `שלום, אני מעוניין בהצעת מחיר:\n\nסוג: ${t?.name}\nזכוכית: ${g?.name} (${g?.mm}מ״מ)\nפרזול: ${f?.name} - ${state.quality === 'pliz' ? 'פליז' : 'זאמק'}\nמידות: ${wMm}×${dMm}×${hMm} מ״מ\nמחיר משוער: ₪${total}`;
   const url = `https://wa.me/972XXXXXXXXX?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
 }

@@ -1012,7 +1012,7 @@ function orderCardHTML(o){
         <div style="font-size:11px;color:var(--muted);margin-top:2px">
           <span style="color:var(--gold);font-weight:600">${o.orderClient}</span>
           · ${o.sketchName||o.orderNum||'—'}
-          · ${item.w||'?'}×${item.h||'?'} ס"מ
+          · ${item.w||'?'}×${item.h||'?'} מ"מ
         </div>
       </div>
       <span style="font-size:10px;font-weight:700;padding:2px 7px;background:${processBg};color:${processColor};flex-shrink:0">${processLabel}</span>
@@ -1064,8 +1064,16 @@ function noItemsHTML(o){
         </select>
       </div>
       <div class="ai-row">
-        <input class="ai-input" type="number" id="ai_w_${o.id}" placeholder="רוחב ס"מ">
-        <input class="ai-input" type="number" id="ai_h_${o.id}" placeholder="גובה ס"מ">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <input class="ai-input" type="text" id="ai_w_${o.id}" placeholder='רוחב מ"מ'
+            oninput="wdDimPrev('ai_w_${o.id}','ai_wp_${o.id}')">
+          <span id="ai_wp_${o.id}" style="font-size:10px;color:#b8922a;padding:0 2px;min-height:14px;"></span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <input class="ai-input" type="text" id="ai_h_${o.id}" placeholder='גובה מ"מ'
+            oninput="wdDimPrev('ai_h_${o.id}','ai_hp_${o.id}')">
+          <span id="ai_hp_${o.id}" style="font-size:10px;color:#b8922a;padding:0 2px;min-height:14px;"></span>
+        </div>
       </div>
       <button class="ia ia-add" onclick="saveManualItem(${o.id})">שמור פריט</button>
     </div>
@@ -1229,12 +1237,24 @@ function addWholeOrder(orderId){
   renderAll();
 }
 
+function wdDimPrev(inputId, prevId) {
+  const raw = document.getElementById(inputId)?.value || '';
+  const prev = document.getElementById(prevId);
+  if (!prev) return;
+  if (!raw.trim()) { prev.textContent = ''; return; }
+  const r = lgParseDimensionInput(raw);
+  prev.textContent = r.ok ? raw.trim() + ' → ' + r.mm + ' מ"מ' : r.error;
+  prev.style.color = r.ok ? '#b8922a' : '#c0392b';
+}
+
 function saveManualItem(orderId){
   const glass = document.getElementById('ai_glass_'+orderId)?.value?.trim();
   const proc  = document.getElementById('ai_proc_'+orderId)?.value;
-  const w     = parseFloat(document.getElementById('ai_w_'+orderId)?.value)||0;
-  const h     = parseFloat(document.getElementById('ai_h_'+orderId)?.value)||0;
+  const rW = lgParseDimensionInput(document.getElementById('ai_w_'+orderId)?.value||'');
+  const rH = lgParseDimensionInput(document.getElementById('ai_h_'+orderId)?.value||'');
   if(!glass){ showToast('הזן סוג זכוכית'); return; }
+  if(!rW.ok){ showToast(rW.error); return; }
+  if(!rH.ok){ showToast(rH.error); return; }
   const o = allOrders.find(x=>x.id===orderId);
   if(!o) return;
   if(!o.items) o.items = [];
@@ -1243,7 +1263,7 @@ function saveManualItem(orderId){
   // זהה graphic מהמק"ט (אם ה-SKU מכיל G לפני MH/M — גרפיקה)
   const skuUpper = glass.toUpperCase().trim();
   const isGraphicSku = /[SC]G(MH?)?$/.test(skuUpper) || fullName.includes('גרפיקה');
-  o.items.push({name:fullName, glassFullName:fullName, w, h,
+  o.items.push({name:fullName, glassFullName:fullName, w: rW.mm, h: rH.mm,
     litush:  proc==='litush',
     chisum:  proc==='chisum',
     graphic: isGraphicSku

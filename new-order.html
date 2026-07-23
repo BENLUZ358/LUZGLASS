@@ -67,6 +67,7 @@
   .mf-item-info{flex:1;}
   .mf-item-del{background:none;border:none;color:#c0392b;cursor:pointer;font-size:14px;padding:0 4px;font-family:'Heebo',sans-serif;}
   .mf-add-btn{width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;margin-bottom:14px;}
+  .mf-dim-prev{font-size:11px;color:var(--gold);padding:2px 0;min-height:16px;}
   .mf-submit{width:100%;padding:14px;background:var(--gold);color:#fff;font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;border:none;cursor:pointer;}
   .mf-submit:disabled{background:#ccc;cursor:not-allowed;}
   .mf-success{text-align:center;padding:28px 20px;}
@@ -177,12 +178,18 @@ const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
 
     <div class="mf-row">
       <div class="mf-field">
-        <div class="mf-label">רוחב (ס"מ)</div>
-        <input type="number" id="mfW" class="mf-input" placeholder="80" min="1" max="999" onkeydown="if(event.key==='Enter'){event.preventDefault();mfAddItem();}">
+        <div class="mf-label">רוחב (מ"מ)</div>
+        <input type="text" id="mfW" class="mf-input" placeholder="800" autocomplete="off"
+          oninput="mfDimPrev('mfW','mfWPrev')"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();mfAddItem();}">
+        <div class="mf-dim-prev" id="mfWPrev"></div>
       </div>
       <div class="mf-field">
-        <div class="mf-label">גובה (ס"מ)</div>
-        <input type="number" id="mfH" class="mf-input" placeholder="200" min="1" max="999" onkeydown="if(event.key==='Enter'){event.preventDefault();mfAddItem();}">
+        <div class="mf-label">גובה (מ"מ)</div>
+        <input type="text" id="mfH" class="mf-input" placeholder="2000" autocomplete="off"
+          oninput="mfDimPrev('mfH','mfHPrev')"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();mfAddItem();}">
+        <div class="mf-dim-prev" id="mfHPrev"></div>
       </div>
     </div>
 
@@ -230,16 +237,36 @@ function showMeasureForm() {
   }
 }
 
+function mfDimPrev(inputId, prevId) {
+  const raw = document.getElementById(inputId)?.value || '';
+  const prev = document.getElementById(prevId);
+  if (!prev) return;
+  if (!raw.trim()) { prev.textContent = ''; return; }
+  const r = lgParseDimensionInput(raw);
+  prev.textContent = r.ok ? raw.trim() + ' → ' + r.mm + ' מ"מ' : r.error;
+  prev.style.color = r.ok ? 'var(--gold)' : '#c0392b';
+}
+
+function mfFieldErr(id, msg) {
+  const el = document.getElementById(id);
+  if (el) { el.style.borderColor = '#c0392b'; setTimeout(() => { el.style.borderColor = ''; }, 2500); el.focus(); }
+  const prev = document.getElementById(id + 'Prev');
+  if (prev) { prev.textContent = msg; prev.style.color = '#c0392b'; }
+}
+
 function mfAddItem() {
   const glass = document.getElementById('mfGlass').value;
   const proc  = document.getElementById('mfProc').value;
-  const w     = parseInt(document.getElementById('mfW').value) || 0;
-  const h     = parseInt(document.getElementById('mfH').value) || 0;
-  if (!w || !h) { alert('נא למלא רוחב וגובה'); return; }
-  mfItems.push({ glass, proc, w, h });
+  const rW = lgParseDimensionInput(document.getElementById('mfW').value);
+  const rH = lgParseDimensionInput(document.getElementById('mfH').value);
+  if (!rW.ok) { mfFieldErr('mfW', rW.error); return; }
+  if (!rH.ok) { mfFieldErr('mfH', rH.error); return; }
+  mfItems.push({ glass, proc, w: rW.mm, h: rH.mm });
   mfRender();
   document.getElementById('mfW').value = '';
   document.getElementById('mfH').value = '';
+  document.getElementById('mfWPrev').textContent = '';
+  document.getElementById('mfHPrev').textContent = '';
   document.getElementById('mfW').focus();
 }
 
@@ -253,7 +280,7 @@ function mfRender() {
   if (!mfItems.length) { list.innerHTML = ''; return; }
   list.innerHTML = mfItems.map((it, i) => `
     <div class="mf-item">
-      <div class="mf-item-info">${it.glass} · ${it.proc} · ${it.w}×${it.h} ס"מ</div>
+      <div class="mf-item-info">${it.glass} · ${it.proc} · ${it.w}×${it.h} מ"מ</div>
       <button class="mf-item-del" onclick="mfRemove(${i})">✕</button>
     </div>`).join('');
 }

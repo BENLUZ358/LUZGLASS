@@ -493,7 +493,7 @@ function openInvoicePreview(orderId, targetStage){
     const name = item.glassFullName||item.name||'—';
     const pid  = findPriceItem(name);
     const ppm2 = pid ? parseFloat(cp[pid]||globalPrices[pid]||0) : 0;
-    const area = ((item.w||0)/100)*((item.h||0)/100);
+    const area = lgCalcAreaM2(item.w||0, item.h||0);
     const price = ppm2 ? Math.round(area*ppm2) : null;
     if(price) calcTotal+=price;
     itemsHtml+=`
@@ -1795,9 +1795,14 @@ document.addEventListener('visibilitychange', () => {
                 <option value="5M">5מ"מ מראה מלוטש</option>
               </datalist>
               <span class="iw-preview" id="iwPreview">—</span>
-              <input class="iw-dim" id="iwW" placeholder="רוחב" type="number" min="1" max="999" onkeydown="event.stopPropagation();">
+              <input class="iw-dim" id="iwW" placeholder="800" type="text"
+                oninput="iwDimPrev('iwW','iwWPrev')" onkeydown="event.stopPropagation();">
+              <span id="iwWPrev" style="font-size:10px;color:#b8922a;min-width:50px;font-weight:600;line-height:1.2;"></span>
               <span style="font-size:11px;color:#aaa">×</span>
-              <input class="iw-dim" id="iwH" placeholder="גובה" type="number" min="1" max="999" onkeydown="if(event.key==='Tab'&&!event.shiftKey){event.preventDefault();event.stopPropagation();iwAdd();}">
+              <input class="iw-dim" id="iwH" placeholder="2000" type="text"
+                oninput="iwDimPrev('iwH','iwHPrev')"
+                onkeydown="if(event.key==='Tab'&&!event.shiftKey){event.preventDefault();event.stopPropagation();iwAdd();}">
+              <span id="iwHPrev" style="font-size:10px;color:#b8922a;min-width:50px;font-weight:600;line-height:1.2;"></span>
               <button class="iw-add" onclick="iwAdd()">+ הוסף</button>
             </div>
             <div class="iw-list" id="iwList"></div>
@@ -1843,7 +1848,7 @@ function makeMeasureListSVG(o){
     <text x="${W-PAD-8}" y="${y+20}" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="${pc}" font-weight="700">${pl}</text>`;
   }).join('');
   const num=o.orderNum||o.refNum||'';
-  const totalM2=Math.round(items.reduce((s,it)=>s+((it.w||0)/100)*((it.h||0)/100),0)*100)/100;
+  const totalM2=Math.round(items.reduce((s,it)=>s+lgCalcAreaM2(it.w||0,it.h||0),0)*100)/100;
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" style="background:#fff">
     <rect width="${W}" height="${HEAD}" fill="#1a1714"/>
     <text x="${W-PAD}" y="19" text-anchor="end" font-family="Heebo,Arial" font-size="13" font-weight="900" fill="#c9a84c">📋 הזמנת זכוכית לפי מידה</text>
@@ -2768,7 +2773,7 @@ function sqRefreshMetrics(){
   const areaEl = document.getElementById('sqMetricArea');
   if(areaEl){
     const m2 = Math.round(sqCurrentItems.reduce(
-      (s,it) => s + ((it.w||0)/100)*((it.h||0)/100), 0
+      (s,it) => s + lgCalcAreaM2(it.w||0, it.h||0), 0
     ) * 100) / 100;
     areaEl.textContent = m2 > 0 ? m2+' מ"ר' : '—';
   }
@@ -2793,7 +2798,7 @@ function iwRender(){
   const _ae = document.getElementById('sqMetricArea');
   if(_ae){
     const _m2 = Math.round(sqCurrentItems.reduce(
-      (s,it) => s + ((it.w||0)/100)*((it.h||0)/100), 0
+      (s,it) => s + lgCalcAreaM2(it.w||0, it.h||0), 0
     ) * 100) / 100;
     _ae.textContent = _m2 > 0 ? _m2+' מ"ר' : '—';
   }
@@ -2808,16 +2813,16 @@ function iwRender(){
     list.innerHTML = sqCurrentItems.map((it,i)=>`
       <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${i}">
         <div class="iw-item-name">${it.name||it.label||'פריט'}</div>
-        <input type="number" value="${it.w||''}" min="1" max="999"
-          style="width:48px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
+        <input type="text" value="${it.w ? lgMmToMeterStr(it.w) : ''}"
+          style="width:52px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
           onchange="iwEditDim(${i},'w',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
         <span style="font-size:11px;color:#aaa">×</span>
-        <input type="number" value="${it.h||''}" min="1" max="999"
-          style="width:48px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
+        <input type="text" value="${it.h ? lgMmToMeterStr(it.h) : ''}"
+          style="width:52px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
           onchange="iwEditDim(${i},'h',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
-        <span style="font-size:10px;color:#aaa">ס"מ</span>
+        <span style="font-size:10px;color:#aaa">מ"מ</span>
         <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
         <button class="iw-item-del" onclick="event.stopPropagation();iwRemove(${i})" title="מחק">✕</button>
       </div>`).join('');
@@ -2825,18 +2830,31 @@ function iwRender(){
   sqRefreshMetrics();
 }
 
+function iwDimPrev(inputId, prevId) {
+  const raw = document.getElementById(inputId)?.value || '';
+  const prev = document.getElementById(prevId);
+  if (!prev) return;
+  if (!raw.trim()) { prev.textContent = ''; return; }
+  const r = lgParseDimensionInput(raw);
+  prev.textContent = r.ok ? r.mm + ' מ"מ' : '⚠';
+  prev.title = r.ok ? raw.trim() + ' → ' + r.mm + ' מ"מ' : r.error;
+  prev.style.color = r.ok ? '#b8922a' : '#c0392b';
+}
+
 function iwAdd(){
   const code = document.getElementById('iwCode')?.value||'';
-  const w = parseInt(document.getElementById('iwW')?.value)||0;
-  const h = parseInt(document.getElementById('iwH')?.value)||0;
+  const rW = lgParseDimensionInput(document.getElementById('iwW')?.value||'');
+  const rH = lgParseDimensionInput(document.getElementById('iwH')?.value||'');
   const r = iwResolve(code);
   if(!r){ alert('קוד לא מוכר: '+code+'\nדוגמאות: 8SMH, 6CM, 8AMH'); return; }
-  if(!w||!h){ alert('נא למלא רוחב וגובה'); return; }
+  if(!rW.ok){ alert(rW.error); return; }
+  if(!rH.ok){ alert(rH.error); return; }
   const item = {
     name: r.label,
     glass: r.glass,
     mm: r.mm,
-    w, h,
+    w: rW.mm,
+    h: rH.mm,
     chisum:  r.proc === 'chisum',
     litush:  r.proc === 'litush',
     graphic: !!r.graphic
@@ -2858,13 +2876,17 @@ function iwAdd(){
   document.getElementById('iwCode').value='';
   document.getElementById('iwW').value='';
   document.getElementById('iwH').value='';
+  document.getElementById('iwWPrev').textContent='';
+  document.getElementById('iwHPrev').textContent='';
   document.getElementById('iwPreview').textContent='—';
   document.getElementById('iwCode').focus();
 }
 
 function iwEditDim(i, field, val){
   if(!sqCurrentItems[i]) return;
-  sqCurrentItems[i][field] = parseInt(val)||0;
+  const r = lgParseDimensionInput(val);
+  if(!r.ok) return;
+  sqCurrentItems[i][field] = r.mm;
   iwSave();
   sqRefreshMetrics();
   // לא עושים iwRender() כדי לא לאבד focus

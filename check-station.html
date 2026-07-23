@@ -522,7 +522,7 @@ async function saveCS(){
 function saveNotes(){ safeStorage.setItem('lgOrderNotes',JSON.stringify(notes)); }
 // מחזיר רק indices של פריטי חיסום (לא ליטוש)
 function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>!!(o.items||[])[i]?.chisum); }
-function area(o){return chisumIdxs(o).reduce((s,i)=>{const it=(o.items||[])[i];return s+(it?.w||0)*(it?.h||0)/10000;},0);}
+function area(o){return chisumIdxs(o).reduce((s,i)=>{const it=(o.items||[])[i];return s+lgCalcAreaM2(it?.w||0,it?.h||0);},0);}
 function buildClients(){
   const cl=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))];
   document.getElementById('fClient').innerHTML='<option value="">כל הלקוחות</option>'+cl.map(c=>`<option value="${c}">${c}</option>`).join('');
