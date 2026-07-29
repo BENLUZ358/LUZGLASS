@@ -500,35 +500,35 @@ function orderCard(o){
     exp='<div class="oc-expand">';
     if(o.items&&o.items.length){
       exp+='<div class="oc-items">';
-      o.items.forEach(it=>{exp+='<div class="oc-item"><div class="oc-item-glass">'+(it.name||"")+'</div><div class="oc-item-dims">'+(it.w||"")+(it.w?"x":"")+(it.h||"")+" cm</div>"+'<div class="oc-item-proc '+(it.chisum?"ip-chis":"ip-cut")+'">'+(it.chisum?"מחוסם":"מלוטש")+"</div></div>";});
+      o.items.forEach(it=>{exp+='<div class="oc-item"><div class="oc-item-glass">'+lgEsc(it.name||"")+'</div><div class="oc-item-dims">'+(it.w||"")+(it.w?"x":"")+(it.h||"")+" cm</div>"+'<div class="oc-item-proc '+(it.chisum?"ip-chis":"ip-cut")+'">'+(it.chisum?"מחוסם":"מלוטש")+"</div></div>";});
       exp+="</div>";
     }
     exp+='<div class="sketch-wrap"><div class="sketch-lbl">סקיצה טכנית</div>';
-    if(o.sketch) exp+='<img src="'+o.sketch+'" style="width:100%;border:1px solid var(--border);display:block;cursor:pointer" data-id="'+o.id+'" onclick="openSk(this)">';
+    if(o.sketch) exp+='<img src="'+lgEsc(o.sketch)+'" style="width:100%;border:1px solid var(--border);display:block;cursor:pointer" data-id="'+o.id+'" onclick="openSk(this)">';
     else exp+='<div class="sketch-ph">&#128208; הסקיצה תופיע לאחר עיבוד</div>';
     exp+="</div>";
-    if(isDone) exp+='<div class="hist-badge">&#9989; נאסף: '+(o.pickedDate||o.date)+"<br>&#8362;"+(o.total||0).toLocaleString()+"</div>";
+    if(isDone) exp+='<div class="hist-badge">&#9989; נאסף: '+lgEsc(o.pickedDate||o.date)+"<br>&#8362;"+(o.total||0).toLocaleString()+"</div>";
     exp+="</div>";
   }
   // Sketch thumbnail (always visible)
   const oid = o.id;
   const sketchSrc = o.sketch || makeAutoSketch(o);
   const thumbHtml = sketchSrc
-    ? '<div style="padding:10px 14px 0;"><img src="'+sketchSrc+'" style="width:100%;max-height:130px;object-fit:contain;border:1px solid var(--border);cursor:pointer;background:#f7f4ef;display:block;" data-oid="'+oid+'" onclick="openSk(this.dataset.oid)"><div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0 2px;"><span style="font-size:10px;color:var(--muted);">'+o.glass+(o.finish&&o.finish!=="—"?' · '+o.finish:'')+'</span><button data-oid="'+oid+'" onclick="openSk(this.dataset.oid)" style="padding:3px 10px;background:rgba(184,146,42,0.1);border:1px solid rgba(184,146,42,0.3);color:#b8922a;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;border-radius:3px;">&#128269; הגדל</button></div></div>'
+    ? '<div style="padding:10px 14px 0;"><img src="'+lgEsc(sketchSrc)+'" style="width:100%;max-height:130px;object-fit:contain;border:1px solid var(--border);cursor:pointer;background:#f7f4ef;display:block;" data-oid="'+oid+'" onclick="openSk(this.dataset.oid)"><div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0 2px;"><span style="font-size:10px;color:var(--muted);">'+lgEsc(o.glass)+(o.finish&&o.finish!=="—"?' · '+lgEsc(o.finish):'')+'</span><button data-oid="'+oid+'" onclick="openSk(this.dataset.oid)" style="padding:3px 10px;background:rgba(184,146,42,0.1);border:1px solid rgba(184,146,42,0.3);color:#b8922a;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;border-radius:3px;">&#128269; הגדל</button></div></div>'
     : '';
 
   return '<div class="order-card">'+
     '<div class="oc-hdr" data-id="'+o.id+'" onclick="toggleExp(this.dataset.id)">'+
       '<div class="oc-dot" style="background:'+cfg.dot+'"></div>'+
-      '<div class="oc-info"><div class="oc-name">'+o.name+'</div><div class="oc-desc">'+o.glass+(o.finish&&o.finish!=="—"?" · "+o.finish:"")+" · "+o.area+' מ"ר</div></div>'+
-      '<div class="oc-right"><div class="oc-price">&#8362;'+(o.total||0).toLocaleString()+'</div><div style="font-size:10px;color:var(--muted)">'+o.num+"</div></div>"+
+      '<div class="oc-info"><div class="oc-name">'+lgEsc(o.name)+'</div><div class="oc-desc">'+lgEsc(o.glass)+(o.finish&&o.finish!=="—"?" · "+lgEsc(o.finish):"")+" · "+o.area+' מ"ר</div></div>'+
+      '<div class="oc-right"><div class="oc-price">&#8362;'+(o.total||0).toLocaleString()+'</div><div style="font-size:10px;color:var(--muted)">'+lgEsc(o.num)+"</div></div>"+
     "</div>"+
     thumbHtml+
     stepper+
     '<div class="oc-status-bar">'+
       '<span class="sbadge '+cfg.cls+'">'+cfg.label+"</span>"+
       '<span class="oc-toggle" data-id="'+o.id+'" onclick="toggleExp(this.dataset.id)">'+(isExp?"▲ סגור":"▾ פרטים")+
-      '</span><span class="oc-date">'+o.date+"</span>"+
+      '</span><span class="oc-date">'+lgEsc(o.date)+"</span>"+
     "</div>"+exp+"</div>";
 }
 
@@ -541,7 +541,7 @@ function openSk(idOrEl){
   if(!skSrc)return;
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
-  ov.innerHTML='<img src="'+skSrc+'" style="max-width:96vw;max-height:85vh;object-fit:contain;border-radius:4px;"><button onclick="this.parentElement.remove()" style="padding:8px 24px;background:#fff;border:none;cursor:pointer;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:4px;">סגור</button>';
+  ov.innerHTML='<img src="'+lgEsc(skSrc)+'" style="max-width:96vw;max-height:85vh;object-fit:contain;border-radius:4px;"><button onclick="this.parentElement.remove()" style="padding:8px 24px;background:#fff;border:none;cursor:pointer;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:4px;">סגור</button>';
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   document.body.appendChild(ov);
 }
@@ -561,8 +561,8 @@ function renderReady(){
         '<button class="btn-confirm" data-id="'+o.id+'" onclick="confirmPick(this.dataset.id)">&#9989; אשר</button></div>';
     }
     return '<div class="ready-card">'+
-      '<div class="rc-top"><span style="font-size:20px">&#9989;</span><div class="rc-info"><div class="rc-name">'+o.name+'</div><div class="rc-desc">'+o.num+" · "+o.glass+"</div></div>"+'<div class="rc-price">&#8362;'+(o.total||0).toLocaleString()+"</div></div>"+
-      (hasFarzel?'<div style="font-size:11px;background:rgba(184,146,42,0.08);padding:6px 10px;border-right:2px solid var(--gold);margin-bottom:8px">&#128297; כולל פרזול: <strong>'+o.finish+"</strong></div>":'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">&#11042; זכוכית בלבד</div>')+
+      '<div class="rc-top"><span style="font-size:20px">&#9989;</span><div class="rc-info"><div class="rc-name">'+lgEsc(o.name)+'</div><div class="rc-desc">'+lgEsc(o.num)+" · "+lgEsc(o.glass)+"</div></div>"+'<div class="rc-price">&#8362;'+(o.total||0).toLocaleString()+"</div></div>"+
+      (hasFarzel?'<div style="font-size:11px;background:rgba(184,146,42,0.08);padding:6px 10px;border-right:2px solid var(--gold);margin-bottom:8px">&#128297; כולל פרזול: <strong>'+lgEsc(o.finish)+"</strong></div>":'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">&#11042; זכוכית בלבד</div>')+
       pick+"</div>";
   }).join("");
 }
@@ -605,7 +605,7 @@ function renderInvoices(){
 }
 
 function renderChat(){
-  document.getElementById("chatMessages").innerHTML=CHAT.map(m=>'<div class="chat-bubble" style="'+(m.from==="LuzGlass"?"":"border-right:3px solid var(--gold)")+'">'+'<div class="cb-from" style="color:'+(m.from==="LuzGlass"?"var(--blue)":"var(--gold)")+'">'+m.from+"</div>"+'<div class="cb-text">'+m.text+"</div>"+'<div class="cb-time">'+m.time+"</div></div>").join("");
+  document.getElementById("chatMessages").innerHTML=CHAT.map(m=>'<div class="chat-bubble" style="'+(m.from==="LuzGlass"?"":"border-right:3px solid var(--gold)")+'">'+'<div class="cb-from" style="color:'+(m.from==="LuzGlass"?"var(--blue)":"var(--gold)")+'">'+lgEsc(m.from)+"</div>"+'<div class="cb-text">'+lgEsc(m.text)+"</div>"+'<div class="cb-time">'+lgEsc(m.time)+"</div></div>").join("");
 }
 function sendMsg(){
   const inp=document.getElementById("chatInput");

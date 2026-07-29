@@ -443,7 +443,7 @@ function showInvoicePrompt(order, newStage){
     <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
       <div style="font-size:26px;text-align:center;margin-bottom:12px;">${icon}</div>
       <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">${title}</div>
-      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${order.orderClient||''} · ${order.orderNum||''}</div>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${lgEsc(order.orderClient||'')} · ${lgEsc(order.orderNum||'')}</div>
       <div style="display:flex;gap:10px;">
         <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}');"
           style="flex:1;padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ כן</button>
@@ -462,7 +462,7 @@ function showCollectedPrompt(order){
     <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
       <div style="font-size:26px;text-align:center;margin-bottom:12px;">📦</div>
       <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">העבר לנאסף</div>
-      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${order.orderClient||''} · ${order.orderNum||''}</div>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${lgEsc(order.orderClient||'')} · ${lgEsc(order.orderNum||'')}</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}','collected');"
           style="padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
@@ -499,7 +499,7 @@ function openInvoicePreview(orderId, targetStage){
     itemsHtml+=`
     <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px;">
       <div style="flex:1">
-        <div style="font-weight:700">${name}</div>
+        <div style="font-weight:700">${lgEsc(name)}</div>
         <div style="color:#8a8278;margin-top:1px">${item.w||''}×${item.h||''} ס"מ · ${area.toFixed(2)} מ"ר</div>
       </div>
       <div style="font-weight:700;color:#b8922a;white-space:nowrap">${price?'₪'+price.toLocaleString():'לפי הצעה'}</div>
@@ -522,10 +522,10 @@ function openInvoicePreview(orderId, targetStage){
       </div>
       <div style="padding:18px 20px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-          <span style="font-size:14px;font-weight:900">${clientName}</span>
-          <span style="font-size:11px;color:#8a8278">${o.orderNum||''} · ${o.date||''}</span>
+          <span style="font-size:14px;font-weight:900">${lgEsc(clientName)}</span>
+          <span style="font-size:11px;color:#8a8278">${lgEsc(o.orderNum||'')} · ${lgEsc(o.date||'')}</span>
         </div>
-        <div style="font-size:11px;color:#8a8278;margin-bottom:16px">${o.sketchName||o.type||''}</div>
+        <div style="font-size:11px;color:#8a8278;margin-bottom:16px">${lgEsc(o.sketchName||o.type||'')}</div>
         <div style="border:1px solid rgba(0,0,0,0.08);border-radius:6px;overflow:hidden;margin-bottom:16px;">${itemsHtml}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f7f4ef;border-radius:6px;margin-bottom:18px;">
           <span style="font-size:13px;font-weight:700;">סה"כ</span>
@@ -645,10 +645,10 @@ function openMod(id) {
     <div class="msec">
       <div class="msec-t">פרטי הזמנה</div>
       <div class="mgrid">
-        <div class="mf"><label>לקוח</label><div class="v">${o.orderClient || ''}</div></div>
-        <div class="mf"><label>טלפון</label><div class="v">${o.phone || ''}</div></div>
-        <div class="mf"><label>מספר הזמנה</label><div class="v">${o.orderNum || ''}</div></div>
-        <div class="mf"><label>תאריך</label><div class="v">${o.date || ''}</div></div>
+        <div class="mf"><label>לקוח</label><div class="v">${lgEsc(o.orderClient || '')}</div></div>
+        <div class="mf"><label>טלפון</label><div class="v">${lgEsc(o.phone || '')}</div></div>
+        <div class="mf"><label>מספר הזמנה</label><div class="v">${lgEsc(o.orderNum || '')}</div></div>
+        <div class="mf"><label>תאריך</label><div class="v">${lgEsc(o.date || '')}</div></div>
         <div class="mf"><label>מס' פריטים</label><div class="v">${itemsCount}</div></div>
       </div>
     </div>
@@ -659,7 +659,7 @@ function openMod(id) {
     ${o.sketch ? `
     <div class="msec">
       <div class="msec-t">סקיצה</div>
-      <img src="${o.sketch}" class="mimg"/>
+      <img src="${lgEsc(o.sketch)}" class="mimg"/>
     </div>` : ''}
     <div class="msec">
       <div class="msec-t">פריטים</div>
@@ -673,7 +673,7 @@ function openMod(id) {
   document.getElementById('itemsPreview').innerHTML = `
     ${previewItems.map(i => `
       <div style="font-size:12px;margin-bottom:4px">
-        ${i.name || ''} ${i.w || ''}${i.w ? '×' : ''}${i.h || ''} ${i.w ? 'ס"מ' : ''}
+        ${lgEsc(i.name || '')} ${i.w || ''}${i.w ? '×' : ''}${i.h || ''} ${i.w ? 'ס"מ' : ''}
       </div>
     `).join('')}
     ${items.length > 3 ? `
@@ -743,7 +743,7 @@ function showAllItems(){
   const items = o.items || [];
   document.getElementById('itemsPreview').innerHTML = items.map(i => `
     <div style="font-size:12px;margin-bottom:5px;padding:5px 8px;background:var(--bg2);border-radius:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-      <span style="font-weight:600">${i.name||''}</span>
+      <span style="font-weight:600">${lgEsc(i.name||'')}</span>
       ${i.w?`<span style="color:var(--muted)">${i.w}×${i.h} ס"מ</span>`:''}
       ${i.chisum?'<span style="font-size:10px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
       ${i.graphic?'<span style="font-size:10px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
@@ -789,13 +789,13 @@ function card(o) {
     ? '<span class="tag" style="background:rgba(184,146,42,0.12);color:#b8922a">📎 העלאה</span>' : '';
   return `<div class="card ${o.urgent?'urgent':''}" onclick="openMod('${o.id}')">
     ${o.urgent ? '<div class="c-urg">⚡ דחוף</div>' : ''}
-    <div class="c-num">${o.orderNum||'—'} · ${o.date||''}</div>
-    <div class="c-client">${o.orderClient||'לקוח'}</div>
-    <div class="c-name">${o.sketchName||o.type||'—'}</div>
+    <div class="c-num">${lgEsc(o.orderNum||'—')} · ${lgEsc(o.date||'')}</div>
+    <div class="c-client">${lgEsc(o.orderClient||'לקוח')}</div>
+    <div class="c-name">${lgEsc(o.sketchName||o.type||'—')}</div>
     <div class="c-tags">
       ${subBadge}
-      ${o.glass ? `<span class="tag tg">${o.glass}</span>` : ''}
-      ${o.finish ? `<span class="tag tf">${o.finish}</span>` : ''}
+      ${o.glass ? `<span class="tag tg">${lgEsc(o.glass)}</span>` : ''}
+      ${o.finish ? `<span class="tag tf">${lgEsc(o.finish)}</span>` : ''}
     </div>
     <div class="c-foot">
       <span class="c-area">${o.area||'—'} מ״ר</span>
@@ -930,7 +930,7 @@ function previewSketch(id){
   if(!o||!o.sketch) return;
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
-  ov.innerHTML=`<img src="${o.sketch}" style="max-width:95vw;max-height:85vh;object-fit:contain;border-radius:4px;">
+  ov.innerHTML=`<img src="${lgEsc(o.sketch)}" style="max-width:95vw;max-height:85vh;object-fit:contain;border-radius:4px;">
     <button onclick="this.closest('div').remove()" style="padding:8px 20px;background:#fff;border:none;cursor:pointer;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:4px;">סגור</button>`;
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   document.body.appendChild(ov);
@@ -943,15 +943,15 @@ function renderTable(){
     const s=ST.find(x=>x.id===o.status)||ST[0];
     return `<tr>
       <td style="color:var(--muted);font-size:11px">${i+1}</td>
-      <td><strong>${o.orderClient||'—'}</strong></td>
-      <td style="font-size:12px;color:var(--muted)">${o.orderNum||'—'}<br><span style="font-size:11px">${o.sketchName||''}</span></td>
-      <td style="font-size:12px">${o.type}</td>
-      <td><span class="tag tg">${o.glass}</span></td>
-      <td><span class="tag tf">${o.finish}</span></td>
+      <td><strong>${lgEsc(o.orderClient||'—')}</strong></td>
+      <td style="font-size:12px;color:var(--muted)">${lgEsc(o.orderNum||'—')}<br><span style="font-size:11px">${lgEsc(o.sketchName||'')}</span></td>
+      <td style="font-size:12px">${lgEsc(o.type)}</td>
+      <td><span class="tag tg">${lgEsc(o.glass)}</span></td>
+      <td><span class="tag tf">${lgEsc(o.finish)}</span></td>
       <td style="font-size:12px">${o.area} מ״ר</td>
       <td style="font-weight:700;color:var(--gold)">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</td>
-      <td><span class="badge" style="background:${s.c}">${o.status}</span></td>
-      <td style="font-size:11px;color:var(--muted)">${o.date||''}</td>
+      <td><span class="badge" style="background:${s.c}">${lgEsc(o.status)}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${lgEsc(o.date||'')}</td>
       <td><button class="cb-btn" style="padding:5px 8px" onclick="openMod('${o.id}')">פרטים</button></td>
     </tr>`;
   }).join('');
@@ -1058,7 +1058,7 @@ function renderPricing(){
     el.innerHTML=`
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">מחיר מיוחד ללקוח. ריק = מחירון כללי</p>
       <select class="client-sel" id="clientSel" onchange="renderPricing()">
-        ${clients.map(c=>`<option value="${c}" ${c===selClient?'selected':''}>${c}</option>`).join('')}
+        ${clients.map(c=>`<option value="${lgEsc(c)}" ${c===selClient?'selected':''}>${lgEsc(c)}</option>`).join('')}
         <option value="__new__">+ לקוח חדש</option>
       </select>
       ${selClient==='__new__'?`<input type="text" id="newClientName" class="client-sel" placeholder="שם לקוח חדש" style="margin-bottom:14px">`:''}
@@ -1142,13 +1142,13 @@ function renderInbox(){
   el.innerHTML=subs.map((s,i)=>`
     <div class="inbox-item ${!s.read?'unread':''}" onclick="openSubmission(${i})">
       ${s.files&&s.files[0]&&s.files[0].data
-        ?`<img class="inbox-thumb" src="${s.files[0].data}" alt="">`
+        ?`<img class="inbox-thumb" src="${lgEsc(s.files[0].data)}" alt="">`
         :`<div class="inbox-thumb-ph">📄</div>`}
       <div class="inbox-info">
-        <div class="inbox-client">${s.client} ${!s.read?'<span style="font-size:10px;background:var(--gold);color:#fff;padding:1px 6px;border-radius:2px;margin-right:6px">חדש</span>':''}</div>
-        <div class="inbox-meta">📞 ${s.phone} &nbsp;·&nbsp; ${s.date} ${s.time} &nbsp;·&nbsp; ${s.files?.length||0} קבצים</div>
-        <div class="inbox-note">${s.type?'📌 '+s.type+' &nbsp;·&nbsp; ':''} ${s.notes||'ללא הערות'}</div>
-        <div class="inbox-ref">${s.refNum}</div>
+        <div class="inbox-client">${lgEsc(s.client)} ${!s.read?'<span style="font-size:10px;background:var(--gold);color:#fff;padding:1px 6px;border-radius:2px;margin-right:6px">חדש</span>':''}</div>
+        <div class="inbox-meta">📞 ${lgEsc(s.phone)} &nbsp;·&nbsp; ${lgEsc(s.date)} ${lgEsc(s.time)} &nbsp;·&nbsp; ${s.files?.length||0} קבצים</div>
+        <div class="inbox-note">${s.type?'📌 '+lgEsc(s.type)+' &nbsp;·&nbsp; ':''} ${lgEsc(s.notes||'ללא הערות')}</div>
+        <div class="inbox-ref">${lgEsc(s.refNum)}</div>
         <div class="inbox-acts" onclick="event.stopPropagation()">
           ${s.files?.length?`<button class="ia-btn pr" onclick="viewImages(${i})">🖼️ צפה בתמונות (${s.files.length})</button>`:''}
           <button class="ia-btn" onclick="markRead(${i})">✓ סמן כנקרא</button>
@@ -1260,7 +1260,7 @@ function openDailySummary(){
         <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:10px;">הזמנות שהושלמו היום</div>
         ${doneToday.map(o=>`
           <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;">
-            <div style="flex:1"><strong>${o.orderClient||'—'}</strong> · <span style="color:var(--muted)">${o.orderNum||''}</span></div>
+            <div style="flex:1"><strong>${lgEsc(o.orderClient||'—')}</strong> · <span style="color:var(--muted)">${lgEsc(o.orderNum||'')}</span></div>
             <div style="font-weight:700;color:#27ae60">${lgCalcOrderTotal(o,globalPrices,clientPrices)?'₪'+(lgCalcOrderTotal(o,globalPrices,clientPrices)).toLocaleString():''}</div>
           </div>`).join('')}
       </div>` : ''}
@@ -1318,20 +1318,20 @@ function renderPickupBoard(){
       ${pickups.map(p=>`
         <div class="pickup-item">
           <div class="pi-info">
-            <div class="pi-client">${p.client||'—'}</div>
-            <div class="pi-order">${p.orderNum||''} · ${p.orderName||''}</div>
-            <div class="pi-glass">⬡ ${p.glass||'—'}</div>
+            <div class="pi-client">${lgEsc(p.client||'—')}</div>
+            <div class="pi-order">${lgEsc(p.orderNum||'')} · ${lgEsc(p.orderName||'')}</div>
+            <div class="pi-glass">⬡ ${lgEsc(p.glass||'—')}</div>
             <div class="pi-farzel ${p.hasFarzel?'yes':'no'}">
-              ${p.hasFarzel?'🔩 כולל פרזול: '+p.finish:'⬡ ללא פרזול'}
+              ${p.hasFarzel?'🔩 כולל פרזול: '+lgEsc(p.finish):'⬡ ללא פרזול'}
             </div>
             ${p.items&&p.items.length?`
               <div class="pi-items">
-                ${p.items.map(i=>`<div class="pi-item-row">${i.name||''} ${i.w||''}${i.w?'×':''}${i.h||''} ס"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
+                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w||''}${i.w?'×':''}${i.h||''} ס"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
               </div>`:''}
           </div>
           <div>
             <div class="pi-total">₪${(p.total||0).toLocaleString()}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">${p.phone||''}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">${lgEsc(p.phone||'')}</div>
           </div>
         </div>`).join('')}
     </div>`;
@@ -1803,6 +1803,10 @@ document.addEventListener('visibilitychange', () => {
                 oninput="iwDimPrev('iwH','iwHPrev')"
                 onkeydown="if(event.key==='Tab'&&!event.shiftKey){event.preventDefault();event.stopPropagation();iwAdd();}">
               <span id="iwHPrev" style="font-size:10px;color:#b8922a;min-width:50px;font-weight:600;line-height:1.2;"></span>
+              <span style="font-size:11px;color:#aaa">×</span>
+              <input class="iw-dim" id="iwQty" type="number" value="1" min="1" max="500"
+                style="width:44px;" title="כמות יחידות" onkeydown="event.stopPropagation();">
+              <span style="font-size:10px;color:#aaa">יח׳</span>
               <button class="iw-add" onclick="iwAdd()">+ הוסף</button>
             </div>
             <div class="iw-list" id="iwList"></div>
@@ -2045,13 +2049,13 @@ function sqRender(){
     const isDone=['opty','done'].includes(sqStageMap[item.id]||'');
     const isActive=sqCurrent&&sqCurrent.id===item.id;
     const thumb=item.sketch
-      ?`<div class="sq-thumb"><img src="${item.sketch}" loading="lazy"></div>`
+      ?`<div class="sq-thumb"><img src="${lgEsc(item.sketch)}" loading="lazy"></div>`
       :`<div class="sq-thumb">${item.source==='upload'?'📎':'📐'}</div>`;
     return `<div class="sq-item ${isDone?'sq-done':''} ${isActive?'sq-active':''}" onclick="sqSelect('${item.id}')">
       ${thumb}
       <div class="sq-item-info">
-        <div class="sq-item-client">${item.client}</div>
-        <div class="sq-item-sub">${item.sketchName}${item.orderNum?' · '+item.orderNum:''}</div>
+        <div class="sq-item-client">${lgEsc(item.client)}</div>
+        <div class="sq-item-sub">${lgEsc(item.sketchName)}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
           <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':'מערכת'}</span>
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
@@ -2111,7 +2115,7 @@ function sqShowDetail(){
 
   const selStyle='width:100%;padding:7px 10px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.1);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;direction:rtl;';
   document.getElementById('sqInfoGrid').innerHTML=`
-    <div class="sq-field"><div class="sq-flabel">לקוח</div><div class="sq-fval">${o.client}</div></div>
+    <div class="sq-field"><div class="sq-flabel">לקוח</div><div class="sq-fval">${lgEsc(o.client)}</div></div>
     <div class="sq-field"><div class="sq-flabel">שטח</div><div class="sq-fval" id="sqMetricArea">—</div></div>
     <div class="sq-field"><div class="sq-flabel">סכום</div><div class="sq-fval" style="color:var(--gold);font-weight:700" id="sqMetricPrice">—</div></div>
   `;
@@ -2121,7 +2125,7 @@ function sqShowDetail(){
     pw.innerHTML=`<table class="sq-ptable">
       <thead><tr><th>פאנל</th><th>רוחב</th><th>גובה</th><th>שיפוע</th></tr></thead>
       <tbody>${o.panels.map(p=>`<tr>
-        <td style="font-weight:700">${p.label||'—'}</td>
+        <td style="font-weight:700">${lgEsc(p.label||'—')}</td>
         <td>${p.wT||p.w||'—'} ס"מ</td>
         <td>${p.h||p.hR||'—'} ס"מ</td>
         <td style="color:#aaa">${p.slope?`${p.hR}/${p.hL}`:'-'}</td>
@@ -2229,7 +2233,7 @@ function sqShowChashConfirm(id){
   // הצג toast קצר
   const toast=document.createElement('div');
   toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#27ae60;color:#fff;padding:12px 24px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:8px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;';
-  toast.innerHTML=`<span>✓</span><span>${item.client} — הועבר לחשבשבת ולתור שרטט</span>`;
+  toast.innerHTML=`<span>✓</span><span>${lgEsc(item.client)} — הועבר לחשבשבת ולתור שרטט</span>`;
   document.body.appendChild(toast);
   setTimeout(()=>toast.remove(),2200);
 
@@ -2809,25 +2813,70 @@ function iwRender(){
   if(cnt) cnt.textContent = sqCurrentItems.length;
   if(!sqCurrentItems.length){
     list.innerHTML = '<div class="iw-empty">אין פריטים — הוסף באמצעות הקוד למעלה</div>';
-  } else {
-    list.innerHTML = sqCurrentItems.map((it,i)=>`
-      <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${i}">
-        <div class="iw-item-name">${it.name||it.label||'פריט'}</div>
+    sqRefreshMetrics(); return;
+  }
+
+  // קיבוץ לפי quantityGroupId לתצוגה בלבד
+  const dispGroups = [];
+  const seenGid = Object.create(null);
+  sqCurrentItems.forEach((item, idx) => {
+    const gid = item.quantityGroupId || ('__solo_' + idx);
+    if (gid in seenGid) {
+      dispGroups[seenGid[gid]].indices.push(idx);
+    } else {
+      seenGid[gid] = dispGroups.length;
+      dispGroups.push({ rep: item, indices: [idx] });
+    }
+  });
+
+  list.innerHTML = dispGroups.map((grp, gi) => {
+    const it = grp.rep;
+    const qty = grp.indices.length;
+    const idxJson = JSON.stringify(grp.indices);
+    const dimStyle = 'width:52px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;';
+    const delBtns = qty > 1
+      ? `<button class="iw-item-del" onclick="event.stopPropagation();iwRemoveSingle(${grp.indices[grp.indices.length-1]})" title="מחק יחידה אחת">✕</button>
+         <button class="iw-item-del" onclick="event.stopPropagation();iwRemoveGroup(${idxJson})" title="מחק כל הקבוצה (${qty})" style="color:#8e44ad;">🗑</button>`
+      : `<button class="iw-item-del" onclick="event.stopPropagation();iwRemoveSingle(${grp.indices[0]})" title="מחק">✕</button>`;
+    return `
+      <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${gi}">
+        <div class="iw-item-name">${lgEsc(it.name||it.label||'פריט')}${qty>1?` <span style="color:#b8922a;font-weight:700;font-size:11px;">×${qty}</span>`:''}</div>
         <input type="text" value="${it.w ? lgMmToMeterStr(it.w) : ''}"
-          style="width:52px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
-          onchange="iwEditDim(${i},'w',this.value)" onclick="event.stopPropagation()"
+          style="${dimStyle}"
+          onchange="iwEditGroupDim(${idxJson},'w',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
         <span style="font-size:11px;color:#aaa">×</span>
         <input type="text" value="${it.h ? lgMmToMeterStr(it.h) : ''}"
-          style="width:52px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;"
-          onchange="iwEditDim(${i},'h',this.value)" onclick="event.stopPropagation()"
+          style="${dimStyle}"
+          onchange="iwEditGroupDim(${idxJson},'h',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
         <span style="font-size:10px;color:#aaa">מ"מ</span>
         <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
-        <button class="iw-item-del" onclick="event.stopPropagation();iwRemove(${i})" title="מחק">✕</button>
-      </div>`).join('');
-  }
+        ${delBtns}
+      </div>`;
+  }).join('');
   sqRefreshMetrics();
+}
+
+function iwEditGroupDim(indices, field, val){
+  const r = lgParseDimensionInput(val);
+  if(!r.ok) return;
+  indices.forEach(i => { if(sqCurrentItems[i]) sqCurrentItems[i][field] = r.mm; });
+  iwSave();
+  sqRefreshMetrics();
+}
+
+function iwRemoveSingle(idx){
+  sqCurrentItems.splice(idx, 1);
+  iwSave();
+  iwRender();
+}
+
+function iwRemoveGroup(indices){
+  if(!confirm(`האם למחוק את כל הקבוצה (${indices.length} יחידות)?`)) return;
+  [...indices].sort((a,b)=>b-a).forEach(i => sqCurrentItems.splice(i,1));
+  iwSave();
+  iwRender();
 }
 
 function iwDimPrev(inputId, prevId) {
@@ -2849,7 +2898,9 @@ function iwAdd(){
   if(!r){ alert('קוד לא מוכר: '+code+'\nדוגמאות: 8SMH, 6CM, 8AMH'); return; }
   if(!rW.ok){ alert(rW.error); return; }
   if(!rH.ok){ alert(rH.error); return; }
-  const item = {
+  const qtyRaw = parseInt(document.getElementById('iwQty')?.value || '1', 10);
+  const qty = Math.max(1, Math.min(500, isNaN(qtyRaw) ? 1 : qtyRaw));
+  const baseItem = {
     name: r.label,
     glass: r.glass,
     mm: r.mm,
@@ -2859,10 +2910,9 @@ function iwAdd(){
     litush:  r.proc === 'litush',
     graphic: !!r.graphic
   };
-  sqCurrentItems.push(item);
+  sqCurrentItems.push(...lgMakeQuantityGroup(baseItem, qty));
   iwSave();
   iwRender(); // → calls sqRefreshMetrics()
-  // גלול לרשימת הפריטים כדי לראות את החדש
   setTimeout(()=>{
     const lastItem = document.querySelector('#iwList .iw-item:last-child');
     if(lastItem){
@@ -2876,6 +2926,7 @@ function iwAdd(){
   document.getElementById('iwCode').value='';
   document.getElementById('iwW').value='';
   document.getElementById('iwH').value='';
+  document.getElementById('iwQty').value='1';
   document.getElementById('iwWPrev').textContent='';
   document.getElementById('iwHPrev').textContent='';
   document.getElementById('iwPreview').textContent='—';
@@ -2977,27 +3028,27 @@ function _renderUserList(users, elId){
     <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px;opacity:${isActive?1:0.55}">
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
-          ${u.name}
+          ${lgEsc(u.name)}
           ${u.isMainAdmin?'<span style="font-size:10px;color:var(--gold)">★ ראשי</span>':''}
           ${u.isDelivery?'<span style="font-size:10px;color:#2980b9">🚚 הובלות</span>':''}
           ${!isActive?'<span style="font-size:10px;background:rgba(0,0,0,0.07);color:var(--muted);padding:1px 6px;border-radius:3px">לא פעיל</span>':''}
           ${u.source==='hashavshevet'?'<span style="font-size:10px;background:rgba(184,146,42,0.12);color:var(--gold);padding:1px 6px;border-radius:3px">חשבשבת</span>':''}
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">
-          ${u.phone||''}${u.businessName?' · '+u.businessName:''}${u.customerId?' · מפתח: '+u.customerId:''}${u.vatId?' · ע"מ: '+u.vatId:''}
+          ${lgEsc(u.phone||'')}${u.businessName?' · '+lgEsc(u.businessName):''}${u.customerId?' · מפתח: '+lgEsc(u.customerId):''}${u.vatId?' · ע"מ: '+lgEsc(u.vatId):''}
         </div>
       </div>
       <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
         ${u.role==='client' ? `
-          <button onclick="umToggleActive('${u.id}','${u.name}',${isActive})"
+          <button onclick="umToggleActive('${u.id}','${lgJsStr(u.name)}',${isActive})"
             title="${isActive ? 'השבת לקוח' : 'הפעל לקוח'}"
             style="padding:4px 8px;background:${isActive?'rgba(39,174,96,0.12)':'rgba(0,0,0,0.04)'};border:1px solid ${isActive?'rgba(39,174,96,0.35)':'rgba(0,0,0,0.1)'};color:${isActive?'#27ae60':'#aaa'};font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;"
           >${isActive?'✓ פעיל':'○ לא פעיל'}</button>
-          <button onclick="umToggleDelivery('${u.id}','${u.businessName||u.name}',${!!u.isDelivery})"
+          <button onclick="umToggleDelivery('${u.id}','${lgJsStr(u.businessName||u.name)}',${!!u.isDelivery})"
             title="${u.isDelivery ? 'בטל הובלות' : 'הגדר כהובלות'}"
             style="padding:4px 8px;background:${u.isDelivery?'rgba(41,128,185,0.15)':'rgba(0,0,0,0.04)'};border:1px solid ${u.isDelivery?'rgba(41,128,185,0.4)':'rgba(0,0,0,0.1)'};color:${u.isDelivery?'#2980b9':'#aaa'};font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;">🚚</button>
         ` : ''}
-        ${!u.isMainAdmin ? `<button onclick="umDeleteUser('${u.id}','${u.name}')"
+        ${!u.isMainAdmin ? `<button onclick="umDeleteUser('${u.id}','${lgJsStr(u.name)}')"
           style="padding:4px 10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.2);color:#c0392b;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;">מחק</button>` : ''}
       </div>
     </div>`;

@@ -525,6 +525,33 @@ function lgSkuToName(sku) {
   return LG_SKU_MAP[upper] || sku;
 }
 
+// ─── אבטחה — הגנת XSS ────────────────────────────────────────────────
+//  לכל ערך שמגיע מ-Firebase/משתמש ומוזרק ל-innerHTML חובה לעטוף ב-lgEsc().
+//  שימוש:  el.innerHTML = `<div>${lgEsc(o.orderClient)}</div>`
+function lgEsc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+//  לערכים שמוזרקים בתוך onclick="fn('${...}')" (מחרוזת JS במרכאות בודדות,
+//  בתוך attribute במרכאות כפולות) — lgEsc לבד לא מספיק כאן: הדפדפן מפענח
+//  HTML entities לפני שהוא מריץ את ה-JS, כך ש-&#39; חוזר להיות ' ושובר את המחרוזת.
+//  שימוש:  onclick="fn('${lgJsStr(clientName)}')"
+function lgJsStr(str) {
+  return String(str ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r?\n/g, '\\n')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 // ─── כלי עזר פנימיים ─────────────────────────────────────────────────
 
 function _lgClean(obj) {
@@ -774,6 +801,38 @@ function lgDimPreviewText(raw) {
   return r.ok ? s + ' → ' + r.mm + ' מ"מ' : r.error;
 }
 
+// ─── כמות — יצירה וקיבוץ ────────────────────────────────────────────
+
+// יוצר מערך של qty פריטים מ-baseItem עם quantityGroupId משותף.
+// קרא רק בזמן יצירת פריטים חדשים — אל תקרא לפונקציה זו בעת עדכון/שינוי סטטוס/עריכה.
+function lgMakeQuantityGroup(baseItem, qty) {
+  const n = Math.max(1, Math.min(500, Math.round(Number(qty) || 1)));
+  const groupId = 'grp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  const result = [];
+  for (let i = 1; i <= n; i++) {
+    result.push({ ...baseItem, quantityGroupId: groupId, originalQuantity: n, groupIndex: i });
+  }
+  return result;
+}
+
+// מקבל מערך פריטים, מחזיר מערך קבוצות לתצוגה בלבד — לא משנה את המקור.
+// כל קבוצה: { quantityGroupId, items, rep } כאשר rep הוא הפריט הראשון.
+// פריטים ללא quantityGroupId (ישן/ידני) מוצגים כקבוצה של יחידה אחת.
+function lgGroupByQuantityId(items) {
+  const groups = [];
+  const seen = Object.create(null); // groupId → index in groups
+  (items || []).forEach((item, rawIdx) => {
+    const gid = item.quantityGroupId || ('__solo_' + rawIdx);
+    if (gid in seen) {
+      groups[seen[gid]].items.push(item);
+    } else {
+      seen[gid] = groups.length;
+      groups.push({ quantityGroupId: item.quantityGroupId || null, items: [item], rep: item });
+    }
+  });
+  return groups;
+}
+
 // ─── הודעת טעינה ─────────────────────────────────────────────────────
-console.log('%c[LuzGlass] firebase-db.js v2.9 ✓', 'color:#b8922a;font-weight:bold');
+console.log('%c[LuzGlass] firebase-db.js v2.10 ✓', 'color:#b8922a;font-weight:bold');
 console.log('  לבדיקת חיבור: lgTest()');

@@ -115,7 +115,7 @@ async function runReset(){
     if (snap.exists()) {
       const users = Object.values(snap.val());
       log(`נמצאו ${users.length} רשומות (יימחקו כולן):`, 'info');
-      users.forEach(u => log(`&nbsp;&nbsp;· path: users/${u.id||'?'} · phone:"${u.phone||'?'}" · pass:"${u.password||'?'}"`, 'data'));
+      users.forEach(u => log(`&nbsp;&nbsp;· path: users/${lgEsc(u.id||'?')} · phone:"${lgEsc(u.phone||'?')}" · pass:"${lgEsc(u.password||'?')}"`, 'data'));
     } else {
       log('אין רשומות ב-/users', 'info');
     }

@@ -306,9 +306,9 @@ function renderSidebar(){
   }
   el.innerHTML=queue.map((o,i)=>`
     <div class="sb-item ${i===curIdx?'active':''}" onclick="jumpTo(${i})">
-      <div class="sb-num">${o.orderNum||'—'} ${o.urgent?'⚡':''}</div>
-      <div class="sb-name">${o.orderClient||'לקוח'}</div>
-      <div class="sb-desc">${o.sketchName||o.type||'—'}</div>
+      <div class="sb-num">${lgEsc(o.orderNum||'—')} ${o.urgent?'⚡':''}</div>
+      <div class="sb-name">${lgEsc(o.orderClient||'לקוח')}</div>
+      <div class="sb-desc">${lgEsc(o.sketchName||o.type||'—')}</div>
     </div>`).join('');
 }
 
@@ -327,7 +327,7 @@ function showOrder(o){
   const items=o.items||o.panels||[];
   document.getElementById('smItems').innerHTML=items.slice(0,4).map(it=>`
     <span style="font-size:10px;background:rgba(184,146,42,0.15);color:#b8922a;padding:2px 8px;border-radius:3px;font-weight:600">
-      ${it.name||it.label||it.type||'פריט'} ${it.w?it.w+'×'+it.h:''}
+      ${lgEsc(it.name||it.label||it.type||'פריט')} ${it.w?it.w+'×'+it.h:''}
     </span>`).join('');
   // Show sketch image
   const canvas=document.getElementById('sketchCanvas');

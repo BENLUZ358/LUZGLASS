@@ -62,7 +62,7 @@
   .mf-label{font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--gold);text-transform:uppercase;}
   .mf-input{padding:10px 12px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:14px;color:var(--text);outline:none;width:100%;-webkit-appearance:none;border-radius:0;}
   .mf-input:focus{border-color:var(--gold);}
-  .mf-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .mf-row{display:grid;grid-template-columns:1fr 1fr 76px;gap:8px;}
   .mf-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);margin-bottom:4px;font-size:12px;}
   .mf-item-info{flex:1;}
   .mf-item-del{background:none;border:none;color:#c0392b;cursor:pointer;font-size:14px;padding:0 4px;font-family:'Heebo',sans-serif;}
@@ -191,6 +191,12 @@ const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
           onkeydown="if(event.key==='Enter'){event.preventDefault();mfAddItem();}">
         <div class="mf-dim-prev" id="mfHPrev"></div>
       </div>
+      <div class="mf-field">
+        <div class="mf-label">כמות</div>
+        <input type="number" id="mfQty" class="mf-input" value="1" min="1" max="500" autocomplete="off"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();mfAddItem();}">
+        <div class="mf-dim-prev" style="min-height:16px"></div>
+      </div>
     </div>
 
     <button class="mf-add-btn" onclick="mfAddItem()">+ הוסף פריט</button>
@@ -261,12 +267,15 @@ function mfAddItem() {
   const rH = lgParseDimensionInput(document.getElementById('mfH').value);
   if (!rW.ok) { mfFieldErr('mfW', rW.error); return; }
   if (!rH.ok) { mfFieldErr('mfH', rH.error); return; }
-  mfItems.push({ glass, proc, w: rW.mm, h: rH.mm });
+  const qtyRaw = parseInt(document.getElementById('mfQty')?.value || '1', 10);
+  const qty = Math.max(1, Math.min(500, isNaN(qtyRaw) ? 1 : qtyRaw));
+  mfItems.push({ glass, proc, w: rW.mm, h: rH.mm, quantity: qty });
   mfRender();
   document.getElementById('mfW').value = '';
   document.getElementById('mfH').value = '';
   document.getElementById('mfWPrev').textContent = '';
   document.getElementById('mfHPrev').textContent = '';
+  document.getElementById('mfQty').value = '1';
   document.getElementById('mfW').focus();
 }
 
@@ -278,11 +287,14 @@ function mfRemove(i) {
 function mfRender() {
   const list = document.getElementById('mfItemList');
   if (!mfItems.length) { list.innerHTML = ''; return; }
-  list.innerHTML = mfItems.map((it, i) => `
-    <div class="mf-item">
-      <div class="mf-item-info">${it.glass} · ${it.proc} · ${it.w}×${it.h} מ"מ</div>
-      <button class="mf-item-del" onclick="mfRemove(${i})">✕</button>
-    </div>`).join('');
+  list.innerHTML = mfItems.map((it, i) => {
+    const qLabel = (it.quantity || 1) > 1 ? ` · <strong>כמות: ${it.quantity}</strong>` : '';
+    return `
+      <div class="mf-item">
+        <div class="mf-item-info">${it.glass} · ${it.proc} · ${it.w}×${it.h} מ"מ${qLabel}</div>
+        <button class="mf-item-del" onclick="mfRemove(${i})">✕</button>
+      </div>`;
+  }).join('');
 }
 
 async function mfSubmit() {
@@ -311,15 +323,15 @@ async function mfSubmit() {
       sketchName:  orderName || 'הזמנת זכוכית לפי מידה',
       orderNum:    refNum,
       notes:       notes || '', // הערות הלקוח בלבד — הפריטים נשמרים ב-items[]
-      items:       mfItems.map(it => ({
-        name:         it.glass + ' ' + it.proc,
-        glassFullName:it.glass,
-        glass:        it.glass,
-        w:            it.w,
-        h:            it.h,
-        chisum:       it.proc === 'חיסום',
-        litush:       it.proc === 'ליטוש'
-      })),
+      items:       mfItems.flatMap(it => lgMakeQuantityGroup({
+        name:          it.glass + ' ' + it.proc,
+        glassFullName: it.glass,
+        glass:         it.glass,
+        w:             it.w,
+        h:             it.h,
+        chisum:        it.proc === 'חיסום',
+        litush:        it.proc === 'ליטוש'
+      }, it.quantity || 1)),
       type:  'measure',
       read:  false,
       sketch: null,
