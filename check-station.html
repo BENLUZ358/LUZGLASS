@@ -516,6 +516,7 @@ async function saveCS(){
     await firebase.database().ref('workday/checkState').set(cs);
   } catch(e) {
     console.error('[CS] saveCS Firebase error:', e);
+    throw e; // חייב לעלות לקורא — אחרת finishSketch/checkItem "יצליחו" גם כשהשמירה נכשלה
   } finally {
     _csLocalPending = false;
   }
@@ -757,7 +758,8 @@ function buildSVG(o, readOnly=false){
 function checkItem(i){
   if(!cur||curReadOnly)return; // אסור לסמן פריטים בסקיצה שהושלמה
   cs[cur.id][i]=!cs[cur.id][i];
-  saveCS();renderSketch();updateProg();
+  saveCS().catch(()=>toast('⚠️ הסימון לא נשמר בענן — בדוק חיבור אינטרנט'));
+  renderSketch();updateProg();
   if(document.getElementById('sheet').classList.contains('open'))renderSheet();
   const idxs=chisumIdxs(cur);
   if(idxs.length&&idxs.every(j=>cs[cur.id]?.[j])){
@@ -801,20 +803,31 @@ function _removeFromChisumStation(ordId){
 }
 
 
-function finishSketch(){
-  if(!cur) return;
+let _finishingSketch = false; // מונע לחיצה כפולה — משוחרר תמיד ב-finally, לא נשאר תקוע
+async function finishSketch(){
+  if(!cur || _finishingSketch) return;
+  _finishingSketch = true;
   const btn = document.getElementById('finishBtn');
   if(btn) btn.disabled = true;
-  if(!cs[cur.id]) cs[cur.id] = {};
-  chisumIdxs(cur).forEach(i => { cs[cur.id][i] = true; });
-  saveCS();
-  hideBanner();
-  cur = null;
-  // נשאר בטאב "לבדיקה" — הסקיצה שהושלמה נעלמת אוטומטית מהרשימה (isDone מסנן אותה)
-  // אין מעבר ל"הושלמו" — מונע לחיצה כפולה בטעות על אותה סקיצה
-  setTab('active');
-  showList();
-  toast('✓ הסקיצה הושלמה');
+  try {
+    if(!cs[cur.id]) cs[cur.id] = {};
+    chisumIdxs(cur).forEach(i => { cs[cur.id][i] = true; });
+    await saveCS(); // ממתין בפועל — לא מסתירים/מאפסים לפני שהשמירה אושרה
+    hideBanner();
+    cur = null;
+    // נשאר בטאב "לבדיקה" — הסקיצה שהושלמה נעלמת אוטומטית מהרשימה (isDone מסנן אותה)
+    // אין מעבר ל"הושלמו" — מונע לחיצה כפולה בטעות על אותה סקיצה
+    setTab('active');
+    showList();
+    toast('✓ הסקיצה הושלמה');
+  } catch(e) {
+    console.error('[CS] finishSketch error:', e);
+    toast('⚠️ השמירה נכשלה — בדוק חיבור אינטרנט ונסה שוב');
+    // לא מאפסים cur/לא עוברים למסך הרשימה — המשתמש נשאר על הסקיצה כדי לנסות שוב
+  } finally {
+    _finishingSketch = false;
+    if(btn) btn.disabled = false;
+  }
 }
 
 // מספר רץ לדוחות חיסום — נשמר ב-Firebase כדי שיהיה עקבי בין מכשירים
@@ -1060,7 +1073,7 @@ function edBindEv(){const old=edCvs,nc=old.cloneNode(true);old.parentNode.replac
 function edStart(e){e.preventDefault();const{x,y}=edPos(e);if(edTl==='text'){const txt=document.getElementById('edTxtIn').value.trim();if(!txt)return;edCtx.font=`bold ${edFt}px Heebo,Arial,sans-serif`;edCtx.fillStyle=edCl;edCtx.textAlign='right';edCtx.fillText(txt,x,y);edSnap();return;}edDrw=true;edCtx.beginPath();edCtx.moveTo(x,y);}
 function edMove(e){e.preventDefault();if(!edDrw)return;const{x,y}=edPos(e);if(edTl==='erase'){edCtx.clearRect(x-edSz*2,y-edSz*2,edSz*4,edSz*4);}else{edCtx.strokeStyle=edCl;edCtx.lineWidth=edSz;edCtx.lineCap='round';edCtx.lineJoin='round';edCtx.lineTo(x,y);edCtx.stroke();edCtx.beginPath();edCtx.moveTo(x,y);}}
 function edEnd(){if(!edDrw)return;edDrw=false;edSnap();}
-function edSave(){
+async function edSave(){
   const bg=document.getElementById('edBg'),merge=document.createElement('canvas');
   const bw=bg.naturalWidth||edBgW,bh=bg.naturalHeight||edBgH;
   // מגביל רוחב ל-1400px — מונע JPEG >5MB שיוביל לכישלון Firebase (גבול 10MB/node)
@@ -1083,20 +1096,28 @@ function edSave(){
     return;
   }
 
-  if(cur){
-    cur._editedSketch=newSrc;
-    window._csCheckEdits[String(cur.id)]=newSrc; // עדכן מיד בזמן אמת — לא מחכה ל-Firebase
-    firebase.database().ref('checkEdits/'+cur.id).set(newSrc)
-      .catch(e=>console.error('[CS] edSave Firebase:', e));
-    try{
-      const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
-      s[cur.id]=newSrc;
-      safeStorage.setItem('lgCSEdits',JSON.stringify(s));
-    }catch(e){}
-    renderSketch();
-  }
+  if(!cur){ closeEditor(); return; }
+
+  const savedId = cur.id;
+  cur._editedSketch=newSrc;
+  window._csCheckEdits[String(savedId)]=newSrc; // עדכון אופטימי מיידי — המסך מתעדכן בלי לחכות לרשת
+  try{
+    const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
+    s[savedId]=newSrc;
+    safeStorage.setItem('lgCSEdits',JSON.stringify(s));
+  }catch(e){}
+  renderSketch();
   closeEditor();
-  toast('סומן ✓');
+
+  // רק עכשיו — הכתיבה בפועל ל-Firebase. ממתינים לה כדי לדעת אם היא באמת הצליחה,
+  // ולא מציגים "סומן ✓" מזויף אם היא נכשלה (העריכה נשארת שמורה מקומית בכל מקרה).
+  try {
+    await firebase.database().ref('checkEdits/'+savedId).set(newSrc);
+    toast('סומן ✓');
+  } catch(e) {
+    console.error('[CS] edSave Firebase:', e);
+    toast('⚠️ העריכה נשמרה מקומית בלבד — לא הועלתה לענן (בדוק חיבור אינטרנט)');
+  }
 }
 
 // נקה ציורי בדיקה זמניים להזמנות שעברו לשלב הבא
