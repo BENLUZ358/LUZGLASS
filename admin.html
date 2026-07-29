@@ -1801,11 +1801,12 @@ document.addEventListener('visibilitychange', () => {
               <span style="font-size:11px;color:#aaa">×</span>
               <input class="iw-dim" id="iwH" placeholder="2000" type="text"
                 oninput="iwDimPrev('iwH','iwHPrev')"
-                onkeydown="if(event.key==='Tab'&&!event.shiftKey){event.preventDefault();event.stopPropagation();iwAdd();}">
+                onkeydown="event.stopPropagation();">
               <span id="iwHPrev" style="font-size:10px;color:#b8922a;min-width:50px;font-weight:600;line-height:1.2;"></span>
               <span style="font-size:11px;color:#aaa">×</span>
               <input class="iw-dim" id="iwQty" type="number" value="1" min="1" max="500"
-                style="width:44px;" title="כמות יחידות" onkeydown="event.stopPropagation();">
+                style="width:44px;" title="כמות יחידות"
+                onkeydown="if(event.key==='Tab'&&!event.shiftKey){event.preventDefault();event.stopPropagation();iwAdd();}else{event.stopPropagation();}">
               <span style="font-size:10px;color:#aaa">יח׳</span>
               <button class="iw-add" onclick="iwAdd()">+ הוסף</button>
             </div>
