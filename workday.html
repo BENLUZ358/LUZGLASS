@@ -1594,6 +1594,35 @@ function markAllClientArrived(clientKey, reportId, clientName){
   renderChisumTab();
 }
 
+// מסמן/מבטל סימון של N מתוך קבוצת פריטים זהים (שורה מקובצת בטאב חיסום).
+// idxs = כל ה-globalIdx של הקבוצה; targetCount = כמות רצויה מסומנת (0..idxs.length).
+// היחידות זהות פיזית — לא משנה איזה אינדקס קונקרטי מסומן, רק הכמות.
+function setGroupArrivedCount(orderId, idxs, targetCount){
+  const sid = String(orderId);
+  if(!arrivedItems[sid]) arrivedItems[sid] = [];
+  const current      = new Set(arrivedItems[sid].map(Number));
+  const currentCount = idxs.filter(i => current.has(i)).length;
+  const target        = Math.max(0, Math.min(idxs.length, Math.round(Number(targetCount) || 0)));
+
+  if(target > currentCount){
+    let need = target - currentCount;
+    for(const i of idxs){
+      if(need <= 0) break;
+      if(!current.has(i)){ arrivedItems[sid].push(i); need--; }
+    }
+  } else if(target < currentCount){
+    let remove = currentCount - target;
+    for(let k = idxs.length - 1; k >= 0 && remove > 0; k--){
+      const i = idxs[k];
+      if(current.has(i)){
+        arrivedItems[sid] = arrivedItems[sid].filter(x => x !== i);
+        remove--;
+      }
+    }
+  }
+  renderChisumTab();
+}
+
 // כרטיס לקוח בתוך דוח בדיקה — מציג רק פריטים שטרם הגיעו
 function _chisumClientCardHtml(clientName, orders, reportId){
   const clientKey = (reportId||'legacy') + '_' + clientName;
@@ -1614,20 +1643,58 @@ function _chisumClientCardHtml(clientName, orders, reportId){
     totalPending        += pendingItems.length;
     sessionArrivedCount += pendingItems.filter(it => sessionArrived.has(it.globalIdx)).length;
 
-    const itemsHtml = pendingItems.map(it => {
-      const isChecked = sessionArrived.has(it.globalIdx);
+    // קיבוץ פריטים זהים לתצוגה — quantityGroupId כשקיים (מובטח זהה),
+    // אחרת חתימה לפי שם+מידות (פריטים ישנים/ידניים בלי quantityGroupId).
+    // שומר את כל ה-globalIdx המקוריים בכל group — chisumArrivedIdxs ממשיך לעבוד ברמת אינדקס בודד.
+    const groupMap = {};
+    const groupOrder = [];
+    pendingItems.forEach(it => {
+      const gid = it.quantityGroupId || ('__sig_' + (it.name||'') + '|' + (it.w||'') + '|' + (it.h||''));
+      if(!groupMap[gid]){ groupMap[gid] = { rep: it, idxs: [] }; groupOrder.push(gid); }
+      groupMap[gid].idxs.push(it.globalIdx);
+    });
+
+    const itemsHtml = groupOrder.map(gid => {
+      const grp = groupMap[gid];
+      const idxs = grp.idxs;
+      const it = grp.rep;
+      const arrivedCount = idxs.filter(i => sessionArrived.has(i)).length;
+
+      if(idxs.length === 1){
+        // פריט בודד — התנהגות מקורית, ללא שינוי
+        const isChecked = arrivedCount > 0;
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${isChecked?'rgba(39,174,96,0.04)':'#fff'}">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:700;color:${isChecked?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')}</div>
+            <div style="font-size:10px;color:#8a8278">${it.w||''}×${it.h||''} ס"מ</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${isChecked?'#27ae60':'rgba(0,0,0,0.12)'};background:${isChecked?'rgba(39,174,96,0.08)':'rgba(0,0,0,0.02)'}">
+            <input type="checkbox" style="width:15px;height:15px;accent-color:#27ae60;cursor:pointer;"
+              onchange="toggleArrived('${o.id}',${idxs[0]},this.checked)"
+              ${isChecked?'checked':''}>
+            <span style="font-size:11px;font-weight:600;color:${isChecked?'#27ae60':'#8a8278'}">${isChecked?'הגיע ✓':'ממתין'}</span>
+          </label>
+        </div>`;
+      }
+
+      // קבוצה — כמה יחידות זהות, לדוגמה "88×77 ×3"
+      const allArrived = arrivedCount === idxs.length;
+      const idxsJson = JSON.stringify(idxs);
       return `
-      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${isChecked?'rgba(39,174,96,0.04)':'#fff'}">
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${allArrived?'rgba(39,174,96,0.04)':'#fff'}">
         <div style="flex:1">
-          <div style="font-size:12px;font-weight:700;color:${isChecked?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')}</div>
+          <div style="font-size:12px;font-weight:700;color:${allArrived?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')} <span style="color:#8e44ad">×${idxs.length}</span></div>
           <div style="font-size:10px;color:#8a8278">${it.w||''}×${it.h||''} ס"מ</div>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${isChecked?'#27ae60':'rgba(0,0,0,0.12)'};background:${isChecked?'rgba(39,174,96,0.08)':'rgba(0,0,0,0.02)'}">
-          <input type="checkbox" style="width:15px;height:15px;accent-color:#27ae60;cursor:pointer;"
-            onchange="toggleArrived('${o.id}',${it.globalIdx},this.checked)"
-            ${isChecked?'checked':''}>
-          <span style="font-size:11px;font-weight:600;color:${isChecked?'#27ae60':'#8a8278'}">${isChecked?'הגיע ✓':'ממתין'}</span>
-        </label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="number" min="0" max="${idxs.length}" value="${arrivedCount}" inputmode="numeric"
+            onchange="setGroupArrivedCount('${o.id}',${idxsJson},this.value)"
+            style="width:38px;padding:4px;text-align:center;border:1px solid rgba(0,0,0,0.15);border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;">
+          <span style="font-size:11px;color:#8a8278;white-space:nowrap">/ ${idxs.length} הגיעו</span>
+          ${!allArrived?`<button onclick="setGroupArrivedCount('${o.id}',${idxsJson},${idxs.length})"
+            style="padding:4px 8px;background:#27ae60;color:#fff;border:none;font-family:Heebo,sans-serif;font-size:10px;font-weight:700;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ הכל</button>`:''}
+        </div>
       </div>`;
     }).join('');
 
