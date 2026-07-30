@@ -304,6 +304,8 @@ let _portalUnsub = null;
 // מחירים — מסונכרנים מ-Firebase בזמן אמת
 let _portalGlobalPrices = {};
 let _portalClientPrices = {};
+// קטלוג מק"טים חדש (skuCatalog) — תוספתי, ריק כברירת מחדל
+let _portalSkuCatalog = {};
 
 function init(){
   const sess = window._lgSession || {};
@@ -321,6 +323,13 @@ function init(){
       o.total = calc || o._rawTotal || 0;
     });
     renderAll();
+  });
+
+  // קטלוג מק"טים — תוספתי, לא חוסם כלום אם ריק
+  listenSkuCatalog(list => {
+    _portalSkuCatalog = {};
+    list.forEach(e => { if (e && e.code && e.active !== false) _portalSkuCatalog[e.code] = e; });
+    if (document.getElementById('view-price')?.style.display !== 'none') renderClientPrice();
   });
 
   // האזנה בזמן אמת ל-Firebase — כל שינוי מהאדמין מתעדכן מיד
@@ -622,20 +631,37 @@ function renderClientPrice(){
   const clientName = (window._lgSession&&window._lgSession.name)||'';
   const myPrices = _portalClientPrices[clientName]||{};
   const gp = _portalGlobalPrices;
+
+  // מאחד את המחירון הישן (LG_PRICE_ITEMS) עם קטלוג המק"טים החדש (skuCatalog) — אותו דפוס כמו באדמין
+  const skuItems = Object.values(_portalSkuCatalog)
+    .sort((a,b)=>String(a.code).localeCompare(String(b.code)))
+    .map(e => ({ cat: 'מק"טים', id: e.code, name: `${e.code} — ${e.name||''}` }));
+  const allItems = [...LG_PRICE_ITEMS, ...skuItems];
+
   const cats = {};
-  LG_PRICE_ITEMS.forEach(p=>{ if(!cats[p.cat]) cats[p.cat]=[]; cats[p.cat].push(p); });
-  el.innerHTML = Object.entries(cats).map(([cat,items])=>`
-    <div style="margin-bottom:18px">
-      <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;padding:6px 0;border-bottom:2px solid rgba(184,146,42,0.2);margin-bottom:8px">${cat}</div>
-      ${items.map(p=>{
-        const price = myPrices[p.id] || gp[p.id];
-        return price ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px">
-          <span>${p.name}</span>
-          <span style="font-weight:700;color:var(--gold)">₪${price}<span style="font-size:11px;font-weight:400;color:var(--muted)">/מ"ר</span></span>
-        </div>` : '';
-      }).join('')}
-    </div>`).join('');
-  if(!el.textContent.trim()) el.innerHTML='<div style="color:var(--muted);text-align:center;padding:30px;font-size:14px">המחירון יעודכן בקרוב</div>';
+  allItems.forEach(p=>{ if(!cats[p.cat]) cats[p.cat]=[]; cats[p.cat].push(p); });
+
+  let hasAny = false;
+  const html = Object.entries(cats).map(([cat,items])=>{
+    const rows = items.map(p=>{
+      const special = myPrices[p.id];
+      const price   = special || gp[p.id];
+      if(!price) return '';
+      hasAny = true;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span>${lgEsc(p.name)}${special?' <span style="font-size:10px;font-weight:700;color:var(--green);background:rgba(39,174,96,0.1);padding:1px 6px;border-radius:3px;margin-right:4px">מחיר מיוחד</span>':''}</span>
+        <span style="font-weight:700;color:var(--gold)">₪${price}<span style="font-size:11px;font-weight:400;color:var(--muted)">/מ"ר</span></span>
+      </div>`;
+    }).join('');
+    // קטגוריה בלי אף פריט עם מחיר — לא מציגים כותרת ריקה
+    if(!rows) return '';
+    return `<div style="margin-bottom:18px">
+      <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;padding:6px 0;border-bottom:2px solid rgba(184,146,42,0.2);margin-bottom:8px">${lgEsc(cat)}</div>
+      ${rows}
+    </div>`;
+  }).join('');
+
+  el.innerHTML = hasAny ? html : '<div style="color:var(--muted);text-align:center;padding:30px;font-size:14px">המחירון יעודכן בקרוב</div>';
 }
 
 function setTab(tab){

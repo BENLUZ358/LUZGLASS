@@ -522,6 +522,7 @@
 let allOrders = [];
 // מחירים — נטענים כדי שנוכל לנעול מחיר סופי בעת מעבר ל-done/delivery
 let _wdGlobalPrices = {}, _wdClientPrices = {};
+let skuCatalogMap = {}; // קטלוג מק"טים חדש (skuCatalog) — תוספתי, ריק כברירת מחדל
 // מטמון שמות לקוחות הובלות — טוען פעם אחת בסטארטאפ
 // מטמון הובלות — מזוהים לפי מספר טלפון (מזהה קבוע), לא לפי שם
 let _deliveryPhones = new Set(); // Set של טלפונים מנורמלים: '0522578559'
@@ -640,6 +641,11 @@ async function load(){
 
   // האזן למחירים — נדרש לנעילת מחיר סופי
   listenAllPrices((gp, cp) => { _wdGlobalPrices = gp; _wdClientPrices = cp; });
+  // קטלוג מק"טים — תוספתי, לא חוסם כלום אם ריק
+  listenSkuCatalog(list => {
+    skuCatalogMap = {};
+    list.forEach(e => { if (e && e.code) skuCatalogMap[e.code] = e; });
+  });
 
   if(_workdayUnsub) _workdayUnsub();
   // האזן ל-Firebase — stage==='workday' בלבד
@@ -1281,16 +1287,19 @@ function saveManualItem(orderId){
   const o = allOrders.find(x=>x.id===orderId);
   if(!o) return;
   if(!o.items) o.items = [];
-  const fullName = (typeof lgSkuToName === 'function') ? lgSkuToName(glass) : glass;
   const skuUpper = glass.toUpperCase().trim();
-  const isGraphicSku = /[SC]G(MH?)?$/.test(skuUpper) || fullName.includes('גרפיקה');
+  // skuCatalog (חדש) גובר כשהטקסט שהוזן הוא בדיוק קוד מק"ט מוכר; אחרת — ההתנהגות הידנית הקיימת ללא שינוי
+  const cat = lgResolveSkuCode(skuUpper, skuCatalogMap);
+  const fullName = cat ? cat.label : ((typeof lgSkuToName === 'function') ? lgSkuToName(glass) : glass);
+  const isGraphicSku = cat ? !!cat.graphic : (/[SC]G(MH?)?$/.test(skuUpper) || fullName.includes('גרפיקה'));
   const baseItem = {
     name: fullName, glassFullName: fullName,
     w: rW.mm, h: rH.mm,
-    litush: proc === 'litush',
-    chisum: proc === 'chisum',
+    litush: cat ? cat.proc === 'litush' : proc === 'litush',
+    chisum: cat ? cat.proc === 'chisum' : proc === 'chisum',
     graphic: isGraphicSku
   };
+  if(cat) baseItem.sku = cat.sku;
   o.items.push(...lgMakeQuantityGroup(baseItem, qty));
   updateOrder(String(o.id), { items: o.items }).catch(e=>console.error('addItem:', e));
   showToast(qty > 1 ? `✓ ${qty} פריטים נשמרו` : '✓ פריט נשמר');

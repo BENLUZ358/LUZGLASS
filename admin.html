@@ -388,6 +388,8 @@ let _unsubscribe = null; // פונקציית ניתוק מ-Firebase listener
 // מחירים — מסונכרנים מ-Firebase בזמן אמת
 let globalPrices = {};
 let clientPrices = {};
+// קטלוג מק"טים חדש (skuCatalog) — תוספתי, ריק כברירת מחדל. Map: CODE -> record.
+let skuCatalogMap = {};
 // לקוחות רשומים — נטענים מ-Firebase users ב-load()
 let _allRegisteredClients = [];
 
@@ -423,6 +425,13 @@ function load() {
   lgGetAllUsers().then(users => {
     _allRegisteredClients = users.filter(u => u.role === 'client' && u.active !== false);
   }).catch(() => {});
+  // קטלוג מק"טים — תוספתי, לא חוסם כלום אם ריק. מוצג כטאב בתוך מסך המחירונים הקיים.
+  listenSkuCatalog(list => {
+    skuCatalogMap = {};
+    list.forEach(e => { if (e && e.code) skuCatalogMap[e.code] = e; });
+    const ov = document.getElementById('pricingOv');
+    if (ov && ov.classList.contains('open')) renderPricing();
+  });
 }
 
 // ══════════════════════════════════════════════════
@@ -1017,18 +1026,34 @@ function closePricing(){
 }
 function setPTab(t){
   pricingTab=t;
-  document.getElementById('pt-global').style.borderBottomColor = t==='global'?'var(--gold)':'transparent';
-  document.getElementById('pt-global').style.color = t==='global'?'var(--text)':'var(--muted)';
-  document.getElementById('pt-client').style.borderBottomColor = t==='client'?'var(--gold)':'transparent';
-  document.getElementById('pt-client').style.color = t==='client'?'var(--text)':'var(--muted)';
+  _skuEditCode=null;
+  ['global','client','sku'].forEach(id=>{
+    const b=document.getElementById('pt-'+id);
+    if(!b) return;
+    b.style.borderBottomColor = t===id?'var(--gold)':'transparent';
+    b.style.color = t===id?'var(--text)':'var(--muted)';
+  });
+  const saveBtn = document.getElementById('btnSavePricing');
+  if(saveBtn) saveBtn.style.display = t==='sku' ? 'none' : '';
   renderPricing();
+}
+
+// מאחד את קטגוריות המחירון הישן (LG_PRICE_ITEMS) עם קטלוג המק"טים החדש (skuCatalog) —
+// שניהם מוצגים באותה טבלת מחירים, לפי אותו דפוס gp_{id}/cp_{id}. תוספתי בלבד.
+function _pricingCatalogItems(){
+  const skuItems = Object.values(skuCatalogMap)
+    .filter(e => e.active !== false)
+    .sort((a,b)=>String(a.code).localeCompare(String(b.code)))
+    .map(e => ({ cat: 'מק"טים (קטלוג חדש · חשבשבת)', id: e.code, name: `${e.code} — ${e.name||''}` }));
+  return [...LG_PRICE_ITEMS, ...skuItems];
 }
 
 function renderPricing(){
   const el=document.getElementById('pricingBody');
+  if(pricingTab==='sku'){ renderSkuCatalogTab(el); return; }
   if(pricingTab==='global'){
     const cats={};
-    LG_PRICE_ITEMS.forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});
+    _pricingCatalogItems().forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});
     el.innerHTML=`
       <p style="font-size:12px;color:var(--muted);margin-bottom:14px">מחיר ל-מ"ר. ריק = "לפי הצעה"</p>
       <table class="price-table">
@@ -1053,7 +1078,7 @@ function renderPricing(){
     const clients = [...new Set([...fromOrders, ...fromPrices, ...fromUsers])].sort();
     const selClient=document.getElementById('clientSel')?.value||clients[0]||'';
     const cats={};
-    LG_PRICE_ITEMS.forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});
+    _pricingCatalogItems().forEach(p=>{if(!cats[p.cat])cats[p.cat]=[];cats[p.cat].push(p);});
     const cp=clientPrices[selClient]||{};
     el.innerHTML=`
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">מחיר מיוחד ללקוח. ריק = מחירון כללי</p>
@@ -1080,28 +1105,121 @@ function renderPricing(){
 }
 
 function savePricing(){
+  if(pricingTab==='sku') return; // לטאב הקטלוג יש שמירה ייעודית per-row, לא כפתור גלובלי
   if(pricingTab==='global'){
-    const gp={};
-    LG_PRICE_ITEMS.forEach(p=>{
+    // מתחיל מהמחירים הקיימים — שומר על מק"טים לא-פעילים/מפתחות שלא מוצגים בטופס הנוכחי
+    const gp={...globalPrices};
+    _pricingCatalogItems().forEach(p=>{
       const v=document.getElementById('gp_'+p.id)?.value;
       const n=document.getElementById('gn_'+p.id)?.value;
-      if(v) gp[p.id]=parseFloat(v);
-      if(n) gp[p.id+'_note']=n;
+      if(v) gp[p.id]=parseFloat(v); else delete gp[p.id];
+      if(n) gp[p.id+'_note']=n; else delete gp[p.id+'_note'];
     });
     savePricesGlobal(gp).catch(e=>console.error('savePricesGlobal',e));
   } else {
     let client=document.getElementById('clientSel')?.value;
     if(client==='__new__') client=document.getElementById('newClientName')?.value;
     if(!client) return;
-    const cp={};
-    LG_PRICE_ITEMS.forEach(p=>{
+    const cp={...(clientPrices[client]||{})};
+    _pricingCatalogItems().forEach(p=>{
       const v=document.getElementById('cp_'+p.id)?.value;
-      if(v) cp[p.id]=parseFloat(v);
+      if(v) cp[p.id]=parseFloat(v); else delete cp[p.id];
     });
     saveClientPrices(client, cp).catch(e=>console.error('saveClientPrices',e));
   }
   closePricing();
   showToast('✓ מחירים נשמרו');
+}
+
+// ═══════════════════════════════════════
+//  קטלוג מק"טים (skuCatalog) — טאב שלישי במסך המחירונים
+//  שדות עסקיים (name/hashavshevetCode/active) לעומת תפעוליים (glass/mm/proc/graphic) —
+//  ראה LG_SKU_BUSINESS_FIELDS/LG_SKU_OPERATIONAL_FIELDS ב-firebase-db.js
+// ═══════════════════════════════════════
+let _skuEditCode = null; // קוד הרשומה שבעריכה כרגע, null = טופס "הוסף חדש"
+
+function renderSkuCatalogTab(el){
+  const list = Object.values(skuCatalogMap).sort((a,b)=>String(a.code).localeCompare(String(b.code)));
+  const ed   = _skuEditCode ? skuCatalogMap[_skuEditCode] : null;
+  el.innerHTML = `
+    <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
+      קטלוג מק"טים — מקור אמת עתידי לחיבור חשבשבת. תוספתי בלבד: מק"ט שלא כאן ממשיך לעבוד כמו היום.
+    </p>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:10px;">${ed?'עריכת מק"ט: '+lgEsc(ed.code):'+ הוספת מק"ט חדש'}</div>
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:8px;">
+        <input id="sku_code" placeholder='מק"ט (8SGMH)' value="${ed?lgEsc(ed.code):''}" ${ed?'disabled':''}
+          style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;${ed?'background:var(--bg);color:var(--muted);':''}">
+        <input id="sku_name" placeholder='שם (8 מ"מ שקוף גרפיקה מחוסם)' value="${ed?lgEsc(ed.name||''):''}"
+          style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+        <input id="sku_glass" placeholder="סוג זכוכית (שקוף)" value="${ed?lgEsc(ed.glass||''):''}"
+          style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">
+        <input id="sku_mm" type="number" min="1" placeholder='עובי מ"מ' value="${ed?(ed.mm||''):''}"
+          style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">
+        <select id="sku_proc" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">
+          <option value="litush" ${ed&&ed.proc==='litush'?'selected':''}>מלוטש ✂️</option>
+          <option value="chisum" ${ed&&ed.proc==='chisum'?'selected':''}>מחוסם 🔥</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="sku_graphic" ${ed&&ed.graphic?'checked':''}> גרפיקה
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" id="sku_active" ${!ed||ed.active!==false?'checked':''}> פעיל
+        </label>
+        <input id="sku_hcode" placeholder="קוד חשבשבת (אופציונלי)" value="${ed?lgEsc(ed.hashavshevetCode||''):''}"
+          style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="saveSkuCatalogForm()" style="flex:1;padding:9px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;border-radius:6px;cursor:pointer;">
+          ${ed?'✓ שמור שינויים':'+ הוסף לקטלוג'}
+        </button>
+        ${ed?`<button onclick="_skuEditCode=null;renderSkuCatalogTab(document.getElementById('pricingBody'))" style="padding:9px 16px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;">ביטול</button>`:''}
+      </div>
+    </div>
+    <table class="price-table">
+      <thead><tr><th>מק"ט</th><th>שם</th><th>תפעולי</th><th>מקור</th><th></th></tr></thead>
+      <tbody>
+        ${list.length?list.map(e=>`
+          <tr style="${e.active===false?'opacity:0.5':''}">
+            <td style="font-weight:700">${lgEsc(e.code)}</td>
+            <td>${lgEsc(e.name||'—')}</td>
+            <td style="font-size:11px;color:var(--muted)">${lgEsc(e.glass||'')} ${e.mm||''}מ"מ · ${e.proc==='chisum'?'🔥':'✂️'}${e.graphic?' 🖼':''}</td>
+            <td>${e.source==='hashavshevet'?'<span style="font-size:10px;background:rgba(184,146,42,0.12);color:var(--gold);padding:1px 6px;border-radius:3px">חשבשבת</span>':'<span style="font-size:10px;color:var(--muted)">ידני</span>'}</td>
+            <td style="white-space:nowrap">
+              <button onclick="_skuEditCode='${lgJsStr(e.code)}';renderSkuCatalogTab(document.getElementById('pricingBody'))" style="padding:3px 8px;background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px;">ערוך</button>
+              <button onclick="deleteSkuCatalogEntry('${lgJsStr(e.code)}')" style="padding:3px 8px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:11px;">מחק</button>
+            </td>
+          </tr>`).join(''):'<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">הקטלוג ריק — הוסף מק"ט ראשון למעלה</td></tr>'}
+      </tbody>
+    </table>`;
+}
+
+function saveSkuCatalogForm(){
+  const code = document.getElementById('sku_code')?.value?.trim();
+  if(!code){ showToast('נא להזין מק"ט'); return; }
+  const fields = {
+    name:             document.getElementById('sku_name')?.value?.trim() || '',
+    glass:            document.getElementById('sku_glass')?.value?.trim() || '',
+    mm:               parseInt(document.getElementById('sku_mm')?.value) || null,
+    proc:             document.getElementById('sku_proc')?.value || 'litush',
+    graphic:          !!document.getElementById('sku_graphic')?.checked,
+    active:           !!document.getElementById('sku_active')?.checked,
+    hashavshevetCode: document.getElementById('sku_hcode')?.value?.trim() || ''
+  };
+  saveSkuCatalogItem(code, fields)
+    .then(()=>{ _skuEditCode=null; showToast('✓ מק"ט נשמר'); })
+    .catch(e=>{ console.error('saveSkuCatalogItem:',e); showToast('שגיאה בשמירה'); });
+}
+
+function deleteSkuCatalogEntry(code){
+  if(!confirm(`למחוק את המק"ט "${code}" מהקטלוג?`)) return;
+  deleteSkuCatalogItem(code)
+    .then(()=>showToast('✓ מק"ט נמחק'))
+    .catch(e=>{ console.error('deleteSkuCatalogItem:',e); showToast('שגיאה במחיקה'); });
 }
 
 
@@ -1362,11 +1480,12 @@ document.addEventListener('visibilitychange', () => {
       <div style="display:flex;border-bottom:1px solid var(--border);background:var(--bg)">
         <button class="ptab active" id="pt-global" onclick="setPTab('global')" style="padding:12px 20px;font-family:Heebo,sans-serif;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--gold);color:var(--text);cursor:pointer">מחירון כללי</button>
         <button class="ptab" id="pt-client" onclick="setPTab('client')" style="padding:12px 20px;font-family:Heebo,sans-serif;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer">לפי לקוח</button>
+        <button class="ptab" id="pt-sku" onclick="setPTab('sku')" style="padding:12px 20px;font-family:Heebo,sans-serif;font-size:13px;font-weight:500;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);cursor:pointer">קטלוג מק"טים</button>
       </div>
       <div id="pricingBody" style="padding:20px;max-height:60vh;overflow-y:auto"></div>
     </div>
     <div class="mfoot">
-      <button class="btn-save" onclick="savePricing()">שמור מחירים</button>
+      <button class="btn-save" onclick="savePricing()" id="btnSavePricing">שמור מחירים</button>
       <button class="btn-cancel" onclick="closePricing()">סגור</button>
     </div>
   </div>
@@ -2758,7 +2877,8 @@ const IW_CODES = {
 
 function iwResolve(code){
   const c = code.toUpperCase().trim();
-  return IW_CODES[c] || null;
+  // skuCatalog (חדש, Firebase) גובר כשקיים; נופל חזרה ל-IW_CODES הישן בדיוק כמו היום
+  return lgResolveSkuCode(c, skuCatalogMap) || IW_CODES[c] || null;
 }
 
 function iwPreview(code){
@@ -2911,6 +3031,9 @@ function iwAdd(){
     litush:  r.proc === 'litush',
     graphic: !!r.graphic
   };
+  // sku מוטבע רק כשהמק"ט הגיע מ-skuCatalog (המקור החדש) — מאפשר תמחור מדויק בלי לפגוע
+  // בפריטים שנפתרו דרך IW_CODES הישן (הם ימשיכו להתומחר כמו היום, לפי ניחוש שם חופשי)
+  if(r._fromCatalog) baseItem.sku = r.sku;
   sqCurrentItems.push(...lgMakeQuantityGroup(baseItem, qty));
   iwSave();
   iwRender(); // → calls sqRefreshMetrics()

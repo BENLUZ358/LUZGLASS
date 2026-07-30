@@ -624,6 +624,84 @@ function lgFindPriceItem(glassName){
   return map[mm]||'cl-8-pol';
 }
 
+// ─── 14ב. קטלוג מק"טים — Firebase, מקור אמת עתידי (מחליף בהדרגה LG_SKU_MAP/IW_CODES/LG_PRICE_ITEMS) ──
+//
+//  skuCatalog/{CODE}  (CODE = מק"ט, לדוגמה "8SGMH")
+//    שדות עסקיים   — מותר לסנכרון מחשבשבת לעדכן: name, hashavshevetCode, active, source
+//    שדות תפעוליים — בבעלות המערכת שלנו בלבד, סנכרון לעולם לא נוגע בהם: glass, mm, proc, graphic
+//
+//  שלב 1 (נוכחי): תוספתי בלבד. כל מקום שמשתמש ב-IW_CODES/LG_SKU_MAP/LG_PRICE_ITEMS ממשיך
+//  לעבוד בדיוק כמו היום — קודם בודקים skuCatalog, ורק אם אין שם רשומה נופלים חזרה לישן.
+//  שלב 2 (עתידי, אחרי שכל המק"טים יעברו ויאומתו): הסרה הדרגתית של הקטלוגים הישנים.
+
+const LG_SKU_BUSINESS_FIELDS    = ['name', 'hashavshevetCode', 'active', 'source'];
+const LG_SKU_OPERATIONAL_FIELDS = ['glass', 'mm', 'proc', 'graphic'];
+
+async function getSkuCatalog() {
+  const snap = await _lgDb.ref('skuCatalog').once('value');
+  return snap.exists() ? Object.values(snap.val()) : [];
+}
+
+// האזנה בזמן אמת — מחזיר פונקציית ניתוק, אותו דפוס כמו listenAllPrices
+function listenSkuCatalog(callback) {
+  const ref     = _lgDb.ref('skuCatalog');
+  const handler = snap => callback(snap.exists() ? Object.values(snap.val()) : []);
+  ref.on('value', handler);
+  return () => ref.off('value', handler);
+}
+
+// עריכה ידנית מלאה (מסך ניהול באדמין) — אדם, לא סנכרון אוטומטי, רשאי לגעת בכל שדה כולל תפעוליים.
+async function saveSkuCatalogItem(code, fields) {
+  const c = String(code || '').toUpperCase().trim();
+  if (!c) throw new Error('saveSkuCatalogItem: קוד מק"ט חסר');
+  const snap     = await _lgDb.ref('skuCatalog/' + c).once('value');
+  const existing = snap.val() || {};
+  const record   = _lgClean({
+    ...existing, ...fields,
+    code:      c,
+    source:    fields.source || existing.source || 'manual',
+    createdAt: existing.createdAt || Date.now(),
+    updatedAt: Date.now()
+  });
+  await _lgDb.ref('skuCatalog/' + c).set(record);
+  return c;
+}
+
+async function deleteSkuCatalogItem(code) {
+  const c = String(code || '').toUpperCase().trim();
+  if (!c) return;
+  await _lgDb.ref('skuCatalog/' + c).remove();
+}
+
+// עתידי — ייקרא מפונקציית סנכרון חשבשבת כשתחובר. נוגע אך ורק בשדות עסקיים —
+// גם אם businessFields יכיל בטעות glass/mm/proc/graphic, הם מסוננים ולא נכתבים.
+async function syncSkuCatalogFromHashavshevet(code, businessFields) {
+  const c = String(code || '').toUpperCase().trim();
+  if (!c) return;
+  const safe = {};
+  LG_SKU_BUSINESS_FIELDS.forEach(k => { if (businessFields && businessFields[k] !== undefined) safe[k] = businessFields[k]; });
+  safe.source = 'hashavshevet';
+  const snap     = await _lgDb.ref('skuCatalog/' + c).once('value');
+  const existing = snap.val() || {};
+  const record   = _lgClean({
+    ...existing, ...safe,
+    code:      c,
+    createdAt: existing.createdAt || Date.now(),
+    updatedAt: Date.now()
+  });
+  await _lgDb.ref('skuCatalog/' + c).set(record);
+  return c;
+}
+
+// רזולוציה מאוחדת של קוד מק"ט מול קטלוג טעון-מראש (map: CODE -> record).
+// null אם לא נמצא — הקורא נופל חזרה לקטלוג הישן שלו (IW_CODES וכו').
+function lgResolveSkuCode(code, skuCatalogMap) {
+  const c = String(code || '').toUpperCase().trim();
+  const e = skuCatalogMap && skuCatalogMap[c];
+  if (!e || e.active === false) return null;
+  return { glass: e.glass, mm: e.mm, proc: e.proc, graphic: !!e.graphic, label: e.name, sku: c, _fromCatalog: true };
+}
+
 // מחשב מ"ר כולל של כל פריטי ההזמנה (w,h במ"מ שלמים)
 function lgCalcOrderM2(order){
   return Math.round(((order.items||[]).reduce((s,item)=>{
@@ -643,7 +721,9 @@ function lgCalcOrderTotal(order, globalP, clientP){
   let priced = 0;
   (order.items||[]).forEach(item=>{
     const name = item.glassFullName||item.name||'';
-    const pid  = lgFindPriceItem(name);
+    // item.sku מוטבע רק כשהפריט נוצר דרך skuCatalog (המקור החדש) — תמחור מדויק לפי מק"ט.
+    // בלי sku (כל פריט קיים/ישן) — ממשיך בדיוק כמו היום, ניחוש קטגוריה לפי שם חופשי.
+    const pid  = item.sku || lgFindPriceItem(name);
     if(!pid) return;
     const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
     if(!ppm2) return;
@@ -670,7 +750,7 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
     const lockedItems = [];
     items.forEach(item=>{
       const name = item.glassFullName||item.name||'';
-      const pid  = lgFindPriceItem(name);
+      const pid  = item.sku || lgFindPriceItem(name); // item.sku (מ-skuCatalog) גובר כשקיים
       if(!pid) return;
       const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
       if(!ppm2) return;
