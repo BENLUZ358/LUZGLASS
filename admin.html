@@ -1138,6 +1138,150 @@ function savePricing(){
 // ═══════════════════════════════════════
 let _skuEditCode = null; // קוד הרשומה שבעריכה כרגע, null = טופס "הוסף חדש"
 
+// ─── ייבוא בבת אחת מקובץ/הדבקה (CSV) — מיועד לייבוא מחשבשבת לפני שיש חיבור API אמיתי ───
+// נוגע רק בשדות עסקיים (דרך syncSkuCatalogFromHashavshevet — לא יכול לגעת ב-proc/graphic) + מחיר כללי.
+let _skuImportOpen    = false;
+let _skuImportHeaders = [];
+let _skuImportRows    = [];
+let _skuImportMapping = {}; // { colIndex: 'code'|'name'|'price'|'hashavshevetCode'|'active' }
+
+function toggleSkuImport(){
+  _skuImportOpen = !_skuImportOpen;
+  renderSkuCatalogTab(document.getElementById('pricingBody'));
+}
+
+function parseSkuImportText(){
+  const raw = document.getElementById('skuImportText')?.value || '';
+  const lines = raw.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length){ _skuImportHeaders=[]; _skuImportRows=[]; _skuImportMapping={}; renderSkuCatalogTab(document.getElementById('pricingBody')); return; }
+  const delim = lines[0].includes('\t') ? '\t' : ',';
+  const splitLine = l => l.split(delim).map(c=>c.trim().replace(/^"|"$/g,''));
+  _skuImportHeaders = splitLine(lines[0]);
+  _skuImportRows    = lines.slice(1).map(splitLine);
+  // ניחוש מיפוי אוטומטי לפי שם עמודה — ניתן לשנות ידנית בכל מקרה
+  const guesses = {
+    code:             /^(מק"?ט|קוד\s*פריט|sku|code|item.?code)$/i,
+    name:             /^(שם|תיאור|name|description)$/i,
+    price:            /^(מחיר|מחיר\s*יחידה|price|unit.?price)$/i,
+    hashavshevetCode: /^(קוד\s*חשבשבת|hashavshevet|מזהה)$/i,
+    active:           /^(פעיל|status|active|סטטוס)$/i,
+  };
+  _skuImportMapping = {};
+  _skuImportHeaders.forEach((h,i)=>{
+    for(const [field,re] of Object.entries(guesses)){
+      if(re.test(h.trim())){ _skuImportMapping[i]=field; break; }
+    }
+  });
+  renderSkuCatalogTab(document.getElementById('pricingBody'));
+}
+
+function setSkuImportMapping(colIdx, field){
+  if(field) _skuImportMapping[colIdx]=field; else delete _skuImportMapping[colIdx];
+  renderSkuCatalogTab(document.getElementById('pricingBody'));
+}
+
+async function runSkuImport(){
+  const codeCol = Object.keys(_skuImportMapping).find(i=>_skuImportMapping[i]==='code');
+  if(codeCol===undefined){ showToast('חובה למפות עמודת מק"ט לפני ייבוא'); return; }
+  let created=0, skipped=0, failed=0;
+  const priceUpdates = {};
+  for(const row of _skuImportRows){
+    const code = (row[codeCol]||'').trim();
+    if(!code){ skipped++; continue; }
+    const fields = {};
+    for(const [colIdx, field] of Object.entries(_skuImportMapping)){
+      if(field==='code') continue;
+      const val = row[colIdx];
+      if(val===undefined || val==='') continue;
+      if(field==='price'){ priceUpdates[code.toUpperCase().trim()] = parseFloat(val)||0; continue; }
+      if(field==='active'){ fields.active = !/^(0|false|לא|לא\s*פעיל|inactive|no)$/i.test(val.trim()); continue; }
+      fields[field] = val;
+    }
+    try{ await syncSkuCatalogFromHashavshevet(code, fields); created++; }
+    catch(e){ console.error('skuImport row failed:', code, e); failed++; }
+  }
+  if(Object.keys(priceUpdates).length){
+    await savePricesGlobal({...globalPrices, ...priceUpdates}).catch(e=>console.error('skuImport prices:',e));
+  }
+  _skuImportOpen=false; _skuImportHeaders=[]; _skuImportRows=[]; _skuImportMapping={};
+  showToast(`✓ יובאו ${created} מק"טים${skipped?` · ${skipped} דולגו (בלי מק"ט)`:''}${failed?` · ${failed} נכשלו`:''}`);
+  renderSkuCatalogTab(document.getElementById('pricingBody'));
+}
+
+function _skuImportPanelHtml(){
+  if(!_skuImportOpen) return `<button onclick="toggleSkuImport()" style="width:100%;padding:10px;margin-bottom:16px;background:var(--bg2);border:1px dashed var(--border);border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:var(--text);cursor:pointer;">📥 ייבוא בבת אחת מחשבשבת (CSV)</button>`;
+  const fieldOptions = [['','— התעלם —'],['code','מק"ט'],['name','שם'],['price','מחיר כללי'],['hashavshevetCode','קוד חשבשבת'],['active','פעיל']];
+  const mappingUi = _skuImportHeaders.length ? `
+    <div style="margin:12px 0;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;">מיפוי עמודות (נוחש אוטומטית — אפשר לשנות):</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${_skuImportHeaders.map((h,i)=>`
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">${lgEsc(h)}</div>
+            <select onchange="setSkuImportMapping(${i},this.value)" style="font-size:11px;padding:2px;border:1px solid var(--border);border-radius:3px;">
+              ${fieldOptions.map(([v,l])=>`<option value="${v}" ${_skuImportMapping[i]===v?'selected':''}>${l}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>
+    </div>
+    <div style="max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:10px;">
+      <table class="price-table" style="font-size:11px;">
+        <thead><tr>${_skuImportHeaders.map(h=>`<th>${lgEsc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${_skuImportRows.slice(0,8).map(r=>`<tr>${r.map(c=>`<td>${lgEsc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+      ${_skuImportRows.length>8?`<div style="padding:4px 8px;color:var(--muted);font-size:10px;">... ועוד ${_skuImportRows.length-8} שורות</div>`:''}
+    </div>
+    <button onclick="runSkuImport()" style="width:100%;padding:9px;background:var(--green);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;border-radius:6px;cursor:pointer;margin-bottom:8px;">✓ ייבא ${_skuImportRows.length} רשומות</button>
+  ` : '';
+  return `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px;">📥 ייבוא מחשבשבת — הדבק CSV (או ייצוא מ-Excel)</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:8px;">שורה ראשונה = כותרות עמודות. נוגע רק בשדות עסקיים (מק"ט/שם/מחיר/קוד חשבשבת/פעיל) — לא בשדות תפעוליים.</p>
+      <textarea id="skuImportText" placeholder='מק"ט,שם,מחיר&#10;8SGMH,8 מ"מ שקוף גרפיקה מחוסם,300' rows="4" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:12px;margin-bottom:8px;" oninput="parseSkuImportText()"></textarea>
+      ${mappingUi}
+      <button onclick="toggleSkuImport()" style="width:100%;padding:7px;background:none;border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">סגור</button>
+    </div>`;
+}
+
+// חיבור API אמיתי — קורא ל-/api/hashavshevet-items (סוד ונתוני חתימה נשארים בשרת, אף פעם לא בדפדפן).
+// מריץ בבת-אחת (batches) כדי לא להציף את Firebase בקריאה סדרתית של מאות רשומות.
+let _hbSyncing = false;
+async function syncFromHashavshevetNow(){
+  if(_hbSyncing) return;
+  _hbSyncing = true;
+  showToast('מסנכרן מול חשבשבת...');
+  try{
+    const res = await fetch('/api/hashavshevet-items');
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP '+res.status));
+
+    const BATCH = 20;
+    let created=0, priced=0;
+    const priceUpdates = {};
+    for(let i=0;i<data.items.length;i+=BATCH){
+      const batch = data.items.slice(i,i+BATCH);
+      await Promise.all(batch.map(async it=>{
+        try{
+          await syncSkuCatalogFromHashavshevet(it.code, { name: it.name, hashavshevetCode: it.code, active: true });
+          created++;
+          if(it.price > 0) priceUpdates[it.code] = it.price; // 0 = טרם הוזן מחיר בחשבשבת, לא דורס מחיר קיים
+        }catch(e){ console.error('syncFromHashavshevetNow item failed:', it.code, e); }
+      }));
+    }
+    if(Object.keys(priceUpdates).length){
+      priced = Object.keys(priceUpdates).length;
+      await savePricesGlobal({...globalPrices, ...priceUpdates}).catch(e=>console.error('syncFromHashavshevetNow prices:',e));
+    }
+    showToast(`✓ סונכרנו ${created} מק"טים מחשבשבת (${priced} עם מחיר)`);
+  }catch(e){
+    console.error('syncFromHashavshevetNow:', e);
+    showToast('⚠️ סנכרון נכשל — בדוק קונסול');
+  }finally{
+    _hbSyncing = false;
+    renderSkuCatalogTab(document.getElementById('pricingBody'));
+  }
+}
+
 function renderSkuCatalogTab(el){
   const list = Object.values(skuCatalogMap).sort((a,b)=>String(a.code).localeCompare(String(b.code)));
   const ed   = _skuEditCode ? skuCatalogMap[_skuEditCode] : null;
@@ -1145,8 +1289,12 @@ function renderSkuCatalogTab(el){
     <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
       קטלוג מק"טים — מקור אמת עתידי לחיבור חשבשבת. תוספתי בלבד: מק"ט שלא כאן ממשיך לעבוד כמו היום.
     </p>
+    <button onclick="syncFromHashavshevetNow()" ${_hbSyncing?'disabled':''} style="width:100%;padding:11px;margin-bottom:12px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;${_hbSyncing?'opacity:0.6;':''}">
+      ${_hbSyncing?'⏳ מסנכרן...':'🔄 סנכרן מחשבשבת עכשיו (API)'}
+    </button>
+    ${_skuImportPanelHtml()}
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:10px;">${ed?'עריכת מק"ט: '+lgEsc(ed.code):'+ הוספת מק"ט חדש'}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:10px;">${ed?'עריכת מק"ט: '+lgEsc(ed.code):'+ הוספת מק"ט חדש (ידנית)'}</div>
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:8px;">
         <input id="sku_code" placeholder='מק"ט (8SGMH)' value="${ed?lgEsc(ed.code):''}" ${ed?'disabled':''}
           style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;${ed?'background:var(--bg);color:var(--muted);':''}">
