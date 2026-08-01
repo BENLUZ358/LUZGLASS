@@ -264,16 +264,60 @@ async function getClientByPhone(phone) {
   return Object.values(snap.val())[0];
 }
 
-// ─── 8. Session ───────────────────────────────────────────────────────
+// ─── 8. Session / Auth ──────────────────────────────────────────────
+//
+//  sessionStorage הוא כאן מטמון-תצוגה בלבד (שם/role להצגה מיידית) —
+//  לא מקור ההרשאה. מקור ההרשאה האמיתי הוא Firebase Authentication
+//  (firebase.auth().currentUser), נבדק ב-lgRequireAuthAsync בכל דף מוגן.
+//  אי אפשר "לזייף" גישה יותר דרך קונסולת הדפדפן — צריך session אמיתי
+//  שנוצר רק דרך lgLoginByPhone (סעיף 11 למטה).
 
 function lgGetSession()      { try { return JSON.parse(sessionStorage.getItem('lgSession') || '{}'); } catch(e) { return {}; } }
 function lgSetSession(data)  { sessionStorage.setItem('lgSession', JSON.stringify(data)); }
 function lgClearSession()    { sessionStorage.removeItem('lgSession'); }
-function lgRequireAuth(role) {
-  const s = lgGetSession();
-  if (!s.role) { window.location.href = 'login.html'; return null; }
-  if (role && s.role !== role && s.role !== 'admin') { window.location.href = 'login.html'; return null; }
-  return s;
+
+async function lgLogout() {
+  lgClearSession();
+  try { await firebase.auth().signOut(); } catch(e) { console.warn('[Auth] signOut:', e); }
+  window.location.href = 'login.html';
+}
+
+// שער הרשאה אמיתי — לקרוא בתחילת כל דף מוגן:
+//   await lgRequireAuthAsync('admin');   // או 'client', וכו'
+// ממתין שFirebase יקבע אם יש משתמש מחובר בפועל, שולף role טרי מ-Firebase
+// (לא סומך על sessionStorage), ומפנה ל-login.html אם אין התאמה.
+function lgRequireAuthAsync(role) {
+  return new Promise((resolve) => {
+    firebase.auth().onAuthStateChanged(async (fbUser) => {
+      if (!fbUser) { lgClearSession(); window.location.href = 'login.html'; resolve(null); return; }
+      try {
+        const phone = fbUser.uid; // uid = מספר טלפון מנורמל, נקבע כך ביצירת המשתמש
+        const snap  = await _lgDb.ref('users/' + phone).once('value');
+        const u     = snap.val();
+        if (!u || (role && u.role !== role && u.role !== 'admin')) {
+          lgClearSession();
+          window.location.href = 'login.html';
+          resolve(null);
+          return;
+        }
+        const session = {
+          id:          u.id,
+          name:        (u.businessName || '').trim() || u.name,
+          role:        u.role,
+          phone:       u.phone || phone,
+          isMainAdmin: !!u.isMainAdmin,
+          loginTime:   Date.now()
+        };
+        lgSetSession(session);
+        window._lgSession = session; // תאימות לאחור — דפים ישנים קוראים ישירות מהמשתנה הזה
+        resolve(session);
+      } catch(e) {
+        console.error('[Auth] lgRequireAuthAsync:', e);
+        window.location.href = 'login.html';
+        resolve(null);
+      }
+    });
+  });
 }
 
 // ─── 9. נרמול הזמנה ──────────────────────────────────────────────────
@@ -384,36 +428,24 @@ async function lgTest() {
 //  · ללא תלות ב-Firebase index
 
 const LG_MAIN_ADMIN_PHONE = '0547725552';
+const LG_EMAIL_DOMAIN     = 'luzglass.local'; // דומיין מלאכותי — Firebase Auth דורש "אימייל", לא נשלח אליו כלום אמיתי
 
 function _lgNormalizePhone(p){ return String(p||'').replace(/[-\s]/g,''); }
+function _lgSyntheticEmail(phone){ return `${_lgNormalizePhone(phone)}@${LG_EMAIL_DOMAIN}`; }
 
-// אתחל אדמין ראשי (נקרא בעמוד login בלבד)
-async function lgInitMainAdmin() {
-  const phone = LG_MAIN_ADMIN_PHONE;
-  const snap  = await _lgDb.ref('users/' + phone).once('value');
-  const ex    = snap.val();
-  if (!ex || ex.role !== 'admin' || !ex.isMainAdmin || ex.password !== '781578') {
-    await _lgDb.ref('users/' + phone).set({
-      id:          phone,
-      name:        'בן לוז',
-      phone,
-      password:    '781578',
-      role:        'admin',
-      isMainAdmin: true,
-      createdAt:   ex?.createdAt || Date.now(),
-      updatedAt:   Date.now()
-    });
-    console.log('[LuzGlass] אדמין ראשי נכתב / עודכן');
-  }
-}
-
-// התחברות — GET ישיר לפי טלפון, ללא סריקה
+// התחברות אמיתית — Firebase Authentication (לא השוואת סיסמה גלויה).
+// דורש שהמשתמש כבר קיים ב-Firebase Auth (ראה scripts/migrate-users-to-auth.js).
+// זורק שגיאה אם הפרטים שגויים — הקורא (login.html) תופס ומציג הודעה למשתמש.
 async function lgLoginByPhone(phone, password) {
-  const p    = _lgNormalizePhone(phone);
+  const p     = _lgNormalizePhone(phone);
+  const email = _lgSyntheticEmail(p);
+  await firebase.auth().signInWithEmailAndPassword(email, password); // זורק על פרטים שגויים
   const snap = await _lgDb.ref('users/' + p).once('value');
-  if (!snap.exists()) return null;
-  const u = snap.val();
-  return String(u.password) === String(password) ? u : null;
+  if (!snap.exists()) {
+    await firebase.auth().signOut().catch(()=>{});
+    throw new Error('לא נמצאה רשומת משתמש תואמת');
+  }
+  return snap.val();
 }
 
 // שמירת משתמש — הטלפון הוא ה-ID, כפילויות בלתי אפשריות

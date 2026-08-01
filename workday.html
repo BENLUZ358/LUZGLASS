@@ -220,7 +220,8 @@
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260518"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="firebase-db.js?v=20260601"></script>
 </head>
 <body>
 <div id="lgLoading" style="position:fixed;inset:0;background:#1a1714;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
@@ -2680,8 +2681,12 @@ function _renderWaBanner(){
 // ═══════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════
-load();
-setTab('build'); // אתחול נכון — build מוצג, finishBtn מוסתר
+// שער הרשאה אמיתי — דף עבודה פנימי, אדמין בלבד (workday.html לא היה מוגן כלל עד עכשיו)
+lgRequireAuthAsync('admin').then(session => {
+  if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
+  load();
+  setTab('build'); // אתחול נכון — build מוצג, finishBtn מוסתר
+});
 renderAll();
 document.getElementById('finishBtn').disabled = workDay.inWork.length === 0;
 

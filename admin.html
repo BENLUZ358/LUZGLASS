@@ -9,15 +9,7 @@ const safeStorage = {
   removeItem(k){ try{ localStorage.removeItem(k); }catch(e){ delete this._mem[k]; } }
 };
 
-(function(){
-  try{
-    const s=JSON.parse(sessionStorage.getItem('lgSession')||'{}');
-    if(!s.role || s.role!=='admin'){
-      window.location.href='login.html'; return;
-    }
-    window._lgSession=s;
-  } catch(e){ window.location.href='login.html'; }
-})();
+// הרשאה נבדקת אמיתית מול Firebase Auth אחרי שה-SDK נטען — ראה קריאה ל-lgRequireAuthAsync('admin') לפני load()
 
 function unavOpen(){document.getElementById('unavSidebar').classList.add('mobile-open');document.getElementById('unavOverlay').classList.add('open');}
 function unavClose(){document.getElementById('unavSidebar').classList.remove('mobile-open');document.getElementById('unavOverlay').classList.remove('open');}
@@ -227,7 +219,8 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260518"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="firebase-db.js?v=20260601"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -1605,7 +1598,12 @@ function renderPickupBoard(){
 }
 
 
-load(); // renderAll() נקרא על-ידי listenAllOrders כשהנתונים מגיעים מ-Firebase
+// שער הרשאה אמיתי — רק אחרי שFirebase מאשר משתמש admin מחובר בפועל מתחילים לטעון נתונים
+lgRequireAuthAsync('admin').then(session => {
+  if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
+  initUserDisplay();
+  load(); // renderAll() נקרא על-ידי listenAllOrders כשהנתונים מגיעים מ-Firebase
+});
 
 // כשהטאב חוזר לפורגראונד אחרי שהיה נסתר — כפה re-subscribe למנע sync gaps
 document.addEventListener('visibilitychange', () => {
@@ -3228,11 +3226,11 @@ function iwSave(){
   sqCurrent.items = sqCurrentItems;
 }
 
-function lgLogout(){lgClearSession();window.location.href='login.html';}
+// lgLogout מוגדר ב-firebase-db.js — מנתק גם מ-Firebase Auth, לא רק מ-sessionStorage
 
 // ─── אתחול תצוגת משתמש ───────────────────────────────────────────────
-(function initUserDisplay(){
-  const sess = window._lgSession || {};
+function initUserDisplay(){
+  const sess = lgGetSession();
   if(!sess.name) return;
   // sidebar
   const sn = document.getElementById('sidebarUserName');
@@ -3247,7 +3245,7 @@ function lgLogout(){lgClearSession();window.location.href='login.html';}
     if(ns) ns.style.display = '';
     if(nu) nu.style.display = '';
   }
-})();
+}
 
 // ─── ניהול משתמשים ───────────────────────────────────────────────────
 

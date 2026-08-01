@@ -30,9 +30,12 @@
 
 'use strict';
 
-const admin = require('firebase-admin');
-const path  = require('path');
-const fs    = require('fs');
+const path = require('path');
+const fs   = require('fs');
+// firebase-admin v12+ עברה ל-API מודולרי — אין יותר admin.credential.cert/admin.database()
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getDatabase }         = require('firebase-admin/database');
+const { getAuth }             = require('firebase-admin/auth');
 
 const KEY_PATH = path.join(__dirname, 'serviceAccountKey.json');
 const EMAIL_DOMAIN = 'luzglass.local'; // דומיין מלאכותי — לעולם לא נשלח אליו מייל אמיתי
@@ -42,13 +45,13 @@ if (!fs.existsSync(KEY_PATH)) {
   process.exit(1);
 }
 
-admin.initializeApp({
-  credential: admin.credential.cert(require(KEY_PATH)),
+const app = initializeApp({
+  credential: cert(require(KEY_PATH)),
   databaseURL: 'https://lussglass-default-rtdb.europe-west1.firebasedatabase.app'
 });
 
-const db   = admin.database();
-const auth = admin.auth();
+const db   = getDatabase(app);
+const auth = getAuth(app);
 
 function normalizePhone(p) { return String(p || '').replace(/[-\s]/g, ''); }
 function syntheticEmail(phone) { return `${phone}@${EMAIL_DOMAIN}`; }

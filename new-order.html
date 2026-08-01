@@ -77,10 +77,13 @@
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260518"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="firebase-db.js?v=20260601"></script>
 </head>
 <body>
 <script>
+// שער הרשאה אמיתי — client/admin בלבד (new-order.html לא היה מוגן כלל עד עכשיו)
+lgRequireAuthAsync('client');
 // Read client from session - runs after body exists
 const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
 </script>

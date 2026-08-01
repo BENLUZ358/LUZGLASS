@@ -50,7 +50,8 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="firebase-db.js?v=20260512"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="firebase-db.js?v=20260601"></script>
 <script>
 // ── משתמשים שייווצרו לאחר האיפוס ──────────────────────────────────────
 // הוסף כאן משתמשים נוספים לפי הצורך
@@ -75,11 +76,19 @@ const SEED_USERS = [
   }
 ];
 
-// הצג משתמשים שייווצרו (לקוחות בלבד — האדמין כבר מוצג למעלה)
-document.getElementById('extraUsersBlock').innerHTML = SEED_USERS
-  .filter(u => u.role === 'client')
-  .map(u => `<div class="ublock"><div class="role">CLIENT</div>שם: ${u.name} &nbsp;|&nbsp; טלפון: ${u.phone} &nbsp;|&nbsp; סיסמה: ${u.password}</div>`)
-  .join('');
+// שער הרשאה אמיתי — כלי איפוס הרסני, אדמין ראשי בלבד. הכלי כולו (כולל הצגת הסיסמאות
+// למעלה) חסום עד שהרשאה אמיתית מאושרת (reset-users.html לא היה מוגן כלל עד עכשיו).
+lgRequireAuthAsync('admin').then(session => {
+  if(!session || !session.isMainAdmin){
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-family:sans-serif;color:#c0392b">גישה לכלי זה מוגבלת לאדמין הראשי בלבד.</div>';
+    return;
+  }
+  // הצג משתמשים שייווצרו (לקוחות בלבד — האדמין כבר מוצג למעלה) — רק אחרי אימות הרשאה
+  document.getElementById('extraUsersBlock').innerHTML = SEED_USERS
+    .filter(u => u.role === 'client')
+    .map(u => `<div class="ublock"><div class="role">CLIENT</div>שם: ${u.name} &nbsp;|&nbsp; טלפון: ${u.phone} &nbsp;|&nbsp; סיסמה: ${u.password}</div>`)
+    .join('');
+});
 
 function log(msg, cls='info'){
   const el = document.getElementById('log');
@@ -88,6 +97,9 @@ function log(msg, cls='info'){
 }
 
 async function runReset(){
+  // הגנה נוספת — לא סומכים רק על החסימה ברמת הדף
+  const sess = lgGetSession();
+  if(!sess.isMainAdmin){ alert('פעולה זו מוגבלת לאדמין הראשי בלבד.'); return; }
   const btn = document.getElementById('goBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="sp"></span>מבצע איפוס...';

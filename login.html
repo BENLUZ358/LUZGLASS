@@ -117,26 +117,15 @@
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="firebase-db.js?v=20260518"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="firebase-db.js?v=20260601"></script>
 <script>
-// ── redirect אם כבר מחובר (sessionStorage — לא דורש Firebase) ──────────
+// ── redirect אם כבר מחובר (רמז UX בלבד — היעד עצמו מגן על עצמו אמיתית) ──
 (function(){
   const s = lgGetSession();
   if(s.role === 'admin')  { window.location.href = 'admin.html';  return; }
   if(s.role === 'client') { window.location.href = 'portal.html'; return; }
 })();
-
-// ── אתחול Firebase — לפני שהכפתור פעיל ───────────────────────────────
-const _loginBtn = document.querySelector('.btn-login');
-_loginBtn.disabled = true;
-document.getElementById('btnLabel').textContent = 'מתחבר...';
-
-lgInitMainAdmin()
-  .catch(e => console.warn('[login] init admin:', e))
-  .finally(() => {
-    _loginBtn.disabled = false;
-    document.getElementById('btnLabel').textContent = 'כניסה';
-  });
 
 // ── התחברות ────────────────────────────────────────────────────────────
 async function doLogin(){
@@ -156,17 +145,7 @@ async function doLogin(){
   _loginBtn.disabled = true;
 
   try {
-    const user = await lgLoginByPhone(phone, password);
-
-    if(!user){
-      document.getElementById('btnLabel').style.display = 'block';
-      document.getElementById('spinner').style.display  = 'none';
-      _loginBtn.disabled = false;
-      errEl.textContent = 'מספר טלפון או סיסמה שגויים';
-      errEl.style.display = 'block';
-      document.getElementById('password').value = '';
-      return;
-    }
+    const user = await lgLoginByPhone(phone, password); // זורק שגיאה על פרטים שגויים
 
     // שם עסקי = primaryName לכל המערכת (orderClient, מחירונים, פורטל)
     const primaryName = (user.businessName||'').trim() || user.name;
@@ -185,7 +164,9 @@ async function doLogin(){
     document.getElementById('btnLabel').style.display = 'block';
     document.getElementById('spinner').style.display  = 'none';
     _loginBtn.disabled = false;
-    errEl.textContent = 'שגיאת חיבור לשרת — בדוק חיבור אינטרנט ונסה שוב';
+    document.getElementById('password').value = '';
+    const badCreds = ['auth/wrong-password','auth/user-not-found','auth/invalid-credential','auth/invalid-email'].includes(err.code);
+    errEl.textContent = badCreds ? 'מספר טלפון או סיסמה שגויים' : 'שגיאת חיבור לשרת — בדוק חיבור אינטרנט ונסה שוב';
     errEl.style.display = 'block';
   }
 }

@@ -9,15 +9,7 @@ const safeStorage = {
   removeItem(k){ try{ localStorage.removeItem(k); }catch(e){ delete this._mem[k]; } }
 };
 
-(function(){
-  try{
-    const s=JSON.parse(sessionStorage.getItem('lgSession')||'{}');
-    if(!s.role || (s.role!=='admin' && s.role!=='client')){
-      window.location.href='login.html'; return;
-    }
-    window._lgSession=s;
-  } catch(e){ window.location.href='login.html'; }
-})();
+// הרשאה נבדקת אמיתית מול Firebase Auth אחרי שה-SDK נטען — ראה קריאה ל-lgRequireAuthAsync('client') לפני init()
 </script>
 
 <meta charset="UTF-8">
@@ -145,7 +137,8 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260518"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="firebase-db.js?v=20260601"></script>
 </head>
 <body>
 <div id="lgLoading" style="position:fixed;inset:0;background:#f7f4ef;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
@@ -674,7 +667,7 @@ function setTab(tab){
 }
 
 function contactUs(){window.open("https://wa.me/972XXXXXXXXX","_blank");}
-function logout(){window.location.href="login.html";}
+function logout(){ lgLogout(); } // lgLogout (firebase-db.js) מנתק גם מ-Firebase Auth
 
 // QUOTE
 const QT=[
@@ -761,7 +754,11 @@ function sendQuoteWA(){
   window.open("https://wa.me/?text="+encodeURIComponent(lines.join("\n")),"_blank");
 }
 
-init();
+// שער הרשאה אמיתי — רק אחרי שFirebase מאשר משתמש client/admin מחובר בפועל מתחילים
+lgRequireAuthAsync('client').then(session => {
+  if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
+  init();
+});
 
 // כשהטאב חוזר לפורגראונד — כפה re-subscribe למנע sync gaps בטאבים ברקע
 document.addEventListener('visibilitychange', () => {
@@ -774,7 +771,7 @@ document.addEventListener('visibilitychange', () => {
 </body>
 </html>
 <script>
-function lgLogout(){sessionStorage.removeItem('lgSession');window.location.href='login.html';}
+// lgLogout מוגדר ב-firebase-db.js — מנתק גם מ-Firebase Auth, לא רק מ-sessionStorage
 // show user name
 const _sess=JSON.parse(sessionStorage.getItem('lgSession')||'{}');
 if(_sess.name){

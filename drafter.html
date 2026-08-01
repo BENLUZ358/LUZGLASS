@@ -124,7 +124,8 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260518"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="firebase-db.js?v=20260601"></script>
 </head>
 <body>
 <div class="unav-topbar"><div class="lg">Luz<span>Glass</span></div><button class="unav-burger" onclick="unavOpen()"><span></span><span></span><span></span></button></div>
@@ -546,7 +547,11 @@ document.addEventListener('keydown',e=>{
   }
 });
 
-load();
+// שער הרשאה אמיתי — כלי שרטוט פנימי, אדמין בלבד (drafter.html לא היה מוגן כלל עד עכשיו)
+lgRequireAuthAsync('admin').then(session => {
+  if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
+  load();
+});
 
 function unavOpen(){document.getElementById('unavSidebar').classList.add('open');const ov=document.getElementById('unavOverlay');if(ov)ov.classList.add('open');}
 function unavClose(){document.getElementById('unavSidebar').classList.remove('open');const ov=document.getElementById('unavOverlay');if(ov)ov.classList.remove('open');}

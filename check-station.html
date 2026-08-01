@@ -180,7 +180,8 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="firebase-db.js?v=20260518"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="firebase-db.js?v=20260601"></script>
 </head>
 <body>
 <div id="lgLoading" style="position:fixed;inset:0;background:#1a1a1a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
@@ -1135,7 +1136,11 @@ window.addEventListener('resize',()=>{if(document.getElementById('csEd').classLi
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
 
 // INIT
-load();
+// שער הרשאה אמיתי — תחנת בדיקה, אדמין בלבד (check-station.html לא היה מוגן כלל עד עכשיו)
+lgRequireAuthAsync('admin').then(session => {
+  if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
+  load();
+});
 
 function unavOpen(){document.getElementById('unavSidebar').classList.add('mobile-open');document.getElementById('unavOverlay').classList.add('open');}
 function unavClose(){document.getElementById('unavSidebar').classList.remove('mobile-open');document.getElementById('unavOverlay').classList.remove('open');}
