@@ -734,6 +734,43 @@ function lgResolveSkuCode(code, skuCatalogMap) {
   return { glass: e.glass, mm: e.mm, proc: e.proc, graphic: !!e.graphic, label: e.name, sku: c, _fromCatalog: true };
 }
 
+// ─── 14ג. כרטיסי לקוח חשבשבת (hashavshevetAccounts) — תוספתי, מקביל ל-skuCatalog ──
+//
+//  hashavshevetAccounts/{KEY}  (KEY = "מפתח" הלקוח בחשבשבת, לדוגמה "14201")
+//  עתידי: יתמלא מסנכרון דוח "כרטיסי לקוח" מחשבשבת (טלפון/מפתח/שם) — לא ידני.
+//  ריק כברירת מחדל עד שהדוח יחובר.
+
+async function getHashavshevetAccounts() {
+  const snap = await _lgDb.ref('hashavshevetAccounts').once('value');
+  return snap.exists() ? Object.values(snap.val()) : [];
+}
+
+function listenHashavshevetAccounts(callback) {
+  const ref     = _lgDb.ref('hashavshevetAccounts');
+  const handler = snap => callback(snap.exists() ? Object.values(snap.val()) : []);
+  ref.on('value', handler);
+  return () => ref.off('value', handler);
+}
+
+// עתידי — ייקרא מסנכרון דוח כרטיסי הלקוח. שדות עסקיים בלבד (שם/טלפון/מפתח/פעיל).
+async function syncHashavshevetAccount(key, businessFields) {
+  const k = String(key || '').trim();
+  if (!k) return;
+  const safe = {};
+  ['name', 'phone', 'hashavshevetCode', 'active'].forEach(f => { if (businessFields && businessFields[f] !== undefined) safe[f] = businessFields[f]; });
+  safe.source = 'hashavshevet';
+  const snap     = await _lgDb.ref('hashavshevetAccounts/' + k).once('value');
+  const existing = snap.val() || {};
+  const record   = _lgClean({
+    ...existing, ...safe,
+    key:       k,
+    createdAt: existing.createdAt || Date.now(),
+    updatedAt: Date.now()
+  });
+  await _lgDb.ref('hashavshevetAccounts/' + k).set(record);
+  return k;
+}
+
 // מחשב מ"ר כולל של כל פריטי ההזמנה (w,h במ"מ שלמים)
 function lgCalcOrderM2(order){
   return Math.round(((order.items||[]).reduce((s,item)=>{
