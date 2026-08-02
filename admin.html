@@ -424,6 +424,7 @@ function load() {
   listenSkuCatalog(list => {
     skuCatalogMap = {};
     list.forEach(e => { if (e && e.code) skuCatalogMap[e.code] = e; });
+    _lgRenderIwCodeList();
     const ov = document.getElementById('pricingOv');
     if (ov && ov.classList.contains('open')) renderPricing();
   });
@@ -1020,7 +1021,7 @@ function exportCSV(){
 //  שדות תפעוליים (glass/mm/proc/graphic) — בבעלותנו, נערכים כאן ידנית.
 // ═══════════════════════════════════════
 let pricingTab = 'global';
-let _skuEditCode = null; // קוד מק"ט בעריכה תפעולית, null = טופס "הוסף ידנית"
+let _skuEditCode = null; // קוד מק"ט שנבחר לעריכת שדות תפעוליים, null = אין עריכה פתוחה
 
 function openPricing(){
   document.getElementById('pricingOv').classList.add('open');
@@ -1055,83 +1056,69 @@ function renderGlobalPriceTab(el){
   const ed   = _skuEditCode ? skuCatalogMap[_skuEditCode] : null;
   el.innerHTML = `
     <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
-      מחירון כללי — קטלוג המק"טים שנמשך מחשבשבת. המחיר מוצג בלבד (לא ניתן לעריכה ידנית כאן) ומתעדכן
-      אוטומטית עם כל סנכרון. שדות תפעוליים (סוג עיבוד/גרפיקה) נשארים בבעלותכם ונערכים כאן ידנית.
+      מחירון כללי — קטלוג המק"טים שנמשך מחשבשבת. שם/מחיר מוצגים בלבד ומתעדכנים אוטומטית עם כל סנכרון —
+      עריכה שלהם נעשית רק בחשבשבת עצמה. שדה "תפעולי" (סוג עיבוד/גרפיקה) אין לו מקבילה בחשבשבת ולכן
+      נשאר בעריכה מזערית כאן בלבד.
     </p>
     <button onclick="syncFromHashavshevetNow()" ${_hbSyncing?'disabled':''} style="width:100%;padding:11px;margin-bottom:12px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;${_hbSyncing?'opacity:0.6;':''}">
       ${_hbSyncing?'⏳ מסנכרן...':'🔄 סנכרן מחשבשבת עכשיו (API)'}
     </button>
-    ${_skuImportPanelHtml()}
+    ${ed?`
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:10px;">${ed?'עריכת נתונים תפעוליים: '+lgEsc(ed.code):'+ הוספת מק"ט ידנית (למקרה חריג בלבד)'}</div>
-      <div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:8px;">
-        <input id="sku_code" placeholder='מק"ט (8SGMH)' value="${ed?lgEsc(ed.code):''}" ${ed?'disabled':''}
-          style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;${ed?'background:var(--bg);color:var(--muted);':''}">
-        <input id="sku_name" placeholder='שם (8 מ"מ שקוף גרפיקה מחוסם)' value="${ed?lgEsc(ed.name||''):''}" ${ed?'disabled':''}
-          style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;${ed?'background:var(--bg);color:var(--muted);':''}">
-      </div>
-      ${ed?'<p style="font-size:10px;color:var(--muted);margin-bottom:8px;">שם/מק"ט נעולים בעריכה — אלה שדות עסקיים, מגיעים מסנכרון חשבשבת בלבד.</p>':''}
+      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:10px;">עריכת נתונים תפעוליים — ${lgEsc(ed.code)} · ${lgEsc(ed.name||'')}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
-        <input id="sku_glass" placeholder="סוג זכוכית (שקוף)" value="${ed?lgEsc(ed.glass||''):''}"
+        <input id="sku_glass" placeholder="סוג זכוכית (שקוף)" value="${lgEsc(ed.glass||'')}"
           style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">
-        <input id="sku_mm" type="number" min="1" placeholder='עובי מ"מ' value="${ed?(ed.mm||''):''}"
+        <input id="sku_mm" type="number" min="1" placeholder='עובי מ"מ' value="${ed.mm||''}"
           style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">
         <select id="sku_proc" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">
-          <option value="litush" ${ed&&ed.proc==='litush'?'selected':''}>מלוטש ✂️</option>
-          <option value="chisum" ${ed&&ed.proc==='chisum'?'selected':''}>מחוסם 🔥</option>
+          <option value="litush" ${ed.proc==='litush'?'selected':''}>מלוטש ✂️</option>
+          <option value="chisum" ${ed.proc==='chisum'?'selected':''}>מחוסם 🔥</option>
         </select>
       </div>
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;">
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
-          <input type="checkbox" id="sku_graphic" ${ed&&ed.graphic?'checked':''}> גרפיקה
+          <input type="checkbox" id="sku_graphic" ${ed.graphic?'checked':''}> גרפיקה
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
-          <input type="checkbox" id="sku_active" ${!ed||ed.active!==false?'checked':''}> פעיל
+          <input type="checkbox" id="sku_active" ${ed.active!==false?'checked':''}> פעיל
         </label>
       </div>
       <div style="display:flex;gap:8px;">
-        <button onclick="saveSkuCatalogForm()" style="flex:1;padding:9px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;border-radius:6px;cursor:pointer;">
-          ${ed?'✓ שמור שינויים תפעוליים':'+ הוסף מק"ט ידנית'}
-        </button>
-        ${ed?`<button onclick="_skuEditCode=null;renderPricing()" style="padding:9px 16px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;">ביטול</button>`:''}
+        <button onclick="saveSkuCatalogForm()" style="flex:1;padding:9px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;border-radius:6px;cursor:pointer;">✓ שמור שינויים תפעוליים</button>
+        <button onclick="_skuEditCode=null;renderPricing()" style="padding:9px 16px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;">ביטול</button>
       </div>
-    </div>
+    </div>`:''}
     <table class="price-table">
       <thead><tr><th>מק"ט</th><th>שם</th><th>מחיר ₪/מ"ר</th><th>תפעולי</th><th>מקור</th><th></th></tr></thead>
       <tbody>
         ${list.length?list.map(e=>`
-          <tr style="${e.active===false?'opacity:0.5':''}">
+          <tr style="${e.active===false?'opacity:0.5;':''}${e.opAuto?'background:rgba(184,146,42,0.06);':''}">
             <td style="font-weight:700">${lgEsc(e.code)}</td>
             <td>${lgEsc(e.name||'—')}</td>
             <td style="color:var(--gold);font-weight:700">${globalPrices[e.code]?'₪'+globalPrices[e.code]:'—'}</td>
-            <td style="font-size:11px;color:var(--muted)">${lgEsc(e.glass||'')} ${e.mm||''}מ"מ · ${e.proc==='chisum'?'🔥':'✂️'}${e.graphic?' 🖼':''}</td>
+            <td style="font-size:11px;color:var(--muted)">${lgEsc(e.glass||'')} ${e.mm||''}מ"מ · ${e.proc==='chisum'?'🔥':'✂️'}${e.graphic?' 🖼':''}${e.opAuto?' <span title="זוהה אוטומטית משם הפריט — טרם אומת ידנית" style="color:#c0392b;font-weight:700;cursor:help;">⚠ לא מאומת</span>':''}</td>
             <td>${e.source==='hashavshevet'?'<span style="font-size:10px;background:rgba(184,146,42,0.12);color:var(--gold);padding:1px 6px;border-radius:3px">חשבשבת</span>':'<span style="font-size:10px;color:var(--muted)">ידני</span>'}</td>
             <td style="white-space:nowrap">
               <button onclick="_skuEditCode='${lgJsStr(e.code)}';renderPricing()" style="padding:3px 8px;background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px;">ערוך תפעולי</button>
               <button onclick="deleteSkuCatalogEntry('${lgJsStr(e.code)}')" style="padding:3px 8px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:11px;">מחק</button>
             </td>
-          </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">הקטלוג ריק — סנכרן מחשבשבת או הוסף מק"ט ידנית למעלה</td></tr>'}
+          </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">הקטלוג ריק — לחץ "סנכרן מחשבשבת" למעלה</td></tr>'}
       </tbody>
     </table>`;
 }
 
 function saveSkuCatalogForm(){
-  const code = document.getElementById('sku_code')?.value?.trim();
-  if(!code){ showToast('נא להזין מק"ט'); return; }
-  const isEdit = !!_skuEditCode;
+  if(!_skuEditCode) return; // אין יותר "הוספה ידנית" — רק עריכת תפעולי למק"ט קיים
   const fields = {
     glass:   document.getElementById('sku_glass')?.value?.trim() || '',
     mm:      parseInt(document.getElementById('sku_mm')?.value) || null,
     proc:    document.getElementById('sku_proc')?.value || 'litush',
     graphic: !!document.getElementById('sku_graphic')?.checked,
     active:  !!document.getElementById('sku_active')?.checked,
+    opAuto:  false, // אישור ידני — כבר לא "ניחוש" ממתין לבדיקה
   };
-  // שם/מקור נקבעים רק בהוספה חדשה — אלה שדות עסקיים, בעריכה הם נעולים ומגיעים מסנכרון בלבד
-  if(!isEdit){
-    fields.name   = document.getElementById('sku_name')?.value?.trim() || '';
-    fields.source = 'manual';
-  }
-  saveSkuCatalogItem(code, fields)
+  saveSkuCatalogItem(_skuEditCode, fields)
     .then(()=>{ _skuEditCode=null; showToast('✓ נשמר'); })
     .catch(e=>{ console.error('saveSkuCatalogItem:',e); showToast('שגיאה בשמירה'); });
 }
@@ -1201,111 +1188,6 @@ function renderClientPriceTab(el){
       </table>`;
   }
   el.innerHTML = body;
-}
-
-// ─── ייבוא בבת אחת מקובץ/הדבקה (CSV) — מיועד לייבוא מחשבשבת לפני שיש חיבור API אמיתי ───
-// נוגע רק בשדות עסקיים (דרך syncSkuCatalogFromHashavshevet — לא יכול לגעת ב-proc/graphic) + מחיר כללי.
-let _skuImportOpen    = false;
-let _skuImportHeaders = [];
-let _skuImportRows    = [];
-let _skuImportMapping = {}; // { colIndex: 'code'|'name'|'price'|'hashavshevetCode'|'active' }
-
-function toggleSkuImport(){
-  _skuImportOpen = !_skuImportOpen;
-  renderPricing();
-}
-
-function parseSkuImportText(){
-  const raw = document.getElementById('skuImportText')?.value || '';
-  const lines = raw.split(/\r?\n/).filter(l=>l.trim());
-  if(!lines.length){ _skuImportHeaders=[]; _skuImportRows=[]; _skuImportMapping={}; renderPricing(); return; }
-  const delim = lines[0].includes('\t') ? '\t' : ',';
-  const splitLine = l => l.split(delim).map(c=>c.trim().replace(/^"|"$/g,''));
-  _skuImportHeaders = splitLine(lines[0]);
-  _skuImportRows    = lines.slice(1).map(splitLine);
-  // ניחוש מיפוי אוטומטי לפי שם עמודה — ניתן לשנות ידנית בכל מקרה
-  const guesses = {
-    code:             /^(מק"?ט|קוד\s*פריט|sku|code|item.?code)$/i,
-    name:             /^(שם|תיאור|name|description)$/i,
-    price:            /^(מחיר|מחיר\s*יחידה|price|unit.?price)$/i,
-    hashavshevetCode: /^(קוד\s*חשבשבת|hashavshevet|מזהה)$/i,
-    active:           /^(פעיל|status|active|סטטוס)$/i,
-  };
-  _skuImportMapping = {};
-  _skuImportHeaders.forEach((h,i)=>{
-    for(const [field,re] of Object.entries(guesses)){
-      if(re.test(h.trim())){ _skuImportMapping[i]=field; break; }
-    }
-  });
-  renderPricing();
-}
-
-function setSkuImportMapping(colIdx, field){
-  if(field) _skuImportMapping[colIdx]=field; else delete _skuImportMapping[colIdx];
-  renderPricing();
-}
-
-async function runSkuImport(){
-  const codeCol = Object.keys(_skuImportMapping).find(i=>_skuImportMapping[i]==='code');
-  if(codeCol===undefined){ showToast('חובה למפות עמודת מק"ט לפני ייבוא'); return; }
-  let created=0, skipped=0, failed=0;
-  const priceUpdates = {};
-  for(const row of _skuImportRows){
-    const code = (row[codeCol]||'').trim();
-    if(!code){ skipped++; continue; }
-    const fields = {};
-    for(const [colIdx, field] of Object.entries(_skuImportMapping)){
-      if(field==='code') continue;
-      const val = row[colIdx];
-      if(val===undefined || val==='') continue;
-      if(field==='price'){ priceUpdates[code.toUpperCase().trim()] = parseFloat(val)||0; continue; }
-      if(field==='active'){ fields.active = !/^(0|false|לא|לא\s*פעיל|inactive|no)$/i.test(val.trim()); continue; }
-      fields[field] = val;
-    }
-    try{ await syncSkuCatalogFromHashavshevet(code, fields); created++; }
-    catch(e){ console.error('skuImport row failed:', code, e); failed++; }
-  }
-  if(Object.keys(priceUpdates).length){
-    await savePricesGlobal({...globalPrices, ...priceUpdates}).catch(e=>console.error('skuImport prices:',e));
-  }
-  _skuImportOpen=false; _skuImportHeaders=[]; _skuImportRows=[]; _skuImportMapping={};
-  showToast(`✓ יובאו ${created} מק"טים${skipped?` · ${skipped} דולגו (בלי מק"ט)`:''}${failed?` · ${failed} נכשלו`:''}`);
-  renderPricing();
-}
-
-function _skuImportPanelHtml(){
-  if(!_skuImportOpen) return `<button onclick="toggleSkuImport()" style="width:100%;padding:10px;margin-bottom:16px;background:var(--bg2);border:1px dashed var(--border);border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:var(--text);cursor:pointer;">📥 ייבוא בבת אחת מחשבשבת (CSV)</button>`;
-  const fieldOptions = [['','— התעלם —'],['code','מק"ט'],['name','שם'],['price','מחיר כללי'],['hashavshevetCode','קוד חשבשבת'],['active','פעיל']];
-  const mappingUi = _skuImportHeaders.length ? `
-    <div style="margin:12px 0;">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;">מיפוי עמודות (נוחש אוטומטית — אפשר לשנות):</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${_skuImportHeaders.map((h,i)=>`
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 8px;">
-            <div style="font-size:10px;color:var(--muted);margin-bottom:3px;">${lgEsc(h)}</div>
-            <select onchange="setSkuImportMapping(${i},this.value)" style="font-size:11px;padding:2px;border:1px solid var(--border);border-radius:3px;">
-              ${fieldOptions.map(([v,l])=>`<option value="${v}" ${_skuImportMapping[i]===v?'selected':''}>${l}</option>`).join('')}
-            </select>
-          </div>`).join('')}
-      </div>
-    </div>
-    <div style="max-height:160px;overflow:auto;border:1px solid var(--border);border-radius:6px;margin-bottom:10px;">
-      <table class="price-table" style="font-size:11px;">
-        <thead><tr>${_skuImportHeaders.map(h=>`<th>${lgEsc(h)}</th>`).join('')}</tr></thead>
-        <tbody>${_skuImportRows.slice(0,8).map(r=>`<tr>${r.map(c=>`<td>${lgEsc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
-      </table>
-      ${_skuImportRows.length>8?`<div style="padding:4px 8px;color:var(--muted);font-size:10px;">... ועוד ${_skuImportRows.length-8} שורות</div>`:''}
-    </div>
-    <button onclick="runSkuImport()" style="width:100%;padding:9px;background:var(--green);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;border-radius:6px;cursor:pointer;margin-bottom:8px;">✓ ייבא ${_skuImportRows.length} רשומות</button>
-  ` : '';
-  return `
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:8px;">📥 ייבוא מחשבשבת — הדבק CSV (או ייצוא מ-Excel)</div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:8px;">שורה ראשונה = כותרות עמודות. נוגע רק בשדות עסקיים (מק"ט/שם/מחיר/קוד חשבשבת/פעיל) — לא בשדות תפעוליים.</p>
-      <textarea id="skuImportText" placeholder='מק"ט,שם,מחיר&#10;8SGMH,8 מ"מ שקוף גרפיקה מחוסם,300' rows="4" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:12px;margin-bottom:8px;" oninput="parseSkuImportText()"></textarea>
-      ${mappingUi}
-      <button onclick="toggleSkuImport()" style="width:100%;padding:7px;background:none;border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">סגור</button>
-    </div>`;
 }
 
 // חיבור API אמיתי — קורא ל-/api/hashavshevet-items (סוד ונתוני חתימה נשארים בשרת, אף פעם לא בדפדפן).
@@ -2017,29 +1899,7 @@ document.addEventListener('visibilitychange', () => {
             <div class="iw-input-row">
               <input class="iw-code" id="iwCode" placeholder="קוד (8SMH, 6CM...)" maxlength="8" list="iwCodeList"
                 oninput="iwPreview(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();iwAdd();}">
-              <datalist id="iwCodeList">
-                <option value="8SMH">8מ"מ שקוף מחוסם</option>
-                <option value="8SM">8מ"מ שקוף מלוטש</option>
-                <option value="4SMH">4מ"מ שקוף מחוסם</option>
-                <option value="6SMH">6מ"מ שקוף מחוסם</option>
-                <option value="6SM">6מ"מ שקוף מלוטש</option>
-                <option value="10SMH">10מ"מ שקוף מחוסם</option>
-                <option value="10SM">10מ"מ שקוף מלוטש</option>
-                <option value="8CMH">8מ"מ קליר מחוסם</option>
-                <option value="8CM">8מ"מ קליר מלוטש</option>
-                <option value="6CM">6מ"מ קליר מלוטש</option>
-                <option value="10CMH">10מ"מ קליר מחוסם</option>
-                <option value="10CM">10מ"מ קליר מלוטש</option>
-                <option value="8AMH">8מ"מ אפור מחוסם</option>
-                <option value="8AM">8מ"מ אפור מלוטש</option>
-                <option value="8BMH">8מ"מ ברונזה מחוסם</option>
-                <option value="8BM">8מ"מ ברונזה מלוטש</option>
-                <option value="8GMH">8מ"מ גרניט מחוסם</option>
-                <option value="8AC">8מ"מ אסיד קליר מחוסם</option>
-                <option value="8GS">8מ"מ גלינה שקוף מלוטש</option>
-                <option value="8GC">8מ"מ גלינה קליר מלוטש</option>
-                <option value="5M">5מ"מ מראה מלוטש</option>
-              </datalist>
+              <datalist id="iwCodeList"></datalist>
               <span class="iw-preview" id="iwPreview">—</span>
               <input class="iw-dim" id="iwW" placeholder="800" type="text"
                 oninput="iwDimPrev('iwW','iwWPrev')" onkeydown="event.stopPropagation();">
@@ -3006,6 +2866,17 @@ function iwResolve(code){
   const c = code.toUpperCase().trim();
   // skuCatalog (חדש, Firebase) גובר כשקיים; נופל חזרה ל-IW_CODES הישן בדיוק כמו היום
   return lgResolveSkuCode(c, skuCatalogMap) || IW_CODES[c] || null;
+}
+
+// רשימת ההשלמה האוטומטית בשדה הקוד — כל המק"טים הפעילים שמסונכרנים מחשבשבת (skuCatalog).
+// מתעדכן בכל שינוי בקטלוג (ר' listenSkuCatalog ב-load()), לא כולל יותר את הרשימה הישנה הסטטית.
+function _lgRenderIwCodeList(){
+  const dl = document.getElementById('iwCodeList');
+  if(!dl) return;
+  const list = Object.values(skuCatalogMap)
+    .filter(e => e && e.code && e.active !== false)
+    .sort((a,b)=>String(a.code).localeCompare(String(b.code)));
+  dl.innerHTML = list.map(e => `<option value="${lgEsc(e.code)}">${lgEsc(e.name||e.code)}</option>`).join('');
 }
 
 function iwPreview(code){

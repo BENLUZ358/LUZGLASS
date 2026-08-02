@@ -669,6 +669,23 @@ function lgFindPriceItem(glassName){
 const LG_SKU_BUSINESS_FIELDS    = ['name', 'hashavshevetCode', 'active', 'source'];
 const LG_SKU_OPERATIONAL_FIELDS = ['glass', 'mm', 'proc', 'graphic'];
 
+// ניחוש שדות תפעוליים מתוך שם הפריט בחשבשבת (למשל '8 מ"מ שקוף מחוסם') — משמש רק כברירת מחדל
+// חד-פעמית בסנכרון ראשון של מק"ט חדש (ר' syncSkuCatalogFromHashavshevet). לעולם לא דורס ערך
+// תפעולי קיים — עריכה ידנית שכבר בוצעה תמיד גוברת על הניחוש.
+const LG_GLASS_TYPES_BY_LENGTH = ['אסיד קליר', 'גלינה שקוף', 'גלינה קליר', 'שקוף', 'קליר', 'אפור', 'ברונזה', 'גרניט', 'מראה'];
+function lgGuessOperationalFromName(name) {
+  const n = String(name || '');
+  const guess = {};
+  const mmMatch = n.match(/(\d+)\s*מ["'׳״]{1,2}מ/);
+  if (mmMatch) guess.mm = parseInt(mmMatch[1], 10);
+  const glass = LG_GLASS_TYPES_BY_LENGTH.find(g => n.includes(g));
+  if (glass) guess.glass = glass;
+  if (n.includes('מחוסם')) guess.proc = 'chisum';
+  else if (n.includes('מלוטש')) guess.proc = 'litush';
+  if (n.includes('גרפיקה')) guess.graphic = true;
+  return guess;
+}
+
 async function getSkuCatalog() {
   const snap = await _lgDb.ref('skuCatalog').once('value');
   return snap.exists() ? Object.values(snap.val()) : [];
@@ -715,8 +732,14 @@ async function syncSkuCatalogFromHashavshevet(code, businessFields) {
   safe.source = 'hashavshevet';
   const snap     = await _lgDb.ref('skuCatalog/' + c).once('value');
   const existing = snap.val() || {};
+  // ברירת מחדל לשדות תפעוליים מתוך שם הפריט — רק לשדה שעדיין לא הוגדר בכלל (לא דורס עריכה קיימת).
+  // זהו ניחוש טקסטואלי, לא ודאי — מסומן ב-opAuto כדי שיוצג כ"לא מאומת" עד לבדיקה ידנית (ר' saveSkuCatalogItem).
+  const guess = lgGuessOperationalFromName(safe.name || existing.name || '');
+  const opFill = {};
+  LG_SKU_OPERATIONAL_FIELDS.forEach(k => { if (existing[k] === undefined && guess[k] !== undefined) opFill[k] = guess[k]; });
+  if (Object.keys(opFill).length) opFill.opAuto = true;
   const record   = _lgClean({
-    ...existing, ...safe,
+    ...existing, ...safe, ...opFill,
     code:      c,
     createdAt: existing.createdAt || Date.now(),
     updatedAt: Date.now()
@@ -730,7 +753,8 @@ async function syncSkuCatalogFromHashavshevet(code, businessFields) {
 function lgResolveSkuCode(code, skuCatalogMap) {
   const c = String(code || '').toUpperCase().trim();
   const e = skuCatalogMap && skuCatalogMap[c];
-  if (!e || e.active === false) return null;
+  // בלי proc תפעולי אין מה להציג בבטחה — נופלים לקטלוג הישן (IW_CODES) אם יש שם הגדרה תקינה
+  if (!e || e.active === false || !e.proc) return null;
   return { glass: e.glass, mm: e.mm, proc: e.proc, graphic: !!e.graphic, label: e.name, sku: c, _fromCatalog: true };
 }
 
