@@ -127,6 +127,8 @@
   if(s.role === 'client') { window.location.href = 'portal.html'; return; }
 })();
 
+const _loginBtn = document.querySelector('.btn-login');
+
 // ── התחברות ────────────────────────────────────────────────────────────
 async function doLogin(){
   const phone    = document.getElementById('username').value.trim();
