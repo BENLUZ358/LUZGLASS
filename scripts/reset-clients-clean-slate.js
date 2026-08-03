@@ -63,7 +63,9 @@ const app = initializeApp({
 const db   = getDatabase(app);
 const auth = getAuth(app);
 
+const EMAIL_DOMAIN = 'luzglass.local';
 function normalizePhone(p) { return String(p || '').replace(/[-\s]/g, ''); }
+function syntheticEmail(phone) { return `${normalizePhone(phone)}@${EMAIL_DOMAIN}`; }
 
 // הגנה כפולה על האדמין: גם לפי role וגם לפי מספר הטלפון הקבוע
 function isProtectedAdmin(u) {
@@ -118,11 +120,13 @@ async function main() {
     const phone = normalizePhone(u.phone || u.id);
     if (!phone) { report.failed.push({ user: u, reason: 'אין מספר טלפון' }); continue; }
 
-    // חשבון Auth (uid = טלפון, לפי המוסכמה שנקבעה ב-migrate-users-to-auth.js)
+    // חשבון Auth — מאתרים לפי אימייל ולא לפי uid: משתמשים שנוצרו מהדפדפן
+    // מקבלים uid אקראי, רק האימייל ({phone}@luzglass.local) עקבי תמיד.
     try {
-      await auth.deleteUser(phone);
+      const rec = await auth.getUserByEmail(syntheticEmail(phone));
+      await auth.deleteUser(rec.uid);
       report.authDeleted.push(phone);
-      console.log(`   ✓ נמחק חשבון Auth: ${phone}`);
+      console.log(`   ✓ נמחק חשבון Auth: ${phone}  (uid=${rec.uid})`);
     } catch (err) {
       if (err.code === 'auth/user-not-found') {
         report.authMissing.push(phone);
@@ -177,10 +181,13 @@ async function main() {
     checks.push({ name: `${node} נשמר`, ok: n > 0, detail: `${n} רשומות` });
   }
 
-  // אין חשבונות Auth יתומים — כל uid חייב להתאים למשתמש קיים ב-users/
-  const validUids = new Set(afterUsers.map(u => normalizePhone(u.phone || u.id)));
+  // אין חשבונות Auth יתומים — משווים לפי האימייל (הטלפון), לא לפי uid,
+  // כי uid של משתמש שנוצר מהדפדפן הוא אקראי ולא שווה לטלפון.
+  const validPhones = new Set(afterUsers.map(u => normalizePhone(u.phone || u.id)));
   const listed = await auth.listUsers(1000);
-  const orphans = listed.users.map(r => r.uid).filter(uid => !validUids.has(uid));
+  const orphans = listed.users
+    .filter(r => !validPhones.has(String(r.email || '').split('@')[0]))
+    .map(r => `${r.email || r.uid}`);
   checks.push({
     name: 'אין חשבונות Auth יתומים',
     ok: orphans.length === 0,

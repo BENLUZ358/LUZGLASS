@@ -291,6 +291,15 @@ async function getClientByPhone(phone) {
 //  אי אפשר "לזייף" גישה יותר דרך קונסולת הדפדפן — צריך session אמיתי
 //  שנוצר רק דרך lgLoginByPhone (סעיף 11 למטה).
 
+// הטלפון של המשתמש המחובר = המפתח ב-users/. נגזר מהאימייל המלאכותי
+// ({phone}@luzglass.local) ולא מ-uid: משתמשים שנוצרו דרך Admin SDK קיבלו
+// uid == טלפון, אבל createUserWithEmailAndPassword בדפדפן לא מאפשר לקבוע
+// uid — Firebase מגריל אותו. האימייל הוא המזהה היחיד שנכון בשני המקרים.
+function _lgPhoneFromAuthUser(fbUser) {
+  const fromEmail = String(fbUser && fbUser.email || '').split('@')[0];
+  return _lgNormalizePhone(fromEmail || (fbUser && fbUser.uid) || '');
+}
+
 function lgGetSession()      { try { return JSON.parse(sessionStorage.getItem('lgSession') || '{}'); } catch(e) { return {}; } }
 function lgSetSession(data)  { sessionStorage.setItem('lgSession', JSON.stringify(data)); }
 function lgClearSession()    { sessionStorage.removeItem('lgSession'); }
@@ -310,7 +319,7 @@ function lgRequireAuthAsync(role) {
     firebase.auth().onAuthStateChanged(async (fbUser) => {
       if (!fbUser) { lgClearSession(); window.location.href = 'login.html'; resolve(null); return; }
       try {
-        const phone = fbUser.uid; // uid = מספר טלפון מנורמל, נקבע כך ביצירת המשתמש
+        const phone = _lgPhoneFromAuthUser(fbUser);
         const snap  = await _lgDb.ref('users/' + phone).once('value');
         const u     = snap.val();
         if (!u || (role && u.role !== role && u.role !== 'admin')) {
