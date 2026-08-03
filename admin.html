@@ -1155,6 +1155,9 @@ function renderClientPriceTab(el){
     <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
       חיפוש לקוח מתוך כרטיסי הלקוחות של חשבשבת. מחיר מיוחד ללקוח מוצג בלבד (לא ניתן לעריכה ידנית) — מתעדכן עם סנכרון.
     </p>
+    <button onclick="syncAccountsFromHashavshevetNow()" ${_hbAccSyncing?'disabled':''} style="width:100%;padding:11px;margin-bottom:12px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;${_hbAccSyncing?'opacity:0.6;':''}">
+      ${_hbAccSyncing?'⏳ מסנכרן...':'🔄 סנכרן לקוחות מחשבשבת עכשיו (API)'}
+    </button>
     <input type="text" placeholder="חפש לקוח לפי שם..." value="${lgEsc(_clientSearchQuery)}" oninput="setClientSearch(this.value)"
       style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;margin-bottom:12px;">`;
 
@@ -1225,6 +1228,38 @@ async function syncFromHashavshevetNow(){
     showToast('⚠️ סנכרון נכשל — בדוק קונסול');
   }finally{
     _hbSyncing = false;
+    renderPricing();
+  }
+}
+
+// חיבור דוח "כרטיסי לקוח" — אותו דפוס בדיוק כמו syncFromHashavshevetNow, מקור נתונים שונה.
+let _hbAccSyncing = false;
+async function syncAccountsFromHashavshevetNow(){
+  if(_hbAccSyncing) return;
+  _hbAccSyncing = true;
+  showToast('מסנכרן לקוחות מול חשבשבת...');
+  try{
+    const res = await fetch('/api/hashavshevet-accounts');
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP '+res.status));
+
+    const BATCH = 20;
+    let created=0;
+    for(let i=0;i<data.accounts.length;i+=BATCH){
+      const batch = data.accounts.slice(i,i+BATCH);
+      await Promise.all(batch.map(async acc=>{
+        try{
+          await syncHashavshevetAccount(acc.key, { name: acc.name, phone: acc.phone, hashavshevetCode: acc.key, active: true });
+          created++;
+        }catch(e){ console.error('syncAccountsFromHashavshevetNow account failed:', acc.key, e); }
+      }));
+    }
+    showToast(`✓ סונכרנו ${created} לקוחות מחשבשבת`);
+  }catch(e){
+    console.error('syncAccountsFromHashavshevetNow:', e);
+    showToast('⚠️ סנכרון נכשל — בדוק קונסול');
+  }finally{
+    _hbAccSyncing = false;
     renderPricing();
   }
 }
