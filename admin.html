@@ -3166,14 +3166,37 @@ let _umClientSearchQuery = '';
 let _umClientSelectedKey = null;
 let _umLinkedCustomerIds = new Set(); // מפתחות חשבשבת שכבר נוצר להם משתמש
 
+// מעדכן רק את רשימת התוצאות — תיבת החיפוש עצמה לא מרונדרת מחדש,
+// אחרת הדפדפן מאבד את הפוקוס אחרי כל תו שמוקלד.
 function umSetClientSearch(q){
   _umClientSearchQuery = q;
   _umClientSelectedKey = null;
-  _renderUmClientLinkPanel();
+  _renderUmClientResults();
 }
 function umSelectClientAccount(key){
   _umClientSelectedKey = key;
   _renderUmClientLinkPanel();
+}
+
+function _renderUmClientResults(){
+  const box = document.getElementById('umClientResults');
+  if(!box) return;
+  const accounts = Object.values(hashavshevetAccountsMap);
+  const q        = _umClientSearchQuery.trim();
+  const filtered = q ? accounts.filter(a=>(a.name||'').includes(q)) : accounts.slice(0, 50);
+
+  box.innerHTML = `
+    ${filtered.length ? `<div style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
+      ${filtered.map(a=>{
+        const taken = _umLinkedCustomerIds.has(a.key);
+        return `<div ${taken?'':`onclick="umSelectClientAccount('${lgJsStr(a.key)}')"`}
+          style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;${taken?'opacity:0.45;':'cursor:pointer;'}">
+          <strong>${lgEsc(a.name||a.key)}</strong>${a.phone?' · '+lgEsc(a.phone):''}
+          ${taken?'<span style="font-size:10px;color:var(--muted);"> · כבר קיים משתמש</span>':''}
+        </div>`;
+      }).join('')}
+    </div>` : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">לא נמצא לקוח תואם</div>`}
+    ${!q && accounts.length>50 ? `<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">מוצגים 50 מתוך ${accounts.length} — חפש לפי שם לצמצום</div>` : ''}`;
 }
 
 function _renderUmClientLinkPanel(){
@@ -3189,23 +3212,30 @@ function _renderUmClientLinkPanel(){
     return;
   }
 
-  const q        = _umClientSearchQuery.trim();
-  const filtered = q ? accounts.filter(a=>(a.name||'').includes(q)) : accounts.slice(0, 50);
   const selected = _umClientSelectedKey ? hashavshevetAccountsMap[_umClientSelectedKey] : null;
+  const lbl = 'display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px;';
+  const inp = 'width:100%;padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;';
 
   if(selected){
     const defPhone = lgEsc(selected.phone||'');
     el.innerHTML = `
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;">
         <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${lgEsc(selected.name||selected.key)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">מפתח חשבשבת: ${lgEsc(selected.key)}</div>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <input id="umLinkPhone" value="${defPhone}" placeholder="מספר טלפון * (שם משתמש לכניסה)" oninput="_umSyncPassPlaceholder()"
-            style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-          <input id="umLinkPass" value="${defPhone}" placeholder="סיסמה (ברירת מחדל: הטלפון)" oninput="this.dataset.touched='1'"
-            style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-          <input id="umLinkVat" placeholder="מספר ע״מ (רשות)"
-            style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">מפתח חשבשבת: ${lgEsc(selected.key)}</div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <label style="${lbl}">👤 שם משתמש לכניסה (= מספר הטלפון)</label>
+            <input id="umLinkPhone" value="${defPhone}" placeholder="05X-XXXXXXX" oninput="_umSyncPassPlaceholder()" style="${inp}">
+          </div>
+          <div>
+            <label style="${lbl}">🔒 סיסמה (לפחות 6 תווים)</label>
+            <input id="umLinkPass" value="${defPhone}" oninput="this.dataset.touched='1'" style="${inp}">
+            <div style="font-size:10px;color:var(--muted);margin-top:4px;">ברירת מחדל: זהה לטלפון. אפשר לשנות — זה מה שהלקוח יקליד.</div>
+          </div>
+          <div>
+            <label style="${lbl}">מספר ע״מ (רשות)</label>
+            <input id="umLinkVat" placeholder="לא חובה" style="${inp}">
+          </div>
           <div style="display:flex;gap:8px;">
             <button onclick="umGrantClientLogin('${lgJsStr(selected.key)}')"
               style="flex:1;padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">🔑 צור התחברות</button>
@@ -3218,19 +3248,10 @@ function _renderUmClientLinkPanel(){
   }
 
   el.innerHTML = `
-    <input type="text" placeholder="חפש לקוח בחשבשבת לפי שם..." value="${lgEsc(_umClientSearchQuery)}" oninput="umSetClientSearch(this.value)"
+    <input type="text" id="umClientSearchInput" placeholder="חפש לקוח בחשבשבת לפי שם..." value="${lgEsc(_umClientSearchQuery)}" oninput="umSetClientSearch(this.value)"
       style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;margin-bottom:8px;">
-    ${filtered.length ? `<div style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
-      ${filtered.map(a=>{
-        const taken = _umLinkedCustomerIds.has(a.key);
-        return `<div ${taken?'':`onclick="umSelectClientAccount('${lgJsStr(a.key)}')"`}
-          style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;${taken?'opacity:0.45;':'cursor:pointer;'}">
-          <strong>${lgEsc(a.name||a.key)}</strong>${a.phone?' · '+lgEsc(a.phone):''}
-          ${taken?'<span style="font-size:10px;color:var(--muted);"> · כבר קיים משתמש</span>':''}
-        </div>`;
-      }).join('')}
-    </div>` : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">לא נמצא לקוח תואם</div>`}
-    ${!q && accounts.length>50 ? `<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">מוצגים 50 מתוך ${accounts.length} — חפש לפי שם לצמצום</div>` : ''}`;
+    <div id="umClientResults"></div>`;
+  _renderUmClientResults();
 }
 
 // שומר על ברירת המחדל "סיסמה = טלפון" כל עוד המשתמש לא שינה את הסיסמה ידנית
@@ -3251,7 +3272,7 @@ async function umGrantClientLogin(key){
   if(pass && pass.length < 6){ showToast('הסיסמה חייבת להיות לפחות 6 תווים'); return; }
 
   try {
-    await lgProvisionClientFromHashavshevet({
+    const savedPhone = await lgProvisionClientFromHashavshevet({
       customerId: acc.key, name: acc.name || acc.key, phone, password: pass, vatId
     });
     showToast('✓ נוצרה התחברות ללקוח');
@@ -3259,10 +3280,41 @@ async function umGrantClientLogin(key){
     _umClientSearchQuery = '';
     await _loadUsers();
     _renderUmClientLinkPanel();
+    // מציג את פרטי הכניסה בבירור — זו ההזדמנות היחידה לראות את הסיסמה,
+    // היא נשמרת מוצפנת ב-Firebase Auth ולא ניתנת לשליפה אחר כך.
+    _umShowCredentials(acc.name || acc.key, savedPhone, pass || savedPhone);
   } catch(e){
     console.error('umGrantClientLogin:', e);
     showToast('שגיאה: ' + e.message);
   }
+}
+
+function _umShowCredentials(name, username, password){
+  const box = document.getElementById('umCredsBox');
+  if(!box) return;
+  box.style.display = '';
+  box.innerHTML = `
+    <div style="background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.35);border-radius:8px;padding:14px;">
+      <div style="font-size:13px;font-weight:900;color:#1e8449;margin-bottom:2px;">✓ נוצרה התחברות ל${lgEsc(name)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">מסור ללקוח את הפרטים הבאים — הסיסמה לא ניתנת לצפייה מאוחר יותר.</div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:13px;line-height:2;">
+        <div>👤 <strong>שם משתמש:</strong> <span style="font-family:monospace;font-size:14px;">${lgEsc(username)}</span></div>
+        <div>🔒 <strong>סיסמה:</strong> <span style="font-family:monospace;font-size:14px;">${lgEsc(password)}</span></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="_umCopyCreds('${lgJsStr(username)}','${lgJsStr(password)}')"
+          style="flex:1;padding:9px;background:rgba(39,174,96,0.15);border:1px solid rgba(39,174,96,0.4);color:#1e8449;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:6px;">📋 העתק פרטים</button>
+        <button onclick="document.getElementById('umCredsBox').style.display='none'"
+          style="padding:9px 14px;background:none;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:6px;">סגור</button>
+      </div>
+    </div>`;
+}
+
+function _umCopyCreds(username, password){
+  const text = `כניסה למערכת LuzGlass\nכתובת: ${location.origin}/login.html\nשם משתמש: ${username}\nסיסמה: ${password}`;
+  navigator.clipboard.writeText(text)
+    .then(()=>showToast('✓ הפרטים הועתקו'))
+    .catch(()=>showToast('לא ניתן להעתיק — סמן ידנית'));
 }
 
 async function _loadUsers(){
@@ -3293,7 +3345,7 @@ function _renderUserList(users, elId){
           ${u.source==='hashavshevet'?'<span style="font-size:10px;background:rgba(184,146,42,0.12);color:var(--gold);padding:1px 6px;border-radius:3px">חשבשבת</span>':''}
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">
-          ${lgEsc(u.phone||'')}${u.businessName?' · '+lgEsc(u.businessName):''}${u.customerId?' · מפתח: '+lgEsc(u.customerId):''}${u.vatId?' · ע"מ: '+lgEsc(u.vatId):''}
+          👤 ${lgEsc(u.phone||'')}${u.customerId?' · מפתח: '+lgEsc(u.customerId):''}${u.vatId?' · ע"מ: '+lgEsc(u.vatId):''}
         </div>
       </div>
       <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
@@ -3478,6 +3530,7 @@ async function migrateToBusinessNames(){
       <div id="umTabClients">
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת לקוחות</div>
         <div id="umListClients" style="margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;"></div>
+        <div id="umCredsBox" style="display:none;margin-bottom:16px;"></div>
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ לקוח חדש מכרטיס חשבשבת</div>
         <div id="umClientLinkPanel"></div>
       </div>
