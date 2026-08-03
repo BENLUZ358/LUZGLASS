@@ -434,6 +434,8 @@ function load() {
     list.forEach(e => { if (e && e.key) hashavshevetAccountsMap[e.key] = e; });
     const ov = document.getElementById('pricingOv');
     if (ov && ov.classList.contains('open')) renderPricing();
+    const umOv = document.getElementById('userMgmtOv');
+    if (umOv && umOv.style.display !== 'none') _renderUmClientLinkPanel();
   });
 }
 
@@ -3142,6 +3144,7 @@ function openUserMgmt(){
   document.getElementById('userMgmtOv').style.display = 'flex';
   unavClose();
   _loadUsers();
+  _renderUmClientLinkPanel();
 }
 function closeUserMgmt(){
   document.getElementById('userMgmtOv').style.display = 'none';
@@ -3154,15 +3157,112 @@ function setUmTab(tab){
   document.getElementById('umBtnAdmins').style.fontWeight  = tab==='admins'  ? '900' : '600';
   document.getElementById('umBtnClients').style.borderBottom = tab==='clients' ? '2px solid var(--gold)' : '2px solid transparent';
   document.getElementById('umBtnAdmins').style.borderBottom  = tab==='admins'  ? '2px solid var(--gold)' : '2px solid transparent';
-  // שדות ייחודיים ללקוח (עסק + מזהה חשבשבת + ע"מ)
-  const clientFields = ['umBusiness','umCustomerId','umVatId'];
-  clientFields.forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.style.display = tab==='clients' ? '' : 'none';
-  });
-  // עדכן כפתור
-  const btn = document.getElementById('umCreateBtn');
-  if(btn) btn.textContent = tab==='clients' ? '+ צור לקוח' : '+ צור אדמין';
+  if(tab==='clients') _renderUmClientLinkPanel();
+}
+
+// ─── יצירת לקוח מכרטיס חשבשבת — חיפוש ובחירה ────────────────────────
+// מבוסס על אותו דפוס כמו renderClientPriceTab במסך המחירונים.
+let _umClientSearchQuery = '';
+let _umClientSelectedKey = null;
+let _umLinkedCustomerIds = new Set(); // מפתחות חשבשבת שכבר נוצר להם משתמש
+
+function umSetClientSearch(q){
+  _umClientSearchQuery = q;
+  _umClientSelectedKey = null;
+  _renderUmClientLinkPanel();
+}
+function umSelectClientAccount(key){
+  _umClientSelectedKey = key;
+  _renderUmClientLinkPanel();
+}
+
+function _renderUmClientLinkPanel(){
+  const el = document.getElementById('umClientLinkPanel');
+  if(!el) return;
+  const accounts = Object.values(hashavshevetAccountsMap);
+
+  if(!accounts.length){
+    el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;background:var(--bg2);border-radius:8px;line-height:1.7;">
+      אין עדיין לקוחות מסונכרנים מחשבשבת.<br>
+      פתח <strong>מחירונים → לפי לקוח</strong> ולחץ "🔄 סנכרן לקוחות מחשבשבת עכשיו".
+    </div>`;
+    return;
+  }
+
+  const q        = _umClientSearchQuery.trim();
+  const filtered = q ? accounts.filter(a=>(a.name||'').includes(q)) : accounts.slice(0, 50);
+  const selected = _umClientSelectedKey ? hashavshevetAccountsMap[_umClientSelectedKey] : null;
+
+  if(selected){
+    const defPhone = lgEsc(selected.phone||'');
+    el.innerHTML = `
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${lgEsc(selected.name||selected.key)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">מפתח חשבשבת: ${lgEsc(selected.key)}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <input id="umLinkPhone" value="${defPhone}" placeholder="מספר טלפון * (שם משתמש לכניסה)" oninput="_umSyncPassPlaceholder()"
+            style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+          <input id="umLinkPass" value="${defPhone}" placeholder="סיסמה (ברירת מחדל: הטלפון)" oninput="this.dataset.touched='1'"
+            style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+          <input id="umLinkVat" placeholder="מספר ע״מ (רשות)"
+            style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+          <div style="display:flex;gap:8px;">
+            <button onclick="umGrantClientLogin('${lgJsStr(selected.key)}')"
+              style="flex:1;padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">🔑 צור התחברות</button>
+            <button onclick="umSelectClientAccount(null)"
+              style="padding:11px 16px;background:none;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;border-radius:6px;">ביטול</button>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <input type="text" placeholder="חפש לקוח בחשבשבת לפי שם..." value="${lgEsc(_umClientSearchQuery)}" oninput="umSetClientSearch(this.value)"
+      style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;margin-bottom:8px;">
+    ${filtered.length ? `<div style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;">
+      ${filtered.map(a=>{
+        const taken = _umLinkedCustomerIds.has(a.key);
+        return `<div ${taken?'':`onclick="umSelectClientAccount('${lgJsStr(a.key)}')"`}
+          style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;${taken?'opacity:0.45;':'cursor:pointer;'}">
+          <strong>${lgEsc(a.name||a.key)}</strong>${a.phone?' · '+lgEsc(a.phone):''}
+          ${taken?'<span style="font-size:10px;color:var(--muted);"> · כבר קיים משתמש</span>':''}
+        </div>`;
+      }).join('')}
+    </div>` : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">לא נמצא לקוח תואם</div>`}
+    ${!q && accounts.length>50 ? `<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">מוצגים 50 מתוך ${accounts.length} — חפש לפי שם לצמצום</div>` : ''}`;
+}
+
+// שומר על ברירת המחדל "סיסמה = טלפון" כל עוד המשתמש לא שינה את הסיסמה ידנית
+function _umSyncPassPlaceholder(){
+  const phoneEl = document.getElementById('umLinkPhone');
+  const passEl  = document.getElementById('umLinkPass');
+  if(!phoneEl || !passEl) return;
+  if(!passEl.dataset.touched) passEl.value = phoneEl.value;
+}
+
+async function umGrantClientLogin(key){
+  const acc = hashavshevetAccountsMap[key];
+  if(!acc){ showToast('כרטיס חשבשבת לא נמצא'); return; }
+  const phone = (document.getElementById('umLinkPhone')||{}).value?.trim() || '';
+  const pass  = (document.getElementById('umLinkPass')||{}).value?.trim()  || '';
+  const vatId = (document.getElementById('umLinkVat')||{}).value?.trim()   || '';
+  if(!phone){ showToast('נא להזין מספר טלפון'); return; }
+  if(pass && pass.length < 6){ showToast('הסיסמה חייבת להיות לפחות 6 תווים'); return; }
+
+  try {
+    await lgProvisionClientFromHashavshevet({
+      customerId: acc.key, name: acc.name || acc.key, phone, password: pass, vatId
+    });
+    showToast('✓ נוצרה התחברות ללקוח');
+    _umClientSelectedKey = null;
+    _umClientSearchQuery = '';
+    await _loadUsers();
+    _renderUmClientLinkPanel();
+  } catch(e){
+    console.error('umGrantClientLogin:', e);
+    showToast('שגיאה: ' + e.message);
+  }
 }
 
 async function _loadUsers(){
@@ -3170,6 +3270,7 @@ async function _loadUsers(){
     const users   = await lgGetAllUsers();
     const clients = users.filter(u => u.role === 'client');
     const admins  = users.filter(u => u.role === 'admin');
+    _umLinkedCustomerIds = new Set(users.map(u => u.customerId).filter(Boolean));
     _renderUserList(clients, 'umListClients');
     _renderUserList(admins,  'umListAdmins');
   } catch(e){ console.error('loadUsers:', e); }
@@ -3221,37 +3322,19 @@ async function umDeleteUser(id, name){
   } catch(e){ showToast('שגיאה: ' + e.message); }
 }
 
+// יצירת אדמין בלבד — לקוחות נוצרים דרך umGrantClientLogin מכרטיס חשבשבת
 async function umCreateUser(){
-  const role = _umTab === 'clients' ? 'client' : 'admin';
   const name     = document.getElementById('umName').value.trim();
   const phone    = document.getElementById('umPhone').value.trim();
   const password = document.getElementById('umPass').value.trim();
   if(!name || !phone || !password){ showToast('נא למלא שם, טלפון וסיסמה'); return; }
 
-  const data = { name, phone, password, role };
-  if(role === 'client'){
-    data.businessName = (document.getElementById('umBusiness')||{}).value?.trim() || '';
-    data.customerId   = (document.getElementById('umCustomerId')||{}).value?.trim() || '';
-    data.vatId        = (document.getElementById('umVatId')||{}).value?.trim() || '';
-    data.isDelivery   = !!(document.getElementById('umIsDelivery')||{}).checked;
-    data.active       = true;      // לקוחות ידניים תמיד פעילים
-    data.source       = 'manual';  // מקור: ידני (לעתיד: 'hashavshevet')
-  } else {
-    data.isMainAdmin = false;
-  }
-
   try {
-    await lgSaveUser(data);
-    // אם לקוח הובלות — עדכן גם הזמנות קיימות
-    if(role === 'client' && data.isDelivery){
-      await _propagateDeliveryToOrders(data.phone, true);
-    }
-    showToast('✓ משתמש נוצר/עודכן בהצלחה');
-    // נקה טופס
-    ['umName','umPhone','umPass','umBusiness','umCustomerId','umVatId'].forEach(id=>{
+    await lgSaveUser({ name, phone, password, role: 'admin', isMainAdmin: false });
+    showToast('✓ אדמין נוצר/עודכן בהצלחה');
+    ['umName','umPhone','umPass'].forEach(id=>{
       const el=document.getElementById(id); if(el) el.value='';
     });
-    const dEl = document.getElementById('umIsDelivery'); if(dEl) dEl.checked = false;
     _loadUsers();
   } catch(e){ showToast('שגיאה: ' + e.message); }
 }
@@ -3391,36 +3474,28 @@ async function migrateToBusinessNames(){
     <!-- body -->
     <div style="padding:16px 20px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;">
 
-      <!-- CLIENTS TAB -->
+      <!-- CLIENTS TAB — לקוחות נוצרים אך ורק מכרטיס חשבשבת -->
       <div id="umTabClients">
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת לקוחות</div>
         <div id="umListClients" style="margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;"></div>
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ לקוח חדש</div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ לקוח חדש מכרטיס חשבשבת</div>
+        <div id="umClientLinkPanel"></div>
       </div>
 
-      <!-- ADMINS TAB -->
+      <!-- ADMINS TAB — אדמינים תמיד ידניים, לעולם לא מחשבשבת -->
       <div id="umTabAdmins" style="display:none;">
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת אדמינים</div>
         <div id="umListAdmins" style="margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;"></div>
         <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ אדמין חדש</div>
-      </div>
-
-      <!-- SHARED FORM (משותף לשני הטאבים) -->
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <input id="umName"       placeholder="שם מלא *" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-        <input id="umBusiness"   placeholder="שם עסק" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-        <input id="umPhone"      placeholder="מספר טלפון * (שם משתמש לכניסה)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-        <input id="umCustomerId" placeholder="מפתח חשבשבת (customerId)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-        <input id="umVatId"      placeholder="מספר ע״מ" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-        <input id="umPass"       placeholder="סיסמה *" type="password" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#555;padding:4px 0;cursor:pointer;">
-          <input type="checkbox" id="umIsDelivery" style="width:16px;height:16px;cursor:pointer;">
-          🚚 לקוח הובלות (ההזמנות יעברו לטאב הובלות במקום "מוכן לאיסוף")
-        </label>
-        <button id="umCreateBtn" onclick="umCreateUser()"
-          style="padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
-          + צור לקוח
-        </button>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <input id="umName"  placeholder="שם מלא *" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+          <input id="umPhone" placeholder="מספר טלפון * (שם משתמש לכניסה)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+          <input id="umPass"  placeholder="סיסמה *" type="password" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
+          <button id="umCreateBtn" onclick="umCreateUser()"
+            style="padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+            + צור אדמין
+          </button>
+        </div>
       </div>
 
       <!-- מיגרציה: שמות עסק → מחירונים + הזמנות קיימות -->

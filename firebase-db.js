@@ -134,13 +134,30 @@ async function updateStage(id, stage) {
 
 // ─── 4. CRUD — הזמנות ────────────────────────────────────────────────
 
+// מזהה חשבשבת של הלקוח, לפי הטלפון שאיתו הוא מחובר. תוספתי בלבד —
+// orderClient נשאר כפי שהוא, שום סינון קיים לא משתנה.
+async function _lgLookupClientMeta(phone) {
+  const p = _lgNormalizePhone(phone || '');
+  if (!p) return {};
+  try {
+    const snap = await _lgDb.ref('users/' + p).once('value');
+    const u = snap.val();
+    if (!u) return {};
+    return { customerId: u.customerId || '', businessName: lgClientDisplayName(u) };
+  } catch (e) {
+    console.warn('[firebase-db] _lgLookupClientMeta:', e);
+    return {};
+  }
+}
+
 async function saveOrder(data) {
   const id     = data.id || ('ord_' + Date.now());
   const stage  = data.stage ?? lgStatusToStage(data.status || '') ?? '';
   const status = lgStageToStatus(stage);
   const normPhone = _lgNormalizePhone(data.phone || '');
+  const meta = await _lgLookupClientMeta(normPhone);
   const record = _lgClean({
-    ...data, id, stage, status,
+    ...meta, ...data, id, stage, status,
     phone:         normPhone,
     clientPhone:   normPhone,
     paymentStatus: data.paymentStatus || 'unpaid',
@@ -165,7 +182,9 @@ async function saveSubmission(data) {
   }
 
   const normPhone = _lgNormalizePhone(data.phone || '');
+  const meta = await _lgLookupClientMeta(normPhone);
   const record = _lgClean({
+    ...meta,
     ...data,
     id,
     stage:         '',
@@ -491,6 +510,64 @@ async function lgDeleteUser(id) {
   if (!phone || phone === LG_MAIN_ADMIN_PHONE)
     throw new Error('לא ניתן למחוק את האדמין הראשי');
   await _lgDb.ref('users/' + phone).remove();
+}
+
+// ─── 11ב. יצירת התחברות ללקוח מתוך כרטיס חשבשבת ────────────────────
+//
+//  createUserWithEmailAndPassword מחבר אוטומטית כמשתמש החדש ומנתק את
+//  האדמין מהסשן שלו. לכן היצירה רצה על מופע Firebase שני ונפרד, שמצב
+//  ה-auth שלו אינו קשור למופע הראשי — האדמין נשאר מחובר.
+
+let _lgProvisionApp = null;
+function _lgProvisionAuth() {
+  if (!_lgProvisionApp) _lgProvisionApp = firebase.initializeApp(LG_CONFIG, 'lgProvision');
+  return _lgProvisionApp.auth();
+}
+
+// מחזיר את המשתמש שכבר נוצר עבור מפתח חשבשבת מסוים, או null
+async function lgFindUserByCustomerId(customerId) {
+  const c = String(customerId || '').trim();
+  if (!c) return null;
+  const users = await lgGetAllUsers();
+  return users.find(u => u.customerId === c) || null;
+}
+
+// יצירת לקוח חדש מכרטיס חשבשבת: חשבון Firebase Auth + רשומת users/{phone}.
+// הסיסמה נשמרת אך ורק ב-Firebase Auth — לא נכתב שדה password ל-RTDB.
+async function lgProvisionClientFromHashavshevet({ customerId, name, phone, password, vatId }) {
+  const p = _lgNormalizePhone(phone);
+  const c = String(customerId || '').trim();
+  if (!p) throw new Error('מספר טלפון חסר');
+  if (!c) throw new Error('מפתח חשבשבת חסר');
+  if (!name) throw new Error('שם לקוח חסר');
+
+  const users = await lgGetAllUsers();
+  if (users.some(u => _lgNormalizePhone(u.phone || u.id) === p))
+    throw new Error('כבר קיים משתמש עם מספר הטלפון הזה');
+  if (users.some(u => u.customerId === c))
+    throw new Error('כבר נוצר משתמש עבור כרטיס החשבשבת הזה');
+
+  try {
+    await _lgProvisionAuth().createUserWithEmailAndPassword(_lgSyntheticEmail(p), password || p);
+  } catch (e) {
+    if (e && e.code === 'auth/email-already-in-use')
+      throw new Error('קיים חשבון התחברות ישן עם הטלפון הזה — יש להריץ את סקריפט הניקוי');
+    if (e && e.code === 'auth/weak-password')
+      throw new Error('הסיסמה קצרה מדי — נדרשים לפחות 6 תווים');
+    throw e;
+  } finally {
+    await _lgProvisionAuth().signOut().catch(()=>{});
+  }
+
+  await lgSaveUser({
+    id: p, phone: p,
+    name, businessName: name,
+    customerId: c, hashavshevetCode: c,
+    vatId: vatId || '',
+    role: 'client', active: true,
+    source: 'hashavshevet', linkedAt: Date.now()
+  });
+  return p;
 }
 
 // ─── 12. מק"ט → שם פריט (מקור יחיד לכל המערכת) ─────────────────────
