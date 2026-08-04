@@ -375,6 +375,19 @@ function lgNormalizeOrder(o) {
     deliveryClient: !!o.deliveryClient,
     createdAt:     o.createdAt    || 0,
     updatedAt:     o.updatedAt    || 0,
+    // שדות "נעילת מחיר" ולקוח — היו נמחקים בשקט כאן, ולכן הנעילה מעולם לא
+    // באמת עבדה (lgLockAndAdvance בודק !order.totalFinal על אובייקט שעבר
+    // כאן, ותמיד קיבל undefined). totalFinal/pricesLockedAt נשארים בלי
+    // ברירת מחדל מאולצת — 0 הוא ערך נעילה אמיתי אפשרי, שונה מ"לא ננעל".
+    totalFinal:    o.totalFinal,
+    totalM2:       o.totalM2      || 0,
+    pricesLockedAt:o.pricesLockedAt || null,
+    lockedItems:   Array.isArray(o.lockedItems) ? o.lockedItems : [],
+    customerId:    o.customerId   || '',
+    businessName:  o.businessName || '',
+    clientPhone:   o.clientPhone  || '',
+    vatId:         o.vatId        || '',
+    paymentStatus: o.paymentStatus|| 'unpaid',
     _isSub:        String(o.id).startsWith('sub_')
   };
 }
@@ -749,8 +762,10 @@ function lgFindPriceItem(glassName){
     if(isKlir) return mm>=10?'tmp-10':'tmp-8-klir';
     return mm>=10?'tmp-10':'tmp-8';
   }
+  // עובי לא מוכר (למשל 7/9/11/13+) — עדיף להחזיר null (לא מתומחר, גלוי) מאשר
+  // לנחש "8 מ"מ קליר" בשקט; ניחוש שגוי כאן היה מוביל לנעילת מחיר שגוי, לא רק חסר.
   const map={4:'cl-4-pol',5:'cl-5-pol',6:'cl-6-pol',8:'cl-8-pol',10:'cl-10-pol',12:'cl-12-pol'};
-  return map[mm]||'cl-8-pol';
+  return map[mm]||null;
 }
 
 // ─── 14ב. קטלוג מק"טים — Firebase, מקור אמת עתידי (מחליף בהדרגה LG_SKU_MAP/IW_CODES/LG_PRICE_ITEMS) ──
@@ -928,27 +943,38 @@ function lgCalcOrderTotal(order, globalP, clientP){
 // ── lgLockAndAdvance: מעביר stage + נועל מחיר — write אטומי אחד ──────────
 // זהו ה-API המומלץ לכל מעבר ל-done/delivery.
 // מבטיח: אין מצב שבו done ללא totalFinal, ולא totalFinal בשלב הלא נכון.
+// מחזיר { locked, unpricedNames } — unpricedNames מפורט רק כשהנעילה בפועל
+// רצה עכשיו (הזמנה שכבר נעולה מחזירה locked:false, unpricedNames:[]).
+// הקורא יכול להציג אזהרה אם unpricedNames לא ריק — במקום שהמחיר הנמוך-מדי
+// ישקוט בשקט בתוך totalFinal בלי שאף אחד ידע שחלק מהפריטים לא תומחרו.
 async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
   const status = lgStageToStatus(nextStage);
   const update = { stage: nextStage, status, updatedAt: Date.now() };
-  // נעל מחיר רק אם עדיין לא נעול
-  if(!order.totalFinal){
+  const result = { locked: false, unpricedNames: [] };
+  // נעל מחיר רק אם עדיין לא נעול. בודקים pricesLockedAt ולא totalFinal —
+  // totalFinal יכול להיות באמת 0 (הזמנה שננעלה בלי אף פריט מתומחר), ואז
+  // בדיקת !order.totalFinal הייתה מזהה זאת בטעות כ"עדיין לא ננעל" ונועלת שוב.
+  if(!order.pricesLockedAt){
+    result.locked = true;
     const cp = (clientP||{})[order.orderClient||'']||{};
     const gp = globalP||{};
     let total=0, priced=0;
-    const items = order.items||[];
+    // מקבצים לפי quantityGroupId — כך שהזמנת "3 יחידות" (3 שורות זהות
+    // מ-lgMakeQuantityGroup) ננעלת כשורה אחת עם quantity:3, לא 3 שורות נפרדות.
+    const groups = lgGroupByQuantityId(order.items||[]);
     const lockedItems = [];
-    items.forEach(item=>{
-      const name = item.glassFullName||item.name||'';
-      const pid  = item.sku || lgFindPriceItem(name); // item.sku (מ-skuCatalog) גובר כשקיים
-      if(!pid) return;
-      const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
-      if(!ppm2) return;
+    groups.forEach(({quantityGroupId, items})=>{
+      const rep  = items[0];
+      const qty  = items.length;
+      const name = rep.glassFullName||rep.name||'';
+      const pid  = rep.sku || lgFindPriceItem(name); // item.sku (מ-skuCatalog) גובר כשקיים
+      const ppm2 = pid ? parseFloat(cp[pid]||gp[pid]||0) : 0;
+      if(!pid || !ppm2){ result.unpricedNames.push(name||'(ללא שם)'); return; }
       priced++;
-      const area = lgCalcAreaM2(item.w||0, item.h||0);
-      const lineTotal = Math.round(area*ppm2);
+      const area      = lgCalcAreaM2(rep.w||0, rep.h||0);
+      const lineTotal = Math.round(area*ppm2*qty);
       total += lineTotal;
-      lockedItems.push({ name, sku: item.sku||pid, w:item.w||0, h:item.h||0, area, pricePerM2:ppm2, lineTotal });
+      lockedItems.push({ name, sku: rep.sku||pid, w:rep.w||0, h:rep.h||0, area, quantity:qty, quantityGroupId, pricePerM2:ppm2, lineTotal });
     });
     // תמיד נועל totalFinal — גם אם המחיר 0 (אין תמחור) כדי שהשדה תמיד יהיה ב-Firebase
     const finalTotal = (priced && total) ? total : (lgCalcOrderTotal(order, gp, cp) || order.total || 0);
@@ -958,19 +984,7 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
     if(lockedItems.length) update.lockedItems = lockedItems;
   }
   await _lgDb.ref('orders/'+orderId).update(update);
-}
-
-// lgLockPrice — שומר תאימות לאחור; מומלץ להשתמש ב-lgLockAndAdvance
-async function lgLockPrice(orderId, order, globalP, clientP){
-  if(order.totalFinal) return;
-  const total = lgCalcOrderTotal(order, globalP, clientP);
-  if(!total) return;
-  const m2 = lgCalcOrderM2(order);
-  await _lgDb.ref('orders/'+orderId).update({
-    totalFinal:      total,
-    totalM2:         m2,
-    pricesLockedAt:  Date.now()
-  });
+  return result;
 }
 
 async function savePricesGlobal(prices){

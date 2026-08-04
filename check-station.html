@@ -391,6 +391,7 @@ let wdInChisum=[];
 let _csUnsub=null, _wdRef=null, _checkEditsRef=null;
 let _wdReady=false, _ordersReady=false; // דגלי טעינה — מונעים render לפני שהכל מוכן
 let _sendingToFactory=false; // מונע double-tap על "שלח למפעל"
+let _csGlobalPrices={}, _csClientPrices={}; // לנעילת מחיר במעבר ל-done (lgLockAndAdvance)
 // סימונים זמניים לבדיקה — נשמרים ב-Firebase בנתיב נפרד, לא נוגעים ב-orders
 window._csCheckEdits = {};
 
@@ -440,6 +441,9 @@ function load(){
   // cs נטען מ-Firebase (ב-_wdRef) — localStorage משמש כ-fallback בלבד עד שהנתון מגיע
   cs=JSON.parse(safeStorage.getItem('lgCheckState')||'{}');
   notes=JSON.parse(safeStorage.getItem('lgOrderNotes')||'{}');
+
+  // מחירים — נדרש כדי לנעול מחיר (lgLockAndAdvance) כשהזמנה מגיעה ל-done כאן
+  listenAllPrices((gp, cp) => { _csGlobalPrices = gp; _csClientPrices = cp; });
 
   // Subscribe to workday — inChisum + checkState
   if(_wdRef) firebase.database().ref('workday').off('value', _wdRef);
@@ -858,17 +862,26 @@ async function sendAllToFactory(){
 
   // שלב 1: עדכן כל ההזמנות ב-Firebase — המתן לסיום לפני עדכון inChisum
   // (מונע מצב שבו inChisum מתעדכן לפני שה-stage של ההזמנה מוכן)
+  const _unpricedAll = [];
   await Promise.all(doneOrds.map(o => {
     const hasRealChisum = (o.items||[]).some(i => i.chisum && !(i.name||'').includes('מראה'));
     const targetStage   = hasRealChisum ? 'chisum' : 'done';
     chDone.push(o);
+    if(!hasRealChisum){
+      // done הוא שלב סופי לתמחור — חייב לעבור נעילת מחיר, אחרת ההזמנה
+      // מגיעה ל-done בלי totalFinal/lockedItems (בדיוק כמו מסלולים אחרים).
+      return lgLockAndAdvance(String(o.id), o, _csGlobalPrices, _csClientPrices, 'done')
+        .then(r => { if(r && r.unpricedNames && r.unpricedNames.length) _unpricedAll.push(...r.unpricedNames); })
+        .catch(e=>console.error('sendAllToFactory lgLockAndAdvance:',e));
+    }
     return updateOrder(String(o.id), {
       stage:           targetStage,
-      chisumArrived:   hasRealChisum ? false : undefined,
-      chisumReportId:  hasRealChisum ? reportId  : undefined,
-      chisumReportNum: hasRealChisum ? reportNum : undefined,
+      chisumArrived:   false,
+      chisumReportId:  reportId,
+      chisumReportNum: reportNum,
     }).catch(e=>console.error('sendAllToFactory updateOrder:',e));
   }));
+  if(_unpricedAll.length) toast('⚠️ לא כל הפריטים תומחרו: ' + _unpricedAll.join(', '));
 
   // שלב 2: רק אחרי שכל ה-stages עודכנו — הסר מ-inChisum
   const doneIds = new Set(doneOrds.map(o => String(o.id)));

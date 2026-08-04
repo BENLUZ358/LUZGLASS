@@ -370,6 +370,14 @@ function showToast(msg){
   t._to=setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),350);},2500);
 }
 
+// אזהרה כשלגlgLockAndAdvance לא הצליח לתמחר חלק מהפריטים — במקום שזה יישאר
+// חבוי בתוך totalFinal נמוך-מדי בשקט.
+function _lgWarnUnpriced(result){
+  if(result && result.unpricedNames && result.unpricedNames.length){
+    showToast('⚠️ לא כל הפריטים תומחרו: ' + result.unpricedNames.join(', '));
+  }
+}
+
 let orders = [], eid = null, sf = 'all', cv = 'kanban';
 // fallback בטוח — נמנע קריסה אם firebase-db.js לא נטען עדיין
 const statusToStage = (typeof lgStatusToStage === 'function') ? lgStatusToStage : (s => '');
@@ -494,24 +502,43 @@ function openInvoicePreview(orderId, targetStage){
   const clientName = o.orderClient||'';
   const cp = clientPrices[clientName]||{};
   let itemsHtml='', calcTotal=0;
-  (o.items||[]).forEach(item=>{
-    const name = item.glassFullName||item.name||'—';
-    const pid  = findPriceItem(name);
-    const ppm2 = pid ? parseFloat(cp[pid]||globalPrices[pid]||0) : 0;
-    const area = lgCalcAreaM2(item.w||0, item.h||0);
-    const price = ppm2 ? Math.round(area*ppm2) : null;
-    if(price) calcTotal+=price;
-    itemsHtml+=`
-    <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px;">
-      <div style="flex:1">
-        <div style="font-weight:700">${lgEsc(name)}</div>
-        <div style="color:#8a8278;margin-top:1px">${item.w||''}×${item.h||''} מ"מ · ${area.toFixed(2)} מ"ר</div>
-      </div>
-      <div style="font-weight:700;color:#b8922a;white-space:nowrap">${price?'₪'+price.toLocaleString():'לפי הצעה'}</div>
-    </div>`;
-  });
+  // אם ההזמנה כבר ננעלה (o.lockedItems) — מציגים בדיוק את מה שנעול,
+  // לא חישוב חי שיכול להיות שונה (למשל אם מחירון השתנה מאז הנעילה).
+  // רק הזמנה שעדיין לא ננעלה מציגה תחשיב-חי, כתצוגה מקדימה למה שיינעל.
+  const isLocked = !!(o.pricesLockedAt && Array.isArray(o.lockedItems) && o.lockedItems.length);
+  if(isLocked){
+    o.lockedItems.forEach(li=>{
+      calcTotal += li.lineTotal||0;
+      const qtyLabel = li.quantity>1 ? ` × ${li.quantity}` : '';
+      itemsHtml+=`
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px;">
+        <div style="flex:1">
+          <div style="font-weight:700">${lgEsc(li.name)}${qtyLabel}</div>
+          <div style="color:#8a8278;margin-top:1px">${li.w||''}×${li.h||''} מ"מ · ${(li.area||0).toFixed(2)} מ"ר</div>
+        </div>
+        <div style="font-weight:700;color:#b8922a;white-space:nowrap">₪${(li.lineTotal||0).toLocaleString()}</div>
+      </div>`;
+    });
+  } else {
+    (o.items||[]).forEach(item=>{
+      const name = item.glassFullName||item.name||'—';
+      const pid  = findPriceItem(name);
+      const ppm2 = pid ? parseFloat(cp[pid]||globalPrices[pid]||0) : 0;
+      const area = lgCalcAreaM2(item.w||0, item.h||0);
+      const price = ppm2 ? Math.round(area*ppm2) : null;
+      if(price) calcTotal+=price;
+      itemsHtml+=`
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px;">
+        <div style="flex:1">
+          <div style="font-weight:700">${lgEsc(name)}</div>
+          <div style="color:#8a8278;margin-top:1px">${item.w||''}×${item.h||''} מ"מ · ${area.toFixed(2)} מ"ר</div>
+        </div>
+        <div style="font-weight:700;color:#b8922a;white-space:nowrap">${price?'₪'+price.toLocaleString():'לפי הצעה'}</div>
+      </div>`;
+    });
+  }
   if(!itemsHtml) itemsHtml='<div style="padding:14px;color:#8a8278;text-align:center;font-size:13px">אין פריטים מוזנים</div>';
-  const displayTotal = calcTotal || o.total || 0;
+  const displayTotal = isLocked ? (o.totalFinal ?? calcTotal) : (calcTotal || o.total || 0);
   // כפתור פעולה לפי stage
   const actionLabel = stage==='collected' ? '✓ העבר לנאסף' : '✓ מוכן לאיסוף';
   const actionOnclick = stage==='collected'
@@ -553,6 +580,7 @@ async function invoiceMarkDone(orderId){
   const target = o ? (lgNextStage(o) || 'done') : 'done';
   if(o && (target === 'done' || target === 'delivery')){
     await lgLockAndAdvance(String(orderId), o, globalPrices, clientPrices, target)
+      .then(_lgWarnUnpriced)
       .catch(e=>console.error('invoiceMarkDone:',e));
   } else {
     await updateStage(String(orderId), target).catch(e=>console.error('invoiceMarkDone:',e));
@@ -613,7 +641,7 @@ async function saveMod() {
   const newStage = statusToStage(newStatus) || '';
   const lockStages = ['done', 'delivery', 'collected'];
   if(lockStages.includes(newStage)){
-    await lgLockAndAdvance(id, o, globalPrices, clientPrices, newStage);
+    _lgWarnUnpriced(await lgLockAndAdvance(id, o, globalPrices, clientPrices, newStage));
   } else {
     await updateStage(id, newStage);
   }

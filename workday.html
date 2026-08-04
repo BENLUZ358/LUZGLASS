@@ -1177,7 +1177,7 @@ function markStageDone(sid){
   const nextSt = o ? lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) : 'done';
   if(o && (nextSt === 'done' || nextSt === 'delivery')){
     // write אטומי אחד: נועל מחיר + מעביר stage
-    lgLockAndAdvance(String(o.id), o, _wdGlobalPrices, _wdClientPrices, nextSt).catch(e=>console.error('markStageDone:',e));
+    lgLockAndAdvance(String(o.id), o, _wdGlobalPrices, _wdClientPrices, nextSt).then(_lgWarnUnpriced).catch(e=>console.error('markStageDone:',e));
   } else {
     markStageValue(sid, nextSt || 'done');
   }
@@ -1813,7 +1813,7 @@ async function completeGraphic(orderId){
     lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`);
   }
   if(nextSt === 'done' || nextSt === 'delivery'){
-    await lgLockAndAdvance(String(orderId), o, _wdGlobalPrices, _wdClientPrices, nextSt);
+    _lgWarnUnpriced(await lgLockAndAdvance(String(orderId), o, _wdGlobalPrices, _wdClientPrices, nextSt));
   } else {
     await updateStage(String(orderId), nextSt || 'done');
   }
@@ -2171,7 +2171,7 @@ function confirmResetChisum(){
       if(nextSt === 'done' || nextSt === 'delivery'){
         // write אטומי: נועל מחיר + stage + מנקה chisumArrivedIdxs
         lgLockAndAdvance(sid, o, _wdGlobalPrices, _wdClientPrices, nextSt)
-          .then(()=> updateOrder(sid, { chisumArrivedIdxs: null }).catch(()=>{}))
+          .then(r => { _lgWarnUnpriced(r); return updateOrder(sid, { chisumArrivedIdxs: null }).catch(()=>{}); })
           .catch(e => console.error('confirmReset lockAndAdvance:', e));
       } else {
         updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null })
@@ -2644,6 +2644,13 @@ function showToast(msg){
   const t=document.getElementById('toast');
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// אזהרה כש-lgLockAndAdvance לא הצליח לתמחר חלק מהפריטים
+function _lgWarnUnpriced(result){
+  if(result && result.unpricedNames && result.unpricedNames.length){
+    showToast('⚠️ לא כל הפריטים תומחרו: ' + result.unpricedNames.join(', '));
+  }
 }
 
 // פותח WhatsApp — אם נחסם ע"י הדפדפן, מציג banner עם קישור ידני
