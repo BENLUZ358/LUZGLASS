@@ -9,9 +9,11 @@
 //  משתנה סביבה נוסף על אלה שכבר קיימים ל-hashavshevet-items (Vercel
 //  Dashboard → Project Settings → Environment Variables):
 //    HASHAVSHEVET_REPORT_DATA_ACCOUNTS   תוכן encrypt_reportData של דוח הלקוחות
+//    FIREBASE_SERVICE_ACCOUNT            לאימות שהקורא הוא אדמין מחובר — ר' api/_verifyAdmin.js
 // ═══════════════════════════════════════════════════════════════════
 
 const crypto = require('crypto');
+const { verifyAdmin } = require('./_verifyAdmin');
 
 const ENDPOINT = 'https://ws.wizground.com/api';
 
@@ -35,6 +37,9 @@ module.exports = async function handler(req, res) {
     res.status(405).json({ error: 'method not allowed' });
     return;
   }
+
+  const auth = await verifyAdmin(req);
+  if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
 
   const SECRET      = process.env.WIZGROUND_SECRET;
   const REPORT_DATA = process.env.HASHAVSHEVET_REPORT_DATA_ACCOUNTS;

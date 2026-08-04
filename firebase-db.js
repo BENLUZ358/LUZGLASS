@@ -238,14 +238,18 @@ function listenAllOrders(callback) {
   return () => ref.off('value', handler);
 }
 
-// האזנה לפי לקוח — לפורטל
-// מסנן client-side (לא server-side) כדי שעדכוני status בזמן אמת יגיעו תמיד
-function listenClientOrders(clientName, callback) {
-  const ref     = _lgDb.ref('orders');
+// האזנה לפי לקוח — לפורטל. מסוננת בשאילתת Firebase עצמה לפי clientPhone
+// (לא קריאת-כל-ההזמנות + סינון בצד הלקוח) — כי ברגע שחוקי Firebase ננעלים,
+// לקוח לא יורשה לקרוא הזמנות של אחרים בכלל. clientPhone הוא הזיהוי היציב
+// שכל הזמנה מקבלת אוטומטית (saveOrder/saveSubmission), לא orderClient
+// (מחרוזת שם שיכולה להשתנות ולנתק היסטוריה).
+function listenClientOrders(clientPhone, callback) {
+  const phone = _lgNormalizePhone(clientPhone || '');
+  if (!phone) { callback([]); return () => {}; }
+  const ref     = _lgDb.ref('orders').orderByChild('clientPhone').equalTo(phone);
   const handler = snap => {
     if (!snap.exists()) { callback([]); return; }
-    const all = Object.values(snap.val()).map(lgNormalizeOrder).filter(Boolean);
-    callback(all.filter(o => o.orderClient === clientName));
+    callback(Object.values(snap.val()).map(lgNormalizeOrder).filter(Boolean));
   };
   ref.on('value', handler);
   return () => ref.off('value', handler);
@@ -579,6 +583,35 @@ async function lgProvisionClientFromHashavshevet({ customerId, name, phone, pass
   return p;
 }
 
+// יצירת אדמין חדש: חשבון Firebase Auth אמיתי + רשומת users/{phone}.
+// אותו דפוס בדיוק כמו lgProvisionClientFromHashavshevet — בלי זה אדמין
+// חדש נראה נוצר בהצלחה אבל לא מסוגל להתחבר בכלל (signInWithEmailAndPassword
+// נכשל כי אין חשבון Auth תואם). שוב — אין שדה password ב-RTDB.
+async function lgProvisionAdmin({ name, phone, password }) {
+  const p = _lgNormalizePhone(phone);
+  if (!p) throw new Error('מספר טלפון חסר');
+  if (!name) throw new Error('שם חסר');
+
+  const users = await lgGetAllUsers();
+  if (users.some(u => _lgNormalizePhone(u.phone || u.id) === p))
+    throw new Error('כבר קיים משתמש עם מספר הטלפון הזה');
+
+  try {
+    await _lgProvisionAuth().createUserWithEmailAndPassword(_lgSyntheticEmail(p), password);
+  } catch (e) {
+    if (e && e.code === 'auth/email-already-in-use')
+      throw new Error('קיים חשבון התחברות ישן עם הטלפון הזה');
+    if (e && e.code === 'auth/weak-password')
+      throw new Error('הסיסמה קצרה מדי — נדרשים לפחות 6 תווים');
+    throw e;
+  } finally {
+    await _lgProvisionAuth().signOut().catch(()=>{});
+  }
+
+  await lgSaveUser({ id: p, phone: p, name, role: 'admin', isMainAdmin: false });
+  return p;
+}
+
 // ─── 12. מק"ט → שם פריט (מקור יחיד לכל המערכת) ─────────────────────
 
 const LG_SKU_MAP = {
@@ -693,8 +726,6 @@ async function lgNextOrderNum() {
 }
 
 // ─── 14. מחירים — Firebase כמקור אמת ──────────────────────────────────
-
-function _lgPriceKey(name){ return String(name||'').replace(/[.#$\[\]\/]/g,'_'); }
 
 const LG_PRICE_ITEMS = [
   {cat:'מראות',        id:'mir-5-pol',    name:'מראה 5מ"מ מלוטש'},
@@ -966,15 +997,6 @@ async function savePricesGlobal(prices){
   await _lgDb.ref('prices/global').set(prices||{});
 }
 
-async function saveClientPrices(clientName, prices){
-  const key  = _lgPriceKey(clientName);
-  const data = prices && Object.keys(prices).length ? prices : null;
-  // שמור מחירים (null → Firebase מסיר את ה-node, זו ההתנהגות הנכונה לניקוי)
-  await _lgDb.ref('prices/clients/'+key).set(data);
-  // תמיד שמור את שם הלקוח ב-clientKeys — גם כשאין מחירים, כדי שהלקוח יישאר ברשימה
-  await _lgDb.ref('prices/clientKeys/'+key).set(clientName);
-}
-
 function _buildClientP(rawClients, keyMap){
   const clientP = {};
   // לקוחות עם מחירים שמורים
@@ -994,6 +1016,13 @@ function listenAllPrices(callback){
     const data = snap.val()||{};
     callback(data.global||{}, _buildClientP(data.clients, data.clientKeys));
   });
+}
+
+// לפורטל בלבד — קורא רק prices/global, לא את כל prices (שכולל היום גם
+// צמתים אדמין-בלבד ב-Firebase Rules). אין יותר מחירי-לקוח מיוחדים, אז cp
+// תמיד ריק — אותה התנהגות בפועל, בלי שהלקוח יזדקק להרשאת קריאה רחבה יותר.
+function listenGlobalPrices(callback){
+  _lgDb.ref('prices/global').on('value', snap => callback(snap.val()||{}, {}));
 }
 
 async function getAllPrices(){

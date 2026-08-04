@@ -1,0 +1,8 @@
+{
+  "name": "luzglass",
+  "private": true,
+  "description": "Vercel serverless functions dependencies (api/) — the site itself is static HTML/JS, no build step.",
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      "$phone": {
+        ".read": "auth != null && auth.token.email != null && ($phone === auth.token.email.replace('@luzglass.local','') || root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin')",
+        "password": { ".validate": false },
+        "role":  { ".validate": "newData.isString() && (newData.val() === 'admin' || newData.val() === 'client')" },
+        "phone": { ".validate": "newData.isString() && newData.val() === $phone" }
+      }
+    },
+
+    "orders": {
+      ".indexOn": ["clientPhone"],
+      ".read": "auth != null && auth.token.email != null && (root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin' || (root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists() && query.orderByChild === 'clientPhone' && query.equalTo === auth.token.email.replace('@luzglass.local','')))",
+      "$orderId": {
+        ".read": "auth != null && auth.token.email != null && (root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin' || data.child('clientPhone').val() === auth.token.email.replace('@luzglass.local',''))",
+        ".write": "auth != null && auth.token.email != null && (root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin' || (root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists() && !data.exists() && newData.child('clientPhone').val() === auth.token.email.replace('@luzglass.local','') && newData.child('stage').val() === ''))",
+        "clientPhone": { ".validate": "newData.isString()" }
+      }
+    },
+
+    "workday": {
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'"
+    },
+
+    "checkEdits": {
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'"
+    },
+
+    "prices": {
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      "global": {
+        ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists()"
+      }
+    },
+
+    "skuCatalog": {
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists()",
+      ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'"
+    },
+
+    "hashavshevetAccounts": {
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'"
+    },
+
+    "meta": {
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      "orderCounter": {
+        ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists()",
+        ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists()",
+        ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+      }
+    },
+
+    "clients": { ".read": false, ".write": false },
+
+    "_test": {
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'"
+    }
+  }
+}

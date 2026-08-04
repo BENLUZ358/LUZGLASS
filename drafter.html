@@ -142,7 +142,6 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
     <a class="unav-a" href="check-station.html"><span class="ic">🔍</span>תחנת בדיקה</a>
     <a class="unav-a" href="workday.html"><span class="ic">🏭</span>יום עבודה</a>
   </nav>
-  <div class="unav-bot"><a href="#" onclick="unavResetAll()">🔄 אפס הכל</a></div>
 </div>
 <div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
 
@@ -555,7 +554,6 @@ lgRequireAuthAsync('admin').then(session => {
 
 function unavOpen(){document.getElementById('unavSidebar').classList.add('open');const ov=document.getElementById('unavOverlay');if(ov)ov.classList.add('open');}
 function unavClose(){document.getElementById('unavSidebar').classList.remove('open');const ov=document.getElementById('unavOverlay');if(ov)ov.classList.remove('open');}
-function unavResetAll(){if(confirm('לאפס?')){firebase.database().ref('orders').remove().then(()=>firebase.database().ref('workday').remove()).then(()=>location.reload());}}
 </script>
 </body>
 </html>

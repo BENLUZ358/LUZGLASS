@@ -255,14 +255,11 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   </div>
 <button class="fab" onclick="window.location.href='new-order.html'">+</button>
 <script>
-// CLIENT הוסר — כל נתוני הלקוח מגיעים מ-session (lgGetSession) בלבד
-const ORDERS=[
-  {id:"o1",num:"2026-007",name:"מקלחון פינתי סוויטה",glass:'8מ"מ אסיד קליר',finish:"זהב מוברש",area:"2.40",total:5200,date:"02/04/2026",status:"ירד לביצוע",sketch:null,items:[{name:'8מ"מ אסיד קליר',w:90,h:220,chisum:true},{name:'8מ"מ שקוף',w:90,h:220,litush:true}]},
-  {id:"o2",num:"2026-006",name:"מראה חדר שינה",glass:'5מ"מ מראה',finish:"—",area:"0.72",total:980,date:"01/04/2026",status:"ירד לביצוע",sketch:null,items:[{name:'5מ"מ מראה',w:80,h:90,litush:true}]},
-  {id:"o3",num:"2026-005",name:"מקלחון חזית",glass:'8מ"מ שקוף',finish:"שחור מט",area:"1.60",total:2800,date:"30/03/2026",status:"מוכן לאיסוף",sketch:null,items:[{name:'8מ"מ שקוף',w:80,h:200,litush:true},{name:'8מ"מ שקוף',w:50,h:200,litush:true}]},
-  {id:"o4",num:"2026-004",name:"מחיצת זכוכית",glass:'10מ"מ קליר',finish:"—",area:"1.20",total:2000,date:"25/03/2026",status:"נאסף",pickedDate:"28/03/2026",sketch:null,items:[{name:'10מ"מ קליר',w:120,h:100,litush:true}]},
-  {id:"o5",num:"2026-003",name:"אמבטיון הזזה",glass:'8מ"מ קליר',finish:"זהב",area:"1.80",total:2800,date:"18/03/2026",status:"נאסף",pickedDate:"22/03/2026",sketch:null,items:[{name:'8מ"מ קליר',w:90,h:200,litush:true}]},
-];
+// CLIENT הוסר — כל נתוני הלקוח מגיעים מ-session (lgGetSession) בלבד.
+// ריק עד ש-_subscribePortalOrders ממלא נתונים אמיתיים מ-Firebase — לפני
+// כן היו כאן 5 הזמנות מזויפות קשיחות, שיכלו להבליח לרגע (או לצמיתות אם
+// הקריאה האמיתית איטית/נכשלת) לפני שהנתונים האמיתיים דורסים אותן.
+const ORDERS=[];
 const INVOICES=[
   {num:"חש-2026-007",date:"02/04/2026",amount:5200,paid:false,desc:"מקלחון פינתי"},
   {num:"חש-2026-006",date:"01/04/2026",amount:980,paid:false,desc:"מראה"},
@@ -307,7 +304,7 @@ function init(){
   document.getElementById("navName").textContent = clientName;
   document.getElementById("heroName").textContent = clientName;
 
-  listenAllPrices((gp, cp) => {
+  listenGlobalPrices((gp, cp) => {
     _portalGlobalPrices = gp;
     _portalClientPrices = cp;
     ORDERS.forEach(o => {
@@ -325,13 +322,15 @@ function init(){
     if (document.getElementById('view-price')?.style.display !== 'none') renderClientPrice();
   });
 
-  // האזנה בזמן אמת ל-Firebase — כל שינוי מהאדמין מתעדכן מיד
-  _subscribePortalOrders(clientName);
+  // האזנה בזמן אמת ל-Firebase — כל שינוי מהאדמין מתעדכן מיד. לפי טלפון
+  // (יציב), לא לפי שם — כי חוקי Firebase יחסמו קריאת הזמנות של אחרים.
+  _subscribePortalOrders(sess.phone);
 }
 
-function _subscribePortalOrders(clientName) {
+function _subscribePortalOrders(clientPhone) {
   if (_portalUnsub) _portalUnsub();
-  _portalUnsub = listenClientOrders(clientName, function(fbOrders){
+  const clientName = (window._lgSession || {}).name || '';
+  _portalUnsub = listenClientOrders(clientPhone, function(fbOrders){
     ORDERS.length = 0;
     fbOrders.forEach(o => {
       ORDERS.push({
@@ -763,8 +762,8 @@ lgRequireAuthAsync('client').then(session => {
 // כשהטאב חוזר לפורגראונד — כפה re-subscribe למנע sync gaps בטאבים ברקע
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
-    const clientName = (window._lgSession || {}).name || '';
-    if (clientName) _subscribePortalOrders(clientName);
+    const phone = (window._lgSession || {}).phone || '';
+    if (phone) _subscribePortalOrders(phone);
   }
 });
 </script>

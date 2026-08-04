@@ -90,6 +90,7 @@
   <!-- Firebase SDK + LuzGlass DB -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260518"></script>
 </head>
 <body>
@@ -144,6 +145,9 @@
 </div>
 
 <script>
+// דף לא היה מוגן כלל עד עכשיו — כל אחד עם הקישור יכל לכתוב הזמנות ל-Firebase.
+lgRequireAuthAsync('client');
+
 // Read session for client name
 const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
 const _clientName = _sess.name || '';

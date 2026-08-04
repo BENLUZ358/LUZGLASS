@@ -1,5 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════
-//  migrate-users-to-auth.js
+//  migrate-users-to-auth.js  —  מיושן, נשמר להיסטוריה בלבד
+//
+//  שימש פעם אחת למעבר מ-sessionStorage לאימות אמיתי. מאז, כל יצירת
+//  משתמש (lgProvisionClientFromHashavshevet, lgProvisionAdmin ב-firebase-db.js)
+//  יוצרת את חשבון ה-Auth ישירות בזמן היצירה ולא כותבת שדה password
+//  ל-RTDB בכלל — אין יותר צורך בסקריפט הזה לזרימה הרגילה.
+//
 //  סקריפט חד-פעמי: יוצר חשבון Firebase Authentication לכל משתמש קיים
 //  ב-users/{phone}, כדי שנוכל לעבור מ-sessionStorage לאימות אמיתי.
 //
