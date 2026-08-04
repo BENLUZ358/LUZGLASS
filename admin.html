@@ -273,7 +273,6 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
         <button class="vt active" id="vtK" onclick="setView('kanban',this)">⬡ לוח</button>
         <button class="vt" id="vtT" onclick="setView('table',this)">☰ טבלה</button>
       </div>
-      <a href="sketch-demo.html" class="btn-new">+ סקיצה חדשה</a>
       <span id="topbarUserName" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
       <button onclick="lgLogout()" style="padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="יציאה">↩ יציאה</button>
     </div>
@@ -506,7 +505,7 @@ function openInvoicePreview(orderId, targetStage){
     <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px;">
       <div style="flex:1">
         <div style="font-weight:700">${lgEsc(name)}</div>
-        <div style="color:#8a8278;margin-top:1px">${item.w||''}×${item.h||''} ס"מ · ${area.toFixed(2)} מ"ר</div>
+        <div style="color:#8a8278;margin-top:1px">${item.w||''}×${item.h||''} מ"מ · ${area.toFixed(2)} מ"ר</div>
       </div>
       <div style="font-weight:700;color:#b8922a;white-space:nowrap">${price?'₪'+price.toLocaleString():'לפי הצעה'}</div>
     </div>`;
@@ -679,7 +678,7 @@ function openMod(id) {
   document.getElementById('itemsPreview').innerHTML = `
     ${previewItems.map(i => `
       <div style="font-size:12px;margin-bottom:4px">
-        ${lgEsc(i.name || '')} ${i.w || ''}${i.w ? '×' : ''}${i.h || ''} ${i.w ? 'ס"מ' : ''}
+        ${lgEsc(i.name || '')} ${i.w || ''}${i.w ? '×' : ''}${i.h || ''} ${i.w ? 'מ"מ' : ''}
       </div>
     `).join('')}
     ${items.length > 3 ? `
@@ -750,7 +749,7 @@ function showAllItems(){
   document.getElementById('itemsPreview').innerHTML = items.map(i => `
     <div style="font-size:12px;margin-bottom:5px;padding:5px 8px;background:var(--bg2);border-radius:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <span style="font-weight:600">${lgEsc(i.name||'')}</span>
-      ${i.w?`<span style="color:var(--muted)">${i.w}×${i.h} ס"מ</span>`:''}
+      ${i.w?`<span style="color:var(--muted)">${i.w}×${i.h} מ"מ</span>`:''}
       ${i.chisum?'<span style="font-size:10px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
       ${i.graphic?'<span style="font-size:10px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
     </div>`).join('');
@@ -974,30 +973,6 @@ function jumpToNextNew(){
 
 // deleteOrder מוגדר ב-firebase-db.js
 // deleteOrderById הוא הפונקציה הנגישה מה-UI
-async function _deleteOrderLegacy(id){
-  if(!id) return;
-  const o = orders.find(x=>x.id===String(id));
-  const name = o ? (o.orderClient||'') + ' — ' + (o.sketchName||o.type||'') : 'הזמנה זו';
-  if(!confirm('למחוק את "' + name + '"?\nפעולה זו לא ניתנת לביטול.')) return;
-  await deleteOrder(String(id));
-  // workday cleanup
-  const wd = await getWorkDay();
-  wd.inWork   = (wd.inWork||[]).filter(x=>String(x)!==String(id));
-  wd.inChisum = (wd.inChisum||[]).filter(x=>String(x)!==String(id));
-  await saveWorkDay(wd);
-  // orders updated via listener
-  closeMod();
-  save();
-  document.getElementById('ov').classList.remove('open');
-  eid = null;
-  renderAll();
-
-  const t = document.createElement('div');
-  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#c0392b;color:#fff;padding:12px 22px;font-size:14px;font-weight:700;z-index:9999;font-family:Heebo,sans-serif;border-radius:4px;';
-  t.textContent = '🗑 ההזמנה נמחקה מהמערכת';
-  document.body.appendChild(t);
-  setTimeout(()=>t.remove(), 2500);
-}
 
 
 function exportCSV(){
@@ -1190,111 +1165,6 @@ async function syncAccountsFromHashavshevetNow(){
 }
 
 // ═══════════════════════════════════════
-//  INBOX
-// ═══════════════════════════════════════
-let viewerImages=[], viewerIdx=0;
-
-function getSubmissions(){
-  return orders.filter(o => o.source === 'upload');
-}
-
-function checkInboxBadge(){
-  const subs=getSubmissions();
-  const unread=subs.filter(s=>!s.read).length;
-  const badge=document.getElementById('inboxBadge');
-  if(badge){
-    badge.style.display=unread>0?'inline':'none';
-    badge.textContent=unread;
-  }
-}
-
-function openInbox(){
-  document.getElementById('inboxOv').classList.add('open');
-  renderInbox();
-}
-function closeInbox(){
-  document.getElementById('inboxOv').classList.remove('open');
-}
-
-function renderInbox(){
-  const subs=getSubmissions();
-  const el=document.getElementById('inboxBody');
-  if(!subs.length){
-    el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><div style="font-size:36px;margin-bottom:12px">📭</div><div style="font-size:14px">אין סקיצות נכנסות עדיין</div><div style="font-size:12px;margin-top:8px">שלח ללקוחות את הקישור: <strong>upload.html</strong></div></div>';
-    return;
-  }
-  el.innerHTML=subs.map((s,i)=>`
-    <div class="inbox-item ${!s.read?'unread':''}" onclick="openSubmission(${i})">
-      ${s.files&&s.files[0]&&s.files[0].data
-        ?`<img class="inbox-thumb" src="${lgEsc(s.files[0].data)}" alt="">`
-        :`<div class="inbox-thumb-ph">📄</div>`}
-      <div class="inbox-info">
-        <div class="inbox-client">${lgEsc(s.client)} ${!s.read?'<span style="font-size:10px;background:var(--gold);color:#fff;padding:1px 6px;border-radius:2px;margin-right:6px">חדש</span>':''}</div>
-        <div class="inbox-meta">📞 ${lgEsc(s.phone)} &nbsp;·&nbsp; ${lgEsc(s.date)} ${lgEsc(s.time)} &nbsp;·&nbsp; ${s.files?.length||0} קבצים</div>
-        <div class="inbox-note">${s.type?'📌 '+lgEsc(s.type)+' &nbsp;·&nbsp; ':''} ${lgEsc(s.notes||'ללא הערות')}</div>
-        <div class="inbox-ref">${lgEsc(s.refNum)}</div>
-        <div class="inbox-acts" onclick="event.stopPropagation()">
-          ${s.files?.length?`<button class="ia-btn pr" onclick="viewImages(${i})">🖼️ צפה בתמונות (${s.files.length})</button>`:''}
-          <button class="ia-btn" onclick="markRead(${i})">✓ סמן כנקרא</button>
-          <button class="ia-btn" onclick="deleteSubmission(${i})">🗑️</button>
-        </div>
-      </div>
-    </div>`).join('');
-}
-
-function openSubmission(idx){
-  const subs=getSubmissions();
-  // Firebase מעדכן אוטומטית
-  safeStorage.setItem('lgSubmissions',JSON.stringify(subs));
-  checkInboxBadge();
-  if(subs[idx].files?.length) viewImages(idx);
-  renderInbox();
-}
-
-function markRead(idx){
-  const subs=getSubmissions();
-  // Firebase מעדכן אוטומטית
-  safeStorage.setItem('lgSubmissions',JSON.stringify(subs));
-  checkInboxBadge();
-  renderInbox();
-}
-
-function deleteSubmission(idx){
-  if(!confirm('למחוק את הסקיצה?')) return;
-  const subs=getSubmissions();
-  // Firebase מעדכן אוטומטית
-  safeStorage.setItem('lgSubmissions',JSON.stringify(subs));
-  checkInboxBadge();
-  renderInbox();
-}
-
-function viewImages(subIdx){
-  const subs=getSubmissions();
-  const files=(subs[subIdx].files||[]).filter(f=>f.data);
-  if(!files.length) return;
-  viewerImages=files.map(f=>f.data);
-  viewerIdx=0;
-  document.getElementById('viewerImg').src=viewerImages[0];
-  document.getElementById('viewerCounter').textContent=`1 / ${viewerImages.length}`;
-  document.getElementById('imgViewer').classList.add('open');
-}
-
-function viewerNav(dir){
-  viewerIdx=(viewerIdx+dir+viewerImages.length)%viewerImages.length;
-  document.getElementById('viewerImg').src=viewerImages[viewerIdx];
-  document.getElementById('viewerCounter').textContent=`${viewerIdx+1} / ${viewerImages.length}`;
-}
-
-function closeViewer(){
-  document.getElementById('imgViewer').classList.remove('open');
-}
-
-// check badge on load
-setTimeout(checkInboxBadge,100);
-setInterval(checkInboxBadge,30000);
-
-
-// ═══════════════════════════════════════
 //  PICKUP BOARD
 // ═══════════════════════════════════════
 function openPickupBoard(){
@@ -1410,7 +1280,7 @@ function renderPickupBoard(){
             </div>
             ${p.items&&p.items.length?`
               <div class="pi-items">
-                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w||''}${i.w?'×':''}${i.h||''} ס"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
+                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w||''}${i.w?'×':''}${i.h||''} מ"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
               </div>`:''}
           </div>
           <div>
@@ -1466,54 +1336,6 @@ document.addEventListener('visibilitychange', () => {
 .client-sel{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:14px;color:var(--text);outline:none;-webkit-appearance:none;margin-bottom:14px;cursor:pointer;}
 .client-sel:focus{border-color:var(--gold);}
 </style>
-
-<!-- INBOX MODAL -->
-<div class="overlay" id="inboxOv" onclick="if(event.target===this)closeInbox()" style="z-index:200">
-  <div class="modal" style="max-width:720px">
-    <div class="mhdr" style="display:flex;align-items:center;justify-content:space-between">
-      <h2>📥 סקיצות נכנסות</h2>
-      <button class="mcl" onclick="closeInbox()">✕</button>
-    </div>
-    <div style="padding:0;max-height:75vh;overflow-y:auto" id="inboxBody">
-      <div style="padding:24px;text-align:center;color:var(--muted)">טוען...</div>
-    </div>
-  </div>
-</div>
-
-<style>
-.inbox-item{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;gap:14px;cursor:pointer;transition:background 0.15s;}
-.inbox-item:hover{background:var(--bg);}
-.inbox-item.unread{border-right:3px solid var(--gold);}
-.inbox-thumb{width:70px;height:70px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;background:var(--bg2);}
-.inbox-thumb-ph{width:70px;height:70px;flex-shrink:0;background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:24px;border:1px solid var(--border);}
-.inbox-info{flex:1;min-width:0;}
-.inbox-client{font-size:14px;font-weight:700;margin-bottom:2px;}
-.inbox-meta{font-size:11px;color:var(--muted);margin-bottom:6px;}
-.inbox-note{font-size:12px;color:var(--text);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.inbox-ref{font-size:10px;color:var(--gold);font-weight:700;margin-top:4px;}
-.inbox-acts{display:flex;gap:6px;margin-top:8px;}
-.ia-btn{padding:5px 10px;font-family:Heebo,sans-serif;font-size:11px;font-weight:600;border:1px solid var(--border);background:var(--bg);color:var(--muted);cursor:pointer;transition:all 0.15s;}
-.ia-btn:hover{background:var(--bg2);border-color:var(--gold);color:var(--text);}
-.ia-btn.pr{background:var(--gold);color:#fff;border-color:var(--gold);}
-/* image viewer */
-.img-viewer{position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:300;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
-.img-viewer.open{display:flex;}
-.img-viewer img{max-width:95vw;max-height:85vh;object-fit:contain;}
-.img-viewer-close{position:absolute;top:16px;left:16px;background:none;border:none;color:#fff;font-size:28px;cursor:pointer;}
-.img-viewer-nav{display:flex;gap:12px;}
-.img-viewer-nav button{padding:8px 20px;background:rgba(255,255,255,0.15);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:14px;cursor:pointer;}
-</style>
-
-<!-- IMAGE VIEWER -->
-<div class="img-viewer" id="imgViewer">
-  <button class="img-viewer-close" onclick="closeViewer()">✕</button>
-  <img id="viewerImg" src="" alt="">
-  <div class="img-viewer-nav">
-    <button onclick="viewerNav(-1)">→ הקודם</button>
-    <span id="viewerCounter" style="color:rgba(255,255,255,0.5);font-size:13px;padding:8px 4px"></span>
-    <button onclick="viewerNav(1)">הבא ←</button>
-  </div>
-</div>
 
 <!-- PICKUP BOARD MODAL -->
 <div class="overlay" id="pickupOv" onclick="if(event.target===this)closePickup()" style="z-index:200">
@@ -1808,7 +1630,7 @@ document.addEventListener('visibilitychange', () => {
       </div>
 
       <!-- DETAIL -->
-      <div id="sqDetailPanel">
+      <div id="sqDetailPanel" class="sq-hidden">
 
         <div id="sqDetailEmpty">
           <div style="font-size:44px;opacity:0.25;">📐</div>
@@ -1910,7 +1732,7 @@ function makeMeasureListSVG(o){
     const pc=it.chisum?'#8e44ad':'#2980b9';
     const pl=it.chisum?'🔥 חיסום':'✂ ליטוש';
     return `<rect x="${PAD}" y="${y}" width="${W-PAD*2}" height="${ROW}" fill="${bg}"/>
-    <text x="${PAD+8}" y="${y+20}" font-family="Heebo,Arial" font-size="13" fill="#333" font-weight="600">${it.w||0} × ${it.h||0} ס"מ</text>
+    <text x="${PAD+8}" y="${y+20}" font-family="Heebo,Arial" font-size="13" fill="#333" font-weight="600">${it.w||0} × ${it.h||0} מ"מ</text>
     <text x="${W-PAD-8}" y="${y+20}" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="${pc}" font-weight="700">${pl}</text>`;
   }).join('');
   const num=o.orderNum||o.refNum||'';
@@ -1920,7 +1742,7 @@ function makeMeasureListSVG(o){
     <text x="${W-PAD}" y="19" text-anchor="end" font-family="Heebo,Arial" font-size="13" font-weight="900" fill="#c9a84c">📋 הזמנת זכוכית לפי מידה</text>
     <text x="${W-PAD}" y="33" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="rgba(247,244,239,0.5)">${o.client||''}${o.client&&num?' · ':''}${num} · ${items.length} פריטים · ${totalM2} מ"ר</text>
     <rect x="0" y="${HEAD}" width="${W}" height="${COLH}" fill="rgba(184,146,42,0.12)"/>
-    <text x="${PAD+8}" y="${HEAD+16}" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">מידות (ס"מ)</text>
+    <text x="${PAD+8}" y="${HEAD+16}" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">מידות (מ"מ)</text>
     <text x="${W-PAD-8}" y="${HEAD+16}" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">עיבוד</text>
     ${rows}
     <rect x="0" y="${H-FOOT}" width="${W}" height="${FOOT}" fill="#f5f2ed"/>
@@ -1999,11 +1821,15 @@ function closeSQ(){
   if(el) el.style.display = 'none';
 }
 
+// מצב מובייל (≤680px, ר' media query למעלה): שתי המסכים תופסים רוחב מלא
+// ומתחלפים ע"י .sq-hidden. בדסקטופ ה-CSS מנטרל את הקלאס והם תמיד גלויים יחד.
 function sqShowList(){
-  const list   = document.getElementById('sqList');
-  const detail = document.getElementById('sqDetail');
-  if(list)   list.style.display   = 'flex';
-  if(detail) detail.style.display = 'none';
+  document.getElementById('sqListPanel')?.classList.remove('sq-hidden');
+  document.getElementById('sqDetailPanel')?.classList.add('sq-hidden');
+}
+function sqShowDetailPanel(){
+  document.getElementById('sqListPanel')?.classList.add('sq-hidden');
+  document.getElementById('sqDetailPanel')?.classList.remove('sq-hidden');
 }
 
 function sqSetMode(mode){
@@ -2188,8 +2014,8 @@ function sqShowDetail(){
       <thead><tr><th>פאנל</th><th>רוחב</th><th>גובה</th><th>שיפוע</th></tr></thead>
       <tbody>${o.panels.map(p=>`<tr>
         <td style="font-weight:700">${lgEsc(p.label||'—')}</td>
-        <td>${p.wT||p.w||'—'} ס"מ</td>
-        <td>${p.h||p.hR||'—'} ס"מ</td>
+        <td>${p.wT||p.w||'—'} מ"מ</td>
+        <td>${p.h||p.hR||'—'} מ"מ</td>
         <td style="color:#aaa">${p.slope?`${p.hR}/${p.hL}`:'-'}</td>
       </tr>`).join('')}</tbody></table>`;
   } else pw.innerHTML='';
@@ -3352,60 +3178,6 @@ async function umToggleActive(userId, clientName, currentlyActive){
   } catch(e){ showToast('שגיאה: ' + e.message); }
 }
 
-// ══════════════════════════════════════════════════
-//  מיגרציה: שמות עסק → orderClient + מחירונים
-//  מריץ פעם אחת כשרוצים שהמערכת תעבוד לפי שם עסק
-// ══════════════════════════════════════════════════
-async function migrateToBusinessNames(){
-  const users = await lgGetAllUsers();
-  const clients = users.filter(u => u.role === 'client');
-
-  // מפה: שם ישן → שם חדש לכל לקוח שיש לו שם עסק שונה מהשם האישי
-  const renames = {};
-  for(const u of clients){
-    const oldName = u.name || '';
-    const newName = (u.businessName||'').trim() || u.name || '';
-    if(oldName && newName && oldName !== newName) renames[oldName] = newName;
-  }
-
-  if(!Object.keys(renames).length){
-    showToast('אין שינויי שם — הכל מסונכרן');
-    return;
-  }
-
-  const allOrders = await getAllOrders();
-  let ordersUpdated = 0;
-  let pricesUpdated = 0;
-  const priceKey = n => String(n||'').replace(/[.#$\[\]\/]/g,'_');
-
-  for(const [oldName, newName] of Object.entries(renames)){
-    // עדכון הזמנות
-    const toUpdate = allOrders.filter(o => o.orderClient === oldName);
-    for(const o of toUpdate){
-      await updateOrder(o.id, { orderClient: newName }).catch(()=>{});
-      ordersUpdated++;
-    }
-
-    // העברת מחירון לפי מפתח חדש
-    const oldKey = priceKey(oldName);
-    const newKey = priceKey(newName);
-    if(oldKey !== newKey){
-      const snap = await firebase.database().ref('prices/clients/'+oldKey).once('value');
-      const data = snap.val();
-      if(data){ await firebase.database().ref('prices/clients/'+newKey).set(data); pricesUpdated++; }
-      await firebase.database().ref('prices/clientKeys/'+newKey).set(newName);
-      await firebase.database().ref('prices/clients/'+oldKey).remove();
-      await firebase.database().ref('prices/clientKeys/'+oldKey).remove();
-    } else {
-      // מפתח זהה — רק עדכן clientKeys
-      await firebase.database().ref('prices/clientKeys/'+newKey).set(newName);
-    }
-  }
-
-  showToast(`✓ מיגרציה הושלמה — ${ordersUpdated} הזמנות, ${pricesUpdated} מחירונים`);
-}
-
-
 </script>
 
 <!-- USER MANAGEMENT OVERLAY -->
@@ -3448,18 +3220,6 @@ async function migrateToBusinessNames(){
             style="padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
             + צור אדמין
           </button>
-        </div>
-      </div>
-
-      <!-- מיגרציה: שמות עסק → מחירונים + הזמנות קיימות -->
-      <div style="border-top:1px solid #eee;padding:14px 0 0;margin-top:4px;">
-        <div style="font-size:11px;color:#999;margin-bottom:8px;">סנכרון שמות עסק — חד-פעמי</div>
-        <button onclick="migrateToBusinessNames()"
-          style="width:100%;padding:10px;background:rgba(0,0,0,0.04);border:1px solid #ddd;font-family:Heebo,sans-serif;font-size:12px;color:#555;cursor:pointer;border-radius:6px;">
-          🔄 סנכרן שמות עסק → הזמנות + מחירונים
-        </button>
-        <div style="font-size:10px;color:#aaa;margin-top:6px;line-height:1.5;">
-          מעדכן הזמנות קיימות ומחירונים לעבוד לפי שם עסק במקום שם פרטי. פעולה בטוחה — ניתן לבדוק קודם ב-Firebase.
         </div>
       </div>
 

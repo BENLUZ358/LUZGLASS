@@ -267,26 +267,6 @@ async function saveWorkDay(data) {
   await _lgDb.ref('workday').set(_lgClean({ ...data, updatedAt: Date.now() }));
 }
 
-// ─── 7. לקוחות ────────────────────────────────────────────────────────
-
-async function getAllClients() {
-  const snap = await _lgDb.ref('clients').once('value');
-  if (!snap.exists()) return [];
-  return Object.values(snap.val());
-}
-
-async function saveClient(data) {
-  const id = data.id || ('c_' + Date.now());
-  await _lgDb.ref('clients/' + id).set({ ...data, id });
-  return id;
-}
-
-async function getClientByPhone(phone) {
-  const snap = await _lgDb.ref('clients').orderByChild('phone').equalTo(phone).once('value');
-  if (!snap.exists()) return null;
-  return Object.values(snap.val())[0];
-}
-
 // ─── 8. Session / Auth ──────────────────────────────────────────────
 //
 //  sessionStorage הוא כאן מטמון-תצוגה בלבד (שם/role להצגה מיידית) —

@@ -501,7 +501,7 @@ function orderCard(o){
     exp='<div class="oc-expand">';
     if(o.items&&o.items.length){
       exp+='<div class="oc-items">';
-      o.items.forEach(it=>{exp+='<div class="oc-item"><div class="oc-item-glass">'+lgEsc(it.name||"")+'</div><div class="oc-item-dims">'+(it.w||"")+(it.w?"x":"")+(it.h||"")+" cm</div>"+'<div class="oc-item-proc '+(it.chisum?"ip-chis":"ip-cut")+'">'+(it.chisum?"מחוסם":"מלוטש")+"</div></div>";});
+      o.items.forEach(it=>{exp+='<div class="oc-item"><div class="oc-item-glass">'+lgEsc(it.name||"")+'</div><div class="oc-item-dims">'+(it.w||"")+(it.w?"x":"")+(it.h||"")+' מ"מ</div>'+'<div class="oc-item-proc '+(it.chisum?"ip-chis":"ip-cut")+'">'+(it.chisum?"מחוסם":"מלוטש")+"</div></div>";});
       exp+="</div>";
     }
     exp+='<div class="sketch-wrap"><div class="sketch-lbl">סקיצה טכנית</div>';

@@ -737,7 +737,7 @@ function buildSVG(o, readOnly=false){
     p+=`<rect x="${x}" y="${y}" width="${PW}" height="${PH}" rx="4" fill="${fl}" stroke="${stk}" stroke-width="1.8" ${readOnly?'':'data-idx="'+origIdx+'" onclick="checkItem('+origIdx+')"'} style="cursor:${readOnly?'default':'pointer'}"/>`;
     if(ck)p+=`<text x="${mx}" y="${my-14}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="24" fill="#27ae60">✓</text>`;
     p+=`<text x="${mx}" y="${ck?my+8:my-2}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="12" font-weight="700" fill="${ck?'#27ae60':'#1a1714'}">${lgEsc(item.name||'')}</text>`;
-    if(item.w&&item.h)p+=`<text x="${mx}" y="${ck?my+22:my+13}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="11" fill="#666">${item.w}×${item.h} ס"מ</text>`;
+    if(item.w&&item.h)p+=`<text x="${mx}" y="${ck?my+22:my+13}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="11" fill="#666">${item.w}×${item.h} מ"מ</text>`;
     p+=`<line x1="${x}" y1="${y-6}" x2="${x+PW}" y2="${y-6}" stroke="rgba(201,168,76,0.5)" stroke-width="0.8"/>`;
     if(item.w)p+=`<text x="${mx}" y="${y-9}" text-anchor="middle" font-family="Heebo,sans-serif" font-size="9" fill="rgba(201,168,76,0.9)">${item.w}</text>`;
     p+=`<line x1="${x+PW+5}" y1="${y}" x2="${x+PW+5}" y2="${y+PH}" stroke="rgba(201,168,76,0.5)" stroke-width="0.8"/>`;
@@ -900,7 +900,7 @@ async function sendAllToFactory(){
 function offerChisum(){
   const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
   if(!items.length)return;
-  document.getElementById('cbBody').innerHTML=`<p style="font-size:12px;color:var(--muted);margin-bottom:14px">סה"כ ${items.length} פריטים לחיסום</p>`+items.map((item,i)=>`<div class="cb-item"><div style="font-size:18px;color:var(--purple);font-weight:900;min-width:24px">${i+1}</div><div><div style="font-size:13px;font-weight:700">${lgEsc(item.name||'—')} · ${item.w||''}×${item.h||''} ס"מ</div><div style="font-size:11px;color:var(--muted)">${lgEsc(item.client)} · ${lgEsc(item.orderNum||'')}</div></div></div>`).join('');
+  document.getElementById('cbBody').innerHTML=`<p style="font-size:12px;color:var(--muted);margin-bottom:14px">סה"כ ${items.length} פריטים לחיסום</p>`+items.map((item,i)=>`<div class="cb-item"><div style="font-size:18px;color:var(--purple);font-weight:900;min-width:24px">${i+1}</div><div><div style="font-size:13px;font-weight:700">${lgEsc(item.name||'—')} · ${item.w||''}×${item.h||''} מ"מ</div><div style="font-size:11px;color:var(--muted)">${lgEsc(item.client)} · ${lgEsc(item.orderNum||'')}</div></div></div>`).join('');
   document.getElementById('chisReport').classList.add('open');
 }
 function printChisum(reportNum, w){
@@ -981,7 +981,7 @@ function renderSheet(){
           <div class="si-chk">${ck?'✓':''}</div>
           <div style="flex:1">
             <div class="si-name">${lgEsc(item?.name||'—')}${isGrp?` <span style="font-size:9px;color:var(--muted)">#${item?.groupIndex||''}</span>`:''}</div>
-            <div class="si-dim">${item?.w||''}${item?.w&&item?.h?'×':''}${item?.h||''} ס"מ</div>
+            <div class="si-dim">${item?.w||''}${item?.w&&item?.h?'×':''}${item?.h||''} מ"מ</div>
           </div>
           <div class="si-tag tc">🔥 חיסום</div>
         </div>`;
