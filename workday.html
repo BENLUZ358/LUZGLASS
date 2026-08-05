@@ -499,21 +499,6 @@
   </div>
 </div>
 
-<!-- CHISUM MODAL -->
-<div class="overlay" id="chisumOv" onclick="if(event.target===this)closeChisum()">
-  <div class="modal">
-    <div class="mhdr" style="background:var(--chisum)">
-      <h2>🔥 חיסום הגיע</h2>
-      <button class="mcl" onclick="closeChisum()">✕</button>
-    </div>
-    <div class="mbody" id="chisumBody"></div>
-    <div class="mfoot">
-      <button class="btn btn-purple" onclick="confirmChisum()" style="flex:1">שלח הודעות ✓</button>
-      <button class="btn btn-outline" onclick="closeChisum()">ביטול</button>
-    </div>
-  </div>
-</div>
-
 <div class="toast" id="toast"></div>
 
 <script>
@@ -559,9 +544,11 @@ let workDay = {
   selected:      [],
   inWork:        [],
   inChisum:      [],
-  pendingChisum: [],
   itemsSel:      {}
 };
+// הערה: pendingChisum הוסר. הוא תועד ב-BUG_LOG כתור המתנה לתחנה, אבל בפועל
+// אף שורת קוד מעולם לא דחפה אליו — כל הזמנות החיסום נכנסות לתחנה יחד
+// (ר' handleWorkdayStart). השארתו כשדה מת הזמינה "שחזור" שהיה פותח את Bug 13.
 let _workDayLoaded = false;
 
 async function initWorkDay(){
@@ -572,8 +559,7 @@ async function initWorkDay(){
     // Firebase מחזיר object עם keys מספריים — המר חזרה ל-array
     function objToArr(val){ return val ? Object.values(val).map(String) : []; }
     workDay.inWork   = objToArr(wd.inWork);
-    workDay.inChisum      = objToArr(wd.inChisum);
-    workDay.pendingChisum = objToArr(wd.pendingChisum);
+    workDay.inChisum = objToArr(wd.inChisum);
     workDay.itemsSel = (wd.itemsSel && !Array.isArray(wd.itemsSel)) ? wd.itemsSel : {};
   } catch(e) {
     console.warn('initWorkDay:', e.message);
@@ -716,7 +702,6 @@ function saveWorkDay(){
     date:      workDay.date     || '',
     inWork:        arrToObj(workDay.inWork),
     inChisum:      arrToObj(workDay.inChisum),
-    pendingChisum: arrToObj(workDay.pendingChisum),
     itemsSel:      workDay.itemsSel || {},
     selected:  arrToObj(workDay.selected),
     updatedAt: Date.now()
@@ -1576,12 +1561,29 @@ function toggleChisumOpen(key){
   renderChisumTab();
 }
 
+// שומר את סימוני ההגעה ל-Firebase (orders/{id}.chisumArrivedIdxs) מיד בכל לחיצה.
+// קודם הם חיו רק ב-arrivedItems שבזיכרון — סימון 8 מתוך 12 פאנלים ורענון דף
+// מחק את הכל. chisumArrivedIdxs הוא עכשיו מקור האמת; arrivedItems נשאר רק
+// כהד מקומי לתגובתיות מיידית של ה-UI.
+function _persistArrivedIdxs(sid, nextSet){
+  const obj = {};
+  nextSet.forEach(i => { obj[i] = true; });
+  return updateOrder(sid, { chisumArrivedIdxs: nextSet.size ? obj : null })
+    .catch(e => { console.error('toggleArrived persist:', e); showToast('⚠️ הסימון לא נשמר — בדוק חיבור'); });
+}
+
 function toggleArrived(orderId, itemIdx, checked){
   const id  = String(orderId);
   const idx = parseInt(itemIdx);
   if(!arrivedItems[id]) arrivedItems[id] = [];
   if(checked){ if(!arrivedItems[id].includes(idx)) arrivedItems[id].push(idx); }
   else        { arrivedItems[id] = arrivedItems[id].filter(i => i !== idx); }
+
+  const o    = allOrders.find(x => String(x.id) === id);
+  const next = new Set((o && o.chisumArrivedIdxs || []).map(Number));
+  if(checked) next.add(idx); else next.delete(idx);
+  _persistArrivedIdxs(id, next);
+
   renderChisumTab();
 }
 
@@ -1600,6 +1602,9 @@ function markAllClientArrived(clientKey, reportId, clientName){
       .filter(i => i >= 0);
     if(!arrivedItems[sid]) arrivedItems[sid] = [];
     pendingIdxs.forEach(idx => { if(!arrivedItems[sid].includes(idx)) arrivedItems[sid].push(idx); });
+    // התמדה מיידית, כמו ב-toggleArrived
+    pendingIdxs.forEach(idx => existingArrived.add(idx));
+    if(pendingIdxs.length) _persistArrivedIdxs(sid, existingArrived);
   });
   renderChisumTab();
 }
@@ -2093,9 +2098,11 @@ function resetChisumList(){
     if(!chisumIdxs.length) return;
 
     const allDone = chisumIdxs.every(i => allArrivedNow.has(i));
-    if(allDone)                   doneOrds.push(o);
-    else if(sessionArrived.size)  partialOrds.push(o);
-    else                          unchangedOrds.push(o);
+    // allArrivedNow ולא sessionArrived — הסימונים נשמרים ל-Firebase מיד,
+    // אז אחרי רענון הם קיימים ב-existingArrived והסשן ריק.
+    if(allDone)                    doneOrds.push(o);
+    else if(allArrivedNow.size)    partialOrds.push(o);
+    else                           unchangedOrds.push(o);
   });
 
   const ov = document.createElement('div');
@@ -2147,7 +2154,14 @@ function resetChisumList(){
   document.body.appendChild(ov);
 }
 
+// מנעול לחיצה כפולה — בלעדיו לחיצה שנייה רצה שוב מול allOrders שעדיין לא
+// קיבל את העדכון: מטח הודעות WhatsApp שני לכל הלקוחות, ו-lgNextStage על הזמנה
+// שכבר done מחזיר 'collected' — כלומר הזמנה מסומנת "נאספה" בזמן שהיא על המדף.
+let _confirmingResetChisum = false;
 function confirmResetChisum(){
+  if(_confirmingResetChisum) return;
+  _confirmingResetChisum = true;
+  try {
   document.querySelectorAll('[style*=fixed]').forEach(el => el.remove());
   const chisumOrds  = allOrders.filter(o => (o.stage||'') === 'chisum' && !!o.chisumArrived);
   let doneCount     = 0;
@@ -2185,13 +2199,11 @@ function confirmResetChisum(){
           lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`);
         }, msgCount++ * 600);
       }
-    } else if(sessionArrived.size > 0){
+    } else if(allArrivedNow.size > 0){
+      // פריטים חלקיים — ההזמנה נשארת בחיסום. הסימונים כבר נשמרו ב-Firebase
+      // בזמן הלחיצה (toggleArrived), כאן רק מוודאים שהם תואמים ומדווחים.
       partialCount++;
-      // פריטים חלקיים — שמור התקדמות ב-Firebase, ההזמנה נשארת בחיסום
-      const obj = {};
-      allArrivedNow.forEach(i => { obj[i] = true; });
-      updateOrder(sid, { chisumArrivedIdxs: obj })
-        .catch(e => console.error('confirmReset partial:', e));
+      _persistArrivedIdxs(sid, allArrivedNow);
     }
   });
 
@@ -2201,6 +2213,11 @@ function confirmResetChisum(){
   const msg2 = partialCount ? ` · ${partialCount} עם פריטים חסרים` : '';
   showToast((msg || '✓ בדיקה הושלמה') + msg2);
   renderAll();
+  } finally {
+    // שחרור מושהה — הכתיבות למעלה אסינכרוניות, וצריך לתת ל-listener להחזיר
+    // allOrders מעודכן לפני שלחיצה נוספת נחשבת לגיטימית.
+    setTimeout(()=>{ _confirmingResetChisum = false; }, 3000);
+  }
 }
 
 function checkChisumArrived(){
@@ -2443,7 +2460,7 @@ function handleWorkdayStart(){
 
   saveWorkDay();
 
-  const _chisumSent = workDay.inChisum.length + (workDay.pendingChisum||[]).length;
+  const _chisumSent = workDay.inChisum.length;
   const _litushCount = workDay.inWork.length;
 
   if(_chisumSent > 0 && _litushCount === 0){
@@ -2483,7 +2500,13 @@ function _showChisumBanner(count){
   document.getElementById('chisumBannerText').textContent = count + ' הזמנות נשלחו לתחנת הבדיקה!';
 }
 
+// מנעול לחיצה כפולה — ר' ההסבר ב-confirmResetChisum. כאן לחיצה שנייה שולחת
+// מטח הודעות "מוכן לאיסוף" כפול לכל הלקוחות ומקדמת done→collected בטעות.
+let _confirmingFinish = false;
 function confirmFinish(){
+  if(_confirmingFinish) return;
+  _confirmingFinish = true;
+  try {
   const { cutReady, cutPending, chisumOrds, mixed } = _getFinishDayGroups();
 
   // שלח הודעה רק להזמנות שעוברות ישירות ל-done (לא גרפיקה, לא הובלה)
@@ -2532,6 +2555,9 @@ function confirmFinish(){
     : `✓ יום עבודה הסתיים${cutPending.length ? ` · ${cutPending.length} ממתינות לחיסום` : ''}`;
   showToast(msg);
   setTab('work');
+  } finally {
+    setTimeout(()=>{ _confirmingFinish = false; }, 3000);
+  }
 }
 
 function closeFinish(){
@@ -2541,53 +2567,12 @@ function closeFinish(){
 // ═══════════════════════════════════════
 //  CHISUM ARRIVED
 // ═══════════════════════════════════════
-function chisumArrived(){
-  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
-  const goingDone  = inChisum.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone))==='done');
-  const goingGraph = inChisum.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone))==='graphic');
-  const goingDeliv = inChisum.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone))==='delivery');
-  document.getElementById('chisumBody').innerHTML = `
-    <div style="margin-bottom:14px;font-size:13px;display:flex;flex-direction:column;gap:6px;">
-      ${goingDone.length  ? `<div>✅ <strong style="color:#27ae60">${goingDone.length}</strong> הזמנות — מוכנות לאיסוף, תישלח הודעה</div>` : ''}
-      ${goingGraph.length ? `<div>🖼 <strong style="color:#27ae60">${goingGraph.length}</strong> הזמנות — עוברות לגרפיקה, <b>אין הודעה עדיין</b></div>` : ''}
-      ${goingDeliv.length ? `<div>🚚 <strong style="color:#2980b9">${goingDeliv.length}</strong> הזמנות — עוברות לטאב הובלות</div>` : ''}
-    </div>
-    ${goingDone.length ? `
-    <div class="wa-preview-title">📱 דוגמת הודעה — מוכן לאיסוף</div>
-    <div class="wa-preview">${lgEsc(waMessage(goingDone[0], 'chisum_ready'))}</div>` : ''}`;
-  document.getElementById('chisumOv').classList.add('open');
-}
-
-function confirmChisum(){
-  const inChisum = allOrders.filter(o => workDay.inChisum.map(String).includes(String(o.id)));
-  // שלח WhatsApp רק להזמנות שעוברות ישירות ל-done (לא גרפיקה, לא הובלה)
-  let waIdx = 0;
-  inChisum.forEach(o => {
-    const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
-    if(nextSt === 'done'){
-      const i = waIdx++;
-      setTimeout(()=>{
-        lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`);
-      }, i * 600);
-    }
-  });
-  // עדכן Firebase — שלב הבא לפי לוגיקה דינמית (markStageDone משתמש ב-lgNextStage)
-  inChisum.forEach(o => markStageDone(String(o.id)));
-
-  workDay.inChisum = [];
-  saveWorkDay();
-  closeChisum();
-  const doneCount = inChisum.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'done').length;
-  const msg = doneCount
-    ? `✓ ${doneCount} הזמנות מוכנות — הודעות נשלחו`
-    : `✓ חיסום הושלם — ממשיך לשלב הבא`;
-  showToast(msg);
-  renderAll();
-}
-
-function closeChisum(){
-  document.getElementById('chisumOv').classList.remove('open');
-}
+// הוסרו: chisumArrived() / confirmChisum() / closeChisum() + אוברליי #chisumOv.
+// היו רגרסיה של Bug 13 — סיננו לפי workDay.inChisum (= תור תחנת הבדיקה, ההזמנה
+// עוד ב-stage='workday') והתייחסו אליו כאילו ההזמנות כבר חזרו מהמפעל. הרצה
+// הייתה שולחת "מוכן לאיסוף" על הזמנות שטרם נבדקו, דוחפת אותן ל-stage='chisum'
+// בעקיפת תחנת הבדיקה, ומרוקנת את התור. מסלול החזרה התקין מהמפעל הוא
+// resetChisumList() / confirmResetChisum() — שמסננים נכון לפי stage==='chisum'.
 
 // ═══════════════════════════════════════
 //  WHATSAPP MESSAGE
@@ -2622,14 +2607,17 @@ function resetDay(){
   // נקה workdayStatus מ-Firebase לכל הזמנה שהייתה ביום — אחרת handleWorkdayStart ידלג עליהן
   const toReset = [...new Set([
     ...workDay.inWork.map(String),
-    ...workDay.inChisum.map(String),
-    ...(workDay.pendingChisum||[]).map(String)
+    ...workDay.inChisum.map(String)
   ])];
   toReset.forEach(id => {
     updateOrder(id, {workdayStatus:'', readyStatus:'', inspectionStatus:'', temperingStatus:''})
       .catch(e => console.error('resetDay updateOrder:', e));
+    // נקה גם את סימוני תחנת הבדיקה — אחרת הזמנה שתחזור לתחנה מגיעה עם כל
+    // הסימונים דלוקים ונחשבת "נבדקה" בלי שאף אחד הסתכל עליה.
+    firebase.database().ref('workday/checkState/' + id).remove()
+      .catch(e => console.error('resetDay checkState:', e));
   });
-  workDay = {date:today(), selected:[], inWork:[], inChisum:[], pendingChisum:[], itemsSel:{}};
+  workDay = {date:today(), selected:[], inWork:[], inChisum:[], itemsSel:{}};
   saveWorkDay();
   selectedIds.clear();
   setTab('build');

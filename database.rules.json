@@ -59,6 +59,9 @@
         ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists()",
         ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists()",
         ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
+      },
+      "chisumCounter": {
+        ".validate": "newData.isNumber() && (!data.exists() || newData.val() > data.val())"
       }
     },
 

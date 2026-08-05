@@ -336,18 +336,6 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 </div>
 
 
-<!-- CHISUM REPORT -->
-<div class="overlay" id="chisReport">
-  <div class="cb-box">
-    <div class="cb-hdr"><h3>🔥 דוח חיסום</h3><button style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer" onclick="document.getElementById('chisReport').classList.remove('open')">✕</button></div>
-    <div class="cb-body" id="cbBody"></div>
-    <div class="cb-foot">
-      <button style="flex:1;padding:12px;background:var(--purple);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;border-radius:4px" onclick="printChisum()">🖨️ הדפס</button>
-      <button style="padding:12px 18px;background:var(--s2);color:var(--muted);font-family:Heebo,sans-serif;font-size:13px;border:1px solid var(--border);cursor:pointer;border-radius:4px" onclick="document.getElementById('chisReport').classList.remove('open')">סגור</button>
-    </div>
-  </div>
-</div>
-
 <!-- EDITOR -->
 <div id="csEd">
   <div class="ed-top">
@@ -407,10 +395,6 @@ function setTab(t){
 }
 
 
-function isMirrorItem(item){
-  return (item.name||'').includes('מראה');
-}
-
 function mapFirebaseOrder(o){
   // Firebase מחזיר לפעמים items כאובייקט {0:{..},1:{..}} — הבטח מערך
   const rawItems = o.items;
@@ -452,19 +436,19 @@ function load(){
     function objToArr(v){ return v ? Object.values(v).map(String) : []; }
     wdInChisum = objToArr(wd.inChisum);
 
-    if(!_csLocalPending && wd.checkState && typeof wd.checkState === 'object'){
-      // Firebase יש נתון — השתמש בו, אלא אם כן אנחנו באמצע כתיבה מקומית
-      cs = wd.checkState;
+    // Firebase הוא מקור האמת לסימוני הבדיקה. localStorage הוא מטמון תצוגה בלבד.
+    // קודם היה כאן ענף "שחזור" שדחף את התוכן המקומי בחזרה לענן כשהצומת היה ריק —
+    // הוא נועד להגן מפני saveWorkDay שמחק את checkState, אבל אותו באג כבר תוקן
+    // (update במקום set, בשני המקומות). מה שנשאר היה ההפך: הוא היה מבטל כל מחיקה
+    // לגיטימית ומחזיר סימונים ישנים, כך שהזמנה חוזרת נראית "נבדקה" בלי שנבדקה.
+    if(!_csLocalPending){
+      cs = (wd.checkState && typeof wd.checkState === 'object') ? wd.checkState : {};
       safeStorage.setItem('lgCheckState', JSON.stringify(cs));
-    } else if(!_csLocalPending && Object.keys(cs).length > 0){
-      // Firebase חסר checkState (ייתכן שworkday מחק אותו) — שחזר מ-localStorage
-      firebase.database().ref('workday/checkState').set(cs)
-        .catch(e=>console.error('[CS] checkState recovery:', e));
     }
 
     _wdReady = true;
     if(_ordersReady) _filterOrders();
-  });
+  }, err => _csListenerFailed('workday', err));
 
   // Subscribe to checkEdits — סימונים זמניים בנתיב נפרד לגמרי מ-orders
   if(_checkEditsRef) firebase.database().ref('checkEdits').off('value', _checkEditsRef);
@@ -474,7 +458,7 @@ function load(){
     try{ safeStorage.setItem('lgCSEdits', JSON.stringify(window._csCheckEdits)); }catch(e){}
     // רענן סקיצה אם פתוחה
     if(cur) renderSketch();
-  });
+  }, err => console.error('[CS] checkEdits listener failed:', err)); // לא חוסם עבודה — רק ציורי בדיקה
 
   // Subscribe to all orders
   if(_csUnsub) _csUnsub();
@@ -482,7 +466,7 @@ function load(){
     window._allCsOrders = fbOrders;
     _ordersReady = true;
     if(_wdReady) _filterOrders();
-  });
+  }, err => _csListenerFailed('orders', err));
 }
 
 function _filterOrders(){
@@ -504,12 +488,22 @@ function _filterOrders(){
   if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
 }
 
-function demos(){return[
-  {id:2001,orderClient:'בן-דוד',orderNum:'2026-001',sketchName:'חדר רחצה',glassFullName:'8מ"מ שקוף',isSystemSketch:true,items:[{name:'8מ"מ שקוף',w:80,h:200},{name:'8מ"מ שקוף',w:50,h:200}],sketch:null},
-  {id:2002,orderClient:'כהן שיפוצים',orderNum:'2026-002',sketchName:'אורחים',glassFullName:'10מ"מ קליר',isSystemSketch:false,items:[{name:'10מ"מ קליר',w:80,h:210,chisum:true},{name:'10מ"מ קליר',w:40,h:210}],sketch:null},
-  {id:2003,orderClient:'לוי קבלן',orderNum:'2026-003',sketchName:'ת"א יח 1',glassFullName:'8מ"מ אפור',isSystemSketch:true,items:[{name:'8מ"מ אפור',w:90,h:210,chisum:true},{name:'8מ"מ אפור',w:60,h:210,chisum:true},{name:'8מ"מ שקוף',w:80,h:200}],sketch:null},
-  {id:2004,orderClient:'מזרחי',orderNum:'2026-004',sketchName:'וילה',glassFullName:'גלינה קליר',isSystemSketch:true,items:[{name:'גלינה קליר',w:70,h:220},{name:'גלינה קליר',w:90,h:220}],sketch:null},
-];}
+// כשל listener (הרשאות/רשת) השאיר קודם ספינר טעינה לנצח בלי שום הודעה, כי
+// ה-overlay מוסר רק ב-_filterOrders שלעולם לא רץ. עכשיו מוצגת שגיאה ברורה.
+function _csListenerFailed(what, err){
+  console.error('[CS] listener failed:', what, err);
+  const ov = document.getElementById('lgLoading');
+  if(ov){
+    ov.innerHTML = `<div style="text-align:center;font-family:Heebo,sans-serif;direction:rtl;padding:24px;">
+      <div style="font-size:38px;margin-bottom:10px">⚠️</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px">לא ניתן לטעון את תחנת הבדיקה</div>
+      <div style="font-size:12px;color:#888;margin-bottom:14px">${lgEsc(what)} — ${lgEsc((err && err.message) || 'שגיאת חיבור')}</div>
+      <button onclick="location.reload()" style="padding:9px 20px;background:#b8922a;color:#fff;border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;">רענן</button>
+    </div>`;
+  } else {
+    toast('⚠️ שגיאת חיבור — רענן את הדף');
+  }
+}
 
 // _csLocalPending: מונע מה-listener לדרוס cs בזמן שאנחנו כותבים ל-Firebase
 let _csLocalPending = false;
@@ -529,7 +523,6 @@ async function saveCS(){
 function saveNotes(){ safeStorage.setItem('lgOrderNotes',JSON.stringify(notes)); }
 // מחזיר רק indices של פריטי חיסום (לא ליטוש)
 function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>!!(o.items||[])[i]?.chisum); }
-function area(o){return chisumIdxs(o).reduce((s,i)=>{const it=(o.items||[])[i];return s+lgCalcAreaM2(it?.w||0,it?.h||0);},0);}
 function buildClients(){
   const cl=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))];
   document.getElementById('fClient').innerHTML='<option value="">כל הלקוחות</option>'+cl.map(c=>`<option value="${lgEsc(c)}">${lgEsc(c)}</option>`).join('');
@@ -762,6 +755,10 @@ function buildSVG(o, readOnly=false){
 // CHECK
 function checkItem(i){
   if(!cur||curReadOnly)return; // אסור לסמן פריטים בסקיצה שהושלמה
+  // ה-listener של workday מחליף את כל אובייקט cs בכל שינוי בצומת (כולל
+  // updatedAt שנכתב בכל שמירה של יום עבודה). בלי ההגנה הזו, שינוי כזה בזמן
+  // שהזמנה פתוחה גרם ל-TypeError שקט בכל הקלקה — ומאותו רגע שום סימון לא נרשם.
+  if(!cs[cur.id]) cs[cur.id] = {};
   cs[cur.id][i]=!cs[cur.id][i];
   saveCS().catch(()=>toast('⚠️ הסימון לא נשמר בענן — בדוק חיבור אינטרנט'));
   renderSketch();updateProg();
@@ -800,12 +797,6 @@ function showBanner(){
 }
 function hideBanner(){document.getElementById('banner').style.display='none';}
 
-function _removeFromChisumStation(ordId){
-  const updated = wdInChisum.filter(id=>id!==String(ordId));
-  const obj={}; updated.forEach((v,i)=>{obj[i]=v;});
-  firebase.database().ref('workday').update({inChisum: updated.length ? obj : null})
-    .catch(e=>console.error('_removeFromChisumStation:', e));
-}
 
 
 let _finishingSketch = false; // מונע לחיצה כפולה — משוחרר תמיד ב-finally, לא נשאר תקוע
@@ -835,13 +826,13 @@ async function finishSketch(){
   }
 }
 
-// מספר רץ לדוחות חיסום — נשמר ב-Firebase כדי שיהיה עקבי בין מכשירים
+// מספר רץ לדוחות חיסום — transaction אטומי, אותו דפוס כמו lgNextOrderNum
+// ב-firebase-db.js. קודם זה היה once('value') ואז set(), כלומר שני טאבים או
+// ריטריי יכלו להפיק את אותו מספר — ואז workday מקבץ שתי קבוצות שונות לדוח אחד.
 async function _createReportNum(){
   const ref = firebase.database().ref('meta/chisumCounter');
-  const snap = await ref.once('value');
-  const next = (snap.val() || 0) + 1;
-  await ref.set(next);
-  return String(next);
+  const result = await ref.transaction(current => (current || 0) + 1);
+  return String(result.snapshot.val());
 }
 
 // שלח את כל ההזמנות שהושלמו למפעל + הפק דוח ממוספר
@@ -855,49 +846,75 @@ async function sendAllToFactory(){
   const printWin = window.open('', '_blank');
   try {
   const doneOrds = orders.filter(isDone);
-  if(!doneOrds.length){ toast('אין הזמנות שהושלמו'); return; }
+  if(!doneOrds.length){
+    toast('אין הזמנות שהושלמו');
+    if(printWin && !printWin.closed) printWin.close(); // אחרת נשאר טאב ריק פתוח
+    return;
+  }
 
   const reportId  = 'chisum_' + Date.now();
   const reportNum = await _createReportNum();
 
   // שלב 1: עדכן כל ההזמנות ב-Firebase — המתן לסיום לפני עדכון inChisum
-  // (מונע מצב שבו inChisum מתעדכן לפני שה-stage של ההזמנה מוכן)
+  // (מונע מצב שבו inChisum מתעדכן לפני שה-stage של ההזמנה מוכן).
+  // כל כשל נאסף ל-failed ולא נבלע: הזמנה שנכשלה נשארת בתור, לא נכנסת לדוח,
+  // ולא מדווחת כ"נשלחה". קודם כל כשל נבלע — ההזמנה נמחקה מהתור, הודפסה בדוח
+  // למפעל, והוצג "✓ נשלחו" בזמן שה-stage נשאר 'workday' והיא חזרה לליטוש.
   const _unpricedAll = [];
+  const sent   = [];
+  const failed = [];
   await Promise.all(doneOrds.map(o => {
     const hasRealChisum = (o.items||[]).some(i => i.chisum && !(i.name||'').includes('מראה'));
-    const targetStage   = hasRealChisum ? 'chisum' : 'done';
-    chDone.push(o);
     if(!hasRealChisum){
       // done הוא שלב סופי לתמחור — חייב לעבור נעילת מחיר, אחרת ההזמנה
       // מגיעה ל-done בלי totalFinal/lockedItems (בדיוק כמו מסלולים אחרים).
+      // מראות לא נוסעות למפעל, ולכן גם לא נכנסות ל-chDone (הדוח).
       return lgLockAndAdvance(String(o.id), o, _csGlobalPrices, _csClientPrices, 'done')
-        .then(r => { if(r && r.unpricedNames && r.unpricedNames.length) _unpricedAll.push(...r.unpricedNames); })
-        .catch(e=>console.error('sendAllToFactory lgLockAndAdvance:',e));
+        .then(r => {
+          if(r && r.unpricedNames && r.unpricedNames.length) _unpricedAll.push(...r.unpricedNames);
+          sent.push(o);
+        })
+        .catch(e=>{ console.error('sendAllToFactory lgLockAndAdvance:',e); failed.push(o); });
     }
     return updateOrder(String(o.id), {
-      stage:           targetStage,
+      stage:           'chisum',
       chisumArrived:   false,
       chisumReportId:  reportId,
       chisumReportNum: reportNum,
-    }).catch(e=>console.error('sendAllToFactory updateOrder:',e));
+    })
+      .then(()=>{ sent.push(o); chDone.push(o); })
+      .catch(e=>{ console.error('sendAllToFactory updateOrder:',e); failed.push(o); });
   }));
   if(_unpricedAll.length) toast('⚠️ לא כל הפריטים תומחרו: ' + _unpricedAll.join(', '));
 
-  // שלב 2: רק אחרי שכל ה-stages עודכנו — הסר מ-inChisum
-  const doneIds = new Set(doneOrds.map(o => String(o.id)));
-  const remaining = wdInChisum.filter(id => !doneIds.has(String(id)));
+  // שלב 2: הסר מ-inChisum — רק את ההזמנות שבאמת עודכנו בהצלחה
+  const sentIds   = new Set(sent.map(o => String(o.id)));
+  const remaining = wdInChisum.filter(id => !sentIds.has(String(id)));
   const obj = {}; remaining.forEach((v,i) => {obj[i]=v;});
-  await firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null})
-    .catch(e=>console.error('sendAllToFactory inChisum:', e));
+  await firebase.database().ref('workday').update({inChisum: remaining.length ? obj : null});
 
-  // מחק סימוני בדיקה זמניים — ההזמנות עברו לשלב הבא
-  doneOrds.forEach(o => {
+  // נקה סימוני בדיקה — גם checkEdits (ציורים) וגם checkState (הסימונים עצמם).
+  // בלי ניקוי checkState, הזמנה שתחזור לתחנה בעתיד מגיעה עם כל הסימונים
+  // דלוקים → isDone מחזיר true מיד → היא נשלחת למפעל בלי שאף אחד בדק אותה.
+  sent.forEach(o => {
     firebase.database().ref('checkEdits/' + o.id).remove()
       .catch(e=>console.error('[CS] removeCheckEdit:', e));
+    firebase.database().ref('workday/checkState/' + o.id).remove()
+      .catch(e=>console.error('[CS] removeCheckState:', e));
+    delete cs[o.id];
   });
-  _clearCSEditsForOrders(doneOrds.map(o=>o.id));
-  printChisum(reportNum, printWin);
-  toast(`✓ דוח ${reportNum} — ${doneOrds.length} הזמנות נשלחו למפעל`);
+  // חובה לעדכן גם את המטמון המקומי, אחרת מנגנון השחזור בליסנר מחזיר את המחיקה
+  safeStorage.setItem('lgCheckState', JSON.stringify(cs));
+  _clearCSEditsForOrders(sent.map(o=>o.id));
+
+  if(chDone.length) printChisum(reportNum, printWin);
+  else if(printWin && !printWin.closed) printWin.close();
+
+  if(failed.length){
+    toast(`⚠️ ${failed.length} מתוך ${doneOrds.length} נכשלו ונשארו בתור — נסה שוב`);
+  } else {
+    toast(`✓ דוח ${reportNum} — ${sent.length} הזמנות נשלחו למפעל`);
+  }
   } catch(e) {
     console.error('[CS] sendAllToFactory error:', e);
     if(printWin && !printWin.closed) printWin.close();
@@ -910,39 +927,28 @@ async function sendAllToFactory(){
 
 
 // CHISUM REPORT
-function offerChisum(){
-  const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
-  if(!items.length)return;
-  document.getElementById('cbBody').innerHTML=`<p style="font-size:12px;color:var(--muted);margin-bottom:14px">סה"כ ${items.length} פריטים לחיסום</p>`+items.map((item,i)=>`<div class="cb-item"><div style="font-size:18px;color:var(--purple);font-weight:900;min-width:24px">${i+1}</div><div><div style="font-size:13px;font-weight:700">${lgEsc(item.name||'—')} · ${item.w||''}×${item.h||''} מ"מ</div><div style="font-size:11px;color:var(--muted)">${lgEsc(item.client)} · ${lgEsc(item.orderNum||'')}</div></div></div>`).join('');
-  document.getElementById('chisReport').classList.add('open');
-}
+// דוח שיוצא פיזית למפעל. בעבר הוא נעטף ב-height:100vh;overflow:hidden (דוח ארוך
+// נחתך לעמוד אחד בהדפסה), הכיל את תפריט הניווט של האפליקציה, והדפיס
+// "מספר דוח:" בלי המספר עצמו. עכשיו: מסמך הדפסה נקי בלבד.
 function printChisum(reportNum, w){
   if(!w){ toast('⚠️ חלון הדוח נחסם — אשר popup ונסה שוב'); return; }
   const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
   const label = reportNum ? `דוח ${lgEsc(reportNum)}` : 'דוח חיסום';
-  w.document.write(`<html dir="rtl"><head><title>${label}</title><style>body{font-family:Heebo,sans-serif;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:9px;border:1px solid #ddd;text-align:right}th{background:#f5f5f5}.report-num{font-size:11px;color:#888;margin-bottom:4px}.report-title{font-size:18px;font-weight:700;margin-bottom:16px}</style></head><body>
-<div class="report-num">מספר דוח:</div>
-<div class="report-title">🔥 ${label} — ${new Date().toLocaleDateString('he-IL')}</div>
-<div class="unav-topbar"><div class="lg">Luz<span>Glass</span></div><button class="unav-burger" onclick="unavOpen()"><span></span><span></span><span></span></button></div>
-<div style="display:flex;height:100vh;overflow:hidden">
-<div class="unav-sidebar" id="unavSidebar">
-  <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
-  <nav class="unav-nav">
-    <div class="unav-sec">מנהל עבודה</div>
-    <a class="unav-a" href="admin.html"><span class="ic">⬡</span>לוח הזמנות</a>
-    <a class="unav-a" href="admin.html"><span class="ic">💰</span>מחירונים</a>
-    <a class="unav-a" href="admin.html"><span class="ic">📅</span>לוח איסופים</a>
-    <div class="unav-sec">תחנות עבודה</div>
-    <a class="unav-a" href="admin.html"><span class="ic">📐</span>תור סקיצות</a>
-    <a class="unav-a" href="drafter.html"><span class="ic">✏️</span>שרטט</a>
-    <a class="unav-a active" href="check-station.html"><span class="ic">🔍</span>תחנת בדיקה</a>
-    <a class="unav-a" href="workday.html"><span class="ic">🏭</span>יום עבודה</a>
-  </nav>
-  <div class="unav-bot"><a href="#" onclick="unavResetAll()">🔄 אפס הכל</a></div>
-</div>
-<div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
-<div style="flex:1;overflow-y:auto">
-<table><thead><tr><th>#</th><th>זכוכית</th><th>מידות</th><th>לקוח</th><th>הזמנה</th></tr></thead><tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${lgEsc(item.name||'—')}</td><td>${item.w||''}×${item.h||''}</td><td>${lgEsc(item.client)}</td><td>${lgEsc(item.orderNum||'')}</td></tr>`).join('')}</tbody></table></div></div>
+  w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>${label}</title><style>
+    body{font-family:Heebo,Arial,sans-serif;padding:20px;color:#1a1714}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:9px;border:1px solid #ddd;text-align:right}
+    th{background:#f5f5f5}
+    thead{display:table-header-group}  /* כותרת חוזרת בכל עמוד מודפס */
+    tr{page-break-inside:avoid}
+    .report-num{font-size:13px;font-weight:700;color:#b8922a;margin-bottom:4px}
+    .report-title{font-size:18px;font-weight:700;margin-bottom:4px}
+    .report-meta{font-size:12px;color:#888;margin-bottom:16px}
+  </style></head><body>
+<div class="report-num">מספר דוח: ${lgEsc(reportNum || '—')}</div>
+<div class="report-title">🔥 ${label}</div>
+<div class="report-meta">${new Date().toLocaleDateString('he-IL')} · ${items.length} פריטים · ${chDone.length} הזמנות</div>
+<table><thead><tr><th>#</th><th>זכוכית</th><th>מידות (מ"מ)</th><th>לקוח</th><th>הזמנה</th></tr></thead><tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${lgEsc(item.name||'—')}</td><td>${item.w||''}×${item.h||''}</td><td>${lgEsc(item.client)}</td><td>${lgEsc(item.orderNum||'')}</td></tr>`).join('')}</tbody></table>
 </body></html>`);
   w.document.close();w.print();
 }

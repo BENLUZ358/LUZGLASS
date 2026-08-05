@@ -228,13 +228,17 @@ async function getAllOrders() {
 // האזנה בזמן אמת — מחזיר פונקציית ניתוק
 //   const off = listenAllOrders(orders => { ... });
 //   off(); // לניתוק
-function listenAllOrders(callback) {
+// onError אופציונלי — בלעדיו כשל הרשאה/רשת נבלע בשקט והדף נשאר בטעינה לנצח.
+function listenAllOrders(callback, onError) {
   const ref     = _lgDb.ref('orders');
   const handler = snap => {
     if (!snap.exists()) { callback([]); return; }
     callback(Object.values(snap.val()).map(lgNormalizeOrder).filter(Boolean));
   };
-  ref.on('value', handler);
+  ref.on('value', handler, err => {
+    console.error('[firebase-db] listenAllOrders failed:', err);
+    if (typeof onError === 'function') onError(err);
+  });
   return () => ref.off('value', handler);
 }
 
@@ -263,8 +267,12 @@ async function getWorkDay() {
   return snap.val();
 }
 
+// update ולא set — set היה מוחק כל מפתח שלא נכלל ב-data, ובפרט את
+// workday/checkState (התקדמות הבדיקה בתחנה) ואת inChisum (תור התחנה), שנכתבים
+// על-ידי check-station.html ולא מופיעים באובייקט של הקורא. workday.html כבר
+// נכווה מזה ומגדיר לעצמו גרסה מקומית עם update; זה מיישר גם את הגרסה המשותפת.
 async function saveWorkDay(data) {
-  await _lgDb.ref('workday').set(_lgClean({ ...data, updatedAt: Date.now() }));
+  await _lgDb.ref('workday').update(_lgClean({ ...data, updatedAt: Date.now() }));
 }
 
 // ─── 8. Session / Auth ──────────────────────────────────────────────
