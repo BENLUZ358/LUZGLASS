@@ -40,9 +40,15 @@ const DATABASE_URL = 'https://lussglass-default-rtdb.europe-west1.firebasedataba
 const DOCUMENT_TYPES = { '30': 'הזמנה', '31': "הזמ' סוכן", '34': "הזמ' רכש" };
 const DEFAULT_DOCUMENT_ID = process.env.HASHAVSHEVET_DOCUMENT_ID || '31';
 
-// שדה Agent מסומן חובה בתיעוד. מסמך מסוג סוכן בלי מספר סוכן לא ייווצר,
-// וזה נכשל בשקט — ה-API עונה ok ופשוט לא נוצר מסמך.
-const DEFAULT_AGENT = process.env.HASHAVSHEVET_AGENT || '';
+// Agent — בהזמנת סוכן אמיתית שקיימת אצל הלקוח בחשבשבת השדה מכיל 0, לא ריק.
+// לכן ברירת המחדל היא "0" והשדה נשלח תמיד. גרסה קודמת גם דרשה מספר סוכן
+// לא-אפס וגם השמיטה את השדה לגמרי כשלא הוזן — שתיהן טעויות.
+const DEFAULT_AGENT = process.env.HASHAVSHEVET_AGENT != null
+  ? String(process.env.HASHAVSHEVET_AGENT) : '0';
+
+// מחסן. מסומן חובה בטבלת השדות, ובמסך של הלקוח הוא מגיע כ-1 כברירת מחדל.
+// לא נשלח עד כה — מועמד סביר לכך שהקליטה עברה "ok" בלי ליצור מסמך.
+const DEFAULT_WAREHOUSE = process.env.HASHAVSHEVET_WAREHOUSE || '1';
 
 function _adminApp() {
   if (getApps().length) return getApps()[0];
@@ -85,7 +91,7 @@ const DOC_ID_FIELDS = {
 };
 
 function buildLines(order, accountKey, reference, globalPrices, clientPrices, opts) {
-  const { docIdMode, documentId, agent } = opts;
+  const { docIdMode, documentId, agent, warehouse } = opts;
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
   const lines = [];
@@ -115,7 +121,9 @@ function buildLines(order, accountKey, reference, globalPrices, clientPrices, op
     line.itemkey   = String(sku);
     line.Quantity  = qty.toFixed(3);
     line.price     = ppm2.toFixed(3);
-    if (agent) line.Agent = String(agent);   // חובה למסמכי סוכן (31)
+    // שניהם נשלחים תמיד, כולל כשהערך הוא "0" — כך זה נראה במסמך אמיתי.
+    if (warehouse !== '') line.warehouse = String(warehouse);
+    if (agent     !== '') line.Agent     = String(agent);
     lines.push(line);
   });
 
@@ -194,19 +202,11 @@ module.exports = async function handler(req, res) {
     const prices = pricesSnap.val() || {};
     const docIdMode  = ['lower', 'upper', 'both'].includes(body.docIdMode) ? body.docIdMode : 'lower';
     const documentId = DOCUMENT_TYPES[String(body.documentId)] ? String(body.documentId) : DEFAULT_DOCUMENT_ID;
-    const agent      = String(body.agent != null ? body.agent : DEFAULT_AGENT).replace(/\D/g, '');
-
-    // מסמך סוכן בלי Agent נקלט בשקט ולא יוצר כלום — עדיף להיעצר כאן.
-    if (documentId === '31' && !agent) {
-      res.status(422).json({
-        error: 'מסמך מסוג "הזמ\' סוכן" (31) דורש מספר סוכן, והוא לא הוגדר',
-        hint:  'הגדר HASHAVSHEVET_AGENT ב-Vercel, או שלח agent בבקשה',
-      });
-      return;
-    }
+    const agent     = String(body.agent     != null ? body.agent     : DEFAULT_AGENT).replace(/\D/g, '');
+    const warehouse = String(body.warehouse != null ? body.warehouse : DEFAULT_WAREHOUSE).replace(/\D/g, '');
 
     const { lines, skipped } = buildLines(order, accountKey, ref.reference,
-      prices.global, prices.client, { docIdMode, documentId, agent });
+      prices.global, prices.client, { docIdMode, documentId, agent, warehouse });
 
     if (!lines.length) {
       res.status(422).json({ error: 'אין אף פריט מתומחר לשליחה', skipped });
@@ -230,7 +230,7 @@ module.exports = async function handler(req, res) {
       res.status(200).json({
         ok: true, dryRun: true,
         reference: ref.reference, accountKey,
-        documentId, documentName: DOCUMENT_TYPES[documentId] || '?', agent,
+        documentId, documentName: DOCUMENT_TYPES[documentId] || '?', agent, warehouse,
         docIdMode, docIdField: docIdMode === 'both' ? 'documentid + DocumentID' : DOC_ID_FIELDS[docIdMode],
         lineCount: lines.length, lines, skipped,
         // בלי signature ובלי station — אלה סודות
@@ -264,6 +264,7 @@ module.exports = async function handler(req, res) {
       accountKey: String(accountKey),
       documentId: documentId,
       agent:      agent || null,
+      warehouse:  warehouse || null,
       docIdMode:  docIdMode,
       lineCount:  lines.length,
       httpStatus: wgRes.status,
