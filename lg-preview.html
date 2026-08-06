@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LuzGlass — תצוגת בסיס העיצוב</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lg-ui.css">
+<style>
+  .wrap{max-width:1100px;margin:0 auto;padding:var(--space-6);}
+  .page-hd{background:var(--text);color:#f7f4ef;padding:var(--space-8) var(--space-6);margin-bottom:var(--space-6);}
+  .page-hd h1{font-family:var(--font-serif);font-size:var(--fs-3xl);font-weight:900;}
+  .page-hd h1 span{color:var(--gold);}
+  .page-hd p{color:rgba(247,244,239,0.65);margin-top:var(--space-2);font-size:var(--fs-sm);}
+
+  section{margin-bottom:var(--space-8);}
+  h2{font-size:var(--fs-xl);font-weight:700;margin-bottom:var(--space-2);}
+  .lead{color:var(--muted);font-size:var(--fs-sm);margin-bottom:var(--space-4);max-width:70ch;}
+
+  .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:var(--space-2);}
+  .sw{border:1px solid var(--border);background:var(--surface);}
+  .sw-chip{height:56px;}
+  .sw-meta{padding:var(--space-2) var(--space-3);}
+  .sw-name{font-size:var(--fs-xs);font-weight:700;}
+  .sw-hex{font-size:var(--fs-xs);color:var(--muted);font-family:ui-monospace,monospace;}
+
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);}
+  @media(max-width:720px){.cmp{grid-template-columns:1fr;}}
+  .cmp-col{border:1px solid var(--border);background:var(--surface);}
+  .cmp-hd{padding:var(--space-2) var(--space-3);font-size:var(--fs-xs);font-weight:700;letter-spacing:0.08em;}
+  .cmp-hd.bad{background:rgba(169,50,38,0.1);color:var(--red);}
+  .cmp-hd.good{background:rgba(30,132,73,0.1);color:var(--green);}
+  .cmp-body{padding:var(--space-4);}
+
+  .ratio{display:inline-flex;align-items:center;gap:6px;font-size:var(--fs-xs);font-weight:700;
+         padding:2px 8px;border-radius:var(--radius);font-family:ui-monospace,monospace;}
+  .ratio.pass{background:rgba(30,132,73,0.12);color:var(--green);}
+  .ratio.fail{background:rgba(169,50,38,0.12);color:var(--red);}
+
+  .icon-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:var(--space-1);}
+  .icon-cell{display:flex;flex-direction:column;align-items:center;gap:6px;padding:var(--space-3) var(--space-2);
+             border:1px solid var(--border);background:var(--surface);}
+  .icon-cell [data-icon]{width:22px;height:22px;color:var(--text);}
+  .icon-cell code{font-size:11px;color:var(--muted);text-align:center;word-break:break-all;}
+
+  .type-row{display:flex;align-items:baseline;gap:var(--space-4);padding:var(--space-2) 0;border-bottom:1px solid var(--border);}
+  .type-tok{font-family:ui-monospace,monospace;font-size:var(--fs-xs);color:var(--muted);min-width:170px;}
+
+  .demo-row{display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center;}
+  .note{border-right:3px solid var(--gold);background:var(--bg2);padding:var(--space-3) var(--space-4);
+        font-size:var(--fs-sm);margin-top:var(--space-3);}
+  .old{font-family:Heebo,sans-serif;}
+</style>
+</head>
+<body>
+
+<a href="#main" class="skip-link">דלג לתוכן</a>
+
+<header class="page-hd">
+  <h1>Luz<span>Glass</span> — בסיס העיצוב</h1>
+  <p>מה שנמצא ב־lg-ui.css ו־lg-icons.js. אף דף באתר עוד לא משתמש בזה.</p>
+</header>
+
+<div class="wrap" id="main">
+
+<section>
+  <h2>1. הצבעים</h2>
+  <p class="lead">הזהב, השחור והקרם נשארו בדיוק כפי שהיו. מה שהתווסף: שני מצבים חדשים לזהב, שנדרשים כי הזהב המקורי נכשל בניגודיות כשהוא משמש כטקסט.</p>
+  <div class="swatches">
+    <div class="sw"><div class="sw-chip" style="background:#b8922a"></div><div class="sw-meta"><div class="sw-name">‎--gold</div><div class="sw-hex">#b8922a · ללא שינוי</div></div></div>
+    <div class="sw"><div class="sw-chip" style="background:#886c1f"></div><div class="sw-meta"><div class="sw-name">‎--gold-text</div><div class="sw-hex">#886c1f · חדש</div></div></div>
+    <div class="sw"><div class="sw-chip" style="background:#1a1714"></div><div class="sw-meta"><div class="sw-name">‎--text</div><div class="sw-hex">#1a1714 · ללא שינוי</div></div></div>
+    <div class="sw"><div class="sw-chip" style="background:#756e66"></div><div class="sw-meta"><div class="sw-name">‎--muted</div><div class="sw-hex">#756e66 · הוכהה</div></div></div>
+    <div class="sw"><div class="sw-chip" style="background:#f7f4ef;border-bottom:1px solid var(--border)"></div><div class="sw-meta"><div class="sw-name">‎--bg</div><div class="sw-hex">#f7f4ef · ללא שינוי</div></div></div>
+    <div class="sw"><div class="sw-chip" style="background:#ede9e1"></div><div class="sw-meta"><div class="sw-name">‎--bg2</div><div class="sw-hex">#ede9e1 · ללא שינוי</div></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>2. הכפתור — הבעיה הכי גלויה</h2>
+  <p class="lead">בכל האתר הכפתור הזהוב נושא טקסט לבן. היחס הוא 2.92:1, מתחת לסף 4.5:1. הפתרון לא דורש לשנות את הזהב — <code>login.html</code> כבר עושה את זה נכון עם טקסט כהה.</p>
+  <div class="cmp">
+    <div class="cmp-col">
+      <div class="cmp-hd bad">לפני — admin.html</div>
+      <div class="cmp-body">
+        <button class="old" style="padding:9px 18px;background:#b8922a;color:#fff;font-size:13px;font-weight:700;border:none;cursor:pointer">הזמנה חדשה</button>
+        <div style="margin-top:12px"><span class="ratio fail">2.92:1 ✕ נכשל</span></div>
+      </div>
+    </div>
+    <div class="cmp-col">
+      <div class="cmp-hd good">אחרי — הבסיס</div>
+      <div class="cmp-body">
+        <button class="btn btn-primary"><span data-icon="plus"></span>הזמנה חדשה</button>
+        <div style="margin-top:12px"><span class="ratio pass">6.11:1 ✓ עובר</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note">הזהב <strong>לא השתנה</strong>. רק צבע הטקסט שעליו.</div>
+</section>
+
+<section>
+  <h2>3. הטקסט המשני</h2>
+  <p class="lead">‎<code>--muted</code> שימש לתוויות, לתאריכים ולשמות בכל האתר — ב־3.45:1. ההכהיה ל־#756e66 מעבירה אותו את הסף בלי לשנות את הגוון.</p>
+  <div class="cmp">
+    <div class="cmp-col">
+      <div class="cmp-hd bad">לפני</div>
+      <div class="cmp-body" style="background:#f7f4ef">
+        <div style="color:#8a8278;font-size:11px">הזמנה #4821 · לקוח: זכוכית הצפון</div>
+        <div style="margin-top:10px"><span class="ratio fail">3.45:1 ✕</span></div>
+      </div>
+    </div>
+    <div class="cmp-col">
+      <div class="cmp-hd good">אחרי</div>
+      <div class="cmp-body" style="background:#f7f4ef">
+        <div style="color:var(--muted);font-size:var(--fs-xs)">הזמנה #4821 · לקוח: זכוכית הצפון</div>
+        <div style="margin-top:10px"><span class="ratio pass">4.58:1 ✓</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>4. סולם הטיפוגרפיה</h2>
+  <p class="lead">הרצפה היא 12px. 286 המופעים של 9/10/11px עולים למעלה — וההיררכיה שהם נשאו עוברת למשקל ולצבע.</p>
+  <div style="background:var(--surface);border:1px solid var(--border);padding:var(--space-4)">
+    <div class="type-row"><span class="type-tok">‎--fs-xs · 12px</span><span style="font-size:12px">תווית, תאריך, מטא־נתונים</span></div>
+    <div class="type-row"><span class="type-tok">‎--fs-sm · 13px</span><span style="font-size:13px">טקסט בטבלה, כפתורים</span></div>
+    <div class="type-row"><span class="type-tok">‎--fs-base · 14px</span><span style="font-size:14px">גוף הטקסט</span></div>
+    <div class="type-row"><span class="type-tok">‎--fs-lg · 16px</span><span style="font-size:16px">כותרת כרטיס</span></div>
+    <div class="type-row"><span class="type-tok">‎--fs-xl · 20px</span><span style="font-size:20px">כותרת מקטע</span></div>
+    <div class="type-row" style="border:none"><span class="type-tok">‎--fs-2xl · 26px</span><span style="font-family:var(--font-serif);font-size:26px;font-weight:900;color:var(--gold-text)">₪184,320</span></div>
+  </div>
+  <div class="cmp" style="margin-top:var(--space-3)">
+    <div class="cmp-col">
+      <div class="cmp-hd bad">לפני — כרטיס קנבן</div>
+      <div class="cmp-body" style="background:#f7f4ef">
+        <div style="background:#fff;border:1px solid rgba(0,0,0,0.07);padding:11px 12px;max-width:200px">
+          <div style="font-size:9px;color:#8a8278;letter-spacing:0.08em;margin-bottom:3px">‎#4821</div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:2px">זכוכית הצפון</div>
+          <div style="font-size:11px;color:#8a8278;margin-bottom:6px">מקלחון פינתי</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:10px;color:#8a8278">4.2 מ״ר</span>
+            <span style="font-size:12px;font-weight:700;color:#b8922a">₪3,240</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="cmp-col">
+      <div class="cmp-hd good">אחרי</div>
+      <div class="cmp-body" style="background:#f7f4ef">
+        <div class="card card-interactive" style="padding:var(--space-3);max-width:200px">
+          <div style="font-size:var(--fs-xs);color:var(--muted);letter-spacing:0.08em;margin-bottom:3px">‎#4821</div>
+          <div style="font-size:var(--fs-base);font-weight:700;margin-bottom:2px">זכוכית הצפון</div>
+          <div style="font-size:var(--fs-xs);color:var(--muted);margin-bottom:var(--space-2)">מקלחון פינתי</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:var(--fs-xs);color:var(--muted)">4.2 מ״ר</span>
+            <span style="font-size:var(--fs-sm);font-weight:700;color:var(--gold-text)">₪3,240</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>5. האייקונים</h2>
+  <p class="lead">‎46 אימוג'י שונים התחלפו בסט SVG אחד. הם יורשים צבע וגודל מההקשר, כך שהם נראים זהים בכל מקום — ולא משתנים בין מכשירים כמו שאימוג'י משתנים.</p>
+  <div class="cmp" style="margin-bottom:var(--space-3)">
+    <div class="cmp-col">
+      <div class="cmp-hd bad">לפני — ניווט</div>
+      <div class="cmp-body" style="background:#1a1714">
+        <div style="color:rgba(247,244,239,0.55);font-size:13px;display:flex;flex-direction:column;gap:9px">
+          <div><span style="font-size:15px">⬡</span> קנבן</div>
+          <div><span style="font-size:15px">🏭</span> יום עבודה</div>
+          <div><span style="font-size:15px">📐</span> תור סקיצות</div>
+          <div><span style="font-size:15px">💰</span> מחירונים</div>
+        </div>
+      </div>
+    </div>
+    <div class="cmp-col">
+      <div class="cmp-hd good">אחרי</div>
+      <div class="cmp-body on-dark" style="background:#1a1714">
+        <div style="color:rgba(247,244,239,0.8);font-size:var(--fs-sm);display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:center;gap:10px"><span data-icon="kanban"></span> קנבן</div>
+          <div style="display:flex;align-items:center;gap:10px"><span data-icon="factory"></span> יום עבודה</div>
+          <div style="display:flex;align-items:center;gap:10px"><span data-icon="ruler"></span> תור סקיצות</div>
+          <div style="display:flex;align-items:center;gap:10px"><span data-icon="wallet"></span> מחירונים</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="icon-grid" id="iconGrid"></div>
+</section>
+
+<section>
+  <h2>6. מצבים שלא היו קיימים בכלל</h2>
+  <p class="lead">בכל 13 הדפים היו 5 מאפייני נגישות בסך הכל, ואפס התייחסות להעדפת תנועה.</p>
+
+  <div style="background:var(--surface);border:1px solid var(--border);padding:var(--space-4);margin-bottom:var(--space-2)">
+    <div style="font-weight:700;margin-bottom:var(--space-2)">טבעת פוקוס למקלדת</div>
+    <p class="lead" style="margin-bottom:var(--space-3)">לחץ Tab. עד היום לא היה שום סימן ויזואלי לאן הגעת.</p>
+    <div class="demo-row">
+      <button class="btn btn-primary">שמור</button>
+      <button class="btn btn-secondary">ערוך</button>
+      <button class="btn btn-ghost">ביטול</button>
+      <button class="btn btn-danger"><span data-icon="trash"></span>מחק</button>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);padding:var(--space-4);margin-bottom:var(--space-2)">
+    <div style="font-weight:700;margin-bottom:var(--space-2)">שדה טופס עם תווית ושגיאה צמודה</div>
+    <div style="max-width:340px">
+      <div class="field">
+        <label for="d1">שם לקוח</label>
+        <input id="d1" type="text" value="זכוכית הצפון">
+      </div>
+      <div class="field field-error">
+        <label for="d2">מ״ר</label>
+        <input id="d2" type="text" value="abc">
+        <div class="field-msg">יש להזין מספר</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);padding:var(--space-4);margin-bottom:var(--space-2)">
+    <div style="font-weight:700;margin-bottom:var(--space-2)">מצב ריק</div>
+    <div class="empty-state">
+      <span data-icon="inbox"></span>
+      <div class="empty-state-title">אין הזמנות בסטטוס הזה</div>
+      <div class="empty-state-msg">כשהזמנה תגיע לשלב הזה היא תופיע כאן.</div>
+      <button class="btn btn-secondary"><span data-icon="plus"></span>צור הזמנה</button>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);padding:var(--space-4)">
+    <div style="font-weight:700;margin-bottom:var(--space-2)">תגיות סטטוס</div>
+    <div class="demo-row">
+      <span class="badge" style="background:rgba(33,97,140,0.12);color:var(--blue)"><span data-icon="scissors"></span>חיתוך</span>
+      <span class="badge" style="background:rgba(118,68,138,0.12);color:var(--purple)"><span data-icon="flame"></span>חיסום</span>
+      <span class="badge" style="background:rgba(30,132,73,0.12);color:var(--green)"><span data-icon="check"></span>מוכן</span>
+      <span class="badge" style="background:rgba(169,50,38,0.12);color:var(--red)"><span data-icon="zap"></span>דחוף</span>
+      <span class="badge" style="background:rgba(186,106,28,0.12);color:var(--orange)"><span data-icon="truck"></span>הובלה</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>7. טבלה</h2>
+  <div class="table-scroll" style="border:1px solid var(--border);background:var(--surface)">
+    <table class="table">
+      <thead><tr><th>מספר</th><th>לקוח</th><th>תיאור</th><th>מ״ר</th><th>סטטוס</th><th>סכום</th></tr></thead>
+      <tbody>
+        <tr><td>4821</td><td>זכוכית הצפון</td><td>מקלחון פינתי</td><td>4.2</td><td><span class="badge" style="background:rgba(33,97,140,0.12);color:var(--blue)">בחיתוך</span></td><td style="font-weight:700;color:var(--gold-text)">₪3,240</td></tr>
+        <tr><td>4822</td><td>א.ב. שיווק</td><td>מדפי זכוכית</td><td>1.8</td><td><span class="badge" style="background:rgba(30,132,73,0.12);color:var(--green)">מוכן</span></td><td style="font-weight:700;color:var(--gold-text)">₪1,120</td></tr>
+        <tr><td>4823</td><td>מראות דרום</td><td>מראה מוארת</td><td>2.6</td><td><span class="badge" style="background:rgba(118,68,138,0.12);color:var(--purple)">בחיסום</span></td><td style="font-weight:700;color:var(--gold-text)">₪2,480</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</div>
+
+<script src="lg-icons.js"></script>
+<script>
+  var grid = document.getElementById('iconGrid');
+  grid.innerHTML = lgIcons.names.map(function(n){
+    return '<div class="icon-cell"><span data-icon="'+n+'"></span><code>'+n+'</code></div>';
+  }).join('');
+  lgIcons.render(grid);
+</script>
+</body>
+</html>
