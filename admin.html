@@ -2178,7 +2178,18 @@ function sqSetStage(stage){
 
 function _sqHbClose(){ document.getElementById('sqHbOv')?.remove(); }
 
-async function sqPreviewHashavshevet(id){
+// documentid באות קטנה לפי הדוגמה בתיעוד, DocumentID לפי טבלת השדות —
+// התיעוד סותר את עצמו, ולכן אפשר להחליף מהמסך במקום לנחש.
+let _sqHbDocIdMode = 'lower';
+// 30 = הזמנה · 31 = הזמ' סוכן. נאמר לנו "תמיד 30", אבל 30 לא יצר כלום
+// ובמקביל נאמר שההזמנות נפתחות כהזמנת סוכן. אפשר להחליף ולבדוק.
+let _sqHbDocId     = '31';
+let _sqHbAgent     = '';
+
+async function sqPreviewHashavshevet(id, opts){
+  if(opts && opts.docIdMode)  _sqHbDocIdMode = opts.docIdMode;
+  if(opts && opts.documentId) _sqHbDocId     = opts.documentId;
+  if(opts && opts.agent != null) _sqHbAgent  = opts.agent;
   _sqHbClose();
   const ov = document.createElement('div');
   ov.id = 'sqHbOv';
@@ -2189,7 +2200,7 @@ async function sqPreviewHashavshevet(id){
 
   let data, res;
   try {
-    res  = await _lgAuthPost('/api/hashavshevet-order', { orderId: id, dryRun: true });
+    res  = await _lgAuthPost('/api/hashavshevet-order', { orderId: id, dryRun: true, docIdMode: _sqHbDocIdMode, documentId: _sqHbDocId, agent: _sqHbAgent });
     data = await res.json();
   } catch(e){
     _sqHbRender(id, { error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false);
@@ -2260,7 +2271,7 @@ function _sqHbRender(id, data, ok){
        <div class="mhdr"><h2>תצוגה מקדימה — טרם נשלח</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
        <div class="mbody">
          <div class="mgrid" style="margin-bottom:14px">
-           <div class="mf"><label>סוג מסמך</label><div class="v">${lgEsc(data.documentId)} — הזמנה</div></div>
+           <div class="mf"><label>סוג מסמך</label><div class="v">${lgEsc(data.documentId)} — ${lgEsc(data.documentName||'')}${data.agent?' · סוכן '+lgEsc(data.agent):''}</div></div>
            <div class="mf"><label>אסמכתא</label><div class="v">${lgEsc(data.reference)}</div></div>
            <div class="mf"><label>מפתח חשבון</label><div class="v">${lgEsc(data.accountKey)}</div></div>
            <div class="mf"><label>שורות</label><div class="v">${data.lineCount}</div></div>
@@ -2268,9 +2279,26 @@ function _sqHbRender(id, data, ok){
          <table class="table"><thead><tr><th>מק"ט</th><th>כמות (מ"ר)</th><th>מחיר למ"ר</th><th>סה"כ</th></tr></thead><tbody>${rows}</tbody></table>
          ${skipped}
        </div>
-       <div class="mfoot">
-         <button class="btn btn-primary" id="sqHbSend" style="flex:1" onclick="sqSendHashavshevet('${lgEsc(id)}')">פתח הזמנה בחשבשבת</button>
-         <button class="btn btn-secondary" onclick="_sqHbClose()">ביטול</button>
+       <div class="mfoot" style="flex-direction:column;align-items:stretch;gap:8px">
+         <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);flex-wrap:wrap">
+           <span>סוג מסמך:</span>
+           <button class="btn ${data.documentId==='30'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{documentId:'30'})">30 הזמנה</button>
+           <button class="btn ${data.documentId==='31'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{documentId:'31'})">31 הזמ' סוכן</button>
+           <span style="margin-right:6px">סוכן:</span>
+           <input id="sqHbAgent" value="${lgEsc(data.agent||'')}" placeholder="מס' סוכן" inputmode="numeric"
+                  style="width:90px;padding:5px 8px;font-size:12px;border:1px solid var(--border);background:var(--bg)"
+                  onchange="sqPreviewHashavshevet('${lgEsc(id)}',{agent:this.value})">
+         </div>
+         <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+           <span>שם השדה:</span>
+           <button class="btn ${data.docIdMode==='lower'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'lower'})">documentid</button>
+           <button class="btn ${data.docIdMode==='upper'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'upper'})">DocumentID</button>
+           <button class="btn ${data.docIdMode==='both'?'btn-primary':'btn-ghost'}"  style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'both'})">שניהם</button>
+         </div>
+         <div style="display:flex;gap:7px">
+           <button class="btn btn-primary" id="sqHbSend" style="flex:1" onclick="sqSendHashavshevet('${lgEsc(id)}')">פתח הזמנה בחשבשבת</button>
+           <button class="btn btn-secondary" onclick="_sqHbClose()">ביטול</button>
+         </div>
        </div>
      </div>`;
   lgIcons?.render(ov);
@@ -2281,7 +2309,7 @@ async function sqSendHashavshevet(id){
   if(btn){ btn.disabled = true; btn.textContent = 'שולח...'; }
   let data, res;
   try {
-    res  = await _lgAuthPost('/api/hashavshevet-order', { orderId: id, dryRun: false });
+    res  = await _lgAuthPost('/api/hashavshevet-order', { orderId: id, dryRun: false, docIdMode: _sqHbDocIdMode, documentId: _sqHbDocId, agent: _sqHbAgent, force: true });
     data = await res.json();
   } catch(e){
     _sqHbRender(id, { error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false);

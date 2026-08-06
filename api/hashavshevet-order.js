@@ -31,8 +31,18 @@ const { getDatabase } = require('firebase-admin/database');
 const ENDPOINT     = 'https://ws.wizground.com/api';
 const DATABASE_URL = 'https://lussglass-default-rtdb.europe-west1.firebasedatabase.app';
 
-// חשבשבת חייבו: סוג המסמך הוא תמיד 30 (הזמנה).
-const DOCUMENT_ID = '30';
+// סוגי המסמכים הרלוונטיים מתוך הטבלה בתיעוד:
+//   30 = הזמנה        31 = הזמ' סוכן        34 = הזמ' רכש
+//
+// בהתחלה נאמר לנו "תמיד 30", ושלחנו 30. חשבשבת החזירו status:ok אבל שום
+// מסמך לא נוצר, ואז התברר שההזמנות אצלנו נפתחות דרך "הזמנת סוכן" — כלומר
+// 31, ולא 30. לכן זה לא מקודד קשיח יותר.
+const DOCUMENT_TYPES = { '30': 'הזמנה', '31': "הזמ' סוכן", '34': "הזמ' רכש" };
+const DEFAULT_DOCUMENT_ID = process.env.HASHAVSHEVET_DOCUMENT_ID || '31';
+
+// שדה Agent מסומן חובה בתיעוד. מסמך מסוג סוכן בלי מספר סוכן לא ייווצר,
+// וזה נכשל בשקט — ה-API עונה ok ופשוט לא נוצר מסמך.
+const DEFAULT_AGENT = process.env.HASHAVSHEVET_AGENT || '';
 
 function _adminApp() {
   if (getApps().length) return getApps()[0];
@@ -64,7 +74,18 @@ function toReference(orderNum) {
 // בונה שורה אחת לכל פריט מתומחר.
 // Quantity = שטח במ"ר, price = מחיר למ"ר — הפריטים בחשבשבת הם מסוג "מכפלה",
 // וזה גם בדיוק מה ש-lgCalcOrderTotal מחשב.
-function buildLines(order, accountKey, reference, globalPrices, clientPrices) {
+// התיעוד סותר את עצמו: דוגמת ה-JSON כותבת "documentid" והטבלה "DocumentID".
+// בחתימת MD5 ובפענוח בשרת אלה שני שדות שונים לגמרי, ואם השם לא נכון השרת
+// עשוי להתעלם מהשדה בשקט — מה שמסביר "status: ok" בלי מסמך.
+// אפשר לבחור בזמן ריצה כדי לבדוק את שתי האפשרויות בלי פריסה מחדש.
+const DOC_ID_FIELDS = {
+  lower: 'documentid',   // לפי הדוגמה בתיעוד — ברירת המחדל, וזה מה שנשלח עד כה
+  upper: 'DocumentID',   // לפי טבלת השדות
+  both:  null,           // שולח את שניהם
+};
+
+function buildLines(order, accountKey, reference, globalPrices, clientPrices, opts) {
+  const { docIdMode, documentId, agent } = opts;
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
   const lines = [];
@@ -86,15 +107,16 @@ function buildLines(order, accountKey, reference, globalPrices, clientPrices) {
     if (!qty) { skipped.push({ name, sku, reason: 'שטח 0 — חסרות מידות' }); return; }
 
     // סדר המפתחות כאן הוא חלק מחוזה החתימה — אין לשנות.
-    // האיות documentid באותיות קטנות לפי הדוגמה בתיעוד של חשבשבת.
-    lines.push({
-      accountKey: String(accountKey),
-      documentid: DOCUMENT_ID,
-      Reference:  reference,
-      itemkey:    String(sku),
-      Quantity:   qty.toFixed(3),
-      price:      ppm2.toFixed(3),
-    });
+    const line = { accountKey: String(accountKey) };
+    if (docIdMode === 'upper')      line.DocumentID = documentId;
+    else if (docIdMode === 'both') { line.documentid = documentId; line.DocumentID = documentId; }
+    else                            line.documentid = documentId;
+    line.Reference = reference;
+    line.itemkey   = String(sku);
+    line.Quantity  = qty.toFixed(3);
+    line.price     = ppm2.toFixed(3);
+    if (agent) line.Agent = String(agent);   // חובה למסמכי סוכן (31)
+    lines.push(line);
   });
 
   return { lines, skipped };
@@ -170,7 +192,21 @@ module.exports = async function handler(req, res) {
 
     // ── שורות ──
     const prices = pricesSnap.val() || {};
-    const { lines, skipped } = buildLines(order, accountKey, ref.reference, prices.global, prices.client);
+    const docIdMode  = ['lower', 'upper', 'both'].includes(body.docIdMode) ? body.docIdMode : 'lower';
+    const documentId = DOCUMENT_TYPES[String(body.documentId)] ? String(body.documentId) : DEFAULT_DOCUMENT_ID;
+    const agent      = String(body.agent != null ? body.agent : DEFAULT_AGENT).replace(/\D/g, '');
+
+    // מסמך סוכן בלי Agent נקלט בשקט ולא יוצר כלום — עדיף להיעצר כאן.
+    if (documentId === '31' && !agent) {
+      res.status(422).json({
+        error: 'מסמך מסוג "הזמ\' סוכן" (31) דורש מספר סוכן, והוא לא הוגדר',
+        hint:  'הגדר HASHAVSHEVET_AGENT ב-Vercel, או שלח agent בבקשה',
+      });
+      return;
+    }
+
+    const { lines, skipped } = buildLines(order, accountKey, ref.reference,
+      prices.global, prices.client, { docIdMode, documentId, agent });
 
     if (!lines.length) {
       res.status(422).json({ error: 'אין אף פריט מתומחר לשליחה', skipped });
@@ -193,7 +229,9 @@ module.exports = async function handler(req, res) {
     if (dryRun) {
       res.status(200).json({
         ok: true, dryRun: true,
-        reference: ref.reference, accountKey, documentId: DOCUMENT_ID,
+        reference: ref.reference, accountKey,
+        documentId, documentName: DOCUMENT_TYPES[documentId] || '?', agent,
+        docIdMode, docIdField: docIdMode === 'both' ? 'documentid + DocumentID' : DOC_ID_FIELDS[docIdMode],
         lineCount: lines.length, lines, skipped,
         // בלי signature ובלי station — אלה סודות
         preview: { plugin: 'imovein', company: COMPANY, netPassportID: NET_ID, pluginData: lines },
@@ -224,7 +262,9 @@ module.exports = async function handler(req, res) {
       sentBy:     auth.phone,
       reference:  ref.reference,
       accountKey: String(accountKey),
-      documentId: DOCUMENT_ID,
+      documentId: documentId,
+      agent:      agent || null,
+      docIdMode:  docIdMode,
       lineCount:  lines.length,
       httpStatus: wgRes.status,
       httpOk:     wgRes.ok,
