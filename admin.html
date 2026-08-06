@@ -268,7 +268,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:12px;">
       <div class="hamburger" onclick="unavOpen()"><span></span><span></span><span></span></div>
-      <div class="topbar-title" id="pgTitle">לוח הזמנות</div>
+      <div class="topbar-title" id="pgTitle">טבלת הזמנות</div>
     </div>
     <div class="topbar-right">
       <div class="search-wrap">
@@ -276,8 +276,8 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
         <input type="text" id="srch" placeholder="חיפוש..." oninput="renderAll()" autocomplete="off" name="admin-search">
       </div>
       <div class="view-toggle">
-        <button class="vt active" id="vtK" onclick="setView('kanban',this)"><span data-icon="kanban"></span> לוח</button>
-        <button class="vt" id="vtT" onclick="setView('table',this)"><span data-icon="list"></span> טבלה</button>
+        <button class="vt" id="vtK" onclick="setView('kanban',this)"><span data-icon="kanban"></span> לוח</button>
+        <button class="vt active" id="vtT" onclick="setView('table',this)"><span data-icon="list"></span> טבלה</button>
       </div>
       <span id="topbarUserName" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
       <button onclick="lgLogout()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="יציאה"><span data-icon="logout"></span>יציאה</button>
@@ -305,8 +305,8 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     </select>
   </div>
 
-  <div id="kanbanView" class="kanban"></div>
-  <div id="tableView" class="table-wrap" style="display:none">
+  <div id="kanbanView" class="kanban" style="display:none"></div>
+  <div id="tableView" class="table-wrap">
     <table class="ot"><thead><tr>
       <th>#</th><th>לקוח</th><th>הזמנה</th><th>סוג מקלחון</th>
       <th>זכוכית</th><th>פרזול</th><th>שטח</th><th>מחיר</th>
@@ -384,7 +384,10 @@ function _lgWarnUnpriced(result){
   }
 }
 
-let orders = [], eid = null, sf = 'all', cv = 'kanban';
+// cv = current view. טבלה היא ברירת המחדל בפתיחת המסך.
+// שינוי כאן חייב להתאים למצב ההתחלתי של הסימון ב-HTML:
+// #kanbanView מוסתר, #tableView גלוי, .vt הפעיל הוא vtT, וכותרת pgTitle.
+let orders = [], eid = null, sf = 'all', cv = 'table';
 // fallback בטוח — נמנע קריסה אם firebase-db.js לא נטען עדיין
 const statusToStage = (typeof lgStatusToStage === 'function') ? lgStatusToStage : (s => '');
 let _unsubscribe = null; // פונקציית ניתוק מ-Firebase listener
@@ -874,7 +877,9 @@ function setSF(s,btn){
   sf=s;
   document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
-  if(cv!=='kanban') setView('kanban',document.getElementById('vtK'));
+  // כאן היה מעבר כפוי ללוח בכל לחיצה על פילטר. עם טבלה כברירת מחדל זה היה
+  // מקפיץ אותך ללוח בפילטר הראשון ומבטל את ברירת המחדל. הטבלה מסננת דרך
+  // filtered() בדיוק כמו הלוח, אז התצוגה הנוכחית נשמרת.
   renderAll();
 }
 

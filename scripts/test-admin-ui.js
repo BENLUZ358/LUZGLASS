@@ -132,5 +132,42 @@ const navBlock = (html.match(/<nav class="unav-nav">[\s\S]*?<\/nav>/) || [''])[0
 check('no emoji left in the sidebar navigation',
       !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u.test(navBlock));
 
+/* ── 12. the default view is declared in four places; they must agree ───
+   cv in JS, the two container display styles, the .active view-toggle button,
+   and the pgTitle text. Changing one and missing another leaves the screen
+   showing one view while the chrome claims the other. ─────────────────── */
+const cv = (html.match(/cv\s*=\s*'(kanban|table)'\s*;/) || [])[1];
+check('a default view is declared for cv', !!cv, 'no `cv = ...` found');
+
+if (cv) {
+  const kanbanHidden = /id="kanbanView"[^>]*style="[^"]*display:none/.test(html);
+  const tableHidden  = /id="tableView"[^>]*style="[^"]*display:none/.test(html);
+  check(`#kanbanView initial visibility matches cv='${cv}'`,
+        cv === 'kanban' ? !kanbanHidden : kanbanHidden);
+  check(`#tableView initial visibility matches cv='${cv}'`,
+        cv === 'table' ? !tableHidden : tableHidden);
+
+  /* match the whole tag — class= sits before id= in this markup */
+  const tagOf = id => (html.match(new RegExp('<button[^>]*id="' + id + '"[^>]*>')) || [''])[0];
+  const vtK = tagOf('vtK'), vtT = tagOf('vtT');
+  const activeBtn = /class="[^"]*\bactive\b/.test(vtK) ? 'kanban'
+                  : /class="[^"]*\bactive\b/.test(vtT) ? 'table' : null;
+  check(`the active view-toggle button matches cv='${cv}'`, activeBtn === cv,
+        'active button says ' + activeBtn);
+
+  const title = (html.match(/id="pgTitle">([^<]+)</) || [])[1];
+  check(`pgTitle matches cv='${cv}'`,
+        cv === 'table' ? title === 'טבלת הזמנות' : title === 'לוח הזמנות',
+        'title is "' + title + '"');
+}
+
+/* setSF must not yank the user into a different view — that would undo the
+   default on the first filter click. */
+const setSFBody = (html.match(/function setSF\s*\([^)]*\)\s*\{([\s\S]*?)\n\}/) || [])[1] || '';
+check('setSF body was located', setSFBody.length > 0);
+check('setSF does not force a view switch',
+      !/setView\s*\(/.test(setSFBody),
+      'setSF calls setView, which would override the default view on the first filter click');
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll admin UI checks passed.');
