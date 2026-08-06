@@ -101,5 +101,36 @@ blocks.forEach((b, i) => {
   check(`<style> block ${i + 1} has balanced braces`, o === c, `${o} open / ${c} close`);
 });
 
+/* ── 8. every data-icon name must exist in lg-icons.js ─────────────────── */
+const icons = fs.readFileSync(path.join(ROOT, 'lg-icons.js'), 'utf8');
+const defined = new Set([...icons.matchAll(/^\s*'([a-z-]+)':\s*'/gm)].map(m => m[1]));
+const used    = [...new Set([...html.matchAll(/data-icon="([^"]+)"/g)].map(m => m[1]))];
+
+check('lg-icons.js actually defines icons', defined.size > 20, `parsed ${defined.size}`);
+const unknown = used.filter(n => !defined.has(n));
+check(`all ${used.length} data-icon names used in admin exist in lg-icons.js`,
+      unknown.length === 0, unknown.join(', '));
+
+/* ── 9. icon-only buttons need an accessible name ──────────────────────── */
+const iconOnly = [...html.matchAll(/<button([^>]*)>\s*<span data-icon="[^"]+"><\/span>\s*<\/button>/g)];
+const unnamed  = iconOnly.filter(m => !/aria-label=|title=/.test(m[1]));
+check(`all ${iconOnly.length} icon-only buttons carry aria-label or title`,
+      unnamed.length === 0,
+      unnamed.map(m => '<button' + m[1] + '>').join('\n      '));
+
+/* ── 10. skip link, and it must point at something that exists ─────────── */
+const skip = html.match(/class="skip-link"[^>]*href="#([^"]+)"|href="#([^"]+)"[^>]*class="skip-link"/);
+check('admin.html has a skip link', !!skip);
+if (skip) {
+  const target = skip[1] || skip[2];
+  check(`the skip link target #${target} exists`,
+        new RegExp('id="' + target + '"').test(html));
+}
+
+/* ── 11. emoji must not remain where an icon was meant to go ───────────── */
+const navBlock = (html.match(/<nav class="unav-nav">[\s\S]*?<\/nav>/) || [''])[0];
+check('no emoji left in the sidebar navigation',
+      !/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u.test(navBlock));
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll admin UI checks passed.');

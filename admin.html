@@ -233,35 +233,37 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   <div style="font-size:12px;color:var(--muted-dark);margin-top:16px;letter-spacing:0.08em;">טוען נתונים...</div>
 </div>
 <style>@keyframes lgSpin{to{transform:rotate(360deg)}}</style>
+<a href="#adminMain" class="skip-link">דלג לתוכן הראשי</a>
+
 <div class="layout">
 
-<!-- SIDEBAR -->
-<div class="unav-sidebar" id="unavSidebar">
+<!-- SIDEBAR — on-dark מחליף את טבעת הפוקוס לגרסה שנראית על רקע כהה -->
+<div class="unav-sidebar on-dark" id="unavSidebar">
   <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
   <nav class="unav-nav">
     <div class="unav-sec">מנהל עבודה</div>
-    <a class="unav-a active" href="#" onclick="setView('kanban',this)"><span class="ic">⬡</span>לוח הזמנות</a>
-    <a class="unav-a" href="#" onclick="openPricing()"><span class="ic">💰</span>מחירונים</a>
-    <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic">📅</span>לוח איסופים</a>
-    <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic">📊</span>סיכום יום</a>
+    <a class="unav-a active" href="#" onclick="setView('kanban',this)"><span class="ic" data-icon="kanban"></span>לוח הזמנות</a>
+    <a class="unav-a" href="#" onclick="openPricing()"><span class="ic" data-icon="wallet"></span>מחירונים</a>
+    <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
+    <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
     <div class="unav-sec">תחנות עבודה</div>
-    <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic">📐</span>תור סקיצות</a>
-    <a class="unav-a" href="drafter.html"><span class="ic">✏️</span>שרטט</a>
-    <a class="unav-a" href="check-station.html"><span class="ic">🔍</span>תחנת בדיקה</a>
-    <a class="unav-a" href="workday.html"><span class="ic">🏭</span>יום עבודה</a>
+    <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
+    <a class="unav-a" href="drafter.html"><span class="ic" data-icon="pencil"></span>שרטט</a>
+    <a class="unav-a" href="check-station.html"><span class="ic" data-icon="search"></span>תחנת בדיקה</a>
+    <a class="unav-a" href="workday.html"><span class="ic" data-icon="factory"></span>יום עבודה</a>
     <div class="unav-sec" id="navSecUsers" style="display:none">מערכת</div>
-    <a class="unav-a" id="navUsers" href="#" style="display:none" onclick="openUserMgmt()"><span class="ic">👥</span>משתמשים</a>
+    <a class="unav-a" id="navUsers" href="#" style="display:none" onclick="openUserMgmt()"><span class="ic" data-icon="users"></span>משתמשים</a>
   </nav>
   <div class="unav-bot">
     <div style="font-size:12px;color:rgba(247,244,239,0.45);padding:4px 0 8px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:8px;" id="sidebarUserName"></div>
-    <a href="#" onclick="lgLogout()">↩ יציאה</a>
+    <a href="#" onclick="lgLogout()"><span data-icon="logout"></span> יציאה</a>
   </div>
 </div>
 <div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
 
 
 <!-- MAIN -->
-<div class="main">
+<div class="main" id="adminMain">
   <div class="sidebar-overlay" id="sidebarOverlay" onclick="unavClose()"></div>
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:12px;">
@@ -270,15 +272,15 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     </div>
     <div class="topbar-right">
       <div class="search-wrap">
-        <span style="color:var(--muted)">🔍</span>
+        <span style="color:var(--muted)" data-icon="search"></span>
         <input type="text" id="srch" placeholder="חיפוש..." oninput="renderAll()" autocomplete="off" name="admin-search">
       </div>
       <div class="view-toggle">
-        <button class="vt active" id="vtK" onclick="setView('kanban',this)">⬡ לוח</button>
-        <button class="vt" id="vtT" onclick="setView('table',this)">☰ טבלה</button>
+        <button class="vt active" id="vtK" onclick="setView('kanban',this)"><span data-icon="kanban"></span> לוח</button>
+        <button class="vt" id="vtT" onclick="setView('table',this)"><span data-icon="list"></span> טבלה</button>
       </div>
       <span id="topbarUserName" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
-      <button onclick="lgLogout()" style="padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="יציאה">↩ יציאה</button>
+      <button onclick="lgLogout()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="יציאה"><span data-icon="logout"></span>יציאה</button>
     </div>
   </div>
 
@@ -291,8 +293,8 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <button class="fb" onclick="setSF('מחכה ל-OptyWay',this)">OptyWay</button>
     <button class="fb" onclick="setSF('ירד לביצוע',this)">בביצוע</button>
     <button class="fb" onclick="setSF('נשלח לחיסום',this)">בחיסום</button>
-    <button class="fb" onclick="setSF('בגרפיקה',this)">🖼 גרפיקה</button>
-    <button class="fb" onclick="setSF('ממתין להובלה',this)">🚚 הובלות</button>
+    <button class="fb" onclick="setSF('בגרפיקה',this)"><span data-icon="image"></span> גרפיקה</button>
+    <button class="fb" onclick="setSF('ממתין להובלה',this)"><span data-icon="truck"></span> הובלות</button>
     <button class="fb" onclick="setSF('מוכן לאיסוף',this)">מוכן לאיסוף</button>
     <button class="fb" onclick="setSF('נאסף',this)">נאסף</button>
     <select class="fsel" id="gf" onchange="renderAll()">
@@ -317,7 +319,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 <!-- MODAL -->
 <div class="overlay" id="ov" onclick="closeMod(event)">
   <div class="modal">
-    <div class="mhdr"><h2 id="mtitle">פרטי הזמנה</h2><button class="mcl" onclick="closeMod()">✕</button></div>
+    <div class="mhdr"><h2 id="mtitle">פרטי הזמנה</h2><button class="mcl" onclick="closeMod()" aria-label="סגור"><span data-icon="x"></span></button></div>
     <div class="mbody" id="mbody"></div>
     <div class="mfoot">
       <button onclick="deleteOrderById(eid)" style="margin-left:auto;padding:10px 16px;background:transparent;color:#c0392b;border:1px solid rgba(192,57,43,0.3);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onmouseover="this.style.background='rgba(192,57,43,0.08)'" onmouseout="this.style.background='transparent'">🗑 מחק הזמנה</button>
@@ -1346,7 +1348,7 @@ document.addEventListener('visibilitychange', () => {
   <div class="modal" style="max-width:720px">
     <div class="mhdr" style="display:flex;align-items:center;justify-content:space-between">
       <h2>מחירון מק"טים</h2>
-      <button class="mcl" onclick="closePricing()">✕</button>
+      <button class="mcl" onclick="closePricing()" aria-label="סגור"><span data-icon="x"></span></button>
     </div>
     <div class="mbody" style="padding:0">
       <div id="pricingBody" style="padding:20px;max-height:60vh;overflow-y:auto"></div>
@@ -1373,8 +1375,8 @@ document.addEventListener('visibilitychange', () => {
 <div class="overlay" id="pickupOv" onclick="if(event.target===this)closePickup()" style="z-index:200">
   <div class="modal" style="max-width:700px">
     <div class="mhdr" style="display:flex;align-items:center;justify-content:space-between">
-      <h2>📅 לוח איסופים</h2>
-      <button class="mcl" onclick="closePickup()">✕</button>
+      <h2 style="display:flex;align-items:center;gap:8px"><span data-icon="calendar"></span>לוח איסופים</h2>
+      <button class="mcl" onclick="closePickup()" aria-label="סגור"><span data-icon="x"></span></button>
     </div>
     <div style="padding:0;max-height:75vh;overflow-y:auto" id="pickupBody"></div>
   </div>
@@ -1631,7 +1633,7 @@ document.addEventListener('visibilitychange', () => {
 
     <!-- TOP BAR -->
     <div id="sqTopBar">
-      <div class="sq-logo">📐 תור <span>סקיצות</span></div>
+      <div class="sq-logo" style="display:flex;align-items:center;gap:7px"><span data-icon="ruler"></span>תור <span>סקיצות</span></div>
       <div class="sq-mode-wrap">
         <button class="sq-mode-btn" id="sqModeAdmin" onclick="sqSetMode('admin')" style="background:#b8922a;color:#1a1714;">אדמין</button>
         <!-- טאב שרטט הוסר -->
@@ -1650,7 +1652,7 @@ document.addEventListener('visibilitychange', () => {
         <option value="done">הועבר ✓</option>
       </select>
       <input id="sqSearchInput" placeholder="🔍 חיפוש..." oninput="sqRender()">
-      <button id="sqCloseBtn" onclick="closeSQ()">✕</button>
+      <button id="sqCloseBtn" onclick="closeSQ()" aria-label="סגור"><span data-icon="x"></span></button>
     </div>
 
     <!-- BODY -->
@@ -1692,9 +1694,9 @@ document.addEventListener('visibilitychange', () => {
           <div id="sqActions">
             <button id="sqBtnDrafter" class="sq-action-btn" onclick="sqSetStage('drafter')" style="display:none;">✏️ שלח לשרטט</button>
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
-            <button id="sqBtnOpty"    class="sq-action-btn" onclick="sqSetStage('opty')">⚙️ הוכנס ל-OptyWay</button>
-            <button class="sq-dl-btn" onclick="sqDownload()" title="הורד">📥</button>
-            <button class="sq-dl-btn" id="sqEditBtn" onclick="sqOpenEditor()" title="ערוך סקיצה" style="display:none;">✏️</button>
+            <button id="sqBtnOpty"    class="sq-action-btn" onclick="sqSetStage('opty')"><span data-icon="settings"></span> הוכנס ל-OptyWay</button>
+            <button class="sq-dl-btn" onclick="sqDownload()" title="הורד" aria-label="הורד"><span data-icon="download"></span></button>
+            <button class="sq-dl-btn" id="sqEditBtn" onclick="sqOpenEditor()" title="ערוך סקיצה" aria-label="ערוך סקיצה" style="display:none;"><span data-icon="pencil"></span></button>
           </div>
           <!-- info -->
           <div id="sqInfoGrid"></div>
@@ -2327,11 +2329,11 @@ function sqUpdateField(field, value){
   <!-- TOOLBAR -->
   <div id="sqEdToolbar">
     <!-- tools -->
-    <button class="et-btn et-active" id="etToolDraw" onclick="etSetTool('draw')">✏️ ציור</button>
+    <button class="et-btn et-active" id="etToolDraw" onclick="etSetTool('draw')"><span data-icon="pencil"></span> ציור</button>
     <button class="et-btn" id="etToolText" onclick="etSetTool('text')">T כתב</button>
-    <button class="et-btn" id="etToolErase" onclick="etSetTool('erase')">🧹 מחק</button>
-    <button class="et-btn" onclick="etUndo()">↩ בטל</button>
-    <button class="et-btn" onclick="etClear()">🗑 נקה הכל</button>
+    <button class="et-btn" id="etToolErase" onclick="etSetTool('erase')"><span data-icon="eraser"></span> מחק</button>
+    <button class="et-btn" onclick="etUndo()"><span data-icon="refresh"></span> בטל</button>
+    <button class="et-btn" onclick="etClear()"><span data-icon="trash"></span> נקה הכל</button>
     <div class="et-sep"></div>
     <!-- colors -->
     <div class="et-color et-active" style="background:#e74c3c;" onclick="etSetColor('#e74c3c',this)" title="אדום"></div>
