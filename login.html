@@ -168,7 +168,14 @@ async function doLogin(){
     _loginBtn.disabled = false;
     document.getElementById('password').value = '';
     const badCreds = ['auth/wrong-password','auth/user-not-found','auth/invalid-credential','auth/invalid-email'].includes(err.code);
-    errEl.textContent = badCreds ? 'מספר טלפון או סיסמה שגויים' : 'שגיאת חיבור לשרת — בדוק חיבור אינטרנט ונסה שוב';
+    if (badCreds) {
+      errEl.textContent = 'מספר טלפון או סיסמה שגויים';
+    } else if (err.code === 'lg/timeout') {
+      // תקיעה, לא דחייה — השרת לא ענה בזמן. אומרים למשתמש מה לעשות עכשיו.
+      errEl.textContent = 'השרת לא הגיב. בדוק את חיבור האינטרנט ונסה שוב.';
+    } else {
+      errEl.textContent = 'שגיאת חיבור לשרת — בדוק חיבור אינטרנט ונסה שוב';
+    }
     errEl.style.display = 'block';
   }
 }

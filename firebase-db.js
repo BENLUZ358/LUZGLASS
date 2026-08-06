@@ -466,14 +466,41 @@ const LG_EMAIL_DOMAIN     = 'luzglass.local'; // דומיין מלאכותי —
 function _lgNormalizePhone(p){ return String(p||'').replace(/[-\s]/g,''); }
 function _lgSyntheticEmail(phone){ return `${_lgNormalizePhone(phone)}@${LG_EMAIL_DOMAIN}`; }
 
+// מגבלת זמן לפעולת רשת.
+//
+// למה זה נחוץ: כשחיבור ה-Realtime Database לא מצליח להיווצר, קריאות כמו
+// .once('value') לא נפתרות ולא נדחות — הן פשוט תלויות לנצח. המשתמש נשאר מול
+// ספינר בלי שום הודעה, וזה בדיוק מה שקרה כשה-CSP חסם את ה-long-polling.
+// עטיפה בזמן קצוב הופכת תקיעה שקטה לשגיאה שאפשר להציג ולהתאושש ממנה.
+const LG_NET_TIMEOUT_MS = 15000;
+
+function _lgWithTimeout(promise, ms = LG_NET_TIMEOUT_MS, label = 'פעולת רשת') {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(`${label}: חלף זמן ההמתנה (${ms}ms)`);
+      err.code  = 'lg/timeout';
+      reject(err);
+    }, ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // התחברות אמיתית — Firebase Authentication (לא השוואת סיסמה גלויה).
 // דורש שהמשתמש כבר קיים ב-Firebase Auth (ראה scripts/migrate-users-to-auth.js).
 // זורק שגיאה אם הפרטים שגויים — הקורא (login.html) תופס ומציג הודעה למשתמש.
 async function lgLoginByPhone(phone, password) {
   const p     = _lgNormalizePhone(phone);
   const email = _lgSyntheticEmail(p);
-  await firebase.auth().signInWithEmailAndPassword(email, password); // זורק על פרטים שגויים
-  const snap = await _lgDb.ref('users/' + p).once('value');
+  await _lgWithTimeout(
+    firebase.auth().signInWithEmailAndPassword(email, password), // זורק על פרטים שגויים
+    LG_NET_TIMEOUT_MS, 'אימות'
+  );
+  // הקריאה הזו היא שנתקעה בבאג ה-CSP — הזמן הקצוב הוא רשת הביטחון שלה
+  const snap = await _lgWithTimeout(
+    _lgDb.ref('users/' + p).once('value'),
+    LG_NET_TIMEOUT_MS, 'טעינת פרטי משתמש'
+  );
   if (!snap.exists()) {
     await firebase.auth().signOut().catch(()=>{});
     throw new Error('לא נמצאה רשומת משתמש תואמת');
