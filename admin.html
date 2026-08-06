@@ -22,10 +22,13 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 <meta http-equiv="Expires" content="0">
 <title>LuzGlass — ניהול הזמנות</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<!-- בסיס העיצוב המשותף. הטוקנים, הסקאלות ומצבי המערכת מגיעים מכאן —
+     אין להגדיר :root בדף הזה. ראה docs/superpowers/specs/. -->
+<link rel="stylesheet" href="lg-ui.css?v=20260806">
+
 <style>
-  :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.07);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;}
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;min-height:100vh;}
+  /* טוקנים, reset ו-body מוגדרים ב-lg-ui.css */
   .layout{display:flex;min-height:100vh;}
 
   /* SIDEBAR */
@@ -33,9 +36,9 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .sb-logo{padding:22px 18px 18px;border-bottom:1px solid rgba(255,255,255,0.07);}
   .sb-logo .lg{font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:#f7f4ef;}
   .sb-logo .lg span{color:var(--gold);}
-  .sb-logo .sub{font-size:9px;color:rgba(247,244,239,0.3);letter-spacing:0.28em;text-transform:uppercase;margin-top:3px;}
+  .sb-logo .sub{font-size:12px;color:rgba(247,244,239,0.3);letter-spacing:0.28em;text-transform:uppercase;margin-top:3px;}
   .nav{padding:14px 0;flex:1;}
-  .nav-sec{padding:14px 18px 5px;font-size:9px;letter-spacing:0.2em;color:rgba(247,244,239,0.2);text-transform:uppercase;}
+  .nav-sec{padding:14px 18px 5px;font-size:12px;letter-spacing:0.2em;color:rgba(247,244,239,0.2);text-transform:uppercase;}
   .nav-a{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;font-weight:500;color:rgba(247,244,239,0.5);cursor:pointer;transition:all 0.15s;text-decoration:none;border-right:3px solid transparent;}
   .nav-a:hover{color:rgba(247,244,239,0.85);background:rgba(255,255,255,0.04);}
   .nav-a.active{color:#f7f4ef;border-right-color:var(--gold);background:rgba(255,255,255,0.06);}
@@ -53,69 +56,69 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .topbar-right{display:flex;align-items:center;gap:10px;}
   .search-wrap{display:flex;align-items:center;gap:7px;padding:7px 12px;background:var(--bg);border:1px solid var(--border);}
   .search-wrap input{background:none;border:none;outline:none;font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);width:150px;}
-  .btn-new{padding:9px 18px;background:var(--gold);color:#fff;font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;text-decoration:none;display:inline-block;transition:background 0.2s;}
+  .btn-new{padding:9px 18px;background:var(--gold);color:var(--on-gold);font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;text-decoration:none;display:inline-block;transition:background 0.2s;}
   .btn-new:hover{background:#9a7520;}
 
   /* STATS */
   .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin:18px 24px 0;}
   .stat{background:var(--surface);padding:16px 18px;border:1px solid var(--border);}
-  .stat .n{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:var(--gold);line-height:1;}
-  .stat .l{font-size:11px;color:var(--muted);margin-top:4px;}
-  .stat .d{font-size:10px;margin-top:5px;}
+  .stat .n{font-family:'Playfair Display',serif;font-size:30px;font-weight:900;color:var(--gold-text);line-height:1;}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:4px;}
+  .stat .d{font-size:12px;margin-top:5px;}
 
   /* FILTERS */
   .filters{margin:14px 24px 0;display:flex;gap:5px;flex-wrap:wrap;align-items:center;}
   .fb{padding:6px 12px;background:var(--surface);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;transition:all 0.15s;}
-  .fb:hover{border-color:var(--gold);color:var(--text);}
-  .fb.active{background:var(--bg2);border-color:var(--gold);color:var(--text);font-weight:700;}
+  .fb:hover{border-color:var(--gold-text);color:var(--text);}
+  .fb.active{background:var(--bg2);border-color:var(--gold-text);color:var(--text);font-weight:700;}
   .fb-queue{position:relative;}
-  .fb-queue::after{content:'↗';font-size:9px;margin-right:3px;opacity:0.5;}
-  .fb-queue:hover{border-color:var(--gold);color:var(--text);}
-  .fb-queue:hover::before{content:'תור סקיצות';position:absolute;bottom:calc(100% + 6px);right:50%;transform:translateX(50%);background:#1a1714;color:#f0ede8;font-size:11px;padding:4px 9px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:100;}
+  .fb-queue::after{content:'↗';font-size:12px;margin-right:3px;opacity:0.5;}
+  .fb-queue:hover{border-color:var(--gold-text);color:var(--text);}
+  .fb-queue:hover::before{content:'תור סקיצות';position:absolute;bottom:calc(100% + 6px);right:50%;transform:translateX(50%);background:#1a1714;color:#f0ede8;font-size:12px;padding:4px 9px;border-radius:4px;white-space:nowrap;pointer-events:none;z-index:100;}
   .fsel{padding:6px 10px;background:var(--surface);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:12px;color:var(--muted);outline:none;cursor:pointer;-webkit-appearance:none;}
-  .fsel:focus{border-color:var(--gold);}
+  .fsel:focus{border-color:var(--gold-text);}
 
   /* VIEW TOGGLE */
   .view-toggle{display:flex;gap:3px;margin-right:auto;}
-  .vt{padding:5px 10px;background:var(--surface);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;}
+  .vt{padding:5px 10px;background:var(--surface);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;}
   .vt.active{background:var(--text);color:#f7f4ef;border-color:var(--text);}
 
   /* KANBAN */
   .kanban{margin:14px 24px 24px;display:grid;grid-template-columns:repeat(9,minmax(160px,1fr));gap:6px;overflow-x:auto;padding-bottom:4px;}
   .kcol{display:flex;flex-direction:column;gap:5px;min-width:170px;}
   .khdr{padding:9px 11px;background:var(--surface);border:1px solid var(--border);border-top:3px solid var(--cc);}
-  .khdr .ct{font-size:10px;font-weight:700;color:var(--cc);letter-spacing:0.04em;}
-  .khdr .cn{font-size:10px;color:var(--muted);margin-top:1px;}
+  .khdr .ct{font-size:12px;font-weight:700;color:var(--cc);letter-spacing:0.04em;}
+  .khdr .cn{font-size:12px;color:var(--muted);margin-top:1px;}
 
   /* CARD */
   .card{background:var(--surface);border:1px solid var(--border);padding:11px 12px;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;position:relative;}
   .card:hover{box-shadow:0 3px 14px rgba(0,0,0,0.08);transform:translateY(-1px);}
   .card.urgent{border-right:3px solid #c0392b;}
-  .c-urg{font-size:9px;color:#c0392b;font-weight:700;margin-bottom:3px;}
-  .c-num{font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-bottom:3px;}
+  .c-urg{font-size:12px;color:#c0392b;font-weight:700;margin-bottom:3px;}
+  .c-num{font-size:12px;color:var(--muted);letter-spacing:0.08em;margin-bottom:3px;}
   .c-client{font-size:13px;font-weight:700;margin-bottom:2px;}
-  .c-name{font-size:11px;color:var(--muted);margin-bottom:6px;}
+  .c-name{font-size:12px;color:var(--muted);margin-bottom:6px;}
   .c-tags{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px;}
-  .tag{padding:2px 6px;font-size:9px;font-weight:600;border-radius:1px;}
+  .tag{padding:2px 6px;font-size:12px;font-weight:600;border-radius:1px;}
   .tg{background:rgba(41,128,185,0.1);color:#2980b9;}
-  .tf{background:rgba(184,146,42,0.1);color:var(--gold);}
+  .tf{background:rgba(184,146,42,0.1);color:var(--gold-text);}
   .tt{background:rgba(0,0,0,0.05);color:var(--muted);}
   .c-foot{display:flex;align-items:center;justify-content:space-between;}
-  .c-area{font-size:10px;color:var(--muted);}
-  .c-price{font-size:12px;font-weight:700;color:var(--gold);}
+  .c-area{font-size:12px;color:var(--muted);}
+  .c-price{font-size:12px;font-weight:700;color:var(--gold-text);}
   .c-acts{display:flex;gap:4px;margin-top:7px;}
-  .cb-btn{flex:1;padding:5px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:10px;font-weight:600;color:var(--muted);cursor:pointer;text-align:center;transition:all 0.15s;text-decoration:none;display:block;}
-  .cb-btn:hover{background:var(--bg2);border-color:var(--gold);color:var(--text);}
-  .cb-btn.pr{background:var(--gold);color:#fff;border-color:var(--gold);}
+  .cb-btn{flex:1;padding:5px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;text-align:center;transition:all 0.15s;text-decoration:none;display:block;}
+  .cb-btn:hover{background:var(--bg2);border-color:var(--gold-text);color:var(--text);}
+  .cb-btn.pr{background:var(--gold);color:var(--on-gold);border-color:var(--gold-text);}
   .cb-btn.pr:hover{background:#9a7520;}
 
   /* TABLE */
   .table-wrap{margin:14px 24px 24px;overflow-x:auto;background:var(--surface);border:1px solid var(--border);}
   .ot{width:100%;border-collapse:collapse;font-size:12px;}
-  .ot th{padding:9px 11px;background:var(--bg2);font-weight:600;color:var(--muted);font-size:10px;letter-spacing:0.07em;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
+  .ot th{padding:9px 11px;background:var(--bg2);font-weight:600;color:var(--muted);font-size:12px;letter-spacing:0.07em;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;}
   .ot td{padding:11px;border-bottom:1px solid var(--border);vertical-align:middle;}
   .ot tr:hover td{background:var(--bg);}
-  .badge{display:inline-block;padding:2px 7px;font-size:9px;font-weight:700;letter-spacing:0.04em;color:#fff;border-radius:1px;}
+  .badge{display:inline-block;padding:2px 7px;font-size:12px;font-weight:700;letter-spacing:0.04em;color:#fff;border-radius:1px;}
   .new-order{border-right:3px solid #e74c3c;animation:pulse 2s infinite;}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.7}}
 
@@ -129,23 +132,22 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .mcl{background:none;border:none;color:rgba(247,244,239,0.45);font-size:19px;cursor:pointer;}
   .mbody{padding:20px 22px;max-height:calc(100vh - 160px);overflow-y:auto;}
   .msec{margin-bottom:18px;}
-  .msec-t{font-size:10px;font-weight:600;letter-spacing:0.18em;color:var(--gold);text-transform:uppercase;margin-bottom:8px;}
+  .msec-t{font-size:12px;font-weight:600;letter-spacing:0.18em;color:var(--gold-text);text-transform:uppercase;margin-bottom:8px;}
   .mgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
   .mf{display:flex;flex-direction:column;gap:3px;}
-  .mf label{font-size:10px;color:var(--muted);}
+  .mf label{font-size:12px;color:var(--muted);}
   .mf .v{font-size:13px;font-weight:600;}
   .msel{width:100%;padding:9px 11px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none;cursor:pointer;}
-  .msel:focus{border-color:var(--gold);}
+  .msel:focus{border-color:var(--gold-text);}
   .mimg{width:100%;border:1px solid var(--border);display:block;margin-top:6px;}
   .mfoot{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:7px;}
-  .btn-save{flex:1;padding:12px;background:var(--gold);color:#fff;font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;}
+  .btn-save{flex:1;padding:12px;background:var(--gold);color:var(--on-gold);font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;}
   .btn-cancel{padding:12px 18px;background:transparent;color:var(--muted);font-family:'Heebo',sans-serif;font-size:13px;border:1px solid var(--border);cursor:pointer;}
 
-  /* replaced */
-    .stats{grid-template-columns:repeat(2,1fr);margin:12px 14px 0;}
-    .filters,.kanban,.table-wrap{margin-right:14px;margin-left:14px;}
-    .topbar{padding:0 14px;}
-  }
+  /* כאן ישב בלוק שבור: שורת @media הוחלפה בהערה "replaced" אבל הכללים
+     וה-} נשארו, אז הם חלו בכל רוחב מסך ודרסו את .stats ל-2 עמודות תמיד —
+     גם בדסקטופ, למרות ההגדרה repeat(4,1fr) למעלה. הכללים היו ממילא כפולים
+     ל-@media(max-width:860px) שמתחת, ולכן נמחקו. */
 
   /* MOBILE */
   .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:4px;}
@@ -167,20 +169,20 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .unav-sidebar{width:210px;flex-shrink:0;background:#1a1714;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;z-index:50;}
 .unav-logo{padding:20px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.07);}
 .unav-logo .lg{font-family:'Playfair Display',serif;font-size:18px;font-weight:900;color:#f7f4ef;}
-.unav-logo .lg span{color:#b8922a;}
-.unav-logo .sub{font-size:10px;color:rgba(247,244,239,0.3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
+.unav-logo .lg span{color:var(--gold);}
+.unav-logo .sub{font-size:12px;color:rgba(247,244,239,0.3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
 .unav-nav{flex:1;padding:8px 0;}
-.unav-sec{font-size:9px;font-weight:700;letter-spacing:0.15em;color:rgba(247,244,239,0.25);text-transform:uppercase;padding:12px 16px 4px;}
+.unav-sec{font-size:12px;font-weight:700;letter-spacing:0.15em;color:rgba(247,244,239,0.25);text-transform:uppercase;padding:12px 16px 4px;}
 .unav-a{display:flex;align-items:center;gap:10px;padding:9px 16px;color:rgba(247,244,239,0.55);font-size:13px;text-decoration:none;transition:all 0.15s;cursor:pointer;border:none;background:none;width:100%;text-align:right;font-family:Heebo,sans-serif;}
 .unav-a:hover{background:rgba(255,255,255,0.05);color:#f7f4ef;}
-.unav-a.active{background:rgba(184,146,42,0.15);color:#b8922a;font-weight:700;}
+.unav-a.active{background:rgba(184,146,42,0.15);color:var(--gold);font-weight:700;}
 .unav-a .ic{font-size:15px;flex-shrink:0;}
 .unav-bot{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.07);}
-.unav-bot a{display:block;font-size:11px;color:rgba(192,57,43,0.55);text-decoration:none;padding:4px 0;}
+.unav-bot a{display:block;font-size:12px;color:rgba(192,57,43,0.55);text-decoration:none;padding:4px 0;}
 .unav-bot a:hover{color:#e74c3c;}
 .unav-topbar{display:none;background:#1a1714;padding:0 16px;height:52px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
 .unav-topbar .lg{font-family:'Playfair Display',serif;font-size:16px;font-weight:900;color:#f7f4ef;}
-.unav-topbar .lg span{color:#b8922a;}
+.unav-topbar .lg span{color:var(--gold);}
 .unav-burger{background:none;border:none;cursor:pointer;padding:6px;display:flex;flex-direction:column;gap:4px;}
 .unav-burger span{display:block;width:20px;height:2px;background:#f7f4ef;border-radius:1px;}
 .unav-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:90;}
@@ -204,7 +206,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .stat .n{font-size:22px;}
   /* פילטרים */
   .filters{margin:10px 12px 0;}
-  .fb{padding:5px 10px;font-size:11px;}
+  .fb{padding:5px 10px;font-size:12px;}
   /* kanban — עמודה אחת גלילה אופקית */
   .kanban{margin:10px 12px 16px;grid-template-columns:repeat(2,minmax(150px,1fr));}
   /* טבלה — גלילה אופקית */
@@ -220,13 +222,15 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
+  <script src="lg-icons.js?v=20260806"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
 <div id="lgLoading" style="position:fixed;inset:0;background:#1a1714;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
-  <div style="font-family:'Playfair Display',serif;font-size:28px;color:#f7f4ef;margin-bottom:20px;">Luz<span style="color:#b8922a">Glass</span></div>
-  <div style="width:36px;height:36px;border:3px solid rgba(184,146,42,0.25);border-top-color:#b8922a;border-radius:50%;animation:lgSpin 0.8s linear infinite;"></div>
-  <div style="font-size:12px;color:#666;margin-top:16px;letter-spacing:0.08em;">טוען נתונים...</div>
+  <div style="font-family:'Playfair Display',serif;font-size:28px;color:#f7f4ef;margin-bottom:20px;">Luz<span style="color:var(--gold)">Glass</span></div>
+  <div style="width:36px;height:36px;border:3px solid rgba(184,146,42,0.25);border-top-color:var(--gold);border-radius:50%;animation:lgSpin 0.8s linear infinite;"></div>
+  <div style="font-size:12px;color:var(--muted-dark);margin-top:16px;letter-spacing:0.08em;">טוען נתונים...</div>
 </div>
 <style>@keyframes lgSpin{to{transform:rotate(360deg)}}</style>
 <div class="layout">
@@ -249,7 +253,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <a class="unav-a" id="navUsers" href="#" style="display:none" onclick="openUserMgmt()"><span class="ic">👥</span>משתמשים</a>
   </nav>
   <div class="unav-bot">
-    <div style="font-size:11px;color:rgba(247,244,239,0.45);padding:4px 0 8px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:8px;" id="sidebarUserName"></div>
+    <div style="font-size:12px;color:rgba(247,244,239,0.45);padding:4px 0 8px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:8px;" id="sidebarUserName"></div>
     <a href="#" onclick="lgLogout()">↩ יציאה</a>
   </div>
 </div>
@@ -459,7 +463,7 @@ function showInvoicePrompt(order, newStage){
       <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${lgEsc(order.orderClient||'')} · ${lgEsc(order.orderNum||'')}</div>
       <div style="display:flex;gap:10px;">
         <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}');"
-          style="flex:1;padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ כן</button>
+          style="flex:1;padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ כן</button>
         <button onclick="this.closest('[style*=fixed]').remove();invoiceMarkDone('${order.id}').catch(e=>console.error(e));"
           style="flex:1;padding:13px;background:#f0ede8;color:#555;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">לא</button>
       </div>
@@ -478,7 +482,7 @@ function showCollectedPrompt(order){
       <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${lgEsc(order.orderClient||'')} · ${lgEsc(order.orderNum||'')}</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}','collected');"
-          style="padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+          style="padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
           🧾 הפק חשבונית / קבלה
         </button>
         <button onclick="this.closest('[style*=fixed]').remove();updateStage('${order.id}','collected').catch(e=>console.error(e));"
@@ -516,7 +520,7 @@ function openInvoicePreview(orderId, targetStage){
           <div style="font-weight:700">${lgEsc(li.name)}${qtyLabel}</div>
           <div style="color:#8a8278;margin-top:1px">${li.w||''}×${li.h||''} מ"מ · ${(li.area||0).toFixed(2)} מ"ר</div>
         </div>
-        <div style="font-weight:700;color:#b8922a;white-space:nowrap">₪${(li.lineTotal||0).toLocaleString()}</div>
+        <div style="font-weight:700;color:var(--gold-text);white-space:nowrap">₪${(li.lineTotal||0).toLocaleString()}</div>
       </div>`;
     });
   } else {
@@ -533,7 +537,7 @@ function openInvoicePreview(orderId, targetStage){
           <div style="font-weight:700">${lgEsc(name)}</div>
           <div style="color:#8a8278;margin-top:1px">${item.w||''}×${item.h||''} מ"מ · ${area.toFixed(2)} מ"ר</div>
         </div>
-        <div style="font-weight:700;color:#b8922a;white-space:nowrap">${price?'₪'+price.toLocaleString():'לפי הצעה'}</div>
+        <div style="font-weight:700;color:var(--gold-text);white-space:nowrap">${price?'₪'+price.toLocaleString():'לפי הצעה'}</div>
       </div>`;
     });
   }
@@ -555,13 +559,13 @@ function openInvoicePreview(orderId, targetStage){
       <div style="padding:18px 20px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
           <span style="font-size:14px;font-weight:900">${lgEsc(clientName)}</span>
-          <span style="font-size:11px;color:#8a8278">${lgEsc(o.orderNum||'')} · ${lgEsc(o.date||'')}</span>
+          <span style="font-size:12px;color:#8a8278">${lgEsc(o.orderNum||'')} · ${lgEsc(o.date||'')}</span>
         </div>
-        <div style="font-size:11px;color:#8a8278;margin-bottom:16px">${lgEsc(o.sketchName||o.type||'')}</div>
+        <div style="font-size:12px;color:#8a8278;margin-bottom:16px">${lgEsc(o.sketchName||o.type||'')}</div>
         <div style="border:1px solid rgba(0,0,0,0.08);border-radius:6px;overflow:hidden;margin-bottom:16px;">${itemsHtml}</div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f7f4ef;border-radius:6px;margin-bottom:18px;">
           <span style="font-size:13px;font-weight:700;">סה"כ</span>
-          <span style="font-size:22px;font-weight:900;color:#b8922a;">₪${displayTotal.toLocaleString()}</span>
+          <span style="font-size:22px;font-weight:900;color:var(--gold-text);">₪${displayTotal.toLocaleString()}</span>
         </div>
         <div style="display:flex;gap:10px;">
           <button onclick="${actionOnclick}"
@@ -778,8 +782,8 @@ function showAllItems(){
     <div style="font-size:12px;margin-bottom:5px;padding:5px 8px;background:var(--bg2);border-radius:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <span style="font-weight:600">${lgEsc(i.name||'')}</span>
       ${i.w?`<span style="color:var(--muted)">${i.w}×${i.h} מ"מ</span>`:''}
-      ${i.chisum?'<span style="font-size:10px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
-      ${i.graphic?'<span style="font-size:10px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
+      ${i.chisum?'<span style="font-size:12px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
+      ${i.graphic?'<span style="font-size:12px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
     </div>`).join('');
 }
 
@@ -819,7 +823,7 @@ function acceptOrder(id) {
 function card(o) {
   const nxt = NEXT[o.status];
   const subBadge = o.source === 'upload'
-    ? '<span class="tag" style="background:rgba(184,146,42,0.12);color:#b8922a">📎 העלאה</span>' : '';
+    ? '<span class="tag" style="background:rgba(184,146,42,0.12);color:var(--gold-text)">📎 העלאה</span>' : '';
   return `<div class="card ${o.urgent?'urgent':''}" onclick="openMod('${o.id}')">
     ${o.urgent ? '<div class="c-urg">⚡ דחוף</div>' : ''}
     <div class="c-num">${lgEsc(o.orderNum||'—')} · ${lgEsc(o.date||'')}</div>
@@ -923,7 +927,7 @@ function renderStats(){
   document.getElementById('stats').innerHTML=`
     <div class="stat"><div class="n">${f.length}</div><div class="l">הזמנות</div></div>
     <div class="stat"><div class="n">${inP}</div><div class="l">בייצור</div></div>
-    <div class="stat"><div class="n">${rdy}</div><div class="l">מוכנות לאיסוף</div>${rdy?'<div class="d" style="color:#b8922a">⚡ ממתינות</div>':''}</div>
+    <div class="stat"><div class="n">${rdy}</div><div class="l">מוכנות לאיסוף</div>${rdy?'<div class="d" style="color:var(--gold-text)">⚡ ממתינות</div>':''}</div>
     <div class="stat"><div class="n">₪${tot.toLocaleString()}</div><div class="l">שווי כולל</div>${urg?`<div class="d" style="color:#c0392b">🔴 ${urg} דחופות</div>`:''}</div>`;
 }
 
@@ -975,16 +979,16 @@ function renderTable(){
   document.getElementById('tbody').innerHTML=f.map((o,i)=>{
     const s=ST.find(x=>x.id===o.status)||ST[0];
     return `<tr>
-      <td style="color:var(--muted);font-size:11px">${i+1}</td>
+      <td style="color:var(--muted);font-size:12px">${i+1}</td>
       <td><strong>${lgEsc(o.orderClient||'—')}</strong></td>
-      <td style="font-size:12px;color:var(--muted)">${lgEsc(o.orderNum||'—')}<br><span style="font-size:11px">${lgEsc(o.sketchName||'')}</span></td>
+      <td style="font-size:12px;color:var(--muted)">${lgEsc(o.orderNum||'—')}<br><span style="font-size:12px">${lgEsc(o.sketchName||'')}</span></td>
       <td style="font-size:12px">${lgEsc(o.type)}</td>
       <td><span class="tag tg">${lgEsc(o.glass)}</span></td>
       <td><span class="tag tf">${lgEsc(o.finish)}</span></td>
       <td style="font-size:12px">${o.area} מ״ר</td>
-      <td style="font-weight:700;color:var(--gold)">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</td>
+      <td style="font-weight:700;color:var(--gold-text)">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</td>
       <td><span class="badge" style="background:${s.c}">${lgEsc(o.status)}</span></td>
-      <td style="font-size:11px;color:var(--muted)">${lgEsc(o.date||'')}</td>
+      <td style="font-size:12px;color:var(--muted)">${lgEsc(o.date||'')}</td>
       <td><button class="cb-btn" style="padding:5px 8px" onclick="openMod('${o.id}')">פרטים</button></td>
     </tr>`;
   }).join('');
@@ -1042,15 +1046,15 @@ function renderGlobalPriceTab(el){
       עריכה שלהם נעשית רק בחשבשבת עצמה. שדה "תפעולי" (סוג עיבוד/גרפיקה) אין לו מקבילה בחשבשבת ולכן
       נשאר בעריכה מזערית כאן בלבד.
     </p>
-    <button onclick="syncFromHashavshevetNow()" ${_hbSyncing?'disabled':''} style="width:100%;padding:11px;margin-bottom:8px;background:var(--gold);color:#fff;border:none;border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;${_hbSyncing?'opacity:0.6;':''}">
+    <button onclick="syncFromHashavshevetNow()" ${_hbSyncing?'disabled':''} style="width:100%;padding:11px;margin-bottom:8px;background:var(--gold);color:var(--on-gold);border:none;border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;${_hbSyncing?'opacity:0.6;':''}">
       ${_hbSyncing?'⏳ מסנכרן מק"טים...':'🔄 סנכרן מק"טים מחשבשבת עכשיו (API)'}
     </button>
-    <button onclick="syncAccountsFromHashavshevetNow()" ${_hbAccSyncing?'disabled':''} style="width:100%;padding:11px;margin-bottom:12px;background:none;border:1px solid var(--gold);color:var(--gold);border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;${_hbAccSyncing?'opacity:0.6;':''}">
+    <button onclick="syncAccountsFromHashavshevetNow()" ${_hbAccSyncing?'disabled':''} style="width:100%;padding:11px;margin-bottom:12px;background:none;border:1px solid var(--gold);color:var(--gold-text);border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;${_hbAccSyncing?'opacity:0.6;':''}">
       ${_hbAccSyncing?'⏳ מסנכרן לקוחות...':'🔄 סנכרן לקוחות מחשבשבת עכשיו (API)'}
     </button>
     ${ed?`
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:700;color:var(--gold);margin-bottom:10px;">עריכת נתונים תפעוליים — ${lgEsc(ed.code)} · ${lgEsc(ed.name||'')}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--gold-text);margin-bottom:10px;">עריכת נתונים תפעוליים — ${lgEsc(ed.code)} · ${lgEsc(ed.name||'')}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
         <input id="sku_glass" placeholder="סוג זכוכית (שקוף)" value="${lgEsc(ed.glass||'')}"
           style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">
@@ -1070,7 +1074,7 @@ function renderGlobalPriceTab(el){
         </label>
       </div>
       <div style="display:flex;gap:8px;">
-        <button onclick="saveSkuCatalogForm()" style="flex:1;padding:9px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;border-radius:6px;cursor:pointer;">✓ שמור שינויים תפעוליים</button>
+        <button onclick="saveSkuCatalogForm()" style="flex:1;padding:9px;background:var(--gold);color:var(--on-gold);font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;border-radius:6px;cursor:pointer;">✓ שמור שינויים תפעוליים</button>
         <button onclick="_skuEditCode=null;renderPricing()" style="padding:9px 16px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;">ביטול</button>
       </div>
     </div>`:''}
@@ -1081,12 +1085,12 @@ function renderGlobalPriceTab(el){
           <tr style="${e.active===false?'opacity:0.5;':''}${e.opAuto?'background:rgba(184,146,42,0.06);':''}">
             <td style="font-weight:700">${lgEsc(e.code)}</td>
             <td>${lgEsc(e.name||'—')}</td>
-            <td style="color:var(--gold);font-weight:700">${globalPrices[e.code]?'₪'+globalPrices[e.code]:'—'}</td>
-            <td style="font-size:11px;color:var(--muted)">${lgEsc(e.glass||'')} ${e.mm||''}מ"מ · ${e.proc==='chisum'?'🔥':'✂️'}${e.graphic?' 🖼':''}${e.opAuto?' <span title="זוהה אוטומטית משם הפריט — טרם אומת ידנית" style="color:#c0392b;font-weight:700;cursor:help;">⚠ לא מאומת</span>':''}</td>
-            <td>${e.source==='hashavshevet'?'<span style="font-size:10px;background:rgba(184,146,42,0.12);color:var(--gold);padding:1px 6px;border-radius:3px">חשבשבת</span>':'<span style="font-size:10px;color:var(--muted)">ידני</span>'}</td>
+            <td style="color:var(--gold-text);font-weight:700">${globalPrices[e.code]?'₪'+globalPrices[e.code]:'—'}</td>
+            <td style="font-size:12px;color:var(--muted)">${lgEsc(e.glass||'')} ${e.mm||''}מ"מ · ${e.proc==='chisum'?'🔥':'✂️'}${e.graphic?' 🖼':''}${e.opAuto?' <span title="זוהה אוטומטית משם הפריט — טרם אומת ידנית" style="color:#c0392b;font-weight:700;cursor:help;">⚠ לא מאומת</span>':''}</td>
+            <td>${e.source==='hashavshevet'?'<span style="font-size:12px;background:rgba(184,146,42,0.12);color:var(--gold-text);padding:1px 6px;border-radius:3px">חשבשבת</span>':'<span style="font-size:12px;color:var(--muted)">ידני</span>'}</td>
             <td style="white-space:nowrap">
-              <button onclick="_skuEditCode='${lgJsStr(e.code)}';renderPricing()" style="padding:3px 8px;background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px;">ערוך תפעולי</button>
-              <button onclick="deleteSkuCatalogEntry('${lgJsStr(e.code)}')" style="padding:3px 8px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:11px;">מחק</button>
+              <button onclick="_skuEditCode='${lgJsStr(e.code)}';renderPricing()" style="padding:3px 8px;background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px;">ערוך תפעולי</button>
+              <button onclick="deleteSkuCatalogEntry('${lgJsStr(e.code)}')" style="padding:3px 8px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:12px;">מחק</button>
             </td>
           </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">הקטלוג ריק — לחץ "סנכרן מחשבשבת" למעלה</td></tr>'}
       </tbody>
@@ -1239,7 +1243,7 @@ function openDailySummary(){
       </div>
       ${doneToday.length ? `
       <div style="padding:0 22px 20px;">
-        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:10px;">הזמנות שהושלמו היום</div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:10px;">הזמנות שהושלמו היום</div>
         ${doneToday.map(o=>`
           <div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;">
             <div style="flex:1"><strong>${lgEsc(o.orderClient||'—')}</strong> · <span style="color:var(--muted)">${lgEsc(o.orderNum||'')}</span></div>
@@ -1251,7 +1255,7 @@ function openDailySummary(){
 }
 function _dsStat(label, count, sub, color){
   return `<div style="background:#f7f4ef;border-radius:8px;padding:14px 16px;border-right:3px solid ${color};">
-    <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${label}</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:4px">${label}</div>
     <div style="font-size:24px;font-weight:900;color:${color}">${count}</div>
     ${sub?`<div style="font-size:12px;color:var(--muted);margin-top:2px">${sub}</div>`:''}
   </div>`;
@@ -1295,7 +1299,7 @@ function renderPickupBoard(){
         <div class="pd-date">${dateLabel}</div>
         <div class="pd-count">${pickups.length} לקוחות</div>
         ${farzelCount?`<div class="pd-farzel-count">🔩 ${farzelCount} עם פרזול</div>`:''}
-        <div style="margin-right:auto;font-size:13px;font-weight:700;color:var(--gold)">₪${totalVal.toLocaleString()}</div>
+        <div style="margin-right:auto;font-size:13px;font-weight:700;color:var(--gold-text)">₪${totalVal.toLocaleString()}</div>
       </div>
       ${pickups.map(p=>`
         <div class="pickup-item">
@@ -1313,7 +1317,7 @@ function renderPickupBoard(){
           </div>
           <div>
             <div class="pi-total">₪${(p.total||0).toLocaleString()}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">${lgEsc(p.phone||'')}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">${lgEsc(p.phone||'')}</div>
           </div>
         </div>`).join('')}
     </div>`;
@@ -1355,14 +1359,14 @@ document.addEventListener('visibilitychange', () => {
 
 <style>
 .price-table{width:100%;border-collapse:collapse;font-size:13px;}
-.price-table th{padding:8px 10px;background:var(--bg2);font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.07em;text-align:right;border-bottom:1px solid var(--border);}
+.price-table th{padding:8px 10px;background:var(--bg2);font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.07em;text-align:right;border-bottom:1px solid var(--border);}
 .price-table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
 .price-table tr:last-child td{border-bottom:none;}
 .price-input{width:90px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;text-align:center;border-radius:0;}
-.price-input:focus{border-color:var(--gold);}
-.price-cat{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;padding:10px 10px 4px;background:var(--bg2);border-top:1px solid var(--border);}
+.price-input:focus{border-color:var(--gold-text);}
+.price-cat{font-size:12px;font-weight:700;color:var(--gold-text);letter-spacing:0.1em;padding:10px 10px 4px;background:var(--bg2);border-top:1px solid var(--border);}
 .client-sel{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:14px;color:var(--text);outline:none;-webkit-appearance:none;margin-bottom:14px;cursor:pointer;}
-.client-sel:focus{border-color:var(--gold);}
+.client-sel:focus{border-color:var(--gold-text);}
 </style>
 
 <!-- PICKUP BOARD MODAL -->
@@ -1380,19 +1384,19 @@ document.addEventListener('visibilitychange', () => {
 .pickup-day{margin-bottom:0;}
 .pd-header{padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 .pd-date{font-size:14px;font-weight:700;}
-.pd-count{font-size:11px;color:var(--muted);}
-.pd-farzel-count{font-size:11px;font-weight:700;color:var(--gold);}
+.pd-count{font-size:12px;color:var(--muted);}
+.pd-farzel-count{font-size:12px;font-weight:700;color:var(--gold-text);}
 .pickup-item{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:flex-start;}
 .pi-info{flex:1;}
 .pi-client{font-size:14px;font-weight:700;margin-bottom:3px;}
 .pi-order{font-size:12px;color:var(--muted);margin-bottom:6px;}
 .pi-glass{font-size:12px;margin-bottom:4px;}
-.pi-farzel{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;font-size:11px;font-weight:700;border-radius:2px;}
-.pi-farzel.yes{background:rgba(184,146,42,0.1);color:var(--gold);}
+.pi-farzel{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;font-size:12px;font-weight:700;border-radius:2px;}
+.pi-farzel.yes{background:rgba(184,146,42,0.1);color:var(--gold-text);}
 .pi-farzel.no{background:rgba(0,0,0,0.05);color:var(--muted);}
 .pi-items{margin-top:6px;display:flex;flex-direction:column;gap:3px;}
-.pi-item-row{font-size:11px;color:var(--muted);padding:3px 8px;background:var(--bg);}
-.pi-total{font-size:14px;font-weight:700;color:var(--gold);white-space:nowrap;}
+.pi-item-row{font-size:12px;color:var(--muted);padding:3px 8px;background:var(--bg);}
+.pi-total{font-size:14px;font-weight:700;color:var(--gold-text);white-space:nowrap;}
 .pickup-empty{padding:40px;text-align:center;color:var(--muted);}
 </style>
 
@@ -1423,20 +1427,20 @@ document.addEventListener('visibilitychange', () => {
   border-bottom:1px solid rgba(255,255,255,0.07);
 }
 #sqTopBar .sq-logo{font-size:13px;font-weight:900;color:#f0ede8;white-space:nowrap;}
-#sqTopBar .sq-logo span{color:#b8922a;}
+#sqTopBar .sq-logo span{color:var(--gold);}
 .sq-mode-wrap{display:flex;gap:2px;background:rgba(255,255,255,0.07);border-radius:5px;padding:3px;}
-.sq-mode-btn{padding:4px 12px;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;border:none;cursor:pointer;border-radius:3px;transition:all 0.15s;white-space:nowrap;}
-#sqCounter{font-size:10px;color:rgba(247,244,239,0.3);flex:1;white-space:nowrap;overflow:hidden;}
+.sq-mode-btn{padding:4px 12px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:3px;transition:all 0.15s;white-space:nowrap;}
+#sqCounter{font-size:12px;color:rgba(247,244,239,0.3);flex:1;white-space:nowrap;overflow:hidden;}
 .sq-filter-sel{
   padding:5px 8px;background:rgba(255,255,255,0.07);
   border:1px solid rgba(255,255,255,0.09);
-  font-family:Heebo,sans-serif;font-size:11px;color:rgba(247,244,239,0.75);
+  font-family:Heebo,sans-serif;font-size:12px;color:rgba(247,244,239,0.75);
   outline:none;border-radius:4px;cursor:pointer;
 }
 #sqSearchInput{
   padding:5px 9px;background:rgba(255,255,255,0.07);
   border:1px solid rgba(255,255,255,0.09);
-  font-family:Heebo,sans-serif;font-size:11px;color:#f0ede8;
+  font-family:Heebo,sans-serif;font-size:12px;color:#f0ede8;
   outline:none;border-radius:4px;width:110px;
 }
 #sqSearchInput::placeholder{color:rgba(247,244,239,0.3);}
@@ -1475,9 +1479,9 @@ document.addEventListener('visibilitychange', () => {
 .sq-thumb img{width:100%;height:100%;object-fit:cover;}
 .sq-item-info{flex:1;min-width:0;}
 .sq-item-client{font-size:12px;font-weight:700;color:#f0ede8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.sq-item-sub{font-size:10px;color:rgba(247,244,239,0.3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sq-item-sub{font-size:12px;color:rgba(247,244,239,0.3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sq-item-tags{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;}
-.sq-tag{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;}
+.sq-tag{font-size:12px;padding:1px 5px;border-radius:3px;font-weight:700;}
 .sq-tag-sketch{background:rgba(41,128,185,0.25);color:#5dade2;}
 .sq-tag-upload{background:rgba(142,68,173,0.25);color:#bb8fce;}
 .sq-tag-pending{background:rgba(184,146,42,0.25);color:#d4ac0d;}
@@ -1511,7 +1515,7 @@ document.addEventListener('visibilitychange', () => {
   font-size:14px;cursor:pointer;border-radius:5px;flex-shrink:0;
 }
 #sqDClient{font-size:15px;font-weight:900;color:#1a1714;flex:1;min-width:0;}
-#sqDMeta{font-size:10px;color:#999;margin-top:1px;}
+#sqDMeta{font-size:12px;color:#999;margin-top:1px;}
 .sq-nav-btn{
   width:32px;height:32px;background:#f5f2ed;border:1px solid rgba(0,0,0,0.1);
   font-size:14px;cursor:pointer;border-radius:5px;flex-shrink:0;
@@ -1556,36 +1560,36 @@ document.addEventListener('visibilitychange', () => {
   display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;
 }
 .sq-field{background:#fff;border:1px solid rgba(0,0,0,0.07);border-radius:5px;padding:9px 11px;}
-.sq-field .sq-flabel{font-size:9px;color:#aaa;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px;}
+.sq-field .sq-flabel{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:3px;}
 .sq-field .sq-fval{font-size:13px;font-weight:700;color:#1a1714;}
 /* panels table */
 #sqPanelsWrap{padding:0 14px 12px;}
 .sq-ptable{width:100%;border-collapse:collapse;font-size:12px;background:#fff;border-radius:5px;overflow:hidden;border:1px solid rgba(0,0,0,0.07);}
-.sq-ptable th{padding:7px 10px;text-align:right;font-size:9px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.07em;background:#faf8f5;border-bottom:1px solid rgba(0,0,0,0.07);}
+.sq-ptable th{padding:7px 10px;text-align:right;font-size:12px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.07em;background:#faf8f5;border-bottom:1px solid rgba(0,0,0,0.07);}
 .sq-ptable td{padding:8px 10px;border-bottom:1px solid rgba(0,0,0,0.04);color:#1a1714;font-weight:500;}
 .sq-ptable tr:last-child td{border-bottom:none;}
 /* notes */
 #sqNotesWrap{padding:0 14px 20px;}
-#sqNotesWrap label{font-size:9px;font-weight:700;color:#aaa;letter-spacing:0.1em;text-transform:uppercase;display:block;margin-bottom:5px;}
+#sqNotesWrap label{font-size:12px;font-weight:700;color:#aaa;letter-spacing:0.1em;text-transform:uppercase;display:block;margin-bottom:5px;}
 
 /* ── ITEMS EDITOR ── */
 #sqItemsWrap{padding:0 14px 14px;}
-#sqItemsWrap .iw-title{font-size:9px;font-weight:700;color:#aaa;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
+#sqItemsWrap .iw-title{font-size:12px;font-weight:700;color:#aaa;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;}
 .iw-input-row{display:flex;gap:6px;margin-bottom:8px;align-items:center;}
 .iw-code{flex:1;padding:7px 10px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.12);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;direction:ltr;text-transform:uppercase;}
-.iw-code:focus{border-color:#b8922a;}
+.iw-code:focus{border-color:var(--gold-text);}
 .iw-dim{width:58px;padding:7px 8px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.12);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;text-align:center;}
-.iw-dim:focus{border-color:#b8922a;}
-.iw-add{padding:7px 14px;background:#b8922a;color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;}
+.iw-dim:focus{border-color:var(--gold-text);}
+.iw-add{padding:7px 14px;background:#b8922a;color:var(--on-gold);border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;}
 .iw-add:hover{background:#9a7520;}
-.iw-preview{font-size:11px;color:#b8922a;font-weight:600;min-width:80px;}
+.iw-preview{font-size:12px;color:var(--gold-text);font-weight:600;min-width:80px;}
 .iw-list{display:flex;flex-direction:column;gap:4px;}
 .iw-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#f7f4ef;border-right:3px solid #b8922a;font-size:12px;}
 .iw-item.chisum{border-right-color:#8e44ad;}
 .iw-item.litush{border-right-color:#2980b9;}
 .iw-item-name{flex:1;font-weight:600;}
-.iw-item-dim{color:#8a8278;font-size:11px;}
-.iw-item-proc{font-size:10px;padding:2px 6px;border-radius:2px;font-weight:700;}
+.iw-item-dim{color:#8a8278;font-size:12px;}
+.iw-item-proc{font-size:12px;padding:2px 6px;border-radius:2px;font-weight:700;}
 .iw-proc-chis{background:rgba(142,68,173,0.1);color:#8e44ad;}
 .iw-proc-lit{background:rgba(41,128,185,0.1);color:#2980b9;}
 .iw-proc-gfx{background:rgba(39,174,96,0.1);color:#27ae60;}
@@ -1663,7 +1667,7 @@ document.addEventListener('visibilitychange', () => {
         <div id="sqDetailEmpty">
           <div style="font-size:44px;opacity:0.25;">📐</div>
           <div style="font-size:14px;">בחר סקיצה</div>
-          <div style="font-size:11px;opacity:0.5;">← → מקלדת</div>
+          <div style="font-size:12px;opacity:0.5;">← → מקלדת</div>
         </div>
 
         <div id="sqDetailScroll">
@@ -1699,7 +1703,7 @@ document.addEventListener('visibilitychange', () => {
           <!-- items editor -->
           <div id="sqItemsWrap">
             <div class="iw-title">
-              <span>פריטים <span id="sqItemCount" style="background:#b8922a;color:#fff;border-radius:8px;padding:1px 7px;font-size:10px;margin-right:4px">0</span></span>
+              <span>פריטים <span id="sqItemCount" style="background:#b8922a;color:var(--on-gold);border-radius:8px;padding:1px 7px;font-size:12px;margin-right:4px">0</span></span>
             </div>
             <div class="iw-input-row">
               <input class="iw-code" id="iwCode" placeholder="קוד (8SMH, 6CM...)" maxlength="8" list="iwCodeList"
@@ -1708,17 +1712,17 @@ document.addEventListener('visibilitychange', () => {
               <span class="iw-preview" id="iwPreview">—</span>
               <input class="iw-dim" id="iwW" placeholder="800" type="text"
                 oninput="iwDimPrev('iwW','iwWPrev')" onkeydown="event.stopPropagation();">
-              <span id="iwWPrev" style="font-size:10px;color:#b8922a;min-width:50px;font-weight:600;line-height:1.2;"></span>
-              <span style="font-size:11px;color:#aaa">×</span>
+              <span id="iwWPrev" style="font-size:12px;color:var(--gold-text);min-width:50px;font-weight:600;line-height:1.2;"></span>
+              <span style="font-size:12px;color:#aaa">×</span>
               <input class="iw-dim" id="iwH" placeholder="2000" type="text"
                 oninput="iwDimPrev('iwH','iwHPrev')"
                 onkeydown="event.stopPropagation();">
-              <span id="iwHPrev" style="font-size:10px;color:#b8922a;min-width:50px;font-weight:600;line-height:1.2;"></span>
-              <span style="font-size:11px;color:#aaa">×</span>
+              <span id="iwHPrev" style="font-size:12px;color:var(--gold-text);min-width:50px;font-weight:600;line-height:1.2;"></span>
+              <span style="font-size:12px;color:#aaa">×</span>
               <input class="iw-dim" id="iwQty" type="number" value="1" min="1" max="500"
                 style="width:44px;" title="כמות יחידות"
                 onkeydown="if(event.key==='Tab'&&!event.shiftKey){event.preventDefault();event.stopPropagation();iwAdd();}else{event.stopPropagation();}">
-              <span style="font-size:10px;color:#aaa">יח׳</span>
+              <span style="font-size:12px;color:#aaa">יח׳</span>
               <button class="iw-add" onclick="iwAdd()">+ הוסף</button>
             </div>
             <div class="iw-list" id="iwList"></div>
@@ -2033,7 +2037,7 @@ function sqShowDetail(){
   document.getElementById('sqInfoGrid').innerHTML=`
     <div class="sq-field"><div class="sq-flabel">לקוח</div><div class="sq-fval">${lgEsc(o.client)}</div></div>
     <div class="sq-field"><div class="sq-flabel">שטח</div><div class="sq-fval" id="sqMetricArea">—</div></div>
-    <div class="sq-field"><div class="sq-flabel">סכום</div><div class="sq-fval" style="color:var(--gold);font-weight:700" id="sqMetricPrice">—</div></div>
+    <div class="sq-field"><div class="sq-flabel">סכום</div><div class="sq-fval" style="color:var(--gold-text);font-weight:700" id="sqMetricPrice">—</div></div>
   `;
 
   const pw=document.getElementById('sqPanelsWrap');
@@ -2279,13 +2283,13 @@ function sqUpdateField(field, value){
   transition:all 0.15s;white-space:nowrap;
 }
 .et-btn:hover{background:rgba(255,255,255,0.12);color:#f0ede8;}
-.et-btn.et-active{background:#b8922a;color:#1a1714;border-color:#b8922a;}
+.et-btn.et-active{background:#b8922a;color:#1a1714;border-color:var(--gold-text);}
 .et-sep{width:1px;height:28px;background:rgba(255,255,255,0.08);flex-shrink:0;}
 .et-color{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);cursor:pointer;flex-shrink:0;transition:transform 0.15s;}
 .et-color:hover{transform:scale(1.15);}
 .et-color.et-active{border-color:#f0ede8;transform:scale(1.1);}
 .et-size-wrap{display:flex;align-items:center;gap:5px;}
-.et-size-wrap label{font-size:10px;color:rgba(247,244,239,0.4);}
+.et-size-wrap label{font-size:12px;color:rgba(247,244,239,0.4);}
 .et-size-wrap input{width:44px;padding:4px 6px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#f0ede8;font-family:Heebo,sans-serif;font-size:12px;border-radius:4px;outline:none;}
 /* text input bar */
 #sqEdTextBar{
@@ -2341,18 +2345,18 @@ function sqUpdateField(field, value){
     <div class="et-size-wrap">
       <label>עובי</label>
       <input type="range" id="etSize" min="1" max="30" value="4" style="width:70px;cursor:pointer;" oninput="etSizeVal=parseInt(this.value);document.getElementById('etSizeNum').textContent=etSizeVal">
-      <span id="etSizeNum" style="font-size:11px;color:rgba(247,244,239,0.5);width:16px;">4</span>
+      <span id="etSizeNum" style="font-size:12px;color:rgba(247,244,239,0.5);width:16px;">4</span>
     </div>
     <div class="et-size-wrap" id="etFontSizeWrap" style="display:none;">
       <label>גודל טקסט</label>
       <input type="range" id="etFontSize" min="10" max="80" value="24" style="width:70px;cursor:pointer;" oninput="etFontSizeVal=parseInt(this.value);document.getElementById('etFontNum').textContent=etFontSizeVal">
-      <span id="etFontNum" style="font-size:11px;color:rgba(247,244,239,0.5);width:24px;">24</span>
+      <span id="etFontNum" style="font-size:12px;color:rgba(247,244,239,0.5);width:24px;">24</span>
     </div>
   </div>
 
   <!-- TEXT INPUT BAR -->
   <div id="sqEdTextBar">
-    <span style="font-size:11px;color:rgba(247,244,239,0.4);white-space:nowrap;">לחץ על הסקיצה להוסיף טקסט:</span>
+    <span style="font-size:12px;color:rgba(247,244,239,0.4);white-space:nowrap;">לחץ על הסקיצה להוסיף טקסט:</span>
     <input type="text" id="sqEdTextInput" placeholder="רשום כאן..." maxlength="40">
     <button class="et-btn" onclick="document.getElementById('sqEdTextInput').focus()">מוכן →</button>
   </div>
@@ -2740,24 +2744,24 @@ function iwRender(){
     const it = grp.rep;
     const qty = grp.indices.length;
     const idxJson = JSON.stringify(grp.indices);
-    const dimStyle = 'width:52px;padding:2px 5px;font-size:11px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;';
+    const dimStyle = 'width:52px;padding:2px 5px;font-size:12px;border:1px solid rgba(0,0,0,0.12);text-align:center;font-family:Heebo,sans-serif;';
     const delBtns = qty > 1
       ? `<button class="iw-item-del" onclick="event.stopPropagation();iwRemoveSingle(${grp.indices[grp.indices.length-1]})" title="מחק יחידה אחת">✕</button>
          <button class="iw-item-del" onclick="event.stopPropagation();iwRemoveGroup(${idxJson})" title="מחק כל הקבוצה (${qty})" style="color:#8e44ad;">🗑</button>`
       : `<button class="iw-item-del" onclick="event.stopPropagation();iwRemoveSingle(${grp.indices[0]})" title="מחק">✕</button>`;
     return `
       <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${gi}">
-        <div class="iw-item-name">${lgEsc(it.name||it.label||'פריט')}${qty>1?` <span style="color:#b8922a;font-weight:700;font-size:11px;">×${qty}</span>`:''}</div>
+        <div class="iw-item-name">${lgEsc(it.name||it.label||'פריט')}${qty>1?` <span style="color:var(--gold-text);font-weight:700;font-size:12px;">×${qty}</span>`:''}</div>
         <input type="text" value="${it.w ? lgMmToMeterStr(it.w) : ''}"
           style="${dimStyle}"
           onchange="iwEditGroupDim(${idxJson},'w',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
-        <span style="font-size:11px;color:#aaa">×</span>
+        <span style="font-size:12px;color:#aaa">×</span>
         <input type="text" value="${it.h ? lgMmToMeterStr(it.h) : ''}"
           style="${dimStyle}"
           onchange="iwEditGroupDim(${idxJson},'h',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
-        <span style="font-size:10px;color:#aaa">מ"מ</span>
+        <span style="font-size:12px;color:#aaa">מ"מ</span>
         <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
         ${delBtns}
       </div>`;
@@ -2942,11 +2946,11 @@ function _renderUmClientResults(){
         return `<div ${taken?'':`onclick="umSelectClientAccount('${lgJsStr(a.key)}')"`}
           style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;${taken?'opacity:0.45;':'cursor:pointer;'}">
           <strong>${lgEsc(a.name||a.key)}</strong>${a.phone?' · '+lgEsc(a.phone):''}
-          ${taken?'<span style="font-size:10px;color:var(--muted);"> · כבר קיים משתמש</span>':''}
+          ${taken?'<span style="font-size:12px;color:var(--muted);"> · כבר קיים משתמש</span>':''}
         </div>`;
       }).join('')}
     </div>` : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px;">לא נמצא לקוח תואם</div>`}
-    ${!q && accounts.length>50 ? `<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">מוצגים 50 מתוך ${accounts.length} — חפש לפי שם לצמצום</div>` : ''}`;
+    ${!q && accounts.length>50 ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;text-align:center;">מוצגים 50 מתוך ${accounts.length} — חפש לפי שם לצמצום</div>` : ''}`;
 }
 
 function _renderUmClientLinkPanel(){
@@ -2963,7 +2967,7 @@ function _renderUmClientLinkPanel(){
   }
 
   const selected = _umClientSelectedKey ? hashavshevetAccountsMap[_umClientSelectedKey] : null;
-  const lbl = 'display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px;';
+  const lbl = 'display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px;';
   const inp = 'width:100%;padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;';
 
   if(selected){
@@ -2971,7 +2975,7 @@ function _renderUmClientLinkPanel(){
     el.innerHTML = `
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;">
         <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${lgEsc(selected.name||selected.key)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">מפתח חשבשבת: ${lgEsc(selected.key)}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">מפתח חשבשבת: ${lgEsc(selected.key)}</div>
         <div style="display:flex;flex-direction:column;gap:12px;">
           <div>
             <label style="${lbl}">👤 שם משתמש לכניסה (= מספר הטלפון)</label>
@@ -2980,7 +2984,7 @@ function _renderUmClientLinkPanel(){
           <div>
             <label style="${lbl}">🔒 סיסמה (לפחות 6 תווים)</label>
             <input id="umLinkPass" value="${defPhone}" oninput="this.dataset.touched='1'" style="${inp}">
-            <div style="font-size:10px;color:var(--muted);margin-top:4px;">ברירת מחדל: זהה לטלפון. אפשר לשנות — זה מה שהלקוח יקליד.</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px;">ברירת מחדל: זהה לטלפון. אפשר לשנות — זה מה שהלקוח יקליד.</div>
           </div>
           <div>
             <label style="${lbl}">מספר ע״מ (רשות)</label>
@@ -2988,7 +2992,7 @@ function _renderUmClientLinkPanel(){
           </div>
           <div style="display:flex;gap:8px;">
             <button onclick="umGrantClientLogin('${lgJsStr(selected.key)}')"
-              style="flex:1;padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">🔑 צור התחברות</button>
+              style="flex:1;padding:11px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">🔑 צור התחברות</button>
             <button onclick="umSelectClientAccount(null)"
               style="padding:11px 16px;background:none;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;border-radius:6px;">ביטול</button>
           </div>
@@ -3046,7 +3050,7 @@ function _umShowCredentials(name, username, password){
   box.innerHTML = `
     <div style="background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.35);border-radius:8px;padding:14px;">
       <div style="font-size:13px;font-weight:900;color:#1e8449;margin-bottom:2px;">✓ נוצרה התחברות ל${lgEsc(name)}</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">מסור ללקוח את הפרטים הבאים — הסיסמה לא ניתנת לצפייה מאוחר יותר.</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">מסור ללקוח את הפרטים הבאים — הסיסמה לא ניתנת לצפייה מאוחר יותר.</div>
       <div style="background:#fff;border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:13px;line-height:2;">
         <div>👤 <strong>שם משתמש:</strong> <span style="font-family:monospace;font-size:14px;">${lgEsc(username)}</span></div>
         <div>🔒 <strong>סיסמה:</strong> <span style="font-family:monospace;font-size:14px;">${lgEsc(password)}</span></div>
@@ -3089,12 +3093,12 @@ function _renderUserList(users, elId){
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
           ${lgEsc(u.name)}
-          ${u.isMainAdmin?'<span style="font-size:10px;color:var(--gold)">★ ראשי</span>':''}
-          ${u.isDelivery?'<span style="font-size:10px;color:#2980b9">🚚 הובלות</span>':''}
-          ${!isActive?'<span style="font-size:10px;background:rgba(0,0,0,0.07);color:var(--muted);padding:1px 6px;border-radius:3px">לא פעיל</span>':''}
-          ${u.source==='hashavshevet'?'<span style="font-size:10px;background:rgba(184,146,42,0.12);color:var(--gold);padding:1px 6px;border-radius:3px">חשבשבת</span>':''}
+          ${u.isMainAdmin?'<span style="font-size:12px;color:var(--gold-text)">★ ראשי</span>':''}
+          ${u.isDelivery?'<span style="font-size:12px;color:#2980b9">🚚 הובלות</span>':''}
+          ${!isActive?'<span style="font-size:12px;background:rgba(0,0,0,0.07);color:var(--muted);padding:1px 6px;border-radius:3px">לא פעיל</span>':''}
+          ${u.source==='hashavshevet'?'<span style="font-size:12px;background:rgba(184,146,42,0.12);color:var(--gold-text);padding:1px 6px;border-radius:3px">חשבשבת</span>':''}
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">
           👤 ${lgEsc(u.phone||'')}${u.customerId?' · מפתח: '+lgEsc(u.customerId):''}${u.vatId?' · ע"מ: '+lgEsc(u.vatId):''}
         </div>
       </div>
@@ -3102,14 +3106,14 @@ function _renderUserList(users, elId){
         ${u.role==='client' ? `
           <button onclick="umToggleActive('${u.id}','${lgJsStr(u.name)}',${isActive})"
             title="${isActive ? 'השבת לקוח' : 'הפעל לקוח'}"
-            style="padding:4px 8px;background:${isActive?'rgba(39,174,96,0.12)':'rgba(0,0,0,0.04)'};border:1px solid ${isActive?'rgba(39,174,96,0.35)':'rgba(0,0,0,0.1)'};color:${isActive?'#27ae60':'#aaa'};font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;"
+            style="padding:4px 8px;background:${isActive?'rgba(39,174,96,0.12)':'rgba(0,0,0,0.04)'};border:1px solid ${isActive?'rgba(39,174,96,0.35)':'rgba(0,0,0,0.1)'};color:${isActive?'#27ae60':'#aaa'};font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;"
           >${isActive?'✓ פעיל':'○ לא פעיל'}</button>
           <button onclick="umToggleDelivery('${u.id}','${lgJsStr(u.businessName||u.name)}',${!!u.isDelivery})"
             title="${u.isDelivery ? 'בטל הובלות' : 'הגדר כהובלות'}"
-            style="padding:4px 8px;background:${u.isDelivery?'rgba(41,128,185,0.15)':'rgba(0,0,0,0.04)'};border:1px solid ${u.isDelivery?'rgba(41,128,185,0.4)':'rgba(0,0,0,0.1)'};color:${u.isDelivery?'#2980b9':'#aaa'};font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;">🚚</button>
+            style="padding:4px 8px;background:${u.isDelivery?'rgba(41,128,185,0.15)':'rgba(0,0,0,0.04)'};border:1px solid ${u.isDelivery?'rgba(41,128,185,0.4)':'rgba(0,0,0,0.1)'};color:${u.isDelivery?'#2980b9':'#aaa'};font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">🚚</button>
         ` : ''}
         ${!u.isMainAdmin ? `<button onclick="umDeleteUser('${u.id}','${lgJsStr(u.name)}')"
-          style="padding:4px 10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.2);color:#c0392b;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;border-radius:4px;">מחק</button>` : ''}
+          style="padding:4px 10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.2);color:#c0392b;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">מחק</button>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -3228,24 +3232,24 @@ async function umToggleActive(userId, clientName, currentlyActive){
 
       <!-- CLIENTS TAB — לקוחות נוצרים אך ורק מכרטיס חשבשבת -->
       <div id="umTabClients">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת לקוחות</div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת לקוחות</div>
         <div id="umListClients" style="margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;"></div>
         <div id="umCredsBox" style="display:none;margin-bottom:16px;"></div>
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ לקוח חדש מכרטיס חשבשבת</div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ לקוח חדש מכרטיס חשבשבת</div>
         <div id="umClientLinkPanel"></div>
       </div>
 
       <!-- ADMINS TAB — אדמינים תמיד ידניים, לעולם לא מחשבשבת -->
       <div id="umTabAdmins" style="display:none;">
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת אדמינים</div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת אדמינים</div>
         <div id="umListAdmins" style="margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;"></div>
-        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ אדמין חדש</div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ אדמין חדש</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           <input id="umName"  placeholder="שם מלא *" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
           <input id="umPhone" placeholder="מספר טלפון * (שם משתמש לכניסה)" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
           <input id="umPass"  placeholder="סיסמה *" type="password" style="padding:9px 12px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;border-radius:4px;outline:none;">
           <button id="umCreateBtn" onclick="umCreateUser()"
-            style="padding:11px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+            style="padding:11px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
             + צור אדמין
           </button>
         </div>

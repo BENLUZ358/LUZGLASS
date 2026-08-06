@@ -19,6 +19,10 @@
   --text:      #1a1714;            /* 16.27:1 on --bg  — AAA */
   --muted:     #756e66;            /* 4.58:1  on --bg, 5.03:1 on --surface
                                       darkened from #8a8278, which was 3.45:1 */
+  --muted-dark:#8f8880;            /* muted text ON the #1a1714 surfaces
+                                      (sidebar, loading splash) — 5.10:1.
+                                      --muted would be 2.4:1 there; they are
+                                      not interchangeable. */
 
   /* ── Brand gold ────────────────────────────────────────────────────────────
      --gold        fills, borders, and gold-on-dark (6.11:1 on --text)
