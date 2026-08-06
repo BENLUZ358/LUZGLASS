@@ -19,10 +19,12 @@ const safeStorage = {
 <meta http-equiv="Expires" content="0">
 <title>LuzGlass &#8212; הפורטל שלי</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
+<link rel="stylesheet" href="lg-ui.css?v=20260806">
+
 <style>
-:root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;--green:#27ae60;--red:#c0392b;--blue:#2980b9;}
-*{margin:0;padding:0;box-sizing:border-box;}
-html,body{font-family:Heebo,sans-serif;background:var(--bg);color:var(--text);direction:rtl;min-height:100vh;}
+/* טוקנים, reset ו-body מוגדרים ב-lg-ui.css */
 @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
 @keyframes slideDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
@@ -30,7 +32,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .logo span{color:var(--gold);}
 .nav-name{font-size:13px;color:rgba(247,244,239,0.6);}
 .nav-name strong{color:#f7f4ef;}
-.nav-logout{padding:7px 14px;background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(247,244,239,0.5);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;}
+.nav-logout{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(247,244,239,0.75);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;}
 .live-alert{background:var(--green);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px;cursor:pointer;animation:slideDown 0.3s ease;}
 .alert-icon{font-size:20px;animation:pulse 1.5s infinite;}
 .hero{background:var(--text);padding:28px 20px 32px;color:#f7f4ef;}
@@ -39,14 +41,14 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .hero-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;}
 .hstat{background:rgba(255,255,255,0.05);padding:14px 10px;text-align:center;}
 .hstat .n{font-family:"Playfair Display",serif;font-size:22px;font-weight:900;color:var(--gold);}
-.hstat .l{font-size:10px;color:rgba(247,244,239,0.4);margin-top:4px;}
+.hstat .l{font-size:12px;color:rgba(247,244,239,0.4);margin-top:4px;}
 .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;position:sticky;top:58px;z-index:9;}
 .tab{padding:13px 15px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:5px;}
-.tab.active{color:var(--text);border-bottom-color:var(--gold);}
-.badge{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--gold);color:#fff;font-weight:700;}
+.tab.active{color:var(--text);border-bottom-color:var(--gold-text);}
+.badge{font-size:12px;padding:1px 6px;border-radius:8px;background:var(--gold);color:var(--on-gold);font-weight:700;}
 .badge.g{background:var(--green);}
 .content{padding:16px 20px;max-width:680px;margin:0 auto;}
-.sec-title{font-size:10px;font-weight:600;letter-spacing:0.22em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.sec-title{font-size:12px;font-weight:600;letter-spacing:0.22em;color:var(--gold-text);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
 .sec-title::after{content:"";flex:1;height:1px;background:var(--border);}
 .order-card{background:var(--surface);border:1px solid var(--border);margin-bottom:8px;overflow:hidden;}
 .oc-hdr{padding:14px 16px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;}
@@ -55,25 +57,25 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .oc-name{font-size:14px;font-weight:700;margin-bottom:3px;}
 .oc-desc{font-size:12px;color:var(--muted);}
 .oc-right{text-align:left;flex-shrink:0;}
-.oc-price{font-size:14px;font-weight:700;color:var(--gold);}
-.oc-num{font-size:10px;color:var(--muted);margin-top:2px;}
+.oc-price{font-size:14px;font-weight:700;color:var(--gold-text);}
+.oc-num{font-size:12px;color:var(--muted);margin-top:2px;}
 .oc-status-bar{padding:8px 16px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);}
-.sbadge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:11px;font-weight:700;border-radius:2px;}
+.sbadge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:12px;font-weight:700;border-radius:2px;}
 .s-wait{background:rgba(107,127,163,0.1);color:#6b7fa3;}
 .s-prod{background:rgba(41,128,185,0.1);color:var(--blue);}
 .s-chis{background:rgba(142,68,173,0.1);color:#8e44ad;}
 .s-ready{background:rgba(39,174,96,0.1);color:var(--green);}
 .s-done{background:rgba(0,0,0,0.05);color:var(--muted);}
 .oc-toggle{font-size:12px;color:var(--muted);cursor:pointer;margin-right:auto;}
-.oc-date{font-size:11px;color:var(--muted);}
+.oc-date{font-size:12px;color:var(--muted);}
 .stepper{display:flex;align-items:center;padding:8px 16px;overflow-x:auto;}
 .st-item{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;}
-.st-circle{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;}
+.st-circle{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
 .st-circle.done{background:var(--green);color:#fff;}
-.st-circle.active{background:var(--gold);color:#fff;}
+.st-circle.active{background:var(--gold);color:var(--on-gold);}
 .st-circle.pending{background:var(--bg2);color:var(--muted);}
-.st-label{font-size:9px;color:var(--muted);text-align:center;white-space:nowrap;}
-.st-label.active{color:var(--gold);font-weight:700;}
+.st-label{font-size:12px;color:var(--muted);text-align:center;white-space:nowrap;}
+.st-label.active{color:var(--gold-text);font-weight:700;}
 .st-line{flex:1;height:2px;background:var(--border);min-width:12px;}
 .st-line.done{background:var(--green);}
 .oc-expand{padding:0 16px 14px;}
@@ -81,11 +83,11 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .oc-item{padding:8px 10px;background:var(--bg);font-size:12px;display:flex;align-items:center;gap:8px;}
 .oc-item-glass{flex:1;font-weight:600;}
 .oc-item-dims{color:var(--muted);}
-.oc-item-proc{font-size:10px;padding:2px 6px;border-radius:2px;font-weight:700;}
+.oc-item-proc{font-size:12px;padding:2px 6px;border-radius:2px;font-weight:700;}
 .ip-cut{background:rgba(41,128,185,0.1);color:var(--blue);}
 .ip-chis{background:rgba(142,68,173,0.1);color:#8e44ad;}
 .sketch-wrap{margin-top:8px;}
-.sketch-lbl{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;}
+.sketch-lbl{font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;}
 .sketch-ph{padding:16px;background:var(--bg2);text-align:center;font-size:12px;color:var(--muted);}
 .hist-badge{margin-top:10px;padding:10px 12px;background:rgba(39,174,96,0.06);border-right:2px solid var(--green);font-size:12px;line-height:1.8;color:var(--muted);}
 .ready-card{background:rgba(39,174,96,0.06);border:1px solid rgba(39,174,96,0.2);border-right:3px solid var(--green);padding:14px 16px;margin-bottom:8px;}
@@ -95,9 +97,9 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .rc-desc{font-size:12px;color:var(--muted);}
 .rc-price{font-size:14px;font-weight:700;color:var(--green);}
 .pickup-ok{background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.3);padding:10px 12px;text-align:center;}
-.pk-lbl{font-size:11px;color:var(--green);}
+.pk-lbl{font-size:12px;color:var(--green);}
 .pk-date{font-size:16px;font-weight:700;margin:4px 0;}
-.pk-change{font-size:11px;color:var(--muted);cursor:pointer;text-decoration:underline;background:none;border:none;}
+.pk-change{font-size:12px;color:var(--muted);cursor:pointer;text-decoration:underline;background:none;border:none;}
 .date-wrap{display:flex;flex-direction:column;gap:6px;}
 .date-lbl{font-size:12px;color:var(--muted);font-weight:600;}
 .date-inp{width:100%;padding:10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:15px;color:var(--text);outline:none;}
@@ -106,39 +108,41 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .inv-icon{font-size:22px;flex-shrink:0;}
 .inv-info{flex:1;}
 .inv-num{font-size:13px;font-weight:700;}
-.inv-date{font-size:11px;color:var(--muted);margin-top:2px;}
+.inv-date{font-size:12px;color:var(--muted);margin-top:2px;}
 .inv-right{text-align:left;}
 .inv-amt{font-size:15px;font-weight:700;}
-.inv-stat{font-size:10px;font-weight:700;margin-top:3px;}
-.btn-dl{display:block;margin-top:6px;padding:6px 12px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;text-align:center;}
+.inv-stat{font-size:12px;font-weight:700;margin-top:3px;}
+.btn-dl{display:block;margin-top:6px;padding:6px 12px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;text-align:center;}
 .debt-bar{background:var(--surface);border:1px solid var(--border);border-right:3px solid var(--red);padding:16px;margin-bottom:16px;}
 .debt-amt{font-family:"Playfair Display",serif;font-size:28px;font-weight:900;color:var(--red);}
 .btn-pay{width:100%;margin-top:10px;padding:12px;background:var(--red);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;}
 .chat-bubble{background:var(--surface);border:1px solid var(--border);padding:12px 14px;margin-bottom:8px;}
-.cb-from{font-size:10px;font-weight:700;margin-bottom:4px;}
+.cb-from{font-size:12px;font-weight:700;margin-bottom:4px;}
 .cb-text{font-size:13px;line-height:1.6;}
-.cb-time{font-size:10px;color:var(--muted);margin-top:4px;text-align:left;}
+.cb-time{font-size:12px;color:var(--muted);margin-top:4px;text-align:left;}
 .chat-wrap{position:sticky;bottom:0;background:var(--bg);padding:12px 0;display:flex;gap:8px;}
 .chat-inp{flex:1;padding:11px 14px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:14px;color:var(--text);outline:none;}
-.chat-inp:focus{border-color:var(--gold);}
-.chat-send{padding:11px 18px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;}
+.chat-inp:focus{border-color:var(--gold-text);}
+.chat-send{padding:11px 18px;background:var(--gold);color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;}
 .q-grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
 .q-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
 .qb{padding:10px 8px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:500;color:var(--muted);cursor:pointer;text-align:center;line-height:1.5;}
-.qb.active{background:var(--bg2);border-color:var(--gold);color:var(--text);font-weight:700;}
+.qb.active{background:var(--bg2);border-color:var(--gold-text);color:var(--text);font-weight:700;}
 .q-result{background:var(--text);color:#f7f4ef;padding:20px;margin-top:2px;}
-.q-total{font-family:"Playfair Display",serif;font-size:36px;font-weight:900;color:var(--gold);}
+.q-total{font-family:"Playfair Display",serif;font-size:36px;font-weight:900;color:var(--gold-text);}
 .q-break{font-size:12px;color:rgba(247,244,239,0.5);margin-top:8px;line-height:1.8;}
 .btn-wa{width:100%;padding:14px;background:#25d366;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;margin-top:10px;}
-.btn-gold-full{width:100%;padding:13px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;margin-top:8px;}
+.btn-gold-full{width:100%;padding:13px;background:var(--gold);color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;margin-top:8px;}
 .empty{text-align:center;padding:36px 20px;color:var(--muted);}
-.fab{position:fixed;bottom:24px;left:20px;width:52px;height:52px;border-radius:50%;background:var(--gold);color:#fff;font-size:24px;border:none;cursor:pointer;box-shadow:0 4px 20px rgba(184,146,42,0.4);display:flex;align-items:center;justify-content:center;}
+.fab{position:fixed;bottom:24px;left:20px;width:52px;height:52px;border-radius:50%;background:var(--gold);color:var(--on-gold);font-size:24px;border:none;cursor:pointer;box-shadow:0 4px 20px rgba(184,146,42,0.4);display:flex;align-items:center;justify-content:center;}
 .spacer{height:80px;}
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי הכרטיסים כאן נבנים מ-JS. -->
+  <script src="lg-icons.js?v=20260806"></script>
 </head>
 <body>
 <div id="lgLoading" style="position:fixed;inset:0;background:#f7f4ef;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
@@ -146,20 +150,22 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <div style="width:32px;height:32px;border:3px solid rgba(184,146,42,0.2);border-top-color:#b8922a;border-radius:50%;animation:lgSpin 0.8s linear infinite;"></div>
 </div>
 <style>@keyframes lgSpin{to{transform:rotate(360deg)}}</style>
-<nav>
+<a href="#portalMain" class="skip-link">דלג לתוכן</a>
+
+<nav class="on-dark">
   <div class="logo">Luz<span>Glass</span></div>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="nav-name">שלום, <strong id="navName">&#8212;</strong></div>
-    <button class="nav-logout" onclick="logout()">יציאה</button>
+    <button class="nav-logout" onclick="logout()"><span data-icon="logout"></span>יציאה</button>
   </div>
 </nav>
 <div id="liveAlert" style="display:none" class="live-alert" onclick="setTab('ready')">
-  <span class="alert-icon">&#128276;</span>
+  <span class="alert-icon" data-icon="bell"></span>
   <div style="flex:1">
     <div style="font-size:14px;font-weight:700" id="alertTitle"></div>
     <div style="font-size:12px;color:rgba(255,255,255,0.75)" id="alertSub"></div>
   </div>
-  <span style="font-size:18px">&#8592;</span>
+  <span style="font-size:18px" data-icon="arrow-left"></span>
 </div>
 <div class="hero">
   <div style="font-size:13px;color:rgba(247,244,239,0.4);margin-bottom:6px">הפורטל האישי שלך</div>
@@ -178,14 +184,14 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <div class="tab" id="tab-chat" onclick="setTab('chat')">&#128172; הודעות</div>
   <div class="tab" id="tab-price" onclick="setTab('price')">&#128200; מחירון</div>
 </div>
-<div class="content">
+<div class="content" id="portalMain">
   <div id="view-quote" style="display:none">
     <div style="height:14px"></div>
     <div style="background:var(--surface);border:1px solid var(--border);padding:16px;margin-bottom:10px">
       <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600">פרטי לקוח קצה (אופציונלי)</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">שם לקוח</div><input type="text" id="qClientName" placeholder="ישראל ישראלי" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:14px;color:var(--text);outline:none"></div>
-        <div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">כתובת / פרויקט</div><input type="text" id="qProject" placeholder="רחוב הרצל 5" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:14px;color:var(--text);outline:none"></div>
+        <div><div style="font-size:12px;color:var(--muted);margin-bottom:4px">שם לקוח</div><input type="text" id="qClientName" placeholder="ישראל ישראלי" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:14px;color:var(--text);outline:none"></div>
+        <div><div style="font-size:12px;color:var(--muted);margin-bottom:4px">כתובת / פרויקט</div><input type="text" id="qProject" placeholder="רחוב הרצל 5" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:14px;color:var(--text);outline:none"></div>
       </div>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);padding:16px;margin-bottom:10px">
@@ -203,9 +209,9 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
       <div class="q-grid3" id="qFinishGrid"></div>
     </div>
     <div id="qResult" style="display:none" class="q-result">
-      <div style="font-size:11px;color:rgba(247,244,239,0.4);margin-bottom:6px">הצעת מחיר</div>
+      <div style="font-size:12px;color:rgba(247,244,239,0.4);margin-bottom:6px">הצעת מחיר</div>
       <div class="q-total" id="qTotalDisplay">&#8362;0</div>
-      <div style="font-size:11px;color:rgba(247,244,239,0.3);margin-top:4px">לא כולל מעמ והתקנה</div>
+      <div style="font-size:12px;color:rgba(247,244,239,0.3);margin-top:4px">לא כולל מעמ והתקנה</div>
       <div class="q-break" id="qBreakdown"></div>
     </div>
     <button class="btn-wa" onclick="sendQuoteWA()">&#128241; שלח ללקוח בוואטסאפ</button>
@@ -217,7 +223,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
     <div id="debtBar" style="display:none"><div class="debt-bar">
       <div style="font-size:12px;color:var(--muted);margin-bottom:4px">סכום הזמנות שלא שולמו</div>
       <div class="debt-amt" id="debtAmount">&#8362;0</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.7" id="debtDetail"></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7" id="debtDetail"></div>
       <button class="btn-pay" onclick="contactUs()">&#128222; צור קשר לתשלום</button>
     </div></div>
     <div class="sec-title">הזמנות פעילות</div>
@@ -250,10 +256,10 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   </div>
 </div>
   <div id="view-price" style="display:none;padding:16px;">
-    <div style="font-size:10px;font-weight:600;letter-spacing:0.2em;color:var(--gold);text-transform:uppercase;margin-bottom:14px">המחירון שלך</div>
+    <div style="font-size:12px;font-weight:600;letter-spacing:0.2em;color:var(--gold-text);text-transform:uppercase;margin-bottom:14px">המחירון שלך</div>
     <div id="clientPriceList"></div>
   </div>
-<button class="fab" onclick="window.location.href='new-order.html'">+</button>
+<button class="fab" onclick="window.location.href='new-order.html'" aria-label="הזמנה חדשה" title="הזמנה חדשה"><span data-icon="plus"></span></button>
 <script>
 // CLIENT הוסר — כל נתוני הלקוח מגיעים מ-session (lgGetSession) בלבד.
 // ריק עד ש-_subscribePortalOrders ממלא נתונים אמיתיים מ-Firebase — לפני
@@ -515,14 +521,14 @@ function orderCard(o){
   const oid = o.id;
   const sketchSrc = o.sketch || makeAutoSketch(o);
   const thumbHtml = sketchSrc
-    ? '<div style="padding:10px 14px 0;"><img src="'+lgEsc(sketchSrc)+'" style="width:100%;max-height:130px;object-fit:contain;border:1px solid var(--border);cursor:pointer;background:#f7f4ef;display:block;" data-oid="'+oid+'" onclick="openSk(this.dataset.oid)"><div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0 2px;"><span style="font-size:10px;color:var(--muted);">'+lgEsc(o.glass)+(o.finish&&o.finish!=="—"?' · '+lgEsc(o.finish):'')+'</span><button data-oid="'+oid+'" onclick="openSk(this.dataset.oid)" style="padding:3px 10px;background:rgba(184,146,42,0.1);border:1px solid rgba(184,146,42,0.3);color:#b8922a;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;border-radius:3px;">&#128269; הגדל</button></div></div>'
+    ? '<div style="padding:10px 14px 0;"><img src="'+lgEsc(sketchSrc)+'" style="width:100%;max-height:130px;object-fit:contain;border:1px solid var(--border);cursor:pointer;background:#f7f4ef;display:block;" data-oid="'+oid+'" onclick="openSk(this.dataset.oid)"><div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0 2px;"><span style="font-size:12px;color:var(--muted);">'+lgEsc(o.glass)+(o.finish&&o.finish!=="—"?' · '+lgEsc(o.finish):'')+'</span><button data-oid="'+oid+'" onclick="openSk(this.dataset.oid)" style="padding:3px 10px;background:rgba(184,146,42,0.1);border:1px solid rgba(184,146,42,0.3);color:#b8922a;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:3px;">&#128269; הגדל</button></div></div>'
     : '';
 
   return '<div class="order-card">'+
     '<div class="oc-hdr" data-id="'+o.id+'" onclick="toggleExp(this.dataset.id)">'+
       '<div class="oc-dot" style="background:'+cfg.dot+'"></div>'+
       '<div class="oc-info"><div class="oc-name">'+lgEsc(o.name)+'</div><div class="oc-desc">'+lgEsc(o.glass)+(o.finish&&o.finish!=="—"?" · "+lgEsc(o.finish):"")+" · "+o.area+' מ"ר</div></div>'+
-      '<div class="oc-right"><div class="oc-price">&#8362;'+(o.total||0).toLocaleString()+'</div><div style="font-size:10px;color:var(--muted)">'+lgEsc(o.num)+"</div></div>"+
+      '<div class="oc-right"><div class="oc-price">&#8362;'+(o.total||0).toLocaleString()+'</div><div style="font-size:12px;color:var(--muted)">'+lgEsc(o.num)+"</div></div>"+
     "</div>"+
     thumbHtml+
     stepper+
@@ -563,7 +569,7 @@ function renderReady(){
     }
     return '<div class="ready-card">'+
       '<div class="rc-top"><span style="font-size:20px">&#9989;</span><div class="rc-info"><div class="rc-name">'+lgEsc(o.name)+'</div><div class="rc-desc">'+lgEsc(o.num)+" · "+lgEsc(o.glass)+"</div></div>"+'<div class="rc-price">&#8362;'+(o.total||0).toLocaleString()+"</div></div>"+
-      (hasFarzel?'<div style="font-size:11px;background:rgba(184,146,42,0.08);padding:6px 10px;border-right:2px solid var(--gold);margin-bottom:8px">&#128297; כולל פרזול: <strong>'+lgEsc(o.finish)+"</strong></div>":'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">&#11042; זכוכית בלבד</div>')+
+      (hasFarzel?'<div style="font-size:12px;background:rgba(184,146,42,0.08);padding:6px 10px;border-right:2px solid var(--gold);margin-bottom:8px">&#128297; כולל פרזול: <strong>'+lgEsc(o.finish)+"</strong></div>":'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">&#11042; זכוכית בלבד</div>')+
       pick+"</div>";
   }).join("");
 }
@@ -641,14 +647,14 @@ function renderClientPrice(){
       if(!price) return '';
       hasAny = true;
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <span>${lgEsc(p.name)}${special?' <span style="font-size:10px;font-weight:700;color:var(--green);background:rgba(39,174,96,0.1);padding:1px 6px;border-radius:3px;margin-right:4px">מחיר מיוחד</span>':''}</span>
-        <span style="font-weight:700;color:var(--gold)">₪${price}<span style="font-size:11px;font-weight:400;color:var(--muted)">/מ"ר</span></span>
+        <span>${lgEsc(p.name)}${special?' <span style="font-size:12px;font-weight:700;color:var(--green);background:rgba(39,174,96,0.1);padding:1px 6px;border-radius:3px;margin-right:4px">מחיר מיוחד</span>':''}</span>
+        <span style="font-weight:700;color:var(--gold-text)">₪${price}<span style="font-size:12px;font-weight:400;color:var(--muted)">/מ"ר</span></span>
       </div>`;
     }).join('');
     // קטגוריה בלי אף פריט עם מחיר — לא מציגים כותרת ריקה
     if(!rows) return '';
     return `<div style="margin-bottom:18px">
-      <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;padding:6px 0;border-bottom:2px solid rgba(184,146,42,0.2);margin-bottom:8px">${lgEsc(cat)}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--gold-text);letter-spacing:0.1em;text-transform:uppercase;padding:6px 0;border-bottom:2px solid rgba(184,146,42,0.2);margin-bottom:8px">${lgEsc(cat)}</div>
       ${rows}
     </div>`;
   }).join('');
@@ -687,7 +693,7 @@ let qInited=false;
 function initQ(){
   if(qInited)return;qInited=true;
   document.getElementById("qTypeGrid").innerHTML=QT.map(t=>'<button class="qb" id="qt_'+t.id+'" data-id="'+t.id+'" onclick="qSelT(this.dataset.id)">'+t.label+"</button>").join("");
-  document.getElementById("qGlassGrid").innerHTML=QG.map(g=>'<button class="qb" id="qg_'+g.id+'" data-id="'+g.id+'" onclick="qSelG(this.dataset.id)">'+g.name+'<br><span style="font-size:10px;color:var(--gold)">&#8362;'+g.price+'/\u05de"\u05e8</span></button>').join("");
+  document.getElementById("qGlassGrid").innerHTML=QG.map(g=>'<button class="qb" id="qg_'+g.id+'" data-id="'+g.id+'" onclick="qSelG(this.dataset.id)">'+g.name+'<br><span style="font-size:12px;color:var(--gold-text)">&#8362;'+g.price+'/\u05de"\u05e8</span></button>').join("");
   document.getElementById("qFinishGrid").innerHTML=QF.map(f=>'<button class="qb" id="qf_'+f.id+'" data-id="'+f.id+'" onclick="qSelF(this.dataset.id)">'+f.name+"</button>").join("");
   qSelT("pin-k-d");qSelG("shafu");qSelF("black");
 }
@@ -707,12 +713,12 @@ function qSelT(id){
   QT.forEach(x=>{const b=document.getElementById("qt_"+x.id);if(b)b.className="qb"+(x.id===id?" active":"");});
   const g=document.getElementById("qDimsGrid");
   g.innerHTML=qState.panels.map((p,i)=>
-    '<div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+p.l+' — רוחב (מ"מ)</div>'
+    '<div><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'+p.l+' — רוחב (מ"מ)</div>'
     +'<input type="text" value="'+lgMmToMeterStr(p.w)+'" oninput="qPanelDim('+i+',\'w\',this)" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;text-align:center">'
-    +'<div id="qpw'+i+'" style="font-size:11px;color:var(--gold);text-align:center;min-height:16px;margin-top:3px;"></div></div>'
-    +'<div><div style="font-size:11px;color:var(--muted);margin-bottom:4px">'+p.l+' — גובה (מ"מ)</div>'
+    +'<div id="qpw'+i+'" style="font-size:12px;color:var(--gold-text);text-align:center;min-height:16px;margin-top:3px;"></div></div>'
+    +'<div><div style="font-size:12px;color:var(--muted);margin-bottom:4px">'+p.l+' — גובה (מ"מ)</div>'
     +'<input type="text" value="'+lgMmToMeterStr(p.h)+'" oninput="qPanelDim('+i+',\'h\',this)" style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;text-align:center">'
-    +'<div id="qph'+i+'" style="font-size:11px;color:var(--gold);text-align:center;min-height:16px;margin-top:3px;"></div></div>'
+    +'<div id="qph'+i+'" style="font-size:12px;color:var(--gold-text);text-align:center;min-height:16px;margin-top:3px;"></div></div>'
   ).join("");calcQ();
 }
 function qSelG(id){qState.glass=id;QG.forEach(x=>{const b=document.getElementById("qg_"+x.id);if(b)b.className="qb"+(x.id===id?" active":"");});calcQ();}
