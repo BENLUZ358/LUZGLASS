@@ -209,36 +209,49 @@ module.exports = async function handler(req, res) {
     const text = await wgRes.text();
 
     let parsed = null;
-    try { parsed = JSON.parse(text); } catch (_) { /* לא JSON — נחזיר גולמי */ }
+    try { parsed = JSON.parse(text); } catch (_) { /* לא JSON — נשמור גולמי */ }
 
-    if (!wgRes.ok) {
-      console.error('hashavshevet-order: WizGround error', wgRes.status, text.slice(0, 500));
-      res.status(502).json({
-        error: 'חשבשבת דחו את הבקשה',
-        status: wgRes.status,
-        // התשובה הגולמית חוזרת בכוונה — קודי השגיאה של H-Connect
-        // (5 = netPassportID חסר, 10 = אין רישיון ל-imovein, 13 = ולידציה)
-        // הם הדרך היחידה לאבחן, והתיעוד לא מפרט פורמט הצלחה.
-        response: parsed || text.slice(0, 2000),
-      });
-      return;
-    }
-
-    // ── סימון על ההזמנה, כדי שלא תישלח שוב ──
-    await db.ref('orders/' + orderId + '/hashavshevet').set({
+    // ── רישום הניסיון תמיד, גם בכישלון ──
+    //
+    // בפעם הראשונה שמרנו רק חותמת בלי התשובה. WizGround החזירו HTTP 200,
+    // ההזמנה סומנה כנשלחה — ובחשבשבת לא נוצר שום מסמך. בלי גוף התשובה לא
+    // הייתה שום דרך לדעת למה. מכאן והלאה התשובה נשמרת תמיד.
+    //
+    // שים לב: httpOk הוא "הבקשה התקבלה", לא "המסמך נוצר". אלה שני דברים
+    // שונים, וזה בדיוק מה שהכשיל אותנו.
+    const attempt = {
       sentAt:     Date.now(),
       sentBy:     auth.phone,
       reference:  ref.reference,
       accountKey: String(accountKey),
       documentId: DOCUMENT_ID,
       lineCount:  lines.length,
-    });
+      httpStatus: wgRes.status,
+      httpOk:     wgRes.ok,
+      response:   text.slice(0, 4000),
+      requestSample: lines[0] || null,   // שורה אחת, לאימות שמות השדות
+      skipped:    skipped.length ? skipped : null,
+    };
+    await db.ref('orders/' + orderId + '/hashavshevet').set(attempt);
+
+    if (!wgRes.ok) {
+      console.error('hashavshevet-order: WizGround error', wgRes.status, text.slice(0, 500));
+      res.status(502).json({
+        error: 'חשבשבת דחו את הבקשה',
+        status: wgRes.status,
+        // קודי H-Connect: 5 = netPassportID חסר, 10 = אין רישיון למודול,
+        // 13 = ולידציה נכשלה. זו הדרך היחידה לאבחן.
+        response: parsed || text.slice(0, 4000),
+        skipped,
+      });
+      return;
+    }
 
     res.status(200).json({
       ok: true, dryRun: false,
       reference: ref.reference, accountKey,
       lineCount: lines.length, skipped,
-      response: parsed || text.slice(0, 2000),
+      response: parsed || text.slice(0, 4000),
     });
 
   } catch (e) {

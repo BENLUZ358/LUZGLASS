@@ -2225,17 +2225,25 @@ function _sqHbRender(id, data, ok){
   }
 
   if(data.dryRun === false){
+    // התשובה של חשבשבת מוצגת במלואה ולא נסגרת מעצמה.
+    // בפעם הראשונה הסתרתי אותה והמסך נסגר אוטומטית — ההזמנה סומנה כנשלחה
+    // בעוד שבחשבשבת לא נוצר כלום, ולא נשארה שום ראיה. לא שוב.
+    const raw = typeof data.response === 'string'
+      ? data.response : JSON.stringify(data.response, null, 2);
     ov.innerHTML =
       `<div class="modal" style="max-width:640px">
-         <div class="mhdr"><h2>ההזמנה נפתחה בחשבשבת</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+         <div class="mhdr"><h2>נשלח — יש לאמת בחשבשבת</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
          <div class="mbody">
-           <div style="font-size:14px;font-weight:700;color:var(--green);margin-bottom:10px">אסמכתא ${lgEsc(data.reference)} · ${data.lineCount} שורות</div>
-           <div style="font-size:13px;color:var(--muted)">מפתח חשבון ${lgEsc(data.accountKey)}</div>
+           <div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ${lgEsc(data.reference)} · חשבון ${lgEsc(data.accountKey)} · ${data.lineCount} שורות</div>
+           <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
+             הבקשה התקבלה בשרת. זה לא מבטיח שנוצר מסמך — יש לפתוח את חשבשבת ולבדוק שהזמנה ${lgEsc(data.reference)} קיימת.
+           </div>
+           <div class="sec-title">תשובת חשבשבת</div>
+           <pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:260px;white-space:pre-wrap">${lgEsc(raw||'(תשובה ריקה)')}</pre>
          </div>
-         <div class="mfoot"><button class="btn btn-primary" onclick="_sqHbClose()">סיום</button></div>
+         <div class="mfoot"><button class="btn btn-primary" onclick="_sqHbClose()">סגור</button></div>
        </div>`;
     lgIcons?.render(ov);
-    setTimeout(()=>{ _sqHbClose(); sqShowChashConfirm(id); }, 1800);
     return;
   }
 
