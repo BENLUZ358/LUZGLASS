@@ -2178,6 +2178,28 @@ function sqSetStage(stage){
 
 function _sqHbClose(){ document.getElementById('sqHbOv')?.remove(); }
 
+// בוררי סוג המסמך והסוכן. מוצגים גם במסך השגיאה ולא רק בתצוגה המקדימה —
+// השגיאה הנפוצה כאן היא "חסר מספר סוכן", ואין היגיון לחסום בלי לאפשר לתקן.
+function _sqHbControls(id, docId, agent, docIdMode){
+  return `
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);flex-wrap:wrap">
+      <span>סוג מסמך:</span>
+      <button class="btn ${docId==='30'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{documentId:'30'})">30 הזמנה</button>
+      <button class="btn ${docId==='31'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{documentId:'31'})">31 הזמ' סוכן</button>
+      <span style="margin-right:6px">סוכן:</span>
+      <input id="sqHbAgent" value="${lgEsc(agent||'')}" placeholder="מס' סוכן" inputmode="numeric"
+             style="width:90px;padding:5px 8px;font-size:12px;border:1px solid var(--border);background:var(--bg)"
+             onkeydown="if(event.key==='Enter')sqPreviewHashavshevet('${lgEsc(id)}',{agent:this.value})"
+             onchange="sqPreviewHashavshevet('${lgEsc(id)}',{agent:this.value})">
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+      <span>שם השדה:</span>
+      <button class="btn ${docIdMode==='lower'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'lower'})">documentid</button>
+      <button class="btn ${docIdMode==='upper'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'upper'})">DocumentID</button>
+      <button class="btn ${docIdMode==='both'?'btn-primary':'btn-ghost'}"  style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'both'})">שניהם</button>
+    </div>`;
+}
+
 // documentid באות קטנה לפי הדוגמה בתיעוד, DocumentID לפי טבלת השדות —
 // התיעוד סותר את עצמו, ולכן אפשר להחליף מהמסך במקום לנחש.
 let _sqHbDocIdMode = 'lower';
@@ -2229,7 +2251,10 @@ function _sqHbRender(id, data, ok){
            ${data.hint?`<div style="font-size:13px;color:var(--muted)">${lgEsc(data.hint)}</div>`:''}
            ${extra}${resp}
          </div>
-         <div class="mfoot"><button class="btn btn-secondary" onclick="_sqHbClose()">סגור</button></div>
+         <div class="mfoot" style="flex-direction:column;align-items:stretch;gap:8px">
+           ${_sqHbControls(id, _sqHbDocId, _sqHbAgent, _sqHbDocIdMode)}
+           <button class="btn btn-secondary" onclick="_sqHbClose()">סגור</button>
+         </div>
        </div>`;
     lgIcons?.render(ov);
     return;
@@ -2280,21 +2305,7 @@ function _sqHbRender(id, data, ok){
          ${skipped}
        </div>
        <div class="mfoot" style="flex-direction:column;align-items:stretch;gap:8px">
-         <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);flex-wrap:wrap">
-           <span>סוג מסמך:</span>
-           <button class="btn ${data.documentId==='30'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{documentId:'30'})">30 הזמנה</button>
-           <button class="btn ${data.documentId==='31'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{documentId:'31'})">31 הזמ' סוכן</button>
-           <span style="margin-right:6px">סוכן:</span>
-           <input id="sqHbAgent" value="${lgEsc(data.agent||'')}" placeholder="מס' סוכן" inputmode="numeric"
-                  style="width:90px;padding:5px 8px;font-size:12px;border:1px solid var(--border);background:var(--bg)"
-                  onchange="sqPreviewHashavshevet('${lgEsc(id)}',{agent:this.value})">
-         </div>
-         <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
-           <span>שם השדה:</span>
-           <button class="btn ${data.docIdMode==='lower'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'lower'})">documentid</button>
-           <button class="btn ${data.docIdMode==='upper'?'btn-primary':'btn-ghost'}" style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'upper'})">DocumentID</button>
-           <button class="btn ${data.docIdMode==='both'?'btn-primary':'btn-ghost'}"  style="padding:5px 10px;font-size:12px" onclick="sqPreviewHashavshevet('${lgEsc(id)}',{docIdMode:'both'})">שניהם</button>
-         </div>
+         ${_sqHbControls(id, data.documentId, data.agent, data.docIdMode)}
          <div style="display:flex;gap:7px">
            <button class="btn btn-primary" id="sqHbSend" style="flex:1" onclick="sqSendHashavshevet('${lgEsc(id)}')">פתח הזמנה בחשבשבת</button>
            <button class="btn btn-secondary" onclick="_sqHbClose()">ביטול</button>
