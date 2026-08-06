@@ -1132,6 +1132,19 @@ async function _lgAuthFetch(url){
   return fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
 }
 
+// גרסת POST — ל-API שכותבים, כמו פתיחת הזמנה בחשבשבת
+async function _lgAuthPost(url, payload){
+  const token = await firebase.auth().currentUser?.getIdToken();
+  return fetch(url, {
+    method: 'POST',
+    headers: Object.assign(
+      { 'Content-Type': 'application/json' },
+      token ? { Authorization: 'Bearer ' + token } : {}
+    ),
+    body: JSON.stringify(payload || {}),
+  });
+}
+
 // חיבור API אמיתי — קורא ל-/api/hashavshevet-items (סוד ונתוני חתימה נשארים בשרת, אף פעם לא בדפדפן).
 // מריץ בבת-אחת (batches) כדי לא להציף את Firebase בקריאה סדרתית של מאות רשומות.
 let _hbSyncing = false;
@@ -2137,8 +2150,9 @@ function sqSetStage(stage){
     sqStageMap[id]='chash';
     updateStage(id, 'chash');
 
-    // הצג אישור מהיר ואז קפוץ להבא
-    sqShowChashConfirm(id);
+    // פתיחת ההזמנה בחשבשבת. תחילה תצוגה מקדימה בלבד — השליחה בפועל
+    // דורשת אישור נוסף בחלון, כדי שטעות מיפוי לא תיצור מסמך אמיתי.
+    sqPreviewHashavshevet(id);
     return;
   }
 
@@ -2151,6 +2165,121 @@ function sqSetStage(stage){
   }
 
   sqSaveState(); sqShowDetail(); sqRender();
+}
+
+// ── פתיחת הזמנה בחשבשבת (plugin imovein) ────────────────────────────────
+//
+//  שני שלבים בכוונה:
+//  1. dryRun — השרת בונה את הבקשה ומחזיר אותה בלי לשלוח. מוצגת כאן.
+//  2. אישור — שליחה אמיתית, שיוצרת מסמך בחשבשבת.
+//
+//  כל הנתונים (מפתח חשבון, מק"טים, כמויות, מחירים) נקראים בשרת מ-Firebase.
+//  הדפדפן שולח orderId בלבד — הוא לא יכול להזריק מחיר למסמך חשבונאי.
+
+function _sqHbClose(){ document.getElementById('sqHbOv')?.remove(); }
+
+async function sqPreviewHashavshevet(id){
+  _sqHbClose();
+  const ov = document.createElement('div');
+  ov.id = 'sqHbOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(26,23,20,0.6);z-index:800;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML = '<div class="modal" style="max-width:640px"><div class="mhdr"><h2>חשבשבת — בודק...</h2></div><div class="mbody"><div class="empty-state"><div class="empty-state-msg">בונה את הבקשה בשרת...</div></div></div></div>';
+  ov.onclick = e => { if(e.target === ov) _sqHbClose(); };
+  document.body.appendChild(ov);
+
+  let data, res;
+  try {
+    res  = await _lgAuthPost('/api/hashavshevet-order', { orderId: id, dryRun: true });
+    data = await res.json();
+  } catch(e){
+    _sqHbRender(id, { error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false);
+    return;
+  }
+  _sqHbRender(id, data, res.ok);
+}
+
+function _sqHbRender(id, data, ok){
+  const ov = document.getElementById('sqHbOv');
+  if(!ov) return;
+
+  if(!ok || data.error){
+    const extra = data.skipped?.length
+      ? '<div class="sec-title" style="margin-top:14px">פריטים שדולגו</div>' +
+        data.skipped.map(s => `<div style="font-size:12px;color:var(--muted);padding:3px 0">${lgEsc(s.name)}${s.sku?' ('+lgEsc(s.sku)+')':''} — ${lgEsc(s.reason)}</div>`).join('')
+      : '';
+    const resp = data.response
+      ? `<div class="sec-title" style="margin-top:14px">תשובת חשבשבת</div><pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:180px;white-space:pre-wrap">${lgEsc(typeof data.response==='string'?data.response:JSON.stringify(data.response,null,2))}</pre>`
+      : '';
+    ov.innerHTML =
+      `<div class="modal" style="max-width:640px">
+         <div class="mhdr"><h2>לא נשלח</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+         <div class="mbody">
+           <div style="color:var(--red);font-weight:700;font-size:14px;margin-bottom:6px">${lgEsc(data.error||'שגיאה')}</div>
+           ${data.hint?`<div style="font-size:13px;color:var(--muted)">${lgEsc(data.hint)}</div>`:''}
+           ${extra}${resp}
+         </div>
+         <div class="mfoot"><button class="btn btn-secondary" onclick="_sqHbClose()">סגור</button></div>
+       </div>`;
+    lgIcons?.render(ov);
+    return;
+  }
+
+  if(data.dryRun === false){
+    ov.innerHTML =
+      `<div class="modal" style="max-width:640px">
+         <div class="mhdr"><h2>ההזמנה נפתחה בחשבשבת</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+         <div class="mbody">
+           <div style="font-size:14px;font-weight:700;color:var(--green);margin-bottom:10px">אסמכתא ${lgEsc(data.reference)} · ${data.lineCount} שורות</div>
+           <div style="font-size:13px;color:var(--muted)">מפתח חשבון ${lgEsc(data.accountKey)}</div>
+         </div>
+         <div class="mfoot"><button class="btn btn-primary" onclick="_sqHbClose()">סיום</button></div>
+       </div>`;
+    lgIcons?.render(ov);
+    setTimeout(()=>{ _sqHbClose(); sqShowChashConfirm(id); }, 1800);
+    return;
+  }
+
+  const rows = data.lines.map(l =>
+    `<tr><td>${lgEsc(l.itemkey)}</td><td>${lgEsc(l.Quantity)}</td><td>${lgEsc(l.price)}</td>
+         <td style="font-weight:700;color:var(--gold-text)">₪${(Number(l.Quantity)*Number(l.price)).toFixed(2)}</td></tr>`).join('');
+  const skipped = data.skipped?.length
+    ? `<div class="sec-title" style="margin-top:14px">לא ייכללו (${data.skipped.length})</div>` +
+      data.skipped.map(s => `<div style="font-size:12px;color:var(--red);padding:3px 0">${lgEsc(s.name)} — ${lgEsc(s.reason)}</div>`).join('')
+    : '';
+
+  ov.innerHTML =
+    `<div class="modal" style="max-width:640px">
+       <div class="mhdr"><h2>תצוגה מקדימה — טרם נשלח</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+       <div class="mbody">
+         <div class="mgrid" style="margin-bottom:14px">
+           <div class="mf"><label>סוג מסמך</label><div class="v">${lgEsc(data.documentId)} — הזמנה</div></div>
+           <div class="mf"><label>אסמכתא</label><div class="v">${lgEsc(data.reference)}</div></div>
+           <div class="mf"><label>מפתח חשבון</label><div class="v">${lgEsc(data.accountKey)}</div></div>
+           <div class="mf"><label>שורות</label><div class="v">${data.lineCount}</div></div>
+         </div>
+         <table class="table"><thead><tr><th>מק"ט</th><th>כמות (מ"ר)</th><th>מחיר למ"ר</th><th>סה"כ</th></tr></thead><tbody>${rows}</tbody></table>
+         ${skipped}
+       </div>
+       <div class="mfoot">
+         <button class="btn btn-primary" id="sqHbSend" style="flex:1" onclick="sqSendHashavshevet('${lgEsc(id)}')">פתח הזמנה בחשבשבת</button>
+         <button class="btn btn-secondary" onclick="_sqHbClose()">ביטול</button>
+       </div>
+     </div>`;
+  lgIcons?.render(ov);
+}
+
+async function sqSendHashavshevet(id){
+  const btn = document.getElementById('sqHbSend');
+  if(btn){ btn.disabled = true; btn.textContent = 'שולח...'; }
+  let data, res;
+  try {
+    res  = await _lgAuthPost('/api/hashavshevet-order', { orderId: id, dryRun: false });
+    data = await res.json();
+  } catch(e){
+    _sqHbRender(id, { error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false);
+    return;
+  }
+  _sqHbRender(id, data, res.ok);
 }
 
 function sqShowChashConfirm(id){
