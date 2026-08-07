@@ -8,10 +8,14 @@
 <meta http-equiv="Expires" content="0">
 <title>LuzGlass — תחנת בדיקה</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
 <style>
-:root{--bg:#1a1a1a;--surface:#242424;--s2:#2e2e2e;--border:rgba(255,255,255,0.08);--text:#f0ede8;--muted:#888;--gold:#c9a84c;--green:#27ae60;--purple:#8e44ad;--red:#c0392b;}
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;height:100%;overflow:hidden;}
+/* מעטפת מסך-מלא: הדף עצמו לא גולל, הגלילה היא באזורים הפנימיים.
+   lg-ui.css לא קובע את זה כי זה נכון רק לדפי התחנות. */
+html,body{height:100%;overflow:hidden;}
+*{-webkit-tap-highlight-color:transparent;}
 .app{display:flex;flex-direction:column;height:100vh;}
 .topbar{flex-shrink:0;height:52px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;display:flex;align-items:center;gap:7px;z-index:20;}
 .tb-logo{font-size:15px;font-weight:900;white-space:nowrap;}.tb-logo span{color:var(--gold);}
@@ -33,29 +37,29 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 .order-card.partial-card{border-right:4px solid var(--gold);}
 .oc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
 .oc-client{font-size:15px;font-weight:900;}
-.oc-badge{font-size:9px;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap;}
+.oc-badge{font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap;}
 .b-new{background:rgba(136,136,136,0.15);color:var(--muted);}
 .b-done{background:rgba(39,174,96,0.2);color:var(--green);}
 .b-prog{background:rgba(201,168,76,0.2);color:var(--gold);}
-.oc-meta{font-size:11px;color:var(--muted);margin-bottom:7px;}
+.oc-meta{font-size:12px;color:var(--muted);margin-bottom:7px;}
 .oc-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;}
-.oc-tag{font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;}
+.oc-tag{font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;}
 .tg{background:rgba(41,128,185,0.15);color:#5dade2;}
 .tc{background:rgba(142,68,173,0.15);color:#a569bd;}
 .tm{background:rgba(255,255,255,0.06);color:var(--muted);}
 .oc-prog{display:flex;align-items:center;gap:8px;}
 .oc-bar{flex:1;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;}
 .oc-fill{height:100%;border-radius:2px;transition:width 0.3s;}
-.oc-cnt{font-size:10px;font-weight:700;white-space:nowrap;}
-.oc-note{font-size:10px;color:var(--gold);background:rgba(201,168,76,0.08);padding:4px 8px;border-right:2px solid var(--gold);margin-top:6px;border-radius:0 3px 3px 0;}
+.oc-cnt{font-size:12px;font-weight:700;white-space:nowrap;}
+.oc-note{font-size:12px;color:var(--gold);background:rgba(201,168,76,0.08);padding:4px 8px;border-right:2px solid var(--gold);margin-top:6px;border-radius:0 3px 3px 0;}
 .note-btn-inline{background:rgba(201,168,76,0.15);border:none;color:var(--gold);font-size:13px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1;}
 .note-btn-inline:hover{background:rgba(201,168,76,0.3);}
 /* SKETCH VIEW */
 .sketch-view{flex:1;display:none;flex-direction:column;overflow:hidden;}
 .sketch-hdr{flex-shrink:0;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);}
 .sh-client{font-size:14px;font-weight:900;color:var(--gold);}
-.sh-meta{font-size:10px;color:var(--muted);margin-top:1px;}
-.sh-note{font-size:11px;color:var(--gold);background:rgba(201,168,76,0.08);padding:3px 8px;border-right:2px solid var(--gold);margin-top:4px;}
+.sh-meta{font-size:12px;color:var(--muted);margin-top:1px;}
+.sh-note{font-size:12px;color:var(--gold);background:rgba(201,168,76,0.08);padding:3px 8px;border-right:2px solid var(--gold);margin-top:4px;}
 .sketch-area{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#0d0d0d;position:relative;min-height:0;touch-action:none;}
 .sketch-wrap{width:100%;height:100%;display:flex;align-items:center;justify-content:center;transform-origin:center center;}
 .sketch-wrap svg,.sketch-wrap img{width:100%;height:100%;object-fit:contain;display:block;}
@@ -74,14 +78,14 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 .sheet{position:absolute;bottom:0;right:0;left:0;background:var(--surface);border-top:2px solid var(--gold);max-height:60%;overflow-y:auto;transform:translateY(100%);transition:transform 0.28s;z-index:10;}
 .sheet.open{transform:translateY(0);}
 .sh-head{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--surface);}
-.sh-hdr-t{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;}
+.sh-hdr-t{font-size:12px;font-weight:700;color:var(--gold);letter-spacing:0.1em;text-transform:uppercase;}
 .si{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;}
 .si:active{background:var(--s2);}.si.on{background:rgba(39,174,96,0.08);}
 .si-chk{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
 .si.on .si-chk{background:var(--green);border-color:var(--green);color:#fff;}
-.si-name{font-size:13px;font-weight:700;flex:1;}.si-dim{font-size:10px;color:var(--muted);}
-.si-tag{font-size:9px;padding:2px 7px;border-radius:2px;font-weight:700;}
-.grp-hdr{padding:6px 14px;background:rgba(201,168,76,0.1);border-bottom:1px solid rgba(201,168,76,0.2);font-size:10px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;align-items:center;}
+.si-name{font-size:13px;font-weight:700;flex:1;}.si-dim{font-size:12px;color:var(--muted);}
+.si-tag{font-size:12px;padding:2px 7px;border-radius:2px;font-weight:700;}
+.grp-hdr{padding:6px 14px;background:rgba(201,168,76,0.1);border-bottom:1px solid rgba(201,168,76,0.2);font-size:12px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;align-items:center;}
 .note-area{padding:12px 14px;background:var(--s2);}
 .note-area textarea{width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;border-radius:4px;resize:vertical;min-height:64px;}
 .note-area textarea:focus{border-color:var(--gold);}
@@ -112,15 +116,15 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 .ed-top{flex-shrink:0;height:48px;background:#242424;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;gap:7px;padding:0 13px;}
 .ed-ttl{font-size:12px;font-weight:700;color:#f0ede8;flex:1;}
 .ed-tools{flex-shrink:0;background:#1e1b18;border-bottom:1px solid rgba(255,255,255,0.07);padding:7px 12px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
-.eb{padding:5px 10px;border-radius:4px;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;border:1px solid rgba(255,255,255,0.1);cursor:pointer;background:rgba(255,255,255,0.07);color:rgba(247,244,239,0.7);}
+.eb{padding:5px 10px;border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,0.1);cursor:pointer;background:rgba(255,255,255,0.07);color:rgba(247,244,239,0.7);}
 .eb.on{background:var(--gold);color:#1a1714;border-color:var(--gold);}
 .esep{width:1px;height:22px;background:rgba(255,255,255,0.08);flex-shrink:0;}
 .ecol{width:24px;height:24px;border-radius:50%;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);}
 .ecol.on{border-color:#fff;transform:scale(1.1);}
 .erw{display:flex;align-items:center;gap:4px;}
-.erw label{font-size:9px;color:rgba(247,244,239,0.35);white-space:nowrap;}
+.erw label{font-size:12px;color:rgba(247,244,239,0.35);white-space:nowrap;}
 .erw input[type=range]{width:60px;cursor:pointer;}
-.erw span{font-size:9px;color:rgba(247,244,239,0.4);min-width:16px;}
+.erw span{font-size:12px;color:rgba(247,244,239,0.4);min-width:16px;}
 .ed-txtbar{flex-shrink:0;background:#1e1b18;border-bottom:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:none;align-items:center;gap:7px;}
 .ed-txtbar input{flex:1;padding:6px 9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#f0ede8;font-family:Heebo,sans-serif;font-size:14px;border-radius:4px;outline:none;}
 .ed-canvas{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#111;touch-action:none;}
@@ -136,15 +140,15 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 .unav-logo{padding:20px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.07);}
 .unav-logo .lg{font-family:'Playfair Display',serif;font-size:18px;font-weight:900;color:#f7f4ef;}
 .unav-logo .lg span{color:#b8922a;}
-.unav-logo .sub{font-size:10px;color:rgba(247,244,239,0.3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
+.unav-logo .sub{font-size:12px;color:rgba(247,244,239,0.3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
 .unav-nav{flex:1;padding:8px 0;}
-.unav-sec{font-size:9px;font-weight:700;letter-spacing:0.15em;color:rgba(247,244,239,0.25);text-transform:uppercase;padding:12px 16px 4px;}
+.unav-sec{font-size:12px;font-weight:700;letter-spacing:0.15em;color:rgba(247,244,239,0.25);text-transform:uppercase;padding:12px 16px 4px;}
 .unav-a{display:flex;align-items:center;gap:10px;padding:9px 16px;color:rgba(247,244,239,0.55);font-size:13px;text-decoration:none;transition:all 0.15s;cursor:pointer;border:none;background:none;width:100%;text-align:right;font-family:Heebo,sans-serif;}
 .unav-a:hover{background:rgba(255,255,255,0.05);color:#f7f4ef;}
 .unav-a.active{background:rgba(184,146,42,0.15);color:#b8922a;font-weight:700;}
 .unav-a .ic{font-size:15px;flex-shrink:0;}
 .unav-bot{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.07);}
-.unav-bot a{display:block;font-size:11px;color:rgba(192,57,43,0.55);text-decoration:none;padding:4px 0;}
+.unav-bot a{display:block;font-size:12px;color:rgba(192,57,43,0.55);text-decoration:none;padding:4px 0;}
 .unav-bot a:hover{color:#e74c3c;}
 .unav-topbar{display:none;background:#1a1714;padding:0 16px;height:52px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
 .unav-topbar .lg{font-family:'Playfair Display',serif;font-size:16px;font-weight:900;color:#f7f4ef;}
@@ -182,8 +186,12 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+<!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
+<script src="lg-icons.js?v=20260807"></script>
 </head>
-<body>
+<body class="lg-dark">
+<a href="#csMain" class="skip-link">דלג לתוכן</a>
+
 <div id="lgLoading" style="position:fixed;inset:0;background:#1a1a1a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
   <div style="font-size:22px;font-weight:900;color:#f0ede8;margin-bottom:20px;">Luz<span style="color:#c9a84c">Glass</span></div>
   <div style="width:36px;height:36px;border:3px solid rgba(201,168,76,0.2);border-top-color:#c9a84c;border-radius:50%;animation:lgSpin 0.8s linear infinite;"></div>
@@ -202,12 +210,12 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
     <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
   </div>
   <button class="tb-btn tb-out" id="btnBack" onclick="goBack()" style="display:none">← רשימה</button>
-  <button class="tb-btn tb-out" id="btnSheet" onclick="toggleSheet()" style="display:none">📋 פריטים</button>
+  <button class="tb-btn tb-out" id="btnSheet" onclick="toggleSheet()" style="display:none"><span data-icon="clipboard"></span> פריטים</button>
   <a href="admin.html" class="tb-btn tb-out" id="csExitBtn" style="text-decoration:none;font-size:18px;font-weight:900;padding:6px 12px;line-height:1;" title="יציאה מתחנת הבדיקה">✕</a>
 </div>
 
 <!-- FILTERS - always visible -->
-<div class="filters" id="filtersBar">
+<div class="filters" id="csMain">
   <input class="fi" id="fSearch" placeholder="🔍 חיפוש..." oninput="renderList()">
   <select class="fi" id="fGlass" onchange="renderList()">
     <option value="">כל הזכוכיות</option>
@@ -282,11 +290,11 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   <div class="sketch-area" id="skArea">
     <div class="sketch-wrap" id="skWrap"></div>
     <div class="banner" id="banner">
-      <div style="font-size:48px">✅</div>
+      <div data-icon="check-circle" style="width:48px;height:48px;margin:0 auto"></div>
       <h2>כל הפריטים נבדקו!</h2>
       <p id="bannerName" style="font-size:13px;color:rgba(255,255,255,0.8)"></p>
       <div style="display:flex;gap:10px;margin-top:6px">
-        <button class="ban-btn" style="background:#fff;color:var(--green)" onclick="finishSketch()">✅ סיים סקיצה</button>
+        <button class="ban-btn" style="background:#fff;color:var(--green)" onclick="finishSketch()"><span data-icon="check"></span> סיים סקיצה</button>
         <button class="ban-btn" style="background:rgba(255,255,255,0.2);color:#fff" onclick="hideBanner()">המשך →</button>
       </div>
     </div>
@@ -297,8 +305,8 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
     <button class="zbtn zbtn-zoom" onclick="resetZoom()">↺</button>
     <div class="sp"></div>
     <div class="icnt" id="iCnt"></div>
-    <button class="tb-btn tb-out" onclick="openEditor()">✏️ ערוך</button>
-    <button class="tb-btn tb-green" id="finishBtn" onclick="finishSketch()" style="display:flex">✅ סיים סקיצה</button>
+    <button class="tb-btn tb-out" onclick="openEditor()"><span data-icon="pencil"></span> ערוך</button>
+    <button class="tb-btn tb-green" id="finishBtn" onclick="finishSketch()" style="display:flex"><span data-icon="check"></span> סיים סקיצה</button>
   </div>
 </div>
 
@@ -316,7 +324,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
 <!-- NOTE POPUP -->
 <div class="overlay" id="notePopup">
   <div class="np-box">
-    <div class="np-icon">⚠️</div>
+    <div class="np-icon" data-icon="alert"></div>
     <div class="np-title">הערה חשובה!</div>
     <div class="np-text" id="npText"></div>
     <button class="np-ok" onclick="dismissNote()">הבנתי ✓</button>
@@ -341,14 +349,14 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
   <div class="ed-top">
     <div class="ed-ttl" id="edTitle">✏️ עריכה</div>
     <button class="eact eundo" onclick="edUndo()">↩</button>
-    <button class="eact eclear" onclick="edClear()">🗑</button>
+    <button class="eact eclear" onclick="edClear()" aria-label="נקה"><span data-icon="trash"></span></button>
     <button class="eact ecancel" onclick="closeEditor()">ביטול</button>
     <button class="eact esave" onclick="edSave()">שמור ✓</button>
   </div>
   <div class="ed-tools">
-    <button class="eb on" id="ebDraw" onclick="edTool('draw')">✏️ ציור</button>
+    <button class="eb on" id="ebDraw" onclick="edTool('draw')"><span data-icon="pencil"></span> ציור</button>
     <button class="eb" id="ebText" onclick="edTool('text')">T כתב</button>
-    <button class="eb" id="ebErase" onclick="edTool('erase')">🧹 מחק</button>
+    <button class="eb" id="ebErase" onclick="edTool('erase')"><span data-icon="eraser"></span> מחק</button>
     <div class="esep"></div>
     <div class="ecol on" style="background:#e74c3c" onclick="edColor('#e74c3c',this)"></div>
     <div class="ecol" style="background:#2980b9" onclick="edColor('#2980b9',this)"></div>
@@ -360,7 +368,7 @@ html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);
     <div class="erw"><label>עובי</label><input type="range" id="edSzR" min="1" max="28" value="5" oninput="edSz=+this.value;document.getElementById('edSzN').textContent=edSz"><span id="edSzN">5</span></div>
     <div class="erw" id="edFtW" style="display:none"><label>גודל</label><input type="range" id="edFtR" min="10" max="72" value="26" oninput="edFt=+this.value;document.getElementById('edFtN').textContent=edFt"><span id="edFtN">26</span></div>
   </div>
-  <div class="ed-txtbar" id="edTxtBar"><span style="font-size:10px;color:rgba(247,244,239,0.35);white-space:nowrap">לחץ בסקיצה:</span><input type="text" id="edTxtIn" placeholder="רשום כאן..." maxlength="40"></div>
+  <div class="ed-txtbar" id="edTxtBar"><span style="font-size:12px;color:rgba(247,244,239,0.35);white-space:nowrap">לחץ בסקיצה:</span><input type="text" id="edTxtIn" placeholder="רשום כאן..." maxlength="40"></div>
   <div class="ed-canvas" id="edWrap"><img id="edBg" src="" alt=""><canvas id="edCvs"></canvas></div>
 </div>
 
@@ -495,10 +503,10 @@ function _csListenerFailed(what, err){
   const ov = document.getElementById('lgLoading');
   if(ov){
     ov.innerHTML = `<div style="text-align:center;font-family:Heebo,sans-serif;direction:rtl;padding:24px;">
-      <div style="font-size:38px;margin-bottom:10px">⚠️</div>
+      <div data-icon="alert" style="width:38px;height:38px;margin:0 auto 10px"></div>
       <div style="font-size:15px;font-weight:700;margin-bottom:6px">לא ניתן לטעון את תחנת הבדיקה</div>
       <div style="font-size:12px;color:#888;margin-bottom:14px">${lgEsc(what)} — ${lgEsc((err && err.message) || 'שגיאת חיבור')}</div>
-      <button onclick="location.reload()" style="padding:9px 20px;background:#b8922a;color:#fff;border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;">רענן</button>
+      <button onclick="location.reload()" style="padding:9px 20px;background:#b8922a;color:var(--on-gold);border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;">רענן</button>
     </div>`;
   } else {
     toast('⚠️ שגיאת חיבור — רענן את הדף');
@@ -935,8 +943,7 @@ function printChisum(reportNum, w){
   const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
   const label = reportNum ? `דוח ${lgEsc(reportNum)}` : 'דוח חיסום';
   w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>${label}</title><style>
-    body{font-family:Heebo,Arial,sans-serif;padding:20px;color:#1a1714}
-    table{width:100%;border-collapse:collapse}
+table{width:100%;border-collapse:collapse}
     th,td{padding:9px;border:1px solid #ddd;text-align:right}
     th{background:#f5f5f5}
     thead{display:table-header-group}  /* כותרת חוזרת בכל עמוד מודפס */
@@ -970,14 +977,14 @@ function renderSheet(){
   const note=notes[cur.id]||'';
 
   let html=`<div class="note-area">
-    <div style="font-size:10px;color:var(--muted);margin-bottom:4px">📝 הערה:</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:4px">📝 הערה:</div>
     <textarea id="skNoteTA" placeholder="הוסף הערה...">${lgEsc(note)}</textarea>
     <button class="note-save" onclick="saveSkNote()">שמור</button>
   </div>`;
 
   // הצג רק פריטי חיסום — לחץ לסימון
   if(idxs.length){
-    html+=`<div style="padding:8px 14px;font-size:9px;font-weight:700;color:var(--gold);letter-spacing:0.15em;background:var(--s2);border-bottom:1px solid var(--border)">🔥 פריטי חיסום — לחץ לסימון בדיקה</div>`;
+    html+=`<div style="padding:8px 14px;font-size:12px;font-weight:700;color:var(--gold);letter-spacing:0.15em;background:var(--s2);border-bottom:1px solid var(--border)">🔥 פריטי חיסום — לחץ לסימון בדיקה</div>`;
     // קיבוץ לתצוגה בלבד לפי quantityGroupId — לא משנה את מערך הפריטים
     const dispGroups=[];const seenG={};
     idxs.forEach(origIdx=>{
@@ -999,7 +1006,7 @@ function renderSheet(){
         return`<div class="si ${ck?'on':''}" onclick="checkItem(${origIdx})"${isGrp?' style="padding-right:22px"':''}>
           <div class="si-chk">${ck?'✓':''}</div>
           <div style="flex:1">
-            <div class="si-name">${lgEsc(item?.name||'—')}${isGrp?` <span style="font-size:9px;color:var(--muted)">#${item?.groupIndex||''}</span>`:''}</div>
+            <div class="si-name">${lgEsc(item?.name||'—')}${isGrp?` <span style="font-size:12px;color:var(--muted)">#${item?.groupIndex||''}</span>`:''}</div>
             <div class="si-dim">${item?.w||''}${item?.w&&item?.h?'×':''}${item?.h||''} מ"מ</div>
           </div>
           <div class="si-tag tc">🔥 חיסום</div>

@@ -5,22 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LuzGlass — קונפיגורטור מקלחונים</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
 <script src="lg-parse.js"></script>
 <style>
-  :root {
-    --bg: #f7f4ef;
-    --bg2: #ede9e1;
-    --surface: #ffffff;
-    --border: rgba(0,0,0,0.08);
-    --text: #1a1714;
-    --muted: #8a8278;
-    --gold: #b8922a;
-    --gold-light: #d4aa45;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Heebo', sans-serif; background: var(--bg); color: var(--text); direction: rtl; }
-
-  /* NAV */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+/* NAV */
   nav {
     position: fixed; top: 0; right: 0; left: 0; z-index: 100;
     display: flex; align-items: center; justify-content: space-between;
@@ -30,8 +21,8 @@
   }
   .logo { text-decoration: none; line-height: 1; }
   .logo-main { font-family: 'Playfair Display', serif; font-size: 26px; font-weight: 900; letter-spacing: -0.02em; color: var(--text); }
-  .logo-main span { color: var(--gold); }
-  .logo-sub { font-size: 9px; font-weight: 400; letter-spacing: 0.38em; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+  .logo-main span { color:var(--gold-text); }
+  .logo-sub { font-size:12px; font-weight: 400; letter-spacing: 0.38em; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
   .nav-links { display: flex; gap: 32px; list-style: none; align-items: center; }
   .nav-links a { color: var(--muted); text-decoration: none; font-size: 14px; transition: color 0.2s; }
   .nav-links a:hover { color: var(--text); }
@@ -43,10 +34,10 @@
   .page-header { padding: 48px 52px 36px; border-bottom: 1px solid var(--border); background: var(--surface); }
   .breadcrumb { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
   .breadcrumb a { color: var(--muted); text-decoration: none; }
-  .breadcrumb a:hover { color: var(--gold); }
+  .breadcrumb a:hover { color:var(--gold-text); }
   .breadcrumb span { margin: 0 6px; }
   .page-header h1 { font-family: 'Playfair Display', serif; font-size: 36px; font-weight: 900; letter-spacing: -0.02em; }
-  .page-header h1 em { font-style: normal; color: var(--gold); }
+  .page-header h1 em { font-style: normal; color:var(--gold-text); }
   .page-header p { font-size: 15px; color: var(--muted); margin-top: 8px; font-weight: 300; }
 
   /* MAIN CONFIGURATOR LAYOUT */
@@ -132,10 +123,10 @@
   /* SECTION BLOCK */
   .ctrl-section { }
   .ctrl-label {
-    font-size: 10px;
+    font-size:12px;
     font-weight: 600;
     letter-spacing: 0.25em;
-    color: var(--gold);
+    color:var(--gold-text);
     text-transform: uppercase;
     margin-bottom: 14px;
     display: flex;
@@ -174,9 +165,9 @@
     gap: 8px;
   }
   .type-btn:hover { background: var(--bg2); border-color: rgba(184,146,42,0.2); }
-  .type-btn.active { background: var(--bg2); border-color: var(--gold); color: var(--text); font-weight: 600; }
+  .type-btn.active { background: var(--bg2); border-color:var(--gold-text); color: var(--text); font-weight: 600; }
   .type-btn .type-tag {
-    font-size: 10px;
+    font-size:12px;
     font-weight: 400;
     color: var(--muted);
     background: var(--surface);
@@ -184,7 +175,7 @@
     border-radius: 2px;
     white-space: nowrap;
   }
-  .type-btn.active .type-tag { background: rgba(184,146,42,0.12); color: var(--gold); }
+  .type-btn.active .type-tag { background: rgba(184,146,42,0.12); color:var(--gold-text); }
 
   /* GLASS SWATCHES */
   .glass-swatches {
@@ -206,15 +197,15 @@
     padding: 6px 4px;
   }
   .swatch-btn:hover { border-color: rgba(184,146,42,0.3); }
-  .swatch-btn.active { border-color: var(--gold); }
+  .swatch-btn.active { border-color:var(--gold-text); }
   .swatch-circle {
     width: 38px; height: 38px;
     border-radius: 50%;
     border: 1px solid rgba(0,0,0,0.1);
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   }
-  .swatch-name { font-size: 10px; color: var(--muted); text-align: center; line-height: 1.3; }
-  .swatch-price { font-size: 10px; color: var(--gold); font-weight: 700; }
+  .swatch-name { font-size:12px; color: var(--muted); text-align: center; line-height: 1.3; }
+  .swatch-price { font-size:12px; color:var(--gold-text); font-weight: 700; }
   .swatch-btn.active .swatch-name { color: var(--text); font-weight: 600; }
 
   /* FINISH SWATCHES */
@@ -233,17 +224,17 @@
     color: var(--muted); transition: all 0.15s; text-align: center;
   }
   .quality-btn:hover { background: var(--bg2); }
-  .quality-btn.active { background: var(--bg2); border-color: var(--gold); color: var(--text); }
+  .quality-btn.active { background: var(--bg2); border-color:var(--gold-text); color: var(--text); }
   .quality-btn .q-badge {
-    display: block; font-size: 10px; font-weight: 400;
+    display: block; font-size:12px; font-weight: 400;
     color: var(--muted); margin-top: 3px;
   }
-  .quality-btn.active .q-badge { color: var(--gold); }
+  .quality-btn.active .q-badge { color:var(--gold-text); }
 
   /* DIMENSIONS */
   .dims-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .dim-field { display: flex; flex-direction: column; gap: 6px; }
-  .dim-field label { font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: 0.05em; }
+  .dim-field label { font-size:12px; color: var(--muted); font-weight: 500; letter-spacing: 0.05em; }
   .dim-field input {
     padding: 11px 14px;
     background: var(--bg);
@@ -255,9 +246,9 @@
     outline: none;
     width: 100%;
   }
-  .dim-field input:focus { border-color: var(--gold); }
-  .dim-field .unit { font-size: 11px; color: var(--muted); margin-top: 3px; }
-  .dim-prev { font-size: 11px; color: var(--gold); margin-top: 3px; min-height: 16px; }
+  .dim-field input:focus { border-color:var(--gold-text); }
+  .dim-field .unit { font-size:12px; color: var(--muted); margin-top: 3px; }
+  .dim-prev { font-size:12px; color:var(--gold-text); margin-top: 3px; min-height: 16px; }
 
   /* EXTRAS */
   .extras-list { display: flex; flex-direction: column; gap: 8px; }
@@ -268,15 +259,15 @@
     user-select: none;
   }
   .extra-item:hover { background: var(--bg2); border-color: rgba(184,146,42,0.2); }
-  .extra-item.checked { background: var(--bg2); border-color: var(--gold); }
+  .extra-item.checked { background: var(--bg2); border-color:var(--gold-text); }
   .extra-checkbox {
     width: 18px; height: 18px; border: 1.5px solid var(--border);
     display: flex; align-items: center; justify-content: center;
     flex-shrink: 0; transition: all 0.15s;
   }
-  .extra-item.checked .extra-checkbox { background: var(--gold); border-color: var(--gold); color: #fff; font-size: 11px; }
+  .extra-item.checked .extra-checkbox { background: var(--gold); border-color:var(--gold-text); color: #fff; font-size:12px; }
   .extra-text { flex: 1; font-size: 13px; }
-  .extra-price { font-size: 12px; color: var(--gold); font-weight: 700; }
+  .extra-price { font-size: 12px; color:var(--gold-text); font-weight: 700; }
 
   /* PRICE BOX */
   .price-box {
@@ -293,10 +284,10 @@
   .price-total-label { font-size: 14px; color: rgba(247,244,239,0.7); }
   .price-total-value { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 900; color: #f7f4ef; }
   .price-total-value span { font-size: 16px; font-family: 'Heebo', sans-serif; font-weight: 400; color: rgba(247,244,239,0.5); margin-right: 4px; }
-  .price-note { font-size: 11px; color: rgba(247,244,239,0.35); margin-bottom: 18px; }
+  .price-note { font-size:12px; color: rgba(247,244,239,0.35); margin-bottom: 18px; }
   .btn-order {
     width: 100%; padding: 16px;
-    background: var(--gold); color: #fff;
+    background: var(--gold); color: var(--on-gold);
     font-family: 'Heebo', sans-serif; font-size: 15px; font-weight: 700;
     border: none; cursor: pointer; letter-spacing: 0.06em;
     transition: background 0.2s;
@@ -321,6 +312,8 @@
 </style>
 </head>
 <body>
+<a href="#mkMain" class="skip-link">דלג לתוכן</a>
+
 
 <nav>
   <a href="index.html" class="logo">
@@ -336,7 +329,7 @@
   </ul>
 </nav>
 
-<div class="page">
+<div class="page" id="mkMain">
   <div class="page-header">
     <div class="breadcrumb">
       <a href="index.html">בית</a><span>›</span>מקלחונים

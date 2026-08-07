@@ -5,12 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LuzGlass — הזמנה מלאה</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
-<style>
-  :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;}
-  *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;}
 
-  /* HEADER */
+<!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+<style>
+/* HEADER */
   .header{background:var(--text);padding:28px 20px 20px;color:#f7f4ef;}
   .header-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;}
   .logo{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;}
@@ -18,43 +17,43 @@
   .order-title{font-size:22px;font-weight:700;margin-bottom:4px;}
   .order-meta{font-size:12px;color:rgba(247,244,239,0.5);line-height:1.7;}
   .header-actions{display:flex;gap:8px;margin-top:16px;}
-  .btn-print{padding:10px 20px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;}
+  .btn-print{padding:10px 20px;background:var(--gold);color:var(--on-gold);font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;}
   .btn-back{padding:10px 20px;background:transparent;color:rgba(247,244,239,0.6);font-family:Heebo,sans-serif;font-size:13px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;text-decoration:none;display:inline-block;}
 
   /* SUMMARY TABLE */
   .section{padding:16px 20px;}
-  .section-title{font-size:10px;font-weight:600;letter-spacing:0.2em;color:var(--gold);text-transform:uppercase;margin-bottom:12px;}
+  .section-title{font-size:12px;font-weight:600;letter-spacing:0.2em;color:var(--gold-text);text-transform:uppercase;margin-bottom:12px;}
   .summary-table{width:100%;border-collapse:collapse;font-size:12px;}
-  .summary-table th{padding:8px 10px;background:var(--bg2);font-weight:600;color:var(--muted);text-align:right;font-size:10px;letter-spacing:0.05em;}
+  .summary-table th{padding:8px 10px;background:var(--bg2);font-weight:600;color:var(--muted);text-align:right;font-size:12px;letter-spacing:0.05em;}
   .summary-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top;}
   .summary-table tr:last-child td{border-bottom:none;}
-  .item-num{font-size:11px;color:var(--muted);}
+  .item-num{font-size:12px;color:var(--muted);}
   .item-name{font-weight:700;font-size:13px;margin-bottom:2px;}
-  .item-details{font-size:11px;color:var(--muted);line-height:1.6;}
-  .item-price{font-weight:700;color:var(--gold);font-size:14px;white-space:nowrap;}
+  .item-details{font-size:12px;color:var(--muted);line-height:1.6;}
+  .item-price{font-weight:700;color:var(--gold-text);font-size:14px;white-space:nowrap;}
 
   /* TOTAL */
   .total-bar{background:var(--text);color:#f7f4ef;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;}
   .total-label{font-size:13px;color:rgba(247,244,239,0.6);}
   .total-val{font-family:'Playfair Display',serif;font-size:28px;font-weight:900;}
-  .total-note{font-size:10px;color:rgba(247,244,239,0.3);margin-top:2px;}
+  .total-note{font-size:12px;color:rgba(247,244,239,0.3);margin-top:2px;}
 
   /* SKETCH CARDS */
   .sketches{padding:16px 20px;display:flex;flex-direction:column;gap:16px;}
   .sketch-card{background:var(--surface);border:1px solid var(--border);}
   .sketch-card-header{padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-  .sketch-card-num{font-size:10px;font-weight:600;color:var(--gold);letter-spacing:0.15em;}
+  .sketch-card-num{font-size:12px;font-weight:600;color:var(--gold-text);letter-spacing:0.15em;}
   .sketch-card-name{font-size:13px;font-weight:700;}
-  .sketch-card-type{font-size:11px;color:var(--muted);}
+  .sketch-card-type{font-size:12px;color:var(--muted);}
   .sketch-img{width:100%;display:block;}
-  .sketch-card-footer{padding:10px 16px;font-size:11px;color:var(--muted);line-height:1.7;border-top:1px solid var(--border);}
+  .sketch-card-footer{padding:10px 16px;font-size:12px;color:var(--muted);line-height:1.7;border-top:1px solid var(--border);}
 
   /* EMPTY STATE */
   .empty{text-align:center;padding:60px 20px;color:var(--muted);}
   .empty-icon{font-size:40px;margin-bottom:16px;}
   .empty h2{font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px;}
   .empty p{font-size:14px;line-height:1.6;}
-  .btn-go{display:inline-block;margin-top:20px;padding:14px 28px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;text-decoration:none;}
+  .btn-go{display:inline-block;margin-top:20px;padding:14px 28px;background:var(--gold);color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:700;text-decoration:none;}
 
   /* DELETE */
   .btn-del{background:none;border:none;color:rgba(192,57,43,0.5);font-size:13px;cursor:pointer;padding:2px 6px;}
@@ -71,6 +70,8 @@
 </style>
 </head>
 <body>
+<a href="#app" class="skip-link">דלג לתוכן</a>
+
 
 <div id="app"></div>
 
@@ -115,7 +116,7 @@ function render(){
           <div class="logo">Luz<span>Glass</span></div>
         </div>
         <div style="text-align:left">
-          <div style="font-size:10px;color:rgba(247,244,239,0.4);letter-spacing:0.1em;">תאריך</div>
+          <div style="font-size:12px;color:rgba(247,244,239,0.4);letter-spacing:0.1em;">תאריך</div>
           <div style="font-size:13px;color:rgba(247,244,239,0.7);">${date}</div>
         </div>
       </div>
@@ -207,8 +208,8 @@ function render(){
 
   // footer
   html+=`
-    <div style="padding:24px 20px;text-align:center;font-size:11px;color:var(--muted);border-top:1px solid var(--border);">
-      <strong style="color:var(--gold)">LuzGlass</strong> &nbsp;·&nbsp; מפעל עיבוד זכוכית &nbsp;·&nbsp; הופק: ${new Date().toLocaleDateString('he-IL')}
+    <div style="padding:24px 20px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--border);">
+      <strong style="color:var(--gold-text)">LuzGlass</strong> &nbsp;·&nbsp; מפעל עיבוד זכוכית &nbsp;·&nbsp; הופק: ${new Date().toLocaleDateString('he-IL')}
     </div>`;
 
   document.getElementById('app').innerHTML=html;

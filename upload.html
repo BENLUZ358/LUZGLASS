@@ -8,14 +8,13 @@
 <meta http-equiv="Expires" content="0">
 <title>LuzGlass — העלאת סקיצה</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
-<style>
-  :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;}
-  *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;min-height:100vh;}
 
-  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
+<!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+<style>
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;}
   .logo-main{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;color:var(--text);}
-  .logo-main span{color:var(--gold);}
+  .logo-main span{color:var(--gold-text);}
   .back-btn{padding:8px 16px;background:var(--bg2);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;color:var(--muted);cursor:pointer;text-decoration:none;display:inline-block;}
 
   .page{max-width:560px;margin:0 auto;padding:28px 20px 60px;}
@@ -34,12 +33,12 @@
     margin-bottom:16px;
     position:relative;
   }
-  .upload-zone:hover,.upload-zone.drag{border-color:var(--gold);background:rgba(184,146,42,0.07);}
+  .upload-zone:hover,.upload-zone.drag{border-color:var(--gold-text);background:rgba(184,146,42,0.07);}
   .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
   .uz-icon{font-size:44px;margin-bottom:12px;}
   .uz-title{font-size:16px;font-weight:700;margin-bottom:6px;}
   .uz-sub{font-size:13px;color:var(--muted);}
-  .uz-types{font-size:11px;color:var(--muted);margin-top:8px;opacity:0.7;}
+  .uz-types{font-size:12px;color:var(--muted);margin-top:8px;opacity:0.7;}
 
   /* PREVIEW */
   .preview-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;}
@@ -51,7 +50,7 @@
   /* FORM */
   .form-section{display:flex;flex-direction:column;gap:14px;margin-bottom:24px;}
   .field{display:flex;flex-direction:column;gap:5px;}
-  .field label{font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--gold);text-transform:uppercase;}
+  .field label{font-size:12px;font-weight:600;letter-spacing:0.1em;color:var(--gold-text);text-transform:uppercase;}
   .field input,.field select,.field textarea{
     padding:12px 14px;background:var(--surface);
     border:1px solid var(--border);
@@ -59,7 +58,7 @@
     outline:none;transition:border-color 0.15s;
     -webkit-appearance:none;border-radius:0;
   }
-  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold);}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold-text);}
   .field textarea{resize:none;line-height:1.6;}
 
   .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
@@ -67,7 +66,7 @@
   /* SUBMIT */
   .btn-submit{
     width:100%;padding:16px;
-    background:var(--gold);color:#fff;
+    background:var(--gold);color:var(--on-gold);
     font-family:'Heebo',sans-serif;font-size:16px;font-weight:700;
     border:none;cursor:pointer;letter-spacing:0.04em;
     transition:background 0.2s;
@@ -84,7 +83,7 @@
   .success-icon{font-size:64px;margin-bottom:20px;}
   .success-title{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;margin-bottom:10px;}
   .success-sub{font-size:15px;color:var(--muted);line-height:1.7;max-width:340px;margin:0 auto 32px;}
-  .success-ref{font-size:13px;color:var(--gold);font-weight:700;margin-bottom:28px;}
+  .success-ref{font-size:13px;color:var(--gold-text);font-weight:700;margin-bottom:28px;}
   .btn-back{display:inline-block;padding:14px 32px;background:var(--text);color:var(--bg);font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;text-decoration:none;}
 </style>
   <!-- Firebase SDK + LuzGlass DB -->
@@ -94,6 +93,8 @@
   <script src="firebase-db.js?v=20260518"></script>
 </head>
 <body>
+<a href="#formPage" class="skip-link">דלג לתוכן</a>
+
 
 <div class="topbar">
   <div class="logo-main" onclick="logoClick()" style="cursor:pointer;">Luz<span>Glass</span></div>
@@ -115,7 +116,7 @@
     <div class="uz-sub">תמונות של שרטוטים, מדידות, רפרנסים</div>
     <div class="uz-types">JPG, PNG, PDF · עד 10MB לקובץ</div>
     <div style="margin-top:14px;">
-      <span style="display:inline-block;padding:10px 24px;background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border-radius:6px;cursor:pointer;">
+      <span style="display:inline-block;padding:10px 24px;background:var(--gold);color:var(--on-gold);font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border-radius:6px;cursor:pointer;">
         📂 בחר קובץ
       </span>
     </div>

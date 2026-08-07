@@ -9,12 +9,15 @@
 <meta http-equiv="Expires" content="0">
 <title>LuzGlass — כניסה</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+
+<!-- בסיס העיצוב המשותף — הדף כהה, ולכן body נושא lg-dark -->
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+
 <style>
-  *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{height:100%;font-family:'Heebo',sans-serif;direction:rtl;}
+  html,body{height:100%;}
 
   body{
-    background:#1a1714;
+    background:var(--dark-bg);
     display:flex;flex-direction:column;align-items:center;justify-content:center;
     min-height:100vh;padding:20px;
   }
@@ -28,7 +31,7 @@
   }
 
   .card{
-    background:#242424;border:1px solid rgba(255,255,255,0.07);
+    background:var(--dark-surface);border:1px solid var(--dark-border);
     border-radius:12px;padding:40px 36px;width:100%;max-width:400px;
     box-shadow:0 24px 64px rgba(0,0,0,0.5);position:relative;
   }
@@ -39,23 +42,23 @@
   .logo-text{
     font-family:'Playfair Display',serif;font-size:30px;color:#f7f4ef;letter-spacing:0.02em;
   }
-  .logo-text span{color:#b8922a;}
-  .logo-sub{font-size:12px;color:#888;margin-top:6px;letter-spacing:0.12em;text-transform:uppercase;}
+  .logo-text span{color:var(--gold);}
+  .logo-sub{font-size:12px;color:var(--dark-muted);margin-top:6px;letter-spacing:0.12em;text-transform:uppercase;}
 
   .field{margin-bottom:16px;}
-  .field label{display:block;font-size:12px;font-weight:700;color:#888;margin-bottom:7px;letter-spacing:0.05em;}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--dark-muted);margin-bottom:7px;letter-spacing:0.05em;}
   .field input{
     width:100%;padding:13px 14px;
     background:#1a1714;border:1px solid rgba(255,255,255,0.1);
-    font-family:Heebo,sans-serif;font-size:15px;color:#f0ede8;
+    font-family:Heebo,sans-serif;font-size:15px;color:var(--dark-text);
     outline:none;border-radius:6px;transition:border 0.2s;
   }
-  .field input:focus{border-color:rgba(184,146,42,0.6);}
-  .field input::placeholder{color:#555;}
+  .field input:focus{border-color:var(--gold);}
+  .field input::placeholder{color:var(--dark-muted);}
 
   .btn-login{
     width:100%;padding:15px;margin-top:8px;
-    background:#b8922a;color:#1a1714;
+    background:var(--gold);color:var(--on-gold);
     font-family:Heebo,sans-serif;font-size:15px;font-weight:900;
     border:none;cursor:pointer;border-radius:6px;
     transition:background 0.15s;
@@ -72,7 +75,7 @@
 
   .footer-text{
     text-align:center;margin-top:24px;
-    font-size:11px;color:#555;
+    font-size:12px;color:var(--dark-muted);
   }
 
   /* loading spinner */
@@ -85,7 +88,7 @@
 
 </style>
 </head>
-<body>
+<body class="lg-dark">
 
 <div class="card">
   <div class="logo">

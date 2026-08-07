@@ -35,6 +35,22 @@
   --on-gold:   #1a1714;
   --gold-hover:#9a7520;
 
+  /* ── Dark surfaces ─────────────────────────────────────────────────────
+     Used by check-station (a full dark page), the login card, and the dark
+     bars inside otherwise-light pages. Not a theme switch — these are
+     separate tokens, applied deliberately where the surface is dark.
+
+     The gold inverts here: on dark, --gold-dark is 7.62:1 while --gold-text
+     (#886c1f) drops to 3.58:1. The two are never interchangeable. */
+  --dark-bg:      #1a1a1a;
+  --dark-surface: #242424;
+  --dark-raised:  #2e2e2e;
+  --dark-border:  rgba(255,255,255,0.08);
+  --dark-text:    #f0ede8;   /* 14.90:1 on --dark-bg */
+  --dark-muted:   #9a9490;   /* 5.81:1 on --dark-bg, 5.18:1 on --dark-surface
+                                was #888, which failed at 4.38:1 on surface */
+  --gold-dark:    #c9a84c;   /* 7.62:1 on --dark-bg, 6.79:1 on --dark-surface */
+
   /* ── Status ────────────────────────────────────────────────────────────── */
   --green:     #1e8449;
   --red:       #a93226;
@@ -84,6 +100,27 @@
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
   --shadow-md: 0 3px 14px rgba(0,0,0,0.08);
   --shadow-lg: 0 24px 64px rgba(0,0,0,0.5);
+}
+
+/* A fully dark page remaps the semantic tokens rather than rewriting every
+   rule. check-station uses var(--bg) / var(--surface) / var(--gold) throughout
+   and is dark end to end, so it carries class="lg-dark" on <body> and every
+   one of those lookups resolves to the dark scale.
+
+   Note --gold-text maps to --gold-dark here: the light-surface gold is
+   unreadable on dark, and the point of the token is "gold you can read". */
+body.lg-dark,
+.lg-dark{
+  --bg:        var(--dark-bg);
+  --bg2:       var(--dark-raised);
+  --surface:   var(--dark-surface);
+  --border:    var(--dark-border);
+  --text:      var(--dark-text);
+  --muted:     var(--dark-muted);
+  --gold:      var(--gold-dark);
+  --gold-text: var(--gold-dark);
+  --on-gold:   #1a1714;
+  --ring:      0 0 0 2px var(--dark-bg), 0 0 0 4px var(--gold-dark);
 }
 
 /* ═══ RESET ═══════════════════════════════════════════════════════════════ */

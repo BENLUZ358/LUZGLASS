@@ -8,20 +8,20 @@
 <meta http-equiv="Expires" content="0">
 <title>LuzGlass — יום עבודה</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
 <style>
-  :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;--cut:#2980b9;--chisum:#8e44ad;--mixed:#e67e22;}
-  *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;min-height:100vh;}
-  .layout{display:flex;min-height:100vh;}
+.layout{display:flex;min-height:100vh;}
 
   /* SIDEBAR */
   .sidebar{width:210px;flex-shrink:0;background:var(--text);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;}
   .sb-logo{padding:22px 18px 18px;border-bottom:1px solid rgba(255,255,255,0.07);}
   .sb-logo .lg{font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:#f7f4ef;}
   .sb-logo .lg span{color:var(--gold);}
-  .sb-logo .sub{font-size:9px;color:rgba(247,244,239,0.3);letter-spacing:0.28em;text-transform:uppercase;margin-top:3px;}
+  .sb-logo .sub{font-size:12px;color:rgba(247,244,239,0.3);letter-spacing:0.28em;text-transform:uppercase;margin-top:3px;}
   .nav{padding:14px 0;flex:1;}
-  .nav-sec{padding:14px 18px 5px;font-size:9px;letter-spacing:0.2em;color:rgba(247,244,239,0.2);text-transform:uppercase;}
+  .nav-sec{padding:14px 18px 5px;font-size:12px;letter-spacing:0.2em;color:rgba(247,244,239,0.2);text-transform:uppercase;}
   .nav-a{display:flex;align-items:center;gap:10px;padding:10px 18px;font-size:13px;font-weight:500;color:rgba(247,244,239,0.5);cursor:pointer;transition:all 0.15s;text-decoration:none;border-right:3px solid transparent;}
   .nav-a:hover{color:rgba(247,244,239,0.85);background:rgba(255,255,255,0.04);}
   .nav-a.active{color:#f7f4ef;border-right-color:var(--gold);background:rgba(255,255,255,0.06);}
@@ -39,8 +39,8 @@
   .phase-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);padding:0 24px;}
   .phase-tab{padding:14px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.15s;display:flex;align-items:center;gap:8px;}
   .phase-tab:hover{color:var(--text);}
-  .phase-tab.active{color:var(--text);border-bottom-color:var(--gold);}
-  .phase-tab .cnt{font-size:11px;padding:2px 7px;border-radius:10px;font-weight:700;}
+  .phase-tab.active{color:var(--text);border-bottom-color:var(--gold-text);}
+  .phase-tab .cnt{font-size:12px;padding:2px 7px;border-radius:10px;font-weight:700;}
 
   /* CONTENT */
   .content{padding:20px 24px;}
@@ -53,7 +53,7 @@
   .col-header{padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);}
   .col-icon{font-size:18px;}
   .col-title{font-size:12px;font-weight:700;flex:1;}
-  .col-count{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;color:#fff;}
+  .col-count{font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;color:#fff;}
   .col-body{min-height:200px;}
 
   /* CUT */
@@ -71,29 +71,29 @@
 
   /* AVAILABLE ORDERS */
   .available-section{margin-bottom:20px;}
-  .avail-title{font-size:10px;font-weight:600;letter-spacing:0.2em;color:var(--gold);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;}
+  .avail-title{font-size:12px;font-weight:600;letter-spacing:0.2em;color:var(--gold-text);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;}
   .avail-title::after{content:'';flex:1;height:1px;background:var(--border);}
   .avail-grid{display:flex;flex-direction:column;gap:5px;}
 
   /* ORDER CARD */
   .order-card{background:var(--surface);border:1px solid var(--border);padding:12px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:all 0.15s;user-select:none;}
-  .order-card:hover{border-color:var(--gold);background:var(--bg);}
-  .order-card.selected{border-color:var(--gold);background:rgba(184,146,42,0.04);}
+  .order-card:hover{border-color:var(--gold-text);background:var(--bg);}
+  .order-card.selected{border-color:var(--gold-text);background:rgba(184,146,42,0.04);}
   .order-card.in-work{opacity:0.5;cursor:default;}
   .oc-check{width:20px;height:20px;border:2px solid var(--border);border-radius:3px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;transition:all 0.15s;}
-  .order-card.selected .oc-check{background:var(--gold);border-color:var(--gold);color:#fff;}
+  .order-card.selected .oc-check{background:var(--gold);border-color:var(--gold-text);color:#fff;}
   .oc-info{flex:1;min-width:0;}
   .oc-client{font-size:13px;font-weight:700;}
-  .oc-desc{font-size:11px;color:var(--muted);margin-top:2px;}
+  .oc-desc{font-size:12px;color:var(--muted);margin-top:2px;}
   .oc-tags{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap;}
-  .tag{padding:2px 7px;font-size:9px;font-weight:700;border-radius:2px;}
+  .tag{padding:2px 7px;font-size:12px;font-weight:700;border-radius:2px;}
   .tag-cut{background:rgba(41,128,185,0.1);color:var(--cut);}
   .tag-chisum{background:rgba(142,68,173,0.1);color:var(--chisum);}
   .tag-mixed{background:rgba(230,126,34,0.1);color:var(--mixed);}
   .tag-glass{background:rgba(0,0,0,0.05);color:var(--muted);}
   .oc-right{text-align:left;flex-shrink:0;}
-  .oc-price{font-size:12px;font-weight:700;color:var(--gold);}
-  .oc-num{font-size:10px;color:var(--muted);margin-top:2px;}
+  .oc-price{font-size:12px;font-weight:700;color:var(--gold-text);}
+  .oc-num{font-size:12px;color:var(--muted);margin-top:2px;}
 
   /* WORK ITEM (in column) */
   .work-item{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--surface);}
@@ -101,13 +101,13 @@
   .wi-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
   .wi-info{flex:1;min-width:0;}
   .wi-client{font-size:12px;font-weight:700;}
-  .wi-desc{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .wi-desc{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .wi-remove{background:none;border:none;color:rgba(192,57,43,0.4);cursor:pointer;font-size:13px;padding:2px 4px;}
   .wi-remove:hover{color:#c0392b;}
 
   /* BUTTONS */
   .btn{padding:10px 20px;font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;}
-  .btn-gold{background:var(--gold);color:#fff;}
+  .btn-gold{background:var(--gold);color:var(--on-gold);}
   .btn-gold:hover{background:#9a7520;}
   .btn-dark{background:var(--text);color:#f7f4ef;}
   .btn-dark:hover{background:#333;}
@@ -150,7 +150,7 @@
 
   /* WA MESSAGE PREVIEW */
   .wa-preview{background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.7;color:#1b5e20;margin-top:14px;white-space:pre-wrap;}
-  .wa-preview-title{font-size:10px;font-weight:700;color:#388e3c;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;}
+  .wa-preview-title{font-size:12px;font-weight:700;color:#388e3c;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;}
 
   .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--text);color:#f7f4ef;padding:12px 22px;font-size:14px;font-weight:600;border-right:3px solid var(--gold);opacity:0;transition:all 0.3s;z-index:200;white-space:nowrap;}
   .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
@@ -160,25 +160,25 @@
   .items-panel.open{display:flex;}
   .item-row-wd{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);cursor:pointer;transition:all 0.15s;}
   .item-row-wd:hover{border-color:rgba(184,146,42,0.3);}
-  .item-row-wd.item-sel{background:rgba(184,146,42,0.06);border-color:var(--gold);}
+  .item-row-wd.item-sel{background:rgba(184,146,42,0.06);border-color:var(--gold-text);}
   .item-row-wd.item-dimmed{opacity:0.4;}
-  .item-check{width:18px;height:18px;border:2px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;transition:all 0.15s;}
-  .item-row-wd.item-sel .item-check{background:var(--gold);border-color:var(--gold);color:#fff;}
+  .item-check{width:18px;height:18px;border:2px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;transition:all 0.15s;}
+  .item-row-wd.item-sel .item-check{background:var(--gold);border-color:var(--gold-text);color:#fff;}
   .item-glass{font-size:12px;font-weight:700;flex:1;}
-  .item-dims{font-size:11px;color:var(--muted);}
-  .item-process{font-size:10px;padding:2px 7px;border-radius:2px;font-weight:700;flex-shrink:0;}
+  .item-dims{font-size:12px;color:var(--muted);}
+  .item-process{font-size:12px;padding:2px 7px;border-radius:2px;font-weight:700;flex-shrink:0;}
   .ip-cut{background:rgba(41,128,185,0.1);color:#2980b9;}
   .ip-chisum{background:rgba(142,68,173,0.1);color:#8e44ad;}
   .items-actions{display:flex;gap:6px;margin-top:4px;padding-top:8px;border-top:1px solid var(--border);}
   .ia{flex:1;padding:8px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;transition:all 0.15s;}
-  .ia-add{background:var(--gold);color:#fff;}
+  .ia-add{background:var(--gold);color:var(--on-gold);}
   .ia-add:hover{background:#9a7520;}
   .ia-cancel{background:var(--bg2);color:var(--muted);border:1px solid var(--border);}
   .ia-cancel:hover{color:var(--text);}
   .add-item-form{padding:10px;background:var(--bg2);border:1px dashed rgba(184,146,42,0.3);display:flex;flex-direction:column;gap:7px;}
   .add-item-form .ai-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
   .ai-input{padding:7px 9px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none;border-radius:0;width:100%;}
-  .ai-input:focus{border-color:var(--gold);}
+  .ai-input:focus{border-color:var(--gold-text);}
   .ai-select{padding:7px 9px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none;border-radius:0;width:100%;cursor:pointer;}
 
   @media(max-width:860px){
@@ -195,15 +195,15 @@
 .unav-logo{padding:20px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.07);}
 .unav-logo .lg{font-family:'Playfair Display',serif;font-size:18px;font-weight:900;color:#f7f4ef;}
 .unav-logo .lg span{color:#b8922a;}
-.unav-logo .sub{font-size:10px;color:rgba(247,244,239,0.3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
+.unav-logo .sub{font-size:12px;color:rgba(247,244,239,0.3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
 .unav-nav{flex:1;padding:8px 0;}
-.unav-sec{font-size:9px;font-weight:700;letter-spacing:0.15em;color:rgba(247,244,239,0.25);text-transform:uppercase;padding:12px 16px 4px;}
+.unav-sec{font-size:12px;font-weight:700;letter-spacing:0.15em;color:rgba(247,244,239,0.25);text-transform:uppercase;padding:12px 16px 4px;}
 .unav-a{display:flex;align-items:center;gap:10px;padding:9px 16px;color:rgba(247,244,239,0.55);font-size:13px;text-decoration:none;transition:all 0.15s;cursor:pointer;border:none;background:none;width:100%;text-align:right;font-family:Heebo,sans-serif;}
 .unav-a:hover{background:rgba(255,255,255,0.05);color:#f7f4ef;}
 .unav-a.active{background:rgba(184,146,42,0.15);color:#b8922a;font-weight:700;}
 .unav-a .ic{font-size:15px;flex-shrink:0;}
 .unav-bot{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.07);}
-.unav-bot a{display:block;font-size:11px;color:rgba(192,57,43,0.55);text-decoration:none;padding:4px 0;}
+.unav-bot a{display:block;font-size:12px;color:rgba(192,57,43,0.55);text-decoration:none;padding:4px 0;}
 .unav-bot a:hover{color:#e74c3c;}
 .unav-topbar{display:none;background:#1a1714;padding:0 16px;height:52px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
 .unav-topbar .lg{font-family:'Playfair Display',serif;font-size:16px;font-weight:900;color:#f7f4ef;}
@@ -222,11 +222,15 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+<!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
+<script src="lg-icons.js?v=20260807"></script>
 </head>
 <body>
+<a href="#wdMain" class="skip-link">דלג לתוכן</a>
+
 <div id="lgLoading" style="position:fixed;inset:0;background:#1a1714;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
-  <div style="font-family:'Playfair Display',serif;font-size:28px;color:#f7f4ef;margin-bottom:20px;">Luz<span style="color:#b8922a">Glass</span></div>
-  <div style="width:36px;height:36px;border:3px solid rgba(184,146,42,0.25);border-top-color:#b8922a;border-radius:50%;animation:lgSpin 0.8s linear infinite;"></div>
+  <div style="font-family:'Playfair Display',serif;font-size:28px;color:#f7f4ef;margin-bottom:20px;">Luz<span style="color:var(--gold-text)">Glass</span></div>
+  <div style="width:36px;height:36px;border:3px solid rgba(184,146,42,0.25);border-top-color:var(--gold-text);border-radius:50%;animation:lgSpin 0.8s linear infinite;"></div>
   <div style="font-size:12px;color:#666;margin-top:16px;letter-spacing:0.08em;">טוען יום עבודה...</div>
 </div>
 <style>@keyframes lgSpin{to{transform:rotate(360deg)}}</style>
@@ -237,19 +241,19 @@
   <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
   <nav class="unav-nav">
     <div class="unav-sec">מנהל עבודה</div>
-    <a class="unav-a" href="admin.html"><span class="ic">⬡</span>לוח הזמנות</a>
-    <a class="unav-a" href="admin.html"><span class="ic">💰</span>מחירונים</a>
-    <a class="unav-a" href="admin.html"><span class="ic">📅</span>לוח איסופים</a>
+    <a class="unav-a" href="admin.html"><span class="ic" data-icon="kanban"></span>לוח הזמנות</a>
+    <a class="unav-a" href="admin.html"><span class="ic" data-icon="wallet"></span>מחירונים</a>
+    <a class="unav-a" href="admin.html"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
     <div class="unav-sec">תחנות עבודה</div>
-    <a class="unav-a" href="admin.html"><span class="ic">📐</span>תור סקיצות</a>
-    <a class="unav-a" href="drafter.html"><span class="ic">✏️</span>שרטט</a>
-    <a class="unav-a" href="check-station.html"><span class="ic">🔍</span>תחנת בדיקה</a>
-    <a class="unav-a active" href="workday.html"><span class="ic">🏭</span>יום עבודה</a>
+    <a class="unav-a" href="admin.html"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
+    <a class="unav-a" href="drafter.html"><span class="ic" data-icon="pencil"></span>שרטט</a>
+    <a class="unav-a" href="check-station.html"><span class="ic" data-icon="search"></span>תחנת בדיקה</a>
+    <a class="unav-a active" href="workday.html"><span class="ic" data-icon="factory"></span>יום עבודה</a>
   </nav>
-  <div class="unav-bot"><a href="#" onclick="unavResetAll()">🔄 אפס הכל</a></div>
+  <div class="unav-bot"><a href="#" onclick="unavResetAll()"><span data-icon="refresh"></span> אפס הכל</a></div>
 </div>
 <div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
-<div class="main">
+<div class="main" id="wdMain">
 
   <!-- TOPBAR -->
   <div class="topbar">
@@ -258,7 +262,7 @@
       <div class="date-badge" id="dateBadge"></div>
     </div>
     <div class="topbar-right">
-      <button class="btn btn-outline" onclick="resetDay()">🔄 אפס יום</button>
+      <button class="btn btn-outline" onclick="resetDay()"><span data-icon="refresh"></span> אפס יום</button>
       <button class="btn btn-gold" id="addBtn" onclick="addSelected()" style="display:none">+ הוסף לעבודה</button>
     </div>
   </div>
@@ -266,7 +270,7 @@
   <!-- PHASE TABS -->
   <div class="phase-tabs">
     <div class="phase-tab active" id="tab-build" onclick="setTab('build')">
-      <span>🔨</span> בנה יום עבודה
+      <span data-icon="hammer"></span> בנה יום עבודה
       <span class="cnt" id="cnt-build" style="background:var(--bg2);color:var(--muted)">0</span>
     </div>
     <div class="phase-tab" id="tab-work" onclick="setTab('work')">
@@ -274,22 +278,22 @@
       <span class="cnt" id="cnt-work" style="background:var(--gold)">0</span>
     </div>
     <div class="phase-tab" id="tab-chisum" onclick="setTab('chisum')">
-      <span>🔥</span> חיסום
+      <span data-icon="flame"></span> חיסום
       <span class="cnt" id="cnt-chisum" style="background:var(--chisum)">0</span>
     </div>
     <div class="phase-tab" id="tab-graphic" onclick="setTab('graphic')">
-      <span>🖼</span> גרפיקה
+      <span data-icon="image"></span> גרפיקה
       <span class="cnt" id="cnt-graphic" style="background:#27ae60">0</span>
     </div>
     <div class="phase-tab" id="tab-delivery" onclick="setTab('delivery')">
-      <span>🚚</span> הובלות
+      <span data-icon="truck"></span> הובלות
       <span class="cnt" id="cnt-delivery" style="background:#2980b9">0</span>
     </div>
   </div>
 
   <!-- FILTER BAR -->
   <div id="filterBar" style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-    <span style="font-size:11px;color:var(--muted);font-weight:600;letter-spacing:0.1em">סינון:</span>
+    <span style="font-size:12px;color:var(--muted);font-weight:600;letter-spacing:0.1em">סינון:</span>
     <select id="fGlass" onchange="renderAll()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;-webkit-appearance:none;min-width:150px">
       <option value="">כל הזכוכיות</option>
       <optgroup label="שקוף">
@@ -349,11 +353,11 @@
     </select>
     <input type="text" id="fClient" placeholder="🔍 שם לקוח..." oninput="renderAll()"
       style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;min-width:140px">
-    <button onclick="clearFilters()" style="padding:6px 12px;background:transparent;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:11px;color:var(--muted);cursor:pointer;">✕ נקה</button>
-    <span id="filterCount" style="font-size:11px;color:var(--gold);font-weight:700;margin-right:4px"></span>
+    <button onclick="clearFilters()" style="padding:6px 12px;background:transparent;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--muted);cursor:pointer;">✕ נקה</button>
+    <span id="filterCount" style="font-size:12px;color:var(--gold-text);font-weight:700;margin-right:4px"></span>
     <!-- SELECT ALL -->
     <button id="selectAllBtn" onclick="selectAllFiltered()" style="margin-right:auto;padding:6px 14px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;display:none">
-      ☑️ בחר הכל
+      <span data-icon="checkbox"></span> בחר הכל
     </button>
   </div>
 
@@ -366,11 +370,11 @@
           <div class="avail-title" style="margin-bottom:0">הזמנות ממתינות לביצוע</div>
           <div style="display:flex;gap:4px">
             <button id="bvItems" onclick="setBuildView('items')"
-              style="padding:5px 12px;border:1px solid var(--border);background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer">
+              style="padding:5px 12px;border:1px solid var(--border);background:var(--gold);color:var(--on-gold);font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">
               פריטים
             </button>
             <button id="bvOrders" onclick="setBuildView('orders')"
-              style="padding:5px 12px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:11px;cursor:pointer">
+              style="padding:5px 12px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">
               הזמנות
             </button>
           </div>
@@ -399,9 +403,9 @@
         </select>
         <div style="margin-right:auto;display:flex;gap:6px">
           <button onclick="setWorkView('list')" id="wViewList"
-            style="padding:6px 10px;border:1px solid var(--border);background:var(--gold);color:#fff;font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;font-weight:700">☰ רשימה</button>
+            style="padding:6px 10px;border:1px solid var(--border);background:var(--gold);color:var(--on-gold);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;font-weight:700">☰ רשימה</button>
           <button onclick="setWorkView('table')" id="wViewTable"
-            style="padding:6px 10px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;">⊞ טבלה</button>
+            style="padding:6px 10px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">⊞ טבלה</button>
         </div>
       </div>
 
@@ -421,7 +425,7 @@
     <div id="view-chisum" style="display:none">
       <!-- כפתור חיסום הגיע -->
       <div id="chisumArrivedBar" style="display:none;margin:12px 12px 0;padding:14px 16px;background:rgba(142,68,173,0.08);border:1px solid rgba(142,68,173,0.25);border-radius:8px;display:none;align-items:center;gap:12px;flex-wrap:wrap;">
-        <span style="font-size:22px">🔥</span>
+        <span data-icon="flame" style="width:22px;height:22px"></span>
         <div style="flex:1;">
           <strong style="color:var(--chisum)">הגיע חיסום!</strong><br>
           <span id="chisumArrivedCount" style="font-size:12px;color:var(--muted)"></span>
@@ -474,7 +478,7 @@
     <div class="sum-spacer"></div>
     <button id="draftPreviewBtn" onclick="openDraftPreview()"
       style="background:#fff;color:#1a1714;border:1px solid #ccc;padding:10px 16px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;margin-left:8px;display:none;">
-      📋 טיוטה <span id="draftCount" style="background:var(--gold);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;margin-right:4px;">0</span>
+      📋 טיוטה <span id="draftCount" style="background:var(--gold);color:var(--on-gold);border-radius:10px;padding:1px 7px;font-size:12px;margin-right:4px;">0</span>
     </button>
     <button class="btn btn-dark" id="finishBtn" onclick="finishDay()" disabled>
       ✅ סיים יום עבודה
@@ -743,8 +747,8 @@ function getPendingUploadsNotice(){
     .filter(o => (!o.stage || o.stage === '') && o.source === 'upload');
   if(!pending.length) return '';
   return `<div style="margin-top:16px;padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.25);text-align:right">
-    <div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:4px">📎 ${pending.length} העלאות ממתינות לאישור</div>
-    <div style="font-size:11px;color:var(--muted)">כנס ל<a href="admin.html" style="color:var(--gold)">לוח ניהול</a> → קבל העלאות → הן יופיעו כאן לאחר מעבר OptyWay</div>
+    <div style="font-size:12px;font-weight:700;color:var(--gold-text);margin-bottom:4px">📎 ${pending.length} העלאות ממתינות לאישור</div>
+    <div style="font-size:12px;color:var(--muted)">כנס ל<a href="admin.html" style="color:var(--gold-text)">לוח ניהול</a> → קבל העלאות → הן יופיעו כאן לאחר מעבר OptyWay</div>
   </div>`;
 }
 
@@ -902,7 +906,7 @@ function renderAvailable(){
   if(!filtered.length){
     const hasAny = total > 0;
     el.innerHTML = hasAny
-      ? `<div class="empty"><div class="empty-icon">🔍</div><p>אין תוצאות לסינון זה<br><button onclick="clearFilters()" style="margin-top:8px;padding:6px 14px;background:var(--gold);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">נקה סינון</button></p></div>`
+      ? `<div class="empty"><div class="empty-icon">🔍</div><p>אין תוצאות לסינון זה<br><button onclick="clearFilters()" style="margin-top:8px;padding:6px 14px;background:var(--gold);color:var(--on-gold);border:none;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">נקה סינון</button></p></div>`
       : `<div class="empty" style="text-align:center;padding:40px 20px"><div class="empty-icon">📋</div><p style="color:var(--muted);font-size:14px">אין הזמנות זמינות<br><span style="font-size:12px;opacity:0.6">הזמנות יופיעו כאן לאחר שיעברו OptyWay</span></p>${getPendingUploadsNotice()}</div>`;
     return;
   }
@@ -936,11 +940,11 @@ function renderAvailable(){
           <div style="padding:10px 14px;background:${color};border-right:4px solid;border-color:${color.includes('41,128')?'#2980b9':'#e67e22'};margin-bottom:6px;display:flex;align-items:center;gap:8px">
             <span style="font-size:14px">${icon}</span>
             <span style="font-size:12px;font-weight:700;color:${color.includes('41,128')?'#2980b9':'#e67e22'}">${label}</span>
-            <span style="font-size:11px;color:var(--muted);margin-right:auto">${total} הזמנות</span>
+            <span style="font-size:12px;color:var(--muted);margin-right:auto">${total} הזמנות</span>
           </div>
           ${entries.map(([k,v])=>`
             <div style="margin-bottom:12px">
-              <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.12em;padding:5px 10px;background:rgba(184,146,42,0.07);border-right:3px solid var(--gold);margin-bottom:3px">
+              <div style="font-size:12px;font-weight:700;color:var(--gold-text);letter-spacing:0.12em;padding:5px 10px;background:rgba(184,146,42,0.07);border-right:3px solid var(--gold);margin-bottom:3px">
                 ⬡ ${lgEsc(v.glass)} · ${v.orders.length} הזמנות
               </div>
               ${v.orders.map(o=>orderCardHTML(o)).join('')}
@@ -971,10 +975,10 @@ function orderCardHTML(o){
       <div style="padding:10px 14px;display:flex;align-items:center;gap:8px">
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;color:var(--text)">${lgEsc(o.orderClient)}</div>
-          <div style="font-size:11px;color:var(--muted)">${lgEsc(o.sketchName||o.type||'')} · ${lgEsc(o.orderNum||'')}</div>
+          <div style="font-size:12px;color:var(--muted)">${lgEsc(o.sketchName||o.type||'')} · ${lgEsc(o.orderNum||'')}</div>
         </div>
-        <button onclick="addWholeOrder('${ordKey}')" style="padding:5px 10px;background:rgba(184,146,42,0.15);color:var(--gold);border:1px solid var(--gold);font-family:Heebo,sans-serif;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף הזמנה שלמה</button>
-        <button onclick="toggleOrderExpand('${ordKey}')" style="padding:5px 8px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;color:var(--muted)">${isOrderOpen?'▲':'▾ ראה פריטים'}</button>
+        <button onclick="addWholeOrder('${ordKey}')" style="padding:5px 10px;background:rgba(184,146,42,0.15);color:var(--gold-text);border:1px solid var(--gold);font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף הזמנה שלמה</button>
+        <button onclick="toggleOrderExpand('${ordKey}')" style="padding:5px 8px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;color:var(--muted)">${isOrderOpen?'▲':'▾ ראה פריטים'}</button>
       </div>
       ${isOrderOpen && o.sketch ? `<button onclick="showSketchPopup('${ordKey}')" style="display:block;margin:8px 14px;padding:6px 14px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">🖼 ראה סקיצה</button>` : ''}
     </div>`;
@@ -1011,19 +1015,19 @@ function orderCardHTML(o){
     const processBg    = isChisum ? 'rgba(142,68,173,0.12)' : 'rgba(41,128,185,0.12)';
     const processColor = isChisum ? '#8e44ad' : '#2980b9';
     const qtyStr = availIdx.length > 1
-      ? ` <span style="color:#b8922a;font-weight:700;font-size:11px;">×${availIdx.length}</span>` : '';
+      ? ` <span style="color:var(--gold-text);font-weight:700;font-size:12px;">×${availIdx.length}</span>` : '';
     return `
     <div style="background:var(--surface);border:1px solid var(--border);margin-bottom:2px;padding:10px 14px;display:flex;align-items:center;gap:8px">
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:700;color:var(--text)">${lgEsc(fullGlass)}${qtyStr}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">
-          <span style="color:var(--gold);font-weight:600">${lgEsc(o.orderClient)}</span>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">
+          <span style="color:var(--gold-text);font-weight:600">${lgEsc(o.orderClient)}</span>
           · ${lgEsc(o.sketchName||o.orderNum||'—')}
           · ${it.w||'?'}×${it.h||'?'} מ"מ
         </div>
       </div>
-      <span style="font-size:10px;font-weight:700;padding:2px 7px;background:${processBg};color:${processColor};flex-shrink:0">${processLabel}</span>
-      <button onclick="addGroupToDraft('${ordKey}',${JSON.stringify(availIdx)})" style="padding:6px 12px;background:var(--gold);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף${availIdx.length > 1 ? ' הכל' : ''}</button>
+      <span style="font-size:12px;font-weight:700;padding:2px 7px;background:${processBg};color:${processColor};flex-shrink:0">${processLabel}</span>
+      <button onclick="addGroupToDraft('${ordKey}',${JSON.stringify(availIdx)})" style="padding:6px 12px;background:var(--gold);color:var(--on-gold);border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף${availIdx.length > 1 ? ' הכל' : ''}</button>
     </div>`;
   }).filter(r=>r).join('');
   return itemRows;
@@ -1053,7 +1057,7 @@ function noItemsHTML(o){
       אין פריטים מוזנים — הזן ידנית או המתן לחיבור חשבשבת
     </div>
     <div class="add-item-form" id="aif_${o.id}">
-      <div style="font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.1em">+ פריט חדש</div>
+      <div style="font-size:12px;font-weight:700;color:var(--gold-text);letter-spacing:0.1em">+ פריט חדש</div>
       <div class="ai-row">
         <div style="flex:1;display:flex;flex-direction:column;gap:3px;">
           <input class="ai-input" type="text" id="ai_glass_${o.id}" placeholder="מק&quot;ט או שם (8SM / 8מ&quot;מ שקוף)"
@@ -1063,7 +1067,7 @@ function noItemsHTML(o){
               const resolved=typeof lgSkuToName==='function'?lgSkuToName(el.value.trim()):'';
               hint.textContent=(resolved&&resolved!==el.value.trim())?'→ '+resolved:'';
             })(this)">
-          <span id="ai_glass_hint_${o.id}" style="font-size:10px;color:#27ae60;font-weight:600;padding:0 2px;min-height:14px;display:block"></span>
+          <span id="ai_glass_hint_${o.id}" style="font-size:12px;color:#27ae60;font-weight:600;padding:0 2px;min-height:14px;display:block"></span>
         </div>
         <select class="ai-select" id="ai_proc_${o.id}">
           <option value="litush">מלוטש ✂️</option>
@@ -1074,19 +1078,19 @@ function noItemsHTML(o){
         <div style="display:flex;flex-direction:column;gap:2px">
           <input class="ai-input" type="text" id="ai_w_${o.id}" placeholder='רוחב מ"מ'
             oninput="wdDimPrev('ai_w_${o.id}','ai_wp_${o.id}')">
-          <span id="ai_wp_${o.id}" style="font-size:10px;color:#b8922a;padding:0 2px;min-height:14px;"></span>
+          <span id="ai_wp_${o.id}" style="font-size:12px;color:var(--gold-text);padding:0 2px;min-height:14px;"></span>
         </div>
         <div style="display:flex;flex-direction:column;gap:2px">
           <input class="ai-input" type="text" id="ai_h_${o.id}" placeholder='גובה מ"מ'
             oninput="wdDimPrev('ai_h_${o.id}','ai_hp_${o.id}')">
-          <span id="ai_hp_${o.id}" style="font-size:10px;color:#b8922a;padding:0 2px;min-height:14px;"></span>
+          <span id="ai_hp_${o.id}" style="font-size:12px;color:var(--gold-text);padding:0 2px;min-height:14px;"></span>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
-        <span style="font-size:11px;color:var(--muted);">כמות:</span>
+        <span style="font-size:12px;color:var(--muted);">כמות:</span>
         <input class="ai-input" type="number" id="ai_qty_${o.id}" value="1" min="1" max="500"
           style="width:64px;">
-        <span style="font-size:10px;color:var(--muted);">יחידות (1–500)</span>
+        <span style="font-size:12px;color:var(--muted);">יחידות (1–500)</span>
       </div>
       <button class="ia ia-add" onclick="saveManualItem(${o.id})">שמור פריט</button>
     </div>
@@ -1425,14 +1429,14 @@ function renderWorkActive(){
           <td style="padding:9px 12px;font-weight:700">${lgEsc(item.glassFullName||item.name||'—')}</td>
           <td style="padding:9px 12px">${item.w||'?'}×${item.h||'?'} מ"מ</td>
           <td style="padding:9px 12px">
-            <span style="font-size:10px;font-weight:700;padding:2px 7px;background:${item.chisum?'rgba(142,68,173,0.12)':'rgba(41,128,185,0.12)'};color:${item.chisum?'#8e44ad':'#2980b9'}">
+            <span style="font-size:12px;font-weight:700;padding:2px 7px;background:${item.chisum?'rgba(142,68,173,0.12)':'rgba(41,128,185,0.12)'};color:${item.chisum?'#8e44ad':'#2980b9'}">
               ${item.chisum?'מחוסם':'מלוטש'}
             </span>
           </td>
           <td style="padding:9px 12px;color:var(--muted)">${lgEsc(o.orderClient)}</td>
           <td style="padding:9px 12px;color:var(--muted)">${lgEsc(o.sketchName||o.orderNum||'—')}</td>
           <td style="padding:9px 12px">
-            <button onclick="showWorkItemDetail('${o.id}',${idx})" style="padding:3px 8px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:10px;cursor:pointer;color:var(--muted)">ראה עוד</button>
+            <button onclick="showWorkItemDetail('${o.id}',${idx})" style="padding:3px 8px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;color:var(--muted)">ראה עוד</button>
           </td>
         </tr>`).join('')}
       </tbody>
@@ -1447,15 +1451,15 @@ function renderWorkActive(){
           <div style="flex:1;min-width:0">
             <div style="font-size:14px;font-weight:900;color:var(--text)">${lgEsc(o.orderClient)}</div>
             <div style="font-size:12px;font-weight:700;color:var(--text);margin-top:1px">${lgEsc(item.glassFullName||item.name||'—')}</div>
-            <div style="font-size:10px;color:var(--muted);margin-top:2px">
-              <span style="background:rgba(184,146,42,0.15);color:var(--gold);padding:1px 6px;font-weight:700;font-size:11px">${lgEsc(o.sketchName||o.refNum||o.orderNum||o.sketchNumber||'—')}</span>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">
+              <span style="background:rgba(184,146,42,0.15);color:var(--gold-text);padding:1px 6px;font-weight:700;font-size:12px">${lgEsc(o.sketchName||o.refNum||o.orderNum||o.sketchNumber||'—')}</span>
               &nbsp;·&nbsp;${item.w||'?'}×${item.h||'?'} מ"מ
             </div>
           </div>
-          <span style="font-size:10px;font-weight:700;padding:3px 7px;background:${item.chisum?'rgba(142,68,173,0.12)':'rgba(41,128,185,0.12)'};color:${item.chisum?'#8e44ad':'#2980b9'};flex-shrink:0">
+          <span style="font-size:12px;font-weight:700;padding:3px 7px;background:${item.chisum?'rgba(142,68,173,0.12)':'rgba(41,128,185,0.12)'};color:${item.chisum?'#8e44ad':'#2980b9'};flex-shrink:0">
             ${item.chisum?'מחוסם':'מלוטש'}
           </span>
-          <button onclick="toggleWorkItemDetail('${o.id}',${idx})" style="padding:5px 8px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:11px;cursor:pointer;color:var(--muted)">
+          <button onclick="toggleWorkItemDetail('${o.id}',${idx})" style="padding:5px 8px;background:var(--bg2);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;color:var(--muted)">
             ${isOpen?'▲':'▾ ראה עוד'}
           </button>
         </div>
@@ -1466,9 +1470,9 @@ function renderWorkActive(){
             <span><b>הזמנה:</b> ${lgEsc(o.orderNum||'—')}</span>
             <span><b>סקיצה:</b> ${lgEsc(o.sketchName||'—')}</span>
           </div>
-          <div style="font-size:11px;font-weight:700;margin-bottom:5px">כל פריטי הסקיצה:</div>
+          <div style="font-size:12px;font-weight:700;margin-bottom:5px">כל פריטי הסקיצה:</div>
           ${(o.items||[]).map((it,j)=>`
-            <div style="display:flex;gap:8px;padding:4px 8px;font-size:11px;${j===idx?'background:rgba(184,146,42,0.1);font-weight:700;border-right:3px solid var(--gold)':''}">
+            <div style="display:flex;gap:8px;padding:4px 8px;font-size:12px;${j===idx?'background:rgba(184,146,42,0.1);font-weight:700;border-right:3px solid var(--gold)':''}">
               <span style="flex:1">${lgEsc(it.glassFullName||it.name||'—')}</span>
               <span>${it.w||'?'}×${it.h||'?'} מ"מ</span>
               <span style="color:${it.chisum?'#8e44ad':'#2980b9'}">${it.chisum?'מחוסם':'מלוטש'}</span>
@@ -1682,13 +1686,13 @@ function _chisumClientCardHtml(clientName, orders, reportId){
         <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${isChecked?'rgba(39,174,96,0.04)':'#fff'}">
           <div style="flex:1">
             <div style="font-size:12px;font-weight:700;color:${isChecked?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')}</div>
-            <div style="font-size:10px;color:#8a8278">${it.w||''}×${it.h||''} מ"מ</div>
+            <div style="font-size:12px;color:#8a8278">${it.w||''}×${it.h||''} מ"מ</div>
           </div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${isChecked?'#27ae60':'rgba(0,0,0,0.12)'};background:${isChecked?'rgba(39,174,96,0.08)':'rgba(0,0,0,0.02)'}">
             <input type="checkbox" style="width:15px;height:15px;accent-color:#27ae60;cursor:pointer;"
               onchange="toggleArrived('${o.id}',${idxs[0]},this.checked)"
               ${isChecked?'checked':''}>
-            <span style="font-size:11px;font-weight:600;color:${isChecked?'#27ae60':'#8a8278'}">${isChecked?'הגיע ✓':'ממתין'}</span>
+            <span style="font-size:12px;font-weight:600;color:${isChecked?'#27ae60':'#8a8278'}">${isChecked?'הגיע ✓':'ממתין'}</span>
           </label>
         </div>`;
       }
@@ -1700,26 +1704,26 @@ function _chisumClientCardHtml(clientName, orders, reportId){
       <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${allArrived?'rgba(39,174,96,0.04)':'#fff'}">
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:${allArrived?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')} <span style="color:#8e44ad">×${idxs.length}</span></div>
-          <div style="font-size:10px;color:#8a8278">${it.w||''}×${it.h||''} מ"מ</div>
+          <div style="font-size:12px;color:#8a8278">${it.w||''}×${it.h||''} מ"מ</div>
         </div>
         <div style="display:flex;align-items:center;gap:6px;">
           <input type="number" min="0" max="${idxs.length}" value="${arrivedCount}" inputmode="numeric"
             onchange="setGroupArrivedCount('${o.id}',${idxsJson},this.value)"
             style="width:38px;padding:4px;text-align:center;border:1px solid rgba(0,0,0,0.15);border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;">
-          <span style="font-size:11px;color:#8a8278;white-space:nowrap">/ ${idxs.length} הגיעו</span>
+          <span style="font-size:12px;color:#8a8278;white-space:nowrap">/ ${idxs.length} הגיעו</span>
           ${!allArrived?`<button onclick="setGroupArrivedCount('${o.id}',${idxsJson},${idxs.length})"
-            style="padding:4px 8px;background:#27ae60;color:#fff;border:none;font-family:Heebo,sans-serif;font-size:10px;font-weight:700;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ הכל</button>`:''}
+            style="padding:4px 8px;background:#27ae60;color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ הכל</button>`:''}
         </div>
       </div>`;
     }).join('');
 
     orderRows += `
     <div style="padding:5px 16px 4px;background:#fafaf8;border-bottom:1px solid rgba(0,0,0,0.04);display:flex;align-items:center;gap:8px;">
-      <span style="font-size:10px;font-weight:700;color:#b8922a;letter-spacing:0.05em;flex:1">
+      <span style="font-size:12px;font-weight:700;color:var(--gold-text);letter-spacing:0.05em;flex:1">
         ${lgEsc(o.sketchName||o.type||'סקיצה')}${o.orderNum?' · '+lgEsc(o.orderNum):''}
       </span>
       ${o.sketch?`<button onclick="showSketchPopup('${o.id}')"
-        style="padding:3px 9px;background:var(--text);color:#fff;font-family:Heebo,sans-serif;font-size:10px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">
+        style="padding:3px 9px;background:var(--text);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">
         🖼 ראה סקיצה</button>`:''}
     </div>
     ${itemsHtml}`;
@@ -1733,10 +1737,10 @@ function _chisumClientCardHtml(clientName, orders, reportId){
     <div onclick="toggleChisumOpen('${lgJsStr(clientKey)}')" style="padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:rgba(142,68,173,0.02);">
       <div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="font-size:13px;font-weight:900;color:#1a1714">👤 ${lgEsc(clientName)}</span>
-        <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:rgba(142,68,173,0.1);color:#8e44ad'}">${sessionArrivedCount}/${totalPending} הגיעו</span>
+        <span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:rgba(142,68,173,0.1);color:#8e44ad'}">${sessionArrivedCount}/${totalPending} הגיעו</span>
       </div>
       <button onclick="event.stopPropagation();markAllClientArrived('${lgJsStr(clientKey)}','${lgJsStr(reportId||'')}','${lgJsStr(clientName)}')"
-        style="padding:4px 10px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:10px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ סמן הכל</button>
+        style="padding:4px 10px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ סמן הכל</button>
       <span style="font-size:16px;color:#8a8278;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
     </div>
     ${isOpen?`<div style="background:#fff;">${orderRows}</div>`:''}
@@ -1777,13 +1781,13 @@ function renderGraphicTab(){
       const nextLabel = nextSt==='delivery' ? '🚚 העבר להובלה' : '✅ גרפיקה הושלמה — מוכן לאיסוף';
       const nextBg    = nextSt==='delivery' ? '#2980b9' : '#27ae60';
       const itsHtml   = gItems.length
-        ? gItems.map(it=>`<div style="font-size:11px;color:#555;padding:1px 0;">🖼 ${lgEsc(it.name||'')} ${it.w||''}×${it.h||''} מ"מ</div>`).join('')
-        : `<div style="font-size:11px;color:#888;">כל הפריטים</div>`;
+        ? gItems.map(it=>`<div style="font-size:12px;color:#555;padding:1px 0;">🖼 ${lgEsc(it.name||'')} ${it.w||''}×${it.h||''} מ"מ</div>`).join('')
+        : `<div style="font-size:12px;color:#888;">כל הפריטים</div>`;
       const sk = o.sketch ? `<img src="${lgEsc(o.sketch)}" onclick="_openSketchFull(this.src)" style="width:100%;max-height:100px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:6px;display:block;cursor:zoom-in;">` : '';
       return `<div style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
           <span style="font-size:12px;font-weight:700;">${lgEsc(o.orderNum||o.sketchName||o.type||'—')}</span>
-          <span style="font-size:10px;color:#8a8278;">${gItems.length||'כל'} פריטי גרפיקה</span>
+          <span style="font-size:12px;color:#8a8278;">${gItems.length||'כל'} פריטי גרפיקה</span>
         </div>
         ${sk}<div style="margin-bottom:7px;">${itsHtml}</div>
         <button onclick="completeGraphic('${o.id}')"
@@ -1797,13 +1801,13 @@ function renderGraphicTab(){
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <div>
             <div style="font-size:16px;font-weight:900;">${lgEsc(cn)}</div>
-            <div style="font-size:11px;color:#8a8278;margin-top:2px;">${cOrds.length} הזמנות · ${graphicCount||totalItems} פריטי גרפיקה</div>
+            <div style="font-size:12px;color:#8a8278;margin-top:2px;">${cOrds.length} הזמנות · ${graphicCount||totalItems} פריטי גרפיקה</div>
           </div>
-          <span style="font-size:10px;padding:3px 8px;background:rgba(39,174,96,0.1);color:#27ae60;border-radius:3px;font-weight:700;">🖼 גרפיקה</span>
+          <span style="font-size:12px;padding:3px 8px;background:rgba(39,174,96,0.1);color:#27ae60;border-radius:3px;font-weight:700;">🖼 גרפיקה</span>
         </div>
       </div>
       <details style="border-top:1px solid rgba(0,0,0,0.05);">
-        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;color:#27ae60;cursor:pointer;outline:none;direction:rtl;text-align:right;">ראה עוד</summary>
+        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;color:#27ae60;cursor:pointer;outline:none;direction:rtl;text-align:right;">ראה עוד</summary>
         ${ordersHtml}
       </details>
     </div>`;
@@ -1844,11 +1848,11 @@ function renderDeliveryTab(){
     const ids = cOrds.map(o=>String(o.id)).join(',');
     const ordersHtml = cOrds.map(o => {
       const sk  = o.sketch ? `<img src="${lgEsc(o.sketch)}" onclick="_openSketchFull(this.src)" style="width:100%;max-height:100px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:6px;display:block;cursor:zoom-in;">` : '';
-      const its = (o.items||[]).map(it=>`<div style="font-size:11px;color:#555;padding:1px 0;">• ${lgEsc(it.name||'')} ${it.w||''}×${it.h||''} מ"מ</div>`).join('');
+      const its = (o.items||[]).map(it=>`<div style="font-size:12px;color:#555;padding:1px 0;">• ${lgEsc(it.name||'')} ${it.w||''}×${it.h||''} מ"מ</div>`).join('');
       return `<div style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
           <span style="font-size:12px;font-weight:700;">${lgEsc(o.orderNum||o.sketchName||o.type||'—')}</span>
-          <span style="font-size:10px;color:#8a8278;">${(o.items||[]).length} פריטים</span>
+          <span style="font-size:12px;color:#8a8278;">${(o.items||[]).length} פריטים</span>
         </div>
         ${sk}<div>${its}</div>
       </div>`;
@@ -1858,13 +1862,13 @@ function renderDeliveryTab(){
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <div>
             <div style="font-size:16px;font-weight:900;">${lgEsc(cn)}</div>
-            <div style="font-size:11px;color:#8a8278;margin-top:2px;">${cOrds.length} הזמנות · ${totalItems} פריטים</div>
+            <div style="font-size:12px;color:#8a8278;margin-top:2px;">${cOrds.length} הזמנות · ${totalItems} פריטים</div>
           </div>
-          <span style="font-size:10px;padding:3px 8px;background:rgba(41,128,185,0.1);color:#2980b9;border-radius:3px;font-weight:700;">🚚 הובלה</span>
+          <span style="font-size:12px;padding:3px 8px;background:rgba(41,128,185,0.1);color:#2980b9;border-radius:3px;font-weight:700;">🚚 הובלה</span>
         </div>
       </div>
       <details style="border-top:1px solid rgba(0,0,0,0.05);">
-        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;color:#2980b9;cursor:pointer;outline:none;direction:rtl;text-align:right;">ראה עוד</summary>
+        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;color:#2980b9;cursor:pointer;outline:none;direction:rtl;text-align:right;">ראה עוד</summary>
         ${ordersHtml}
       </details>
       <div style="padding:10px 14px;">
@@ -1893,7 +1897,7 @@ function showDeliveryCompletePrompt(orderId){
       <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${lgEsc(o.orderClient||'')} · ${lgEsc(o.orderNum||'')}</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
         <button onclick="this.closest('[style*=fixed]').remove();finalizeDelivery('${orderId}', true)"
-          style="padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+          style="padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
           🧾 הפק חשבונית / קבלה
         </button>
         <button onclick="this.closest('[style*=fixed]').remove();finalizeDelivery('${orderId}', false)"
@@ -1922,7 +1926,7 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
       <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">סיים הובלה</div>
       <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${lgEsc(clientName)} · ${orderIds.length} הזמנות</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
-        <button id="_cldInv"  style="padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">🧾 הפק חשבונית / קבלה</button>
+        <button id="_cldInv"  style="padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">🧾 הפק חשבונית / קבלה</button>
         <button id="_cldNoInv" style="padding:13px;background:#f0ede8;color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">✓ סיים ללא חשבונית</button>
         <button id="_cldCancel" style="padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול</button>
       </div>
@@ -1982,7 +1986,7 @@ function renderChisumTab(){
       const clientBreakdownHtml = Object.entries(byClient).map(([name, cnt]) =>
         `<div style="padding:7px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(0,0,0,0.04);">
           <span style="font-size:12px;font-weight:700;color:var(--text)">${lgEsc(name)}</span>
-          <span style="font-size:11px;font-weight:700;color:var(--chisum)">${cnt} פריטים</span>
+          <span style="font-size:12px;font-weight:700;color:var(--chisum)">${cnt} פריטים</span>
         </div>`).join('');
 
       awaitingHtml += `
@@ -1990,7 +1994,7 @@ function renderChisumTab(){
         <div style="padding:14px 16px;background:rgba(142,68,173,0.05);display:flex;align-items:center;gap:10px;">
           <div style="flex:1">
             <div style="font-size:14px;font-weight:900;color:var(--chisum)">📦 דוח ${label} — ${totalItems} פריטים</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">⏳ נשלח למפעל · ${orders.length} הזמנות</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">⏳ נשלח למפעל · ${orders.length} הזמנות</div>
           </div>
           <button onclick="markChisumReportArrived('${lgJsStr(reportId||'')}','${lgJsStr(reportNum||'')}')"
             style="padding:8px 16px;background:var(--chisum);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:6px;white-space:nowrap;">
@@ -1998,7 +2002,7 @@ function renderChisumTab(){
           </button>
         </div>
         <details style="border-top:1px solid rgba(142,68,173,0.1);">
-          <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:11px;font-weight:700;color:var(--chisum);cursor:pointer;outline:none;direction:rtl;text-align:right;">
+          <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;color:var(--chisum);cursor:pointer;outline:none;direction:rtl;text-align:right;">
             ראה עוד
           </summary>
           ${clientBreakdownHtml}
@@ -2032,7 +2036,7 @@ function renderChisumTab(){
       <div style="margin:0 12px 14px;border:1.5px solid rgba(39,174,96,0.3);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">
         <div style="padding:12px 16px;background:rgba(39,174,96,0.05);">
           <div style="font-size:13px;font-weight:900;color:var(--green)">✅ דוח ${label} — בדיקה פעילה</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:1px">${orders.length} הזמנות · ${totalItems} פריטים · ${progressTxt}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:1px">${orders.length} הזמנות · ${totalItems} פריטים · ${progressTxt}</div>
         </div>
         ${clientCardsHtml || '<div style="padding:12px 16px;font-size:12px;color:#27ae60">✓ כל הפריטים סומנו — לחץ סיום בדיקה</div>'}
       </div>`;
@@ -2040,8 +2044,8 @@ function renderChisumTab(){
   });
 
   let html = '';
-  if(awaitingHtml) html += `<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">⏳ ממתינות לחזרה מהמפעל</div>` + awaitingHtml;
-  if(arrivedHtml)  html += `<div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">🔍 בדיקה פעילה — סמן פריטים שהגיעו</div>` + arrivedHtml;
+  if(awaitingHtml) html += `<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">⏳ ממתינות לחזרה מהמפעל</div>` + awaitingHtml;
+  if(arrivedHtml)  html += `<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;padding:12px 12px 6px;">🔍 בדיקה פעילה — סמן פריטים שהגיעו</div>` + arrivedHtml;
   el.innerHTML = html;
 }
 
@@ -2122,27 +2126,27 @@ function resetChisumList(){
           return `
           ${toMsg.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
             <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">✅ ${toMsg.length} סקיצות הושלמו — תישלח הודעה ללקוח</div>
-            ${toMsg.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
+            ${toMsg.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
           </div>`:''}
           ${toGraph.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
             <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">🖼 ${toGraph.length} סקיצות הושלמו — עוברות לשלב גרפיקה (אין הודעה עדיין)</div>
-            ${toGraph.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
+            ${toGraph.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
           </div>`:''}
           ${toDeliv.length?`<div style="padding:10px 14px;background:rgba(41,128,185,0.08);border:1px solid rgba(41,128,185,0.2);border-radius:6px;">
             <div style="font-size:12px;font-weight:700;color:#2980b9;margin-bottom:6px;">🚚 ${toDeliv.length} סקיצות הושלמו — עוברות לטאב הובלות</div>
-            ${toDeliv.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
+            ${toDeliv.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
           </div>`:''}`;
         })():''}
         ${partialOrds.length?`<div style="padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.2);border-radius:6px;">
-          <div style="font-size:12px;font-weight:700;color:#b8922a;margin-bottom:6px;">⚠️ ${partialOrds.length} סקיצות חלקיות — פריטים שהגיעו יישמרו, החסרים ישארו</div>
-          ${partialOrds.map(o=>`<div style="font-size:11px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
+          <div style="font-size:12px;font-weight:700;color:var(--gold-text);margin-bottom:6px;">⚠️ ${partialOrds.length} סקיצות חלקיות — פריטים שהגיעו יישמרו, החסרים ישארו</div>
+          ${partialOrds.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
         </div>`:''}
         ${unchangedOrds.length?`<div style="padding:10px 14px;background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);border-radius:6px;">
           <div style="font-size:12px;font-weight:700;color:#8a8278;margin-bottom:6px;">⏳ ${unchangedOrds.length} סקיצות — לא סומנו, אין שינוי</div>
         </div>`:''}
         ${!doneOrds.length&&!partialOrds.length?`<div style="padding:12px;text-align:center;color:#8a8278;font-size:13px;">לא סומנו פריטים בסשן זה</div>`:''}
         <div style="display:flex;gap:8px;margin-top:4px;">
-          <button onclick="confirmResetChisum()" style="flex:2;padding:13px;background:#b8922a;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+          <button onclick="confirmResetChisum()" style="flex:2;padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
             ✓ אשר סיום בדיקה
           </button>
           <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:13px;background:#f5f2ed;color:#555;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.1);cursor:pointer;border-radius:6px;">
@@ -2784,7 +2788,7 @@ function renderDraftModal(){
     <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f7f4ef;border-radius:6px;">
       <div style="flex:1;min-width:0;">
         <div style="font-size:13px;font-weight:600;">${lgEsc(d.orderName)}</div>
-        <div style="font-size:11px;color:#888;">${lgEsc(d.glass)}${d.w?` · ${d.w}×${d.h} מ"מ`:''} · <span style="color:${d.type==='חיסום'?'#8e44ad':d.type==='ליטוש'?'#2980b9':'#27ae60'}">${d.type}</span></div>
+        <div style="font-size:12px;color:#888;">${lgEsc(d.glass)}${d.w?` · ${d.w}×${d.h} מ"מ`:''} · <span style="color:${d.type==='חיסום'?'#8e44ad':d.type==='ליטוש'?'#2980b9':'#27ae60'}">${d.type}</span></div>
       </div>
       <button onclick="removeFromDraft(${i})" style="background:none;border:none;color:#c0392b;cursor:pointer;font-size:16px;flex-shrink:0;">✕</button>
     </div>
@@ -2849,7 +2853,7 @@ function commitDraftToWork(){
       <button onclick="clearDraft()" style="padding:10px 16px;border:1px solid #ccc;background:#fff;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;border-radius:4px;">
         🗑️ נקה טיוטה
       </button>
-      <button onclick="commitDraftToWork()" style="padding:10px 20px;background:var(--gold);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;border-radius:4px;">
+      <button onclick="commitDraftToWork()" style="padding:10px 20px;background:var(--gold);color:var(--on-gold);border:none;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;border-radius:4px;">
         ▶ הורד לעבודה
       </button>
     </div>

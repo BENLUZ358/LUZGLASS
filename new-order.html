@@ -8,12 +8,11 @@
 <meta http-equiv="Expires" content="0">
 <title>LuzGlass — הזמנה חדשה</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
-<style>
-  :root{--bg:#f7f4ef;--bg2:#ede9e1;--surface:#fff;--border:rgba(0,0,0,0.08);--text:#1a1714;--muted:#8a8278;--gold:#b8922a;}
-  *{margin:0;padding:0;box-sizing:border-box;}
-  html,body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);direction:rtl;min-height:100vh;}
 
-  nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:center;justify-content:space-between;}
+<!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+<style>
+nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:center;justify-content:space-between;}
   .logo{font-family:'Playfair Display',serif;font-size:20px;font-weight:900;color:#f7f4ef;}
   .logo span{color:var(--gold);}
   .nav-back{font-size:13px;color:rgba(247,244,239,0.5);text-decoration:none;transition:color 0.15s;}
@@ -21,7 +20,7 @@
 
   .hero{padding:36px 20px 28px;text-align:center;}
   .hero h1{font-family:'Playfair Display',serif;font-size:26px;font-weight:900;margin-bottom:8px;}
-  .hero h1 em{font-style:normal;color:var(--gold);}
+  .hero h1 em{font-style:normal;color:var(--gold-text);}
   .hero p{font-size:14px;color:var(--muted);font-weight:300;}
 
   .cards{padding:0 16px;display:flex;flex-direction:column;gap:12px;max-width:500px;margin:0 auto;}
@@ -36,39 +35,39 @@
   .oc-title{font-size:18px;font-weight:700;margin-bottom:6px;}
   .oc-desc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px;}
   .oc-examples{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:16px;}
-  .oc-tag{padding:3px 10px;background:var(--bg2);font-size:11px;color:var(--muted);border-radius:2px;}
+  .oc-tag{padding:3px 10px;background:var(--bg2);font-size:12px;color:var(--muted);border-radius:2px;}
   .oc-arrow{display:flex;align-items:center;justify-content:space-between;}
-  .oc-arrow span{font-size:12px;font-weight:700;color:var(--gold);}
-  .oc-arrow .arr{font-size:18px;color:var(--gold);}
+  .oc-arrow span{font-size:12px;font-weight:700;color:var(--gold-text);}
+  .oc-arrow .arr{font-size:18px;color:var(--gold-text);}
 
   .divider{display:flex;align-items:center;gap:12px;padding:4px 16px;max-width:500px;margin:0 auto;}
   .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
-  .divider span{font-size:11px;color:var(--muted);}
+  .divider span{font-size:12px;color:var(--muted);}
 
   .upload-card{background:rgba(184,146,42,0.04);border:1px dashed rgba(184,146,42,0.3);padding:18px 20px;cursor:pointer;transition:all 0.2s;text-decoration:none;display:flex;align-items:center;gap:14px;max-width:500px;margin:12px auto 0;}
-  .upload-card:hover{background:rgba(184,146,42,0.07);border-color:var(--gold);}
+  .upload-card:hover{background:rgba(184,146,42,0.07);border-color:var(--gold-text);}
   .uc-icon{font-size:24px;flex-shrink:0;}
   .uc-info{flex:1;}
   .uc-title{font-size:14px;font-weight:700;margin-bottom:3px;}
   .uc-desc{font-size:12px;color:var(--muted);}
 
   .bottom-note{text-align:center;padding:28px 20px;font-size:12px;color:var(--muted);}
-  .bottom-note a{color:var(--gold);text-decoration:none;}
+  .bottom-note a{color:var(--gold-text);text-decoration:none;}
 
   .measure-form{display:none;background:var(--surface);border:1px solid var(--border);padding:20px 16px;max-width:500px;margin:12px auto 0;}
   .measure-form.open{display:block;}
   .mf-title{font-size:15px;font-weight:700;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);}
   .mf-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px;}
-  .mf-label{font-size:11px;font-weight:600;letter-spacing:0.1em;color:var(--gold);text-transform:uppercase;}
+  .mf-label{font-size:12px;font-weight:600;letter-spacing:0.1em;color:var(--gold-text);text-transform:uppercase;}
   .mf-input{padding:10px 12px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:14px;color:var(--text);outline:none;width:100%;-webkit-appearance:none;border-radius:0;}
-  .mf-input:focus{border-color:var(--gold);}
+  .mf-input:focus{border-color:var(--gold-text);}
   .mf-row{display:grid;grid-template-columns:1fr 1fr 76px;gap:8px;}
   .mf-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);margin-bottom:4px;font-size:12px;}
   .mf-item-info{flex:1;}
   .mf-item-del{background:none;border:none;color:#c0392b;cursor:pointer;font-size:14px;padding:0 4px;font-family:'Heebo',sans-serif;}
   .mf-add-btn{width:100%;padding:10px;background:var(--bg2);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;margin-bottom:14px;}
-  .mf-dim-prev{font-size:11px;color:var(--gold);padding:2px 0;min-height:16px;}
-  .mf-submit{width:100%;padding:14px;background:var(--gold);color:#fff;font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;border:none;cursor:pointer;}
+  .mf-dim-prev{font-size:12px;color:var(--gold-text);padding:2px 0;min-height:16px;}
+  .mf-submit{width:100%;padding:14px;background:var(--gold);color:var(--on-gold);font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;border:none;cursor:pointer;}
   .mf-submit:disabled{background:#ccc;cursor:not-allowed;}
   .mf-success{text-align:center;padding:28px 20px;}
   .mf-success-icon{font-size:48px;margin-bottom:14px;}
@@ -81,6 +80,8 @@
   <script src="firebase-db.js?v=20260601"></script>
 </head>
 <body>
+<a href="#noMain" class="skip-link">דלג לתוכן</a>
+
 <script>
 // שער הרשאה אמיתי — client/admin בלבד (new-order.html לא היה מוגן כלל עד עכשיו)
 lgRequireAuthAsync('client');
@@ -93,7 +94,7 @@ const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
   <a href="portal.html" class="nav-back">← חזרה לפורטל</a>
 </nav>
 
-<div class="hero">
+<div class="hero" id="noMain">
   <h1>הזמנה <em>חדשה</em></h1>
   <p>הזן מידות ובחר סוג זכוכית</p>
 </div>
@@ -206,7 +207,7 @@ const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
     <div class="uc-title">העלאת סקיצה / שרטוט ידני</div>
     <div class="uc-desc">יש לך שרטוט ידני או קובץ? העלה אותו ונטפל בזה</div>
   </div>
-  <span style="font-size:18px;color:var(--gold)">←</span>
+  <span style="font-size:18px;color:var(--gold-text)">←</span>
 </a>
 
 <div class="bottom-note">

@@ -245,7 +245,35 @@
 </section>
 
 <section>
-  <h2>7. טבלה</h2>
+  <h2>7. המשטח הכהה</h2>
+  <p class="lead">‎<code>check-station</code> ו‑<code>login</code> כהים לגמרי. הם לא מתרגמים כלל‑אחר‑כלל אלא נושאים <code>class="lg-dark"</code> על ה‑body, וכל הטוקנים נפתרים לסקאלה הכהה אוטומטית. <strong>הזהב מתהפך שם</strong> — הזהב הבהיר קריא על רקע בהיר ונופל על כהה, ולהיפך.</p>
+  <div class="swatches" style="margin-bottom:var(--space-3)">
+    <div class="sw"><div class="sw-chip" style="background:#1a1a1a"></div><div class="sw-meta"><div class="sw-name">‎--dark-bg</div><div class="sw-hex">#1a1a1a</div></div></div>
+    <div class="sw"><div class="sw-chip" style="background:#242424"></div><div class="sw-meta"><div class="sw-name">‎--dark-surface</div><div class="sw-hex">#242424</div></div></div>
+    <div class="sw"><div class="sw-chip" style="background:#9a9490"></div><div class="sw-meta"><div class="sw-name">‎--dark-muted</div><div class="sw-hex">#9a9490 · היה #888</div></div></div>
+    <div class="sw"><div class="sw-chip" style="background:#c9a84c"></div><div class="sw-meta"><div class="sw-name">‎--gold-dark</div><div class="sw-hex">#c9a84c</div></div></div>
+  </div>
+  <div class="cmp">
+    <div class="cmp-col">
+      <div class="cmp-hd bad">לפני — טקסט משני על כרטיס כהה</div>
+      <div class="cmp-body" style="background:#242424">
+        <div style="color:#888;font-size:12px">4 פריטים · נבדק 2/4</div>
+        <div style="margin-top:10px"><span class="ratio fail">4.38:1 ✕</span></div>
+      </div>
+    </div>
+    <div class="cmp-col">
+      <div class="cmp-hd good">אחרי</div>
+      <div class="cmp-body lg-dark" style="background:#242424">
+        <div style="color:var(--dark-muted);font-size:var(--fs-xs)">4 פריטים · נבדק 2/4</div>
+        <div style="margin-top:10px"><span class="ratio pass">5.18:1 ✓</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note">הזהב הכהה <code>#c9a84c</code> נותן 7.62:1 על הרקע הכהה. הזהב הבהיר <code>#886c1f</code> היה נותן שם 3.58:1 — ולכן אלה שני טוקנים ולא אחד.</div>
+</section>
+
+<section>
+  <h2>8. טבלה</h2>
   <div class="table-scroll" style="border:1px solid var(--border);background:var(--surface)">
     <table class="table">
       <thead><tr><th>מספר</th><th>לקוח</th><th>תיאור</th><th>מ״ר</th><th>סטטוס</th><th>סכום</th></tr></thead>

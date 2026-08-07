@@ -17,23 +17,81 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
 
-const MIGRATED = ['admin.html', 'portal.html'];
-const PENDING  = ['workday.html', 'check-station.html', 'drafter.html', 'mekhlahon.html',
-                  'new-order.html', 'order-view.html', 'sketch-demo.html', 'upload.html',
-                  'login.html', 'logo.html', 'index.html'];
+const MIGRATED = ['admin.html', 'portal.html', 'workday.html', 'check-station.html',
+                  'drafter.html', 'mekhlahon.html', 'new-order.html', 'order-view.html',
+                  'upload.html', 'sketch-demo.html', 'login.html'];
 
-/* Rules whose gold sits on a dark surface, per page. On #1a1714 --gold is
-   6.11:1 and --gold-text only 3.58:1, so these must NOT be "fixed". */
+/* Deliberately excluded, not pending:
+   index.html  is a meta-refresh redirect with no UI at all
+   logo.html   is a logo-variation gallery used as a design reference, not an
+               app screen; it has its own palette on purpose */
+const EXCLUDED = ['index.html', 'logo.html'];
+const PENDING  = [];
+
+/* Pages that are dark end to end and remap the tokens via body.lg-dark rather
+   than converting rule by rule. Their gold is correct as-is. */
+const DARK_PAGES = ['check-station.html', 'login.html'];
+
+/* A skip link exists to bypass navigation. Pages with no navigation to bypass
+   are exempt — adding one there is noise, not accessibility. */
+const NO_NAV = ['login.html'];
+
+/* Rules whose gold sits on a dark surface inside an otherwise light page. On
+   #1a1714 --gold is 6.11:1 and --gold-text only 3.58:1, so these must NOT be
+   "fixed". Each was verified by locating the dark container in the markup. */
 const DARK_SURFACE_RULES = {
-  'admin.html':  ['.sb-logo .lg span', '.unav-logo .lg span', '.unav-a.active',
-                  '.unav-topbar .lg span', '#sqTopBar .sq-logo span'],
-  'portal.html': ['.logo span', '.hero-name em', '.hstat .n'],
+  'admin.html':      ['.sb-logo .lg span', '.unav-logo .lg span', '.unav-a.active',
+                      '.unav-topbar .lg span', '#sqTopBar .sq-logo span'],
+  'portal.html':     ['.logo span', '.hero-name em', '.hstat .n'],
+  'workday.html':    ['.sb-logo .lg span', '.nav-a.active', '.unav-logo .lg span',
+                      '.unav-a.active', '.unav-topbar .lg span'],
+  'drafter.html':    ['.logo span', '.unav-logo .lg span', '.unav-a.active',
+                      '.unav-topbar .lg span'],
+  'mekhlahon.html':  ['.footer-logo-main span'],
+  'new-order.html':  ['.logo span'],
+  'order-view.html': ['.logo span'],
 };
 
 const icons   = fs.readFileSync(path.join(ROOT, 'lg-icons.js'), 'utf8');
 const defined = new Set([...icons.matchAll(/^\s*'([a-z-]+)':\s*'/gm)].map(m => m[1]));
 
 let failed = 0;
+
+/* ── dark-scale contrast ────────────────────────────────────────────────
+   The light tokens are asserted in test-admin-ui.js. These are the dark ones,
+   which exist because the light values are unusable on a dark surface — the
+   whole point is that the two scales are not interchangeable. */
+const css = fs.readFileSync(path.join(ROOT, 'lg-ui.css'), 'utf8');
+const lin = c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const lum = h => {
+  h = h.replace('#', '');
+  if (h.length === 3) h = h.split('').map(x => x + x).join('');
+  const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+};
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+const tok = n => (css.match(new RegExp('--' + n + ':\\s*(#[0-9a-fA-F]{3,6})')) || [])[1];
+
+console.log('dark token scale');
+{
+  const D = { bg: tok('dark-bg'), surface: tok('dark-surface'), text: tok('dark-text'),
+              muted: tok('dark-muted'), gold: tok('gold-dark'), goldText: tok('gold-text') };
+  const missing = Object.entries(D).filter(([, v]) => !v).map(([k]) => k);
+  if (missing.length) {
+    failed++; console.error('  FAIL  missing token(s): ' + missing.join(', '));
+  } else {
+    const c = (name, cond, detail) => cond
+      ? console.log('  ok    ' + name)
+      : (failed++, console.error('  FAIL  ' + name + (detail ? ' — ' + detail : '')));
+    c('--dark-text on --dark-bg',        ratio(D.text, D.bg) >= 4.5,        ratio(D.text, D.bg).toFixed(2));
+    c('--dark-muted on --dark-bg',       ratio(D.muted, D.bg) >= 4.5,       ratio(D.muted, D.bg).toFixed(2));
+    c('--dark-muted on --dark-surface',  ratio(D.muted, D.surface) >= 4.5,  ratio(D.muted, D.surface).toFixed(2));
+    c('--gold-dark on --dark-bg',        ratio(D.gold, D.bg) >= 4.5,        ratio(D.gold, D.bg).toFixed(2));
+    c('--gold-dark on --dark-surface',   ratio(D.gold, D.surface) >= 4.5,   ratio(D.gold, D.surface).toFixed(2));
+    c('the light gold really does fail on dark, justifying --gold-dark',
+      ratio(D.goldText, D.bg) < 4.5, ratio(D.goldText, D.bg).toFixed(2));
+  }
+}
 const check = (name, cond, detail) => cond
   ? console.log('  ok    ' + name)
   : (failed++, console.error('  FAIL  ' + name + (detail ? '\n        ' + detail : '')));
@@ -53,10 +111,17 @@ for (const page of MIGRATED) {
   const wog = html.match(/background:\s*var\(--gold\)\s*;\s*color:\s*#fff/gi) || [];
   check('no white text on a gold fill', wog.length === 0, wog[0]);
 
+  /* A dark page must declare itself, or every token resolves to the light
+     scale and the page renders unreadable. */
+  if (DARK_PAGES.includes(page)) {
+    check('dark page carries body.lg-dark', /<body[^>]*class="[^"]*\blg-dark\b/.test(html));
+  }
+
   /* dark-surface gold must stay --gold */
   for (const sel of DARK_SURFACE_RULES[page] || []) {
     const esc  = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const rule = html.match(new RegExp(esc + '\\{[^}]*\\}'));
+    /* \s* — some pages put a space before the brace */
+    const rule = html.match(new RegExp(esc + '\\s*\\{[^}]*\\}'));
     if (!rule) { check(`dark-surface rule "${sel}" still exists`, false, 'renamed or removed?'); continue; }
     check(`"${sel}" keeps --gold (dark surface)`, !/--gold-text/.test(rule[0]), rule[0]);
   }
@@ -78,7 +143,7 @@ for (const page of MIGRATED) {
   /* skip link must point at a real element */
   /* attribute order varies, so match the whole tag then pull the href out */
   const skipTag = (html.match(/<a[^>]*class="skip-link"[^>]*>/) || [])[0];
-  check('has a skip link', !!skipTag);
+  if (!NO_NAV.includes(page)) check('has a skip link', !!skipTag);
   if (skipTag) {
     const target = (skipTag.match(/href="#([^"]+)"/) || [])[1];
     check('the skip link has a fragment href', !!target, skipTag);
@@ -91,7 +156,19 @@ const stillLocal = PENDING.filter(p => {
   const f = path.join(ROOT, p);
   return fs.existsSync(f) && /:root\s*\{/.test(fs.readFileSync(f, 'utf8'));
 });
-console.log(`\nnot yet migrated (${stillLocal.length}): ${stillLocal.join(', ') || 'none'}`);
+console.log(`\nmigrated: ${MIGRATED.length}`);
+console.log(`not yet migrated (${stillLocal.length}): ${stillLocal.join(', ') || 'none'}`);
+console.log(`excluded by design: ${EXCLUDED.join(', ')}`);
+
+/* Nothing outside those two lists should still be carrying its own tokens. */
+const known = new Set([...MIGRATED, ...EXCLUDED, ...PENDING]);
+const stray = fs.readdirSync(ROOT)
+  .filter(f => f.endsWith('.html') && !known.has(f) && f !== 'lg-preview.html')
+  .filter(f => /:root\s*\{/.test(fs.readFileSync(path.join(ROOT, f), 'utf8')));
+if (stray.length) {
+  console.error(`\nFAIL  page(s) with local tokens and no entry in any list: ${stray.join(', ')}`);
+  failed++;
+}
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');
