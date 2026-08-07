@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -181,13 +181,19 @@
   .ai-input:focus{border-color:var(--gold-text);}
   .ai-select{padding:7px 9px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none;border-radius:0;width:100%;cursor:pointer;}
 
-  @media(max-width:860px){
+  /* ═══ רספונסיביות — 600 / 900 / 1200 כמו בשאר המערכת ═══ */
+  @media(max-width:900px){
     .sidebar{display:none;}
-    .work-cols{grid-template-columns:1fr;}
-    .content{padding:14px 14px;}
+    /* אייפד לאורך: שתי עמודות. שלוש צפופות מדי, אחת מבזבזת את המסך. */
+    .work-cols{grid-template-columns:1fr 1fr;}
+    .content{padding:14px;}
     .topbar{padding:0 14px;}
     .summary-bar{padding:12px 14px;flex-wrap:wrap;gap:8px;}
     .phase-tabs{padding:0 14px;}
+  }
+  @media(max-width:600px){
+    .work-cols{grid-template-columns:1fr;}
+    .add-item-form .ai-row{grid-template-columns:1fr;}
   }
 
 /* ═══ UNIFIED NAV ═══ */

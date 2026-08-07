@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LuzGlass — הזמנה מלאה</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
 
@@ -67,6 +67,22 @@
   }
 
   .note-box{background:rgba(184,146,42,0.07);border-right:3px solid var(--gold);padding:8px 12px;font-size:12px;color:var(--muted);font-style:italic;margin-top:6px;}
+
+/* ═══ רספונסיביות — נקודות העצירה של lg-ui.css: 600 / 900 / 1200 ═══ */
+@media (min-width:601px){
+  /* המסמך צר ומרוכז — קריא יותר מאשר לרוחב מלא על אייפד */
+  .header,.section{max-width:720px;margin-right:auto;margin-left:auto;}
+}
+@media (max-width:600px){
+  .header{padding:20px 14px 16px;}
+  .header-top{flex-wrap:wrap;gap:10px;}
+  .header-actions{flex-wrap:wrap;width:100%;}
+  .header-actions > *{flex:1 1 auto;}
+  .section{padding:14px;}
+  /* שם הפריט והמחיר לא נלחצים — המחיר יורד לשורה משלו */
+  .item-row{flex-wrap:wrap;row-gap:4px;}
+  .item-price{white-space:nowrap;}
+}
 </style>
 </head>
 <body>

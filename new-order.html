@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -73,6 +73,15 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   .mf-success-icon{font-size:48px;margin-bottom:14px;}
   .mf-success-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:900;margin-bottom:8px;}
   .mf-success-sub{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px;}
+
+/* ═══ רספונסיביות — נקודות העצירה של lg-ui.css: 600 / 900 / 1200 ═══ */
+@media (max-width:600px){
+  .hero{padding:24px 14px 18px;}
+  .hero h1{font-size:22px;}
+  .cards{padding:0 14px;}
+  .upload-card,.measure-form{margin-right:14px;margin-left:14px;}
+  .measure-form{padding:16px 14px;}
+}
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>

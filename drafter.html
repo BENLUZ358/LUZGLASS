@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -123,6 +123,12 @@ html,body{height:100%;overflow:hidden;}
 .unav-sidebar.open{transform:translateX(0);}
 @media(max-width:768px){
   .unav-topbar{display:flex;}
+}
+
+/* ═══ רספונסיביות — נקודות העצירה של lg-ui.css: 600 / 900 / 1200 ═══ */
+@media (min-width:601px) and (max-width:900px){
+  /* אייפד לאורך — הסרגל צר יותר כדי להשאיר מקום לשרטוט */
+  .sidebar{width:180px;}
 }
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>

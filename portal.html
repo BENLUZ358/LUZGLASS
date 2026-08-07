@@ -13,7 +13,7 @@ const safeStorage = {
 </script>
 
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -136,6 +136,55 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .empty{text-align:center;padding:36px 20px;color:var(--muted);}
 .fab{position:fixed;bottom:24px;left:20px;width:52px;height:52px;border-radius:50%;background:var(--gold);color:var(--on-gold);font-size:24px;border:none;cursor:pointer;box-shadow:0 4px 20px rgba(184,146,42,0.4);display:flex;align-items:center;justify-content:center;}
 .spacer{height:80px;}
+
+/* ═══ רספונסיביות ══════════════════════════════════════════════════════════
+   זה הדף שהלקוחות פותחים, וברוב המקרים בטלפון. עד עכשיו לא היה בו אף
+   breakpoint. נקודות העצירה הן אלה של lg-ui.css: 600 / 900 / 1200.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── טאבלט: הפורטל צר ומרוכז ממילא, רק מרחיבים מעט את האוויר ── */
+@media (min-width:601px) and (max-width:1200px){
+  .content{padding:20px 24px;}
+  .hero{padding:32px 24px 36px;}
+}
+
+/* ── טלפון ── */
+@media (max-width:600px){
+  nav{padding:0 14px;}
+  .nav-name{font-size:12px;}
+
+  .hero{padding:20px 14px 24px;}
+  .hero-name{font-size:22px;margin-bottom:16px;}
+
+  /* התוויות ("הזמנות פעילות", "מוכן לאיסוף") לא נכנסות בשורה אחת בשליש
+     מסך של 375px, אז נותנים להן לרדת שורה במקום לחתוך אותן. */
+  .hstat{padding:12px 6px;}
+  .hstat .n{font-size:20px;}
+  .hstat .l{font-size:12px;line-height:1.3;}
+
+  .content{padding:14px;}
+  .tab{padding:14px 12px;}
+
+  /* הכרטיס: שם הלקוח והמחיר נלחצים זה בזה במסך צר. המחיר יורד לשורה
+     נפרדת ומיושר לקצה, במקום להתכווץ. */
+  .oc-hdr{flex-wrap:wrap;padding:14px;}
+  .oc-info{flex:1 1 100%;}
+  .oc-right{flex:1 1 100%;text-align:right;display:flex;gap:10px;align-items:baseline;}
+  .oc-num{margin-top:0;}
+
+  .oc-status-bar{padding:8px 14px;flex-wrap:wrap;row-gap:6px;}
+  .oc-expand{padding:0 14px 14px;}
+
+  /* הסטפר גולל אופקית — הוא כבר overflow-x:auto, רק שיהיה נוח לאצבע */
+  .stepper{padding:10px 14px;-webkit-overflow-scrolling:touch;}
+
+  .q-total{font-size:30px;}
+  .debt-amt{font-size:24px;}
+
+  /* ה-FAB מעל פס הבית של האייפון — הערך מגיע מ-lg-ui.css */
+  .fab{left:14px;width:56px;height:56px;}
+  .spacer{height:96px;}
+}
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>

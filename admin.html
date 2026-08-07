@@ -16,7 +16,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 </script>
 
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -153,7 +153,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:4px;}
   .hamburger span{display:block;width:22px;height:2px;background:var(--text);border-radius:2px;}
   .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99;}
-  @media(max-width:860px){
+  @media(max-width:900px){
     .sidebar{position:fixed;top:0;right:0;height:100vh;z-index:100;transform:translateX(100%);transition:transform 0.25s;}
     .sidebar.open{transform:translateX(0);}
     .sidebar-overlay.open{display:block;}
@@ -1624,7 +1624,7 @@ document.addEventListener('visibilitychange', () => {
 }
 
 /* ─ MOBILE ─ */
-@media(max-width:680px){
+@media(max-width:600px){
   #sqPanel{ inset:0; border-radius:0; }
   #sqTopBar{ height:46px; padding:0 10px; gap:6px; }
   #sqTopBar .sq-logo{ display:none; }
@@ -1639,7 +1639,7 @@ document.addEventListener('visibilitychange', () => {
   #sqImg{ max-height:38vh; }
   #sqInfoGrid{ grid-template-columns:1fr 1fr; }
 }
-@media(min-width:681px){
+@media(min-width:601px){
   #sqListPanel.sq-hidden{ display:block !important; }
   #sqDetailPanel.sq-hidden{ display:flex !important; }
 }

@@ -151,6 +151,54 @@ for (const page of MIGRATED) {
   }
 }
 
+/* ── responsive ─────────────────────────────────────────────────────────
+   Six breakpoints were in circulation (600, 680, 768, 860, 900, 1024), which
+   is how the same layout ends up behaving differently on two pages at the same
+   width. The sanctioned scale is 600 / 900 / 1200, plus 768 where a page
+   already keyed its nav drawer to it.
+
+   Every page must also handle a phone. Five had no media query at all — and
+   portal, the one customers actually open on a phone, was among them. */
+console.log('\nresponsive');
+{
+  const ALLOWED = new Set([600, 601, 768, 900, 901, 1200, 1201]);
+  const c = (name, cond, detail) => cond
+    ? console.log('  ok    ' + name)
+    : (failed++, console.error('  FAIL  ' + name + (detail ? ' — ' + detail : '')));
+
+  for (const page of MIGRATED) {
+    const html = fs.readFileSync(path.join(ROOT, page), 'utf8');
+
+    const vp = html.match(/<meta name="viewport" content="([^"]*)"/);
+    c(`${page} declares a device-width viewport`,
+      !!vp && /width=device-width/.test(vp[1]));
+    /* Pinch-zoom must not be disabled; it is how low-vision users cope. */
+    c(`${page} does not block zoom`,
+      !vp || !/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/.test(vp[1]), vp && vp[1]);
+
+    /* Strip comments first — a breakpoint mentioned in prose is not a
+       breakpoint, and the note explaining the deleted @media block in admin
+       would otherwise fail this. */
+    const code = html.replace(/\/\*[\s\S]*?\*\//g, '');
+    const bps = [...new Set([...code.matchAll(/@media[^{]*?(?:max|min)-width:\s*(\d+)px/g)].map(m => +m[1]))];
+    c(`${page} handles a phone width`,
+      bps.some(b => b <= 768), bps.length ? `breakpoints: ${bps.sort((a,b)=>a-b).join(', ')}` : 'no media queries at all');
+    const odd = bps.filter(b => !ALLOWED.has(b));
+    c(`${page} uses only sanctioned breakpoints`, odd.length === 0,
+      odd.length ? `off-scale: ${odd.join(', ')}` : '');
+  }
+
+  /* The iOS zoom-on-focus rule, and the safe-area handling, live in the
+     foundation so that no page has to remember them. */
+  c('lg-ui.css forces 16px inputs on coarse pointers (iOS zoom-on-focus)',
+    /@media\s*\(pointer:\s*coarse\)[\s\S]*?input,select,textarea\{\s*font-size:16px/.test(css));
+  c('lg-ui.css accounts for the iPhone safe area',
+    /env\(safe-area-inset-bottom\)/.test(css));
+  /* overflow-x:hidden on the root would silently break every sticky bar. */
+  c('lg-ui.css does not put overflow-x:hidden on html/body',
+    !/html\s*,\s*body\s*\{[^}]*overflow-x:\s*hidden/.test(css));
+}
+
 /* Report, do not fail, on what is still to do. */
 const stillLocal = PENDING.filter(p => {
   const f = path.join(ROOT, p);

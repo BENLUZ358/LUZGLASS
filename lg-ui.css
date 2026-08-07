@@ -187,8 +187,22 @@ summary:focus-visible,
 }
 .skip-link:focus{right:var(--space-2);}
 
-/* Touch targets. Applies on coarse pointers, where it actually matters —
-   keeps dense desktop layouts intact. */
+/* ═══ RESPONSIVE ══════════════════════════════════════════════════════════
+
+   Breakpoints. The app had six in circulation (600, 680, 768, 860, 900,
+   1024), which is how the same layout ends up behaving differently on two
+   pages at the same width. Three, used everywhere:
+
+     ≤ 600px    phone            iPhone portrait, and landscape on small ones
+     ≤ 900px    tablet portrait  iPad portrait is 768–820
+     ≤ 1200px   tablet landscape iPad landscape is 1024–1180
+
+   Media queries cannot read custom properties, so these are written as
+   literals — but nowhere else. If a page needs a different number, it needs a
+   reason.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* Touch targets. Coarse pointers only, so dense desktop layouts stay dense. */
 @media (pointer:coarse){
   button,
   a[role="button"],
@@ -199,6 +213,55 @@ summary:focus-visible,
   button,a[role="button"],.btn{
     min-width:var(--touch-min);
   }
+
+  /* iOS Safari zooms the entire page when you focus an input whose font-size
+     is under 16px, and then leaves you scrolled sideways. Thirty-seven rules
+     in this project were under it. This is also simply easier to type into. */
+  input,select,textarea{
+    font-size:16px;
+  }
+
+  /* Comfortable hit area for form controls without changing desktop density. */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea{
+    min-height:var(--touch-min);
+  }
+}
+
+/* iPhone notch and home indicator. Anything pinned to an edge has to respect
+   them or it ends up under the bezel. Harmless everywhere else — the env()
+   values are 0 on devices without insets. */
+.safe-top    { padding-top:    env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-x      { padding-right:  env(safe-area-inset-right);
+               padding-left:   env(safe-area-inset-left); }
+
+body{
+  padding-bottom:env(safe-area-inset-bottom);
+}
+
+/* Fixed bars and floating buttons, lifted clear of the home indicator. */
+.fab,
+.lg-fixed-bottom{
+  bottom:calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+/* Nothing may push the page sideways. Wide content scrolls inside its own
+   container — see .table-scroll — rather than widening the document.
+
+   Deliberately NOT overflow-x:hidden on html/body: that breaks position:sticky
+   for every descendant, and the nav and tab bars in admin and portal are
+   sticky. The fix belongs at the element that overflows, not at the root. */
+html,body{max-width:100%;}
+
+/* Media and embeds never exceed their column. */
+img,svg,video,canvas,table{max-width:100%;}
+
+/* Long unbroken strings — order numbers, emails — wrap instead of stretching
+   the layout on a narrow screen. */
+@media (max-width:600px){
+  body{overflow-wrap:break-word;}
 }
 
 /* Motion preference. Neutralises the pulse/slide keyframes site-wide. */

@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -85,6 +85,14 @@
   .success-sub{font-size:15px;color:var(--muted);line-height:1.7;max-width:340px;margin:0 auto 32px;}
   .success-ref{font-size:13px;color:var(--gold-text);font-weight:700;margin-bottom:28px;}
   .btn-back{display:inline-block;padding:14px 32px;background:var(--text);color:var(--bg);font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;text-decoration:none;}
+
+/* ═══ רספונסיביות — נקודות העצירה של lg-ui.css: 600 / 900 / 1200 ═══ */
+@media (max-width:600px){
+  .topbar{padding:0 14px;}
+  .page{padding:20px 14px 48px;}
+  .page-title{font-size:22px;}
+  .page-sub{margin-bottom:20px;}
+}
 </style>
   <!-- Firebase SDK + LuzGlass DB -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
