@@ -40,24 +40,18 @@ const DATABASE_URL = 'https://lussglass-default-rtdb.europe-west1.firebasedataba
 const DOCUMENT_TYPES = { '30': 'הזמנה', '31': "הזמ' סוכן", '34': "הזמ' רכש" };
 const DEFAULT_DOCUMENT_ID = process.env.HASHAVSHEVET_DOCUMENT_ID || '31';
 
-// ── כלל 2 ב"בדיקות מיוחדות והערות" שבתיעוד imovein ──────────────────────
+// ── מה נשלח בפועל ────────────────────────────────────────────────────────
 //
-//   "האם שדות אסמכתא, סוכן, מחסנים ומספר עותקים הם מספר חיובי ושונה מאפס."
+// חשבשבת אישרו בטלפון את הסט המדויק, וזה כל מה שנשלח:
 //
-// זו הסיבה שכל הניסיונות הקודמים החזירו status:ok ולא יצרו מסמך. שלחנו
-// Agent:"0" — במסך של חשבשבת 0 מוצג כ"ללא סוכן", אבל בממשק הקליטה אפס נפסל.
-// הוולידציה רצה בזמן הקליטה (ר' כלל 13: "בעת קליטת הממשק בחשבשבת"), ולכן
-// ה-API מאשר את הבקשה והכישלון מתגלה רק אחר כך, בלי שיחזור אלינו.
-const DEFAULT_AGENT     = process.env.HASHAVSHEVET_AGENT     || '1';
-const DEFAULT_WAREHOUSE = process.env.HASHAVSHEVET_WAREHOUSE || '1';
-const DEFAULT_COPIES    = process.env.HASHAVSHEVET_COPIES    || '1';
-
-// אותם ארבעה שדות, נבדקים לפני השליחה במקום להיקלט ולהיעלם בשקט.
-function checkPositive(fields) {
-  const bad = Object.entries(fields).filter(([, v]) => !(Number(v) > 0));
-  if (!bad.length) return null;
-  return bad.map(([k, v]) => `${k}=${v === '' ? '(ריק)' : v}`).join(', ');
-}
+//     accountKey · documentid · Reference · itemkey · Quantity
+//
+// המחיר במפורש לא נשלח — חשבשבת מושכים אותו מכרטיס הפריט. שליחת price
+// הייתה מיותרת, וכך גם warehouse, Agent ו-copies שהוספתי קודם על סמך
+// טבלת השדות. הם הוסרו.
+//
+// ההשלכה החשובה: אם המחיר מגיע מחשבשבת, אסור לדלג על פריט רק בגלל שאין
+// לו מחיר אצלנו. הגרסה הקודמת דילגה, ולכן שורות היו נשמטות מהמסמך בשקט.
 
 function _adminApp() {
   if (getApps().length) return getApps()[0];
@@ -86,24 +80,16 @@ function toReference(orderNum) {
   return { ok: true, reference: String(Number(digits)) };
 }
 
-// בונה שורה אחת לכל פריט מתומחר.
-// Quantity = שטח במ"ר, price = מחיר למ"ר — הפריטים בחשבשבת הם מסוג "מכפלה",
-// וזה גם בדיוק מה ש-lgCalcOrderTotal מחשב.
-// התיעוד סותר את עצמו: דוגמת ה-JSON כותבת "documentid" והטבלה "DocumentID".
-// בחתימת MD5 ובפענוח בשרת אלה שני שדות שונים לגמרי, ואם השם לא נכון השרת
-// עשוי להתעלם מהשדה בשקט — מה שמסביר "status: ok" בלי מסמך.
-// אפשר לבחור בזמן ריצה כדי לבדוק את שתי האפשרויות בלי פריסה מחדש.
-const DOC_ID_FIELDS = {
-  lower: 'documentid',   // לפי הדוגמה בתיעוד — ברירת המחדל, וזה מה שנשלח עד כה
-  upper: 'DocumentID',   // לפי טבלת השדות
-  both:  null,           // שולח את שניהם
-};
-
-function buildLines(order, accountKey, reference, globalPrices, clientPrices, opts) {
-  const { docIdMode, documentId, agent, warehouse, copies } = opts;
+// בונה שורה אחת לכל פריט. Quantity = שטח במ"ר, כי הפריטים בחשבשבת הם
+// מסוג "מכפלה" והמחיר שם הוא למ"ר.
+//
+// המחיר שלנו עדיין מחושב — אבל רק לתצוגה המקדימה, כדי שתדע מה אתה שולח.
+// הוא לא נכנס לשורה שנשלחת.
+function buildLines(order, accountKey, reference, documentId, globalPrices, clientPrices) {
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
   const lines = [];
+  const preview = [];
   const skipped = [];
 
   const items = Array.isArray(order.items) ? order.items
@@ -115,28 +101,24 @@ function buildLines(order, accountKey, reference, globalPrices, clientPrices, op
     const sku  = item.sku;
     if (!sku) { skipped.push({ name, reason: 'אין מק"ט (sku) על הפריט' }); return; }
 
-    const ppm2 = parseFloat(cp[sku] || gp[sku] || 0);
-    if (!ppm2) { skipped.push({ name, sku, reason: 'אין מחיר למק"ט הזה' }); return; }
-
     const qty = areaM2(item.w || 0, item.h || 0);
     if (!qty) { skipped.push({ name, sku, reason: 'שטח 0 — חסרות מידות' }); return; }
 
-    // סדר המפתחות כאן הוא חלק מחוזה החתימה — אין לשנות.
-    const line = { accountKey: String(accountKey) };
-    if (docIdMode === 'upper')      line.DocumentID = documentId;
-    else if (docIdMode === 'both') { line.documentid = documentId; line.DocumentID = documentId; }
-    else                            line.documentid = documentId;
-    line.Reference = reference;
-    line.itemkey   = String(sku);
-    line.Quantity  = qty.toFixed(3);
-    line.price     = ppm2.toFixed(3);
-    line.warehouse = String(warehouse);
-    line.Agent     = String(agent);
-    line.copies    = String(copies);
-    lines.push(line);
+    // סדר המפתחות הוא חלק מחוזה החתימה — אין לשנות.
+    lines.push({
+      accountKey: String(accountKey),
+      documentid: documentId,
+      Reference:  reference,
+      itemkey:    String(sku),
+      Quantity:   qty.toFixed(3),
+    });
+
+    // לתצוגה בלבד. אין מחיר אצלנו? זה בסדר גמור — חשבשבת יתמחרו.
+    const ppm2 = parseFloat(cp[sku] || gp[sku] || 0);
+    preview.push({ name, sku, qty: qty.toFixed(3), ppm2: ppm2 || null });
   });
 
-  return { lines, skipped };
+  return { lines, preview, skipped };
 }
 
 module.exports = async function handler(req, res) {
@@ -209,30 +191,13 @@ module.exports = async function handler(req, res) {
 
     // ── שורות ──
     const prices = pricesSnap.val() || {};
-    const docIdMode  = ['lower', 'upper', 'both'].includes(body.docIdMode) ? body.docIdMode : 'lower';
     const documentId = DOCUMENT_TYPES[String(body.documentId)] ? String(body.documentId) : DEFAULT_DOCUMENT_ID;
-    const agent     = String(body.agent     != null && body.agent     !== '' ? body.agent     : DEFAULT_AGENT).replace(/\D/g, '');
-    const warehouse = String(body.warehouse != null && body.warehouse !== '' ? body.warehouse : DEFAULT_WAREHOUSE).replace(/\D/g, '');
-    const copies    = String(body.copies    != null && body.copies    !== '' ? body.copies    : DEFAULT_COPIES).replace(/\D/g, '');
 
-    // כלל 2 בתיעוד. נבדק כאן כי הקליטה בחשבשבת נכשלת על זה בשקט —
-    // ה-API עונה status:ok, ואף שגיאה לא חוזרת אלינו.
-    const nonPositive = checkPositive({
-      אסמכתא: ref.reference, סוכן: agent, מחסן: warehouse, 'מספר עותקים': copies,
-    });
-    if (nonPositive) {
-      res.status(422).json({
-        error: `לפי כלל 2 בתיעוד, אסמכתא/סוכן/מחסן/מספר עותקים חייבים להיות חיוביים ושונים מאפס. נמצא: ${nonPositive}`,
-        hint:  'אפס נקלט בשקט ולא יוצר מסמך — זו הסיבה שהניסיונות הקודמים החזירו ok בלי תוצאה',
-      });
-      return;
-    }
-
-    const { lines, skipped } = buildLines(order, accountKey, ref.reference,
-      prices.global, prices.client, { docIdMode, documentId, agent, warehouse, copies });
+    const { lines, preview, skipped } = buildLines(order, accountKey, ref.reference,
+      documentId, prices.global, prices.client);
 
     if (!lines.length) {
-      res.status(422).json({ error: 'אין אף פריט מתומחר לשליחה', skipped });
+      res.status(422).json({ error: 'אין אף פריט לשליחה', skipped });
       return;
     }
 
@@ -253,9 +218,8 @@ module.exports = async function handler(req, res) {
       res.status(200).json({
         ok: true, dryRun: true,
         reference: ref.reference, accountKey,
-        documentId, documentName: DOCUMENT_TYPES[documentId] || '?', agent, warehouse, copies,
-        docIdMode, docIdField: docIdMode === 'both' ? 'documentid + DocumentID' : DOC_ID_FIELDS[docIdMode],
-        lineCount: lines.length, lines, skipped,
+        documentId, documentName: DOCUMENT_TYPES[documentId] || '?',
+        lineCount: lines.length, lines, preview, skipped,
         // בלי signature ובלי station — אלה סודות
         preview: { plugin: 'imovein', company: COMPANY, netPassportID: NET_ID, pluginData: lines },
       });
@@ -286,10 +250,6 @@ module.exports = async function handler(req, res) {
       reference:  ref.reference,
       accountKey: String(accountKey),
       documentId: documentId,
-      agent:      agent || null,
-      warehouse:  warehouse || null,
-      copies:     copies || null,
-      docIdMode:  docIdMode,
       lineCount:  lines.length,
       httpStatus: wgRes.status,
       httpOk:     wgRes.ok,
