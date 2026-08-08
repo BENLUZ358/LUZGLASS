@@ -814,22 +814,61 @@ function lgFindPriceItem(glassName){
 //  שלב 2 (עתידי, אחרי שכל המק"טים יעברו ויאומתו): הסרה הדרגתית של הקטלוגים הישנים.
 
 const LG_SKU_BUSINESS_FIELDS    = ['name', 'hashavshevetCode', 'active', 'source'];
-const LG_SKU_OPERATIONAL_FIELDS = ['glass', 'mm', 'proc', 'graphic'];
+const LG_SKU_OPERATIONAL_FIELDS = ['glass', 'mm', 'proc', 'graphic', 'chalavi', 'triplex'];
 
 // ניחוש שדות תפעוליים מתוך שם הפריט בחשבשבת (למשל '8 מ"מ שקוף מחוסם') — משמש רק כברירת מחדל
 // חד-פעמית בסנכרון ראשון של מק"ט חדש (ר' syncSkuCatalogFromHashavshevet). לעולם לא דורס ערך
 // תפעולי קיים — עריכה ידנית שכבר בוצעה תמיד גוברת על הניחוש.
-const LG_GLASS_TYPES_BY_LENGTH = ['אסיד קליר', 'גלינה שקוף', 'גלינה קליר', 'שקוף', 'קליר', 'אפור', 'ברונזה', 'גרניט', 'מראה'];
+// סוגי הזכוכית — מה החומר הוא, ותו לא.
+//
+// מסודר מהארוך לקצר, וזה קריטי: 'אסיד קליר' חייב להיבדק לפני 'אסיד', אחרת
+// "10 מ''מ אסיד קליר" יזוהה כ'אסיד' ויאבד את הצירוף. אותו דבר ל'לקובל שחור'
+// מול 'לקובל'.
+//
+// חלבי אינו ברשימה בכוונה — הוא לא סוג זכוכית אלא התזת חול. "8 מ''מ חלבי
+// חתוך" נחתך כ-8 שקוף, הוא 8 שקוף בכל המערכת, ורק נושא דגל שאומר שהוא עוד
+// חייב מעבר במתיז. אותו דבר לטריפלקס ולדלתות נגרים.
+const LG_GLASS_TYPES_BY_LENGTH = [
+  'לקובל שחור', 'לקובל לבן', 'מאסטר ליין',
+  'אסיד קליר', 'גלינה שקוף', 'גלינה קליר',
+  'צנצילה', 'פפיטה', 'ברונזה', 'גרניט', 'סבתא', 'מראה',
+  'שקוף', 'קליר', 'אפור', 'אסיד'
+];
+
+// כשהשם מתאר גימור ולא חומר, החומר שמתחת הוא שקוף — כך הזכוכית נחתכת
+// ובזה היא מנוהלת עד שהיא מגיעה לטיפול. צנצילה חלבי הוא החריג היחיד:
+// שם החומר כן נאמר, וההתאמה לעיל תופסת אותו לפני שנגיע לכאן.
+const LG_GLASS_DEFAULT_BASE = 'שקוף';
+const LG_IMPLIES_BASE_GLASS = ['חלבי', 'דלתות נגרים'];
+
 function lgGuessOperationalFromName(name) {
   const n = String(name || '');
   const guess = {};
+
+  // עובי: "8 מ''מ" ‏· או צורת הטריפלקס "3+3" / "4+4", שהיא סכום השכבות
   const mmMatch = n.match(/(\d+)\s*מ["'׳״]{1,2}מ/);
-  if (mmMatch) guess.mm = parseInt(mmMatch[1], 10);
+  if (mmMatch) {
+    guess.mm = parseInt(mmMatch[1], 10);
+  } else {
+    const lam = n.match(/(\d+)\s*\+\s*(\d+)/);
+    if (lam) guess.mm = parseInt(lam[1], 10) + parseInt(lam[2], 10);
+  }
+
   const glass = LG_GLASS_TYPES_BY_LENGTH.find(g => n.includes(g));
   if (glass) guess.glass = glass;
+  else if (LG_IMPLIES_BASE_GLASS.some(w => n.includes(w))) guess.glass = LG_GLASS_DEFAULT_BASE;
+
   if (n.includes('מחוסם')) guess.proc = 'chisum';
   else if (n.includes('מלוטש')) guess.proc = 'litush';
+
   if (n.includes('גרפיקה')) guess.graphic = true;
+
+  // התזת חול. טריפלקס חלבי מגיע כבר חלבי מהספק ולא עובר במתיז — הדגל נשאר
+  // false שם, וזו בדיוק הסיבה שטריפלקס חייב להיות דגל ולא מילה בשם.
+  if (n.includes('חלבי')) guess.chalavi = !n.includes('טריפלקס');
+
+  if (n.includes('טריפלקס')) guess.triplex = true;
+
   return guess;
 }
 
