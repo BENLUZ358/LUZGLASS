@@ -191,7 +191,9 @@ html,body{height:100%;overflow:hidden;}
 <script src="lg-icons.js?v=20260807"></script>
 </head>
 <body class="lg-dark">
-<a href="#csMain" class="skip-link">דלג לתוכן</a>
+<!-- מצביע ל-#listView ולא לסרגל הסינון: לסרגל כבר יש id שהקוד משתמש בו
+     (filtersBar), ולאלמנט יכול להיות id אחד בלבד. -->
+<a href="#listView" class="skip-link">דלג לתוכן</a>
 
 <div id="lgLoading" style="position:fixed;inset:0;background:#1a1a1a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
   <div style="font-size:22px;font-weight:900;color:#f0ede8;margin-bottom:20px;">Luz<span style="color:#c9a84c">Glass</span></div>
@@ -216,7 +218,7 @@ html,body{height:100%;overflow:hidden;}
 </div>
 
 <!-- FILTERS - always visible -->
-<div class="filters" id="csMain">
+<div class="filters" id="filtersBar">
   <input class="fi" id="fSearch" placeholder="🔍 חיפוש..." oninput="renderList()">
   <select class="fi" id="fGlass" onchange="renderList()">
     <option value="">כל הזכוכיות</option>
@@ -641,20 +643,31 @@ function showList(){
 }
 let curReadOnly = false;
 
+// ?. בכוונה על כולם. קודם הייתה כאן שרשרת חשופה, ואלמנט אחד חסר
+// (filtersBar, שה-id שלו נדרס) הפיל את הפונקציה באמצע — לפני השורה שמציגה
+// את כפתור "← רשימה" ולפני renderSketch(). התוצאה: גם הסקיצה לא הוצגה וגם
+// לא הייתה דרך לחזור לרשימה בלי לצאת מהמסך.
+// זה מסך שעובדים עליו על רצפת הייצור; מסך חלקי עדיף על מסך מת.
+function _csShow(id, value){
+  const el = document.getElementById(id);
+  if (el) el.style.display = value;
+  else console.warn('[CS] missing element:', id);
+}
+
 function showSketch(){
   curReadOnly = (activeTab==='done');
-  document.getElementById('listView').style.display='none';
-  document.getElementById('sketchView').style.display='flex';
-  document.getElementById('filtersBar').style.display='none';
-  document.getElementById('tabsBar').style.display='none';
-  document.getElementById('btnBack').style.display='flex';
+  _csShow('listView',   'none');
+  _csShow('sketchView', 'flex');
+  _csShow('filtersBar', 'none');
+  _csShow('tabsBar',    'none');
+  _csShow('btnBack',    'flex');
   // סרגל עבודה עליון — מוסתר בהושלמו
-  document.getElementById('btnSheet').style.display = curReadOnly ? 'none' : 'flex';
-  document.getElementById('progWrap').style.display = curReadOnly ? 'none' : 'flex';
+  _csShow('btnSheet', curReadOnly ? 'none' : 'flex');
+  _csShow('progWrap', curReadOnly ? 'none' : 'flex');
   // סרגל תחתון — נסתר לגמרי בהושלמו (כל ה-workflow של עריכה/סיום שייך ל"לבדיקה" בלבד)
-  document.getElementById('btmbar').style.display = curReadOnly ? 'none' : 'flex';
+  _csShow('btmbar',   curReadOnly ? 'none' : 'flex');
   // badge סטטוס — מוצג במקום הסרגל בהושלמו
-  document.getElementById('doneBadge').style.display = curReadOnly ? 'block' : 'none';
+  _csShow('doneBadge', curReadOnly ? 'block' : 'none');
   hideBanner();
 }
 function goBack(){ cur=null; curReadOnly=false; hideBanner(); showList(); }
@@ -1169,8 +1182,11 @@ lgRequireAuthAsync('admin').then(session => {
   load();
 });
 
-function unavOpen(){document.getElementById('unavSidebar').classList.add('mobile-open');document.getElementById('unavOverlay').classList.add('open');}
-function unavClose(){document.getElementById('unavSidebar').classList.remove('mobile-open');document.getElementById('unavOverlay').classList.remove('open');}
+// הועתקו מהדפים שיש בהם את הניווט המאוחד. בתחנת הבדיקה אין את הסימון
+// הזה — היא מסך מלא עם סרגל משלה — ואף אחד לא קורא לפונקציות האלה כאן.
+// מוגנות כדי שחיבור כפתור אליהן בעתיד לא יפיל את הדף.
+function unavOpen(){document.getElementById('unavSidebar')?.classList.add('mobile-open');document.getElementById('unavOverlay')?.classList.add('open');}
+function unavClose(){document.getElementById('unavSidebar')?.classList.remove('mobile-open');document.getElementById('unavOverlay')?.classList.remove('open');}
 function unavResetAll(){if(confirm('לאפס את המצב?')){localStorage.clear();location.reload();}}
 </script>
 
