@@ -128,6 +128,29 @@ function _lgItemHasSurfaceWork(item) {
   return _lgItemHasGraphic(item) || _lgItemHasChalavi(item);
 }
 
+// ─── פענוח chisumArrivedIdxs ───────────────────────────────────────────
+//
+//  נכתב כ-{0:true, 1:true} ומוחזר מ-Firebase כמערך בוליאנים כשהמפתחות
+//  צפופים: [true,true,true]. אינדקסים דלילים חוזרים כאובייקט, ומערך דליל
+//  חוזר עם null-ים באמצע: [true,true,null,null,true].
+//
+//  הקוד עשה (raw||[]).map(Number) — שממפה את הערכים ולא את המיקומים.
+//  [true,true,true] הפך ל-[1,1,1], כלומר "רק פריט 1 הגיע", בכל הזמנה
+//  ובכל דוח. Number(null) הוא 0, אז מערך דליל הוסיף גם 0 מדומה.
+//  התוצאה: תיבות סימון על הפריטים הלא נכונים וספירות שגויות.
+//
+//  שלוש הצורות מפוענחות כאן, במקום אחד.
+function lgArrivedIdxs(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    return raw.map((v, i) => (v ? i : -1)).filter(i => i >= 0);
+  }
+  return Object.keys(raw)
+    .filter(k => raw[k])
+    .map(Number)
+    .filter(n => Number.isInteger(n) && n >= 0);
+}
+
 // מראה לא נוסעת למפעל. הגוון חלק מהסוג — מראה, מראה אפורה, מראה ברונזה —
 // ולכן די בבדיקת התחילית. נפילה לשם רק לפריטים ישנים בלי glass.
 function _lgItemIsMirror(item) {

@@ -1597,7 +1597,7 @@ function toggleArrived(orderId, itemIdx, checked){
   else        { arrivedItems[id] = arrivedItems[id].filter(i => i !== idx); }
 
   const o    = allOrders.find(x => String(x.id) === id);
-  const next = new Set((o && o.chisumArrivedIdxs || []).map(Number));
+  const next = new Set(lgArrivedIdxs(o && o.chisumArrivedIdxs));
   if(checked) next.add(idx); else next.delete(idx);
   _persistArrivedIdxs(id, next);
 
@@ -1613,7 +1613,7 @@ function markAllClientArrived(clientKey, reportId, clientName){
   );
   reportOrders.forEach(o => {
     const sid = String(o.id);
-    const existingArrived = new Set((o.chisumArrivedIdxs||[]).map(Number));
+    const existingArrived = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
     const pendingIdxs = (o.items||[])
       .map((it,i) => (!!it.chisum && !existingArrived.has(i)) ? i : -1)
       .filter(i => i >= 0);
@@ -1655,25 +1655,35 @@ function setGroupArrivedCount(orderId, idxs, targetCount){
   renderChisumTab();
 }
 
-// כרטיס לקוח בתוך דוח בדיקה — מציג רק פריטים שטרם הגיעו
+// כרטיס לקוח בתוך דוח בדיקה — מציג את כל פריטי החיסום, מסומנים ולא.
+//
+// קודם הוא סינן החוצה כל מה שכבר סומן כהגיע. זה היה נכון כשהסימון נשמר רק
+// בסוף, אבל מאז _persistArrivedIdxs כותב ל-Firebase בכל לחיצה — ולכן פריט
+// היה נעלם מהרשימה ברגע שסימנת אותו, ולקוח שכל פריטיו סומנו נעלם כולו.
+// שני תיקונים נכונים כל אחד לחוד שסתרו זה את זה.
+//
+// סימון הוא מצב שרואים ואפשר לבטל, לא פעולה שמעלימה את השורה.
 function _chisumClientCardHtml(clientName, orders, reportId){
   const clientKey = (reportId||'legacy') + '_' + clientName;
   const isOpen    = chisumOpen[clientKey] === true;   // סגור כברירת מחדל
 
-  let totalPending        = 0;
-  let sessionArrivedCount = 0;
-  let orderRows           = '';
+  let totalItems   = 0;   // כל פריטי החיסום של הלקוח בדוח הזה
+  let arrivedCountAll = 0; // כמה מהם כבר סומנו כהגיעו
+  let orderRows    = '';
 
   orders.forEach(o => {
     const sid             = String(o.id);
-    const existingArrived = new Set((o.chisumArrivedIdxs||[]).map(Number));
+    const existingArrived = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
     const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
+    // Firebase הוא מקור האמת; arrivedItems הוא הד מקומי לתגובתיות מיידית.
+    // האיחוד ביניהם הוא מה שמסומן על המסך.
+    const arrived         = new Set([...existingArrived, ...sessionArrived]);
     const allChisumItems  = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>!!it.chisum);
-    const pendingItems    = allChisumItems.filter(it => !existingArrived.has(it.globalIdx));
-    if(!pendingItems.length) return;
+    if(!allChisumItems.length) return;
 
-    totalPending        += pendingItems.length;
-    sessionArrivedCount += pendingItems.filter(it => sessionArrived.has(it.globalIdx)).length;
+    const pendingItems  = allChisumItems;   // מציגים הכל, מסומן ולא
+    totalItems         += allChisumItems.length;
+    arrivedCountAll    += allChisumItems.filter(it => arrived.has(it.globalIdx)).length;
 
     // קיבוץ פריטים זהים לתצוגה — quantityGroupId כשקיים (מובטח זהה),
     // אחרת חתימה לפי שם+מידות (פריטים ישנים/ידניים בלי quantityGroupId).
@@ -1690,7 +1700,7 @@ function _chisumClientCardHtml(clientName, orders, reportId){
       const grp = groupMap[gid];
       const idxs = grp.idxs;
       const it = grp.rep;
-      const arrivedCount = idxs.filter(i => sessionArrived.has(i)).length;
+      const arrivedCount = idxs.filter(i => arrived.has(i)).length;
 
       if(idxs.length === 1){
         // פריט בודד — התנהגות מקורית, ללא שינוי
@@ -1742,15 +1752,15 @@ function _chisumClientCardHtml(clientName, orders, reportId){
     ${itemsHtml}`;
   });
 
-  if(!totalPending) return '';
+  if(!totalItems) return '';
 
-  const allChecked = sessionArrivedCount === totalPending;
+  const allChecked = arrivedCountAll === totalItems;
   return `
   <div style="border-top:1px solid rgba(142,68,173,0.1);">
     <div onclick="toggleChisumOpen('${lgJsStr(clientKey)}')" style="padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:rgba(142,68,173,0.02);">
       <div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="font-size:13px;font-weight:900;color:#1a1714">👤 ${lgEsc(clientName)}</span>
-        <span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:rgba(142,68,173,0.1);color:#8e44ad'}">${sessionArrivedCount}/${totalPending} הגיעו</span>
+        <span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:rgba(142,68,173,0.1);color:#8e44ad'}">${arrivedCountAll}/${totalItems} הגיעו</span>
       </div>
       <button onclick="event.stopPropagation();markAllClientArrived('${lgJsStr(clientKey)}','${lgJsStr(reportId||'')}','${lgJsStr(clientName)}')"
         style="padding:4px 10px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ סמן הכל</button>
@@ -2038,7 +2048,7 @@ function renderChisumTab(){
       let totalPend = 0, sessionMrk = 0;
       orders.forEach(o => {
         const sid = String(o.id);
-        const ex = new Set((o.chisumArrivedIdxs||[]).map(Number));
+        const ex = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
         const pend = (o.items||[]).filter((it,i) => !!it.chisum && !ex.has(i)).length;
         totalPend   += pend;
         sessionMrk  += Math.min((arrivedItems[sid]||[]).length, pend);
@@ -2108,7 +2118,7 @@ function resetChisumList(){
 
   chisumOrds.forEach(o => {
     const sid             = String(o.id);
-    const existingArrived = new Set((o.chisumArrivedIdxs||[]).map(Number));
+    const existingArrived = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
     const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
     const allArrivedNow   = new Set([...existingArrived, ...sessionArrived]);
     const chisumIdxs      = (o.items||[]).reduce((a,it,i)=>{ if(!!it.chisum) a.push(i); return a; },[]);
@@ -2187,7 +2197,7 @@ function confirmResetChisum(){
 
   chisumOrds.forEach(o => {
     const sid             = String(o.id);
-    const existingArrived = new Set((o.chisumArrivedIdxs||[]).map(Number));
+    const existingArrived = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
     const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
     const allArrivedNow   = new Set([...existingArrived, ...sessionArrived]);
     const chisumIdxs      = (o.items||[]).reduce((a,it,i)=>{ if(!!it.chisum) a.push(i); return a; },[]);
@@ -2283,7 +2293,8 @@ function updateCounts(){
   let chisumItemCount = 0;
   allOrders.filter(o => (o.stage||'') === 'chisum').forEach(o => {
     const chisumItems  = (o.items||[]).filter(it => !!it.chisum);
-    const arrivedCount = (o.chisumArrivedIdxs||[]).length;
+    // .length על הערך הגולמי ספר גם null-ים של מערך דליל
+    const arrivedCount = lgArrivedIdxs(o.chisumArrivedIdxs).length;
     chisumItemCount += Math.max(0, chisumItems.length - arrivedCount);
   });
   document.getElementById('cnt-chisum').textContent = chisumItemCount;
