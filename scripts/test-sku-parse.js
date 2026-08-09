@@ -103,6 +103,27 @@ check('טריפלקס 4+4 חלבי חתוך → triplex, chalavi FALSE', parse("
 check('10+10 טריפלקס קליר מחוסם', parse("10+10 טריפלקס קליר מחוסם"),
       { mm: 20, glass: 'קליר', triplex: true, proc: 'chisum' });
 
+/* ── mirrors. The tint is part of the type: a grey mirror is a mirror, not
+      grey glass. The names are inconsistent about word order, so both forms
+      have to resolve the same way. ───────────────────────────────────────── */
+check('5 מ\'\'מ מראה חתוך → מראה', parse("5 מ''מ מראה חתוך"),
+      { mm: 5, glass: 'מראה' });
+check('5 מ\'\'מ מראה אפורה חתוך → מראה אפורה', parse("5 מ''מ מראה אפורה חתוך"),
+      { mm: 5, glass: 'מראה אפורה' });
+check('מראה 5 מ\'\'מ אפורה עגולה → מראה אפורה (words apart)', parse("מראה 5 מ''מ אפורה עגולה"),
+      { mm: 5, glass: 'מראה אפורה' });
+check('5 מ\'\'מ מראה ברונזה מלוטש → מראה ברונזה', parse("5 מ''מ מראה ברונזה מלוטש"),
+      { mm: 5, glass: 'מראה ברונזה', proc: 'litush' });
+/* plain grey glass must NOT become a mirror */
+check('6 מ\'\'מ אפור חתוך stays אפור', parse("6 מ''מ אפור חתוך"),
+      { mm: 6, glass: 'אפור' });
+
+/* ── triplex with no glass named is שקוף like the rest ────────────────── */
+check('3+3 טריפלקס מלוטש → שקוף', parse("3+3 טריפלקס מלוטש"),
+      { mm: 6, glass: 'שקוף', triplex: true, proc: 'litush' });
+check('טריפלקס 4+4 חתוך → שקוף', parse("טריפלקס 4+4 חתוך"),
+      { mm: 8, glass: 'שקוף', triplex: true });
+
 /* ── graphics still works ─────────────────────────────────────────────── */
 check('8 מ\'\'מ שקוף גרפיקה מחוסם', parse("8 מ''מ שקוף גרפיקה מחוסם"),
       { mm: 8, glass: 'שקוף', graphic: true, proc: 'chisum' });

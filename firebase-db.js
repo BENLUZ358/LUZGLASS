@@ -828,10 +828,11 @@ const LG_SKU_OPERATIONAL_FIELDS = ['glass', 'mm', 'proc', 'graphic', 'chalavi', 
 // חלבי אינו ברשימה בכוונה — הוא לא סוג זכוכית אלא התזת חול. "8 מ''מ חלבי
 // חתוך" נחתך כ-8 שקוף, הוא 8 שקוף בכל המערכת, ורק נושא דגל שאומר שהוא עוד
 // חייב מעבר במתיז. אותו דבר לטריפלקס ולדלתות נגרים.
+// מראה ושלושת גווניה מטופלים בנפרד למטה, ולכן אינם ברשימה הזו.
 const LG_GLASS_TYPES_BY_LENGTH = [
   'לקובל שחור', 'לקובל לבן', 'מאסטר ליין',
   'אסיד קליר', 'גלינה שקוף', 'גלינה קליר',
-  'צנצילה', 'פפיטה', 'ברונזה', 'גרניט', 'סבתא', 'מראה',
+  'צנצילה', 'פפיטה', 'ברונזה', 'גרניט', 'סבתא',
   'שקוף', 'קליר', 'אפור', 'אסיד'
 ];
 
@@ -854,9 +855,22 @@ function lgGuessOperationalFromName(name) {
     if (lam) guess.mm = parseInt(lam[1], 10) + parseInt(lam[2], 10);
   }
 
-  const glass = LG_GLASS_TYPES_BY_LENGTH.find(g => n.includes(g));
-  if (glass) guess.glass = glass;
-  else if (LG_IMPLIES_BASE_GLASS.some(w => n.includes(w))) guess.glass = LG_GLASS_DEFAULT_BASE;
+  // מראה היא סוג בפני עצמו והגוון חלק ממנו: מראה רגילה, מראה אפורה, מראה
+  // ברונזה. אי אפשר לחפש את הצירוף כמחרוזת כי השמות בחשבשבת לא עקביים —
+  // "5 מ''מ מראה אפורה חתוך" מכיל אותו, "מראה 5 מ''מ אפורה עגולה" לא. לכן
+  // בודקים את שתי המילים בנפרד. בלי זה מראה אפורה נופלת תחת "אפור" יחד עם
+  // זכוכית אפורה רגילה, וזה מה שקרה עד עכשיו.
+  if (n.includes('מראה')) {
+    if (n.includes('אפור'))        guess.glass = 'מראה אפורה';
+    else if (n.includes('ברונזה')) guess.glass = 'מראה ברונזה';
+    else                           guess.glass = 'מראה';
+  } else {
+    const glass = LG_GLASS_TYPES_BY_LENGTH.find(g => n.includes(g));
+    if (glass) guess.glass = glass;
+    else if (LG_IMPLIES_BASE_GLASS.some(w => n.includes(w))) guess.glass = LG_GLASS_DEFAULT_BASE;
+    // טריפלקס שלא נאמר בשמו מאיזו זכוכית הוא — שקוף, כמו כל השאר
+    else if (n.includes('טריפלקס')) guess.glass = LG_GLASS_DEFAULT_BASE;
+  }
 
   if (n.includes('מחוסם')) guess.proc = 'chisum';
   else if (n.includes('מלוטש')) guess.proc = 'litush';
