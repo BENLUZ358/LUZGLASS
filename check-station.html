@@ -384,7 +384,7 @@ const safeStorage = {
 };
 
 // STATE
-let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[];
+let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[],chTriplex=[];
 let activeTab='active'; // 'active' | 'done'
 let wdInChisum=[];
 let _csUnsub=null, _wdRef=null, _checkEditsRef=null;
@@ -861,7 +861,7 @@ async function _createReportNum(){
 async function sendAllToFactory(){
   if(_sendingToFactory) return; // מונע double-tap
   _sendingToFactory = true;
-  chDone = []; // אפס לפני כל שליחה חדשה
+  chDone = []; chTriplex = []; // אפס לפני כל שליחה חדשה
   const sendBtn = document.querySelector('button[onclick="sendAllToFactory()"]');
   if(sendBtn){ sendBtn.disabled=true; sendBtn.textContent='⏳ שולח...'; }
   // פתח חלון דוח עכשיו (sync, בתוך gesture) — browsers חוסמים window.open אחרי await
@@ -874,8 +874,23 @@ async function sendAllToFactory(){
     return;
   }
 
+  // שני דוחות נפרדים, ממוספרים בנפרד.
+  //
+  // הדוח נוסע פיזית למפעל, ושם עושים שתי עבודות שונות: חיסום והדבקת
+  // טריפלקס. במסמך אחד לא יודעים שם מה לשלוח לאן. ובנוסף — חיסום חוזר
+  // למחרת וטריפלקס אחרי כמה ימים, אז מספר משותף היה גורם ל"קיבלתי את
+  // הדוח" לסמן גם את הטריפלקס בזמן שהוא עוד במפעל.
+  //
+  // הזמנה שיש בה גם וגם מופיעה בשני הדוחות, בכל אחד רק הפריטים שלו,
+  // ונושאת שתי חותמות.
+  const _hasTriplex = doneOrds.some(o => lgSplitFactoryItems(o.items).triplex.length);
+  const _hasChisum  = doneOrds.some(o => lgSplitFactoryItems(o.items).chisum.length);
+
   const reportId  = 'chisum_' + Date.now();
-  const reportNum = await _createReportNum();
+  const reportNum = _hasChisum ? await _createReportNum() : null;
+  const triplexId  = 'triplex_' + Date.now();
+  const triplexNum = _hasTriplex ? await _createReportNum() : null;
+  chTriplex = [];
 
   // שלב 1: עדכן כל ההזמנות ב-Firebase — המתן לסיום לפני עדכון inChisum
   // (מונע מצב שבו inChisum מתעדכן לפני שה-stage של ההזמנה מוכן).
@@ -886,7 +901,10 @@ async function sendAllToFactory(){
   const sent   = [];
   const failed = [];
   await Promise.all(doneOrds.map(o => {
-    const hasRealChisum = (o.items||[]).some(i => i.chisum && !(i.name||'').includes('מראה'));
+    const split = lgSplitFactoryItems(o.items);
+    // מראות וטריפלקס לא-מחוסם נחתכים אצלנו ולא נוסעים למפעל — הזמנה שכל
+    // תוכנה כזה מגיעה ישר ל"מוכן", בדיוק כפי שהיה נכון למראות בלבד.
+    const hasRealChisum = split.chisum.length > 0 || split.triplex.length > 0;
     if(!hasRealChisum){
       // done הוא שלב סופי לתמחור — חייב לעבור נעילת מחיר, אחרת ההזמנה
       // מגיעה ל-done בלי totalFinal/lockedItems (בדיוק כמו מסלולים אחרים).
@@ -898,13 +916,26 @@ async function sendAllToFactory(){
         })
         .catch(e=>{ console.error('sendAllToFactory lgLockAndAdvance:',e); failed.push(o); });
     }
-    return updateOrder(String(o.id), {
-      stage:           'chisum',
-      chisumArrived:   false,
-      chisumReportId:  reportId,
-      chisumReportNum: reportNum,
-    })
-      .then(()=>{ sent.push(o); chDone.push(o); })
+    // חותמת נפרדת לכל תהליך. הזמנה מעורבת מקבלת את שתיהן, ומסומנת כחוזרת
+    // רק כששני הדגלים דולקים — אחרת לחיצה על "קיבלתי" בחיסום הייתה מסמנת
+    // גם את הטריפלקס שעדיין במפעל.
+    const patch = { stage: 'chisum' };
+    if(split.chisum.length){
+      patch.chisumArrived   = false;
+      patch.chisumReportId  = reportId;
+      patch.chisumReportNum = reportNum;
+    }
+    if(split.triplex.length){
+      patch.triplexArrived   = false;
+      patch.triplexReportId  = triplexId;
+      patch.triplexReportNum = triplexNum;
+    }
+    return updateOrder(String(o.id), patch)
+      .then(()=>{
+        sent.push(o);
+        if(split.chisum.length)  chDone.push(o);
+        if(split.triplex.length) chTriplex.push(o);
+      })
       .catch(e=>{ console.error('sendAllToFactory updateOrder:',e); failed.push(o); });
   }));
   if(_unpricedAll.length) toast('⚠️ לא כל הפריטים תומחרו: ' + _unpricedAll.join(', '));
@@ -929,13 +960,14 @@ async function sendAllToFactory(){
   safeStorage.setItem('lgCheckState', JSON.stringify(cs));
   _clearCSEditsForOrders(sent.map(o=>o.id));
 
-  if(chDone.length) printChisum(reportNum, printWin);
+  if(chDone.length || chTriplex.length) printChisum(reportNum, printWin, triplexNum);
   else if(printWin && !printWin.closed) printWin.close();
 
   if(failed.length){
     toast(`⚠️ ${failed.length} מתוך ${doneOrds.length} נכשלו ונשארו בתור — נסה שוב`);
   } else {
-    toast(`✓ דוח ${reportNum} — ${sent.length} הזמנות נשלחו למפעל`);
+    const _nums = [reportNum && `חיסום ${reportNum}`, triplexNum && `טריפלקס ${triplexNum}`].filter(Boolean).join(' · ');
+    toast(`✓ ${_nums || 'נשלח'} — ${sent.length} הזמנות נשלחו למפעל`);
   }
   } catch(e) {
     console.error('[CS] sendAllToFactory error:', e);
@@ -952,25 +984,45 @@ async function sendAllToFactory(){
 // דוח שיוצא פיזית למפעל. בעבר הוא נעטף ב-height:100vh;overflow:hidden (דוח ארוך
 // נחתך לעמוד אחד בהדפסה), הכיל את תפריט הניווט של האפליקציה, והדפיס
 // "מספר דוח:" בלי המספר עצמו. עכשיו: מסמך הדפסה נקי בלבד.
-function printChisum(reportNum, w){
+// בונה מקטע דוח אחד: כותרת, מספר, וטבלת הפריטים שנוסעים לתהליך הזה.
+// `pick` בוחר מתוך כל הזמנה את הפריטים ששייכים לתהליך.
+function _csReportSection(title, reportNum, orders, pick){
+  const items = [];
+  orders.forEach(o => pick(o.items).forEach(({item}) =>
+    items.push({ ...item, client: o.orderClient, orderNum: o.orderNum })));
+  if(!items.length) return '';
+  return `
+<section>
+  <div class="report-num">מספר דוח: ${lgEsc(reportNum || '—')}</div>
+  <div class="report-title">${lgEsc(title)}</div>
+  <div class="report-meta">${new Date().toLocaleDateString('he-IL')} · ${items.length} פריטים · ${orders.length} הזמנות</div>
+  <table><thead><tr><th>#</th><th>זכוכית</th><th>מידות (מ"מ)</th><th>לקוח</th><th>הזמנה</th></tr></thead>
+  <tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${lgEsc(item.name||'—')}</td><td>${item.w||''}×${item.h||''}</td><td>${lgEsc(item.client)}</td><td>${lgEsc(item.orderNum||'')}</td></tr>`).join('')}</tbody></table>
+</section>`;
+}
+
+// חלון אחד, שני מקטעים, שבירת עמוד ביניהם — כך יוצאים שני דפים נפרדים
+// למפעל בהדפסה אחת. פתיחת שני חלונות הייתה נחסמת ע"י הדפדפן, ובלאו הכי
+// צריך שני דפים ולא שתי פעולות הדפסה.
+function printChisum(reportNum, w, triplexNum){
   if(!w){ toast('⚠️ חלון הדוח נחסם — אשר popup ונסה שוב'); return; }
-  const items=[];chDone.forEach(o=>{(o.items||[]).forEach(item=>{if(item.chisum)items.push({...item,client:o.orderClient,orderNum:o.orderNum});});});
-  const label = reportNum ? `דוח ${lgEsc(reportNum)}` : 'דוח חיסום';
-  w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>${label}</title><style>
-table{width:100%;border-collapse:collapse}
+  const chisumHtml  = _csReportSection('🔥 דוח חיסום ' + (reportNum||''),  reportNum,  chDone,
+                                       items => lgSplitFactoryItems(items).chisum);
+  const triplexHtml = _csReportSection('◪ דוח טריפלקס — הדבקה ' + (triplexNum||''), triplexNum, chTriplex,
+                                       items => lgSplitFactoryItems(items).triplex);
+  if(!chisumHtml && !triplexHtml){ if(!w.closed) w.close(); return; }
+
+  w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>דוחות למפעל</title><style>
+    table{width:100%;border-collapse:collapse}
     th,td{padding:9px;border:1px solid #ddd;text-align:right}
     th{background:#f5f5f5}
     thead{display:table-header-group}  /* כותרת חוזרת בכל עמוד מודפס */
     tr{page-break-inside:avoid}
+    section + section{page-break-before:always}  /* דף נפרד לכל תהליך */
     .report-num{font-size:13px;font-weight:700;color:#b8922a;margin-bottom:4px}
     .report-title{font-size:18px;font-weight:700;margin-bottom:4px}
     .report-meta{font-size:12px;color:#888;margin-bottom:16px}
-  </style></head><body>
-<div class="report-num">מספר דוח: ${lgEsc(reportNum || '—')}</div>
-<div class="report-title">🔥 ${label}</div>
-<div class="report-meta">${new Date().toLocaleDateString('he-IL')} · ${items.length} פריטים · ${chDone.length} הזמנות</div>
-<table><thead><tr><th>#</th><th>זכוכית</th><th>מידות (מ"מ)</th><th>לקוח</th><th>הזמנה</th></tr></thead><tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${lgEsc(item.name||'—')}</td><td>${item.w||''}×${item.h||''}</td><td>${lgEsc(item.client)}</td><td>${lgEsc(item.orderNum||'')}</td></tr>`).join('')}</tbody></table>
-</body></html>`);
+  </style></head><body>${chisumHtml}${triplexHtml}</body></html>`);
   w.document.close();w.print();
 }
 

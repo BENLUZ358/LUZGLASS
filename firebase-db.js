@@ -128,6 +128,32 @@ function _lgItemHasSurfaceWork(item) {
   return _lgItemHasGraphic(item) || _lgItemHasChalavi(item);
 }
 
+// מראה לא נוסעת למפעל. הגוון חלק מהסוג — מראה, מראה אפורה, מראה ברונזה —
+// ולכן די בבדיקת התחילית. נפילה לשם רק לפריטים ישנים בלי glass.
+function _lgItemIsMirror(item) {
+  if (!item) return false;
+  if (String(item.glass || '').startsWith('מראה')) return true;
+  return (item.name || item.glassFullName || '').includes('מראה');
+}
+
+// מה מתוך ההזמנה באמת נוסע למפעל, ולאיזה משני התהליכים.
+//
+//  chisum   — חיסום רגיל. חוזר למחרת.
+//  triplex  — הדבקת טריפלקס. חוזר אחרי כמה ימים, בלי לדעת כמה.
+//
+// שני התהליכים מתבצעים באותו מפעל אבל הם עבודות שונות, ולכן הדוח הפיזי
+// שנוסע לשם חייב להיות מופרד — אחרת במפעל לא יודעים מה לשלוח לאן.
+// מראות וטריפלקס לא-מחוסם לא נוסעים כלל: הם נחתכים אצלנו ומוכנים מיד.
+function lgSplitFactoryItems(items) {
+  const chisum = [], triplex = [];
+  (items || []).forEach((item, idx) => {
+    if (!item || !item.chisum) return;
+    if (_lgItemIsMirror(item)) return;
+    (_lgItemIsLaminatedTriplex(item) ? triplex : chisum).push({ item, idx });
+  });
+  return { chisum, triplex };
+}
+
 // ─── חישוב השלב הבא — לוגיקה דינמית לפי פריטים + לקוח הובלות ──────
 //  שני מקורות לזיהוי לקוח הובלות (OR — מספיק שאחד מהם נכון):
 //    1. order.deliveryClient = true  (denormalized על ההזמנה)
