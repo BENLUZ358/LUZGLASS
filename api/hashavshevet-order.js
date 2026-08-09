@@ -42,16 +42,22 @@ const DEFAULT_DOCUMENT_ID = process.env.HASHAVSHEVET_DOCUMENT_ID || '31';
 
 // ── מה נשלח בפועל ────────────────────────────────────────────────────────
 //
-// חשבשבת אישרו בטלפון את הסט המדויק, וזה כל מה שנשלח:
+//     accountKey · documentid · Reference · itemkey · Quantity · Agent
 //
-//     accountKey · documentid · Reference · itemkey · Quantity
+// המחיר לא נשלח — חשבשבת מושכים אותו מכרטיס הפריט. וכך גם warehouse
+// ו-copies, שהוספתי קודם על סמך טבלת השדות והתבררו כמיותרים.
 //
-// המחיר במפורש לא נשלח — חשבשבת מושכים אותו מכרטיס הפריט. שליחת price
-// הייתה מיותרת, וכך גם warehouse, Agent ו-copies שהוספתי קודם על סמך
-// טבלת השדות. הם הוסרו.
+// Agent חזר אחרי שיומן הקליטה הראה "ERROR קוד עובד לא קיים" חמש פעמים,
+// אחת לכל שורה. בשיחה נאמר שמספיקים חמישה שדות, אז הסרתי אותו — אבל
+// דוגמת ה-JSON הרשמית שולחת "Agent": "999", וכלל 2 ב"בדיקות מיוחדות
+// והערות" דורש שהסוכן יהיה חיובי ושונה מאפס. כשהשדה חסר הקליטה מציבה 0,
+// וסוכן 0 לא קיים — ולכן כל שורה נפסלה.
 //
-// ההשלכה החשובה: אם המחיר מגיע מחשבשבת, אסור לדלג על פריט רק בגלל שאין
-// לו מחיר אצלנו. הגרסה הקודמת דילגה, ולכן שורות היו נשמטות מהמסמך בשקט.
+// הערך ניתן לשינוי מהבקשה, כדי שאפשר יהיה לנסות קודים בלי פריסה מחדש.
+const DEFAULT_AGENT = process.env.HASHAVSHEVET_AGENT || '1';
+//
+// ההשלכה החשובה של אי-שליחת מחיר: אסור לדלג על פריט רק בגלל שאין לו מחיר
+// אצלנו. הגרסה הקודמת דילגה, ולכן שורות היו נשמטות מהמסמך בשקט.
 
 function _adminApp() {
   if (getApps().length) return getApps()[0];
@@ -85,7 +91,7 @@ function toReference(orderNum) {
 //
 // המחיר שלנו עדיין מחושב — אבל רק לתצוגה המקדימה, כדי שתדע מה אתה שולח.
 // הוא לא נכנס לשורה שנשלחת.
-function buildLines(order, accountKey, reference, documentId, globalPrices, clientPrices) {
+function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices) {
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
   const lines = [];
@@ -111,6 +117,7 @@ function buildLines(order, accountKey, reference, documentId, globalPrices, clie
       Reference:  reference,
       itemkey:    String(sku),
       Quantity:   qty.toFixed(3),
+      Agent:      String(agent),
     });
 
     // לתצוגה בלבד. אין מחיר אצלנו? זה בסדר גמור — חשבשבת יתמחרו.
@@ -192,9 +199,20 @@ module.exports = async function handler(req, res) {
     // ── שורות ──
     const prices = pricesSnap.val() || {};
     const documentId = DOCUMENT_TYPES[String(body.documentId)] ? String(body.documentId) : DEFAULT_DOCUMENT_ID;
+    const agent = String(body.agent != null && body.agent !== '' ? body.agent : DEFAULT_AGENT).replace(/\D/g, '');
+
+    // כלל 2 בתיעוד: סוכן חייב להיות חיובי ושונה מאפס. אפס נקלט ונפסל בשקט —
+    // עדיף להיעצר כאן מאשר לגלות את זה ביומן השגיאות של הקליטה.
+    if (!(Number(agent) > 0)) {
+      res.status(422).json({
+        error: `קוד סוכן חייב להיות מספר חיובי ושונה מאפס. התקבל: "${agent || '(ריק)'}"`,
+        hint:  'הקליטה בחשבשבת נכשלת עם "קוד עובד לא קיים" כשהסוכן הוא 0 או חסר',
+      });
+      return;
+    }
 
     const { lines, preview, skipped } = buildLines(order, accountKey, ref.reference,
-      documentId, prices.global, prices.client);
+      documentId, agent, prices.global, prices.client);
 
     if (!lines.length) {
       res.status(422).json({ error: 'אין אף פריט לשליחה', skipped });
@@ -218,7 +236,7 @@ module.exports = async function handler(req, res) {
       res.status(200).json({
         ok: true, dryRun: true,
         reference: ref.reference, accountKey,
-        documentId, documentName: DOCUMENT_TYPES[documentId] || '?',
+        documentId, documentName: DOCUMENT_TYPES[documentId] || '?', agent,
         lineCount: lines.length, lines, preview, skipped,
         // המעטפת, לאבחון. בלי signature ובלי station — אלה סודות.
         // חייב שם משלו: קודם הוא נקרא preview גם הוא, דרס את מערך התצוגה,
@@ -252,6 +270,7 @@ module.exports = async function handler(req, res) {
       reference:  ref.reference,
       accountKey: String(accountKey),
       documentId: documentId,
+      agent:      agent,
       lineCount:  lines.length,
       httpStatus: wgRes.status,
       httpOk:     wgRes.ok,

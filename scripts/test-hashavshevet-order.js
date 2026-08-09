@@ -59,18 +59,29 @@ const build = SRC.match(/lines\.push\(\{([\s\S]*?)\}\);/);
 check('found the line builder', !!build);
 if (build) {
   const fields = [...build[1].matchAll(/^\s*([A-Za-z_$][\w$]*)\s*:/gm)].map(m => m[1]);
-  const EXPECTED = ['accountKey', 'documentid', 'Reference', 'itemkey', 'Quantity'];
-  check('the line carries exactly the five confirmed fields',
+  const EXPECTED = ['accountKey', 'documentid', 'Reference', 'itemkey', 'Quantity', 'Agent'];
+  check('the line carries exactly the expected fields',
         JSON.stringify(fields) === JSON.stringify(EXPECTED),
         `got: ${fields.join(', ')}`);
 
   /* price is theirs, not ours */
   check('price is not sent', !/^\s*price\s*:/m.test(build[1]),
         'Hashavshevet price the line from the item card');
-  ['warehouse', 'Agent', 'copies'].forEach(f => {
+  ['warehouse', 'copies'].forEach(f => {
     check(`${f} is not sent`, !new RegExp('^\\s*' + f + '\\s*:', 'm').test(build[1]));
   });
+
+  /* Agent was removed once on the strength of a phone call and the import
+     then failed with "קוד עובד לא קיים" on every line. It is required. */
+  check('Agent is sent', /^\s*Agent\s*:/m.test(build[1]),
+        'without it the import defaults to 0, and agent 0 does not exist');
 }
+
+/* a zero or missing agent is refused before the request goes out, rather than
+   being discovered later in the capture log */
+check('a non-positive agent is refused up front',
+      /Number\(agent\)\s*>\s*0/.test(SRC),
+      'rule 2: אסמכתא, סוכן, מחסנים ומספר עותקים must be positive and non-zero');
 
 /* ── 3. an item with no local price must still be sent ─────────────────── */
 check('items are not skipped for want of a local price',
