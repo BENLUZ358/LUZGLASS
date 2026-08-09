@@ -1295,6 +1295,13 @@ function saveManualItem(orderId){
     chisum: cat ? cat.proc === 'chisum' : proc === 'chisum',
     graphic: isGraphicSku
   };
+  // חלבי וטריפלקס נשמרים על הפריט, כי הם קובעים מסלול: חלבי מחייב מעבר
+  // בתחנת הפנים, וטריפלקס מחוסם נוסע למפעל בדוח נפרד וחוזר אחרי ימים.
+  // נשמרים רק כשהם מהקטלוג — ניחוש לפי שם נעשה בזמן קריאה, לא בכתיבה.
+  if (cat) {
+    baseItem.chalavi = !!cat.chalavi;
+    baseItem.triplex = !!cat.triplex;
+  }
   if(cat) baseItem.sku = cat.sku;
   o.items.push(...lgMakeQuantityGroup(baseItem, qty));
   updateOrder(String(o.id), { items: o.items }).catch(e=>console.error('addItem:', e));

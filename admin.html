@@ -1076,6 +1076,14 @@ function renderGlobalPriceTab(el){
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
           <input type="checkbox" id="sku_graphic" ${ed.graphic?'checked':''}> גרפיקה
         </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"
+               title="התזת חול. הזכוכית עצמה נשארת מה שהיא — 8 חלבי הוא 8 שקוף שעוד חייב מעבר במתיז.">
+          <input type="checkbox" id="sku_chalavi" ${ed.chalavi?'checked':''}> חלבי
+        </label>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"
+               title="טריפלקס מחוסם נוסע למפעל להדבקה וחוזר אחרי כמה ימים, בדוח נפרד. טריפלקס שאינו מחוסם מוכן אחרי יום העבודה.">
+          <input type="checkbox" id="sku_triplex" ${ed.triplex?'checked':''}> טריפלקס
+        </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
           <input type="checkbox" id="sku_active" ${ed.active!==false?'checked':''}> פעיל
         </label>
@@ -1111,6 +1119,8 @@ function saveSkuCatalogForm(){
     mm:      parseInt(document.getElementById('sku_mm')?.value) || null,
     proc:    document.getElementById('sku_proc')?.value || 'litush',
     graphic: !!document.getElementById('sku_graphic')?.checked,
+    chalavi: !!document.getElementById('sku_chalavi')?.checked,
+    triplex: !!document.getElementById('sku_triplex')?.checked,
     active:  !!document.getElementById('sku_active')?.checked,
     opAuto:  false, // אישור ידני — כבר לא "ניחוש" ממתין לבדיקה
   };
@@ -2988,6 +2998,13 @@ function iwAdd(){
     litush:  r.proc === 'litush',
     graphic: !!r.graphic
   };
+  // חלבי וטריפלקס קובעים מסלול, ולכן נשמרים על הפריט: חלבי מחייב מעבר
+  // בתחנת הפנים, וטריפלקס מחוסם נוסע למפעל בדוח נפרד וחוזר אחרי ימים.
+  // רק ממק"ט בקטלוג — IW_CODES הישן לא מכיר אותם, ושם הזיהוי נשאר לפי שם.
+  if(r._fromCatalog){
+    baseItem.chalavi = !!r.chalavi;
+    baseItem.triplex = !!r.triplex;
+  }
   // sku מוטבע רק כשהמק"ט הגיע מ-skuCatalog (המקור החדש) — מאפשר תמחור מדויק בלי לפגוע
   // בפריטים שנפתרו דרך IW_CODES הישן (הם ימשיכו להתומחר כמו היום, לפי ניחוש שם חופשי)
   if(r._fromCatalog) baseItem.sku = r.sku;

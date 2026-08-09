@@ -93,14 +93,53 @@ function _lgItemHasGraphic(item) {
   return n.includes('גרפיקה');
 }
 
+// ─── חלבי וטריפלקס ─────────────────────────────────────────────────────
+//
+//  שניהם נגזרים מהמק"ט בקטלוג, עם נפילה חזרה לשם הפריט — פריטים שנוצרו
+//  לפני שהדגלים היו קיימים נושאים רק שם. אותו דפוס כמו גרפיקה למעלה.
+
+// חלבי = התזת חול. אינו סוג זכוכית: "8 מ''מ חלבי" הוא 8 שקוף שעוד חייב
+// מעבר במתיז. טריפלקס חלבי מגיע כבר חלבי מהספק ולא עובר שם — ולכן הדגל
+// שם נכתב false במפורש, וה-false הזה חייב לגבור על ניחוש לפי השם.
+function _lgItemHasChalavi(item) {
+  if (!item) return false;
+  if (item.chalavi === true)  return true;
+  if (item.chalavi === false) return false;
+  const n = item.name || item.glassFullName || '';
+  return n.includes('חלבי') && !n.includes('טריפלקס');
+}
+
+function _lgItemIsTriplex(item) {
+  if (!item) return false;
+  if (item.triplex) return true;
+  return (item.name || item.glassFullName || '').includes('טריפלקס');
+}
+
+// טריפלקס נוסע למפעל רק כשהוא מחוסם — שם מדביקים אותו, והוא חוזר אחרי כמה
+// ימים ולא למחרת כמו שאר החיסום. טריפלקס שאינו מחוסם נחתך אצלנו ומוכן מיד,
+// בדיוק כמו מראה.
+function _lgItemIsLaminatedTriplex(item) {
+  return _lgItemIsTriplex(item) && !!item.chisum;
+}
+
+// עבודת פנים = גרפיקה או התזת חול. שתיהן מתבצעות באותה תחנה ובאותו שלב,
+// ולכן חלבי לא מקבל שלב משלו אלא נכנס ל-graphic הקיים.
+function _lgItemHasSurfaceWork(item) {
+  return _lgItemHasGraphic(item) || _lgItemHasChalavi(item);
+}
+
 // ─── חישוב השלב הבא — לוגיקה דינמית לפי פריטים + לקוח הובלות ──────
 //  שני מקורות לזיהוי לקוח הובלות (OR — מספיק שאחד מהם נכון):
 //    1. order.deliveryClient = true  (denormalized על ההזמנה)
 //    2. isDelivery = true            (מה-cache של משתמשים בworkday.html)
 function lgNextStage(order, isDelivery) {
   const items      = order.items || [];
+  // טריפלקס רגיל אינו מסומן chisum מלכתחילה, ולכן הוא כבר לא נכנס לכאן —
+  // הוא נחתך אצלנו ומוכן אחרי יום העבודה, כמו מראה. רק טריפלקס מחוסם נוסע
+  // למפעל, ושם הוא גם מודבק וחוזר אחרי ימים.
   const hasChisum  = items.some(i => !!i.chisum);
-  const hasGraphic = items.some(i => _lgItemHasGraphic(i));
+  // עבודת פנים = גרפיקה או חלבי. אותו שלב, אותה תחנה, ולכן שם אחד.
+  const hasGraphic = items.some(i => _lgItemHasSurfaceWork(i));
   // OR בין שני המקורות — לא מאפשרים ל-false מה-cache לדרוס deliveryClient=true על ההזמנה
   const deliveryFl = !!order.deliveryClient || (isDelivery === true);
   const finalStage = deliveryFl ? 'delivery' : 'done';
@@ -955,7 +994,13 @@ function lgResolveSkuCode(code, skuCatalogMap) {
   const e = skuCatalogMap && skuCatalogMap[c];
   // בלי proc תפעולי אין מה להציג בבטחה — נופלים לקטלוג הישן (IW_CODES) אם יש שם הגדרה תקינה
   if (!e || e.active === false || !e.proc) return null;
-  return { glass: e.glass, mm: e.mm, proc: e.proc, graphic: !!e.graphic, label: e.name, sku: c, _fromCatalog: true };
+  return {
+    glass: e.glass, mm: e.mm, proc: e.proc,
+    graphic: !!e.graphic,
+    chalavi: !!e.chalavi,   // התזת חול — טיפול פנים, כמו גרפיקה
+    triplex: !!e.triplex,   // משנה את המסלול: ר' lgNextStage
+    label: e.name, sku: c, _fromCatalog: true
+  };
 }
 
 // ─── 14ג. כרטיסי לקוח חשבשבת (hashavshevetAccounts) — תוספתי, מקביל ל-skuCatalog ──
