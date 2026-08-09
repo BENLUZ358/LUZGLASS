@@ -220,8 +220,10 @@ module.exports = async function handler(req, res) {
         reference: ref.reference, accountKey,
         documentId, documentName: DOCUMENT_TYPES[documentId] || '?',
         lineCount: lines.length, lines, preview, skipped,
-        // בלי signature ובלי station — אלה סודות
-        preview: { plugin: 'imovein', company: COMPANY, netPassportID: NET_ID, pluginData: lines },
+        // המעטפת, לאבחון. בלי signature ובלי station — אלה סודות.
+        // חייב שם משלו: קודם הוא נקרא preview גם הוא, דרס את מערך התצוגה,
+        // ואז .map נפל על אובייקט.
+        envelope: { plugin: 'imovein', company: COMPANY, netPassportID: NET_ID, pluginData: lines },
       });
       return;
     }
