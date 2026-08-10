@@ -833,6 +833,7 @@ function card(o) {
     ? '<span class="tag" style="background:rgba(184,146,42,0.12);color:var(--gold-text)">📎 העלאה</span>' : '';
   return `<div class="card ${o.urgent?'urgent':''}" onclick="openMod('${o.id}')">
     ${o.urgent ? '<div class="c-urg">⚡ דחוף</div>' : ''}
+    ${o.isTest ? '<div class="c-urg" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 הזמנה פיקטיבית</div>' : ''}
     <div class="c-num">${lgEsc(o.orderNum||'—')} · ${lgEsc(o.date||'')}</div>
     <div class="c-client">${lgEsc(o.orderClient||'לקוח')}</div>
     <div class="c-name">${lgEsc(o.sketchName||o.type||'—')}</div>
@@ -1005,7 +1006,7 @@ function renderTable(){
     const s=ST.find(x=>x.id===o.status)||ST[0];
     return `<tr>
       <td style="color:var(--muted);font-size:12px">${i+1}</td>
-      <td><strong>${lgEsc(o.orderClient||'—')}</strong></td>
+      <td><strong>${lgEsc(o.orderClient||'—')}</strong>${o.isTest?' <span class="tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}</td>
       <td style="font-size:12px;color:var(--muted)">${lgEsc(o.orderNum||'—')}<br><span style="font-size:12px">${lgEsc(o.sketchName||'')}</span></td>
       <td style="font-size:12px">${lgEsc(o.type)}</td>
       <td><span class="tag tg">${lgEsc(o.glass)}</span></td>
@@ -1746,6 +1747,7 @@ document.addEventListener('visibilitychange', () => {
           <div id="sqActions">
             <button id="sqBtnDrafter" class="sq-action-btn" onclick="sqSetStage('drafter')" style="display:none;">✏️ שלח לשרטט</button>
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
+            <button id="sqBtnTest"    class="sq-action-btn" onclick="sqMarkTestOrder()" title="אותו תהליך בדיוק, רק שלא ייפתח מסמך בחשבשבת">🧪 הזמנה פיקטיבית</button>
             <button id="sqBtnOpty"    class="sq-action-btn" onclick="sqSetStage('opty')"><span data-icon="settings"></span> הוכנס ל-OptyWay</button>
             <button class="sq-dl-btn" onclick="sqDownload()" title="הורד" aria-label="הורד"><span data-icon="download"></span></button>
             <button class="sq-dl-btn" id="sqEditBtn" onclick="sqOpenEditor()" title="ערוך סקיצה" aria-label="ערוך סקיצה" style="display:none;"><span data-icon="pencil"></span></button>
@@ -1968,6 +1970,7 @@ function buildSQItems(){
       files:        o.files || [],
       items:        o.items || [],
       type:         o.type  || '',
+      isTest:       !!o.isTest,
     });
   });
 }
@@ -2042,6 +2045,7 @@ function sqRender(){
         <div class="sq-item-tags">
           <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':'מערכת'}</span>
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
+          ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
         </div>
       </div>
     </div>`;
@@ -2228,6 +2232,34 @@ const _sqHbDocId = '31';
 // ולכן הוא ניתן לשינוי מהמסך — כדי לנסות קודים בלי פריסה מחדש.
 let _sqHbAgent = '1';
 
+// ── הזמנה פיקטיבית ──────────────────────────────────────────────────────
+//
+// מסמנת את ההזמנה כהזמנת בדיקה וממשיכה בדיוק באותו מסלול: אותו שינוי שלב,
+// אותה תצוגה מקדימה, אותו כפתור שליחה, אותו רישום. ההבדל היחיד הוא בשרת —
+// הקריאה לחשבשבת לא יוצאת (api/hashavshevet-order.js). כך מה שנבדק הוא אותו
+// מסלול ולא מסלול מקוצר, וגם לא נוצר מסמך שצריך לבטל ידנית בהנהלת החשבונות.
+//
+// הסימון על ההזמנה ולא על המסך, כי השרת הוא זה שמחליט אם לשלוח — כפתור
+// אפשר לעקוף.
+async function sqMarkTestOrder(){
+  const id = sqCurrent && sqCurrent.id;
+  if(!id) return;
+  if(!confirm('לפתוח את ההזמנה כפיקטיבית?\n\nכל התהליך יתנהג רגיל, אבל לא ייפתח מסמך בחשבשבת. אי אפשר להחזיר הזמנה פיקטיבית להיות אמיתית.')) return;
+  try {
+    await updateOrder(id, { isTest: true });
+  } catch(e){
+    alert('לא הצלחתי לסמן את ההזמנה: ' + e.message);
+    return;
+  }
+  if(sqCurrent) sqCurrent.isTest = true;
+  const it = sqItems.find(i => i.id === id);
+  if(it) it.isTest = true;
+  sqShowDetail();
+  sqRender();
+  // ומכאן זהה לחלוטין למסלול הרגיל
+  sqSetStage('chash');
+}
+
 async function sqPreviewHashavshevet(id, agent){
   if(agent != null) _sqHbAgent = agent;
   _sqHbClose();
@@ -2283,11 +2315,13 @@ function _sqHbRender(id, data, ok){
       ? data.response : JSON.stringify(data.response, null, 2);
     ov.innerHTML =
       `<div class="modal" style="max-width:640px">
-         <div class="mhdr"><h2>נשלח — יש לאמת בחשבשבת</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+         <div class="mhdr"><h2>${data.simulated ? '🧪 הורץ כפיקטיבי' : 'נשלח — יש לאמת בחשבשבת'}</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
          <div class="mbody">
            <div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ${lgEsc(data.reference)} · חשבון ${lgEsc(data.accountKey)} · ${data.lineCount} שורות</div>
            <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
-             הבקשה התקבלה בשרת. זה לא מבטיח שנוצר מסמך — יש לפתוח את חשבשבת ולבדוק שהזמנה ${lgEsc(data.reference)} קיימת.
+             ${data.simulated
+               ? 'הבקשה נבנתה ונבדקה במלואה ונרשמה על ההזמנה, בדיוק כמו בשליחה אמיתית — אבל לא יצאה לחשבשבת. אין מה לחפש שם.'
+               : `הבקשה התקבלה בשרת. זה לא מבטיח שנוצר מסמך — יש לפתוח את חשבשבת ולבדוק שהזמנה ${lgEsc(data.reference)} קיימת.`}
            </div>
            <div class="sec-title">תשובת חשבשבת</div>
            <pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:260px;white-space:pre-wrap">${lgEsc(raw||'(תשובה ריקה)')}</pre>
@@ -2308,10 +2342,17 @@ function _sqHbRender(id, data, ok){
       data.skipped.map(s => `<div style="font-size:12px;color:var(--red);padding:3px 0">${lgEsc(s.name)} — ${lgEsc(s.reason)}</div>`).join('')
     : '';
 
+  const testNote = data.isTest
+    ? `<div style="margin-bottom:14px;padding:10px 12px;background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.35);border-radius:6px;font-size:12px;font-weight:700;color:var(--gold-text)">
+         🧪 הזמנה פיקטיבית — התהליך ירוץ במלואו, אבל לא ייפתח מסמך בחשבשבת.
+       </div>`
+    : '';
+
   ov.innerHTML =
     `<div class="modal" style="max-width:640px">
        <div class="mhdr"><h2>תצוגה מקדימה — טרם נשלח</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
        <div class="mbody">
+         ${testNote}
          <div class="mgrid" style="margin-bottom:14px">
            <div class="mf"><label>סוג מסמך</label><div class="v">${lgEsc(data.documentId)} — ${lgEsc(data.documentName||'')}${data.agent?' · סוכן '+lgEsc(data.agent):''}</div></div>
            <div class="mf"><label>אסמכתא</label><div class="v">${lgEsc(data.reference)}</div></div>
@@ -2334,7 +2375,7 @@ function _sqHbRender(id, data, ok){
            <span style="font-size:12px">הקליטה נכשלת עם "קוד עובד לא קיים" כשהוא 0</span>
          </div>
          <div style="display:flex;gap:7px">
-           <button class="btn btn-primary" id="sqHbSend" style="flex:1" onclick="sqSendHashavshevet('${lgEsc(id)}')">פתח הזמנה בחשבשבת</button>
+           <button class="btn btn-primary" id="sqHbSend" style="flex:1" onclick="sqSendHashavshevet('${lgEsc(id)}')">${data.isTest ? '🧪 הרץ בלי לפתוח בחשבשבת' : 'פתח הזמנה בחשבשבת'}</button>
            <button class="btn btn-secondary" onclick="_sqHbClose()">ביטול</button>
          </div>
        </div>

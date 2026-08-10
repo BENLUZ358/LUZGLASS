@@ -166,6 +166,10 @@ module.exports = async function handler(req, res) {
     const order = orderSnap.val();
     if (!order) { res.status(404).json({ error: 'הזמנה לא נמצאה' }); return; }
 
+    // הזמנה פיקטיבית. התהליך כולו זהה — אותן בדיקות, אותה בקשה, אותו רישום
+    // ואותה תשובה — רק שהקריאה לשרת של חשבשבת לא יוצאת. ר' _simulated למטה.
+    const isTest = order.isTest === true;
+
     // ── אי-כפילות: לא פותחים את אותה הזמנה פעמיים בחשבשבת ──
     if (order.hashavshevet && order.hashavshevet.sentAt && !force) {
       res.status(409).json({
@@ -234,7 +238,7 @@ module.exports = async function handler(req, res) {
     // ── מצב בדיקה: מראים בדיוק מה היה נשלח, בלי לשלוח ──
     if (dryRun) {
       res.status(200).json({
-        ok: true, dryRun: true,
+        ok: true, dryRun: true, isTest,
         reference: ref.reference, accountKey,
         documentId, documentName: DOCUMENT_TYPES[documentId] || '?', agent,
         lineCount: lines.length, lines, preview, skipped,
@@ -246,12 +250,30 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    const wgRes = await fetch(ENDPOINT, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body:    payload,
-    });
-    const text = await wgRes.text();
+    // ── הזמנה פיקטיבית: כל השאר זהה, רק הקריאה החוצה לא יוצאת ──
+    //
+    // עד שהמערכת מאומתת במלואה צריך לפתוח הזמנות אמיתיות ולהריץ אותן דרך כל
+    // התהליך, בלי שייווצר מסמך בהנהלת החשבונות — מסמך כזה דורש ביטול ידני
+    // בחשבשבת ומזהם את הספרים.
+    //
+    // הכל עד כאן כבר רץ: מפתח החשבון נמצא, המק"טים נפתרו, השורות נבנו,
+    // החתימה חושבה. מכאן והלאה גם הרישום ל-Firebase והתשובה זהים. ההבדל
+    // היחיד הוא ש-fetch לא נקרא. כך שמה שנבדק הוא באמת אותו מסלול.
+    //
+    // הבדיקה על ההזמנה עצמה ולא על פרמטר מהדפדפן, כי פרמטר אפשר לזייף
+    // ו-isTest נקבע פעם אחת בפתיחת ההזמנה.
+    let wgRes, text;
+    if (isTest) {
+      wgRes = { status: 200, ok: true };
+      text  = JSON.stringify({ simulated: true, note: 'הזמנה פיקטיבית — לא נשלחה לחשבשבת' });
+    } else {
+      wgRes = await fetch(ENDPOINT, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body:    payload,
+      });
+      text = await wgRes.text();
+    }
 
     let parsed = null;
     try { parsed = JSON.parse(text); } catch (_) { /* לא JSON — נשמור גולמי */ }
@@ -277,6 +299,9 @@ module.exports = async function handler(req, res) {
       response:   text.slice(0, 4000),
       requestSample: lines[0] || null,   // שורה אחת, לאימות שמות השדות
       skipped:    skipped.length ? skipped : null,
+      // בלי זה אי אפשר יהיה להבדיל אחר כך בין הזמנה שנפתחה בחשבשבת לבין
+      // הזמנת בדיקה שרק נראתה כך. נשמר על ההזמנה, לא רק בתשובה לדפדפן.
+      simulated:  isTest || null,
     };
     await db.ref('orders/' + orderId + '/hashavshevet').set(attempt);
 
@@ -295,6 +320,7 @@ module.exports = async function handler(req, res) {
 
     res.status(200).json({
       ok: true, dryRun: false,
+      simulated: isTest,
       reference: ref.reference, accountKey,
       lineCount: lines.length, skipped,
       response: parsed || text.slice(0, 4000),

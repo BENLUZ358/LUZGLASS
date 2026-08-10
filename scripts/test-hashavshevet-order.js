@@ -98,5 +98,38 @@ check('the raw response is persisted', /response:\s*text\.slice/.test(SRC),
 check('httpOk is stored under its own name', /httpOk:\s*wgRes\.ok/.test(SRC),
       '"accepted" and "document exists" turned out to be different things');
 
+/* ── 6. a test order runs the whole path but never leaves the building ──
+   Until the system is fully verified, real orders need to be pushed through
+   the entire flow without a document appearing in the accounts — one that
+   appears has to be cancelled by hand in Hashavshevet.
+
+   The decision must be made from the ORDER, not from a request parameter,
+   and everything except the outbound call must still run: same validation,
+   same payload, same record on the order, same response shape. Otherwise
+   what gets tested is a shortcut rather than the real path. */
+check('the flag is read off the order, not the request body',
+      /const isTest\s*=\s*order\.isTest\s*===\s*true/.test(SRC),
+      'a browser-supplied parameter could be forged, and would test nothing');
+check('the outbound call is the only thing skipped',
+      /if\s*\(isTest\)\s*\{[\s\S]{0,300}?\}\s*else\s*\{[\s\S]{0,200}?await fetch\(ENDPOINT/.test(SRC),
+      'the point is that the rest of the path is identical');
+check('the attempt is still recorded on the order',
+      /simulated:\s*isTest\s*\|\|\s*null/.test(SRC),
+      'without it there is no way to tell a test order from a real one later');
+check('the caller is told it was simulated',
+      /simulated:\s*isTest,/.test(SRC),
+      'the success screen must not claim a document was created');
+check('force does not turn a test order into a real send',
+      !/isTest\s*&&\s*!?\s*force/.test(SRC),
+      'force exists to resend a real order, not to promote a test one');
+
+{
+  /* the flag has to survive the normaliser, or no screen can mark it */
+  const db = fs.readFileSync(path.join(__dirname, '..', 'firebase-db.js'), 'utf8');
+  const norm = (db.match(/function lgNormalizeOrder[\s\S]*?\n}/) || [''])[0];
+  check('isTest survives lgNormalizeOrder', /isTest:\s*!!o\.isTest/.test(norm),
+        'dropped there, a test order would look identical to a real one on every screen');
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll Hashavshevet order checks passed.');

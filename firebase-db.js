@@ -552,6 +552,9 @@ function lgNormalizeOrder(o) {
     triplexReportId:   o.triplexReportId  || null,
     triplexReportNum:  o.triplexReportNum || null,
     triplexSentAt:     o.triplexSentAt    || null,
+    // הזמנת בדיקה — רצה בכל התהליך הרגיל אבל לא נפתחת בחשבשבת. חייב לעבור
+    // כאן, אחרת אף מסך לא יוכל לסמן אותה ככזו והיא תיראה כמו הזמנה אמיתית.
+    isTest:         !!o.isTest,
     deliveryClient: !!o.deliveryClient,
     createdAt:     o.createdAt    || 0,
     updatedAt:     o.updatedAt    || 0,
