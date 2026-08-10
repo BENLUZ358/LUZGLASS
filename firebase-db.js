@@ -538,9 +538,20 @@ function lgNormalizeOrder(o) {
     chisumArrived:     o.chisumArrived   || false,
     chisumReportId:    o.chisumReportId  || null,
     chisumReportNum:   o.chisumReportNum || null,
-    chisumArrivedIdxs: o.chisumArrivedIdxs
-      ? Object.keys(o.chisumArrivedIdxs).map(Number)
-      : [],
+    chisumSentAt:      o.chisumSentAt    || null,
+    // גולמי, בדיוק כפי ש-Firebase החזיר. הפענוח קורה במקום אחד בלבד —
+    // lgArrivedIdxs — ושתי הצורות אינן תואמות: Object.keys מחזיר מערך של
+    // אינדקסים ([0,7]), ואילו lgArrivedIdxs מפרש מערך כמערך בוליאנים לפי
+    // מיקום. הנרמול הזה הפך "רק פריט 3 הגיע" ל"פריטים 1,2,3 הגיעו",
+    // ו"רק פריט 0 הגיע" ל"כלום לא הגיע" — בכל דף ובכל הזמנה.
+    chisumArrivedIdxs: o.chisumArrivedIdxs ?? null,
+    // דוח הטריפלקס. השדות האלה נכתבים בתחנת הבדיקה ונקראים ביום עבודה,
+    // אבל נשמטו מהרשימה כאן — ולכן חזרו undefined לכל דף. טאב הטריפלקס
+    // מסנן לפי triplexReportId, ומעולם לא היה יכול להציג שורה אחת.
+    triplexArrived:    o.triplexArrived   || false,
+    triplexReportId:   o.triplexReportId  || null,
+    triplexReportNum:  o.triplexReportNum || null,
+    triplexSentAt:     o.triplexSentAt    || null,
     deliveryClient: !!o.deliveryClient,
     createdAt:     o.createdAt    || 0,
     updatedAt:     o.updatedAt    || 0,
