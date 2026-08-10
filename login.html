@@ -131,6 +131,16 @@
 <script>
 // ── redirect אם כבר מחובר (רמז UX בלבד — היעד עצמו מגן על עצמו אמיתית) ──
 (function(){
+  // הגענו לכאן כי מישהו התחבר בלשונית אחרת והזהות בלשונית הזו הוחלפה.
+  // בלי ההסבר הזה זה נראה כמו ניתוק אקראי.
+  if(new URLSearchParams(location.search).has('switched')){
+    const el = document.getElementById('errMsg');
+    if(el){
+      el.textContent = 'ההתחברות התחלפה בלשונית אחרת של אותו דפדפן, ולכן הסשן כאן נסגר. יש להתחבר מחדש.';
+      el.style.display = 'block';
+    }
+    return;   // בלי redirect אוטומטי — אחרת נחזור מיד לזהות שרק עכשיו נסגרה
+  }
   const s = lgGetSession();
   if(s.role === 'admin')  { window.location.href = 'admin.html';  return; }
   if(s.role === 'client') { window.location.href = 'portal.html'; return; }

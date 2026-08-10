@@ -467,10 +467,32 @@ async function lgLogout() {
 //   await lgRequireAuthAsync('admin');   // או 'client', וכו'
 // ממתין שFirebase יקבע אם יש משתמש מחובר בפועל, שולף role טרי מ-Firebase
 // (לא סומך על sessionStorage), ומפנה ל-login.html אם אין התאמה.
+//  הדף נקשר לזהות אחת ונשאר קשור אליה.
+//
+//  onAuthStateChanged אינו אירוע חד-פעמי — הוא ממשיך לירות לכל אורך חיי הדף.
+//  Firebase Auth שומר את המשתמש ב-localStorage, שמשותף לכל הלשוניות של אותו
+//  אתר, בעוד lgSession יושב ב-sessionStorage ששייך ללשונית אחת. לכן התחברות
+//  בלשונית אחת שינתה בשקט את הזהות בכל השאר: לשונית פורטל שהייתה פתוחה על
+//  לקוח קיבלה את המשתמש החדש, כתבה אותו ל-lgSession, והמסך התחיל לומר
+//  "שלום בן לוז". גרוע מכך — upload.html קורא את lgSession ברגע השליחה,
+//  ולכן הסקיצה נרשמה על שם המשתמש שהוחלף ולא על הלקוח שהעלה אותה.
+//
+//  עכשיו: הרענון הרגיל של הטוקן (אותו uid) לא נוגע בכלום, והחלפת משתמש
+//  אמיתית מסיימת את הסשן בלשונית הזו במקום לאמץ אותה בשקט. עדיף להחזיר
+//  אותך למסך ההתחברות מאשר להמשיך לעבוד בזהות שלא ביקשת.
 function lgRequireAuthAsync(role) {
   return new Promise((resolve) => {
+    let boundUid = null;   // ה-uid שהדף הזה נקשר אליו
     firebase.auth().onAuthStateChanged(async (fbUser) => {
       if (!fbUser) { lgClearSession(); window.location.href = 'login.html'; resolve(null); return; }
+
+      if (boundUid) {
+        if (fbUser.uid === boundUid) return;   // חידוש טוקן — אותו אדם, אין מה לעשות
+        lgClearSession();
+        window.location.href = 'login.html?switched=1';
+        return;
+      }
+
       try {
         const phone = _lgPhoneFromAuthUser(fbUser);
         const snap  = await _lgDb.ref('users/' + phone).once('value');
@@ -487,8 +509,10 @@ function lgRequireAuthAsync(role) {
           role:        u.role,
           phone:       u.phone || phone,
           isMainAdmin: !!u.isMainAdmin,
+          uid:         fbUser.uid,   // כדי שכתיבה תוכל לאמת מול מי שבאמת מחובר
           loginTime:   Date.now()
         };
+        boundUid = fbUser.uid;
         lgSetSession(session);
         window._lgSession = session; // תאימות לאחור — דפים ישנים קוראים ישירות מהמשתנה הזה
         resolve(session);
@@ -499,6 +523,19 @@ function lgRequireAuthAsync(role) {
       }
     });
   });
+}
+
+//  מי מחובר עכשיו באמת, לפי Firebase Auth ולא לפי מטמון התצוגה.
+//  כל כתיבה שנרשמת על שם מישהו חייבת לעבור כאן: lgSession הוא מטמון, והוא
+//  זה שהחליף זהות מתחת לידיים והכניס סקיצות של לקוח על שם בן לוז.
+//  מחזיר null אם אין משתמש, או אם הוא אינו זה שהדף נקשר אליו.
+function lgVerifiedSession() {
+  const sess   = lgGetSession();
+  const fbUser = (typeof firebase !== 'undefined' && firebase.auth) ? firebase.auth().currentUser : null;
+  if (!fbUser || !sess || !sess.phone) return null;
+  if (sess.uid && sess.uid !== fbUser.uid) return null;
+  if (_lgPhoneFromAuthUser(fbUser) !== _lgNormalizePhone(sess.phone)) return null;
+  return sess;
 }
 
 // ─── 9. נרמול הזמנה ──────────────────────────────────────────────────

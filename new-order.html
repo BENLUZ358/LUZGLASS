@@ -93,9 +93,10 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 
 <script>
 // שער הרשאה אמיתי — client/admin בלבד (new-order.html לא היה מוגן כלל עד עכשיו)
-lgRequireAuthAsync('client');
-// Read client from session - runs after body exists
-const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
+// הזהות נלקחת מהתוצאה ולא מקריאה מיידית של sessionStorage — בטעינה ראשונה
+// הוא עדיין ריק או מחזיק את המשתמש הקודם.
+let _sess = {};
+lgRequireAuthAsync('client').then(session => { if(session) _sess = session; });
 </script>
 
 <nav>
@@ -295,7 +296,16 @@ async function mfSubmit() {
   btn.disabled = true;
   btn.textContent = 'שולח...';
 
-  const sess    = JSON.parse(sessionStorage.getItem('lgSession') || '{}');
+  // מי שנרשם על ההזמנה חייב להיות מי שבאמת מחובר. lgSession הוא מטמון תצוגה
+  // והוא מוחלף כשמישהו מתחבר בלשונית אחרת — כך הזמנות של לקוח נרשמו על שם
+  // מישהו אחר.
+  const sess = lgVerifiedSession();
+  if (!sess) {
+    btn.disabled = false; btn.textContent = 'שלח הזמנה';
+    alert('ההתחברות התחלפה או פגה, ולכן ההזמנה לא נשמרה — כדי שלא תירשם על לקוח אחר.\nיש להתחבר מחדש ולשלוח שוב.');
+    window.location.href = 'login.html?switched=1';
+    return;
+  }
   const name    = sess.name || sess.id || 'לקוח';
   const phone   = sess.phone || '';
   const orderName = document.getElementById('mfOrderName').value.trim();

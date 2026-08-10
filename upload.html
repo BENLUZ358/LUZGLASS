@@ -155,17 +155,17 @@
 
 <script>
 // דף לא היה מוגן כלל עד עכשיו — כל אחד עם הקישור יכל לכתוב הזמנות ל-Firebase.
-lgRequireAuthAsync('client');
-
-// Read session for client name
-const _sess = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
-const _clientName = _sess.name || '';
-const _clientPhone = _sess.phone || '';
-// Pre-fill client name if logged in
-if(_clientName) {
+//
+// הממתינים לתוצאה ולא קוראים את sessionStorage מיד: בטעינה ראשונה הוא עדיין
+// ריק או מחזיק את הזהות הקודמת, ואז שם הלקוח בטופס נפתח על מישהו אחר.
+let _clientName = '', _clientPhone = '';
+lgRequireAuthAsync('client').then(session => {
+  if(!session) return; // כבר הופנה ל-login.html
+  _clientName  = session.name  || '';
+  _clientPhone = session.phone || '';
   const cnEl = document.getElementById('clientName');
-  if(cnEl) cnEl.value = _clientName;
-}
+  if(cnEl && _clientName) cnEl.value = _clientName;
+});
 
 let uploadedFiles = [];
 
@@ -234,7 +234,15 @@ function compressImage(dataUrl, maxW, quality, cb){
 }
 
 async function submitUpload() {
-  const sess = JSON.parse(sessionStorage.getItem('lgSession') || '{}');
+  // מי שנרשם על הסקיצה חייב להיות מי שבאמת מחובר, ולא מה שיושב במטמון
+  // התצוגה. lgSession מוחלף כשמישהו מתחבר בלשונית אחרת — וכך סקיצות של
+  // לקוח נשמרו על שם בן לוז ותור הסקיצות הראה את הלקוח הלא נכון.
+  const sess = lgVerifiedSession();
+  if (!sess) {
+    alert('ההתחברות התחלפה או פגה, ולכן הסקיצה לא נשמרה — כדי שלא תירשם על לקוח אחר.\nיש להתחבר מחדש ולהעלות שוב.');
+    window.location.href = 'login.html?switched=1';
+    return;
+  }
   const name = sess.name || sess.id || 'לקוח';
   const phone = sess.phone || '';
   const notes = document.getElementById('notes').value.trim();
