@@ -976,6 +976,10 @@ function orderCardHTML(o){
 
   const itemRows = _dispGroups.map(grp => {
     const it = grp.rep;
+    // שם הפריט לתצוגה. היה כאן קודם וגם שימש לסינון; כשהסינון עבר
+    // ל-glassMatches ההצהרה נמחקה יחד איתו, אבל השורה למטה המשיכה להשתמש בו
+    // — והדף כולו נפל על ReferenceError ברגע שהייתה הזמנה זמינה להצגה.
+    const fullGlass = it.glassFullName || it.name || '';
     if (glassFilter && !glassMatches(it, glassFilter)) return '';
     // אינדקסים שעדיין לא נבחרו / לא בטיוטה
     const availIdx = grp.indices.filter(i =>
@@ -2417,25 +2421,14 @@ function updateCounts(){
   });
   document.getElementById('cnt-work').textContent = workItemCount;
 
-  // cnt-chisum: כמה פאנלים עוד בחוץ, מתוך כמה שיצאו.
-  //
-  // קודם הוצג מספר בודד — הנותרים בלבד. הוא היה נכון אבל בלתי קריא: המסך
-  // מתחתיו אומר "23/32 הגיעו" והטאב אמר "9", שהוא המשלים, בלי שום רמז לכך.
-  // עכשיו שני המספרים על הטאב ומדברים על אותה קבוצה בדיוק.
-  let chisumItemCount = 0, chisumItemTotal = 0;
-  allOrders.filter(o => (o.stage||'') === 'chisum').forEach(o => {
-    // .length על הערך הגולמי ספר גם null-ים של מערך דליל, ובלי ההד המקומי
-    // המונה פיגר אחרי המסך עד שהכתיבה חזרה מהשרת
-    const marked = _markedIdxSet(String(o.id));
-    const idxs   = _chisumIdxsOf(o);
-    chisumItemTotal += idxs.length;
-    chisumItemCount += idxs.filter(i => !marked.has(i)).length;
-  });
+  // cnt-chisum: כמה פאנלים יש בדוח — הכמות שיצאה למפעל, בלי קשר לכמה כבר חזרו.
+  // זה אותו מספר שמופיע על כרטיס הדוח ועל הדוח המודפס עצמו.
+  let chisumItemTotal = 0;
+  allOrders.filter(o => (o.stage||'') === 'chisum')
+    .forEach(o => { chisumItemTotal += _chisumIdxsOf(o).length; });
   const _cc = document.getElementById('cnt-chisum');
-  _cc.textContent = chisumItemTotal ? `${chisumItemCount}/${chisumItemTotal}` : '0';
-  _cc.title = chisumItemTotal
-    ? `${chisumItemCount} פאנלים עוד לא חזרו מהמפעל, מתוך ${chisumItemTotal} שיצאו`
-    : 'אין פאנלים בחיסום';
+  _cc.textContent = chisumItemTotal;
+  _cc.title = `${chisumItemTotal} פאנלים בחיסום`;
 
   // cnt-triplex: פריטי טריפלקס שעדיין במפעל. הם באותו stage כמו החיסום,
   // ולכן מזוהים לפי triplexReportId ולא לפי השלב.

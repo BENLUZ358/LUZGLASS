@@ -4,5 +4,9 @@
   "description": "Vercel serverless functions dependencies (api/) — the site itself is static HTML/JS, no build step.",
   "dependencies": {
     "firebase-admin": "^12.7.0"
+  },
+  "devDependencies": {
+    "acorn": "^8.18.0",
+    "acorn-walk": "^8.3.5"
   }
 }

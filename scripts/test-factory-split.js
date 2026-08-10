@@ -165,10 +165,12 @@ check('the report card counts what is on the report',
 check('and no longer counts every item in the orders',
       /const totalItems = orders\.reduce\(\(s, o\) => s \+ \(o\.items\|\|\[\]\)\.length, 0\)/.test(workday), false);
 
-/* the tab badge shows both halves, so it cannot read as the complement of
-   the progress line below it without explanation */
-check('the chisum badge shows outstanding out of total',
-      /_cc\.textContent = chisumItemTotal \? `\$\{chisumItemCount\}\/\$\{chisumItemTotal\}`/.test(workday), true);
+/* the tab badge shows how many panels are on the report — the same number as
+   the report card and the printed report, and nothing else */
+check('the chisum badge counts the panels on the report',
+      /chisumItemTotal \+= _chisumIdxsOf\(o\)\.length/.test(workday), true);
+check('and shows that number plainly',
+      /_cc\.textContent = chisumItemTotal;/.test(workday), true);
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll factory split checks passed.');
