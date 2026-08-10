@@ -1543,14 +1543,47 @@ function removeFromWork(id){
 }
 
 // ═══════════════════════════════════════
-//  CHISUM TAB
+//  FACTORY TABS — חיסום וטריפלקס
 // ═══════════════════════════════════════
-let arrivedItems = {}; // {orderId: [itemIdx,...]} — סימוני "הגיע" של הסשן הנוכחי
-let chisumOpen   = {}; // {clientKey: bool}
+//
+// שני מסלולים לאותו מפעל, שני דוחות נפרדים, ואותה עבודה בדיוק אצלנו: מקבלים
+// דוח חזרה ומסמנים פאנל־פאנל מה הגיע. לכן זה מנוע אחד עם שתי תצורות ולא שתי
+// מימושים. שכפול היה מבטיח שהשניים ייפרדו — וכל הבאגים שתוקנו כאן לאחרונה
+// היו בדיוק זה: שני מקומות שאמורים לספור אותו דבר וספרו אחרת.
+//
+// כל מה שנבדל בין המסלולים יושב כאן ובשום מקום אחר.
+const LG_TRACK = {
+  chisum: {
+    idxsField: 'chisumArrivedIdxs',
+    flagField: 'chisumArrived',
+    reportId:  'chisumReportId',
+    reportNum: 'chisumReportNum',
+    label:     'חיסום',
+    color:     '#8e44ad',
+    echo:      {},   // {orderId: [itemIdx,...]} — סימוני הסשן, עד שהשרת מאשר
+    open:      {},   // {clientKey: bool}
+    idxsOf:    o => lgSplitFactoryItems((o && o.items) || []).chisum.map(e => e.idx),
+    render:    () => renderChisumTab(),
+  },
+  triplex: {
+    idxsField: 'triplexArrivedIdxs',
+    flagField: 'triplexArrived',
+    reportId:  'triplexReportId',
+    reportNum: 'triplexReportNum',
+    label:     'טריפלקס',
+    color:     '#0e7490',
+    echo:      {},
+    open:      {},
+    idxsOf:    o => lgSplitFactoryItems((o && o.items) || []).triplex.map(e => e.idx),
+    render:    () => renderTriplexTab(),
+  },
+};
+const _tr = t => LG_TRACK[t] || LG_TRACK.chisum;
 
-function toggleChisumOpen(key){
-  chisumOpen[key] = !chisumOpen[key];
-  renderChisumTab();
+function toggleChisumOpen(key, track){
+  const T = _tr(track);
+  T.open[key] = !T.open[key];
+  T.render();
 }
 
 // שומר את סימוני ההגעה ל-Firebase (orders/{id}.chisumArrivedIdxs) מיד בכל לחיצה.
@@ -1570,71 +1603,73 @@ function toggleChisumOpen(key){
 // שנחתכות אצלנו ולא נוסעות בכלל, וטריפלקס מחוסם, שנוסע לאותו מפעל אבל בדוח
 // נפרד וחוזר אחרי ימים. שניהם נספרו כאן וגם בטאב הטריפלקס, ולכן מונה החיסום
 // לא היה יכול להגיע לאפס. lgSplitFactoryItems הוא ההגדרה היחידה של מי נוסע לאן.
-function _chisumIdxsOf(order){
-  return lgSplitFactoryItems((order && order.items) || []).chisum.map(e => e.idx);
-}
+function _chisumIdxsOf(order){ return LG_TRACK.chisum.idxsOf(order); }
 
-function _markedIdxSet(sid){
+function _markedIdxSet(sid, track){
+  const T = _tr(track);
   const o = allOrders.find(x => String(x.id) === String(sid));
   return new Set([
-    ...lgArrivedIdxs(o && o.chisumArrivedIdxs),
-    ...((arrivedItems[String(sid)] || []).map(Number)),
+    ...lgArrivedIdxs(o && o[T.idxsField]),
+    ...((T.echo[String(sid)] || []).map(Number)),
   ]);
 }
 
 // אם הכתיבה נכשלת, ההד המקומי חייב ליפול איתה. אחרת הוא ממשיך להציג וי על
 // פריט שהשרת מעולם לא קיבל, והמסך משקר עד לרענון — ובחיסום זה אומר שפאנל
 // ייחשב כאילו הגיע. זורקים את ההד של אותה הזמנה וחוזרים למה שהשרת מחזיק.
-function _persistArrivedIdxs(sid, nextSet){
+function _persistArrivedIdxs(sid, nextSet, track){
+  const T   = _tr(track);
   const key = String(sid);
   const obj = {};
   nextSet.forEach(i => { obj[i] = true; });
-  return updateOrder(key, { chisumArrivedIdxs: nextSet.size ? obj : null })
+  return updateOrder(key, { [T.idxsField]: nextSet.size ? obj : null })
     .catch(e => {
-      console.error('persist chisumArrivedIdxs:', e);
-      delete arrivedItems[key];
+      console.error('persist ' + T.idxsField + ':', e);
+      delete T.echo[key];
       showToast('⚠️ הסימון לא נשמר — בדוק חיבור');
-      renderChisumTab();
+      T.render();
     });
 }
 
-function toggleArrived(orderId, itemIdx, checked){
+function toggleArrived(orderId, itemIdx, checked, track){
+  const T   = _tr(track);
   const id  = String(orderId);
   const idx = parseInt(itemIdx);
-  if(!arrivedItems[id]) arrivedItems[id] = [];
-  if(checked){ if(!arrivedItems[id].includes(idx)) arrivedItems[id].push(idx); }
-  else        { arrivedItems[id] = arrivedItems[id].filter(i => i !== idx); }
+  if(!T.echo[id]) T.echo[id] = [];
+  if(checked){ if(!T.echo[id].includes(idx)) T.echo[id].push(idx); }
+  else        { T.echo[id] = T.echo[id].filter(i => i !== idx); }
 
   // מבוסס על האיחוד ולא רק על מה שהשרת אישר — אחרת לחיצה מהירה שנייה
   // מוחקת את הראשונה שעוד בדרך.
-  const next = _markedIdxSet(id);
+  const next = _markedIdxSet(id, track);
   if(checked) next.add(idx); else next.delete(idx);
-  _persistArrivedIdxs(id, next);
+  _persistArrivedIdxs(id, next, track);
 
-  renderChisumTab();
+  T.render();
 }
 
-function markAllClientArrived(clientKey, reportId, clientName){
+function markAllClientArrived(clientKey, reportId, clientName, track){
+  const T = _tr(track);
   const reportOrders = allOrders.filter(o =>
     (o.stage||'') === 'chisum' &&
-    !!o.chisumArrived &&
+    !!o[T.flagField] &&
     o.orderClient === clientName &&
-    (reportId ? o.chisumReportId === reportId : !o.chisumReportId)
+    (reportId ? o[T.reportId] === reportId : !o[T.reportId])
   );
   reportOrders.forEach(o => {
     const sid = String(o.id);
     // אותו בסיס כמו שאר הכותבים — אחרת סימון שעוד בדרך היה נמחק כאן
-    const marked = _markedIdxSet(sid);
-    const pendingIdxs = _chisumIdxsOf(o).filter(i => !marked.has(i));
+    const marked = _markedIdxSet(sid, track);
+    const pendingIdxs = T.idxsOf(o).filter(i => !marked.has(i));
     if(!pendingIdxs.length) return;
-    if(!arrivedItems[sid]) arrivedItems[sid] = [];
+    if(!T.echo[sid]) T.echo[sid] = [];
     pendingIdxs.forEach(idx => {
-      if(!arrivedItems[sid].includes(idx)) arrivedItems[sid].push(idx);
+      if(!T.echo[sid].includes(idx)) T.echo[sid].push(idx);
       marked.add(idx);
     });
-    _persistArrivedIdxs(sid, marked);
+    _persistArrivedIdxs(sid, marked, track);
   });
-  renderChisumTab();
+  T.render();
 }
 
 // מסמן/מבטל סימון של N מתוך קבוצת פריטים זהים (שורה מקובצת בטאב חיסום).
@@ -1646,19 +1681,20 @@ function markAllClientArrived(clientKey, reportId, clientName){
 // נעולה. toggleArrived ו-markAllClientArrived כן שמרו — רק זו לא.
 //
 // עכשיו chisumArrivedIdxs הוא מקור האמת גם כאן, ושתי השכבות משתנות יחד.
-function setGroupArrivedCount(orderId, idxs, targetCount){
+function setGroupArrivedCount(orderId, idxs, targetCount, track){
+  const T   = _tr(track);
   const sid = String(orderId);
-  if(!arrivedItems[sid]) arrivedItems[sid] = [];
+  if(!T.echo[sid]) T.echo[sid] = [];
 
   // המצב האמיתי הוא האיחוד — בדיוק מה שהמסך מציג, וגם מה שנשמר
-  const marked = _markedIdxSet(sid);
+  const marked = _markedIdxSet(sid, track);
 
   const currentCount = idxs.filter(i => marked.has(i)).length;
   const target = Math.max(0, Math.min(idxs.length, Math.round(Number(targetCount) || 0)));
   if(target === currentCount) return;
 
-  const add = i => { marked.add(i); if(!arrivedItems[sid].includes(i)) arrivedItems[sid].push(i); };
-  const del = i => { marked.delete(i); arrivedItems[sid] = arrivedItems[sid].filter(x => x !== i); };
+  const add = i => { marked.add(i); if(!T.echo[sid].includes(i)) T.echo[sid].push(i); };
+  const del = i => { marked.delete(i); T.echo[sid] = T.echo[sid].filter(x => x !== i); };
 
   if(target > currentCount){
     let need = target - currentCount;
@@ -1673,9 +1709,9 @@ function setGroupArrivedCount(orderId, idxs, targetCount){
   }
 
   // marked כבר מכיל את כל ההזמנה — גם קבוצות אחרות וגם סימונים שעוד בדרך
-  _persistArrivedIdxs(sid, marked);
+  _persistArrivedIdxs(sid, marked, track);
 
-  renderChisumTab();
+  T.render();
 }
 
 // כרטיס לקוח בתוך דוח בדיקה — מציג את כל פריטי החיסום, מסומנים ולא.
@@ -1686,11 +1722,13 @@ function setGroupArrivedCount(orderId, idxs, targetCount){
 // שני תיקונים נכונים כל אחד לחוד שסתרו זה את זה.
 //
 // סימון הוא מצב שרואים ואפשר לבטל, לא פעולה שמעלימה את השורה.
-function _chisumClientCardHtml(clientName, orders, reportId){
+function _chisumClientCardHtml(clientName, orders, reportId, track){
+  const T         = _tr(track);
+  const tk        = T === LG_TRACK.triplex ? 'triplex' : 'chisum';
   const clientKey = (reportId||'legacy') + '_' + clientName;
-  const isOpen    = chisumOpen[clientKey] === true;   // סגור כברירת מחדל
+  const isOpen    = T.open[clientKey] === true;   // סגור כברירת מחדל
 
-  let totalItems   = 0;   // כל פריטי החיסום של הלקוח בדוח הזה
+  let totalItems   = 0;   // כל פריטי הדוח של הלקוח
   let arrivedCountAll = 0; // כמה מהם כבר סומנו כהגיעו
   let orderRows    = '';
 
@@ -1698,9 +1736,9 @@ function _chisumClientCardHtml(clientName, orders, reportId){
     const sid             = String(o.id);
     // Firebase הוא מקור האמת; arrivedItems הוא הד מקומי לתגובתיות מיידית.
     // האיחוד ביניהם הוא מה שמסומן על המסך — ומה שכל כתיבה מתבססת עליו.
-    const arrived = _markedIdxSet(sid);
-    // רק מה שנוסע בדוח החיסום — בלי מראות ובלי טריפלקס מחוסם, שיש לו טאב משלו
-    const _chSet          = new Set(_chisumIdxsOf(o));
+    const arrived = _markedIdxSet(sid, tk);
+    // רק מה שנוסע בדוח הזה — lgSplitFactoryItems מפריד חיסום מטריפלקס ומוציא מראות
+    const _chSet          = new Set(T.idxsOf(o));
     const allChisumItems  = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>_chSet.has(it.globalIdx));
     if(!allChisumItems.length) return;
 
@@ -1736,7 +1774,7 @@ function _chisumClientCardHtml(clientName, orders, reportId){
           </div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${isChecked?'#27ae60':'rgba(0,0,0,0.12)'};background:${isChecked?'rgba(39,174,96,0.08)':'rgba(0,0,0,0.02)'}">
             <input type="checkbox" style="width:15px;height:15px;accent-color:#27ae60;cursor:pointer;"
-              onchange="toggleArrived('${o.id}',${idxs[0]},this.checked)"
+              onchange="toggleArrived('${o.id}',${idxs[0]},this.checked,'${tk}')"
               ${isChecked?'checked':''}>
             <span style="font-size:12px;font-weight:600;color:${isChecked?'#27ae60':'#8a8278'}">${isChecked?'הגיע ✓':'ממתין'}</span>
           </label>
@@ -1749,15 +1787,15 @@ function _chisumClientCardHtml(clientName, orders, reportId){
       return `
       <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${allArrived?'rgba(39,174,96,0.04)':'#fff'}">
         <div style="flex:1">
-          <div style="font-size:12px;font-weight:700;color:${allArrived?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')} <span style="color:#8e44ad">×${idxs.length}</span></div>
+          <div style="font-size:12px;font-weight:700;color:${allArrived?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')} <span style="color:${T.color}">×${idxs.length}</span></div>
           <div style="font-size:12px;color:#8a8278">${it.w||''}×${it.h||''} מ"מ</div>
         </div>
         <div style="display:flex;align-items:center;gap:6px;">
           <input type="number" min="0" max="${idxs.length}" value="${arrivedCount}" inputmode="numeric"
-            onchange="setGroupArrivedCount('${o.id}',${idxsJson},this.value)"
+            onchange="setGroupArrivedCount('${o.id}',${idxsJson},this.value,'${tk}')"
             style="width:38px;padding:4px;text-align:center;border:1px solid rgba(0,0,0,0.15);border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;">
           <span style="font-size:12px;color:#8a8278;white-space:nowrap">/ ${idxs.length} הגיעו</span>
-          ${!allArrived?`<button onclick="setGroupArrivedCount('${o.id}',${idxsJson},${idxs.length})"
+          ${!allArrived?`<button onclick="setGroupArrivedCount('${o.id}',${idxsJson},${idxs.length},'${tk}')"
             style="padding:4px 8px;background:#27ae60;color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ הכל</button>`:''}
         </div>
       </div>`;
@@ -1779,13 +1817,13 @@ function _chisumClientCardHtml(clientName, orders, reportId){
 
   const allChecked = arrivedCountAll === totalItems;
   return `
-  <div style="border-top:1px solid rgba(142,68,173,0.1);">
-    <div onclick="toggleChisumOpen('${lgJsStr(clientKey)}')" style="padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:rgba(142,68,173,0.02);">
+  <div style="border-top:1px solid ${T.color}1a;">
+    <div onclick="toggleChisumOpen('${lgJsStr(clientKey)}','${tk}')" style="padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.015);">
       <div style="flex:1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <span style="font-size:13px;font-weight:900;color:#1a1714">👤 ${lgEsc(clientName)}</span>
-        <span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:rgba(142,68,173,0.1);color:#8e44ad'}">${arrivedCountAll}/${totalItems} הגיעו</span>
+        <span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:'+T.color+'1a;color:'+T.color}">${arrivedCountAll}/${totalItems} הגיעו</span>
       </div>
-      <button onclick="event.stopPropagation();markAllClientArrived('${lgJsStr(clientKey)}','${lgJsStr(reportId||'')}','${lgJsStr(clientName)}')"
+      <button onclick="event.stopPropagation();markAllClientArrived('${lgJsStr(clientKey)}','${lgJsStr(reportId||'')}','${lgJsStr(clientName)}','${tk}')"
         style="padding:4px 10px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ סמן הכל</button>
       <span style="font-size:16px;color:#8a8278;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
     </div>
@@ -2060,6 +2098,30 @@ function renderTriplexTab(){
           style="padding:3px 9px;background:var(--text);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">ראה סקיצה</button>
       </div>`).join('');
 
+    // אחרי שהדוח התקבל — אותם כרטיסי לקוח עם הסימון פריט־פריט כמו בחיסום.
+    // זה בדיוק אותו מנוע, רק עם triplexArrivedIdxs במקום chisumArrivedIdxs.
+    let markingHtml = '';
+    if(arrived){
+      const byClientOrders = {};
+      orders.forEach(o => {
+        const n = o.orderClient || '—';
+        (byClientOrders[n] = byClientOrders[n] || []).push(o);
+      });
+      markingHtml = Object.entries(byClientOrders)
+        .map(([cn, ords]) => _chisumClientCardHtml(cn, ords, reportId, 'triplex'))
+        .filter(Boolean).join('');
+    }
+
+    // כמה כבר סומנו — אותו מכנה כמו בכרטיסי הלקוח מתחת
+    let markedAll = 0;
+    orders.forEach(o => {
+      const m = _markedIdxSet(String(o.id), 'triplex');
+      markedAll += LG_TRACK.triplex.idxsOf(o).filter(i => m.has(i)).length;
+    });
+    const progressTxt = arrived
+      ? (totalItems && markedAll >= totalItems ? 'כל הפריטים הגיעו' : `${markedAll}/${totalItems} הגיעו`)
+      : `${orders.length} הזמנות`;
+
     return `
     <div style="margin:0 12px 14px;border:1.5px solid ${arrived?'rgba(39,174,96,0.3)':'rgba(14,116,144,0.25)'};border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">
       <div style="padding:14px 16px;background:${arrived?'rgba(39,174,96,0.05)':'rgba(14,116,144,0.05)'};display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -2068,13 +2130,14 @@ function renderTriplexTab(){
             ${arrived?'✓':'◪'} דוח ${label} — ${totalItems} פריטים
           </div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px">
-            ${arrived?'חזר מהמפעל':'בהדבקה במפעל'} · ${orders.length} הזמנות${age?' · '+lgEsc(age):''}
+            ${arrived?'חזר מהמפעל':'בהדבקה במפעל'} · ${progressTxt}${age?' · '+lgEsc(age):''}
           </div>
         </div>
         ${arrived?'':`<button onclick="markTriplexReportArrived('${lgJsStr(reportId)}','${lgJsStr(reportNum||'')}')"
           style="padding:8px 16px;background:#0e7490;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:6px;white-space:nowrap;">
           קיבלתי את הדוח</button>`}
       </div>
+      ${markingHtml}
       <details style="border-top:1px solid rgba(14,116,144,0.1);">
         <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;color:#0e7490;cursor:pointer;outline:none;direction:rtl;text-align:right;">
           ראה עוד
@@ -2138,7 +2201,10 @@ function renderChisumTab(){
       // ── כרטיס דוח ממתין ──
       // per-client breakdown — derived from the same orders[] used for totalItems, no new state
       const byClient = {};
-      orders.forEach(o => { const n = o.orderClient||'—'; byClient[n] = (byClient[n]||0)+(o.items||[]).length; });
+      // אותה הגדרה כמו הכותרת. קודם זה ספר (o.items||[]).length — כל פריטי
+      // ההזמנה — והכרטיס הראה "דוח 22 — 3 פריטים" ומיד מתחת "28 פריטים"
+      // לאותו לקוח. שני מספרים על שתי קבוצות שונות, זה מעל זה.
+      orders.forEach(o => { const n = o.orderClient||'—'; byClient[n] = (byClient[n]||0)+_chisumIdxsOf(o).length; });
       const clientBreakdownHtml = Object.entries(byClient).map(([name, cnt]) =>
         `<div style="padding:7px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(0,0,0,0.04);">
           <span style="font-size:12px;font-weight:700;color:var(--text)">${lgEsc(name)}</span>
@@ -2335,7 +2401,15 @@ function confirmResetChisum(){
     const chisumIdxs      = _chisumIdxsOf(o);
     if(!chisumIdxs.length) return;
 
-    const allDone = chisumIdxs.every(i => allArrivedNow.has(i));
+    // הזמנה לא עוזבת את השלב כל עוד הטריפלקס שלה עדיין בחוץ. הוא נוסע לאותו
+    // מפעל בדוח נפרד וחוזר אחרי ימים, הרבה אחרי החיסום — בלי הבדיקה הזו
+    // ההזמנה הייתה מתקדמת והפאנלים שטרם חזרו נעלמים מכל מסך.
+    const triplexIdxs = LG_TRACK.triplex.idxsOf(o);
+    const triplexDone = !triplexIdxs.length || (
+      !!o.triplexArrived &&
+      triplexIdxs.every(i => _markedIdxSet(sid, 'triplex').has(i))
+    );
+    const allDone = chisumIdxs.every(i => allArrivedNow.has(i)) && triplexDone;
 
     if(allDone){
       doneCount++;
@@ -2344,10 +2418,10 @@ function confirmResetChisum(){
       if(nextSt === 'done' || nextSt === 'delivery'){
         // write אטומי: נועל מחיר + stage + מנקה chisumArrivedIdxs
         lgLockAndAdvance(sid, o, _wdGlobalPrices, _wdClientPrices, nextSt)
-          .then(r => { _lgWarnUnpriced(r); return updateOrder(sid, { chisumArrivedIdxs: null }).catch(()=>{}); })
+          .then(r => { _lgWarnUnpriced(r); return updateOrder(sid, { chisumArrivedIdxs: null, triplexArrivedIdxs: null }).catch(()=>{}); })
           .catch(e => console.error('confirmReset lockAndAdvance:', e));
       } else {
-        updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null })
+        updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null, triplexArrivedIdxs: null })
           .catch(e => console.error('confirmReset done:', e));
       }
       // נקה מ-inChisum
@@ -2366,7 +2440,8 @@ function confirmResetChisum(){
     }
   });
 
-  arrivedItems = {};
+  LG_TRACK.chisum.echo  = {};
+  LG_TRACK.triplex.echo = {};
   if(doneCount > 0) saveWorkDay(); // שמור ניקוי inChisum
   const msg  = doneCount   ? `✓ ${doneCount} סקיצות הושלמו` : '';
   const msg2 = partialCount ? ` · ${partialCount} עם פריטים חסרים` : '';
@@ -2421,22 +2496,26 @@ function updateCounts(){
   });
   document.getElementById('cnt-work').textContent = workItemCount;
 
-  // cnt-chisum: כמה פאנלים יש בדוח — הכמות שיצאה למפעל, בלי קשר לכמה כבר חזרו.
-  // זה אותו מספר שמופיע על כרטיס הדוח ועל הדוח המודפס עצמו.
-  let chisumItemTotal = 0;
-  allOrders.filter(o => (o.stage||'') === 'chisum')
-    .forEach(o => { chisumItemTotal += _chisumIdxsOf(o).length; });
-  const _cc = document.getElementById('cnt-chisum');
-  _cc.textContent = chisumItemTotal;
-  _cc.title = `${chisumItemTotal} פאנלים בחיסום`;
+  // cnt-chisum / cnt-triplex: כמה פאנלים יש בדוח שכבר קיבלנו ושמסמנים אותו
+  // עכשיו. דוח שעדיין במפעל אינו נספר — אין מה לסמן בו, והמונה היה מנופח
+  // בפריטים שלא נוגעים בהם. זה אותו מספר שעל כרטיס הדוח ועל הדוח המודפס.
+  const _factoryBadge = (track, elId) => {
+    const T = LG_TRACK[track];
+    let total = 0;
+    allOrders.forEach(o => {
+      if((o.stage||'') !== 'chisum') return;
+      if(!o[T.flagField]) return;          // עדיין במפעל — לא מסמנים אותו
+      if(!o[T.reportId] && track === 'triplex') return;
+      total += T.idxsOf(o).length;
+    });
+    const el = document.getElementById(elId);
+    if(!el) return;
+    el.textContent = total;
+    el.title = total ? `${total} פאנלים בדוח ${T.label} שהתקבל` : `אין דוח ${T.label} פתוח לסימון`;
+  };
+  _factoryBadge('chisum',  'cnt-chisum');
+  _factoryBadge('triplex', 'cnt-triplex');
 
-  // cnt-triplex: פריטי טריפלקס שעדיין במפעל. הם באותו stage כמו החיסום,
-  // ולכן מזוהים לפי triplexReportId ולא לפי השלב.
-  let triplexItemCount = 0;
-  allOrders.filter(o => (o.stage||'') === 'chisum' && o.triplexReportId && !o.triplexArrived)
-    .forEach(o => { triplexItemCount += lgSplitFactoryItems(o.items).triplex.length; });
-  const _tc = document.getElementById('cnt-triplex');
-  if(_tc) _tc.textContent = triplexItemCount;
 
   // cnt-graphic: הזמנות בשלב גרפיקה
   const graphicCount = allOrders.filter(o => (o.stage||'') === 'graphic').length;

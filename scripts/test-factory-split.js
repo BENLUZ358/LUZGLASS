@@ -139,20 +139,41 @@ const fs2      = require('fs');
 const workday  = fs2.readFileSync(require('path').join(__dirname, '..', 'workday.html'), 'utf8');
 check('workday exposes one definition of what is on the chisum report',
       /function _chisumIdxsOf\(/.test(workday), true);
-check('and it is built from lgSplitFactoryItems',
-      /function _chisumIdxsOf\([\s\S]{0,200}?lgSplitFactoryItems\(/.test(workday), true);
-{
-  /* no arrival path may go back to the raw flag. The remaining it.chisum uses
-     are display labels (מחוסם/מלוטש) and the build tab, which are not the
-     factory report — so this pins the arrival call sites by name instead. */
-  for (const fn of ['markAllClientArrived']) {
-    const body = (workday.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
-    check(`${fn} enumerates through _chisumIdxsOf`, /_chisumIdxsOf\(/.test(body), true);
-    check(`${fn} does not filter on the raw flag`, /\.chisum\b(?!Arrived|Report|Sent)/.test(body), false);
-  }
-  const uses = (workday.match(/_chisumIdxsOf\(/g) || []).length;
-  check('every chisum arrival site uses it', uses >= 6, true);
+check('and it delegates to the chisum track',
+      /function _chisumIdxsOf\(order\)\{ return LG_TRACK\.chisum\.idxsOf\(order\); \}/.test(workday), true);
+/* ── one engine, two tracks ────────────────────────────────────────────
+   Chisum and triplex are the same job for us: a report comes back and every
+   panel on it gets ticked off. They were two separate implementations, and
+   the run of bugs on this screen came from exactly that — two places meant to
+   count the same thing counting it differently. Everything that differs
+   between the tracks now lives in LG_TRACK and nowhere else. */
+const TRACKS = (workday.match(/const LG_TRACK = \{[\s\S]*?\n\};/) || [''])[0];
+check('workday declares both tracks in one place',
+      /chisum:[\s\S]*triplex:/.test(TRACKS), true);
+for (const field of ['idxsField', 'flagField', 'reportId', 'idxsOf']) {
+  check(`both tracks declare ${field}`, (TRACKS.match(new RegExp(field + ':', 'g')) || []).length, 2);
 }
+check('both resolve their panels through lgSplitFactoryItems',
+      (TRACKS.match(/lgSplitFactoryItems\(/g) || []).length, 2);
+
+{
+  /* A writer that ignored its track would mark the chisum field from the
+     triplex screen — the two would silently share one set of ticks. */
+  for (const fn of ['toggleArrived', 'markAllClientArrived', 'setGroupArrivedCount', '_persistArrivedIdxs']) {
+    const body = (workday.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
+    check(`${fn} takes a track`, /^function \w+\([^)]*\btrack\b/.test(body), true);
+    check(`${fn} names no field literally`, /chisumArrivedIdxs/.test(body), false);
+  }
+}
+
+/* the triplex tab must render the marking cards, not just a summary — it
+   showed a report card with no way to tick anything on it */
+check('the triplex tab reuses the chisum client cards',
+      /_chisumClientCardHtml\(cn, ords, reportId, 'triplex'\)/.test(workday), true);
+
+/* and an order may not leave the stage with triplex still outstanding */
+check('completion waits for the triplex panels too',
+      /allDone = chisumIdxs\.every\(i => allArrivedNow\.has\(i\)\) && triplexDone/.test(workday), true);
 
 /* ── the report card must describe the report, not the orders ──────────
    The card and its header counted (o.items||[]).length — every panel in the
@@ -165,12 +186,86 @@ check('the report card counts what is on the report',
 check('and no longer counts every item in the orders',
       /const totalItems = orders\.reduce\(\(s, o\) => s \+ \(o\.items\|\|\[\]\)\.length, 0\)/.test(workday), false);
 
-/* the tab badge shows how many panels are on the report — the same number as
-   the report card and the printed report, and nothing else */
-check('the chisum badge counts the panels on the report',
-      /chisumItemTotal \+= _chisumIdxsOf\(o\)\.length/.test(workday), true);
-check('and shows that number plainly',
-      /_cc\.textContent = chisumItemTotal;/.test(workday), true);
+/* Both badges count the panels on a report that has come back and is being
+   ticked now. A report still at the factory has nothing to mark on it, and
+   counting it left the badge showing work nobody could do. */
+check('one badge builder serves both tabs',
+      /_factoryBadge\('chisum',\s*'cnt-chisum'\)/.test(workday)
+      && /_factoryBadge\('triplex',\s*'cnt-triplex'\)/.test(workday), true);
+check('it skips reports still at the factory',
+      /if\(!o\[T\.flagField\]\) return;/.test(workday), true);
+check('and counts the panels on the report',
+      /total \+= T\.idxsOf\(o\)\.length;/.test(workday), true);
+
+/* the waiting card's per-client breakdown must use the same definition as the
+   header directly above it — it read "דוח 22 — 3 פריטים" over "28 פריטים" */
+check('the waiting breakdown counts the report, not every item in the orders',
+      /byClient\[n\] = \(byClient\[n\]\|\|0\)\+_chisumIdxsOf\(o\)\.length/.test(workday), true);
+
+/* ── run the engine for real ───────────────────────────────────────────
+   The checks above read the source. This one executes it: one order holding
+   both a chisum panel and a laminated triplex panel, ticked on both screens,
+   proving the two tracks keep separate books. If they shared one, marking a
+   panel as back from tempering would also mark the triplex that is still out. */
+{
+  const vm2  = require('vm');
+  const grab = (re) => (workday.match(re) || [''])[0];
+  const src  = [
+    grab(/const LG_TRACK = \{[\s\S]*?\n\};/),
+    grab(/const _tr = [^\n]*\n/),
+    grab(/function _markedIdxSet\([\s\S]*?\n}/),
+  ].join('\n');
+
+  /* the engine needs the same helpers the page gets from firebase-db.js */
+  const deps = parts.map(p => p[0])
+    .concat([(SRC.match(/function lgArrivedIdxs[\s\S]*?\n}/) || [''])[0]])
+    .join('\n');
+
+  const ctx = { console, allOrders: [] };
+  vm2.createContext(ctx);
+  /* const bindings do not attach to the context object, so hand them over */
+  vm2.runInContext(deps + '\n' + src + '\nglobalThis.LG_TRACK = LG_TRACK;', ctx);
+
+  const order = {
+    id: 'L1044',
+    items: [
+      { chisum: true, glass: 'שקוף' },                 // 0 — chisum report
+      { chisum: true, triplex: true, glass: 'שקוף' },   // 1 — triplex report
+      { chisum: true, glass: 'מראה' },                  // 2 — never leaves
+    ],
+    chisumArrivedIdxs:  { 0: true },
+    triplexArrivedIdxs: null,
+  };
+  ctx.allOrders = [order];
+
+  check('the chisum track sees only its own panel',
+        ctx.LG_TRACK.chisum.idxsOf(order), [0]);
+  check('the triplex track sees only its own panel',
+        ctx.LG_TRACK.triplex.idxsOf(order), [1]);
+  check('the mirror is on neither report',
+        ctx.LG_TRACK.chisum.idxsOf(order).concat(ctx.LG_TRACK.triplex.idxsOf(order)).includes(2), false);
+
+  check('a chisum tick is visible on the chisum screen',
+        [...ctx._markedIdxSet('L1044', 'chisum')], [0]);
+  check('and does NOT appear on the triplex screen',
+        [...ctx._markedIdxSet('L1044', 'triplex')], []);
+
+  /* now the triplex comes back too */
+  order.triplexArrivedIdxs = { 1: true };
+  check('the triplex tick lands in its own field',
+        [...ctx._markedIdxSet('L1044', 'triplex')], [1]);
+  check('and the chisum screen is unchanged',
+        [...ctx._markedIdxSet('L1044', 'chisum')], [0]);
+
+  /* the session echo is per track as well */
+  ctx.LG_TRACK.triplex.echo['L1044'] = [1];
+  check('the triplex echo does not bleed into chisum',
+        [...ctx._markedIdxSet('L1044', 'chisum')], [0]);
+
+  /* an unknown track falls back to chisum rather than throwing */
+  check('an unknown track degrades to chisum',
+        [...ctx._markedIdxSet('L1044', 'nonsense')], [0]);
+}
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll factory split checks passed.');
