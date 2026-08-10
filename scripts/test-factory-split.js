@@ -154,5 +154,21 @@ check('and it is built from lgSplitFactoryItems',
   check('every chisum arrival site uses it', uses >= 6, true);
 }
 
+/* ── the report card must describe the report, not the orders ──────────
+   The card and its header counted (o.items||[]).length — every panel in the
+   orders, including ones that never travel. The same line then showed the
+   arrival progress, which counts only what did travel, so it read
+   "40 פריטים · 23/32 הגיעו": two numbers over two different sets, side by
+   side, with nothing to say so. The printed report holds 32. */
+check('the report card counts what is on the report',
+      /const totalItems = orders\.reduce\(\(s, o\) => s \+ _chisumIdxsOf\(o\)\.length, 0\)/.test(workday), true);
+check('and no longer counts every item in the orders',
+      /const totalItems = orders\.reduce\(\(s, o\) => s \+ \(o\.items\|\|\[\]\)\.length, 0\)/.test(workday), false);
+
+/* the tab badge shows both halves, so it cannot read as the complement of
+   the progress line below it without explanation */
+check('the chisum badge shows outstanding out of total',
+      /_cc\.textContent = chisumItemTotal \? `\$\{chisumItemCount\}\/\$\{chisumItemTotal\}`/.test(workday), true);
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll factory split checks passed.');
