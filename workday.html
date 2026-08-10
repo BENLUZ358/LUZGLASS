@@ -1554,7 +1554,8 @@ function removeFromWork(id){
 // כל מה שנבדל בין המסלולים יושב כאן ובשום מקום אחר.
 const LG_TRACK = {
   chisum: {
-    idxsField: 'chisumArrivedIdxs',
+    idxsField:   'chisumArrivedIdxs',
+    closedField: 'chisumClosedIdxs',
     flagField: 'chisumArrived',
     reportId:  'chisumReportId',
     reportNum: 'chisumReportNum',
@@ -1566,7 +1567,8 @@ const LG_TRACK = {
     render:    () => renderChisumTab(),
   },
   triplex: {
-    idxsField: 'triplexArrivedIdxs',
+    idxsField:   'triplexArrivedIdxs',
+    closedField: 'triplexClosedIdxs',
     flagField: 'triplexArrived',
     reportId:  'triplexReportId',
     reportNum: 'triplexReportNum',
@@ -1612,6 +1614,25 @@ function _markedIdxSet(sid, track){
     ...lgArrivedIdxs(o && o[T.idxsField]),
     ...((T.echo[String(sid)] || []).map(Number)),
   ]);
+}
+
+// אילו פאנלים עדיין פתוחים לסימון בדוח הזה.
+//
+// פאנל שסומן כהגיע ואושר ב"סיום בדיקה" נסגר — הוא ירד מהרשימה ולא חוזר.
+// זו הנקודה שהייתה חסרה: סימון בלבד השאיר את הפאנל על המסך (וזה נכון, כדי
+// שאפשר יהיה לתקן טעות), אבל גם אחרי האישור הוא נשאר, אז הרשימה לא התקצרה
+// ולחיצה נוספת על "סיום ואיפוס" לא עשתה כלום. הסגירה היא הפעולה שמקדמת.
+function _closedIdxSet(sid, track){
+  const T = _tr(track);
+  const o = allOrders.find(x => String(x.id) === String(sid));
+  return new Set(lgArrivedIdxs(o && o[T.closedField]));
+}
+
+// מה שעוד פתוח: פאנלי הדוח פחות מה שכבר נסגר
+function _pendingIdxsOf(order, track){
+  const T      = _tr(track);
+  const closed = _closedIdxSet(String(order && order.id), track);
+  return T.idxsOf(order).filter(i => !closed.has(i));
 }
 
 // אם הכתיבה נכשלת, ההד המקומי חייב ליפול איתה. אחרת הוא ממשיך להציג וי על
@@ -1737,8 +1758,8 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
     // Firebase הוא מקור האמת; arrivedItems הוא הד מקומי לתגובתיות מיידית.
     // האיחוד ביניהם הוא מה שמסומן על המסך — ומה שכל כתיבה מתבססת עליו.
     const arrived = _markedIdxSet(sid, tk);
-    // רק מה שנוסע בדוח הזה — lgSplitFactoryItems מפריד חיסום מטריפלקס ומוציא מראות
-    const _chSet          = new Set(T.idxsOf(o));
+    // רק מה שנוסע בדוח הזה ועוד לא נסגר ב"סיום בדיקה"
+    const _chSet          = new Set(_pendingIdxsOf(o, tk));
     const allChisumItems  = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>_chSet.has(it.globalIdx));
     if(!allChisumItems.length) return;
 
@@ -2076,14 +2097,14 @@ function renderTriplexTab(){
     const { reportId, reportNum, orders } = group;
     const arrived    = orders.every(o => !!o.triplexArrived);
     const label      = lgEsc(reportNum || 'דוח טריפלקס');
-    const totalItems = orders.reduce((s,o) => s + lgSplitFactoryItems(o.items).triplex.length, 0);
+    const totalItems = orders.reduce((s,o) => s + _pendingIdxsOf(o,'triplex').length, 0);
     const age        = _triplexAgeLabel(orders);
 
     // פירוט לפי לקוח — נגזר מאותן הזמנות, בלי state נוסף
     const byClient = {};
     orders.forEach(o => {
       const n = o.orderClient || '—';
-      byClient[n] = (byClient[n]||0) + lgSplitFactoryItems(o.items).triplex.length;
+      byClient[n] = (byClient[n]||0) + _pendingIdxsOf(o,'triplex').length;
     });
     const clientRows = Object.entries(byClient).map(([name, cnt]) =>
       `<div style="padding:7px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(0,0,0,0.04);">
@@ -2116,7 +2137,7 @@ function renderTriplexTab(){
     let markedAll = 0;
     orders.forEach(o => {
       const m = _markedIdxSet(String(o.id), 'triplex');
-      markedAll += LG_TRACK.triplex.idxsOf(o).filter(i => m.has(i)).length;
+      markedAll += _pendingIdxsOf(o,'triplex').filter(i => m.has(i)).length;
     });
     const progressTxt = arrived
       ? (totalItems && markedAll >= totalItems ? 'כל הפריטים הגיעו' : `${markedAll}/${totalItems} הגיעו`)
@@ -2195,7 +2216,7 @@ function renderChisumTab(){
     // פריטי הדוח, לא כל פריטי ההזמנות. קודם זה ספר (o.items||[]).length, כלומר
     // גם פאנלים שלא נוסעים למפעל בכלל — והשורה הציגה "40 פריטים · 23/32 הגיעו",
     // שני מספרים על שתי קבוצות שונות זה לצד זה. הדוח המודפס עצמו מכיל 32.
-    const totalItems = orders.reduce((s, o) => s + _chisumIdxsOf(o).length, 0);
+    const totalItems = orders.reduce((s, o) => s + _pendingIdxsOf(o, 'chisum').length, 0);
 
     if(!allArrived){
       // ── כרטיס דוח ממתין ──
@@ -2204,7 +2225,7 @@ function renderChisumTab(){
       // אותה הגדרה כמו הכותרת. קודם זה ספר (o.items||[]).length — כל פריטי
       // ההזמנה — והכרטיס הראה "דוח 22 — 3 פריטים" ומיד מתחת "28 פריטים"
       // לאותו לקוח. שני מספרים על שתי קבוצות שונות, זה מעל זה.
-      orders.forEach(o => { const n = o.orderClient||'—'; byClient[n] = (byClient[n]||0)+_chisumIdxsOf(o).length; });
+      orders.forEach(o => { const n = o.orderClient||'—'; byClient[n] = (byClient[n]||0)+_pendingIdxsOf(o,'chisum').length; });
       const clientBreakdownHtml = Object.entries(byClient).map(([name, cnt]) =>
         `<div style="padding:7px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(0,0,0,0.04);">
           <span style="font-size:12px;font-weight:700;color:var(--text)">${lgEsc(name)}</span>
@@ -2249,7 +2270,7 @@ function renderChisumTab(){
       let totalChisum = 0, arrivedAll = 0;
       orders.forEach(o => {
         const marked = _markedIdxSet(String(o.id));
-        const chisumIdx = _chisumIdxsOf(o);
+        const chisumIdx = _pendingIdxsOf(o, 'chisum');
         totalChisum += chisumIdx.length;
         arrivedAll  += chisumIdx.filter(i => marked.has(i)).length;
       });
@@ -2312,24 +2333,65 @@ function markChisumReportArrived(reportId, reportNum){
   document.body.appendChild(ov);
 }
 
+// האם ההזמנה סיימה את המפעל, ואם לא — מה בדיוק חסר.
+//
+// הדיאלוג והפעולה חישבו את זה כל אחד לחוד, ומרגע שהתווסף תנאי הטריפלקס הם
+// כבר לא הסכימו: הדיאלוג הכריז "הושלמה" והאישור לא עשה כלום. הרשימה נשארה
+// על המסך בלי הסבר. עכשיו שניהם קוראים לכאן, ולכן אי אפשר שיסתרו.
+function _factoryDoneState(o){
+  const sid         = String(o.id);
+  const chisumIdxs  = _pendingIdxsOf(o, 'chisum');
+  const chMarked    = _markedIdxSet(sid, 'chisum');
+  const chArrived   = chisumIdxs.filter(i => chMarked.has(i));
+  const chMissing   = chisumIdxs.length - chArrived.length;
+
+  const triplexIdxs = _pendingIdxsOf(o, 'triplex');
+  const txMarked    = _markedIdxSet(sid, 'triplex');
+  const txArrived   = o.triplexArrived ? triplexIdxs.filter(i => txMarked.has(i)) : [];
+  // טריפלקס שעדיין במפעל נחשב כולו חסר — אין מה לסמן בו
+  const txMissing   = triplexIdxs.length - txArrived.length;
+
+  return {
+    chisumTotal: chisumIdxs.length,   chisumArrived: chArrived,  chisumMissing: chMissing,
+    triplexTotal: triplexIdxs.length, triplexArrived: txArrived, triplexMissing: txMissing,
+    marked: chArrived.length + txArrived.length,
+    // "הכל חזר" נמדד על מה שעוד פתוח. מה שנסגר בסיבוב קודם כבר לא נספר.
+    done: chMissing === 0 && txMissing === 0,
+  };
+}
+
+// סוגר את הפאנלים שסומנו: הם יורדים מהרשימה ולא יחזרו אליה.
+// זו הפעולה ש"סיום בדיקה" לא עשה — הוא רק כתב מחדש את אותם סימונים, ולכן
+// הרשימה נשארה שלמה ולחיצה נוספת לא שינתה כלום.
+function _closeArrived(sid, idxs, track){
+  if(!idxs.length) return Promise.resolve();
+  const T      = _tr(track);
+  const closed = _closedIdxSet(sid, track);
+  idxs.forEach(i => closed.add(i));
+  const obj = {};
+  closed.forEach(i => { obj[i] = true; });
+  return updateOrder(String(sid), { [T.closedField]: obj })
+    .catch(e => { console.error('close ' + T.closedField + ':', e);
+                  showToast('⚠️ הסגירה לא נשמרה — בדוק חיבור'); });
+}
+
 function resetChisumList(){
   const chisumOrds = allOrders.filter(o => (o.stage||'') === 'chisum' && !!o.chisumArrived);
   if(!chisumOrds.length){ showToast('אין הזמנות בבדיקה'); return; }
 
-  const doneOrds = [], partialOrds = [], unchangedOrds = [];
+  const doneOrds = [], partialOrds = [], waitingTriplex = [], unchangedOrds = [];
 
   chisumOrds.forEach(o => {
-    const sid             = String(o.id);
-    const allArrivedNow   = _markedIdxSet(sid);   // שמור + מה שעוד בדרך
-    const chisumIdxs      = _chisumIdxsOf(o);
-    if(!chisumIdxs.length) return;
+    const st = _factoryDoneState(o);
+    if(!st.chisumTotal) return;
+    o._st = st;   // לתצוגה בדיאלוג — למה בדיוק היא לא עוברת
 
-    const allDone = chisumIdxs.every(i => allArrivedNow.has(i));
     // allArrivedNow ולא sessionArrived — הסימונים נשמרים ל-Firebase מיד,
     // אז אחרי רענון הם קיימים ב-existingArrived והסשן ריק.
-    if(allDone)                    doneOrds.push(o);
-    else if(allArrivedNow.size)    partialOrds.push(o);
-    else                           unchangedOrds.push(o);
+    if(st.done)                            doneOrds.push(o);
+    else if(!st.chisumMissing && st.triplexMissing) waitingTriplex.push(o);
+    else if(st.marked)                     partialOrds.push(o);
+    else                                   unchangedOrds.push(o);
   });
 
   const ov = document.createElement('div');
@@ -2361,8 +2423,13 @@ function resetChisumList(){
           </div>`:''}`;
         })():''}
         ${partialOrds.length?`<div style="padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.2);border-radius:6px;">
-          <div style="font-size:12px;font-weight:700;color:var(--gold-text);margin-bottom:6px;">⚠️ ${partialOrds.length} סקיצות חלקיות — פריטים שהגיעו יישמרו, החסרים ישארו</div>
-          ${partialOrds.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
+          <div style="font-size:12px;font-weight:700;color:var(--gold-text);margin-bottom:6px;">⚠️ ${partialOrds.length} סקיצות חלקיות — נשארות בחיסום עד שכל הפאנלים יחזרו</div>
+          ${partialOrds.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')} — <strong style="color:var(--gold-text)">חסרים ${o._st.chisumMissing} מתוך ${o._st.chisumTotal}</strong></div>`).join('')}
+        </div>`:''}
+        ${waitingTriplex.length?`<div style="padding:10px 14px;background:rgba(14,116,144,0.08);border:1px solid rgba(14,116,144,0.25);border-radius:6px;">
+          <div style="font-size:12px;font-weight:700;color:#0e7490;margin-bottom:6px;">◪ ${waitingTriplex.length} סקיצות — כל החיסום חזר, ממתינות לטריפלקס</div>
+          ${waitingTriplex.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')} — <strong style="color:#0e7490">${o._st.triplexMissing} פאנלי טריפלקס עדיין לא סומנו</strong></div>`).join('')}
+          <div style="font-size:12px;color:#8a8278;margin-top:5px;">סמן אותם בטאב טריפלקס, ואז הן יעברו הלאה.</div>
         </div>`:''}
         ${unchangedOrds.length?`<div style="padding:10px 14px;background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);border-radius:6px;">
           <div style="font-size:12px;font-weight:700;color:#8a8278;margin-bottom:6px;">⏳ ${unchangedOrds.length} סקיצות — לא סומנו, אין שינוי</div>
@@ -2396,32 +2463,23 @@ function confirmResetChisum(){
   let msgCount      = 0;
 
   chisumOrds.forEach(o => {
-    const sid             = String(o.id);
-    const allArrivedNow   = _markedIdxSet(sid);   // שמור + מה שעוד בדרך
-    const chisumIdxs      = _chisumIdxsOf(o);
-    if(!chisumIdxs.length) return;
+    const sid = String(o.id);
+    // אותו מחשב שהדיאלוג הציג. שני חישובים נפרדים כאן ושם הביאו לכך
+    // שהדיאלוג הכריז "הושלמה" והאישור לא עשה כלום — הרשימה נשארה על המסך.
+    const st = _factoryDoneState(o);
+    if(!st.chisumTotal && !st.triplexTotal) return;
 
-    // הזמנה לא עוזבת את השלב כל עוד הטריפלקס שלה עדיין בחוץ. הוא נוסע לאותו
-    // מפעל בדוח נפרד וחוזר אחרי ימים, הרבה אחרי החיסום — בלי הבדיקה הזו
-    // ההזמנה הייתה מתקדמת והפאנלים שטרם חזרו נעלמים מכל מסך.
-    const triplexIdxs = LG_TRACK.triplex.idxsOf(o);
-    const triplexDone = !triplexIdxs.length || (
-      !!o.triplexArrived &&
-      triplexIdxs.every(i => _markedIdxSet(sid, 'triplex').has(i))
-    );
-    const allDone = chisumIdxs.every(i => allArrivedNow.has(i)) && triplexDone;
-
-    if(allDone){
+    if(st.done){
       doneCount++;
       // כל הפריטים הגיעו — חשב שלב הבא לפי לוגיקה דינמית
       const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
       if(nextSt === 'done' || nextSt === 'delivery'){
         // write אטומי: נועל מחיר + stage + מנקה chisumArrivedIdxs
         lgLockAndAdvance(sid, o, _wdGlobalPrices, _wdClientPrices, nextSt)
-          .then(r => { _lgWarnUnpriced(r); return updateOrder(sid, { chisumArrivedIdxs: null, triplexArrivedIdxs: null }).catch(()=>{}); })
+          .then(r => { _lgWarnUnpriced(r); return updateOrder(sid, { chisumArrivedIdxs: null, triplexArrivedIdxs: null, chisumClosedIdxs: null, triplexClosedIdxs: null }).catch(()=>{}); })
           .catch(e => console.error('confirmReset lockAndAdvance:', e));
       } else {
-        updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null, triplexArrivedIdxs: null })
+        updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null, triplexArrivedIdxs: null, chisumClosedIdxs: null, triplexClosedIdxs: null })
           .catch(e => console.error('confirmReset done:', e));
       }
       // נקה מ-inChisum
@@ -2432,11 +2490,13 @@ function confirmResetChisum(){
           lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`);
         }, msgCount++ * 600);
       }
-    } else if(allArrivedNow.size > 0){
-      // פריטים חלקיים — ההזמנה נשארת בחיסום. הסימונים כבר נשמרו ב-Firebase
-      // בזמן הלחיצה (toggleArrived), כאן רק מוודאים שהם תואמים ומדווחים.
+    } else if(st.marked > 0){
+      // חלקי — ההזמנה נשארת בחיסום, אבל מה שכבר הגיע נסגר ויורד מהרשימה.
+      // עד כאן זה רק כתב מחדש את אותם סימונים, כלומר לא עשה כלום: הרשימה
+      // נשארה מלאה ולחיצה נוספת על "סיום ואיפוס" לא שינתה דבר.
       partialCount++;
-      _persistArrivedIdxs(sid, allArrivedNow);
+      _closeArrived(sid, st.chisumArrived,  'chisum');
+      _closeArrived(sid, st.triplexArrived, 'triplex');
     }
   });
 
@@ -2506,7 +2566,7 @@ function updateCounts(){
       if((o.stage||'') !== 'chisum') return;
       if(!o[T.flagField]) return;          // עדיין במפעל — לא מסמנים אותו
       if(!o[T.reportId] && track === 'triplex') return;
-      total += T.idxsOf(o).length;
+      total += _pendingIdxsOf(o, track).length;
     });
     const el = document.getElementById(elId);
     if(!el) return;

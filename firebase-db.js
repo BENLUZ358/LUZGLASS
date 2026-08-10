@@ -591,6 +591,9 @@ function lgNormalizeOrder(o) {
     triplexSentAt:     o.triplexSentAt    || null,
     // גולמי, כמו chisumArrivedIdxs ומאותה סיבה — lgArrivedIdxs הוא המפענח היחיד
     triplexArrivedIdxs: o.triplexArrivedIdxs ?? null,
+    // פאנלים שנסגרו ב"סיום בדיקה" — ירדו מהרשימה ולא חוזרים אליה
+    chisumClosedIdxs:   o.chisumClosedIdxs   ?? null,
+    triplexClosedIdxs:  o.triplexClosedIdxs  ?? null,
     // הזמנת בדיקה — רצה בכל התהליך הרגיל אבל לא נפתחת בחשבשבת. חייב לעבור
     // כאן, אחרת אף מסך לא יוכל לסמן אותה ככזו והיא תיראה כמו הזמנה אמיתית.
     isTest:         !!o.isTest,

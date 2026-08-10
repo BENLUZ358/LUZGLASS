@@ -173,7 +173,18 @@ check('the triplex tab reuses the chisum client cards',
 
 /* and an order may not leave the stage with triplex still outstanding */
 check('completion waits for the triplex panels too',
-      /allDone = chisumIdxs\.every\(i => allArrivedNow\.has\(i\)\) && triplexDone/.test(workday), true);
+      /done: chMissing === 0 && txMissing === 0/.test(workday), true);
+/* the dialog and the action must agree — they computed "done" separately, so
+   the dialog announced a sketch complete and confirming did nothing */
+check('the dialog and the confirm share one predicate',
+      (workday.match(/_factoryDoneState\(o\)/g) || []).length >= 2, true);
+/* and confirming must actually close the arrived panels, not re-save them */
+check('confirming closes what arrived',
+      /_closeArrived\(sid, st\.chisumArrived,\s*'chisum'\)/.test(workday), true);
+check('for both tracks',
+      /_closeArrived\(sid, st\.triplexArrived, 'triplex'\)/.test(workday), true);
+check('closed panels drop off the list',
+      /function _pendingIdxsOf\(order, track\)/.test(workday), true);
 
 /* ── the report card must describe the report, not the orders ──────────
    The card and its header counted (o.items||[]).length — every panel in the
@@ -181,8 +192,8 @@ check('completion waits for the triplex panels too',
    arrival progress, which counts only what did travel, so it read
    "40 פריטים · 23/32 הגיעו": two numbers over two different sets, side by
    side, with nothing to say so. The printed report holds 32. */
-check('the report card counts what is on the report',
-      /const totalItems = orders\.reduce\(\(s, o\) => s \+ _chisumIdxsOf\(o\)\.length, 0\)/.test(workday), true);
+check('the report card counts what is still open on the report',
+      /const totalItems = orders\.reduce\(\(s, o\) => s \+ _pendingIdxsOf\(o, 'chisum'\)\.length, 0\)/.test(workday), true);
 check('and no longer counts every item in the orders',
       /const totalItems = orders\.reduce\(\(s, o\) => s \+ \(o\.items\|\|\[\]\)\.length, 0\)/.test(workday), false);
 
@@ -194,13 +205,13 @@ check('one badge builder serves both tabs',
       && /_factoryBadge\('triplex',\s*'cnt-triplex'\)/.test(workday), true);
 check('it skips reports still at the factory',
       /if\(!o\[T\.flagField\]\) return;/.test(workday), true);
-check('and counts the panels on the report',
-      /total \+= T\.idxsOf\(o\)\.length;/.test(workday), true);
+check('and counts the panels still open on it',
+      /total \+= _pendingIdxsOf\(o, track\)\.length;/.test(workday), true);
 
 /* the waiting card's per-client breakdown must use the same definition as the
    header directly above it — it read "דוח 22 — 3 פריטים" over "28 פריטים" */
 check('the waiting breakdown counts the report, not every item in the orders',
-      /byClient\[n\] = \(byClient\[n\]\|\|0\)\+_chisumIdxsOf\(o\)\.length/.test(workday), true);
+      /byClient\[n\] = \(byClient\[n\]\|\|0\)\+_pendingIdxsOf\(o,'chisum'\)\.length/.test(workday), true);
 
 /* ── run the engine for real ───────────────────────────────────────────
    The checks above read the source. This one executes it: one order holding
@@ -214,6 +225,8 @@ check('the waiting breakdown counts the report, not every item in the orders',
     grab(/const LG_TRACK = \{[\s\S]*?\n\};/),
     grab(/const _tr = [^\n]*\n/),
     grab(/function _markedIdxSet\([\s\S]*?\n}/),
+    grab(/function _closedIdxSet\([\s\S]*?\n}/),
+    grab(/function _pendingIdxsOf\([\s\S]*?\n}/),
   ].join('\n');
 
   /* the engine needs the same helpers the page gets from firebase-db.js */
@@ -265,6 +278,40 @@ check('the waiting breakdown counts the report, not every item in the orders',
   /* an unknown track falls back to chisum rather than throwing */
   check('an unknown track degrades to chisum',
         [...ctx._markedIdxSet('L1044', 'nonsense')], [0]);
+
+  /* ── the round the user reported ──────────────────────────────────────
+     Tick some panels, confirm the check, and the ticked ones must leave the
+     list so only the missing remain. Confirming used to re-save the same
+     marks — nothing left the list, and pressing it again did nothing at all. */
+  const many = {
+    id: 'L1039',
+    items: Array.from({ length: 8 }, () => ({ chisum: true, glass: 'שקוף' })),
+    chisumArrivedIdxs: { 0: true, 1: true, 2: true, 3: true, 4: true },
+    chisumClosedIdxs: null,
+  };
+  ctx.allOrders = [many];
+
+  check('all eight panels are open before the check',
+        ctx._pendingIdxsOf(many, 'chisum').length, 8);
+  check('five are ticked', [...ctx._markedIdxSet('L1039', 'chisum')].length, 5);
+
+  /* confirming closes the five that arrived */
+  many.chisumClosedIdxs = { 0: true, 1: true, 2: true, 3: true, 4: true };
+  check('after confirming, only the missing three are still listed',
+        ctx._pendingIdxsOf(many, 'chisum'), [5, 6, 7]);
+  check('and the closed ones do not come back',
+        ctx._pendingIdxsOf(many, 'chisum').some(i => i < 5), false);
+
+  /* the remaining three arrive on a later day */
+  many.chisumArrivedIdxs = { 5: true, 6: true, 7: true };
+  const stillOpen = ctx._pendingIdxsOf(many, 'chisum');
+  const marked    = ctx._markedIdxSet('L1039', 'chisum');
+  check('the second round sees three open panels, all ticked',
+        [stillOpen.length, stillOpen.every(i => marked.has(i))], [3, true]);
+
+  many.chisumClosedIdxs = { 0:true,1:true,2:true,3:true,4:true,5:true,6:true,7:true };
+  check('once everything is closed the order has nothing left open',
+        ctx._pendingIdxsOf(many, 'chisum'), []);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

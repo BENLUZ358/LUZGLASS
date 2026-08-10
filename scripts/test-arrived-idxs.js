@@ -102,9 +102,15 @@ for (const fn of ['toggleArrived', 'markAllClientArrived', 'setGroupArrivedCount
         /lgArrivedIdxs\s*\(/.test(body), false);
 }
 
-/* only the helper itself decodes the raw field */
-check('workday decodes the raw field in exactly one place',
-      (workday.match(/lgArrivedIdxs\s*\(/g) || []).length, 1);
+/* Exactly two decoders, both helpers, both named: _markedIdxSet for what has
+   been ticked and _closedIdxSet for what was closed out at "סיום בדיקה".
+   Anything else reading the raw field is a third opinion waiting to diverge. */
+check('workday decodes the raw fields only in its two helpers',
+      (workday.match(/lgArrivedIdxs\s*\(/g) || []).length, 2);
+for (const fn of ['_markedIdxSet', '_closedIdxSet']) {
+  const body = (workday.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
+  check(`${fn} is one of them`, /lgArrivedIdxs\(/.test(body), true);
+}
 
 /* ── one denominator on the screen ─────────────────────────────────────
    The report header counted "marked this session out of not-yet-arrived"
