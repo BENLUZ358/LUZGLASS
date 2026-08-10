@@ -171,6 +171,13 @@ check('both resolve their panels through lgSplitFactoryItems',
 check('the triplex tab reuses the chisum client cards',
       /_chisumClientCardHtml\(cn, ords, reportId, 'triplex'\)/.test(workday), true);
 
+/* and the "ראה עוד" summary belongs only to a report still at the factory.
+   Once the marking cards are there it repeats the same client, the same count
+   and a second sketch button underneath them — it read as a duplicate, empty
+   copy of the report. */
+check('the triplex summary is hidden once the report is back',
+      /\$\{arrived \? '' : `<details/.test(workday), true);
+
 /* and an order may not leave the stage with triplex still outstanding */
 check('completion waits for the triplex panels too',
       /done: chMissing === 0 && txMissing === 0/.test(workday), true);
