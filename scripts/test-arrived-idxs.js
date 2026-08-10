@@ -115,5 +115,34 @@ check('the report header counts arrived out of total',
 check('the old session-based denominator is gone',
       /פריטים סומנו`/.test(workday), false);
 
+/* ── the positions must stay put ───────────────────────────────────────
+   chisumArrivedIdxs stores POSITIONS in the items array. If an item is ever
+   removed from the middle of items while an order sits at the chisum stage,
+   every stored mark after it silently points at a different panel — the
+   worker's ticks would move to the wrong glass and nothing would look wrong.
+
+   Two things keep that from happening, and neither is obvious from the code
+   that depends on them, so both are pinned here:
+
+     workday's saveManualItem appends — push, never splice — so existing
+     positions do not shift.
+
+     admin's sketch-queue item editor DOES splice, but the queue is built only
+     from orders that have no stage at all, so a chisum-stage order can never
+     reach it. */
+{
+  const add = (workday.match(/function saveManualItem\([\s\S]*?\n}/) || [''])[0];
+  check('saveManualItem exists', add.length > 0, true);
+  check('saveManualItem appends to items', /\.items\.push\(/.test(add), true);
+  check('no page splices order.items outside the sketch queue',
+        /\bo\.items\.splice\(|\border\.items\.splice\(/.test(workday), false);
+
+  const admin = fs.readFileSync(path.join(__dirname, '..', 'admin.html'), 'utf8');
+  check('the sketch-queue editor does splice, so the gate matters',
+        /sqCurrentItems\.splice\(/.test(admin), true);
+  check('and the queue admits only orders with no stage',
+        /if\s*\(\s*o\.stage\s*&&\s*o\.stage\s*!==\s*''\s*\)\s*return;/.test(admin), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll arrived-index checks passed.');
