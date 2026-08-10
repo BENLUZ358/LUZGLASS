@@ -1561,6 +1561,15 @@ function toggleChisumOpen(key){
 // החדש ממצב ישן — ודרסה את הראשונה. המסך הראה את שתיהן מהמערך המקומי, ואז
 // העדכון מהשרת הגיע ומחק אחת. מכאן "צריך ללחוץ פעמיים", "סימנתי אחד ונדלק
 // אחר", ו"סימן לי שניים".
+// אילו אינדקסים של ההזמנה באמת נסעו בדוח החיסום — בדיוק מה שרשום על הדוח
+// שהעובד מחזיק ביד. items.filter(it => it.chisum) אינו זה: הוא כולל מראות,
+// שנחתכות אצלנו ולא נוסעות בכלל, וטריפלקס מחוסם, שנוסע לאותו מפעל אבל בדוח
+// נפרד וחוזר אחרי ימים. שניהם נספרו כאן וגם בטאב הטריפלקס, ולכן מונה החיסום
+// לא היה יכול להגיע לאפס. lgSplitFactoryItems הוא ההגדרה היחידה של מי נוסע לאן.
+function _chisumIdxsOf(order){
+  return lgSplitFactoryItems((order && order.items) || []).chisum.map(e => e.idx);
+}
+
 function _markedIdxSet(sid){
   const o = allOrders.find(x => String(x.id) === String(sid));
   return new Set([
@@ -1612,9 +1621,7 @@ function markAllClientArrived(clientKey, reportId, clientName){
     const sid = String(o.id);
     // אותו בסיס כמו שאר הכותבים — אחרת סימון שעוד בדרך היה נמחק כאן
     const marked = _markedIdxSet(sid);
-    const pendingIdxs = (o.items||[])
-      .map((it,i) => (!!it.chisum && !marked.has(i)) ? i : -1)
-      .filter(i => i >= 0);
+    const pendingIdxs = _chisumIdxsOf(o).filter(i => !marked.has(i));
     if(!pendingIdxs.length) return;
     if(!arrivedItems[sid]) arrivedItems[sid] = [];
     pendingIdxs.forEach(idx => {
@@ -1688,7 +1695,9 @@ function _chisumClientCardHtml(clientName, orders, reportId){
     // Firebase הוא מקור האמת; arrivedItems הוא הד מקומי לתגובתיות מיידית.
     // האיחוד ביניהם הוא מה שמסומן על המסך — ומה שכל כתיבה מתבססת עליו.
     const arrived = _markedIdxSet(sid);
-    const allChisumItems  = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>!!it.chisum);
+    // רק מה שנוסע בדוח החיסום — בלי מראות ובלי טריפלקס מחוסם, שיש לו טאב משלו
+    const _chSet          = new Set(_chisumIdxsOf(o));
+    const allChisumItems  = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>_chSet.has(it.globalIdx));
     if(!allChisumItems.length) return;
 
     const pendingItems  = allChisumItems;   // מציגים הכל, מסומן ולא
@@ -2167,7 +2176,7 @@ function renderChisumTab(){
       let totalChisum = 0, arrivedAll = 0;
       orders.forEach(o => {
         const marked = _markedIdxSet(String(o.id));
-        const chisumIdx = (o.items||[]).map((it,i) => (it && it.chisum) ? i : -1).filter(i => i >= 0);
+        const chisumIdx = _chisumIdxsOf(o);
         totalChisum += chisumIdx.length;
         arrivedAll  += chisumIdx.filter(i => marked.has(i)).length;
       });
@@ -2239,7 +2248,7 @@ function resetChisumList(){
   chisumOrds.forEach(o => {
     const sid             = String(o.id);
     const allArrivedNow   = _markedIdxSet(sid);   // שמור + מה שעוד בדרך
-    const chisumIdxs      = (o.items||[]).reduce((a,it,i)=>{ if(!!it.chisum) a.push(i); return a; },[]);
+    const chisumIdxs      = _chisumIdxsOf(o);
     if(!chisumIdxs.length) return;
 
     const allDone = chisumIdxs.every(i => allArrivedNow.has(i));
@@ -2316,7 +2325,7 @@ function confirmResetChisum(){
   chisumOrds.forEach(o => {
     const sid             = String(o.id);
     const allArrivedNow   = _markedIdxSet(sid);   // שמור + מה שעוד בדרך
-    const chisumIdxs      = (o.items||[]).reduce((a,it,i)=>{ if(!!it.chisum) a.push(i); return a; },[]);
+    const chisumIdxs      = _chisumIdxsOf(o);
     if(!chisumIdxs.length) return;
 
     const allDone = chisumIdxs.every(i => allArrivedNow.has(i));
@@ -2411,8 +2420,7 @@ function updateCounts(){
     // .length על הערך הגולמי ספר גם null-ים של מערך דליל, ובלי ההד המקומי
     // המונה פיגר אחרי המסך עד שהכתיבה חזרה מהשרת
     const marked     = _markedIdxSet(String(o.id));
-    const stillOut   = (o.items||[]).filter((it,i) => !!it.chisum && !marked.has(i)).length;
-    chisumItemCount += stillOut;
+    chisumItemCount += _chisumIdxsOf(o).filter(i => !marked.has(i)).length;
   });
   document.getElementById('cnt-chisum').textContent = chisumItemCount;
 

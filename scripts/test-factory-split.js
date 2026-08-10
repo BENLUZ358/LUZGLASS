@@ -106,5 +106,53 @@ check('legacy tempered triplex by name → triplex',
       counts([{ chisum: true, name: '8+8 טריפלקס שקוף מחוסם' }]), [0, 1]);
 check('empty and missing input are safe', [counts([]), counts(null)], [[0, 0], [0, 0]]);
 
+/* ── the chisum screen must enumerate through the splitter ─────────────
+   workday.html counted panels with items.filter(it => it.chisum), which is a
+   different set from what actually travels on the chisum report: it also
+   swept up mirrors, which are cut in-house and never leave, and laminated
+   triplex, which goes to the same factory on a SEPARATE report and is ticked
+   back through triplexArrived rather than chisumArrivedIdxs.
+
+   So those panels were counted in the chisum badge and again in the triplex
+   badge, and nothing the worker could do would clear them from the first —
+   the chisum badge could never reach zero on such an order. */
+{
+  const order = { items: [
+    { chisum: true, glass: 'שקוף' },                 // 0 — on the chisum report
+    { chisum: true, glass: 'מראה' },                  // 1 — never leaves the building
+    { chisum: true, triplex: true, glass: 'שקוף' },   // 2 — on the triplex report
+    { graphic: true, glass: 'שקוף' },                 // 3 — not a factory panel at all
+  ]};
+  const split = lgSplitFactoryItems(order.items);
+  check('only the real chisum panel is on the chisum report',
+        split.chisum.map(e => e.idx), [0]);
+  check('the laminated triplex panel is on the triplex report',
+        split.triplex.map(e => e.idx), [2]);
+
+  const naive = order.items.filter(it => it.chisum).length;
+  check('the old count really did inflate this order from 1 to 3', naive, 3);
+  check('and really did count the triplex panel on both reports',
+        naive - split.chisum.length, split.triplex.length + 1);   // +1 for the mirror
+}
+
+const fs2      = require('fs');
+const workday  = fs2.readFileSync(require('path').join(__dirname, '..', 'workday.html'), 'utf8');
+check('workday exposes one definition of what is on the chisum report',
+      /function _chisumIdxsOf\(/.test(workday), true);
+check('and it is built from lgSplitFactoryItems',
+      /function _chisumIdxsOf\([\s\S]{0,200}?lgSplitFactoryItems\(/.test(workday), true);
+{
+  /* no arrival path may go back to the raw flag. The remaining it.chisum uses
+     are display labels (מחוסם/מלוטש) and the build tab, which are not the
+     factory report — so this pins the arrival call sites by name instead. */
+  for (const fn of ['markAllClientArrived']) {
+    const body = (workday.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
+    check(`${fn} enumerates through _chisumIdxsOf`, /_chisumIdxsOf\(/.test(body), true);
+    check(`${fn} does not filter on the raw flag`, /\.chisum\b(?!Arrived|Report|Sent)/.test(body), false);
+  }
+  const uses = (workday.match(/_chisumIdxsOf\(/g) || []).length;
+  check('every chisum arrival site uses it', uses >= 6, true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll factory split checks passed.');
