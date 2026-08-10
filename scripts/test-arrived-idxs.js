@@ -85,6 +85,27 @@ for (const fn of ['toggleArrived', 'markAllClientArrived', 'setGroupArrivedCount
   check(`${fn} persists to Firebase`, /_persistArrivedIdxs\(/.test(body), true);
 }
 
+/* ── and no writer may compute its base state on its own ───────────────
+   Every writer built the next set from lgArrivedIdxs(o.chisumArrivedIdxs)
+   alone. o comes from allOrders, which the Firebase listener refreshes
+   asynchronously, so a second click landing before the first write confirmed
+   read stale state and dropped the first mark. On screen the local echo showed
+   both, then the server push deleted one — which is what was reported: one
+   click marking two rows, a row needing two clicks, the wrong row moving.
+
+   _markedIdxSet unions the saved set with the session echo, so a mark still in
+   flight is never lost. Every writer and every reader goes through it. */
+for (const fn of ['toggleArrived', 'markAllClientArrived', 'setGroupArrivedCount']) {
+  const body = (workday.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
+  check(`${fn} bases its write on _markedIdxSet`, /_markedIdxSet\(/.test(body), true);
+  check(`${fn} does not read chisumArrivedIdxs itself`,
+        /lgArrivedIdxs\s*\(/.test(body), false);
+}
+
+/* only the helper itself decodes the raw field */
+check('workday decodes the raw field in exactly one place',
+      (workday.match(/lgArrivedIdxs\s*\(/g) || []).length, 1);
+
 /* ── one denominator on the screen ─────────────────────────────────────
    The report header counted "marked this session out of not-yet-arrived"
    while the client cards counted "arrived out of total", so the same screen

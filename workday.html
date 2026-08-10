@@ -1553,11 +1553,36 @@ function toggleChisumOpen(key){
 // קודם הם חיו רק ב-arrivedItems שבזיכרון — סימון 8 מתוך 12 פאנלים ורענון דף
 // מחק את הכל. chisumArrivedIdxs הוא עכשיו מקור האמת; arrivedItems נשאר רק
 // כהד מקומי לתגובתיות מיידית של ה-UI.
+// המצב האמיתי של הזמנה = מה ש-Firebase אישר, באיחוד עם מה שסומן כאן וטרם
+// חזר. כל כתיבה חייבת להתבסס על זה.
+//
+// קודם כל כותב קרא רק את מה ש-allOrders החזיק, ו-allOrders מתעדכן
+// אסינכרונית מהליסנר. לחיצה שנייה לפני שהראשונה חזרה מהשרת חישבה את הסט
+// החדש ממצב ישן — ודרסה את הראשונה. המסך הראה את שתיהן מהמערך המקומי, ואז
+// העדכון מהשרת הגיע ומחק אחת. מכאן "צריך ללחוץ פעמיים", "סימנתי אחד ונדלק
+// אחר", ו"סימן לי שניים".
+function _markedIdxSet(sid){
+  const o = allOrders.find(x => String(x.id) === String(sid));
+  return new Set([
+    ...lgArrivedIdxs(o && o.chisumArrivedIdxs),
+    ...((arrivedItems[String(sid)] || []).map(Number)),
+  ]);
+}
+
+// אם הכתיבה נכשלת, ההד המקומי חייב ליפול איתה. אחרת הוא ממשיך להציג וי על
+// פריט שהשרת מעולם לא קיבל, והמסך משקר עד לרענון — ובחיסום זה אומר שפאנל
+// ייחשב כאילו הגיע. זורקים את ההד של אותה הזמנה וחוזרים למה שהשרת מחזיק.
 function _persistArrivedIdxs(sid, nextSet){
+  const key = String(sid);
   const obj = {};
   nextSet.forEach(i => { obj[i] = true; });
-  return updateOrder(sid, { chisumArrivedIdxs: nextSet.size ? obj : null })
-    .catch(e => { console.error('toggleArrived persist:', e); showToast('⚠️ הסימון לא נשמר — בדוק חיבור'); });
+  return updateOrder(key, { chisumArrivedIdxs: nextSet.size ? obj : null })
+    .catch(e => {
+      console.error('persist chisumArrivedIdxs:', e);
+      delete arrivedItems[key];
+      showToast('⚠️ הסימון לא נשמר — בדוק חיבור');
+      renderChisumTab();
+    });
 }
 
 function toggleArrived(orderId, itemIdx, checked){
@@ -1567,8 +1592,9 @@ function toggleArrived(orderId, itemIdx, checked){
   if(checked){ if(!arrivedItems[id].includes(idx)) arrivedItems[id].push(idx); }
   else        { arrivedItems[id] = arrivedItems[id].filter(i => i !== idx); }
 
-  const o    = allOrders.find(x => String(x.id) === id);
-  const next = new Set(lgArrivedIdxs(o && o.chisumArrivedIdxs));
+  // מבוסס על האיחוד ולא רק על מה שהשרת אישר — אחרת לחיצה מהירה שנייה
+  // מוחקת את הראשונה שעוד בדרך.
+  const next = _markedIdxSet(id);
   if(checked) next.add(idx); else next.delete(idx);
   _persistArrivedIdxs(id, next);
 
@@ -1584,15 +1610,18 @@ function markAllClientArrived(clientKey, reportId, clientName){
   );
   reportOrders.forEach(o => {
     const sid = String(o.id);
-    const existingArrived = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
+    // אותו בסיס כמו שאר הכותבים — אחרת סימון שעוד בדרך היה נמחק כאן
+    const marked = _markedIdxSet(sid);
     const pendingIdxs = (o.items||[])
-      .map((it,i) => (!!it.chisum && !existingArrived.has(i)) ? i : -1)
+      .map((it,i) => (!!it.chisum && !marked.has(i)) ? i : -1)
       .filter(i => i >= 0);
+    if(!pendingIdxs.length) return;
     if(!arrivedItems[sid]) arrivedItems[sid] = [];
-    pendingIdxs.forEach(idx => { if(!arrivedItems[sid].includes(idx)) arrivedItems[sid].push(idx); });
-    // התמדה מיידית, כמו ב-toggleArrived
-    pendingIdxs.forEach(idx => existingArrived.add(idx));
-    if(pendingIdxs.length) _persistArrivedIdxs(sid, existingArrived);
+    pendingIdxs.forEach(idx => {
+      if(!arrivedItems[sid].includes(idx)) arrivedItems[sid].push(idx);
+      marked.add(idx);
+    });
+    _persistArrivedIdxs(sid, marked);
   });
   renderChisumTab();
 }
@@ -1608,13 +1637,10 @@ function markAllClientArrived(clientKey, reportId, clientName){
 // עכשיו chisumArrivedIdxs הוא מקור האמת גם כאן, ושתי השכבות משתנות יחד.
 function setGroupArrivedCount(orderId, idxs, targetCount){
   const sid = String(orderId);
-  const o   = allOrders.find(x => String(x.id) === sid);
   if(!arrivedItems[sid]) arrivedItems[sid] = [];
 
-  // המצב האמיתי הוא האיחוד — בדיוק מה שהמסך מציג
-  const persisted = new Set(lgArrivedIdxs(o && o.chisumArrivedIdxs));
-  const session   = new Set(arrivedItems[sid].map(Number));
-  const marked    = new Set([...persisted, ...session]);
+  // המצב האמיתי הוא האיחוד — בדיוק מה שהמסך מציג, וגם מה שנשמר
+  const marked = _markedIdxSet(sid);
 
   const currentCount = idxs.filter(i => marked.has(i)).length;
   const target = Math.max(0, Math.min(idxs.length, Math.round(Number(targetCount) || 0)));
@@ -1635,10 +1661,8 @@ function setGroupArrivedCount(orderId, idxs, targetCount){
     }
   }
 
-  // כל האינדקסים שנשארו מסומנים בהזמנה, לא רק של הקבוצה הזו
-  const next = new Set([...persisted].filter(i => marked.has(i)));
-  idxs.forEach(i => { if(marked.has(i)) next.add(i); });
-  _persistArrivedIdxs(sid, next);
+  // marked כבר מכיל את כל ההזמנה — גם קבוצות אחרות וגם סימונים שעוד בדרך
+  _persistArrivedIdxs(sid, marked);
 
   renderChisumTab();
 }
@@ -1661,11 +1685,9 @@ function _chisumClientCardHtml(clientName, orders, reportId){
 
   orders.forEach(o => {
     const sid             = String(o.id);
-    const existingArrived = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
-    const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
     // Firebase הוא מקור האמת; arrivedItems הוא הד מקומי לתגובתיות מיידית.
-    // האיחוד ביניהם הוא מה שמסומן על המסך.
-    const arrived         = new Set([...existingArrived, ...sessionArrived]);
+    // האיחוד ביניהם הוא מה שמסומן על המסך — ומה שכל כתיבה מתבססת עליו.
+    const arrived = _markedIdxSet(sid);
     const allChisumItems  = (o.items||[]).map((it,idx)=>({...it,globalIdx:idx})).filter(it=>!!it.chisum);
     if(!allChisumItems.length) return;
 
@@ -2144,11 +2166,7 @@ function renderChisumTab(){
       // שורות באותו מסך הראו מספרים שלא מתיישבים — 7/15 לצד 23/32.
       let totalChisum = 0, arrivedAll = 0;
       orders.forEach(o => {
-        const sid = String(o.id);
-        const marked = new Set([
-          ...lgArrivedIdxs(o.chisumArrivedIdxs),
-          ...(arrivedItems[sid]||[]).map(Number),
-        ]);
+        const marked = _markedIdxSet(String(o.id));
         const chisumIdx = (o.items||[]).map((it,i) => (it && it.chisum) ? i : -1).filter(i => i >= 0);
         totalChisum += chisumIdx.length;
         arrivedAll  += chisumIdx.filter(i => marked.has(i)).length;
@@ -2220,9 +2238,7 @@ function resetChisumList(){
 
   chisumOrds.forEach(o => {
     const sid             = String(o.id);
-    const existingArrived = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
-    const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
-    const allArrivedNow   = new Set([...existingArrived, ...sessionArrived]);
+    const allArrivedNow   = _markedIdxSet(sid);   // שמור + מה שעוד בדרך
     const chisumIdxs      = (o.items||[]).reduce((a,it,i)=>{ if(!!it.chisum) a.push(i); return a; },[]);
     if(!chisumIdxs.length) return;
 
@@ -2299,9 +2315,7 @@ function confirmResetChisum(){
 
   chisumOrds.forEach(o => {
     const sid             = String(o.id);
-    const existingArrived = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
-    const sessionArrived  = new Set((arrivedItems[sid]||[]).map(Number));
-    const allArrivedNow   = new Set([...existingArrived, ...sessionArrived]);
+    const allArrivedNow   = _markedIdxSet(sid);   // שמור + מה שעוד בדרך
     const chisumIdxs      = (o.items||[]).reduce((a,it,i)=>{ if(!!it.chisum) a.push(i); return a; },[]);
     if(!chisumIdxs.length) return;
 
@@ -2394,10 +2408,11 @@ function updateCounts(){
   // cnt-chisum: פריטי חיסום שטרם הגיעו
   let chisumItemCount = 0;
   allOrders.filter(o => (o.stage||'') === 'chisum').forEach(o => {
-    const chisumItems  = (o.items||[]).filter(it => !!it.chisum);
-    // .length על הערך הגולמי ספר גם null-ים של מערך דליל
-    const arrivedCount = lgArrivedIdxs(o.chisumArrivedIdxs).length;
-    chisumItemCount += Math.max(0, chisumItems.length - arrivedCount);
+    // .length על הערך הגולמי ספר גם null-ים של מערך דליל, ובלי ההד המקומי
+    // המונה פיגר אחרי המסך עד שהכתיבה חזרה מהשרת
+    const marked     = _markedIdxSet(String(o.id));
+    const stillOut   = (o.items||[]).filter((it,i) => !!it.chisum && !marked.has(i)).length;
+    chisumItemCount += stillOut;
   });
   document.getElementById('cnt-chisum').textContent = chisumItemCount;
 
