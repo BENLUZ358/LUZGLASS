@@ -1200,6 +1200,41 @@ function listenHashavshevetAccounts(callback) {
 }
 
 // עתידי — ייקרא מסנכרון דוח כרטיסי הלקוח. שדות עסקיים בלבד (שם/טלפון/מפתח/פעיל).
+// ─── לאיזה מספר יוצאת ההודעה ללקוח ──────────────────────────────────────
+//
+//  מקור האמת הוא הטלפון בכרטיס הלקוח בחשבשבת. שם הוא מתוחזק, ומשם הוא
+//  מסונכרן ל-hashavshevetAccounts.
+//
+//  order.phone הוא מה שהועתק להזמנה ביום שהיא נפתחה. הוא אינו מתעדכן כשהלקוח
+//  מחליף מספר, ובהגשה מהפורטל הוא יכול להיות של מי שהעלה את הסקיצה ולא של
+//  החשבון שמחויב. הודעה היא פעולה שיוצאת החוצה ואי אפשר להחזיר אותה, ולכן
+//  היא צריכה לצאת למספר שבכרטיס.
+//
+//  מחזיר גם את המקור, כדי שהמסך יוכל להראות לפי מה נבחר המספר במקום להסתיר
+//  את ההחלטה.
+function lgResolveClientPhone(order, accountsMap, customerIdByPhone) {
+  const normalize = p => String(p || '').replace(/[-\s]/g, '');
+  const account   = k => (accountsMap || {})[String(k || '').trim()];
+
+  // 1. מפתח החשבון שרשום על ההזמנה עצמה
+  let acc = account(order && order.customerId);
+
+  // 2. דרך המשתמש שמאחורי טלפון ההתחברות — אותה שרשרת שבה
+  //    api/hashavshevet-order.js מוצא את מפתח החשבון
+  if (!acc || !acc.phone) {
+    const key = (customerIdByPhone || {})[normalize(order && (order.clientPhone || order.phone))];
+    if (key) acc = account(key);
+  }
+
+  if (acc && acc.phone) {
+    return { phone: normalize(acc.phone), source: 'hashavshevet', accountKey: acc.key || null };
+  }
+
+  // 3. אין כרטיס או שאין בו טלפון — נופלים למה שעל ההזמנה, ואומרים זאת
+  const own = normalize(order && order.phone);
+  return { phone: own, source: own ? 'order' : 'none', accountKey: null };
+}
+
 async function syncHashavshevetAccount(key, businessFields) {
   const k = String(key || '').trim();
   if (!k) return;

@@ -498,6 +498,11 @@ let skuCatalogMap = {}; // קטלוג מק"טים חדש (skuCatalog) — תוס
 // מטמון שמות לקוחות הובלות — טוען פעם אחת בסטארטאפ
 // מטמון הובלות — מזוהים לפי מספר טלפון (מזהה קבוע), לא לפי שם
 let _deliveryPhones = new Set(); // Set של טלפונים מנורמלים: '0522578559'
+// טלפון התחברות → מפתח החשבון בחשבשבת. אותה שרשרת שבה ה-API מוצא את
+// מפתח החשבון, וממנה נגזר גם המספר שאליו יוצאת ההודעה ללקוח.
+let _customerIdByPhone = {};
+// כרטיסי הלקוח מחשבשבת — שם יושב הטלפון המתוחזק
+let _wdAccounts = {};
 async function _loadDeliveryClients(){
   try {
     const users = await lgGetAllUsers();
@@ -506,7 +511,24 @@ async function _loadDeliveryClients(){
         .filter(u => u.isDelivery && u.phone)
         .map(u => String(u.phone).replace(/[-\s]/g, ''))
     );
+    _customerIdByPhone = {};
+    users.forEach(u => {
+      if(u && u.phone && u.customerId)
+        _customerIdByPhone[String(u.phone).replace(/[-\s]/g,'')] = u.customerId;
+    });
   } catch(e){ console.warn('loadDeliveryClients:', e); }
+}
+
+// המספר שאליו תצא ההודעה, ולפי מה הוא נבחר. עובר דרך ההגדרה המשותפת
+// ב-firebase-db.js כדי ששלושת מקומות השליחה לא יחליטו כל אחד אחרת.
+function _waTarget(o){
+  return lgResolveClientPhone(o, _wdAccounts, _customerIdByPhone);
+}
+function _waLink(o, kind){
+  const t = _waTarget(o);
+  if(!t.phone) return null;
+  // cleanPhone מסיר את ה-0 המוביל לפני קידומת 972
+  return `https://wa.me/972${cleanPhone(t.phone)}?text=${encodeURIComponent(waMessage(o, kind))}`;
 }
 // בדיקה לפי טלפון בלבד — שם הלקוח לתצוגה בלבד, לא לזיהוי
 function _isDeliveryClient(orderClient, phone){
@@ -618,6 +640,12 @@ async function load(){
   listenSkuCatalog(list => {
     skuCatalogMap = {};
     list.forEach(e => { if (e && e.code) skuCatalogMap[e.code] = e; });
+  });
+  // כרטיסי הלקוח מחשבשבת — מהם נלקח המספר שאליו יוצאת ההודעה ללקוח.
+  // הדף לא טען אותם כלל, ולכן ההודעה יצאה תמיד לטלפון שהועתק להזמנה.
+  listenHashavshevetAccounts(list => {
+    _wdAccounts = {};
+    (list||[]).forEach(a => { if (a && a.key) _wdAccounts[String(a.key)] = a; });
   });
 
   if(_workdayUnsub) _workdayUnsub();
@@ -1924,7 +1952,7 @@ async function completeGraphic(orderId){
   if(!o) return;
   const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
   if(nextSt === 'done'){
-    lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`);
+    { const _u = _waLink(o,'ready'); if(_u) lgOpenWhatsApp(_u); else console.warn('אין מספר ללקוח', o.id); }
   }
   if(nextSt === 'done' || nextSt === 'delivery'){
     _lgWarnUnpriced(await lgLockAndAdvance(String(orderId), o, _wdGlobalPrices, _wdClientPrices, nextSt));
@@ -2411,7 +2439,16 @@ function resetChisumList(){
           return `
           ${toMsg.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
             <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">✅ ${toMsg.length} סקיצות הושלמו — תישלח הודעה ללקוח</div>
-            ${toMsg.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
+            ${toMsg.map(o=>{
+              // המספר מוצג לפני השליחה, ולא רק נבחר בשקט. הודעה יוצאת החוצה
+              // ואי אפשר להחזיר אותה, ולכן צריך לראות לאן היא הולכת ולפי מה.
+              const t = _waTarget(o);
+              const tag = t.source==='hashavshevet'
+                ? '<span style="color:#27ae60;font-weight:700">כרטיס חשבשבת</span>'
+                : (t.phone ? '<span style="color:var(--gold-text);font-weight:700">⚠ מההזמנה — אין טלפון בכרטיס</span>'
+                           : '<span style="color:var(--red);font-weight:700">⚠ אין מספר — לא תישלח</span>');
+              return `<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')} — <strong>${lgEsc(t.phone||'—')}</strong> · ${tag}</div>`;
+            }).join('')}
           </div>`:''}
           ${toGraph.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
             <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">🖼 ${toGraph.length} סקיצות הושלמו — עוברות לשלב גרפיקה (אין הודעה עדיין)</div>
@@ -2487,7 +2524,7 @@ function confirmResetChisum(){
       // הודעה ללקוח רק אם עובר ל-done (לא גרפיקה, לא הובלה)
       if(nextSt === 'done'){
         setTimeout(() => {
-          lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'chisum_ready'))}`);
+          { const _u = _waLink(o,'chisum_ready'); if(_u) lgOpenWhatsApp(_u); else console.warn('אין מספר ללקוח', o.id); }
         }, msgCount++ * 600);
       }
     } else if(st.marked > 0){
@@ -2822,7 +2859,7 @@ function confirmFinish(){
     if(nextSt === 'done'){
       const i = waIdx++;
       setTimeout(()=>{
-        lgOpenWhatsApp(`https://wa.me/972${cleanPhone(o.phone)}?text=${encodeURIComponent(waMessage(o,'ready'))}`);
+        { const _u = _waLink(o,'ready'); if(_u) lgOpenWhatsApp(_u); else console.warn('אין מספר ללקוח', o.id); }
       }, i * 600);
     }
   });
