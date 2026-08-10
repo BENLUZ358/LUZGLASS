@@ -16,7 +16,7 @@
    lg-ui.css לא קובע את זה כי זה נכון רק לדפי התחנות. */
 html,body{height:100%;overflow:hidden;}
 *{-webkit-tap-highlight-color:transparent;}
-.app{display:flex;flex-direction:column;height:100vh;}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
 .topbar{flex-shrink:0;height:52px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;display:flex;align-items:center;gap:7px;z-index:20;}
 .tb-logo{font-size:15px;font-weight:900;white-space:nowrap;}.tb-logo span{color:var(--gold);}
 .tb-title{font-size:13px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -136,7 +136,7 @@ html,body{height:100%;overflow:hidden;}
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;z-index:600;box-shadow:0 4px 20px rgba(0,0,0,0.4);pointer-events:none;}
 
 /* ═══ UNIFIED NAV ═══ */
-.unav-sidebar{width:210px;flex-shrink:0;background:#1a1714;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;z-index:50;}
+.unav-sidebar{width:210px;flex-shrink:0;background:#1a1714;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;z-index:50;}
 .unav-logo{padding:20px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.07);}
 .unav-logo .lg{font-family:'Playfair Display',serif;font-size:18px;font-weight:900;color:#f7f4ef;}
 .unav-logo .lg span{color:#b8922a;}
@@ -165,8 +165,12 @@ html,body{height:100%;overflow:hidden;}
   .zbtn{width:44px;height:44px;font-size:20px;}
   .tb-btn{min-height:44px;padding:10px 16px;font-size:13px;}
 }
-@media(max-width:768px){
-  .app{height:100vh;}
+/* 900 ולא 768. אייפד לאורך הוא 810–834 רוחב, כלומר נפל בין הכיסאות:
+   התפריט הראשי כבר התקפל ב-900, תפריט המשתמש נשאר סרגל קבוע, וסרגל
+   הפתיחה שלו הוסתר — ולא הייתה שום דרך לפתוח אותו. נקודות השבירה של
+   המערכת הן 600 / 900 / 1200, וזו אחת מהן. */
+@media(max-width:900px){
+  .app{height:100vh;height:100dvh;}
   /* btmbar קבוע לתחתית — לא נחתך */
   .btmbar{
     position:fixed;bottom:0;left:0;right:0;z-index:30;
@@ -181,6 +185,28 @@ html,body{height:100%;overflow:hidden;}
   #finishBtn{flex:1;font-size:15px;padding:12px 16px;justify-content:center;}
   /* הסתר כפתורי zoom על אייפד — ניתן לזום עם אצבעות */
   .zbtn-zoom{display:none;}
+}
+
+/* ── פלאפון ──────────────────────────────────────────────────────────────
+   לדף הזה לא היו כללים לרוחב פלאפון בכלל. הוא נבנה לתחנה בעמידה, אבל הוא
+   נפתח גם מהטלפון, ושם השורה העליונה נדחסה: לוגו, כותרת ההזמנה ושלושה
+   כפתורים על 375 פיקסלים. הכותרת נחתכה ראשונה — בדיוק המידע שצריך.
+
+   שינוי תצוגה בלבד: שום אלמנט לא מוסר מה-DOM, רק הלוגו מוסתר ויתר
+   הרוחב עובר לכותרת ולפילטרים. */
+@media(max-width:600px){
+  /* הכותרת מזהה את המסך; הלוגו עולה 90 פיקסלים ולא מוסיף מידע */
+  .tb-logo{display:none;}
+  .topbar{gap:6px;padding:0 10px;}
+
+  /* ארבעה פילטרים בשורה אחת נותנים 70 פיקסלים לכל אחד — צר מכדי לקרוא
+     את מה שנבחר. שניים בשורה קריאים. */
+  .fi{min-width:calc(50% - 3px);}
+  .filters{padding:8px 10px;}
+
+  /* כרטיס הזמנה — אותו מידע, פחות ריפוד מסביבו */
+  .order-card{padding:12px 12px 10px;}
+  .oc-client{font-size:14px;}
 }
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -1010,7 +1036,7 @@ async function sendAllToFactory(){
 
 
 // CHISUM REPORT
-// דוח שיוצא פיזית למפעל. בעבר הוא נעטף ב-height:100vh;overflow:hidden (דוח ארוך
+// דוח שיוצא פיזית למפעל. בעבר הוא נעטף ב-height:100vh;height:100dvh;overflow:hidden (דוח ארוך
 // נחתך לעמוד אחד בהדפסה), הכיל את תפריט הניווט של האפליקציה, והדפיס
 // "מספר דוח:" בלי המספר עצמו. עכשיו: מסמך הדפסה נקי בלבד.
 // בונה מקטע דוח אחד: כותרת, מספר, וטבלת הפריטים שנוסעים לתהליך הזה.

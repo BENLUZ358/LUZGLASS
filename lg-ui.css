@@ -134,7 +134,7 @@ body{
   background:var(--bg);
   color:var(--text);
   direction:rtl;
-  min-height:100vh;
+  min-height:100vh;min-height:100dvh;
   -webkit-text-size-adjust:100%;
 }
 
@@ -262,6 +262,41 @@ img,svg,video,canvas,table{max-width:100%;}
    the layout on a narrow screen. */
 @media (max-width:600px){
   body{overflow-wrap:break-word;}
+}
+
+/* ── The tablet band: 601–900 ─────────────────────────────────────────────
+   Most of the day's work happens on an iPad. In portrait it is 810–834 CSS
+   pixels wide, which is the width nothing was written for: the pages had
+   collapsed their main navigation at 900 but kept the user menu as a fixed
+   210px rail until 768, and hid the bar that opens it. Between those two
+   numbers the menu could not be reached at all. Every page uses 900 now.
+
+   Landscape is 1024–1194 and behaves as a desktop, which is right — there is
+   room for both rails and the dense lists. */
+@media (min-width:601px) and (max-width:900px){
+  /* Dense tables are the main casualty of the narrower width. They scroll
+     inside their own container rather than widening the page — the rule the
+     root deliberately does not enforce with overflow-x:hidden. */
+  .table-scroll{max-width:100%;}
+
+  /* Reading distance on a tablet is longer than on a phone held close, and
+     these screens are used standing at a bench. */
+  .table{font-size:var(--fs-sm);}
+}
+
+/* ── Spacing between touch targets ───────────────────────────────────────
+   44×44 each is not enough on its own: two correctly sized buttons flush
+   against each other still produce mis-taps, because the finger contact patch
+   is wider than the point the browser reports. Eight pixels of clearance is
+   the smallest gap that reliably separates them.
+
+   Only where the browser reports a coarse pointer, so mouse-driven desktop
+   layouts keep their density. */
+@media (pointer:coarse){
+  .btn + .btn,
+  .btn-row > * + *{
+    margin-inline-start:var(--space-2);
+  }
 }
 
 /* Motion preference. Neutralises the pulse/slide keyframes site-wide. */
