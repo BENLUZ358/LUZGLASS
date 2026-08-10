@@ -304,52 +304,10 @@
   <!-- FILTER BAR -->
   <div id="filterBar" style="background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     <span style="font-size:12px;color:var(--muted);font-weight:600;letter-spacing:0.1em">סינון:</span>
-    <select id="fGlass" onchange="renderAll()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;-webkit-appearance:none;min-width:150px">
+    <!-- נבנה ב-buildWorkdayFilters() מסוגי הזכוכית שקיימים בפועל -->
+    <select id="fGlass" onchange="renderAll()"
+      style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;-webkit-appearance:none;min-width:150px">
       <option value="">כל הזכוכיות</option>
-      <optgroup label="שקוף">
-        <option value='4מ"מ שקוף'>4מ"מ שקוף</option>
-        <option value='5מ"מ שקוף'>5מ"מ שקוף</option>
-        <option value='6מ"מ שקוף'>6מ"מ שקוף</option>
-        <option value='8מ"מ שקוף'>8מ"מ שקוף</option>
-        <option value='10מ"מ שקוף'>10מ"מ שקוף</option>
-        <option value='12מ"מ שקוף'>12מ"מ שקוף</option>
-      </optgroup>
-      <optgroup label="קליר">
-        <option value='6מ"מ קליר'>6מ"מ קליר</option>
-        <option value='8מ"מ קליר'>8מ"מ קליר</option>
-        <option value='10מ"מ קליר'>10מ"מ קליר</option>
-        <option value='12מ"מ קליר'>12מ"מ קליר</option>
-        <option value='15מ"מ קליר'>15מ"מ קליר</option>
-      </optgroup>
-      <optgroup label="גרניט">
-        <option value='8מ"מ גרניט'>8מ"מ גרניט</option>
-      </optgroup>
-      <optgroup label="אסיד">
-        <option value='8מ"מ אסיד'>8מ"מ אסיד</option>
-        <option value='8מ"מ אסיד קליר'>8מ"מ אסיד קליר</option>
-        <option value='10מ"מ אסיד'>10מ"מ אסיד</option>
-      </optgroup>
-      <optgroup label="אפור">
-        <option value='8מ"מ אפור'>8מ"מ אפור</option>
-        <option value='10מ"מ אפור'>10מ"מ אפור</option>
-      </optgroup>
-      <optgroup label="ברונזה">
-        <option value='8מ"מ ברונזה'>8מ"מ ברונזה</option>
-      </optgroup>
-      <optgroup label="פיפיטה">
-        <option value='8מ"מ פיפיטה'>8מ"מ פיפיטה</option>
-        <option value='6מ"מ פיפיטה'>6מ"מ פיפיטה</option>
-      </optgroup>
-      <optgroup label="גלינה">
-        <option value='8מ"מ גלינה שקוף'>8מ"מ גלינה שקוף</option>
-        <option value='8מ"מ גלינה קליר'>8מ"מ גלינה קליר</option>
-        <option value='10מ"מ גלינה קליר'>10מ"מ גלינה קליר</option>
-      </optgroup>
-      <optgroup label="מראה">
-        <option value='5מ"מ מראה'>5מ"מ מראה</option>
-        <option value='5מ"מ מראה אפורה'>5מ"מ מראה אפורה</option>
-        <option value='5מ"מ מראה ברונזה'>5מ"מ מראה ברונזה</option>
-      </optgroup>
     </select>
     <select id="fMachine" onchange="renderAll()" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;-webkit-appearance:none;min-width:130px">
       <option value="">כל המכונות</option>
@@ -361,8 +319,11 @@
       <option value="cut">✂️ מלוטש / חיתוך</option>
       <option value="chisum">🔥 חיסום</option>
     </select>
-    <input type="text" id="fClient" placeholder="🔍 שם לקוח..." oninput="renderAll()"
-      style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;min-width:140px">
+    <!-- היה שדה טקסט חופשי. רשימה מונעת שגיאות הקלדה ומראה מי באמת קיים. -->
+    <select id="fClient" onchange="renderAll()"
+      style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;min-width:150px">
+      <option value="">כל הלקוחות</option>
+    </select>
     <button onclick="clearFilters()" style="padding:6px 12px;background:transparent;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--muted);cursor:pointer;">✕ נקה</button>
     <span id="filterCount" style="font-size:12px;color:var(--gold-text);font-weight:700;margin-right:4px"></span>
     <!-- SELECT ALL -->
@@ -410,6 +371,10 @@
         <select id="wGlass" onchange="renderWorkActive()"
           style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;min-width:130px">
           <option value="">כל הזכוכיות</option>
+        </select>
+        <select id="wClient" onchange="renderWorkActive()"
+          style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;color:var(--text);outline:none;cursor:pointer;min-width:130px">
+          <option value="">כל הלקוחות</option>
         </select>
         <div style="margin-right:auto;display:flex;gap:6px">
           <button onclick="setWorkView('list')" id="wViewList"
@@ -800,7 +765,7 @@ function getMachine(o){
 function getFiltered(){
   const glass  = document.getElementById('fGlass')?.value || '';
   const type   = document.getElementById('fType')?.value  || '';
-  const client = (document.getElementById('fClient')?.value || '').toLowerCase();
+  const client = document.getElementById('fClient')?.value || '';
 
   return allOrders.filter(o=>{
     // stage מגיע ישירות מ-Firebase (o.stage) — מקור האמת
@@ -818,35 +783,16 @@ function getFiltered(){
       if(uniqueSel.length === totalItems) return false;
       // אחרת — המשך להציג (יש פריטים שלא נבחרו עדיין)
     }
-    if(glass){
-      const glassLow = glass.toLowerCase();
-      const fullGlass = (o.glassFullName || '').toLowerCase();
-      const baseGlass = (o.glass || '').toLowerCase();
-      // חיפוש חלקי — אם הפילטר כלול בשם הזכוכית
-      const match = fullGlass.includes(glassLow) || baseGlass.includes(glassLow) ||
-                    glassLow.includes(fullGlass) || glassLow.includes(baseGlass) ||
-                    (o.items||[]).some(it=>(it.glassFullName||it.name||'').toLowerCase().includes(glassLow));
-      if(!match) return false;
-    }
+    // היו כאן חמש בדיקות תת-מחרוזת חופפות בשני כיוונים. עכשיו התאמה מדויקת
+    // על הזוג {עובי, סוג}, ברמת הפריט — "8 שקוף" מפסיק לתפוס "18 שקוף".
+    if(glass && !lgOrderHasGlass(o, glass, skuCatalogMap)) return false;
     const machine = document.getElementById('fMachine')?.value || '';
     if(machine && getMachine(o) !== machine) return false;
     if(type === 'chisum' && classifyOrder(o) !== 'chisum' && classifyOrder(o) !== 'mixed') return false;
     else if(type && type !== 'chisum' && classifyOrder(o) !== type) return false;
-    if(client){
-      const searchIn = [
-        o.orderClient, o.client, o.customerName,
-        o.orderNum, o.refNum,
-        o.sketchName, o.sketchNumber,
-        o.description, o.type,
-        String(o.id||'')
-      ].map(v=>String(v||'').toLowerCase());
-      // חפש גם בתוך שמות הפריטים
-      (o.items||[]).forEach(it=>{
-        searchIn.push(String(it.name||'').toLowerCase());
-        searchIn.push(String(it.glassFullName||'').toLowerCase());
-      });
-      if(!searchIn.some(v=>v.includes(client))) return false;
-    }
+    // היה חיפוש חופשי על תשעה שדות כולל שמות פריטים — "מראות" בשם לקוח
+    // החזיר גם הזמנות של לקוחות אחרים שיש בהן פריט מראה. עכשיו בחירה מרשימה.
+    if(client && (o.orderClient||'') !== client) return false;
     return true;
   });
 }
@@ -870,8 +816,7 @@ function selectAllFiltered(){
 
     o.items.forEach((item, i) => {
       // כבד את פילטר הזכוכית
-      const fg = item.glassFullName || item.name || '';
-      if(glassFilter && !fg.includes(glassFilter)) return;
+      if(glassFilter && !glassMatches(item, glassFilter)) return;
       // דלג על פריטים שכבר בטיוטה
       if(draftItems.some(d => d.orderId === sid && d.itemIdx === i)) return;
       // דלג על פריטים שכבר ב-itemsSel
@@ -899,7 +844,17 @@ function selectAllFiltered(){
   showToast(`✓ ${added} פריטים נוספו לטיוטה`);
 }
 
+// שני מנועי הסינון של "בנה יום עבודה", נבנים מההזמנות שזמינות בשלב הזה.
+function buildWorkdayFilters(){
+  const pool = allOrders.filter(o => ['opty','workday'].includes(o.stage||''));
+  lgFillFilterSelect(document.getElementById('fGlass'),
+    lgGlassTypesInOrders(pool, skuCatalogMap), 'כל הזכוכיות');
+  lgFillFilterSelect(document.getElementById('fClient'),
+    lgClientsInOrders(pool), 'כל הלקוחות');
+}
+
 function renderAvailable(){
+  buildWorkdayFilters();
   const el = document.getElementById('availableOrders');
   const filtered = getFiltered();
   // השתמש ב-stage (כמו getFiltered) — לא בשדה status שיכול להיות ישן
@@ -1021,8 +976,7 @@ function orderCardHTML(o){
 
   const itemRows = _dispGroups.map(grp => {
     const it = grp.rep;
-    const fullGlass = it.glassFullName || it.name || '';
-    if (glassFilter && !fullGlass.includes(glassFilter)) return '';
+    if (glassFilter && !glassMatches(it, glassFilter)) return '';
     // אינדקסים שעדיין לא נבחרו / לא בטיוטה
     const availIdx = grp.indices.filter(i =>
       !_selIdxs.includes(i) && !draftItems.some(d => d.orderId === ordKey && d.itemIdx === i)
@@ -1221,8 +1175,7 @@ function addAllMatching(orderId){
   const glassFilter = document.getElementById('fGlass')?.value || '';
   if(!selectedItems[orderId]) selectedItems[orderId] = new Set();
   o.items.forEach((item,i)=>{
-    const fullGlass = item.glassFullName||item.name||'';
-    if(!glassFilter || fullGlass.includes(glassFilter))
+    if(glassMatches(item, glassFilter))
       selectedItems[orderId].add(i);
   });
   renderAvailable();
@@ -1351,13 +1304,12 @@ const GLASS_SEARCH_MAP = {
   'גלינה': ['גלינה','GS','GC'],
   'מראה':  ['מראה','5M'],
 };
+// התאמה על הזוג {עובי, סוג} מהקטלוג. קודם זו הייתה בדיקת תת-מחרוזת בשם
+// הפריט בתוספת מפת מילים נרדפות — מה שגרם ל"8 שקוף" לתפוס גם "18 שקוף",
+// ולא הבחין בין "מראה" ל"מראה אפורה".
 function glassMatches(item, filter){
   if(!filter) return true;
-  const name = (item.glassFullName||item.name||'').toLowerCase();
-  const f = filter.toLowerCase();
-  if(name.includes(f)) return true;
-  const keys = GLASS_SEARCH_MAP[filter]||[];
-  return keys.some(k=>name.toUpperCase().includes(k.toUpperCase()));
+  return lgGlassLabelOf(item, skuCatalogMap) === filter;
 }
 let buildViewMode = 'items'; // 'items' | 'orders'
 
@@ -1377,6 +1329,7 @@ function renderWorkActive(){
   const search = (document.getElementById('wSearch')?.value||'').trim().toLowerCase();
   const typeFilter = document.getElementById('wType')?.value||'';
   const glassFilter = document.getElementById('wGlass')?.value||'';
+  const clientFilter = document.getElementById('wClient')?.value||'';
 
   // בנה רשימת פריטים מworkDay.inWork + itemsSel
   const items = [];
@@ -1404,7 +1357,9 @@ function renderWorkActive(){
   if(glassEl){
     const currentVal = glassEl.value;
     glassEl.innerHTML = '<option value="">כל הזכוכיות</option>';
-    const glasses = [...new Set(items.map(({item})=>item.glassFullName||item.name||'').filter(Boolean))];
+    // היה שם הפריט המלא ("8 מ''מ שקוף מחוסם"). עכשיו עובי+סוג בלבד.
+    const glasses = [...new Set(items.map(({item})=>lgGlassLabelOf(item, skuCatalogMap)).filter(Boolean))]
+      .sort((a,b)=>(parseInt(a,10)-parseInt(b,10)) || a.localeCompare(b,'he'));
     glasses.forEach(g=>{
       const opt = document.createElement('option');
       opt.value = g; opt.textContent = g;
@@ -1412,6 +1367,9 @@ function renderWorkActive(){
       glassEl.appendChild(opt);
     });
   }
+  // אותה רשימה, מאותם פריטים — רק הלקוחות שבאמת על הרצפה עכשיו
+  lgFillFilterSelect(document.getElementById('wClient'),
+    lgClientsInOrders(items.map(({o})=>o)), 'כל הלקוחות');
 
   // סינון
   const filtered = items.filter(({o, item})=>{
@@ -1419,6 +1377,7 @@ function renderWorkActive(){
     const cls = item.chisum ? 'chisum' : 'cut';
     if(typeFilter && cls !== typeFilter) return false;
     if(glassFilter && !glassMatches(item, glassFilter)) return false;
+    if(clientFilter && (o.orderClient||'') !== clientFilter) return false;
     if(search){
       const fields = [
         glass, o.orderClient, o.orderNum, o.refNum,

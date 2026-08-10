@@ -297,11 +297,13 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <button class="fb" onclick="setSF('ממתין להובלה',this)"><span data-icon="truck"></span> הובלות</button>
     <button class="fb" onclick="setSF('מוכן לאיסוף',this)">מוכן לאיסוף</button>
     <button class="fb" onclick="setSF('נאסף',this)">נאסף</button>
+    <!-- שני הסינונים נבנים מהנתונים ב-buildOrderFilters(): רק ערכים שקיימים
+         בפועל בהזמנות שמוצגות, עם מספר הפריטים בכל אחד. -->
     <select class="fsel" id="gf" onchange="renderAll()">
       <option value="">כל הזכוכיות</option>
-      <option>שקוף</option><option>קליר</option><option>גרניט</option>
-      <option>אסיד</option><option>אפור</option><option>ברונזה</option>
-      <option>פיפיטה</option><option>אסיד קליר</option><option>גלינה שקוף</option><option>גלינה קליר</option>
+    </select>
+    <select class="fsel" id="cf" onchange="renderAll()">
+      <option value="">כל הלקוחות</option>
     </select>
   </div>
 
@@ -896,6 +898,7 @@ function setView(v,btn){
 function filtered(){
   const q=document.getElementById('srch')?.value?.toLowerCase()||'';
   const g=document.getElementById('gf')?.value||'';
+  const c=document.getElementById('cf')?.value||'';
   const result = orders.filter(o=>{
     if(sf!=='all'){
       if(sf==='ממתין לאישור'){
@@ -904,14 +907,29 @@ function filtered(){
         if(o.status!==sf) return false;
       }
     }
-    if(g&&o.glass!==g)return false;
+    // סינון ברמת הפריט: סקיצה נושאת לרוב כמה סוגי זכוכית, ולכן הזמנה נשארת
+    // אם יש בה ולו פריט אחד מהסוג. ההשוואה על הזוג {עובי, סוג} — "8 שקוף"
+    // מפסיק לתפוס "18 שקוף".
+    if(g && !lgOrderHasGlass(o, g, skuCatalogMap)) return false;
+    if(c && (o.orderClient||'') !== c) return false;
     if(q){const h=((o.orderClient||'')+(o.orderNum||'')+(o.sketchName||'')+(o.type||'')+(o.phone||'')).toLowerCase();if(!h.includes(q))return false;}
     return true;
   });
   return result;
 }
 
+// שני מנועי הסינון של הרשימה הראשית, נבנים מהנתונים החיים.
+// הבחירה הנוכחית נשמרת — ר' lgFillFilterSelect — אחרת כל עדכון מ-Firebase
+// היה מאפס את הסינון תוך כדי עבודה.
+function buildOrderFilters(){
+  lgFillFilterSelect(document.getElementById('gf'),
+    lgGlassTypesInOrders(orders, skuCatalogMap), 'כל הזכוכיות');
+  lgFillFilterSelect(document.getElementById('cf'),
+    lgClientsInOrders(orders), 'כל הלקוחות');
+}
+
 function renderAll(){
+  buildOrderFilters();
   renderStats();if(cv==='kanban')renderKanban();else renderTable();
   // keep sketch queue in sync — same approach as kanban cards (always from live orders[])
   if(sqCurrent && document.getElementById('sqOverlay')?.style.display!=='none'){
@@ -1679,6 +1697,12 @@ document.addEventListener('visibilitychange', () => {
         <option value="optyway">OptyWay</option>
         <option value="done">הועבר ✓</option>
       </select>
+      <select id="sqFGlass" class="sq-filter-sel" onchange="sqRender()">
+        <option value="">כל הזכוכיות</option>
+      </select>
+      <select id="sqFClient" class="sq-filter-sel" onchange="sqRender()">
+        <option value="">כל הלקוחות</option>
+      </select>
       <input id="sqSearchInput" placeholder="🔍 חיפוש..." oninput="sqRender()">
       <button id="sqCloseBtn" onclick="closeSQ()" aria-label="סגור"><span data-icon="x"></span></button>
     </div>
@@ -1957,8 +1981,13 @@ function sqFiltered(){
   const src=document.getElementById('sqFSource').value;
   const stat=document.getElementById('sqFStatus').value;
   const q=(document.getElementById('sqSearchInput').value||'').toLowerCase();
+  const gf=document.getElementById('sqFGlass')?.value||'';
+  const cf=document.getElementById('sqFClient')?.value||'';
   return sqItems.filter(item=>{
     if(src&&item.source!==src) return false;
+    // סוג הזכוכית נבדק ברמת הפריט — סקיצה עם כמה סוגים נשארת אם יש בה אחד
+    if(gf && !lgOrderHasGlass(item, gf, skuCatalogMap)) return false;
+    if(cf && (item.orderClient||item.client||'') !== cf) return false;
     const st=sqStageMap[item.id]||'';
     // submissions (העלאות לקוח) — הצג תמיד אלא אם כן סיימו (done/chash/opty)
     const isDone=['chash','opty','done'].includes(st);
@@ -1981,6 +2010,10 @@ function sqStageTag(id){
 }
 
 function sqRender(){
+  lgFillFilterSelect(document.getElementById('sqFGlass'),
+    lgGlassTypesInOrders(sqItems, skuCatalogMap), 'כל הזכוכיות');
+  lgFillFilterSelect(document.getElementById('sqFClient'),
+    lgClientsInOrders(sqItems.map(i => ({ orderClient: i.orderClient || i.client }))), 'כל הלקוחות');
   const list=sqFiltered();
   const pending=sqItems.filter(i=>!(sqStageMap[i.id])).length;
   const atDrafter=sqItems.filter(i=>sqStageMap[i.id]==='drafter').length;

@@ -220,41 +220,10 @@ html,body{height:100%;overflow:hidden;}
 <!-- FILTERS - always visible -->
 <div class="filters" id="filtersBar">
   <input class="fi" id="fSearch" placeholder="🔍 חיפוש..." oninput="renderList()">
+  <!-- האופציות נבנות מהנתונים ב-renderGlassFilter(): רק סוגי הזכוכית
+       שקיימים בפועל בהזמנות שבשלב הזה, עם מספר הפריטים בכל אחד. -->
   <select class="fi" id="fGlass" onchange="renderList()">
     <option value="">כל הזכוכיות</option>
-    <optgroup label="8 מ&quot;מ">
-      <option value="8מ&quot;מ שקוף">8מ"מ שקוף</option>
-      <option value="8מ&quot;מ קליר">8מ"מ קליר</option>
-      <option value="8מ&quot;מ גרניט">8מ"מ גרניט</option>
-      <option value="8מ&quot;מ אסיד">8מ"מ אסיד</option>
-      <option value="8מ&quot;מ אפור">8מ"מ אפור</option>
-      <option value="8מ&quot;מ ברונזה">8מ"מ ברונזה</option>
-      <option value="8מ&quot;מ פיפיטה">8מ"מ פיפיטה</option>
-      <option value="8 אסיד קליר">8 אסיד קליר</option>
-      <option value="8 גלינה שקוף">8 גלינה שקוף</option>
-      <option value="8 גלינה קליר">8 גלינה קליר</option>
-    </optgroup>
-    <optgroup label="שקוף מלוטש">
-      <option value="4מ&quot;מ שקוף">4מ"מ שקוף</option>
-      <option value="5מ&quot;מ שקוף">5מ"מ שקוף</option>
-      <option value="6מ&quot;מ שקוף">6מ"מ שקוף</option>
-      <option value="8מ&quot;מ שקוף מלוטש">8מ"מ שקוף מלוטש</option>
-      <option value="10מ&quot;מ שקוף">10מ"מ שקוף</option>
-      <option value="12מ&quot;מ שקוף">12מ"מ שקוף</option>
-      <option value="12מ&quot;מ קליר">12מ"מ קליר</option>
-    </optgroup>
-    <optgroup label="מחוסם">
-      <option value="10מ&quot;מ קליר">10מ"מ קליר</option>
-      <option value="10מ&quot;מ אפור">10מ"מ אפור</option>
-      <option value="10מ&quot;מ אסיד">10מ"מ אסיד</option>
-      <option value="15מ&quot;מ קליר">15מ"מ קליר</option>
-    </optgroup>
-    <optgroup label="מראות">
-      <option value="5מ&quot;מ מראה מלוטש">5מ"מ מראה מלוטש</option>
-      <option value="5מ&quot;מ מראה אפורה">5מ"מ מראה אפורה</option>
-      <option value="5מ&quot;מ מראה ברונזה">5מ"מ מראה ברונזה</option>
-      <option value="5מ&quot;מ מראה צורתית">5מ"מ מראה צורתית</option>
-    </optgroup>
   </select>
   <select class="fi" id="fClient" onchange="renderList()">
     <option value="">כל הלקוחות</option>
@@ -391,6 +360,47 @@ let _csUnsub=null, _wdRef=null, _checkEditsRef=null;
 let _wdReady=false, _ordersReady=false; // דגלי טעינה — מונעים render לפני שהכל מוכן
 let _sendingToFactory=false; // מונע double-tap על "שלח למפעל"
 let _csGlobalPrices={}, _csClientPrices={}; // לנעילת מחיר במעבר ל-done (lgLockAndAdvance)
+let csSkuCatalogMap = {};                   // מזין את סינון סוגי הזכוכית
+
+// ─── סינון לפי סוג זכוכית ──────────────────────────────────────────────
+//
+//  עד כה הרשימה הייתה ~30 אופציות כתובות ביד, והסינון בדק תת-מחרוזת בשדה
+//  אחד ברמת ההזמנה. שתי בעיות: הרשימה לא תאמה למה שבאמת קיים, והזמנה עם
+//  שני סוגי זכוכית הוצגה או הוסתרה כמקשה אחת.
+//
+//  עכשיו: האופציות נגזרות מהמק"טים שנמשכו מחשבשבת, וההתאמה היא על הזוג
+//  {עובי, סוג} — כך "8 שקוף" מפסיק לתפוס בטעות "18 שקוף".
+
+function csGlassOf(item){ return lgGlassLabelOf(item, csSkuCatalogMap); }
+
+function csItemsOf(o){
+  return Array.isArray(o && o.items) ? o.items : Object.values((o && o.items) || {});
+}
+
+function csOrderHasGlass(o, label){
+  return csItemsOf(o).some(it => csGlassOf(it) === label);
+}
+
+// הפריטים שיוצגו בהזמנה: הכל, או רק הסוג שנבחר.
+// שומר את האינדקס המקורי — הסימונים ב-cs[] עובדים לפי אינדקס.
+function csFilteredItems(o){
+  const gf = document.getElementById('fGlass')?.value || '';
+  const withIdx = csItemsOf(o).map((it, idx) => ({ it, idx }));
+  if(!gf) return withIdx;
+  return withIdx.filter(({it}) => csGlassOf(it) === gf);
+}
+
+function renderGlassFilter(){
+  const sel = document.getElementById('fGlass');
+  if(!sel) return;
+  const keep = sel.value;
+  // רק מה שקיים בהזמנות שבשלב הזה — אופציה שתחזיר ריק לא מוצעת
+  const types = lgGlassTypesInOrders(orders, csSkuCatalogMap);
+  sel.innerHTML = '<option value="">כל הזכוכיות</option>' +
+    types.map(t => `<option value="${lgEsc(t.label)}">${lgEsc(t.label)} (${t.count})</option>`).join('');
+  // אם הבחירה הקודמת כבר לא קיימת, חוזרים ל"הכל" במקום להישאר על ריק
+  sel.value = types.some(t => t.label === keep) ? keep : '';
+}
 // סימונים זמניים לבדיקה — נשמרים ב-Firebase בנתיב נפרד, לא נוגעים ב-orders
 window._csCheckEdits = {};
 
@@ -439,6 +449,14 @@ function load(){
 
   // מחירים — נדרש כדי לנעול מחיר (lgLockAndAdvance) כשהזמנה מגיעה ל-done כאן
   listenAllPrices((gp, cp) => { _csGlobalPrices = gp; _csClientPrices = cp; });
+  // קטלוג מק"טים — מזין את סינון סוגי הזכוכית. פריטים שנוצרו ב-workday לא
+  // נושאים glass/mm על עצמם, ורק המק"ט מאפשר לגזור אותם. לא חוסם אם ריק.
+  listenSkuCatalog(list => {
+    csSkuCatalogMap = {};
+    list.forEach(e => { if (e && e.code) csSkuCatalogMap[e.code] = e; });
+    renderGlassFilter();
+    renderList();
+  });
 
   // Subscribe to workday — inChisum + checkState
   if(_wdRef) firebase.database().ref('workday').off('value', _wdRef);
@@ -535,8 +553,13 @@ function saveNotes(){ safeStorage.setItem('lgOrderNotes',JSON.stringify(notes));
 // מחזיר רק indices של פריטי חיסום (לא ליטוש)
 function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>!!(o.items||[])[i]?.chisum); }
 function buildClients(){
-  const cl=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))];
-  document.getElementById('fClient').innerHTML='<option value="">כל הלקוחות</option>'+cl.map(c=>`<option value="${lgEsc(c)}">${lgEsc(c)}</option>`).join('');
+  const sel = document.getElementById('fClient');
+  if(!sel) return;
+  const keep = sel.value;
+  const cl=[...new Set(orders.map(o=>o.orderClient).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'he'));
+  sel.innerHTML='<option value="">כל הלקוחות</option>'+cl.map(c=>`<option value="${lgEsc(c)}">${lgEsc(c)}</option>`).join('');
+  sel.value = cl.includes(keep) ? keep : '';
+  renderGlassFilter();   // שני הסינונים נבנים מאותם נתונים, אז יחד
 }
 
 // FILTER + RENDER LIST
@@ -556,7 +579,10 @@ function getFiltered(){
     if(activeTab==='active' && isDone(o)) return false;
     if(activeTab==='done'   && !isDone(o)) return false;
     if(q&&!(o.orderClient+o.sketchName+o.orderNum+(o.glassFullName||'')).toLowerCase().includes(q))return false;
-    if(gf&&!(o.glassFullName||'').includes(gf))return false;
+    // סינון ברמת הפריט: סקיצה אחת נושאת לרוב כמה סוגי זכוכית, ולכן הזמנה
+    // נשארת ברשימה אם יש בה ולו פריט אחד מהסוג שנבחר. מה שמוצג בתוכה
+    // מצומצם לאותו סוג — ר' csFilteredItems.
+    if(gf && !csOrderHasGlass(o, gf)) return false;
     if(cf&&o.orderClient!==cf)return false;
     return true;
   });

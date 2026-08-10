@@ -128,6 +128,79 @@ function _lgItemHasSurfaceWork(item) {
   return _lgItemHasGraphic(item) || _lgItemHasChalavi(item);
 }
 
+// ─── סוג הזכוכית של פריט, לתצוגה ולסינון ───────────────────────────────
+//
+//  "8 שקוף" — עובי וסוג, בלי המק"ט ובלי חלק העיבוד שבשם ("חתוך"/"מלוטש"/
+//  "מחוסם"). זה מה שמופיע ברשימת הסינון.
+//
+//  מקור: הפריט עצמו אם הוא נושא glass ו-mm (כך נוצרים פריטים באדמין),
+//  אחרת דרך המק"ט בקטלוג (workday לא שומר את השדות האלה על הפריט).
+//  פריט בלי מק"ט ובלי השדות — מוחזר null ולא משתתף בסינון.
+function lgGlassLabelOf(item, skuCatalogMap) {
+  if (!item) return null;
+  let glass = item.glass, mm = item.mm;
+  if ((!glass || !mm) && item.sku && skuCatalogMap) {
+    const e = skuCatalogMap[String(item.sku).toUpperCase().trim()];
+    if (e) { glass = glass || e.glass; mm = mm || e.mm; }
+  }
+  if (!glass || !mm) return null;
+  return mm + ' ' + glass;
+}
+
+// רשימת הסוגים שקיימים בפועל בהזמנות שנתונות, עם כמה פריטים בכל אחד.
+// נבנית מהנתונים ולא מרשימה קשיחה, כך שאופציה שתחזיר ריק לא מוצעת בכלל.
+// itemFilter מאפשר לצמצם לפריטים הרלוונטיים לשלב (למשל רק פריטי חיסום).
+function lgGlassTypesInOrders(orders, skuCatalogMap, itemFilter) {
+  const counts = {};
+  (orders || []).forEach(o => {
+    const items = Array.isArray(o.items) ? o.items : Object.values((o && o.items) || {});
+    items.forEach(it => {
+      if (itemFilter && !itemFilter(it, o)) return;
+      const label = lgGlassLabelOf(it, skuCatalogMap);
+      if (!label) return;
+      counts[label] = (counts[label] || 0) + 1;
+    });
+  });
+  return Object.entries(counts)
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => {
+      const am = parseInt(a.label, 10), bm = parseInt(b.label, 10);
+      if (am !== bm) return am - bm;
+      return a.label.localeCompare(b.label, 'he');
+    });
+}
+
+// האם בהזמנה יש ולו פריט אחד מסוג הזכוכית שנבחר.
+// הזמנה נשארת ברשימה גם אם רוב פריטיה מסוג אחר — הצמצום למה שנבחר נעשה
+// בתצוגה של הפריטים עצמם, לא בהסתרת ההזמנה.
+function lgOrderHasGlass(order, label, skuCatalogMap) {
+  if (!label) return true;
+  const items = Array.isArray(order && order.items)
+    ? order.items : Object.values((order && order.items) || {});
+  return items.some(it => lgGlassLabelOf(it, skuCatalogMap) === label);
+}
+
+// רשימת הלקוחות שקיימים בהזמנות שנתונות.
+function lgClientsInOrders(orders) {
+  return [...new Set((orders || []).map(o => o && o.orderClient).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'he'));
+}
+
+// בונה תוכן ל-select סינון ושומר את הבחירה הקיימת אם היא עדיין רלוונטית.
+// בלי שמירת הבחירה, כל רענון נתונים היה מאפס את הסינון תוך כדי עבודה.
+// `options` — מחרוזות, או {label, count}.
+function lgFillFilterSelect(sel, options, placeholder) {
+  if (!sel) return;
+  const keep = sel.value;
+  const norm = (options || []).map(o => (typeof o === 'string' ? { label: o } : o));
+  const esc  = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  sel.innerHTML = `<option value="">${esc(placeholder)}</option>` +
+    norm.map(o => `<option value="${esc(o.label)}">${esc(o.label)}` +
+                  `${o.count != null ? ' (' + o.count + ')' : ''}</option>`).join('');
+  sel.value = norm.some(o => o.label === keep) ? keep : '';
+}
+
 // ─── פענוח chisumArrivedIdxs ───────────────────────────────────────────
 //
 //  נכתב כ-{0:true, 1:true} ומוחזר מ-Firebase כמערך בוליאנים כשהמפתחות
