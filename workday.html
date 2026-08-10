@@ -1600,29 +1600,46 @@ function markAllClientArrived(clientKey, reportId, clientName){
 // מסמן/מבטל סימון של N מתוך קבוצת פריטים זהים (שורה מקובצת בטאב חיסום).
 // idxs = כל ה-globalIdx של הקבוצה; targetCount = כמות רצויה מסומנת (0..idxs.length).
 // היחידות זהות פיזית — לא משנה איזה אינדקס קונקרטי מסומן, רק הכמות.
+// עבד רק על arrivedItems — המערך המקומי — ולא שמר כלום ל-Firebase. שתי
+// תוצאות: סימון קבוצתי נמחק ברענון, ו"הורדה" מ-2/2 ל-1/2 לא עשתה כלום,
+// כי התצוגה מחשבת איחוד של השמור והמקומי והשמור נשאר במקומו. השורה נראתה
+// נעולה. toggleArrived ו-markAllClientArrived כן שמרו — רק זו לא.
+//
+// עכשיו chisumArrivedIdxs הוא מקור האמת גם כאן, ושתי השכבות משתנות יחד.
 function setGroupArrivedCount(orderId, idxs, targetCount){
   const sid = String(orderId);
+  const o   = allOrders.find(x => String(x.id) === sid);
   if(!arrivedItems[sid]) arrivedItems[sid] = [];
-  const current      = new Set(arrivedItems[sid].map(Number));
-  const currentCount = idxs.filter(i => current.has(i)).length;
-  const target        = Math.max(0, Math.min(idxs.length, Math.round(Number(targetCount) || 0)));
+
+  // המצב האמיתי הוא האיחוד — בדיוק מה שהמסך מציג
+  const persisted = new Set(lgArrivedIdxs(o && o.chisumArrivedIdxs));
+  const session   = new Set(arrivedItems[sid].map(Number));
+  const marked    = new Set([...persisted, ...session]);
+
+  const currentCount = idxs.filter(i => marked.has(i)).length;
+  const target = Math.max(0, Math.min(idxs.length, Math.round(Number(targetCount) || 0)));
+  if(target === currentCount) return;
+
+  const add = i => { marked.add(i); if(!arrivedItems[sid].includes(i)) arrivedItems[sid].push(i); };
+  const del = i => { marked.delete(i); arrivedItems[sid] = arrivedItems[sid].filter(x => x !== i); };
 
   if(target > currentCount){
     let need = target - currentCount;
-    for(const i of idxs){
-      if(need <= 0) break;
-      if(!current.has(i)){ arrivedItems[sid].push(i); need--; }
-    }
-  } else if(target < currentCount){
+    for(const i of idxs){ if(need <= 0) break; if(!marked.has(i)){ add(i); need--; } }
+  } else {
+    // מסירים מהסוף — היחידות זהות פיזית, רק הכמות משנה
     let remove = currentCount - target;
     for(let k = idxs.length - 1; k >= 0 && remove > 0; k--){
       const i = idxs[k];
-      if(current.has(i)){
-        arrivedItems[sid] = arrivedItems[sid].filter(x => x !== i);
-        remove--;
-      }
+      if(marked.has(i)){ del(i); remove--; }
     }
   }
+
+  // כל האינדקסים שנשארו מסומנים בהזמנה, לא רק של הקבוצה הזו
+  const next = new Set([...persisted].filter(i => marked.has(i)));
+  idxs.forEach(i => { if(marked.has(i)) next.add(i); });
+  _persistArrivedIdxs(sid, next);
+
   renderChisumTab();
 }
 
@@ -2122,16 +2139,23 @@ function renderChisumTab(){
         .filter(Boolean)
         .join('');
 
-      // ספור כמה פריטים בסשן זה כבר סומנו
-      let totalPend = 0, sessionMrk = 0;
+      // הגיעו מתוך הכל — אותו מכנה כמו בכרטיסי הלקוחות שמתחת.
+      // קודם זה נספר אחרת לגמרי: "מסומנים בסשן" חלקי "טרם הגיעו", כך ששתי
+      // שורות באותו מסך הראו מספרים שלא מתיישבים — 7/15 לצד 23/32.
+      let totalChisum = 0, arrivedAll = 0;
       orders.forEach(o => {
         const sid = String(o.id);
-        const ex = new Set(lgArrivedIdxs(o.chisumArrivedIdxs));
-        const pend = (o.items||[]).filter((it,i) => !!it.chisum && !ex.has(i)).length;
-        totalPend   += pend;
-        sessionMrk  += Math.min((arrivedItems[sid]||[]).length, pend);
+        const marked = new Set([
+          ...lgArrivedIdxs(o.chisumArrivedIdxs),
+          ...(arrivedItems[sid]||[]).map(Number),
+        ]);
+        const chisumIdx = (o.items||[]).map((it,i) => (it && it.chisum) ? i : -1).filter(i => i >= 0);
+        totalChisum += chisumIdx.length;
+        arrivedAll  += chisumIdx.filter(i => marked.has(i)).length;
       });
-      const progressTxt = totalPend ? `${sessionMrk}/${totalPend} פריטים סומנו` : 'כל הפריטים הגיעו';
+      const progressTxt = (totalChisum && arrivedAll >= totalChisum)
+        ? 'כל הפריטים הגיעו'
+        : `${arrivedAll}/${totalChisum} הגיעו`;
 
       arrivedHtml += `
       <div style="margin:0 12px 14px;border:1.5px solid rgba(39,174,96,0.3);border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">

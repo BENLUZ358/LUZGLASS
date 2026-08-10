@@ -68,11 +68,31 @@ check('empty object', decode({}), []);
 }
 
 /* ── no reader may go back to the raw form ────────────────────────────── */
+const workday = fs.readFileSync(path.join(__dirname, '..', 'workday.html'), 'utf8');
 {
-  const workday = fs.readFileSync(path.join(__dirname, '..', 'workday.html'), 'utf8');
   const raw = workday.match(/chisumArrivedIdxs\s*\|\|\s*\[\]\s*\)\s*\.map/g) || [];
   check('workday.html decodes only through lgArrivedIdxs', raw.length, 0);
 }
+
+/* ── every writer must persist ─────────────────────────────────────────
+   setGroupArrivedCount edited only the in-memory echo. A group marked 2/2
+   was lost on refresh, and turning it back down to 1/2 did nothing at all —
+   the display unions the saved set with the local one, so the saved mark
+   stayed and the row looked stuck. */
+for (const fn of ['toggleArrived', 'markAllClientArrived', 'setGroupArrivedCount']) {
+  const body = (workday.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
+  check(`${fn} exists`, body.length > 0, true);
+  check(`${fn} persists to Firebase`, /_persistArrivedIdxs\(/.test(body), true);
+}
+
+/* ── one denominator on the screen ─────────────────────────────────────
+   The report header counted "marked this session out of not-yet-arrived"
+   while the client cards counted "arrived out of total", so the same screen
+   showed 7/15 next to 23/32. */
+check('the report header counts arrived out of total',
+      /arrivedAll\}\/\$\{totalChisum\} הגיעו/.test(workday), true);
+check('the old session-based denominator is gone',
+      /פריטים סומנו`/.test(workday), false);
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll arrived-index checks passed.');
