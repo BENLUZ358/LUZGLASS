@@ -298,9 +298,9 @@ html,body{height:100%;overflow:hidden;}
     </div>
   </div>
   <div class="btmbar" id="btmbar">
-    <button class="zbtn zbtn-zoom" onclick="doZoom(0.25)">+</button>
-    <button class="zbtn zbtn-zoom" onclick="doZoom(-0.25)">−</button>
-    <button class="zbtn zbtn-zoom" onclick="resetZoom()">↺</button>
+    <button aria-label="הגדל" class="zbtn zbtn-zoom" onclick="doZoom(0.25)">+</button>
+    <button aria-label="הקטן" class="zbtn zbtn-zoom" onclick="doZoom(-0.25)">−</button>
+    <button aria-label="איפוס תצוגה" class="zbtn zbtn-zoom" onclick="resetZoom()">↺</button>
     <div class="sp"></div>
     <div class="icnt" id="iCnt"></div>
     <button class="tb-btn tb-out" onclick="openEditor()"><span data-icon="pencil"></span> ערוך</button>
@@ -314,7 +314,7 @@ html,body{height:100%;overflow:hidden;}
 <div class="sheet" id="sheet">
   <div class="sh-head">
     <span class="sh-hdr-t" id="shTitle">פריטים</span>
-    <button style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer" onclick="closeSheet()">✕</button>
+    <button aria-label="סגור" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer" onclick="closeSheet()">✕</button>
   </div>
   <div id="shBody"></div>
 </div>
@@ -346,7 +346,7 @@ html,body{height:100%;overflow:hidden;}
 <div id="csEd">
   <div class="ed-top">
     <div class="ed-ttl" id="edTitle">✏️ עריכה</div>
-    <button class="eact eundo" onclick="edUndo()">↩</button>
+    <button aria-label="בטל פעולה" class="eact eundo" onclick="edUndo()">↩</button>
     <button class="eact eclear" onclick="edClear()" aria-label="נקה"><span data-icon="trash"></span></button>
     <button class="eact ecancel" onclick="closeEditor()">ביטול</button>
     <button class="eact esave" onclick="edSave()">שמור ✓</button>
@@ -657,7 +657,7 @@ function renderList(){
       <div class="oc-top">
         <div class="oc-client">${lgEsc(o.orderClient)}</div>
         <div style="display:flex;align-items:center;gap:6px">
-          <button class="note-btn-inline" onclick="event.stopPropagation();openQN('${o.id}')">📝</button>
+          <button aria-label="הוסף הערה" class="note-btn-inline" onclick="event.stopPropagation();openQN('${o.id}')">📝</button>
           <span class="oc-badge ${badgeCls}">${badgeTxt}</span>
         </div>
       </div>

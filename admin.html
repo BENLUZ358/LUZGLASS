@@ -565,7 +565,7 @@ function openInvoicePreview(orderId, targetStage){
     <div style="background:#fff;border-radius:12px;width:100%;max-width:460px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.35);display:flex;flex-direction:column;">
       <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
         <span style="font-size:15px;font-weight:900;color:#f0ede8;">🧾 ${stage==='collected'?'קבלה / חשבונית — מסירה':'תצוגת חשבונית'}</span>
-        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
+        <button aria-label="סגור" onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
       </div>
       <div style="padding:18px 20px;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
@@ -707,7 +707,7 @@ function openMod(id) {
     ${o.sketch ? `
     <div class="msec">
       <div class="msec-t">סקיצה</div>
-      <img src="${lgEsc(o.sketch)}" class="mimg"/>
+      <img src="${lgEsc(o.sketch)}" alt="סקיצת ההזמנה" class="mimg"/>
     </div>` : ''}
     <div class="msec">
       <div class="msec-t">פריטים</div>
@@ -997,7 +997,7 @@ function previewSketch(id){
   if(!o||!o.sketch) return;
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
-  ov.innerHTML=`<img src="${lgEsc(o.sketch)}" style="max-width:95vw;max-height:85vh;object-fit:contain;border-radius:4px;">
+  ov.innerHTML=`<img src="${lgEsc(o.sketch)}" alt="סקיצת ההזמנה בתצוגה מלאה" style="max-width:95vw;max-height:85vh;object-fit:contain;border-radius:4px;">
     <button onclick="this.closest('div').remove()" style="padding:8px 20px;background:#fff;border:none;cursor:pointer;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:4px;">סגור</button>`;
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   document.body.appendChild(ov);
@@ -1270,7 +1270,7 @@ function openDailySummary(){
     <div style="background:#fff;border-radius:12px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin-top:20px;">
       <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;">
         <span style="font-size:15px;font-weight:900;color:#f0ede8;">📊 סיכום יום — ${todayStr}</span>
-        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
+        <button aria-label="סגור" onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
       </div>
       <div style="padding:20px 22px;display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;">
         ${_dsStat('✅ הושלמו היום', doneToday.length, doneTotal ? '₪'+doneTotal.toLocaleString() : '', '#27ae60')}
@@ -1716,13 +1716,13 @@ document.addEventListener('visibilitychange', () => {
         <div id="sqDetailScroll">
           <!-- header -->
           <div id="sqDetailHeader">
-            <button id="sqBackBtn" onclick="sqShowList()">→</button>
+            <button aria-label="חזרה לרשימת הסקיצות" id="sqBackBtn" onclick="sqShowList()">→</button>
             <div style="flex:1;min-width:0;">
               <div id="sqDClient"></div>
               <div id="sqDMeta"></div>
             </div>
-            <button class="sq-nav-btn" onclick="sqNav(-1)">→</button>
-            <button class="sq-nav-btn" onclick="sqNav(+1)">←</button>
+            <button aria-label="הסקיצה הקודמת" class="sq-nav-btn" onclick="sqNav(-1)">→</button>
+            <button aria-label="הסקיצה הבאה" class="sq-nav-btn" onclick="sqNav(+1)">←</button>
           </div>
           <!-- image -->
           <div id="sqImgWrap">
@@ -2023,7 +2023,7 @@ function sqRender(){
     const isDone=['opty','done'].includes(sqStageMap[item.id]||'');
     const isActive=sqCurrent&&sqCurrent.id===item.id;
     const thumb=item.sketch
-      ?`<div class="sq-thumb"><img src="${lgEsc(item.sketch)}" loading="lazy"></div>`
+      ?`<div class="sq-thumb"><img src="${lgEsc(item.sketch)}" alt="תצוגה מקדימה של הסקיצה" loading="lazy"></div>`
       :`<div class="sq-thumb">${item.source==='upload'?'📎':'📐'}</div>`;
     return `<div class="sq-item ${isDone?'sq-done':''} ${isActive?'sq-active':''}" onclick="sqSelect('${item.id}')">
       ${thumb}
@@ -3464,7 +3464,7 @@ async function umToggleActive(userId, clientName, currentlyActive){
     <!-- header -->
     <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
       <span style="font-size:15px;font-weight:900;color:#f0ede8;">👥 ניהול משתמשים</span>
-      <button onclick="closeUserMgmt()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;line-height:1;">✕</button>
+      <button aria-label="סגור" onclick="closeUserMgmt()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;line-height:1;">✕</button>
     </div>
     <!-- tabs -->
     <div style="display:flex;border-bottom:1px solid #eee;flex-shrink:0;">

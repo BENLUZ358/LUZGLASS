@@ -143,7 +143,7 @@ html,body{height:100%;overflow:hidden;}
 <body>
 <a href="#drMain" class="skip-link">דלג לתוכן</a>
 
-<div class="unav-topbar"><div class="lg">Luz<span>Glass</span></div><button class="unav-burger" onclick="unavOpen()"><span></span><span></span><span></span></button></div>
+<div class="unav-topbar"><div class="lg">Luz<span>Glass</span></div><button aria-label="פתח תפריט" class="unav-burger" onclick="unavOpen()"><span></span><span></span><span></span></button></div>
 <div class="unav-sidebar" id="unavSidebar">
   <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
   <nav class="unav-nav">
@@ -168,8 +168,8 @@ html,body{height:100%;overflow:hidden;}
   <div class="tbar-center">תחנת שרטט</div>
   <div class="tbar-right">
     <span class="counter" id="qCounter">0 בתור</span>
-    <button class="nav-btn" id="btnPrev" onclick="navSketch(-1)">→</button>
-    <button class="nav-btn" id="btnNext" onclick="navSketch(+1)">←</button>
+    <button aria-label="הסקיצה הקודמת" class="nav-btn" id="btnPrev" onclick="navSketch(-1)">→</button>
+    <button aria-label="הסקיצה הבאה" class="nav-btn" id="btnNext" onclick="navSketch(+1)">←</button>
     <div class="logo">Luz<span>Glass</span></div>
   </div>
 </div>
@@ -224,7 +224,7 @@ html,body{height:100%;overflow:hidden;}
           <button class="ed-close" onclick="closeEditor()">✕ סגור</button>
         </div>
         <div class="ed-canvas-wrap" id="edCanvasWrap">
-          <img id="edBg" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none">
+          <img id="edBg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none">
           <canvas id="edCvs" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
         </div>
       </div>

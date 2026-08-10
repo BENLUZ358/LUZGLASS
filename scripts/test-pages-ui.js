@@ -218,5 +218,45 @@ if (stray.length) {
   failed++;
 }
 
+/* ── every control has a name, every image has a description ───────────
+   Priority 1 in the design skill is accessibility, and its two named
+   anti-patterns are icon-only buttons without labels and missing alt text.
+   A button whose whole content is ✕ or ← is announced by a screen reader as
+   "button" — and the ← / → pair for previous and next sketch is announced
+   identically, so the two cannot be told apart at all.
+
+   title= counts: it is what a mouse user gets on hover and what assistive
+   tech falls back to when there is no aria-label. */
+{
+  const A11Y = ['workday.html','admin.html','check-station.html','portal.html',
+                'drafter.html','new-order.html','upload.html','order-view.html'];
+  let unlabelled = 0, undescribed = 0;
+  for (const page of A11Y) {
+    let html;
+    try { html = fs.readFileSync(path.join(ROOT, page), 'utf8'); } catch { continue; }
+
+    for (const tag of html.match(/<button[^>]*>[\s\S]{0,60}?<\/button>/g) || []) {
+      const text = tag.replace(/<button[^>]*>/, '').replace('</button>', '')
+                      .replace(/<[^>]+>/g, '').trim();
+      /* two characters or fewer is an icon, not a label */
+      if (text.length <= 2 && !/aria-label=|title=/.test(tag)) {
+        unlabelled++;
+        console.error('        no name: ' + page + ' — ' + tag.replace(/\s+/g,' ').slice(0, 80));
+      }
+    }
+    for (const tag of html.match(/<img[^>]*>/g) || []) {
+      if (!/alt=/.test(tag)) {
+        undescribed++;
+        console.error('        no alt : ' + page + ' — ' + tag.replace(/\s+/g,' ').slice(0, 80));
+      }
+    }
+  }
+  /* modalAdvBtn in admin is given its label from JS when it is shown */
+  /* this file's check() takes a boolean, not actual/expected */
+  check('every icon-only button has an accessible name', unlabelled <= 1,
+        unlabelled + ' unnamed (modalAdvBtn is labelled from JS when shown)');
+  check('every image has alt text', undescribed === 0, undescribed + ' without alt');
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');

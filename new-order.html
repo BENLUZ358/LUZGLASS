@@ -284,7 +284,7 @@ function mfRender() {
     return `
       <div class="mf-item">
         <div class="mf-item-info">${it.glass} · ${it.proc} · ${it.w}×${it.h} מ"מ${qLabel}</div>
-        <button class="mf-item-del" onclick="mfRemove(${i})">✕</button>
+        <button aria-label="הסר פריט" class="mf-item-del" onclick="mfRemove(${i})">✕</button>
       </div>`;
   }).join('');
 }

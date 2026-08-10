@@ -177,7 +177,7 @@ function render(){
         <td><div class="item-details">${item.finish||'—'}<br>${item.quality==='pliz'?'פליז':'זאמק'}${item.sand?' · חול':''}</div></td>
         <td><div class="item-details">${item.area||0} מ"ר</div></td>
         <td><span class="item-price">₪${(item.total||0).toLocaleString()}</span></td>
-        <td class="no-print"><button class="btn-del" onclick="deleteItem(${item.id})">✕</button></td>
+        <td class="no-print"><button aria-label="מחק פריט" class="btn-del" onclick="deleteItem(${item.id})">✕</button></td>
       </tr>`;
     if(item.notes){
       html+=`<tr><td colspan="8"><div class="note-box">📝 ${item.notes}</div></td></tr>`;
