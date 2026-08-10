@@ -1155,24 +1155,8 @@ function deleteSkuCatalogEntry(code){
     .catch(e=>{ console.error('deleteSkuCatalogItem:',e); showToast('שגיאה במחיקה'); });
 }
 
-// שולח את ה-ID token של המשתמש המחובר — ה-API בודק שם שהוא אדמין לפני שממשיך
-async function _lgAuthFetch(url){
-  const token = await firebase.auth().currentUser?.getIdToken();
-  return fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
-}
-
-// גרסת POST — ל-API שכותבים, כמו פתיחת הזמנה בחשבשבת
-async function _lgAuthPost(url, payload){
-  const token = await firebase.auth().currentUser?.getIdToken();
-  return fetch(url, {
-    method: 'POST',
-    headers: Object.assign(
-      { 'Content-Type': 'application/json' },
-      token ? { Authorization: 'Bearer ' + token } : {}
-    ),
-    body: JSON.stringify(payload || {}),
-  });
-}
+// _lgAuthFetch / _lgAuthPost עברו ל-firebase-db.js — גם workday צריך אותם
+// עכשיו כשהוא שולח וואטסאפ, ושני עותקים היו מתפצלים במוקדם או במאוחר.
 
 // חיבור API אמיתי — קורא ל-/api/hashavshevet-items (סוד ונתוני חתימה נשארים בשרת, אף פעם לא בדפדפן).
 // מריץ בבת-אחת (batches) כדי לא להציף את Firebase בקריאה סדרתית של מאות רשומות.

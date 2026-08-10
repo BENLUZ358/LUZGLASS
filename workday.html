@@ -524,6 +524,70 @@ async function _loadDeliveryClients(){
 function _waTarget(o){
   return lgResolveClientPhone(o, _wdAccounts, _customerIdByPhone);
 }
+// ── שליחה אוטומטית מהשרת ────────────────────────────────────────────────
+//
+// wa.me הוא deep link: הוא רק פותח את WhatsApp עם טקסט מוכן ומחכה שילחצו
+// שלח. ביום עם עשרות הזמנות שנסגרות זה לא עובד. השליחה עצמה קורית עכשיו
+// ב-api/whatsapp-send דרך WhatsApp Cloud API — בלי שום חלון שנפתח.
+//
+// אוסף את כל ההזמנות שנסגרו וקורא פעם אחת, ולא קריאה להזמנה. השרת מקצב
+// בעצמו, ומדלג על מה שכבר נשלח ועל הזמנות פיקטיביות.
+async function _waSendBulk(orderIds){
+  const ids = [...new Set((orderIds||[]).map(String))];
+  if(!ids.length) return;
+  try {
+    // dryRun:false — אבל כל עוד משתני הסביבה של Meta חסרים, השרת עונה
+    // "preview" ולא שולח כלום. אפשר להריץ את כל הזרימה לפני שיש חשבון.
+    const res  = await _lgAuthPost('/api/whatsapp-send', { orderIds: ids, dryRun: false });
+    const data = await res.json();
+    if(!res.ok){ showToast('⚠️ שליחת וואטסאפ נכשלה: ' + (data.error||res.status)); return; }
+    _waReport(data);
+  } catch(e){
+    console.error('whatsapp bulk:', e);
+    showToast('⚠️ לא הצלחתי להגיע לשרת השליחה');
+  }
+}
+
+// מדווח מה קרה. הודעה ללקוח היא פעולה יוצאת — כישלון חייב להיראות, לא
+// להיבלע בקונסולה, וזו בדיוק הטעות שכבר עלתה לנו בחשבשבת.
+function _waReport(data){
+  const t = data.tally || {};
+  if(data.dryRun){
+    const n = (t.preview||0);
+    showToast(`📱 ${n} הודעות מוכנות — וואטסאפ עדיין לא מחובר, לא נשלח כלום`);
+    return;
+  }
+  const bits = [];
+  if(t.sent)    bits.push(`✓ ${t.sent} הודעות נשלחו`);
+  if(t.skipped) bits.push(`${t.skipped} דולגו`);
+  if(t.error)   bits.push(`⚠️ ${t.error} נכשלו`);
+  showToast(bits.join(' · ') || 'לא נשלחו הודעות');
+
+  const failed = (data.results||[]).filter(r => r.status === 'error');
+  if(failed.length) _waFailureBanner(failed);
+}
+
+// כשהשליחה האוטומטית נכשלה — קישור ידני, אבל רק לפי בקשה. בלי לפתוח
+// חלונות מעצמו, שזו הנקודה שבגללה הכל שונה.
+function _waFailureBanner(failed){
+  const bar = document.createElement('div');
+  bar.style.cssText='position:fixed;bottom:70px;right:16px;left:16px;max-width:460px;margin:0 auto;background:#fff;border:2px solid var(--red);border-radius:10px;padding:12px 16px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.25);font-family:Heebo,sans-serif;direction:rtl;max-height:50vh;overflow:auto;';
+  bar.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <strong style="flex:1;font-size:13px;color:var(--red)">⚠️ ${failed.length} הודעות לא נשלחו</strong>
+      <button onclick="this.closest('[style]').remove()" style="border:none;background:none;font-size:16px;cursor:pointer;color:#8a8278">✕</button>
+    </div>
+    ${failed.map(f => {
+      const o = allOrders.find(x => String(x.id) === String(f.orderId));
+      const u = o ? _waLink(o, 'chisum_ready') : null;
+      return `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid rgba(0,0,0,0.05);display:flex;align-items:center;gap:8px;">
+        <span style="flex:1">${lgEsc((o&&o.orderClient)||f.orderId)} — ${lgEsc(f.reason||'שגיאה')}</span>
+        ${u?`<a href="${u}" target="_blank" style="padding:3px 9px;background:#25d366;color:#fff;font-weight:700;border-radius:4px;text-decoration:none;white-space:nowrap;">שלח ידנית</a>`:''}
+      </div>`;
+    }).join('')}`;
+  document.body.appendChild(bar);
+}
+
 function _waLink(o, kind){
   const t = _waTarget(o);
   if(!t.phone) return null;
@@ -1952,7 +2016,7 @@ async function completeGraphic(orderId){
   if(!o) return;
   const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
   if(nextSt === 'done'){
-    { const _u = _waLink(o,'ready'); if(_u) lgOpenWhatsApp(_u); else console.warn('אין מספר ללקוח', o.id); }
+    setTimeout(() => _waSendBulk([String(o.id)]), 1200);
   }
   if(nextSt === 'done' || nextSt === 'delivery'){
     _lgWarnUnpriced(await lgLockAndAdvance(String(orderId), o, _wdGlobalPrices, _wdClientPrices, nextSt));
@@ -2498,6 +2562,7 @@ function confirmResetChisum(){
   let doneCount     = 0;
   let partialCount  = 0;
   let msgCount      = 0;
+  const _waPending  = [];   // הזמנות שעוברות ל-done — הודעה אחת מרוכזת
 
   chisumOrds.forEach(o => {
     const sid = String(o.id);
@@ -2521,12 +2586,9 @@ function confirmResetChisum(){
       }
       // נקה מ-inChisum
       workDay.inChisum = workDay.inChisum.filter(id => String(id) !== sid);
-      // הודעה ללקוח רק אם עובר ל-done (לא גרפיקה, לא הובלה)
-      if(nextSt === 'done'){
-        setTimeout(() => {
-          { const _u = _waLink(o,'chisum_ready'); if(_u) lgOpenWhatsApp(_u); else console.warn('אין מספר ללקוח', o.id); }
-        }, msgCount++ * 600);
-      }
+      // הודעה ללקוח רק אם עובר ל-done (לא גרפיקה, לא הובלה).
+      // נאסף ונשלח בבת אחת מהשרת אחרי הלולאה — לא נפתח חלון לכל הזמנה.
+      if(nextSt === 'done'){ _waPending.push(sid); msgCount++; }
     } else if(st.marked > 0){
       // חלקי — ההזמנה נשארת בחיסום, אבל מה שכבר הגיע נסגר ויורד מהרשימה.
       // עד כאן זה רק כתב מחדש את אותם סימונים, כלומר לא עשה כלום: הרשימה
@@ -2536,6 +2598,10 @@ function confirmResetChisum(){
       _closeArrived(sid, st.triplexArrived, 'triplex');
     }
   });
+
+  // אחרי שהשלבים נכתבו — שליחה אחת מרוכזת מהשרת. השהיה קצרה כדי שהכתיבות
+  // יספיקו להיקלט, אחרת השרת קורא הזמנה שעדיין לא סומנה done.
+  if(_waPending.length) setTimeout(() => _waSendBulk(_waPending), 1200);
 
   LG_TRACK.chisum.echo  = {};
   LG_TRACK.triplex.echo = {};
@@ -2852,17 +2918,13 @@ function confirmFinish(){
   try {
   const { cutReady, cutPending, chisumOrds, mixed } = _getFinishDayGroups();
 
-  // שלח הודעה רק להזמנות שעוברות ישירות ל-done (לא גרפיקה, לא הובלה)
-  let waIdx = 0;
-  cutReady.forEach(o => {
-    const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
-    if(nextSt === 'done'){
-      const i = waIdx++;
-      setTimeout(()=>{
-        { const _u = _waLink(o,'ready'); if(_u) lgOpenWhatsApp(_u); else console.warn('אין מספר ללקוח', o.id); }
-      }, i * 600);
-    }
-  });
+  // שלח הודעה רק להזמנות שעוברות ישירות ל-done (לא גרפיקה, לא הובלה).
+  // זה הרגע עם הכי הרבה הודעות ביום — פעם אחת נפתח כאן חלון וואטסאפ לכל
+  // הזמנה בנפרד. עכשיו זו קריאה אחת לשרת, והוא מקצב בעצמו.
+  const _waReady = cutReady
+    .filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'done')
+    .map(o => String(o.id));
+  if(_waReady.length) setTimeout(() => _waSendBulk(_waReady), 1200);
 
   // עדכן statuses
   allOrders.forEach(o => {

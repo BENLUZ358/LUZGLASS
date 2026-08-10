@@ -1200,6 +1200,28 @@ function listenHashavshevetAccounts(callback) {
 }
 
 // עתידי — ייקרא מסנכרון דוח כרטיסי הלקוח. שדות עסקיים בלבד (שם/טלפון/מפתח/פעיל).
+// ─── קריאות ל-API שלנו עם זהות המשתמש ───────────────────────────────────
+//
+//  ה-API בצד השרת בודק בעצמו שהקורא הוא אדמין (api/_verifyAdmin.js), ולכן
+//  כל קריאה חייבת לשאת את ה-ID token. היו כאן רק ב-admin.html; משעה שגם
+//  workday שולח וואטסאפ הם משותפים, כדי שלא ייווצר עותק שני שיתפצל.
+async function _lgAuthFetch(url){
+  const token = await (firebase.auth().currentUser && firebase.auth().currentUser.getIdToken());
+  return fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+}
+
+async function _lgAuthPost(url, payload){
+  const token = await (firebase.auth().currentUser && firebase.auth().currentUser.getIdToken());
+  return fetch(url, {
+    method: 'POST',
+    headers: Object.assign(
+      { 'Content-Type': 'application/json' },
+      token ? { Authorization: 'Bearer ' + token } : {}
+    ),
+    body: JSON.stringify(payload || {}),
+  });
+}
+
 // ─── לאיזה מספר יוצאת ההודעה ללקוח ──────────────────────────────────────
 //
 //  מקור האמת הוא הטלפון בכרטיס הלקוח בחשבשבת. שם הוא מתוחזק, ומשם הוא

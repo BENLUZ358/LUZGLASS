@@ -110,10 +110,16 @@ check('a null order does not throw', resolve(null, ACCOUNTS, BY_PHONE).source, '
         /lgResolveClientPhone\(o, _wdAccounts, _customerIdByPhone\)/.test(workday), true);
   check('no send site builds the link from order.phone any more',
         /wa\.me\/972\$\{cleanPhone\(o\.phone\)\}/.test(workday), false);
-  check('all three send sites go through one link builder',
-        (workday.match(/_waLink\(o,'/g) || []).length, 3);
   check('the confirm dialog shows the number before sending',
         /const t = _waTarget\(o\);/.test(workday), true);
+
+  /* Sending itself moved to the server (api/whatsapp-send). _waLink survives
+     only as the manual fallback offered when an automatic send fails — it must
+     never be what a completed order routinely goes through again. */
+  check('nothing opens WhatsApp on the completion paths',
+        /lgOpenWhatsApp\(_u\)/.test(workday), false);
+  check('the only remaining link use is the failure fallback',
+        (workday.match(/_waLink\(o, 'chisum_ready'\)/g) || []).length, 1);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
