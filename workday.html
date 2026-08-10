@@ -287,6 +287,10 @@
       <span data-icon="flame"></span> חיסום
       <span class="cnt" id="cnt-chisum" style="background:var(--chisum)">0</span>
     </div>
+    <div class="phase-tab" id="tab-triplex" onclick="setTab('triplex')">
+      <span data-icon="layers"></span> טריפלקס
+      <span class="cnt" id="cnt-triplex" style="background:#0e7490">0</span>
+    </div>
     <div class="phase-tab" id="tab-graphic" onclick="setTab('graphic')">
       <span data-icon="image"></span> גרפיקה
       <span class="cnt" id="cnt-graphic" style="background:#27ae60">0</span>
@@ -441,6 +445,13 @@
       <div class="available-section">
         <div class="avail-title">רשימת חיסום</div>
         <div class="avail-grid" id="chisumOrders"></div>
+</div></div>
+
+    <!-- TAB: TRIPLEX -->
+    <div id="view-triplex" style="display:none">
+      <div class="available-section">
+        <div class="avail-title">טריפלקס במפעל</div>
+        <div class="avail-grid" id="triplexOrders"></div>
       </div>
     </div>
 
@@ -726,7 +737,7 @@ function saveWorkDay(){
 // ═══════════════════════════════════════
 function setTab(tab){
   currentTab = tab;
-  ['build','work','chisum','graphic','delivery'].forEach(t=>{
+  ['build','work','chisum','triplex','graphic','delivery'].forEach(t=>{
     const vEl = document.getElementById('view-'+t);
     const tEl = document.getElementById('tab-'+t);
     if(vEl) vEl.style.display = t===tab?'block':'none';
@@ -735,10 +746,10 @@ function setTab(tab){
   const fb = document.getElementById('filterBar');
   if(fb) fb.style.display = tab==='build'?'flex':'none';
   const finishBtn = document.getElementById('finishBtn');
-  const hideFinish = ['build','chisum','graphic','delivery'];
+  const hideFinish = ['build','chisum','triplex','graphic','delivery'];
   if(finishBtn) finishBtn.style.display = hideFinish.includes(tab) ? 'none' : '';
   const stb = document.getElementById('sumTypeBar');
-  const hideSumBar = ['chisum','graphic','delivery'];
+  const hideSumBar = ['chisum','triplex','graphic','delivery'];
   if(stb) stb.style.display = hideSumBar.includes(tab) ? 'none' : 'flex';
   renderAll();
 }
@@ -762,6 +773,7 @@ function renderAll(){
   renderAvailable();
   renderWorkCols(); renderWorkActive();
   renderChisumTab();
+  renderTriplexTab();
   renderGraphicTab();
   renderDeliveryTab();
   updateCounts();
@@ -1969,6 +1981,113 @@ async function finalizeDelivery(orderId, withInvoice){
   }
 }
 
+// ═══════════════════════════════════════
+//  TRIPLEX TAB
+// ═══════════════════════════════════════
+//
+//  טריפלקס מחוסם נוסע לאותו מפעל כמו החיסום, אבל שם מדביקים אותו והוא חוזר
+//  אחרי כמה ימים — לא למחרת. לכן הוא בטאב נפרד עם דוח נפרד: לחיצה על
+//  "קיבלתי" בחיסום לא אמורה לסמן טריפלקס שעדיין בחוץ.
+//
+//  התוספת היחידה לעומת כרטיס החיסום היא מספר הימים. בחיסום הוא חסר משמעות
+//  כי הכל חוזר למחרת; כאן זה בדיוק מה שצריך לדעת.
+
+function _daysSince(ts){
+  if(!ts) return null;
+  return Math.floor((Date.now() - ts) / 86400000);
+}
+
+function _triplexAgeLabel(orders){
+  const stamps = orders.map(o => o.triplexSentAt || o.updatedAt).filter(Boolean);
+  if(!stamps.length) return '';
+  const d = _daysSince(Math.min(...stamps));
+  if(d === null) return '';
+  if(d <= 0)  return 'נשלח היום';
+  if(d === 1) return 'לפני יום';
+  return `לפני ${d} ימים`;
+}
+
+function renderTriplexTab(){
+  const el = document.getElementById('triplexOrders');
+  if(!el) return;
+  const all = allOrders.filter(o => (o.stage||'') === 'chisum' && o.triplexReportId);
+  if(!all.length){
+    el.innerHTML = `<div class="empty"><div class="empty-icon">◪</div><p>אין טריפלקס במפעל כרגע</p></div>`;
+    return;
+  }
+
+  const reportMap = {};
+  all.forEach(o => {
+    const key = o.triplexReportId;
+    if(!reportMap[key]) reportMap[key] = { reportId: key, reportNum: o.triplexReportNum||null, orders: [] };
+    reportMap[key].orders.push(o);
+  });
+
+  el.innerHTML = Object.values(reportMap).map(group => {
+    const { reportId, reportNum, orders } = group;
+    const arrived    = orders.every(o => !!o.triplexArrived);
+    const label      = lgEsc(reportNum || 'דוח טריפלקס');
+    const totalItems = orders.reduce((s,o) => s + lgSplitFactoryItems(o.items).triplex.length, 0);
+    const age        = _triplexAgeLabel(orders);
+
+    // פירוט לפי לקוח — נגזר מאותן הזמנות, בלי state נוסף
+    const byClient = {};
+    orders.forEach(o => {
+      const n = o.orderClient || '—';
+      byClient[n] = (byClient[n]||0) + lgSplitFactoryItems(o.items).triplex.length;
+    });
+    const clientRows = Object.entries(byClient).map(([name, cnt]) =>
+      `<div style="padding:7px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(0,0,0,0.04);">
+        <span style="font-size:12px;font-weight:700;color:var(--text)">${lgEsc(name)}</span>
+        <span style="font-size:12px;font-weight:700;color:#0e7490">${cnt} פריטים</span>
+      </div>`).join('');
+
+    const sketchRows = orders.filter(o => o.sketch).map(o =>
+      `<div style="padding:6px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(0,0,0,0.04);">
+        <span style="flex:1;font-size:12px;color:var(--muted)">${lgEsc(o.orderClient||'')} · ${lgEsc(o.orderNum||'')}</span>
+        <button onclick="showSketchPopup('${lgJsStr(String(o.id))}')"
+          style="padding:3px 9px;background:var(--text);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">ראה סקיצה</button>
+      </div>`).join('');
+
+    return `
+    <div style="margin:0 12px 14px;border:1.5px solid ${arrived?'rgba(39,174,96,0.3)':'rgba(14,116,144,0.25)'};border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,0.06);">
+      <div style="padding:14px 16px;background:${arrived?'rgba(39,174,96,0.05)':'rgba(14,116,144,0.05)'};display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px">
+          <div style="font-size:14px;font-weight:900;color:${arrived?'var(--green)':'#0e7490'}">
+            ${arrived?'✓':'◪'} דוח ${label} — ${totalItems} פריטים
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">
+            ${arrived?'חזר מהמפעל':'בהדבקה במפעל'} · ${orders.length} הזמנות${age?' · '+lgEsc(age):''}
+          </div>
+        </div>
+        ${arrived?'':`<button onclick="markTriplexReportArrived('${lgJsStr(reportId)}','${lgJsStr(reportNum||'')}')"
+          style="padding:8px 16px;background:#0e7490;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:6px;white-space:nowrap;">
+          קיבלתי את הדוח</button>`}
+      </div>
+      <details style="border-top:1px solid rgba(14,116,144,0.1);">
+        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;color:#0e7490;cursor:pointer;outline:none;direction:rtl;text-align:right;">
+          ראה עוד
+        </summary>
+        ${clientRows}${sketchRows}
+      </details>
+    </div>`;
+  }).join('');
+}
+
+// אישור לפני סימון — אותו דפוס כמו בחיסום, ומגן מפני סימון דוח שעדיין בחוץ
+function markTriplexReportArrived(reportId, reportNum){
+  const reportOrders = allOrders.filter(o =>
+    (o.stage||'') === 'chisum' && o.triplexReportId === reportId && !o.triplexArrived
+  );
+  if(!reportOrders.length){ showToast('לא נמצאו הזמנות בדוח'); return; }
+  if(!confirm(`קיבלת את דוח הטריפלקס ${reportNum}?\n\n${reportOrders.length} הזמנות יסומנו כחזרו מההדבקה.`)) return;
+  reportOrders.forEach(o =>
+    updateOrder(String(o.id), { triplexArrived: true })
+      .catch(e => console.error('markTriplexReportArrived:', e)));
+  showToast(`✓ דוח ${reportNum} — ${reportOrders.length} הזמנות חזרו`);
+  renderTriplexTab();
+}
+
 function renderChisumTab(){
   const el = document.getElementById('chisumOrders');
   const all = allOrders.filter(o => (o.stage||'') === 'chisum');
@@ -2298,6 +2417,14 @@ function updateCounts(){
     chisumItemCount += Math.max(0, chisumItems.length - arrivedCount);
   });
   document.getElementById('cnt-chisum').textContent = chisumItemCount;
+
+  // cnt-triplex: פריטי טריפלקס שעדיין במפעל. הם באותו stage כמו החיסום,
+  // ולכן מזוהים לפי triplexReportId ולא לפי השלב.
+  let triplexItemCount = 0;
+  allOrders.filter(o => (o.stage||'') === 'chisum' && o.triplexReportId && !o.triplexArrived)
+    .forEach(o => { triplexItemCount += lgSplitFactoryItems(o.items).triplex.length; });
+  const _tc = document.getElementById('cnt-triplex');
+  if(_tc) _tc.textContent = triplexItemCount;
 
   // cnt-graphic: הזמנות בשלב גרפיקה
   const graphicCount = allOrders.filter(o => (o.stage||'') === 'graphic').length;

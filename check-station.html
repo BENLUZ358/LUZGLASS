@@ -929,6 +929,9 @@ async function sendAllToFactory(){
       patch.triplexArrived   = false;
       patch.triplexReportId  = triplexId;
       patch.triplexReportNum = triplexNum;
+      // מתי יצא — הטאב ביום עבודה מציג כמה ימים הוא כבר בחוץ, וזה בדיוק
+      // מה שצריך לדעת בטריפלקס שחוזר אחרי ימים ולא למחרת.
+      patch.triplexSentAt    = Date.now();
     }
     return updateOrder(String(o.id), patch)
       .then(()=>{
