@@ -139,6 +139,9 @@ html,body{height:100%;overflow:hidden;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <!-- ערכת האייקונים המשותפת. הדף היה היחיד שלא טען אותה, ולכן תפריט
+       המשתמש שלו — אותו תפריט בדיוק כמו בשאר הדפים — הוצג באמוג'י. -->
+  <script src="lg-icons.js?v=20260807"></script>
 </head>
 <body>
 <a href="#drMain" class="skip-link">דלג לתוכן</a>
@@ -148,14 +151,14 @@ html,body{height:100%;overflow:hidden;}
   <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
   <nav class="unav-nav">
     <div class="unav-sec">מנהל עבודה</div>
-    <a class="unav-a" href="admin.html"><span class="ic">⬡</span>לוח הזמנות</a>
-    <a class="unav-a" href="admin.html"><span class="ic">💰</span>מחירונים</a>
-    <a class="unav-a" href="admin.html"><span class="ic">📅</span>לוח איסופים</a>
+    <a class="unav-a" href="admin.html"><span class="ic" data-icon="kanban"></span>לוח הזמנות</a>
+    <a class="unav-a" href="admin.html"><span class="ic" data-icon="wallet"></span>מחירונים</a>
+    <a class="unav-a" href="admin.html"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
     <div class="unav-sec">תחנות עבודה</div>
-    <a class="unav-a" href="admin.html"><span class="ic">📐</span>תור סקיצות</a>
-    <a class="unav-a active" href="drafter.html"><span class="ic">✏️</span>שרטט</a>
-    <a class="unav-a" href="check-station.html"><span class="ic">🔍</span>תחנת בדיקה</a>
-    <a class="unav-a" href="workday.html"><span class="ic">🏭</span>יום עבודה</a>
+    <a class="unav-a" href="admin.html"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
+    <a class="unav-a active" href="drafter.html"><span class="ic" data-icon="pencil"></span>שרטט</a>
+    <a class="unav-a" href="check-station.html"><span class="ic" data-icon="search"></span>תחנת בדיקה</a>
+    <a class="unav-a" href="workday.html"><span class="ic" data-icon="factory"></span>יום עבודה</a>
   </nav>
 </div>
 <div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>

@@ -258,5 +258,32 @@ if (stray.length) {
   check('every image has alt text', undescribed === 0, undescribed + ' without alt');
 }
 
+/* ── the shared menu uses the shared icons ────────────────────────────
+   Every page carries the same user menu, with the same .unav-a markup and the
+   same labels. Six pages drew it with the SVG set; drafter.html drew it with
+   emoji, because it was the one page that never loaded lg-icons.js. The same
+   menu item therefore looked different depending on which screen you were on,
+   and on a Windows machine versus an iPad it looked different again — emoji
+   are drawn by the system font and cannot be themed.
+
+   A page that renders .unav-a must load the icon set and use it. */
+{
+  const NAV_PAGES = ['admin.html','workday.html','check-station.html',
+                     'drafter.html','portal.html'];
+  for (const page of NAV_PAGES) {
+    let html;
+    try { html = fs.readFileSync(path.join(ROOT, page), 'utf8'); } catch { continue; }
+    if (!/class="unav-a"|class="unav-a /.test(html)) continue;
+
+    check(page + ' loads the shared icon set', /lg-icons\.js/.test(html),
+          'the menu falls back to system emoji without it');
+
+    const emojiIcons = (html.match(/<span class="ic">[^<]+<\/span>/g) || [])
+                       .filter(t => !/data-icon/.test(t));
+    check(page + ' draws its menu icons from the set', emojiIcons.length === 0,
+          emojiIcons.length + ' still literal: ' + emojiIcons.join(' '));
+  }
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');
