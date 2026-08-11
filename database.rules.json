@@ -39,6 +39,16 @@
       ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
       "global": {
         ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).exists()"
+      },
+      "clients": {
+        "$customerId": {
+          ".read": "auth != null && auth.token.email != null && (root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin' || root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('customerId').val() === $customerId)"
+        }
+      },
+      "clientKeys": {
+        "$customerId": {
+          ".read": "auth != null && auth.token.email != null && (root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin' || root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('customerId').val() === $customerId)"
+        }
       }
     },
 

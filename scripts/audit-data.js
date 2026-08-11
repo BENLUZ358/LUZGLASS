@@ -134,6 +134,14 @@ const db = getDatabase(app);
     'לכרטיס הלקוח בחשבשבת אין טלפון',
     'ההודעה תצא למספר שהועתק להזמנה, ולא למספר המתוחזק בכרטיס.');
 
+  /* The client→price-list mapping is held here rather than pulled, so it goes
+     stale in silence: a new client, or one moved to another list in
+     Hashavshevet, keeps being priced from the general list with nothing to
+     say so. This is the check that makes the manual mapping safe to live with. */
+  const noPriceList = add('medium',
+    'לקוח עם הזמנות שאין לו מחירון משויך',
+    'ההזמנות שלו מתומחרות לפי המחירון הכללי, גם אם בחשבשבת יש לו מחירון משלו.');
+
   /* ── 6. panels that cannot be priced or filtered ───────────────────────── */
   const noSku = add('high',
     'פריט בלי מק"ט',
@@ -225,6 +233,19 @@ const db = getDatabase(app);
   Object.entries(byNum).forEach(([num, ids]) => {
     if (ids.length > 1) dupNum(`${num} → ${ids.join(', ')}`);
   });
+
+  /* ── clients with orders but no price list ─────────────────────────────── */
+  {
+    const mapped = prices.clientPriceList || {};
+    const byName = new Set(Object.values(mapped).map(m => m && m.client));
+    const seen   = new Set();
+    for (const o of orders) {
+      const name = o.orderClient;
+      if (!name || o.isTest || seen.has(name)) continue;
+      seen.add(name);
+      if (!byName.has(name)) noPriceList(`${name} — ${orders.filter(x => x.orderClient === name).length} הזמנות`);
+    }
+  }
 
   /* ── walk the catalogue ─────────────────────────────────────────────────── */
   /* which SKUs have actually been ordered — that is what separates a price

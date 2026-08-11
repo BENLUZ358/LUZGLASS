@@ -420,6 +420,13 @@ function load() {
     const ov = document.getElementById('lgLoading');
     if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
   });
+  // השיוך לקוח→מחירון. נשמר אצלנו כי חשבשבת מחזיקים אותו על כרטיס הלקוח
+  // ולא בדוח המחירים, ומשיכתו הייתה דורשת דוח שני.
+  firebase.database().ref('prices/clientPriceList').on('value', snap => {
+    _clientPriceMap = snap.val() || {};
+    if(_priceTab === 'clients' && document.getElementById('pricingBody')) renderPricing();
+  });
+
   listenAllPrices((gp, cp) => {
     globalPrices = gp;
     clientPrices = cp;
@@ -1242,10 +1249,74 @@ function closePricing(){
   document.getElementById('pricingOv').classList.remove('open');
 }
 
+// מחירון כללי מול מחירוני לקוח. הכללי נמשך מחשבשבת אוטומטית; מחירוני
+// הלקוח מיובאים מייצוא הדוח ומשויכים ידנית, כי חשבשבת מחזיקים את השיוך
+// על כרטיס הלקוח ולא בדוח המחירים.
+let _priceTab = 'global';
+let _clientPriceMap = {};   // מפתח חשבון → { list, listName, client }
+function setPriceTab(t){ _priceTab = t; renderPricing(); }
+
 function renderPricing(){
-  const el=document.getElementById('pricingBody');
-  renderGlobalPriceTab(el);
+  const el = document.getElementById('pricingBody');
+  const tab = (id, label) =>
+    '<button onclick="setPriceTab(\'' + id + '\')" style="flex:1;padding:10px;border:none;cursor:pointer;'
+    + 'font-family:Heebo,sans-serif;font-size:13px;font-weight:700;'
+    + (_priceTab===id ? 'background:var(--gold);color:var(--on-gold);' : 'background:var(--bg2);color:var(--muted);')
+    + '">' + label + '</button>';
+  el.innerHTML = '<div style="display:flex;gap:2px;margin-bottom:16px;border-radius:6px;overflow:hidden">'
+    + tab('global','מחירון כללי') + tab('clients','מחירוני לקוחות') + '</div><div id="priceTabBody"></div>';
+  const body = document.getElementById('priceTabBody');
+  if(_priceTab === 'clients') renderClientPriceTab(body);
+  else renderGlobalPriceTab(body);
 }
+
+// ─── טאב "מחירוני לקוחות" ─────────────────────────────────────────────────
+function renderClientPriceTab(el){
+  const map  = _clientPriceMap || {};
+  const keys = Object.keys(map);
+
+  if(!keys.length){
+    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">'
+      + 'אין עדיין מחירוני לקוח.<br><span style="font-size:12px">מיובאים מייצוא דוח המחירונים של חשבשבת.</span></div>';
+    return;
+  }
+
+  const rows = keys.map(function(k){
+    const m = map[k] || {};
+    const prices = (clientPrices[m.client] || {});
+    const n = Object.keys(prices).length;
+    const sel = _clientPriceOpen === k;
+    return '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">'
+      + '<div onclick="togglePriceClient(\'' + lgJsStr(k) + '\')" style="padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;background:' + (sel?'var(--bg2)':'var(--surface)') + '">'
+      + '<div style="flex:1"><div style="font-size:13px;font-weight:900">' + lgEsc(m.client||k) + '</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-top:2px">מפתח ' + lgEsc(k) + ' · מחירון ' + lgEsc(String(m.list||'—')) + ' · ' + lgEsc(m.listName||'') + '</div></div>'
+      + '<span style="font-size:12px;font-weight:700;color:var(--gold-text);white-space:nowrap">' + n + ' מחירים</span>'
+      + '<span style="font-size:15px;color:var(--muted);transform:rotate(' + (sel?'180':'0') + 'deg)">▾</span>'
+      + '</div>'
+      + (sel ? '<div style="max-height:320px;overflow-y:auto;border-top:1px solid var(--border)">'
+          + Object.keys(prices).sort().map(function(sku){
+              const cat = skuCatalogMap[sku];
+              const g   = globalPrices[sku];
+              const diff = (g != null && Number(g) !== Number(prices[sku]));
+              return '<div style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid rgba(0,0,0,0.04);font-size:12px">'
+                + '<span style="font-weight:700;min-width:80px">' + lgEsc(sku) + '</span>'
+                + '<span style="flex:1;color:var(--muted)">' + lgEsc((cat&&cat.name)||'') + '</span>'
+                + (diff ? '<span style="color:var(--muted);text-decoration:line-through">₪' + lgEsc(String(g)) + '</span>' : '')
+                + '<span style="font-weight:900;color:' + (diff?'var(--gold-text)':'var(--text)') + ';min-width:60px;text-align:left">₪' + lgEsc(String(prices[sku])) + '</span>'
+                + '</div>';
+            }).join('')
+          + '</div>' : '')
+      + '</div>';
+  }).join('');
+
+  el.innerHTML = '<p style="font-size:12px;color:var(--muted);margin-bottom:14px">'
+    + 'מחיר של לקוח גובר על המחירון הכללי. מחיר שמסומן בזהב שונה מהכללי — הכללי מוצג לידו מחוק.<br>'
+    + 'המחירים מיובאים מייצוא דוח המחירונים של חשבשבת, והשיוך לקוח→מחירון נשמר כאן.'
+    + '</p>' + rows;
+}
+
+let _clientPriceOpen = null;
+function togglePriceClient(k){ _clientPriceOpen = (_clientPriceOpen===k?null:k); renderPricing(); }
 
 // ─── טאב "מחירון כללי" — קטלוג מק"טים מחשבשבת, מחיר תצוגה בלבד ────────────
 function renderGlobalPriceTab(el){

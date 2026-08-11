@@ -359,9 +359,34 @@ function init(){
   document.getElementById("navName").textContent = clientName;
   document.getElementById("heroName").textContent = clientName;
 
+  // ── המחירון של הלקוח עצמו ──
+  //
+  // listenGlobalPrices מחזיר cp ריק תמיד — הוא קורא רק prices/global, כדי
+  // שלקוח לא יזדקק להרשאת קריאה רחבה. עכשיו שיש מחירוני לקוח, הוא קורא גם
+  // את הענף שלו בלבד: prices/clients/<מפתח החשבון שלו>. חוקי Firebase
+  // מתירים בדיוק את הצומת הזה ולא אף אחד אחר, אז אי אפשר להציץ למחירון
+  // של לקוח אחר גם מהקונסולה.
+  //
+  // מפתח החשבון יושב על רשומת המשתמש, שלקוח רשאי לקרוא רק את שלו.
+  const _myPhone = String(sess.phone || '').replace(/[-\s]/g, '');
+  if(_myPhone){
+    firebase.database().ref('users/' + _myPhone + '/customerId').once('value')
+      .then(snap => {
+        const cid = snap.val();
+        if(!cid) return;
+        firebase.database().ref('prices/clients/' + cid).on('value', s2 => {
+          const mine = s2.val() || {};
+          if(!Object.keys(mine).length) return;
+          _portalClientPrices[clientName] = mine;
+          renderAll();
+        });
+      })
+      .catch(e => console.warn('client price list:', e));
+  }
+
   listenGlobalPrices((gp, cp) => {
     _portalGlobalPrices = gp;
-    _portalClientPrices = cp;
+    _portalClientPrices = Object.assign({}, cp, _portalClientPrices);
     ORDERS.forEach(o => {
       // העבר totalFinal כדי ש-lgCalcOrderTotal יחזיר מחיר נעול לנאספות
       const calc = lgCalcOrderTotal({items: o.items, orderClient: o.orderClient, totalFinal: o._totalFinal}, gp, cp);
