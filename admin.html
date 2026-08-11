@@ -831,11 +831,181 @@ function acceptOrder(id) {
 
 
 // ── כרטיסיית הזמנה בקנבן ──────────────────────────────────
+// חשבונית מרוכזת — אילו הזמנות סומנו בעמודת "מוכן לאיסוף".
+// חשבונית מופקת על חשבון אחד, ולכן הבחירה ננעלת ללקוח של הראשונה שנבחרה.
+let invSel = new Set();
+let invSelClient = null;
+
+function invToggle(id, client, ev){
+  if(ev) ev.stopPropagation();          // אל תפתח את ההזמנה בלחיצה על התיבה
+  if(invSel.has(id)){
+    invSel.delete(id);
+    if(!invSel.size) invSelClient = null;
+  } else {
+    if(invSel.size && invSelClient !== client){
+      showToast('חשבונית מופקת על לקוח אחד — בטל את הבחירה הקודמת');
+      return;
+    }
+    invSel.add(id); invSelClient = client;
+  }
+  renderAll();
+}
+
+function invClear(){ invSel.clear(); invSelClient = null; renderAll(); }
+
+// סרגל הבחירה. מופיע רק כשיש בחירה, ומראה על מה בדיוק תופק החשבונית.
+function renderInvBar(){
+  let bar = document.getElementById('invBar');
+  if(!invSel.size){ if(bar) bar.remove(); return; }
+  if(!bar){
+    bar = document.createElement('div');
+    bar.id = 'invBar';
+    bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:400;background:#1a1714;color:#f7f4ef;'
+      + 'padding:12px 20px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));'
+      + 'display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-family:Heebo,sans-serif;direction:rtl;'
+      + 'box-shadow:0 -4px 20px rgba(0,0,0,0.3);';
+    document.body.appendChild(bar);
+  }
+  const picked = orders.filter(o => invSel.has(o.id));
+  const total  = picked.reduce((sum,o) => sum + (Number(o.totalFinal != null ? o.totalFinal : (o.total||0)) || 0), 0);
+  const noLock = picked.filter(o => !(Array.isArray(o.lockedItems) && o.lockedItems.length)).length;
+  bar.innerHTML =
+    '<div style="flex:1;min-width:200px;">'
+    + '<div style="font-size:14px;font-weight:900;">' + lgEsc(invSelClient||'') + ' · ' + picked.length + ' הזמנות</div>'
+    + '<div style="font-size:12px;color:rgba(247,244,239,0.6);margin-top:2px;">'
+    + picked.map(function(o){return lgEsc(o.orderNum||'');}).join(' · ')
+    + (total ? ' · סה"כ ₪' + total.toLocaleString() : '')
+    + (noLock ? ' · <span style="color:#e8b44a">⚠ ' + noLock + ' בלי מחיר נעול</span>' : '')
+    + '</div></div>'
+    + '<button onclick="invPreview()" style="padding:10px 18px;background:var(--gold);color:var(--on-gold);border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;cursor:pointer;white-space:nowrap;">הפק חשבונית</button>'
+    + '<button onclick="invClear()" style="padding:10px 14px;background:transparent;color:rgba(247,244,239,0.6);border:1px solid rgba(255,255,255,0.2);border-radius:6px;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;white-space:nowrap;">נקה בחירה</button>';
+}
+
+// שלב 1 — תצוגה מקדימה מהשרת. שום דבר לא נשלח לחשבשבת בשלב הזה.
+async function invPreview(){
+  const ids = Array.from(invSel);
+  if(!ids.length) return;
+  _invOverlay('בונה את החשבונית בשרת...');
+  let data, res;
+  try {
+    res  = await _lgAuthPost('/api/hashavshevet-invoice', { orderIds: ids, dryRun: true });
+    data = await res.json();
+  } catch(e){ _invRender({ error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false); return; }
+  _invRender(data, res.ok);
+}
+
+// שלב 2 — הפקה אמיתית, ורק אחריה ההזמנות עוברות לנאסף.
+// הסדר מכוון: הזמנה שנאספה בלי חשבונית גרועה מהזמנה שנתקעה.
+async function invSend(){
+  const btn = document.getElementById('invSendBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'מפיק...'; }
+  const ids = Array.from(invSel);
+  let data, res;
+  try {
+    res  = await _lgAuthPost('/api/hashavshevet-invoice', { orderIds: ids, dryRun: false });
+    data = await res.json();
+  } catch(e){ _invRender({ error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false); return; }
+  if(res.ok && data.ok){
+    for(const id of ids){
+      await updateStage(id, 'collected').catch(function(e){ console.error('invSend updateStage:', e); });
+    }
+    invSel.clear(); invSelClient = null;
+  }
+  _invRender(data, res.ok);
+  renderAll();
+}
+
+function _invOverlay(msg){
+  const old = document.getElementById('invOv');
+  if(old) old.remove();
+  const ov = document.createElement('div');
+  ov.id = 'invOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(26,23,20,0.6);z-index:800;display:flex;align-items:center;justify-content:center;padding:20px;font-family:Heebo,sans-serif;direction:rtl;';
+  ov.innerHTML = '<div class="modal" style="max-width:620px"><div class="mhdr"><h2>חשבונית</h2></div><div class="mbody"><div class="empty-state"><div class="empty-state-msg">' + lgEsc(msg) + '</div></div></div></div>';
+  ov.onclick = function(e){ if(e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+  return ov;
+}
+
+function _invClose(){ const o = document.getElementById('invOv'); if(o) o.remove(); }
+
+function _invRender(data, ok){
+  const ov = document.getElementById('invOv') || _invOverlay('');
+  if(!ok || data.error){
+    const list = (data.orders || data.clients || []);
+    const extra = list.length
+      ? '<div style="font-size:12px;color:var(--muted);margin-top:8px">' + list.map(lgEsc).join(' · ') + '</div>' : '';
+    ov.innerHTML = '<div class="modal" style="max-width:620px">'
+      + '<div class="mhdr"><h2>לא הופקה חשבונית</h2><button class="mcl" aria-label="סגור" onclick="_invClose()"><span data-icon="x"></span></button></div>'
+      + '<div class="mbody"><div style="color:var(--red);font-weight:700;font-size:13px">' + lgEsc(data.error || 'שגיאה') + '</div>'
+      + (data.hint ? '<div style="font-size:12px;color:var(--muted);margin-top:6px">' + lgEsc(data.hint) + '</div>' : '')
+      + extra + '</div>'
+      + '<div class="mfoot"><button class="btn btn-secondary" onclick="_invClose()">סגור</button></div></div>';
+    if(window.lgIcons) lgIcons.render(ov);
+    return;
+  }
+
+  if(data.dryRun === false){
+    const raw = typeof data.response === 'string' ? data.response : JSON.stringify(data.response, null, 2);
+    ov.innerHTML = '<div class="modal" style="max-width:620px">'
+      + '<div class="mhdr"><h2>הופקה — יש לאמת בחשבשבת</h2><button class="mcl" aria-label="סגור" onclick="_invClose()"><span data-icon="x"></span></button></div>'
+      + '<div class="mbody">'
+      + '<div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ' + lgEsc(data.reference) + ' · ' + lgEsc(data.client) + ' · ' + data.lineCount + ' שורות · ₪' + Number(data.total||0).toLocaleString() + '</div>'
+      + '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">הבקשה התקבלה. זה לא מבטיח שנוצר מסמך — יש לפתוח את חשבשבת ולוודא.</div>'
+      + '<div class="sec-title">הזמנות</div><div style="font-size:12px;padding:4px 0">' + (data.orderNums||[]).map(lgEsc).join(' · ') + '</div>'
+      + '<div class="sec-title" style="margin-top:12px">תשובת חשבשבת</div>'
+      + '<pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:200px;white-space:pre-wrap">' + lgEsc(raw||'') + '</pre>'
+      + '</div><div class="mfoot"><button class="btn btn-primary" onclick="_invClose()">סגור</button></div></div>';
+    if(window.lgIcons) lgIcons.render(ov);
+    return;
+  }
+
+  const rows = (data.preview||[]).map(function(l){
+    return '<tr><td style="font-size:12px;color:var(--muted)">' + lgEsc(l.order||'') + '</td><td>' + lgEsc(l.sku) + '</td>'
+      + '<td style="color:var(--muted)">' + lgEsc(l.name||'') + '</td><td>' + lgEsc(l.qty) + '</td>'
+      + '<td>₪' + Number(l.ppm2||0).toLocaleString() + '</td><td style="font-weight:700">₪' + Number(l.lineTotal||0).toLocaleString() + '</td></tr>';
+  }).join('');
+  const skipped = (data.skipped||[]).length
+    ? '<div class="sec-title" style="margin-top:14px">לא ייכללו (' + data.skipped.length + ')</div>'
+      + data.skipped.map(function(x){ return '<div style="font-size:12px;color:var(--red);padding:3px 0">' + lgEsc(x.order||'') + ' · ' + lgEsc(x.name||'') + ' — ' + lgEsc(x.reason) + '</div>'; }).join('')
+    : '';
+
+  ov.innerHTML = '<div class="modal" style="max-width:620px">'
+    + '<div class="mhdr"><h2>תצוגה מקדימה — טרם הופקה</h2><button class="mcl" aria-label="סגור" onclick="_invClose()"><span data-icon="x"></span></button></div>'
+    + '<div class="mbody">'
+    + '<div class="mgrid" style="margin-bottom:14px">'
+    + '<div class="mf"><label>לקוח</label><div class="v">' + lgEsc(data.client) + '</div></div>'
+    + '<div class="mf"><label>מפתח חשבון</label><div class="v">' + lgEsc(data.accountKey) + '</div></div>'
+    + '<div class="mf"><label>סוג מסמך</label><div class="v">' + lgEsc(data.documentId) + ' — ' + lgEsc(data.documentName||'') + '</div></div>'
+    + '<div class="mf"><label>אסמכתא</label><div class="v">' + lgEsc(data.reference) + '</div></div>'
+    + '</div>'
+    + '<table class="table"><thead><tr><th>הזמנה</th><th>מק"ט</th><th>פריט</th><th>מ"ר</th><th>למ"ר</th><th>שורה</th></tr></thead><tbody>' + rows + '</tbody></table>'
+    + '<div style="font-size:14px;font-weight:900;margin-top:10px;text-align:left">סה"כ ₪' + Number(data.total||0).toLocaleString() + '</div>'
+    + '<div style="font-size:12px;color:var(--muted);margin-top:6px">המחיר הוא זה שננעל בסיום ההזמנה, ונשלח לחשבשבת כפי שהוא.</div>'
+    + skipped
+    + '</div>'
+    + '<div class="mfoot" style="gap:7px">'
+    + '<button class="btn btn-primary" id="invSendBtn" style="flex:1" onclick="invSend()">הפק חשבונית והעבר לנאסף</button>'
+    + '<button class="btn btn-secondary" onclick="_invClose()">ביטול</button>'
+    + '</div></div>';
+  if(window.lgIcons) lgIcons.render(ov);
+}
+
 function card(o) {
   const nxt = NEXT[o.status];
   const subBadge = o.source === 'upload'
     ? '<span class="tag" style="background:rgba(184,146,42,0.12);color:var(--gold-text)">📎 העלאה</span>' : '';
-  return `<div class="card ${o.urgent?'urgent':''}" onclick="openMod('${o.id}')">
+  // תיבת סימון רק במוכן לאיסוף — זה השלב שממנו מפיקים חשבונית
+  const pickable = o.status === 'מוכן לאיסוף';
+  const picked   = invSel.has(o.id);
+  const pickBox  = pickable
+    ? `<label onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;font-size:12px;font-weight:700;color:${picked?'var(--gold-text)':'var(--muted)'}">
+         <input type="checkbox" ${picked?'checked':''} style="width:15px;height:15px;accent-color:#b8922a;cursor:pointer"
+           onchange="invToggle('${o.id}','${lgJsStr(o.orderClient||'')}',event)">
+         ${picked?'נבחר לחשבונית':'בחר לחשבונית'}
+       </label>` : '';
+  return `<div class="card ${o.urgent?'urgent':''}" style="${picked?'outline:2px solid var(--gold);outline-offset:-2px;':''}" onclick="openMod('${o.id}')">
+    ${pickBox}
     ${o.urgent ? '<div class="c-urg">⚡ דחוף</div>' : ''}
     ${o.isTest ? '<div class="c-urg" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 הזמנה פיקטיבית</div>' : ''}
     <div class="c-num">${lgEsc(o.orderNum||'—')} · ${lgEsc(o.date||'')}</div>
@@ -935,6 +1105,7 @@ function buildOrderFilters(){
 
 function renderAll(){
   buildOrderFilters();
+  renderInvBar();
   renderStats();if(cv==='kanban')renderKanban();else renderTable();
 
   // תור הסקיצות נבנה מ-orders, אבל נבנה מחדש רק בפתיחת התור. לכן סקיצה
