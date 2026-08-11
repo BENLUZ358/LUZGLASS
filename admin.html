@@ -936,6 +936,16 @@ function buildOrderFilters(){
 function renderAll(){
   buildOrderFilters();
   renderStats();if(cv==='kanban')renderKanban();else renderTable();
+
+  // תור הסקיצות נבנה מ-orders, אבל נבנה מחדש רק בפתיחת התור. לכן סקיצה
+  // שנשלחה נשארה ברשימה עד רענון ידני: Firebase כבר החזיק stage='chash',
+  // orders כאן כבר התעדכן, ורק sqItems נשאר מהרגע שהתור נפתח.
+  // buildSQItems מסנן החוצה כל הזמנה עם שלב, אז די לבנות מחדש.
+  if(document.getElementById('sqOverlay')?.style.display !== 'none'){
+    buildSQItems();
+    sqRender();
+  }
+
   // keep sketch queue in sync — same approach as kanban cards (always from live orders[])
   if(sqCurrent && document.getElementById('sqOverlay')?.style.display!=='none'){
     const _live = orders.find(o => o.id === sqCurrent.id);

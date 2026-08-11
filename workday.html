@@ -418,6 +418,17 @@
 
     <!-- TAB: TRIPLEX -->
     <div id="view-triplex" style="display:none">
+      <!-- אותו כפתור סיום כמו בחיסום, ומכוון לאותו דיאלוג: הוא כבר בודק את
+           שני המסלולים יחד ומקדם הזמנה רק כשגם החיסום וגם הטריפלקס חזרו.
+           בלעדיו אפשר היה לסמן פאנלי טריפלקס ולא היה מה שיעביר אותם הלאה. -->
+      <div id="triplexArrivedBar" style="display:none;margin:12px 12px 0;padding:14px 16px;background:rgba(14,116,144,0.08);border:1px solid rgba(14,116,144,0.25);border-radius:8px;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span data-icon="layers" style="width:22px;height:22px"></span>
+        <div style="flex:1;">
+          <strong style="color:#0e7490">טריפלקס חזר!</strong><br>
+          <span id="triplexArrivedCount" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <button class="btn" style="background:#0e7490;color:#fff;white-space:nowrap" onclick="resetChisumList()">✓ סיום בדיקה ואיפוס רשימה</button>
+      </div>
       <div class="available-section">
         <div class="avail-title">טריפלקס במפעל</div>
         <div class="avail-grid" id="triplexOrders"></div>
@@ -2479,7 +2490,10 @@ function resetChisumList(){
 
   chisumOrds.forEach(o => {
     const st = _factoryDoneState(o);
-    if(!st.chisumTotal) return;
+    // אותו תנאי בדיוק כמו בפעולה. קודם נבדק chisumTotal — מה שעוד פתוח —
+    // והזמנה שכל פאנליה כבר נסגרו לא הופיעה בדיאלוג בכלל, אז לא היה שום
+    // רמז למה היא עדיין על המסך.
+    if(!_chisumIdxsOf(o).length && !LG_TRACK.triplex.idxsOf(o).length) return;
     o._st = st;   // לתצוגה בדיאלוג — למה בדיוק היא לא עוברת
 
     // allArrivedNow ולא sessionArrived — הסימונים נשמרים ל-Firebase מיד,
@@ -2573,7 +2587,12 @@ function confirmResetChisum(){
     // אותו מחשב שהדיאלוג הציג. שני חישובים נפרדים כאן ושם הביאו לכך
     // שהדיאלוג הכריז "הושלמה" והאישור לא עשה כלום — הרשימה נשארה על המסך.
     const st = _factoryDoneState(o);
-    if(!st.chisumTotal && !st.triplexTotal) return;
+    // הדילוג הזה נועד להזמנה שאין לה בכלל פאנלים במפעל. אבל chisumTotal סופר
+    // את מה שעוד *פתוח*, ואחרי שסוגרים את הכל הוא 0 — אז הזמנה שהושלמה
+    // נדחתה כאן לפני שהגיעה ל-done ונשארה תקועה בחיסום לנצח, עם כרטיס
+    // שאומר "כל הפריטים סומנו" ושום דבר שמקדם אותו. נבדק על הסך המלא.
+    const everHadFactoryItems = _chisumIdxsOf(o).length || LG_TRACK.triplex.idxsOf(o).length;
+    if(!everHadFactoryItems) return;
 
     if(st.done){
       doneCount++;
@@ -2630,6 +2649,19 @@ function checkChisumArrived(){
       `${cnt} סקיצות בבדיקה — סמן פריטים שהגיעו`;
   } else {
     bar.style.display = 'none';
+  }
+
+  // אותו דבר בטאב הטריפלקס — הוא נספר לפי triplexArrived, כי דוח הטריפלקס
+  // חוזר בנפרד ובדרך כלל ימים אחרי החיסום.
+  const tbar = document.getElementById('triplexArrivedBar');
+  if(tbar){
+    const tcnt = allOrders.filter(o =>
+      (o.stage||'') === 'chisum' && !!o.triplexArrived &&
+      _pendingIdxsOf(o, 'triplex').length
+    ).length;
+    tbar.style.display = tcnt > 0 ? 'flex' : 'none';
+    const el = document.getElementById('triplexArrivedCount');
+    if(el) el.textContent = `${tcnt} סקיצות עם טריפלקס שחזר — סמן פריטים שהגיעו`;
   }
 }
 

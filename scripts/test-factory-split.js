@@ -319,7 +319,40 @@ check('the waiting breakdown counts the report, not every item in the orders',
   many.chisumClosedIdxs = { 0:true,1:true,2:true,3:true,4:true,5:true,6:true,7:true };
   check('once everything is closed the order has nothing left open',
         ctx._pendingIdxsOf(many, 'chisum'), []);
+
+  /* ── the report that could not be finished ────────────────────────────
+     Closing every panel leaves nothing pending, and both the dialog and the
+     confirm skipped an order on exactly that condition — before ever asking
+     whether it was done. The card sat there saying "כל הפריטים סומנו" with
+     nothing able to advance it, and the report stayed on screen for good.
+
+     "Has this order any factory panels at all" and "has it any still open"
+     are different questions. The skip must ask the first. */
+  check('a fully closed order still has factory panels',
+        ctx.LG_TRACK.chisum.idxsOf(many).length, 8);
+  check('while nothing is left open', ctx._pendingIdxsOf(many, 'chisum').length, 0);
+
+  const guard = (workday.match(/const everHadFactoryItems[^\n]*\n[^\n]*/) || [''])[0];
+  check('the confirm skips on the full total, not the open one',
+        /_chisumIdxsOf\(o\)\.length \|\| LG_TRACK\.triplex\.idxsOf\(o\)\.length/.test(guard), true);
+  check('and no longer skips on what is still pending',
+        /if\(!st\.chisumTotal && !st\.triplexTotal\) return;/.test(workday), false);
+  check('the dialog uses the same condition',
+        /if\(!_chisumIdxsOf\(o\)\.length && !LG_TRACK\.triplex\.idxsOf\(o\)\.length\) return;/.test(workday), true);
 }
+
+/* ── triplex can be finished from its own tab ──────────────────────────
+   Panels could be ticked off on the triplex tab and then nothing moved them
+   on: the only finish button lived on the chisum tab. The dialog behind it
+   already weighs both tracks and only advances an order when both are back,
+   so the tab gets the same button pointed at the same dialog rather than a
+   second flow that could disagree with the first. */
+check('the triplex tab has a finish button',
+      /id="triplexArrivedBar"/.test(workday), true);
+check('and it opens the same dialog as chisum',
+      /triplexArrivedBar[\s\S]{0,700}?onclick="resetChisumList\(\)"/.test(workday), true);
+check('the bar appears only while something is open to mark',
+      /_pendingIdxsOf\(o, 'triplex'\)\.length/.test(workday), true);
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll factory split checks passed.');
