@@ -316,5 +316,18 @@ if (stray.length) {
         unresolved + ' declaration(s) would be discarded by the browser');
 }
 
+
+/* ── the rules in the repo are not the rules in force ─────────────────
+   Vercel deploys the site; it does not deploy Firebase rules. Editing
+   database.rules.json changes nothing until deploy-rules.js runs, and the
+   failure is silent — reads are denied and the screen simply looks empty.
+   That is how the client price list shipped showing nothing.
+
+   This does not check the live rules (that needs credentials); it checks the
+   deploy tool still exists, so the step cannot be forgotten entirely. */
+check('there is a way to deploy the rules',
+      fs.existsSync(path.join(ROOT, 'scripts', 'deploy-rules.js')),
+      'database.rules.json is inert without it');
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');
