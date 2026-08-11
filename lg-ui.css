@@ -56,6 +56,22 @@
   --red:       #a93226;
   --blue:      #21618c;
   --purple:    #76448a;
+  --orange:    #a85b10;            /* 5.04:1 with white on it, 4.59:1 as text */
+
+  /* ── Stage colours ─────────────────────────────────────────────────────
+     The three work stages, named for what they are rather than what colour
+     they happen to be. workday.html referred to all three and check-station
+     to --s2, and none of the four existed anywhere: a declaration whose
+     var() cannot resolve is thrown away by the browser, so 36 rules simply
+     did not apply. The clearest casualty was "סיום בדיקה ואיפוס רשימה" —
+     background:var(--chisum) was dropped and its white text was left on a
+     pale banner, invisible.
+
+     They point at the palette above, which is already contrast-checked, so
+     no new colour enters the system. */
+  --chisum:    var(--purple);
+  --cut:       var(--blue);
+  --mixed:     var(--orange);
   --orange:    #ba6a1c;
 
   /* ── Type scale — 12px floor ───────────────────────────────────────────────

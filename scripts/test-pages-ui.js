@@ -285,5 +285,36 @@ if (stray.length) {
   }
 }
 
+/* ── every var() must resolve ─────────────────────────────────────────
+   A custom property that was never defined does not fall back to anything.
+   The whole declaration is invalid and the browser throws it away, silently.
+   Thirty-six rules across three pages were being discarded this way, and the
+   visible symptom was a button whose background:var(--chisum) vanished and
+   left white text on a pale banner — unreadable, with nothing in the console.
+
+   var(--x, fallback) is fine: that has somewhere to land. */
+{
+  const cssTokens = new Set(
+    [...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map(m => m[1]));
+
+  const TOKEN_PAGES = ['workday.html','admin.html','check-station.html','portal.html',
+                       'drafter.html','mekhlahon.html','new-order.html','upload.html',
+                       'order-view.html','login.html'];
+  let unresolved = 0;
+  for (const page of TOKEN_PAGES) {
+    let html;
+    try { html = fs.readFileSync(path.join(ROOT, page), 'utf8'); } catch { continue; }
+    const local = new Set([...html.matchAll(/(--[a-z0-9-]+)\s*:/g)].map(m => m[1]));
+    for (const m of html.matchAll(/var\((--[a-z0-9-]+)\s*(,)?/g)) {
+      const [, token, hasFallback] = m;
+      if (hasFallback || cssTokens.has(token) || local.has(token)) continue;
+      unresolved++;
+      console.error('        ' + page + ' uses ' + token + ', which is defined nowhere');
+    }
+  }
+  check('every var() resolves to a defined token', unresolved === 0,
+        unresolved + ' declaration(s) would be discarded by the browser');
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');
