@@ -57,6 +57,18 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .search-wrap{display:flex;align-items:center;gap:7px;padding:7px 12px;background:var(--bg);border:1px solid var(--border);}
   .search-wrap input{background:none;border:none;outline:none;font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);width:150px;}
   .btn-new{padding:9px 18px;background:var(--gold);color:var(--on-gold);font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;text-decoration:none;display:inline-block;transition:background 0.2s;}
+
+  /* ── שורת מחירון לקוח ──────────────────────────────────────────────────
+     מק"ט · שם הפריט · מחיר. שלושתם בשורה אחת על מסך רחב; על פלאפון השם
+     יורד לשורה משלו, כי ב-375 פיקסלים נשארו לו כ-70 והוא נחתך. */
+  .cp-row{display:flex;align-items:center;gap:8px;padding:7px 14px;
+          border-bottom:1px solid rgba(0,0,0,0.04);font-size:var(--fs-xs);}
+  .cp-sku{font-weight:700;min-width:80px;flex-shrink:0;}
+  .cp-name{flex:1;color:var(--muted);min-width:0;overflow-wrap:anywhere;}
+  .cp-money{display:flex;align-items:baseline;gap:8px;flex-shrink:0;white-space:nowrap;}
+  .cp-old{color:var(--muted);text-decoration:line-through;}
+  .cp-new{font-weight:900;color:var(--text);}
+  .cp-diff{color:var(--gold-text);}
   .btn-new:hover{background:#9a7520;}
 
   /* STATS */
@@ -218,6 +230,12 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   /* modal — מלא מסך */
   .modal{max-width:100%;margin:0;}
   .mbody{padding:16px;}
+  /* שורת מחירון על פלאפון: מק"ט ומחיר בשורה אחת, שם הפריט מתחתיהם.
+     בשורה אחת נשארו לשם כ-70 פיקסלים והוא נמעך. ר' .cp-row למטה. */
+  #pricingBody{padding:12px !important;}
+  .cp-row{flex-wrap:wrap;}
+  .cp-name{order:3;flex-basis:100%;min-width:0;}
+  .cp-money{margin-inline-start:auto;}
   .mgrid{grid-template-columns:1fr;}
 }
 </style>
@@ -1298,12 +1316,13 @@ function renderClientPriceTab(el){
               const cat = skuCatalogMap[sku];
               const g   = globalPrices[sku];
               const diff = (g != null && Number(g) !== Number(prices[sku]));
-              return '<div style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid rgba(0,0,0,0.04);font-size:12px">'
-                + '<span style="font-weight:700;min-width:80px">' + lgEsc(sku) + '</span>'
-                + '<span style="flex:1;color:var(--muted)">' + lgEsc((cat&&cat.name)||'') + '</span>'
-                + (diff ? '<span style="color:var(--muted);text-decoration:line-through">₪' + lgEsc(String(g)) + '</span>' : '')
-                + '<span style="font-weight:900;color:' + (diff?'var(--gold-text)':'var(--text)') + ';min-width:60px;text-align:left">₪' + lgEsc(String(prices[sku])) + '</span>'
-                + '</div>';
+              return '<div class="cp-row">'
+                + '<span class="cp-sku">' + lgEsc(sku) + '</span>'
+                + '<span class="cp-name">' + lgEsc((cat&&cat.name)||'') + '</span>'
+                + '<span class="cp-money">'
+                +   (diff ? '<span class="cp-old">₪' + lgEsc(String(g)) + '</span>' : '')
+                +   '<span class="cp-new' + (diff?' cp-diff':'') + '">₪' + lgEsc(String(prices[sku])) + '</span>'
+                + '</span></div>';
             }).join('')
           + '</div>' : '')
       + '</div>';
