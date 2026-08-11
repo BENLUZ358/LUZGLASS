@@ -354,5 +354,22 @@ check('and it opens the same dialog as chisum',
 check('the bar appears only while something is open to mark',
       /_pendingIdxsOf\(o, 'triplex'\)\.length/.test(workday), true);
 
+/* ── an order can be under check on the triplex alone ──────────────────
+   The two reports come back separately and days apart, so an order is
+   frequently under check because its triplex returned while its tempering
+   either has not or never existed. Both the dialog and the confirm selected
+   on chisumArrived only, so pressing finish from the triplex tab answered
+   "אין הזמנות בבדיקה" with the list plainly full in front of you.
+
+   One definition, shared, so the two cannot disagree again. */
+check('there is a single definition of what is under check',
+      /function _ordersUnderCheck\(\)/.test(workday), true);
+check('it accepts either report having come back',
+      /!!o\.chisumArrived \|\| !!o\.triplexArrived/.test(workday), true);
+check('the dialog and the confirm both use it',
+      (workday.match(/_ordersUnderCheck\(\)/g) || []).length, 3);
+check('neither selects on chisumArrived alone any more',
+      /allOrders\.filter\(o => \(o\.stage\|\|''\) === 'chisum' && !!o\.chisumArrived\);/.test(workday), false);
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll factory split checks passed.');

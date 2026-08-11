@@ -2445,6 +2445,18 @@ function markChisumReportArrived(reportId, reportNum){
 // הדיאלוג והפעולה חישבו את זה כל אחד לחוד, ומרגע שהתווסף תנאי הטריפלקס הם
 // כבר לא הסכימו: הדיאלוג הכריז "הושלמה" והאישור לא עשה כלום. הרשימה נשארה
 // על המסך בלי הסבר. עכשיו שניהם קוראים לכאן, ולכן אי אפשר שיסתרו.
+// אילו הזמנות נמצאות עכשיו בבדיקה.
+//
+// שני הדוחות חוזרים בנפרד ובימים שונים, ולכן הזמנה יכולה להיות בבדיקה בגלל
+// הטריפלקס בלבד. הסינון בדק רק chisumArrived, אז לחיצה על "סיום בדיקה"
+// מטאב הטריפלקס ענתה "אין הזמנות בבדיקה" בזמן שהרשימה מלאה.
+//
+// הגדרה אחת לשני הקוראים — הדיאלוג והפעולה — כדי שלא יסתרו שוב.
+function _ordersUnderCheck(){
+  return allOrders.filter(o =>
+    (o.stage||'') === 'chisum' && (!!o.chisumArrived || !!o.triplexArrived));
+}
+
 function _factoryDoneState(o){
   const sid         = String(o.id);
   const chisumIdxs  = _pendingIdxsOf(o, 'chisum');
@@ -2483,7 +2495,7 @@ function _closeArrived(sid, idxs, track){
 }
 
 function resetChisumList(){
-  const chisumOrds = allOrders.filter(o => (o.stage||'') === 'chisum' && !!o.chisumArrived);
+  const chisumOrds = _ordersUnderCheck();
   if(!chisumOrds.length){ showToast('אין הזמנות בבדיקה'); return; }
 
   const doneOrds = [], partialOrds = [], waitingTriplex = [], unchangedOrds = [];
@@ -2576,7 +2588,7 @@ function confirmResetChisum(){
   _confirmingResetChisum = true;
   try {
   document.querySelectorAll('[style*=fixed]').forEach(el => el.remove());
-  const chisumOrds  = allOrders.filter(o => (o.stage||'') === 'chisum' && !!o.chisumArrived);
+  const chisumOrds  = _ordersUnderCheck();
   let doneCount     = 0;
   let partialCount  = 0;
   let msgCount      = 0;
