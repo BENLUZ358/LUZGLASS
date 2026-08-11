@@ -81,8 +81,14 @@ check('the account key is resolved server-side',
 {
   const admin = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
   check('orders can be selected on the board', /function invToggle\(/.test(admin), true);
-  check('selection is offered only at "מוכן לאיסוף"',
-        /const pickable = o\.status === 'מוכן לאיסוף'/.test(admin), true);
+  /* Both views, because the admin opens on the table and that is where the
+     work happens — the checkbox first shipped on the kanban card only, so on
+     the screen actually in use there was nothing to click. */
+  for (const [view, fn] of [['kanban', 'card'], ['table', 'renderTable']]) {
+    const body = (admin.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
+    check(`the ${view} view offers selection`, /invToggle\(/.test(body), true);
+    check(`and only at "מוכן לאיסוף"`, /o\.status === 'מוכן לאיסוף'/.test(body), true);
+  }
   check('mixing clients in one selection is refused',
         /invSelClient !== client/.test(admin), true);
   check('a preview runs before anything is issued',

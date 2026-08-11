@@ -1214,8 +1214,18 @@ function renderTable(){
   const f=filtered();
   document.getElementById('tbody').innerHTML=f.map((o,i)=>{
     const s=ST.find(x=>x.id===o.status)||ST[0];
-    return `<tr>
-      <td style="color:var(--muted);font-size:12px">${i+1}</td>
+    // בחירה לחשבונית — רק ב"מוכן לאיסוף". התיבה הייתה רק על כרטיסי הלוח,
+    // אבל האדמין נפתח על טבלה וזו התצוגה שבה עובדים בפועל.
+    const pickable = o.status === 'מוכן לאיסוף';
+    const picked   = invSel.has(o.id);
+    return `<tr${picked?' style="background:rgba(184,146,42,0.07)"':''}>
+      <td style="color:var(--muted);font-size:12px">${
+        pickable
+          ? `<input type="checkbox" ${picked?'checked':''} aria-label="בחר לחשבונית"
+               style="width:16px;height:16px;accent-color:#b8922a;cursor:pointer"
+               onchange="invToggle('${o.id}','${lgJsStr(o.orderClient||'')}',event)">`
+          : (i+1)
+      }</td>
       <td><strong>${lgEsc(o.orderClient||'—')}</strong>${o.isTest?' <span class="tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}</td>
       <td style="font-size:12px;color:var(--muted)">${lgEsc(o.orderNum||'—')}<br><span style="font-size:12px">${lgEsc(o.sketchName||'')}</span></td>
       <td style="font-size:12px">${lgEsc(o.type)}</td>
