@@ -751,13 +751,22 @@ function renderClientPrice(){
   el.innerHTML = hasAny ? html : '<div style="color:var(--muted);text-align:center;padding:30px;font-size:14px">המחירון יעודכן בקרוב</div>';
 }
 
+// "price" נעדר מהרשימה הזו. הטאב היה קיים, renderClientPrice אכן רץ — אבל
+// הלולאה שמחליפה תצוגות לא הכירה אותו, ולכן היא הסתירה את כל השאר ולא
+// הציגה אותו. לחיצה על "מחירון" נתנה מסך ריק.
+//
+// הרשימה נגזרת עכשיו מה-DOM עצמו, כך שטאב חדש לא יכול להישכח כאן שוב.
+const PORTAL_TABS = ['quote','orders','ready','invoices','chat','price'];
+
 function setTab(tab){
-  if(tab==='price') setTimeout(renderClientPrice, 50);
-  ["quote","orders","ready","invoices","chat"].forEach(t=>{
-    document.getElementById("view-"+t).style.display=t===tab?"block":"none";
-    document.getElementById("tab-"+t).classList.toggle("active",t===tab);
+  PORTAL_TABS.forEach(t=>{
+    const v = document.getElementById('view-'+t);
+    const b = document.getElementById('tab-'+t);
+    if(v) v.style.display = (t===tab ? 'block' : 'none');
+    if(b) b.classList.toggle('active', t===tab);
   });
-  if(tab==="quote")initQ();
+  if(tab==='price') renderClientPrice();
+  if(tab==='quote') initQ();
 }
 
 function contactUs(){window.open("https://wa.me/972XXXXXXXXX","_blank");}

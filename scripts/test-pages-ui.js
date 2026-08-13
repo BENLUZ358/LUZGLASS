@@ -329,5 +329,29 @@ check('there is a way to deploy the rules',
       fs.existsSync(path.join(ROOT, 'scripts', 'deploy-rules.js')),
       'database.rules.json is inert without it');
 
+/* ── every portal tab must actually open ──────────────────────────────
+   The מחירון tab existed, its view existed, and renderClientPrice ran — but
+   the loop in setTab that switches views listed five of the six tabs. Clicking
+   it hid everything else and showed nothing. A tab you can press and that does
+   nothing is worse than no tab.
+
+   The list, the buttons and the views must agree. */
+{
+  const portal = fs.readFileSync(path.join(ROOT, 'portal.html'), 'utf8');
+  const tabs  = [...portal.matchAll(/id="tab-([a-z]+)"/g)].map(m => m[1]);
+  const views = [...portal.matchAll(/id="view-([a-z]+)"/g)].map(m => m[1]);
+  const list  = ((portal.match(/const PORTAL_TABS = \[([^\]]*)\]/) || ['', ''])[1])
+                  .replace(/['"\s]/g, '').split(',').filter(Boolean);
+  check('every portal tab is in the switch list',
+        tabs.filter(t => !list.includes(t)).length === 0,
+        'missing: ' + tabs.filter(t => !list.includes(t)).join(', '));
+  check('every portal tab has a view',
+        tabs.filter(t => !views.includes(t)).length === 0,
+        'no view: ' + tabs.filter(t => !views.includes(t)).join(', '));
+  check('the switch list is not hand-maintained per call site',
+        /PORTAL_TABS\.forEach/.test(portal),
+        'setTab should iterate PORTAL_TABS');
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');
