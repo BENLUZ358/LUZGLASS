@@ -347,6 +347,9 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <div class="mbody" id="mbody"></div>
     <div class="mfoot">
       <button onclick="deleteOrderById(eid)" style="margin-left:auto;padding:10px 16px;background:transparent;color:#c0392b;border:1px solid rgba(192,57,43,0.3);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onmouseover="this.style.background='rgba(192,57,43,0.08)'" onmouseout="this.style.background='transparent'">🗑 מחק הזמנה</button>
+      <!-- סימון כפיקטיבית אחרי שההזמנה כבר יצאה מתור הסקיצות. הכפתור שם
+           הוא חד-כיווני ורק בכניסה; זה המקום היחיד לסמן הזמנה שכבר בתהליך. -->
+      <button id="modalTestBtn" style="display:none;padding:10px 16px;background:transparent;color:var(--gold-text);border:1px solid rgba(184,146,42,0.4);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onclick="markOrderTest()">🧪 סמן כפיקטיבית</button>
       <button id="modalAdvBtn" style="display:none;padding:10px 16px;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:none;cursor:pointer;" onclick="doModalAdvance()"></button>
       <button class="btn-save" onclick="saveMod()">שמור</button>
       <button class="btn-cancel" onclick="closeMod()">ביטול</button>
@@ -772,6 +775,16 @@ function openMod(id) {
   if (urgBtn) urgBtn.classList.toggle('active',  !!o.urgent);
   if (nrmBtn) nrmBtn.classList.toggle('active', !o.urgent);
 
+  // סימון כפיקטיבית — רק להזמנה שעדיין לא סומנה ושלא הופקה עליה חשבונית.
+  // חד-כיווני בכוונה: הפיכת הזמנה פיקטיבית לאמיתית היא הכיוון המסוכן.
+  const testBtn = document.getElementById('modalTestBtn');
+  if(testBtn){
+    const already = !!o.isTest;
+    const invoiced = !!(o.hashavshevetInvoice && o.hashavshevetInvoice.sentAt);
+    testBtn.style.display = (already || invoiced) ? 'none' : '';
+    testBtn.title = 'ההזמנה תרוץ בכל התהליך אבל לא תיצור מסמך בחשבשבת';
+  }
+
   // כפתור "קדם" — מציג את השלב הבא הרלוונטי לפי לוגיקה דינמית
   const advBtn = document.getElementById('modalAdvBtn');
   if(advBtn){
@@ -878,6 +891,27 @@ function invToggle(id, client, ev){
 
 function invClear(){ invSel.clear(); invSelClient = null; renderAll(); }
 
+// מסמן הזמנה קיימת כפיקטיבית. הכפתור בתור הסקיצות תופס רק בכניסה, וזה
+// המקום היחיד לסמן הזמנה שכבר בתהליך — למשל כדי לבדוק הפקת חשבונית בלי
+// שייווצר מסמך אמיתי בחשבשבת.
+async function markOrderTest(){
+  if(!eid) return;
+  const o = orders.find(x => String(x.id) === String(eid));
+  if(!o) return;
+  if(!confirm('לסמן את ההזמנה כפיקטיבית?\n\n'
+      + (o.orderNum||'') + ' · ' + (o.orderClient||'') + '\n\n'
+      + 'היא תמשיך לרוץ בכל התהליך, אבל לא ייווצר עליה מסמך בחשבשבת.\n'
+      + 'אי אפשר להחזיר אותה להיות אמיתית.')) return;
+  try {
+    await updateOrder(String(eid), { isTest: true });
+    showToast('🧪 ההזמנה סומנה כפיקטיבית');
+    closeMod();
+  } catch(e){
+    console.error('markOrderTest:', e);
+    alert('לא הצלחתי לסמן: ' + e.message);
+  }
+}
+
 // סרגל הבחירה. מופיע רק כשיש בחירה, ומראה על מה בדיוק תופק החשבונית.
 function renderInvBar(){
   let bar = document.getElementById('invBar');
@@ -973,10 +1007,14 @@ function _invRender(data, ok){
   if(data.dryRun === false){
     const raw = typeof data.response === 'string' ? data.response : JSON.stringify(data.response, null, 2);
     ov.innerHTML = '<div class="modal" style="max-width:620px">'
-      + '<div class="mhdr"><h2>הופקה — יש לאמת בחשבשבת</h2><button class="mcl" aria-label="סגור" onclick="_invClose()"><span data-icon="x"></span></button></div>'
+      + '<div class="mhdr"><h2>' + (data.simulated ? '🧪 הורץ כפיקטיבי' : 'הופקה — יש לאמת בחשבשבת') + '</h2><button class="mcl" aria-label="סגור" onclick="_invClose()"><span data-icon="x"></span></button></div>'
       + '<div class="mbody">'
       + '<div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ' + lgEsc(data.reference) + ' · ' + lgEsc(data.client) + ' · ' + data.lineCount + ' שורות · ₪' + Number(data.total||0).toLocaleString() + '</div>'
-      + '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">הבקשה התקבלה. זה לא מבטיח שנוצר מסמך — יש לפתוח את חשבשבת ולוודא.</div>'
+      + '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">'
+      +   (data.simulated
+            ? 'החשבונית נבנתה ונבדקה במלואה ונרשמה על ההזמנות — בדיוק כמו בהפקה אמיתית — אבל לא יצאה לחשבשבת. אין מה לחפש שם.'
+            : 'הבקשה התקבלה. זה לא מבטיח שנוצר מסמך — יש לפתוח את חשבשבת ולוודא.')
+      + '</div>'
       + '<div class="sec-title">הזמנות</div><div style="font-size:12px;padding:4px 0">' + (data.orderNums||[]).map(lgEsc).join(' · ') + '</div>'
       + '<div class="sec-title" style="margin-top:12px">תשובת חשבשבת</div>'
       + '<pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:200px;white-space:pre-wrap">' + lgEsc(raw||'') + '</pre>'
@@ -995,9 +1033,15 @@ function _invRender(data, ok){
       + data.skipped.map(function(x){ return '<div style="font-size:12px;color:var(--red);padding:3px 0">' + lgEsc(x.order||'') + ' · ' + lgEsc(x.name||'') + ' — ' + lgEsc(x.reason) + '</div>'; }).join('')
     : '';
 
+  const testNote = data.isTest
+    ? '<div style="margin-bottom:14px;padding:10px 12px;background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.35);border-radius:6px;font-size:12px;font-weight:700;color:var(--gold-text)">'
+      + '🧪 הזמנה פיקטיבית — החשבונית תיבנה במלואה אבל לא תופק בחשבשבת.</div>'
+    : '';
+
   ov.innerHTML = '<div class="modal" style="max-width:620px">'
     + '<div class="mhdr"><h2>תצוגה מקדימה — טרם הופקה</h2><button class="mcl" aria-label="סגור" onclick="_invClose()"><span data-icon="x"></span></button></div>'
     + '<div class="mbody">'
+    + testNote
     + '<div class="mgrid" style="margin-bottom:14px">'
     + '<div class="mf"><label>לקוח</label><div class="v">' + lgEsc(data.client) + '</div></div>'
     + '<div class="mf"><label>מפתח חשבון</label><div class="v">' + lgEsc(data.accountKey) + '</div></div>'
@@ -1010,7 +1054,7 @@ function _invRender(data, ok){
     + skipped
     + '</div>'
     + '<div class="mfoot" style="gap:7px">'
-    + '<button class="btn btn-primary" id="invSendBtn" style="flex:1" onclick="invSend()">הפק חשבונית והעבר לנאסף</button>'
+    + '<button class="btn btn-primary" id="invSendBtn" style="flex:1" onclick="invSend()">' + (data.isTest ? '🧪 הרץ בלי להפיק בחשבשבת' : 'הפק חשבונית והעבר לנאסף') + '</button>'
     + '<button class="btn btn-secondary" onclick="_invClose()">ביטול</button>'
     + '</div></div>';
   if(window.lgIcons) lgIcons.render(ov);

@@ -141,12 +141,27 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    // ── הזמנת בדיקה לא מוציאה מסמך חשבונאי, לעולם ──
-    const test = orders.filter(o => o.isTest).map(o => o.orderNum || '');
-    if (test.length) {
-      res.status(423).json({ error: 'יש בבחירה הזמנה פיקטיבית — לא מופקת עליה חשבונית', orders: test });
+    // ── הזמנה פיקטיבית: כל המסלול רץ, המסמך לא נוצר ──
+    //
+    // בהתחלה זו הייתה חסימה מוחלטת, מתוך מחשבה שחשבונית חמורה מהזמנה.
+    // התוצאה הייתה שאי אפשר לבדוק את המסלול בכלל — כדי לוודא שהחשבוניות
+    // עובדות היה צריך להוציא מסמך אמיתי ואז לבטל אותו ידנית בחשבשבת.
+    //
+    // עכשיו זה מתנהג כמו hashavshevet-order: מפתח החשבון נמצא, המחירים
+    // הנעולים נקראים, השורות נבנות, החתימה מחושבת והניסיון נרשם — ורק
+    // הקריאה החוצה לא יוצאת. מה שנבדק הוא המסלול האמיתי, לא קיצור דרך.
+    //
+    // ערבוב אסור: חשבונית אחת לא יכולה להיות חצי אמיתית.
+    const testNums = orders.filter(o => o.isTest).map(o => o.orderNum || o.id);
+    if (testNums.length && testNums.length !== orders.length) {
+      res.status(422).json({
+        error: 'הבחירה מערבבת הזמנות פיקטיביות ואמיתיות',
+        hint:  'חשבונית אחת היא או פיקטיבית או אמיתית. בחר קבוצה אחידה.',
+        orders: testNums,
+      });
       return;
     }
+    const isTest = testNums.length > 0;
 
     // ── בלי מחיר נעול אין על מה להוציא חשבונית ──
     const unlocked = orders.filter(o => !(Array.isArray(o.lockedItems) && o.lockedItems.length))
@@ -200,7 +215,7 @@ module.exports = async function handler(req, res) {
 
     if (dryRun) {
       res.status(200).json({
-        ok: true, dryRun: true,
+        ok: true, dryRun: true, isTest,
         client: clients[0], accountKey, reference: ref.reference,
         documentId, documentName: DOCUMENT_TYPES[documentId], agent,
         orderNums: orders.map(o => o.orderNum), lineCount: lines.length,
@@ -219,12 +234,21 @@ module.exports = async function handler(req, res) {
       `"pluginData":${pluginDataJson}},` +
       `"signature":${JSON.stringify(signature)}}`;
 
-    const wgRes = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: payload,
-    });
-    const text = await wgRes.text();
+    // הכל עד כאן כבר רץ: מפתח החשבון, המחירים הנעולים, השורות, החתימה.
+    // מכאן והלאה גם הרישום והתשובה זהים — ההבדל היחיד הוא ש-fetch לא נקרא.
+    // הבדיקה על ההזמנה עצמה ולא על פרמטר מהדפדפן, כי פרמטר אפשר לזייף.
+    let wgRes, text;
+    if (isTest) {
+      wgRes = { status: 200, ok: true };
+      text  = JSON.stringify({ simulated: true, note: 'הזמנה פיקטיבית — לא הופקה חשבונית בחשבשבת' });
+    } else {
+      wgRes = await fetch(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: payload,
+      });
+      text = await wgRes.text();
+    }
     let parsed = null;
     try { parsed = JSON.parse(text); } catch (_) { /* לא JSON */ }
 
@@ -241,6 +265,9 @@ module.exports = async function handler(req, res) {
       lineCount:   lines.length,
       total,
       withOrders:  orders.map(o => String(o.orderNum || o.id)),
+      // בלי זה אי אפשר יהיה להבדיל אחר כך בין חשבונית שהופקה בחשבשבת לבין
+      // ריצה פיקטיבית שרק נראתה כך.
+      simulated:   isTest || null,
       httpStatus:  wgRes.status,
       httpOk:      wgRes.ok,
       response:    text.slice(0, 4000),
@@ -258,7 +285,7 @@ module.exports = async function handler(req, res) {
     }
 
     res.status(200).json({
-      ok: true, dryRun: false,
+      ok: true, dryRun: false, simulated: isTest,
       client: clients[0], accountKey, reference: ref.reference,
       documentId, documentName: DOCUMENT_TYPES[documentId],
       orderNums: orders.map(o => o.orderNum),

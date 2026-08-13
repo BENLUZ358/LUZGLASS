@@ -51,8 +51,21 @@ check('an unlocked order is refused',
       /יש הזמנות בלי מחיר נעול/.test(SRC), true);
 check('a line whose locked price is zero is skipped, not billed at zero',
       /המחיר הנעול הוא 0/.test(SRC), true);
-check('a fictitious order never produces an accounting document',
-      /o\.isTest[\s\S]{0,200}?status\(423\)/.test(SRC), true);
+/* A fictitious order runs the whole path and issues nothing. This began as a
+   flat refusal, on the reasoning that an invoice is graver than an order — and
+   the result was that the path could not be exercised at all: proving invoicing
+   worked meant issuing a real document and cancelling it by hand in
+   Hashavshevet. It now behaves exactly as hashavshevet-order does. */
+check('a fictitious order is decided from the order, not the request',
+      /const testNums = orders\.filter\(o => o\.isTest\)/.test(SRC), true);
+check('and the outbound call is the only thing skipped',
+      /if \(isTest\) \{[\s\S]{0,300}?\} else \{[\s\S]{0,240}?await fetch\(ENDPOINT/.test(SRC), true);
+check('a mixed selection is refused — an invoice cannot be half real',
+      /מערבבת הזמנות פיקטיביות ואמיתיות/.test(SRC), true);
+check('the attempt is recorded as simulated',
+      /simulated:\s+isTest \|\| null/.test(SRC), true);
+check('and the caller is told',
+      /ok: true, dryRun: false, simulated: isTest/.test(SRC), true);
 check('one invoice belongs to one account',
       /clients\.length > 1[\s\S]{0,200}?status\(422\)/.test(SRC), true);
 check('the same order is not invoiced twice without force',
@@ -97,6 +110,19 @@ check('the account key is resolved server-side',
      that stayed put, so the stage only moves after the document succeeds */
   check('the stage moves only after the invoice succeeds',
         /if\(res\.ok && data\.ok\)\{[\s\S]{0,220}?updateStage\(id, 'collected'\)/.test(admin), true);
+}
+
+/* the screen has to say it, or a simulated run reads as a real one */
+{
+  const admin = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+  check('the preview warns when the selection is fictitious',
+        /const testNote = data\.isTest[\s\S]{0,500}?לא תופק בחשבשבת/.test(admin), true);
+  check('the result screen says nothing was issued',
+        /data\.simulated \? '🧪 הורץ כפיקטיבי'/.test(admin), true);
+  check('an order already in progress can still be marked fictitious',
+        /function markOrderTest\(/.test(admin), true);
+  check('but not once it has been invoiced',
+        /const invoiced = !!\(o\.hashavshevetInvoice && o\.hashavshevetInvoice\.sentAt\)/.test(admin), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
