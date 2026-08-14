@@ -1065,7 +1065,7 @@ function card(o) {
   const subBadge = o.source === 'upload'
     ? '<span class="tag" style="background:rgba(184,146,42,0.12);color:var(--gold-text)">📎 העלאה</span>' : '';
   // תיבת סימון רק במוכן לאיסוף — זה השלב שממנו מפיקים חשבונית
-  const pickable = o.status === 'מוכן לאיסוף';
+  const pickable = sf === 'מוכן לאיסוף' && o.status === 'מוכן לאיסוף';
   const picked   = invSel.has(o.id);
   const pickBox  = pickable
     ? `<label onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;font-size:12px;font-weight:700;color:${picked?'var(--gold-text)':'var(--muted)'}">
@@ -1120,6 +1120,10 @@ function openQueueFilter(status, btn){
 }
 
 function setSF(s,btn){
+  // תיבות הסימון מופיעות רק בפילטר "מוכן לאיסוף". יציאה ממנו מנקה בחירה
+  // קיימת — אחרת נשארת בחירה פעילה שאי אפשר לראות ולא לבטל, והסרגל
+  // התחתון היה מציע להפיק חשבונית על הזמנות שכבר לא על המסך.
+  if(s !== 'מוכן לאיסוף' && invSel.size){ invSel.clear(); invSelClient = null; }
   sf=s;
   document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
@@ -1260,7 +1264,7 @@ function renderTable(){
     const s=ST.find(x=>x.id===o.status)||ST[0];
     // בחירה לחשבונית — רק ב"מוכן לאיסוף". התיבה הייתה רק על כרטיסי הלוח,
     // אבל האדמין נפתח על טבלה וזו התצוגה שבה עובדים בפועל.
-    const pickable = o.status === 'מוכן לאיסוף';
+    const pickable = sf === 'מוכן לאיסוף' && o.status === 'מוכן לאיסוף';
     const picked   = invSel.has(o.id);
     return `<tr${picked?' style="background:rgba(184,146,42,0.07)"':''}>
       <td style="color:var(--muted);font-size:12px">${

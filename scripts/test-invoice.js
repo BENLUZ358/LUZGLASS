@@ -100,8 +100,15 @@ check('the account key is resolved server-side',
   for (const [view, fn] of [['kanban', 'card'], ['table', 'renderTable']]) {
     const body = (admin.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
     check(`the ${view} view offers selection`, /invToggle\(/.test(body), true);
-    check(`and only at "מוכן לאיסוף"`, /o\.status === 'מוכן לאיסוף'/.test(body), true);
+    /* Two conditions, not one. The status alone put a checkbox on every ready
+       order in every view, including "הכל" — visual noise on rows nobody was
+       about to invoice. It appears only while that filter is the one selected. */
+    check(`the ${view} view shows it only under the ready filter`,
+          /sf === 'מוכן לאיסוף' && o\.status === 'מוכן לאיסוף'/.test(body), true);
   }
+  /* and leaving the filter must not strand a selection off-screen */
+  check('changing filter clears a selection you can no longer see',
+        /if\(s !== 'מוכן לאיסוף' && invSel\.size\)\{ invSel\.clear\(\)/.test(admin), true);
   check('mixing clients in one selection is refused',
         /invSelClient !== client/.test(admin), true);
   check('a preview runs before anything is issued',
