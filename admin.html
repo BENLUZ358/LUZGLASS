@@ -1949,7 +1949,11 @@ document.addEventListener('visibilitychange', () => {
 .iw-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#f7f4ef;border-right:3px solid #b8922a;font-size:12px;}
 .iw-item.chisum{border-right-color:#8e44ad;}
 .iw-item.litush{border-right-color:#2980b9;}
-.iw-item-name{flex:1;font-weight:600;}
+.iw-item-name{flex:1;font-weight:600;min-width:0;}
+/* הכמות. הייתה span בתוך שם הפריט, ולכן נבלעה בטקסט ונדחפה ימינה ככל
+   שהשם ארוך יותר. עכשיו היא אלמנט אחיין משלה — אותו מראה בדסקטופ,
+   ומקום קבוע משלה שאפשר להגדיל במסכי מגע. */
+.iw-qty{color:var(--gold-text);font-weight:700;font-size:12px;flex-shrink:0;white-space:nowrap;}
 .iw-item-dim{color:#8a8278;font-size:12px;}
 .iw-item-proc{font-size:12px;padding:2px 6px;border-radius:2px;font-weight:700;}
 .iw-proc-chis{background:rgba(142,68,173,0.1);color:#8e44ad;}
@@ -1984,6 +1988,36 @@ document.addEventListener('visibilitychange', () => {
 @media(min-width:601px){
   #sqListPanel.sq-hidden{ display:block !important; }
   #sqDetailPanel.sq-hidden{ display:flex !important; }
+}
+
+/* ── שורת פריט בתור הסקיצות, על אייפד ופלאפון ──────────────────────────
+   בשורה אחת יושבים שם הפריט, שני שדות מידה, יחידה, תווית עיבוד ושני
+   כפתורי מחיקה. ברוחב של אייפד לאורך הם נדחסים, והכמות — הדבר שהכי
+   צריך לראות — נבלעה בין השם למידות.
+
+   השורה נשברת לשתיים: שם וכמות למעלה, המידות והפעולות מתחת. שום דבר
+   לא מוסתר ואין גלילה אופקית; הכמות מקבלת תג משלה בגודל קריא, והשדות
+   והכפתורים מקבלים מטרת מגע. הדסקטופ לא נוגע בזה. */
+@media(max-width:900px){
+  .iw-item{flex-wrap:wrap;row-gap:8px;padding:10px;}
+  .iw-item-name{flex-basis:calc(100% - 68px);font-size:13px;}
+  .iw-qty{
+    order:2;
+    font-size:15px;
+    font-weight:900;
+    color:var(--on-gold);
+    background:var(--gold);
+    border-radius:6px;
+    padding:4px 10px;
+    min-width:52px;
+    text-align:center;
+  }
+  /* המידות והפעולות יורדות לשורה שנייה משלהן */
+  .iw-item > input,
+  .iw-item > span:not(.iw-qty),
+  .iw-item > button{order:3;}
+  .iw-item > input{width:64px !important;min-height:40px;font-size:15px;}
+  .iw-item-del{min-width:40px;min-height:40px;font-size:16px;}
 }
 </style>
 
@@ -3315,7 +3349,8 @@ function iwRender(){
       : `<button class="iw-item-del" onclick="event.stopPropagation();iwRemoveSingle(${grp.indices[0]})" title="מחק">✕</button>`;
     return `
       <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${gi}">
-        <div class="iw-item-name">${lgEsc(it.name||it.label||'פריט')}${qty>1?` <span style="color:var(--gold-text);font-weight:700;font-size:12px;">×${qty}</span>`:''}</div>
+        <div class="iw-item-name">${lgEsc(it.name||it.label||'פריט')}</div>
+        ${qty>1?`<span class="iw-qty">×${qty}</span>`:''}
         <input type="text" value="${it.w ? lgMmToMeterStr(it.w) : ''}"
           style="${dimStyle}"
           onchange="iwEditGroupDim(${idxJson},'w',this.value)" onclick="event.stopPropagation()"

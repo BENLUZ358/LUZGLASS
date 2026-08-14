@@ -171,6 +171,25 @@ html,body{height:100%;overflow:hidden;}
    המערכת הן 600 / 900 / 1200, וזו אחת מהן. */
 @media(max-width:900px){
   .app{height:100vh;height:100dvh;}
+
+  /* ── כפתור החזרה לרשימה ────────────────────────────────────────────
+     12px עם ריפוד 6px הוא מטרת מגע קטנה מדי, והוא ישב בין שני כפתורים
+     נוספים בקצה השורה — באייפד צריך לכוון אליו. הוא מקבל כאן משקל
+     שמתאים לתפקיד: זו דרך היציאה היחידה ממסך הסקיצה.
+     lg-ui.css כבר נותן min-height:44px במסכי מגע; מה שחסר הוא רוחב,
+     ניגודיות והפרדה משאר הכפתורים. */
+  #btnBack{
+    background:var(--gold);
+    color:var(--on-gold);
+    border-color:var(--gold);
+    font-size:14px;
+    font-weight:900;
+    padding:10px 16px;
+    margin-inline-end:auto;   /* דוחף אותו לקצה, הרחק מ"פריטים" ומ-✕ */
+  }
+  /* הכותרת מוותרת על מקום לטובתו במקום להידחס יחד איתו */
+  .tb-title{font-size:12px;}
+  .tb-logo{display:none;}
   /* btmbar קבוע לתחתית — לא נחתך */
   .btmbar{
     position:fixed;bottom:0;left:0;right:0;z-index:30;
