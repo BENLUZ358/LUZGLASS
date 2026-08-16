@@ -555,8 +555,7 @@ function _filterOrders(){
     }
   }
   buildClients();
-  renderList();
-  updateTabCounts();
+  renderList();   // מעדכן גם את תגי הטאבים
   // הסתר loading overlay אחרי הטעינה הראשונה
   const ov = document.getElementById('lgLoading');
   if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
@@ -694,6 +693,14 @@ function renderList(){
       ${note?`<div class="oc-note">📌 ${lgEsc(note.slice(0,60))}${note.length>60?'...':''}</div>`:''}
     </div>`;
   }).join('');
+
+  // התג והרשימה נגזרים מאותו orders, ולכן חייבים להיחשב באותו רגע.
+  // updateTabCounts נקראה רק משני מקומות — מהליסנר של Firebase ומטיימר
+  // אחרי שכל פריטי סקיצה סומנו — בעוד renderList נקראת מאחד עשר. כל מסלול
+  // אחר השאיר את התג על המספר הישן: "סיים סקיצה" רענן את הרשימה, המסך אמר
+  // "כל הסקיצות הושלמו", והטאב המשיך להראות שנשארו. רענון תיקן את זה כי
+  // הליסנר רץ מחדש — כלומר הנתונים היו נכונים כל הזמן, רק התג פיגר.
+  updateTabCounts();
 }
 
 // VIEW SWITCH

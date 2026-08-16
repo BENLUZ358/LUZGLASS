@@ -353,5 +353,23 @@ check('there is a way to deploy the rules',
         'setTab should iterate PORTAL_TABS');
 }
 
+/* ── a badge and the list beneath it must agree ────────────────────────
+   The check station shows a count on each tab and a list below. Both derive
+   from the same orders array, but only the list was recomputed on most paths:
+   renderList had eleven call sites, updateTabCounts had two. Press
+   "סיים סקיצה" and the list emptied and said "כל הסקיצות הושלמו" while the tab
+   still claimed sketches remained. Refreshing fixed it, because the Firebase
+   listener happened to call both — which is what made it look intermittent
+   rather than simply missing.
+
+   The count is computed inside renderList now, so the two cannot separate. */
+{
+  const cs = fs.readFileSync(path.join(ROOT, 'check-station.html'), 'utf8');
+  const renderList = (cs.match(/function renderList\(\)[\s\S]*?\n}/) || [''])[0];
+  check('check-station recomputes the tab counts where it renders the list',
+        /updateTabCounts\(\);/.test(renderList),
+        'the badge goes stale on every path that is not the Firebase listener');
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');
