@@ -41,6 +41,12 @@ html,body{height:100%;overflow:hidden;}
 .b-new{background:rgba(136,136,136,0.15);color:var(--muted);}
 .b-done{background:rgba(39,174,96,0.2);color:var(--green);}
 .b-prog{background:rgba(201,168,76,0.2);color:var(--gold);}
+/* שם הסקיצה. קודם הוא ישב מוקטן בתוך שורת המטא יחד עם מספר ההזמנה,
+   מתחת לתצוגה מקדימה שנחתכה ב-object-fit:cover — סקיצה גבוהה או רחבה
+   הראתה פרוסה מהאמצע, ולכן "חלק לא נראו טוב". התמונה ירדה מהרשימה
+   ונפתחת בלחיצה, ושם הסקיצה תפס את מקומה כמזהה של השורה. */
+.oc-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;
+         overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .oc-meta{font-size:12px;color:var(--muted);margin-bottom:7px;}
 .oc-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;}
 .oc-tag{font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;}
@@ -679,8 +685,8 @@ function renderList(){
           <span class="oc-badge ${badgeCls}">${badgeTxt}</span>
         </div>
       </div>
-      <div class="oc-meta">${lgEsc(o.orderNum||'—')} · ${lgEsc(o.sketchName||o.type||'')}</div>
-      ${o.sketch?`<img src="${lgEsc(o.sketch)}" style="width:100%;max-height:120px;object-fit:cover;border-top:1px solid var(--border);border-bottom:1px solid var(--border);" alt="סקיצה">` : ''}
+      <div class="oc-name">${lgEsc(o.sketchName||o.type||'—')}</div>
+      <div class="oc-meta">${lgEsc(o.orderNum||'—')}${o.sketch?' · 🖼 יש סקיצה':''}</div>
       <div class="oc-tags">
         <span class="oc-tag tg">${lgEsc(o.glassFullName||o.glass||'')}</span>
         <span class="oc-tag tc">🔥 חיסום · ${total} פריטים</span>
