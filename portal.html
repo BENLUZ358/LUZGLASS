@@ -441,6 +441,7 @@ function _subscribePortalOrders(clientPhone) {
         status:     o.status    || lgStageToStatus(o.stage || ''),
         stage:      o.stage     || '',
         sketch:     o.sketch    || null,
+        hasSketch:  !!(o.hasSketch || o.sketch),
         items:      o.items     || [],
         panels:     o.panels    || [],
         pickedDate: o.pickedDate|| '',

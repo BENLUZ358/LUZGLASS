@@ -2318,6 +2318,7 @@ function buildSQItems(){
       panels:       o.panels || [],
       notes:        o.notes || '',
       sketch:       o.sketch || null,
+      hasSketch:    !!(o.hasSketch || o.sketch),
       files:        o.files || [],
       items:        o.items || [],
       type:         o.type  || '',
@@ -3158,7 +3159,9 @@ function sqSaveEdit(){
 
   // persist permanently to Firebase as the canonical sketch
   if(sqCurrent.id.startsWith('ord_')){
-    updateOrder(sqCurrent.id, { sketch: newSrc });
+    updateOrder(sqCurrent.id, { sketch: newSrc, hasSketch: true });
+    // שלב 1 — כתיבה כפולה גם לצומת הנפרד. השדה הישן נשמר למעלה כרגיל
+    lgSaveSketch(sqCurrent.id, newSrc);
   }
 
   sqCloseEditor();

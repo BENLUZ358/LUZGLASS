@@ -484,6 +484,7 @@ function mapFirebaseOrder(o){
     finish:       o.finish||'',
     source:       o.source||'sketch',
     sketch:       o.sketch||(o.files&&o.files.f0&&o.files.f0.data)||null,
+    hasSketch:    !!(o.hasSketch||o.sketch||(o.files&&o.files.f0&&o.files.f0.data)),
     // ציור בדיקה זמני — מגיע מ-checkEdits Firebase (נתיב נפרד, לא נוגע ב-orders)
     // fallback: localStorage אם Firebase עדיין לא נטען
     _editedSketch: window._csCheckEdits[String(o.id)] ||

@@ -311,6 +311,49 @@ async function _lgLookupClientMeta(phone) {
   }
 }
 
+// ─── הסקיצה יוצאת מרשומת ההזמנה ─────────────────────────────────────────
+//
+//  היום התמונה נשמרת כ-base64 בתוך orders/<id>/sketch. נמדד: 23 הזמנות =
+//  4.6MB, מהם 99% סקיצות. וארבעה דפים מאזינים ל-orders דרך on('value'),
+//  שמשדר מחדש את *כל* תת-העץ בכל שינוי — כלומר כל סימון וי בתחנת הבדיקה
+//  מוריד 4.6MB מחדש. בפי עשרה הזמנות זה 46MB, בכל לחיצה.
+//
+//  היעד: התמונה בצומת נפרד, וברשומה נשאר סימן בלבד. הרשימה יורדת ל-45KB
+//  והתמונה נטענת רק כשפותחים אותה.
+//
+//  המעבר בארבעה שלבים, כדי שבשום רגע לא יהיה נתון שקיים במקום אחד בלבד:
+//    1. כתיבה כפולה — לכאן ולשדה הישן.        ← אנחנו כאן
+//    2. קריאה מהחדש עם נפילה לישן.
+//    3. העברת הקיים, עם ריצה יבשה.
+//    4. מחיקת השדה הישן — ורק אז הרווח בפועל.
+//
+//  שים לב: שלבים 1–2 אינם מזרזים כלום בעצמם. החיסכון מגיע רק כשהשדה הישן
+//  עוזב את orders. הם קיימים כדי ששלב 4 יהיה בטוח.
+async function lgSaveSketch(orderId, dataUrl) {
+  if (!orderId || !dataUrl) return false;
+  try {
+    await _lgDb.ref('sketches/' + orderId).set(dataUrl);
+    return true;
+  } catch (e) {
+    // כישלון כאן לא נוגע בשדה הישן, שכבר נשמר — ולכן אינו מאבד כלום
+    console.warn('[firebase-db] lgSaveSketch:', e && e.message);
+    return false;
+  }
+}
+
+// קריאת סקיצה בודדת, לשלב 2. נופלת לשדה הישן כשהחדש עוד לא קיים.
+async function lgGetSketch(orderId) {
+  if (!orderId) return null;
+  try {
+    const snap = await _lgDb.ref('sketches/' + orderId).once('value');
+    if (snap.exists()) return snap.val();
+  } catch (e) { console.warn('[firebase-db] lgGetSketch:', e && e.message); }
+  try {
+    const old = await _lgDb.ref('orders/' + orderId + '/sketch').once('value');
+    return old.exists() ? old.val() : null;
+  } catch (e) { return null; }
+}
+
 async function saveOrder(data) {
   const id     = data.id || ('ord_' + Date.now());
   const stage  = data.stage ?? lgStatusToStage(data.status || '') ?? '';
@@ -323,11 +366,14 @@ async function saveOrder(data) {
     clientPhone:   normPhone,
     paymentStatus: data.paymentStatus || 'unpaid',
     source:        data.source        || 'sketch',
+    hasSketch:     !!data.sketch,
     date:          data.date          || _lgToday(),
     createdAt:     data.createdAt     || Date.now(),
     updatedAt:     Date.now()
   });
   await _lgDb.ref('orders/' + id).set(record);
+  // שלב 1 — כתיבה כפולה. השדה הישן נשמר כרגיל למעלה; זו תוספת בלבד.
+  if (record.sketch) await lgSaveSketch(id, record.sketch);
   return id;
 }
 
@@ -354,6 +400,7 @@ async function saveSubmission(data) {
     clientPhone:   normPhone,
     paymentStatus: 'unpaid',
     source:        'upload',
+    hasSketch:     !!data.sketch,
     date:          now.toLocaleDateString('he-IL'),
     time:          now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }),
     createdAt:     Date.now(),
@@ -362,6 +409,7 @@ async function saveSubmission(data) {
   });
 
   await _lgDb.ref('orders/' + id).set(record);
+  if (record.sketch) await lgSaveSketch(id, record.sketch);
   console.log('[firebase-db] saveSubmission saved:', id, 'hasSketch:', !!record.sketch, 'sketchLen:', record.sketch ? record.sketch.length : 0);
   return id;
 }
@@ -565,6 +613,8 @@ function lgNormalizeOrder(o) {
     source:        o.source       || 'sketch',
     urgent:        o.urgent       || false,
     sketch:        o.sketch       || null,
+    // סימן בלבד — מאפשר למסך לדעת שיש סקיצה בלי להוריד אותה
+    hasSketch:     !!(o.hasSketch || o.sketch),
     files:         o.files        || [],
     type:          o.type         || '',
     cat:           o.cat          || '',

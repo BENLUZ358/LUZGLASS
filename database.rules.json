@@ -24,6 +24,14 @@
       }
     },
 
+    "sketches": {
+      "$orderId": {
+        ".read": "auth != null && auth.token.email != null && (root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin' || root.child('orders').child($orderId).child('clientPhone').val() === auth.token.email.replace('@luzglass.local',''))",
+        ".write": "auth != null && auth.token.email != null && (root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin' || (!data.exists() && root.child('orders').child($orderId).child('clientPhone').val() === auth.token.email.replace('@luzglass.local','') && root.child('orders').child($orderId).child('stage').val() === ''))",
+        ".validate": "newData.isString()"
+      }
+    },
+
     "workday": {
       ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
       ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'"

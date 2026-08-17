@@ -298,6 +298,7 @@ function load(){
         status:        o.status||'',
         source:        o.source||'sketch',
         sketch:        o.sketch||(o.files&&o.files.f0&&o.files.f0.data)||null,
+        hasSketch:     !!(o.hasSketch||o.sketch||(o.files&&o.files.f0&&o.files.f0.data)),
         _editedSketch: o._editedSketch||null,
         date:          o.date||'',
         items:         o.items||[],
