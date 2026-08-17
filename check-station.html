@@ -521,8 +521,15 @@ function load(){
     // הוא נועד להגן מפני saveWorkDay שמחק את checkState, אבל אותו באג כבר תוקן
     // (update במקום set, בשני המקומות). מה שנשאר היה ההפך: הוא היה מבטל כל מחיקה
     // לגיטימית ומחזיר סימונים ישנים, כך שהזמנה חוזרת נראית "נבדקה" בלי שנבדקה.
-    if(!_csLocalPending){
-      cs = (wd.checkState && typeof wd.checkState === 'object') ? wd.checkState : {};
+    const incoming = (wd.checkState && typeof wd.checkState === 'object') ? wd.checkState : {};
+    if(_csLocalPending){
+      // כתיבה באוויר — לא נוגעים ב-cs
+    } else if(_csPendingWrite){
+      // ממתינים לתמונה של הכתיבה שלנו. כל מה שלפניה הוא הד ישן שיחזיר
+      // את המסך אחורה, וזה בדיוק מה שגרם ל"נגמרו הסקיצות".
+      if(JSON.stringify(incoming) === _csPendingWrite) _csClearPending();
+    } else {
+      cs = incoming;
       safeStorage.setItem('lgCheckState', JSON.stringify(cs));
     }
 
@@ -587,13 +594,36 @@ function _csListenerFailed(what, err){
 // _csLocalPending: מונע מה-listener לדרוס cs בזמן שאנחנו כותבים ל-Firebase
 let _csLocalPending = false;
 
+// הדגל השתחרר ברגע שהכתיבה אושרה — אבל אירוע הליסנר על אותה כתיבה מגיע
+// אחריה, כשהדגל כבר כבוי. בדרך כלל התמונה זהה ולכן לא הזיק. אבל כששתי
+// כתיבות רודפות זו את זו — לסמן פריט ומיד "סיים סקיצה" — התמונה של הראשונה
+// נחתה אחרי שהשנייה שחררה את הדגל, ו-cs חזר למצב הישן. הרשימה נגזרת מ-cs,
+// ולכן הציגה מצב שגוי עד שיצאת וחזרת וקראת את המצב הסופי.
+//
+// עכשיו הדגל מחזיק את מה שנכתב, והליסנר מתעלם עד שהוא רואה בדיוק אותו.
+// תמונה ישנה יותר פשוט לא מתקבלת. הפסקת ביטחון משחררת אם התמונה לא מגיעה,
+// כדי שכשל רשת לא ישאיר את המסך חירש לעדכונים לתמיד.
+let _csPendingWrite = null;
+let _csPendingTimer = null;
+
+function _csClearPending(){
+  _csPendingWrite = null;
+  if(_csPendingTimer){ clearTimeout(_csPendingTimer); _csPendingTimer = null; }
+}
+
 async function saveCS(){
+  const payload = JSON.stringify(cs);
   _csLocalPending = true;
-  safeStorage.setItem('lgCheckState', JSON.stringify(cs));
+  _csPendingWrite = payload;
+  if(_csPendingTimer) clearTimeout(_csPendingTimer);
+  _csPendingTimer = setTimeout(_csClearPending, 8000);
+
+  safeStorage.setItem('lgCheckState', payload);
   try {
     await firebase.database().ref('workday/checkState').set(cs);
   } catch(e) {
     console.error('[CS] saveCS Firebase error:', e);
+    _csClearPending();   // הכתיבה נכשלה — אין תמונה לחכות לה
     throw e; // חייב לעלות לקורא — אחרת finishSketch/checkItem "יצליחו" גם כשהשמירה נכשלה
   } finally {
     _csLocalPending = false;
