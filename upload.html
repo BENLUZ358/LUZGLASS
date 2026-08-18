@@ -195,21 +195,15 @@ function renderPreviews() {
   const count = document.getElementById('previewCount');
   if (!uploadedFiles.length) { grid.style.display = 'none'; count.textContent = ''; return; }
   grid.style.display = 'grid';
+  // אין כאן שדה שם. הלקוח מעלה סקיצות ברצף, בתצוגה מוקטנת שבה אי אפשר
+  // באמת לראות מה בכל אחת — ולכן השם נקבע בתור הסקיצות, מול התמונה
+  // בגודל מלא, יחד עם הכנסת הפריטים.
   grid.innerHTML = uploadedFiles.map((f, i) => `
-    <div class="preview-item" style="display:flex;flex-direction:column;">
-      <div style="flex:1;position:relative;overflow:hidden;min-height:0;">
-        ${f.type.startsWith('image')
-          ? `<img src="${lgEsc(f.data)}" alt="${lgEsc(f.name)}" style="width:100%;height:100%;object-fit:cover;">`
-          : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:32px;">📄</div>`}
-        <button aria-label="הסר קובץ" class="rm" onclick="removeFile(${i})">✕</button>
-      </div>
-      <input
-        type="text"
-        placeholder="שם סקיצה..."
-        value="${lgEsc(f.sketchName||'')}"
-        oninput="uploadedFiles[${i}].sketchName=this.value"
-        onclick="event.stopPropagation()"
-        style="flex-shrink:0;width:100%;padding:6px 8px;font-size:12px;font-family:Heebo,sans-serif;border:none;border-top:1px solid rgba(0,0,0,0.12);background:#fff;color:#1a1714;outline:none;text-align:center;direction:rtl;box-sizing:border-box;">
+    <div class="preview-item">
+      ${f.type.startsWith('image')
+        ? `<img src="${lgEsc(f.data)}" alt="${lgEsc(f.name)}">`
+        : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:32px;">📄</div>`}
+      <button aria-label="הסר קובץ" class="rm" onclick="removeFile(${i})">✕</button>
     </div>`).join('');
   count.textContent = `${uploadedFiles.length} קבצים נבחרו`;
 }
@@ -267,7 +261,9 @@ async function submitUpload() {
   async function saveAll(){
     try {
       for (let i = 0; i < compressed.length; i++) {
-        const fileSketchName = (uploadedFiles[i].sketchName || '').trim() || ('סקיצה ' + (i + 1));
+        // ריק בכוונה — ולא "סקיצה 1". שם אוטומטי נראה בתור בדיוק כמו שם
+        // אמיתי, ואז אי אפשר לדעת מה עוד מחכה לשם. ריק נראה כ"ללא שם".
+        const fileSketchName = '';
         const imgData = compressed[i].data || null;
         const fileName = compressed[i].name || '';
 

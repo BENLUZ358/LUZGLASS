@@ -1197,6 +1197,10 @@ function renderAll(){
       sqCurrent.total       = _live.total;
       sqCurrent.totalFinal  = _live.totalFinal;
       sqCurrent.orderClient = _live.orderClient;
+      // השם נערך בדף הזה, ולכן sqCurrent הוא המקור הטרי יותר. מסונכרן רק
+      // כשהצד השני באמת שונה — אחרת הקלדה נמחקת תוך כדי מהעדכון החוזר.
+      if(document.activeElement?.id !== 'sqNameInput')
+        sqCurrent.sketchName = _live.sketchName || _live.type || '';
     }
     sqRefreshMetrics();
   }
@@ -1934,6 +1938,20 @@ document.addEventListener('visibilitychange', () => {
 .sq-ptable th{padding:7px 10px;text-align:right;font-size:12px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.07em;background:#faf8f5;border-bottom:1px solid rgba(0,0,0,0.07);}
 .sq-ptable td{padding:8px 10px;border-bottom:1px solid rgba(0,0,0,0.04);color:#1a1714;font-weight:500;}
 .sq-ptable tr:last-child td{border-bottom:none;}
+/* שם הסקיצה — נקבע כאן, לא בפורטל */
+#sqNameWrap{padding:10px 14px 12px;}
+#sqNameWrap label{font-size:12px;font-weight:700;color:#aaa;letter-spacing:0.1em;text-transform:uppercase;display:block;margin-bottom:5px;}
+#sqNameInput{
+  width:100%;box-sizing:border-box;padding:10px 12px;
+  border:1px solid rgba(0,0,0,0.14);border-radius:5px;background:#fff;
+  font-family:Heebo,sans-serif;font-size:15px;font-weight:700;color:#1a1714;
+  outline:none;direction:rtl;transition:border-color 160ms ease,box-shadow 160ms ease;
+}
+#sqNameInput::placeholder{font-weight:500;color:#bbb;}
+#sqNameInput:focus{border-color:var(--gold-text);box-shadow:0 0 0 3px rgba(184,146,42,0.15);}
+/* ריק פירושו שעוד לא נתנו שם — נראה מיד, בלי לקרוא */
+#sqNameInput.sq-name-empty{border-color:rgba(184,146,42,0.55);background:rgba(184,146,42,0.06);}
+.sq-unnamed{color:var(--gold-text);font-weight:700;}
 /* notes */
 #sqNotesWrap{padding:0 14px 20px;}
 #sqNotesWrap label{font-size:12px;font-weight:700;color:#aaa;letter-spacing:0.1em;text-transform:uppercase;display:block;margin-bottom:5px;}
@@ -1992,6 +2010,11 @@ document.addEventListener('visibilitychange', () => {
 @media(min-width:601px){
   #sqListPanel.sq-hidden{ display:block !important; }
   #sqDetailPanel.sq-hidden{ display:flex !important; }
+}
+/* אייפד ופלאפון: 16px, אחרת iOS מזנק את המסך בכל לחיצה על השדה, והריפוד
+   מביא את שטח המגע ל-46px */
+@media(max-width:900px){
+  #sqNameInput{ font-size:16px; padding:12px 12px; }
 }
 
 /* ── שורת פריט בתור הסקיצות, על אייפד ופלאפון ──────────────────────────
@@ -2091,6 +2114,14 @@ document.addEventListener('visibilitychange', () => {
           <div id="sqImgWrap">
             <img id="sqImg" alt="סקיצה">
             <div id="sqNoImg"><div style="font-size:28px;">📄</div><div>אין תמונה</div></div>
+          </div>
+          <!-- שם הסקיצה. יושב מתחת לתמונה במכוון: זה הרגע היחיד שבו רואים
+               את הסקיצה בגודל מלא, ומשם השם רץ לאורך כל התהליך. -->
+          <div id="sqNameWrap">
+            <label for="sqNameInput">שם הסקיצה</label>
+            <input id="sqNameInput" type="text" autocomplete="off" placeholder="למשל: מקלחון חדר רחצה"
+                   onchange="sqSaveName(this.value)"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}else{event.stopPropagation();}">
           </div>
           <!-- check-station status badge -->
           <div id="sqCheckBadge" style="display:none;margin:0 14px 10px;padding:8px 12px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.2);border-radius:6px;font-size:12px;color:#27ae60;font-weight:700;"></div>
@@ -2393,7 +2424,7 @@ function sqRender(){
       ${thumb}
       <div class="sq-item-info">
         <div class="sq-item-client">${lgEsc(item.client)}</div>
-        <div class="sq-item-sub">${lgEsc(item.sketchName)}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
+        <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
           <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':'מערכת'}</span>
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
@@ -2450,6 +2481,9 @@ function sqShowDetail(){
     img.style.display='none';noimg.style.display='flex';
   }
 
+  const nameEl=document.getElementById('sqNameInput');
+  if(nameEl){ nameEl.value=o.sketchName||''; sqMarkNameState(); }
+
   sqUpdateBtns(o.id);
 
   const selStyle='width:100%;padding:7px 10px;background:#f7f4ef;border:1px solid rgba(0,0,0,0.1);font-family:Heebo,sans-serif;font-size:13px;color:#1a1714;outline:none;direction:rtl;';
@@ -2499,6 +2533,40 @@ function sqShowDetail(){
       badge.style.display='none';
     }
   }
+}
+
+// שם הסקיצה נקבע כאן ומכאן והלאה הוא רץ בכל המערכת, בדיוק כפי שרץ קודם
+// השם שהלקוח נתן בפורטל.
+//
+// נשמר ב-change בלבד — כלומר ביציאה מהשדה או ב-Enter, לא בכל הקשה. כל
+// כתיבה ל-orders משדרת מחדש את כל הצומת לכל מי שמחובר, ושמירה לכל אות
+// הייתה עושה זאת עשרים פעם לשם אחד.
+function sqSaveName(value){
+  if(!sqCurrent) return;
+  const v   = (value || '').trim();
+  const cur = sqCurrent.sketchName || '';
+  if(v === cur) return;               // יציאה מהשדה בלי לשנות אינה שמירה
+
+  const id = sqCurrent.id;
+  sqCurrent.sketchName = v;
+  // sqCurrent מתנתק מ-sqItems בכל בנייה מחדש, ולכן גם המקור מתעדכן —
+  // אחרת השורה ברשימה מציגה את השם הישן עד שמגיע עדכון מ-Firebase
+  const row = sqItems.find(i => i.id === id);
+  if(row) row.sketchName = v;
+
+  sqMarkNameState();
+  sqRender();
+
+  updateOrder(id, { sketchName: v }).catch(e => {
+    console.error('sqSaveName:', e);
+    alert('שם הסקיצה לא נשמר: ' + e.message);
+  });
+}
+
+// מסמן את השדה כשהוא ריק, כדי שסקיצה בלי שם תיראה מיד
+function sqMarkNameState(){
+  const el = document.getElementById('sqNameInput');
+  if(el) el.classList.toggle('sq-name-empty', !el.value.trim());
 }
 
 function sqUpdateBtns(id){
