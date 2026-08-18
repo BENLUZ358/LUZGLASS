@@ -2617,9 +2617,11 @@ function sqSetStage(stage){
     sqStageMap[id]='chash';
     updateStage(id, 'chash');
 
-    // פתיחת ההזמנה בחשבשבת. תחילה תצוגה מקדימה בלבד — השליחה בפועל
-    // דורשת אישור נוסף בחלון, כדי שטעות מיפוי לא תיצור מסמך אמיתי.
-    sqPreviewHashavshevet(id);
+    // לחיצה אחת. פעם היה כאן חלון תצוגה מקדימה ואחריו חלון תוצאה, ושניהם
+    // נכתבו מסיבה טובה — אבל בעשרים הזמנות ברצף זה ארבעים לחיצות על שני
+    // חלונות שכמעט תמיד אומרים "בסדר". החלון נשאר בדיוק למקרים שבהם הוא
+    // באמת אומר משהו: שגיאה, או פריט שדולג.
+    sqSendHashavshevet(id);
     return;
   }
 
@@ -2644,6 +2646,17 @@ function sqSetStage(stage){
 //  הדפדפן שולח orderId בלבד — הוא לא יכול להזריק מחיר למסמך חשבונאי.
 
 function _sqHbClose(){ document.getElementById('sqHbOv')?.remove(); }
+
+// החלון נבנה רק כשיש מה להגיד. במסלול המהיר הוא לא נוצר בכלל.
+function _sqHbOpen(){
+  _sqHbClose();
+  const ov = document.createElement('div');
+  ov.id = 'sqHbOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(26,23,20,0.6);z-index:800;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.onclick = e => { if(e.target === ov) _sqHbClose(); };
+  document.body.appendChild(ov);
+  return ov;
+}
 
 
 // חשבשבת אישרו: 31 = הזמנת סוכן.
@@ -2682,13 +2695,8 @@ async function sqMarkTestOrder(){
 
 async function sqPreviewHashavshevet(id, agent){
   if(agent != null) _sqHbAgent = agent;
-  _sqHbClose();
-  const ov = document.createElement('div');
-  ov.id = 'sqHbOv';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(26,23,20,0.6);z-index:800;display:flex;align-items:center;justify-content:center;padding:20px;';
+  const ov = _sqHbOpen();
   ov.innerHTML = '<div class="modal" style="max-width:640px"><div class="mhdr"><h2>חשבשבת — בודק...</h2></div><div class="mbody"><div class="empty-state"><div class="empty-state-msg">בונה את הבקשה בשרת...</div></div></div></div>';
-  ov.onclick = e => { if(e.target === ov) _sqHbClose(); };
-  document.body.appendChild(ov);
 
   let data, res;
   try {
@@ -2704,6 +2712,26 @@ async function sqPreviewHashavshevet(id, agent){
 function _sqHbRender(id, data, ok){
   const ov = document.getElementById('sqHbOv');
   if(!ov) return;
+
+  // "כבר נשלחה" אינה שגיאה — זו התשובה על מה שכבר קרה. זה גם המסלול שבו
+  // לחיצה חוזרת על הכפתור הירוק מראה לך מה נשלח, בלי לשלוח שוב.
+  if(!ok && data.sentAt){
+    const when = new Date(data.sentAt).toLocaleString('he-IL');
+    ov.innerHTML =
+      `<div class="modal" style="max-width:520px">
+         <div class="mhdr"><h2>כבר נשלחה לחשבשבת</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+         <div class="mbody">
+           <div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ${lgEsc(data.reference||'—')}</div>
+           <div style="font-size:13px;color:var(--muted)">נשלחה ב-${lgEsc(when)}. לא נשלח שוב — כדי שלא ייפתח מסמך שני.</div>
+         </div>
+         <div class="mfoot" style="gap:7px">
+           <button class="btn btn-primary" style="flex:1" onclick="_sqHbClose()">סגור</button>
+           <button class="btn btn-secondary" onclick="sqResendHashavshevet('${lgEsc(id)}')">שלח שוב בכל זאת</button>
+         </div>
+       </div>`;
+    lgIcons?.render(ov);
+    return;
+  }
 
   if(!ok || data.error){
     const extra = data.skipped?.length
@@ -2721,7 +2749,20 @@ function _sqHbRender(id, data, ok){
            ${data.hint?`<div style="font-size:13px;color:var(--muted)">${lgEsc(data.hint)}</div>`:''}
            ${extra}${resp}
          </div>
-         <div class="mfoot"><button class="btn btn-secondary" onclick="_sqHbClose()">סגור</button></div>
+         <div class="mfoot" style="flex-direction:column;align-items:stretch;gap:8px">
+           <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+             <span>קוד סוכן:</span>
+             <input id="sqHbAgent" value="${lgEsc(_sqHbAgent||'')}" inputmode="numeric" placeholder="חיובי, לא 0"
+                    style="width:90px;padding:5px 8px;font-size:12px;border:1px solid var(--border);background:var(--bg)"
+                    onchange="_sqHbAgent=this.value">
+             <span style="font-size:12px">הקליטה נכשלת עם "קוד עובד לא קיים" כשהוא 0</span>
+           </div>
+           <div style="display:flex;gap:7px">
+             <button class="btn btn-primary" style="flex:1" onclick="sqSendHashavshevet('${lgEsc(id)}')">נסה שוב</button>
+             <button class="btn btn-secondary" onclick="sqPreviewHashavshevet('${lgEsc(id)}')">הצג מה נשלח</button>
+             <button class="btn btn-secondary" onclick="_sqHbClose()">סגור</button>
+           </div>
+         </div>
        </div>`;
     lgIcons?.render(ov);
     return;
@@ -2733,10 +2774,19 @@ function _sqHbRender(id, data, ok){
     // בעוד שבחשבשבת לא נוצר כלום, ולא נשארה שום ראיה. לא שוב.
     const raw = typeof data.response === 'string'
       ? data.response : JSON.stringify(data.response, null, 2);
+    // מאז שהמסלול הנקי לא פותח חלון כלל, הדרך היחידה להגיע לכאן אחרי הצלחה
+    // היא פריט שדולג — ולכן הוא חייב להופיע, ולא רק התשובה הגולמית.
+    const sk = data.skipped?.length
+      ? `<div style="margin-bottom:12px;padding:10px 12px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:6px">
+           <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:4px">${data.skipped.length} פריטים לא נכללו במסמך</div>
+           ${data.skipped.map(s=>`<div style="font-size:12px;color:var(--muted);padding:2px 0">${lgEsc(s.name)}${s.sku?' ('+lgEsc(s.sku)+')':''} — ${lgEsc(s.reason)}</div>`).join('')}
+         </div>`
+      : '';
     ov.innerHTML =
       `<div class="modal" style="max-width:640px">
          <div class="mhdr"><h2>${data.simulated ? '🧪 הורץ כפיקטיבי' : 'נשלח — יש לאמת בחשבשבת'}</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
          <div class="mbody">
+           ${sk}
            <div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ${lgEsc(data.reference)} · חשבון ${lgEsc(data.accountKey)} · ${data.lineCount} שורות</div>
            <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
              ${data.simulated
@@ -2803,30 +2853,68 @@ function _sqHbRender(id, data, ok){
   lgIcons?.render(ov);
 }
 
-async function sqSendHashavshevet(id){
-  const btn = document.getElementById('sqHbSend');
-  if(btn){ btn.disabled = true; btn.textContent = 'שולח...'; }
+// המסלול המהיר: לחיצה אחת, בלי חלון. החלון נפתח רק כשיש מה להגיד —
+// שגיאה, פריט שדולג, או הזמנה שכבר נשלחה.
+//
+// force ירד מכאן. פעם הוא נשלח תמיד, וזה היה בסדר כשאדם אישר בחלון לפני
+// כל שליחה; עכשיו לחיצה שנייה על הכפתור הירוק הייתה פותחת מסמך שני
+// בחשבשבת. בלעדיו השרת עונה 409 ואנחנו מציגים מה כבר נשלח.
+async function sqSendHashavshevet(id, force){
+  const btn   = document.getElementById('sqHbSend') || document.getElementById('sqBtnChash');
+  const label = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'שולח לחשבשבת...'; }
+  const restore = () => { if(btn){ btn.disabled = false; btn.textContent = label; } };
+
   let data, res;
   try {
-    res  = await _lgAuthPost('/api/hashavshevet-order', { orderId: id, dryRun: false, documentId: _sqHbDocId, agent: _sqHbAgent, force: true });
+    const payload = { orderId: id, dryRun: false, documentId: _sqHbDocId, agent: _sqHbAgent };
+    if(force) payload.force = true;
+    res  = await _lgAuthPost('/api/hashavshevet-order', payload);
     data = await res.json();
   } catch(e){
+    restore();
+    _sqHbOpen();
     _sqHbRender(id, { error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false);
     return;
   }
+  restore();
+
+  // דילוג על פריט אינו הצלחה שקטה: המסמך נפתח בלי משהו שהיה אמור להיות בו,
+  // וזה חייב לעצור אותך.
+  const clean = res.ok && data.ok && !(data.skipped && data.skipped.length);
+  if(clean){
+    _sqHbClose();
+    sqShowChashConfirm(id, data);
+    return;
+  }
+  _sqHbOpen();
   _sqHbRender(id, data, res.ok);
 }
 
-function sqShowChashConfirm(id){
+// שליחה חוזרת ביודעין. היחידה שמדלגת על מנגנון אי-הכפילות.
+function sqResendHashavshevet(id){
+  if(!confirm('לשלוח שוב לחשבשבת?\n\nההזמנה כבר נשלחה. שליחה נוספת עלולה לפתוח מסמך שני שיצטרך ביטול ידני בהנהלת החשבונות.')) return;
+  sqSendHashavshevet(id, true);
+}
+
+// ההודעה על שליחה מוצלחת. toast ולא חלון: הוא לא חוסם, הוא לא דורש לחיצה,
+// והוא נושא את האסמכתא — הדבר היחיד מתוך חלון התוצאה שבאמת צריך לראות.
+// התשובה המלאה של חשבשבת נשמרת בכל מקרה על ההזמנה, ב-hashavshevet.
+function sqShowChashConfirm(id, data){
   const item=sqItems.find(i=>i.id===id);
   if(!item) return;
 
-  // הצג toast קצר
+  const sim  = data && data.simulated;
+  const ref  = data && data.reference;
+  const tail = ref
+    ? `${sim?'הורץ כפיקטיבי':'נפתח בחשבשבת'} · אסמכתא ${ref} · ${data.lineCount} שורות`
+    : 'הועבר לחשבשבת ולתור שרטט';
+
   const toast=document.createElement('div');
-  toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#27ae60;color:#fff;padding:12px 24px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:8px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;';
-  toast.innerHTML=`<span>✓</span><span>${lgEsc(item.client)} — הועבר לחשבשבת ולתור שרטט</span>`;
+  toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:'+(sim?'#b8922a':'#27ae60')+';color:#fff;padding:12px 24px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:8px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);';
+  toast.innerHTML=`<span>${sim?'🧪':'✓'}</span><span>${lgEsc(item.client)} — ${lgEsc(tail)}</span>`;
   document.body.appendChild(toast);
-  setTimeout(()=>toast.remove(),2200);
+  setTimeout(()=>toast.remove(),3200);
 
   // קפוץ להזמנה הבאה בתור הסקיצות (pending)
   sqRender();
