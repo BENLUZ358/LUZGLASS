@@ -371,5 +371,28 @@ check('there is a way to deploy the rules',
         'the badge goes stale on every path that is not the Firebase listener');
 }
 
+/* Returning to the list clears the search box.
+
+   The search survived the trip into a sketch and back, so the list came back
+   filtered to the one sketch that had been searched for — which on the station
+   floor reads as "there is nothing left to check". The box is at the top of a
+   narrow bar on a tablet and its leftover text does not announce itself.
+
+   The dropdowns are deliberately left alone: those are a standing choice for
+   the day, and their selected value is legible in the bar. */
+{
+  const cs = fs.readFileSync(path.join(ROOT, 'check-station.html'), 'utf8');
+  const showList = (cs.match(/function showList\(\)[\s\S]*?\n}/) || [''])[0];
+  check('check-station clears the search when it returns to the list',
+        /srch\.value=''/.test(showList),
+        'a stale search makes the list look empty after every sketch');
+  check('and clears it before the list is drawn',
+        showList.indexOf("srch.value=''") < showList.indexOf('renderList()'),
+        'clearing after the render leaves the filtered list on screen');
+  check('the standing filters are not reset with it',
+        !/fGlass|fClient|fSort/.test(showList),
+        'wiping the day\'s filters on every return is worse than keeping them');
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');

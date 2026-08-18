@@ -750,6 +750,11 @@ function showList(){
   document.getElementById('btnSheet').style.display='none';
   document.getElementById('progWrap').style.display='none';
   document.getElementById('tbTitle').textContent='תחנת בדיקה';
+  // החיפוש נמחק בכל חזרה לרשימה. מחפשים סקיצה אחת, נכנסים אליה, ובחזרה
+  // הרשימה עדיין מסוננת לאותה סקיצה — ונראית כאילו לא נשאר מה לבדוק.
+  // הסינונים הנפתחים נשארים: הם בחירה מתמשכת של היום, והם נראים בסרגל.
+  const srch=document.getElementById('fSearch');
+  if(srch) srch.value='';
   renderList();
   // מנע ghost-click iOS (300ms delayed click) מלפגוע בכפתורים שהופיעו זה עתה
   const lv=document.getElementById('listView');
