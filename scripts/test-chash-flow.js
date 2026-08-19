@@ -20,14 +20,22 @@
  * call, which was safe while a human confirmed in a modal first; with one-click
  * sending it would mean a second click opens a second document.
  *
- * What the toast may NOT do is call a real send a success. The API records, in
- * its own comments and from experience, that Hashavshevet returned HTTP 200
- * while no document was created — httpOk means "the request was accepted", not
- * "the document exists", and the reply carries no dependable marker of the
- * difference. A green tick here would reproduce exactly the failure the old
- * result modal was written to catch. The toast therefore says "נשלח … לאמת
- * בחשבשבת", and only a fictitious run, which has nothing to verify, is closed
- * out as done.
+ * Whether a reply is worth interrupting for is decided on the SERVER, not in
+ * the browser and not by whoever is entering orders — they do not read
+ * Hashavshevet replies and should not be asked to judge one. So the message on
+ * a good send is an ordinary Hebrew sentence with no reply text in it at all,
+ * and anything technical everywhere else is folded behind a <details>.
+ *
+ * The warning does not rest on httpOk, which means "the request was accepted" —
+ * Hashavshevet have already returned HTTP 200 with nothing created. It rests on
+ * the body. The first real send ever recorded, order 1058, answered:
+ *
+ *   {"apiRes":{"status":"ok"},"actionType":"imovein","messType":"apiReplay"}
+ *
+ * so the check is positive rather than negative: look for the marker known to
+ * mean fine, and warn on anything else. That direction is the point. A reply in
+ * a shape nobody has seen stops you instead of passing as success. A false
+ * warning costs one click; a missing document costs a great deal more.
  *
  * The record survives regardless — but a record nobody can reach is not
  * evidence, so the 409 returns the stored reply and the modal prints it. It is
@@ -67,8 +75,8 @@ const bodyOf = (name, src = ADMIN) =>
   check('a clean send closes rather than renders',
         /if\(clean\)\{\s*_sqHbClose\(\);\s*sqShowChashConfirm\(id, data\);/.test(send), true);
   /* the three conditions, spelled out — a skipped item is not a clean send */
-  check('"clean" means ok, ok, and nothing skipped',
-        /const clean = res\.ok && data\.ok && !\(data\.skipped && data\.skipped\.length\);/.test(send), true);
+  check('"clean" means ok, ok, nothing skipped, and nothing flagged',
+        /const clean = res\.ok && data\.ok && !\(data\.skipped && data\.skipped\.length\) && !data\.warn;/.test(send), true);
   check('anything else opens the modal',
         /_sqHbOpen\(\);\s*_sqHbRender\(id, data, res\.ok\);/.test(send), true);
   check('the modal is built only when needed, not up front',
@@ -80,17 +88,15 @@ const bodyOf = (name, src = ADMIN) =>
   const toast = bodyOf('sqShowChashConfirm');
   check('the confirmation takes the server reply', /function sqShowChashConfirm\(id, data\)/.test(ADMIN), true);
   check('and shows the reference', /אסמכתא \$\{ref\}/.test(toast), true);
-  /* "נשלח", never "נפתח". Hashavshevet have already returned HTTP 200 with no
-     document created — that is recorded in the API from experience — and the
-     reply carries no reliable "created" marker. The toast may therefore claim
-     only what is known: the request went out, here is the reference, verify.
-     A fictitious run is the one case with nothing to verify. */
-  check('a real send does not claim the document exists',
-        /נשלח · אסמכתא \$\{ref\} · \$\{data\.lineCount\} שורות — לאמת בחשבשבת/.test(toast), true);
-  check('and no green tick is shown for it',
-        /'#27ae60'/.test(toast), false);
+  /* An ordinary sentence. No reply text, no status code, no instruction to go
+     and verify — the server has already decided there is nothing wrong, and a
+     verify-every-time nag is one people stop reading by the tenth order. */
+  check('a good send reads as an ordinary message',
+        /`נשלח לחשבשבת · אסמכתא \$\{ref\}`/.test(toast), true);
+  check('with nothing technical in it',
+        /response|httpStatus|JSON/.test(toast), false);
   check('a simulated run says so instead',
-        /sim {13}\? `הורץ כפיקטיבי/.test(toast), true);
+        /sim  \? `הורץ כפיקטיבי · אסמכתא \$\{ref\}`/.test(toast), true);
   check('it disappears on its own — nothing to dismiss',
         /setTimeout\(\(\)=>toast\.remove\(\),3200\)/.test(toast), true);
 }
@@ -115,7 +121,40 @@ const bodyOf = (name, src = ADMIN) =>
   check('it is not carried on every order instead',
         /hashavshevet:/.test(fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8')), false);
   check('and the modal shows it',
-        /const stored = data\.response[\s\S]{0,240}?תשובת חשבשבת/.test(ADMIN), true);
+        /const stored = _sqHbRaw\(data\.response, 'תשובת חשבשבת \(טכני\)'\);/.test(ADMIN), true);
+}
+
+/* ── the server decides what is worth interrupting for ─────────────────── */
+{
+  check('the flag is computed server-side, not in the browser',
+        /const warn = isTest \? null/.test(API), true);
+  check('a fictitious run is never flagged', /isTest \? null/.test(API), true);
+  check('an empty reply is flagged', /חשבשבת החזירו תשובה ריקה/.test(API), true);
+  check('so is one that is not JSON', /parsed === null +\? 'התשובה מחשבשבת אינה בפורמט צפוי'/.test(API), true);
+  /* the marker from the first real reply, order 1058 */
+  check('the known-good marker is what clears it',
+        /String\(apiStatus\|\|''\)\.toLowerCase\(\) === 'ok' \? null/.test(API), true);
+  check('and it is read from apiRes.status',
+        /const apiStatus = parsed && parsed\.apiRes && parsed\.apiRes\.status;/.test(API), true);
+  /* the direction matters: an unrecognised shape must warn, not pass */
+  check('another status is named in the warning',
+        /חשבשבת החזירו סטטוס "' \+ apiStatus \+ '" ולא "ok"/.test(API), true);
+  check('and a reply with no status at all still warns',
+        /התשובה מחשבשבת לא כללה סטטוס/.test(API), true);
+  check('the flag reaches the browser', /^\s*warn,$/m.test(API), true);
+}
+
+/* ── nothing technical in anyone's face ────────────────────────────────── */
+{
+  const render = bodyOf('_sqHbRender');
+  check('the raw reply is folded away everywhere',
+        (render.match(/_sqHbRaw\(/g) || []).length >= 3, true);
+  check('and there is only one place that formats it',
+        /function _sqHbRaw\(resp, label\)/.test(ADMIN), true);
+  check('it is behind a summary, not printed open',
+        /<summary[\s\S]{0,120}?פרטים טכניים/.test(bodyOf('_sqHbRaw')), true);
+  check('the warning itself is a plain Hebrew sentence',
+        /כדאי לפתוח את חשבשבת ולוודא שההזמנה קיימת/.test(render), true);
 }
 
 /* ── the loud cases stay loud ──────────────────────────────────────────── */

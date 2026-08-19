@@ -324,11 +324,35 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    // ── מתי להטריד את מי שעובד על המסך ──
+    //
+    // המסך מראה הודעה רגילה כשהכל תקין ואזהרה כשלא, ולכן ההחלטה הזו חייבת
+    // להתקבל כאן — לא בדפדפן, ולא על ידי מי שמזין הזמנות.
+    //
+    // HTTP 200 אינו "נוצר מסמך" — חשבשבת כבר החזירו 200 בלי שנוצר כלום.
+    // מה שכן מבדיל הוא גוף התשובה. השליחה האמיתית הראשונה (הזמנה 1058)
+    // החזירה:
+    //
+    //   {"apiRes":{"status":"ok"},"actionType":"imovein","messType":"apiReplay"}
+    //
+    // ולכן הבדיקה היא חיובית ולא שלילית: מחפשים את הסימן שידוע שמשמעותו
+    // תקין, וכל דבר אחר מעורר אזהרה. הכיוון הזה חשוב — תשובה בצורה שלא
+    // ראינו מעולם תעצור אותך במקום לחלוף כהצלחה. אזהרת שווא עולה לחיצה,
+    // מסמך חסר עולה הרבה יותר.
+    const apiStatus = parsed && parsed.apiRes && parsed.apiRes.status;
+    const warn = isTest ? null
+      : !text || !text.trim() ? 'חשבשבת החזירו תשובה ריקה — ייתכן שלא נוצר מסמך'
+      : parsed === null       ? 'התשובה מחשבשבת אינה בפורמט צפוי'
+      : String(apiStatus||'').toLowerCase() === 'ok' ? null
+      : apiStatus             ? 'חשבשבת החזירו סטטוס "' + apiStatus + '" ולא "ok"'
+      : 'התשובה מחשבשבת לא כללה סטטוס — לא ידוע אם נוצר מסמך';
+
     res.status(200).json({
       ok: true, dryRun: false,
       simulated: isTest,
       reference: ref.reference, accountKey,
       lineCount: lines.length, skipped,
+      warn,
       response: parsed || text.slice(0, 4000),
     });
 

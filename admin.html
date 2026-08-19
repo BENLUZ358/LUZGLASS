@@ -2709,6 +2709,17 @@ async function sqPreviewHashavshevet(id, agent){
   _sqHbRender(id, data, res.ok);
 }
 
+// התשובה הגולמית של חשבשבת מקופלת תמיד. מי שעובד על המסך לא מבין בה ולא
+// צריך אותה; היא שם רק בשביל אבחון, בלחיצה אחת, כשמישהו באמת מחפש למה.
+function _sqHbRaw(resp, label){
+  if(!resp) return '';
+  const txt = typeof resp === 'string' ? resp : JSON.stringify(resp, null, 2);
+  return `<details style="margin-top:14px">
+    <summary style="cursor:pointer;font-size:12px;color:var(--muted);font-weight:700">${lgEsc(label||'פרטים טכניים')}</summary>
+    <pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:220px;white-space:pre-wrap;margin-top:8px">${lgEsc(txt)}</pre>
+  </details>`;
+}
+
 function _sqHbRender(id, data, ok){
   const ov = document.getElementById('sqHbOv');
   if(!ov) return;
@@ -2719,9 +2730,7 @@ function _sqHbRender(id, data, ok){
     const when = new Date(data.sentAt).toLocaleString('he-IL');
     // התשובה השמורה מוצגת כאן במלואה. זו הדרך לראות מה חשבשבת ענו בפועל
     // על הזמנה שכבר נשלחה, בלי לשלוח שוב.
-    const stored = data.response
-      ? `<div class="sec-title" style="margin-top:14px">תשובת חשבשבת</div><pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:220px;white-space:pre-wrap">${lgEsc(typeof data.response==='string'?data.response:JSON.stringify(data.response,null,2))}</pre>`
-      : '';
+    const stored = _sqHbRaw(data.response, 'תשובת חשבשבת (טכני)');
     ov.innerHTML =
       `<div class="modal" style="max-width:560px">
          <div class="mhdr"><h2>${data.simulated ? '🧪 הורצה כפיקטיבית' : 'כבר נשלחה לחשבשבת'}</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
@@ -2744,9 +2753,7 @@ function _sqHbRender(id, data, ok){
       ? '<div class="sec-title" style="margin-top:14px">פריטים שדולגו</div>' +
         data.skipped.map(s => `<div style="font-size:12px;color:var(--muted);padding:3px 0">${lgEsc(s.name)}${s.sku?' ('+lgEsc(s.sku)+')':''} — ${lgEsc(s.reason)}</div>`).join('')
       : '';
-    const resp = data.response
-      ? `<div class="sec-title" style="margin-top:14px">תשובת חשבשבת</div><pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:180px;white-space:pre-wrap">${lgEsc(typeof data.response==='string'?data.response:JSON.stringify(data.response,null,2))}</pre>`
-      : '';
+    const resp = _sqHbRaw(data.response, 'תשובת חשבשבת (טכני)');
     ov.innerHTML =
       `<div class="modal" style="max-width:640px">
          <div class="mhdr"><h2>לא נשלח</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
@@ -2778,8 +2785,10 @@ function _sqHbRender(id, data, ok){
     // התשובה של חשבשבת מוצגת במלואה ולא נסגרת מעצמה.
     // בפעם הראשונה הסתרתי אותה והמסך נסגר אוטומטית — ההזמנה סומנה כנשלחה
     // בעוד שבחשבשבת לא נוצר כלום, ולא נשארה שום ראיה. לא שוב.
-    const raw = typeof data.response === 'string'
-      ? data.response : JSON.stringify(data.response, null, 2);
+    // מגיעים לכאן רק כשיש מה להגיד — אחרת הטוסט טיפל בזה בלי חלון בכלל.
+    const warn = data.warn
+      ? `<div style="margin-bottom:12px;padding:10px 12px;background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.45);border-radius:6px;font-size:13px;font-weight:700;color:var(--gold-text)">⚠️ ${lgEsc(data.warn)}<div style="font-weight:500;font-size:12px;color:var(--muted);margin-top:4px">כדאי לפתוח את חשבשבת ולוודא שההזמנה קיימת.</div></div>`
+      : '';
     // מאז שהמסלול הנקי לא פותח חלון כלל, הדרך היחידה להגיע לכאן אחרי הצלחה
     // היא פריט שדולג — ולכן הוא חייב להופיע, ולא רק התשובה הגולמית.
     const sk = data.skipped?.length
@@ -2790,17 +2799,14 @@ function _sqHbRender(id, data, ok){
       : '';
     ov.innerHTML =
       `<div class="modal" style="max-width:640px">
-         <div class="mhdr"><h2>${data.simulated ? '🧪 הורץ כפיקטיבי' : 'נשלח — יש לאמת בחשבשבת'}</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+         <div class="mhdr"><h2>${data.simulated ? '🧪 הורץ כפיקטיבי' : data.skipped?.length ? 'נשלח — אבל חסרים פריטים' : 'נשלח — כדאי לבדוק'}</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
          <div class="mbody">
-           ${sk}
+           ${warn}${sk}
            <div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ${lgEsc(data.reference)} · חשבון ${lgEsc(data.accountKey)} · ${data.lineCount} שורות</div>
-           <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
-             ${data.simulated
-               ? 'הבקשה נבנתה ונבדקה במלואה ונרשמה על ההזמנה, בדיוק כמו בשליחה אמיתית — אבל לא יצאה לחשבשבת. אין מה לחפש שם.'
-               : `הבקשה התקבלה בשרת. זה לא מבטיח שנוצר מסמך — יש לפתוח את חשבשבת ולבדוק שהזמנה ${lgEsc(data.reference)} קיימת.`}
-           </div>
-           <div class="sec-title">תשובת חשבשבת</div>
-           <pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:260px;white-space:pre-wrap">${lgEsc(raw||'(תשובה ריקה)')}</pre>
+           ${data.simulated
+             ? '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">הבקשה נבנתה ונבדקה במלואה ונרשמה על ההזמנה, בדיוק כמו בשליחה אמיתית — אבל לא יצאה לחשבשבת. אין מה לחפש שם.</div>'
+             : ''}
+           ${_sqHbRaw(data.response, 'תשובת חשבשבת (טכני)')}
          </div>
          <div class="mfoot"><button class="btn btn-primary" onclick="_sqHbClose()">סגור</button></div>
        </div>`;
@@ -2885,9 +2891,11 @@ async function sqSendHashavshevet(id, force){
   }
   restore();
 
-  // דילוג על פריט אינו הצלחה שקטה: המסמך נפתח בלי משהו שהיה אמור להיות בו,
-  // וזה חייב לעצור אותך.
-  const clean = res.ok && data.ok && !(data.skipped && data.skipped.length);
+  // הכל תקין — הודעה רגילה. משהו לא תקין — אזהרה. שלושה דברים פוסלים:
+  // כישלון, פריט שדולג (המסמך נפתח בלי משהו שהיה אמור להיות בו), ותשובה
+  // שנראית לשרת חריגה. את השלישי מחליט השרת, כי מי שמזין הזמנות לא אמור
+  // לקרוא תשובות של חשבשבת ולשפוט אותן.
+  const clean = res.ok && data.ok && !(data.skipped && data.skipped.length) && !data.warn;
   if(clean){
     _sqHbClose();
     sqShowChashConfirm(id, data);
@@ -2913,17 +2921,16 @@ function sqShowChashConfirm(id, data){
   const sim = data && data.simulated;
   const ref = data && data.reference;
 
-  // "נשלח" ולא "נפתח". חשבשבת החזירו כבר HTTP 200 בלי שנוצר שום מסמך — זה
-  // כתוב ב-api/hashavshevet-order.js מניסיון. אין בתשובה סימן אמין ל"נוצר",
-  // ולכן הטוסט אומר בדיוק את מה שידוע: הבקשה יצאה, זו האסמכתא, תאמת.
-  // הזמנה פיקטיבית היא המקרה היחיד שבו אין מה לאמת.
-  const tail = !ref            ? 'הועבר לחשבשבת ולתור שרטט'
-             : sim             ? `הורץ כפיקטיבי · אסמכתא ${ref} · ${data.lineCount} שורות`
-             : `נשלח · אסמכתא ${ref} · ${data.lineCount} שורות — לאמת בחשבשבת`;
+  // הודעה רגילה, בעברית, בלי שום דבר טכני. מי שמזין הזמנות לא אמור לקרוא
+  // תשובות של חשבשבת ולשפוט אותן — ההחלטה אם משהו חריג נעשית בשרת, ואם
+  // היא חיובית לא מגיעים לכאן בכלל אלא לחלון אזהרה.
+  const tail = !ref ? 'הועבר לחשבשבת ולתור שרטט'
+             : sim  ? `הורץ כפיקטיבי · אסמכתא ${ref}`
+             :        `נשלח לחשבשבת · אסמכתא ${ref}`;
 
   const toast=document.createElement('div');
-  toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:'+(sim||!ref?'#b8922a':'#2c6e8f')+';color:#fff;padding:12px 24px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:8px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);';
-  toast.innerHTML=`<span>${sim?'🧪':'↗'}</span><span>${lgEsc(item.client)} — ${lgEsc(tail)}</span>`;
+  toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:'+(sim?'#b8922a':'#27ae60')+';color:#fff;padding:12px 24px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:8px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);';
+  toast.innerHTML=`<span>${sim?'🧪':'✓'}</span><span>${lgEsc(item.client)} — ${lgEsc(tail)}</span>`;
   document.body.appendChild(toast);
   setTimeout(()=>toast.remove(),3200);
 
