@@ -54,19 +54,25 @@ responses.forEach((m, i) => {
         dupes.length ? `duplicated: ${[...new Set(dupes)].join(', ')} — in: ${keys.join(', ')}` : '');
 });
 
-/* ── 2. the line payload is exactly the five confirmed fields ──────────── */
+/* ── 2. the line payload is exactly the confirmed fields ───────────────── */
 const build = SRC.match(/lines\.push\(\{([\s\S]*?)\}\);/);
 check('found the line builder', !!build);
 if (build) {
   const fields = [...build[1].matchAll(/^\s*([A-Za-z_$][\w$]*)\s*:/gm)].map(m => m[1]);
-  const EXPECTED = ['accountKey', 'documentid', 'Reference', 'itemkey', 'Quantity', 'Agent'];
+  const EXPECTED = ['accountKey', 'documentid', 'Reference', 'itemkey', 'Quantity', 'price', 'Agent'];
   check('the line carries exactly the expected fields',
         JSON.stringify(fields) === JSON.stringify(EXPECTED),
         `got: ${fields.join(', ')}`);
 
-  /* price is theirs, not ours */
-  check('price is not sent', !/^\s*price\s*:/m.test(build[1]),
-        'Hashavshevet price the line from the item card');
+  /* This file used to assert the opposite — that price is theirs, not ours,
+     because Hashavshevet price the line from the item card. Order 1058, the
+     first real send ever made, disproved it: the line landed with price 0.000
+     and total 0.00, while the same item key typed by hand into their own
+     screen priced itself at 171. The card lookup belongs to the data-entry
+     screen, not to the API. An assumption held for months by a test that
+     agreed with it. */
+  check('price is sent', /^\s*price\s*:/m.test(build[1]),
+        'a line with no price is stored at zero — see order 1058');
   ['warehouse', 'copies'].forEach(f => {
     check(`${f} is not sent`, !new RegExp('^\\s*' + f + '\\s*:', 'm').test(build[1]));
   });
@@ -83,10 +89,17 @@ check('a non-positive agent is refused up front',
       /Number\(agent\)\s*>\s*0/.test(SRC),
       'rule 2: אסמכתא, סוכן, מחסנים ומספר עותקים must be positive and non-zero');
 
-/* ── 3. an item with no local price must still be sent ─────────────────── */
-check('items are not skipped for want of a local price',
-      !/skipped\.push\([^)]*אין מחיר/.test(SRC),
-      'Hashavshevet supply the price — skipping unpriced items shipped short orders');
+/* ── 3. an unpriced item is skipped, not billed at zero ────────────────── */
+/* Also the reverse of what this file once asserted, and for the same reason:
+   the fallback was "send it and let them price it", which produces a zero
+   line. A zero line reads in the document like an item given away and nobody
+   audits it; a missing item is listed in the modal and cannot be ignored. */
+check('an item with no price anywhere is skipped',
+      /skipped\.push\([^)]*אין מחיר/.test(SRC),
+      'sending it unpriced puts a ₪0 line in an accounting document');
+check('and the client list is preferred over the global one',
+      /const ppm2 = parseFloat\(cp\[sku\] \|\| gp\[sku\] \|\| 0\);/.test(SRC),
+      'the global price overcharges every client who has a list of their own');
 
 /* ── 4. dry run stays the default ──────────────────────────────────────── */
 check('dryRun defaults to true', /const dryRun\s*=\s*body\.dryRun\s*!==\s*false/.test(SRC),

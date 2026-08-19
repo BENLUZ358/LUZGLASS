@@ -86,11 +86,26 @@ function toReference(orderNum) {
   return { ok: true, reference: String(Number(digits)) };
 }
 
+// מחירוני הלקוח שמורים תחת מפתח החשבון בחשבשבת (prices/clients/14201),
+// ואילו החיפוש נעשה לפי שם הלקוח שעל ההזמנה. prices/clientKeys מחזיק את
+// התרגום. זו בדיוק המרה ש-_buildClientP עושה ב-firebase-db.js לדפדפן —
+// משוכפלת כאן כי זה קובץ Node ולא סקריפט דפדפן. אם אחד מהם משתנה, גם השני.
+function clientPricesByName(prices) {
+  const out    = {};
+  const keyMap = (prices && prices.clientKeys) || {};
+  for (const [key, list] of Object.entries((prices && prices.clients) || {})) {
+    out[keyMap[key] || key] = list || {};
+  }
+  return out;
+}
+
 // בונה שורה אחת לכל פריט. Quantity = שטח במ"ר, כי הפריטים בחשבשבת הם
 // מסוג "מכפלה" והמחיר שם הוא למ"ר.
 //
-// המחיר שלנו עדיין מחושב — אבל רק לתצוגה המקדימה, כדי שתדע מה אתה שולח.
-// הוא לא נכנס לשורה שנשלחת.
+// המחיר נשלח. פעם הוא לא נשלח, מתוך הנחה שחשבשבת יתמחרו לפי כרטיס הפריט —
+// ההזמנה האמיתית הראשונה (1058) הוכיחה שזה לא קורה: השורה נכנסה עם מחיר
+// 0.000 וסה"כ 0, בעוד שאותו מק"ט שהוקלד ביד בממשק שלהם קיבל 171. התמחור
+// האוטומטי הוא של מסך ההקלדה, לא של הקליטה דרך ה-API.
 function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices) {
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
@@ -110,6 +125,14 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     const qty = areaM2(item.w || 0, item.h || 0);
     if (!qty) { skipped.push({ name, sku, reason: 'שטח 0 — חסרות מידות' }); return; }
 
+    // מחירון הלקוח קודם, ואחריו הגלובלי — אותו סדר בדיוק שבו lgCalcOrderTotal
+    // מחשב את הסכום שעל המסך, כדי שהמסמך בחשבשבת והמסך לא יגידו שני דברים.
+    const ppm2 = parseFloat(cp[sku] || gp[sku] || 0);
+    // בלי מחיר עדיף לדלג ולהגיד את זה מאשר לשלוח שורה ב-0. שורת אפס נראית
+    // במסמך כמו פריט שניתן בחינם, ואיש לא בודק אותה; פריט חסר מופיע בחלון
+    // ואי אפשר להתעלם ממנו.
+    if (!ppm2) { skipped.push({ name, sku, reason: 'אין מחיר למק"ט הזה — לא במחירון הלקוח ולא בגלובלי' }); return; }
+
     // סדר המפתחות הוא חלק מחוזה החתימה — אין לשנות.
     lines.push({
       accountKey: String(accountKey),
@@ -117,12 +140,11 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
       Reference:  reference,
       itemkey:    String(sku),
       Quantity:   qty.toFixed(3),
+      price:      ppm2.toFixed(3),
       Agent:      String(agent),
     });
 
-    // לתצוגה בלבד. אין מחיר אצלנו? זה בסדר גמור — חשבשבת יתמחרו.
-    const ppm2 = parseFloat(cp[sku] || gp[sku] || 0);
-    preview.push({ name, sku, qty: qty.toFixed(3), ppm2: ppm2 || null });
+    preview.push({ name, sku, qty: qty.toFixed(3), ppm2 });
   });
 
   return { lines, preview, skipped };
@@ -221,8 +243,11 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    // prices.clients, לא prices.client — הצומת הוא ברבים. הטעות הזו הפכה את
+    // מחירון הלקוח ל-undefined, וכל מחיר נפל לגלובלי: 190 במקום 171 ל"המקום
+    // לאמבט". היא לא הזיקה כל עוד המחיר לא נשלח בכלל.
     const { lines, preview, skipped } = buildLines(order, accountKey, ref.reference,
-      documentId, agent, prices.global, prices.client);
+      documentId, agent, prices.global, clientPricesByName(prices));
 
     if (!lines.length) {
       res.status(422).json({ error: 'אין אף פריט לשליחה', skipped });
