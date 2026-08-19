@@ -2717,12 +2717,18 @@ function _sqHbRender(id, data, ok){
   // לחיצה חוזרת על הכפתור הירוק מראה לך מה נשלח, בלי לשלוח שוב.
   if(!ok && data.sentAt){
     const when = new Date(data.sentAt).toLocaleString('he-IL');
+    // התשובה השמורה מוצגת כאן במלואה. זו הדרך לראות מה חשבשבת ענו בפועל
+    // על הזמנה שכבר נשלחה, בלי לשלוח שוב.
+    const stored = data.response
+      ? `<div class="sec-title" style="margin-top:14px">תשובת חשבשבת</div><pre style="font-size:12px;background:var(--bg2);padding:10px;overflow:auto;max-height:220px;white-space:pre-wrap">${lgEsc(typeof data.response==='string'?data.response:JSON.stringify(data.response,null,2))}</pre>`
+      : '';
     ov.innerHTML =
-      `<div class="modal" style="max-width:520px">
-         <div class="mhdr"><h2>כבר נשלחה לחשבשבת</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+      `<div class="modal" style="max-width:560px">
+         <div class="mhdr"><h2>${data.simulated ? '🧪 הורצה כפיקטיבית' : 'כבר נשלחה לחשבשבת'}</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
          <div class="mbody">
            <div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ${lgEsc(data.reference||'—')}</div>
-           <div style="font-size:13px;color:var(--muted)">נשלחה ב-${lgEsc(when)}. לא נשלח שוב — כדי שלא ייפתח מסמך שני.</div>
+           <div style="font-size:13px;color:var(--muted)">${data.simulated?'הורצה ב-':'נשלחה ב-'}${lgEsc(when)}. לא נשלח שוב — כדי שלא ייפתח מסמך שני.</div>
+           ${stored}
          </div>
          <div class="mfoot" style="gap:7px">
            <button class="btn btn-primary" style="flex:1" onclick="_sqHbClose()">סגור</button>
@@ -2904,15 +2910,20 @@ function sqShowChashConfirm(id, data){
   const item=sqItems.find(i=>i.id===id);
   if(!item) return;
 
-  const sim  = data && data.simulated;
-  const ref  = data && data.reference;
-  const tail = ref
-    ? `${sim?'הורץ כפיקטיבי':'נפתח בחשבשבת'} · אסמכתא ${ref} · ${data.lineCount} שורות`
-    : 'הועבר לחשבשבת ולתור שרטט';
+  const sim = data && data.simulated;
+  const ref = data && data.reference;
+
+  // "נשלח" ולא "נפתח". חשבשבת החזירו כבר HTTP 200 בלי שנוצר שום מסמך — זה
+  // כתוב ב-api/hashavshevet-order.js מניסיון. אין בתשובה סימן אמין ל"נוצר",
+  // ולכן הטוסט אומר בדיוק את מה שידוע: הבקשה יצאה, זו האסמכתא, תאמת.
+  // הזמנה פיקטיבית היא המקרה היחיד שבו אין מה לאמת.
+  const tail = !ref            ? 'הועבר לחשבשבת ולתור שרטט'
+             : sim             ? `הורץ כפיקטיבי · אסמכתא ${ref} · ${data.lineCount} שורות`
+             : `נשלח · אסמכתא ${ref} · ${data.lineCount} שורות — לאמת בחשבשבת`;
 
   const toast=document.createElement('div');
-  toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:'+(sim?'#b8922a':'#27ae60')+';color:#fff;padding:12px 24px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:8px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);';
-  toast.innerHTML=`<span>${sim?'🧪':'✓'}</span><span>${lgEsc(item.client)} — ${lgEsc(tail)}</span>`;
+  toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:'+(sim||!ref?'#b8922a':'#2c6e8f')+';color:#fff;padding:12px 24px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:8px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);';
+  toast.innerHTML=`<span>${sim?'🧪':'↗'}</span><span>${lgEsc(item.client)} — ${lgEsc(tail)}</span>`;
   document.body.appendChild(toast);
   setTimeout(()=>toast.remove(),3200);
 

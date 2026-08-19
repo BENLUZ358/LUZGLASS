@@ -8,14 +8,9 @@
  * result because an early version auto-closed, marked the order sent, and left
  * no evidence when nothing had actually been created in Hashavshevet.
  *
- * What changed is that the reason for the second one no longer holds: every
- * attempt, including the raw reply, is now written to orders/<id>/hashavshevet
- * by the API whether or not anything is on screen. The evidence outlives the
- * modal. And across twenty orders in a row, two modals that almost always say
- * "fine" cost forty clicks.
- *
- * So the fast path is silent — a toast carrying the reference — and the modal
- * is kept for the cases where it says something:
+ * Across twenty orders in a row, two modals that almost always say "fine" cost
+ * forty clicks. So the fast path is a toast and the modal is kept only for the
+ * cases where it has something to say:
  *
  *   an error                → modal, with the agent code and a retry
  *   an item was skipped     → modal, because the document is missing a panel
@@ -24,6 +19,20 @@
  * The last one is new and is why `force` had to go. It used to be sent on every
  * call, which was safe while a human confirmed in a modal first; with one-click
  * sending it would mean a second click opens a second document.
+ *
+ * What the toast may NOT do is call a real send a success. The API records, in
+ * its own comments and from experience, that Hashavshevet returned HTTP 200
+ * while no document was created — httpOk means "the request was accepted", not
+ * "the document exists", and the reply carries no dependable marker of the
+ * difference. A green tick here would reproduce exactly the failure the old
+ * result modal was written to catch. The toast therefore says "נשלח … לאמת
+ * בחשבשבת", and only a fictitious run, which has nothing to verify, is closed
+ * out as done.
+ *
+ * The record survives regardless — but a record nobody can reach is not
+ * evidence, so the 409 returns the stored reply and the modal prints it. It is
+ * deliberately not carried on every order: 4,000 characters times every order
+ * in a node every page downloads whole. See test-sketch-storage.js.
  *
  * Run: node scripts/test-chash-flow.js
  */
@@ -71,10 +80,17 @@ const bodyOf = (name, src = ADMIN) =>
   const toast = bodyOf('sqShowChashConfirm');
   check('the confirmation takes the server reply', /function sqShowChashConfirm\(id, data\)/.test(ADMIN), true);
   check('and shows the reference', /אסמכתא \$\{ref\}/.test(toast), true);
-  check('a simulated run is not dressed as a real one',
-        /sim\?'הורץ כפיקטיבי':'נפתח בחשבשבת'/.test(toast), true);
-  check('and is a different colour, not only different words',
-        /\(sim\?'#b8922a':'#27ae60'\)/.test(toast), true);
+  /* "נשלח", never "נפתח". Hashavshevet have already returned HTTP 200 with no
+     document created — that is recorded in the API from experience — and the
+     reply carries no reliable "created" marker. The toast may therefore claim
+     only what is known: the request went out, here is the reference, verify.
+     A fictitious run is the one case with nothing to verify. */
+  check('a real send does not claim the document exists',
+        /נשלח · אסמכתא \$\{ref\} · \$\{data\.lineCount\} שורות — לאמת בחשבשבת/.test(toast), true);
+  check('and no green tick is shown for it',
+        /'#27ae60'/.test(toast), false);
+  check('a simulated run says so instead',
+        /sim {13}\? `הורץ כפיקטיבי/.test(toast), true);
   check('it disappears on its own — nothing to dismiss',
         /setTimeout\(\(\)=>toast\.remove\(\),3200\)/.test(toast), true);
 }
@@ -91,7 +107,15 @@ const bodyOf = (name, src = ADMIN) =>
   check('the server still refuses a repeat without it',
         /order\.hashavshevet && order\.hashavshevet\.sentAt && !force/.test(API), true);
   check('"already sent" is reported, not shown as a failure',
-        /if\(!ok && data\.sentAt\)\{[\s\S]{0,200}?כבר נשלחה לחשבשבת/.test(ADMIN), true);
+        /if\(!ok && data\.sentAt\)\{[\s\S]{0,1200}?כבר נשלחה לחשבשבת/.test(ADMIN), true);
+  /* and it is where the stored reply becomes readable again — a record nobody
+     can reach is not evidence */
+  check('the stored reply comes back on the 409',
+        /response:  order\.hashavshevet\.response \|\| null/.test(API), true);
+  check('it is not carried on every order instead',
+        /hashavshevet:/.test(fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8')), false);
+  check('and the modal shows it',
+        /const stored = data\.response[\s\S]{0,240}?תשובת חשבשבת/.test(ADMIN), true);
 }
 
 /* ── the loud cases stay loud ──────────────────────────────────────────── */

@@ -176,6 +176,12 @@ module.exports = async function handler(req, res) {
         error: 'ההזמנה כבר נשלחה לחשבשבת',
         sentAt:    order.hashavshevet.sentAt,
         reference: order.hashavshevet.reference,
+        // התשובה השמורה חוזרת מכאן ולא מרשומת ההזמנה בדפדפן, כי היא לא
+        // עוברת ב-lgNormalizeOrder בכוונה: 4000 תווים כפול כל הזמנה בצומת
+        // שכל דף מוריד במלואו. כאן היא נטענת רק כשמבקשים אותה.
+        response:  order.hashavshevet.response || null,
+        httpOk:    order.hashavshevet.httpOk ?? null,
+        simulated: order.hashavshevet.simulated || null,
         hint:      'שלח force:true כדי לשלוח שוב ביודעין',
       });
       return;
