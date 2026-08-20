@@ -2915,8 +2915,15 @@ function sqResendHashavshevet(id){
 // והוא נושא את האסמכתא — הדבר היחיד מתוך חלון התוצאה שבאמת צריך לראות.
 // התשובה המלאה של חשבשבת נשמרת בכל מקרה על ההזמנה, ב-hashavshevet.
 function sqShowChashConfirm(id, data){
-  const item=sqItems.find(i=>i.id===id);
-  if(!item) return;
+  // ההזמנה כבר איננה ב-sqItems, וזה תקין: השלב מתעדכן לפני השליחה, והתור
+  // בנוי מהזמנות בלי שלב. עד שהשליחה חוזרת, buildSQItems כבר הוציא אותה.
+  // פעם היה כאן find עם יציאה מוקדמת — ולכן לא הופיעה שום הודעה ולא היה
+  // מעבר להזמנה הבאה. שם הלקוח הוא היחיד שנחוץ מכאן, ויש לו שלושה מקורות.
+  const item = sqItems.find(i => i.id === id)
+            || (sqCurrent && sqCurrent.id === id ? sqCurrent : null)
+            || orders.find(o => o.id === id)
+            || {};
+  const client = item.client || item.orderClient || '';
 
   const sim = data && data.simulated;
   const ref = data && data.reference;
@@ -2930,7 +2937,7 @@ function sqShowChashConfirm(id, data){
 
   const toast=document.createElement('div');
   toast.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:'+(sim?'#b8922a':'#27ae60')+';color:#fff;padding:12px 24px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:8px;z-index:700;box-shadow:0 8px 24px rgba(0,0,0,0.3);display:flex;align-items:center;gap:10px;max-width:calc(100vw - 32px);';
-  toast.innerHTML=`<span>${sim?'🧪':'✓'}</span><span>${lgEsc(item.client)} — ${lgEsc(tail)}</span>`;
+  toast.innerHTML=`<span>${sim?'🧪':'✓'}</span><span>${client?lgEsc(client)+' — ':''}${lgEsc(tail)}</span>`;
   document.body.appendChild(toast);
   setTimeout(()=>toast.remove(),3200);
 
@@ -2941,10 +2948,16 @@ function sqShowChashConfirm(id, data){
     sqSetMode('admin');
     document.getElementById('sqFStatus').value='pending';
     sqRender();
-    const list=sqFiltered();
+    // ההזמנה ששלחנו מוצאת מהרשימה במפורש. היא אמורה כבר לא להיות שם —
+    // buildSQItems מסנן כל הזמנה עם שלב — אבל זה תלוי בכך שהעדכון מ-Firebase
+    // הספיק לחזור. אם הוא איחר, בלי הסינון הזה המסך נשאר בדיוק על ההזמנה
+    // שזה עתה נשלחה, וזו הייתה כל התלונה.
+    const full=sqFiltered();
+    const list=full.filter(i=>i.id!==id);
     if(list.length>0){
-      sqCurrentIdx=0;
       sqCurrent=list[0];
+      // האינדקס נמדד מול הרשימה המלאה, אחרת החיצים ← → קופצים לפריט אחר
+      sqCurrentIdx=full.findIndex(i=>i.id===sqCurrent.id);
       sqShowDetail();
     } else {
       // אין יותר — הצג ריק

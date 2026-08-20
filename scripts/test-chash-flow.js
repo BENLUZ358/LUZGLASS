@@ -157,6 +157,55 @@ const bodyOf = (name, src = ADMIN) =>
         /כדאי לפתוח את חשבשבת ולוודא שההזמנה קיימת/.test(render), true);
 }
 
+/* ── the confirmation must survive the order leaving the queue ─────────── */
+/*
+ * This is where the first version of the feature failed outright, and it failed
+ * silently, which is worse. sqSetStage writes the stage BEFORE sending. The
+ * queue is built from orders that have no stage, so the Firebase echo removes
+ * the order from sqItems while the request is still in flight. The confirmation
+ * then began with
+ *
+ *     const item = sqItems.find(i => i.id === id);
+ *     if (!item) return;
+ *
+ * and returned before the toast and before advancing — so a send that worked
+ * perfectly showed nothing at all and left the screen on the order just sent.
+ *
+ * The client name is the only thing needed from that lookup, and there are
+ * three places to get it.
+ */
+{
+  const toast = bodyOf('sqShowChashConfirm');
+  check('the confirmation does not bail when the row is gone',
+        /if\(!item\) return;/.test(toast), false);
+  check('it falls back to the open order',
+        /\(sqCurrent && sqCurrent\.id === id \? sqCurrent : null\)/.test(toast), true);
+  check('and then to the order list itself',
+        /orders\.find\(o => o\.id === id\)/.test(toast), true);
+  check('a missing name does not print a stray dash',
+        /\$\{client\?lgEsc\(client\)\+' — ':''\}/.test(toast), true);
+
+  /* and the advance, which is the other half of the same complaint */
+  check('the sent order is excluded from what comes next',
+        /const list=full\.filter\(i=>i\.id!==id\);/.test(toast), true);
+  check('the index is measured against the full list',
+        /sqCurrentIdx=full\.findIndex\(i=>i\.id===sqCurrent\.id\);/.test(toast), true);
+  check('the next order is opened, not just highlighted',
+        /sqCurrent=list\[0\];[\s\S]{0,200}?sqShowDetail\(\);/.test(toast), true);
+  check('and an empty queue says so instead of going blank',
+        /כל הסקיצות טופלו/.test(toast), true);
+}
+
+/* the ordering that causes it, pinned so the reason stays visible */
+{
+  const stage = bodyOf('sqSetStage');
+  check('the stage is written before the send',
+        stage.indexOf("updateStage(id, 'chash')") < stage.indexOf('sqSendHashavshevet(id)'), true);
+  const build = bodyOf('buildSQItems');
+  check('and the queue excludes anything with a stage',
+        /if \(o\.stage && o\.stage !== ''\) return;/.test(build), true);
+}
+
 /* ── the loud cases stay loud ──────────────────────────────────────────── */
 {
   const render = bodyOf('_sqHbRender');
