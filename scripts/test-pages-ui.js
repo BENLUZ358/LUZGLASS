@@ -394,5 +394,37 @@ check('there is a way to deploy the rules',
         'wiping the day\'s filters on every return is worse than keeping them');
 }
 
+/* The check station loads one drawing, not all of them.
+
+   checkEdits holds the temporary marks drawn over a sketch — images. Measured
+   live: 2,199 KB in seven entries. It was subscribed with on('value') on the
+   whole node, so every mark saved at any station re-sent all of them to every
+   connected client, on a screen used on an iPad on the factory floor.
+
+   The value is only ever read for the order that is open — see renderSketch and
+   the three reads keyed on cur.id — so the rest was pure cost. */
+{
+  const cs = fs.readFileSync(path.join(ROOT, 'check-station.html'), 'utf8');
+  check('the check station does not subscribe to every drawing',
+        !/ref\('checkEdits'\)\.on\('value'/.test(cs),
+        '2.2 MB re-sent to every client whenever anyone draws a mark');
+  check('it subscribes per order instead',
+        /ref\('checkEdits\/' \+ id\)\.on\('value'/.test(cs));
+  const select = (cs.match(/function selectOrder\([\s\S]*?\n}/) || [''])[0];
+  check('the listener attaches when a sketch is opened',
+        /_csWatchEdits\(id\);/.test(select));
+  /* in showList, not goBack: finishSketch also returns to the list, and any
+     future route back goes through the same door */
+  const showList = (cs.match(/function showList\(\)[\s\S]*?\n}/) || [''])[0];
+  check('and detaches on every route back to the list',
+        /_csWatchEdits\(null\);/.test(showList),
+        'a listener per opened sketch, left attached, is a slow leak');
+  check('switching sketches replaces rather than stacks',
+        /if\(_checkEditsRef\)\{[\s\S]{0,200}?\.off\('value', _checkEditsRef\.fn\)/.test(cs));
+  /* a deleted drawing must clear, not linger from a previous read */
+  check('a removed drawing is dropped from the cache',
+        /else {4}delete window\._csCheckEdits\[String\(id\)\];/.test(cs));
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');

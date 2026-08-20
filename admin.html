@@ -2471,8 +2471,11 @@ function sqShowDetail(){
 
   const img=document.getElementById('sqImg');
   const noimg=document.getElementById('sqNoImg');
-  if(o.sketch){
-    img.src=o.sketch;img.style.display='block';noimg.style.display='none';
+  if(o.hasSketch || o.sketch){
+    // דרך lgSketchIntoImg ולא השמה ישירה: היום זה זהה, ואחרי שהשדה הישן
+    // ייעלם מ-orders המסך הזה כבר לא יצטרך להשתנות. ר' שלב 2 ב-firebase-db.
+    lgSketchIntoImg(img, o);
+    img.style.display='block';noimg.style.display='none';
   } else if(o.type==='measure' && o.items && o.items.length){
     const svg=makeMeasureListSVG(o);
     if(svg){img.src=svg;img.style.display='block';noimg.style.display='none';}

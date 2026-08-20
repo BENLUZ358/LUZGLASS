@@ -344,14 +344,70 @@ async function lgSaveSketch(orderId, dataUrl) {
 // קריאת סקיצה בודדת, לשלב 2. נופלת לשדה הישן כשהחדש עוד לא קיים.
 async function lgGetSketch(orderId) {
   if (!orderId) return null;
+  if (_lgSketchCache.has(orderId)) return _lgSketchCache.get(orderId);
+  let val = null;
   try {
     const snap = await _lgDb.ref('sketches/' + orderId).once('value');
-    if (snap.exists()) return snap.val();
+    if (snap.exists()) val = snap.val();
   } catch (e) { console.warn('[firebase-db] lgGetSketch:', e && e.message); }
-  try {
-    const old = await _lgDb.ref('orders/' + orderId + '/sketch').once('value');
-    return old.exists() ? old.val() : null;
-  } catch (e) { return null; }
+  if (val === null) {
+    try {
+      const old = await _lgDb.ref('orders/' + orderId + '/sketch').once('value');
+      if (old.exists()) val = old.val();
+    } catch (e) { /* אין — מוחזר null */ }
+  }
+  if (val !== null) _lgSketchCache.set(orderId, val);
+  return val;
+}
+
+// ─── שלב 2 · קריאה ──────────────────────────────────────────────────────
+//
+//  השדה הישן עדיין קיים ועדיין יורד עם ההזמנה, ולכן ברירת המחדל היא לקחת
+//  אותו — הוא כבר בזיכרון, וקריאה נוספת הייתה בזבוז נטו.
+//
+//  אבל אז הצומת החדש אינו נבדק עד שלב 4, שהוא היחיד שמוחק. לכן יש מתג:
+//  הרצה של המערכת כולה מול הצומת החדש, בלי למחוק בייט אחד, וחזרה מיידית
+//  אם משהו לא עובד. זו כל תכליתו של שלב 2 — להפוך את שלב 4 למשעמם.
+//
+//  לבדיקה, ב-console של כל דף:   lgSketchSource('new')
+//  לחזרה:                        lgSketchSource('old')
+//  הבחירה נשמרת ב-localStorage ושורדת רענון.
+const _lgSketchCache = new Map();
+
+function lgSketchSource(mode) {
+  if (mode === 'new' || mode === 'old') {
+    try { localStorage.setItem('lgSketchSource', mode); } catch (e) {}
+    _lgSketchCache.clear();
+    console.log('[firebase-db] מקור הסקיצות:', mode, '— רענן את הדף');
+  }
+  try { return localStorage.getItem('lgSketchSource') || 'old'; } catch (e) { return 'old'; }
+}
+
+// המקור היחיד לתמונת סקיצה בכל המסכים. מחזיר Promise תמיד, כדי שהקוראים
+// לא יצטרכו להשתנות שוב כשהשדה הישן ייעלם.
+async function lgLoadSketch(order) {
+  if (!order) return null;
+  const inline = order.sketch || (order.files && order.files.f0 && order.files.f0.data) || null;
+  if (lgSketchSource() === 'old' && inline) return inline;
+  const fromNode = await lgGetSketch(order.id);
+  return fromNode || inline;
+}
+
+// מציב סקיצה ב-<img>. מה שכבר בזיכרון מוצג מיד, ומה שמגיע מהצומת מחליף
+// אותו — כדי שלא יהיה רגע שבו המסך ריק. אם המשתמש עבר להזמנה אחרת בינתיים,
+// התשובה המאחרת נזרקת ולא דורסת את מה שהוא מסתכל עליו עכשיו.
+function lgSketchIntoImg(imgEl, order, onSrc) {
+  if (!imgEl || !order) return;
+  const inline = order.sketch || (order.files && order.files.f0 && order.files.f0.data) || null;
+  const done = src => { imgEl.src = src; if (onSrc) onSrc(src); };
+  if (inline && lgSketchSource() === 'old') { imgEl.dataset.lgFor = String(order.id); done(inline); return; }
+  if (inline) done(inline);
+  imgEl.dataset.lgFor = String(order.id);
+  const want = String(order.id);
+  lgLoadSketch(order).then(src => {
+    if (!src || imgEl.dataset.lgFor !== want) return;
+    if (src !== imgEl.src) done(src);
+  }).catch(() => {});
 }
 
 async function saveOrder(data) {

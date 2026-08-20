@@ -1,26 +1,30 @@
 #!/usr/bin/env node
 /**
- * Tests stage 1 of moving sketches out of the order record.
+ * Tests moving sketches out of the order record.
  *
- * The measurement that started this: 23 orders occupy 4,659 KB in `orders`, of
- * which 99% is sketch base64. Four pages listen with on('value') on the whole
- * `orders` node, and Firebase re-sends the entire subtree on any change — so
- * ticking one checkbox in the check station re-downloads 4.6 MB on every open
- * client. At the ten-fold volume this is being built for, that is 46 MB a tick.
+ * Measured on the live database, most recently at 40 orders: `orders` is
+ * 7,589 KB, of which 7,509 KB — 99% — is sketch base64. Without them it would
+ * be 80 KB. Four pages listen with on('value') on the whole node, and Firebase
+ * re-sends the entire subtree on any change, so ticking one checkbox in the
+ * check station re-downloads 7.5 MB on every open client. Ninety-four times
+ * more than the data anyone is looking at, and it grew from 23 orders to 40 in
+ * a week.
  *
- * The fix is to store the image at sketches/<id> and leave a marker on the
- * order. It arrives in four stages, so that at no moment does a sketch exist in
- * only one place:
+ * The image moves to sketches/<id> and the order keeps a marker. Four stages,
+ * so that at no moment does a sketch exist in only one place:
  *
- *   1. write to both                    ← this file
- *   2. read the new one, fall back
+ *   1. write to both                    ← done, deployed, confirmed live
+ *   2. read the new one, fall back      ← here
  *   3. migrate what already exists
  *   4. drop the old field — and only here does anything get faster
  *
- * Stages 1 and 2 buy nothing on their own. They exist so that stage 4, which is
- * the only irreversible one, is safe when it comes. This suite therefore checks
- * two things: that every writer now writes both places, and that the old field
- * is still written untouched.
+ * Stages 1 and 2 buy nothing on their own. They exist so that stage 4, the only
+ * irreversible one, is boring when it arrives.
+ *
+ * Stage 2 is NOT finished. The admin sketch queue reads through the new loader;
+ * the check station, drafter, portal and order-view still read order.sketch
+ * directly, and the queue's own list thumbnails show every sketch at once.
+ * Stage 4 cannot happen until each of those is either wired or made lazy.
  *
  * Run: node scripts/test-sketch-storage.js
  */
@@ -85,11 +89,58 @@ check('and the new node too',
   check('and never touches the old field', /orders\//.test(body), false);
 }
 
-/* ── reading back, for stage 2 ─────────────────────────────────────────── */
+/* ── stage 2 · reading ─────────────────────────────────────────────────── */
 {
   const body = bodyOf(DB, 'lgGetSketch');
   check('lgGetSketch prefers the new node', /ref\('sketches\/' \+ orderId\)/.test(body), true);
   check('and falls back to the old field', /orders\/' \+ orderId \+ '\/sketch/.test(body), true);
+  check('a fetched sketch is cached, not fetched per render',
+        /if \(_lgSketchCache\.has\(orderId\)\) return _lgSketchCache\.get\(orderId\);/.test(body), true);
+}
+
+/*
+ * The switch is the whole point of this stage.
+ *
+ * While the old field still exists it is what gets read — it is already in
+ * memory and a second fetch would be pure waste. But that leaves the new node
+ * untested until stage 4, which is the one stage that deletes. So the source is
+ * switchable at runtime: run the entire system against sketches/<id> without
+ * removing a byte, and switch back the moment something misbehaves.
+ *
+ *   lgSketchSource('new')   in any page's console
+ *   lgSketchSource('old')   to go back
+ *
+ * Stage 4 is meant to be boring by the time it arrives.
+ */
+{
+  const body = bodyOf(DB, 'lgSketchSource');
+  check('the source defaults to the old field', /localStorage\.getItem\('lgSketchSource'\) \|\| 'old'/.test(body), true);
+  check('the choice survives a refresh', /localStorage\.setItem\('lgSketchSource', mode\)/.test(body), true);
+  check('and switching clears the cache', /_lgSketchCache\.clear\(\);/.test(body), true);
+  check('only the two known modes are accepted',
+        /if \(mode === 'new' \|\| mode === 'old'\)/.test(body), true);
+
+  const load = bodyOf(DB, 'lgLoadSketch');
+  check('the old field is used directly while it is the source',
+        /if \(lgSketchSource\(\) === 'old' && inline\) return inline;/.test(load), true);
+  check('and the inline value is the last resort, never dropped',
+        /return fromNode \|\| inline;/.test(load), true);
+}
+
+/* one loader for the screens, so stage 4 does not touch them again */
+{
+  const into = bodyOf(DB, 'lgSketchIntoImg');
+  check('what is already in memory is shown at once',
+        /if \(inline\) done\(inline\);/.test(into), true);
+  /* open one sketch, switch to another before the first answers: the late
+     reply must not overwrite what is now on screen */
+  check('a late answer for a different order is discarded',
+        /if \(!src \|\| imgEl\.dataset\.lgFor !== want\) return;/.test(into), true);
+  check('the sketch queue goes through it',
+        /lgSketchIntoImg\(img, o\);/.test(read('admin.html')), true);
+  /* the marker, not the image, decides whether there is one to show */
+  check('and asks the marker rather than the payload',
+        /if\(o\.hasSketch \|\| o\.sketch\)\{/.test(read('admin.html')), true);
 }
 
 /* ── the marker travels to every screen ────────────────────────────────── */

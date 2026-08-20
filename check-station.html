@@ -538,15 +538,15 @@ function load(){
     if(_ordersReady) _filterOrders();
   }, err => _csListenerFailed('workday', err));
 
-  // Subscribe to checkEdits — סימונים זמניים בנתיב נפרד לגמרי מ-orders
-  if(_checkEditsRef) firebase.database().ref('checkEdits').off('value', _checkEditsRef);
-  _checkEditsRef = firebase.database().ref('checkEdits').on('value', snap=>{
-    window._csCheckEdits = snap.val() || {};
-    // עדכן גם localStorage כ-fallback
-    try{ safeStorage.setItem('lgCSEdits', JSON.stringify(window._csCheckEdits)); }catch(e){}
-    // רענן סקיצה אם פתוחה
-    if(cur) renderSketch();
-  }, err => console.error('[CS] checkEdits listener failed:', err)); // לא חוסם עבודה — רק ציורי בדיקה
+  // checkEdits נטען לפי הזמנה, לא כולו.
+  //
+  // כאן היה on('value') על כל הצומת. הוא 2.2MB בשבע רשומות בלבד — ציורי
+  // בדיקה הם תמונות — וכל ציור שנשמר בכל תחנה שידר מחדש את כולן לכל מי
+  // שמחובר. הערך נקרא רק עבור ההזמנה הפתוחה (ר' renderSketch ו-cur), אז
+  // אין סיבה להחזיק את השאר.
+  //
+  // ה-listener מתחבר בפתיחת סקיצה ומתנתק ביציאה, ב-_csWatchEdits.
+  window._csCheckEdits = window._csCheckEdits || {};
 
   // Subscribe to all orders
   if(_csUnsub) _csUnsub();
@@ -742,6 +742,9 @@ function renderList(){
 
 // VIEW SWITCH
 function showList(){
+  // מנתק את המאזין לציור הבדיקה. כאן ולא ב-goBack, כי גם "סיים סקיצה"
+  // חוזר לרשימה — וכל מסלול אחר שיתווסף יעבור מכאן גם הוא.
+  _csWatchEdits(null);
   document.getElementById('listView').style.display='flex';
   document.getElementById('sketchView').style.display='none';
   document.getElementById('filtersBar').style.display='flex';
@@ -793,9 +796,29 @@ function showSketch(){
 function goBack(){ cur=null; curReadOnly=false; hideBanner(); showList(); }
 
 // SELECT ORDER
+// מאזין לציור הבדיקה של הזמנה אחת. מתחלף בכל פתיחת סקיצה ומתנתק ביציאה
+// לרשימה, כדי שלא יישארו מאזינים פתוחים אחרי עשרים סקיצות.
+function _csWatchEdits(id){
+  if(_checkEditsRef){
+    firebase.database().ref('checkEdits/' + _checkEditsRef.id).off('value', _checkEditsRef.fn);
+    _checkEditsRef = null;
+  }
+  if(!id) return;
+  const fn = firebase.database().ref('checkEdits/' + id).on('value', snap=>{
+    const val = snap.val() || null;
+    if(val) window._csCheckEdits[String(id)] = val;
+    else    delete window._csCheckEdits[String(id)];
+    // ה-fallback ב-localStorage נשאר, אבל רק להזמנות שנפתחו — לא לכולן
+    try{ safeStorage.setItem('lgCSEdits', JSON.stringify(window._csCheckEdits)); }catch(e){}
+    if(cur && String(cur.id) === String(id)) renderSketch();
+  }, err => console.error('[CS] checkEdits listener failed:', err)); // לא חוסם עבודה — רק ציורי בדיקה
+  _checkEditsRef = { id: String(id), fn };
+}
+
 function selectOrder(id){ id = String(id);
   cur=orders.find(o=>o.id===id); if(!cur)return;
   if(!cs[id])cs[id]={};
+  _csWatchEdits(id);
   document.getElementById('tbTitle').textContent=cur.orderClient;
   document.getElementById('shClient').textContent=cur.orderClient;
   document.getElementById('shMeta').textContent=[cur.orderNum,cur.sketchName,cur.glassFullName].filter(Boolean).join(' · ');
