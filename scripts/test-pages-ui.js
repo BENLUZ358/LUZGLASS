@@ -426,5 +426,55 @@ check('there is a way to deploy the rules',
         /else {4}delete window\._csCheckEdits\[String\(id\)\];/.test(cs));
 }
 
+/* The client portal shows no sketch until it is asked for.
+
+   The card carried what looked like a thumbnail. It was not one: the full
+   image, roughly 190 KB, shrunk by CSS to 130 pixels. A client with ten orders
+   downloaded about 2 MB to a phone to see ten stamp-sized pictures, and decoded
+   ten full images on every re-render.
+
+   The card now carries what identifies an order — name, glass, date, total,
+   status — and the sketch lives behind "פרטים". A closed card has no <img> at
+   all, which is the whole point: there is nothing to load. */
+{
+  const portal = fs.readFileSync(path.join(ROOT, 'portal.html'), 'utf8');
+  check('the portal card has no always-visible sketch',
+        !/thumbHtml/.test(portal),
+        'a 190 KB image per card, shown at 130px');
+  check('the expanded sketch has no src in the markup',
+        /<img class="sk-full" data-sketch-for=/.test(portal),
+        'an src in the string loads whether or not the card is open');
+  check('and is filled only for cards that are open',
+        /document\.querySelectorAll\('img\[data-sketch-for\]'\)/.test(portal));
+  check('through the shared loader, so stage 4 will not touch this screen',
+        /lgSketchIntoImg\(el, o,/.test(portal));
+  /* removing the picture without saying anything would just look like the
+     sketch had gone missing */
+  check('the button says a sketch is there', /oc-has-sk/.test(portal));
+
+  /* the toggle is now the only route to the sketch, so it has to be a real
+     control: a button, focusable, with a 44px target */
+  check('the toggle is a button, not a span',
+        /<button type="button" class="oc-toggle"/.test(portal));
+  check('it reports its state to a screen reader', /aria-expanded=/.test(portal));
+  check('it meets the 44px touch target', /min-height:44px/.test(portal));
+  check('and it keeps a visible focus ring',
+        /\.oc-toggle:focus-visible\{outline:/.test(portal),
+        'removing focus rings is the first accessibility rule in the table');
+
+  /* three widths, all three deliberate */
+  check('there is a tablet-and-up block', /@media \(min-width:601px\)\{/.test(portal));
+  check('and a wide-desktop block', /@media \(min-width:1201px\)\{/.test(portal));
+  check('the date drops rather than crushing the button at 320px',
+        /\.oc-date\{flex:1 1 100%;text-align:left;\}/.test(portal));
+  /* reserving height stops the card jumping when the image arrives — CLS */
+  check('the image reserves its height before it loads',
+        /\.sk-full\{[\s\S]{0,200}?min-height:120px;/.test(portal));
+  check('and fades in within the 150-300ms band',
+        /transition:opacity 200ms ease/.test(portal));
+  check('motion preferences are respected',
+        /@media \(prefers-reduced-motion:reduce\)\{[\s\S]{0,140}?\.sk-full\{transition:none/.test(portal));
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');

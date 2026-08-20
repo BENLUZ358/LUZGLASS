@@ -79,7 +79,31 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .s-chis{background:rgba(142,68,173,0.1);color:#8e44ad;}
 .s-ready{background:rgba(39,174,96,0.1);color:var(--green);}
 .s-done{background:rgba(0,0,0,0.05);color:var(--muted);}
-.oc-toggle{font-size:12px;color:var(--muted);cursor:pointer;margin-right:auto;}
+/* "פרטים" הוא הפעולה היחידה בשורה, ומאז שהתמונה ירדה מהכרטיס הוא גם הדרך
+   היחידה להגיע לסקיצה — ולכן הוא כפתור אמיתי ולא span, עם שטח מגע מלא. */
+.oc-toggle{
+  margin-right:auto;display:inline-flex;align-items:center;gap:6px;
+  min-height:44px;padding:0 12px;
+  background:none;border:1px solid transparent;border-radius:4px;
+  font-family:inherit;font-size:13px;font-weight:700;color:var(--gold-text);
+  cursor:pointer;transition:background-color 160ms ease,border-color 160ms ease;
+}
+.oc-toggle:hover{background:rgba(184,146,42,0.08);border-color:rgba(184,146,42,0.25);}
+.oc-toggle:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+/* רמז שיש סקיצה מאחורי הכפתור — במקום להוריד את התמונה ולא לומר כלום */
+.oc-has-sk{font-size:13px;opacity:0.75;}
+
+/* הסקיצה בתוך "פרטים". רזרבציית גובה מונעת קפיצה של הכרטיס כשהיא נכנסת. */
+.sk-full{
+  width:100%;display:block;border:1px solid var(--border);background:var(--bg);
+  min-height:120px;cursor:zoom-in;
+  opacity:0;transition:opacity 200ms ease;
+}
+.sk-full.is-loaded{opacity:1;}
+@media (prefers-reduced-motion:reduce){
+  .sk-full{transition:none;opacity:1;}
+  .oc-toggle{transition:none;}
+}
 .oc-date{font-size:12px;color:var(--muted);}
 .stepper{display:flex;align-items:center;padding:8px 16px;overflow-x:auto;}
 .st-item{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px;}
@@ -161,6 +185,25 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   .hero{padding:32px 24px 36px;}
 }
 
+/* ── אייפד ומעלה: יש רוחב, אז הכרטיס נושם ─────────────────────────────
+   מאז שהתמונה ירדה מהכרטיס הוא נמוך בהרבה, ובלי זה נראה דחוס. השורה
+   נשארת אחת — יש מקום — והכפתור מקבל שטח מגע נדיב יותר לאצבע. */
+@media (min-width:601px){
+  .oc-hdr{padding:16px 18px;}
+  .oc-name{font-size:15px;}
+  .oc-desc{font-size:13px;}
+  .oc-status-bar{padding:10px 18px;flex-wrap:nowrap;}
+  .oc-toggle{min-height:46px;padding:0 14px;font-size:14px;}
+  .oc-expand{padding:0 18px 16px;}
+  .sk-full{min-height:180px;}
+}
+
+/* ── דסקטופ רחב: המכל כבר תחום ב-680px כדי שהשורות לא יתארכו מדי ── */
+@media (min-width:1201px){
+  .content{padding:24px 20px 40px;}
+  .order-card{margin-bottom:10px;}
+}
+
 /* ── טלפון ── */
 @media (max-width:600px){
   nav{padding:0 14px;}
@@ -185,8 +228,14 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   .oc-right{flex:1 1 100%;text-align:right;display:flex;gap:10px;align-items:baseline;}
   .oc-num{margin-top:0;}
 
-  .oc-status-bar{padding:8px 14px;flex-wrap:wrap;row-gap:6px;}
+  /* "פרטים" ו"תאריך" זה לצד זה ב-320px נחתכים. התאריך יורד שורה והכפתור
+     נשאר בגודל מלא — הוא הדרך היחידה לסקיצה, אז הוא לא מתכווץ. */
+  .oc-status-bar{padding:6px 14px 8px;flex-wrap:wrap;row-gap:4px;}
+  .oc-toggle{min-height:44px;padding:0 10px;font-size:13px;}
+  .oc-date{flex:1 1 100%;text-align:left;}
   .oc-expand{padding:0 14px 14px;}
+  /* מסך צר — פחות מקום שמור לתמונה, שלא ייווצר חלל ריק גדול לפני שהיא באה */
+  .sk-full{min-height:90px;}
 
   /* הסטפר גולל אופקית — הוא כבר overflow-x:auto, רק שיהיה נוח לאצבע */
   .stepper{padding:10px 14px;-webkit-overflow-scrolling:touch;}
@@ -491,6 +540,19 @@ function renderOrders(){
   const history=ORDERS.filter(o=>o.status==="נאסף");
   document.getElementById("activeOrders").innerHTML=active.length?active.map(orderCard).join(""):'<div class="empty">אין הזמנות פעילות</div>';
   document.getElementById("historyOrders").innerHTML=history.length?history.map(orderCard).join(""):'<div class="empty" style="font-size:12px">אין היסטוריה</div>';
+  _fillOpenSketches();
+}
+
+// ממלא את הסקיצות של הכרטיסים הפתוחים בלבד. כרטיס סגור לא מכיל <img>
+// בכלל, ולכן אין מה למלא — זו כל הסיבה שהתמונה ירדה מהכרטיס.
+function _fillOpenSketches(){
+  document.querySelectorAll('img[data-sketch-for]').forEach(el=>{
+    const id = el.getAttribute('data-sketch-for');
+    if(el.dataset.lgFor === id) return;              // כבר מולא
+    const o = ORDERS.find(x=>String(x.id)===String(id));
+    if(!o) return;
+    lgSketchIntoImg(el, o, () => { el.classList.add('is-loaded'); });
+  });
 }
 
 
@@ -599,18 +661,25 @@ function orderCard(o){
       exp+="</div>";
     }
     exp+='<div class="sketch-wrap"><div class="sketch-lbl">סקיצה טכנית</div>';
-    if(o.sketch) exp+='<img src="'+lgEsc(o.sketch)+'" alt="סקיצת ההזמנה" style="width:100%;border:1px solid var(--border);display:block;cursor:pointer" data-id="'+o.id+'" onclick="openSk(this)">';
+    // ריק ב-src, ו-data-sketch-for ממלא אותו אחרי שהכרטיס נכנס ל-DOM.
+    // כך התמונה נטענת רק כשנפתחו הפרטים, וכשהשדה הישן ייעלם מ-orders
+    // המסך הזה כבר לא יצטרך להשתנות.
+    if(o.hasSketch || o.sketch)
+      exp+='<img class="sk-full" data-sketch-for="'+lgEsc(String(o.id))+'" alt="סקיצת ההזמנה — לחיצה מגדילה" data-id="'+lgEsc(String(o.id))+'" onclick="openSk(this)">';
     else exp+='<div class="sketch-ph">&#128208; הסקיצה תופיע לאחר עיבוד</div>';
     exp+="</div>";
     if(isDone) exp+='<div class="hist-badge">&#9989; נאסף: '+lgEsc(o.pickedDate||o.date)+"<br>&#8362;"+(o.total||0).toLocaleString()+"</div>";
     exp+="</div>";
   }
-  // Sketch thumbnail (always visible)
+  // אין יותר תמונה ממוזערת על הכרטיס.
+  //
+  // היא לא הייתה ממוזערת: זו הייתה התמונה המלאה, כ-190KB, שהוקטנה ב-CSS
+  // ל-130 פיקסל. לקוח עם עשר הזמנות הוריד 2 מגה לטלפון כדי לראות עשר
+  // תמונות בגודל בול, וגם עיבד עשר תמונות מלאות בזיכרון בכל ציור מחדש.
+  //
+  // הכרטיס מראה עכשיו את מה שבאמת מזהה הזמנה — שם, זכוכית, תאריך, סכום,
+  // מצב — והסקיצה נמצאת מאחורי "פרטים", כלומר נטענת רק כשמבקשים אותה.
   const oid = o.id;
-  const sketchSrc = o.sketch || makeAutoSketch(o);
-  const thumbHtml = sketchSrc
-    ? '<div style="padding:10px 14px 0;"><img src="'+lgEsc(sketchSrc)+'" alt="סקיצת ההזמנה" style="width:100%;max-height:130px;object-fit:contain;border:1px solid var(--border);cursor:pointer;background:#f7f4ef;display:block;" data-oid="'+oid+'" onclick="openSk(this.dataset.oid)"><div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0 2px;"><span style="font-size:12px;color:var(--muted);">'+lgEsc(o.glass)+(o.finish&&o.finish!=="—"?' · '+lgEsc(o.finish):'')+'</span><button data-oid="'+oid+'" onclick="openSk(this.dataset.oid)" style="padding:3px 10px;background:rgba(184,146,42,0.1);border:1px solid rgba(184,146,42,0.3);color:#b8922a;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:3px;">&#128269; הגדל</button></div></div>'
-    : '';
 
   return '<div class="order-card">'+
     '<div class="oc-hdr" data-id="'+o.id+'" onclick="toggleExp(this.dataset.id)">'+
@@ -618,12 +687,12 @@ function orderCard(o){
       '<div class="oc-info"><div class="oc-name">'+lgEsc(o.name)+'</div><div class="oc-desc">'+lgEsc(o.glass)+(o.finish&&o.finish!=="—"?" · "+lgEsc(o.finish):"")+" · "+o.area+' מ"ר</div></div>'+
       '<div class="oc-right"><div class="oc-price">&#8362;'+(o.total||0).toLocaleString()+'</div><div style="font-size:12px;color:var(--muted)">'+lgEsc(o.num)+"</div></div>"+
     "</div>"+
-    thumbHtml+
     stepper+
     '<div class="oc-status-bar">'+
       '<span class="sbadge '+cfg.cls+'">'+cfg.label+"</span>"+
-      '<span class="oc-toggle" data-id="'+o.id+'" onclick="toggleExp(this.dataset.id)">'+(isExp?"▲ סגור":"▾ פרטים")+
-      '</span><span class="oc-date">'+lgEsc(o.date)+"</span>"+
+      '<button type="button" class="oc-toggle" data-id="'+o.id+'" aria-expanded="'+(isExp?'true':'false')+'" onclick="toggleExp(this.dataset.id)">'+
+        (isExp?"▲ סגור":"▾ פרטים")+((o.hasSketch||o.sketch)&&!isExp?' <span class="oc-has-sk">🖼</span>':'')+
+      '</button><span class="oc-date">'+lgEsc(o.date)+"</span>"+
     "</div>"+exp+"</div>";
 }
 
@@ -632,11 +701,15 @@ function toggleExp(id){if(expanded.has(id))expanded.delete(id);else expanded.add
 function openSk(idOrEl){
   const id = typeof idOrEl === 'string' ? idOrEl : (idOrEl?.dataset?.id || idOrEl?.dataset?.oid);
   const o=ORDERS.find(x=>String(x.id)===String(id));
+  if(!o)return;
   const skSrc = o.sketch || makeAutoSketch(o);
-  if(!skSrc)return;
+  if(!skSrc && !o.hasSketch)return;
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
-  ov.innerHTML='<img src="'+lgEsc(skSrc)+'" alt="סקיצת ההזמנה בתצוגה מלאה" style="max-width:96vw;max-height:85vh;object-fit:contain;border-radius:4px;"><button onclick="this.parentElement.remove()" style="padding:8px 24px;background:#fff;border:none;cursor:pointer;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:4px;">סגור</button>';
+  ov.innerHTML='<img alt="סקיצת ההזמנה בתצוגה מלאה" style="max-width:96vw;max-height:85vh;object-fit:contain;border-radius:4px;"><button onclick="this.parentElement.remove()" style="min-height:44px;padding:10px 28px;background:#fff;border:none;cursor:pointer;font-family:Heebo,sans-serif;font-size:16px;font-weight:700;border-radius:4px;">סגור</button>';
+  const full=ov.querySelector('img');
+  if(skSrc) full.src=skSrc;
+  if(o.hasSketch) lgSketchIntoImg(full, o);
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   document.body.appendChild(ov);
 }
