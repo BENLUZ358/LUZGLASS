@@ -367,12 +367,15 @@ function showOrder(o){
   canvas.querySelectorAll('img.sketch-img').forEach(el=>el.remove());
   // הפסק טעינה של תמונות ישנות
   canvas.querySelectorAll('img').forEach(el=>{ el.src=''; });
-  if(o.sketch||o._editedSketch){
+  if(o.hasSketch||o.sketch||o._editedSketch){
     const img=document.createElement('img');
     img.className='sketch-img';
-    img.src=o._editedSketch||o.sketch;
     img.style.cssText='max-width:100%;max-height:100%;object-fit:contain;display:block;';
     canvas.insertBefore(img, document.getElementById('edOverlay'));
+    // ציור מקומי גובר על הסקיצה עצמה. אחרת דרך lgSketchIntoImg, שמציג את
+    // מה שכבר בזיכרון ומחליף במה שמגיע מהצומת — ר' שלב 2 ב-firebase-db.
+    if(o._editedSketch) img.src=o._editedSketch;
+    else lgSketchIntoImg(img, o);
   } else {
     // Auto-generate SVG
     const svg=buildAutoSVG(o);
@@ -514,8 +517,8 @@ function openEditor(){
   edCvs.style.width=edBgW+'px'; edCvs.style.height=edBgH+'px';
   edCtx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
   const bg=document.getElementById('edBg');
-  const src=curOrder._editedSketch||curOrder.sketch;
-  if(src){bg.style.display='block';bg.src=src;}
+  if(curOrder._editedSketch){ bg.style.display='block'; bg.src=curOrder._editedSketch; }
+  else if(curOrder.hasSketch||curOrder.sketch){ bg.style.display='block'; lgSketchIntoImg(bg, curOrder); }
   else {
     const svg=buildAutoSVG(curOrder);
     if(svg){bg.style.display='block';bg.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);}
