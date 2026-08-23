@@ -559,10 +559,24 @@ function renderAll(){renderStats();renderOrders();renderReady();renderInvoices()
 // התנאי של "מוכן" היה כתוב פעמיים — ב-renderReady וב-renderStats — ועכשיו
 // נדרש גם שלישית, כדי להוציא את המוכנות מ"הזמנות". שלושה עותקים של אותו
 // תנאי מתפצלים בשינוי הראשון, ולכן הוא יושב כאן פעם אחת.
-function _isCollected(o){ return o.status === 'נאסף'; }
+// "מוכן" = עבר את כל העיבוד שהיה צריך — ליטוש, חיסום, גרפיקה. שני שלבים
+// עונים על זה:
+//   done      לקוח רגיל שסיים עיבוד — "מוכן לאיסוף"
+//   delivery  לקוח הובלות שסיים עיבוד — יצא להובלה, טרם הגיע אליו, ובלי
+//             חשבונית. "סיים הובלה" מעביר ל-collected, ואז הוא נאסף.
+//
+// הפרדיקט נשען על השלב, שהוא השדה המוסמך, ולא על readyStatus. במסד כל
+// 21 ההזמנות של המקום לאמבט נושאות readyStatus='blocked', ותשע מהן ב-
+// delivery — כלומר מוכנות בפועל, ומוצגות תחת "הזמנות".
+// status ו-readyStatus נשארים כנפילה לאחור לרשומות ישנות בלי שלב.
+const LG_READY_STAGES = ['done', 'delivery'];
+
+function _isCollected(o){ return o.stage === 'collected' || o.status === 'נאסף'; }
 function _isReady(o){
   return !_isCollected(o) &&
-         (o.readyStatus === 'eligible' || o.readyStatus === 'sent' || o.status === 'מוכן לאיסוף');
+         (LG_READY_STAGES.includes(o.stage) ||
+          o.readyStatus === 'eligible' || o.readyStatus === 'sent' ||
+          o.status === 'מוכן לאיסוף' || o.status === 'ממתין להובלה');
 }
 function _isInProgress(o){ return !_isCollected(o) && !_isReady(o); }
 

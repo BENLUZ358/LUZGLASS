@@ -499,6 +499,63 @@ check('there is a way to deploy the rules',
         'a fourth copy is how the buckets drift apart again');
   check('the orders tab shows work in progress only',
         /const active=ORDERS\.filter\(_isInProgress\);/.test(portal));
+
+  /* Run the three predicates for real, over every stage in LG_STAGE_TO_STATUS.
+
+     "Ready" means the processing is finished — polishing, tempering, graphics.
+     Two stages qualify: `done` for a client who collects, and `delivery` for a
+     delivery client, whose goods are finished and on the way but not yet with
+     him and not yet invoiced. Pressing "סיים הובלה" moves it to `collected`.
+
+     The first version keyed on readyStatus and status instead of the stage, and
+     every one of the 21 live orders of one client carries readyStatus='blocked'
+     — nine of them in `delivery`. All nine showed under "orders" while the
+     ready tab read 0. */
+  {
+    const vm = require('vm');
+    const ctx = { module: {}, exports: {} };
+    vm.createContext(ctx);
+    for (const re of [/const LG_READY_STAGES = \[[^\]]*\];/,
+                      /function _isCollected\(o\)\{[\s\S]*?\}/,
+                      /function _isReady\(o\)\{[\s\S]*?\n\}/,
+                      /function _isInProgress\(o\)\{[\s\S]*?\}/]) {
+      const m = portal.match(re);
+      if (!m) { check('could not extract ' + re, false); continue; }
+      vm.runInContext(m[0], ctx);
+    }
+    /* every stage the system defines, with the readyStatus the live data
+       actually carries */
+    const EXPECT = [
+      ['',          'ממתין לאישור',  'progress'],
+      ['pending',   'ממתין לאישור',  'progress'],
+      ['drafter',   'אצל שרטט',      'progress'],
+      ['opty',      'מחכה ל-OptyWay','progress'],
+      ['workday',   'ירד לביצוע',    'progress'],
+      ['chisum',    'נשלח לחיסום',   'progress'],
+      ['graphic',   'בגרפיקה',       'progress'],
+      ['delivery',  'ממתין להובלה',  'ready'],
+      ['done',      'מוכן לאיסוף',   'ready'],
+      ['collected', 'נאסף',          'collected'],
+    ];
+    let wrong = [];
+    for (const [stage, status, want] of EXPECT) {
+      const o = { stage, status, readyStatus: 'blocked' };
+      const got = ctx._isCollected(o) ? 'collected' : ctx._isReady(o) ? 'ready' : 'progress';
+      if (got !== want) wrong.push(`${stage||'(empty)'}: ${got}, expected ${want}`);
+    }
+    check('every stage lands in exactly one bucket', wrong.length === 0, wrong.join('; '));
+    /* the three are mutually exclusive and cover everything — no order can be
+       in two tabs, and none can vanish */
+    const holes = EXPECT.filter(([stage, status]) => {
+      const o = { stage, status, readyStatus: 'blocked' };
+      const n = [ctx._isCollected(o), ctx._isReady(o), ctx._isInProgress(o)].filter(Boolean).length;
+      return n !== 1;
+    });
+    check('and in exactly one — never two, never none', holes.length === 0,
+          holes.map(h => h[0]).join(', '));
+    check('a delivery order is ready, not in progress',
+          ctx._isReady({ stage: 'delivery', status: 'ממתין להובלה', readyStatus: 'blocked' }));
+  }
   check('the ready tab uses the same predicate',
         /const ready=ORDERS\.filter\(_isReady\);/.test(portal));
 
