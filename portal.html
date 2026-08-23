@@ -79,6 +79,33 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .s-chis{background:rgba(142,68,173,0.1);color:#8e44ad;}
 .s-ready{background:rgba(39,174,96,0.1);color:var(--green);}
 .s-done{background:rgba(0,0,0,0.05);color:var(--muted);}
+/* חיפוש בהזמנות. 16px חובה — מתחת לזה iOS מזנק את המסך בכל לחיצה על השדה. */
+.ord-search{position:relative;display:flex;align-items:center;margin-bottom:12px;}
+.ord-search-ico{position:absolute;right:12px;font-size:15px;opacity:0.45;pointer-events:none;}
+.ord-search input{
+  width:100%;box-sizing:border-box;min-height:44px;padding:10px 38px 10px 40px;
+  border:1px solid var(--border);border-radius:6px;background:var(--surface);
+  font-family:Heebo,sans-serif;font-size:16px;color:var(--text);
+  outline:none;direction:rtl;transition:border-color 160ms ease,box-shadow 160ms ease;
+}
+.ord-search input::placeholder{color:var(--muted);font-size:14px;}
+.ord-search input:focus{border-color:var(--gold-text);box-shadow:0 0 0 3px rgba(184,146,42,0.15);}
+.ord-search input::-webkit-search-cancel-button{display:none;}
+.ord-search button{
+  position:absolute;left:6px;width:32px;height:32px;display:flex;align-items:center;
+  justify-content:center;background:none;border:none;border-radius:50%;cursor:pointer;
+  color:var(--muted);font-size:15px;
+}
+.ord-search button:hover{background:var(--bg2);color:var(--text);}
+.ord-search button:focus-visible{outline:2px solid var(--gold-text);outline-offset:1px;}
+.res-count{font-weight:500;color:var(--muted);}
+.debt-soon{
+  margin-top:8px;padding:7px 10px;border-radius:5px;
+  background:rgba(184,146,42,0.10);border:1px solid rgba(184,146,42,0.28);
+  font-size:12px;font-weight:600;color:var(--gold-text);line-height:1.55;
+}
+@media (prefers-reduced-motion:reduce){ .ord-search input{transition:none;} }
+
 /* "פרטים" הוא הפעולה היחידה בשורה, ומאז שהתמונה ירדה מהכרטיס הוא גם הדרך
    היחידה להגיע לסקיצה — ולכן הוא כפתור אמיתי ולא span, עם שטח מגע מלא. */
 .oc-toggle{
@@ -335,13 +362,35 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
       <div style="font-size:12px;color:var(--muted);margin-bottom:4px">סכום הזמנות שלא שולמו</div>
       <div class="debt-amt" id="debtAmount">&#8362;0</div>
       <div style="font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7" id="debtDetail"></div>
+      <!-- הסכום מחושב מההזמנות שבמערכת ואינו מסונכרן עם כרטיס הלקוח בהנהלת
+           החשבונות. עד שיהיה — נאמר את זה, במקום להציג מספר שנראה סופי. -->
+      <div class="debt-soon">בפיתוח — הסכום עדיין אינו מסונכרן עם כרטיס הלקוח בהנהלת החשבונות</div>
       <button class="btn-pay" onclick="contactUs()">&#128222; צור קשר לתשלום</button>
     </div></div>
-    <div class="sec-title">הזמנות פעילות</div>
-    <div id="activeOrders"></div>
-    <div style="height:14px"></div>
-    <div class="sec-title">היסטוריה</div>
-    <div id="historyOrders"></div>
+
+    <div class="ord-search">
+      <span class="ord-search-ico" aria-hidden="true">&#128269;</span>
+      <input id="ordSearch" type="search" inputmode="search" autocomplete="off"
+             placeholder="חיפוש הזמנה — מספר, שם, זכוכית או תאריך"
+             aria-label="חיפוש בהזמנות שלי"
+             oninput="renderOrders()">
+      <button id="ordSearchClear" type="button" onclick="clearOrdSearch()"
+              aria-label="נקה חיפוש" style="display:none">&#10005;</button>
+    </div>
+
+    <div id="secResults" style="display:none">
+      <div class="sec-title">תוצאות חיפוש <span id="resultsCount" class="res-count"></span></div>
+      <div id="searchResults"></div>
+    </div>
+    <div id="secActive">
+      <div class="sec-title">הזמנות בעבודה</div>
+      <div id="activeOrders"></div>
+    </div>
+    <div id="secHistory">
+      <div style="height:14px"></div>
+      <div class="sec-title">היסטוריה</div>
+      <div id="historyOrders"></div>
+    </div>
     <div class="spacer"></div>
   </div>
   <div id="view-ready" style="display:none">
@@ -507,6 +556,21 @@ function _subscribePortalOrders(clientPhone) {
 function renderAll(){renderStats();renderOrders();renderReady();renderInvoices();renderChat();}
 
 // חוב = כל ההזמנות שלא נאספו עדיין (נאסף = שולם/נסגר)
+// שלוש קבוצות זרות, וכל הזמנה נמצאת באחת בדיוק:
+//   בעבודה  →  לשונית "הזמנות"
+//   מוכן     →  לשונית "מוכן"
+//   נאסף     →  היסטוריה
+//
+// התנאי של "מוכן" היה כתוב פעמיים — ב-renderReady וב-renderStats — ועכשיו
+// נדרש גם שלישית, כדי להוציא את המוכנות מ"הזמנות". שלושה עותקים של אותו
+// תנאי מתפצלים בשינוי הראשון, ולכן הוא יושב כאן פעם אחת.
+function _isCollected(o){ return o.status === 'נאסף'; }
+function _isReady(o){
+  return !_isCollected(o) &&
+         (o.readyStatus === 'eligible' || o.readyStatus === 'sent' || o.status === 'מוכן לאיסוף');
+}
+function _isInProgress(o){ return !_isCollected(o) && !_isReady(o); }
+
 function _calcUnpaidTotal(){
   return ORDERS
     .filter(o => o.status !== 'נאסף')
@@ -514,8 +578,8 @@ function _calcUnpaidTotal(){
 }
 
 function renderStats(){
-  const active=ORDERS.filter(o=>o.status!=="נאסף").length;
-  const ready=ORDERS.filter(o=>o.readyStatus==="eligible"||o.readyStatus==="sent"||o.status==="מוכן לאיסוף").length;
+  const active=ORDERS.filter(_isInProgress).length;
+  const ready=ORDERS.filter(_isReady).length;
   const unpaid = _calcUnpaidTotal();
   document.getElementById("statActive").textContent=active;
   document.getElementById("statReady").textContent=ready;
@@ -536,11 +600,49 @@ function renderOrders(){
   } else {
     document.getElementById("debtBar").style.display="none";
   }
-  const active=ORDERS.filter(o=>o.status!=="נאסף");
-  const history=ORDERS.filter(o=>o.status==="נאסף");
-  document.getElementById("activeOrders").innerHTML=active.length?active.map(orderCard).join(""):'<div class="empty">אין הזמנות פעילות</div>';
+  // חיפוש: כשיש טקסט, רשימה אחת שטוחה מכל ההזמנות — בעבודה, מוכנות
+  // ונאספות כאחת. לקוח שמחפש הזמנה מסוימת לא יודע באיזו לשונית היא, ולרוב
+  // הוא דווקא מחפש ישנה. חיפוש שמסנן רק את הלשונית הפתוחה היה מחזיר
+  // "לא נמצא" על הזמנה שקיימת — גרוע יותר מלא לחפש בכלל.
+  const q = (document.getElementById('ordSearch')?.value || '').trim().toLowerCase();
+  const secActive  = document.getElementById('secActive');
+  const secHistory = document.getElementById('secHistory');
+  const secResults = document.getElementById('secResults');
+  const clearBtn   = document.getElementById('ordSearchClear');
+  if(clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
+
+  if(q){
+    const hit = o => [o.num, o.name, o.glass, o.finish, o.date, o.status]
+      .some(v => String(v||'').toLowerCase().includes(q));
+    const found = ORDERS.filter(hit);
+    secActive.style.display = secHistory.style.display = 'none';
+    secResults.style.display = 'block';
+    document.getElementById('resultsCount').textContent =
+      found.length ? `${found.length} ${found.length===1?'הזמנה':'הזמנות'}` : '';
+    document.getElementById('searchResults').innerHTML = found.length
+      ? found.map(orderCard).join('')
+      : '<div class="empty">לא נמצאה הזמנה תואמת</div>';
+    _fillOpenSketches();
+    return;
+  }
+
+  secResults.style.display = 'none';
+  secActive.style.display = secHistory.style.display = 'block';
+
+  // "הזמנות" מציגה רק מה שעדיין בעבודה. מוכן יושב בלשונית "מוכן" ונאסף
+  // בהיסטוריה — כל הזמנה במקום אחד בדיוק.
+  const active=ORDERS.filter(_isInProgress);
+  const history=ORDERS.filter(_isCollected);
+  document.getElementById("activeOrders").innerHTML=active.length?active.map(orderCard).join(""):'<div class="empty">אין הזמנות בעבודה</div>';
   document.getElementById("historyOrders").innerHTML=history.length?history.map(orderCard).join(""):'<div class="empty" style="font-size:12px">אין היסטוריה</div>';
   _fillOpenSketches();
+}
+
+// מנוקה בלחיצה על ×, ומחזיר את המסך למצב הרגיל
+function clearOrdSearch(){
+  const el = document.getElementById('ordSearch');
+  if(el){ el.value=''; el.focus(); }
+  renderOrders();
 }
 
 // ממלא את הסקיצות של הכרטיסים הפתוחים בלבד. כרטיס סגור לא מכיל <img>
@@ -715,7 +817,7 @@ function openSk(idOrEl){
 }
 
 function renderReady(){
-  const ready=ORDERS.filter(o=>o.readyStatus==="eligible"||o.readyStatus==="sent"||o.status==="מוכן לאיסוף");
+  const ready=ORDERS.filter(_isReady);
   if(!ready.length){document.getElementById("readyOrders").innerHTML='<div class="empty">&#127881; אין סחורה ממתינה</div>';return;}
   document.getElementById("readyOrders").innerHTML=ready.map(o=>{
     const hasFarzel=o.finish&&o.finish!=="—"&&o.finish!=="ללא פרזול";

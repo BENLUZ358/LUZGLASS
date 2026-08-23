@@ -476,5 +476,63 @@ check('there is a way to deploy the rules',
         /@media \(prefers-reduced-motion:reduce\)\{[\s\S]{0,140}?\.sk-full\{transition:none/.test(portal));
 }
 
+/* The client portal: three buckets, and a search that crosses all of them.
+
+   Every order belongs to exactly one place — in progress, ready, collected.
+   "Ready" was previously computed inline in two functions while the orders tab
+   showed everything not yet collected, so a ready order appeared in two tabs at
+   once. A third copy of that condition was about to be added; three copies of
+   one rule diverge on the first change to it. */
+{
+  const portal = fs.readFileSync(path.join(ROOT, 'portal.html'), 'utf8');
+
+  check('the three buckets are one definition each',
+        /function _isCollected\(o\)[\s\S]{0,500}?function _isReady\(o\)[\s\S]{0,500}?function _isInProgress\(o\)/.test(portal));
+  check('and they cannot overlap — ready excludes collected',
+        /function _isReady\(o\)\{\s*return !_isCollected\(o\) &&/.test(portal));
+  check('in-progress excludes both',
+        /return !_isCollected\(o\) && !_isReady\(o\);/.test(portal));
+  /* the inline condition must be gone from every consumer, or the split is
+     only half done */
+  check('no consumer still spells the condition out',
+        !/readyStatus==="eligible"\|\|o\.readyStatus==="sent"/.test(portal),
+        'a fourth copy is how the buckets drift apart again');
+  check('the orders tab shows work in progress only',
+        /const active=ORDERS\.filter\(_isInProgress\);/.test(portal));
+  check('the ready tab uses the same predicate',
+        /const ready=ORDERS\.filter\(_isReady\);/.test(portal));
+
+  /* search */
+  check('there is a search field', /id="ordSearch"/.test(portal));
+  check('it filters as you type, with no network call',
+        /oninput="renderOrders\(\)"/.test(portal));
+  /* across every bucket: a client looking for one order does not know which tab
+     holds it, and is usually looking for an old one */
+  check('it searches all orders, not the open tab',
+        /const found = ORDERS\.filter\(hit\);/.test(portal));
+  check('over the fields a client would type',
+        /\[o\.num, o\.name, o\.glass, o\.finish, o\.date, o\.status\]/.test(portal));
+  check('an empty field restores the normal view',
+        /secResults\.style\.display = 'none';\s*secActive\.style\.display = secHistory\.style\.display = 'block';/.test(portal));
+  check('no match says so rather than showing nothing',
+        /לא נמצאה הזמנה תואמת/.test(portal));
+  check('and there is a way to clear it', /function clearOrdSearch\(\)/.test(portal));
+
+  /* touch and accessibility, same rules as the rest of the portal */
+  check('the field is 16px, so iOS does not zoom on focus',
+        /\.ord-search input\{[\s\S]{0,300}?font-size:16px;/.test(portal));
+  check('and meets the 44px target',
+        /\.ord-search input\{[\s\S]{0,200}?min-height:44px;/.test(portal));
+  check('the clear button is labelled', /aria-label="נקה חיפוש"/.test(portal));
+  check('the field is labelled', /aria-label="חיפוש בהזמנות שלי"/.test(portal));
+  check('and keeps a focus ring',
+        /\.ord-search button:focus-visible\{outline:/.test(portal));
+
+  /* the debt figure is not reconciled and must not look as if it were */
+  check('the debt bar says it is not connected yet',
+        /class="debt-soon">בפיתוח/.test(portal),
+        'a number that looks final but is not reconciled is worse than none');
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');
