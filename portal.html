@@ -48,9 +48,15 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .cpl-name{min-width:0;overflow-wrap:anywhere;}
 .cpl-price{font-weight:700;color:var(--gold-text);flex-shrink:0;white-space:nowrap;}
 .cpl-unit{font-size:var(--fs-xs);font-weight:400;color:var(--muted);}
-.cpl-tag{font-size:var(--fs-xs);font-weight:700;color:var(--green);
-         background:rgba(39,174,96,0.1);padding:1px 6px;border-radius:3px;
-         margin-inline-start:4px;white-space:nowrap;}
+/* מסך "בפיתוח" — לשוניות שעדיין לא מחוברות. עדיף לומר את זה מאשר להראות
+   נתוני דוגמה שנראים אמיתיים. */
+.soon-panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+            padding:24px 20px;text-align:center;}
+.soon-ttl{display:inline-block;font-size:12px;font-weight:700;color:var(--gold-text);
+          background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.30);
+          border-radius:20px;padding:4px 14px;margin-bottom:12px;letter-spacing:0.05em;}
+.soon-txt{font-size:14px;color:var(--muted);line-height:1.7;margin-bottom:16px;}
+.soon-panel .btn-pay{width:auto;min-width:160px;margin:0 auto;}
 .hero-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;}
 .hstat{background:rgba(255,255,255,0.05);padding:14px 10px;text-align:center;}
 .hstat .n{font-family:"Playfair Display",serif;font-size:22px;font-weight:900;color:var(--gold);}
@@ -426,17 +432,6 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 // כן היו כאן 5 הזמנות מזויפות קשיחות, שיכלו להבליח לרגע (או לצמיתות אם
 // הקריאה האמיתית איטית/נכשלת) לפני שהנתונים האמיתיים דורסים אותן.
 const ORDERS=[];
-const INVOICES=[
-  {num:"חש-2026-007",date:"02/04/2026",amount:5200,paid:false,desc:"מקלחון פינתי"},
-  {num:"חש-2026-006",date:"01/04/2026",amount:980,paid:false,desc:"מראה"},
-  {num:"חש-2026-004",date:"25/03/2026",amount:2000,paid:true,desc:"מחיצת זכוכית"},
-  {num:"חש-2026-003",date:"18/03/2026",amount:2800,paid:true,desc:"אמבטיון"},
-];
-let CHAT=[
-  {from:"LuzGlass",text:"שלום! ברוכים הבאים לפורטל LuzGlass",time:"01/04 09:15"},
-  {from:"כהן שיפוצים",text:"מתי מוכן המקלחון?",time:"01/04 09:22"},
-  {from:"LuzGlass",text:"הזמנה 2026-007 בייצור, צפי מחר-מחרתיים",time:"01/04 09:35"},
-];
 const SCFG={
   "הזמנה חדשה":    {cls:"s-wait",  label:"בקבלה",        dot:"#e74c3c",step:0},
   "ממתין לאישור":  {cls:"s-wait",  label:"בקבלה",         dot:"#6b7fa3",step:0},
@@ -859,32 +854,34 @@ function cancelPick(id){
   renderReady();
 }
 
+// חשבוניות עדיין לא מחוברות. כאן ישבו ארבע חשבוניות מומצאות שנשתלו
+// כדוגמת עיצוב, וכל לקוח ראה את אותן ארבע — עם סכומים. מסמך חשבונאי
+// חייב לצאת מחשבשבת, ועד שהמשיכה משם תעבוד עדיף לומר את זה מאשר להראות
+// מספרים שאינם שלו.
 function renderInvoices(){
-  const unpaid=INVOICES.filter(i=>!i.paid);
-  const paid=INVOICES.filter(i=>i.paid);
-  let html="";
-  if(unpaid.length){
-    html+='<div class="sec-title" style="color:var(--red)">לתשלום</div>';
-    html+=unpaid.map(inv=>'<div class="inv-card" style="border-right:3px solid var(--red)"><div class="inv-icon">&#129534;</div><div class="inv-info"><div class="inv-num">'+inv.num+'</div><div class="inv-date">'+inv.date+" · "+inv.desc+'</div><button class="btn-dl" onclick="contactUs()">&#128222; ליצירת קשר</button></div><div class="inv-right"><div class="inv-amt" style="color:var(--red)">&#8362;'+inv.amount.toLocaleString()+'</div><div class="inv-stat" style="color:var(--red)">לא שולם</div></div></div>').join("");
-  }
-  if(paid.length){
-    html+='<div class="sec-title">שולם</div>';
-    html+=paid.map(inv=>'<div class="inv-card"><div class="inv-icon">&#9989;</div><div class="inv-info"><div class="inv-num">'+inv.num+'</div><div class="inv-date">'+inv.date+" · "+inv.desc+'</div><button class="btn-dl">&#128196; הורד PDF</button></div><div class="inv-right"><div class="inv-amt">&#8362;'+inv.amount.toLocaleString()+'</div><div class="inv-stat" style="color:var(--green)">שולם</div></div></div>').join("");
-  }
-  document.getElementById("invoicesList").innerHTML=html||'<div class="empty">אין חשבוניות</div>';
+  document.getElementById("invoicesList").innerHTML =
+    '<div class="soon-panel">' +
+      '<div class="soon-ttl">בפיתוח</div>' +
+      '<div class="soon-txt">החשבוניות שלך יופיעו כאן להורדה. בינתיים אפשר לקבל אותן ישירות מאיתנו.</div>' +
+      '<button class="btn-pay" onclick="contactUs()">&#128222; צור קשר</button>' +
+    '</div>';
 }
 
+// ההודעות אינן מחוברות לשום מקום. כאן ישבה שיחה מומצאת, ו-sendMsg הוסיף
+// אחרי 1.2 שניות "תודה! נחזור אליך בהקדם" — תשובה מאף אחד. לקוח היה כותב,
+// מקבל אישור, ומחכה לתשובה שלא תגיע. עדיף מסך שאומר את האמת.
 function renderChat(){
-  document.getElementById("chatMessages").innerHTML=CHAT.map(m=>'<div class="chat-bubble" style="'+(m.from==="LuzGlass"?"":"border-right:3px solid var(--gold)")+'">'+'<div class="cb-from" style="color:'+(m.from==="LuzGlass"?"var(--blue)":"var(--gold)")+'">'+lgEsc(m.from)+"</div>"+'<div class="cb-text">'+lgEsc(m.text)+"</div>"+'<div class="cb-time">'+lgEsc(m.time)+"</div></div>").join("");
+  const box = document.getElementById("chatMessages");
+  if(box) box.innerHTML =
+    '<div class="soon-panel">' +
+      '<div class="soon-ttl">בפיתוח</div>' +
+      '<div class="soon-txt">ההודעות כאן עדיין לא פעילות. לכל שאלה — אנחנו זמינים בטלפון ובוואטספ.</div>' +
+      '<button class="btn-pay" onclick="contactUs()">&#128222; צור קשר</button>' +
+    '</div>';
+  const inp = document.getElementById("chatInput");
+  if(inp){ inp.disabled = true; inp.placeholder = "ההודעות עדיין לא פעילות"; }
 }
-function sendMsg(){
-  const inp=document.getElementById("chatInput");
-  const text=inp.value.trim();if(!text)return;
-  const now=new Date();
-  const time=now.getDate()+"/"+(now.getMonth()+1)+" "+String(now.getHours()).padStart(2,"0")+":"+String(now.getMinutes()).padStart(2,"0");
-  CHAT.push({from:(window._lgSession&&window._lgSession.name)||'לקוח',text,time});inp.value="";renderChat();
-  setTimeout(()=>{CHAT.push({from:"LuzGlass",text:"תודה! נחזור אליך בהקדם",time});renderChat();},1200);
-}
+function sendMsg(){ /* ההודעות אינן מחוברות — ר' renderChat */ }
 
 function renderClientPrice(){
   const el = document.getElementById('clientPriceList');
@@ -912,7 +909,9 @@ function renderClientPrice(){
       // gap + min-width:0 + flex-shrink:0 — בלעדיהם שם ארוך כמו
       // "10ACCMH — 10 מ''מ אסיד קליר מחוסם" דוחס את המחיר עד שהוא נשבר
       return `<div class="cpl-row">
-        <span class="cpl-name">${lgEsc(p.name)}${special?' <span class="cpl-tag">מחיר מיוחד</span>':''}</span>
+        <!-- בלי תווית "מחיר מיוחד". היא סימנה את השורות שבהן ללקוח יש מחיר
+             משלו — ובכך הודיעה לו בדיוק על אילו פריטים הוא לא קיבל אחד. -->
+        <span class="cpl-name">${lgEsc(p.name)}</span>
         <span class="cpl-price">₪${price}<span class="cpl-unit">/מ"ר</span></span>
       </div>`;
     }).join('');

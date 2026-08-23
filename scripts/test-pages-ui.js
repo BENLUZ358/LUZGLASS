@@ -532,6 +532,34 @@ check('there is a way to deploy the rules',
   check('the debt bar says it is not connected yet',
         /class="debt-soon">בפיתוח/.test(portal),
         'a number that looks final but is not reconciled is worse than none');
+
+  /* No invented data on a screen a customer sees.
+
+     Four invoices with amounts were seeded here as a design example — the same
+     four for every client, "חש-2026-007 · מקלחון פינתי · ₪5,200". The chat was
+     worse: a scripted conversation, and sendMsg pushed "תודה! נחזור אליך
+     בהקדם" 1.2 seconds after the customer typed, a reply from nobody, while
+     the message went nowhere. */
+  /* this file's check() takes (name, condition, detail) — negatives are
+     expressed by negating the condition, not by passing an expected value */
+  check('no invented invoices', !/const INVOICES\s*=\s*\[/.test(portal),
+        'every client saw the same four fabricated amounts');
+  check('no scripted conversation', !/let CHAT\s*=\s*\[/.test(portal));
+  /* the code, not the comment that explains why it went */
+  check('and no fabricated reply', !/CHAT\.push\(/.test(portal),
+        'a customer typed into a void and was told someone had answered');
+  check('the chat input is disabled while it is not connected',
+        /inp\.disabled = true;/.test(portal));
+  check('both tabs say so plainly',
+        (portal.match(/soon-ttl">בפיתוח/g) || []).length >= 2);
+
+  /* The price list must not tell a client which items he was NOT given a
+     special price on. The tag marked exactly the rows where he had one, which
+     is the same information read the other way round. */
+  check('the special-price tag is gone', !/<span class="cpl-tag">/.test(portal));
+  check('and its style with it', !/\.cpl-tag\{/.test(portal));
+  check('the client price is still preferred over the global one',
+        /const price   = special \|\| gp\[p\.id\];/.test(portal));
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
