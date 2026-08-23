@@ -57,6 +57,11 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
           border-radius:20px;padding:4px 14px;margin-bottom:12px;letter-spacing:0.05em;}
 .soon-txt{font-size:14px;color:var(--muted);line-height:1.7;margin-bottom:16px;}
 .soon-panel .btn-pay{width:auto;min-width:160px;margin:0 auto;}
+/* הרצה פיקטיבית — חשבונית שלא נפתחה בפועל בחשבשבת. חייבת להיראות שונה,
+   אחרת היא נספרת אצל הלקוח כחשבונית אמיתית. */
+.inv-sim{font-size:var(--fs-xs);font-weight:700;color:var(--gold-text);
+         background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.30);
+         padding:1px 7px;border-radius:3px;margin-inline-start:6px;white-space:nowrap;}
 .hero-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;}
 .hstat{background:rgba(255,255,255,0.05);padding:14px 10px;text-align:center;}
 .hstat .n{font-family:"Playfair Display",serif;font-size:22px;font-weight:900;color:var(--gold);}
@@ -529,6 +534,7 @@ function _subscribePortalOrders(clientPhone) {
         total:      lgCalcOrderTotal(o, _portalGlobalPrices, _portalClientPrices) || Number(o.total) || 0,
         _rawTotal:  Number(o.total) || 0,
         _totalFinal:o.totalFinal   || 0,
+        invoice:    o.invoice    || null,
         orderClient:o.orderClient || clientName,
         date:       o.date      || '',
         status:     o.status    || lgStageToStatus(o.stage || ''),
@@ -870,17 +876,55 @@ function cancelPick(id){
   renderReady();
 }
 
-// חשבוניות עדיין לא מחוברות. כאן ישבו ארבע חשבוניות מומצאות שנשתלו
-// כדוגמת עיצוב, וכל לקוח ראה את אותן ארבע — עם סכומים. מסמך חשבונאי
-// חייב לצאת מחשבשבת, ועד שהמשיכה משם תעבוד עדיף לומר את זה מאשר להראות
-// מספרים שאינם שלו.
+// חשבוניות אמיתיות, מתוך מה שהופק בפועל בחשבשבת. כאן ישבו קודם ארבע
+// חשבוניות מומצאות שנשתלו כדוגמת עיצוב, וכל לקוח ראה את אותן ארבע.
+//
+// חשבונית אחת יכולה לכסות כמה הזמנות — hashavshevet-invoice.js שולח מסמך
+// אחד עם withOrders — ולכן מקבצים לפי האסמכתא במקום שורה לכל הזמנה.
+//
+// אין כאן כפתור הורדה. מסמך חשבונאי חייב לצאת מתוכנה מאושרת, ומשיכת
+// ה-PDF (plugin getPDF) עדיין לא אומתה מול מסמך אמיתי — ר'
+// api/hashavshevet-getpdf.js. כפתור שנכשל גרוע מכפתור שאינו קיים.
 function renderInvoices(){
-  document.getElementById("invoicesList").innerHTML =
-    '<div class="soon-panel">' +
-      '<div class="soon-ttl">בפיתוח</div>' +
-      '<div class="soon-txt">החשבוניות שלך יופיעו כאן להורדה. בינתיים אפשר לקבל אותן ישירות מאיתנו.</div>' +
-      '<button class="btn-pay" onclick="contactUs()">&#128222; צור קשר</button>' +
+  const el = document.getElementById("invoicesList");
+  if(!el) return;
+
+  const byRef = {};
+  ORDERS.forEach(o=>{
+    const inv = o.invoice;
+    if(!inv || !inv.sentAt) return;
+    const key = inv.reference || ('_' + inv.sentAt);
+    if(!byRef[key]) byRef[key] = Object.assign({}, inv, { orders: [] });
+    byRef[key].orders.push(o);
+  });
+  const list = Object.values(byRef).sort((a,b)=>b.sentAt-a.sentAt);
+
+  if(!list.length){
+    el.innerHTML =
+      '<div class="soon-panel">' +
+        '<div class="soon-ttl">אין חשבוניות עדיין</div>' +
+        '<div class="soon-txt">חשבונית תופיע כאן אחרי שתופק. בינתיים אפשר לקבל אותה ישירות מאיתנו.</div>' +
+        '<button class="btn-pay" onclick="contactUs()">&#128222; צור קשר</button>' +
+      '</div>';
+    return;
+  }
+
+  el.innerHTML = list.map(function(inv){
+    const d    = new Date(inv.sentAt);
+    const date = isNaN(d) ? '' : d.toLocaleDateString('he-IL');
+    const nums = inv.orders.map(o=>o.num).filter(Boolean).join(' · ');
+    const sim  = inv.simulated
+      ? ' <span class="inv-sim">&#129514; הרצה פיקטיבית</span>' : '';
+    return '<div class="inv-card">'+
+      '<div class="inv-icon">&#129534;</div>'+
+      '<div class="inv-info">'+
+        '<div class="inv-num">חשבונית '+lgEsc(inv.reference||'')+sim+'</div>'+
+        '<div class="inv-date">'+lgEsc(date)+(nums?' &middot; '+lgEsc(nums):'')+'</div>'+
+        '<div class="inv-date">'+inv.orders.length+' '+(inv.orders.length===1?'הזמנה':'הזמנות')+'</div>'+
+      '</div>'+
+      '<div class="inv-right"><div class="inv-amt">&#8362;'+(inv.total||0).toLocaleString()+'</div></div>'+
     '</div>';
+  }).join('');
 }
 
 // ההודעות אינן מחוברות לשום מקום. כאן ישבה שיחה מומצאת, ו-sendMsg הוסיף

@@ -660,6 +660,18 @@ function lgNormalizeOrder(o) {
     // chisumArrivedIdxs ו-itemType.
     pickedDate:    o.pickedDate    || '',
     pickupDateRaw: o.pickupDateRaw || '',
+    // סיכום החשבונית — ולא הרשומה המלאה. hashavshevetInvoice מחזיקה גם
+    // response באורך 4000 תווים ו-requestSample, וזה נכפל בכל הזמנה בצומת
+    // שכל דף מוריד במלואו. ר' scripts/test-sketch-storage.js.
+    // מי שצריך את הגולמי קורא אותו נקודתית מ-orders/<id>/hashavshevetInvoice.
+    invoice:       o.hashavshevetInvoice ? {
+      reference:  o.hashavshevetInvoice.reference || '',
+      total:      Number(o.hashavshevetInvoice.total) || 0,
+      sentAt:     Number(o.hashavshevetInvoice.sentAt) || 0,
+      documentId: o.hashavshevetInvoice.documentId || '',
+      simulated:  !!o.hashavshevetInvoice.simulated,
+      httpOk:     !!o.hashavshevetInvoice.httpOk,
+    } : null,
     glass:         o.glass        || '',
     glassFullName: o.glassFullName|| o.glass       || '',
     finish:        o.finish       || '',

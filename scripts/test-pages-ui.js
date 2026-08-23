@@ -607,8 +607,34 @@ check('there is a way to deploy the rules',
         'a customer typed into a void and was told someone had answered');
   check('the chat input is disabled while it is not connected',
         /inp\.disabled = true;/.test(portal));
-  check('both tabs say so plainly',
-        (portal.match(/soon-ttl">בפיתוח/g) || []).length >= 2);
+  check('the chat says so plainly', /soon-ttl">בפיתוח/.test(portal));
+
+  /* The invoices tab is no longer "in development" — it is built and reads
+     what was actually issued in Hashavshevet. One invoice can cover several
+     orders (hashavshevet-invoice.js sends one document with withOrders), so
+     rows are grouped by reference rather than one per order. */
+  check('invoices come from the issued record',
+        /const inv = o\.invoice;\s*if\(!inv \|\| !inv\.sentAt\) return;/.test(portal));
+  check('and are grouped by reference, not per order',
+        /const key = inv\.reference \|\| \('_' \+ inv\.sentAt\);/.test(portal));
+  check('newest first', /\.sort\(\(a,b\)=>b\.sentAt-a\.sentAt\)/.test(portal));
+  check('an empty list says so rather than pretending',
+        /soon-ttl">אין חשבוניות עדיין/.test(portal));
+  /* a simulated run must never be counted by the client as a real invoice */
+  check('a fictitious run is marked', /class="inv-sim"/.test(portal));
+  /* the PDF is not offered until getPDF is verified against a real document */
+  check('no download button while the plugin is unverified',
+        !/הורד PDF/.test(portal),
+        'a button that fails is worse than no button');
+
+  /* the summary must stay small — the full record carries a 4000-character
+     response, and `orders` is the node every page downloads whole */
+  const db = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+  check('the normaliser carries a compact invoice summary',
+        /invoice:       o\.hashavshevetInvoice \? \{/.test(db));
+  check('and not the raw response',
+        !/invoice:[\s\S]{0,400}?response:/.test(db),
+        '4000 characters times every order in the node every page downloads');
 
   /* The price list must not tell a client which items he was NOT given a
      special price on. The tag marked exactly the rows where he had one, which
