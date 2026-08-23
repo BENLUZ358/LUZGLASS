@@ -745,7 +745,10 @@ function makeAutoSketch(o){
   return 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
 }
 
-function orderCard(o){
+// extra — גוש שנוסף בתוך הכרטיס, לפני הסגירה. משמש את לשונית "מוכן"
+// לבחירת תאריך האיסוף. כך שני הטאבים מציגים בדיוק את אותו כרטיס — עם
+// סרגל ההתקדמות, "פרטים" והסקיצה — ולא שני מבנים שיתפצלו.
+function orderCard(o, extra){
   // מראות לא עוברות חיסום - הצג "בייצור" במקום "בחיסום"
   const isMirrorOrd = (o.items||[]).every(i=>(i.name||'').includes('מראה')) || (o.glass||'').includes('מראה');
   const displayStatus = (o.status==='נשלח לחיסום'&&isMirrorOrd) ? 'ירד לביצוע' : o.status;
@@ -804,10 +807,12 @@ function orderCard(o){
       '<button type="button" class="oc-toggle" data-id="'+o.id+'" aria-expanded="'+(isExp?'true':'false')+'" onclick="toggleExp(this.dataset.id)">'+
         (isExp?"▲ סגור":"▾ פרטים")+((o.hasSketch||o.sketch)&&!isExp?' <span class="oc-has-sk">🖼</span>':'')+
       '</button><span class="oc-date">'+lgEsc(o.date)+"</span>"+
-    "</div>"+exp+"</div>";
+    "</div>"+exp+(extra||'')+"</div>";
 }
 
-function toggleExp(id){if(expanded.has(id))expanded.delete(id);else expanded.add(id);renderOrders();}
+// שני הטאבים מציגים כרטיסים, ולכן פתיחת "פרטים" חייבת לצייר את שניהם —
+// אחרת לחיצה בטאב "מוכן" לא הייתה עושה כלום.
+function toggleExp(id){if(expanded.has(id))expanded.delete(id);else expanded.add(id);renderOrders();renderReady();}
 
 function openSk(idOrEl){
   const id = typeof idOrEl === 'string' ? idOrEl : (idOrEl?.dataset?.id || idOrEl?.dataset?.oid);
@@ -828,22 +833,19 @@ function openSk(idOrEl){
 function renderReady(){
   const ready=ORDERS.filter(_isReady);
   if(!ready.length){document.getElementById("readyOrders").innerHTML='<div class="empty">&#127881; אין סחורה ממתינה</div>';return;}
+  // אותו כרטיס בדיוק כמו בלשונית "הזמנות" — סרגל התקדמות, "פרטים" והסקיצה —
+  // ועליו נוסף גוש בחירת התאריך. קודם היה כאן מבנה נפרד (ready-card) בלי
+  // "פרטים", ולכן לא הייתה שום דרך לראות את הסקיצה של הזמנה מוכנה.
   document.getElementById("readyOrders").innerHTML=ready.map(o=>{
-    const hasFarzel=o.finish&&o.finish!=="—"&&o.finish!=="ללא פרזול";
-    const pd=pickupDates[o.id];
-    let pick;
-    if(pd){
-      pick='<div class="pickup-ok"><div class="pk-lbl">&#9989; תאריך איסוף נקבע</div><div class="pk-date">'+pd+'</div><button class="pk-change" data-id="'+o.id+'" onclick="cancelPick(this.dataset.id)">שנה תאריך</button></div>';
-    } else {
-      pick='<div class="date-wrap"><div class="date-lbl">בחר תאריך איסוף:</div>'+
+    const pd=pickupDates[o.id]||o.pickedDate;
+    const pick = pd
+      ? '<div class="pickup-ok"><div class="pk-lbl">&#9989; תאריך איסוף נקבע</div><div class="pk-date">'+lgEsc(pd)+'</div><button class="pk-change" data-id="'+o.id+'" onclick="cancelPick(this.dataset.id)">שנה תאריך</button></div>'
+      : '<div class="date-wrap"><div class="date-lbl">בחר תאריך איסוף:</div>'+
         '<input type="date" id="dp_'+o.id+'" class="date-inp" min="'+minDate()+'">'+
         '<button class="btn-confirm" data-id="'+o.id+'" onclick="confirmPick(this.dataset.id)">&#9989; אשר</button></div>';
-    }
-    return '<div class="ready-card">'+
-      '<div class="rc-top"><span style="font-size:20px">&#9989;</span><div class="rc-info"><div class="rc-name">'+lgEsc(o.name)+'</div><div class="rc-desc">'+lgEsc(o.num)+" · "+lgEsc(o.glass)+"</div></div>"+'<div class="rc-price">&#8362;'+(o.total||0).toLocaleString()+"</div></div>"+
-      (hasFarzel?'<div style="font-size:12px;background:rgba(184,146,42,0.08);padding:6px 10px;border-right:2px solid var(--gold);margin-bottom:8px">&#128297; כולל פרזול: <strong>'+lgEsc(o.finish)+"</strong></div>":'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">&#11042; זכוכית בלבד</div>')+
-      pick+"</div>";
+    return orderCard(o, pick);
   }).join("");
+  _fillOpenSketches();
 }
 
 function minDate(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().split("T")[0];}
@@ -859,7 +861,7 @@ function confirmPick(id){
   }
   // שמור גם לגיבוי מקומי
   safeStorage.setItem("lgPickupDates",JSON.stringify(pickupDates));
-  renderReady();
+  renderAll();
 }
 function cancelPick(id){
   delete pickupDates[id];

@@ -133,5 +133,26 @@ const dropped = Object.keys(written).filter(f => !whitelist.has(f) && !NOT_CARRI
 check('no page writes an order field the normaliser then drops', dropped, []);
 check('the scan actually found fields to check', Object.keys(written).length > 10, true);
 
+/* The pickup date the client sets in the portal.
+
+   confirmPick has always written pickedDate and pickupDateRaw to Firebase.
+   Neither was named here, so the whitelist dropped both on the way back out —
+   to every screen, including the portal that had just written them and the
+   admin's pickup board that exists to show them. The same shape as
+   chisumArrivedIdxs and itemType before it. */
+{
+  const SRC = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+  const body = (SRC.match(/function lgNormalizeOrder[\s\S]*?\n}/) || [''])[0];
+  check('the pickup date survives the whitelist',
+        /pickedDate:    o\.pickedDate    \|\| '',/.test(body), true);
+  check('and the raw yyyy-mm-dd with it',
+        /pickupDateRaw: o\.pickupDateRaw \|\| '',/.test(body), true);
+  /* the raw form is what the admin board groups and sorts by; the formatted
+     Hebrew string cannot be parsed back into a date */
+  check('the portal writes both',
+        /updateOrder\(id, \{ pickedDate: fmt, pickupDateRaw: inp\.value \}\)/
+          .test(fs.readFileSync(path.join(ROOT, 'portal.html'), 'utf8')), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll order-normaliser checks passed.');

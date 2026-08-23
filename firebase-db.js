@@ -654,6 +654,12 @@ function lgNormalizeOrder(o) {
     orderClient:   o.orderClient  || o.client     || '—',
     orderNum:      o.orderNum     || o.refNum      || '',
     sketchName:    o.sketchName   || o.type        || o.desc || '',
+    // תאריך האיסוף שהלקוח קובע בפורטל. confirmPick כתב אותו ל-Firebase מאז
+    // ומתמיד, אבל הוא לא היה ברשימה כאן — ולכן נמחק בדרך חזרה לכל מסך,
+    // כולל הפורטל שכתב אותו וכולל לוח האיסופים באדמין. אותה תבנית כמו
+    // chisumArrivedIdxs ו-itemType.
+    pickedDate:    o.pickedDate    || '',
+    pickupDateRaw: o.pickupDateRaw || '',
     glass:         o.glass        || '',
     glassFullName: o.glassFullName|| o.glass       || '',
     finish:        o.finish       || '',

@@ -617,6 +617,50 @@ check('there is a way to deploy the rules',
   check('and its style with it', !/\.cpl-tag\{/.test(portal));
   check('the client price is still preferred over the global one',
         /const price   = special \|\| gp\[p\.id\];/.test(portal));
+
+  /* The ready tab draws the same card as the orders tab.
+
+     It had a structure of its own — ready-card — carrying only the client,
+     order number, glass and a date picker. No progress bar, no "פרטים", and
+     therefore no way to open the sketch of an order that is ready. Two card
+     structures for the same object also drift: a change to one skips the
+     other. Now there is one card, and the ready tab passes the date block in. */
+  check('orderCard takes an extra block', /function orderCard\(o, extra\)\{/.test(portal));
+  check('and appends it inside the card',
+        /\+exp\+\(extra\|\|''\)\+"<\/div>";/.test(portal));
+  check('the ready tab uses that card', /return orderCard\(o, pick\);/.test(portal));
+  check('and no longer has a card of its own',
+        !/class="ready-card"/.test(portal),
+        'two structures for one object drift apart');
+  check('sketches load in the ready tab too',
+        /return orderCard\(o, pick\);[\s\S]{0,80}?_fillOpenSketches\(\);/.test(portal));
+  /* both tabs now render cards, so expanding must redraw both — otherwise
+     tapping "פרטים" in the ready tab does nothing at all */
+  check('expanding redraws both tabs',
+        /function toggleExp\(id\)\{[\s\S]{0,140}?renderOrders\(\);renderReady\(\);\}/.test(portal));
+  /* a date already stored on the order must show, not only one set in this
+     browser session */
+  check('a stored pickup date is shown',
+        /const pd=pickupDates\[o\.id\]\|\|o\.pickedDate;/.test(portal));
+
+  /* The admin's pickup board reads the live orders.
+
+     It read safeStorage.getItem('lgAllPickups') — this browser's own local
+     storage. A client setting a date on their phone writes to Firebase, and no
+     path carried it here, so the board could only ever fill from dates set on
+     this machine. */
+  const admin = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+  const board = (admin.match(/function renderPickupBoard\(\)[\s\S]*?\n}/) || [''])[0];
+  /* code only — the comment above the change names the old key on purpose */
+  const boardCode = board.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+  check('the pickup board does not read local storage',
+        !/lgAllPickups/.test(boardCode),
+        'a date set on a phone could never reach this machine');
+  check('it reads the orders instead',
+        /const allPickups = orders\s*\n?\s*\.filter\(o => o\.pickupDateRaw \|\| o\.pickedDate\)/.test(board));
+  check('and a Hebrew date string is shown as-is rather than as NaN',
+        /isNaN\(_d\) \? date/.test(admin),
+        'new Date("יום ראשון, 24 באוגוסט") is Invalid Date');
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

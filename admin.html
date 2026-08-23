@@ -1635,10 +1635,28 @@ function closePickup(){
 }
 
 function renderPickupBoard(){
-  const allPickups = JSON.parse(safeStorage.getItem('lgAllPickups')||'{}');
+  // נקרא מההזמנות החיות, לא מ-localStorage.
+  //
+  // כאן היה safeStorage.getItem('lgAllPickups') — כלומר האחסון המקומי של
+  // הדפדפן הזה. לקוח שקובע תאריך בטלפון שלו כותב ל-Firebase, ולא היה שום
+  // מסלול שמביא את זה לכאן. הלוח היה יכול להתמלא רק ממה שנקבע במחשב הזה.
+  const allPickups = orders
+    .filter(o => o.pickupDateRaw || o.pickedDate)
+    .map(o => ({
+      date:      o.pickupDateRaw || o.pickedDate,
+      client:    o.orderClient,
+      phone:     o.phone || o.clientPhone || '',
+      orderNum:  o.orderNum,
+      orderName: o.sketchName || o.type || '',
+      glass:     o.glassFullName || o.glass || '',
+      finish:    o.finish || '',
+      hasFarzel: !!(o.finish && o.finish !== '—' && o.finish !== 'ללא פרזול'),
+      total:     lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0,
+      items:     o.items || [],
+    }));
   const el = document.getElementById('pickupBody');
 
-  if(!Object.keys(allPickups).length){
+  if(!allPickups.length){
     el.innerHTML=`<div class="pickup-empty">
       <div style="font-size:36px;margin-bottom:12px">📅</div>
       <div style="font-size:14px;font-weight:700;margin-bottom:6px">אין איסופים מתוזמנים</div>
@@ -1649,7 +1667,7 @@ function renderPickupBoard(){
 
   // Group by date
   const byDate = {};
-  Object.values(allPickups).forEach(p=>{
+  allPickups.forEach(p=>{
     const d = p.date||'';
     if(!byDate[d]) byDate[d]=[];
     byDate[d].push(p);
@@ -1661,7 +1679,12 @@ function renderPickupBoard(){
   el.innerHTML = sorted.map(([date, pickups])=>{
     const farzelCount = pickups.filter(p=>p.hasFarzel).length;
     const totalVal = pickups.reduce((s,p)=>s+(p.total||0),0);
-    const dateLabel = new Date(date).toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    // pickupDateRaw הוא yyyy-mm-dd וניתן לפירוק. pickedDate הוא כבר מחרוזת
+    // בעברית ("יום ראשון, 24 באוגוסט") — new Date עליו מחזיר Invalid Date,
+    // ולכן מציגים אותו כפי שהוא במקום "NaN".
+    const _d = new Date(date);
+    const dateLabel = isNaN(_d) ? date
+      : _d.toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
     return `<div class="pickup-day">
       <div class="pd-header">
