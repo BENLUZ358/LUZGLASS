@@ -238,6 +238,45 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .cp-money{margin-inline-start:auto;}
   .mgrid{grid-template-columns:1fr;}
 }
+/* מסך הפקת חשבונית */
+#billOv{position:fixed;inset:0;background:rgba(26,23,20,0.6);z-index:820;display:none;}
+#billOv.open{display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;}
+#billOv .ov-panel{background:var(--surface);border-radius:10px;max-width:640px;width:100%;
+                  max-height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden;}
+#billOv .ov-head{padding:16px 18px;border-bottom:1px solid var(--border);
+                 display:flex;align-items:center;justify-content:space-between;}
+#billOv .ov-body{padding:16px 18px;overflow-y:auto;}
+.bill-search{width:100%;box-sizing:border-box;min-height:44px;padding:10px 12px;margin-bottom:12px;
+             border:1px solid var(--border);border-radius:6px;background:var(--bg);
+             font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;direction:rtl;}
+.bill-search:focus{border-color:var(--gold-text);box-shadow:0 0 0 3px rgba(184,146,42,0.15);}
+.bill-cli{display:flex;align-items:center;justify-content:space-between;gap:10px;
+          min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;
+          background:var(--bg);margin-bottom:6px;cursor:pointer;width:100%;
+          font-family:Heebo,sans-serif;font-size:14px;color:var(--text);text-align:right;}
+.bill-cli:hover{background:var(--bg2);}
+.bill-cli:focus-visible{outline:2px solid var(--gold-text);outline-offset:1px;}
+.bill-cli-n{font-weight:700;}
+.bill-cli-s{font-size:13px;color:var(--muted);white-space:nowrap;}
+.bill-row{border:1px solid var(--border);border-radius:6px;margin-bottom:6px;overflow:hidden;}
+.bill-row-top{display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:44px;}
+.bill-row-top input{width:20px;height:20px;flex-shrink:0;cursor:pointer;}
+.bill-row-t{flex:1;min-width:0;font-size:13px;color:var(--text);}
+.bill-row-a{font-size:13px;font-weight:700;color:var(--gold-text);white-space:nowrap;}
+.bill-det>summary{min-height:44px;display:flex;align-items:center;padding:0 12px;
+                  font-size:13px;font-weight:700;color:var(--gold-text);cursor:pointer;
+                  outline:none;direction:rtl;list-style:none;border-top:1px solid var(--border);}
+.bill-det>summary::-webkit-details-marker{display:none;}
+.bill-det>summary:focus-visible{outline:2px solid var(--gold-text);outline-offset:-2px;}
+.bill-item{font-size:12px;color:#555;padding:1px 12px;}
+.bill-sk{width:100%;max-height:110px;min-height:60px;object-fit:contain;display:block;
+         border:1px solid var(--border);border-radius:4px;background:var(--bg2);
+         margin:6px 12px 8px;cursor:zoom-in;opacity:0;transition:opacity 200ms ease;}
+.bill-sk.is-loaded{opacity:1;}
+.bill-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);
+           padding:12px 0 0;margin-top:12px;}
+.bill-sum{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;}
+@media (prefers-reduced-motion:reduce){ .bill-sk{transition:none;opacity:1;} }
 </style>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -267,6 +306,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <a class="unav-a active" href="#" onclick="setView('kanban',this)"><span class="ic" data-icon="kanban"></span>לוח הזמנות</a>
     <a class="unav-a" href="#" onclick="openPricing()"><span class="ic" data-icon="wallet"></span>מחירונים</a>
     <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
+    <a class="unav-a" href="#" onclick="openBillBoard()"><span class="ic" data-icon="calendar"></span>הפקת חשבונית</a>
     <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
     <div class="unav-sec">תחנות עבודה</div>
     <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
@@ -1632,6 +1672,159 @@ function _dsStat(label, count, sub, color){
 }
 function closePickup(){
   document.getElementById('pickupOv').classList.remove('open');
+}
+
+// ── הפקת חשבונית ───────────────────────────────────────────────────────
+//
+//  תהליך ולא סקירה: מתחיל ריק, מחפשים לקוח, ורואים רק את שלו.
+//
+//  "לא חויב" אינו שדה חדש. ה-API כבר מסרב לחייב הזמנה פעמיים לפי
+//  hashavshevetInvoice.sentAt, ולכן אותה עובדה מגדירה את הרשימה — אין מצב
+//  חדש לתחזק, ואין סנכרון שיכול להתפצל. חיוב כפול נשאר חסום בשרת.
+let _billClient = null;
+let _billSearch = '';
+
+function _billFilterOrders(){
+  return orders.filter(o => o.stage === 'collected' && !(o.invoice && o.invoice.sentAt));
+}
+
+function openBillBoard(){
+  _billClient = null; _billSearch = '';
+  invSel.clear(); invSelClient = null;
+  document.getElementById('billOv').classList.add('open');
+  renderBillBoard();
+}
+function closeBillBoard(){
+  document.getElementById('billOv').classList.remove('open');
+  invSel.clear(); invSelClient = null;
+}
+
+function renderBillBoard(){
+  const el = document.getElementById('billBody');
+  if(!el) return;
+  if(_billClient) _renderBillClient(el); else _renderBillClients(el);
+}
+
+function _renderBillClients(el){
+  const byClient = {};
+  _billFilterOrders().forEach(o => {
+    const c = o.orderClient || '—';
+    (byClient[c] = byClient[c] || []).push(o);
+  });
+  const q = _billSearch.trim().toLowerCase();
+  const list = Object.entries(byClient)
+    .filter(([c]) => !q || c.toLowerCase().includes(q))
+    .sort((a,b) => b[1].length - a[1].length);
+
+  el.innerHTML =
+    '<input class="bill-search" id="billSearch" type="search" autocomplete="off"' +
+    ' placeholder="חפש לקוח..." aria-label="חיפוש לקוח לחיוב" value="' + lgEsc(_billSearch) + '">' +
+    '<div id="billClients"></div>';
+  const inp = document.getElementById('billSearch');
+  inp.oninput = () => { _billSearch = inp.value; _renderBillClients(el); document.getElementById('billSearch').focus(); };
+
+  const box = document.getElementById('billClients');
+  if(!list.length){
+    box.innerHTML = '<div class="empty-state"><div class="empty-state-msg">' +
+      (q ? 'אין לקוח תואם' : 'אין הזמנות שנאספו וטרם חויבו') + '</div></div>';
+    return;
+  }
+  // שם הלקוח עובר ב-data ולא בתוך onclick. הרכבת JS עם שם בעברית בתוך
+  // מחרוזת HTML היא בדיוק מה שהקוד הקיים כבר נמנע ממנו — ר' ההערה ליד
+  // כפתורי ההובלה ב-workday.html.
+  box.innerHTML = list.map(([c, ords]) => {
+    const total = ords.reduce((s,o) => s + (lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0), 0);
+    return '<button class="bill-cli" data-client="' + lgEsc(c) + '">' +
+      '<span class="bill-cli-n">' + lgEsc(c) + '</span>' +
+      '<span class="bill-cli-s">' + ords.length + ' · ₪' + total.toLocaleString() + '</span>' +
+    '</button>';
+  }).join('');
+  box.querySelectorAll('button[data-client]').forEach(btn =>
+    btn.addEventListener('click', () => _billPick(btn.dataset.client)));
+}
+
+function _billPick(clientName){
+  _billClient = clientName;
+  invSel.clear(); invSelClient = _billClient;
+  renderBillBoard();
+}
+
+function _renderBillClient(el){
+  const ords = _billFilterOrders()
+    .filter(o => (o.orderClient || '—') === _billClient)
+    .sort((a,b) => (a.orderNum||'').localeCompare(b.orderNum||''));
+
+  // הכל מסומן כברירת מחדל — בסוף החודש מחייבים על הכל, והסרת סימון היא החריג
+  ords.forEach(o => invSel.add(String(o.id)));
+
+  el.innerHTML =
+    '<button class="bill-cli" onclick="_billBack()" style="margin-bottom:12px">' +
+      '<span class="bill-cli-n">← ' + lgEsc(_billClient) + '</span>' +
+      '<span class="bill-cli-s">' + ords.length + ' הזמנות</span>' +
+    '</button>' +
+    '<div id="billRows"></div>' +
+    '<div class="bill-foot">' +
+      '<div class="bill-sum" id="billTotal" aria-live="polite"></div>' +
+      '<button class="btn btn-primary" style="width:100%" onclick="invPreview()">הפק חשבונית</button>' +
+    '</div>';
+
+  document.getElementById('billRows').innerHTML = ords.map(o => {
+    const total = lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0;
+    const items = (o.items||[]).map(it =>
+      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + (it.w||'') + '×' + (it.h||'') + ' מ"מ</div>').join('');
+    const sk = (o.hasSketch || o.sketch)
+      ? '<img class="bill-sk" data-sketch-for="' + lgEsc(String(o.id)) + '"' +
+        ' alt="סקיצה — ' + lgEsc(o.orderNum||'') + '" onclick="if(this.src)previewSketchSrc(this.src)">'
+      : '';
+    return '<div class="bill-row">' +
+      '<div class="bill-row-top">' +
+        '<input type="checkbox" checked data-oid="' + lgEsc(String(o.id)) + '"' +
+        ' aria-label="כלול את ' + lgEsc(o.orderNum||'') + ' בחשבונית">' +
+        '<span class="bill-row-t">' + lgEsc(o.orderNum||'') + ' · ' + lgEsc(o.date||'') + '</span>' +
+        '<span class="bill-row-a">₪' + total.toLocaleString() + '</span>' +
+      '</div>' +
+      '<details class="bill-det"><summary>פירוט</summary>' + items + sk + '</details>' +
+    '</div>';
+  }).join('');
+
+  el.querySelectorAll('.bill-row-top input').forEach(cb => cb.addEventListener('change', () => {
+    if(cb.checked) invSel.add(cb.dataset.oid); else invSel.delete(cb.dataset.oid);
+    _billUpdateTotal(ords);
+  }));
+  el.querySelectorAll('details.bill-det').forEach(d =>
+    d.addEventListener('toggle', () => { if(d.open) _hydrateBillSketches(d); }));
+  _billUpdateTotal(ords);
+}
+
+function _billBack(){ _billClient = null; invSel.clear(); invSelClient = null; renderBillBoard(); }
+
+// הסכום נאמר, לא רק מצויר — aria-live מודיע לקורא מסך כשהוא משתנה
+function _billUpdateTotal(ords){
+  const chosen = ords.filter(o => invSel.has(String(o.id)));
+  const total  = chosen.reduce((s,o) => s + (lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0), 0);
+  const el = document.getElementById('billTotal');
+  if(el) el.textContent = `נבחרו ${chosen.length} מתוך ${ords.length} · ₪${total.toLocaleString()}`;
+}
+
+// סקיצות נטענות רק בפתיחת שורה — ר' אותו דפוס ב-workday.html
+function _hydrateBillSketches(root){
+  root.querySelectorAll('img[data-sketch-for]').forEach(el => {
+    const id = el.getAttribute('data-sketch-for');
+    if(el.dataset.lgFor === id) return;
+    const o = orders.find(x => String(x.id) === String(id));
+    if(o) lgSketchIntoImg(el, o, () => el.classList.add('is-loaded'));
+  });
+}
+
+// תצוגה מלאה של סקיצה מתוך מסך החיוב. previewSketch הקיים מקבל מזהה הזמנה
+// וקורא את o.sketch; כאן התמונה כבר נטענה ל-img, אז מוצג המקור שלו.
+function previewSketchSrc(src){
+  if(!src) return;
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
+  ov.innerHTML = '<img src="' + lgEsc(src) + '" alt="סקיצה בתצוגה מלאה" style="max-width:95vw;max-height:90vh;object-fit:contain;">';
+  ov.onclick = () => ov.remove();
+  document.body.appendChild(ov);
 }
 
 function renderPickupBoard(){
@@ -4121,6 +4314,17 @@ async function umToggleActive(userId, clientName, currentlyActive){
       </div>
 
     </div>
+  </div>
+</div>
+
+<!-- הפקת חשבונית — תהליך ולא רשימה. מתחיל ריק; בוחרים לקוח אחד. -->
+<div id="billOv" class="ov">
+  <div class="ov-panel">
+    <div class="ov-head">
+      <h2 style="display:flex;align-items:center;gap:8px"><span>🧾</span>הפקת חשבונית</h2>
+      <button class="mcl" onclick="closeBillBoard()" aria-label="סגור"><span data-icon="x"></span></button>
+    </div>
+    <div id="billBody" class="ov-body"></div>
   </div>
 </div>
 

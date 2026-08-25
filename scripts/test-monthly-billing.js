@@ -110,5 +110,58 @@ check('and the row says when it is on', /שוטף 30/.test(ADMIN), true);
   }
 }
 
+/* ── the issuing screen ────────────────────────────────────────────────── */
+/*
+ * A flow, not a browse. It starts empty and you search for one client — the
+ * action is "invoice this client", not "survey everyone".
+ *
+ * "Not yet billed" is not a new field. The invoice API already refuses to
+ * invoice an order twice by checking hashavshevetInvoice.sentAt, so the same
+ * fact defines the list. No new state, nothing that can drift out of sync, and
+ * double billing stays blocked on the server rather than in this screen.
+ */
+{
+  const fn = bodyOf(ADMIN, '_billFilterOrders');
+  check('the list is collected orders only', /o\.stage === 'collected'/.test(fn), true);
+  check('and only those not yet billed',
+        /!\(o\.invoice && o\.invoice\.sentAt\)/.test(fn), true);
+
+  check('there is a screen', /id="billOv"/.test(ADMIN), true);
+  check('it starts with no client chosen', /let _billClient = null;/.test(ADMIN), true);
+  check('and is reached from the menu', /openBillBoard\(\)/.test(ADMIN), true);
+
+  const list = bodyOf(ADMIN, '_renderBillClients');
+  check('only clients with something to bill are listed',
+        /if\(!list\.length\)\{/.test(list), true);
+  check('the search filters by client name',
+        /_billSearch/.test(list), true);
+  /* a Hebrew client name must not be assembled into an inline onclick — the
+     codebase already avoids this, see the data-ids buttons in workday.html */
+  check('the client name travels in a data attribute',
+        /data-client="' \+ lgEsc\(c\)/.test(list), true);
+
+  const det = bodyOf(ADMIN, '_renderBillClient');
+  check('every order starts selected', /invSel\.add\(String\(o\.id\)\)/.test(det), true);
+  check('the sketch carries an id and no src',
+        /data-sketch-for="' \+ lgEsc\(String\(o\.id\)\)/.test(det), true);
+  /* "no src" is the point of the pattern — a collapsed row must cost no image
+     bytes — so check its absence directly rather than only asserting the id */
+  check('and the <img> tag itself has no src attribute',
+        !/<img[^>]*\ssrc=/.test(det), true);
+  check('and is filled only when a row is opened',
+        /if\(d\.open\) _hydrateBillSketches\(d\)/.test(det), true);
+
+  /* reuse, not a second copy of the money path */
+  check('issuing goes through the existing preview',
+        /onclick="invPreview\(\)"/.test(ADMIN), true);
+
+  /* the running total has to be announced, not only drawn */
+  check('the total is announced to a screen reader',
+        /id="billTotal" aria-live="polite"/.test(ADMIN), true);
+  /* colour alone must not carry meaning */
+  check('a selected row says so in words, not only in colour',
+        /נבחרו \$\{/.test(ADMIN), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll monthly-billing checks passed.');
