@@ -2837,6 +2837,9 @@ function finishDay(){
 //  HANDLE WORKDAY START
 // ═══════════════════════════════════════
 function handleWorkdayStart(){
+  // כמה הזמנות ההעברה הזו הוסיפה לתחנת הבדיקה. נספר בלולאה, בנקודת הדחיפה
+  // עצמה — ר' ההודעה בסוף הפונקציה להסבר למה לא סופרים את הצומת.
+  let _newToChisum = 0;
   // עובד על workDay.inWork — הרשימה הקבועה
   workDay.inWork.forEach(ordId => {
     const o = allOrders.find(x => x.id === ordId);
@@ -2905,6 +2908,7 @@ function handleWorkdayStart(){
     // כל הזמנות החיסום נכנסות לתחנת הבדיקה יחד (לא תור אחד-אחד)
     if(hasChisum && !workDay.inChisum.map(String).includes(_sid)){
       workDay.inChisum.push(_sid);
+      _newToChisum++;   // מה שההעברה הזו הוסיפה, ר' ההערה ליד ההודעה
     }
   });
 
@@ -2917,17 +2921,28 @@ function handleWorkdayStart(){
 
   saveWorkDay();
 
-  const _chisumSent = workDay.inChisum.length;
+  // ההודעה אומרת כמה הועברו עכשיו — לא כמה יושבות בתחנה.
+  //
+  // כאן היה workDay.inChisum.length, שהוא הצומת המצטבר של כל מה שנכנס
+  // לתחנת הבדיקה ביום העבודה הזה. שבע הזמנות שכבר נבדקו ועוד אחת שנשלחה
+  // דיווחו "8 הזמנות נשלחו" — בעוד שאחת זזה. עם תחנה ריקה המספר יצא נכון
+  // במקרה, וזה מה שהסתיר את זה.
+  const _chisumSent  = _newToChisum;
+  const _chisumTotal = workDay.inChisum.length;
   const _litushCount = workDay.inWork.length;
+  // כמה כבר חיכו שם לפני ההעברה הזו. מוצג בנפרד, כי בלבול בין השניים הוא
+  // בדיוק מה שגרם לבאג להיראות כאילו נשלחו הזמנות שלא נשלחו.
+  const _waiting = _chisumTotal - _chisumSent;
+  const _alsoTxt = _waiting > 0 ? ' (' + _chisumTotal + ' בתחנה בסך הכל)' : '';
 
   if(_chisumSent > 0 && _litushCount === 0){
     // רק חיסום — הסבר ברור למשתמש
-    showToast('✓ ' + _chisumSent + ' הזמנות חיסום → נשלחו לתחנת הבדיקה');
+    showToast('✓ ' + _chisumSent + (_chisumSent === 1 ? ' הזמנת חיסום נשלחה' : ' הזמנות חיסום נשלחו') + ' לתחנת הבדיקה' + _alsoTxt);
     setTab('build');
-    // הצג באנר שמוביל לתחנת בדיקה
-    _showChisumBanner(_chisumSent);
+    // הבאנר מוביל לתחנה, ולכן מציג את מה שמחכה שם — לא את מה שזז עכשיו
+    _showChisumBanner(_chisumTotal);
   } else if(_chisumSent > 0){
-    showToast('✓ ' + _litushCount + ' ליטוש | ' + _chisumSent + ' חיסום → תחנת בדיקה');
+    showToast('✓ ' + _litushCount + ' ליטוש | ' + _chisumSent + ' חיסום → תחנת בדיקה' + _alsoTxt);
     setTab('work');
   } else {
     showToast('✓ הורד לעבודה — ' + _litushCount + ' הזמנות');
@@ -2954,7 +2969,11 @@ function _showChisumBanner(count){
     const content = document.getElementById('view-build') || document.querySelector('.content');
     if(content) content.insertAdjacentElement('afterbegin', banner);
   }
-  document.getElementById('chisumBannerText').textContent = count + ' הזמנות נשלחו לתחנת הבדיקה!';
+  // "ממתינות", לא "נשלחו" — הבאנר מקבל את מצאי התחנה ולא את גודל ההעברה,
+  // כי לחיצה עליו מובילה לשם. הנוסח הקודם הפך כל הזמנה שכבר חיכתה שם
+  // להזמנה שזה עתה נשלחה.
+  document.getElementById('chisumBannerText').textContent =
+    count === 1 ? 'הזמנה אחת ממתינה בתחנת הבדיקה' : count + ' הזמנות ממתינות בתחנת הבדיקה';
 }
 
 // מנעול לחיצה כפולה — ר' ההסבר ב-confirmResetChisum. כאן לחיצה שנייה שולחת
