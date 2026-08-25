@@ -2212,6 +2212,14 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
   if(!orderIds.length) return;
   const firstO = allOrders.find(o => String(o.id) === orderIds[0]);
   const clientName = firstO?.orderClient || '—';
+  // שוטף 30 — לא שואלים. ההזמנה עוברת לנאסף וממתינה להפקה המרוכזת במסך
+  // "הפקת חשבונית" באדמין. הדגל נקרא מההזמנה ולא מרשומת הלקוח, כי ההזמנה
+  // נושאת את המשטר שבו נפתחה.
+  if(firstO && firstO.monthlyBilling){
+    orderIds.forEach(id => finalizeDelivery(id, false));
+    showToast('✓ הובלה הושלמה — ' + lgEsc(clientName) + ' בשוטף 30, החשבונית תופק מרוכזת');
+    return;
+  }
   const ov = document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
   ov.innerHTML=`
