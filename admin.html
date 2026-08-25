@@ -4005,8 +4005,11 @@ async function _propagateDeliveryToOrders(phone, isDelivery){
 }
 
 // מפזר את דגל שוטף 30 להזמנות קיימות. לפי טלפון ולא לפי שם — שם לקוח
-// משתנה, והטלפון הוא המזהה שכל הזמנה נושאת. זהה במבנה ל-
-// _propagateDeliveryToOrders; אם אחד מהם משתנה, שנה את שניהם.
+// משתנה, והטלפון הוא המזהה שכל הזמנה נושאת. בשונה מ-_propagateDeliveryToOrders:
+// קורא מהמערך orders שכבר טעון בזיכרון במקום לשלוף מחדש מ-Firebase, ולא
+// מנרמל את הטלפון — _lgNormalizePhone כבר רץ בזמן הכתיבה על כל טלפון
+// שנשמר, הן על רשומת המשתמש והן על שדות ההזמנה, כך ששני הצדדים כאן כבר
+// ספרות בלבד.
 async function _propagateMonthlyToOrders(phone, isMonthly){
   if(!phone) return;
   const updates = {};

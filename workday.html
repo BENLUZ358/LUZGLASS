@@ -2216,8 +2216,12 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
   // "הפקת חשבונית" באדמין. הדגל נקרא מההזמנה ולא מרשומת הלקוח, כי ההזמנה
   // נושאת את המשטר שבו נפתחה.
   if(firstO && firstO.monthlyBilling){
-    orderIds.forEach(id => finalizeDelivery(id, false));
-    showToast('✓ הובלה הושלמה — ' + lgEsc(clientName) + ' בשוטף 30, החשבונית תופק מרוכזת');
+    // finalizeDelivery הוא async ומציג טוסט משלו ('✓ הובלה הושלמה — הועבר
+    // לנאסף') אחרי שהכתיבה ל-Firebase מסתיימת. showToast רק קובע textContent
+    // ואין תור — בלי להמתין, הטוסט של שוטף 30 היה מוצג ראשון ומיד נדרס.
+    // לכן ממתינים לכל הסיומים ורק אז מציגים את ההודעה הזו.
+    Promise.all(orderIds.map(id => finalizeDelivery(id, false)))
+      .then(() => showToast('✓ הובלה הושלמה — ' + clientName + ' בשוטף 30, החשבונית תופק מרוכזת'));
     return;
   }
   const ov = document.createElement('div');

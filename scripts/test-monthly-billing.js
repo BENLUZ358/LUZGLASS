@@ -77,8 +77,12 @@ check('and the row says when it is on', /שוטף 30/.test(ADMIN), true);
   const WD  = read('workday.html');
   const fn  = bodyOf(WD, 'showClientDeliveryPrompt');
   check('the dialog checks the flag', /firstO\.monthlyBilling/.test(fn), true);
+  /* relaxed from a literal "finalizeDelivery(id, false));" — the toast-ordering
+     fix below wraps the calls in Promise.all(...map...), which changes the
+     closing punctuation but not the intent: finalizeDelivery(id, false) runs,
+     then the branch returns without ever reaching the dialog. */
   check('a monthly client skips straight to collected',
-        /finalizeDelivery\(id, false\)\);[\s\S]{0,200}?return;/.test(fn), true);
+        /finalizeDelivery\(id, false\)[\s\S]{0,200}?return;/.test(fn), true);
   /* silence would look like nothing happened */
   check('and is told what happened',
         /שוטף 30/.test(fn), true);
@@ -87,6 +91,23 @@ check('and the row says when it is on', /שוטף 30/.test(ADMIN), true);
         /_cldInv'\)\.onclick/.test(fn), true);
   check('and can still issue from there',
         /_deliveryInvoice\(orderIds\)/.test(fn), true);
+
+  /* finalizeDelivery is async and shows its own toast after its Firebase
+     write resolves. showToast only sets textContent — there is no queue —
+     so a monthly toast fired synchronously right after a bare forEach is
+     always overwritten by finalizeDelivery's generic one. The regex checks
+     above cannot catch this: they only prove the toast string exists in the
+     source, not when it fires relative to the writes. */
+  {
+    const monthlyBranch = (fn.match(/if\(firstO && firstO\.monthlyBilling\)\{[\s\S]*?\n  \}/) || [''])[0];
+    check('the monthly branch exists', monthlyBranch.length > 0, true);
+    check('it waits for every finalizeDelivery before toasting',
+          /Promise\.all\(orderIds\.map\(id => finalizeDelivery\(id, false\)\)\)/.test(monthlyBranch), true);
+    check('the toast is in the continuation, not a bare statement after the forEach',
+          /\.then\(\(\) => showToast\(/.test(monthlyBranch), true);
+    check('and does not fire synchronously right after a bare forEach',
+          !/forEach\(id => finalizeDelivery\(id, false\)\);\s*\n\s*showToast\(/.test(monthlyBranch), true);
+  }
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
