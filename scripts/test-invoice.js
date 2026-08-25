@@ -132,5 +132,47 @@ check('the account key is resolved server-side',
         /const invoiced = !!\(o\.hashavshevetInvoice && o\.hashavshevetInvoice\.sentAt\)/.test(admin), true);
 }
 
+/* Finishing a delivery issues the invoice from there.
+
+   The dialog's "הפק חשבונית" button called finalizeDelivery, which marked the
+   order collected and then showed a toast saying to open the dashboard. By then
+   the dashboard could not help: the invoice checkbox appears only under the
+   "מוכן לאיסוף" filter, and the order had just left it. The one click meant to
+   lead to an invoice put the order out of reach.
+
+   The order of operations is the point, and it is the same rule already
+   enforced on the admin screen: issue first, move to collected only on success.
+   An order collected without an invoice is worse than one that stayed put — and
+   worse still, unreachable. */
+{
+  const wd = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
+  check('the delivery dialog issues rather than redirecting',
+        /_cldInv'\)\.onclick    = \(\) => \{ ov\.remove\(\); _deliveryInvoice\(orderIds\); \}/.test(wd), true);
+  check('and no longer tells the operator to go elsewhere',
+        /_cldInv[\s\S]{0,200}?פתח דשבורד/.test(wd), false);
+  /* one client, one document — the API sends a single invoice with withOrders,
+     so a loop would produce one document per order */
+  check('the whole batch goes on one invoice',
+        /const ids = \(orderIds \|\| \[\]\)\.map\(String\);/.test(wd), true);
+  check('a preview runs before anything is issued',
+        /_lgAuthPost\('\/api\/hashavshevet-invoice', \{ orderIds: ids, dryRun: true \}\)/.test(wd), true);
+  check('and issuing is a separate, explicit call',
+        /_lgAuthPost\('\/api\/hashavshevet-invoice', \{ orderIds: ids, dryRun: false \}\)/.test(wd), true);
+
+  const confirm = (wd.match(/function _deliveryInvoiceConfirm[\s\S]*?\n}/) || [''])[0];
+  check('the stage moves only after the invoice succeeds',
+        /if\(ok\) for\(const id of ids\) await updateStage\(id, 'collected'\);/.test(confirm), true);
+  check('a skipped item is shown before issuing, not after',
+        /פריטים לא ייכללו/.test(confirm), true);
+  check('a fictitious order says so in the preview',
+        /data\.isTest[\s\S]{0,400}?לא תופק חשבונית בחשבשבת/.test(confirm), true);
+  check('cancelling leaves the order in delivery',
+        /ביטול — ההזמנה נשארת בהובלה/.test(confirm), true);
+
+  const result = (wd.match(/function _deliveryInvoiceResult[\s\S]*?\n}/) || [''])[0];
+  check('a failure says the orders stayed put, so it can be retried',
+        /ההזמנות נשארו בהובלה/.test(result), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll invoice checks passed.');

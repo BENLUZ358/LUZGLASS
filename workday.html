@@ -2143,7 +2143,9 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
         <button id="_cldCancel" style="padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול</button>
       </div>
     </div>`;
-  ov.querySelector('#_cldInv').onclick    = () => { ov.remove(); orderIds.forEach(id => finalizeDelivery(id, true)); };
+  // כל ההזמנות של אותו לקוח נכנסות לחשבונית אחת — hashavshevet-invoice
+  // מפיק מסמך אחד עם withOrders. לכן קריאה אחת לכולן, ולא לולאה.
+  ov.querySelector('#_cldInv').onclick    = () => { ov.remove(); _deliveryInvoice(orderIds); };
   ov.querySelector('#_cldNoInv').onclick  = () => { ov.remove(); orderIds.forEach(id => finalizeDelivery(id, false)); };
   ov.querySelector('#_cldCancel').onclick = () => ov.remove();
   ov.addEventListener('click', e => { if(e.target===ov) ov.remove(); });
@@ -2156,6 +2158,104 @@ async function finalizeDelivery(orderId, withInvoice){
   if(withInvoice){
     showToast('פתח דשבורד להפקת חשבונית');
   }
+}
+
+// ── הפקת חשבונית ברגע סיום ההובלה ──────────────────────────────────────
+//
+//  כאן היה showToast('פתח דשבורד להפקת חשבונית') — הפניה למקום שבו כבר אי
+//  אפשר: finalizeDelivery סימן "נאסף" קודם, ובלוח ההזמנות תיבת הבחירה
+//  לחשבונית מופיעה רק תחת הפילטר "מוכן לאיסוף". ההזמנה יצאה מהישג יד באותה
+//  לחיצה שאמורה הייתה להוביל להפקה.
+//
+//  הסדר כאן הפוך, וזה העיקר: מפיקים ורק אז מעבירים לנאסף. הזמנה שנאספה בלי
+//  חשבונית גרועה מהזמנה שנשארה במקומה — וזה בדיוק הכלל שכבר נעול בבדיקה
+//  על מסך האדמין ("the stage moves only after the invoice succeeds").
+async function _deliveryInvoice(orderIds){
+  const ids = (orderIds || []).map(String);
+  if(!ids.length) return;
+
+  showToast('בונה חשבונית...');
+  let data, res;
+  try {
+    res  = await _lgAuthPost('/api/hashavshevet-invoice', { orderIds: ids, dryRun: true });
+    data = await res.json();
+  } catch(e){
+    _deliveryInvoiceResult({ error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false, ids);
+    return;
+  }
+  if(!res.ok || !data.ok){ _deliveryInvoiceResult(data, false, ids); return; }
+  _deliveryInvoiceConfirm(data, ids);
+}
+
+// תצוגה מקדימה לפני שנפתח מסמך חשבונאי. פריט שדולג מוצג במפורש — מסמך
+// שיוצא בלי שורה שהייתה אמורה להיות בו הוא בדיוק מה שאי אפשר לתקן אחר כך.
+function _deliveryInvoiceConfirm(data, ids){
+  const skipped = (data.skipped || []).length
+    ? '<div style="margin-top:12px;padding:10px 12px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.3);border-radius:6px;font-size:12px;color:#c0392b;">'
+      + data.skipped.length + ' פריטים לא ייכללו:<br>'
+      + data.skipped.map(s => lgEsc(s.name || '') + ' — ' + lgEsc(s.reason || '')).join('<br>') + '</div>'
+    : '';
+  const test = data.isTest
+    ? '<div style="margin-bottom:12px;padding:9px 11px;background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.35);border-radius:6px;font-size:12px;font-weight:700;color:#886c1f;">🧪 הזמנה פיקטיבית — לא תופק חשבונית בחשבשבת.</div>'
+    : '';
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:610;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">'
+    + '<div style="font-size:16px;font-weight:900;margin-bottom:14px;text-align:center;">הפקת חשבונית</div>'
+    + test
+    + '<div style="font-size:13px;line-height:2;color:#1a1714;">'
+    +   '<div><b>לקוח:</b> ' + lgEsc(data.client || '') + '</div>'
+    +   '<div><b>אסמכתא:</b> ' + lgEsc(data.reference || '') + '</div>'
+    +   '<div><b>הזמנות:</b> ' + lgEsc((data.orderNums || []).join(' · ')) + '</div>'
+    +   '<div><b>שורות:</b> ' + (data.lineCount || 0) + '</div>'
+    +   '<div style="font-weight:900;color:#886c1f;"><b>סכום:</b> ₪' + Number(data.total || 0).toLocaleString() + '</div>'
+    + '</div>' + skipped
+    + '<div style="display:flex;flex-direction:column;gap:9px;margin-top:18px;">'
+    +   '<button id="_diGo" style="padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">'
+    +     (data.isTest ? '🧪 הרץ בלי להפיק בחשבשבת' : 'הפק חשבונית והעבר לנאסף') + '</button>'
+    +   '<button id="_diCancel" style="padding:10px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול — ההזמנה נשארת בהובלה</button>'
+    + '</div></div>';
+  ov.querySelector('#_diCancel').onclick = () => ov.remove();
+  ov.querySelector('#_diGo').onclick = async () => {
+    const btn = ov.querySelector('#_diGo');
+    btn.disabled = true; btn.textContent = 'מפיק...';
+    let d2, r2;
+    try {
+      r2 = await _lgAuthPost('/api/hashavshevet-invoice', { orderIds: ids, dryRun: false });
+      d2 = await r2.json();
+    } catch(e){
+      ov.remove(); _deliveryInvoiceResult({ error: 'לא הצלחתי להגיע לשרת: ' + e.message }, false, ids); return;
+    }
+    ov.remove();
+    const ok = r2.ok && d2.ok;
+    // רק עכשיו — אחרי שהמסמך הופק — ההזמנות עוברות לנאסף.
+    if(ok) for(const id of ids) await updateStage(id, 'collected');
+    _deliveryInvoiceResult(d2, ok, ids);
+  };
+  ov.addEventListener('click', e => { if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+
+function _deliveryInvoiceResult(data, ok, ids){
+  if(ok){
+    showToast('✓ ' + (data.simulated ? 'הורץ כפיקטיבי' : 'חשבונית הופקה') + ' · אסמכתא ' + (data.reference || '') + ' — הועבר לנאסף');
+    return;
+  }
+  // נכשל — ההזמנות נשארות בהובלה, ולכן אפשר לנסות שוב מאותו מקום.
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:610;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">'
+    + '<div style="font-size:16px;font-weight:900;margin-bottom:10px;text-align:center;color:#c0392b;">החשבונית לא הופקה</div>'
+    + '<div style="font-size:13px;color:#1a1714;line-height:1.8;">' + lgEsc(data && data.error || 'שגיאה לא ידועה') + '</div>'
+    + (data && data.hint ? '<div style="font-size:12px;color:#8a8278;margin-top:8px;">' + lgEsc(data.hint) + '</div>' : '')
+    + '<div style="font-size:12px;color:#8a8278;margin-top:12px;">ההזמנות נשארו בהובלה — אפשר לנסות שוב.</div>'
+    + '<button id="_diClose" style="width:100%;margin-top:16px;padding:12px;background:#1a1714;color:#f7f4ef;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">סגור</button>'
+    + '</div>';
+  ov.querySelector('#_diClose').onclick = () => ov.remove();
+  ov.addEventListener('click', e => { if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
 }
 
 // ═══════════════════════════════════════
