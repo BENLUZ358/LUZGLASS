@@ -64,6 +64,15 @@ function toReference(orderNum) {
   return { ok: true, reference: String(Number(digits)) };
 }
 
+// מונה אסמכתאות לחשבוניות מרוכזות. אותה תבנית של meta/orderCounter —
+// transaction ולא קריאה-ואז-כתיבה, אחרת שתי חשבוניות שיופקו באותו רגע
+// יקבלו את אותו מספר. מתחיל ב-5001 כדי שלא יתבלבל עם מספרי הזמנות.
+async function nextInvoiceRef(db) {
+  const result = await db.ref('meta/invoiceCounter').transaction(current =>
+    Math.max(current || 0, 5000) + 1);
+  return { ok: true, reference: String(result.snapshot.val()) };
+}
+
 // שורה אחת לכל פריט נעול. Quantity = שטח כולל במ"ר, price = המחיר למ"ר
 // שננעל. lineTotal לא נשלח — חשבשבת מכפילים, ושליחת שלושתם מזמינה סתירה.
 function buildLines(orders, accountKey, reference, documentId, agent) {
@@ -197,8 +206,12 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    // האסמכתא היא של ההזמנה הראשונה; כל המספרים נרשמים אצלנו על כל הזמנה
-    const ref = toReference(first.orderNum);
+    // חשבונית על הזמנה אחת נושאת את מספר ההזמנה — נוח, ומצביע חזרה על
+    // המקור. חשבונית שמכסה כמה הזמנות מקבלת מספר משלה: לקחת את הראשונה
+    // מבין עשרים הוא שרירותי, והמספר הזה כבר תפוס על מסמך ההזמנה שלה.
+    const ref = orders.length > 1
+      ? await nextInvoiceRef(db)
+      : toReference(first.orderNum);
     if (!ref.ok) { res.status(422).json({ error: ref.error }); return; }
 
     const documentId = DOCUMENT_TYPES[String(body.documentId)] ? String(body.documentId) : DEFAULT_DOCUMENT_ID;

@@ -174,5 +174,32 @@ check('the account key is resolved server-side',
         /ההזמנות נשארו בהובלה/.test(result), true);
 }
 
+/* ── a consolidated invoice gets its own number ────────────────────────── */
+/*
+ * The reference was the first order's number. For one order that is right and
+ * convenient — you see an invoice and know which order it belongs to. For
+ * twenty it is arbitrary, and it collides: order 1061 already carries
+ * reference 1061 on its own order document in Hashavshevet, and its invoice
+ * took 1061 as well.
+ *
+ * A consolidated invoice takes a running number of its own, from the same
+ * transaction pattern as meta/orderCounter. A single-order invoice is left
+ * exactly as it was.
+ */
+check('a consolidated invoice uses its own counter',
+      /const ref = orders\.length > 1[\s\S]{0,200}?nextInvoiceRef\(db\)/.test(SRC), true);
+check('a single-order invoice keeps the order number',
+      /: toReference\(first\.orderNum\);/.test(SRC), true);
+{
+  const fn = (SRC.match(/async function nextInvoiceRef[\s\S]*?\n}/) || [''])[0];
+  check('the counter is a transaction, not a read-then-write',
+        /\.transaction\(/.test(fn), true,
+        'two invoices issued at once would otherwise take the same number');
+  check('it never goes backwards',
+        /Math\.max\(current \|\| 0, 5000\) \+ 1/.test(fn), true);
+  check('and it is a separate node from the order counter',
+        /meta\/invoiceCounter/.test(fn), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll invoice checks passed.');
