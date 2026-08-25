@@ -134,6 +134,58 @@
 
   /* EMPTY STATE */
   .empty{text-align:center;padding:40px 20px;color:var(--muted);}
+
+  /* ── גרפיקה והובלה — שורה ללקוח, פירוט בלחיצה ────────────────────────
+     שורה אחת לכל לקוח, ובה הכמות שלו. הפריטים והסקיצות נמצאים מאחורי
+     "פירוט" ולא על המסך הראשי — ר' _renderStageTab. */
+  .stv-grand{display:flex;align-items:baseline;gap:10px;padding:12px 16px;margin-bottom:12px;
+             background:var(--surface);border:1px solid;border-radius:10px;}
+  .stv-grand-n{font-size:26px;font-weight:900;line-height:1;}
+  .stv-grand-l{font-size:13px;color:var(--muted);font-weight:600;}
+
+  .stv-card{background:var(--surface);border:1px solid rgba(0,0,0,0.08);border-radius:10px;
+            overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);}
+  .stv-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .stv-client{font-size:16px;font-weight:900;color:var(--text);
+              overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .stv-sub{font-size:13px;color:var(--muted);margin-top:3px;font-weight:600;}
+  .stv-chip{font-size:12px;padding:3px 9px;border-radius:3px;font-weight:700;
+            flex-shrink:0;white-space:nowrap;}
+
+  /* "פירוט" הוא הפעולה היחידה בכרטיס, ולכן שטח מגע מלא וטבעת מיקוד */
+  .stv-det{border-top:1px solid rgba(0,0,0,0.05);}
+  .stv-det>summary{min-height:44px;display:flex;align-items:center;padding:0 16px;
+                   font-family:Heebo,sans-serif;font-size:13px;font-weight:700;
+                   cursor:pointer;outline:none;direction:rtl;list-style:none;}
+  .stv-det>summary::-webkit-details-marker{display:none;}
+  .stv-det>summary::after{content:'▾';margin-inline-start:6px;font-size:12px;opacity:0.7;transition:transform 200ms ease;}
+  .stv-det[open]>summary::after{transform:rotate(180deg);}
+  .stv-det>summary:hover{background:var(--bg2);}
+  .stv-det>summary:focus-visible{outline:2px solid var(--gold-text);outline-offset:-2px;}
+
+  .stv-ord{padding:10px 14px;border-top:1px solid rgba(0,0,0,0.05);}
+  .stv-ord-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;}
+  .stv-ord-num{font-size:13px;font-weight:700;color:var(--text);}
+  .stv-ord-cnt{font-size:12px;color:var(--muted);white-space:nowrap;}
+  .stv-items{margin-bottom:7px;}
+  .stv-item{font-size:12px;color:#555;padding:1px 0;}
+
+  /* הסקיצה יושבת אחרי הפריטים. גובה שמור מראש כדי שהכרטיס לא יקפוץ
+     כשהתמונה נכנסת, ו-opacity כי היא מגיעה מאוחר. */
+  .stv-sk{width:100%;max-height:110px;min-height:60px;object-fit:contain;display:block;
+          border:1px solid rgba(0,0,0,0.08);border-radius:4px;background:var(--bg2);
+          margin-bottom:7px;cursor:zoom-in;opacity:0;transition:opacity 200ms ease;}
+  .stv-sk.is-loaded{opacity:1;}
+
+  .stv-act{width:100%;min-height:44px;padding:10px;color:#fff;font-family:Heebo,sans-serif;
+           font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;}
+  .stv-act:focus-visible{outline:2px solid var(--text);outline-offset:2px;}
+  .stv-foot{padding:10px 14px;border-top:1px solid rgba(0,0,0,0.05);}
+
+  @media (prefers-reduced-motion:reduce){
+    .stv-sk,.stv-det>summary::after{transition:none;}
+    .stv-sk{opacity:1;}
+  }
   .empty-icon{font-size:32px;margin-bottom:10px;}
   .empty p{font-size:13px;}
 
@@ -1973,58 +2025,141 @@ function _openSketchFull(src){
 // ═══════════════════════════════════════
 //  GRAPHIC TAB
 // ═══════════════════════════════════════
-function renderGraphicTab(){
-  const el = document.getElementById('graphicOrders');
-  if(!el) return;
-  const ords = allOrders.filter(o => (o.stage||'') === 'graphic');
-  if(!ords.length){
-    el.innerHTML = `<div class="empty"><div class="empty-icon">🖼</div><p>אין הזמנות בגרפיקה כרגע</p></div>`;
-    return;
-  }
-  // group by client — computed view, same data, no new state
-  const clientMap = {};
-  ords.forEach(o => { const c = o.orderClient||'—'; if(!clientMap[c]) clientMap[c]=[]; clientMap[c].push(o); });
-  el.innerHTML = Object.entries(clientMap).map(([cn, cOrds]) => {
-    const totalItems   = cOrds.reduce((s,o)=>s+(o.items||[]).length, 0);
-    const graphicCount = cOrds.reduce((s,o)=>s+(o.items||[]).filter(it=>!!it.graphic).length, 0);
-    const ordersHtml = cOrds.map(o => {
-      const gItems   = (o.items||[]).filter(it=>!!it.graphic);
-      const nextSt   = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
-      const nextLabel = nextSt==='delivery' ? '🚚 העבר להובלה' : '✅ גרפיקה הושלמה — מוכן לאיסוף';
-      const nextBg    = nextSt==='delivery' ? '#2980b9' : '#27ae60';
-      const itsHtml   = gItems.length
-        ? gItems.map(it=>`<div style="font-size:12px;color:#555;padding:1px 0;">🖼 ${lgEsc(it.name||'')} ${it.w||''}×${it.h||''} מ"מ</div>`).join('')
-        : `<div style="font-size:12px;color:#888;">כל הפריטים</div>`;
-      const sk = o.sketch ? `<img src="${lgEsc(o.sketch)}" alt="סקיצה של ${lgEsc(o.orderClient||'ההזמנה')}" onclick="_openSketchFull(this.src)" style="width:100%;max-height:100px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:6px;display:block;cursor:zoom-in;">` : '';
-      return `<div style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-          <span style="font-size:12px;font-weight:700;">${lgEsc(o.orderNum||o.sketchName||o.type||'—')}</span>
-          <span style="font-size:12px;color:#8a8278;">${gItems.length||'כל'} פריטי גרפיקה</span>
-        </div>
-        ${sk}<div style="margin-bottom:7px;">${itsHtml}</div>
-        <button onclick="completeGraphic('${o.id}')"
-          style="width:100%;padding:9px;background:${nextBg};color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">
-          ${nextLabel}
-        </button>
-      </div>`;
-    }).join('');
-    return `<div style="background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:10px;overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-      <div style="padding:14px 16px;background:rgba(39,174,96,0.04);">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <div style="font-size:16px;font-weight:900;">${lgEsc(cn)}</div>
-            <div style="font-size:12px;color:#8a8278;margin-top:2px;">${cOrds.length} הזמנות · ${graphicCount||totalItems} פריטי גרפיקה</div>
-          </div>
-          <span style="font-size:12px;padding:3px 8px;background:rgba(39,174,96,0.1);color:#27ae60;border-radius:3px;font-weight:700;">🖼 גרפיקה</span>
-        </div>
+// ══════════════════════════════════════════════════════════════════════
+//  גרפיקה והובלה — מנוע תצוגה אחד
+// ══════════════════════════════════════════════════════════════════════
+//
+//  שני הטאבים היו שתי פונקציות כמעט זהות, והן כבר התחילו להתפצל: בגרפיקה
+//  כפתור הפעולה יושב על כל הזמנה ובהובלה על כל לקוח. כאן זה מנוע אחד עם
+//  הגדרה לכל טאב, כמו LG_TRACK בחיסום/טריפלקס.
+//
+//  ── התמונות ──
+//
+//  קודם כל סקיצה הוטמעה כ-base64 בתוך מחרוזת ה-HTML, לכל הזמנה, גם כשהלקוח
+//  מקופל. details הסתיר אותה מהעין — ה-DOM נשא אותה במלואה. עשרים הזמנות
+//  היו מגה-בייטים שנבנים בכל ציור מחדש.
+//
+//  עכשיו ה-img נכתב בלי src כלל, ומתמלא רק כשפותחים לקוח — דרך
+//  lgSketchIntoImg, שמעדיף את מה שכבר בזיכרון ונופל לצומת sketches/<id>.
+//  לקוח מקופל אינו עולה בייט אחד.
+const LG_STAGE_VIEW = {
+  graphic: {
+    stage:'graphic', elId:'graphicOrders',
+    accent:'#27ae60', tint:'rgba(39,174,96,0.04)', chip:'rgba(39,174,96,0.10)',
+    chipText:'🖼 גרפיקה', emptyIcon:'🖼', emptyText:'אין הזמנות בגרפיקה כרגע',
+    unit:'פריטי גרפיקה', showGrandTotal:false,
+    // בגרפיקה סופרים רק את פריטי הגרפיקה — הם העבודה שיש שם
+    itemsOf: o => { const g=(o.items||[]).filter(it=>!!it.graphic); return g.length ? g : (o.items||[]); },
+    bullet: '🖼',
+  },
+  delivery: {
+    stage:'delivery', elId:'deliveryOrders',
+    accent:'#2980b9', tint:'rgba(41,128,185,0.04)', chip:'rgba(41,128,185,0.10)',
+    chipText:'🚚 הובלה', emptyIcon:'🚚', emptyText:'אין הובלות ממתינות כרגע',
+    unit:'פריטים', showGrandTotal:true,
+    itemsOf: o => (o.items||[]),
+    bullet: '•',
+  },
+};
+
+function _stageTabHTML(cfg, cn, cOrds){
+  const clientItems = cOrds.reduce((s,o)=>s+cfg.itemsOf(o).length, 0);
+  const ids = cOrds.map(o=>String(o.id)).join(',');
+
+  const ordersHtml = cOrds.map(o => {
+    const its = cfg.itemsOf(o);
+    const itsHtml = its.length
+      ? its.map(it=>`<div class="stv-item">${cfg.bullet} ${lgEsc(it.name||'')} ${it.w||''}×${it.h||''} מ"מ</div>`).join('')
+      : `<div class="stv-item" style="color:#888">אין פריטים</div>`;
+    // בלי src. הוא נכתב רק כשפותחים — ר' _hydrateStageSketches.
+    const sk = (o.hasSketch || o.sketch)
+      ? `<img class="stv-sk" data-sketch-for="${lgEsc(String(o.id))}"
+              alt="סקיצה — ${lgEsc(o.orderClient||'הזמנה')} ${lgEsc(o.orderNum||'')}"
+              onclick="if(this.src)_openSketchFull(this.src)">`
+      : '';
+    const act = cfg.stage==='graphic'
+      ? (()=>{ const ns=lgNextStage(o,_isDeliveryClient(o.orderClient,o.phone));
+               return `<button class="stv-act" style="background:${ns==='delivery'?'#2980b9':'#27ae60'}"
+                 onclick="completeGraphic('${lgEsc(String(o.id))}')">${ns==='delivery'?'🚚 העבר להובלה':'✅ גרפיקה הושלמה — מוכן לאיסוף'}</button>`; })()
+      : '';
+    return `<div class="stv-ord">
+      <div class="stv-ord-top">
+        <span class="stv-ord-num">${lgEsc(o.orderNum||o.sketchName||o.type||'—')}</span>
+        <span class="stv-ord-cnt">${its.length} ${lgEsc(cfg.unit)}</span>
       </div>
-      <details style="border-top:1px solid rgba(0,0,0,0.05);">
-        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;color:#27ae60;cursor:pointer;outline:none;direction:rtl;text-align:right;">ראה עוד</summary>
-        ${ordersHtml}
-      </details>
+      <div class="stv-items">${itsHtml}</div>
+      ${sk}${act}
     </div>`;
   }).join('');
+
+  const footer = cfg.stage==='delivery'
+    ? `<div class="stv-foot"><button class="stv-act" data-ids="${ids}" style="background:${cfg.accent}">
+         🚚 סיים הובלה${cOrds.length>1?` (${cOrds.length} הזמנות)`:''}</button></div>`
+    : '';
+
+  return `<div class="stv-card">
+    <div class="stv-head" style="background:${cfg.tint}">
+      <div style="min-width:0">
+        <div class="stv-client">${lgEsc(cn)}</div>
+        <div class="stv-sub">${clientItems} ${lgEsc(cfg.unit)} · ${cOrds.length} ${cOrds.length===1?'הזמנה':'הזמנות'}</div>
+      </div>
+      <span class="stv-chip" style="background:${cfg.chip};color:${cfg.accent}">${cfg.chipText}</span>
+    </div>
+    <details class="stv-det">
+      <summary style="color:${cfg.accent}">פירוט</summary>
+      ${ordersHtml}
+    </details>
+    ${footer}
+  </div>`;
 }
+
+// ממלא סקיצות של לקוח שנפתח זה עתה, ושלו בלבד.
+function _hydrateStageSketches(root){
+  root.querySelectorAll('img[data-sketch-for]').forEach(el => {
+    const id = el.getAttribute('data-sketch-for');
+    if(el.dataset.lgFor === id) return;               // כבר מולא
+    const o = allOrders.find(x => String(x.id) === String(id));
+    if(!o) return;
+    lgSketchIntoImg(el, o, () => el.classList.add('is-loaded'));
+  });
+}
+
+function _renderStageTab(key){
+  const cfg = LG_STAGE_VIEW[key];
+  const el  = document.getElementById(cfg.elId);
+  if(!el) return;
+  const ords = allOrders.filter(o => (o.stage||'') === cfg.stage);
+  if(!ords.length){
+    el.innerHTML = `<div class="empty"><div class="empty-icon">${cfg.emptyIcon}</div><p>${lgEsc(cfg.emptyText)}</p></div>`;
+    return;
+  }
+  const clientMap = {};
+  ords.forEach(o => { const c = o.orderClient||'—'; (clientMap[c] = clientMap[c] || []).push(o); });
+
+  // סך כל הפריטים על פני כל הלקוחות — מה שצריך לדעת לפני שיוצאים להובלה
+  const grand = cfg.showGrandTotal
+    ? (()=>{ const items = ords.reduce((s,o)=>s+cfg.itemsOf(o).length,0);
+             return `<div class="stv-grand" style="border-color:${cfg.accent}33">
+               <span class="stv-grand-n" style="color:${cfg.accent}">${items}</span>
+               <span class="stv-grand-l">${lgEsc(cfg.unit)} בסך הכל · ${ords.length} הזמנות · ${Object.keys(clientMap).length} לקוחות</span>
+             </div>`; })()
+    : '';
+
+  el.innerHTML = grand + Object.entries(clientMap)
+    .map(([cn, cOrds]) => _stageTabHTML(cfg, cn, cOrds)).join('');
+
+  // סקיצות נטענות רק בפתיחה, ורק של הלקוח שנפתח
+  el.querySelectorAll('details.stv-det').forEach(d =>
+    d.addEventListener('toggle', () => { if(d.open) _hydrateStageSketches(d); }));
+
+  if(cfg.stage==='delivery'){
+    el.querySelectorAll('button[data-ids]').forEach(btn =>
+      btn.addEventListener('click', () => showClientDeliveryPrompt(btn.dataset.ids)));
+  }
+}
+
+function renderGraphicTab(){ _renderStageTab('graphic'); }
+function renderDeliveryTab(){ _renderStageTab('delivery'); }
 
 async function completeGraphic(orderId){
   const o = allOrders.find(x => String(x.id) === String(orderId));
@@ -2044,59 +2179,6 @@ async function completeGraphic(orderId){
 // ═══════════════════════════════════════
 //  DELIVERY TAB
 // ═══════════════════════════════════════
-function renderDeliveryTab(){
-  const el = document.getElementById('deliveryOrders');
-  if(!el) return;
-  const ords = allOrders.filter(o => (o.stage||'') === 'delivery');
-  if(!ords.length){
-    el.innerHTML = `<div class="empty"><div class="empty-icon">🚚</div><p>אין הובלות ממתינות כרגע</p></div>`;
-    return;
-  }
-  // group by client — computed view, same data, no new state
-  const clientMap = {};
-  ords.forEach(o => { const c = o.orderClient||'—'; if(!clientMap[c]) clientMap[c]=[]; clientMap[c].push(o); });
-  el.innerHTML = Object.entries(clientMap).map(([cn, cOrds]) => {
-    const totalItems = cOrds.reduce((s,o)=>s+(o.items||[]).length, 0);
-    const ids = cOrds.map(o=>String(o.id)).join(',');
-    const ordersHtml = cOrds.map(o => {
-      const sk  = o.sketch ? `<img src="${lgEsc(o.sketch)}" alt="סקיצה של ${lgEsc(o.orderClient||'ההזמנה')}" onclick="_openSketchFull(this.src)" style="width:100%;max-height:100px;object-fit:contain;border:1px solid rgba(0,0,0,0.08);margin-bottom:6px;display:block;cursor:zoom-in;">` : '';
-      const its = (o.items||[]).map(it=>`<div style="font-size:12px;color:#555;padding:1px 0;">• ${lgEsc(it.name||'')} ${it.w||''}×${it.h||''} מ"מ</div>`).join('');
-      return `<div style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,0.05);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-          <span style="font-size:12px;font-weight:700;">${lgEsc(o.orderNum||o.sketchName||o.type||'—')}</span>
-          <span style="font-size:12px;color:#8a8278;">${(o.items||[]).length} פריטים</span>
-        </div>
-        ${sk}<div>${its}</div>
-      </div>`;
-    }).join('');
-    return `<div style="background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:10px;overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-      <div style="padding:14px 16px;background:rgba(41,128,185,0.04);">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <div style="font-size:16px;font-weight:900;">${lgEsc(cn)}</div>
-            <div style="font-size:12px;color:#8a8278;margin-top:2px;">${cOrds.length} הזמנות · ${totalItems} פריטים</div>
-          </div>
-          <span style="font-size:12px;padding:3px 8px;background:rgba(41,128,185,0.1);color:#2980b9;border-radius:3px;font-weight:700;">🚚 הובלה</span>
-        </div>
-      </div>
-      <details style="border-top:1px solid rgba(0,0,0,0.05);">
-        <summary style="padding:8px 16px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;color:#2980b9;cursor:pointer;outline:none;direction:rtl;text-align:right;">ראה עוד</summary>
-        ${ordersHtml}
-      </details>
-      <div style="padding:10px 14px;">
-        <button data-ids="${ids}"
-          style="width:100%;padding:11px;background:#2980b9;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
-          🚚 סיים הובלה${cOrds.length>1?` (${cOrds.length} הזמנות)`:''}
-        </button>
-      </div>
-    </div>`;
-  }).join('');
-  // wire client delivery buttons via data attribute — avoids inline-JS escaping issues
-  el.querySelectorAll('button[data-ids]').forEach(btn =>
-    btn.addEventListener('click', () => showClientDeliveryPrompt(btn.dataset.ids))
-  );
-}
-
 function showDeliveryCompletePrompt(orderId){
   const o = allOrders.find(x => String(x.id) === String(orderId));
   if(!o) return;

@@ -689,5 +689,64 @@ check('there is a way to deploy the rules',
         'new Date("יום ראשון, 24 באוגוסט") is Invalid Date');
 }
 
+/* The graphics and delivery tabs: one client per row, detail behind a tap.
+
+   They were two nearly identical functions that had already begun to diverge —
+   graphics put its action button on each order, delivery on each client. One
+   engine with a config per tab, the same shape as LG_TRACK for chisum/triplex.
+
+   The reason it mattered enough to rewrite: every sketch was embedded as base64
+   inside the HTML string, for every order, even while the client was collapsed.
+   <details> hid it from the eye; the DOM carried all of it. Twenty orders were
+   megabytes rebuilt on every render — the exact mechanism that would have made
+   this screen unusable as the business grows. */
+{
+  const wd = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
+
+  check('one engine serves both tabs',
+        /function renderGraphicTab\(\)\{ _renderStageTab\('graphic'\); \}/.test(wd) &&
+        /function renderDeliveryTab\(\)\{ _renderStageTab\('delivery'\); \}/.test(wd));
+  check('and each tab is a config, not a copy',
+        /const LG_STAGE_VIEW = \{[\s\S]{0,900}?graphic: \{[\s\S]{0,900}?delivery: \{/.test(wd));
+
+  /* no base64 in the markup — the img is written without a src at all */
+  check('no sketch is embedded in the HTML string',
+        !/stv-sk[^>]*src="\$\{lgEsc\(o\.sketch\)\}/.test(wd),
+        'a collapsed client must not cost a single byte of image');
+  check('the img carries only an id',
+        /<img class="stv-sk" data-sketch-for="\$\{lgEsc\(String\(o\.id\)\)\}"/.test(wd));
+  check('and is filled only when a client is opened',
+        /addEventListener\('toggle', \(\) => \{ if\(d\.open\) _hydrateStageSketches\(d\); \}\)/.test(wd));
+  check('through the shared loader, so stage 4 will not touch this screen',
+        /lgSketchIntoImg\(el, o, \(\) => el\.classList\.add\('is-loaded'\)\)/.test(wd));
+  check('an already-filled image is not refetched',
+        /if\(el\.dataset\.lgFor === id\) return;/.test(wd));
+
+  /* the row carries the client and his quantity; everything else is behind it */
+  check('the row shows the client and his item count',
+        /<div class="stv-sub">\$\{clientItems\}/.test(wd));
+  check('the toggle says פירוט', /<summary style="color:\$\{cfg\.accent\}">פירוט<\/summary>/.test(wd));
+  /* items first, sketch after them — asked for explicitly */
+  check('the sketch comes after the items',
+        /<div class="stv-items">\$\{itsHtml\}<\/div>\s*\$\{sk\}/.test(wd));
+
+  /* delivery gets a total across every client, which is what you need to know
+     before loading the van */
+  check('delivery shows a grand total', /showGrandTotal:true/.test(wd));
+  check('graphics does not', /showGrandTotal:false/.test(wd));
+  check('and the total counts every order, not one client',
+        /const items = ords\.reduce\(\(s,o\)=>s\+cfg\.itemsOf\(o\)\.length,0\);/.test(wd));
+
+  /* touch and motion, same rules as the rest of the project */
+  check('the summary is a 44px target',
+        /\.stv-det>summary\{min-height:44px/.test(wd));
+  check('and keeps a focus ring',
+        /\.stv-det>summary:focus-visible\{outline:/.test(wd));
+  check('the sketch reserves height so the card does not jump',
+        /\.stv-sk\{[\s\S]{0,120}?min-height:60px/.test(wd));
+  check('motion preferences are respected',
+        /@media \(prefers-reduced-motion:reduce\)\{[\s\S]{0,120}?\.stv-sk,\.stv-det>summary::after\{transition:none/.test(wd));
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll migrated pages pass the shared rules.');
