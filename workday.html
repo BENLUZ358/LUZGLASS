@@ -565,6 +565,13 @@ let skuCatalogMap = {}; // קטלוג מק"טים חדש (skuCatalog) — תוס
 // מטמון שמות לקוחות הובלות — טוען פעם אחת בסטארטאפ
 // מטמון הובלות — מזוהים לפי מספר טלפון (מזהה קבוע), לא לפי שם
 let _deliveryPhones = new Set(); // Set של טלפונים מנורמלים: '0522578559'
+// מטמון שוטף 30 — אותה תבנית בדיוק ומאותה סיבה. הדגל נכתב על ההזמנה, אבל
+// שום דבר לא מעתיק אותו לרשומה בזמן יצירת ההזמנה: _propagateMonthlyToOrders
+// רץ רק כשמפעילים את הכפתור באדמין. בלי המטמון הזה כל הזמנה שנפתחה *אחרי*
+// שהלקוח סומן כשוטף 30 הייתה חוזרת לשאול על חשבונית — השאלה שהפיצ'ר נועד
+// להסיר. זה בדיוק מה ש-deliveryClient עושה בשני מקומות (lgNextStage ו-
+// הסנכרון בכניסה ליום עבודה), ומה שנשמט כאן.
+let _monthlyPhones = new Set();
 // טלפון התחברות → מפתח החשבון בחשבשבת. אותה שרשרת שבה ה-API מוצא את
 // מפתח החשבון, וממנה נגזר גם המספר שאליו יוצאת ההודעה ללקוח.
 let _customerIdByPhone = {};
@@ -576,6 +583,11 @@ async function _loadDeliveryClients(){
     _deliveryPhones = new Set(
       users
         .filter(u => u.isDelivery && u.phone)
+        .map(u => String(u.phone).replace(/[-\s]/g, ''))
+    );
+    _monthlyPhones = new Set(
+      users
+        .filter(u => u.monthlyBilling && u.phone)
         .map(u => String(u.phone).replace(/[-\s]/g, ''))
     );
     _customerIdByPhone = {};
@@ -668,6 +680,21 @@ function _isDeliveryClient(orderClient, phone){
     if(_deliveryPhones.has(norm)) return true;
   }
   return false;
+}
+// אותה צורה בדיוק, ומאותה סיבה: הזיהוי לפי טלפון בלבד, כי שם לקוח משתנה.
+function _isMonthlyClient(orderClient, phone){
+  if(phone){
+    const norm = String(phone).replace(/[-\s]/g, '');
+    if(_monthlyPhones.has(norm)) return true;
+  }
+  return false;
+}
+// OR בין שני המקורות — בדיוק כמו deliveryFl ב-lgNextStage. ההזמנה נושאת את
+// המשטר שבו נפתחה, ולכן monthlyBilling=true עליה מנצח תמיד; רשומת הלקוח
+// משלימה הזמנות שנוצרו אחרי שהלקוח סומן ומעולם לא קיבלו את הדגל.
+function _orderIsMonthly(o){
+  if(!o) return false;
+  return !!o.monthlyBilling || _isMonthlyClient(o.orderClient, o.clientPhone || o.phone);
 }
 // Safe storage wrapper for Safari file:// compatibility
 const safeStorage = {
@@ -2213,9 +2240,10 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
   const firstO = allOrders.find(o => String(o.id) === orderIds[0]);
   const clientName = firstO?.orderClient || '—';
   // שוטף 30 — לא שואלים. ההזמנה עוברת לנאסף וממתינה להפקה המרוכזת במסך
-  // "הפקת חשבונית" באדמין. הדגל נקרא מההזמנה ולא מרשומת הלקוח, כי ההזמנה
-  // נושאת את המשטר שבו נפתחה.
-  if(firstO && firstO.monthlyBilling){
+  // "הפקת חשבונית" באדמין. הדגל נקרא קודם כל מההזמנה — היא נושאת את המשטר
+  // שבו נפתחה — ובנפילה חזרה מרשומת הלקוח, אחרת הזמנה שנפתחה אחרי שהלקוח
+  // סומן כשוטף 30 הייתה נשאלת שוב. ר' _orderIsMonthly.
+  if(_orderIsMonthly(firstO)){
     // finalizeDelivery הוא async ומציג טוסט משלו ('✓ הובלה הושלמה — הועבר
     // לנאסף') אחרי שהכתיבה ל-Firebase מסתיימת. showToast רק קובע textContent
     // ואין תור — בלי להמתין, הטוסט של שוטף 30 היה מוצג ראשון ומיד נדרס.
@@ -3095,6 +3123,12 @@ function handleWorkdayStart(){
     if(_isDeliveryClient(o.orderClient, o.phone) && !o.deliveryClient){
       o.deliveryClient = true;
       updateOrder(_sid, { deliveryClient: true }).catch(e => console.error('setDeliveryClient:', e));
+    }
+    // אותו סנכרון עבור שוטף 30 — תופס הזמנות שנפתחו אחרי שהלקוח סומן,
+    // כדי שהדגל יישב על ההזמנה עצמה ולא יסתמך על המטמון בכל קריאה.
+    if(_isMonthlyClient(o.orderClient, o.clientPhone || o.phone) && !o.monthlyBilling){
+      o.monthlyBilling = true;
+      updateOrder(_sid, { monthlyBilling: true }).catch(e => console.error('setMonthlyBilling:', e));
     }
     saveOrderToStorage(o);
     markStageValue(String(ordId), 'workday');
