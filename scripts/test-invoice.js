@@ -22,6 +22,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const vm   = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const SRC  = fs.readFileSync(path.join(ROOT, 'api', 'hashavshevet-invoice.js'), 'utf8');
@@ -190,16 +191,56 @@ check('a consolidated invoice uses its own counter',
       /const ref = orders\.length > 1[\s\S]{0,200}?nextInvoiceRef\(db\)/.test(SRC), true);
 check('a single-order invoice keeps the order number',
       /: toReference\(first\.orderNum\);/.test(SRC), true);
+/*
+ * Run the counter rather than matching its source. The check here used to pin
+ * the literal `Math.max(current || 0, 5000) + 1` — which fails a correct
+ * refactor and passes a broken counter that keeps the string. What matters is
+ * the behaviour: a transaction (not read-then-write), on its own node, that
+ * never returns a number it has returned before.
+ */
 {
   const fn = (SRC.match(/async function nextInvoiceRef[\s\S]*?\n}/) || [''])[0];
+  check('the counter function is found', fn.length > 0, true);
   check('the counter is a transaction, not a read-then-write',
-        /\.transaction\(/.test(fn), true,
-        'two invoices issued at once would otherwise take the same number');
-  check('it never goes backwards',
-        /Math\.max\(current \|\| 0, 5000\) \+ 1/.test(fn), true);
-  check('and it is a separate node from the order counter',
-        /meta\/invoiceCounter/.test(fn), true);
-}
+        /\.transaction\(/.test(fn), true);
 
-if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
-console.log('\nAll invoice checks passed.');
+  const ctx = vm.createContext({});
+  vm.runInContext(fn, ctx);
+
+  /* a database stub that behaves the way RTDB transactions do: hand the
+     current value to the updater, store what comes back, report it */
+  const paths = [];
+  const fakeDb = (start) => {
+    let stored = start;
+    return { ref(p){ paths.push(p); return { async transaction(fn){ stored = fn(stored); return { snapshot: { val: () => stored } }; } }; } };
+  };
+  const next = async (start) => (await ctx.nextInvoiceRef(fakeDb(start))).reference;
+
+  (async () => {
+    check('and it is a separate node from the order counter',
+          (await next(null), paths[paths.length - 1]), 'meta/invoiceCounter');
+    /* the first consolidated invoice ever issued starts above order numbers,
+       so an invoice reference can never be mistaken for an order reference */
+    check('an empty counter starts at 5001', await next(null), '5001');
+    check('and the next one follows it',     await next(5001), '5002');
+    /* it never goes backwards: a node somehow holding a low or absurd value
+       must not hand out a reference that has already been used */
+    check('a counter below the floor is lifted back to it', await next(42),   '5001');
+    check('and a negative one too',                          await next(-9),  '5001');
+    check('a counter above the floor keeps climbing',        await next(9000), '9001');
+    check('and the result is a string, as Reference must be',
+          typeof (await ctx.nextInvoiceRef(fakeDb(7000))).reference, 'string');
+
+    /* two invoices issued back to back against the same node get two numbers */
+    const db = fakeDb(null);
+    const a  = (await ctx.nextInvoiceRef(db)).reference;
+    const b  = (await ctx.nextInvoiceRef(db)).reference;
+    check('two invoices in a row never share a number', a === b, false);
+    check('and the second is higher', Number(b) > Number(a), true);
+
+    if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
+    console.log('\nAll invoice checks passed.');
+  })();
+}
+/* the report lives inside the async block above — nextInvoiceRef is async, and
+   a synchronous report here would print "passed" before it had run */
