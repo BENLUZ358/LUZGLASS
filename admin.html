@@ -1718,6 +1718,16 @@ function renderBillBoard(){
 }
 
 function _renderBillClients(el){
+  // הרינדור הזה מגיע גם מ-renderAll() — כל עדכון הזמנה בחנות, לא רק הקלדה —
+  // כי המסך מאזין ל-Firebase החי. innerHTML למטה הורס את שדה החיפוש ובונה
+  // אותו מחדש, אז פוקוס ומיקום הסמן נלכדים כאן, לפני ההחלפה, ומוחזרים
+  // אחריה — לא רק הטקסט. פוקוס בלי סמן משמעו שהעכבר קופץ לתחילת המחרוזת,
+  // שזה הפוך במיוחד בעברית.
+  const prevInp  = document.getElementById('billSearch');
+  const hadFocus = !!prevInp && document.activeElement === prevInp;
+  const selStart = hadFocus ? prevInp.selectionStart : null;
+  const selEnd   = hadFocus ? prevInp.selectionEnd   : null;
+
   const byClient = {};
   _billFilterOrders().forEach(o => {
     const c = o.orderClient || '—';
@@ -1733,7 +1743,11 @@ function _renderBillClients(el){
     ' placeholder="חפש לקוח..." aria-label="חיפוש לקוח לחיוב" value="' + lgEsc(_billSearch) + '">' +
     '<div id="billClients"></div>';
   const inp = document.getElementById('billSearch');
-  inp.oninput = () => { _billSearch = inp.value; _renderBillClients(el); document.getElementById('billSearch').focus(); };
+  inp.oninput = () => { _billSearch = inp.value; _renderBillClients(el); };
+  if(hadFocus){
+    inp.focus();
+    inp.setSelectionRange(selStart, selEnd);
+  }
 
   const box = document.getElementById('billClients');
   if(!list.length){

@@ -194,5 +194,31 @@ check('and the row says when it is on', /שוטף 30/.test(ADMIN), true);
         /billOv'\)\?\.classList\.contains\('open'\)[\s\S]{0,40}renderBillBoard\(\)/.test(ra), true);
 }
 
+/* ── review round 2 fix ────────────────────────────────────────────────── */
+/*
+ * renderAll() now reaches _renderBillClients on every live-order update, not
+ * only on typing — the round-1 fix made that true. _renderBillClients rebuilds
+ * #billSearch with innerHTML, so an admin typing a client name while the shop
+ * is busy elsewhere gets the caret pulled out from under them, unless focus
+ * and the caret position are captured before the rebuild and restored after.
+ *
+ * A bare search for ".focus()" would pass on the broken code too — the old
+ * oninput handler already called it. The checks below require the capture
+ * (activeElement compared against the pre-rebuild input, both selection
+ * bounds read) and the restore (both focus and setSelectionRange, together,
+ * gated on hadFocus) so a fix that restores focus but drops the caret — or
+ * one that unconditionally calls .focus() and steals it when the box never
+ * had it — still fails.
+ */
+{
+  const rbc = bodyOf(ADMIN, '_renderBillClients');
+  check('focus is captured against the pre-rebuild input, before innerHTML runs',
+        /document\.activeElement === prevInp/.test(rbc), true);
+  check('and the caret bounds are captured too, not only whether it had focus',
+        /selectionStart/.test(rbc) && /selectionEnd/.test(rbc), true);
+  check('both focus and the caret are restored together, only if it had focus',
+        /if\(hadFocus\)\{[\s\S]{0,80}inp\.focus\(\)[\s\S]{0,80}inp\.setSelectionRange\(selStart, selEnd\)/.test(rbc), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll monthly-billing checks passed.');
