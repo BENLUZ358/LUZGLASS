@@ -163,5 +163,36 @@ check('and the row says when it is on', /שוטף 30/.test(ADMIN), true);
         /נבחרו \$\{/.test(ADMIN), true);
 }
 
+/* ── review round 1 fixes ──────────────────────────────────────────────── */
+{
+  /* the invoice modal (_invOverlay, and its result path further down) opens
+     over this screen once "הפק חשבונית" is pressed. If billOv's z-index ever
+     climbs to or past the modal's, the modal renders invisible and unclickable
+     underneath it — the button that issues the invoice becomes unreachable.
+     Pinned to the relationship, not to either literal number, so a future
+     change to either side cannot silently break the order again. */
+  const billZ = (ADMIN.match(/#billOv\{[^}]*z-index:(\d+)/) || [])[1];
+  const invFn = bodyOf(ADMIN, '_invOverlay');
+  const invZ  = (invFn.match(/z-index:(\d+)/) || [])[1];
+  check('the billing overlay z-index is found', billZ !== undefined, true);
+  check('the invoice modal z-index is found', invZ !== undefined, true);
+  check('the billing overlay sits below the invoice modal',
+        Number(billZ) < Number(invZ), true);
+
+  /* the touch target is the whole row, not the bare 20x20 box — same shape
+     as the kanban card's pickBox: a <label> wrapping the input, so the
+     browser's native label-click toggles the checkbox */
+  const det = bodyOf(ADMIN, '_renderBillClient');
+  check('the checkbox sits in a label, not a bare box',
+        /<label class="bill-check">/.test(det), true);
+
+  /* invSend() clears invSel and calls renderAll() on success; without this,
+     the row list would still show the just-invoiced orders, checked, after
+     they have already dropped out of _billFilterOrders */
+  const ra = bodyOf(ADMIN, 'renderAll');
+  check('renderAll refreshes the billing screen while it is open',
+        /billOv'\)\?\.classList\.contains\('open'\)[\s\S]{0,40}renderBillBoard\(\)/.test(ra), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll monthly-billing checks passed.');

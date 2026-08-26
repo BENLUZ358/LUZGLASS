@@ -238,8 +238,10 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .cp-money{margin-inline-start:auto;}
   .mgrid{grid-template-columns:1fr;}
 }
-/* מסך הפקת חשבונית */
-#billOv{position:fixed;inset:0;background:rgba(26,23,20,0.6);z-index:820;display:none;}
+/* מסך הפקת חשבונית — כמו pricingOv/pickupOv. חייב להישאר מתחת ל-800: זה
+   ה-z-index של מודל החשבונית (_invOverlay) שנפתח מעל המסך הזה, ואם billOv
+   מטפס מעליו החלון ייפתח מוסתר ובלתי-לחיץ. */
+#billOv{position:fixed;inset:0;background:rgba(26,23,20,0.6);z-index:200;display:none;}
 #billOv.open{display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;}
 #billOv .ov-panel{background:var(--surface);border-radius:10px;max-width:640px;width:100%;
                   max-height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden;}
@@ -259,8 +261,11 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .bill-cli-n{font-weight:700;}
 .bill-cli-s{font-size:13px;color:var(--muted);white-space:nowrap;}
 .bill-row{border:1px solid var(--border);border-radius:6px;margin-bottom:6px;overflow:hidden;}
-.bill-row-top{display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:44px;}
-.bill-row-top input{width:20px;height:20px;flex-shrink:0;cursor:pointer;}
+.bill-row-top{display:flex;align-items:center;gap:10px;padding:0 12px;min-height:44px;}
+/* התיבה עצמה קטנה, אבל ה-label סביבה — כמו pickBox בכרטיס הקנבן — הוא
+   מטרת הלחיצה: כל השורה מסמנת/מבטלת, לא רק ריבוע 20 על 20. */
+.bill-check{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:44px;cursor:pointer;}
+.bill-check input{width:20px;height:20px;flex-shrink:0;cursor:pointer;}
 .bill-row-t{flex:1;min-width:0;font-size:13px;color:var(--text);}
 .bill-row-a{font-size:13px;font-weight:700;color:var(--gold-text);white-space:nowrap;}
 .bill-det>summary{min-height:44px;display:flex;align-items:center;padding:0 12px;
@@ -1244,6 +1249,13 @@ function renderAll(){
     }
     sqRefreshMetrics();
   }
+
+  // מסך החיוב נבנה מ-orders בזמן הפתיחה. אחרי הפקה מוצלחת ה-invSel מתרוקן
+  // וההזמנות שחויבו יוצאות מ-_billFilterOrders — בלי רענון כאן השורות
+  // היו נשארות על המסך מסומנות כאילו עדיין ממתינות לחיוב.
+  if(document.getElementById('billOv')?.classList.contains('open')){
+    renderBillBoard();
+  }
 }
 
 function renderStats(){
@@ -1778,9 +1790,11 @@ function _renderBillClient(el){
       : '';
     return '<div class="bill-row">' +
       '<div class="bill-row-top">' +
-        '<input type="checkbox" checked data-oid="' + lgEsc(String(o.id)) + '"' +
-        ' aria-label="כלול את ' + lgEsc(o.orderNum||'') + ' בחשבונית">' +
-        '<span class="bill-row-t">' + lgEsc(o.orderNum||'') + ' · ' + lgEsc(o.date||'') + '</span>' +
+        '<label class="bill-check">' +
+          '<input type="checkbox" checked data-oid="' + lgEsc(String(o.id)) + '"' +
+          ' aria-label="כלול את ' + lgEsc(o.orderNum||'') + ' בחשבונית">' +
+          '<span class="bill-row-t">' + lgEsc(o.orderNum||'') + ' · ' + lgEsc(o.date||'') + '</span>' +
+        '</label>' +
         '<span class="bill-row-a">₪' + total.toLocaleString() + '</span>' +
       '</div>' +
       '<details class="bill-det"><summary>פירוט</summary>' + items + sk + '</details>' +
