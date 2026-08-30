@@ -2329,6 +2329,49 @@ document.addEventListener('visibilitychange', () => {
   outline:none;direction:rtl;transition:border-color 160ms ease,box-shadow 160ms ease;
 }
 #sqNameInput::placeholder{font-weight:500;color:#bbb;}
+
+/* ── תת-שלב הבדיקה ─────────────────────────────────────────────────
+   הטאבים חותכים את אותה רשימה. מצב הבדיקה מסתיר את מסך העבודה במקום
+   לשכפל אותו למסך שני — נתיב קוד אחד, מקום אחד שיכול להישבר. */
+.sq-seen-tabs{display:flex;gap:8px;}
+.sq-seen-tab{
+  min-height:44px;padding:0 14px;
+  background:transparent;border:1px solid rgba(247,244,239,0.18);
+  border-radius:6px;cursor:pointer;
+  font-family:Heebo,sans-serif;font-size:13px;font-weight:700;
+  color:rgba(247,244,239,0.72);
+  transition:background 180ms ease,color 180ms ease,border-color 180ms ease;
+}
+.sq-seen-tab:hover{border-color:rgba(184,146,42,0.5);color:#f7f4ef;}
+.sq-seen-tab:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.sq-seen-tab.sq-seen-on{background:#b8922a;border-color:#b8922a;color:#1a1714;}
+.sq-seen-tab span{
+  display:inline-block;min-width:20px;margin-right:6px;padding:0 5px;
+  border-radius:9px;background:rgba(0,0,0,0.22);font-size:12px;
+}
+.sq-seen-tab.sq-seen-on span{background:rgba(0,0,0,0.18);}
+#sqBtnSeen{min-height:44px;background:#27ae60;border-color:#27ae60;color:#fff;}
+#sqBtnSeen:hover{background:#219150;border-color:#219150;}
+
+/* מצב בדיקה — רק הסקיצה, השם, ההערות והפעולות של השלב הזה */
+.sq-review #sqItemsWrap,
+.sq-review #sqInfoGrid,
+.sq-review #sqPanelsWrap,
+.sq-review #sqCheckBadge,
+.sq-review #sqBtnChash,
+.sq-review #sqBtnOpty,
+.sq-review #sqBtnTest,
+.sq-review #sqBtnDrafter{display:none !important;}
+/* ובטאב "נראה" אין את הכפתור הזה — הסקיצה כבר טופלה */
+#sqDetailScroll:not(.sq-review) #sqBtnSeen{display:none;}
+
+@media (prefers-reduced-motion:reduce){
+  .sq-seen-tab{transition:none;}
+}
+@media (max-width:768px){
+  .sq-seen-tabs{width:100%;order:5;}
+  .sq-seen-tab{flex:1;font-size:14px;}
+}
 #sqNameInput:focus{border-color:var(--gold-text);box-shadow:0 0 0 3px rgba(184,146,42,0.15);}
 /* ריק פירושו שעוד לא נתנו שם — נראה מיד, בלי לקרוא */
 #sqNameInput.sq-name-empty{border-color:rgba(184,146,42,0.55);background:rgba(184,146,42,0.06);}
@@ -2441,6 +2484,12 @@ document.addEventListener('visibilitychange', () => {
         <!-- טאב שרטט הוסר -->
       </div>
       <div id="sqCounter"></div>
+      <div class="sq-seen-tabs" role="tablist" aria-label="שלב הבדיקה">
+        <button class="sq-seen-tab sq-seen-on" id="sqTabUnseen" role="tab" aria-selected="true"
+                onclick="sqSetSeenTab('unseen')">עוד לא נראה <span id="sqTabUnseenN">0</span></button>
+        <button class="sq-seen-tab" id="sqTabSeen" role="tab" aria-selected="false"
+                onclick="sqSetSeenTab('seen')">נראה <span id="sqTabSeenN">0</span></button>
+      </div>
       <select id="sqFSource" class="sq-filter-sel" onchange="sqRender()">
         <option value="">כל המקורות</option>
         <option value="sketch">מערכת</option>
@@ -2508,6 +2557,7 @@ document.addEventListener('visibilitychange', () => {
           <div id="sqCheckBadge" style="display:none;margin:0 14px 10px;padding:8px 12px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.2);border-radius:6px;font-size:12px;color:#27ae60;font-weight:700;"></div>
           <!-- actions -->
           <div id="sqActions">
+            <button id="sqBtnSeen" class="sq-action-btn" onclick="sqMarkSeen()">✓ סקיצה טופלה</button>
             <button id="sqBtnDrafter" class="sq-action-btn" onclick="sqSetStage('drafter')" style="display:none;">✏️ שלח לשרטט</button>
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
             <button id="sqBtnTest"    class="sq-action-btn" onclick="sqMarkTestOrder()" title="אותו תהליך בדיוק, רק שלא ייפתח מסמך בחשבשבת">🧪 הזמנה פיקטיבית</button>
@@ -2569,6 +2619,49 @@ function sqSaveNotes(id){
   sqNoteMap[id] = notes;
   updateOrder(id, { notes });
   showToast('✓ הערה נשמרה');
+}
+
+// הטאב הנוכחי. 'unseen' — מה שעוד לא עברו עליו. 'seen' — מסך העבודה המלא.
+let sqSeenTab = 'unseen';
+
+// חלוקה טהורה, כדי שאפשר יהיה להריץ אותה בבדיקה בלי דפדפן.
+function sqSeenSplit(items, tab){
+  return (items || []).filter(function(i){
+    return tab === 'seen' ? !!i.sketchSeenAt : !i.sketchSeenAt;
+  });
+}
+
+function sqSetSeenTab(tab){
+  sqSeenTab = tab === 'seen' ? 'seen' : 'unseen';
+  var u = document.getElementById('sqTabUnseen');
+  var s = document.getElementById('sqTabSeen');
+  if(u){ u.classList.toggle('sq-seen-on', sqSeenTab === 'unseen');
+         u.setAttribute('aria-selected', sqSeenTab === 'unseen'); }
+  if(s){ s.classList.toggle('sq-seen-on', sqSeenTab === 'seen');
+         s.setAttribute('aria-selected', sqSeenTab === 'seen'); }
+  // הבחירה הנוכחית עשויה לא להיות קיימת בטאב החדש
+  sqCurrent = null; sqCurrentIdx = -1;
+  sqShowDetail();
+  sqRender();
+}
+
+// מסמן שעברו על הסקיצה. כותב שדה אחד ותו לא.
+//
+// במפורש לא נכתב כאן stage. זה תת-שלב בתוך התור ולא מעבר בצנרת: התור
+// נבנה מהזמנות עם stage ריק, וכתיבת stage כאן הייתה מוציאה את ההזמנה
+// מהתור לגמרי ומזיזה אותה לשרטט או לחשבשבת בלי שאיש ביקש.
+function sqMarkSeen(){
+  if(!sqCurrent) return;
+  var id = sqCurrent.id, now = Date.now();
+  sqCurrent.sketchSeenAt = now;
+  var it = sqItems.find(function(i){ return i.id === id; });
+  if(it) it.sketchSeenAt = now;
+  updateOrder(id, { sketchSeenAt: now });
+  showToast('✓ הסקיצה טופלה');
+  // הבאה בתור, כמו אחרי כל פעולה אחרת במסך הזה
+  sqCurrent = null; sqCurrentIdx = -1;
+  sqShowDetail();
+  sqRender();
 }
 
 // ── MEASURE ORDER LIST SVG ──
@@ -2735,6 +2828,7 @@ function buildSQItems(){
       items:        o.items || [],
       type:         o.type  || '',
       isTest:       !!o.isTest,
+      sketchSeenAt: o.sketchSeenAt || 0,
     });
   });
 }
@@ -2767,6 +2861,9 @@ function sqFiltered(){
     if(stat==='done'&&!isDone) return false;
     if(q&&!(item.client+item.sketchName+item.orderNum).toLowerCase().includes(q)) return false;
     return true;
+  }).filter(function(i){
+    // תת-שלב הבדיקה. אחרון בשרשרת כדי שכל הפילטרים הקיימים ירוצו כרגיל.
+    return sqSeenTab === 'seen' ? !!i.sketchSeenAt : !i.sketchSeenAt;
   });
 }
 
@@ -2782,6 +2879,12 @@ function sqRender(){
   lgFillFilterSelect(document.getElementById('sqFClient'),
     lgClientsInOrders(sqItems.map(i => ({ orderClient: i.orderClient || i.client }))), 'כל הלקוחות');
   const list=sqFiltered();
+  // המונים סופרים את התור כולו ולא את התוצאה המסוננת — אחרת חיפוש היה
+  // נראה כאילו הוא מרוקן את הטאב השני.
+  var elU=document.getElementById('sqTabUnseenN');
+  var elS=document.getElementById('sqTabSeenN');
+  if(elU) elU.textContent=sqSeenSplit(sqItems,'unseen').length;
+  if(elS) elS.textContent=sqSeenSplit(sqItems,'seen').length;
   const pending=sqItems.filter(i=>!(sqStageMap[i.id])).length;
   const atDrafter=sqItems.filter(i=>sqStageMap[i.id]==='drafter').length;
   document.getElementById('sqCounter').textContent=`${sqItems.length} סקיצות · ${pending} ממתין · ${atDrafter} שרטט`;
@@ -2846,6 +2949,8 @@ function sqShowDetail(){
   }
   document.getElementById('sqDetailEmpty').style.display='none';
   document.getElementById('sqDetailScroll').style.display='block';
+  // מצב בדיקה מסתיר את מסך העבודה בלי לשכפל אותו. ר' .sq-review ב-CSS.
+  document.getElementById('sqDetailScroll').classList.toggle('sq-review', sqSeenTab === 'unseen');
   const o=sqCurrent;
   document.getElementById('sqDClient').textContent=o.client;
   document.getElementById('sqDMeta').textContent=[o.orderNum,o.date,o.glassFullName,o.finish].filter(Boolean).join(' · ');
