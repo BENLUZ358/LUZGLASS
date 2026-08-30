@@ -552,6 +552,9 @@ function load(){
   if(_csUnsub) _csUnsub();
   _csUnsub = listenAllOrders(function(fbOrders){
     window._allCsOrders = fbOrders;
+    // ההערות שנכתבו בתור הסקיצות מגיעות על ההזמנה, לא ב-localStorage
+    notes = mergeOrderNotes(notes, fbOrders);
+    saveNotes();
     _ordersReady = true;
     if(_wdReady) _filterOrders();
   }, err => _csListenerFailed('orders', err));
@@ -630,6 +633,22 @@ async function saveCS(){
     _csLocalPending = false;
   }
 }
+// ההערה נכתבת בתור הסקיצות ונקראת כאן. עד עכשיו הצומת הזה קרא רק
+// מ-localStorage, ולכן הערה מהתור לא הגיעה לעולם — הפופאפ קפץ רק על
+// הערות שנכתבו בתחנה עצמה, והשרטט לא ראה הערות בכלל.
+//
+// הערה שעל ההזמנה גוברת. הערה מקומית שאין לה מקבילה על ההזמנה נשארת:
+// הערות שנכתבו כאן בעבר מעולם לא הגיעו ל-Firebase, ודריסה עיוורת הייתה
+// מוחקת את כולן. מחזיר מפה חדשה ולא נוגע בזו שקיבל.
+function mergeOrderNotes(local, orders){
+  var out = {};
+  for (var k in local) out[k] = local[k];
+  (orders || []).forEach(function(o){
+    if (o && o.id && o.notes) out[o.id] = o.notes;
+  });
+  return out;
+}
+
 function saveNotes(){ safeStorage.setItem('lgOrderNotes',JSON.stringify(notes)); }
 // מחזיר רק indices של פריטי חיסום (לא ליטוש)
 function chisumIdxs(o){ return (o.items||[]).map((_,i)=>i).filter(i=>!!(o.items||[])[i]?.chisum); }
@@ -1176,7 +1195,9 @@ function printChisum(reportNum, w, triplexNum){
 function showNotePopup(note){document.getElementById('npText').textContent=note;document.getElementById('notePopup').classList.add('open');}
 function dismissNote(){document.getElementById('notePopup').classList.remove('open');}
 function openQN(id){qnId=id;const o=orders.find(x=>x.id===id);document.getElementById('qnTitle').textContent='הערה: '+(o?.orderClient||'');document.getElementById('qnText').value=notes[id]||'';document.getElementById('qnModal').classList.add('open');}
-function saveQN(){if(!qnId)return;const txt=document.getElementById('qnText').value.trim();if(txt)notes[qnId]=txt;else delete notes[qnId];saveNotes();document.getElementById('qnModal').classList.remove('open');renderList();toast('הערה נשמרה ✓');}
+// נכתב לשני המקומות: ל-Firebase כדי שהשרטט ותור הסקיצות יראו את ההערה,
+// ול-localStorage כדי שהיא תישאר גם אם הרשת נופלת באמצע.
+function saveQN(){if(!qnId)return;const txt=document.getElementById('qnText').value.trim();if(txt)notes[qnId]=txt;else delete notes[qnId];saveNotes();updateOrder(qnId,{notes:txt}).catch(e=>console.error('saveQN:',e));document.getElementById('qnModal').classList.remove('open');renderList();toast('הערה נשמרה ✓');}
 
 // SHEET
 function toggleSheet(){document.getElementById('sheet').classList.toggle('open');renderSheet();}
@@ -1235,7 +1256,7 @@ function renderSheet(){
 
   document.getElementById('shBody').innerHTML=html;
 }
-function saveSkNote(){if(!cur)return;const txt=document.getElementById('skNoteTA')?.value.trim();if(txt)notes[cur.id]=txt;else delete notes[cur.id];saveNotes();renderList();closeSheet();toast('הערה נשמרה ✓');}
+function saveSkNote(){if(!cur)return;const txt=document.getElementById('skNoteTA')?.value.trim();if(txt)notes[cur.id]=txt;else delete notes[cur.id];saveNotes();updateOrder(cur.id,{notes:txt}).catch(e=>console.error('saveSkNote:',e));renderList();closeSheet();toast('הערה נשמרה ✓');}
 
 // ZOOM/PAN
 function doZoom(d){scl=Math.max(0.3,Math.min(5,scl+d));applyTr();}

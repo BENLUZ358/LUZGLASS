@@ -451,6 +451,12 @@ const SCFG={
   "נאסף":          {cls:"s-done",  label:"נאסף",           dot:"#95a5a6",step:6}
 };
 const STEPS=["התקבלה","בתור","בייצור","חיסום","גרפיקה","מוכן","נאסף"];
+// תווית על השלב הראשון, לא שלב שמיני. חשבון האינדקסים של הסטפר
+// (hasGraphic, rawStep, stepIdx) עדין ולא קשור לשינוי הזה — הוספת שלב
+// הייתה מזיזה כל הזמנה במערכת במקום אחד.
+function _firstStepLabel(o){
+  return (o && o.sketchSeenAt) ? 'נראה' : 'התקבלה';
+}
 let expanded=new Set();
 let pickupDates=JSON.parse(safeStorage.getItem("lgPickupDates")||"{}");
 
@@ -762,7 +768,10 @@ function orderCard(o, extra){
   const isExp=expanded.has(o.id);
   const isDone=o.status==="נאסף";
   const hasGraphic=(o.items||[]).some(i=>_lgItemHasGraphic(i))||o.status==='בגרפיקה';
-  const orderSteps=hasGraphic?STEPS:["התקבלה","בתור","בייצור","חיסום","מוכן","נאסף"];
+  const first=_firstStepLabel(o);
+  const orderSteps=hasGraphic
+    ?[first].concat(STEPS.slice(1))
+    :[first,"בתור","בייצור","חיסום","מוכן","נאסף"];
   const rawStep=cfg.step;
   const stepIdx=hasGraphic?rawStep:(rawStep>=5?rawStep-1:rawStep);
   let stepper='<div class="stepper">';
