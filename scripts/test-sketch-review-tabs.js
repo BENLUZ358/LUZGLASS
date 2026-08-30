@@ -104,5 +104,30 @@ check('each tab reports whether it is selected', /aria-selected/.test(ADMIN), tr
 check('motion is dropped for anyone who asked for that',
       /prefers-reduced-motion[\s\S]{0,200}\.sq-seen-tab/.test(ADMIN), true);
 
+/* ── what the client is told ───────────────────────────────────────────── */
+/*
+ * A label on the step that already exists, not an eighth step. The stepper's
+ * index arithmetic (hasGraphic, rawStep, stepIdx) is delicate and unrelated to
+ * this change; adding a step would move every order's position in it.
+ */
+{
+  const PORTAL = fs.readFileSync(path.join(ROOT, 'portal.html'), 'utf8');
+  const fn = (PORTAL.match(/function _firstStepLabel[\s\S]*?\n}/) || [''])[0];
+  check('the label function is found', fn.length > 0, true);
+  const ctx = vm.createContext({});
+  vm.runInContext(fn, ctx);
+  check('an unreviewed order still says it was received',
+        ctx._firstStepLabel({}), 'התקבלה');
+  check('and a reviewed one says it was seen',
+        ctx._firstStepLabel({ sketchSeenAt: 1756500000000 }), 'נראה');
+  check('a missing order does not throw', ctx._firstStepLabel(null), 'התקבלה');
+  check('the step list itself is unchanged',
+        /const STEPS=\["התקבלה","בתור","בייצור","חיסום","גרפיקה","מוכן","נאסף"\]/.test(PORTAL), true);
+  /* the count is what the index arithmetic depends on */
+  const withG    = (PORTAL.match(/const orderSteps=[\s\S]{0,200}?;/) || [''])[0];
+  check('and both step lists still have their original length',
+        /STEPS\.slice\(1\)/.test(withG) && /"בתור","בייצור","חיסום","מוכן","נאסף"/.test(withG), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll sketch-review-tab checks passed.');
