@@ -63,6 +63,14 @@
 
   .field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 
+  /* הודעות ההעלאה — ליד הכפתור, לא alert. ניגודיות מעל 4.5:1 בשני המצבים. */
+  .up-notice{
+    margin:12px 0;padding:12px 14px;border-radius:8px;
+    font-family:Heebo,sans-serif;font-size:14px;line-height:1.5;
+  }
+  .up-err{background:#fdecea;border:1px solid #f5c6c2;color:#8f2d24;}
+  .up-ok {background:#eaf7ef;border:1px solid #bfe3cd;color:#1e6b3a;}
+
   /* SUBMIT */
   .btn-submit{
     width:100%;padding:16px;
@@ -141,6 +149,9 @@
     </div>
   </div>
 
+  <!-- הודעות ההעלאה יושבות כאן, ליד הכפתור שהמשתמש לוחץ עליו -->
+  <div id="upNotice" class="up-notice" style="display:none" role="status" aria-live="polite"></div>
+
   <button class="btn-submit" id="submitBtn" type="button" onclick="submitUpload()" style="width:100%;min-height:50px;font-size:16px;">שלח סקיצה ←</button>
 </div>
 
@@ -178,9 +189,43 @@ dz.addEventListener('drop', e => {
   handleFiles(e.dataTransfer.files);
 });
 
+// accept="" הוא רמז לחלון הבחירה בלבד: אפשר לבחור בו "כל הקבצים", וגרירה
+// עוקפת אותו לגמרי. כך נכנס קובץ .url של Windows בן 513 בתים, נשמר כסקיצה,
+// והוצג בכל מסך כתמונה שבורה.
+//
+// הסוג שהדפדפן מוסר ריק לפעמים — סיומת שהוא לא מכיר, או גרירה ממקומות
+// מסוימים — ולכן הסיומת צריכה להכריע לבדה כשאין סוג.
+function lgIsAcceptedUpload(file){
+  var name = String((file && file.name) || '');
+  var type = String((file && file.type) || '').toLowerCase();
+  var dot  = name.lastIndexOf('.');
+  var ext  = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
+  var IMG_EXT = ['jpg','jpeg','png','gif','webp','heic','heif','bmp'];
+  if (type.indexOf('image/') === 0) return { ok: true };
+  if (type === 'application/pdf')   return { ok: true };
+  if (!type) {
+    if (ext === 'pdf')               return { ok: true };
+    if (IMG_EXT.indexOf(ext) !== -1) return { ok: true };
+  }
+  return { ok: false,
+           reason: 'הקובץ "' + (name || 'ללא שם') + '" אינו תמונה או PDF, ולכן לא צורף.' };
+}
+
+// alert חוסם, ובחלק מדפדפני הנייד הוא פשוט לא מוצג. ההודעה יושבת בדף,
+// ליד הכפתור, ונקראת גם על ידי קורא מסך.
+function uploadNotice(msg, kind){
+  var el = document.getElementById('upNotice');
+  if(!el){ console.warn('[upload]', msg); return; }
+  el.textContent = msg || '';
+  el.className = 'up-notice' + (kind === 'ok' ? ' up-ok' : ' up-err');
+  el.style.display = msg ? 'block' : 'none';
+}
+
 function handleFiles(files) {
   Array.from(files).forEach(file => {
-    if(file.size > 10 * 1024 * 1024) { alert(`הקובץ ${file.name} גדול מ-10MB`); return; }
+    const verdict = lgIsAcceptedUpload(file);
+    if(!verdict.ok) { uploadNotice(verdict.reason); return; }
+    if(file.size > 10 * 1024 * 1024) { uploadNotice(`הקובץ ${file.name} גדול מ-10MB`); return; }
     const reader = new FileReader();
     reader.onload = e => {
       uploadedFiles.push({ name: file.name, data: e.target.result, type: file.type });
@@ -227,6 +272,42 @@ function compressImage(dataUrl, maxW, quality, cb){
   img.src = dataUrl;
 }
 
+// משלוח אחד = מזהה אחד, שנשמר עד שהכל אומת. ניסיון חוזר משתמש בו שוב,
+// כותב לאותם נתיבים, ולכן דורס במקום ליצור הזמנות כפולות. בלי זה כל ניסיון
+// יצר מזהים חדשים לפי השעון, והזמנות שכבר נשמרו נשמרו בשנית.
+//
+// sessionStorage ולא localStorage: המשלוח שייך ללשונית הזו. חסום בגלישה
+// פרטית — ואז נופלים לזיכרון, וההגנה שורדת ניסיון חוזר אך לא רענון דף.
+var _lgBatchMem = null;
+function lgUploadBatch(){
+  var raw = null;
+  try { raw = sessionStorage.getItem('lgUploadBatch'); } catch(e) { raw = _lgBatchMem; }
+  if(!raw) raw = _lgBatchMem;
+  if(raw){ try { return JSON.parse(raw); } catch(e) {} }
+  var made = { batchId: String(Date.now()), refNum: null };
+  lgUploadBatchSet(made);
+  return made;
+}
+function lgUploadBatchSet(b){
+  var s = JSON.stringify(b);
+  _lgBatchMem = s;
+  try { sessionStorage.setItem('lgUploadBatch', s); } catch(e) {}
+}
+function lgUploadBatchClear(){
+  _lgBatchMem = null;
+  try { sessionStorage.removeItem('lgUploadBatch'); } catch(e) {}
+}
+
+// "נשמר" פירושו שקראנו את זה בחזרה. set() שחזר אינו הוכחה שההזמנה שם.
+// שדה בודד ולא ההזמנה כולה: הזמנה נושאת סקיצת base64, והורדתה לאימות
+// הייתה עולה מאות קילובייטים על כל קובץ.
+async function verifySaved(id){
+  const snap = await _lgWithTimeout(
+    firebase.database().ref('orders/' + id + '/id').once('value'),
+    15000, 'אימות שמירה');
+  return snap.exists() && snap.val() === id;
+}
+
 async function submitUpload() {
   // מי שנרשם על הסקיצה חייב להיות מי שבאמת מחובר, ולא מה שיושב במטמון
   // התצוגה. lgSession מוחלף כשמישהו מתחבר בלשונית אחרת — וכך סקיצות של
@@ -247,75 +328,105 @@ async function submitUpload() {
   btn.disabled = true;
   btn.textContent = 'מעבד...';
 
-  const refNum = await lgNextOrderNum();
+  const PROCESS_TIMEOUT_MS = 20000;
+  const SAVE_TIMEOUT_MS    = 30000;
+
+  // מספר ההזמנה נמשך פעם אחת למשלוח ונשמר איתו. בלי זה ניסיון חוזר היה
+  // שורף מספר הזמנה נוסף בכל לחיצה.
+  const batch = lgUploadBatch();
+  if(!batch.refNum){ batch.refNum = await lgNextOrderNum(); lgUploadBatchSet(batch); }
+  const refNum = batch.refNum;
+
   const now = new Date();
   const dateStr = now.toLocaleDateString('he-IL');
   const timeStr = now.toLocaleTimeString('he-IL', {hour:'2-digit',minute:'2-digit'});
 
-  // דחוס כל תמונה לפני שמירה (פותר בעיית iOS/נפח)
-  let processed = 0;
-  const compressed = [];
-
-  // שמור ל-Firebase — כל קובץ כ-submission נפרד
+  // שמור ל-Firebase — כל תמונה כ-submission נפרד, במזהה קבוע לפי המשלוח.
   // התמונה נשמרת ישירות כ-sketch (string), לא בתוך array (Firebase לא אמין עם arrays)
-  async function saveAll(){
-    try {
-      for (let i = 0; i < compressed.length; i++) {
-        // ריק בכוונה — ולא "סקיצה 1". שם אוטומטי נראה בתור בדיוק כמו שם
-        // אמיתי, ואז אי אפשר לדעת מה עוד מחכה לשם. ריק נראה כ"ללא שם".
-        const fileSketchName = '';
-        const imgData = compressed[i].data || null;
-        const fileName = compressed[i].name || '';
-
-        console.log('[upload] saving submission', i+1,
-          'sketchName:', fileSketchName,
-          'hasImage:', !!imgData,
-          'imageLength:', imgData ? imgData.length : 0);
-
-        await saveSubmission({
-          refNum:      refNum + (compressed.length > 1 ? '-' + (i + 1) : ''),
+  async function saveAll(images){
+    const failures = [];
+    for (let i = 0; i < images.length; i++) {
+      // המזהה נגזר מהמשלוח ומהמיקום, ולא מהשעון — ולכן ניסיון חוזר כותב
+      // בדיוק לאותו נתיב ודורס, במקום ליצור הזמנה שנייה לאותה סקיצה.
+      const id  = 'sub_' + batch.batchId + '_' + i;
+      const num = refNum + (images.length > 1 ? '-' + (i + 1) : '');
+      const fileName = images[i].name || '';
+      try {
+        await _lgWithTimeout(saveSubmission({
+          id,
+          refNum:      num,
           orderClient: name,
           client:      name,
           phone,
-          sketchName:  fileSketchName,
-          orderNum:    refNum + (compressed.length > 1 ? '-' + (i + 1) : ''),
+          // ריק בכוונה — ולא "סקיצה 1". שם אוטומטי נראה בתור בדיוק כמו שם
+          // אמיתי, ואז אי אפשר לדעת מה עוד מחכה לשם. ריק נראה כ"ללא שם".
+          sketchName:  '',
+          orderNum:    num,
           notes,
           read:        false,
           fileName:    fileName,
           // שמור כ-sketch ישירות — Firebase מטפל במחרוזות base64 ללא בעיה
-          sketch:      imgData,
+          sketch:      images[i].data || null,
           // שמור גם files לתאימות לאחור (ללא data — רק מטאדאטה)
           files:       [{ name: fileName, type: 'image/jpeg' }],
           date:        dateStr,
           time:        timeStr
-        });
+        }), SAVE_TIMEOUT_MS, 'שמירת סקיצה');
+
+        if(!await verifySaved(id)) throw new Error('ההזמנה לא נמצאה אחרי השמירה');
+      } catch(e) {
+        console.error('[upload] save failed', id, e);
+        failures.push({ n: i + 1, name: fileName, msg: e.message });
       }
-    } catch(e) {
-      console.error('[upload] Firebase error:', e.message, e);
-      alert('שגיאה בשמירה: ' + e.message);
+    }
+
+    if(failures.length){
+      uploadNotice('נשמרו ' + (images.length - failures.length) + ' מתוך ' + images.length +
+                   '. נכשלו: ' + failures.map(f => f.name || ('קובץ ' + f.n)).join(', ') +
+                   '. לחיצה נוספת על "שלח" תשלים את החסרים בלבד, בלי לשכפל.');
       btn.disabled = false;
       btn.textContent = 'שלח סקיצה ←';
       return;
     }
 
+    // רק כאן. עד לרגע הזה המשלוח נשמר, כדי שניסיון חוזר יידע לדרוס.
+    lgUploadBatchClear();
+    uploadNotice('');
     document.getElementById('formPage').style.display = 'none';
     document.getElementById('successScreen').classList.add('show');
     document.getElementById('successRef').textContent = 'מספר פנייה: ' + refNum;
   }
 
-  uploadedFiles.forEach((f, i) => {
-    if(f.type && f.type.startsWith('image/')){
-      compressImage(f.data, 1000, 0.6, function(compData){
-        compressed[i] = {name: f.name, data: compData};
-        processed++;
-        if(processed === uploadedFiles.length) saveAll();
-      });
-    } else {
-      compressed[i] = {name: f.name, data: f.data};
-      processed++;
-      if(processed === uploadedFiles.length) saveAll();
-    }
-  });
+  // הלולאה הקודמת ספרה סיומי דחיסה וקראה ל-saveAll רק כשהמונה השתווה
+  // למספר הקבצים. קריאה חוזרת אחת שלא הגיעה — קובץ פגום, תמונה שנגמר עליה
+  // הזיכרון, לשונית שהנייד הרדים — עצרה את הספירה לנצח: saveAll לא נקרא,
+  // שום דבר לא נשלח, ושום שגיאה לא הוצגה. הכפתור נשאר "מעבד...".
+  //
+  // זמן קצוב לכל קובץ הופך את אותה תקלה בדיוק לשגיאה שהלקוח רואה.
+  function compressOne(f){
+    return new Promise(resolve => {
+      compressImage(f.data, 1000, 0.6, d => resolve({ name: f.name, data: d }));
+    });
+  }
+
+  let images;
+  try {
+    images = await Promise.all(uploadedFiles.map((f, i) => {
+      const label = f.name || ('קובץ ' + (i + 1));
+      const job = (f.type && f.type.startsWith('image/'))
+        ? compressOne(f)
+        : Promise.resolve({ name: f.name, data: f.data });
+      return _lgWithTimeout(job, PROCESS_TIMEOUT_MS, 'עיבוד ' + label);
+    }));
+  } catch(e) {
+    console.error('[upload] processing failed:', e);
+    uploadNotice('העיבוד נכשל: ' + e.message + '. נסה שוב, או הסר את הקובץ הבעייתי.');
+    btn.disabled = false;
+    btn.textContent = 'שלח סקיצה ←';
+    return;
+  }
+
+  await saveAll(images);
 }
 
 // Session auto-detected — no need to pre-fill

@@ -44,8 +44,11 @@ check('and nothing still writes to a per-file name',
       /uploadedFiles\[\$?\{?i\}?\]\.sketchName\s*=/.test(UPLOAD), false);
 check('the remove button survived the rewrite',
       /class="rm" onclick="removeFile/.test(UPLOAD), true);
+/* this pinned `const fileSketchName = '';` — the variable, not the behaviour.
+   The reliability rewrite passes the empty name straight to saveSubmission and
+   the name is still empty, which is the whole point of the check. */
 check('an upload saves an empty name, not an invented one',
-      /const fileSketchName = '';/.test(bodyOf(UPLOAD, 'saveAll')), true);
+      /sketchName:\s*''/.test(bodyOf(UPLOAD, 'saveAll')), true);
 check('the auto-name is really gone',
       /'סקיצה ' \+ \(i \+ 1\)/.test(UPLOAD), false);
 
