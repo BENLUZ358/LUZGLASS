@@ -67,14 +67,91 @@ check('the attempt is recorded as simulated',
       /simulated:\s+isTest \|\| null/.test(SRC), true);
 check('and the caller is told',
       /ok: true, dryRun: false, simulated: isTest/.test(SRC), true);
-check('one invoice belongs to one account',
-      /clients\.length > 1[\s\S]{0,200}?status\(422\)/.test(SRC), true);
-check('the same order is not invoiced twice without force',
-      /hashavshevetInvoice && o\.hashavshevetInvoice\.sentAt[\s\S]{0,120}?!force/.test(SRC), true);
 check('issuing is opt-in, never the default',
       /const dryRun\s+= body\.dryRun !== false/.test(SRC), true);
 check('the agent must be positive and non-zero, as for orders',
       /!\(Number\(agent\) > 0\)/.test(SRC), true);
+
+/* ── one invoice belongs to one account ────────────────────────────────── */
+/*
+ * This guard used to compare orderClient — free text — while the billing
+ * screen groups by phone and the account key is looked up by phone. The two
+ * disagreed, so a phone group holding one nameless order, or a client whose
+ * name was corrected mid-month, was refused an invoice it was entitled to.
+ *
+ * Run the predicate rather than matching its source: what matters is which
+ * selections it accepts, not how it is written.
+ */
+{
+  const fn = (SRC.match(/function billingPhone[\s\S]*?\n}/) || [''])[0];
+  check('the account predicate is found', fn.length > 0, true);
+  const ctx = vm.createContext({});
+  vm.runInContext(fn, ctx);
+  const call = os => ctx.billingPhone(os);
+
+  /* the case that blocked a legitimate invoice */
+  check('orders whose client name differs are still one account',
+        call([{ clientPhone: '0501234567', orderClient: 'אבי זכוכית' },
+              { clientPhone: '0501234567', orderClient: 'אבי זכוכית בע"מ' }]).ok, true);
+  check('and so is one with no client name at all',
+        call([{ clientPhone: '0501234567', orderClient: 'אבי זכוכית' },
+              { clientPhone: '0501234567' }]).ok, true);
+  check('formatting of the number does not split the group',
+        call([{ clientPhone: '050-123 4567' },
+              { clientPhone: '0501234567' }]).ok, true);
+
+  /* what it must still refuse */
+  check('two different phones are two accounts',
+        call([{ clientPhone: '0501234567' }, { clientPhone: '0507654321' }]).ok, false);
+  check('and the same name over two phones does not merge them',
+        call([{ clientPhone: '0501234567', orderClient: 'אבי זכוכית' },
+              { clientPhone: '0507654321', orderClient: 'אבי זכוכית' }]).ok, false);
+  check('an order with no phone has no account to bill',
+        call([{ orderClient: 'אבי זכוכית' }]).ok, false);
+  check('the two refusals are told apart',
+        [call([{ clientPhone: '05011' }, { clientPhone: '05022' }]).reason,
+         call([{ orderClient: 'x' }]).reason], ['mixed', 'missing']);
+  check('and an accepted group reports the number to look the account up by',
+        call([{ clientPhone: '050-123 4567' }]).phone, '0501234567');
+}
+
+/* ── the same order is not invoiced twice ──────────────────────────────── */
+/*
+ * "Already invoiced" has to mean a document Hashavshevet accepted. The attempt
+ * is written to the order unconditionally — a rejected send records sentAt just
+ * like an accepted one — so testing sentAt alone locked an order out forever
+ * over an invoice that was never issued.
+ *
+ * httpOk === false is the only thing that releases it. A record without the
+ * field (written before it existed) counts as issued: blocking an invoice is
+ * recoverable, billing a client twice is not.
+ */
+{
+  const fn = (SRC.match(/function alreadyInvoiced[\s\S]*?\n}/) || [''])[0];
+  check('the duplicate predicate is found', fn.length > 0, true);
+  const ctx = vm.createContext({});
+  vm.runInContext(fn, ctx);
+  const call = os => ctx.alreadyInvoiced(os);
+
+  check('an order never invoiced is free',
+        call([{ orderNum: '1061' }]), []);
+  check('an accepted invoice blocks a second one',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1, httpOk: true } }]), ['1061']);
+  /* the case that blocked a legitimate invoice */
+  check('an invoice Hashavshevet rejected does not block a retry',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1, httpOk: false } }]), []);
+  check('a record from before httpOk existed is treated as issued',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1 } }]), ['1061']);
+  check('a simulated invoice still blocks — the run is the real path',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1, httpOk: true, simulated: true } }]),
+        ['1061']);
+  check('only the offending orders are named',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1, httpOk: true } },
+              { orderNum: '1062', hashavshevetInvoice: { sentAt: 1, httpOk: false } },
+              { orderNum: '1063' }]), ['1061']);
+  check('an order with no number falls back to its id',
+        call([{ id: 'ord_9', hashavshevetInvoice: { sentAt: 1, httpOk: true } }]), ['ord_9']);
+}
 
 /* ── the record ────────────────────────────────────────────────────────── */
 check('every attempt is written to each order in the batch',

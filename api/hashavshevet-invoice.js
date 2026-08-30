@@ -73,6 +73,35 @@ async function nextInvoiceRef(db) {
   return { ok: true, reference: String(result.snapshot.val()) };
 }
 
+// חשבונית אחת שייכת לחשבון אחד — והזהות היא הטלפון, לא השם. מפתח החשבון
+// נשלף מ-users/<טלפון>, ולכן הטלפון הוא מה שקובע בפועל את מי מחייבים.
+// שם לקוח הוא טקסט חופשי: הזמנה בלי שם, או שם שתוקן באמצע החודש, פיצלו
+// קבוצה תקינה לשתיים וחסמו חשבונית לגיטימית. ובכיוון המסוכן יותר — שני
+// לקוחות שונים בעלי אותו שם היו עוברים את הבדיקה ומחויבים שניהם לפי
+// הטלפון של הראשון.
+function billingPhone(orders) {
+  const phones = [...new Set(orders.map(o =>
+    String((o && (o.clientPhone || o.phone)) || '').replace(/[-\s]/g, '')))];
+  if (phones.length > 1) return { ok: false, reason: 'mixed', phones };
+  if (!phones[0])        return { ok: false, reason: 'missing' };
+  return { ok: true, phone: phones[0] };
+}
+
+// "כבר הופקה חשבונית" חייב להיות מסמך שחשבשבת קיבלו. הניסיון נרשם על
+// ההזמנה בלי תנאי — ניסיון שנדחה כותב sentAt בדיוק כמו ניסיון שהתקבל —
+// ולכן בדיקה על sentAt לבדה נעלה את ההזמנה לתמיד בגלל חשבונית שמעולם
+// לא נוצרה. httpOk === false הוא הדבר היחיד שמשחרר: רשומה בלי השדה
+// (מלפני שהוא היה קיים) נחשבת כהופקה, כי חסימת חשבונית היא הפיכה
+// וחיוב כפול של לקוח הוא לא.
+function alreadyInvoiced(orders) {
+  return orders
+    .filter(o => {
+      const inv = o && o.hashavshevetInvoice;
+      return !!(inv && inv.sentAt && inv.httpOk !== false);
+    })
+    .map(o => o.orderNum || o.id);
+}
+
 // שורה אחת לכל פריט נעול. Quantity = שטח כולל במ"ר, price = המחיר למ"ר
 // שננעל. lineTotal לא נשלח — חשבשבת מכפילים, ושליחת שלושתם מזמינה סתירה.
 function buildLines(orders, accountKey, reference, documentId, agent) {
@@ -140,15 +169,22 @@ module.exports = async function handler(req, res) {
     }
 
     // ── חשבונית אחת שייכת לחשבון אחד ──
-    const clients = [...new Set(orders.map(o => o.orderClient || ''))];
-    if (clients.length > 1) {
+    const acct = billingPhone(orders);
+    if (!acct.ok && acct.reason === 'mixed') {
       res.status(422).json({
         error: 'ההזמנות שנבחרו שייכות ליותר מלקוח אחד',
         hint:  'חשבונית מופקת על חשבון אחד. סנן לפי לקוח ובחר שוב.',
-        clients,
+        clients: [...new Set(orders.map(o => o.orderClient || ''))],
+        phones:  acct.phones,
       });
       return;
     }
+    if (!acct.ok) {
+      res.status(422).json({ error: 'להזמנה אין טלפון לקוח, ולכן אין דרך למצוא מפתח חשבון' });
+      return;
+    }
+    // לתצוגה בלבד. הזהות שמחייבים לפיה היא acct.phone, ולא השם הזה.
+    const clientName = orders.map(o => o.orderClient).find(Boolean) || '';
 
     // ── הזמנה פיקטיבית: כל המסלול רץ, המסמך לא נוצר ──
     //
@@ -185,8 +221,7 @@ module.exports = async function handler(req, res) {
     }
 
     // ── אי-כפילות ──
-    const already = orders.filter(o => o.hashavshevetInvoice && o.hashavshevetInvoice.sentAt)
-                          .map(o => o.orderNum || o.id);
+    const already = alreadyInvoiced(orders);
     if (already.length && !force) {
       res.status(409).json({
         error: 'כבר הופקה חשבונית על חלק מההזמנות', orders: already,
@@ -197,12 +232,11 @@ module.exports = async function handler(req, res) {
 
     // ── מפתח החשבון — אותה שרשרת כמו בהזמנה ──
     const first = orders[0];
-    const phone = String(first.clientPhone || first.phone || '').replace(/[-\s]/g, '');
-    if (!phone) { res.status(422).json({ error: 'להזמנה אין טלפון לקוח, ולכן אין דרך למצוא מפתח חשבון' }); return; }
+    const phone = acct.phone;
     const user       = (await db.ref('users/' + phone).once('value')).val();
     const accountKey = user && user.customerId;
     if (!accountKey) {
-      res.status(422).json({ error: `ללקוח ${first.orderClient || phone} אין מפתח חשבון (customerId)` });
+      res.status(422).json({ error: `ללקוח ${clientName || phone} אין מפתח חשבון (customerId)` });
       return;
     }
 
@@ -229,7 +263,7 @@ module.exports = async function handler(req, res) {
     if (dryRun) {
       res.status(200).json({
         ok: true, dryRun: true, isTest,
-        client: clients[0], accountKey, reference: ref.reference,
+        client: clientName, accountKey, reference: ref.reference,
         documentId, documentName: DOCUMENT_TYPES[documentId], agent,
         orderNums: orders.map(o => o.orderNum), lineCount: lines.length,
         total, preview, skipped,
@@ -299,7 +333,7 @@ module.exports = async function handler(req, res) {
 
     res.status(200).json({
       ok: true, dryRun: false, simulated: isTest,
-      client: clients[0], accountKey, reference: ref.reference,
+      client: clientName, accountKey, reference: ref.reference,
       documentId, documentName: DOCUMENT_TYPES[documentId],
       orderNums: orders.map(o => o.orderNum),
       lineCount: lines.length, total, skipped,
