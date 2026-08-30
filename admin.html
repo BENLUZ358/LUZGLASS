@@ -3832,13 +3832,23 @@ function sqSaveEdit(){
 
   // update in-memory object immediately
   sqCurrent.sketch = newSrc;
+  // וגם ברשימה — היא מחזיקה עותק משלה, וב-sqShowDetail הבא הוא היה
+  // מחזיר את התמונה מלפני העריכה.
+  const _it = sqItems.find(i => i.id === sqCurrent.id);
+  if(_it){ _it.sketch = newSrc; _it.hasSketch = true; }
 
   // persist permanently to Firebase as the canonical sketch
-  if(sqCurrent.id.startsWith('ord_')){
-    updateOrder(sqCurrent.id, { sketch: newSrc, hasSketch: true });
-    // שלב 1 — כתיבה כפולה גם לצומת הנפרד. השדה הישן נשמר למעלה כרגיל
-    lgSaveSketch(sqCurrent.id, newSrc);
-  }
+  //
+  // כאן היה `if(sqCurrent.id.startsWith('ord_'))`. הזמנה שהלקוח מעלה
+  // דרך הפורטל נשמרת כ-sub_<ms> (ר' saveSubmission), ולכן התנאי היה שקרי
+  // בדיוק על ההזמנות שעליהן מדגישים — הציור נכתב לאובייקט בזיכרון ולשום
+  // מקום אחר, והרינדור הבא החזיר את התמונה המקורית. כל מזהה ב-sqItems הוא
+  // הזמנה אמיתית מ-orders, ולכן אין מה לסנן.
+  const _id = sqCurrent.id;
+  updateOrder(_id, { sketch: newSrc, hasSketch: true })
+    .catch(e => { console.error('sqSaveEdit:', e); showToast('✗ שמירת הסקיצה נכשלה'); });
+  // שלב 1 — כתיבה כפולה גם לצומת הנפרד. השדה הישן נשמר למעלה כרגיל
+  lgSaveSketch(_id, newSrc);
 
   sqCloseEditor();
   // refresh detail view with new image

@@ -104,6 +104,63 @@ check('each tab reports whether it is selected', /aria-selected/.test(ADMIN), tr
 check('motion is dropped for anyone who asked for that',
       /prefers-reduced-motion[\s\S]{0,200}\.sq-seen-tab/.test(ADMIN), true);
 
+/* ── the edit has to survive the render ────────────────────────────────── */
+/*
+ * sqSaveEdit persisted only `if(sqCurrent.id.startsWith('ord_'))`. Every order
+ * a client uploads through the portal is keyed sub_<ms> — saveSubmission names
+ * them — so the guard was false for exactly the orders whose sketches get
+ * annotated. The merged image was written to the in-memory object and nothing
+ * else, and the next render read it back from Firebase unchanged: you drew on
+ * the sketch, pressed "סקיצה טופלה", and the work was gone.
+ *
+ * workday.html already knew both prefixes exist (markStageValue). This screen
+ * did not.
+ */
+{
+  const fn = (ADMIN.match(/function sqSaveEdit[\s\S]*?\n}/) || [''])[0];
+  check('the save function is found', fn.length > 0, true);
+  /* strip comments: the fix documents the guard it removed by quoting it, and
+     a check that reads comments would fail on its own explanation */
+  const code = fn.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  check('saving no longer depends on the id prefix',
+        /startsWith\(['"]ord_['"]\)/.test(code), false);
+  check('the order is updated', /updateOrder\(/.test(fn), true);
+  check('and the sketch node is written too', /lgSaveSketch\(/.test(fn), true);
+  /* the list keeps its own copy; without this the thumbnail stays stale and
+     the next sqShowDetail re-reads the pre-edit image from it */
+  check('the queue list gets the new image as well',
+        /sqItems\.find[\s\S]{0,160}?\.sketch\s*=\s*newSrc/.test(fn), true);
+  /* a failed write must not look like a success */
+  check('a failed save is surfaced, not swallowed',
+        /catch\s*\(/.test(fn), true);
+}
+
+/* ── the edit has to survive the whole chain ───────────────────────────── */
+/*
+ * Every screen reads a sketch through lgSketchIntoImg → lgLoadSketch, so an
+ * annotation only travels if BOTH copies move: orders/<id>/sketch, which the
+ * default 'old' source returns inline, and sketches/<id>, which the 'new'
+ * source prefers.
+ *
+ * lgGetSketch memoises into _lgSketchCache and lgSaveSketch did not touch it.
+ * Under the 'new' source that cache outlives the edit: lgSketchIntoImg paints
+ * the fresh inline image, then lgLoadSketch answers from the stale cache and
+ * overwrites it — the annotation appears and then vanishes by itself.
+ */
+{
+  const FB = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+  const save = (FB.match(/async function lgSaveSketch[\s\S]*?\n}/) || [''])[0];
+  check('lgSaveSketch is found', save.length > 0, true);
+  check('a saved sketch refreshes the read cache',
+        /_lgSketchCache\.(set|delete)\(/.test(save), true);
+
+  const load = (FB.match(/async function lgLoadSketch[\s\S]*?\n}/) || [''])[0];
+  check('the default source returns the inline copy the editor wrote',
+        /lgSketchSource\(\) === 'old' && inline/.test(load), true);
+  check('and sketchSeenAt did not disturb the sketch fields',
+        /sketch:\s*o\.sketch\s*\|\|\s*null/.test(FB), true);
+}
+
 /* ── what the client is told ───────────────────────────────────────────── */
 /*
  * A label on the step that already exists, not an eighth step. The stepper's

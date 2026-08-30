@@ -333,6 +333,9 @@ async function lgSaveSketch(orderId, dataUrl) {
   if (!orderId || !dataUrl) return false;
   try {
     await _lgDb.ref('sketches/' + orderId).set(dataUrl);
+    // בלי זה עריכה נעלמת מעצמה תחת המקור החדש: lgGetSketch משמר את מה
+    // שקרא, ולכן היה מחזיר את התמונה מלפני ההדגשה ודורס את זו שהוצגה.
+    _lgSketchCache.set(orderId, dataUrl);
     return true;
   } catch (e) {
     // כישלון כאן לא נוגע בשדה הישן, שכבר נשמר — ולכן אינו מאבד כלום
