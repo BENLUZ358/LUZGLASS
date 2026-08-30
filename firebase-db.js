@@ -437,7 +437,9 @@ async function saveOrder(data) {
 }
 
 async function saveSubmission(data) {
-  const id  = 'sub_' + Date.now();
+  // המזהה מגיע מהקורא כשהוא רוצה שניסיון חוזר יידרוס במקום ליצור כפילות.
+  // בלעדיו — התנהגות זהה לקודם, וכל קורא קיים ממשיך כרגיל.
+  const id  = data.id || ('sub_' + Date.now());
   const now = new Date();
 
   // המר files מ-array ל-object (Firebase Realtime DB לא שומר arrays אמינות)
