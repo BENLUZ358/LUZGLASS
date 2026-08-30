@@ -238,6 +238,53 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   .cp-money{margin-inline-start:auto;}
   .mgrid{grid-template-columns:1fr;}
 }
+/* מסך הפקת חשבונית — כמו pricingOv/pickupOv. חייב להישאר מתחת ל-800: זה
+   ה-z-index של מודל החשבונית (_invOverlay) שנפתח מעל המסך הזה, ואם billOv
+   מטפס מעליו החלון ייפתח מוסתר ובלתי-לחיץ. */
+#billOv{position:fixed;inset:0;background:rgba(26,23,20,0.6);z-index:200;display:none;}
+#billOv.open{display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;}
+#billOv .ov-panel{background:var(--surface);border-radius:10px;max-width:640px;width:100%;
+                  max-height:calc(100vh - 48px);display:flex;flex-direction:column;overflow:hidden;}
+#billOv .ov-head{padding:16px 18px;border-bottom:1px solid var(--border);
+                 display:flex;align-items:center;justify-content:space-between;}
+#billOv .ov-body{padding:16px 18px;overflow-y:auto;}
+.bill-search{width:100%;box-sizing:border-box;min-height:44px;padding:10px 12px;margin-bottom:12px;
+             border:1px solid var(--border);border-radius:6px;background:var(--bg);
+             font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;direction:rtl;}
+.bill-search:focus{border-color:var(--gold-text);box-shadow:0 0 0 3px rgba(184,146,42,0.15);}
+.bill-cli{display:flex;align-items:center;justify-content:space-between;gap:10px;
+          min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;
+          background:var(--bg);margin-bottom:6px;cursor:pointer;width:100%;
+          font-family:Heebo,sans-serif;font-size:14px;color:var(--text);text-align:right;}
+.bill-cli:hover{background:var(--bg2);}
+.bill-cli:focus-visible{outline:2px solid var(--gold-text);outline-offset:1px;}
+.bill-cli-n{font-weight:700;}
+.bill-cli-s{font-size:13px;color:var(--muted);white-space:nowrap;}
+.bill-row{border:1px solid var(--border);border-radius:6px;margin-bottom:6px;overflow:hidden;}
+.bill-row-top{display:flex;align-items:center;gap:10px;padding:0 12px;min-height:44px;}
+/* התיבה עצמה קטנה, אבל ה-label סביבה — כמו pickBox בכרטיס הקנבן — הוא
+   מטרת הלחיצה: כל השורה מסמנת/מבטלת, לא רק ריבוע 20 על 20. */
+.bill-check{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:44px;cursor:pointer;}
+.bill-check input{width:20px;height:20px;flex-shrink:0;cursor:pointer;}
+.bill-row-t{flex:1;min-width:0;font-size:13px;color:var(--text);}
+.bill-row-a{font-size:13px;font-weight:700;color:var(--gold-text);white-space:nowrap;}
+.bill-det>summary{min-height:44px;display:flex;align-items:center;padding:0 12px;
+                  font-size:13px;font-weight:700;color:var(--gold-text);cursor:pointer;
+                  outline:none;direction:rtl;list-style:none;border-top:1px solid var(--border);}
+.bill-det>summary::-webkit-details-marker{display:none;}
+.bill-det>summary:focus-visible{outline:2px solid var(--gold-text);outline-offset:-2px;}
+.bill-item{font-size:12px;color:#555;padding:1px 12px;}
+.bill-sk{width:100%;max-height:110px;min-height:60px;object-fit:contain;display:block;
+         border:1px solid var(--border);border-radius:4px;background:var(--bg2);
+         margin:6px 12px 8px;cursor:zoom-in;opacity:0;transition:opacity 200ms ease;}
+.bill-sk.is-loaded{opacity:1;}
+.bill-foot{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);
+           padding:12px 0 0;margin-top:12px;}
+.bill-sum{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;}
+/* הזמנות בלי טלפון לקוח — התראה, לא כפתור. אין להן חשבון בחשבשבת. */
+.bill-nophone{font-size:12px;line-height:1.5;color:#8a5b00;background:rgba(184,146,42,0.12);
+              border:1px solid rgba(184,146,42,0.35);border-radius:6px;padding:10px 12px;margin-bottom:8px;}
+@media (prefers-reduced-motion:reduce){ .bill-sk{transition:none;opacity:1;} }
 </style>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -267,6 +314,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <a class="unav-a active" href="#" onclick="setView('kanban',this)"><span class="ic" data-icon="kanban"></span>לוח הזמנות</a>
     <a class="unav-a" href="#" onclick="openPricing()"><span class="ic" data-icon="wallet"></span>מחירונים</a>
     <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
+    <a class="unav-a" href="#" onclick="openBillBoard()"><span class="ic" data-icon="calendar"></span>הפקת חשבונית</a>
     <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
     <div class="unav-sec">תחנות עבודה</div>
     <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
@@ -873,6 +921,10 @@ function acceptOrder(id) {
 // חשבונית מופקת על חשבון אחד, ולכן הבחירה ננעלת ללקוח של הראשונה שנבחרה.
 let invSel = new Set();
 let invSelClient = null;
+// ההזמנות שהתצוגה המקדימה נבנתה עליהן. invSel הוא סט חי — renderAll() רץ על
+// כל עדכון הזמנה מהרצפה, וגם מסך החיוב מרנדר מחדש ממנו — ולכן קריאה חוזרת
+// שלו ברגע השליחה יכולה להחזיר קבוצה אחרת מזו שהמנהל אישר על המסך.
+let _invPreviewIds = [];
 
 function invToggle(id, client, ev){
   if(ev) ev.stopPropagation();          // אל תפתח את ההזמנה בלחיצה על התיבה
@@ -912,10 +964,20 @@ async function markOrderTest(){
   }
 }
 
+// סרגל הבחירה של הקנבן ומסך הפקת החשבונית חולקים את invSel, ולכן ברגע
+// שמסך החיוב מסמן הזמנות הסרגל הזה "מתעורר" — והוא position:fixed עם
+// z-index:400, מעל #billOv (200). התוצאה הייתה סרגל שחור שנמתח מעל הפאנל
+// ומציע "הפק חשבונית" שני ו"נקה בחירה", על אותה בחירה בדיוק.
+// הפרדה נקייה: כשמסך החיוב פתוח יש לו כפתור הפקה משלו בתחתית הפאנל,
+// והסרגל לא מצויר כלל. פונקציה נפרדת כדי שאפשר יהיה לבדוק את התנאי.
+function _invBarSuppressed(){
+  return !!document.getElementById('billOv')?.classList.contains('open');
+}
+
 // סרגל הבחירה. מופיע רק כשיש בחירה, ומראה על מה בדיוק תופק החשבונית.
 function renderInvBar(){
   let bar = document.getElementById('invBar');
-  if(!invSel.size){ if(bar) bar.remove(); return; }
+  if(!invSel.size || _invBarSuppressed()){ if(bar) bar.remove(); return; }
   if(!bar){
     bar = document.createElement('div');
     bar.id = 'invBar';
@@ -942,8 +1004,10 @@ function renderInvBar(){
 
 // שלב 1 — תצוגה מקדימה מהשרת. שום דבר לא נשלח לחשבשבת בשלב הזה.
 async function invPreview(){
-  const ids = Array.from(invSel);
+  const ids = Array.from(invSel).map(String);
   if(!ids.length) return;
+  // נשמר כאן, ורק כאן. השליחה תשתמש בדיוק ברשימה הזו — ר' invSend.
+  _invPreviewIds = ids;
   _invOverlay('בונה את החשבונית בשרת...');
   let data, res;
   try {
@@ -958,7 +1022,13 @@ async function invPreview(){
 async function invSend(){
   const btn = document.getElementById('invSendBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'מפיק...'; }
-  const ids = Array.from(invSel);
+  // ההזמנות שנשלחות הן אלה שהתצוגה המקדימה נבנתה עליהן — לא invSel כפי
+  // שהוא ברגע הלחיצה. עדכון חי שנוחת בזמן שחלון האישור פתוח היה מוסיף
+  // לסט הזמנות שמעולם לא הופיעו במסך, והמנהל היה מאשר תשע ושולח שתים-עשרה
+  // בלי ששום דבר על המסך משתנה. hashavshevetInvoice.sentAt אינו מגן כאן:
+  // אף אחת מהן לא חויבה קודם.
+  const ids = _invPreviewIds.map(String);
+  if(!ids.length){ _invRender({ error: 'אין הזמנות בתצוגה המקדימה' }, false); return; }
   let data, res;
   try {
     res  = await _lgAuthPost('/api/hashavshevet-invoice', { orderIds: ids, dryRun: false });
@@ -968,7 +1038,11 @@ async function invSend(){
     for(const id of ids){
       await updateStage(id, 'collected').catch(function(e){ console.error('invSend updateStage:', e); });
     }
-    invSel.clear(); invSelClient = null;
+    // רק מה שנשלח יורד מהבחירה. אם בינתיים נוספה הזמנה שלא נכללה בתצוגה
+    // המקדימה — היא נשארת מסומנת וממתינה להפקה משלה, ולא נמחקת בשקט.
+    ids.forEach(function(id){ invSel.delete(String(id)); });
+    if(!invSel.size) invSelClient = null;
+    _invPreviewIds = [];
   }
   _invRender(data, res.ok);
   renderAll();
@@ -1203,6 +1277,13 @@ function renderAll(){
         sqCurrent.sketchName = _live.sketchName || _live.type || '';
     }
     sqRefreshMetrics();
+  }
+
+  // מסך החיוב נבנה מ-orders בזמן הפתיחה. אחרי הפקה מוצלחת ה-invSel מתרוקן
+  // וההזמנות שחויבו יוצאות מ-_billFilterOrders — בלי רענון כאן השורות
+  // היו נשארות על המסך מסומנות כאילו עדיין ממתינות לחיוב.
+  if(document.getElementById('billOv')?.classList.contains('open')){
+    renderBillBoard();
   }
 }
 
@@ -1632,6 +1713,262 @@ function _dsStat(label, count, sub, color){
 }
 function closePickup(){
   document.getElementById('pickupOv').classList.remove('open');
+}
+
+// ── הפקת חשבונית ───────────────────────────────────────────────────────
+//
+//  תהליך ולא סקירה: מתחיל ריק, מחפשים לקוח, ורואים רק את שלו.
+//
+//  "לא חויב" אינו שדה חדש. ה-API כבר מסרב לחייב הזמנה פעמיים לפי
+//  hashavshevetInvoice.sentAt, ולכן אותה עובדה מגדירה את הרשימה — אין מצב
+//  חדש לתחזק, ואין סנכרון שיכול להתפצל. חיוב כפול נשאר חסום בשרת.
+//
+//  _billClient מחזיק טלפון מנורמל ולא שם. ר' _billKey.
+let _billClient = null;
+let _billSearch = '';
+
+// מפתח הקיבוץ הוא הטלפון, כמו בכל מקום אחר במערכת שבו מזהים לקוח — השם
+// הוא לתצוגה. השרת מוצא את מפתח החשבון בחשבשבת לפי clientPhone של ההזמנה
+// הראשונה באצווה, ובודק "לקוח אחד" לפי orderClient. קיבוץ לפי שם משמעו
+// ששני לקוחות שונים עם אותו שם תצוגה עוברים את הבדיקה הזו ומחויבים כולם
+// ל-customerId של הראשון.
+function _billKey(o){
+  return String((o && (o.clientPhone || o.phone)) || '').replace(/[-\s]/g, '');
+}
+
+// "חויב" = ניסיון שהתקבל. ה-API רושם hashavshevetInvoice על כל הזמנה
+// באצווה *לפני* שהוא יודע אם חשבשבת קיבלו — בכוונה, כדי שגם כישלון יתועד —
+// ולכן sentAt לבדו הופך אצווה שנדחתה (httpOk=false) לבלתי-נראית לנצח
+// במסך היחיד שנועד למצוא עבודה שלא חויבה. כאן נדרש גם httpOk.
+//
+// ריצה פיקטיבית נחשבת כחויבה: המסלול רץ במלואו והוחלט ביודעין שלא ייווצר
+// מסמך. להשאיר אותה ברשימה פירושו להציע להפיק חשבונית אמיתית על הזמנת
+// בדיקה — בדיוק מה שהסימון בא למנוע. שני השדות עוברים ב-lgNormalizeOrder.
+function _billIsBilled(o){
+  const inv = o && o.invoice;
+  if(!(inv && inv.sentAt)) return false;
+  return !!inv.httpOk || !!inv.simulated;
+}
+
+function _billFilterOrders(){
+  return orders.filter(o => o.stage === 'collected' && !_billIsBilled(o));
+}
+
+// ההזמנות של לקוח אחד, לפי מפתח הטלפון
+function _billOrdersFor(key){
+  if(!key) return [];   // "בלי טלפון" אינו לקוח, ואי אפשר לבחור אותו
+  return _billFilterOrders()
+    .filter(o => _billKey(o) === key)
+    .sort((a,b) => (a.orderNum||'').localeCompare(b.orderNum||''));
+}
+
+// קיבוץ טהור, בלי DOM — כדי שאפשר יהיה להריץ אותו בבדיקה.
+// הזמנות בלי טלפון מוחזרות בנפרד ולא כקבוצה: הן אינן לקוח אחד, ודלי
+// משותף כזה היה כפתור אחד שמחייב הזמנות של אנשים שונים לחשבון של הראשון.
+function _billGroups(list, q){
+  const by = {}, noPhone = [];
+  (list||[]).forEach(o => {
+    const k = _billKey(o);
+    if(!k){ noPhone.push(o); return; }
+    const g = by[k] || (by[k] = { key: k, name: '', ords: [] });
+    if(!g.name && o.orderClient) g.name = o.orderClient;
+    g.ords.push(o);
+  });
+  const needle = String(q||'').trim().toLowerCase();
+  const groups = Object.keys(by).map(k => by[k])
+    .filter(g => !needle || (g.name||'').toLowerCase().includes(needle) || g.key.includes(needle))
+    .sort((a,b) => b.ords.length - a.ords.length);
+  return { groups, noPhone };
+}
+
+// זריעת הבחירה — פעם אחת, בבחירת הלקוח. לא ברינדור.
+function _billSeedSelection(ords, sel){
+  (ords||[]).forEach(o => sel.add(String(o.id)));
+  return sel;
+}
+
+// גיזום — מה שיצא מהרשימה החיה יורד מהבחירה. ההפך מהוספה: הוא לעולם לא
+// מחזיר סימון שהוסר ידנית.
+function _billPruneSelection(ords, sel){
+  const live = new Set((ords||[]).map(o => String(o.id)));
+  Array.from(sel).forEach(id => { if(!live.has(String(id))) sel.delete(id); });
+  return sel;
+}
+
+function openBillBoard(){
+  _billClient = null; _billSearch = '';
+  invSel.clear(); invSelClient = null; _invPreviewIds = [];
+  document.getElementById('billOv').classList.add('open');
+  renderInvBar();   // מסלק את סרגל הקנבן אם נשאר על המסך
+  renderBillBoard();
+}
+function closeBillBoard(){
+  document.getElementById('billOv').classList.remove('open');
+  invSel.clear(); invSelClient = null; _invPreviewIds = [];
+  renderInvBar();
+}
+
+function renderBillBoard(){
+  const el = document.getElementById('billBody');
+  if(!el) return;
+  if(_billClient) _renderBillClient(el); else _renderBillClients(el);
+}
+
+function _renderBillClients(el){
+  // הרינדור הזה מגיע גם מ-renderAll() — כל עדכון הזמנה בחנות, לא רק הקלדה —
+  // כי המסך מאזין ל-Firebase החי. innerHTML למטה הורס את שדה החיפוש ובונה
+  // אותו מחדש, אז פוקוס ומיקום הסמן נלכדים כאן, לפני ההחלפה, ומוחזרים
+  // אחריה — לא רק הטקסט. פוקוס בלי סמן משמעו שהעכבר קופץ לתחילת המחרוזת,
+  // שזה הפוך במיוחד בעברית.
+  const prevInp  = document.getElementById('billSearch');
+  const hadFocus = !!prevInp && document.activeElement === prevInp;
+  const selStart = hadFocus ? prevInp.selectionStart : null;
+  const selEnd   = hadFocus ? prevInp.selectionEnd   : null;
+
+  const q = _billSearch.trim().toLowerCase();
+  const { groups: list, noPhone } = _billGroups(_billFilterOrders(), q);
+
+  el.innerHTML =
+    '<input class="bill-search" id="billSearch" type="search" autocomplete="off"' +
+    ' placeholder="חפש לקוח..." aria-label="חיפוש לקוח לחיוב" value="' + lgEsc(_billSearch) + '">' +
+    '<div id="billClients"></div>';
+  const inp = document.getElementById('billSearch');
+  inp.oninput = () => { _billSearch = inp.value; _renderBillClients(el); };
+  if(hadFocus){
+    inp.focus();
+    inp.setSelectionRange(selStart, selEnd);
+  }
+
+  const box = document.getElementById('billClients');
+  // ההזמנות בלי טלפון אינן לקוח, ואי אפשר להפיק להן חשבונית: השרת מחפש את
+  // מפתח החשבון לפי הטלפון ומחזיר 422 בלעדיו. מוצגות כהתראה, לא ככפתור.
+  const noPhoneNote = noPhone.length
+    ? '<div class="bill-nophone">⚠ ' + noPhone.length + ' הזמנות שנאספו בלי טלפון לקוח — ' +
+      'אי אפשר להפיק עליהן חשבונית מכאן. יש להשלים טלפון בכרטיס ההזמנה.</div>'
+    : '';
+  if(!list.length){
+    box.innerHTML = noPhoneNote + '<div class="empty-state"><div class="empty-state-msg">' +
+      (q ? 'אין לקוח תואם' : 'אין הזמנות שנאספו וטרם חויבו') + '</div></div>';
+    return;
+  }
+  // מפתח הלקוח עובר ב-data ולא בתוך onclick. הרכבת JS עם ערך מהנתונים בתוך
+  // מחרוזת HTML היא בדיוק מה שהקוד הקיים כבר נמנע ממנו — ר' ההערה ליד
+  // כפתורי ההובלה ב-workday.html.
+  box.innerHTML = noPhoneNote + list.map(g => {
+    const total = g.ords.reduce((s,o) => s + (lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0), 0);
+    const label = g.name || g.key;
+    return '<button class="bill-cli" data-billkey="' + lgEsc(g.key) + '">' +
+      '<span class="bill-cli-n">' + lgEsc(label) + '</span>' +
+      '<span class="bill-cli-s">' + g.ords.length + ' · ₪' + total.toLocaleString() + '</span>' +
+    '</button>';
+  }).join('');
+  box.querySelectorAll('button[data-billkey]').forEach(btn =>
+    btn.addEventListener('click', () => _billPick(btn.dataset.billkey)));
+}
+
+// שם התצוגה של הקבוצה. הטלפון מזהה, השם רק נראה.
+function _billNameFor(ords, key){
+  const named = (ords||[]).find(o => o.orderClient);
+  return (named && named.orderClient) || key || '—';
+}
+
+function _billPick(key){
+  _billClient = key;
+  const ords = _billOrdersFor(key);
+  // הכל מסומן כברירת מחדל — בסוף החודש מחייבים על הכל, והסרת סימון היא
+  // החריג. הזריעה כאן ורק כאן: ברינדור אסור לגעת ב-invSel, אחרת כל עדכון
+  // הזמנה מהרצפה היה מחזיר לבחירה הזמנות שהמנהל הוריד ידנית.
+  invSel.clear();
+  _billSeedSelection(ords, invSel);
+  invSelClient = _billNameFor(ords, key);
+  _invPreviewIds = [];
+  renderBillBoard();
+}
+
+function _renderBillClient(el){
+  const ords  = _billOrdersFor(_billClient);
+  const cname = _billNameFor(ords, _billClient);
+
+  // רינדור לא מסמן. הוא רק מוריד מהבחירה מה שכבר אינו ברשימה החיה —
+  // הזמנה שחויבה במקום אחר או שיצאה מ"נאסף".
+  _billPruneSelection(ords, invSel);
+
+  el.innerHTML =
+    '<button class="bill-cli" onclick="_billBack()" style="margin-bottom:12px">' +
+      '<span class="bill-cli-n">← ' + lgEsc(cname) + '</span>' +
+      '<span class="bill-cli-s">' + ords.length + ' הזמנות</span>' +
+    '</button>' +
+    '<div id="billRows"></div>' +
+    '<div class="bill-foot">' +
+      '<div class="bill-sum" id="billTotal" aria-live="polite"></div>' +
+      '<button class="btn btn-primary" style="width:100%" onclick="invPreview()">הפק חשבונית</button>' +
+    '</div>';
+
+  document.getElementById('billRows').innerHTML = ords.map(o => {
+    const total = lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0;
+    const items = (o.items||[]).map(it =>
+      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + (it.w||'') + '×' + (it.h||'') + ' מ"מ</div>').join('');
+    const sk = (o.hasSketch || o.sketch)
+      ? '<img class="bill-sk" data-sketch-for="' + lgEsc(String(o.id)) + '"' +
+        ' alt="סקיצה — ' + lgEsc(o.orderNum||'') + '" onclick="if(this.src)previewSketchSrc(this.src)">'
+      : '';
+    return '<div class="bill-row">' +
+      '<div class="bill-row-top">' +
+        '<label class="bill-check">' +
+          // מצב התיבה נקרא מהבחירה, לא נכתב קשיח. תיבה קבועה checked ציירה
+          // מחדש כמסומנות גם הזמנות שהוסרו רגע קודם.
+          '<input type="checkbox"' + (invSel.has(String(o.id)) ? ' checked' : '') +
+          ' data-oid="' + lgEsc(String(o.id)) + '"' +
+          ' aria-label="כלול את ' + lgEsc(o.orderNum||'') + ' בחשבונית">' +
+          '<span class="bill-row-t">' + lgEsc(o.orderNum||'') + ' · ' + lgEsc(o.date||'') + '</span>' +
+        '</label>' +
+        '<span class="bill-row-a">₪' + total.toLocaleString() + '</span>' +
+      '</div>' +
+      '<details class="bill-det"><summary>פירוט</summary>' + items + sk + '</details>' +
+    '</div>';
+  }).join('');
+
+  el.querySelectorAll('.bill-row-top input').forEach(cb => cb.addEventListener('change', () => {
+    if(cb.checked) invSel.add(cb.dataset.oid); else invSel.delete(cb.dataset.oid);
+    _billUpdateTotal(ords);
+  }));
+  el.querySelectorAll('details.bill-det').forEach(d =>
+    d.addEventListener('toggle', () => { if(d.open) _hydrateBillSketches(d); }));
+  _billUpdateTotal(ords);
+}
+
+function _billBack(){
+  _billClient = null; invSel.clear(); invSelClient = null; _invPreviewIds = [];
+  renderBillBoard();
+}
+
+// הסכום נאמר, לא רק מצויר — aria-live מודיע לקורא מסך כשהוא משתנה
+function _billUpdateTotal(ords){
+  const chosen = ords.filter(o => invSel.has(String(o.id)));
+  const total  = chosen.reduce((s,o) => s + (lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0), 0);
+  const el = document.getElementById('billTotal');
+  if(el) el.textContent = `נבחרו ${chosen.length} מתוך ${ords.length} · ₪${total.toLocaleString()}`;
+}
+
+// סקיצות נטענות רק בפתיחת שורה — ר' אותו דפוס ב-workday.html
+function _hydrateBillSketches(root){
+  root.querySelectorAll('img[data-sketch-for]').forEach(el => {
+    const id = el.getAttribute('data-sketch-for');
+    if(el.dataset.lgFor === id) return;
+    const o = orders.find(x => String(x.id) === String(id));
+    if(o) lgSketchIntoImg(el, o, () => el.classList.add('is-loaded'));
+  });
+}
+
+// תצוגה מלאה של סקיצה מתוך מסך החיוב. previewSketch הקיים מקבל מזהה הזמנה
+// וקורא את o.sketch; כאן התמונה כבר נטענה ל-img, אז מוצג המקור שלו.
+function previewSketchSrc(src){
+  if(!src) return;
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:900;display:flex;align-items:center;justify-content:center;padding:20px;cursor:zoom-out;';
+  ov.innerHTML = '<img src="' + lgEsc(src) + '" alt="סקיצה בתצוגה מלאה" style="max-width:95vw;max-height:90vh;object-fit:contain;">';
+  ov.onclick = () => ov.remove();
+  document.body.appendChild(ov);
 }
 
 function renderPickupBoard(){
@@ -3921,6 +4258,7 @@ function _renderUserList(users, elId){
           ${lgEsc(u.name)}
           ${u.isMainAdmin?'<span style="font-size:12px;color:var(--gold-text)">★ ראשי</span>':''}
           ${u.isDelivery?'<span style="font-size:12px;color:#2980b9">🚚 הובלות</span>':''}
+          ${u.monthlyBilling?'<span style="font-size:12px;color:var(--gold-text)">📅 שוטף 30</span>':''}
           ${!isActive?'<span style="font-size:12px;background:rgba(0,0,0,0.07);color:var(--muted);padding:1px 6px;border-radius:3px">לא פעיל</span>':''}
           ${u.source==='hashavshevet'?'<span style="font-size:12px;background:rgba(184,146,42,0.12);color:var(--gold-text);padding:1px 6px;border-radius:3px">חשבשבת</span>':''}
         </div>
@@ -3937,6 +4275,9 @@ function _renderUserList(users, elId){
           <button onclick="umToggleDelivery('${u.id}','${lgJsStr(u.businessName||u.name)}',${!!u.isDelivery})"
             title="${u.isDelivery ? 'בטל הובלות' : 'הגדר כהובלות'}"
             style="padding:4px 8px;background:${u.isDelivery?'rgba(41,128,185,0.15)':'rgba(0,0,0,0.04)'};border:1px solid ${u.isDelivery?'rgba(41,128,185,0.4)':'rgba(0,0,0,0.1)'};color:${u.isDelivery?'#2980b9':'#aaa'};font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">🚚</button>
+          <button onclick="umToggleMonthly('${u.id}','${lgJsStr(u.businessName||u.name)}',${!!u.monthlyBilling})"
+            title="${u.monthlyBilling ? 'בטל שוטף 30' : 'הגדר כשוטף 30'}"
+            style="padding:4px 8px;background:${u.monthlyBilling?'rgba(184,146,42,0.15)':'rgba(0,0,0,0.04)'};border:1px solid ${u.monthlyBilling?'rgba(184,146,42,0.4)':'rgba(0,0,0,0.1)'};color:${u.monthlyBilling?'var(--gold-text)':'#aaa'};font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">📅</button>
         ` : ''}
         ${!u.isMainAdmin ? `<button onclick="umDeleteUser('${u.id}','${lgJsStr(u.name)}')"
           style="padding:4px 10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.2);color:#c0392b;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">מחק</button>` : ''}
@@ -4000,6 +4341,23 @@ async function _propagateDeliveryToOrders(phone, isDelivery){
   return updated;
 }
 
+// מפזר את דגל שוטף 30 להזמנות קיימות. לפי טלפון ולא לפי שם — שם לקוח
+// משתנה, והטלפון הוא המזהה שכל הזמנה נושאת. בשונה מ-_propagateDeliveryToOrders:
+// קורא מהמערך orders שכבר טעון בזיכרון במקום לשלוף מחדש מ-Firebase, ולא
+// מנרמל את הטלפון — _lgNormalizePhone כבר רץ בזמן הכתיבה על כל טלפון
+// שנשמר, הן על רשומת המשתמש והן על שדות ההזמנה, כך ששני הצדדים כאן כבר
+// ספרות בלבד.
+async function _propagateMonthlyToOrders(phone, isMonthly){
+  if(!phone) return;
+  const updates = {};
+  orders.forEach(o => {
+    if(o.clientPhone === phone || o.phone === phone){
+      if(!!o.monthlyBilling !== !!isMonthly) updates['orders/' + o.id + '/monthlyBilling'] = !!isMonthly;
+    }
+  });
+  if(Object.keys(updates).length) await firebase.database().ref().update(updates);
+}
+
 // שנה סטטוס הובלות ללקוח קיים + עדכן כל הזמנותיו
 async function umToggleDelivery(userId, clientName, currentVal){
   const newVal = !currentVal;
@@ -4015,6 +4373,24 @@ async function umToggleDelivery(userId, clientName, currentVal){
     if(newVal){
       await _propagateDeliveryToOrders(user.phone, true);
     }
+    showToast(`✓ ${clientName} עודכן ל${label}`);
+    _loadUsers();
+  } catch(e){ showToast('שגיאה: ' + e.message); }
+}
+
+// שוטף 30 — אותו דפוס בדיוק כמו umToggleDelivery.
+async function umToggleMonthly(userId, clientName, currentVal){
+  const newVal = !currentVal;
+  const label  = newVal ? 'שוטף 30' : 'חיוב רגיל';
+  if(!confirm(`לשנות את ${clientName} ל${label}?\n\n${newVal
+    ? 'בסיום הובלה לא תישאל יותר שאלת החשבונית — ההזמנה תעבור לנאסף, והחשבונית תופק מרוכזת.'
+    : 'ההגדרה תוסר, ושאלת החשבונית תחזור להישאל בכל סיום הובלה.'}`)) return;
+  try {
+    const snap = await firebase.database().ref('users/' + userId).once('value');
+    const user = snap.val();
+    if(!user){ showToast('לא נמצא משתמש'); return; }
+    await firebase.database().ref('users/' + userId).update({ monthlyBilling: newVal, updatedAt: Date.now() });
+    await _propagateMonthlyToOrders(user.phone, newVal);
     showToast(`✓ ${clientName} עודכן ל${label}`);
     _loadUsers();
   } catch(e){ showToast('שגיאה: ' + e.message); }
@@ -4082,6 +4458,17 @@ async function umToggleActive(userId, clientName, currentlyActive){
       </div>
 
     </div>
+  </div>
+</div>
+
+<!-- הפקת חשבונית — תהליך ולא רשימה. מתחיל ריק; בוחרים לקוח אחד. -->
+<div id="billOv" class="ov">
+  <div class="ov-panel">
+    <div class="ov-head">
+      <h2 style="display:flex;align-items:center;gap:8px"><span>🧾</span>הפקת חשבונית</h2>
+      <button class="mcl" onclick="closeBillBoard()" aria-label="סגור"><span data-icon="x"></span></button>
+    </div>
+    <div id="billBody" class="ov-body"></div>
   </div>
 </div>
 

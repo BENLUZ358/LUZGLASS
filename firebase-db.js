@@ -722,6 +722,10 @@ function lgNormalizeOrder(o) {
     // כאן, אחרת אף מסך לא יוכל לסמן אותה ככזו והיא תיראה כמו הזמנה אמיתית.
     isTest:         !!o.isTest,
     deliveryClient: !!o.deliveryClient,
+    // שוטף 30 — הלקוח אוסף לאורך החודש ומחויב פעם אחת בסופו. מסומן על
+    // ההזמנה ולא רק על הלקוח, כדי שהזמנה תזכור באיזה משטר היא נפתחה גם
+    // אם ההגדרה של הלקוח תשתנה מאוחר יותר.
+    monthlyBilling: !!o.monthlyBilling,
     createdAt:     o.createdAt    || 0,
     updatedAt:     o.updatedAt    || 0,
     // שדות "נעילת מחיר" ולקוח — היו נמחקים בשקט כאן, ולכן הנעילה מעולם לא

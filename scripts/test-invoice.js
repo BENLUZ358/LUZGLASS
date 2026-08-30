@@ -22,6 +22,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const vm   = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const SRC  = fs.readFileSync(path.join(ROOT, 'api', 'hashavshevet-invoice.js'), 'utf8');
@@ -66,14 +67,91 @@ check('the attempt is recorded as simulated',
       /simulated:\s+isTest \|\| null/.test(SRC), true);
 check('and the caller is told',
       /ok: true, dryRun: false, simulated: isTest/.test(SRC), true);
-check('one invoice belongs to one account',
-      /clients\.length > 1[\s\S]{0,200}?status\(422\)/.test(SRC), true);
-check('the same order is not invoiced twice without force',
-      /hashavshevetInvoice && o\.hashavshevetInvoice\.sentAt[\s\S]{0,120}?!force/.test(SRC), true);
 check('issuing is opt-in, never the default',
       /const dryRun\s+= body\.dryRun !== false/.test(SRC), true);
 check('the agent must be positive and non-zero, as for orders',
       /!\(Number\(agent\) > 0\)/.test(SRC), true);
+
+/* ── one invoice belongs to one account ────────────────────────────────── */
+/*
+ * This guard used to compare orderClient — free text — while the billing
+ * screen groups by phone and the account key is looked up by phone. The two
+ * disagreed, so a phone group holding one nameless order, or a client whose
+ * name was corrected mid-month, was refused an invoice it was entitled to.
+ *
+ * Run the predicate rather than matching its source: what matters is which
+ * selections it accepts, not how it is written.
+ */
+{
+  const fn = (SRC.match(/function billingPhone[\s\S]*?\n}/) || [''])[0];
+  check('the account predicate is found', fn.length > 0, true);
+  const ctx = vm.createContext({});
+  vm.runInContext(fn, ctx);
+  const call = os => ctx.billingPhone(os);
+
+  /* the case that blocked a legitimate invoice */
+  check('orders whose client name differs are still one account',
+        call([{ clientPhone: '0501234567', orderClient: 'אבי זכוכית' },
+              { clientPhone: '0501234567', orderClient: 'אבי זכוכית בע"מ' }]).ok, true);
+  check('and so is one with no client name at all',
+        call([{ clientPhone: '0501234567', orderClient: 'אבי זכוכית' },
+              { clientPhone: '0501234567' }]).ok, true);
+  check('formatting of the number does not split the group',
+        call([{ clientPhone: '050-123 4567' },
+              { clientPhone: '0501234567' }]).ok, true);
+
+  /* what it must still refuse */
+  check('two different phones are two accounts',
+        call([{ clientPhone: '0501234567' }, { clientPhone: '0507654321' }]).ok, false);
+  check('and the same name over two phones does not merge them',
+        call([{ clientPhone: '0501234567', orderClient: 'אבי זכוכית' },
+              { clientPhone: '0507654321', orderClient: 'אבי זכוכית' }]).ok, false);
+  check('an order with no phone has no account to bill',
+        call([{ orderClient: 'אבי זכוכית' }]).ok, false);
+  check('the two refusals are told apart',
+        [call([{ clientPhone: '05011' }, { clientPhone: '05022' }]).reason,
+         call([{ orderClient: 'x' }]).reason], ['mixed', 'missing']);
+  check('and an accepted group reports the number to look the account up by',
+        call([{ clientPhone: '050-123 4567' }]).phone, '0501234567');
+}
+
+/* ── the same order is not invoiced twice ──────────────────────────────── */
+/*
+ * "Already invoiced" has to mean a document Hashavshevet accepted. The attempt
+ * is written to the order unconditionally — a rejected send records sentAt just
+ * like an accepted one — so testing sentAt alone locked an order out forever
+ * over an invoice that was never issued.
+ *
+ * httpOk === false is the only thing that releases it. A record without the
+ * field (written before it existed) counts as issued: blocking an invoice is
+ * recoverable, billing a client twice is not.
+ */
+{
+  const fn = (SRC.match(/function alreadyInvoiced[\s\S]*?\n}/) || [''])[0];
+  check('the duplicate predicate is found', fn.length > 0, true);
+  const ctx = vm.createContext({});
+  vm.runInContext(fn, ctx);
+  const call = os => ctx.alreadyInvoiced(os);
+
+  check('an order never invoiced is free',
+        call([{ orderNum: '1061' }]), []);
+  check('an accepted invoice blocks a second one',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1, httpOk: true } }]), ['1061']);
+  /* the case that blocked a legitimate invoice */
+  check('an invoice Hashavshevet rejected does not block a retry',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1, httpOk: false } }]), []);
+  check('a record from before httpOk existed is treated as issued',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1 } }]), ['1061']);
+  check('a simulated invoice still blocks — the run is the real path',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1, httpOk: true, simulated: true } }]),
+        ['1061']);
+  check('only the offending orders are named',
+        call([{ orderNum: '1061', hashavshevetInvoice: { sentAt: 1, httpOk: true } },
+              { orderNum: '1062', hashavshevetInvoice: { sentAt: 1, httpOk: false } },
+              { orderNum: '1063' }]), ['1061']);
+  check('an order with no number falls back to its id',
+        call([{ id: 'ord_9', hashavshevetInvoice: { sentAt: 1, httpOk: true } }]), ['ord_9']);
+}
 
 /* ── the record ────────────────────────────────────────────────────────── */
 check('every attempt is written to each order in the batch',
@@ -174,5 +252,72 @@ check('the account key is resolved server-side',
         /ההזמנות נשארו בהובלה/.test(result), true);
 }
 
-if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
-console.log('\nAll invoice checks passed.');
+/* ── a consolidated invoice gets its own number ────────────────────────── */
+/*
+ * The reference was the first order's number. For one order that is right and
+ * convenient — you see an invoice and know which order it belongs to. For
+ * twenty it is arbitrary, and it collides: order 1061 already carries
+ * reference 1061 on its own order document in Hashavshevet, and its invoice
+ * took 1061 as well.
+ *
+ * A consolidated invoice takes a running number of its own, from the same
+ * transaction pattern as meta/orderCounter. A single-order invoice is left
+ * exactly as it was.
+ */
+check('a consolidated invoice uses its own counter',
+      /const ref = orders\.length > 1[\s\S]{0,200}?nextInvoiceRef\(db\)/.test(SRC), true);
+check('a single-order invoice keeps the order number',
+      /: toReference\(first\.orderNum\);/.test(SRC), true);
+/*
+ * Run the counter rather than matching its source. The check here used to pin
+ * the literal `Math.max(current || 0, 5000) + 1` — which fails a correct
+ * refactor and passes a broken counter that keeps the string. What matters is
+ * the behaviour: a transaction (not read-then-write), on its own node, that
+ * never returns a number it has returned before.
+ */
+{
+  const fn = (SRC.match(/async function nextInvoiceRef[\s\S]*?\n}/) || [''])[0];
+  check('the counter function is found', fn.length > 0, true);
+  check('the counter is a transaction, not a read-then-write',
+        /\.transaction\(/.test(fn), true);
+
+  const ctx = vm.createContext({});
+  vm.runInContext(fn, ctx);
+
+  /* a database stub that behaves the way RTDB transactions do: hand the
+     current value to the updater, store what comes back, report it */
+  const paths = [];
+  const fakeDb = (start) => {
+    let stored = start;
+    return { ref(p){ paths.push(p); return { async transaction(fn){ stored = fn(stored); return { snapshot: { val: () => stored } }; } }; } };
+  };
+  const next = async (start) => (await ctx.nextInvoiceRef(fakeDb(start))).reference;
+
+  (async () => {
+    check('and it is a separate node from the order counter',
+          (await next(null), paths[paths.length - 1]), 'meta/invoiceCounter');
+    /* the first consolidated invoice ever issued starts above order numbers,
+       so an invoice reference can never be mistaken for an order reference */
+    check('an empty counter starts at 5001', await next(null), '5001');
+    check('and the next one follows it',     await next(5001), '5002');
+    /* it never goes backwards: a node somehow holding a low or absurd value
+       must not hand out a reference that has already been used */
+    check('a counter below the floor is lifted back to it', await next(42),   '5001');
+    check('and a negative one too',                          await next(-9),  '5001');
+    check('a counter above the floor keeps climbing',        await next(9000), '9001');
+    check('and the result is a string, as Reference must be',
+          typeof (await ctx.nextInvoiceRef(fakeDb(7000))).reference, 'string');
+
+    /* two invoices issued back to back against the same node get two numbers */
+    const db = fakeDb(null);
+    const a  = (await ctx.nextInvoiceRef(db)).reference;
+    const b  = (await ctx.nextInvoiceRef(db)).reference;
+    check('two invoices in a row never share a number', a === b, false);
+    check('and the second is higher', Number(b) > Number(a), true);
+
+    if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
+    console.log('\nAll invoice checks passed.');
+  })();
+}
+/* the report lives inside the async block above — nextInvoiceRef is async, and
+   a synchronous report here would print "passed" before it had run */
