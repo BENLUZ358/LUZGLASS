@@ -1,5 +1,8 @@
 node_modules/
 scripts/serviceAccountKey.json
+# גיבויים מקומיים לפני מחיקה — נתוני לקוחות אמיתיים, לא נכנסים ל-git
+backups/
+.superpowers/
 scripts/node_modules/
 .env
 .env.local
