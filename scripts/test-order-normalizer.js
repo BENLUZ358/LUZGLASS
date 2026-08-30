@@ -104,6 +104,20 @@ for (const f of FACTORY_FIELDS) check(`the whitelist carries ${f}`, whitelist.ha
   check('and can show how long it has been out', o.triplexSentAt, 1738000000000);
 }
 
+/* ── the review sub-stage in the sketch queue ──────────────────────────
+   sketchSeenAt marks that someone went over the sketch and highlighted
+   whatever needed highlighting. It is a label, not a stage: stage stays ''
+   on both sides of the move, and the queue is still built from stage. Were
+   it a stage, marking a sketch reviewed would push the order out of the
+   queue and into the drafter or Hashavshevet route nobody chose. */
+check('the whitelist carries sketchSeenAt', whitelist.has('sketchSeenAt'), true);
+check('a reviewed sketch keeps its timestamp',
+      lgNormalizeOrder({ id: 'L1', sketchSeenAt: 1756500000000 }).sketchSeenAt, 1756500000000);
+check('and one never reviewed reports 0, not undefined',
+      lgNormalizeOrder({ id: 'L1' }).sketchSeenAt, 0);
+check('marking a sketch seen leaves the stage empty',
+      lgNormalizeOrder({ id: 'L1', stage: '', sketchSeenAt: 1756500000000 }).stage, '');
+
 /* ── the general guard ─────────────────────────────────────────────────
    Every order-level field any page writes must be named in the whitelist,
    otherwise it is write-only: saved to Firebase and invisible to the app. */

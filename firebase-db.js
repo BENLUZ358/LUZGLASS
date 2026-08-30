@@ -684,6 +684,9 @@ function lgNormalizeOrder(o) {
                    : [],
     panels:        o.panels       || [],
     notes:         o.notes        || '',
+    // תת-שלב ויזואלי בתוך תור הסקיצות, לא שלב. מסומן כשמי שעובר על
+    // הסקיצות אישר אותה, ונקרא רק בתור הסקיצות ובפורטל. stage לא מושפע.
+    sketchSeenAt:  o.sketchSeenAt || 0,
     source:        o.source       || 'sketch',
     urgent:        o.urgent       || false,
     sketch:        o.sketch       || null,
