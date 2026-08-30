@@ -327,8 +327,9 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 </div>
 <div class="tabs">
   <div class="tab" id="tab-quote" onclick="setTab('quote')">&#128176; הצעת מחיר</div>
-  <div class="tab active" id="tab-orders" onclick="setTab('orders')">&#128230; הזמנות <span class="badge" id="badge-orders">0</span></div>
+  <div class="tab active" id="tab-orders" onclick="setTab('orders')">&#128230; הזמנות פעילות <span class="badge" id="badge-orders">0</span></div>
   <div class="tab" id="tab-ready" onclick="setTab('ready')">&#9989; מוכן <span class="badge g" id="badge-ready">0</span></div>
+  <div class="tab" id="tab-collected" onclick="setTab('collected')">&#128229; נאספו <span class="badge" id="badge-collected">0</span></div>
   <div class="tab" id="tab-invoices" onclick="setTab('invoices')">&#129534; חשבוניות</div>
   <div class="tab" id="tab-chat" onclick="setTab('chat')">&#128172; הודעות</div>
   <div class="tab" id="tab-price" onclick="setTab('price')">&#128200; מחירון</div>
@@ -397,17 +398,22 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
       <div class="sec-title">הזמנות בעבודה</div>
       <div id="activeOrders"></div>
     </div>
-    <div id="secHistory">
-      <div style="height:14px"></div>
-      <div class="sec-title">היסטוריה</div>
-      <div id="historyOrders"></div>
-    </div>
     <div class="spacer"></div>
   </div>
   <div id="view-ready" style="display:none">
     <div style="height:14px"></div>
     <div class="sec-title">ממתין לאיסוף</div>
     <div id="readyOrders"></div>
+    <div class="spacer"></div>
+  </div>
+  <!-- נאספו. ישב עד עכשיו בתוך view-orders, ולכן לשונית "הזמנות" הראתה
+       מונה 0 ומתחתיו עמוד מלא הזמנות שכבר נאספו. -->
+  <div id="view-collected" style="display:none">
+    <div id="secHistory">
+      <div style="height:14px"></div>
+      <div class="sec-title">הזמנות שנאספו</div>
+      <div id="historyOrders"></div>
+    </div>
     <div class="spacer"></div>
   </div>
   <div id="view-invoices" style="display:none">
@@ -607,6 +613,8 @@ function renderStats(){
   document.getElementById("statDebt").innerHTML="&#8362;"+(unpaid||0).toLocaleString();
   document.getElementById("badge-orders").textContent=active;
   document.getElementById("badge-ready").textContent=ready;
+  const bc=document.getElementById("badge-collected");
+  if(bc) bc.textContent=ORDERS.filter(_isCollected).length;
   const al=document.getElementById("liveAlert");
   al.style.display="none";
 }
@@ -627,16 +635,18 @@ function renderOrders(){
   // "לא נמצא" על הזמנה שקיימת — גרוע יותר מלא לחפש בכלל.
   const q = (document.getElementById('ordSearch')?.value || '').trim().toLowerCase();
   const secActive  = document.getElementById('secActive');
-  const secHistory = document.getElementById('secHistory');
   const secResults = document.getElementById('secResults');
   const clearBtn   = document.getElementById('ordSearchClear');
   if(clearBtn) clearBtn.style.display = q ? 'flex' : 'none';
 
+  // החיפוש חי בלשונית "הזמנות פעילות" ומחליף את התוכן שלה בלבד. הוא לא
+  // נוגע ב-secHistory: מאז שהנאספות עברו ללשונית משלהן, הסתרה מכאן הייתה
+  // מכבה לשונית אחרת — מחפשים, עוברים ל"נאספו", ומקבלים מסך ריק.
   if(q){
     const hit = o => [o.num, o.name, o.glass, o.finish, o.date, o.status]
       .some(v => String(v||'').toLowerCase().includes(q));
     const found = ORDERS.filter(hit);
-    secActive.style.display = secHistory.style.display = 'none';
+    if(secActive) secActive.style.display = 'none';
     secResults.style.display = 'block';
     document.getElementById('resultsCount').textContent =
       found.length ? `${found.length} ${found.length===1?'הזמנה':'הזמנות'}` : '';
@@ -648,10 +658,10 @@ function renderOrders(){
   }
 
   secResults.style.display = 'none';
-  secActive.style.display = secHistory.style.display = 'block';
+  if(secActive) secActive.style.display = 'block';
 
-  // "הזמנות" מציגה רק מה שעדיין בעבודה. מוכן יושב בלשונית "מוכן" ונאסף
-  // בהיסטוריה — כל הזמנה במקום אחד בדיוק.
+  // לשונית לכל שלב, והזמנה נמצאת באחת בדיוק: פעילות מה שעדיין בעבודה,
+  // "מוכן" מה שנגמר וממתין, "נאספו" מה שכבר יצא.
   const active=ORDERS.filter(_isInProgress);
   const history=ORDERS.filter(_isCollected);
   document.getElementById("activeOrders").innerHTML=active.length?active.map(orderCard).join(""):'<div class="empty">אין הזמנות בעבודה</div>';
@@ -1000,7 +1010,7 @@ function renderClientPrice(){
 // הציגה אותו. לחיצה על "מחירון" נתנה מסך ריק.
 //
 // הרשימה נגזרת עכשיו מה-DOM עצמו, כך שטאב חדש לא יכול להישכח כאן שוב.
-const PORTAL_TABS = ['quote','orders','ready','invoices','chat','price'];
+const PORTAL_TABS = ['quote','orders','ready','collected','invoices','chat','price'];
 
 function setTab(tab){
   PORTAL_TABS.forEach(t=>{

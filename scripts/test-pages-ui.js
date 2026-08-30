@@ -569,8 +569,14 @@ check('there is a way to deploy the rules',
         /const found = ORDERS\.filter\(hit\);/.test(portal));
   check('over the fields a client would type',
         /\[o\.num, o\.name, o\.glass, o\.finish, o\.date, o\.status\]/.test(portal));
+  /* this pinned `secActive.style.display = secHistory.style.display = 'block'`,
+     which was the coupling itself: collected orders moved to their own tab, and
+     search — which lives in the active tab — must no longer reach into another
+     view to hide or show anything. Assert the restore, not the old line. */
   check('an empty field restores the normal view',
-        /secResults\.style\.display = 'none';\s*secActive\.style\.display = secHistory\.style\.display = 'block';/.test(portal));
+        /secResults\.style\.display = 'none';\s*if\(secActive\) secActive\.style\.display = 'block';/.test(portal));
+  check('and searching does not blank another tab',
+        !/secHistory\s*(\.style)?[^;]*=\s*[^;]*'none'/.test(portal));
   check('no match says so rather than showing nothing',
         /לא נמצאה הזמנה תואמת/.test(portal));
   check('and there is a way to clear it', /function clearOrdSearch\(\)/.test(portal));
