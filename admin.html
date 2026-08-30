@@ -248,6 +248,13 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 #billOv .ov-head{padding:16px 18px;border-bottom:1px solid var(--border);
                  display:flex;align-items:center;justify-content:space-between;}
 #billOv .ov-body{padding:16px 18px;overflow-y:auto;}
+/* .mcl is coloured for the dark .mhdr every other overlay uses. This screen
+   has a light .ov-head, so the inherited near-white X was invisible against
+   it and the operator had no way out but a reload. */
+#billOv .mcl{min-width:44px;min-height:44px;display:flex;align-items:center;
+             justify-content:center;color:var(--text);opacity:0.55;border-radius:6px;}
+#billOv .mcl:hover{opacity:1;background:var(--bg2);}
+#billOv .mcl:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;opacity:1;}
 .bill-search{width:100%;box-sizing:border-box;min-height:44px;padding:10px 12px;margin-bottom:12px;
              border:1px solid var(--border);border-radius:6px;background:var(--bg);
              font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;direction:rtl;}
@@ -1802,6 +1809,20 @@ function openBillBoard(){
   renderInvBar();   // מסלק את סרגל הקנבן אם נשאר על המסך
   renderBillBoard();
 }
+// Escape is the third way out, alongside the X and the backdrop. Bound once
+// at module level rather than on open, so there is no listener to leak and
+// no second copy if the screen is opened twice.
+function _billEscape(e){
+  if(e.key !== 'Escape') return;
+  var ov = document.getElementById('billOv');
+  if(!ov || !ov.classList.contains('open')) return;
+  // _invOverlay() builds #invOv on top of this screen. While it is up it owns
+  // Escape — closing the screen underneath it would strand the modal.
+  if(document.getElementById('invOv')) return;
+  closeBillBoard();
+}
+document.addEventListener('keydown', _billEscape);
+
 function closeBillBoard(){
   document.getElementById('billOv').classList.remove('open');
   invSel.clear(); invSelClient = null; _invPreviewIds = [];
@@ -4462,7 +4483,7 @@ async function umToggleActive(userId, clientName, currentlyActive){
 </div>
 
 <!-- הפקת חשבונית — תהליך ולא רשימה. מתחיל ריק; בוחרים לקוח אחד. -->
-<div id="billOv" class="ov">
+<div id="billOv" class="ov" onclick="if(event.target===this)closeBillBoard()">
   <div class="ov-panel">
     <div class="ov-head">
       <h2 style="display:flex;align-items:center;gap:8px"><span>🧾</span>הפקת חשבונית</h2>

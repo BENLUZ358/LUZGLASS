@@ -386,6 +386,27 @@ const ord = (o) => Object.assign({ stage: 'collected', orderNum: 'L1000', orderC
   check('it starts with no client chosen', /let _billClient = null;/.test(ADMIN), true);
   check('and is reached from the menu', /openBillBoard\(\)/.test(ADMIN), true);
 
+  /* ── you can get back out of it ──────────────────────────────────────
+   * The screen trapped the operator. Its close button was there and
+   * clickable, but .mcl is coloured rgba(247,244,239,0.45) — near-white at
+   * 45% — because every other overlay puts it on the dark .mhdr. billOv is
+   * the only one with a light .ov-head, so the X was white on white: present
+   * in the DOM, invisible on screen, and failing the 4.5:1 contrast rule.
+   *
+   * Its two siblings also close on a backdrop click; billOv had neither that
+   * nor an Escape handler, so a reload was the only way out.
+   */
+  check('the close button is recoloured for this screen\'s light header',
+        /#billOv\s+\.mcl\s*\{[^}]*color\s*:/.test(ADMIN), true);
+  check('and it is a 44px touch target',
+        Number(((ADMIN.match(/#billOv\s+\.mcl\s*\{[^}]*\}/) || [''])[0]
+                .match(/min-height:\s*(\d+)px/) || [])[1]) >= 44, true);
+  check('clicking the backdrop closes it, as on the pricing and pickup screens',
+        /id="billOv"[^>]*onclick="if\(event\.target===this\)closeBillBoard\(\)"/.test(ADMIN), true);
+  check('Escape closes it too', /function _billEscape/.test(ADMIN), true);
+  check('and Escape only acts while the screen is open',
+        /function _billEscape[\s\S]{0,300}?classList\.contains\('open'\)/.test(ADMIN), true);
+
   const list = bodyOf(ADMIN, '_renderBillClients');
   check('the phoneless orders are shown as a warning, never as a button',
         /bill-nophone/.test(list) && !/data-billkey="' \+ lgEsc\(''\)/.test(list), true);
