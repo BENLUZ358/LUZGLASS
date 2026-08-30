@@ -392,6 +392,21 @@ function showOrder(o){
   }
   renderSidebar();
   updateCounter();
+  // ההערה נכתבת בתור הסקיצות או בתחנת הבדיקה, ומי שפותח את הסקיצה צריך
+  // לראות אותה. אחרי השהייה קצרה, אחרת הפופאפ קופץ לפני שהתמונה נטענה.
+  if(o.notes) setTimeout(function(){ drShowNote(o.notes); }, 300);
+}
+
+// textContent ולא innerHTML — הטקסט מגיע ממשתמש.
+function drShowNote(txt){
+  var el = document.getElementById('drNoteText');
+  if(!el || !txt) return;
+  el.textContent = txt;
+  document.getElementById('drNotePopup').style.display = 'flex';
+}
+function drDismissNote(){
+  var el = document.getElementById('drNotePopup');
+  if(el) el.style.display = 'none';
 }
 
 function buildMeasureTableSVG(o){
@@ -590,5 +605,22 @@ lgRequireAuthAsync('admin').then(session => {
 function unavOpen(){document.getElementById('unavSidebar').classList.add('open');const ov=document.getElementById('unavOverlay');if(ov)ov.classList.add('open');}
 function unavClose(){document.getElementById('unavSidebar').classList.remove('open');const ov=document.getElementById('unavOverlay');if(ov)ov.classList.remove('open');}
 </script>
+
+<!-- הערה על ההזמנה — נכתבת בתור הסקיצות או בתחנת הבדיקה -->
+<div id="drNotePopup" role="dialog" aria-modal="true" aria-labelledby="drNoteTitle"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:900;
+            align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#1f1c19;border:1px solid rgba(184,146,42,0.4);border-radius:10px;
+              max-width:420px;width:100%;padding:20px;direction:rtl;">
+    <div id="drNoteTitle" style="font-family:Heebo,sans-serif;font-size:15px;font-weight:900;
+                color:#c9a84c;margin-bottom:10px;">💬 הערה על ההזמנה</div>
+    <div id="drNoteText" style="font-family:Heebo,sans-serif;font-size:14px;line-height:1.6;
+                color:#f7f4ef;white-space:pre-wrap;margin-bottom:16px;"></div>
+    <button onclick="drDismissNote()"
+            style="min-height:44px;width:100%;background:#b8922a;color:#1a1714;border:none;
+                   border-radius:6px;font-family:Heebo,sans-serif;font-size:14px;
+                   font-weight:700;cursor:pointer;">הבנתי</button>
+  </div>
+</div>
 </body>
 </html>
