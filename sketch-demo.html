@@ -511,6 +511,45 @@ function _dimLane(zone){
   return LANE_FIRST+n*LANE_STEP;
 }
 
+// ── מודדים חריגים, לא הכל ─────────────────────────────────────────
+//
+// מקלחון טיפוסי הוא 2000 2000 1985 2000 2000 — חמש מידות שארבע מהן
+// זהות. מדידת כולן היא מה שהפך את הציור לבלתי קריא, והצפיפות נעלמת
+// לא כי דחסנו אלא כי הפסקנו לחזור על עצמנו.
+//
+// הגובה הכולל נמדד פעם אחת. שייף ששונה ממנו מקבל קו משלו עם קו הפניה
+// אליו. החיסכון לעולם לא מסתיר מידה: חמישה גבהים שונים נותנים חמש.
+function _heightDims(pss){
+  const list=(pss||[])
+    .map((p,i)=>({idx:i,mm:Math.round((p&&p.h)||0)}))
+    .filter(o=>o.mm>0);
+  if(!list.length) return [];
+  const max=Math.max.apply(null,list.map(o=>o.mm));
+  const out=[{mm:max,idx:null,overall:true}];
+  list.forEach(o=>{ if(o.mm!==max) out.push({mm:o.mm,idx:o.idx,overall:false}); });
+  return out;
+}
+
+// הקצה השמאלי של ההרכבה כולה, מחושב מהשייף שמצייר עכשיו. קו ההפניה
+// חייב לספור שייפים מההתחלה, לא מהשייף הנוכחי.
+function _assemblyX(allPS,sc,x,idx){
+  let base=x;
+  for(let i=0;i<idx;i++) base-=((allPS&&allPS[i]&&allPS[i].w)||500)*sc;
+  return base;
+}
+
+// קו דק באלכסון מהמידה אל השייף שהיא מתארת. בלעדיו "1985" שצף ליד
+// הציור לא אומר על איזה שייף מדובר.
+function _leaderTo(fromX,fromY,idx,allPS,sc,baseX){
+  let cx0=baseX;
+  for(let i=0;i<idx;i++) cx0+=((allPS&&allPS[i]&&allPS[i].w)||500)*sc;
+  cx0+=(((allPS&&allPS[idx]&&allPS[idx].w)||500)*sc)/2;
+  cx.save();
+  cx.strokeStyle='#b8922a';cx.lineWidth=0.7;cx.setLineDash([2,2]);
+  cx.beginPath();cx.moveTo(fromX,fromY);cx.lineTo(cx0,fromY);cx.stroke();
+  cx.restore();
+}
+
 // ברירות המחדל של הידית, בסנטימטרים — כפי ששדות הקלט שלה מסומנים.
 // 6 ס"מ מהצד, ובאמצע גובה הזכוכית.
 const HANDLE_EDGE_CM=6;
@@ -1230,39 +1269,43 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
   // הכלל: הפאנל הראשון מוציא את הקו שמאלה מחוץ להרכבה, האחרון ימינה
   // מחוצה לה, ומי שבאמצע מקבל את הקו **בתוך** הזכוכית שלו — שם אין שכן
   // להתנגש בו, והשיוך לשייף חד-משמעי כי הקו מצויר עליו.
-  const _last = !allPanels || idx===allPanels.length-1;
-  const _hx = (side)=>{                    // side: 'l' | 'r'
-    if(side==='l') return idx===0 ? x-32 : x+22;
-    return _last ? x+pw+32 : x+pw-22;
-  };
-  const _hoff = (side)=> side==='l' ? (idx===0?-28:24) : (_last?28:-24);
+  // הרוחב של כל שייף — נתיב עליון. רוחב הוא מה שחותכים, ולכן כל שייף
+  // מקבל את שלו גם כששניים סמוכים זהים.
+  const _wLane=_dimLane('top');
+  dLine(x,y-_wLane,x+pw,y-_wLane,`${ps.w}`,0,true,`${pfx}_w_${idx}`);
 
   if(ps.hasSlope){
+    // בשייף משופע שתי המידות שייכות לשתי פאות שונות שלו עצמו, ולכן
+    // שתיהן נכנסות לנתיבים ומקבלות קו הפניה לפאה שלהן.
     const h1=ps.slopeH1, h2=ps.slopeH2;
-    if(ps.slopeAxis==='height'){
-      const leftH=ps.slopeSide==='left'?h2:h1;
-      const rightH=ps.slopeSide==='right'?h2:h1;
-      const maxH=Math.max(leftH,rightH)*sc;
-      // גובה צד שמאל, ובשייף משופע גם שם הפאה — כדי שיהיה ברור לאיזו
-      // פאה המידה שייכת ולא רק לאיזה שייף
-      dLine(_hx('l'),y+(maxH-leftH*sc),_hx('l'),y+maxH,`${leftH}`,_hoff('l'),false,`${pfx}_h_${idx}`);
-      dLine(_hx('r'),y+(maxH-rightH*sc),_hx('r'),y+maxH,`${rightH}`,_hoff('r'),false,`${pfx}_sH2_${idx}`);
-      dLine(x,y+maxH,x+pw,y+maxH,`${ps.w}`,-26,true,`${pfx}_w_${idx}`);
-    } else {
-      const h1sc=h1*sc, h2sc=h2*sc;
-      dLine(_hx('l'),y,_hx('l'),y+h1sc,`${h1}`,_hoff('l'),false,`${pfx}_h_${idx}`);
-      dLine(_hx('r'),y,_hx('r'),y+h2sc,`${h2}`,_hoff('r'),false,`${pfx}_sH2_${idx}`);
-      dLine(x,y,x+pw,y,`${ps.w}`,-26,true,`${pfx}_w_${idx}`);
-    }
+    const leftH =ps.slopeSide==='left' ?h2:h1;
+    const rightH=ps.slopeSide==='right'?h2:h1;
+    const topRef=ps.slopeAxis==='height'?Math.max(leftH,rightH)*sc:0;
+    const lL=_dimLane('left');
+    dLine(x-lL,y+(topRef-leftH*sc),x-lL,y+topRef||y+leftH*sc,`${leftH}`,-18,false,`${pfx}_h_${idx}`);
+    _leaderTo(x-lL,y+(ps.slopeAxis==='height'?topRef:leftH*sc),idx,allPS,sc,_assemblyX(allPS,sc,x,idx));
+    const lR=_dimLane('left');
+    dLine(x-lR,y+(topRef-rightH*sc),x-lR,y+topRef||y+rightH*sc,`${rightH}`,-18,false,`${pfx}_sH2_${idx}`);
+
     // סימון הפאה הנמוכה, כדי שכיוון השיפוע יהיה חד-משמעי על הציור
     cx.save();
     cx.font=`bold ${Math.max(8,sc*0.5)}px Heebo,sans-serif`;
     cx.fillStyle='#b8922a';cx.textAlign='center';
     cx.fillText('▼ נמוך', ps.slopeSide==='left'?x+pw-26:x+26, y+14);
     cx.restore();
-  } else {
-    dLine(x,y,x+pw,y,`${ps.w}`,-26,true,`${pfx}_w_${idx}`);
-    dLine(_hx('r'),y,_hx('r'),y+ph,`${ps.h}`,_hoff('r'),false,`${pfx}_h_${idx}`);
+  } else if(idx===0){
+    // הגובה נמדד פעם אחת להרכבה כולה, מהשייף הראשון. שייף ששונה
+    // מהגובה הכולל מקבל קו משלו וקו הפניה אליו. חמישה שייפים בגובה
+    // אחיד נותנים מידה אחת — לא חמש.
+    const base=_assemblyX(allPS,sc,x,0);
+    _heightDims(allPS).forEach(d=>{
+      const lane=_dimLane('left');
+      const bottom=y+ph;
+      const top=bottom-(d.mm)*sc;
+      dLine(x-lane,top,x-lane,bottom,String(d.mm),-18,false,
+            d.overall?null:{pfx:pfx,field:'h',idx:d.idx});
+      if(!d.overall) _leaderTo(x-lane,top,d.idx,allPS,sc,base);
+    });
   }
 
   // SLIDER
@@ -1313,7 +1356,8 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 
     // Hinge distance dims
     // קו המידה של הציר נלחץ במצב עריכה, ומשנה את הגובה של שני הצירים
-    const hDX=hx+(_hSide==='left'?-24:24);
+    const _hLane=_dimLane('right');
+    const hDX=_hSide==='left'?x-_hLane:x+pw+_hLane;
     const hOff=_hSide==='left'?-18:18;
     // כל קו מידה מצביע על הציר שלו בלבד
     dLine(hDX,y,hDX,y+hTop*sc,String(hTop),hOff,false,{pfx:pfx,field:'hingeTop',idx:idx});
@@ -1353,9 +1397,12 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // מידות הידית — גובה מלמעלה, וגם המרחק מהפאה. בציר רואים רק גובה;
     // בידית המרחק מהפאה הוא מה שקובע איפה קודחים, ולכן הוא מוצג גם הוא.
     // שניהם נלחצים במצב עריכה.
-    // קו המידה יוצא מהפאה שממנה מודדים — למטה כברירת מחדל
-    dLine(handleX, hRef==='top'?y:handleY, handleX, hRef==='top'?handleY:y+ph,
-          String(hDistMM), _handleSide==='right'?16:-16, false,
+    // הידית מקבלת נתיב משלה, אחרי הצירים — כדי שהמידות שלה לא ייפלו
+    // עליהם. קו המידה יוצא מהפאה שממנה מודדים, למטה כברירת מחדל.
+    const _uLane=_dimLane('right');
+    const _uX=_handleSide==='right'?x+pw+_uLane:x-_uLane;
+    dLine(_uX, hRef==='top'?y:handleY, _uX, hRef==='top'?handleY:y+ph,
+          String(hDistMM), 0, false,
           {pfx:pfx,field:'handleDist',idx:idx});
     const heX=_handleSide==='right'?x+pw:x;
     dLine(Math.min(handleX,heX),handleY,Math.max(handleX,heX),handleY,
@@ -1475,12 +1522,16 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
   cx.font=`bold ${_lblFS}px Heebo,sans-serif`;
   cx.textAlign='center';cx.fillStyle='#2a5a8a';
   cx.fillText(panel.label||panel.type,x+pw/2,y+ph/2-2);
-  const _hMM=ps.h||0;
-  if(_hMM){
-    cx.font=`${Math.max(9,_lblFS-1)}px Heebo,sans-serif`;
-    cx.fillStyle='rgba(42,90,138,0.75)';
-    cx.fillText(_hMM+' × '+(ps.w||0),x+pw/2,y+ph/2+_lblFS+2);
-  }
+  // המידות שהודפסו כאן על הזכוכית היו פלסטר לחפיפת קווי המידה, והנתיבים
+  // פותרים אותה טוב יותר. טקסט על הזכוכית מסתיר את הציור, וקבלן שמצייר
+  // ביד לא כותב מידות בתוך הזכוכית.
+  //
+  // מה שנשאר על הזכוכית: המספר, כדי שקו הפניה יוכל להצביע עליו.
+  cx.font=`bold ${Math.max(9,_lblFS)}px Heebo,sans-serif`;
+  cx.fillStyle='rgba(42,90,138,0.55)';
+  cx.textAlign='right';
+  cx.fillText(String.fromCharCode(9312+Math.min(idx,19)), x+pw-6, y+_lblFS+6);
+  cx.textAlign='center';
 }
 
 // ══════════════ DRAW HELPERS ══════════════
