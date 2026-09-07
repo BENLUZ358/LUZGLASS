@@ -17,6 +17,59 @@
 .mode-tabs{display:flex;gap:2px;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border);}
 .mode-tab{flex:1;padding:9px;font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;border:1px solid transparent;cursor:pointer;text-align:center;color:var(--muted);background:var(--bg);}
 .mode-tab.active{background:var(--text);color:#f7f4ef;}
+/* ── בונה השייפים ──────────────────────────────────────────────────
+   הגלריה קצרה בכוונה. ההפרדה בין מה שנוגעים על הציור למה שנוגעים
+   ברצועה היא לפי **גודל המטרה**: קו מידה הוא ~90×30px ונלחץ על הציור;
+   ציר הוא ~10px ולכן יושב ברצועה. */
+.shape-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px;}
+.shape-chip{
+  min-height:44px;padding:10px 8px;
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;
+  color:var(--text);cursor:pointer;text-align:center;
+  transition:background 180ms ease,border-color 180ms ease;
+}
+.shape-chip:hover{border-color:var(--gold);}
+.shape-chip:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.shape-chip .gi{display:block;font-size:20px;line-height:1.3;}
+
+.shape-strip{
+  display:flex;gap:8px;overflow-x:auto;padding:10px;
+  background:var(--surface);border-top:1px solid var(--border);
+  -webkit-overflow-scrolling:touch;
+}
+.strip-item{
+  min-height:44px;min-width:88px;flex:0 0 auto;
+  padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg);font-family:'Heebo',sans-serif;font-size:12px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.strip-item.bad{border-color:#c0392b;background:rgba(192,57,43,0.06);}
+.strip-item .sn{font-weight:700;font-size:13px;}
+.strip-row{display:flex;gap:4px;}
+/* 32px ולא 44px במכוון: אלה פקדים משניים בתוך פריט שכולו כבר 44px,
+   והם יושבים ברצועה דווקא כי הם מטרות קטנות. 8px ביניהם. */
+.strip-row button{
+  min-height:32px;min-width:32px;border:1px solid var(--border);
+  background:var(--surface);border-radius:4px;cursor:pointer;font-size:13px;
+  color:var(--text);
+}
+.strip-row button:hover{border-color:var(--gold);}
+.strip-row button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.strip-row{gap:8px;}
+.shape-err{
+  margin:8px 10px;padding:10px 12px;border-radius:6px;
+  background:#fdecea;border:1px solid #f5c6c2;color:#8f2d24;
+  font-family:'Heebo',sans-serif;font-size:13px;line-height:1.5;
+}
+.shape-bom{
+  margin:8px 10px;padding:10px 12px;border:1px solid var(--border);
+  background:var(--bg);font-family:'Heebo',sans-serif;font-size:13px;
+}
+.shape-bom b{color:var(--gold-text);}
+@media (prefers-reduced-motion:reduce){
+  .shape-chip,.strip-item{transition:none;}
+}
 /* המחוות נחסמות על הקנבס עצמו, כדי שהדף כולו יישאר ניתן לזום */
 #sk{touch-action:none;}
 .canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow:hidden;}
@@ -86,6 +139,14 @@ canvas{display:block;width:100%;height:auto;cursor:pointer;}
 @media (min-width:901px){
   /* אייפד לרוחב ומעלה — הקנבס והפאנל זה לצד זה במקום זה מתחת לזה */
   .canvas-wrap{margin:14px;}
+  /* שש הצורות נכנסות בשורה אחת, ואין צורך לגלול בשביל אף אחת מהן */
+  .shape-gallery{grid-template-columns:repeat(6,1fr);}
+  /* ברוחב הזה הרצועה לא צריכה לגלול — עדיף לראות את כל השייפים יחד */
+  .shape-strip{flex-wrap:wrap;overflow-x:visible;}
+}
+@media (min-width:601px) and (max-width:900px){
+  /* אייפד לאורך — שלוש בשורה, מטרה של כ-230px */
+  .shape-gallery{grid-template-columns:repeat(3,1fr);}
 }
 @media (max-width:600px){
   .topbar{padding:10px;}
@@ -95,6 +156,11 @@ canvas{display:block;width:100%;height:auto;cursor:pointer;}
   .row{flex-wrap:wrap;row-gap:6px;}
   .row label{flex:1 1 100%;}
   .row input[type=number],.row input[type=text],.row select{width:100%;}
+  /* שלוש בשורה על 375px זה 116px לצ'יפ שנושא אייקון וגם שתי מילים.
+     שתיים נותנות 175px — מטרה נוחה לאגודל, והטקסט לא נשבר. */
+  .shape-gallery{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .shape-chip{font-size:14px;}
+  .strip-item{min-width:104px;}
 }
 </style>
 </head>
@@ -107,6 +173,7 @@ canvas{display:block;width:100%;height:auto;cursor:pointer;}
 </div>
 <div class="mode-tabs" id="sdMain">
   <button class="mode-tab active" id="mTab1" onclick="setMode('combo')">⬡ קומבינציה</button>
+  <button class="mode-tab" id="mTab3" onclick="setMode('shape')">◫ שייפים</button>
   <button class="mode-tab" id="mTab2" onclick="setMode('item')">＋ פריט פריט</button>
 </div>
 <div class="sn-wrap" style="margin-top:10px;">
@@ -138,6 +205,24 @@ canvas{display:block;width:100%;height:auto;cursor:pointer;}
 </div>
 
 <!-- ITEM UI -->
+<!-- בונה השייפים. שש צורות, ושתיים מהן קיצורי דרך ולא סוגים נפרדים:
+     "קבוע משופע" הוא קבוע עם hasSlope מסומן מראש, ו"צורה חופשית" היא
+     ה-kind:'shape' שכבר קיים בכלי. אף פריט בגלריה לא נושא פרזול — המנוע
+     גוזר אותו מהצמתים, וצ'יפ עם ספירת צירים משלו היה סותר אותו. -->
+<div id="shapeUI" style="display:none;">
+  <div class="shape-gallery">
+    <button class="shape-chip" data-shape="fixed"  onclick="shapeAdd('fixed')"><span class="gi">▭</span>קבוע</button>
+    <button class="shape-chip" data-shape="fixed"  data-slope="1" onclick="shapeAdd('fixed',null,true)"><span class="gi">◸</span>קבוע משופע</button>
+    <button class="shape-chip" data-shape="door"   data-hinge="right" onclick="shapeAdd('door','right')"><span class="gi">🚪</span>דלת · ציר ימין</button>
+    <button class="shape-chip" data-shape="door"   data-hinge="left"  onclick="shapeAdd('door','left')"><span class="gi">🚪</span>דלת · ציר שמאל</button>
+    <button class="shape-chip" data-shape="mirror" onclick="shapeAdd('mirror')"><span class="gi">▤</span>מראה</button>
+    <button class="shape-chip" data-shape="shape"  onclick="shapeAdd('shape')"><span class="gi">◇</span>צורה חופשית</button>
+  </div>
+  <div class="shape-strip" id="shapeStrip"></div>
+  <div id="shapeErr" class="shape-err" style="display:none" role="status" aria-live="polite"></div>
+  <div id="shapeBom" class="shape-bom" style="display:none"></div>
+</div>
+
 <div id="itemUI" style="display:none;">
   <div class="item-list" id="itemList"></div>
   <div class="add-grid">
@@ -377,11 +462,128 @@ function setMode(m){
   appMode=m;
   document.getElementById('mTab1').classList.toggle('active',m==='combo');
   document.getElementById('mTab2').classList.toggle('active',m==='item');
+  document.getElementById('mTab3')?.classList.toggle('active',m==='shape');
   document.getElementById('comboUI').style.display=m==='combo'?'':'none';
   document.getElementById('itemUI').style.display=m==='item'?'':'none';
+  document.getElementById('shapeUI').style.display=m==='shape'?'':'none';
   const addBtn=document.getElementById('btnAddToSketch');
   if(addBtn) addBtn.textContent=m==='item'?'＋ הוסף פריט לסקיצה':'＋ הוסף לסקיצה';
+  if(m==='shape') renderShapeUI();
   draw();
+}
+
+// ══════════════ בונה השייפים ══════════════
+//
+// הרכבה לינארית: הקבלן מניח צורה אחרי צורה, והמנוע גוזר מה יושב בכל
+// צומת. אין כאן שדה פרזול — הוא נגזר, ולכן אי אפשר לסתור את הציור.
+let shapeList=[];
+let shapeBoundary={right:'wall',left:'wall'};
+
+function _shapeShower(){
+  return {boundary:shapeBoundary,finish:'shahor',
+          quality:selQ==='pliz'?'pliz':'zamak',
+          shapes:shapeList.map(s=>({id:s.id,kind:s.kind,hingeSide:s.hingeSide}))};
+}
+
+// המצב שהצייר צורך — אותו מבנה בדיוק שהקומבינציות מייצרות, כדי שלא יהיה
+// נתיב ציור שני.
+//
+// wallSide נכתב על הפאנלים החיצוניים כי הגשר _lgShowerOf גוזר ממנו את
+// הגבולות. בלעדיו קבוע במצב שייפים לא היה מקבל אף זווית קיר.
+function _shapePanels(){
+  const n=shapeList.length;
+  return shapeList.map((s,i)=>{
+    const p={
+      type: s.kind==='door'?'door':s.kind==='mirror'?'mirror':s.kind==='shape'?'shape':'fixed',
+      label: s.label,
+      hingeSide: s.hingeSide,
+      handleSide: s.hingeSide==='right'?'left':'right',
+      hingeOnFixed: s.kind==='door' ? (s.hingeSide==='right'?'prev':'next') : undefined,
+    };
+    const rW=shapeBoundary.right==='wall', lW=shapeBoundary.left==='wall';
+    if(n===1)            p.wallSide = rW&&lW?'both':rW?'right':lW?'left':'none';
+    else if(i===0)       p.wallSide = rW?'right':'none';
+    else if(i===n-1)     p.wallSide = lW?'left':'none';
+    else                 p.wallSide = 'none';
+    return p;
+  });
+}
+
+// lgEsc מוגדר ב-firebase-db.js, שהדף הזה לא טוען. שם צורה נכתב על ידי
+// המשתמש ולכן חייב בריחה — בלי זה, שם עם < היה נכנס כ-HTML.
+function _shEsc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,c=>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+let _shapeSeq=0;
+function shapeAdd(kind,hingeSide,slope){
+  _shapeSeq++;
+  const id='sh'+_shapeSeq;
+  const label = kind==='door' ? 'דלת' : kind==='mirror' ? 'מראה'
+              : kind==='shape' ? 'צורה' : (slope?'קבוע משופע':'קבוע');
+  shapeList.push({id,kind,hingeSide:hingeSide||undefined,label});
+  shapePS[id]=mkPS({type:kind});
+  if(slope) shapePS[id].hasSlope=true;
+  renderShapeUI();draw();
+}
+function shapeRemove(id){
+  shapeList=shapeList.filter(s=>s.id!==id);
+  delete shapePS[id];
+  renderShapeUI();draw();
+}
+function shapeMove(id,dir){
+  const i=shapeList.findIndex(s=>s.id===id);
+  const j=i+dir;
+  if(i<0||j<0||j>=shapeList.length) return;
+  const t=shapeList[i];shapeList[i]=shapeList[j];shapeList[j]=t;
+  renderShapeUI();draw();
+}
+// צד הציר תלוי בשטח — אותה דלת נבנית ימין או שמאל. הליקוט לא משתנה.
+function shapeFlipHinge(id){
+  const s=shapeList.find(x=>x.id===id);
+  if(!s||s.kind!=='door') return;
+  s.hingeSide = s.hingeSide==='right'?'left':'right';
+  renderShapeUI();draw();
+}
+let shapePS={};
+
+function renderShapeUI(){
+  const strip=document.getElementById('shapeStrip');
+  const errEl=document.getElementById('shapeErr');
+  const bomEl=document.getElementById('shapeBom');
+  if(!strip) return;
+
+  const sh=_shapeShower();
+  const errs=(typeof lgValidate==='function')?lgValidate(sh):[];
+  const badIds={};errs.forEach(e=>{badIds[e.at]=e.msg;});
+
+  strip.innerHTML = shapeList.length ? shapeList.map((s,i)=>
+    '<div class="strip-item'+(badIds[s.id]?' bad':'')+'">'+
+      '<span class="sn">'+_shEsc(s.label)+(s.kind==='door'?' ('+(s.hingeSide==='right'?'ימין':'שמאל')+')':'')+'</span>'+
+      '<span class="strip-row">'+
+        '<button onclick="shapeMove(\''+s.id+'\',-1)" aria-label="הזז ימינה">→</button>'+
+        '<button onclick="shapeMove(\''+s.id+'\',1)" aria-label="הזז שמאלה">←</button>'+
+        (s.kind==='door'?'<button onclick="shapeFlipHinge(\''+s.id+'\')" aria-label="החלף צד ציר">⇄</button>':'')+
+        '<button onclick="shapeRemove(\''+s.id+'\')" aria-label="הסר">✕</button>'+
+      '</span>'+
+    '</div>').join('')
+    : '<div style="padding:8px;color:var(--muted);font-size:13px">בחר צורה מהגלריה כדי להתחיל</div>';
+
+  if(errs.length){
+    errEl.style.display='block';
+    errEl.textContent=errs.map(e=>e.msg).join(' · ');
+  } else errEl.style.display='none';
+
+  // הליקוט מוצג מהמנוע ולא נספר מחדש — שתי ספירות מתפצלות.
+  const bom=(typeof lgBOM==='function')?lgBOM(sh):[];
+  if(bom.length){
+    const NAME={'bracket-wall':'זווית קיר','bracket-gg':'זווית זכוכית-זכוכית',
+                'bracket-floor':'מחזיק רצפה','hinge-gg':'ציר זכוכית-זכוכית',
+                'hinge-wall':'ציר קיר-זכוכית','handle':'ידית'};
+    bomEl.style.display='block';
+    bomEl.innerHTML='<b>ליקוט</b> — '+bom.map(b=>(NAME[b.type]||b.type)+' ×'+b.qty).join(' · ');
+  } else bomEl.style.display='none';
 }
 function setCat(cat,btn){
   curCat=cat;
@@ -591,8 +793,14 @@ function renderItemList(){
 }
 
 // ══════════════ DRAW ENGINE ══════════════
-function getPanels(){return appMode==='combo'?curCombo.panels:items.map(it=>it._panel||{type:'fixed',label:'פריט',wallSide:'both'});}
+function getPanels(){
+  // מצב השייפים מזין את אותו נתיב ציור בדיוק כמו הקומבינציות — אותו מבנה
+  // פאנלים, אותו drawComboMode. נתיב ציור שני היה מתפצל מהראשון.
+  if(appMode==='shape') return _shapePanels();
+  return appMode==='combo'?curCombo.panels:items.map(it=>it._panel||{type:'fixed',label:'פריט',wallSide:'both'});
+}
 function getPStates(){
+  if(appMode==='shape') return Object.fromEntries(shapeList.map((s,i)=>[i,shapePS[s.id]||mkPS({type:s.kind})]));
   if(appMode==='combo') return panelState;
   return Object.fromEntries(items.map((it,i)=>[i,it]));
 }
