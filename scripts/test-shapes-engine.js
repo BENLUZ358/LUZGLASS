@@ -185,6 +185,52 @@ check('a missing shower is survivable', lgJunctions(null), []);
   check('and a missing one does not throw', lgBOM(null), []);
 }
 
+/* ── the same enclosure, other hand ────────────────────────────────────── */
+/*
+ * Whether the door hangs on the right or on the left is decided by the site,
+ * not by the design — the same shower gets built both ways. Mirroring reverses
+ * the order of the shapes, swaps each hinge side and swaps the boundary. The
+ * glass and the hardware are identical; only the hand changes. A picking list
+ * that shifts under mirroring would send a different order to the warehouse
+ * for the same job.
+ */
+{
+  const { lgBOM } = ctx;
+  const mirror = s => ({
+    boundary: { right: s.boundary.left, left: s.boundary.right },
+    finish: s.finish, quality: s.quality,
+    shapes: s.shapes.slice().reverse().map(sh => Object.assign({}, sh, {
+      hingeSide: sh.hingeSide === 'right' ? 'left'
+               : sh.hingeSide === 'left'  ? 'right' : sh.hingeSide,
+    })),
+  });
+  const sortBom = b => b.slice().sort((x, y) => (x.type + x.variant).localeCompare(y.type + y.variant));
+
+  for (const s of [
+    shower([fixed('s1'), door('s2', 'right')]),
+    shower([fixed('s1'), door('s2', 'right'), fixed('s3')]),
+    shower([fixed('s1'), door('s2', 'right'), door('s3', 'left'), fixed('s4')]),
+    shower([fixed('s1'), fixed('s2'), door('s3', 'left')]),
+    shower([fixed('s1')], { right: 'wall', left: 'open' }),
+  ]) {
+    const n = s.shapes.map(x => x.kind[0]).join('');
+    check(`${n}: mirroring it changes nothing in the picking list`,
+          sortBom(lgBOM(mirror(s))).map(b => b.type + ':' + b.qty),
+          sortBom(lgBOM(s)).map(b => b.type + ':' + b.qty));
+    check(`${n}: and the mirrored enclosure is just as valid`,
+          lgValidate(mirror(s)).length, lgValidate(s).length);
+  }
+
+  /* the door may hang either way against a wall, and both are legal */
+  check('a door hinged right against a wall is fine',
+        lgValidate(shower([door('s1', 'right')])), []);
+  check('and hinged left against the other wall too',
+        lgValidate(shower([door('s1', 'left')])), []);
+  check('both give the same hardware',
+        lgBOM(shower([door('s1', 'right')])).map(b => b.type + ':' + b.qty).sort(),
+        lgBOM(shower([door('s1', 'left')])).map(b => b.type + ':' + b.qty).sort());
+}
+
 /* ── purity ────────────────────────────────────────────────────────────── */
 /* comments stripped: the header explains what the engine deliberately does
    NOT touch, and a check that reads comments fails on its own explanation */
