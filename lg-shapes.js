@@ -102,5 +102,66 @@ function lgValidate(shower) {
   return errors;
 }
 
+// ─── הליקוט ─────────────────────────────────────────────────────────────
+//
+// קורא את lgJunctions ולא מחשב צמתים בעצמו. ברגע שהליקוט והציור מחשבים
+// כל אחד לחוד, שתי הגרסאות מתפצלות — והפער נשאר בלתי נראה עד שהמספר
+// השגוי מגיע למחסן. אותה תבנית כמו LG_TRACK ב-workday.html: מנוע אחד,
+// שני צרכנים.
+//
+// מחזיר **סוגים, לא מק"טים**. זו ההחלטה הארכיטקטונית החשובה במסמך
+// התכנון: מק"ט בתוך המנוע היה קושר אותו לקטלוג ולמותג הפרזול של לקוח
+// מסוים, וקבלן שעובד עם פרזול אחר היה מחייב שינוי במנוע. המיפוי
+// (סוג, וריאנט) × (גימור, איכות) → מק"ט הוא שכבה נפרדת.
+//
+// המערכת גוזרת **סוג**; הקבלן בוחר **כמה**. "שלושה צירים" אינו כלל אלא
+// החלטה, ולכן הכמות נקראת מהשייף ולא מהטבלה.
+function lgBOM(shower) {
+  if (!shower) return [];
+  var shapes  = shower.shapes || [];
+  var finish  = shower.finish  || '';
+  var quality = shower.quality || '';
+
+  var byId = {};
+  for (var i = 0; i < shapes.length; i++) byId[shapes[i].id] = shapes[i];
+
+  var lines = {};
+  function add(type, variant, qty) {
+    if (!type || !qty) return;
+    var v = variant || 'regular';
+    var key = type + '|' + v;
+    if (!lines[key]) lines[key] = { type: type, variant: v, finish: finish, quality: quality, qty: 0 };
+    lines[key].qty += qty;
+  }
+
+  var js = lgJunctions(shower);
+  for (var k = 0; k < js.length; k++) {
+    var j = js[k];
+    if (!j.type) continue;
+    // הבחירה יושבת על השייף שנוגע בצומת, ולא על הצומת עצמו — הצומת נגזר
+    // ולכן אין לו איפה לשאת העדפה.
+    var owner = byId[j.between[0]] || byId[j.between[1]] || {};
+    var isBracket = j.type.indexOf('bracket') === 0;
+    var qty = isBracket
+      ? (Number(owner.wallBracketQty) || j.qty)
+      : (Number(owner.hingeQty) || j.qty);
+    add(j.type, isBracket ? owner.bracketVariant : owner.hingeVariant, qty);
+  }
+
+  // ידית לכל דלת. היא נגזרת מצד הציר — תמיד בצד ההפוך — ולעולם לא נבחרת,
+  // ולכן אין לה צומת משלה.
+  // מחזיק רצפה, לעומת זאת, הוא בחירה מפורשת של הקבלן.
+  for (var m = 0; m < shapes.length; m++) {
+    var sh = shapes[m];
+    if (!sh) continue;
+    if (sh.kind === 'door') add('handle', sh.handleVariant, 1);
+    if (sh.floorBracket)    add('bracket-floor', null, 1);
+  }
+
+  var out = [];
+  for (var key2 in lines) if (lines.hasOwnProperty(key2)) out.push(lines[key2]);
+  return out;
+}
+
 if (typeof module !== 'undefined' && module.exports)
-  module.exports = { lgJunctions: lgJunctions, lgValidate: lgValidate };
+  module.exports = { lgJunctions: lgJunctions, lgValidate: lgValidate, lgBOM: lgBOM };

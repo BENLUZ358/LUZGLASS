@@ -125,6 +125,66 @@ check('no shapes, no junction between two walls', lgJunctions(shower([])).length
 check('and nothing to validate', lgValidate(shower([])), []);
 check('a missing shower is survivable', lgJunctions(null), []);
 
+/* ── the bill of materials ─────────────────────────────────────────────── */
+/*
+ * lgBOM reads lgJunctions. It must never work the junctions out for itself:
+ * the moment the picking list and the drawing each compute them separately
+ * they drift, and the drift stays invisible until the wrong count reaches the
+ * warehouse. Same shape as LG_TRACK in workday.html — one engine, two
+ * consumers.
+ */
+{
+  const { lgBOM } = ctx;
+  check('lgBOM exists', typeof lgBOM, 'function');
+
+  const s = shower([fixed('s1'), door('s2', 'right'), fixed('s3')]);
+  const bom = lgBOM(s);
+  const line = t => bom.find(b => b.type === t);
+
+  check('the wall brackets are one line of four', line('bracket-wall').qty, 4);
+  check('the hinges are one line of two',         line('hinge-gg').qty, 2);
+  check('a handle is derived for the door',       line('handle').qty, 1);
+  check('and there is exactly one handle, not one per junction',
+        bom.filter(b => b.type === 'handle').length, 1);
+  check('nothing is listed twice',
+        bom.length, new Set(bom.map(b => b.type + '|' + b.variant)).size);
+
+  /* the architectural decision the spec calls the most important in the
+     document: types, never skus */
+  check('no line carries a sku',
+        bom.some(b => 'sku' in b || 'itemkey' in b), false);
+  check('every line carries the finish and quality instead',
+        bom.every(b => b.finish === 'shahor' && b.quality === 'zamak'), true);
+
+  /* it agrees with the junctions by construction, not by coincidence */
+  check('the picking list cannot contradict the drawing',
+        line('bracket-wall').qty, counts(s)['bracket-wall']);
+
+  /* the engine decides the TYPE; the contractor decides HOW MANY */
+  const three = shower([fixed('s1', { wallBracketQty: 3 }), door('s2', 'right'), fixed('s3')]);
+  check('three brackets on one panel is a choice the engine honours',
+        lgBOM(three).find(b => b.type === 'bracket-wall').qty, 5);
+
+  /* a variant changes the line, never the type */
+  const open = shower([fixed('s1', { bracketVariant: 'open' }), door('s2', 'right'), fixed('s3')]);
+  const ob = lgBOM(open);
+  check('an open bracket is a variant of the same type',
+        ob.some(b => b.type === 'bracket-wall' && b.variant === 'open'), true);
+  check('and the regular ones stay on their own line',
+        ob.filter(b => b.type === 'bracket-wall').length, 2);
+
+  /* a floor bracket is an explicit choice, never derived */
+  const floor = shower([fixed('s1', { floorBracket: true })], { right: 'wall', left: 'open' });
+  check('a floor bracket appears only when asked for',
+        lgBOM(floor).find(b => b.type === 'bracket-floor').qty, 1);
+  check('and is absent otherwise',
+        lgBOM(shower([fixed('s1')])).some(b => b.type === 'bracket-floor'), false);
+
+  /* nothing to pick from nothing */
+  check('an empty shower has an empty list', lgBOM(shower([])), []);
+  check('and a missing one does not throw', lgBOM(null), []);
+}
+
 /* ── purity ────────────────────────────────────────────────────────────── */
 /* comments stripped: the header explains what the engine deliberately does
    NOT touch, and a check that reads comments fails on its own explanation */
