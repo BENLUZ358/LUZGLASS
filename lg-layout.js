@@ -184,20 +184,39 @@ function _layoutPass(shower,cW,mgL,mgR){
       hEntries.push({idx:s.idx, mm:s.mmH, ax:s.x+s.w/2, y1:s.y, y2:s.y+s.h});
     }
   });
-  _heightGroups(hEntries,out.shapes.length).forEach(g=>{
+  // מנגנון הנחה אחד לכל המידות האנכיות. קודם הגבהים והפרזול הוקצו
+  // בשתי מערכות נפרדות שלא ראו זו את זו, ולכן שתי מידות יכלו לנחות
+  // באותו מקום בלי שאף אחת מהן תדע.
+  const vPlaced=[];
+  const placeV=(x0,step,lo,hi)=>{
+    let x=x0, k=0;
+    while(k<10 && vPlaced.some(q=>Math.abs(q.x-x)<18 && lo<q.hi && hi>q.lo)) x=x0+(++k)*step;
+    vPlaced.push({x:x,lo:lo,hi:hi});
+    return x;
+  };
+
+  const hGroups=_heightGroups(hEntries,out.shapes.length);
+  hGroups.forEach(g=>{
     // מידה משותפת נמתחת על מה שהיא מכסה בפועל
     const top=Math.min.apply(null,g.pts.map(p=>p.y1));
     const bot=Math.max.apply(null,g.pts.map(p=>p.y2));
-    const lane=place('left',top,bot,20);
+
+    // הגובה יוצא לצד שהשייפים שלו יושבים בו. הדלת בקצה הימני והמידה
+    // שלה בקצה השמאלי — עם קו הארכה שחוצה את כל הזכוכית כדי להגיע
+    // אליה — בזמן שמימין לא היה כלום. הצד הקרוב תמיד פנוי יותר.
+    const cx=g.pts.reduce((n,p)=>n+p.ax,0)/g.pts.length;
+    const right = !g.all && cx>(asmL+asmR)/2;
+    const s=right?1:-1, edge=right?asmR:asmL;
+    const x=placeV(edge+s*cfg.first, s*cfg.step, Math.min(top,bot)-13, Math.max(top,bot)+13);
+
     // קווי הפניה אלכסוניים מכל מידה אל מרכז כל שייף חצו את הזכוכית
     // מפינה לפינה. שרטוט טכני לא עושה את זה: קו ההארכה **אופקי**, יוצא
-    // מקו המידה בגובה הקצה ונעצר בשייף הרחוק ביותר שהמידה מכסה. שני
-    // קווים ישרים במקום חמישה אלכסוניים.
-    const far=g.all?null:Math.max.apply(null,g.pts.map(p=>p.ax));
-    dim('height',g.mm,asmL-lane,top,asmL-lane,bot,{
-      zone:'left', lane:lane, idxs:g.idxs, idx:g.idxs[0],
-      ext: far==null?null:[{x1:asmL-lane,y1:top,x2:far,y2:top},
-                           {x1:asmL-lane,y1:bot,x2:far,y2:bot}],
+    // מקו המידה בגובה הקצה ונעצר בשייף הרחוק ביותר שהמידה מכסה.
+    const far=g.all?null:(right?Math.min.apply(null,g.pts.map(p=>p.ax))
+                               :Math.max.apply(null,g.pts.map(p=>p.ax)));
+    dim('height',g.mm,x,top,x,bot,{
+      zone:right?'right':'left', lane:Math.abs(x-edge), idxs:g.idxs, idx:g.idxs[0],
+      ext: far==null?null:[{x1:x,y1:top,x2:far,y2:top},{x1:x,y1:bot,x2:far,y2:bot}],
     });
   });
 
@@ -316,9 +335,7 @@ function _layoutPass(shower,cW,mgL,mgR){
     // שלהן חופפים אבל הפאות שונות, ולכן הקצאה שמסתכלת רק על y נתנה
     // לשתיהן את הנתיב הראשון והתוויות נחתו זו על זו.
     const gap=Math.max(11,Math.min(HW_GAP,room/2));
-    let x=p.face+dir*gap, k=0;
-    while(k<4 && hwPlaced.some(q=>Math.abs(q.x-x)<18 && lo<q.hi && hi>q.lo))
-      x=p.face+dir*(gap+(++k)*cfg.step);
+    let x=placeV(p.face+dir*gap,dir*cfg.step,lo,hi);
 
     // דלת של 800 מ"מ היא 58 פיקסלים על מסך פלאפון, ובתוכם צריכים לשבת
     // גם גובה הציר וגם מרחק הידית. כשאין מקום, דחיפה נוספת הצידה רק
@@ -328,18 +345,15 @@ function _layoutPass(shower,cW,mgL,mgR){
     // אופקי** אל הנקודה שהיא מודדת. יתומה באמצע היא לא אפשרות.
     let ext=null;
     const hwY=p.outward==='start'?p.b:p.a;
-    if(Math.abs(x-p.face)>46 || hwPlaced.some(q=>Math.abs(q.x-x)<18 && lo<q.hi && hi>q.lo)){
+    if(Math.abs(x-p.face)>46){
+      vPlaced.pop();
       const right=p.face>=(asmL+asmR)/2, edge=right?asmR:asmL, s=right?1:-1;
-      let k2=0;
-      x=edge+s*HW_GAP;
-      while(k2<8 && hwPlaced.some(q=>Math.abs(q.x-x)<18 && lo<q.hi && hi>q.lo))
-        x=edge+s*(HW_GAP+(++k2)*cfg.step);
+      x=placeV(edge+s*HW_GAP,s*cfg.step,lo,hi);
       ext=[{x1:x,y1:hwY,x2:p.face,y2:hwY}];
     }
-    hwPlaced.push({x:x,lo:lo,hi:hi});
 
     dim(p.kind,p.mm,x,p.a,x,p.b,
-        {idx:p.idxs[0], idxs:p.idxs, zone:'hw', face:p.face, lane:cfg.first+k*cfg.step,
+        {idx:p.idxs[0], idxs:p.idxs, zone:'hw', face:p.face, lane:Math.abs(x-p.face),
          t:t, ext:ext});
   });
 
@@ -367,14 +381,21 @@ function lgLayout(shower,opts){
   const cfg=_lanesFor(cW);
   const MG=Math.min(cfg.first+cfg.step*2+26, Math.round(cW*0.20));
 
-  const first=_layoutPass(shower,cW,MG,MG);
-  if(!first.overflow||(first.overflow.l<0.5&&first.overflow.r<0.5)) return first;
+  // אף צד לא עובר 27% מהקנבס: עדיף מידה שנוגעת בשפה מזכוכית שנעלמה.
+  const cap=Math.round(cW*0.27);
+  let l=MG, r=MG, res=_layoutPass(shower,cW,l,r);
 
-  // אף צד לא עובר 30% מהקנבס: עדיף מידה שנוגעת בשפה מזכוכית שנעלמה.
-  const cap=Math.round(cW*0.30);
-  const l=Math.min(cap,Math.ceil(MG+first.overflow.l));
-  const r=Math.min(cap,Math.ceil(MG+first.overflow.r));
-  return _layoutPass(shower,cW,l,r);
+  // השוליים גדלים מונוטונית. הרחבת צד אחד משנה את קנה המידה ולכן גם את
+  // מה שנדחס לצד השני, ושני מעברים בלבד התנדנדו בין השניים: הראשון
+  // חרג ימינה, השני חרג שמאלה, ואיש מהם לא ראה את שניהם.
+  for(let i=0;i<4 && res.overflow && (res.overflow.l>0.5||res.overflow.r>0.5);i++){
+    const nl=Math.min(cap,Math.ceil(l+res.overflow.l));
+    const nr=Math.min(cap,Math.ceil(r+res.overflow.r));
+    if(nl===l&&nr===r) break;              // הגענו לתקרה, אין מה להוסיף
+    l=nl; r=nr;
+    res=_layoutPass(shower,cW,l,r);
+  }
+  return res;
 }
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { lgLayout: lgLayout };

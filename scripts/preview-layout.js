@@ -44,36 +44,52 @@ function svg(L, title) {
 
   /* הפרזול */
   L.hardware.forEach(h => {
-    if (h.kind === 'handle') {
-      /* ידית מקלחון היא מוט על שתי רגליים, לא מקל שחור. הרגליים יוצאות
-         לכיוון הזכוכית ונגמרות בדיסק — ככה רואים שזו ידית ולא כפתור. */
-      const L2 = (h.len || 44) / 2, bx = h.x + (h.toward || 1) * 8;
-      p.push(`<line x1="${h.x}" y1="${h.y - L2 * 0.55}" x2="${bx}" y2="${h.y - L2 * 0.55}" stroke="#94a3b8" stroke-width="2"/>`);
-      p.push(`<line x1="${h.x}" y1="${h.y + L2 * 0.55}" x2="${bx}" y2="${h.y + L2 * 0.55}" stroke="#94a3b8" stroke-width="2"/>`);
-      p.push(`<circle cx="${bx}" cy="${h.y - L2 * 0.55}" r="2.6" fill="#94a3b8"/>`);
-      p.push(`<circle cx="${bx}" cy="${h.y + L2 * 0.55}" r="2.6" fill="#94a3b8"/>`);
-      p.push(`<line x1="${h.x}" y1="${h.y - L2}" x2="${h.x}" y2="${h.y + L2}" stroke="#334155" stroke-width="4.5" stroke-linecap="round"/>`);
+    if (h.kind === 'hole') {
+      /* חור. זה מה שהחותך צריך לקדוח, וזה כל מה שהשרטוט צריך להראות. */
+      p.push(`<circle cx="${h.x}" cy="${h.y}" r="4" fill="#fff" stroke="#334155" stroke-width="1.5"/>`);
     } else {
       const c = h.kind === 'bracket' ? '#b45309' : '#1e293b';
       p.push(`<rect x="${h.x - 7}" y="${h.y - 5}" width="14" height="10" rx="2" fill="${c}"/>`);
     }
   });
 
-  /* המידות */
+  /* המידות.
+     המספר יושב **בתוך פער בקו**, לא בקופסה לבנה מעליו. הקופסאות היו
+     מפוזרות על הזכוכית ונקראו כמו פתקים שהודבקו על הציור; פער בקו הוא
+     מה ששרטוט טכני עושה, והעין קוראת אותו כחלק מהמידה. */
   L.dims.forEach(d => {
     const t = d.t == null ? 0.5 : d.t;
     const mx = d.x1 + (d.x2 - d.x1) * t, my = d.y1 + (d.y2 - d.y1) * t;
-    p.push(`<line x1="${d.x1}" y1="${d.y1}" x2="${d.x2}" y2="${d.y2}" stroke="#dc2626" stroke-width="1"/>`);
-    /* קצוות */
-    const ext = d.rot ? `<line x1="${d.x1 - 4}" y1="${d.y1}" x2="${d.x1 + 4}" y2="${d.y1}" stroke="#dc2626" stroke-width="1"/><line x1="${d.x2 - 4}" y1="${d.y2}" x2="${d.x2 + 4}" y2="${d.y2}" stroke="#dc2626" stroke-width="1"/>`
-                     : `<line x1="${d.x1}" y1="${d.y1 - 4}" x2="${d.x1}" y2="${d.y1 + 4}" stroke="#dc2626" stroke-width="1"/><line x1="${d.x2}" y1="${d.y2 - 4}" x2="${d.x2}" y2="${d.y2 + 4}" stroke="#dc2626" stroke-width="1"/>`;
-    p.push(ext);
-    /* קווי הארכה — ישרים בלבד */
+    const len = Math.max(String(d.text).length * 7 + 8, 22);
+
+    /* קווי הארכה — ישרים בלבד, ומתחת לכל השאר */
     (d.ext || []).forEach(e => {
-      p.push(`<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="#f87171" stroke-width="0.6"/>`);
+      p.push(`<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="#fca5a5" stroke-width="0.6"/>`);
     });
+
+    /* הקו, שבור סביב המספר — ורק אם המספר באמת יושב עליו */
+    const inside = t > 0.02 && t < 0.98;
+    if (d.rot) {
+      if (inside) {
+        p.push(`<line x1="${d.x1}" y1="${d.y1}" x2="${d.x1}" y2="${my - len / 2}" stroke="#dc2626" stroke-width="1"/>`);
+        p.push(`<line x1="${d.x1}" y1="${my + len / 2}" x2="${d.x2}" y2="${d.y2}" stroke="#dc2626" stroke-width="1"/>`);
+      } else {
+        p.push(`<line x1="${d.x1}" y1="${d.y1}" x2="${d.x2}" y2="${d.y2}" stroke="#dc2626" stroke-width="1"/>`);
+      }
+      p.push(`<line x1="${d.x1 - 4}" y1="${d.y1}" x2="${d.x1 + 4}" y2="${d.y1}" stroke="#dc2626" stroke-width="1"/>`);
+      p.push(`<line x1="${d.x2 - 4}" y1="${d.y2}" x2="${d.x2 + 4}" y2="${d.y2}" stroke="#dc2626" stroke-width="1"/>`);
+    } else {
+      if (inside) {
+        p.push(`<line x1="${d.x1}" y1="${d.y1}" x2="${mx - len / 2}" y2="${d.y1}" stroke="#dc2626" stroke-width="1"/>`);
+        p.push(`<line x1="${mx + len / 2}" y1="${d.y2}" x2="${d.x2}" y2="${d.y2}" stroke="#dc2626" stroke-width="1"/>`);
+      } else {
+        p.push(`<line x1="${d.x1}" y1="${d.y1}" x2="${d.x2}" y2="${d.y2}" stroke="#dc2626" stroke-width="1"/>`);
+      }
+      p.push(`<line x1="${d.x1}" y1="${d.y1 - 4}" x2="${d.x1}" y2="${d.y1 + 4}" stroke="#dc2626" stroke-width="1"/>`);
+      p.push(`<line x1="${d.x2}" y1="${d.y2 - 4}" x2="${d.x2}" y2="${d.y2 + 4}" stroke="#dc2626" stroke-width="1"/>`);
+    }
+
     const rot = d.rot ? ` transform="rotate(-90 ${mx} ${my})"` : '';
-    p.push(`<rect x="${mx - (d.rot ? 8 : String(d.text).length * 3.5 + 5)}" y="${my - (d.rot ? String(d.text).length * 3.5 + 5 : 8)}" width="${d.rot ? 16 : String(d.text).length * 7 + 10}" height="${d.rot ? String(d.text).length * 7 + 10 : 16}" fill="#fff" opacity="0.9"/>`);
     p.push(`<text x="${mx}" y="${my + 4}"${rot} font-size="11" fill="#dc2626" text-anchor="middle">${esc(d.text)}</text>`);
   });
 
