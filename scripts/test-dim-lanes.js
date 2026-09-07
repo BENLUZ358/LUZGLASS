@@ -301,5 +301,45 @@ check('and no width still carries a fixed offset',
   check('and the overall, covering both, sits one row out', all > p0, true);
 }
 
+/* ── hardware dimensions leave the assembly, not the panel ─────────────── */
+/*
+ * They came off the panel's own face. A middle panel's face sits inside the
+ * neighbour's glass, so the measurement landed on top of the hinges it was
+ * describing. Outside the assembly that cannot happen, and it cannot collide
+ * with the overall height either — that is on the other side.
+ *
+ * Left for heights, right for hardware. The same rule for hinges, the handle
+ * and the brackets, so this does not have to be found again on each of them
+ * in turn.
+ */
+{
+  const fn = (DEMO.match(/function _hwX[\s\S]*?\n\}/) || [''])[0];
+  check('there is one helper for where hardware dimensions go', fn.length > 0, true);
+  check('and it measures from the assembly, not the panel',
+        /_assemblyX\(/.test(fn), true);
+
+  const c4 = vm.createContext({});
+  vm.runInContext((DEMO.match(/function _assemblyX[\s\S]*?\n\}/) || [''])[0] + '\n' + fn, c4);
+  /* three 500-wide panels at scale 1, the middle one drawn at x=500 */
+  const ps = { 0: { w: 500 }, 1: { w: 500 }, 2: { w: 500 } };
+  check('a middle panel still sends its dimension past the far edge',
+        c4._hwX(ps, 1, 500, 1, 'right', 20), 1520);
+  check('and the left side goes past the near edge',
+        c4._hwX(ps, 1, 500, 1, 'left', 20), -20);
+  check('the first panel gives the same answer',
+        c4._hwX(ps, 1, 0, 0, 'right', 20), 1520);
+  check('and so does the last',
+        c4._hwX(ps, 1, 1000, 2, 'right', 20), 1520);
+  check('a missing state does not throw',
+        typeof c4._hwX(null, 1, 0, 0, 'right', 20), 'number');
+}
+
+/* every hardware dimension uses it — hinges, handle and brackets alike */
+check('the hinge dimensions use it',   /const hDX=_hwX\(/.test(DEMO), true);
+check('the handle height uses it',     /const _uX=_hwX\(/.test(DEMO), true);
+check('the bracket dimensions too',    /dLine\(_hwX\(allPS,sc,x,idx,'right',bl\)/.test(DEMO), true);
+check('and none still measures from the panel face',
+      /hDX=_hSide==='left'\?x-|_uX=_handleSide==='right'\?x\+pw\+|bDX=sides\[0\]/.test(DEMO), false);
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll dimension-lane checks passed.');

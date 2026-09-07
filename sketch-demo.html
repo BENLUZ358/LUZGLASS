@@ -603,6 +603,20 @@ function _assemblyX(allPS,sc,x,idx){
   return base;
 }
 
+// כל מידת פרזול יוצאת מחוץ ל**הרכבה כולה**, לא מפאת הפאנל שלה.
+//
+// פאה של פאנל אמצעי יושבת בתוך הזכוכית של השכן, ולכן מידה שיצאה ממנה
+// נחתה על הצירים עצמם ודרסה אותם. מחוץ להרכבה זה לא יכול לקרות, וגם
+// אין התנגשות עם מידת הגובה הכללית — היא בצד השני.
+//
+// שמאל למידות הגובה, ימין לפרזול. אותו כלל לצירים, לידית ולזוויות.
+function _hwX(allPS,sc,x,idx,side,lane){
+  const L=_assemblyX(allPS,sc,x,idx);
+  let total=0;
+  if(allPS) for(const k in allPS) total+=((allPS[k]&&allPS[k].w)||500)*sc;
+  return side==='left' ? L-lane : L+total+lane;
+}
+
 // קו דק באלכסון מהמידה אל השייף שהיא מתארת. בלעדיו "1985" שצף ליד
 // הציור לא אומר על איזה שייף מדובר.
 function _leaderTo(fromX,fromY,idx,allPS,sc,baseX){
@@ -1432,8 +1446,8 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // Hinge distance dims
     // קו המידה של הציר נלחץ במצב עריכה, ומשנה את הגובה של שני הצירים
     const _hLane=_dimPlace('right',y,y+hTop*sc,20);
-    const hDX=_hSide==='left'?x-_hLane:x+pw+_hLane;
-    const hOff=_hSide==='left'?-18:18;
+    const hDX=_hwX(allPS,sc,x,idx,'right',_hLane);
+    const hOff=0;
     // כל קו מידה מצביע על הציר שלו בלבד
     dLine(hDX,y,hDX,y+hTop*sc,String(hTop),hOff,false,{pfx:pfx,field:'hingeTop',idx:idx});
     dLine(hDX,y+ph-hBot*sc,hDX,y+ph,String(hBot),hOff,false,{pfx:pfx,field:'hingeBot',idx:idx});
@@ -1475,7 +1489,7 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // הידית מקבלת נתיב משלה, אחרי הצירים — כדי שהמידות שלה לא ייפלו
     // עליהם. קו המידה יוצא מהפאה שממנה מודדים, למטה כברירת מחדל.
     const _uLane=_dimPlace('right',hRef==='top'?y:handleY,hRef==='top'?handleY:y+ph,20);
-    const _uX=_handleSide==='right'?x+pw+_uLane:x-_uLane;
+    const _uX=_hwX(allPS,sc,x,idx,'right',_uLane);
     dLine(_uX, hRef==='top'?y:handleY, _uX, hRef==='top'?handleY:y+ph,
           String(hDistMM), 0, false,
           {pfx:pfx,field:'handleDist',idx:idx});
@@ -1536,12 +1550,17 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
                     t:{pfx:pfx,field:'bracketBot',idx:idx}});
       // קו מידה רק אם שינו את הזווית הזו במפורש. כל עוד היא עוקבת אחרי
       // הצירים, המספר כבר מופיע לידם ואין טעם להעמיס אותו פעמיים.
-      const bDX=sides[0]==='right'?x-24:x+pw+24;
-      const bOff=sides[0]==='right'?-18:18;
-      if(ps.bracketTop!=null)
-        dLine(bDX,y,bDX,y+bH.top*sc,String(bH.top),bOff,false,{pfx:pfx,field:'bracketTop',idx:idx});
-      if(ps.bracketBot!=null)
-        dLine(bDX,y+ph-bH.bot*sc,bDX,y+ph,String(bH.bot),bOff,false,{pfx:pfx,field:'bracketBot',idx:idx});
+      // גם הן מחוץ להרכבה, באותו נתיב ימני — אותו כלל כמו הצירים והידית
+      if(ps.bracketTop!=null){
+        const bl=_dimPlace('right',y,y+bH.top*sc,20);
+        dLine(_hwX(allPS,sc,x,idx,'right',bl),y,_hwX(allPS,sc,x,idx,'right',bl),y+bH.top*sc,
+              String(bH.top),0,false,{pfx:pfx,field:'bracketTop',idx:idx});
+      }
+      if(ps.bracketBot!=null){
+        const bl=_dimPlace('right',y+ph-bH.bot*sc,y+ph,20);
+        dLine(_hwX(allPS,sc,x,idx,'right',bl),y+ph-bH.bot*sc,_hwX(allPS,sc,x,idx,'right',bl),y+ph,
+              String(bH.bot),0,false,{pfx:pfx,field:'bracketBot',idx:idx});
+      }
     }
 
     // Glass-glass connector — גם הוא מהצומת ולא מ-panel.glassGlass
