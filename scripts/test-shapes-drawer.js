@@ -305,25 +305,32 @@ check('the click handler no longer multiplies by the pixel ratio',
      next one's left — so the two lines landed on each other and there was no
      telling which measurement belonged to which shape. On a sloped panel it
      is worse: both of its own heights sit on its two faces. */
-  check('the height line position is chosen, not fixed',
-        /const _hx = \(side\)=>/.test(DEMO), true);
-  check('the outermost panels put their lines outside the assembly',
-        /idx===0 \? x-32/.test(DEMO) && /_last \? x\+pw\+32/.test(DEMO), true);
-  check('and a panel in the middle carries its line inside its own glass',
-        /x\+22/.test(DEMO) && /x\+pw-22/.test(DEMO), true);
-  check('both slope heights use it, so they cannot collide with a neighbour',
-        /dLine\(_hx\('l'\)[\s\S]{0,400}?dLine\(_hx\('r'\)/.test(DEMO), true);
+  /* the first fix put outer panels' lines outside the assembly and middle
+     ones inside their own glass — a compromise that only held because the
+     alternatives collided. The lane allocator replaced it: every height comes
+     off one side in its own lane, and a middle panel needs no line at all
+     unless its height differs from the rest. */
+  check('height lines are placed by the lane allocator',
+        /const lane=_dimLane\('left'\)/.test(DEMO), true);
+  check('and the old per-panel offset scheme is gone',
+        /const _hx = \(side\)=>/.test(DEMO), false);
+  check('the assembly is measured once, from the first shape',
+        /else if\(idx===0\)\{[\s\S]{0,400}?_heightDims\(allPS\)/.test(DEMO), true);
+  check('both slope heights get lanes of their own',
+        /const lL=_dimLane\('left'\)[\s\S]{0,400}?const lR=_dimLane\('left'\)/.test(DEMO), true);
   check('and the low face is marked, so the slope direction is unambiguous',
         /נמוך/.test(DEMO), true);
 
-  /* the overall height says nothing about the door. A 2 m shower is a 2000
-     fixed panel with a door under it that is normally 10 to 15 mm shorter, so
-     every shape has to state its own size where it is, not only on a
-     dimension line that may fall behind its neighbour. */
-  check('each shape prints its own size on the glass',
-        /cx\.fillText\(_hMM\+' × '\+\(ps\.w\|\|0\)/.test(DEMO), true);
-  check('and it sits under the shape name, not over it',
-        /_lblFS\+2/.test(DEMO), true);
+  /* printing the size on the glass was a patch for the collisions: a
+     dimension line could fall behind its neighbour, so the number was written
+     inside the shape instead. Lanes solve that properly, and text on the
+     glass hides the drawing — a contractor drawing by hand does not write
+     measurements inside the glass. What stays is the number a leader points
+     at. */
+  check('the size is no longer printed on the glass',
+        /fillText\(_hMM\+' × '/.test(DEMO), false);
+  check('the shape number is what remains',
+        /String\.fromCharCode\(9312\+/.test(DEMO), true);
 
   check('saving applies the value through the shared parser',
         /function dimEditorApply[\s\S]{0,400}?lgParseDimensionInput\(/.test(DEMO), true);
