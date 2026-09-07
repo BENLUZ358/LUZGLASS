@@ -9,6 +9,7 @@
 <!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
 <link rel="stylesheet" href="lg-ui.css?v=20260807">
 <script src="lg-parse.js"></script>
+<script src="lg-shapes.js"></script>
 <style>
 .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 14px;position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;}
 .topbar .ti{font-size:15px;font-weight:700;}.topbar .su{font-size:12px;color:var(--muted);}
@@ -737,6 +738,45 @@ function getPanelShape(ps,pw,sc){
   }
 }
 
+// ══════════════ הגשר אל מנוע החוקים ══════════════
+//
+// הפאנלים נושאים את אוצר המילים הישן — wallSide, glassGlass, hingeMarks,
+// hingeOnFixed — ארבעה שדות שנכתבו ביד לכל קומבינציה ואינם עקביים
+// ביניהם. hingeSide הוא גאומטריה על הקנבס; hingeOnFixed הוא מי השכן.
+// רק השני אומר אילו שייפים באמת מחוברים, וזה מה שצומת הוא.
+//
+// הגאומטריה של הציור לא משתנה בשורה אחת. מה שמשתנה הוא מאיפה מגיעה
+// ההחלטה כמה חתיכות לצייר ואיפה.
+function _lgShowerOf(allPanels, allPS){
+  const shapes=(allPanels||[]).map((p,i)=>{
+    if(p.type==='slider') return {id:'s'+i,kind:'slider'};
+    if(p.type==='door'){
+      const hingeSide = p.hingeOnFixed==='prev' ? 'right'
+                      : p.hingeOnFixed==='next' ? 'left'
+                      : (i===0 ? 'right' : 'left');
+      return {id:'s'+i,kind:'door',hingeSide};
+    }
+    return {id:'s'+i,kind:'fixed'};
+  });
+  const first=(allPanels||[])[0]||{}, last=(allPanels||[])[(allPanels||[]).length-1]||{};
+  const rightWall = first.wallSide==='right'||first.wallSide==='both'||first.type==='door';
+  const leftWall  = last.wallSide==='left' ||last.wallSide==='both' ||last.type==='door';
+  return {boundary:{right:rightWall?'wall':'open',left:leftWall?'wall':'open'},
+          finish:'shahor',quality:selQ==='pliz'?'pliz':'zamak',shapes};
+}
+
+// הצמתים משני צדי פאנל idx. junction[idx] הוא הצד הימני שלו,
+// junction[idx+1] הצד השמאלי — n שייפים נותנים n+1 צמתים.
+function _lgSidesOf(allPanels,allPS,idx){
+  const js=(typeof lgJunctions==='function') ? lgJunctions(_lgShowerOf(allPanels,allPS)) : [];
+  return {right:js[idx]||{type:null,qty:0}, left:js[idx+1]||{type:null,qty:0}};
+}
+
+// מפת מיקומים: איזה שייף יושב באיזה מלבן על הקנבס. בלעדיה אי אפשר יהיה
+// להצביע על צורה — לא כאן ולא בתחנת הבדיקה — והוספה מאוחרת מחייבת לחזור
+// לתוך הציור.
+window._lgShapeRects=[];
+
 function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
   const isDoor=panel.type==='door', isFixed=panel.type==='fixed'||panel.type==='mirror';
   const isSlider=panel.type==='slider';
@@ -877,8 +917,12 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 
   // FIXED brackets
   if(isFixed){
-    const ws=panel.wallSide||ps.wallSide||'both';
-    const sides=ws==='both'?['right','left']:ws==='none'?[]:ws==='right'?['right']:['left'];
+    // ההחלטה מגיעה מהמנוע, לא מ-panel.wallSide. הגאומטריה שמתחת לא זזה.
+    // אומת מול כל 16 הקומבינציות הקיימות — ר' test-shapes-vs-combos.js.
+    const _j=_lgSidesOf(allPanels,allPS,idx);
+    const sides=[];
+    if(_j.right.type==='bracket-wall') sides.push('right');
+    if(_j.left.type ==='bracket-wall') sides.push('left');
     sides.forEach(side=>{
       const bx=side==='right'?x:x+pw;
       const bPos=[y+20*sc,y+ph-20*sc];
@@ -889,21 +933,21 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
       bPos.forEach(by=>cx.fillText(ps.bracketType==='open'?'פתוחה':'זווית',side==='right'?bx+4:bx-4,by-5));
     });
 
-    // Glass-glass connector (between panels in pinati with 2 fixed)
-    if(panel.glassGlass){
-      const gx=panel.glassGlass==='left'?x:x+pw;
-      [y+20*sc,y+ph-20*sc].forEach(by=>drwGGBracket(gx,by));
-    }
-    // hingeMarks on fixed (e.g. middle fixed in 3k2d)
-    if(panel.hingeMarks){
-      const sides2=panel.hingeMarks==='both'?['right','left']:panel.hingeMarks==='right'?['right']:['left'];
-      sides2.forEach(side=>{
-        const hx2=side==='right'?x+pw:x;
-        [y+20*sc,y+ph-20*sc].forEach(hy=>drwHingeOnFixed(hx2,hy));
-      });
-    }
+    // Glass-glass connector — גם הוא מהצומת ולא מ-panel.glassGlass
+    if(_j.right.type==='bracket-gg') [y+20*sc,y+ph-20*sc].forEach(by=>drwGGBracket(x,by));
+    if(_j.left.type ==='bracket-gg') [y+20*sc,y+ph-20*sc].forEach(by=>drwGGBracket(x+pw,by));
+
+    // סימון ציר על קבוע שדלת נתלית עליו. היה panel.hingeMarks, שדה ידני
+    // שהיה צריך להיכתב בעקביות עם hingeOnFixed של השכן — ולא תמיד נכתב.
+    if(_j.right.type==='hinge-gg') [y+20*sc,y+ph-20*sc].forEach(hy=>drwHingeOnFixed(x,hy));
+    if(_j.left.type ==='hinge-gg') [y+20*sc,y+ph-20*sc].forEach(hy=>drwHingeOnFixed(x+pw,hy));
+
     if(ps.floorBracket) drwFloorBracket(x+pw/2,y+ph);
   }
+
+  // מפת המיקומים — נרשמת אחרי שהפאנל צויר, כדי שאפשר יהיה להצביע עליו
+  if(idx===0) window._lgShapeRects=[];
+  window._lgShapeRects.push({id:'s'+idx, idx:idx, x:x, y:y, w:pw, h:ph});
 
   // HOLES
   (ps.holes||[]).forEach((hole)=>{
@@ -942,11 +986,26 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 }
 
 // ══════════════ DRAW HELPERS ══════════════
+// ציר הוא פיזית לוחית, ציר סיבוב ומלחציים על הזכוכית:
+//
+//    ███●═╪═     ███  לוחית
+//                ●    ציר הסיבוב
+//                ═╪═  מלחציים על הזכוכית
+//
+// קודם היה כאן מלבן מלא עם נקודה — במקום הנכון ובגודל הנכון, אבל קבלן
+// שמסתכל על השרטוט לא זיהה בו ציר. אותו מיקום, אותו גודל, אותו זהב;
+// משתנה הגאומטריה בלבד. המיקום מחושב אצל הקורא ולא כאן.
 function drwHinge(x,y){
-  const hw=7,hh=14;
-  cx.fillStyle='#b8922a';cx.fillRect(x-hw/2,y-hh/2,hw,hh);
-  cx.strokeStyle='#7a5e10';cx.lineWidth=1;cx.strokeRect(x-hw/2,y-hh/2,hw,hh);
-  cx.fillStyle='#fff';cx.beginPath();cx.arc(x,y,2,0,Math.PI*2);cx.fill();
+  const hh=14;
+  cx.fillStyle='#b8922a';
+  cx.fillRect(x-5,y-hh/2,4,hh);                                   // הלוחית
+  cx.strokeStyle='#7a5e10';cx.lineWidth=1;cx.strokeRect(x-5,y-hh/2,4,hh);
+  cx.fillStyle='#b8922a';
+  cx.beginPath();cx.arc(x,y,3,0,Math.PI*2);cx.fill();              // ציר הסיבוב
+  cx.strokeStyle='#7a5e10';cx.beginPath();cx.arc(x,y,3,0,Math.PI*2);cx.stroke();
+  cx.fillStyle='#b8922a';
+  cx.fillRect(x+2,y-4,6,8);                                        // המלחציים
+  cx.strokeStyle='#7a5e10';cx.strokeRect(x+2,y-4,6,8);
 }
 function drwHingeOnFixed(x,y){
   // hinge mark on fixed panel — smaller, hollow
