@@ -64,8 +64,18 @@ check('drawSinglePanel is still the one drawing a panel',
   check('the symbol itself computes no position',
         /hingeSide|x\+pw/.test(fn), false);
 }
+/* the geometry rule is unchanged — a hinge on the left face sits at x, on the
+   right face at x+pw. What changed is where the side comes from: the engine,
+   not panel.hingeSide. The two hand-written fields disagreed in two
+   combinations and drew hinges on the handle side. */
 check('the hinge position rule is unchanged',
-      /hingeSide==='left'\?x:x\+pw/.test(DEMO), true);
+      /const hx=_hSide==='left'\?x:x\+pw/.test(DEMO), true);
+check('and the side is taken from the junctions',
+      /_hSide=_hingePrev\?'left':_hingeNext\?'right'/.test(DEMO), true);
+check('the handle follows from it, always opposite',
+      /_handleSide=_hSide==='left'\?'right':'left'/.test(DEMO), true);
+check('no drawing still reads the hand-written handle field',
+      /panel\.handleSide/.test(DEMO), false);
 
 /* ── how far from the edge hardware sits ───────────────────────────────── */
 /*
@@ -86,9 +96,14 @@ check('the hinge position rule is unchanged',
         /dLine\(hDX[\s\S]{0,80}?String\(hTop\)/.test(DEMO), true);
   check('which defaults to that constant',
         /ps\.hingeTop!=null\?ps\.hingeTop:EDGE_MM/.test(DEMO), true);
-  /* every hinge and bracket row is placed from that one constant */
-  check('all eight placements use it',
-        (DEMO.match(/EDGE_MM\*sc/g) || []).length >= 8, true);
+  /* it is the default every piece falls back to. Brackets now follow the
+     hinges opposite them rather than the constant directly, so the count of
+     literal uses is no longer the thing worth pinning — that the defaults all
+     come from here is. */
+  check('the hinge defaults come from it',
+        (DEMO.match(/!=null\?ps\.hinge(Top|Bot):EDGE_MM/g) || []).length, 2);
+  check('and so does the bracket fallback when there is no door opposite',
+        /EDGE_MM/.test((DEMO.match(/function _bracketHeights[\s\S]*?\n\}/) || [''])[0]), true);
 }
 
 /* ── the position map ──────────────────────────────────────────────────── */

@@ -63,9 +63,15 @@ function showerFromCombo(combo) {
   panels.forEach((p, i) => {
     if (p.type === 'slider') { shapes.push({ id: 's' + i, kind: 'slider' }); return; }
     if (p.type === 'door') {
+      /* mirrors _lgShowerOf in the page. hingeOnFixed is array-relative and so
+         maps straight over; without it the drawer's hingeSide decides, and
+         that is canvas-relative, so it inverts — the drawer's 'left' faces the
+         previous panel, which the engine calls 'right'. */
       const hingeSide = p.hingeOnFixed === 'prev' ? 'right'
                       : p.hingeOnFixed === 'next' ? 'left'
-                      : (i === 0 ? 'right' : 'left');   // no neighbour named — leans on the boundary
+                      : p.hingeSide === 'left'    ? 'right'
+                      : p.hingeSide === 'right'   ? 'left'
+                      : (i === 0 ? 'right' : 'left');
       shapes.push({ id: 's' + i, kind: 'door', hingeSide });
       return;
     }
@@ -132,6 +138,37 @@ for (const { cat, c } of all) {
         q('hinge-gg') + q('hinge-wall') <= doors * 2, true);
   check(`${name}: the wall brackets match what the drawer draws`,
         q('bracket-wall'), drawnCounts(c).wallBrackets);
+}
+
+/* ── the drawer hangs each door on the face the engine chose ───────────── */
+/*
+ * hingeSide and hingeOnFixed are two hand-written fields with nothing forcing
+ * them to agree, and in two combinations they did not: p_2k2d marked both
+ * doors as hinged onto the fixed beside them while hingeSide pointed the other
+ * way, so the hinges were drawn on the handle side. h_2d had both doors hinged
+ * onto each other with the handles on the outside — backwards, and a door on a
+ * door is refused by the engine anyway.
+ *
+ * Both are corrected in the data, and the drawer takes the face from the
+ * engine rather than from the field, so a field that drifts again cannot move
+ * a hinge. This check is what caught them.
+ */
+for (const { cat, c } of all) {
+  const panels = c.panels || [];
+  const js = lgJunctions(showerFromCombo(c));
+  panels.forEach((p, i) => {
+    if (p.type !== 'door') return;
+    const isHinge = j => !!(j && /hinge/.test(j.type || ''));
+    const engineFace = isHinge(js[i]) ? 'prev' : isHinge(js[i + 1]) ? 'next' : 'none';
+    /* the drawer's hingeSide is canvas-relative: 'left' is the face shared
+       with the previous panel, because panels are drawn in array order */
+    const dataFace = p.hingeSide === 'left' ? 'prev' : 'next';
+    check(`${cat}/${c.id} panel ${i}: the data agrees with the engine on the hinge face`,
+          dataFace, engineFace);
+    /* and the handle is always opposite the hinge */
+    check(`${cat}/${c.id} panel ${i}: the handle is opposite the hinge`,
+          p.handleSide, p.hingeSide === 'left' ? 'right' : 'left');
+  });
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

@@ -407,9 +407,12 @@ const FN=[
 const COMBOS={
   pinati:[
     {id:'p_2k2d',label:'2 קבועים 2 דלתות',panels:[
+      // hingeSide היה הפוך ל-hingeOnFixed בשתי הדלתות: הסימון על השכן היה
+      // בצד אחד והציר עצמו בצד השני, ולכן צוירו צירים בצד הידית. כל דלת
+      // נתלית על הקבוע שלה, והידיות נפגשות באמצע.
       {type:'fixed',label:'קבוע א',wallSide:'right'},
-      {type:'door', label:'דלת א', hingeSide:'right',handleSide:'left',swingDir:'left',hingeOnFixed:'prev'},
-      {type:'door', label:'דלת ב', hingeSide:'left', handleSide:'right',swingDir:'right',hingeOnFixed:'next'},
+      {type:'door', label:'דלת א', hingeSide:'left', handleSide:'right',swingDir:'left',hingeOnFixed:'prev'},
+      {type:'door', label:'דלת ב', hingeSide:'right',handleSide:'left', swingDir:'right',hingeOnFixed:'next'},
       {type:'fixed',label:'קבוע ב',wallSide:'left'},
     ]},
     {id:'p_kd',label:'קבוע ודלת',panels:[
@@ -451,8 +454,10 @@ const COMBOS={
       {type:'door', label:'דלת', hingeSide:'left',handleSide:'right',swingDir:'out',hingeOnFixed:'prev'},
     ]},
     {id:'h_2d',label:'2 דלתות',panels:[
-      {type:'door',label:'דלת א',hingeSide:'right',handleSide:'left',swingDir:'out'},
-      {type:'door',label:'דלת ב',hingeSide:'left', handleSide:'right',swingDir:'out'},
+      // שתי הדלתות נתלו אחת על השנייה והידיות היו בחוץ — הפוך מהמציאות,
+      // ודלת על דלת גם נפסלת במנוע. כל אחת נתלית על הקיר שלה.
+      {type:'door',label:'דלת א',hingeSide:'left', handleSide:'right',swingDir:'out'},
+      {type:'door',label:'דלת ב',hingeSide:'right',handleSide:'left', swingDir:'out'},
     ]},
     {id:'h_k',label:'קבוע בלבד',panels:[{type:'fixed',label:'קבוע',wallSide:'both'}]},
   ],
@@ -1095,8 +1100,13 @@ function _lgShowerOf(allPanels, allPS){
   const shapes=(allPanels||[]).map((p,i)=>{
     if(p.type==='slider') return {id:'s'+i,kind:'slider'};
     if(p.type==='door'){
+      // hingeOnFixed נמדד על המערך ולכן הוא ישיר. בלעדיו נופלים ל-hingeSide
+      // של הצייר, שהוא ביחס לקנבס — ולכן מתהפך: 'left' של הצייר פונה
+      // לפאנל הקודם, וזה 'right' של המנוע.
       const hingeSide = p.hingeOnFixed==='prev' ? 'right'
                       : p.hingeOnFixed==='next' ? 'left'
+                      : p.hingeSide==='left'    ? 'right'
+                      : p.hingeSide==='right'   ? 'left'
                       : (i===0 ? 'right' : 'left');
       return {id:'s'+i,kind:'door',hingeSide};
     }
@@ -1114,6 +1124,25 @@ function _lgShowerOf(allPanels, allPS){
 function _lgSidesOf(allPanels,allPS,idx){
   const js=(typeof lgJunctions==='function') ? lgJunctions(_lgShowerOf(allPanels,allPS)) : [];
   return {right:js[idx]||{type:null,qty:0}, left:js[idx+1]||{type:null,qty:0}};
+}
+
+// גובה הזוויות עוקב אחרי הצירים שמולן — הן מותקנות באותו גובה כדי שהמראה
+// יהיה אחיד. אם אין דלת בהרכבה, ברירת המחדל היא הסטנדרט של 20 ס"מ.
+//
+// שינוי מפורש של זווית מסוימת גובר, ורק אז מצויר לה קו מידה: כל עוד היא
+// עוקבת אחרי הצירים המספר כבר מופיע לידם, ואין טעם להעמיס אותו פעמיים.
+function _bracketHeights(allPanels,allPS,ps){
+  let dTop=null,dBot=null;
+  (allPanels||[]).forEach((p,i)=>{
+    if(p.type!=='door') return;
+    const d=(allPS&&allPS[i])||{};
+    if(dTop===null) dTop=(d.hingeTop!=null?d.hingeTop:EDGE_MM);
+    if(dBot===null) dBot=(d.hingeBot!=null?d.hingeBot:EDGE_MM);
+  });
+  return {
+    top: ps.bracketTop!=null ? ps.bracketTop : (dTop!==null?dTop:EDGE_MM),
+    bot: ps.bracketBot!=null ? ps.bracketBot : (dBot!==null?dBot:EDGE_MM),
+  };
 }
 
 // מפת מיקומים: איזה שייף יושב באיזה מלבן על הקנבס. בלעדיה אי אפשר יהיה
@@ -1228,7 +1257,19 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     cx.restore();
 
     // Hinges on door
-    const hx=panel.hingeSide==='left'?x:x+pw;
+    //
+    // הפאה נגזרת מהמנוע ולא מ-panel.hingeSide. שני השדות הידניים בנתונים
+    // סותרים זה את זה: ב-p_2k2d הדלת מסומנת hingeOnFixed:'prev' אבל
+    // hingeSide:'right', כלומר סימון הציר על השכן בצד אחד והציר עצמו בצד
+    // השני. התוצאה על המסך הייתה צירים בצד הידית.
+    //
+    // _j.right הוא הצומת שלפני השייף, שהוא הפאה השמאלית שלו על הקנבס.
+    const _jd=_lgSidesOf(allPanels,allPS,idx);
+    const _hingePrev=/hinge/.test((_jd.right&&_jd.right.type)||'');
+    const _hingeNext=/hinge/.test((_jd.left &&_jd.left.type )||'');
+    // בלי תשובה מהמנוע נשארים עם השדה הידני, כדי שמסלול לא מוכר לא ייפול
+    const _hSide=_hingePrev?'left':_hingeNext?'right':(panel.hingeSide||'left');
+    const hx=_hSide==='left'?x:x+pw;
     // כל ציר בנפרד. שדה אחד לשניהם היה אומר ששינוי הציר העליון מזיז גם את
     // התחתון — ובשטח הם לא תמיד סימטריים. ברירת המחדל לשניהם היא הסטנדרט,
     // 20 ס"מ מהקצה הקרוב אליהם.
@@ -1240,14 +1281,14 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 
     // Hinge labels
     cx.font=`${Math.max(7,sc*0.55)}px Heebo,sans-serif`; cx.fillStyle='#b8922a';
-    const hlx=panel.hingeSide==='left'?hx-4:hx+4;
-    cx.textAlign=panel.hingeSide==='left'?'right':'left';
+    const hlx=_hSide==='left'?hx-4:hx+4;
+    cx.textAlign=_hSide==='left'?'right':'left';
     hPos.forEach(hy=>cx.fillText('E400',hlx,hy+3));
 
     // Hinge distance dims
     // קו המידה של הציר נלחץ במצב עריכה, ומשנה את הגובה של שני הצירים
-    const hDX=hx+(panel.hingeSide==='left'?-24:24);
-    const hOff=panel.hingeSide==='left'?-18:18;
+    const hDX=hx+(_hSide==='left'?-24:24);
+    const hOff=_hSide==='left'?-18:18;
     // כל קו מידה מצביע על הציר שלו בלבד
     dLine(hDX,y,hDX,y+hTop*sc,String(hTop),hOff,false,{pfx:pfx,field:'hingeTop',idx:idx});
     dLine(hDX,y+ph-hBot*sc,hDX,y+ph,String(hBot),hOff,false,{pfx:pfx,field:'hingeBot',idx:idx});
@@ -1264,7 +1305,10 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     //     מלמעלה, ולא אמצע הזכוכית.
     const hEdgeMM=(ps.handleEdge!=null?ps.handleEdge:HANDLE_EDGE_CM)*10;
     const hEdge=hEdgeMM*sc;
-    const handleX=panel.handleSide==='right'?x+pw-hEdge:x+hEdge;
+    // הידית תמיד בצד ההפוך לציר. נגזרת מאותו מקור, אחרת היא יכולה לנחות
+    // על הצירים עצמם כששני השדות הידניים סותרים.
+    const _handleSide=_hSide==='left'?'right':'left';
+    const handleX=_handleSide==='right'?x+pw-hEdge:x+hEdge;
     // גובה הידית נמדד מלמטה כברירת מחדל — זו המידה שמודדים בשטח, מהרצפה.
     // אפשר להחליף לייחוס מלמעלה בחלון העריכה, והידית לא זזה בהחלפה.
     const hRef=ps.handleRef||'bottom';
@@ -1273,7 +1317,7 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     if(ps.handleType==='towel'){
       const spMM=(ps.towelSpacing||TOWEL_SPACING_CM)*10;
       const sp=spMM*sc;
-      const hx2=panel.handleSide==='right'?handleX-sp:handleX+sp;
+      const hx2=_handleSide==='right'?handleX-sp:handleX+sp;
       if(hx2>x+4&&hx2<x+pw-4){
         drwHole(handleX,handleY);drwHole(hx2,handleY);
         dLine(Math.min(handleX,hx2),handleY-20,Math.max(handleX,hx2),handleY-20,String(spMM),0,true,null);
@@ -1285,9 +1329,9 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // שניהם נלחצים במצב עריכה.
     // קו המידה יוצא מהפאה שממנה מודדים — למטה כברירת מחדל
     dLine(handleX, hRef==='top'?y:handleY, handleX, hRef==='top'?handleY:y+ph,
-          String(hDistMM), panel.handleSide==='right'?16:-16, false,
+          String(hDistMM), _handleSide==='right'?16:-16, false,
           {pfx:pfx,field:'handleDist',idx:idx});
-    const heX=panel.handleSide==='right'?x+pw:x;
+    const heX=_handleSide==='right'?x+pw:x;
     dLine(Math.min(handleX,heX),handleY,Math.max(handleX,heX),handleY,
           String(hEdgeMM),22,true,{pfx:pfx,field:'handleEdge',idx:idx});
 
@@ -1320,9 +1364,10 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     const sides=[];
     if(_j.right.type==='bracket-wall') sides.push('right');
     if(_j.left.type ==='bracket-wall') sides.push('left');
+    const bH=_bracketHeights(allPanels,allPS,ps);
     sides.forEach(side=>{
       const bx=side==='right'?x:x+pw;
-      const bPos=[y+EDGE_MM*sc,y+ph-EDGE_MM*sc];
+      const bPos=[y+bH.top*sc,y+ph-bH.bot*sc];
       if(ps.extraBracket) bPos.push(y+(ps.bracket3pos||40)*sc);
       bPos.forEach(by=>drwBracket(bx,by,side==='right',ps.bracketType==='open'));
       cx.font=`${Math.max(7,sc*0.5)}px Heebo,sans-serif`;cx.fillStyle='#b8922a';
@@ -1330,9 +1375,27 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
       bPos.forEach(by=>cx.fillText(ps.bracketType==='open'?'פתוחה':'זווית',side==='right'?bx+4:bx-4,by-5));
     });
 
+    // הזווית עצמה נלחצת במצב עריכה, גם כשאין לה קו מידה — אחרת אי אפשר
+    // היה לשנות אותה כלל בלי להוסיף קו קבוע לציור.
+    if(sides.length){
+      const tx=sides[0]==='right'?x:x+pw;
+      dimHits.push({x:tx-22,y:y+bH.top*sc-22,w:44,h:44,
+                    t:{pfx:pfx,field:'bracketTop',idx:idx}});
+      dimHits.push({x:tx-22,y:y+ph-bH.bot*sc-22,w:44,h:44,
+                    t:{pfx:pfx,field:'bracketBot',idx:idx}});
+      // קו מידה רק אם שינו את הזווית הזו במפורש. כל עוד היא עוקבת אחרי
+      // הצירים, המספר כבר מופיע לידם ואין טעם להעמיס אותו פעמיים.
+      const bDX=sides[0]==='right'?x-24:x+pw+24;
+      const bOff=sides[0]==='right'?-18:18;
+      if(ps.bracketTop!=null)
+        dLine(bDX,y,bDX,y+bH.top*sc,String(bH.top),bOff,false,{pfx:pfx,field:'bracketTop',idx:idx});
+      if(ps.bracketBot!=null)
+        dLine(bDX,y+ph-bH.bot*sc,bDX,y+ph,String(bH.bot),bOff,false,{pfx:pfx,field:'bracketBot',idx:idx});
+    }
+
     // Glass-glass connector — גם הוא מהצומת ולא מ-panel.glassGlass
-    if(_j.right.type==='bracket-gg') [y+EDGE_MM*sc,y+ph-EDGE_MM*sc].forEach(by=>drwGGBracket(x,by));
-    if(_j.left.type ==='bracket-gg') [y+EDGE_MM*sc,y+ph-EDGE_MM*sc].forEach(by=>drwGGBracket(x+pw,by));
+    if(_j.right.type==='bracket-gg') [y+bH.top*sc,y+ph-bH.bot*sc].forEach(by=>drwGGBracket(x,by));
+    if(_j.left.type ==='bracket-gg') [y+bH.top*sc,y+ph-bH.bot*sc].forEach(by=>drwGGBracket(x+pw,by));
 
     // סימון ציר על קבוע שדלת נתלית עליו. היה panel.hingeMarks, שדה ידני
     // שהיה צריך להיכתב בעקביות עם hingeOnFixed של השכן — ולא תמיד נכתב.
