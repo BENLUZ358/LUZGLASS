@@ -419,10 +419,10 @@ function buildSlope(ps,i,pfx){
       </select><span class="unit"></span></div>
     ${isH?`
     <div class="row"><label>גובה צד שמאל</label>
-      <input type="text" value="${lgMmToMeterStr(ps.slopeH1)}" oninput="setPSv('${pfx}',${i},'slopeH1',this)">
+      <input type="text" value="${lgMmToInputStr(ps.slopeH1)}" oninput="setPSv('${pfx}',${i},'slopeH1',this)">
       <span class="unit dim-prev"></span></div>
     <div class="row"><label>גובה צד ימין</label>
-      <input type="text" value="${lgMmToMeterStr(ps.slopeH2)}" oninput="setPSv('${pfx}',${i},'slopeH2',this)">
+      <input type="text" value="${lgMmToInputStr(ps.slopeH2)}" oninput="setPSv('${pfx}',${i},'slopeH2',this)">
       <span class="unit dim-prev"></span></div>
     <div class="row"><label>צד קצר (שיפוע)</label>
       <select onchange="setPSs('${pfx}',${i},'slopeSide',this)" style="width:110px">
@@ -431,10 +431,10 @@ function buildSlope(ps,i,pfx){
       </select><span class="unit"></span></div>
     `:`
     <div class="row"><label>גובה עליון</label>
-      <input type="text" value="${lgMmToMeterStr(ps.slopeH1)}" oninput="setPSv('${pfx}',${i},'slopeH1',this)">
+      <input type="text" value="${lgMmToInputStr(ps.slopeH1)}" oninput="setPSv('${pfx}',${i},'slopeH1',this)">
       <span class="unit dim-prev"></span></div>
     <div class="row"><label>גובה תחתון</label>
-      <input type="text" value="${lgMmToMeterStr(ps.slopeH2)}" oninput="setPSv('${pfx}',${i},'slopeH2',this)">
+      <input type="text" value="${lgMmToInputStr(ps.slopeH2)}" oninput="setPSv('${pfx}',${i},'slopeH2',this)">
       <span class="unit dim-prev"></span></div>
     <div class="row"><label>צד קצר</label>
       <select onchange="setPSs('${pfx}',${i},'slopeSide',this)" style="width:110px">
@@ -484,11 +484,11 @@ function buildPanelHTML(panel,ps,i,pfx){
   const isDoor=panel.type==='door',isFixed=panel.type==='fixed'||panel.type==='mirror',isMirror=panel.type==='mirror';
   let h=`
     <div class="row"><label>רוחב</label>
-      <input type="text" id="${pfx}_w_${i}" value="${lgMmToMeterStr(ps.w)}"
+      <input type="text" id="${pfx}_w_${i}" value="${lgMmToInputStr(ps.w)}"
         oninput="setPSv('${pfx}',${i},'w',this);this.classList.add('hi')" onblur="this.classList.remove('hi')">
       <span class="unit dim-prev"></span></div>
     <div class="row"><label>גובה${ps.hasSlope&&ps.slopeAxis==='height'?' (שמאל)':''}</label>
-      <input type="text" id="${pfx}_h_${i}" value="${lgMmToMeterStr(ps.h)}"
+      <input type="text" id="${pfx}_h_${i}" value="${lgMmToInputStr(ps.h)}"
         oninput="setPSv('${pfx}',${i},'h',this);this.classList.add('hi')" onblur="this.classList.remove('hi')">
       <span class="unit dim-prev"></span></div>`;
 
