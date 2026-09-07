@@ -219,5 +219,47 @@ check('the shape number stays', /String\.fromCharCode\(9312\+/.test(DEMO), true)
 check('and it is capped so a twenty-first shape does not print a stray glyph',
       /Math\.min\(idx,19\)/.test(DEMO), true);
 
+/* ── the lanes have to fit on the canvas ───────────────────────────────── */
+/*
+ * The margin was a bare 64. A third lane sits 88 from the panel face, so the
+ * right-hand door's hinge dimensions were drawn and simply fell off the
+ * canvas — present in the code, invisible on screen, which reads as "the
+ * hinges have no dimensions".
+ */
+{
+  const m = DEMO.match(/const MG=LANE_FIRST\+LANE_STEP\*2\+(\d+)/);
+  check('the combo margin is derived from the lanes, not a bare number', !!m, true);
+  check('and leaves room for three lanes plus a label',
+        24 + 32 * 2 + Number(m && m[1]) >= 24 + 32 * 2 + 30, true);
+  check('the item view sizes its margin the same way',
+        /const MG=LANE_FIRST\+LANE_STEP\+\d+, GAP=/.test(DEMO), true);
+  check('no margin is a bare literal any more',
+        /const MG=\d+[,;]/.test(DEMO), false);
+}
+
+/* ── the label must be readable over its own line ──────────────────────── */
+/*
+ * An editable dimension was tinted rgba(184,146,42,0.2) — 80% transparent —
+ * so the dimension line showed straight through the number and blurred it.
+ */
+{
+  const fn = (DEMO.match(/function dLine[\s\S]*?\n\}/) || [''])[0];
+  check('the label gets an opaque backing first', /fillStyle='#fbf9f5'/.test(fn), true);
+  check('and the editable tint goes on top of it',
+        /fillStyle='#fbf9f5'[\s\S]{0,140}?rgba\(184,146,42,0\.18\)/.test(fn), true);
+  check('the tint is no longer the only backing',
+        /fillStyle=inputId\?'rgba\(184,146,42,0\.2\)'/.test(fn), false);
+}
+
+/* ── the handle's edge distance goes through the placer too ────────────── */
+/*
+ * It kept a fixed offset of 22, so two doors meeting in the middle put both
+ * of their edge distances in the same spot and they read as "6060".
+ */
+check('the handle edge distance is placed, not offset by hand',
+      /_dimPlace\('handle'/.test(DEMO), true);
+check('and no dimension call still passes a bare 22',
+      /String\(hEdgeMM\),22,true/.test(DEMO), false);
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll dimension-lane checks passed.');

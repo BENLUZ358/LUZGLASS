@@ -1072,7 +1072,10 @@ function draw(){
 }
 
 function drawComboMode(panels,pss,DPR,cW){
-  const MG=64;
+  // השוליים חייבים להכיל את נתיבי המידה. ב-64 נתיב שלישי (88 מהפאה)
+  // נחתך מחוץ לקנבס, וכך נעלמו מידות הצירים של הדלת הימנית: הן צוירו
+  // ופשוט לא היו על המסך.
+  const MG=LANE_FIRST+LANE_STEP*2+40;   // 128 — שלושה נתיבים ותווית
   const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
   // max height considering slopes
   const maxH=Math.max(...panels.map((_,i)=>{
@@ -1105,7 +1108,7 @@ function drawComboMode(panels,pss,DPR,cW){
 }
 
 function drawItemMode(panels,pss,DPR,cW){
-  const MG=50, GAP=16;
+  const MG=LANE_FIRST+LANE_STEP+30, GAP=16;   // 86 — במצב פריטים יש פחות נתיבים
   if(!panels.length){drawEmpty();return;}
   // Calculate total width and max height for scaling
   const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
@@ -1457,9 +1460,12 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     dLine(_uX, hRef==='top'?y:handleY, _uX, hRef==='top'?handleY:y+ph,
           String(hDistMM), 0, false,
           {pfx:pfx,field:'handleDist',idx:idx});
+    // המרחק מהפאה עובר גם הוא במקצה. שתי דלתות שנפגשות באמצע מניחות
+    // את שתי המידות האלה כמעט באותו מקום, והן נבלעו זו בזו — "6060".
     const heX=_handleSide==='right'?x+pw:x;
+    const _eLane=_dimPlace('handle',Math.min(handleX,heX),Math.max(handleX,heX),34);
     dLine(Math.min(handleX,heX),handleY,Math.max(handleX,heX),handleY,
-          String(hEdgeMM),22,true,{pfx:pfx,field:'handleEdge',idx:idx});
+          String(hEdgeMM),_eLane-4,true,{pfx:pfx,field:'handleEdge',idx:idx});
 
     // HINGE MARKS ON ADJACENT FIXED PANEL (hingeOnFixed)
     if(panel.hingeOnFixed&&pfx==='combo'){
@@ -1660,8 +1666,11 @@ function dLine(x1,y1,x2,y2,txt,off,horiz,inputId){
   const mx=(x1+ox+x2+ox)/2,my=(y1+oy+y2+oy)/2;
   cx.font='bold 9px Heebo,sans-serif';cx.textAlign='center';cx.textBaseline='middle';
   const tw=cx.measureText(txt).width+8;
-  cx.fillStyle=inputId?'rgba(184,146,42,0.2)':'rgba(247,244,239,0.95)';
-  cx.fillRect(mx-tw/2,my-7,tw,14);
+  // רקע אטום קודם, ורק אחריו הגוון של מידה הניתנת לעריכה. הגוון לבדו
+  // היה שקוף ב-80% והקו נראה מבעדו — המספר יצא מטושטש ולא נקרא.
+  cx.fillStyle='#fbf9f5';
+  cx.fillRect(mx-tw/2,my-8,tw,16);
+  if(inputId){ cx.fillStyle='rgba(184,146,42,0.18)'; cx.fillRect(mx-tw/2,my-8,tw,16); }
   cx.fillStyle='#1a1714';cx.fillText(txt,mx,my);
   cx.restore();
   // יעד המגע מורחב מעבר לטקסט: 14 פיקסלים על קנבס הם מטרה שאי אפשר
