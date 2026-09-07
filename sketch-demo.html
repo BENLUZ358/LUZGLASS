@@ -1579,13 +1579,29 @@ function dimEditorApply(){
   draw();
 }
 
+// המרת נקודת מסך לקואורדינטת ציור.
+//
+// setupCanvas עושה cx.scale(DPR,DPR), ולכן כל הציור — ואיתו dimHits —
+// נמצא בפיקסלי CSS. החישוב הקודם היה:
+//
+//     ratio = C.width/(rect.width*DPR)     ← מצטמצם ל-cssW/rect.width
+//     cx2   = (clientX-left) * DPR * ratio ← כלומר מוכפל ב-DPR מיותר
+//
+// כלומר הנקודה יצאה גדולה פי DPR מהיעד. בטלפון עם DPR=3 נגיעה ב-100
+// חושבה כ-300 ולעולם לא פגעה בשום מידה. בדסקטופ עם DPR=1 זה עבד במקרה,
+// ולכן הבאג שרד: אף אחד לא לחץ על מידה בטלפון עד עכשיו.
+//
+// טהורה בכוונה, כדי שאפשר יהיה לבדוק אותה עם DPR=3 בלי דפדפן.
+function _canvasPoint(clientX,clientY,rect,cssW){
+  const s = rect.width ? (cssW/rect.width) : 1;
+  return { x:(clientX-rect.left)*s, y:(clientY-rect.top)*s };
+}
+
 C.addEventListener('click',function(e){
   if(!editMode) return;              // מחוץ למצב עריכה הצייר אינו מגיב כלל
   const rect=C.getBoundingClientRect();
-  const DPR=window.devicePixelRatio||1;
-  const ratio=C.width/(rect.width*DPR);
-  const cx2=(e.clientX-rect.left)*DPR*ratio;
-  const cy2=(e.clientY-rect.top)*DPR*ratio;
+  const p=_canvasPoint(e.clientX,e.clientY,rect,parseFloat(C.style.width)||rect.width);
+  const cx2=p.x, cy2=p.y;
   for(const hit of dimHits){
     if(cx2>=hit.x&&cx2<=hit.x+hit.w&&cy2>=hit.y&&cy2<=hit.y+hit.h){
       openDimEditor(hit,e.clientX,e.clientY);

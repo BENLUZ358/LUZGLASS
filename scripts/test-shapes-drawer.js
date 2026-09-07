@@ -190,6 +190,52 @@ check('and the map carries an id with each rectangle',
         /const HIT=22/.test(DEMO) && /Math\.max\(tw,44\)/.test(DEMO), true);
 }
 
+/* ── the tap has to land where the dimension was drawn ─────────────────── */
+/*
+ * setupCanvas does cx.scale(DPR,DPR), so every drawing coordinate — and with
+ * it every entry in dimHits — is in CSS pixels. The hit test computed
+ *
+ *     ratio = C.width/(rect.width*DPR)      which reduces to cssW/rect.width
+ *     cx2   = (clientX-left) * DPR * ratio  so DPR is applied a second time
+ *
+ * and came out DPR times too large. On a phone at DPR 3 a tap at 100 was
+ * tested at 300 and never hit anything, which is why tapping a dimension did
+ * nothing there. At DPR 1 on a desktop it worked by accident, so the bug
+ * survived: nobody had tapped a dimension on a phone until now.
+ */
+{
+  const vm = require('vm');
+  const fn = (DEMO.match(/function _canvasPoint[\s\S]*?\n\}/) || [''])[0];
+  check('the mapping is a function of its own', fn.length > 0, true);
+  const ctx = vm.createContext({});
+  vm.runInContext(fn, ctx);
+
+  /* canvas laid out at exactly its CSS size — the ordinary case */
+  const rect = { left: 0, top: 0, width: 380, height: 900 };
+  const p = ctx._canvasPoint(100, 250, rect, 380);
+  check('a tap maps to the point it was drawn at', [p.x, p.y], [100, 250]);
+
+  /* and it must not change with the device pixel ratio: the same tap on a
+     phone at DPR 3 has to give the same drawing coordinate */
+  const p3 = ctx._canvasPoint(100, 250, rect, 380);
+  check('the device pixel ratio does not enter into it', [p3.x, p3.y], [100, 250]);
+
+  /* the canvas is styled width:100%, so CSS can scale it away from its
+     drawing size — that, and only that, is what the ratio corrects for */
+  const scaled = ctx._canvasPoint(100, 0, { left: 0, top: 0, width: 190 }, 380);
+  check('a canvas shown at half its drawing width doubles the coordinate',
+        scaled.x, 200);
+
+  /* offset by the element's position on the page */
+  const off = ctx._canvasPoint(140, 90, { left: 40, top: 50, width: 380 }, 380);
+  check('the element offset is subtracted', [off.x, off.y], [100, 40]);
+
+  check('a zero-width rect does not divide by zero',
+        ctx._canvasPoint(10, 10, { left: 0, top: 0, width: 0 }, 380).x, 10);
+}
+check('the click handler no longer multiplies by the pixel ratio',
+      /\(e\.clientX-rect\.left\)\*DPR/.test(DEMO), false);
+
 /* ── the hinge and the handle are editable too ─────────────────────────── */
 {
   check('the hinge height is a target', /field:'hingeTop'/.test(DEMO), true);
