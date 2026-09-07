@@ -502,7 +502,22 @@ const EDGE_MM=200;
 //
 // ההתנגשות לא נמנעת בזהירות של מי שכותב את הקוד. היא בלתי אפשרית:
 // מידה מבקשת נתיב ומקבלת מרחק פנוי, ואין דרך לבקש מרחק תפוס.
-const LANE_FIRST=24, LANE_STEP=32, LANE_PAD=6;
+// המרחקים תלויים ברוחב הקנבס. הם היו קבועים — 24 ו-32 — ומהם נגזרו
+// שוליים של 128 לכל צד. על מסך של 375 פיקסלים אלה 256, שני שליש מהמסך,
+// והזכוכית התכווצה לפירורים.
+let LANE_FIRST=24, LANE_STEP=32;
+function _lanesForWidth(cW){
+  if(cW<=430){ LANE_FIRST=16; LANE_STEP=20; }        // פלאפון
+  else if(cW<=900){ LANE_FIRST=20; LANE_STEP=26; }   // אייפד
+  else { LANE_FIRST=24; LANE_STEP=32; }              // מחשב
+}
+// השוליים נגזרים מהנתיבים, כדי שנתיב לא ייחתך מחוץ לקנבס — אבל לעולם
+// לא יותר מרבע מרוחב המסך, כי מעבר לזה כבר אין מה לצייר בפנים.
+function _marginFor(cW,maxLanes){
+  const need=LANE_FIRST+LANE_STEP*Math.max(0,(maxLanes||3)-1)+26;
+  return Math.min(need, Math.round(cW*0.22));
+}
+
 let _dimLanes={};
 function _dimLanesReset(){ _dimLanes={}; }
 
@@ -1072,10 +1087,8 @@ function draw(){
 }
 
 function drawComboMode(panels,pss,DPR,cW){
-  // השוליים חייבים להכיל את נתיבי המידה. ב-64 נתיב שלישי (88 מהפאה)
-  // נחתך מחוץ לקנבס, וכך נעלמו מידות הצירים של הדלת הימנית: הן צוירו
-  // ופשוט לא היו על המסך.
-  const MG=LANE_FIRST+LANE_STEP*2+40;   // 128 — שלושה נתיבים ותווית
+  _lanesForWidth(cW);
+  const MG=_marginFor(cW,3);
   const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
   // max height considering slopes
   const maxH=Math.max(...panels.map((_,i)=>{
@@ -1101,14 +1114,19 @@ function drawComboMode(panels,pss,DPR,cW){
   });
 
   if(panels.length>1){
-    dLine(startX,oy,startX+totalW*sc,oy,`${totalW} ס״מ`,-52,true,null);
+    // הרוחב הכולל נמדד **אחרי** רוחבי הפאנלים, כדי שייצא מעליהם — המידה
+    // הקטנה קרובה לאובייקט והגדולה רחוקה, ISO 129. היסט קבוע כאן הוציא
+    // אותו ממערכת הנתיבים לגמרי.
+    const _tLane=_dimPlace('top',startX,startX+totalW*sc,String(totalW).length*8+30);
+    dLine(startX,oy-_tLane,startX+totalW*sc,oy-_tLane,`${totalW}`,0,true,null);
   }
   drawTitleBar(cW,cH);
   updateSpecs();
 }
 
 function drawItemMode(panels,pss,DPR,cW){
-  const MG=LANE_FIRST+LANE_STEP+30, GAP=16;   // 86 — במצב פריטים יש פחות נתיבים
+  _lanesForWidth(cW);
+  const MG=_marginFor(cW,2), GAP=16;   // במצב פריטים יש פחות נתיבים
   if(!panels.length){drawEmpty();return;}
   // Calculate total width and max height for scaling
   const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
@@ -1142,7 +1160,8 @@ function drawItemMode(panels,pss,DPR,cW){
   // Total width dim if more than 1 item
   if(panels.length>1){
     const startX=MG+(cW-MG*2-renderedW)/2;
-    dLine(startX,oy,startX+renderedW,oy,`${totalW} ס״מ`,-46,true,null);
+    const _tLane=_dimPlace('top',startX,startX+renderedW,String(totalW).length*8+30);
+    dLine(startX,oy-_tLane,startX+renderedW,oy-_tLane,`${totalW}`,0,true,null);
   }
 
   drawTitleBar(cW,canvasH);

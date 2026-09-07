@@ -227,14 +227,32 @@ check('and it is capped so a twenty-first shape does not print a stray glyph',
  * hinges have no dimensions".
  */
 {
-  const m = DEMO.match(/const MG=LANE_FIRST\+LANE_STEP\*2\+(\d+)/);
-  check('the combo margin is derived from the lanes, not a bare number', !!m, true);
-  check('and leaves room for three lanes plus a label',
-        24 + 32 * 2 + Number(m && m[1]) >= 24 + 32 * 2 + 30, true);
+  check('the margin is computed, not a bare number', /const MG=_marginFor\(cW/.test(DEMO), true);
   check('the item view sizes its margin the same way',
-        /const MG=LANE_FIRST\+LANE_STEP\+\d+, GAP=/.test(DEMO), true);
-  check('no margin is a bare literal any more',
-        /const MG=\d+[,;]/.test(DEMO), false);
+        /const MG=_marginFor\(cW,2\), GAP=/.test(DEMO), true);
+  check('no margin is a bare literal any more', /const MG=\d+[,;]/.test(DEMO), false);
+  check('and the lane spacing follows the screen too',
+        /function _lanesForWidth/.test(DEMO), true);
+
+  /* the fixed 128 margin took 256 off a 375px phone — two thirds of the
+     screen — and the glass was left with crumbs. The margin has to leave the
+     drawing the greater part of the width on every device. */
+  const src2 = ['_lanesForWidth', '_marginFor']
+    .map(n => (DEMO.match(new RegExp('function ' + n + '[\\s\\S]*?\\n\\}')) || [''])[0]).join('\n');
+  const c3 = vm.createContext({ Math });
+  vm.runInContext('var LANE_FIRST=24, LANE_STEP=32;\n' + src2, c3);
+  const share = cW => { c3._lanesForWidth(cW); return (cW - c3._marginFor(cW, 3) * 2) / cW; };
+
+  check('a phone keeps most of the width for the glass', share(375) > 0.5, true);
+  check('an iPad more still',                            share(768) > 0.7, true);
+  check('and a desktop most of all',                     share(1440) > 0.8, true);
+  check('the margin never takes more than a fifth a side',
+        [375, 414, 768, 1440].every(w => { c3._lanesForWidth(w);
+          return c3._marginFor(w, 3) <= Math.round(w * 0.22); }), true);
+  /* and the lanes themselves tighten on a small screen, so three of them
+     still fit inside that margin */
+  c3._lanesForWidth(375);
+  check('a phone uses tighter lanes', c3.LANE_STEP < 32, true);
 }
 
 /* ── the label must be readable over its own line ──────────────────────── */
@@ -260,6 +278,28 @@ check('the handle edge distance is placed, not offset by hand',
       /_dimPlace\('handle'/.test(DEMO), true);
 check('and no dimension call still passes a bare 22',
       /String\(hEdgeMM\),22,true/.test(DEMO), false);
+
+/* ── the overall width sits above the panel widths, not on a fixed offset ── */
+/*
+ * It kept -52 and -46, which put it outside the lane system entirely: the
+ * panel widths were placed by collision and the overall by a constant, so
+ * they could not be reasoned about together — and the rows came out uneven.
+ * ISO 129 puts the smallest dimension nearest the object, which falls out of
+ * placing the overall last.
+ */
+check('the overall width asks for a lane like everything else',
+      /const _tLane=_dimPlace\('top'/.test(DEMO), true);
+check('and no width still carries a fixed offset',
+      /ס״מ`,-(52|46),true/.test(DEMO), false);
+{
+  /* placed after the panel widths, it lands outside them */
+  ctx._dimLanesReset();
+  const p0 = place('top', 82, 163, 40);
+  const p1 = place('top', 163, 293, 40);
+  const all = place('top', 82, 293, 60);
+  check('two adjacent panel widths share the nearest row', [p0, p1], [24, 24]);
+  check('and the overall, covering both, sits one row out', all > p0, true);
+}
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll dimension-lane checks passed.');
