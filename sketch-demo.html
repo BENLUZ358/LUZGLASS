@@ -101,8 +101,10 @@ canvas{display:block;width:100%;height:auto;cursor:pointer;}
   background:rgba(184,146,42,0.10);border:1px solid rgba(184,146,42,0.35);
   color:var(--text);font-family:'Heebo',sans-serif;font-size:13px;line-height:1.5;
 }
-/* הקנבס תופס את המחווה רק כשעורכים; אחרת הדף חייב להיות ניתן לגלילה */
-#sk.editing{touch-action:none;}
+/* הקנבס לעולם לא תופס את המחווה, גם במצב עריכה. הדפדפן כבר מבחין בין
+   גרירה לנגיעה — click לא נורה על גרירה — ולכן אפשר גם לגלול מעל הציור
+   וגם ללחוץ על מידה, באותו מצב. touch-action:none כאן חסם את הגלילה
+   בדיוק כשהיא הכי נחוצה: כשמחפשים את המידה שרוצים לשנות. */
 .canvas-wrap.editing{outline:2px solid var(--gold);outline-offset:-2px;}
 
 #dimEditor{
@@ -517,7 +519,12 @@ function setQ(q){selQ=q;document.getElementById('bZ').classList.toggle('active',
 function toggleSand(){sand=!sand;document.getElementById('bSand').classList.toggle('active',sand);}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 
-function getPS(pfx,i){return pfx==='combo'?panelState[i]:items[i];}
+// במצב שייפים המצב יושב לפי מזהה השייף ולא לפי מיקום, כדי שהזזה או
+// מחיקה של שייף באמצע לא תזיז את המידות של השכנים.
+function getPS(pfx,i){
+  if(appMode==='shape'){ const s=shapeList[i]; return s?shapePS[s.id]:null; }
+  return pfx==='combo'?panelState[i]:items[i];
+}
 
 function setPSv(pfx,i,k,el){
   const ps=getPS(pfx,i);if(!ps)return;
@@ -1138,32 +1145,50 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
   }
 
   // SLOPE DIMS — always show all 4 measurements
+  // ── איפה יושב קו גובה, כדי ששניים לא ייפלו אחד על השני ────────────
+  //
+  // קווי הגובה יצאו תמיד ב-32 פיקסלים מהפאה של הפאנל. בין שני פאנלים
+  // צמודים זה אותו מרווח בדיוק — הפאה הימנית של האחד היא השמאלית של
+  // השני — ולכן שני הקווים נחתו זה על זה ואי אפשר היה לדעת איזו מידה
+  // שייכת לאיזה שייף. בשייף משופע זה חמור כפליים, כי שתי המידות שלו
+  // עצמו יושבות על שתי הפאות.
+  //
+  // הכלל: הפאנל הראשון מוציא את הקו שמאלה מחוץ להרכבה, האחרון ימינה
+  // מחוצה לה, ומי שבאמצע מקבל את הקו **בתוך** הזכוכית שלו — שם אין שכן
+  // להתנגש בו, והשיוך לשייף חד-משמעי כי הקו מצויר עליו.
+  const _last = !allPanels || idx===allPanels.length-1;
+  const _hx = (side)=>{                    // side: 'l' | 'r'
+    if(side==='l') return idx===0 ? x-32 : x+22;
+    return _last ? x+pw+32 : x+pw-22;
+  };
+  const _hoff = (side)=> side==='l' ? (idx===0?-28:24) : (_last?28:-24);
+
   if(ps.hasSlope){
     const h1=ps.slopeH1, h2=ps.slopeH2;
     if(ps.slopeAxis==='height'){
       const leftH=ps.slopeSide==='left'?h2:h1;
       const rightH=ps.slopeSide==='right'?h2:h1;
       const maxH=Math.max(leftH,rightH)*sc;
-      // Left side height
-      dLine(x-32,y+(maxH-leftH*sc),x-32,y+maxH,`${leftH}`,-28,false,`${pfx}_h_${idx}`);
-      // Right side height  
-      dLine(x+pw+32,y+(maxH-rightH*sc),x+pw+32,y+maxH,`${rightH}`,28,false,`${pfx}_sH2_${idx}`);
-      // Width
+      // גובה צד שמאל, ובשייף משופע גם שם הפאה — כדי שיהיה ברור לאיזו
+      // פאה המידה שייכת ולא רק לאיזה שייף
+      dLine(_hx('l'),y+(maxH-leftH*sc),_hx('l'),y+maxH,`${leftH}`,_hoff('l'),false,`${pfx}_h_${idx}`);
+      dLine(_hx('r'),y+(maxH-rightH*sc),_hx('r'),y+maxH,`${rightH}`,_hoff('r'),false,`${pfx}_sH2_${idx}`);
       dLine(x,y+maxH,x+pw,y+maxH,`${ps.w}`,-26,true,`${pfx}_w_${idx}`);
     } else {
       const h1sc=h1*sc, h2sc=h2*sc;
-      // Left side (full height)
-      dLine(x-32,y,x-32,y+h1sc,`${h1}`,-28,false,`${pfx}_h_${idx}`);
-      // Right side
-      dLine(x+pw+32,y,x+pw+32,y+h2sc,`${h2}`,28,false,`${pfx}_sH2_${idx}`);
-      // Width top
+      dLine(_hx('l'),y,_hx('l'),y+h1sc,`${h1}`,_hoff('l'),false,`${pfx}_h_${idx}`);
+      dLine(_hx('r'),y,_hx('r'),y+h2sc,`${h2}`,_hoff('r'),false,`${pfx}_sH2_${idx}`);
       dLine(x,y,x+pw,y,`${ps.w}`,-26,true,`${pfx}_w_${idx}`);
     }
+    // סימון הפאה הנמוכה, כדי שכיוון השיפוע יהיה חד-משמעי על הציור
+    cx.save();
+    cx.font=`bold ${Math.max(8,sc*0.5)}px Heebo,sans-serif`;
+    cx.fillStyle='#b8922a';cx.textAlign='center';
+    cx.fillText('▼ נמוך', ps.slopeSide==='left'?x+pw-26:x+26, y+14);
+    cx.restore();
   } else {
-    // ALWAYS show width AND height
     dLine(x,y,x+pw,y,`${ps.w}`,-26,true,`${pfx}_w_${idx}`);
-    // Height on right side of panel — always visible
-    dLine(x+pw+4,y,x+pw+4,y+ph,`${ps.h}`,28,false,`${pfx}_h_${idx}`);
+    dLine(_hx('r'),y,_hx('r'),y+ph,`${ps.h}`,_hoff('r'),false,`${pfx}_h_${idx}`);
   }
 
   // SLIDER
@@ -1185,7 +1210,9 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 
     // Hinges on door
     const hx=panel.hingeSide==='left'?x:x+pw;
-    const hPos=[y+EDGE_MM*sc, y+ph-EDGE_MM*sc];
+    // גובה הציר ניתן לשינוי, וברירת המחדל היא הסטנדרט — 20 ס"מ מהקצה.
+    const hTop=(ps.hingeTop!=null?ps.hingeTop:EDGE_MM);
+    const hPos=[y+hTop*sc, y+ph-hTop*sc];
     if(ps.extraHinge) hPos.push(y+(ps.hinge3pos||40)*sc);
     hPos.forEach(hy=>drwHinge(hx,hy));
 
@@ -1196,8 +1223,11 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     hPos.forEach(hy=>cx.fillText('E400',hlx,hy+3));
 
     // Hinge distance dims
-    dLine(hx+(panel.hingeSide==='left'?-24:24),y,hx+(panel.hingeSide==='left'?-24:24),y+EDGE_MM*sc,String(EDGE_MM),panel.hingeSide==='left'?-18:18,false,null);
-    dLine(hx+(panel.hingeSide==='left'?-24:24),y+ph-EDGE_MM*sc,hx+(panel.hingeSide==='left'?-24:24),y+ph,String(EDGE_MM),panel.hingeSide==='left'?-18:18,false,null);
+    // קו המידה של הציר נלחץ במצב עריכה, ומשנה את הגובה של שני הצירים
+    const hDX=hx+(panel.hingeSide==='left'?-24:24);
+    const hTgt={pfx:pfx,field:'hingeTop',idx:idx};
+    dLine(hDX,y,hDX,y+hTop*sc,String(hTop),panel.hingeSide==='left'?-18:18,false,hTgt);
+    dLine(hDX,y+ph-hTop*sc,hDX,y+ph,String(hTop),panel.hingeSide==='left'?-18:18,false,hTgt);
 
     // Handle
     //
@@ -1209,9 +1239,12 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     //     ישבה 6 מ"מ מהקצה, לא 6 ס"מ. אותו דבר במרחק חורי המגבת.
     //   · הגובה היה y+100*sc לכל דלת גבוהה מ-20 ס"מ, כלומר 10 ס"מ
     //     מלמעלה, ולא אמצע הזכוכית.
-    const hEdge=(ps.handleEdge||HANDLE_EDGE_CM)*10*sc;
+    const hEdgeMM=(ps.handleEdge!=null?ps.handleEdge:HANDLE_EDGE_CM)*10;
+    const hEdge=hEdgeMM*sc;
     const handleX=panel.handleSide==='right'?x+pw-hEdge:x+hEdge;
-    const handleY=y+ph/2;
+    // גובה הידית ניתן לשינוי, וברירת המחדל היא אמצע הזכוכית
+    const hTopMM=(ps.handleTop!=null?ps.handleTop:Math.round((ps.h||2000)/2));
+    const handleY=y+hTopMM*sc;
     if(ps.handleType==='towel'){
       const spMM=(ps.towelSpacing||TOWEL_SPACING_CM)*10;
       const sp=spMM*sc;
@@ -1221,6 +1254,15 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
         dLine(Math.min(handleX,hx2),handleY-20,Math.max(handleX,hx2),handleY-20,String(spMM),0,true,null);
       }
     } else drwHole(handleX,handleY);
+
+    // מידות הידית — גובה מלמעלה, וגם המרחק מהפאה. בציר רואים רק גובה;
+    // בידית המרחק מהפאה הוא מה שקובע איפה קודחים, ולכן הוא מוצג גם הוא.
+    // שניהם נלחצים במצב עריכה.
+    dLine(handleX,y,handleX,handleY,String(hTopMM),
+          panel.handleSide==='right'?16:-16,false,{pfx:pfx,field:'handleTop',idx:idx});
+    const heX=panel.handleSide==='right'?x+pw:x;
+    dLine(Math.min(handleX,heX),handleY,Math.max(handleX,heX),handleY,
+          String(hEdgeMM),22,true,{pfx:pfx,field:'handleEdge',idx:idx});
 
     // HINGE MARKS ON ADJACENT FIXED PANEL (hingeOnFixed)
     if(panel.hingeOnFixed&&pfx==='combo'){
@@ -1307,10 +1349,22 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     dLine(rx,ry,rx+rw,ry,`${ps.recessW||12}`,-16,true,null);
   }
 
-  // Panel label
-  cx.font=`bold ${Math.max(10,Math.min(12,sc*0.9))}px Heebo,sans-serif`;
+  // Panel label — ומתחתיו הגובה של השייף עצמו.
+  //
+  // הגובה הכללי של המקלחון אינו אומר מה גובה הדלת: מקלחון של 2 מטר הוא
+  // קבוע של 2000, והדלת מתחתיו נמוכה ממנו בדרך כלל בסנטימטר עד סנטימטר
+  // וחצי. קו המידה של הגובה יוצא מפאה אחת ולא תמיד קריא בין פאנלים
+  // צמודים, ולכן המספר יושב גם על הזכוכית עצמה — ליד השייף שהוא מתאר.
+  const _lblFS=Math.max(10,Math.min(12,sc*0.9));
+  cx.font=`bold ${_lblFS}px Heebo,sans-serif`;
   cx.textAlign='center';cx.fillStyle='#2a5a8a';
-  cx.fillText(panel.label||panel.type,x+pw/2,y+ph/2+4);
+  cx.fillText(panel.label||panel.type,x+pw/2,y+ph/2-2);
+  const _hMM=ps.h||0;
+  if(_hMM){
+    cx.font=`${Math.max(9,_lblFS-1)}px Heebo,sans-serif`;
+    cx.fillStyle='rgba(42,90,138,0.75)';
+    cx.fillText(_hMM+' × '+(ps.w||0),x+pw/2,y+ph/2+_lblFS+2);
+  }
 }
 
 // ══════════════ DRAW HELPERS ══════════════
@@ -1363,6 +1417,10 @@ function drwHole(x,y){
 }
 
 // DIM LINE with clickable hit area
+//
+// המטרה האחרונה היא או מזהה שדה טופס (הקריאות הוותיקות) או אובייקט
+// {pfx, field, idx} — הצורה החדשה, שאינה תלויה בכך שהפקד מרונדר על המסך.
+// במצב שייפים הפקדים אינם קיימים כלל, ולכן מזהה מחרוזת לבדו לא הספיק.
 function dLine(x1,y1,x2,y2,txt,off,horiz,inputId){
   if(x1===x2&&y1===y2)return;
   cx.save();
@@ -1386,7 +1444,17 @@ function dLine(x1,y1,x2,y2,txt,off,horiz,inputId){
   cx.fillRect(mx-tw/2,my-7,tw,14);
   cx.fillStyle='#1a1714';cx.fillText(txt,mx,my);
   cx.restore();
-  if(inputId) dimHits.push({x:mx-tw/2,y:my-7,w:tw,h:14,id:inputId});
+  // יעד המגע מורחב מעבר לטקסט: 14 פיקסלים על קנבס הם מטרה שאי אפשר
+  // לפגוע בה באצבע. ר' כלל המגע בסקיל העיצוב — 44px.
+  if(inputId){
+    const HIT=22;
+    dimHits.push({
+      x:mx-Math.max(tw,44)/2, y:my-HIT,
+      w:Math.max(tw,44),      h:HIT*2,
+      id:  typeof inputId==='string'?inputId:null,
+      t:   typeof inputId==='object'?inputId:null,
+    });
+  }
 }
 
 function drawTitleBar(cW,cH){
@@ -1429,18 +1497,54 @@ function setEditMode(on){
   if(!editMode) closeDimEditor();
 }
 
+// מה כל מטרה משנה בפועל. השדות במ"מ, חוץ מ-handleEdge שהפקד שלו בס"מ —
+// העורך מדבר מ"מ תמיד, וממיר לו.
+const DIM_FIELDS={
+  w:          {label:'רוחב'},
+  h:          {label:'גובה'},
+  slopeH2:    {label:'גובה צד שני'},
+  hingeTop:   {label:'גובה הציר מלמעלה'},
+  handleTop:  {label:'גובה הידית מלמעלה'},
+  handleEdge: {label:'מרחק הידית מהפאה', cm:true},
+};
+
+// המטרה מתוארת כ-{pfx, field, idx} ולא כמזהה של שדה טופס. במצב שייפים
+// פקדי הפאנל אינם מרונדרים כלל, ולכן getElementById החזיר null והחלון
+// פשוט לא נפתח — בדיוק מה שנראה על המסך.
+function _dimTarget(hit){
+  if(hit.t) return hit.t;
+  const m=String(hit.id||'').match(/^(.+)_([a-zA-Z0-9]+)_(\d+)$/);
+  return m?{pfx:m[1],field:m[2],idx:Number(m[3])}:null;
+}
+function _dimRead(t){
+  const ps=getPS(t.pfx,t.idx); if(!ps) return null;
+  const f=DIM_FIELDS[t.field]||{};
+  let v=ps[t.field];
+  if(t.field==='hingeTop'  && v==null) v=EDGE_MM;
+  if(t.field==='handleTop' && v==null) v=Math.round((ps.h||2000)/2);
+  if(t.field==='handleEdge'&& v==null) v=HANDLE_EDGE_CM;
+  return f.cm?Math.round(v*10):v;      // תמיד מ"מ החוצה
+}
+function _dimWrite(t,mm){
+  const ps=getPS(t.pfx,t.idx); if(!ps) return false;
+  const f=DIM_FIELDS[t.field]||{};
+  ps[t.field]=f.cm?(mm/10):mm;
+  return true;
+}
+
 function openDimEditor(hit,clientX,clientY){
-  const el=document.getElementById(hit.id);
-  if(!el) return;
-  dimEditTarget=el;
+  const t=_dimTarget(hit);
+  const cur=t&&_dimRead(t);
+  if(!t||cur==null) return;
+  dimEditTarget=t;
   const rect=C.getBoundingClientRect();
   const ed=document.getElementById('dimEditor');
   const inp=document.getElementById('dimEditorInput');
-  document.getElementById('dimEditorLabel').textContent='מידה במ"מ';
+  const lbl=document.getElementById('dimEditorLabel');
+  lbl.style.color='';
+  lbl.textContent=((DIM_FIELDS[t.field]||{}).label||'מידה')+' — מ"מ';
   // מתחיל מהערך שיושב שם עכשיו, כדי שאפשר יהיה לתקן ולא רק להקליד מחדש
-  inp.value=(typeof lgMmToInputStr==='function')
-    ? lgMmToInputStr(lgParseDimensionInput(el.value).mm||el.value)
-    : el.value;
+  inp.value=lgMmToInputStr(cur);
   ed.classList.add('open');
   // נפתח ליד הנגיעה, ונדחף פנימה אם הוא גולש מהמעטפת
   const w=ed.offsetWidth||180, h=ed.offsetHeight||140;
@@ -1467,8 +1571,10 @@ function dimEditorApply(){
     return;
   }
   document.getElementById('dimEditorLabel').style.color='';
-  dimEditTarget.value=lgMmToInputStr(r.mm);
-  dimEditTarget.dispatchEvent(new Event('input',{bubbles:true}));
+  if(!_dimWrite(dimEditTarget,r.mm)) return;
+  // הפקדים שמתחת לציור, אם הם מרונדרים במצב הזה, צריכים להראות את הערך החדש
+  if(appMode==='combo') renderPanelCtrl();
+  else if(appMode==='item') renderItemList();
   closeDimEditor();
   draw();
 }

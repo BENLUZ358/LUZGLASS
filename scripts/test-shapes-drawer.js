@@ -80,8 +80,12 @@ check('the hinge position rule is unchanged',
   check('the edge distance is named, not repeated', !!m, true);
   check('and it is 200 mm — twenty centimetres', Number(m && m[1]), 200);
   check('no drawing site still hardcodes 20', /\b20\*sc\b/.test(DEMO), false);
+  /* the hinge height became editable, so the line prints the live value
+     rather than the constant — the property is that label and drawing agree */
   check('and the dimension line prints the same number it draws',
-        /String\(EDGE_MM\)/.test(DEMO), true);
+        /dLine\(hDX[\s\S]{0,80}?String\(hTop\)/.test(DEMO), true);
+  check('which defaults to that constant',
+        /ps\.hingeTop!=null\?ps\.hingeTop:EDGE_MM/.test(DEMO), true);
   /* every hinge and bracket row is placed from that one constant */
   check('all eight placements use it',
         (DEMO.match(/EDGE_MM\*sc/g) || []).length >= 8, true);
@@ -113,8 +117,11 @@ check('and the map carries an id with each rectangle',
   check('the handle inset is named', !!eh, true);
   check('and it is 6 cm', Number(eh && eh[1]), 6);
   check('the drawing converts those centimetres to millimetres',
-        /ps\.handleEdge\|\|HANDLE_EDGE_CM\)\*10\*sc/.test(DEMO), true);
-  check('the handle is centred on the glass', /const handleY=y\+ph\/2/.test(DEMO), true);
+        /ps\.handleEdge!=null\?ps\.handleEdge:HANDLE_EDGE_CM\)\*10/.test(DEMO), true);
+  /* the height is a field now, so the middle of the glass is its default
+     rather than a hardcoded position */
+  check('the handle defaults to the middle of the glass',
+        /ps\.handleTop!=null\?ps\.handleTop:Math\.round\(\(ps\.h\|\|2000\)\/2\)/.test(DEMO), true);
   check('and no longer pinned near the top', /handleY=\(ps\.h\|\|2000\)>200/.test(DEMO), false);
 
   /* the same unit mistake sat next to it, on the towel-rail holes */
@@ -162,9 +169,78 @@ check('and the map carries an id with each rectangle',
   check('it opens at the dimension that was tapped', /clientX|hit\.x/.test(ed), true);
   check('and it starts from the value that is there now', /\.value\s*=/.test(ed), true);
 
+  /* it reads and writes the panel state, not a form field. In shape mode the
+     panel controls are not rendered at all, so getElementById returned null
+     and the editor simply never opened — exactly what was seen on screen. */
+  check('the editor works off the panel state, not a hidden input',
+        /function _dimRead[\s\S]{0,400}?getPS\(/.test(DEMO), true);
+  check('and writes back to it', /function _dimWrite[\s\S]{0,300}?getPS\(/.test(DEMO), true);
+  check('getPS knows about the shape mode',
+        /function getPS[\s\S]{0,240}?appMode==='shape'/.test(DEMO), true);
+  check('a dimension line may carry a target object, not only a field id',
+        /typeof inputId==='object'/.test(DEMO), true);
+
+  /* scrolling has to keep working while editing — otherwise you cannot reach
+     the dimension you want to change without leaving edit mode first */
+  check('edit mode never blocks the page scroll',
+        /#sk\.editing\{touch-action:none/.test(DEMO), false);
+
+  /* a 14px tall label is not something a finger can hit */
+  check('the tap area is widened well past the text',
+        /const HIT=22/.test(DEMO) && /Math\.max\(tw,44\)/.test(DEMO), true);
+}
+
+/* ── the hinge and the handle are editable too ─────────────────────────── */
+{
+  check('the hinge height is a target', /field:'hingeTop'/.test(DEMO), true);
+  check('and it defaults to the 20 cm standard',
+        /ps\.hingeTop!=null\?ps\.hingeTop:EDGE_MM/.test(DEMO), true);
+  check('the handle height is a target', /field:'handleTop'/.test(DEMO), true);
+  check('and it defaults to the middle of the glass',
+        /ps\.handleTop!=null\?ps\.handleTop:Math\.round\(\(ps\.h\|\|2000\)\/2\)/.test(DEMO), true);
+  /* the hinge shows only its height; the handle also needs its distance from
+     the edge, because that is what decides where the hole is drilled */
+  check('the handle also shows its distance from the edge',
+        /field:'handleEdge'/.test(DEMO), true);
+  check('and that field is centimetres, so the editor converts it',
+        /handleEdge:\s*\{[^}]*cm:true/.test(DEMO), true);
+}
+
+/* ── every panel's height is legible ───────────────────────────────────── */
+/*
+ * The height line always came off the panel's right face. On any panel but
+ * the last that face is the middle of the drawing, so the line landed on the
+ * neighbour and was unreadable — the door's height could not be seen at all.
+ */
+{
+  /* every height line came off the panel face at a fixed 32px. Between two
+     touching panels that is the same gap — one panel's right face is the
+     next one's left — so the two lines landed on each other and there was no
+     telling which measurement belonged to which shape. On a sloped panel it
+     is worse: both of its own heights sit on its two faces. */
+  check('the height line position is chosen, not fixed',
+        /const _hx = \(side\)=>/.test(DEMO), true);
+  check('the outermost panels put their lines outside the assembly',
+        /idx===0 \? x-32/.test(DEMO) && /_last \? x\+pw\+32/.test(DEMO), true);
+  check('and a panel in the middle carries its line inside its own glass',
+        /x\+22/.test(DEMO) && /x\+pw-22/.test(DEMO), true);
+  check('both slope heights use it, so they cannot collide with a neighbour',
+        /dLine\(_hx\('l'\)[\s\S]{0,400}?dLine\(_hx\('r'\)/.test(DEMO), true);
+  check('and the low face is marked, so the slope direction is unambiguous',
+        /נמוך/.test(DEMO), true);
+
+  /* the overall height says nothing about the door. A 2 m shower is a 2000
+     fixed panel with a door under it that is normally 10 to 15 mm shorter, so
+     every shape has to state its own size where it is, not only on a
+     dimension line that may fall behind its neighbour. */
+  check('each shape prints its own size on the glass',
+        /cx\.fillText\(_hMM\+' × '\+\(ps\.w\|\|0\)/.test(DEMO), true);
+  check('and it sits under the shape name, not over it',
+        /_lblFS\+2/.test(DEMO), true);
+
   check('saving applies the value through the shared parser',
         /function dimEditorApply[\s\S]{0,400}?lgParseDimensionInput\(/.test(DEMO), true);
-  check('and redraws', /function dimEditorApply[\s\S]{0,500}?draw\(\)/.test(DEMO), true);
+  check('and redraws', /function dimEditorApply[\s\S]{0,900}?draw\(\);/.test(DEMO), true);
   check('the editor can be dismissed without changing anything',
         /function closeDimEditor/.test(DEMO), true);
   check('and Escape closes it', /Escape/.test(DEMO), true);
@@ -184,9 +260,17 @@ check('and the map carries an id with each rectangle',
   check('the edit-mode button is a 44px target',
         Number((css.match(/min-height:\s*(\d+)px/) || [])[1]) >= 44, true);
 }
-/* while editing, the canvas may claim the touch; otherwise the page must scroll */
-check('the canvas only claims gestures while editing',
-      /#sk\.editing\{touch-action:none/.test(DEMO), true);
+/* the page must scroll at all times, edit mode included. Claiming the gesture
+   while editing blocked scrolling exactly when it is most needed — reaching
+   the dimension you want to change. The browser already tells a drag from a
+   tap: click does not fire on a drag. */
+/* comments stripped: both rules are documented by quoting the value they
+   replaced, and a check that reads comments fails on its own explanation */
+{
+  const css = DEMO.replace(/\/\*[\s\S]*?\*\//g, '');
+  check('the canvas never claims the gesture', /touch-action:none/.test(css), false);
+  check('and always allows a vertical scroll', /#sk\{touch-action:pan-y/.test(css), true);
+}
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll drawer checks passed.');
