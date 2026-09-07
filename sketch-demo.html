@@ -489,6 +489,28 @@ const COMBOS={
 // המידה על השרטוט הראה "20" ולכן שידר את המספר השגוי הלאה.
 const EDGE_MM=200;
 
+// ── מקצה נתיבי המידה ───────────────────────────────────────────────
+//
+// כל מידה חישבה קודם את המרחק שלה בעצמה — 26 כאן, 28 שם, 32 במקום
+// אחר — ושתי מידות באותו מקום היו באג שממתין שמישהו ישים לב. קווי
+// הגובה של פאנלים צמודים נחתו זה על זה, ואי אפשר היה לדעת איזו מידה
+// שייכת לאיזה שייף; את הגובה של הדלת פשוט לא ראו.
+//
+// שרטוט טכני פותר את זה מזה מאה שנה (ISO 129): לכל מידה נתיב במרחק
+// קבוע, הקטנה קרובה לאובייקט והגדולה רחוקה — כדי שקו של מידה גדולה
+// לא יחצה קו של קטנה.
+//
+// ההתנגשות לא נמנעת בזהירות של מי שכותב את הקוד. היא בלתי אפשרית:
+// מידה מבקשת נתיב ומקבלת מרחק פנוי, ואין דרך לבקש מרחק תפוס.
+const LANE_FIRST=24, LANE_STEP=32;
+let _dimLanes={};
+function _dimLanesReset(){ _dimLanes={}; }
+function _dimLane(zone){
+  const n=_dimLanes[zone]||0;
+  _dimLanes[zone]=n+1;
+  return LANE_FIRST+n*LANE_STEP;
+}
+
 // ברירות המחדל של הידית, בסנטימטרים — כפי ששדות הקלט שלה מסומנים.
 // 6 ס"מ מהצד, ובאמצע גובה הזכוכית.
 const HANDLE_EDGE_CM=6;
@@ -972,6 +994,8 @@ function drawComboMode(panels,pss,DPR,cW){
   setupCanvas(DPR,cW,cH);
   drawGrid(cW,cH);
   dimHits=[];
+  // בלי איפוס, הנתיבים זוחלים החוצה בכל ציור והשרטוט יוצא מהקנבס
+  _dimLanesReset();
 
   const startX=MG+(cW-MG*2-totalW*sc)/2;
   let curX=startX;
@@ -1007,6 +1031,8 @@ function drawItemMode(panels,pss,DPR,cW){
   setupCanvas(DPR,cW,canvasH);
   drawGrid(cW,canvasH);
   dimHits=[];
+  // בלי איפוס, הנתיבים זוחלים החוצה בכל ציור והשרטוט יוצא מהקנבס
+  _dimLanesReset();
 
   // Draw side by side, centered
   const renderedW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500)*sc,0)+GAP*(panels.length-1);
