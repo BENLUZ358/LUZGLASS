@@ -115,6 +115,15 @@ check('and so can a gallery chip',
   check('no rule makes the page itself scroll sideways',
         /body[^{]*\{[^}]*overflow-x\s*:\s*auto/.test(DEMO), false);
 
+  /* the canvas must not swallow the page scroll. It carries a click listener
+     and no gesture handler at all, so touch-action:none bought nothing and
+     cost the ability to scroll — on a phone the canvas fills the screen and
+     there is no margin left to drag from. */
+  check('the canvas lets the page scroll vertically',
+        /#sk\{touch-action:pan-y/.test(DEMO), true);
+  check('and does not claim every gesture',
+        /#sk\{touch-action:none/.test(DEMO), false);
+
   /* body type never drops below the floor */
   const sizes = (DEMO.match(/\.(shape-chip|strip-item|shape-err|shape-bom)[^{]*\{[^}]*font-size:(\d+)px/g) || [])
     .map(s => Number(s.match(/font-size:(\d+)px/)[1]));

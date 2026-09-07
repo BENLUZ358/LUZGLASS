@@ -70,8 +70,12 @@
 @media (prefers-reduced-motion:reduce){
   .shape-chip,.strip-item{transition:none;}
 }
-/* המחוות נחסמות על הקנבס עצמו, כדי שהדף כולו יישאר ניתן לזום */
-#sk{touch-action:none;}
+/* היה כאן touch-action:none, שאומר לדפדפן "אני מטפל בכל מגע כאן". אבל
+   על הקנבס יש רק מאזין click ואף מטפל מחוות — כלומר הגלילה נחסמה בתמורה
+   לכלום. בפלאפון הקנבס תופס כמעט את כל המסך, ולכן לא נשארה שום רצועה
+   לגלול ממנה והדף נתקע.
+   pan-y מחזיר את הגלילה האנכית ומשאיר את הלחיצה על קווי המידה עובדת. */
+#sk{touch-action:pan-y;}
 .canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow:hidden;}
 canvas{display:block;width:100%;height:auto;cursor:pointer;}
 .dim-tip{position:absolute;background:var(--gold);color:var(--on-gold);padding:2px 7px;font-size:12px;font-weight:700;border-radius:3px;pointer-events:none;display:none;z-index:5;}
@@ -398,6 +402,13 @@ const COMBOS={
 };
 
 // ══════════════ STATE ══════════════
+// המרחק הסטנדרטי של ציר או זווית מקצה הזכוכית: 20 ס"מ.
+//
+// היה כתוב 20 בכל שמונה מקומות הציור, ו-sc ממיר מ"מ לפיקסלים — כלומר
+// 20 מ"מ, שני סנטימטרים מהקצה. זה מרחק שאי אפשר להתקין בו, וגם קו
+// המידה על השרטוט הראה "20" ולכן שידר את המספר השגוי הלאה.
+const EDGE_MM=200;
+
 const C=document.getElementById('sk'),cx=C.getContext('2d');
 let selG='shafu',selF='shahor',selQ='zamak',sand=false;
 let appMode='combo',curCat='pinati',curCombo=COMBOS.pinati[0];
@@ -1075,7 +1086,7 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 
     // Hinges on door
     const hx=panel.hingeSide==='left'?x:x+pw;
-    const hPos=[y+20*sc, y+ph-20*sc];
+    const hPos=[y+EDGE_MM*sc, y+ph-EDGE_MM*sc];
     if(ps.extraHinge) hPos.push(y+(ps.hinge3pos||40)*sc);
     hPos.forEach(hy=>drwHinge(hx,hy));
 
@@ -1086,8 +1097,8 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     hPos.forEach(hy=>cx.fillText('E400',hlx,hy+3));
 
     // Hinge distance dims
-    dLine(hx+(panel.hingeSide==='left'?-24:24),y,hx+(panel.hingeSide==='left'?-24:24),y+20*sc,'20',panel.hingeSide==='left'?-18:18,false,null);
-    dLine(hx+(panel.hingeSide==='left'?-24:24),y+ph-20*sc,hx+(panel.hingeSide==='left'?-24:24),y+ph,'20',panel.hingeSide==='left'?-18:18,false,null);
+    dLine(hx+(panel.hingeSide==='left'?-24:24),y,hx+(panel.hingeSide==='left'?-24:24),y+EDGE_MM*sc,String(EDGE_MM),panel.hingeSide==='left'?-18:18,false,null);
+    dLine(hx+(panel.hingeSide==='left'?-24:24),y+ph-EDGE_MM*sc,hx+(panel.hingeSide==='left'?-24:24),y+ph,String(EDGE_MM),panel.hingeSide==='left'?-18:18,false,null);
 
     // Handle
     const hEdge=(ps.handleEdge||6)*sc;
@@ -1116,7 +1127,7 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
         const adjPH=(adjPS.h||2000)*sc;
         // hinge marks on the side of adjacent fixed that touches this door
         const adjHX=panel.hingeOnFixed==='prev'?adjX+adjPW:adjX;
-        const adjHPos=[y+20*sc,y+ph-20*sc];
+        const adjHPos=[y+EDGE_MM*sc,y+ph-EDGE_MM*sc];
         if(ps.extraHinge) adjHPos.push(y+(ps.hinge3pos||40)*sc);
         adjHPos.forEach(hy=>drwHingeOnFixed(adjHX,hy));
       }
@@ -1133,7 +1144,7 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     if(_j.left.type ==='bracket-wall') sides.push('left');
     sides.forEach(side=>{
       const bx=side==='right'?x:x+pw;
-      const bPos=[y+20*sc,y+ph-20*sc];
+      const bPos=[y+EDGE_MM*sc,y+ph-EDGE_MM*sc];
       if(ps.extraBracket) bPos.push(y+(ps.bracket3pos||40)*sc);
       bPos.forEach(by=>drwBracket(bx,by,side==='right',ps.bracketType==='open'));
       cx.font=`${Math.max(7,sc*0.5)}px Heebo,sans-serif`;cx.fillStyle='#b8922a';
@@ -1142,13 +1153,13 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     });
 
     // Glass-glass connector — גם הוא מהצומת ולא מ-panel.glassGlass
-    if(_j.right.type==='bracket-gg') [y+20*sc,y+ph-20*sc].forEach(by=>drwGGBracket(x,by));
-    if(_j.left.type ==='bracket-gg') [y+20*sc,y+ph-20*sc].forEach(by=>drwGGBracket(x+pw,by));
+    if(_j.right.type==='bracket-gg') [y+EDGE_MM*sc,y+ph-EDGE_MM*sc].forEach(by=>drwGGBracket(x,by));
+    if(_j.left.type ==='bracket-gg') [y+EDGE_MM*sc,y+ph-EDGE_MM*sc].forEach(by=>drwGGBracket(x+pw,by));
 
     // סימון ציר על קבוע שדלת נתלית עליו. היה panel.hingeMarks, שדה ידני
     // שהיה צריך להיכתב בעקביות עם hingeOnFixed של השכן — ולא תמיד נכתב.
-    if(_j.right.type==='hinge-gg') [y+20*sc,y+ph-20*sc].forEach(hy=>drwHingeOnFixed(x,hy));
-    if(_j.left.type ==='hinge-gg') [y+20*sc,y+ph-20*sc].forEach(hy=>drwHingeOnFixed(x+pw,hy));
+    if(_j.right.type==='hinge-gg') [y+EDGE_MM*sc,y+ph-EDGE_MM*sc].forEach(hy=>drwHingeOnFixed(x,hy));
+    if(_j.left.type ==='hinge-gg') [y+EDGE_MM*sc,y+ph-EDGE_MM*sc].forEach(hy=>drwHingeOnFixed(x+pw,hy));
 
     if(ps.floorBracket) drwFloorBracket(x+pw/2,y+ph);
   }
@@ -1194,26 +1205,14 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 }
 
 // ══════════════ DRAW HELPERS ══════════════
-// ציר הוא פיזית לוחית, ציר סיבוב ומלחציים על הזכוכית:
-//
-//    ███●═╪═     ███  לוחית
-//                ●    ציר הסיבוב
-//                ═╪═  מלחציים על הזכוכית
-//
-// קודם היה כאן מלבן מלא עם נקודה — במקום הנכון ובגודל הנכון, אבל קבלן
-// שמסתכל על השרטוט לא זיהה בו ציר. אותו מיקום, אותו גודל, אותו זהב;
-// משתנה הגאומטריה בלבד. המיקום מחושב אצל הקורא ולא כאן.
+// הסמל המקורי. ניסיתי להחליף אותו בלוחית-ציר-מלחציים, והתוצאה על המסך
+// הייתה גרועה מהמלבן — המפעיל דחה אותה. אם מחליפים אותו שוב, זה נבדק
+// מול העין לפני שזה נכנס, לא אחרי.
 function drwHinge(x,y){
-  const hh=14;
-  cx.fillStyle='#b8922a';
-  cx.fillRect(x-5,y-hh/2,4,hh);                                   // הלוחית
-  cx.strokeStyle='#7a5e10';cx.lineWidth=1;cx.strokeRect(x-5,y-hh/2,4,hh);
-  cx.fillStyle='#b8922a';
-  cx.beginPath();cx.arc(x,y,3,0,Math.PI*2);cx.fill();              // ציר הסיבוב
-  cx.strokeStyle='#7a5e10';cx.beginPath();cx.arc(x,y,3,0,Math.PI*2);cx.stroke();
-  cx.fillStyle='#b8922a';
-  cx.fillRect(x+2,y-4,6,8);                                        // המלחציים
-  cx.strokeStyle='#7a5e10';cx.strokeRect(x+2,y-4,6,8);
+  const hw=7,hh=14;
+  cx.fillStyle='#b8922a';cx.fillRect(x-hw/2,y-hh/2,hw,hh);
+  cx.strokeStyle='#7a5e10';cx.lineWidth=1;cx.strokeRect(x-hw/2,y-hh/2,hw,hh);
+  cx.fillStyle='#fff';cx.beginPath();cx.arc(x,y,2,0,Math.PI*2);cx.fill();
 }
 function drwHingeOnFixed(x,y){
   // hinge mark on fixed panel — smaller, hollow

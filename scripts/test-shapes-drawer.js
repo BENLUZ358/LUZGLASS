@@ -47,12 +47,18 @@ check('drawSinglePanel is still the one drawing a panel',
  * size, but not recognisable as a hinge to a contractor reading the drawing.
  * Same position, same size, same gold; the geometry is all that changes.
  */
+/*
+ * The symbol was replaced with a plate-pivot-clamp drawing and the operator
+ * rejected it on sight: it read worse than the rectangle it replaced. It is
+ * back to the original. A symbol is judged against the eye, not against a
+ * description of what the part is — so the next attempt gets looked at before
+ * it ships, not after.
+ */
 {
   const fn = (DEMO.match(/function drwHinge\(x,y\)\{[\s\S]*?\n\}/) || [''])[0];
   check('drwHinge is found', fn.length > 0, true);
-  check('it draws a pivot', /arc\(/.test(fn), true);
-  check('and a plate and a clamp either side of it',
-        (fn.match(/fillRect\(/g) || []).length >= 2, true);
+  check('it is the original symbol the operator kept',
+        /const hw=7,hh=14/.test(fn), true);
   check('and keeps the gold it always had', /#b8922a/.test(fn), true);
   /* the position is computed by the caller and must not move */
   check('the symbol itself computes no position',
@@ -60,6 +66,26 @@ check('drawSinglePanel is still the one drawing a panel',
 }
 check('the hinge position rule is unchanged',
       /hingeSide==='left'\?x:x\+pw/.test(DEMO), true);
+
+/* ── how far from the edge hardware sits ───────────────────────────────── */
+/*
+ * The standard is 20 cm from the top and from the bottom, for hinges and for
+ * brackets alike. The drawing had 20 in all eight places and sc converts
+ * millimetres to pixels, so every piece was drawn two centimetres from the
+ * edge — a distance nothing can actually be installed at — and the dimension
+ * line printed "20" beside it, carrying the wrong number onward.
+ */
+{
+  const m = DEMO.match(/const EDGE_MM=(\d+)/);
+  check('the edge distance is named, not repeated', !!m, true);
+  check('and it is 200 mm — twenty centimetres', Number(m && m[1]), 200);
+  check('no drawing site still hardcodes 20', /\b20\*sc\b/.test(DEMO), false);
+  check('and the dimension line prints the same number it draws',
+        /String\(EDGE_MM\)/.test(DEMO), true);
+  /* every hinge and bracket row is placed from that one constant */
+  check('all eight placements use it',
+        (DEMO.match(/EDGE_MM\*sc/g) || []).length >= 8, true);
+}
 
 /* ── the position map ──────────────────────────────────────────────────── */
 /*
