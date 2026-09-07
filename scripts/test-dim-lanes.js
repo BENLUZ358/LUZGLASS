@@ -28,49 +28,72 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
   ? console.log('ok    ' + name)
   : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
 
-const src = ['_dimLanesReset', '_dimLane']
+const src = ['_dimLanesReset', '_dimPlace']
   .map(n => (DEMO.match(new RegExp('function ' + n + '[\\s\\S]*?\\n\\}')) || [''])[0])
   .join('\n');
-check('the allocator is found', /function _dimLane\(/.test(src), true);
+check('the placer is found',    /function _dimPlace\(/.test(src), true);
 check('and so is the reset',    /function _dimLanesReset\(/.test(src), true);
 
-const ctx = vm.createContext({});
-vm.runInContext('var LANE_FIRST=24, LANE_STEP=32, _dimLanes={};\n' + src, ctx);
+const ctx = vm.createContext({ Math });
+vm.runInContext('var LANE_FIRST=24, LANE_STEP=32, LANE_PAD=6, _dimLanes={};\n' + src, ctx);
+const place = (zone, a, b, t) => ctx._dimPlace(zone, a, b, t || 0);
 
+/* ── what actually moves a dimension outward ───────────────────────────── */
+/*
+ * The first version handed out a lane per dimension, in order, checking
+ * nothing. So 500 and 800 — sitting at completely different points along the
+ * axis, unable to touch — were pushed onto two separate rows for no reason,
+ * and the drawing looked ridiculous.
+ *
+ * What moves a dimension out is an actual overlap, not the mere existence of
+ * another dimension. That is what a draughtsman does by hand: keep them on
+ * one row as long as they do not touch.
+ */
 ctx._dimLanesReset();
-check('the first lane sits closest to the object', ctx._dimLane('left'), 24);
-check('the next one is further out',                ctx._dimLane('left'), 56);
-check('and the one after that further still',       ctx._dimLane('left'), 88);
+check('the first dimension sits closest to the object', place('top', 0, 100), 24);
+check('one beside it, not touching, stays on the same row', place('top', 200, 300), 24);
+check('and a third further along, also', place('top', 400, 500), 24);
+check('but one that overlaps is pushed out', place('top', 50, 250), 56);
+check('and a third overlapping both goes further still', place('top', 0, 500), 88);
 
-/* each zone counts on its own — a height and a width never share a lane
-   because they are not even in the same direction */
-check('a different zone starts over',   ctx._dimLane('top'), 24);
-check('and advances on its own',        ctx._dimLane('top'), 56);
-check('without disturbing the first',   ctx._dimLane('left'), 120);
-
-/* a redraw starts from nothing, or lanes would creep outward every frame */
+/* the case from the screenshot: two panel widths side by side */
 ctx._dimLanesReset();
-check('a redraw resets every zone', [ctx._dimLane('left'), ctx._dimLane('top')], [24, 24]);
+check('two adjacent panel widths share a row',
+      [place('top', 100, 400, 40), place('top', 400, 900, 40)], [24, 24]);
+check('and the overall width, spanning both, goes above them',
+      place('top', 100, 900, 40), 56);
 
-/* the property that matters, stated directly */
+/* heights all span the same vertical range, so they genuinely do collide */
 ctx._dimLanesReset();
-const got = [];
-for (let i = 0; i < 6; i++) got.push(ctx._dimLane('right'));
-check('no two dimensions in a zone ever share a distance', got.length, new Set(got).size);
-check('and they only ever move outward',
-      got.every((v, i) => i === 0 || v > got[i - 1]), true);
+check('two heights over the same range cannot share a row',
+      [place('left', 0, 2000, 20), place('left', 0, 1985, 20)], [24, 56]);
 
-/* the smallest dimension nearest the object is the ISO 129 rule, and the
-   reason for it: a large dimension's line must not cross a small one's */
-check('lanes grow by a fixed step, so the drawing stays regular',
-      got.map((v, i) => i === 0 ? 0 : v - got[i - 1]).slice(1),
-      [32, 32, 32, 32, 32]);
+/* a short line with a long label takes the label's width, not the line's */
+ctx._dimLanesReset();
+place('top', 100, 110, 60);
+check('a long label reserves room for itself',
+      place('top', 130, 140, 60), 56);
+
+/* zones are independent — a height and a width are not even in the same
+   direction, so they can never contend for the same space */
+ctx._dimLanesReset();
+check('a different zone starts over', [place('left', 0, 100), place('top', 0, 100)], [24, 24]);
+
+/* a redraw starts from nothing, or lanes creep outward every frame and the
+   drawing walks off the canvas */
+ctx._dimLanesReset();
+check('a redraw resets every zone', [place('left', 0, 100), place('top', 0, 100)], [24, 24]);
 
 /* an unknown zone must not throw — a new dimension type should degrade, not
    take the whole drawing down with it */
 ctx._dimLanesReset();
-check('an unseen zone still gets a lane', typeof ctx._dimLane('nowhere'), 'number');
-check('and it starts at the first lane',  ctx._dimLane('elsewhere'), 24);
+check('an unseen zone still gets a lane', typeof place('nowhere', 0, 10), 'number');
+
+/* lanes only ever move outward, by a fixed step, so the drawing stays regular */
+ctx._dimLanesReset();
+const stacked = [];
+for (let i = 0; i < 4; i++) stacked.push(place('right', 0, 1000, 20));
+check('stacked dimensions step outward evenly', stacked, [24, 56, 88, 120]);
 
 /* ── the drawing resets the lanes on every pass ────────────────────────── */
 /*
@@ -91,9 +114,9 @@ check('and so does the item drawing',
  */
 {
   const code = DEMO.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  check('the width lane is asked for',    /_dimLane\('top'\)/.test(code), true);
-  check('the height lane is asked for',   /_dimLane\('left'\)/.test(code), true);
-  check('the hardware lane is asked for', /_dimLane\('right'\)/.test(code), true);
+  check('the width lane is asked for',    /_dimPlace\('top'/.test(code), true);
+  check('the height lane is asked for',   /_dimPlace\('left'/.test(code), true);
+  check('the hardware lane is asked for', /_dimPlace\('right'/.test(code), true);
   /* the old hand-picked offsets are gone from the panel dimension calls */
   check('no panel dimension still carries a hand-picked distance',
         /dLine\(x[^;]{0,60},\s*-?(26|28|32)\s*,/.test(code), false);
@@ -116,19 +139,33 @@ check('and so does the item drawing',
   vm.runInContext(fn, c2);
   const call = hs => c2._heightDims(hs.map(h => ({ h })));
 
+  /* every height is stated. Shapes that share one share a single line rather
+     than repeating it — 2000 covers both fixed panels, 1985 the door. Two
+     measurements for three shapes, and neither is missing.
+     Measuring exceptions only, as the first version did, left the drafter
+     without an answer: if the door has no line, is it 2000 or was it simply
+     not measured? Glass is cut from that number. */
   check('all the same height gives one dimension', call([2000, 2000, 2000]).length, 1);
-  check('and it is the overall height',            call([2000, 2000, 2000])[0].mm, 2000);
+  check('and it covers every shape',
+        call([2000, 2000, 2000])[0].idxs, [0, 1, 2]);
+  check('so it needs no leader lines',
+        call([2000, 2000, 2000])[0].overall, true);
 
   /* the ordinary shower: a door 15 mm shorter than the fixed panels */
   const t = call([2000, 1985, 2000]);
   check('one door out of three gives two dimensions', t.length, 2);
-  check('the overall comes first',                    [t[0].mm, t[0].overall], [2000, true]);
-  check('then the exception, tied to its shape',      [t[1].mm, t[1].idx], [1985, 1]);
+  check('the taller comes first',    [t[0].mm, t[0].idxs], [2000, [0, 2]]);
+  check('and the door is stated too, not left blank',
+        [t[1].mm, t[1].idxs], [1985, [1]]);
+  check('both need leaders, since neither covers everything',
+        [t[0].overall, t[1].overall], [false, false]);
 
-  /* nothing is hidden */
+  /* nothing is hidden, and nothing is repeated */
   check('five different heights give five', call([1000, 1200, 1400, 1600, 1800]).length, 5);
   check('two doors both shorter give three',
         call([2000, 1985, 2000, 1990, 2000]).length, 3);
+  check('and five shapes at one height still give one',
+        call([2000, 2000, 2000, 2000, 2000]).length, 1);
   check('a single shape gives one', call([2000]).length, 1);
   check('no shapes, no dimensions',  call([]).length, 0);
   check('a shape with no height is skipped, not measured as zero',
@@ -163,9 +200,11 @@ check('and so does the item drawing',
 /* ── the leader line ───────────────────────────────────────────────────── */
 /* without it, "1985" floating beside the drawing does not say which shape it
    belongs to */
-check('an exception is tied to its shape by a leader', /function _leaderTo/.test(DEMO), true);
-check('and only an exception gets one',
-      /if\(!d\.overall\)\s*_leaderTo\(/.test(DEMO), true);
+check('a measurement is tied to its shapes by leaders', /function _leaderTo/.test(DEMO), true);
+/* a line that covers every shape needs no leader — there is nothing to
+   distinguish it from. Any other gets one per shape it describes. */
+check('and one that covers everything does not get them',
+      /if\(!d\.overall\) d\.idxs\.forEach\(i=>_leaderTo\(/.test(DEMO), true);
 
 /* ── the glass carries no measurements ─────────────────────────────────── */
 /*

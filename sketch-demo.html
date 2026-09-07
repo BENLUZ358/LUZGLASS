@@ -502,13 +502,35 @@ const EDGE_MM=200;
 //
 // ההתנגשות לא נמנעת בזהירות של מי שכותב את הקוד. היא בלתי אפשרית:
 // מידה מבקשת נתיב ומקבלת מרחק פנוי, ואין דרך לבקש מרחק תפוס.
-const LANE_FIRST=24, LANE_STEP=32;
+const LANE_FIRST=24, LANE_STEP=32, LANE_PAD=6;
 let _dimLanes={};
 function _dimLanesReset(){ _dimLanes={}; }
-function _dimLane(zone){
-  const n=_dimLanes[zone]||0;
-  _dimLanes[zone]=n+1;
-  return LANE_FIRST+n*LANE_STEP;
+
+// מידה מבקשת מקום עבור הקטע שהיא תופסת, ומקבלת את **הנתיב הקרוב ביותר
+// שבו הקטע פנוי**.
+//
+// הגרסה הראשונה נתנה נתיב לכל מידה ברצף, בלי לבדוק כלום. התוצאה הייתה
+// ש-500 ו-800 — שיושבים במקומות שונים לגמרי על הציר ולא יכולים להתנגש —
+// נדחפו לשתי שורות נפרדות בלי סיבה, והשרטוט נראה מגוחך.
+//
+// מה שמזיז מידה החוצה הוא חפיפה בפועל, לא עצם קיומה של מידה אחרת.
+// זה מה שקבלן עושה ביד: מצמיד מידות באותה שורה כל עוד הן לא נוגעות.
+function _dimPlace(zone,a,b,textPx){
+  const lo0=Math.min(a,b), hi0=Math.max(a,b);
+  const mid=(lo0+hi0)/2;
+  // קטע קצר עם תווית ארוכה תופס את רוחב התווית, לא את אורך הקו
+  // בלי ריפוד: שתי מידות שנוגעות בקצה משותף אינן מתנגשות — זו שרשרת
+  // מידות, בדיוק מה ששרטט מצייר. ריפוד הפך כל שני רוחבים סמוכים
+  // למתנגשים, כי הפאה הימנית של האחד היא השמאלית של השני.
+  const need=Math.max(hi0-lo0, textPx||0);
+  const lo=mid-need/2, hi=mid+need/2;
+  const lanes=_dimLanes[zone]||(_dimLanes[zone]=[]);
+  for(let i=0;i<lanes.length;i++){
+    const clash=lanes[i].some(s=>lo<s.hi&&hi>s.lo);
+    if(!clash){ lanes[i].push({lo,hi}); return LANE_FIRST+i*LANE_STEP; }
+  }
+  lanes.push([{lo,hi}]);
+  return LANE_FIRST+(lanes.length-1)*LANE_STEP;
 }
 
 // ── מודדים חריגים, לא הכל ─────────────────────────────────────────
@@ -534,10 +556,28 @@ function _heightDims(pss){
     .map((p,i)=>({idx:i,mm:Math.round((p&&p.h)||0)}))
     .filter(o=>o.mm>0);
   if(!list.length) return [];
-  const max=Math.max.apply(null,list.map(o=>o.mm));
-  const out=[{mm:max,idx:null,overall:true}];
-  list.forEach(o=>{ if(o.mm!==max) out.push({mm:o.mm,idx:o.idx,overall:false}); });
-  return out;
+
+  // קיבוץ לפי גובה: כל גובה מקבל קו אחד, וקווי הפניה לכל השייפים שלו.
+  //
+  // הגרסה הקודמת מדדה רק חריגים — גובה כולל פעם אחת, ושייף ששונה ממנו
+  // מקבל קו. זה נכון בשרטוט טכני אבל השאיר את השרטט בלי תשובה: אם
+  // לדלת אין קו, האם היא 2000 או שפשוט לא נמדדה? זכוכית נחתכת לפי
+  // המספר הזה, וספק הוא לא מצב שמותר להשאיר בו אותו.
+  //
+  // עכשיו כל גובה מוצג במפורש, אבל שייפים באותו גובה חולקים קו אחד
+  // במקום לחזור עליו — 2000 מכסה את שני הקבועים, 1985 את הדלת. שתי
+  // מידות לחמישה שייפים, ואף אחת מהן לא חסרה.
+  const groups=[];
+  list.forEach(o=>{
+    const g=groups.find(x=>x.mm===o.mm);
+    if(g) g.idxs.push(o.idx); else groups.push({mm:o.mm,idxs:[o.idx]});
+  });
+  groups.sort((a,b)=>b.mm-a.mm);
+  return groups.map(g=>({
+    mm:g.mm, idxs:g.idxs, idx:g.idxs[0],
+    // קו אחד שמכסה הכל אינו צריך קווי הפניה — אין ממה להבדיל אותו
+    overall: g.idxs.length===list.length,
+  }));
 }
 
 // הקצה השמאלי של ההרכבה כולה, מחושב מהשייף שמצייר עכשיו. קו ההפניה
@@ -1281,7 +1321,9 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
   // להתנגש בו, והשיוך לשייף חד-משמעי כי הקו מצויר עליו.
   // הרוחב של כל שייף — נתיב עליון. רוחב הוא מה שחותכים, ולכן כל שייף
   // מקבל את שלו גם כששניים סמוכים זהים.
-  const _wLane=_dimLane('top');
+  // שני רוחבים סמוכים יושבים במקומות שונים על הציר ולכן לא מתנגשים —
+  // הם נשארים באותה שורה.
+  const _wLane=_dimPlace('top',x,x+pw,String(ps.w).length*8+16);
   dLine(x,y-_wLane,x+pw,y-_wLane,`${ps.w}`,0,true,`${pfx}_w_${idx}`);
 
   if(ps.hasSlope){
@@ -1291,10 +1333,10 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     const leftH =ps.slopeSide==='left' ?h2:h1;
     const rightH=ps.slopeSide==='right'?h2:h1;
     const topRef=ps.slopeAxis==='height'?Math.max(leftH,rightH)*sc:0;
-    const lL=_dimLane('left');
+    const lL=_dimPlace('left',y,y+leftH*sc,20);
     dLine(x-lL,y+(topRef-leftH*sc),x-lL,y+topRef||y+leftH*sc,`${leftH}`,-18,false,`${pfx}_h_${idx}`);
     _leaderTo(x-lL,y+(ps.slopeAxis==='height'?topRef:leftH*sc),idx,allPS,sc,_assemblyX(allPS,sc,x,idx));
-    const lR=_dimLane('left');
+    const lR=_dimPlace('left',y,y+rightH*sc,20);
     dLine(x-lR,y+(topRef-rightH*sc),x-lR,y+topRef||y+rightH*sc,`${rightH}`,-18,false,`${pfx}_sH2_${idx}`);
 
     // סימון הפאה הנמוכה, כדי שכיוון השיפוע יהיה חד-משמעי על הציור
@@ -1309,12 +1351,13 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // אחיד נותנים מידה אחת — לא חמש.
     const base=_assemblyX(allPS,sc,x,0);
     _heightDims(allPS).forEach(d=>{
-      const lane=_dimLane('left');
       const bottom=y+ph;
       const top=bottom-(d.mm)*sc;
+      const lane=_dimPlace('left',top,bottom,20);
       dLine(x-lane,top,x-lane,bottom,String(d.mm),-18,false,
-            d.overall?null:{pfx:pfx,field:'h',idx:d.idx});
-      if(!d.overall) _leaderTo(x-lane,top,d.idx,allPS,sc,base);
+            {pfx:pfx,field:'h',idx:d.idx});
+      // קו הפניה לכל שייף שהמידה הזו מתארת, אלא אם היא מתארת את כולם
+      if(!d.overall) d.idxs.forEach(i=>_leaderTo(x-lane,top,i,allPS,sc,base));
     });
   }
 
@@ -1366,7 +1409,7 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 
     // Hinge distance dims
     // קו המידה של הציר נלחץ במצב עריכה, ומשנה את הגובה של שני הצירים
-    const _hLane=_dimLane('right');
+    const _hLane=_dimPlace('right',y,y+hTop*sc,20);
     const hDX=_hSide==='left'?x-_hLane:x+pw+_hLane;
     const hOff=_hSide==='left'?-18:18;
     // כל קו מידה מצביע על הציר שלו בלבד
@@ -1409,7 +1452,7 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // שניהם נלחצים במצב עריכה.
     // הידית מקבלת נתיב משלה, אחרי הצירים — כדי שהמידות שלה לא ייפלו
     // עליהם. קו המידה יוצא מהפאה שממנה מודדים, למטה כברירת מחדל.
-    const _uLane=_dimLane('right');
+    const _uLane=_dimPlace('right',hRef==='top'?y:handleY,hRef==='top'?handleY:y+ph,20);
     const _uX=_handleSide==='right'?x+pw+_uLane:x-_uLane;
     dLine(_uX, hRef==='top'?y:handleY, _uX, hRef==='top'?handleY:y+ph,
           String(hDistMM), 0, false,

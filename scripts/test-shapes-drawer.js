@@ -310,14 +310,16 @@ check('the click handler no longer multiplies by the pixel ratio',
      alternatives collided. The lane allocator replaced it: every height comes
      off one side in its own lane, and a middle panel needs no line at all
      unless its height differs from the rest. */
-  check('height lines are placed by the lane allocator',
-        /const lane=_dimLane\('left'\)/.test(DEMO), true);
+  /* the placer decides where a dimension sits, by testing whether the space
+     is free — not by handing out the next row regardless */
+  check('height lines are placed by the collision test',
+        /const lane=_dimPlace\('left'/.test(DEMO), true);
   check('and the old per-panel offset scheme is gone',
         /const _hx = \(side\)=>/.test(DEMO), false);
   check('the assembly is measured once, from the first shape',
         /else if\(idx===0\)\{[\s\S]{0,400}?_heightDims\(allPS\)/.test(DEMO), true);
-  check('both slope heights get lanes of their own',
-        /const lL=_dimLane\('left'\)[\s\S]{0,400}?const lR=_dimLane\('left'\)/.test(DEMO), true);
+  check('both slope heights are placed the same way',
+        /const lL=_dimPlace\('left'[\s\S]{0,400}?const lR=_dimPlace\('left'/.test(DEMO), true);
   check('and the low face is marked, so the slope direction is unambiguous',
         /נמוך/.test(DEMO), true);
 
