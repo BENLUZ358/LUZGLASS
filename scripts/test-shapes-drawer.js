@@ -97,5 +97,96 @@ check('the drawer reports where each shape landed', /_lgShapeRects/.test(DEMO), 
 check('and the map carries an id with each rectangle',
       /_lgShapeRects[\s\S]{0,400}?\bid\b/.test(DEMO), true);
 
+/* ── where the handle sits by default ──────────────────────────────────── */
+/*
+ * Six centimetres in from the side, and halfway up the glass. The contractor
+ * can move it, but that is what is drawn until he does.
+ *
+ * Two bugs lived here, both the same unit mistake as the edge distance: the
+ * input is labelled ס"מ while the drawing multiplied by sc, which converts
+ * millimetres — so the handle sat 6 mm from the edge rather than 60. And the
+ * height was y+100*sc for any door taller than 20 cm, putting the handle ten
+ * centimetres below the top instead of at the middle.
+ */
+{
+  const eh = DEMO.match(/const HANDLE_EDGE_CM=(\d+)/);
+  check('the handle inset is named', !!eh, true);
+  check('and it is 6 cm', Number(eh && eh[1]), 6);
+  check('the drawing converts those centimetres to millimetres',
+        /ps\.handleEdge\|\|HANDLE_EDGE_CM\)\*10\*sc/.test(DEMO), true);
+  check('the handle is centred on the glass', /const handleY=y\+ph\/2/.test(DEMO), true);
+  check('and no longer pinned near the top', /handleY=\(ps\.h\|\|2000\)>200/.test(DEMO), false);
+
+  /* the same unit mistake sat next to it, on the towel-rail holes */
+  const ts = DEMO.match(/const TOWEL_SPACING_CM=(\d+)/);
+  check('the towel spacing is named too', !!ts, true);
+  check('and it is converted the same way', /ps\.towelSpacing\|\|TOWEL_SPACING_CM\)\*10/.test(DEMO), true);
+  check('its dimension line prints millimetres, like every other one',
+        /dLine\([\s\S]{0,120}?String\(spMM\)/.test(DEMO), true);
+
+  /* the defaults the panel starts with are the same constants, so the field
+     and the drawing cannot drift apart */
+  check('mkPS starts from the same constants',
+        /handleEdge:HANDLE_EDGE_CM,towelSpacing:TOWEL_SPACING_CM/.test(DEMO), true);
+  /* and the contractor can still change it */
+  check('the inset is still an editable field', /id="\$\{pfx\}_hEd_\$\{i\}"/.test(DEMO), true);
+}
+
+/* ── edit mode ─────────────────────────────────────────────────────────── */
+/*
+ * Tapping a dimension used to scroll the page away from the drawing to a form
+ * field below it — the opposite of what a contractor needs. Now a tap opens a
+ * small editor at the dimension itself and the drawing follows.
+ *
+ * But a canvas that reacts to every touch cannot be scrolled past on a phone:
+ * a drag to scroll lands as a tap and opens something. So the reaction is
+ * behind an explicit edit mode. Off by default, the canvas is inert and the
+ * page scrolls; on, dimensions become editable. Save turns it off again.
+ */
+{
+  check('there is an edit mode', /function setEditMode/.test(DEMO), true);
+  check('and it starts off, so the drawing is inert until asked',
+        /let editMode\s*=\s*false/.test(DEMO), true);
+  check('there is a control to turn it on', /id="btnEditMode"/.test(DEMO), true);
+
+  const click = (DEMO.match(/C\.addEventListener\('click'[\s\S]*?\n\}\);/) || [''])[0];
+  check('the canvas click handler is found', click.length > 0, true);
+  check('it does nothing at all while edit mode is off', /if\(!editMode\)\s*return;/.test(click), true);
+  /* the old behaviour: it scrolled you away to a form field */
+  check('and it no longer scrolls the page away from the drawing',
+        /scrollIntoView/.test(click), false);
+  check('a tap opens the editor instead', /openDimEditor\(/.test(click), true);
+
+  const ed = (DEMO.match(/function openDimEditor[\s\S]*?\n\}/) || [''])[0];
+  check('the editor is found', ed.length > 0, true);
+  check('it opens at the dimension that was tapped', /clientX|hit\.x/.test(ed), true);
+  check('and it starts from the value that is there now', /\.value\s*=/.test(ed), true);
+
+  check('saving applies the value through the shared parser',
+        /function dimEditorApply[\s\S]{0,400}?lgParseDimensionInput\(/.test(DEMO), true);
+  check('and redraws', /function dimEditorApply[\s\S]{0,500}?draw\(\)/.test(DEMO), true);
+  check('the editor can be dismissed without changing anything',
+        /function closeDimEditor/.test(DEMO), true);
+  check('and Escape closes it', /Escape/.test(DEMO), true);
+}
+{
+  const css = (DEMO.match(/#dimEditor\s*\{[^}]*\}/) || [''])[0];
+  check('the editor has a rule', css.length > 0, true);
+  const inp = (DEMO.match(/#dimEditorInput\s*\{[^}]*\}/) || [''])[0];
+  check('its input is a 44px target',
+        Number((inp.match(/min-height:\s*(\d+)px/) || [])[1]) >= 44, true);
+  /* iOS zooms the page when a focused input is under 16px */
+  check('and 16px, so focusing it does not zoom the page on iOS',
+        Number((inp.match(/font-size:\s*(\d+)px/) || [])[1]) >= 16, true);
+}
+{
+  const css = (DEMO.match(/#btnEditMode\s*\{[^}]*\}/) || [''])[0];
+  check('the edit-mode button is a 44px target',
+        Number((css.match(/min-height:\s*(\d+)px/) || [])[1]) >= 44, true);
+}
+/* while editing, the canvas may claim the touch; otherwise the page must scroll */
+check('the canvas only claims gestures while editing',
+      /#sk\.editing\{touch-action:none/.test(DEMO), true);
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll drawer checks passed.');

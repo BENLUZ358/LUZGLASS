@@ -191,6 +191,60 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
   check('and one handle',         q('handle'), 1);
 }
 
+/* ── two kinds of fixed panel ──────────────────────────────────────────── */
+/*
+ * A fixed panel against a wall with nothing on its other face takes two
+ * brackets, not four. The builder assumed a wall at both ends and drew four
+ * for a lone panel. Which end is a wall depends on the site, so it is the
+ * operator's choice and not something to infer from the shape count.
+ *
+ * A fixed panel with a door hanging on it is the other kind entirely: that
+ * junction is glass-to-glass, the engine returns hinge-gg, and hinges are
+ * drawn on the fixed so the door has something to meet.
+ */
+{
+  const vm = require('vm');
+  const ENG = fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8');
+  const panelsFn = (DEMO.match(/function _shapePanels\(\)\{[\s\S]*?\n\}/) || [''])[0];
+  const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
+
+  const run = (list, bound) => {
+    const ctx = vm.createContext({ selQ: 'zamak' });
+    vm.runInContext(ENG + '\nvar shapeBoundary=' + JSON.stringify(bound) +
+      ';\nvar shapeList=' + JSON.stringify(list) + ';\n' + panelsFn + '\n' + showerFn, ctx);
+    const bom = ctx.lgBOM(ctx._lgShowerOf(ctx._shapePanels(), {}));
+    return t => (bom.find(b => b.type === t) || { qty: 0 }).qty;
+  };
+
+  const lone = run([{ id: 'a', kind: 'fixed', label: 'קבוע' }], { right: 'wall', left: 'open' });
+  check('a fixed panel on one wall takes two brackets', lone('bracket-wall'), 2);
+
+  const spanning = run([{ id: 'a', kind: 'fixed', label: 'קבוע' }], { right: 'wall', left: 'wall' });
+  check('and four only when both ends really are walls', spanning('bracket-wall'), 4);
+
+  /* the other kind: a door hangs on it */
+  const withDoor = run([{ id: 'a', kind: 'fixed', label: 'קבוע' },
+                        { id: 'b', kind: 'door', hingeSide: 'right', label: 'דלת' }],
+                       { right: 'wall', left: 'open' });
+  check('a fixed carrying a door still takes its two wall brackets',
+        withDoor('bracket-wall'), 2);
+  check('and the joint between them is a glass-to-glass hinge',
+        withDoor('hinge-gg'), 2);
+  check('so the fixed has hinges drawn on it for the door to meet',
+        /_j\.right\.type==='hinge-gg'[\s\S]{0,120}drwHingeOnFixed/.test(DEMO), true);
+}
+
+/* the end of the enclosure is set by the operator, not guessed */
+check('each end can be set to a wall or to nothing', /function shapeSetEnd/.test(DEMO), true);
+/* order, not distance — the shapes are rendered between the two ends, so a
+   fixed-size window between them breaks as soon as the strip grows */
+check('the strip offers both ends',
+      DEMO.includes("endBtn('right')") && DEMO.includes("endBtn('left')"), true);
+check('and the right end is drawn before the shapes, the left end after',
+      DEMO.indexOf("endBtn('right')") < DEMO.indexOf("endBtn('left')"), true);
+check('a lone panel starts against one wall, not two',
+      /shapeBoundary=\{right:'wall',left:'open'\}/.test(DEMO), true);
+
 /* the strip escapes what it prints — the page has no lgEsc of its own */
 check('a shape label is escaped before it becomes html', /_shEsc\(/.test(DEMO), true);
 check('and the escaper is defined here, not assumed from firebase-db',

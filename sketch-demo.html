@@ -56,7 +56,11 @@
 }
 .strip-row button:hover{border-color:var(--gold);}
 .strip-row button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.strip-row button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
 .strip-row{gap:8px;}
+/* הקצוות אינם צורות — הם מה שיושב מעבר לצורה האחרונה */
+.strip-item.strip-end{background:var(--surface);border-style:dashed;}
+.strip-item.strip-end .sn{color:var(--muted);font-size:12px;}
 .shape-err{
   margin:8px 10px;padding:10px 12px;border-radius:6px;
   background:#fdecea;border:1px solid #f5c6c2;color:#8f2d24;
@@ -79,6 +83,53 @@
 .canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow:hidden;}
 canvas{display:block;width:100%;height:auto;cursor:pointer;}
 .dim-tip{position:absolute;background:var(--gold);color:var(--on-gold);padding:2px 7px;font-size:12px;font-weight:700;border-radius:3px;pointer-events:none;display:none;z-index:5;}
+
+/* ── מצב עריכה ────────────────────────────────────────────────────
+   הצייר מגיב למגע רק כאן. בלי זה, גרירה כדי לגלול נוחתת כלחיצה
+   ופותחת משהו — ובפלאפון הקנבס תופס כמעט את כל המסך. */
+#btnEditMode{
+  min-height:44px;width:calc(100% - 20px);margin:0 10px 10px;
+  padding:10px 14px;border:1px solid var(--gold);border-radius:6px;
+  background:var(--surface);color:var(--gold-text);
+  font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;cursor:pointer;
+  transition:background 180ms ease,color 180ms ease;
+}
+#btnEditMode.on{background:var(--gold);color:var(--on-gold);}
+#btnEditMode:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.edit-hint{
+  margin:0 10px 10px;padding:9px 12px;border-radius:6px;
+  background:rgba(184,146,42,0.10);border:1px solid rgba(184,146,42,0.35);
+  color:var(--text);font-family:'Heebo',sans-serif;font-size:13px;line-height:1.5;
+}
+/* הקנבס תופס את המחווה רק כשעורכים; אחרת הדף חייב להיות ניתן לגלילה */
+#sk.editing{touch-action:none;}
+.canvas-wrap.editing{outline:2px solid var(--gold);outline-offset:-2px;}
+
+#dimEditor{
+  position:absolute;z-index:30;display:none;
+  background:var(--surface);border:1px solid var(--gold);border-radius:8px;
+  box-shadow:0 8px 28px rgba(0,0,0,0.22);padding:10px;
+  flex-direction:column;gap:8px;min-width:172px;
+}
+#dimEditor.open{display:flex;}
+#dimEditorLabel{font-family:'Heebo',sans-serif;font-size:12px;color:var(--muted);}
+#dimEditorInput{
+  min-height:44px;width:100%;box-sizing:border-box;
+  padding:8px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg);color:var(--text);
+  /* 16px ולא פחות — אייפון מזים את הדף כשמתמקדים בשדה קטן מזה */
+  font-family:'Heebo',sans-serif;font-size:16px;font-weight:700;text-align:center;
+}
+#dimEditorInput:focus{border-color:var(--gold);outline:none;}
+.dim-ed-row{display:flex;gap:8px;}
+.dim-ed-row button{
+  flex:1;min-height:44px;border-radius:6px;cursor:pointer;
+  font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;
+}
+.dim-ed-ok{background:var(--gold);color:var(--on-gold);border:1px solid var(--gold);}
+.dim-ed-x{background:var(--bg);color:var(--text);border:1px solid var(--border);}
+.dim-ed-row button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){ #btnEditMode{transition:none;} }
 .controls{margin:0 10px 10px;display:flex;flex-direction:column;gap:2px;}
 .cs{background:var(--surface);border:1px solid var(--border);overflow:hidden;}
 .ch{padding:11px 14px;font-size:12px;font-weight:600;letter-spacing:0.2em;color:var(--gold-text);text-transform:uppercase;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;background:var(--bg);}
@@ -189,9 +240,26 @@ canvas{display:block;width:100%;height:auto;cursor:pointer;}
     <option value="">-- בחר לקוח --</option>
   </select>
 </div>
-<div class="canvas-wrap">
+<div class="canvas-wrap" id="canvasWrap">
   <canvas id="sk"></canvas>
   <div class="dim-tip" id="dimTip"></div>
+  <!-- נפתח במקום שבו נגעו במידה, כדי שהעין לא תעזוב את הציור -->
+  <div id="dimEditor" role="dialog" aria-label="שינוי מידה">
+    <span id="dimEditorLabel"></span>
+    <input id="dimEditorInput" type="text" inputmode="decimal" autocomplete="off"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();dimEditorApply();}
+                      else if(event.key==='Escape'){closeDimEditor();}">
+    <span class="dim-ed-row">
+      <button class="dim-ed-ok" onclick="dimEditorApply()">שמור</button>
+      <button class="dim-ed-x"  onclick="closeDimEditor()">ביטול</button>
+    </span>
+  </div>
+</div>
+<!-- מחוץ למצב עריכה הצייר אינו מגיב למגע, כדי שאפשר יהיה לגלול מעליו
+     בלי לפתוח דברים בטעות. -->
+<button id="btnEditMode" onclick="setEditMode(!editMode)">✎ מצב עריכה</button>
+<div id="editHint" class="edit-hint" style="display:none">
+  לחץ על מידה בציור כדי לשנות אותה. בסיום — <b>שמור וסיים</b>.
 </div>
 
 <!-- COMBO UI -->
@@ -409,6 +477,11 @@ const COMBOS={
 // המידה על השרטוט הראה "20" ולכן שידר את המספר השגוי הלאה.
 const EDGE_MM=200;
 
+// ברירות המחדל של הידית, בסנטימטרים — כפי ששדות הקלט שלה מסומנים.
+// 6 ס"מ מהצד, ובאמצע גובה הזכוכית.
+const HANDLE_EDGE_CM=6;
+const TOWEL_SPACING_CM=55;
+
 const C=document.getElementById('sk'),cx=C.getContext('2d');
 let selG='shafu',selF='shahor',selQ='zamak',sand=false;
 let appMode='combo',curCat='pinati',curCombo=COMBOS.pinati[0];
@@ -422,7 +495,7 @@ function mkPS(panel){
     // brackets
     extraBracket:false,bracket3pos:40,bracketType:'normal',floorBracket:false,
     // handle
-    handleType:'knob',handleEdge:6,towelSpacing:55,
+    handleType:'knob',handleEdge:HANDLE_EDGE_CM,towelSpacing:TOWEL_SPACING_CM,
     // slope
     hasSlope:false,
     slopeAxis:'height',   // 'height' or 'width'
@@ -488,7 +561,21 @@ function setMode(m){
 // הרכבה לינארית: הקבלן מניח צורה אחרי צורה, והמנוע גוזר מה יושב בכל
 // צומת. אין כאן שדה פרזול — הוא נגזר, ולכן אי אפשר לסתור את הציור.
 let shapeList=[];
-let shapeBoundary={right:'wall',left:'wall'};
+
+// מה יושב בכל קצה של המקלחון. קיר או כלום.
+//
+// היה כאן קיר משני הצדדים, ולכן קבוע בודד קיבל ארבע זוויות — שתיים לכל
+// צד. אבל קבוע בודד יושב על קיר אחד, ומהפאה השנייה אין כלום: שתי זוויות.
+// זה תלוי בשטח ולא בסוג הצורה, ולכן זו בחירה של המפעיל ולא ניחוש.
+//
+// קבוע שדלת נתלית עליו הוא מקרה אחר לגמרי — שם הצומת הוא זכוכית-זכוכית,
+// המנוע מחזיר hinge-gg, והצירים מצוירים על הקבוע. ר' _lgSidesOf.
+let shapeBoundary={right:'wall',left:'open'};
+
+function shapeSetEnd(side,val){
+  shapeBoundary[side] = val;
+  renderShapeUI();draw();
+}
 
 function _shapeShower(){
   return {boundary:shapeBoundary,finish:'shahor',
@@ -569,7 +656,19 @@ function renderShapeUI(){
   const errs=(typeof lgValidate==='function')?lgValidate(sh):[];
   const badIds={};errs.forEach(e=>{badIds[e.at]=e.msg;});
 
-  strip.innerHTML = shapeList.length ? shapeList.map((s,i)=>
+  // קצה = קיר או כלום. יושב בקצוות הרצועה, במקום שהוא מייצג על הציור.
+  const endBtn=(side)=>
+    '<div class="strip-item strip-end">'+
+      '<span class="sn">'+(side==='right'?'קצה ימין':'קצה שמאל')+'</span>'+
+      '<span class="strip-row">'+
+        '<button class="'+(shapeBoundary[side]==='wall'?'on':'')+'" '+
+          'onclick="shapeSetEnd(\''+side+'\',\'wall\')">קיר</button>'+
+        '<button class="'+(shapeBoundary[side]==='open'?'on':'')+'" '+
+          'onclick="shapeSetEnd(\''+side+'\',\'open\')">פתוח</button>'+
+      '</span>'+
+    '</div>';
+
+  strip.innerHTML = shapeList.length ? endBtn('right') + shapeList.map((s,i)=>
     '<div class="strip-item'+(badIds[s.id]?' bad':'')+'">'+
       '<span class="sn">'+_shEsc(s.label)+(s.kind==='door'?' ('+(s.hingeSide==='right'?'ימין':'שמאל')+')':'')+'</span>'+
       '<span class="strip-row">'+
@@ -578,7 +677,7 @@ function renderShapeUI(){
         (s.kind==='door'?'<button onclick="shapeFlipHinge(\''+s.id+'\')" aria-label="החלף צד ציר">⇄</button>':'')+
         '<button onclick="shapeRemove(\''+s.id+'\')" aria-label="הסר">✕</button>'+
       '</span>'+
-    '</div>').join('')
+    '</div>').join('') + endBtn('left')
     : '<div style="padding:8px;color:var(--muted);font-size:13px">בחר צורה מהגלריה כדי להתחיל</div>';
 
   if(errs.length){
@@ -1101,15 +1200,25 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     dLine(hx+(panel.hingeSide==='left'?-24:24),y+ph-EDGE_MM*sc,hx+(panel.hingeSide==='left'?-24:24),y+ph,String(EDGE_MM),panel.hingeSide==='left'?-18:18,false,null);
 
     // Handle
-    const hEdge=(ps.handleEdge||6)*sc;
+    //
+    // ברירת המחדל: 6 ס"מ מהצד, ובאמצע גובה הזכוכית. הלקוח יכול לשנות,
+    // אבל זה מה שמוצג עד שהוא משנה.
+    //
+    // שני באגים היו כאן, שניהם מאותה משפחה של מרחק הפרזול מהקצה:
+    //   · השדה מסומן ס"מ והציור הכפיל ב-sc, שממיר מ"מ — כלומר הידית
+    //     ישבה 6 מ"מ מהקצה, לא 6 ס"מ. אותו דבר במרחק חורי המגבת.
+    //   · הגובה היה y+100*sc לכל דלת גבוהה מ-20 ס"מ, כלומר 10 ס"מ
+    //     מלמעלה, ולא אמצע הזכוכית.
+    const hEdge=(ps.handleEdge||HANDLE_EDGE_CM)*10*sc;
     const handleX=panel.handleSide==='right'?x+pw-hEdge:x+hEdge;
-    const handleY=(ps.h||2000)>200?y+100*sc:y+ph/2;
+    const handleY=y+ph/2;
     if(ps.handleType==='towel'){
-      const sp=(ps.towelSpacing||55)*sc;
+      const spMM=(ps.towelSpacing||TOWEL_SPACING_CM)*10;
+      const sp=spMM*sc;
       const hx2=panel.handleSide==='right'?handleX-sp:handleX+sp;
       if(hx2>x+4&&hx2<x+pw-4){
         drwHole(handleX,handleY);drwHole(hx2,handleY);
-        dLine(Math.min(handleX,hx2),handleY-20,Math.max(handleX,hx2),handleY-20,`${ps.towelSpacing}`,0,true,null);
+        dLine(Math.min(handleX,hx2),handleY-20,Math.max(handleX,hx2),handleY-20,String(spMM),0,true,null);
       }
     } else drwHole(handleX,handleY);
 
@@ -1293,8 +1402,79 @@ function drawTitleBar(cW,cH){
   cx.textAlign='left';cx.fillText(new Date().toLocaleDateString('he-IL'),10,ty+18);
 }
 
-// CANVAS CLICK → FOCUS INPUT
+// ══════════════ מצב עריכה ══════════════
+//
+// לחיצה על מידה הייתה גוללת את הדף אל שדה טופס מתחת לציור — כלומר מרחיקה
+// את העין בדיוק מהדבר שרוצים לראות בזמן השינוי. עכשיו נפתח חלון קטן על
+// המידה עצמה, והציור מתעדכן מיד.
+//
+// אבל קנבס שמגיב לכל מגע אי אפשר לגלול מעליו: גרירה כדי לגלול נוחתת
+// כלחיצה ופותחת משהו, ובפלאפון הקנבס תופס כמעט את כל המסך. לכן התגובה
+// יושבת מאחורי מצב עריכה מפורש — כבוי כברירת מחדל.
+let editMode=false;
+let dimEditTarget=null;
+
+function setEditMode(on){
+  editMode=!!on;
+  const btn=document.getElementById('btnEditMode');
+  const wrap=document.getElementById('canvasWrap');
+  const hint=document.getElementById('editHint');
+  if(btn){
+    btn.classList.toggle('on',editMode);
+    btn.textContent=editMode?'✓ שמור וסיים':'✎ מצב עריכה';
+  }
+  C.classList.toggle('editing',editMode);
+  if(wrap) wrap.classList.toggle('editing',editMode);
+  if(hint) hint.style.display=editMode?'block':'none';
+  if(!editMode) closeDimEditor();
+}
+
+function openDimEditor(hit,clientX,clientY){
+  const el=document.getElementById(hit.id);
+  if(!el) return;
+  dimEditTarget=el;
+  const rect=C.getBoundingClientRect();
+  const ed=document.getElementById('dimEditor');
+  const inp=document.getElementById('dimEditorInput');
+  document.getElementById('dimEditorLabel').textContent='מידה במ"מ';
+  // מתחיל מהערך שיושב שם עכשיו, כדי שאפשר יהיה לתקן ולא רק להקליד מחדש
+  inp.value=(typeof lgMmToInputStr==='function')
+    ? lgMmToInputStr(lgParseDimensionInput(el.value).mm||el.value)
+    : el.value;
+  ed.classList.add('open');
+  // נפתח ליד הנגיעה, ונדחף פנימה אם הוא גולש מהמעטפת
+  const w=ed.offsetWidth||180, h=ed.offsetHeight||140;
+  let left=clientX-rect.left-w/2, top=clientY-rect.top-h-10;
+  left=Math.max(6,Math.min(left,rect.width-w-6));
+  if(top<6) top=clientY-rect.top+14;
+  ed.style.left=left+'px'; ed.style.top=top+'px';
+  setTimeout(()=>{inp.focus();inp.select();},30);
+}
+
+function closeDimEditor(){
+  dimEditTarget=null;
+  document.getElementById('dimEditor')?.classList.remove('open');
+}
+
+// אותו פרסר של כל המערכת — 200 הם 2000, 1985 נשארים 1985.
+function dimEditorApply(){
+  if(!dimEditTarget) return;
+  const raw=document.getElementById('dimEditorInput').value;
+  const r=lgParseDimensionInput(raw);
+  if(!r.ok){
+    const lbl=document.getElementById('dimEditorLabel');
+    lbl.textContent=r.error; lbl.style.color='#c0392b';
+    return;
+  }
+  document.getElementById('dimEditorLabel').style.color='';
+  dimEditTarget.value=lgMmToInputStr(r.mm);
+  dimEditTarget.dispatchEvent(new Event('input',{bubbles:true}));
+  closeDimEditor();
+  draw();
+}
+
 C.addEventListener('click',function(e){
+  if(!editMode) return;              // מחוץ למצב עריכה הצייר אינו מגיב כלל
   const rect=C.getBoundingClientRect();
   const DPR=window.devicePixelRatio||1;
   const ratio=C.width/(rect.width*DPR);
@@ -1302,20 +1482,15 @@ C.addEventListener('click',function(e){
   const cy2=(e.clientY-rect.top)*DPR*ratio;
   for(const hit of dimHits){
     if(cx2>=hit.x&&cx2<=hit.x+hit.w&&cy2>=hit.y&&cy2<=hit.y+hit.h){
-      const el=document.getElementById(hit.id);
-      if(el){
-        el.scrollIntoView({behavior:'smooth',block:'center'});
-        setTimeout(()=>{el.focus();el.select();el.classList.add('hi');},300);
-        const tip=document.getElementById('dimTip');
-        tip.textContent='✎ לחץ לעריכה';
-        tip.style.display='block';
-        tip.style.left=(e.clientX-rect.left-30)+'px';
-        tip.style.top=(e.clientY-rect.top-28)+'px';
-        setTimeout(()=>tip.style.display='none',1400);
-      }
-      break;
+      openDimEditor(hit,e.clientX,e.clientY);
+      return;
     }
   }
+  closeDimEditor();                  // נגיעה מחוץ למידה סוגרת
+});
+
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape') closeDimEditor();
 });
 
 // ══════════════ SPECS & ORDER ══════════════
