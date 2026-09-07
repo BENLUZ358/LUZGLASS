@@ -238,9 +238,20 @@ check('the click handler no longer multiplies by the pixel ratio',
 
 /* ── the hinge and the handle are editable too ─────────────────────────── */
 {
-  check('the hinge height is a target', /field:'hingeTop'/.test(DEMO), true);
-  check('and it defaults to the 20 cm standard',
-        /ps\.hingeTop!=null\?ps\.hingeTop:EDGE_MM/.test(DEMO), true);
+  /* each hinge moves on its own. One field for both meant changing the top
+     hinge dragged the bottom one with it, and in the field they are not
+     always symmetric. */
+  check('the top hinge is its own target', /field:'hingeTop'/.test(DEMO), true);
+  check('and the bottom hinge is another', /field:'hingeBot'/.test(DEMO), true);
+  check('they are positioned independently',
+        /hPos=\[y\+hTop\*sc, ?y\+ph-hBot\*sc\]/.test(DEMO), true);
+  check('and each dimension line prints its own value',
+        /String\(hTop\)[\s\S]{0,200}?String\(hBot\)/.test(DEMO), true);
+  check('both default to the 20 cm standard',
+        /ps\.hingeTop!=null\?ps\.hingeTop:EDGE_MM/.test(DEMO) &&
+        /ps\.hingeBot!=null\?ps\.hingeBot:EDGE_MM/.test(DEMO), true);
+  check('and the editor knows the default for both',
+        /t\.field==='hingeTop'\|\|t\.field==='hingeBot'/.test(DEMO), true);
   check('the handle height is a target', /field:'handleTop'/.test(DEMO), true);
   check('and it defaults to the middle of the glass',
         /ps\.handleTop!=null\?ps\.handleTop:Math\.round\(\(ps\.h\|\|2000\)\/2\)/.test(DEMO), true);

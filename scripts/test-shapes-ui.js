@@ -234,6 +234,65 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
         /_j\.right\.type==='hinge-gg'[\s\S]{0,120}drwHingeOnFixed/.test(DEMO), true);
 }
 
+/* ── the drawer and the engine must mean the same face ─────────────────── */
+/*
+ * Two opposite conventions, and it showed on screen. In the engine 'right'
+ * means "toward the previous shape in the array", which is LEFT on the canvas
+ * because panels are drawn in array order. In the drawer,
+ * hingeSide==='left' ? x : x+pw — 'left' is the canvas left.
+ *
+ * So the engine's 'right' is the drawer's 'left'. Without the flip, a door
+ * hung on the fixed panel beside it was drawn with its hinges against the
+ * opposite wall, while the engine separately marked hinges on the shared
+ * face: both drawn at once, which cannot exist.
+ *
+ * The existing combinations settle which way round the drawer reads: p_kd
+ * pairs hingeSide:'left' with hingeOnFixed:'prev', so 'left' faces the
+ * previous panel.
+ */
+{
+  const vm = require('vm');
+  const ENG = fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8');
+  const panelsFn = (DEMO.match(/function _shapePanels\(\)\{[\s\S]*?\n\}/) || [''])[0];
+  const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
+
+  const build = list => {
+    const ctx = vm.createContext({ selQ: 'zamak' });
+    vm.runInContext(ENG + '\nvar shapeBoundary={right:"wall",left:"open"};\n' +
+      'var shapeList=' + JSON.stringify(list) + ';\n' + panelsFn + '\n' + showerFn, ctx);
+    const panels = ctx._shapePanels();
+    return { panels, js: ctx.lgJunctions(ctx._lgShowerOf(panels, {})) };
+  };
+
+  /* the case from the screenshot: a fixed, then a door hinged right */
+  const r = build([{ id: 'a', kind: 'fixed', label: 'קבוע' },
+                   { id: 'b', kind: 'door', hingeSide: 'right', label: 'דלת' }]);
+
+  /* the engine puts the hinge at the junction the two shapes share */
+  check('the engine hinges the door onto the fixed beside it',
+        r.js[1].type, 'hinge-gg');
+  check('and leaves the far end without hardware', r.js[2].type, null);
+
+  /* the drawer must hang it on that same face. Panels are drawn in array
+     order, so the face shared with the previous panel is the canvas left. */
+  check('the drawer hangs it on the face they share, not the far wall',
+        r.panels[1].hingeSide, 'left');
+  check('so the handle lands on the other side', r.panels[1].handleSide, 'right');
+  check('and the neighbour marked for a hinge is the previous panel',
+        r.panels[1].hingeOnFixed, 'prev');
+
+  /* mirrored: the door hinged left leans on whatever follows it */
+  const l = build([{ id: 'a', kind: 'door', hingeSide: 'left', label: 'דלת' },
+                   { id: 'b', kind: 'fixed', label: 'קבוע' }]);
+  check('a door hinged the other way hangs on the panel after it',
+        l.panels[0].hingeSide, 'right');
+  check('and names that neighbour', l.panels[0].hingeOnFixed, 'next');
+  check('the engine agrees it is a glass-to-glass hinge', l.js[1].type, 'hinge-gg');
+
+  /* a fixed panel carries no hinge side at all */
+  check('a fixed panel has no hinge side', r.panels[0].hingeSide, undefined);
+}
+
 /* the end of the enclosure is set by the operator, not guessed */
 check('each end can be set to a wall or to nothing', /function shapeSetEnd/.test(DEMO), true);
 /* order, not distance — the shapes are rendered between the two ends, so a

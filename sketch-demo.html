@@ -598,11 +598,25 @@ function _shapeShower(){
 function _shapePanels(){
   const n=shapeList.length;
   return shapeList.map((s,i)=>{
+    // ⚠️ שתי מוסכמות הפוכות, וזה היה הבאג:
+    //
+    //   המנוע:  'right' = לכיוון השייף הקודם במערך  → שמאל על הקנבס
+    //   הצייר:  hingeSide==='left' ? x : x+pw       → 'left' = שמאל על הקנבס
+    //
+    // כלומר 'right' של המנוע הוא 'left' של הצייר. בלי ההיפוך, דלת שנתלית
+    // על הקבוע צוירה עם הצירים על הקיר שמנגד — ובמקביל המנוע צייר סימוני
+    // ציר בפאה המשותפת. שניהם יחד, וזה בלתי אפשרי פיזית.
+    //
+    // אומת מול הקומבינציות הקיימות: p_kd כותב hingeSide:'left' יחד עם
+    // hingeOnFixed:'prev', כלומר אצל הצייר 'left' פונה לפאנל הקודם.
+    const canvasHinge = s.hingeSide==='right' ? 'left'
+                      : s.hingeSide==='left'  ? 'right' : undefined;
     const p={
       type: s.kind==='door'?'door':s.kind==='mirror'?'mirror':s.kind==='shape'?'shape':'fixed',
       label: s.label,
-      hingeSide: s.hingeSide,
-      handleSide: s.hingeSide==='right'?'left':'right',
+      hingeSide: canvasHinge,
+      handleSide: canvasHinge==='right'?'left':'right',
+      // prev/next נמדד על המערך, ולכן הוא נגזר מהמוסכמה של המנוע ולא מהקנבס
       hingeOnFixed: s.kind==='door' ? (s.hingeSide==='right'?'prev':'next') : undefined,
     };
     const rW=shapeBoundary.right==='wall', lW=shapeBoundary.left==='wall';
@@ -1210,9 +1224,12 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
 
     // Hinges on door
     const hx=panel.hingeSide==='left'?x:x+pw;
-    // גובה הציר ניתן לשינוי, וברירת המחדל היא הסטנדרט — 20 ס"מ מהקצה.
+    // כל ציר בנפרד. שדה אחד לשניהם היה אומר ששינוי הציר העליון מזיז גם את
+    // התחתון — ובשטח הם לא תמיד סימטריים. ברירת המחדל לשניהם היא הסטנדרט,
+    // 20 ס"מ מהקצה הקרוב אליהם.
     const hTop=(ps.hingeTop!=null?ps.hingeTop:EDGE_MM);
-    const hPos=[y+hTop*sc, y+ph-hTop*sc];
+    const hBot=(ps.hingeBot!=null?ps.hingeBot:EDGE_MM);
+    const hPos=[y+hTop*sc, y+ph-hBot*sc];
     if(ps.extraHinge) hPos.push(y+(ps.hinge3pos||40)*sc);
     hPos.forEach(hy=>drwHinge(hx,hy));
 
@@ -1225,9 +1242,10 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // Hinge distance dims
     // קו המידה של הציר נלחץ במצב עריכה, ומשנה את הגובה של שני הצירים
     const hDX=hx+(panel.hingeSide==='left'?-24:24);
-    const hTgt={pfx:pfx,field:'hingeTop',idx:idx};
-    dLine(hDX,y,hDX,y+hTop*sc,String(hTop),panel.hingeSide==='left'?-18:18,false,hTgt);
-    dLine(hDX,y+ph-hTop*sc,hDX,y+ph,String(hTop),panel.hingeSide==='left'?-18:18,false,hTgt);
+    const hOff=panel.hingeSide==='left'?-18:18;
+    // כל קו מידה מצביע על הציר שלו בלבד
+    dLine(hDX,y,hDX,y+hTop*sc,String(hTop),hOff,false,{pfx:pfx,field:'hingeTop',idx:idx});
+    dLine(hDX,y+ph-hBot*sc,hDX,y+ph,String(hBot),hOff,false,{pfx:pfx,field:'hingeBot',idx:idx});
 
     // Handle
     //
@@ -1503,7 +1521,8 @@ const DIM_FIELDS={
   w:          {label:'רוחב'},
   h:          {label:'גובה'},
   slopeH2:    {label:'גובה צד שני'},
-  hingeTop:   {label:'גובה הציר מלמעלה'},
+  hingeTop:   {label:'הציר העליון — מלמעלה'},
+  hingeBot:   {label:'הציר התחתון — מלמטה'},
   handleTop:  {label:'גובה הידית מלמעלה'},
   handleEdge: {label:'מרחק הידית מהפאה', cm:true},
 };
@@ -1520,7 +1539,7 @@ function _dimRead(t){
   const ps=getPS(t.pfx,t.idx); if(!ps) return null;
   const f=DIM_FIELDS[t.field]||{};
   let v=ps[t.field];
-  if(t.field==='hingeTop'  && v==null) v=EDGE_MM;
+  if((t.field==='hingeTop'||t.field==='hingeBot') && v==null) v=EDGE_MM;
   if(t.field==='handleTop' && v==null) v=Math.round((ps.h||2000)/2);
   if(t.field==='handleEdge'&& v==null) v=HANDLE_EDGE_CM;
   return f.cm?Math.round(v*10):v;      // תמיד מ"מ החוצה
