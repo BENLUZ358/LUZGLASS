@@ -69,6 +69,41 @@ const onHardware = L => {
   return out;
 };
 
+/* A dimension has to sit beside the thing it measures. Pushing hinge heights
+   outside the whole assembly kept them off the symbols, but left a hinge on
+   the left face measured by a number on the far right, joined by a dashed
+   line across the entire drawing. That is not a dimension, it is a puzzle. */
+/* A dimension is either tight against its face, or out at the margin with a
+   straight extension line reaching back to it. Orphaned in the middle is not
+   an option. */
+const HW_KINDS = /^(hinge|bracket|handle-dist)/;
+const reaches = (d) => (d.ext || []).some(e =>
+  Math.abs(e.x1 - d.face) < 2 || Math.abs(e.x2 - d.face) < 2);
+const strandedDims = L => L.dims.filter(d => HW_KINDS.test(d.kind))
+  .filter(d => d.face == null || (Math.abs(d.x1 - d.face) > 46 && !reaches(d)))
+  .map(d => d.kind + ':' + d.text);
+
+/* And every piece of hardware has to be measured. A hinge or a wall bracket
+   with no height beside it leaves the fitter guessing where to drill. */
+const unmeasuredHardware = L => {
+  const dims = L.dims.filter(d => HW_KINDS.test(d.kind));
+  return L.hardware.filter(h => h.kind === 'handle' ? false : !dims.some(d =>
+      Math.abs((d.face == null ? 1e9 : d.face) - h.x) < 1 &&
+      (Math.abs(d.y1 - h.y) < 1 || Math.abs(d.y2 - h.y) < 1)))
+    .map(h => h.kind + '@' + Math.round(h.x) + ',' + Math.round(h.y));
+};
+
+/* Leaders may only run straight. The diagonal ones crossed the glass corner
+   to corner and turned the drawing into a thicket. */
+const diagonalLeaders = L => {
+  const out = [];
+  L.dims.forEach(d => (d.ext || []).forEach(e => {
+    if (Math.abs(e.y1 - e.y2) > 0.5 && Math.abs(e.x1 - e.x2) > 0.5)
+      out.push(d.kind + ':' + d.text);
+  }));
+  return out;
+};
+
 /* ── the cases ─────────────────────────────────────────────────────────── */
 const shower = (shapes, boundary) => ({
   boundary: boundary || { right: 'wall', left: 'open' },
@@ -105,6 +140,9 @@ for (const [name, s] of CASES) {
     check(`${label}: no two dimension labels overlap`, overlappingLabels(L), []);
     check(`${label}: every dimension is inside the canvas`, outsideCanvas(L), []);
     check(`${label}: no dimension sits on a hardware symbol`, onHardware(L), []);
+    check(`${label}: every hardware dimension sits beside its own face`, strandedDims(L), []);
+    check(`${label}: every hinge and bracket has its height stated`, unmeasuredHardware(L), []);
+    check(`${label}: no leader runs diagonally across the glass`, diagonalLeaders(L), []);
   }
 }
 
@@ -134,16 +172,15 @@ for (const [name, s] of CASES) {
   const asmR = Math.max(...L.shapes.map(s => s.x + s.w));
   check('heights sit left of the glass',
         L.dims.filter(d => d.kind === 'height').every(d => d.x1 < asmL), true);
-  /* the vertical ones, at least. handle-edge measures across the glass — it
-     is horizontal and belongs under the handle it describes, the way a
-     fitter draws it; what it must not do is land on the symbol, and that is
-     checked above for every case at every width. */
-  check('hardware heights sit right of the glass, clear of the panel faces',
-        L.dims.filter(d => /hinge|bracket|handle-dist/.test(d.kind)).every(d => d.x1 > asmR), true);
+  /* hardware is measured beside the face it hangs on, wherever that face is —
+     checked for every case at every width by strandedDims above */
 
   /* a dimension that does not describe every shape says which it describes */
-  check('a height shared by fewer than all shapes carries leaders',
-        L.dims.filter(d => d.kind === 'height' && d.leaderTo).length > 0, true);
+  check('a height shared by fewer than all shapes carries extension lines',
+        L.dims.filter(d => d.kind === 'height' && d.ext).length > 0, true);
+  check('and one shared by all of them needs none',
+        lgLayout(shower([fixed('a', 2000), fixed('b', 2000)], { right: 'wall', left: 'wall' }),
+                 { canvasW: 768 }).dims.filter(d => d.kind === 'height' && d.ext).length, 0);
 }
 
 /* ── a sloped panel is cut from two heights, so it needs both ──────────── */

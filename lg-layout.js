@@ -78,6 +78,15 @@ const LG_DEF_W=500, LG_DEF_H=2000;
 const LG_EDGE_MM=200;          // ציר או זווית, 20 ס"מ מהקצה
 const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 
+// באיזו פאה תלויה הדלת. המנוע קובע, לא שדה ידני: ‏hingeSide היה סותר
+// את הצומת ודלתות צוירו עם הצירים בצד הידית.
+function _hingeLeft(src,js,i){
+  const isH=j=>!!(j&&/hinge/.test(j.type||''));
+  if(isH(js[i]))   return true;
+  if(isH(js[i+1])) return false;
+  return (src&&src.hingeSide)!=='left';
+}
+
 // ─── הפריסה ─────────────────────────────────────────────────────────────
 //
 // מעבר אחד. השוליים נתונים לו מבחוץ, כי כמה נתיבים יידרשו מימין מתברר
@@ -180,100 +189,158 @@ function _layoutPass(shower,cW,mgL,mgR){
     const top=Math.min.apply(null,g.pts.map(p=>p.y1));
     const bot=Math.max.apply(null,g.pts.map(p=>p.y2));
     const lane=place('left',top,bot,20);
+    // קווי הפניה אלכסוניים מכל מידה אל מרכז כל שייף חצו את הזכוכית
+    // מפינה לפינה. שרטוט טכני לא עושה את זה: קו ההארכה **אופקי**, יוצא
+    // מקו המידה בגובה הקצה ונעצר בשייף הרחוק ביותר שהמידה מכסה. שני
+    // קווים ישרים במקום חמישה אלכסוניים.
+    const far=g.all?null:Math.max.apply(null,g.pts.map(p=>p.ax));
     dim('height',g.mm,asmL-lane,top,asmL-lane,bot,{
       zone:'left', lane:lane, idxs:g.idxs, idx:g.idxs[0],
-      // קו שמכסה את כל השייפים אינו צריך קווי הפניה — אין ממה להבדילו
-      leaderTo: g.all?null:g.pts.map(p=>({ idx:p.idx, x:p.ax, y:p.y1 })),
+      ext: far==null?null:[{x1:asmL-lane,y1:top,x2:far,y2:top},
+                           {x1:asmL-lane,y1:bot,x2:far,y2:bot}],
     });
   });
 
-  // ── הפרזול, ומידותיו מימין להרכבה ──
+  // ── הפרזול ומידותיו, כל אחת ליד הפאה שלה ──
   //
-  // מידת פרזול יוצאת מחוץ להרכבה כולה ולא מפאת הפאנל שלה: פאה של פאנל
-  // אמצעי יושבת בתוך הזכוכית של השכן, ושם המידה נחתה על הצירים עצמם.
+  // ניסיון קודם הוציא את כל מידות הפרזול מחוץ להרכבה, כדי שלא ידרסו את
+  // הסמלים. זה אכן פינה אותן — ובאותה תנועה ניתק אותן ממה שהן מתארות:
+  // ציר בפאה השמאלית נמדד במספר בקצה הימני, ובין השניים קו מקווקו
+  // שחצה את כל הזכוכית. שמונה קווים כאלה הפכו את השרטוט לסבך.
+  //
+  // מידה יושבת ליד מה שהיא מודדת. הקו יורד לצד הפאה שהפרזול עליה,
+  // במרווח שמפנה את הסמל — וקווי ההפניה מתייתרים מעצמם.
   const js=(typeof lgJunctions==='function')?lgJunctions(shower):[];
   const isHinge=j=>!!(j&&/hinge/.test(j.type||''));
 
-  // מידות הפרזול מקובצות בדיוק כמו הגבהים. שתי דלתות עם ציר ב-200 הן
-  // מידה אחת, לא שתיים בשני נתיבים — החזרה היא מה שדחף אותן החוצה
-  // מהקנבס ואת התוויות זו על זו.
+  // הקיבוץ הוא לפי פאה: ציר וזווית באותה פאה ובאותו גובה הם מידה אחת,
+  // אבל שתי פאות שונות מקבלות כל אחת את שלה. קיבוץ גלובלי מיזג את כל
+  // ה-200 של הציור למספר בודד, ואז לחצי מהפרזול לא היה גובה כלל.
   const hwPend=[];
-  const hwAdd=(kind,mm,a,b,idx)=>{
-    const g=hwPend.find(p=>p.kind===kind&&p.mm===mm&&Math.abs(p.a-a)<1&&Math.abs(p.b-b)<1);
-    if(g) g.idxs.push(idx); else hwPend.push({kind,mm,a,b,idxs:[idx]});
+  const hwAdd=(kind,mm,a,b,idx,face,outward)=>{
+    const g=hwPend.find(p=>p.kind===kind&&p.mm===mm&&Math.abs(p.face-face)<1&&
+                           Math.abs(p.a-a)<1&&Math.abs(p.b-b)<1);
+    if(g){ if(g.idxs.indexOf(idx)<0) g.idxs.push(idx); }
+    else hwPend.push({kind,mm,a,b,face,outward,idxs:[idx]});
   };
-  // הזוויות יושבות בדיוק על פאת ההרכבה, ולכן הנתיב הראשון חייב לפנות
-  // את הסמל שלהן — אחרת התווית נוחתת עליו.
-  const HW_CLEAR=14;
+  // מרווח שמפנה את סמל הפרזול (רדיוס 9) מהתווית (רוחב 16 מסובבת)
+  const HW_GAP=20;
 
+  // הפרזול נתלה על **הצומת**, לא על השייף, ולכן הוא נספר פעם אחת — בדיוק
+  // כמו ב-lg-shapes.js. קודם הדלת ציירה את הציר שלה והקבוע שלידה צייר
+  // אותו שוב, אותו ציר פיזי פעמיים בשני גבהים אפשריים; וזווית בין שני
+  // קבועים לא צוירה בכלל, כי הקוד חיפש רק זווית קיר.
+  const nJ=out.shapes.length;
+  const jx=j=>j<=0?asmL:(j>=nJ?asmR:out.shapes[j].x);
+
+  // הזוויות עוקבות אחרי הצירים שבציור; אם אין צירים — 20 ס"מ.
+  let defTop=LG_EDGE_MM, defBot=LG_EDGE_MM;
+  shapes.forEach(d=>{ if(d&&d.kind==='door'){
+    if(d.hingeTop!=null) defTop=d.hingeTop;
+    if(d.hingeBot!=null) defBot=d.hingeBot; } });
+
+  for(let j=0;j<=nJ;j++){
+    const jt=(js[j]||{}).type;
+    if(!jt) continue;
+    const hinge=/hinge/.test(jt);
+    const L=out.shapes[j-1], R=out.shapes[j];
+    // ציר נתלה על הדלת; זווית מוברגת לקבוע
+    const host = hinge ? ((L&&L.kind==='door')?L:(R&&R.kind==='door')?R:(L||R))
+                       : ((L&&L.kind!=='door')?L:(R&&R.kind!=='door')?R:(L||R));
+    if(!host) continue;
+    const src=shapes[host.idx]||{};
+    const mmT = hinge ? (src.hingeTop!=null?src.hingeTop:LG_EDGE_MM)
+                      : (src.bracketTop!=null?src.bracketTop:defTop);
+    const mmB = hinge ? (src.hingeBot!=null?src.hingeBot:LG_EDGE_MM)
+                      : (src.bracketBot!=null?src.bracketBot:defBot);
+    const fx=jx(j), yT=host.y+mmT*sc, yB=host.y+host.h-mmB*sc;
+    out.hardware.push({kind:hinge?'hinge':'bracket',idx:host.idx,junction:j,jType:jt,x:fx,y:yT});
+    out.hardware.push({kind:hinge?'hinge':'bracket',idx:host.idx,junction:j,jType:jt,x:fx,y:yB});
+    hwAdd(hinge?'hinge-top':'bracket-top',mmT,host.y,yT,host.idx,fx,'start');
+    hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,yB,host.y+host.h,host.idx,fx,'end');
+  }
+
+  // ── הידית ──
   out.shapes.forEach(s=>{
+    if(s.kind!=='door') return;
     const src=shapes[s.idx]||{};
-    const hTop=src.hingeTop!=null?src.hingeTop:LG_EDGE_MM;
-    const hBot=src.hingeBot!=null?src.hingeBot:LG_EDGE_MM;
+    // הפאה שהדלת נתלית עליה נגזרת מהמנוע, לא משדה ידני
+    const hingeLeft=_hingeLeft(src,js,s.idx);
+    const handleOnRight=hingeLeft;
+    const eMM=src.handleEdge!=null?src.handleEdge*10:LG_HANDLE_EDGE_MM;
+    const face=handleOnRight ? s.x+s.w : s.x;
+    const hxU=handleOnRight ? face-eMM*sc : face+eMM*sc;
+    const dMM=src.handleDist!=null?src.handleDist:Math.round(s.mmH/2);
+    const ref=src.handleRef||'bottom';
+    const hyU=ref==='top'? s.y+dMM*sc : s.y+s.h-dMM*sc;
+    // הצייר צריך לדעת לאן פונות רגלי הידית, ואיזה אורך למוט
+    out.hardware.push({kind:'handle',idx:s.idx,x:hxU,y:hyU,
+                       len:Math.max(120*sc,24), toward:handleOnRight?-1:1});
 
-    if(s.kind==='door'){
-      // הפאה שהדלת נתלית עליה נגזרת מהמנוע, לא משדה ידני
-      const hingePrev=isHinge(js[s.idx]), hingeNext=isHinge(js[s.idx+1]);
-      const hx = hingePrev ? s.x : hingeNext ? s.x+s.w
-               : (src.hingeSide==='left'? s.x+s.w : s.x);
-      out.hardware.push({kind:'hinge',idx:s.idx,x:hx,y:s.y+hTop*sc});
-      out.hardware.push({kind:'hinge',idx:s.idx,x:hx,y:s.y+s.h-hBot*sc});
-
-      hwAdd('hinge-top',hTop,s.y,s.y+hTop*sc,s.idx);
-      hwAdd('hinge-bot',hBot,s.y+s.h-hBot*sc,s.y+s.h,s.idx);
-
-      // ידית — בצד ההפוך לציר, ונמדדת מלמטה כברירת מחדל
-      const handleOnRight = hx===s.x;
-      const eMM=src.handleEdge!=null?src.handleEdge*10:LG_HANDLE_EDGE_MM;
-      const hxU=handleOnRight ? s.x+s.w-eMM*sc : s.x+eMM*sc;
-      const dMM=src.handleDist!=null?src.handleDist:Math.round(s.mmH/2);
-      const ref=src.handleRef||'bottom';
-      const hyU=ref==='top'? s.y+dMM*sc : s.y+s.h-dMM*sc;
-      out.hardware.push({kind:'handle',idx:s.idx,x:hxU,y:hyU});
-
-      hwAdd('handle-dist',dMM,ref==='top'?s.y:hyU,ref==='top'?hyU:s.y+s.h,s.idx);
-      // +14 כדי לפנות את סמל הידית עצמו: הנתיב הראשון הוא 16, התווית
-      // גבוהה 16, והסמל ברדיוס 9 — הם נגעו.
-      const eLane=place('handle',Math.min(hxU,handleOnRight?s.x+s.w:s.x),
-                                 Math.max(hxU,handleOnRight?s.x+s.w:s.x),34)+14;
-      dim('handle-edge',eMM,Math.min(hxU,handleOnRight?s.x+s.w:s.x),hyU+eLane,
-                             Math.max(hxU,handleOnRight?s.x+s.w:s.x),hyU+eLane,
-          {idx:s.idx,zone:'handle',lane:eLane});
-    } else {
-      // זוויות קיר — הגובה עוקב אחרי הצירים שמולן, ואין קו מידה אלא אם
-      // שינו את הזווית הזו במפורש
-      const wallL=js[s.idx]&&js[s.idx].type==='bracket-wall';
-      const wallR=js[s.idx+1]&&js[s.idx+1].type==='bracket-wall';
-      let bTop=LG_EDGE_MM, bBot=LG_EDGE_MM;
-      shapes.forEach((d,i)=>{ if(d&&d.kind==='door'){
-        if(d.hingeTop!=null) bTop=d.hingeTop;
-        if(d.hingeBot!=null) bBot=d.hingeBot; } });
-      if(src.bracketTop!=null) bTop=src.bracketTop;
-      if(src.bracketBot!=null) bBot=src.bracketBot;
-      if(wallL){ out.hardware.push({kind:'bracket',idx:s.idx,x:s.x,y:s.y+bTop*sc});
-                 out.hardware.push({kind:'bracket',idx:s.idx,x:s.x,y:s.y+s.h-bBot*sc}); }
-      if(wallR){ out.hardware.push({kind:'bracket',idx:s.idx,x:s.x+s.w,y:s.y+bTop*sc});
-                 out.hardware.push({kind:'bracket',idx:s.idx,x:s.x+s.w,y:s.y+s.h-bBot*sc}); }
-      if(src.bracketTop!=null) hwAdd('bracket-top',bTop,s.y,s.y+bTop*sc,s.idx);
-      if(src.bracketBot!=null) hwAdd('bracket-bot',bBot,s.y+s.h-bBot*sc,s.y+s.h,s.idx);
-      // ציר על קבוע שדלת נתלית עליו
-      if(isHinge(js[s.idx]))   { out.hardware.push({kind:'hinge-on-fixed',idx:s.idx,x:s.x,y:s.y+bTop*sc});
-                                 out.hardware.push({kind:'hinge-on-fixed',idx:s.idx,x:s.x,y:s.y+s.h-bBot*sc}); }
-      if(isHinge(js[s.idx+1])) { out.hardware.push({kind:'hinge-on-fixed',idx:s.idx,x:s.x+s.w,y:s.y+bTop*sc});
-                                 out.hardware.push({kind:'hinge-on-fixed',idx:s.idx,x:s.x+s.w,y:s.y+s.h-bBot*sc}); }
-    }
+    hwAdd('handle-dist',dMM,ref==='top'?s.y:hyU,ref==='top'?hyU:s.y+s.h,s.idx,hxU,
+          ref==='top'?'start':'end');
+    // מרחק הידית מהפאה — מידה אופקית, מתחת לידית שהיא מתארת
+    const eLane=place('handle',Math.min(hxU,face),Math.max(hxU,face),34)+14;
+    dim('handle-edge',eMM,Math.min(hxU,face),hyU+eLane,Math.max(hxU,face),hyU+eLane,
+        {idx:s.idx,zone:'handle',lane:eLane});
   });
 
-  // מידה אחת לכל (סוג, ערך, קטע), עם קו הפניה לכל שייף שהיא מתארת.
+  // כל מידת פרזול יורדת לצד הפאה שלה. לאיזה צד — לזה שיש בו מקום: בין
+  // חמישה פאנלים על מסך פלאפון פאנל שלם הוא 36 פיקסלים, ומידה שיוצאת
+  // תמיד שמאלה הייתה נוחתת על הפרזול של הפאה הקודמת.
+  const faces=hwPend.map(p=>p.face).sort((a,b)=>a-b);
+  const hwPlaced=[];
   hwPend.forEach(p=>{
-    const lane=place('right',p.a,p.b,String(p.mm).length*8+16)+HW_CLEAR;
-    dim(p.kind,p.mm,asmR+lane,p.a,asmR+lane,p.b,{
-      idx:p.idxs[0], idxs:p.idxs, zone:'right', lane:lane,
-      leaderTo:p.idxs.map(i=>{
-        const sh=out.shapes[i];
-        return { idx:i, x:sh.x+sh.w/2, y:/top$/.test(p.kind)?p.b:p.a };
-      }),
-    });
+    const before=faces.filter(f=>f<p.face-1).pop();
+    const after =faces.filter(f=>f>p.face+1)[0];
+    const roomL=p.face-(before!=null?before:asmL-mgL);
+    const roomR=(after!=null?after:asmR+mgR)-p.face;
+    const dir=roomR>roomL?1:-1;
+    const room=Math.max(dir>0?roomR:roomL,0);
+
+    // תווית מסובבת ארוכה מקו של 20 ס"מ בקנה מידה של פלאפון, ולכן היא
+    // יוצאת מעבר לקצה. **פנימה, לתוך הזכוכית** — הקצה שליד הפרזול.
+    // כלפי חוץ היא נדחפה מעל ראש הפאנל ונחתה על מידות הרוחב; פנימה היא
+    // יושבת ליד הציר שהיא מתארת, וההיסט האופקי כבר מפנה את הסמל.
+    const len=Math.abs(p.b-p.a), need=Math.max(String(p.mm).length*7+10,26);
+    let t=0.5;
+    if(len<need+6){
+      const over=(need/2+5)/Math.max(len,1);
+      t = p.outward==='start' ? 1+over : -over;
+    }
+    const my=p.a+(p.b-p.a)*t;
+    const lo=Math.min(p.a,p.b,my-13), hi=Math.max(p.a,p.b,my+13);
+
+    // ההקצאה חייבת לראות גם את ה-x. מידת ציר יוצאת ימינה מפאה אחת
+    // ומידת ידית שמאלה מפאה אחרת, והשתיים נפגשות באמצע — טווחי ה-y
+    // שלהן חופפים אבל הפאות שונות, ולכן הקצאה שמסתכלת רק על y נתנה
+    // לשתיהן את הנתיב הראשון והתוויות נחתו זו על זו.
+    const gap=Math.max(11,Math.min(HW_GAP,room/2));
+    let x=p.face+dir*gap, k=0;
+    while(k<4 && hwPlaced.some(q=>Math.abs(q.x-x)<18 && lo<q.hi && hi>q.lo))
+      x=p.face+dir*(gap+(++k)*cfg.step);
+
+    // דלת של 800 מ"מ היא 58 פיקסלים על מסך פלאפון, ובתוכם צריכים לשבת
+    // גם גובה הציר וגם מרחק הידית. כשאין מקום, דחיפה נוספת הצידה רק
+    // מרחיקה את המידה ממה שהיא מתארת ומנחיתה אותה על פרזול אחר.
+    //
+    // מידה היא או צמודה לפאה שלה, או יוצאת לשולי ההרכבה **עם קו הארכה
+    // אופקי** אל הנקודה שהיא מודדת. יתומה באמצע היא לא אפשרות.
+    let ext=null;
+    const hwY=p.outward==='start'?p.b:p.a;
+    if(Math.abs(x-p.face)>46 || hwPlaced.some(q=>Math.abs(q.x-x)<18 && lo<q.hi && hi>q.lo)){
+      const right=p.face>=(asmL+asmR)/2, edge=right?asmR:asmL, s=right?1:-1;
+      let k2=0;
+      x=edge+s*HW_GAP;
+      while(k2<8 && hwPlaced.some(q=>Math.abs(q.x-x)<18 && lo<q.hi && hi>q.lo))
+        x=edge+s*(HW_GAP+(++k2)*cfg.step);
+      ext=[{x1:x,y1:hwY,x2:p.face,y2:hwY}];
+    }
+    hwPlaced.push({x:x,lo:lo,hi:hi});
+
+    dim(p.kind,p.mm,x,p.a,x,p.b,
+        {idx:p.idxs[0], idxs:p.idxs, zone:'hw', face:p.face, lane:cfg.first+k*cfg.step,
+         t:t, ext:ext});
   });
 
   // מה חורג בפועל מהקנבס, לכל צד — זה מה שהמעבר השני מתקן.

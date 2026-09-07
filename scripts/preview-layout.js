@@ -45,7 +45,14 @@ function svg(L, title) {
   /* הפרזול */
   L.hardware.forEach(h => {
     if (h.kind === 'handle') {
-      p.push(`<rect x="${h.x - 3}" y="${h.y - 22}" width="6" height="44" rx="3" fill="#334155"/>`);
+      /* ידית מקלחון היא מוט על שתי רגליים, לא מקל שחור. הרגליים יוצאות
+         לכיוון הזכוכית ונגמרות בדיסק — ככה רואים שזו ידית ולא כפתור. */
+      const L2 = (h.len || 44) / 2, bx = h.x + (h.toward || 1) * 8;
+      p.push(`<line x1="${h.x}" y1="${h.y - L2 * 0.55}" x2="${bx}" y2="${h.y - L2 * 0.55}" stroke="#94a3b8" stroke-width="2"/>`);
+      p.push(`<line x1="${h.x}" y1="${h.y + L2 * 0.55}" x2="${bx}" y2="${h.y + L2 * 0.55}" stroke="#94a3b8" stroke-width="2"/>`);
+      p.push(`<circle cx="${bx}" cy="${h.y - L2 * 0.55}" r="2.6" fill="#94a3b8"/>`);
+      p.push(`<circle cx="${bx}" cy="${h.y + L2 * 0.55}" r="2.6" fill="#94a3b8"/>`);
+      p.push(`<line x1="${h.x}" y1="${h.y - L2}" x2="${h.x}" y2="${h.y + L2}" stroke="#334155" stroke-width="4.5" stroke-linecap="round"/>`);
     } else {
       const c = h.kind === 'bracket' ? '#b45309' : '#1e293b';
       p.push(`<rect x="${h.x - 7}" y="${h.y - 5}" width="14" height="10" rx="2" fill="${c}"/>`);
@@ -61,8 +68,9 @@ function svg(L, title) {
     const ext = d.rot ? `<line x1="${d.x1 - 4}" y1="${d.y1}" x2="${d.x1 + 4}" y2="${d.y1}" stroke="#dc2626" stroke-width="1"/><line x1="${d.x2 - 4}" y1="${d.y2}" x2="${d.x2 + 4}" y2="${d.y2}" stroke="#dc2626" stroke-width="1"/>`
                      : `<line x1="${d.x1}" y1="${d.y1 - 4}" x2="${d.x1}" y2="${d.y1 + 4}" stroke="#dc2626" stroke-width="1"/><line x1="${d.x2}" y1="${d.y2 - 4}" x2="${d.x2}" y2="${d.y2 + 4}" stroke="#dc2626" stroke-width="1"/>`;
     p.push(ext);
-    (d.leaderTo || []).forEach(l => {
-      p.push(`<line x1="${mx}" y1="${my}" x2="${l.x}" y2="${l.y}" stroke="#fca5a5" stroke-width="0.75" stroke-dasharray="3 3"/>`);
+    /* קווי הארכה — ישרים בלבד */
+    (d.ext || []).forEach(e => {
+      p.push(`<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="#f87171" stroke-width="0.6"/>`);
     });
     const rot = d.rot ? ` transform="rotate(-90 ${mx} ${my})"` : '';
     p.push(`<rect x="${mx - (d.rot ? 8 : String(d.text).length * 3.5 + 5)}" y="${my - (d.rot ? String(d.text).length * 3.5 + 5 : 8)}" width="${d.rot ? 16 : String(d.text).length * 7 + 10}" height="${d.rot ? String(d.text).length * 7 + 10 : 16}" fill="#fff" opacity="0.9"/>`);
