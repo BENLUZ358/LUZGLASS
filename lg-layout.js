@@ -150,11 +150,24 @@ function _layoutPass(shower,cW,mgL,mgR){
   // תווית שכובה תופסת 38 פיקסלים לרוחב ונתיב הוא 20, ולכן שתי מידות
   // בשני נתיבים שכנים חפפו למרות שהקווים עצמם לא נגעו. מסובבת, היא
   // תופסת 16 לרוחב ונכנסת. הצייר חייב לסובב בפועל — ‏rot אומר לו.
+  // כל תווית שהונחה נרשמת, כדי שהבאה אחריה תדע איפה לא לשבת. מנגנון
+  // ההימנעות של המידות האנכיות עבד על קווים; תווית אופקית קצרה כמו
+  // מרחק החור מהפאה חמקה ממנו ונחתה על שכנתה.
+  const labels=[];
+  const labelBox=(text,rot,x1,y1,x2,y2,t)=>{
+    const mx=x1+(x2-x1)*t, my=y1+(y2-y1)*t;
+    const len=Math.max(String(text).length*7+10,26);
+    const w=rot?16:len, h=rot?len:16;
+    return {lo:mx-w/2, hi:mx+w/2, top:my-h/2, bot:my+h/2};
+  };
+  const labelClear=b=>!labels.some(q=>b.lo<q.hi&&b.hi>q.lo&&b.top<q.bot&&b.bot>q.top);
+
   const dim=(kind,text,x1,y1,x2,y2,extra)=>{
     const e=extra||{};
-    out.dims.push(Object.assign({kind,text:String(text),x1,y1,x2,y2,
-      rot: Math.abs(x2-x1)<Math.abs(y2-y1) ? 90 : 0,
-      t: e.lane!=null?labelT(e.lane):0.5},e));
+    const rot=Math.abs(x2-x1)<Math.abs(y2-y1)?90:0;
+    const t=e.t!=null?e.t:(e.lane!=null?labelT(e.lane):0.5);
+    labels.push(labelBox(text,rot,x1,y1,x2,y2,t));
+    out.dims.push(Object.assign({kind,text:String(text),x1,y1,x2,y2,rot:rot,t:t},e));
   };
 
   // ── רוחב לכל שייף, ואז הרוחב הכולל מעליהם ──
@@ -195,30 +208,54 @@ function _layoutPass(shower,cW,mgL,mgR){
     return x;
   };
 
-  const hGroups=_heightGroups(hEntries,out.shapes.length);
-  hGroups.forEach(g=>{
-    // מידה משותפת נמתחת על מה שהיא מכסה בפועל
-    const top=Math.min.apply(null,g.pts.map(p=>p.y1));
-    const bot=Math.max.apply(null,g.pts.map(p=>p.y2));
+  // ── איפה נרשם כל גובה ──
+  //
+  // קודם כל הגבהים נערמו בצד שמאל: 2000 ו-1985 בטור אחד, והקורא נשאר
+  // לפענח לבד לאיזה פאנל שייך כל מספר — בזמן שהשוליים מימין ריקים.
+  //
+  // **כל קצה של ההרכבה נושא את הגובה של הפאנל שיושב בו.** פאנל שאין לו
+  // קצה — דלת באמצע — נושא את הגובה שלו בתוך הזכוכית שלו. ככה כל מספר
+  // נוגע במה שהוא מתאר, ואף אחד לא צריך קו הפניה.
+  const nS=out.shapes.length;
+  const entriesOf=i=>hEntries.filter(e=>e.idx===i);
+  const uniform = hEntries.length>0 && hEntries.every(e=>e.mm===hEntries[0].mm);
 
-    // הגובה יוצא לצד שהשייפים שלו יושבים בו. הדלת בקצה הימני והמידה
-    // שלה בקצה השמאלי — עם קו הארכה שחוצה את כל הזכוכית כדי להגיע
-    // אליה — בזמן שמימין לא היה כלום. הצד הקרוב תמיד פנוי יותר.
-    const cx=g.pts.reduce((n,p)=>n+p.ax,0)/g.pts.length;
-    const right = !g.all && cx>(asmL+asmR)/2;
-    const s=right?1:-1, edge=right?asmR:asmL;
-    const x=placeV(edge+s*cfg.first, s*cfg.step, Math.min(top,bot)-13, Math.max(top,bot)+13);
-
-    // קווי הפניה אלכסוניים מכל מידה אל מרכז כל שייף חצו את הזכוכית
-    // מפינה לפינה. שרטוט טכני לא עושה את זה: קו ההארכה **אופקי**, יוצא
-    // מקו המידה בגובה הקצה ונעצר בשייף הרחוק ביותר שהמידה מכסה.
-    const far=g.all?null:(right?Math.min.apply(null,g.pts.map(p=>p.ax))
-                               :Math.max.apply(null,g.pts.map(p=>p.ax)));
-    dim('height',g.mm,x,top,x,bot,{
-      zone:right?'right':'left', lane:Math.abs(x-edge), idxs:g.idxs, idx:g.idxs[0],
-      ext: far==null?null:[{x1:x,y1:top,x2:far,y2:top},{x1:x,y1:bot,x2:far,y2:bot}],
+  const hDims=[];
+  if(uniform){
+    // אין מה להבדיל — מספר אחד אומר את הכל
+    hDims.push({mm:hEntries[0].mm, pts:hEntries, side:'left'});
+  } else {
+    entriesOf(0).forEach(e=>hDims.push({mm:e.mm, pts:[e], side:'left'}));
+    if(nS>1) entriesOf(nS-1).forEach(e=>hDims.push({mm:e.mm, pts:[e], side:'right'}));
+    // שייפים אמצעיים: כל גובה ייחודי פעם אחת. שתי דלתות באותו גובה הן
+    // מידה אחת, לא שתיים.
+    const mids=[];
+    for(let i=1;i<nS-1;i++) entriesOf(i).forEach(e=>{
+      const g=mids.find(m=>m.mm===e.mm);
+      if(g) g.pts.push(e); else mids.push({mm:e.mm, pts:[e]});
     });
-  });
+    mids.forEach(m=>hDims.push({mm:m.mm, pts:m.pts, side:'inside'}));
+  }
+
+  // הקצוות נרשמים כאן; מידה שיושבת **בתוך** פאנל נרשמת אחרי הפרזול,
+  // כי היא חולקת איתו את אותה זכוכית וצריכה לראות איפה הוא נחת.
+  const emitHeight=hd=>{
+    const top=Math.min.apply(null,hd.pts.map(p=>p.y1));
+    const bot=Math.max.apply(null,hd.pts.map(p=>p.y2));
+    const idxs=hd.pts.map(p=>p.idx);
+    let x, t=0.5;
+    if(hd.side==='inside'){
+      const s0=out.shapes[hd.pts[0].idx];
+      x=placeV(s0.x+s0.w/2, cfg.step, top-13, bot+13);
+      t=0.3;   // ברבע העליון, כדי לפנות את שם הפאנל שיושב במרכזו
+    } else {
+      const right=hd.side==='right', s=right?1:-1, edge=right?asmR:asmL;
+      x=placeV(edge+s*cfg.first, s*cfg.step, top-13, bot+13);
+    }
+    dim('height',hd.mm,x,top,x,bot,
+        {zone:hd.side, idxs:idxs, idx:idxs[0], t:t, inside:hd.side==='inside'});
+  };
+  hDims.filter(h=>h.side!=='inside').forEach(emitHeight);
 
   // ── הפרזול ומידותיו, כל אחת ליד הפאה שלה ──
   //
@@ -280,6 +317,7 @@ function _layoutPass(shower,cW,mgL,mgR){
   }
 
   // ── הידית ──
+  const edgePend=[];
   out.shapes.forEach(s=>{
     if(s.kind!=='door') return;
     const src=shapes[s.idx]||{};
@@ -298,10 +336,9 @@ function _layoutPass(shower,cW,mgL,mgR){
 
     hwAdd('handle-dist',dMM,ref==='top'?s.y:hyU,ref==='top'?hyU:s.y+s.h,s.idx,hxU,
           ref==='top'?'start':'end');
-    // מרחק הידית מהפאה — מידה אופקית, מתחת לידית שהיא מתארת
-    const eLane=place('handle',Math.min(hxU,face),Math.max(hxU,face),34)+14;
-    dim('handle-edge',eMM,Math.min(hxU,face),hyU+eLane,Math.max(hxU,face),hyU+eLane,
-        {idx:s.idx,zone:'handle',lane:eLane});
+    // מרחק החור מהפאה נפלט אחרון, כשכל שאר המידות כבר על הנייר
+    edgePend.push({idx:s.idx, mm:eMM, a:Math.min(hxU,face), b:Math.max(hxU,face),
+                   y:hyU, right:handleOnRight});
   });
 
   // כל מידת פרזול יורדת לצד הפאה שלה. לאיזה צד — לזה שיש בו מקום: בין
@@ -355,6 +392,26 @@ function _layoutPass(shower,cW,mgL,mgR){
     dim(p.kind,p.mm,x,p.a,x,p.b,
         {idx:p.idxs[0], idxs:p.idxs, zone:'hw', face:p.face, lane:Math.abs(x-p.face),
          t:t, ext:ext});
+  });
+
+  hDims.filter(h=>h.side==='inside').forEach(emitHeight);
+
+  // ── מרחק החור מהפאה, אחרון ──
+  //
+  // 6 ס"מ הם ארבעה פיקסלים על מסך פלאפון והמספר רחב עשרים ושניים, ולכן
+  // קו המידה עבר בדיוק דרך הספרות והן נבלעו. המספר יורד מהקצה החוצה,
+  // והמידה כולה יורדת מתחת לחור עד שהיא מוצאת שורה פנויה — שתי דלתות
+  // שנפגשות מביאות שתי ידיות זו מול זו, ושתי המידות רצו לאותו מקום.
+  edgePend.forEach(p=>{
+    const need=Math.max(String(p.mm).length*7+8,22), len=Math.abs(p.b-p.a);
+    let t=0.5;
+    if(len<need+4){
+      const over=(need/2+5)/Math.max(len,1);
+      t = p.right ? 1+over : -over;      // כלפי הפאה והלאה
+    }
+    let lane=cfg.first+14, k=0, y=p.y+lane;
+    while(k<7 && !labelClear(labelBox(p.mm,0,p.a,y,p.b,y,t))) y=p.y+lane+(++k)*18;
+    dim('handle-edge',p.mm,p.a,y,p.b,y,{idx:p.idx,zone:'handle',t:t});
   });
 
   // מה חורג בפועל מהקנבס, לכל צד — זה מה שהמעבר השני מתקן.

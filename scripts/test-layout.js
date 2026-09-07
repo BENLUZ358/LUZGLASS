@@ -93,6 +93,16 @@ const unmeasuredHardware = L => {
     .map(h => h.kind + '@' + Math.round(h.x) + ',' + Math.round(h.y));
 };
 
+/* A number the dimension line runs straight through is unreadable. When the
+   line is shorter than the label, the label has to step off the end of it —
+   the handle's 60mm span is four pixels wide and the text is twenty-two. */
+const struckThrough = L => L.dims.filter(d => {
+  const len = Math.abs(d.x2 - d.x1) + Math.abs(d.y2 - d.y1);
+  const need = Math.max(String(d.text).length * 7 + 8, 22);
+  const t = d.t == null ? 0.5 : d.t;
+  return len < need && t > 0.02 && t < 0.98;
+}).map(d => d.kind + ':' + d.text);
+
 /* Leaders may only run straight. The diagonal ones crossed the glass corner
    to corner and turned the drawing into a thicket. */
 const diagonalLeaders = L => {
@@ -143,7 +153,46 @@ for (const [name, s] of CASES) {
     check(`${label}: every hardware dimension sits beside its own face`, strandedDims(L), []);
     check(`${label}: every hinge and bracket has its height stated`, unmeasuredHardware(L), []);
     check(`${label}: no leader runs diagonally across the glass`, diagonalLeaders(L), []);
+    check(`${label}: no dimension line runs through its own number`, struckThrough(L), []);
   }
+}
+
+/* ── which side a height is written on ─────────────────────────────────── */
+/* Both heights ended up stacked on the left while the right margin sat
+   empty, so the drawing said 2000 and 1985 in one column and left you to
+   work out which panel each belonged to. Each END of the assembly carries
+   the height of the panel that sits in it; a panel with no end — a door in
+   the middle — carries its height inside its own glass. */
+{
+  const at = (L, mm) => L.dims.find(d => d.kind === 'height' && Number(d.text) === mm);
+  const asmL = L => Math.min(...L.shapes.map(s => s.x));
+  const asmR = L => Math.max(...L.shapes.map(s => s.x + s.w));
+
+  /* fixed | door — one panel at each end, so one height at each end */
+  const fd = lgLayout(shower([fixed('a', 2000), door('b', 'right', 1985)],
+                             { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  check('the panel on the left has its height on the left', at(fd, 2000).x1 < asmL(fd), true);
+  check('and the panel on the right has its height on the right', at(fd, 1985).x1 > asmR(fd), true);
+
+  /* fixed | door | door | fixed — the doors have no end to sit at */
+  const fddf = lgLayout(shower([fixed('a', 2000), door('b', 'right', 1985),
+                                door('c', 'left', 1985), fixed('d', 2000)],
+                               { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  const ends = fddf.dims.filter(d => d.kind === 'height' && Number(d.text) === 2000);
+  check('a fixed panel at each end is measured at each end', ends.length, 2);
+  check('one on the left and one on the right',
+        [ends.some(d => d.x1 < asmL(fddf)), ends.some(d => d.x1 > asmR(fddf))], [true, true]);
+
+  const mid = fddf.dims.filter(d => d.kind === 'height' && Number(d.text) === 1985);
+  check('two doors of the same height are measured once, not twice', mid.length, 1);
+  check('and that measurement sits inside the door itself',
+        mid[0].x1 > asmL(fddf) && mid[0].x1 < asmR(fddf), true);
+
+  /* nothing to distinguish — one number is enough */
+  const same = lgLayout(shower([fixed('a', 2000), fixed('b', 2000), fixed('c', 2000)],
+                               { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  check('when every panel is the same height, one number says so',
+        same.dims.filter(d => d.kind === 'height').length, 1);
 }
 
 /* ── the properties that make it a layout and not a guess ──────────────── */
@@ -158,7 +207,8 @@ for (const [name, s] of CASES) {
 
   /* every height that exists is stated, and shapes sharing one share a line */
   const heights = L.dims.filter(d => d.kind === 'height').map(d => Number(d.text)).sort((a, b) => b - a);
-  check('both heights are measured, neither is left blank', heights, [2000, 1985]);
+  check('both heights are measured, neither is left blank',
+        [...new Set(heights)], [2000, 1985]);
 
   /* widths: one per shape, and the overall */
   check('every shape has its width measured',
@@ -170,17 +220,13 @@ for (const [name, s] of CASES) {
      that cannot reach each other */
   const asmL = Math.min(...L.shapes.map(s => s.x));
   const asmR = Math.max(...L.shapes.map(s => s.x + s.w));
-  check('heights sit left of the glass',
-        L.dims.filter(d => d.kind === 'height').every(d => d.x1 < asmL), true);
   /* hardware is measured beside the face it hangs on, wherever that face is —
      checked for every case at every width by strandedDims above */
 
-  /* a dimension that does not describe every shape says which it describes */
-  check('a height shared by fewer than all shapes carries extension lines',
-        L.dims.filter(d => d.kind === 'height' && d.ext).length > 0, true);
-  check('and one shared by all of them needs none',
-        lgLayout(shower([fixed('a', 2000), fixed('b', 2000)], { right: 'wall', left: 'wall' }),
-                 { canvasW: 768 }).dims.filter(d => d.kind === 'height' && d.ext).length, 0);
+  /* a height now sits beside the panel it belongs to, so it needs no leader
+     at all — checked by side above */
+  check('heights need no leaders once they sit beside their own panel',
+        L.dims.filter(d => d.kind === 'height' && d.ext).length, 0);
 }
 
 /* ── a sloped panel is cut from two heights, so it needs both ──────────── */
