@@ -133,6 +133,31 @@ check('and so does the item drawing',
   check('no shapes, no dimensions',  call([]).length, 0);
   check('a shape with no height is skipped, not measured as zero',
         call([2000, 0, 2000]).length, 1);
+
+  /* ── the shape the drawing actually hands it ─────────────────────────── */
+  /*
+   * getPStates returns an OBJECT keyed by position, not an array — in every
+   * mode: panelState in combinations, Object.fromEntries in shapes and items.
+   * The first version called .map on it directly, threw, and the drawing died
+   * after the first width line: the screen showed "800" and nothing else.
+   *
+   * The unit test above passed throughout, because it fed an array. It tested
+   * the logic and was blind to the interface. This is the check that would
+   * have caught it.
+   */
+  const asObj = hs => c2._heightDims(Object.fromEntries(hs.map((h, i) => [i, { h }])));
+  check('an object keyed by position works exactly like an array',
+        asObj([2000, 1985, 2000]).length, 2);
+  check('and picks out the same exception',
+        [asObj([2000, 1985, 2000])[1].mm, asObj([2000, 1985, 2000])[1].idx], [1985, 1]);
+  check('a single shape as an object gives one dimension',
+        asObj([2000]).length, 1);
+  check('an empty object gives none', c2._heightDims({}), []);
+  check('and neither null nor undefined throws',
+        [c2._heightDims(null).length, c2._heightDims(undefined).length], [0, 0]);
+  /* the order has to follow position, not object key order */
+  check('positions are read in order, not in whatever order the keys came',
+        c2._heightDims({ 2: { h: 1900 }, 0: { h: 2000 }, 1: { h: 2000 } })[1].idx, 2);
 }
 
 /* ── the leader line ───────────────────────────────────────────────────── */

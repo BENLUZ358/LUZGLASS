@@ -519,8 +519,18 @@ function _dimLane(zone){
 //
 // הגובה הכולל נמדד פעם אחת. שייף ששונה ממנו מקבל קו משלו עם קו הפניה
 // אליו. החיסכון לעולם לא מסתיר מידה: חמישה גבהים שונים נותנים חמש.
+// ⚠️ getPStates מחזיר **אובייקט** ממופתח לפי מיקום, לא מערך — גם במצב
+// קומבינציה (panelState) וגם בשייפים ובפריטים (Object.fromEntries).
+// הגרסה הראשונה כאן קראה ל-.map ישירות, זרקה, והציור מת אחרי קו הרוחב
+// הראשון: על המסך נראה רק "800" ושום דבר אחר.
+//
+// הבדיקה לא תפסה את זה כי הזנתי לה מערך. היא בדקה את הלוגיקה והייתה
+// עיוורת לממשק.
 function _heightDims(pss){
-  const list=(pss||[])
+  const arr = Array.isArray(pss) ? pss
+            : pss ? Object.keys(pss).sort((a,b)=>a-b).map(k=>pss[k])
+            : [];
+  const list=arr
     .map((p,i)=>({idx:i,mm:Math.round((p&&p.h)||0)}))
     .filter(o=>o.mm>0);
   if(!list.length) return [];
