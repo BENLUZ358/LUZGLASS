@@ -248,6 +248,11 @@ canvas{display:block;width:100%;height:auto;cursor:pointer;}
   <!-- נפתח במקום שבו נגעו במידה, כדי שהעין לא תעזוב את הציור -->
   <div id="dimEditor" role="dialog" aria-label="שינוי מידה">
     <span id="dimEditorLabel"></span>
+    <!-- מאיפה מודדים. מוצג רק למידות שיש להן ייחוס, כמו גובה הידית. -->
+    <span class="dim-ed-row" id="dimEditorRef" style="display:none">
+      <button type="button" id="dimRefBot" onclick="dimEditorSetRef('bottom')">מלמטה</button>
+      <button type="button" id="dimRefTop" onclick="dimEditorSetRef('top')">מלמעלה</button>
+    </span>
     <input id="dimEditorInput" type="text" inputmode="decimal" autocomplete="off"
            onkeydown="if(event.key==='Enter'){event.preventDefault();dimEditorApply();}
                       else if(event.key==='Escape'){closeDimEditor();}">
@@ -1260,9 +1265,11 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     const hEdgeMM=(ps.handleEdge!=null?ps.handleEdge:HANDLE_EDGE_CM)*10;
     const hEdge=hEdgeMM*sc;
     const handleX=panel.handleSide==='right'?x+pw-hEdge:x+hEdge;
-    // גובה הידית ניתן לשינוי, וברירת המחדל היא אמצע הזכוכית
-    const hTopMM=(ps.handleTop!=null?ps.handleTop:Math.round((ps.h||2000)/2));
-    const handleY=y+hTopMM*sc;
+    // גובה הידית נמדד מלמטה כברירת מחדל — זו המידה שמודדים בשטח, מהרצפה.
+    // אפשר להחליף לייחוס מלמעלה בחלון העריכה, והידית לא זזה בהחלפה.
+    const hRef=ps.handleRef||'bottom';
+    const hDistMM=(ps.handleDist!=null?ps.handleDist:Math.round((ps.h||2000)/2));
+    const handleY=hRef==='top' ? y+hDistMM*sc : y+ph-hDistMM*sc;
     if(ps.handleType==='towel'){
       const spMM=(ps.towelSpacing||TOWEL_SPACING_CM)*10;
       const sp=spMM*sc;
@@ -1276,8 +1283,10 @@ function drawSinglePanel(panel,ps,x,y,pw,ph,sc,poly,idx,pfx,allPanels,allPS){
     // מידות הידית — גובה מלמעלה, וגם המרחק מהפאה. בציר רואים רק גובה;
     // בידית המרחק מהפאה הוא מה שקובע איפה קודחים, ולכן הוא מוצג גם הוא.
     // שניהם נלחצים במצב עריכה.
-    dLine(handleX,y,handleX,handleY,String(hTopMM),
-          panel.handleSide==='right'?16:-16,false,{pfx:pfx,field:'handleTop',idx:idx});
+    // קו המידה יוצא מהפאה שממנה מודדים — למטה כברירת מחדל
+    dLine(handleX, hRef==='top'?y:handleY, handleX, hRef==='top'?handleY:y+ph,
+          String(hDistMM), panel.handleSide==='right'?16:-16, false,
+          {pfx:pfx,field:'handleDist',idx:idx});
     const heX=panel.handleSide==='right'?x+pw:x;
     dLine(Math.min(handleX,heX),handleY,Math.max(handleX,heX),handleY,
           String(hEdgeMM),22,true,{pfx:pfx,field:'handleEdge',idx:idx});
@@ -1523,7 +1532,8 @@ const DIM_FIELDS={
   slopeH2:    {label:'גובה צד שני'},
   hingeTop:   {label:'הציר העליון — מלמעלה'},
   hingeBot:   {label:'הציר התחתון — מלמטה'},
-  handleTop:  {label:'גובה הידית מלמעלה'},
+  // ref מציין שלמידה יש נקודת ייחוס שאפשר להחליף — מלמעלה או מלמטה
+  handleDist: {label:'גובה הידית', ref:'handleRef', refDefault:'bottom'},
   handleEdge: {label:'מרחק הידית מהפאה', cm:true},
 };
 
@@ -1540,7 +1550,7 @@ function _dimRead(t){
   const f=DIM_FIELDS[t.field]||{};
   let v=ps[t.field];
   if((t.field==='hingeTop'||t.field==='hingeBot') && v==null) v=EDGE_MM;
-  if(t.field==='handleTop' && v==null) v=Math.round((ps.h||2000)/2);
+  if(t.field==='handleDist'&& v==null) v=Math.round((ps.h||2000)/2);
   if(t.field==='handleEdge'&& v==null) v=HANDLE_EDGE_CM;
   return f.cm?Math.round(v*10):v;      // תמיד מ"מ החוצה
 }
@@ -1561,9 +1571,19 @@ function openDimEditor(hit,clientX,clientY){
   const inp=document.getElementById('dimEditorInput');
   const lbl=document.getElementById('dimEditorLabel');
   lbl.style.color='';
-  lbl.textContent=((DIM_FIELDS[t.field]||{}).label||'מידה')+' — מ"מ';
+  const f=DIM_FIELDS[t.field]||{};
+  lbl.textContent=(f.label||'מידה')+' — מ"מ';
   // מתחיל מהערך שיושב שם עכשיו, כדי שאפשר יהיה לתקן ולא רק להקליד מחדש
   inp.value=lgMmToInputStr(cur);
+  // בורר נקודת הייחוס, למידות שיש להן אחת
+  const refRow=document.getElementById('dimEditorRef');
+  if(f.ref){
+    const ps=getPS(t.pfx,t.idx)||{};
+    const curRef=ps[f.ref]||f.refDefault;
+    refRow.style.display='flex';
+    document.getElementById('dimRefBot').className=curRef==='bottom'?'dim-ed-ok':'dim-ed-x';
+    document.getElementById('dimRefTop').className=curRef==='top'?'dim-ed-ok':'dim-ed-x';
+  } else refRow.style.display='none';
   ed.classList.add('open');
   // נפתח ליד הנגיעה, ונדחף פנימה אם הוא גולש מהמעטפת
   const w=ed.offsetWidth||180, h=ed.offsetHeight||140;
@@ -1577,6 +1597,27 @@ function openDimEditor(hit,clientX,clientY){
 function closeDimEditor(){
   dimEditTarget=null;
   document.getElementById('dimEditor')?.classList.remove('open');
+}
+
+// החלפת נקודת הייחוס. הידית **לא זזה** — רק המספר משתנה למרחק מהפאה
+// החדשה. אחרת החלפת "מלמטה" ל"מלמעלה" הייתה מקפיצה אותה לצד השני של
+// הזכוכית, וזו לא בקשה שמישהו התכוון אליה.
+function dimEditorSetRef(val){
+  const t=dimEditTarget; if(!t) return;
+  const f=DIM_FIELDS[t.field]||{}; if(!f.ref) return;
+  const ps=getPS(t.pfx,t.idx); if(!ps) return;
+
+  const h=ps.h||2000;
+  const typed=lgParseDimensionInput(document.getElementById('dimEditorInput').value);
+  const curRef=ps[f.ref]||f.refDefault;
+  const curDist=typed.ok?typed.mm:(ps[t.field]!=null?ps[t.field]:Math.round(h/2));
+  if(val!==curRef) ps[t.field]=Math.max(0,h-curDist);   // אותו מקום, מדידה מהצד השני
+  ps[f.ref]=val;
+
+  document.getElementById('dimEditorInput').value=lgMmToInputStr(ps[t.field]);
+  document.getElementById('dimRefBot').className=val==='bottom'?'dim-ed-ok':'dim-ed-x';
+  document.getElementById('dimRefTop').className=val==='top'?'dim-ed-ok':'dim-ed-x';
+  draw();
 }
 
 // אותו פרסר של כל המערכת — 200 הם 2000, 1985 נשארים 1985.

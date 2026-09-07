@@ -118,10 +118,10 @@ check('and the map carries an id with each rectangle',
   check('and it is 6 cm', Number(eh && eh[1]), 6);
   check('the drawing converts those centimetres to millimetres',
         /ps\.handleEdge!=null\?ps\.handleEdge:HANDLE_EDGE_CM\)\*10/.test(DEMO), true);
-  /* the height is a field now, so the middle of the glass is its default
-     rather than a hardcoded position */
+  /* the height is a field with a reference now — measured from the bottom by
+     default, starting at the middle of the glass */
   check('the handle defaults to the middle of the glass',
-        /ps\.handleTop!=null\?ps\.handleTop:Math\.round\(\(ps\.h\|\|2000\)\/2\)/.test(DEMO), true);
+        /ps\.handleDist!=null\?ps\.handleDist:Math\.round\(\(ps\.h\|\|2000\)\/2\)/.test(DEMO), true);
   check('and no longer pinned near the top', /handleY=\(ps\.h\|\|2000\)>200/.test(DEMO), false);
 
   /* the same unit mistake sat next to it, on the towel-rail holes */
@@ -252,9 +252,24 @@ check('the click handler no longer multiplies by the pixel ratio',
         /ps\.hingeBot!=null\?ps\.hingeBot:EDGE_MM/.test(DEMO), true);
   check('and the editor knows the default for both',
         /t\.field==='hingeTop'\|\|t\.field==='hingeBot'/.test(DEMO), true);
-  check('the handle height is a target', /field:'handleTop'/.test(DEMO), true);
-  check('and it defaults to the middle of the glass',
-        /ps\.handleTop!=null\?ps\.handleTop:Math\.round\(\(ps\.h\|\|2000\)\/2\)/.test(DEMO), true);
+  /* the handle height is measured from the floor by default — that is how it
+     is measured on site — and the editor can switch the reference */
+  check('the handle height is a target', /field:'handleDist'/.test(DEMO), true);
+  check('and it is measured from the bottom by default',
+        /ps\.handleRef\|\|'bottom'/.test(DEMO), true);
+  check('with the middle of the glass as the starting distance',
+        /ps\.handleDist!=null\?ps\.handleDist:Math\.round\(\(ps\.h\|\|2000\)\/2\)/.test(DEMO), true);
+  check('the dimension line runs from the face it is measured from',
+        /hRef==='top'\?y:handleY/.test(DEMO), true);
+  check('the editor offers both references', /function dimEditorSetRef/.test(DEMO), true);
+  check('and only for fields that have one',
+        /if\(f\.ref\)\{[\s\S]{0,300}?refRow\.style\.display='flex'/.test(DEMO), true);
+  /* switching the reference must not move the handle — only restate where it
+     is measured from */
+  check('switching the reference keeps the handle where it is',
+        /ps\[t\.field\]=Math\.max\(0,h-curDist\)/.test(DEMO), true);
+  check('both buttons exist',
+        /id="dimRefBot"/.test(DEMO) && /id="dimRefTop"/.test(DEMO), true);
   /* the hinge shows only its height; the handle also needs its distance from
      the edge, because that is what decides where the hole is drilled */
   check('the handle also shows its distance from the edge',
