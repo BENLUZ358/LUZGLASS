@@ -382,6 +382,38 @@ for (const [name, s] of CASES) {
         [h1985.ext, h1800.ext].every(e => !e || !e.length), true);
 }
 
+/* ── a shared hinge, two different numbers ─────────────────────────────── */
+/* The hinge is one piece of metal through two panes, so it is at one height.
+   But the door hangs from the head and the fixed panel stands on the floor,
+   so the door's bottom edge is 15mm higher — and the same hinge is 200 up
+   from the door and 215 up from the fixed. Whoever drills the fixed panel
+   using the door's number misses by a centimetre and a half. */
+{
+  const L = lgLayout(shower([fixed('a', 1900), door('b', 'right', 1885)],
+                            { right: 'wall', left: 'wall' }), { canvasW: 900 });
+  const lows = L.dims.filter(d => d.kind === 'hinge-bot').map(d => Number(d.text)).sort((a, b) => a - b);
+  check('the bottom hinge is measured from BOTH panes it passes through',
+        lows, [200, 215]);
+  check('and the top hinge needs one number, because the heads are level',
+        L.dims.filter(d => d.kind === 'hinge-top').length, 1);
+
+  /* both numbers describe the same piece of metal */
+  const hy = L.hardware.filter(h => h.kind === 'hinge').sort((a, b) => b.y - a.y)[0].y;
+  const bots = L.dims.filter(d => d.kind === 'hinge-bot');
+  check('both dimensions start at the same hinge',
+        bots.every(d => Math.abs(d.y1 - hy) < 1), true);
+
+  /* when the two panes are the same height there is nothing to distinguish,
+     so their shared joint carries one number, not two */
+  const eq = lgLayout(shower([fixed('a', 2000), fixed('b', 2000)], { right: 'wall', left: 'wall' }),
+                      { canvasW: 900 });
+  /* the anchor is where the bracket sits, which is inset from the joint */
+  const joint = eq.shapes[1].x, inset = 25 * eq.scale;
+  check('two equal panes share one number at the joint between them',
+        eq.dims.filter(d => d.kind === 'bracket-bot' &&
+                            Math.abs(d.face - joint) < inset + 2).length, 1);
+}
+
 /* ── hardware follows the glass edge ───────────────────────────────────── */
 /* A bracket and a hinge both screw into the glass, so when the face they sit
    on is out of plumb they lean with it. Pinning them to the panel's box put

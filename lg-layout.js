@@ -44,8 +44,12 @@ function _mkLanes(cfg){
     const need=Math.max(hi0-lo0, textPx||0);
     const lo=mid-need/2, hi=mid+need/2;
     const lanes=zones[zone]||(zones[zone]=[]);
+    // סבילות של חצי פיקסל. שני רוחבים סמוכים נגמרים ומתחילים באותה
+    // נקודה, ובחשבון צף הקצה יוצא 493.00001 מול 492.99999 — מספיק כדי
+    // שייחשבו חופפים. מידה אחת מתוך חמש קפצה משורת הרוחבים לשורת
+    // הרוחב הכולל, בלי שום סיבה שנראית בציור.
     for(let i=0;i<lanes.length;i++){
-      if(!lanes[i].some(s=>lo<s.hi&&hi>s.lo)){ lanes[i].push({lo,hi}); return cfg.first+i*cfg.step; }
+      if(!lanes[i].some(s=>lo<s.hi-0.5&&hi>s.lo+0.5)){ lanes[i].push({lo,hi}); return cfg.first+i*cfg.step; }
     }
     lanes.push([{lo,hi}]);
     return cfg.first+(lanes.length-1)*cfg.step;
@@ -83,6 +87,7 @@ const LG_DEF_W=500, LG_DEF_H=2000;
 const LG_EDGE_MM=200;          // ציר או זווית, 20 ס"מ מהקצה
 const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
+const MAX_NEAR=56;             // כמה רחוק מותר למידה לשבת ממה שהיא מודדת
 
 // באיזו פאה תלויה הדלת. המנוע קובע, לא שדה ידני: ‏hingeSide היה סותר
 // את הצומת ודלתות צוירו עם הצירים בצד הידית.
@@ -160,12 +165,16 @@ function _applyNotch(P,nt,sc,mmW){
     const t=Math.abs(d)<1e-6?0:(x-A[0])/d;  return A[1]+(B[1]-A[1])*t; };
   const right=nt.side==='right';
   const edge = right?[TR,BR]:[TL,BL];      // הפאה שהפינוי יורד בה
-  const yOut = edge[1][1]-nt.h*sc;         // כתף הפינוי, בפאה החיצונית
-  const yIn  = edge[1][1]-nt.hIn*sc;       // ובפינה הפנימית
   const restMM = nt.rest!=null ? nt.rest : (mmW-nt.w);
 
-  // הכתף על הפאה, הפינה הפנימית, והנקודה שבה הזכוכית חוזרת לרצפה
+  // שני גבהי הפינוי נמדדים **מהרצפה שמתחתיהם**, לא מנקודה אחת. כשתחתית
+  // הזכוכית נוטה — רצפה מנוקזת — הרצפה מתחת לפינה הפנימית נמוכה מזו
+  // שמתחת לכתף, והמדף יורש את הנטייה. מדידת שניהם מאותה פינה הייתה
+  // מזיזה את הפינוי מהמקום שהוא באמת יושב בו.
+  const yOut = edge[1][1]-nt.h*sc;
   const S=[yOn(edge[0],edge[1],yOut), yOut];
+  const xNapprox = S[0] + (right?-1:1)*nt.w*sc;
+  const yIn = xOn(BL,BR,xNapprox) - nt.hIn*sc;
   const N=[yOn(edge[0],edge[1],yIn) + (right?-1:1)*nt.w*sc, yIn];
   const bx = right ? BL[0]+restMM*sc : BR[0]-restMM*sc;
   const B=[bx, xOn(BL,BR,bx)];
@@ -342,17 +351,22 @@ function _layoutPass(shower,cW,mgL,mgR){
   // מידה לא ישבה שם, אבל הסמל כן.
   const vPlaced=[];
   const claim=(x,y)=>vPlaced.push({x:x,lo:y-10,hi:y+10,hw:9});
-  const placeV=(x0,step,lo,hi,size)=>{
+  const placeV=(x0,step,lo,hi,size,bound)=>{
     const hw=LG_HALF(size||LG_SZ_MAIN);
     const free=x=>!vPlaced.some(q=>Math.abs(q.x-x)<q.hw+hw && lo<q.hi && hi>q.lo);
     // מחפשים לשני הכיוונים מהמקום המועדף, לא רק החוצה. חיפוש בכיוון אחד
     // בלבד דחף מידה של דלת צרה אל מעבר לדלת עצמה, בזמן שהצד השני היה
     // פנוי — והמספר הפסיק לתאר את מה שהוא מודד.
+    //
+    // ‏bound חוסם צד שלם: מידת פרזול בקצה ההרכבה חייבת להישאר **בתוך**
+    // הזכוכית. בלעדיו החיפוש הדו-כיווני הוציא אותה החוצה, אל מעבר
+    // למידת הגובה הכללי — וההיררכיה התהפכה: הקטן רחוק, הגדול קרוב.
     const s=Math.abs(step)||16, d0=step<0?-1:1;
+    const ok = bound ? (x=>free(x) && x>=bound[0] && x<=bound[1]) : free;
     const tries=[0];
     for(let k=1;k<=5;k++){ tries.push(d0*k*s); tries.push(-d0*k*s); }
     let x=x0;
-    for(let i=0;i<tries.length;i++) if(free(x0+tries[i])){ x=x0+tries[i]; break; }
+    for(let i=0;i<tries.length;i++) if(ok(x0+tries[i])){ x=x0+tries[i]; break; }
     vPlaced.push({x:x,lo:lo,hi:hi,hw:hw});
     return x;
   };
@@ -453,10 +467,26 @@ function _layoutPass(shower,cW,mgL,mgR){
     out.hardware.push({kind:kindHw,idx:host.idx,junction:j,jType:jt,x:xB,y:yB,
                        face:face,edgeX:xAt(botEdge[0],botEdge[1],yB),
                        onNotch:botEdge!==edge}); claim(xB,yB);
-    hwAdd(hinge?'hinge-top':'bracket-top',mmT,host.y,yT,host.idx,xT,'start');
-    hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,
-          yB, (where==='shoulder')?nt.shoulder[1]:floorY, host.idx,xB,
-          (where==='shoulder')?'start':'end');
+    // הפרזול הוא פיסת מתכת אחת שעוברת דרך שתי הזכוכיות, אבל **כל זכוכית
+    // נמדדת מהקצה שלה**. דלת תלויה מהמשקוף וקבוע עומד על הרצפה, ולכן
+    // תחתית הדלת גבוהה בסנטימטר וחצי — ואותו ציר הוא 200 מהדלת ו-215
+    // מהקבוע. מי שקודח בקבוע לפי המספר של הדלת מפספס.
+    const kT=hinge?'hinge-top':'bracket-top', kB=hinge?'hinge-bot':'bracket-bot';
+    const panes=[L,R].filter(Boolean);
+    const once=(vals,v)=>{ if(vals.some(x=>Math.abs(x-v)<0.5)) return false;
+                           vals.push(v); return true; };
+
+    const tops=[];
+    panes.forEach(s=>{ if(once(tops,s.y))
+      hwAdd(kT,Math.round((yT-s.y)/sc),s.y,yT,s.idx,xT,'start'); });
+
+    if(where==='shoulder'){
+      hwAdd(kB,mmB,yB,nt.shoulder[1],host.idx,xB,'start');
+    } else {
+      const bots=[];
+      panes.forEach(s=>{ const b=s.y+s.h; if(once(bots,b))
+        hwAdd(kB,Math.round((b-yB)/sc),yB,b,s.idx,xB,'end'); });
+    }
 
     // 'both' — גם על הפאה החיצונית, מכתף הפינוי כלפי מעלה
     if(where==='both'){
@@ -546,7 +576,12 @@ function _layoutPass(shower,cW,mgL,mgR){
         // שמשני הצדדים, ושום דבר לא קשר אותן לדלת. פאה שהיא קצה חיצוני
         // — המידה יוצאת החוצה; פאה פנימית — המידה נכנסת **לתוך הזכוכית
         // של אותו שייף**, וכך רואים מיד לאיזו דלת היא שייכת.
-        const atL=Math.abs(e.ax-asmL)<0.5, atR=Math.abs(e.ax-asmR)<0.5;
+        // "קצה חיצוני" נקבע לפי מקומו של השייף ברצף, לא לפי השוואת x.
+        // פאה משופעת נוטה, ה-ax שלה הוא אמצע הנטייה, וההשוואה ל-asmL
+        // נכשלה — הקצה השמאלי של הציור סווג כפאה פנימית ונשלח לתוך
+        // הזכוכית, היישר אל המידה שבאה מהצד השני.
+        const atL=(e.idx===0 && e.face==='L');
+        const atR=(nS>0 && e.idx===nS-1 && e.face==='R');
         const dir = atL ? -1 : atR ? 1 : (e.face==='L' ? 1 : -1);
         hDims.push({mm:e.mm, pts:[e], side:'face', at:e.ax, dir:dir});
       }
@@ -573,7 +608,8 @@ function _layoutPass(shower,cW,mgL,mgR){
       // מידת פאה של שיפוע — גופן משני, כדי שהיא ומידות הצירים יחלקו
       // את אותם 46 פיקסלים בלי שאף אחת מהן תיאלץ להתרחק
       near=hd.at; size=LG_SZ_SUB;
-      x=placeV(hd.at+hd.dir*cfg.subFirst, hd.dir*cfg.sub, top-13, bot+13, LG_SZ_SUB);
+      const bF = hd.dir>0 ? [near,near+MAX_NEAR] : [near-MAX_NEAR,near];
+      x=placeV(near+hd.dir*cfg.subFirst, hd.dir*cfg.sub, top-13, bot+13, LG_SZ_SUB, bF);
     } else if(hd.side==='inside'){
       // פאנל שאין לו קצה. המידה יושבת על אחת הפאות שלו ולא באמצעו:
       // באמצע דלת של 69 פיקסלים כבר יושבים הציר, הידית ומרחק הידית,
@@ -587,18 +623,21 @@ function _layoutPass(shower,cW,mgL,mgR){
       const useR=!freeR||freeL, dir=useR?-1:1;
       near=useR ? s0.x+s0.w : s0.x;
       size=LG_SZ_SUB;
-      x=placeV(near+dir*cfg.subFirst, dir*cfg.sub, top-13, bot+13, size);
+      const bI = dir>0 ? [near,near+MAX_NEAR] : [near-MAX_NEAR,near];
+      x=placeV(near+dir*cfg.subFirst, dir*cfg.sub, top-13, bot+13, size, bI);
     } else {
+      // הגובה הכללי נשאר **מחוץ** להרכבה. הפרזול תפס כבר את הנתיבים
+      // שבתוך הזכוכית, ובלי החסם הזה הגובה היה נדחף פנימה ומתחלף איתם
+      // במקום — הגדול קרוב והקטן רחוק, הפוך מכל שרטוט.
       const right=hd.side==='right', s=right?1:-1;
       near=right?asmR:asmL;
-      x=placeV(near+s*cfg.first, s*cfg.step, top-13, bot+13, LG_SZ_MAIN);
+      const bound = right ? [near, near+MAX_NEAR] : [near-MAX_NEAR, near];
+      x=placeV(near+s*cfg.first, s*cfg.step, top-13, bot+13, LG_SZ_MAIN, bound);
     }
     dim('height',hd.mm,x,top,x,bot,
         {zone:hd.side, idxs:idxs, idx:idxs[0], t:t, near:near, size:size,
          inside:hd.side==='inside'});
   };
-  hDims.filter(h=>h.side!=='inside').forEach(emitHeight);
-
   // כל מידת פרזול יורדת לצד הפאה שלה. לאיזה צד — לזה שיש בו מקום: בין
   // חמישה פאנלים על מסך פלאפון פאנל שלם הוא 36 פיקסלים, ומידה שיוצאת
   // תמיד שמאלה הייתה נוחתת על הפרזול של הפאה הקודמת.
@@ -641,13 +680,20 @@ function _layoutPass(shower,cW,mgL,mgR){
     // מה שקונה לה את המקום.
     // המרווח המינימלי נגזר מהסמל: רדיוס 9 ועוד חצי תווית משנית. פחות
     // מזה, והמספר נוחת על הציר שהוא מתאר.
+    // ISO 129 — הקטן קרוב לזכוכית והגדול רחוק ממנה. מידת פרזול בקצה
+    // ההרכבה נשארת בתוך הזכוכית, והגובה הכללי יוצא מחוצה לה.
+    const atEdge = Math.abs(p.face-asmL)<0.5 || Math.abs(p.face-asmR)<0.5;
+    const bound = !atEdge ? null
+      : (dir>0 ? [p.face, p.face+MAX_NEAR] : [p.face-MAX_NEAR, p.face]);
     const gap=Math.max(9+LG_HALF(LG_SZ_SUB),Math.min(HW_GAP,room/2));
-    const x=placeV(p.face+dir*gap,dir*cfg.sub,lo,hi,LG_SZ_SUB);
+    const x=placeV(p.face+dir*gap,dir*cfg.sub,lo,hi,LG_SZ_SUB,bound);
 
     dim(p.kind,p.mm,x,p.a,x,p.b,
         {idx:p.idxs[0], idxs:p.idxs, zone:'hw', face:p.face, near:p.face,
          size:LG_SZ_SUB, t:t});
   });
+
+  hDims.filter(h=>h.side!=='inside').forEach(emitHeight);
 
   hDims.filter(h=>h.side==='inside').forEach(emitHeight);
 
@@ -661,7 +707,10 @@ function _layoutPass(shower,cW,mgL,mgR){
     const xOut=placeV(S[0]+dirOut*cfg.subFirst, dirOut*cfg.sub, S[1]-13, botY+13, LG_SZ_SUB);
     dim('notch-h',nt.h,xOut,S[1],xOut,botY,
         {idx:p.idx,zone:'notch',near:S[0],size:LG_SZ_SUB});
-    if(nt.hIn!==nt.h){
+    // מדף נוטה מקבל שתי מידות גם כששני הגבהים שווים. הנטייה יכולה לבוא
+    // מהרצפה ולא מהמדרגה, ואז העין רואה שיפוע ומוצא מספר אחד — בדיוק
+    // המצב שבו לא ברור אם המדף ישר או לא.
+    if(Math.abs(S[1]-N[1])>1){
       const dirIn = p.right?1:-1;          // לתוך חלל הפינוי
       const xIn=placeV(N[0]+dirIn*cfg.subFirst, dirIn*cfg.sub, N[1]-13, botY+13, LG_SZ_SUB);
       dim('notch-h',nt.hIn,xIn,N[1],xIn,botY,
@@ -730,9 +779,11 @@ function lgLayout(shower,opts){
   if(shp.length>=2){
     // דלת נושאת גם חור וגם מרחק ידית; שייף משופע נושא שתי מידות חיתוך
     // במקום אחת. שניהם צריכים יותר זכוכית מקבוע רגיל.
-    const room=shp.reduce((n,s)=>n+80
+    // כל תוספת גוררת עוד מידה אנכית על אותה זכוכית, וכשאין מקום המספר
+    // או מתרחק או נחתך. שניהם פסולים, ולכן הציור גדל.
+    const room=shp.reduce((n,s)=>n+90
       +((s&&s.kind)==='door'?15:0)
-      +((s&&s.slopeH1)?25:0)+((s&&s.slopeW1)?25:0)
+      +((s&&s.slopeH1)?35:0)+((s&&s.slopeW1)?25:0)
       +((s&&s.notchW)?60:0),0);      // פינוי מוסיף רוחב, גובה, ומה שנשאר
     const need=Math.round(room/0.65);
     if(need>cW) cW=need;

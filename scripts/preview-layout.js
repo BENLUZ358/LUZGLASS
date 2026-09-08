@@ -103,6 +103,7 @@ const fixed = (id, h, extra) => Object.assign({ id, kind: 'fixed', w: 500, h: h 
 const door = (id, hingeSide, h) => ({ id, kind: 'door', w: 800, h: h || 1985, hingeSide: hingeSide || 'right' });
 
 const CASES = [
+  ['קבוע 1900 + דלת 1885 — ציר משותף, שני מספרים', shower([fixed('a', 1900), door('b', 'right', 1885)])],
   ['דלת בודדת', shower([door('a', 'right')])],
   ['קבוע + דלת', shower([fixed('a'), door('b', 'right')])],
   ['קבוע דלת קבוע', shower([fixed('a'), door('b', 'right'), fixed('c')])],
