@@ -119,8 +119,15 @@ check('and so can a gallery chip',
      and no gesture handler at all, so touch-action:none bought nothing and
      cost the ability to scroll — on a phone the canvas fills the screen and
      there is no margin left to drag from. */
+  /* and sideways too, since the canvas can now be wider than the screen —
+     a four-panel shower needs room for its dimensions, and without pan-x
+     half the drawing cannot be reached with a finger */
   check('the canvas lets the page scroll vertically',
-        /#sk\{touch-action:pan-y/.test(DEMO), true);
+        /#sk\{touch-action:[^;}]*pan-y/.test(DEMO), true);
+  check('and sideways, for a drawing wider than the screen',
+        /#sk\{touch-action:[^;}]*pan-x/.test(DEMO), true);
+  check('the canvas wrapper scrolls rather than clipping',
+        /\.canvas-wrap\{[^}]*overflow-x:auto/.test(DEMO), true);
   check('and does not claim every gesture',
         /#sk\{touch-action:none/.test(DEMO), false);
 

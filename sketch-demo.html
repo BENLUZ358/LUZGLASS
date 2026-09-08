@@ -80,9 +80,18 @@
    לכלום. בפלאפון הקנבס תופס כמעט את כל המסך, ולכן לא נשארה שום רצועה
    לגלול ממנה והדף נתקע.
    pan-y מחזיר את הגלילה האנכית ומשאיר את הלחיצה על קווי המידה עובדת. */
-#sk{touch-action:pan-y;}
-.canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow:hidden;}
-canvas{display:block;width:100%;height:auto;cursor:pointer;}
+/* ‏pan-x נוסף משהוגדל הקנבס מעבר למסך: בלעדיו אי אפשר לגלול אל החלק
+   שיצא, ומחצית השרטוט הופכת לבלתי נגישה באצבע. */
+#sk{touch-action:pan-x pan-y;}
+/* מקלחון של ארבעה פאנלים יוצא רחב מפלאפון — כל פאנל צריך מקום למידות
+   שלו, אחרת המספרים מתרחקים מהזכוכית או נחתכים. הקנבס גדל, והמכל גולל
+   אליו. ‏overflow:hidden חתך את החלק שיצא, ואיתו כל מה שאפשר היה ללחוץ
+   עליו שם. */
+.canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
+/* הקנבס נושא רוחב מפורש מ-setupCanvas ולא נמתח למכל: כשהוא רחב ממנו,
+   מותר לו לגלוש והמכל גולל. ‏width:100% היה מכווץ אותו בחזרה ומועך את
+   קנה המידה. */
+canvas{display:block;height:auto;cursor:pointer;}
 .dim-tip{position:absolute;background:var(--gold);color:var(--on-gold);padding:2px 7px;font-size:12px;font-weight:700;border-radius:3px;pointer-events:none;display:none;z-index:5;}
 
 /* ── מצב עריכה ────────────────────────────────────────────────────
@@ -495,6 +504,8 @@ const EDGE_MM=200;
 // זווית קיר-זכוכית מוברגת דרך חור, ולחור יש מרחק מהקצה. אותו מספר
 // כמו LG_BRACKET_INSET במנוע — הוא מצייר, וכאן קוראים אותו לעריכה.
 const BRACKET_INSET_MM=25;
+// דלת ברירת מחדל: 15 מ"מ נמוכה מקבוע של 2000, והפער בתחתית.
+const DOOR_H_MM=1985;
 
 // ── מקצה נתיבי המידה ───────────────────────────────────────────────
 //
@@ -532,7 +543,12 @@ let panelState={}, items=[], dimHits=[];
 
 function mkPS(panel){
   return {
-    w:panel.type==='door'?800:panel.type==='slider'?800:500, h:2000,
+    // דלת נמוכה מהקבוע בסנטימטר וחצי, והפער בתחתית: היא תלויה מהמשקוף
+    // ומרווח הרצפה נשאר מתחתיה. בלי זה כל הפאנלים יוצאים 2000, ואז אין
+    // 1985 על השרטוט ואין 215 על הציר התחתון של הקבוע — כל המקלחון
+    // נראה כאילו הוא בגובה אחד.
+    w:panel.type==='door'?800:panel.type==='slider'?800:500,
+    h:panel.type==='door'?DOOR_H_MM:2000,
     // hinge
     extraHinge:false,hinge3pos:40,
     // brackets
@@ -1429,10 +1445,20 @@ function openDimEditor(hit,clientX,clientY){
   } else refRow.style.display='none';
   ed.classList.add('open');
   // נפתח ליד הנגיעה, ונדחף פנימה אם הוא גולש מהמעטפת
+  // החלון ממוקם ביחס למעטפת — היא ה-offsetParent — ומוגבל לאזור **הנראה**
+  // שלה, לא לרוחב הקנבס.
+  //
+  // זה היה הבאג: משהוגדל הקנבס מעבר למסך, ההגבלה לרוחבו אפשרה לחלון
+  // לשבת רחוק מעבר לשפת המעטפת, ושם הוא נחתך ולא נראה כלל. לחיצה על
+  // מידה נראתה כאילו לא קרה כלום — ובקבוע בודד, שבו הקנבס לא גדל, הכל
+  // עבד. אותו קוד, שני מצבים.
+  const wrap=C.parentElement, wr=wrap.getBoundingClientRect();
+  const sx=wrap.scrollLeft||0, sy=wrap.scrollTop||0;
   const w=ed.offsetWidth||180, h=ed.offsetHeight||140;
-  let left=clientX-rect.left-w/2, top=clientY-rect.top-h-10;
-  left=Math.max(6,Math.min(left,rect.width-w-6));
-  if(top<6) top=clientY-rect.top+14;
+  let left=clientX-wr.left+sx-w/2;
+  left=Math.max(sx+6, Math.min(left, sx+wrap.clientWidth-w-6));
+  let top=clientY-wr.top+sy-h-10;
+  if(top<sy+6) top=clientY-wr.top+sy+14;
   ed.style.left=left+'px'; ed.style.top=top+'px';
   setTimeout(()=>{inp.focus();inp.select();},30);
 }
