@@ -153,6 +153,11 @@ const CASES = [
   ['a door sloped down its handle side', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeW1: 800, slopeW2: 750 })], { right: 'wall', left: 'wall' })],
   ['a sloped panel in the middle', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeH1: 1985, slopeH2: 1800 }), fixed('c')], { right: 'wall', left: 'wall' })],
   ['sloped in both directions', shower([Object.assign(fixed('a'), { slopeH1: 2000, slopeH2: 1950, slopeW1: 500, slopeW2: 455 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  /* step notches */
+  ['a fixed on a step', shower([fixed('a', 2000, { notchW: 200, notchH: 500 })], { right: 'wall', left: 'wall' })],
+  ['a step carrying a door', shower([fixed('a', 2000, { notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['a step with a sloping shelf', shower([fixed('a', 2000, { notchW: 200, notchH: 500, notchHIn: 470, notchRest: 790 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['a step and a sloped top', shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1940, notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
 ];
 
 const WIDTHS = [375, 768, 1440];
@@ -375,6 +380,67 @@ for (const [name, s] of CASES) {
         [h1985, h1800].every(d => d.x1 > dr.x - MAX_AWAY && d.x1 < dr.x + dr.w + MAX_AWAY), true);
   check('and neither needs a leader to explain itself',
         [h1985.ext, h1800.ext].every(e => !e || !e.length), true);
+}
+
+/* ── the step notch ────────────────────────────────────────────────────── */
+/* A shower tray or a built step eats a rectangle out of the bottom corner of
+   the glass. The notch always sits on the wall side, because the step is
+   part of the building — which also means it can never be on the side a
+   door hangs from.
+   Its own faces can be out of square: the shelf may slope, so the notch has
+   an outer height and an inner one, and the glass left beside it is measured
+   in its own right rather than derived — that is how you see whether it is
+   square at all. */
+{
+  const notched = (extra, b) => lgLayout(shower([Object.assign(fixed('a', 2000, {
+      notchW: 200, notchH: 500 }), extra || {}), door('b', 'right')],
+      b || { right: 'wall', left: 'open' }), { canvasW: 900 });
+
+  const L = notched();
+  const s0 = L.shapes[0];
+  check('a notched panel comes back with six points, not four', s0.poly.length, 6);
+  check('and the notch is on the wall side', s0.notch.side, 'left');
+
+  /* the three numbers the fitter needs */
+  const texts = k => L.dims.filter(d => d.kind === k).map(d => Number(d.text));
+  check('the notch width is stated', texts('notch-w').includes(200), true);
+  check('the notch height is stated', texts('notch-h').includes(500), true);
+  check('and the glass left beside it is stated too',
+        texts('width').includes(800), true);
+
+  /* the shelf can slope: outer 500, inner 480 */
+  const sl = notched({ notchHIn: 480 });
+  check('a sloping shelf gives the notch two heights',
+        [500, 480].every(mm => sl.dims.some(d => d.kind === 'notch-h' && Number(d.text) === mm)), true);
+  check('and the polygon follows — the shelf is not level',
+        Math.abs(sl.shapes[0].notch.shoulder[1] - sl.shapes[0].notch.inner[1]) > 1, true);
+
+  /* the remaining width is entered, not derived — so it can disagree */
+  const off = notched({ notchRest: 780 });
+  check('the remaining width is taken as entered, not computed',
+        off.dims.some(d => d.kind === 'width' && Number(d.text) === 780), true);
+  check('so the notch face is out of plumb and the drawing shows it',
+        Math.abs(off.shapes[0].notch.inner[0] - off.shapes[0].notch.foot[0]) > 1, true);
+
+  /* hardware: the wall face now ends at the notch shoulder */
+  const shoulderY = s0.notch.shoulder[1];
+  const lowBracket = L.hardware.filter(h => h.kind === 'bracket')
+                              .sort((a, b) => b.y - a.y)[0];
+  check('the bottom bracket is measured from the notch shoulder, not the floor',
+        Math.abs((shoulderY - lowBracket.y) - 200 * L.scale) < 1.5, true);
+
+  /* and it is still inset from the face, like every wall bracket */
+  check('a wall bracket sits 25mm in from the face, where the hole is drilled',
+        Math.abs(Math.abs(lowBracket.x - lowBracket.face) - 25 * L.scale) < 0.5, true);
+
+  /* 25mm is the default and every fitter knows it — a dimension line on it
+     is noise. It appears only when the customer moved the bracket. */
+  check('the default inset carries no dimension line',
+        L.dims.filter(d => d.kind === 'bracket-inset').length, 0);
+  check('but a bracket the customer moved says so',
+        lgLayout(shower([fixed('a', 2000, { bracketInset: 40 }), door('b', 'right')],
+                        { right: 'wall', left: 'open' }), { canvasW: 900 })
+          .dims.filter(d => d.kind === 'bracket-inset').map(d => Number(d.text)), [40]);
 }
 
 /* ── it must not throw on the shapes the drawing really hands it ───────── */

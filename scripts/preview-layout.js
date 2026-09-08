@@ -30,6 +30,12 @@ function svg(L, title) {
      נקודות ומצייר אותן. */
   L.shapes.forEach(s => {
     const fill = s.kind === 'door' ? '#dbeafe' : '#e8f4f8';
+    /* המדרגה עצמה, מתחת לזכוכית — כדי שרואים על מה הפינוי יושב */
+    if (s.notch) {
+      const n = s.notch, out = n.side === 'right' ? s.x + s.w : s.x;
+      p.push(`<path d="M ${out} ${n.shoulder[1]} L ${out} ${s.y + s.h} L ${n.foot[0]} ${s.y + s.h}"
+              fill="none" stroke="#cbd5e1" stroke-width="5" stroke-linejoin="round"/>`);
+    }
     p.push(`<polygon points="${s.poly.map(q => q[0] + ',' + q[1]).join(' ')}" fill="${fill}" stroke="#0f766e" stroke-width="2"/>`);
     p.push(`<text x="${s.x + s.w / 2}" y="${s.y + s.h / 2}" font-size="11" fill="#64748b" text-anchor="middle">${esc(s.kind === 'door' ? 'דלת' : 'קבוע')}</text>`);
   });
@@ -111,6 +117,11 @@ const CASES = [
   ['שיפוע בפאנל אמצעי', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeH1: 1985, slopeH2: 1800 }), fixed('c')])],
   ['שיפוע בגובה וגם ברוחב', shower([Object.assign(fixed('a'), { slopeH1: 2000, slopeH2: 1950, slopeW1: 500, slopeW2: 455 }), door('b', 'right')], { right: 'wall', left: 'open' })],
   ['צירים לא בברירת מחדל', shower([fixed('a'), Object.assign(door('b', 'right'), { hingeTop: 150, hingeBot: 340 })])],
+  ['קבוע מדרגה', shower([fixed('a', 2000, { notchW: 200, notchH: 500 })], { right: 'wall', left: 'wall' })],
+  ['קבוע מדרגה נושא דלת', shower([fixed('a', 2000, { notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['מדרגה עם מדף משופע', shower([fixed('a', 2000, { notchW: 200, notchH: 500, notchHIn: 470, notchRest: 790 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['מדרגה + שיפוע למעלה', shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1940, notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['זווית שהוזזה מ-2.5', shower([fixed('a', 2000, { bracketInset: 40 }), door('b', 'right')], { right: 'wall', left: 'open' })],
 ];
 
 const WIDTHS = [375, 768, 1440];

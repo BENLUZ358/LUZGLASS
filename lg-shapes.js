@@ -114,6 +114,20 @@ function lgValidate(shower) {
     if (!held) {
       errors.push({ at: fx.id, msg: 'קבוע חייב להישען על קיר או על קבוע — הוא לא יכול לשבת בין שתי דלתות' });
     }
+
+    // פינוי מדרגה הוא חלק מהבנייה, ולכן הוא תמיד בצד הקיר. פינוי בפאה
+    // שדלת נתלית עליה משאיר לציר התחתון אוויר במקום זכוכית.
+    if (fx.notchW > 0 && fx.notchH > 0) {
+      var nSide = fx.notchSide === 'right' ? 'right' : (fx.notchSide === 'left' ? 'left' : null);
+      if (!nSide) nSide = (left === 'wall') ? 'left' : (right === 'wall') ? 'right' : 'left';
+      var nb = nSide === 'left' ? left : right;
+      if (nb && nb !== 'wall' && nb.kind === 'door') {
+        errors.push({ at: fx.id, msg: 'פינוי מדרגה לא יכול להיות בצד שהדלת נתלית עליו — המדרגה באה מצד הקיר' });
+      }
+      if (nb !== 'wall' && !fx.notchSide) {
+        errors.push({ at: fx.id, msg: 'פינוי מדרגה בקבוע שאינו נוגע בקיר — יש לציין באיזה צד' });
+      }
+    }
   }
   return errors;
 }
