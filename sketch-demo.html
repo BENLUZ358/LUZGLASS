@@ -1522,8 +1522,22 @@ function dimEditorApply(){
 //
 // טהורה בכוונה, כדי שאפשר יהיה לבדוק אותה עם DPR=3 בלי דפדפן.
 function _canvasPoint(clientX,clientY,rect,cssW){
-  const s = rect.width ? (cssW/rect.width) : 1;
-  return { x:(clientX-rect.left)*s, y:(clientY-rect.top)*s };
+  // שני צירים, שני יחסים. יחס אחד לשניהם מניח שהקנבס נמתח באותה מידה
+  // לרוחב ולגובה — וזה נשבר ברגע שהוא רחב מהמסך: הרוחב מוקטן, הגובה
+  // נשאר, וכל נקודת מגע נופלת גבוה או נמוך ממה שהיא באמת.
+  //
+  // כך נראה הבאג מבחוץ: לחיצה על הרוחב הכולל פתחה את **עורך הרוחב של
+  // הפאנל** שמתחתיו, וכל שאר המידות לא הגיבו כלל. המידה היחידה שאין לה
+  // עורך היא בדיוק זו שנראתה עובדת.
+  //
+  // המקור הוא C.width ולא style.width: הוא נקבע ב-setupCanvas ואינו
+  // תלוי ב-CSS שעשוי למתוח את האלמנט.
+  const dpr = window.devicePixelRatio || 1;
+  const cw = (C.width  / dpr) || cssW || rect.width;
+  const ch = (C.height / dpr) || rect.height;
+  const sx = rect.width  ? (cw / rect.width)  : 1;
+  const sy = rect.height ? (ch / rect.height) : sx;
+  return { x:(clientX-rect.left)*sx, y:(clientY-rect.top)*sy };
 }
 
 C.addEventListener('click',function(e){

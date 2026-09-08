@@ -145,5 +145,87 @@ const door = (id, hs, h) => ({ id, kind: 'door', w: 800, h: h || 1985, hingeSide
         second.every(h => h.t.idx === 1), true);
 }
 
+/* ── tapping a number must open THAT number ─────────────────────────────── */
+/* The sharpest check in this file, and the one that names the bug outright:
+   walk every dimension, take the point where its label is drawn, and ask
+   which target the click handler would find there. It has to be that
+   dimension's own target — never a neighbour's.
+   This is what "tapping 2600 edits the 800" looks like from inside. */
+{
+  const cases = [
+    ['fixed + door',     shower([fixed('a'), door('b', 'right')], { right: 'wall', left: 'open' })],
+    ['fixed door fixed', shower([fixed('a'), door('b', 'right'), fixed('c')])],
+    ['two doors',        shower([fixed('a'), door('b', 'right'), door('c', 'left'), fixed('d')])],
+    ['a sloped fixed',   shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1750 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+    ['a notched fixed',  shower([fixed('a', 2000, { notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ];
+  const FIELD = { 'width': 'w', 'height': 'h', 'hinge-top': 'hingeTop',
+    'hinge-bot': 'hingeBot', 'bracket-top': 'bracketTop', 'bracket-bot': 'bracketBot',
+    'bracket-inset': 'bracketInset', 'handle-edge': 'handleEdge',
+    'handle-dist': 'handleDist', 'notch-w': 'notchW', 'notch-h': 'notchH' };
+
+  cases.forEach(([name, sh]) => {
+    [375, 900].forEach(cw => {
+      const { L, hits } = paint(sh, cw);
+      const wrong = [];
+      L.dims.forEach(d => {
+        const field = FIELD[d.kind];
+        if (!field || d.idx == null) return;      // the overall width has no editor
+        const t = d.t == null ? 0.5 : d.t;
+        const mx = d.x1 + (d.x2 - d.x1) * t, my = d.y1 + (d.y2 - d.y1) * t;
+        /* the click handler takes the FIRST target containing the point */
+        const found = hits.find(h => mx >= h.x && mx <= h.x + h.w &&
+                                     my >= h.y && my <= h.y + h.h);
+        if (!found) wrong.push(`${d.kind}:${d.text} has no target`);
+        else if (found.t.field !== field || found.t.idx !== d.idx)
+          wrong.push(`${d.kind}:${d.text} opens ${found.t.field} of pane ${found.t.idx}`);
+      });
+      check(`${name} @${cw}: every number opens its own editor`, wrong, []);
+    });
+  });
+}
+
+/* ── the click has to land where the finger did ─────────────────────────── */
+/* This is the one that was missing, and it cost two rounds of guessing.
+   A canvas wider than the screen is displayed narrower than it is, and the
+   click coordinates have to be scaled back. One ratio for both axes assumes
+   the canvas is stretched equally in each — and it is not: the width is
+   squeezed and the height is left alone.
+   Seen from outside it looked like this: tapping the overall width opened
+   the WIDTH editor of the panel below it, and nothing else responded at all.
+   The one dimension with no editor was the only one that seemed to work. */
+{
+  const grab = name => {
+    const i = DEMO.indexOf('function ' + name + '(');
+    let d = 0, j = i;
+    for (; j < DEMO.length; j++) {
+      if (DEMO[j] === '{') d++; else if (DEMO[j] === '}') { d--; if (!d) break; }
+    }
+    return DEMO.slice(i, j + 1);
+  };
+  const ctx = vm.createContext({ Math, window: { devicePixelRatio: 3 } });
+  ctx.C = { width: 723 * 3, height: 1200 * 3 };
+  vm.runInContext(grab('_canvasPoint'), ctx);
+
+  /* displayed at 410 wide but full height: the width is squeezed 1.76×,
+     the height is not squeezed at all */
+  const rect = { left: 0, top: 0, width: 410, height: 1200 };
+  const p = vm.runInContext(
+    '_canvasPoint(205,600,' + JSON.stringify(rect) + ',723)', ctx);
+
+  check('a squeezed width is scaled back', Math.round(p.x), Math.round(205 * 723 / 410));
+  check('and an unsqueezed height is left where it is', Math.round(p.y), 600);
+
+  /* and when nothing is stretched, both are identity */
+  const same = { left: 0, top: 0, width: 723, height: 1200 };
+  const q = vm.runInContext('_canvasPoint(100,200,' + JSON.stringify(same) + ',723)', ctx);
+  check('an untouched canvas maps one to one', [Math.round(q.x), Math.round(q.y)], [100, 200]);
+
+  /* the offset of the element is honoured in both axes */
+  const off = { left: 40, top: 90, width: 723, height: 1200 };
+  const r = vm.runInContext('_canvasPoint(140,290,' + JSON.stringify(off) + ',723)', ctx);
+  check('and the element offset is subtracted', [Math.round(r.x), Math.round(r.y)], [100, 200]);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll hit-target checks passed.');
