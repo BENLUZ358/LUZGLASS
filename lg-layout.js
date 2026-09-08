@@ -365,8 +365,11 @@ function _layoutPass(shower,cW,mgL,mgR){
     const ok = bound ? (x=>free(x) && x>=bound[0] && x<=bound[1]) : free;
     const tries=[0];
     for(let k=1;k<=5;k++){ tries.push(d0*k*s); tries.push(-d0*k*s); }
-    let x=x0;
-    for(let i=0;i<tries.length;i++) if(ok(x0+tries[i])){ x=x0+tries[i]; break; }
+    // אם אין מקום בתוך התחום, עדיף לחרוג ממנו מאשר לנחות על סמל: מספר
+    // קצת רחוק עוד קריא, מספר על גבי ציר כבר לא.
+    let x=x0, found=false;
+    for(let i=0;i<tries.length && !found;i++) if(ok(x0+tries[i])){ x=x0+tries[i]; found=true; }
+    for(let i=0;i<tries.length && !found;i++) if(free(x0+tries[i])){ x=x0+tries[i]; found=true; }
     vPlaced.push({x:x,lo:lo,hi:hi,hw:hw});
     return x;
   };
@@ -386,11 +389,11 @@ function _layoutPass(shower,cW,mgL,mgR){
   // אבל שתי פאות שונות מקבלות כל אחת את שלה. קיבוץ גלובלי מיזג את כל
   // ה-200 של הציור למספר בודד, ואז לחצי מהפרזול לא היה גובה כלל.
   const hwPend=[];
-  const hwAdd=(kind,mm,a,b,idx,face,outward)=>{
+  const hwAdd=(kind,mm,a,b,idx,face,outward,side)=>{
     const g=hwPend.find(p=>p.kind===kind&&p.mm===mm&&Math.abs(p.face-face)<1&&
-                           Math.abs(p.a-a)<1&&Math.abs(p.b-b)<1);
+                           p.side===side&&Math.abs(p.a-a)<1&&Math.abs(p.b-b)<1);
     if(g){ if(g.idxs.indexOf(idx)<0) g.idxs.push(idx); }
-    else hwPend.push({kind,mm,a,b,face,outward,idxs:[idx]});
+    else hwPend.push({kind,mm,a,b,face,outward,side,idx,idxs:[idx]});
   };
   // מרווח שמפנה את סמל הפרזול (רדיוס 9) מהתווית (רוחב 16 מסובבת)
   const HW_GAP=cfg.subFirst;
@@ -471,21 +474,27 @@ function _layoutPass(shower,cW,mgL,mgR){
     // נמדדת מהקצה שלה**. דלת תלויה מהמשקוף וקבוע עומד על הרצפה, ולכן
     // תחתית הדלת גבוהה בסנטימטר וחצי — ואותו ציר הוא 200 מהדלת ו-215
     // מהקבוע. מי שקודח בקבוע לפי המספר של הדלת מפספס.
+    // **המידה נרשמת על הזכוכית שהיא מודדת.** שתי המידות ישבו בצד הדלת,
+    // ואז ה-215 של הקבוע נקרא כאילו הוא של הדלת — שני מספרים על זכוכית
+    // אחת, והזכוכית שהם מתארים בלי אף אחד.
+    //
+    // והעוגן: הזווית עצמה מוסטת פנימה לתוך הזכוכית שנושאת אותה, ולכן
+    // מידה של הזכוכית השנייה שנתלית עליה נגררה לצד הלא נכון של הצומת.
+    // היא נמדדת מהצומת; רק המידה של הנושא נצמדת לזווית.
     const kT=hinge?'hinge-top':'bracket-top', kB=hinge?'hinge-bot':'bracket-bot';
     const panes=[L,R].filter(Boolean);
-    const once=(vals,v)=>{ if(vals.some(x=>Math.abs(x-v)<0.5)) return false;
-                           vals.push(v); return true; };
+    const sideOf=s=>(s===L?-1:1);
+    const anchor=(s,x)=>(s===host?x:face);
 
-    const tops=[];
-    panes.forEach(s=>{ if(once(tops,s.y))
-      hwAdd(kT,Math.round((yT-s.y)/sc),s.y,yT,s.idx,xT,'start'); });
+    panes.forEach(s=>hwAdd(kT,Math.round((yT-s.y)/sc),s.y,yT,s.idx,
+                           anchor(s,xT),'start',sideOf(s)));
 
     if(where==='shoulder'){
-      hwAdd(kB,mmB,yB,nt.shoulder[1],host.idx,xB,'start');
+      hwAdd(kB,mmB,yB,nt.shoulder[1],host.idx,xB,'start',sideOf(host));
     } else {
-      const bots=[];
-      panes.forEach(s=>{ const b=s.y+s.h; if(once(bots,b))
-        hwAdd(kB,Math.round((b-yB)/sc),yB,b,s.idx,xB,'end'); });
+      panes.forEach(s=>{ const b=s.y+s.h;
+        hwAdd(kB,Math.round((b-yB)/sc),yB,b,s.idx,
+              anchor(s,xB),'end',sideOf(s)); });
     }
 
     // 'both' — גם על הפאה החיצונית, מכתף הפינוי כלפי מעלה
@@ -651,9 +660,8 @@ function _layoutPass(shower,cW,mgL,mgR){
     // בקצה ההרכבה החוץ שמור לגובה — הוא המידה הראשית ומקומו בשוליים —
     // והפרזול נכנס פנימה. בלי החלוקה הזאת שניהם יצאו לאותו צד ודחפו זה
     // את זה ארבעה נתיבים החוצה.
-    const dir = Math.abs(p.face-asmL)<0.5 ? 1
-              : Math.abs(p.face-asmR)<0.5 ? -1
-              : (roomR>roomL?1:-1);
+    // הכיוון נקבע ע"י הזכוכית שהמידה מודדת, לא ע"י המקום הפנוי
+    const dir = p.side!=null ? p.side : (roomR>roomL?1:-1);
     const room=Math.max(dir>0?roomR:roomL,0);
 
     // תווית מסובבת ארוכה מקו של 20 ס"מ בקנה מידה של פלאפון, ולכן היא
@@ -689,7 +697,7 @@ function _layoutPass(shower,cW,mgL,mgR){
     const x=placeV(p.face+dir*gap,dir*cfg.sub,lo,hi,LG_SZ_SUB,bound);
 
     dim(p.kind,p.mm,x,p.a,x,p.b,
-        {idx:p.idxs[0], idxs:p.idxs, zone:'hw', face:p.face, near:p.face,
+        {idx:p.idx, idxs:p.idxs, zone:'hw', face:p.face, near:p.face,
          size:LG_SZ_SUB, t:t});
   });
 
@@ -703,16 +711,21 @@ function _layoutPass(shower,cW,mgL,mgR){
   // שווים ומספר אחד מספיק; כשהוא יורד, שתי המידות הן מה שמראה את זה.
   notchPend.forEach(p=>{
     const nt=p.nt, S=nt.shoulder, N=nt.inner, botY=p.botY;
+    const bnd=(x,d)=>d>0?[x,x+MAX_NEAR]:[x-MAX_NEAR,x];
     const dirOut = p.right?-1:1;           // פנימה, לתוך הזכוכית
-    const xOut=placeV(S[0]+dirOut*cfg.subFirst, dirOut*cfg.sub, S[1]-13, botY+13, LG_SZ_SUB);
+    const xOut=placeV(S[0]+dirOut*cfg.subFirst, dirOut*cfg.sub, S[1]-13, botY+13,
+                      LG_SZ_SUB, bnd(S[0],dirOut));
     dim('notch-h',nt.h,xOut,S[1],xOut,botY,
         {idx:p.idx,zone:'notch',near:S[0],size:LG_SZ_SUB});
     // מדף נוטה מקבל שתי מידות גם כששני הגבהים שווים. הנטייה יכולה לבוא
     // מהרצפה ולא מהמדרגה, ואז העין רואה שיפוע ומוצא מספר אחד — בדיוק
     // המצב שבו לא ברור אם המדף ישר או לא.
     if(Math.abs(S[1]-N[1])>1){
-      const dirIn = p.right?1:-1;          // לתוך חלל הפינוי
-      const xIn=placeV(N[0]+dirIn*cfg.subFirst, dirIn*cfg.sub, N[1]-13, botY+13, LG_SZ_SUB);
+      // גם היא פנימה, לתוך הזכוכית. כיוון הפוך הפנה אותה אל חלל הפינוי
+      // הצר — היישר אל המידה החיצונית שבאה משם.
+      const dirIn = dirOut;
+      const xIn=placeV(N[0]+dirIn*cfg.subFirst, dirIn*cfg.sub, N[1]-13, botY+13,
+                       LG_SZ_SUB, bnd(N[0],dirIn));
       dim('notch-h',nt.hIn,xIn,N[1],xIn,botY,
           {idx:p.idx,zone:'notch',near:N[0],size:LG_SZ_SUB});
     }
@@ -781,10 +794,10 @@ function lgLayout(shower,opts){
     // במקום אחת. שניהם צריכים יותר זכוכית מקבוע רגיל.
     // כל תוספת גוררת עוד מידה אנכית על אותה זכוכית, וכשאין מקום המספר
     // או מתרחק או נחתך. שניהם פסולים, ולכן הציור גדל.
-    const room=shp.reduce((n,s)=>n+90
+    const room=shp.reduce((n,s)=>n+110
       +((s&&s.kind)==='door'?15:0)
       +((s&&s.slopeH1)?35:0)+((s&&s.slopeW1)?25:0)
-      +((s&&s.notchW)?60:0),0);      // פינוי מוסיף רוחב, גובה, ומה שנשאר
+      +((s&&s.notchW)?140:0),0);      // פינוי מוסיף רוחב, גובה, ומה שנשאר
     const need=Math.round(room/0.65);
     if(need>cW) cW=need;
   }

@@ -111,6 +111,15 @@ const struckThrough = L => L.dims.filter(d => {
   return len < need && t > 0.02 && t < 0.98;
 }).map(d => d.kind + ':' + d.text);
 
+/* A hardware dimension must sit ON the pane it measures. Both numbers for a
+   shared hinge landed on the door's side of the joint, so the fixed panel's
+   215 read as if it belonged to the door — two numbers stacked on one pane
+   while the pane they described had none. */
+const wrongPane = L => L.dims.filter(d => HW_KINDS.test(d.kind) && d.idx != null)
+  .filter(d => { const s = L.shapes[d.idx];
+    return !s || d.x1 < s.x - 1 || d.x1 > s.x + s.w + 1; })
+  .map(d => `${d.kind}:${d.text} is not on pane ${d.idx}`);
+
 /* Leaders may only run straight. The diagonal ones crossed the glass corner
    to corner and turned the drawing into a thicket. */
 const diagonalLeaders = L => {
@@ -175,6 +184,7 @@ for (const [name, s] of CASES) {
     check(`${label}: every hinge and bracket has its height stated`, unmeasuredHardware(L), []);
     check(`${label}: no leader runs diagonally across the glass`, diagonalLeaders(L), []);
     check(`${label}: no dimension line runs through its own number`, struckThrough(L), []);
+    check(`${label}: every hardware dimension lands on its own pane`, wrongPane(L), []);
   }
 }
 
@@ -394,8 +404,16 @@ for (const [name, s] of CASES) {
   const lows = L.dims.filter(d => d.kind === 'hinge-bot').map(d => Number(d.text)).sort((a, b) => a - b);
   check('the bottom hinge is measured from BOTH panes it passes through',
         lows, [200, 215]);
-  check('and the top hinge needs one number, because the heads are level',
-        L.dims.filter(d => d.kind === 'hinge-top').length, 1);
+  check('and each number sits on the pane it measures', wrongPane(L), []);
+
+  /* the 215 belongs to the fixed panel alone; everything else is 200, and
+     that has to be visible rather than assumed */
+  const on = (kind, idx) => L.dims.filter(d => d.kind === kind && d.idx === idx)
+                             .map(d => Number(d.text));
+  check('the fixed panel says 200 at the top and 215 at the bottom',
+        [on('hinge-top', 0), on('hinge-bot', 0)], [[200], [215]]);
+  check('and the door says 200 at both, written on the door',
+        [on('hinge-top', 1), on('hinge-bot', 1)], [[200], [200]]);
 
   /* both numbers describe the same piece of metal */
   const hy = L.hardware.filter(h => h.kind === 'hinge').sort((a, b) => b.y - a.y)[0].y;
@@ -403,15 +421,19 @@ for (const [name, s] of CASES) {
   check('both dimensions start at the same hinge',
         bots.every(d => Math.abs(d.y1 - hy) < 1), true);
 
-  /* when the two panes are the same height there is nothing to distinguish,
-     so their shared joint carries one number, not two */
+  /* Even when the two panes are the same height, each says its own number on
+     its own glass. One number floating on the joint leaves the fitter
+     deciding which pane it belongs to — and that is the guess we are here to
+     remove. */
   const eq = lgLayout(shower([fixed('a', 2000), fixed('b', 2000)], { right: 'wall', left: 'wall' }),
                       { canvasW: 900 });
-  /* the anchor is where the bracket sits, which is inset from the joint */
-  const joint = eq.shapes[1].x, inset = 25 * eq.scale;
-  check('two equal panes share one number at the joint between them',
-        eq.dims.filter(d => d.kind === 'bracket-bot' &&
-                            Math.abs(d.face - joint) < inset + 2).length, 1);
+  const joint = eq.shapes[1].x;
+  const atJoint = eq.dims.filter(d => d.kind === 'bracket-bot' &&
+                                      Math.abs(d.x1 - joint) < 60);
+  check('two equal panes each carry their own number at the joint', atJoint.length, 2);
+  check('one on each side of it',
+        [atJoint.some(d => d.x1 < joint), atJoint.some(d => d.x1 > joint)], [true, true]);
+  check('and every one of them lands on its own pane', wrongPane(eq), []);
 }
 
 /* ── hardware follows the glass edge ───────────────────────────────────── */
