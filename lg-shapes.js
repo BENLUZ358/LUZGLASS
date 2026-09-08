@@ -99,6 +99,49 @@ function lgValidate(shower) {
       errors.push({ at: sh.id, msg: 'דלת לא יכולה להיתלות על דלת' });
     }
   }
+
+  // קבוע נושא את עצמו רק אם הוא נשען על משהו — קיר או קבוע אחר. קבוע
+  // שיושב בין שתי דלתות לא מחובר לכלום: הצירים של שתי הדלתות נתלים
+  // עליו, ואין לו עצמו על מה להתברג.
+  for (var k = 0; k < shapes.length; k++) {
+    var fx = shapes[k];
+    if (!fx || fx.kind === 'door') continue;
+    var left  = k === 0 ? (bound.right === 'wall' ? 'wall' : null) : shapes[k - 1];
+    var right = k === shapes.length - 1 ? (bound.left === 'wall' ? 'wall' : null) : shapes[k + 1];
+    var held = [left, right].some(function (n) {
+      return n === 'wall' || (n && n.kind && n.kind !== 'door');
+    });
+    if (!held) {
+      errors.push({ at: fx.id, msg: 'קבוע חייב להישען על קיר או על קבוע — הוא לא יכול לשבת בין שתי דלתות' });
+    }
+
+    // פינוי מדרגה הוא חלק מהבנייה, ולכן הוא תמיד בצד הקיר. פינוי בפאה
+    // שדלת נתלית עליה משאיר לציר התחתון אוויר במקום זכוכית.
+    if (fx.notchW > 0 && fx.notchH > 0) {
+      var nSide = fx.notchSide === 'right' ? 'right' : (fx.notchSide === 'left' ? 'left' : null);
+      if (!nSide) nSide = (left === 'wall') ? 'left' : (right === 'wall') ? 'right' : 'left';
+      var nb = nSide === 'left' ? left : right;
+      if (nb && nb !== 'wall' && nb.kind === 'door') {
+        errors.push({ at: fx.id, msg: 'פינוי מדרגה לא יכול להיות בצד שהדלת נתלית עליו — המדרגה באה מצד הקיר' });
+      }
+      if (nb !== 'wall' && !fx.notchSide) {
+        errors.push({ at: fx.id, msg: 'פינוי מדרגה בקבוע שאינו נוגע בקיר — יש לציין באיזה צד' });
+      }
+      // הפינוי חייב להיכנס בתוך הזכוכית, ומה שנשאר לצידו חייב להתיישב
+      // עם הרוחב הכללי. רוחב נותר גדול מהזכוכית עצמה דוחף את הפינוי
+      // אל מחוץ לפאנל, ובציור זה נראה כמו זכוכית שברחה מהמקום.
+      var gw = fx.w || 0, gh = fx.h || 0;
+      if (gw && fx.notchW >= gw) {
+        errors.push({ at: fx.id, msg: 'פינוי המדרגה רחב מהזכוכית' });
+      }
+      if (gh && fx.notchH >= gh) {
+        errors.push({ at: fx.id, msg: 'פינוי המדרגה גבוה מהזכוכית' });
+      }
+      if (gw && fx.notchRest > 0 && fx.notchRest + fx.notchW > gw + 20) {
+        errors.push({ at: fx.id, msg: 'הרוחב שנשאר ליד הפינוי גדול מדי — יחד עם הפינוי הוא חורג מרוחב הזכוכית' });
+      }
+    }
+  }
   return errors;
 }
 
