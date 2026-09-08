@@ -492,6 +492,9 @@ const COMBOS={
 // 20 מ"מ, שני סנטימטרים מהקצה. זה מרחק שאי אפשר להתקין בו, וגם קו
 // המידה על השרטוט הראה "20" ולכן שידר את המספר השגוי הלאה.
 const EDGE_MM=200;
+// זווית קיר-זכוכית מוברגת דרך חור, ולחור יש מרחק מהקצה. אותו מספר
+// כמו LG_BRACKET_INSET במנוע — הוא מצייר, וכאן קוראים אותו לעריכה.
+const BRACKET_INSET_MM=25;
 
 // ── מקצה נתיבי המידה ───────────────────────────────────────────────
 //
@@ -559,8 +562,15 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 
 // במצב שייפים המצב יושב לפי מזהה השייף ולא לפי מיקום, כדי שהזזה או
 // מחיקה של שייף באמצע לא תזיז את המידות של השכנים.
+// ‏getPStates נופל ל-mkPS כששייף עדיין בלי מצב, ולכן הציור עבד; ‏getPS
+// לא נפל, ולכן **העריכה** לא עבדה — לחיצה על מספר החזירה undefined
+// והחלון פשוט לא נפתח, בלי שום סימן. אותו מקור, אותה נפילה.
 function getPS(pfx,i){
-  if(appMode==='shape'){ const s=shapeList[i]; return s?shapePS[s.id]:null; }
+  if(appMode==='shape'){
+    const s=shapeList[i]; if(!s) return null;
+    if(!shapePS[s.id]) shapePS[s.id]=mkPS({type:s.kind});
+    return shapePS[s.id];
+  }
   return pfx==='combo'?panelState[i]:items[i];
 }
 
@@ -1374,9 +1384,17 @@ function _dimRead(t){
   const ps=getPS(t.pfx,t.idx); if(!ps) return null;
   const f=DIM_FIELDS[t.field]||{};
   let v=ps[t.field];
-  if((t.field==='hingeTop'||t.field==='hingeBot') && v==null) v=EDGE_MM;
-  if(t.field==='handleDist'&& v==null) v=Math.round((ps.h||2000)/2);
-  if(t.field==='handleEdge'&& v==null) v=HANDLE_EDGE_CM;
+  // ברירת מחדל לכל שדה שהמנוע יודע לצייר בלי שהוזן. בלעדיה הערך יוצא
+  // undefined, ‏openDimEditor יוצא בשקט, והלחיצה לא עושה כלום — מידה
+  // שרואים על השרטוט ואי אפשר לגעת בה.
+  if(v==null){
+    if(t.field==='hingeTop'||t.field==='hingeBot')       v=EDGE_MM;
+    else if(t.field==='bracketTop'||t.field==='bracketBot') v=EDGE_MM;
+    else if(t.field==='bracketInset')  v=BRACKET_INSET_MM;
+    else if(t.field==='handleDist')    v=Math.round((ps.h||2000)/2);
+    else if(t.field==='handleEdge')    v=HANDLE_EDGE_CM;
+  }
+  if(v==null) return null;
   return f.cm?Math.round(v*10):v;      // תמיד מ"מ החוצה
 }
 function _dimWrite(t,mm){

@@ -101,5 +101,39 @@ console.log('');
   }
 }
 
+/* ── a number on the drawing must open when tapped ──────────────────────── */
+/* This is the check that was missing, and it cost a broken edit mode on the
+   live site. Everything upstream was right — the engine emitted the
+   dimension, the drawer registered the touch target, the click handler found
+   it — and then _dimRead returned undefined for a field with no default, and
+   openDimEditor returned without a sound. A number you can see and cannot
+   touch, with nothing to show why. */
+{
+  const i = DEMO.indexOf('function _dimRead(t)');
+  const read = i > -1 ? DEMO.slice(i, DEMO.indexOf('function _dimWrite', i)) : '';
+  check('the value reader is found', read.length > 0, true);
+  if (read) {
+    const m = DEMO.match(/const ENG_FIELD=\{([\s\S]*?)\};/);
+    const fields = m ? [...m[1].matchAll(/:\s*'([a-zA-Z]+)'/g)].map(x => x[1]) : [];
+    /* Some fields are always on the panel state (w, h) and some only exist
+       once they have been entered — a notch dimension is only drawn when
+       there IS a notch. The rest are drawn from a default the engine knows,
+       and those are the ones the reader has to know too. */
+    const ALWAYS = ['w', 'h', 'notchW', 'notchH'];
+    const missing = fields.filter(f => !ALWAYS.includes(f) && !read.includes("'" + f + "'"));
+    check('every dimension drawn from a default can be read back', missing, []);
+    check('and the reader refuses to return undefined',
+          /if\(v==null\)\s*return null/.test(read), true);
+  }
+}
+
+/* ── and the panel state is always there to read from ───────────────────── */
+{
+  const get = DEMO.match(/function getPS\(pfx,i\)\{([\s\S]*?)\n\}/);
+  check('the state lookup is found', !!get, true);
+  if (get) check('a shape with no state yet gets one rather than null',
+                 /mkPS\(/.test(get[1]), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll drawer checks passed.');
