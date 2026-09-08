@@ -87,6 +87,43 @@ function _hingeLeft(src,js,i){
   return (src&&src.hingeSide)!=='left';
 }
 
+// ─── באיזו פאה יורד השיפוע ───────────────────────────────────────────────
+//
+// שיפוע יכול לרדת בכל אחת מארבע הפאות, והלקוח בוחר. אלה רק ברירות
+// המחדל לכשלא בחר:
+//
+//   • מקלחון נחתך ברצפה — האגן מנוקז — ולכן 'bottom' היא ברירת המחדל.
+//   • שיפוע אנכי בקבוע יורד בפאה שנוגעת בקיר, כי הקיר הוא זה שלא ישר.
+//   • שיפוע אנכי בדלת יורד בצד הידית. לא בצד הציר: שם הדלת נתלית,
+//     ופאה משופעת מתחת לציר לא נותנת לו מה לאחוז.
+//
+// אופקי (top/bottom) נמדד בשני גבהים — שמאל וימין; אנכי (left/right)
+// בשני רוחבים — עליון ותחתון.
+function _slopeOf(src,js,i){
+  const h1=(src&&src.slopeH1)||0, h2=(src&&src.slopeH2)||0;
+  const w1=(src&&src.slopeW1)||0, w2=(src&&src.slopeW2)||0;
+  const hasH=h1>0&&h2>0&&h1!==h2, hasW=w1>0&&w2>0&&w1!==w2;
+  if(!hasH&&!hasW) return null;
+
+  let side=src&&src.slopeSide;
+  if(['top','bottom','left','right'].indexOf(side)<0) side=null;
+  if(!side){
+    if(hasW){
+      side = (src&&src.kind)==='door'
+        ? (_hingeLeft(src,js,i)?'right':'left')             // הצד ההפוך לציר
+        : ((js[i]&&js[i].type==='bracket-wall')?'left'      // הפאה שנוגעת בקיר
+          :(js[i+1]&&js[i+1].type==='bracket-wall')?'right':'left');
+    } else side='bottom';
+  }
+
+  // הצד שנבחר חייב את המידות שמתאימות לו
+  const vertical=(side==='left'||side==='right');
+  if(vertical  && !hasW) return null;
+  if(!vertical && !hasH) return null;
+  return vertical ? {side:side, vertical:true,  w1:w1, w2:w2}
+                  : {side:side, vertical:false, h1:h1, h2:h2};
+}
+
 // ─── הפריסה ─────────────────────────────────────────────────────────────
 //
 // מעבר אחד. השוליים נתונים לו מבחוץ, כי כמה נתיבים יידרשו מימין מתברר
@@ -101,13 +138,18 @@ function _layoutPass(shower,cW,mgL,mgR){
   if(!shapes.length){ out.canvas.h=200; return out; }
 
   const MG=mgL;
-  const totalMM=shapes.reduce((n,s)=>n+((s&&s.w)||LG_DEF_W),0);
-  // גובה שייף: משופע נמדד לפי הפאה הגבוהה, ישר לפי h. ‏slopeH גובר על h,
-  // אחרת ברירת המחדל 2000 של שייף משופע בלי h הייתה מנפחת את הציור.
-  const shapeMM=s=>{
-    const a=(s&&s.slopeH1)||0, b=(s&&s.slopeH2)||0;
-    return (a>0&&b>0&&a!==b) ? Math.max(a,b) : ((s&&s.h)||LG_DEF_H);
-  };
+  const js=(typeof lgJunctions==='function')?lgJunctions(shower):[];
+  const slopes=shapes.map((s,i)=>_slopeOf(s,js,i));
+
+  // גובה ורוחב של שייף: משופע נמדד לפי הפאה הגדולה. השדות של השיפוע
+  // גוברים על h ו-w, אחרת ברירת המחדל 2000 של שייף משופע בלי h הייתה
+  // מנפחת את הציור.
+  const shapeMM=(s,i)=>{ const sl=slopes[i];
+    return (sl&&!sl.vertical) ? Math.max(sl.h1,sl.h2) : ((s&&s.h)||LG_DEF_H); };
+  const shapeWM=(s,i)=>{ const sl=slopes[i];
+    return (sl&&sl.vertical) ? Math.max(sl.w1,sl.w2) : ((s&&s.w)||LG_DEF_W); };
+
+  const totalMM=shapes.reduce((n,s,i)=>n+shapeWM(s,i),0);
   const maxMM=Math.max.apply(null,shapes.map(shapeMM));
   const sc=(cW-mgL-mgR)/Math.max(totalMM,1);
   const oy=Math.min(mgL,mgR);
@@ -118,21 +160,35 @@ function _layoutPass(shower,cW,mgL,mgR){
   // ── השייפים ──
   let x=mgL;
   shapes.forEach((s,i)=>{
-    // משופע: שתי פאות בשני גבהים. h1 היא הפאה השמאלית בקנבס, h2 הימנית.
-    // תיבת השייף לוקחת את הגבוה מביניהם, והצייר מוריד את הפאה הנמוכה.
-    const s1=(s&&s.slopeH1)||0, s2=(s&&s.slopeH2)||0;
-    const sloped=s1>0&&s2>0&&s1!==s2;
-    const mmH=shapeMM(s);
-    const w=((s&&s.w)||LG_DEF_W)*sc, h=mmH*sc;
+    const sl=slopes[i];
+    const mmH=shapeMM(s,i), mmW=shapeWM(s,i);
+    const w=mmW*sc, h=mmH*sc;
     // קו הרצפה הוא הייחוס. קבוע עומד עליו; דלת תלויה מקו המשקוף למעלה
     // ומרווח הרצפה נשאר מתחתיה — לכן דלת נמוכה מהקבוע בסנטימטר, והפער
     // בתחתית, בדיוק כמו במקלחון אמיתי.
     const kind=(s&&s.kind)||'fixed';
     const y = kind==='door' ? oy : oy+(maxMM-mmH)*sc;
+
+    // כל שייף נמסר לצייר כפוליגון, גם מלבן. ככה הצייר לא צריך לדעת מה
+    // זה שיפוע, באיזה צד הוא יורד ומה ברירת המחדל — הוא מצייר נקודות.
+    const x2=x+w, y2=y+h;
+    let poly=[[x,y],[x2,y],[x2,y2],[x,y2]];
+    if(sl && !sl.vertical){
+      // אופקי: פאה אחת ישרה לכל האורך, השנייה נחתכת באלכסון
+      const a=sl.h1*sc, b=sl.h2*sc;
+      poly = sl.side==='bottom' ? [[x,y],[x2,y],[x2,y+b],[x,y+a]]
+                                : [[x,y2-a],[x2,y2-b],[x2,y2],[x,y2]];
+    } else if(sl){
+      // אנכי: ראש ותחתית ישרים, ופאה אחת יורדת באלכסון
+      const t=sl.w1*sc, bm=sl.w2*sc;
+      poly = sl.side==='left' ? [[x2-t,y],[x2,y],[x2,y2],[x2-bm,y2]]
+                              : [[x,y],[x+t,y],[x+bm,y2],[x,y2]];
+    }
+
     const o={ idx:i, id:(s&&s.id)||('s'+i), kind:kind,
               label:(s&&s.label)||'', x:x, y:y, w:w, h:h,
-              mmW:(s&&s.w)||LG_DEF_W, mmH:mmH };
-    if(sloped) o.slope={h1:s1,h2:s2};
+              mmW:mmW, mmH:mmH, poly:poly };
+    if(sl) o.slope=sl;
     out.shapes.push(o);
     x+=w;
   });
@@ -171,9 +227,20 @@ function _layoutPass(shower,cW,mgL,mgR){
   };
 
   // ── רוחב לכל שייף, ואז הרוחב הכולל מעליהם ──
+  //
+  // שיפוע אנכי נמדד בשני רוחבים, עליון ותחתון — כי זה מה שמודדים בשטח
+  // כשהקיר לא ישר. השניים יושבים אחד מול השני, מעל הזכוכית ומתחתיה, כדי
+  // שרואים מיד כמה הקיר סוטה.
   out.shapes.forEach(s=>{
-    const lane=place('top',s.x,s.x+s.w,String(s.mmW).length*8+16);
-    dim('width',s.mmW,s.x,oy-lane,s.x+s.w,oy-lane,{idx:s.idx,zone:'top',lane:lane});
+    const vs = s.slope && s.slope.vertical ? s.slope : null;
+    const topMM = vs ? vs.w1 : s.mmW;
+    const lane=place('top',s.x,s.x+s.w,String(topMM).length*8+16);
+    dim('width',topMM,s.x,oy-lane,s.x+s.w,oy-lane,{idx:s.idx,zone:'top',lane:lane});
+    if(vs){
+      const bw=vs.w2*sc, bx = vs.side==='left' ? s.x+s.w-bw : s.x;
+      const bLane=place('bottom',bx,bx+bw,String(vs.w2).length*8+16);
+      dim('width',vs.w2,bx,asmB+bLane,bx+bw,asmB+bLane,{idx:s.idx,zone:'bottom',lane:bLane});
+    }
   });
   if(out.shapes.length>1){
     const lane=place('top',asmL,asmR,String(totalMM).length*8+30);
@@ -186,13 +253,13 @@ function _layoutPass(shower,cW,mgL,mgR){
   // כי משם נגזרות שתי מידות החיתוך.
   const hEntries=[];
   out.shapes.forEach(s=>{
-    if(s.slope){
-      const tallL=s.slope.h1>=s.slope.h2;
-      hEntries.push({idx:s.idx, mm:Math.max(s.slope.h1,s.slope.h2),
-                     ax:tallL?s.x:s.x+s.w, y1:s.y, y2:s.y+s.h});
-      const shortMM=Math.min(s.slope.h1,s.slope.h2);
-      hEntries.push({idx:s.idx, mm:shortMM,
-                     ax:tallL?s.x+s.w:s.x, y1:s.y+s.h-shortMM*sc, y2:s.y+s.h});
+    const hs = s.slope && !s.slope.vertical ? s.slope : null;
+    if(hs){
+      // כל פאה נושאת את המידה שלה, בקצה שלה — אותו כלל כמו קצה ההרכבה.
+      // הפוליגון כבר יודע איפה כל פאה מתחילה ונגמרת, ולכן נגזר ממנו.
+      const P=s.poly;
+      hEntries.push({idx:s.idx, mm:hs.h1, ax:s.x,     y1:P[0][1], y2:P[3][1], face:'L'});
+      hEntries.push({idx:s.idx, mm:hs.h2, ax:s.x+s.w, y1:P[1][1], y2:P[2][1], face:'R'});
     } else {
       hEntries.push({idx:s.idx, mm:s.mmH, ax:s.x+s.w/2, y1:s.y, y2:s.y+s.h});
     }
@@ -225,14 +292,26 @@ function _layoutPass(shower,cW,mgL,mgR){
     // אין מה להבדיל — מספר אחד אומר את הכל
     hDims.push({mm:hEntries[0].mm, pts:hEntries, side:'left'});
   } else {
-    entriesOf(0).forEach(e=>hDims.push({mm:e.mm, pts:[e], side:'left'}));
-    if(nS>1) entriesOf(nS-1).forEach(e=>hDims.push({mm:e.mm, pts:[e], side:'right'}));
-    // שייפים אמצעיים: כל גובה ייחודי פעם אחת. שתי דלתות באותו גובה הן
-    // מידה אחת, לא שתיים.
     const mids=[];
-    for(let i=1;i<nS-1;i++) entriesOf(i).forEach(e=>{
-      const g=mids.find(m=>m.mm===e.mm);
-      if(g) g.pts.push(e); else mids.push({mm:e.mm, pts:[e]});
+    hEntries.forEach(e=>{
+      if(e.face){
+        // פאה של שיפוע. אם היא הקצה החיצוני של ההרכבה — המידה בחוץ,
+        // צמודה. אחרת היא פאה פנימית: המידה יוצאת לצד הקרוב עם קו
+        // הארכה אופקי אליה, ולא נדחסת לתוך הזכוכית.
+        const atL=Math.abs(e.ax-asmL)<0.5, atR=Math.abs(e.ax-asmR)<0.5;
+        if(atL)      hDims.push({mm:e.mm, pts:[e], side:'left'});
+        else if(atR) hDims.push({mm:e.mm, pts:[e], side:'right'});
+        else         hDims.push({mm:e.mm, pts:[e], lead:e.ax,
+                                 side:e.ax>(asmL+asmR)/2?'right':'left'});
+      }
+      else if(e.idx===0)             hDims.push({mm:e.mm, pts:[e], side:'left'});
+      else if(nS>1 && e.idx===nS-1)  hDims.push({mm:e.mm, pts:[e], side:'right'});
+      else {
+        // שייפים אמצעיים: כל גובה ייחודי פעם אחת. שתי דלתות באותו גובה
+        // הן מידה אחת, לא שתיים.
+        const g=mids.find(m=>m.mm===e.mm);
+        if(g) g.pts.push(e); else mids.push({mm:e.mm, pts:[e]});
+      }
     });
     mids.forEach(m=>hDims.push({mm:m.mm, pts:m.pts, side:'inside'}));
   }
@@ -252,8 +331,12 @@ function _layoutPass(shower,cW,mgL,mgR){
       const right=hd.side==='right', s=right?1:-1, edge=right?asmR:asmL;
       x=placeV(edge+s*cfg.first, s*cfg.step, top-13, bot+13);
     }
+    // פאה פנימית של שיפוע יושבת בשוליים, ולכן צריכה קו הארכה אופקי
+    // שיגיד איזו פאה בדיוק היא מודדת
+    const ext = hd.lead==null ? null
+      : [{x1:x,y1:top,x2:hd.lead,y2:top},{x1:x,y1:bot,x2:hd.lead,y2:bot}];
     dim('height',hd.mm,x,top,x,bot,
-        {zone:hd.side, idxs:idxs, idx:idxs[0], t:t, inside:hd.side==='inside'});
+        {zone:hd.side, idxs:idxs, idx:idxs[0], t:t, inside:hd.side==='inside', ext:ext});
   };
   hDims.filter(h=>h.side!=='inside').forEach(emitHeight);
 
@@ -266,7 +349,6 @@ function _layoutPass(shower,cW,mgL,mgR){
   //
   // מידה יושבת ליד מה שהיא מודדת. הקו יורד לצד הפאה שהפרזול עליה,
   // במרווח שמפנה את הסמל — וקווי ההפניה מתייתרים מעצמם.
-  const js=(typeof lgJunctions==='function')?lgJunctions(shower):[];
   const isHinge=j=>!!(j&&/hinge/.test(j.type||''));
 
   // הקיבוץ הוא לפי פאה: ציר וזווית באותה פאה ובאותו גובה הם מידה אחת,

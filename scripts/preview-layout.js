@@ -26,19 +26,11 @@ function svg(L, title) {
   p.push(`<svg viewBox="0 0 ${L.canvas.w} ${L.canvas.h}" width="${L.canvas.w}" height="${L.canvas.h}">`);
   p.push(`<rect width="100%" height="100%" fill="#fff"/>`);
 
-  /* הזכוכית */
+  /* הזכוכית. הצייר לא יודע מה זה שיפוע ולא צריך לדעת — הוא מקבל
+     נקודות ומצייר אותן. */
   L.shapes.forEach(s => {
     const fill = s.kind === 'door' ? '#dbeafe' : '#e8f4f8';
-    if (s.slope) {
-      const tallL = s.slope.h1 >= s.slope.h2;
-      const shortH = Math.min(s.slope.h1, s.slope.h2) * L.scale;
-      const pts = tallL
-        ? `${s.x},${s.y} ${s.x + s.w},${s.y + s.h - shortH} ${s.x + s.w},${s.y + s.h} ${s.x},${s.y + s.h}`
-        : `${s.x},${s.y + s.h - shortH} ${s.x + s.w},${s.y} ${s.x + s.w},${s.y + s.h} ${s.x},${s.y + s.h}`;
-      p.push(`<polygon points="${pts}" fill="${fill}" stroke="#0f766e" stroke-width="2"/>`);
-    } else {
-      p.push(`<rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" fill="${fill}" stroke="#0f766e" stroke-width="2"/>`);
-    }
+    p.push(`<polygon points="${s.poly.map(q => q[0] + ',' + q[1]).join(' ')}" fill="${fill}" stroke="#0f766e" stroke-width="2"/>`);
     p.push(`<text x="${s.x + s.w / 2}" y="${s.y + s.h / 2}" font-size="11" fill="#64748b" text-anchor="middle">${esc(s.kind === 'door' ? 'דלת' : 'קבוע')}</text>`);
   });
 
@@ -110,8 +102,11 @@ const CASES = [
   ['קבוע דלת קבוע', shower([fixed('a'), door('b', 'right'), fixed('c')])],
   ['שתי דלתות', shower([fixed('a'), door('b', 'right'), door('c', 'left'), fixed('d')])],
   ['חמישה פאנלים', shower([fixed('a'), door('b', 'right'), fixed('c'), door('d', 'left'), fixed('e')])],
-  ['קבוע משופע', shower([Object.assign(fixed('a'), { slopeH1: 2000, slopeH2: 1750 }), door('b', 'right')])],
-  ['דלת משופעת', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeH1: 1985, slopeH2: 1700 })])],
+  ['שיפוע ברצפה (ברירת מחדל)', shower([Object.assign(fixed('a'), { slopeH1: 2000, slopeH2: 1950 }), door('b', 'right')])],
+  ['שיפוע למעלה', shower([Object.assign(fixed('a'), { slopeH1: 2000, slopeH2: 1750, slopeSide: 'top' }), door('b', 'right')])],
+  ['שיפוע בצד הקיר', shower([Object.assign(fixed('a'), { slopeW1: 500, slopeW2: 455 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['דלת משופעת בצד הידית', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeW1: 800, slopeW2: 750 })])],
+  ['שיפוע בפאנל אמצעי', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeH1: 1985, slopeH2: 1800 }), fixed('c')])],
   ['צירים לא בברירת מחדל', shower([fixed('a'), Object.assign(door('b', 'right'), { hingeTop: 150, hingeBot: 340 })])],
 ];
 

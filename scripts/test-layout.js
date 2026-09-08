@@ -138,6 +138,12 @@ const CASES = [
   ['handle from the top',  shower([fixed('a'), Object.assign(door('b', 'right'), { handleRef: 'top', handleDist: 1000 })], { right: 'wall', left: 'wall' })],
   ['two doors, hinges differ', shower([fixed('a'), Object.assign(door('b', 'right'), { hingeTop: 150 }), Object.assign(door('c', 'left'), { hingeTop: 250 }), fixed('d')], { right: 'wall', left: 'wall' })],
   ['five panels, mixed heights', shower([fixed('a', 2000), door('b', 'right', 1985), fixed('c', 1990), door('d', 'left', 1985), fixed('e', 2000)], { right: 'wall', left: 'wall' })],
+  /* slopes, on every face */
+  ['slope at the floor',   shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1950 }), door('b', 'right')], { right: 'wall', left: 'wall' })],
+  ['slope at the top',     shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1750, slopeSide: 'top' }), door('b', 'right')], { right: 'wall', left: 'wall' })],
+  ['slope down a wall face', shower([fixed('a', 2000, { slopeW1: 500, slopeW2: 455 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['a door sloped down its handle side', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeW1: 800, slopeW2: 750 })], { right: 'wall', left: 'wall' })],
+  ['a sloped panel in the middle', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeH1: 1985, slopeH2: 1800 }), fixed('c')], { right: 'wall', left: 'wall' })],
 ];
 
 const WIDTHS = [375, 768, 1440];
@@ -238,7 +244,94 @@ for (const [name, s] of CASES) {
   check('the tall side of a slope is measured', texts.includes(2000), true);
   check('and so is the short side — the cutter needs both', texts.includes(1750), true);
   check('a sloped shape is drawn as a slope, not a rectangle',
-        L.shapes[0].slope, { h1: 2000, h2: 1750 });
+        [L.shapes[0].slope.h1, L.shapes[0].slope.h2], [2000, 1750]);
+}
+
+/* ── slopes ────────────────────────────────────────────────────────────── */
+/* A shower cubicle slopes at the FLOOR by default — the tray drains, so the
+   glass is cut along the bottom. It can also be cut at the top, or down
+   either vertical face where the wall is out of plumb. The customer picks;
+   these are only the defaults for when they haven't.
+   Sloped glass is cut from BOTH measurements, so both are stated: each face
+   carries its own, the same rule as each end carrying its panel's height. */
+{
+  const sq = (extra, kind) => Object.assign({ id: 'x', kind: kind || 'fixed', w: 500, h: 2000 }, extra);
+  const heightsOf = L => L.dims.filter(d => d.kind === 'height').map(d => Number(d.text));
+  const widthsOf  = L => L.dims.filter(d => d.kind === 'width').map(d => Number(d.text));
+
+  /* every shape is handed over as a polygon — the drawer never has to know
+     what a slope is, it just draws the points it is given */
+  const plain = lgLayout(shower([fixed('a')]), { canvasW: 768 }).shapes[0];
+  check('a plain panel is handed over as a polygon too', plain.poly.length, 4);
+  check('and that polygon is a rectangle',
+        Math.abs(plain.poly[0][1] - plain.poly[1][1]) < 0.5 &&
+        Math.abs(plain.poly[2][1] - plain.poly[3][1]) < 0.5, true);
+
+  /* default side: the floor */
+  const bot = lgLayout(shower([sq({ slopeH1: 2000, slopeH2: 1950 }), door('b', 'right')],
+                              { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  check('with no side given, the slope is at the floor', bot.shapes[0].slope.side, 'bottom');
+  check('the head stays straight — the lintel is level',
+        Math.abs(bot.shapes[0].poly[0][1] - bot.shapes[0].poly[1][1]) < 0.5, true);
+  check('and both cut heights are stated',
+        [heightsOf(bot).includes(2000), heightsOf(bot).includes(1950)], [true, true]);
+
+  /* the customer can put it at the top instead */
+  const top = lgLayout(shower([sq({ slopeH1: 2000, slopeH2: 1750, slopeSide: 'top' }), door('b', 'right')],
+                              { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  check('asked for the top, the slope goes to the top', top.shapes[0].slope.side, 'top');
+  check('and then it is the floor edge that is straight',
+        Math.abs(top.shapes[0].poly[2][1] - top.shapes[0].poly[3][1]) < 0.5, true);
+
+  /* a vertical slope is measured in two WIDTHS, not two heights */
+  const wall = lgLayout(shower([sq({ slopeW1: 500, slopeW2: 455 }), door('b', 'right')],
+                               { right: 'wall', left: 'open' }), { canvasW: 768 });
+  check('a fixed panel slopes down the face that meets the wall', wall.shapes[0].slope.side, 'left');
+  check('and it is measured top and bottom, in widths',
+        [widthsOf(wall).includes(500), widthsOf(wall).includes(455)], [true, true]);
+  check('the top width sits above the glass and the bottom width below it',
+        (() => {
+          const ws = wall.dims.filter(d => d.kind === 'width' && [500, 455].includes(Number(d.text)));
+          const oy = Math.min(...wall.shapes.map(s => s.y));
+          const ab = Math.max(...wall.shapes.map(s => s.y + s.h));
+          return [ws.find(d => Number(d.text) === 500).y1 < oy,
+                  ws.find(d => Number(d.text) === 455).y1 > ab];
+        })(), [true, true]);
+
+  /* a door slopes down its handle side — never the side it hangs from */
+  const dL = lgLayout(shower([fixed('a'),
+                              Object.assign(door('b', 'right'), { slopeW1: 800, slopeW2: 760 })],
+                             { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  const dS = dL.shapes[1], hingeX = dL.hardware.filter(h => h.kind === 'hinge')[0].x;
+  check('a door slopes down its handle side, not its hinge side',
+        Math.abs((dS.slope.side === 'left' ? dS.x : dS.x + dS.w) - hingeX) > 1, true);
+
+  /* whatever the default, the customer's choice wins */
+  check('an explicit side overrides the default',
+        lgLayout(shower([sq({ slopeW1: 500, slopeW2: 455, slopeSide: 'right' }), door('b', 'right')],
+                        { right: 'wall', left: 'open' }), { canvasW: 768 }).shapes[0].slope.side, 'right');
+
+  /* a sloped panel keeps to its own column */
+  const pair = lgLayout(shower([sq({ slopeW1: 500, slopeW2: 455 }), fixed('b')],
+                               { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  check('a vertically sloped panel stays inside its own column',
+        pair.shapes[0].poly.every(p => p[0] >= pair.shapes[0].x - 0.5 &&
+                                       p[0] <= pair.shapes[0].x + pair.shapes[0].w + 0.5), true);
+  check('and does not overlap the panel beside it',
+        Math.max(...pair.shapes[0].poly.map(p => p[0])) <= pair.shapes[1].x + 0.5, true);
+
+  /* an inner face has no end to sit at, so its dimension goes out to the
+     margin with a straight extension line back to the face it measures */
+  const inner = lgLayout(shower([sq({ slopeH1: 2000, slopeH2: 1950 }), door('b', 'right')],
+                                { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  const d1950 = inner.dims.find(d => d.kind === 'height' && Number(d.text) === 1950);
+  const iAsmL = Math.min(...inner.shapes.map(s => s.x));
+  const iAsmR = Math.max(...inner.shapes.map(s => s.x + s.w));
+  check('an inner slope face is measured out at the margin',
+        d1950.x1 < iAsmL || d1950.x1 > iAsmR, true);
+  check('with a straight extension line reaching back to it',
+        (d1950.ext || []).length > 0 &&
+        d1950.ext.every(e => Math.abs(e.y1 - e.y2) < 0.5), true);
 }
 
 /* ── it must not throw on the shapes the drawing really hands it ───────── */
