@@ -186,6 +186,43 @@ function _applyNotch(P,nt,sc,mmW){
            shoulder:S, inner:N, foot:B, rest:restMM };
 }
 
+// ─── מתאר הזכוכית ────────────────────────────────────────────────────────
+//
+// המתאר הוא **מה שנחתך בפועל**, ולכן הוא נבנה פעם אחת במילימטרים ומשמש
+// גם את הציור וגם את הליקוט. הציור מכפיל בקנה מידה ומזיז למקום; הליקוט
+// מחשב ממנו שטח ומידות חיתוך. שני מחשבים נפרדים היו מתפצלים, והפער
+// היה נשאר בלתי נראה עד שהזכוכית מגיעה חתוכה לא נכון.
+//
+// הנקודות יחסיות לפינה השמאלית-עליונה של תיבת השייף.
+function lgOutline(shower){
+  const shapes=(shower&&shower.shapes)||[];
+  const js=(typeof lgJunctions==='function')?lgJunctions(shower):[];
+  return shapes.map((s,i)=>{
+    const sl=_slopeOf(s,js,i), nt=_notchOf(s,js,i);
+    const mmW = (sl&&sl.vSide) ? Math.max(sl.w1,sl.w2) : ((s&&s.w)||LG_DEF_W);
+    const mmH = (sl&&sl.hSide) ? Math.max(sl.h1,sl.h2) : ((s&&s.h)||LG_DEF_H);
+
+    // נוסחה אחת לכל תשעת המקרים — בלי שיפוע, אופקי, אנכי, או שניהם.
+    // הפאה שאינה משופעת היא העוגן, וארבע המידות קובעות את המרובע במלואו.
+    const W1=(sl&&sl.vSide)?sl.w1:mmW, W2=(sl&&sl.vSide)?sl.w2:mmW;
+    const H1=(sl&&sl.hSide)?sl.h1:mmH, H2=(sl&&sl.hSide)?sl.h2:mmH;
+    const anchorL=!(sl&&sl.vSide==='left');
+    const anchorT=!(sl&&sl.hSide==='top');
+    let TLx,TRx,BLx,BRx,TLy,TRy,BLy,BRy;
+    if(anchorL){ TLx=0;    BLx=0;    TRx=W1;      BRx=W2;      }
+    else       { TRx=mmW;  BRx=mmW;  TLx=mmW-W1;  BLx=mmW-W2;  }
+    if(anchorT){ TLy=0;    TRy=0;    BLy=H1;      BRy=H2;      }
+    else       { BLy=mmH;  BRy=mmH;  TLy=mmH-H1;  TRy=mmH-H2;  }
+
+    let poly=[[TLx,TLy],[TRx,TRy],[BRx,BRy],[BLx,BLy]], cut=null;
+    if(nt){ cut=_applyNotch(poly,nt,1,mmW); poly=cut.poly; }
+
+    return { idx:i, id:(s&&s.id)||('s'+i), kind:(s&&s.kind)||'fixed',
+             label:(s&&s.label)||'', mmW:mmW, mmH:mmH, poly:poly,
+             slope:sl, notch:nt, cut:cut };
+  });
+}
+
 // ─── הפריסה ─────────────────────────────────────────────────────────────
 //
 // מעבר אחד. השוליים נתונים לו מבחוץ, כי כמה נתיבים יידרשו מימין מתברר
@@ -201,8 +238,9 @@ function _layoutPass(shower,cW,mgL,mgR){
 
   const MG=mgL;
   const js=(typeof lgJunctions==='function')?lgJunctions(shower):[];
-  const slopes=shapes.map((s,i)=>_slopeOf(s,js,i));
-  const notches=shapes.map((s,i)=>_notchOf(s,js,i));
+  const outlines=lgOutline(shower);
+  const slopes=outlines.map(o=>o.slope);
+  const notches=outlines.map(o=>o.notch);
 
   // גובה ורוחב של שייף: משופע נמדד לפי הפאה הגדולה. השדות של השיפוע
   // גוברים על h ו-w, אחרת ברירת המחדל 2000 של שייף משופע בלי h הייתה
@@ -232,26 +270,16 @@ function _layoutPass(shower,cW,mgL,mgR){
     const kind=(s&&s.kind)||'fixed';
     const y = kind==='door' ? oy : oy+(maxMM-mmH)*sc;
 
-    // כל שייף נמסר לצייר כפוליגון, גם מלבן. ככה הצייר לא צריך לדעת מה
-    // זה שיפוע, באיזה צד הוא יורד ומה ברירת המחדל — הוא מצייר נקודות.
-    // נוסחה אחת לכל תשעת המקרים — בלי שיפוע, אופקי, אנכי, או שניהם.
-    // הפאה שאינה משופעת היא העוגן, וארבע המידות קובעות את המרובע במלואו:
-    // רוחב עליון ותחתון, גובה שמאלי וימני.
-    const W1=sl&&sl.vSide?sl.w1*sc:w, W2=sl&&sl.vSide?sl.w2*sc:w;
-    const H1=sl&&sl.hSide?sl.h1*sc:h, H2=sl&&sl.hSide?sl.h2*sc:h;
-    const anchorL=!(sl&&sl.vSide==='left');   // שיפוע בשמאל ⇒ הפאה הימנית היא העוגן
-    const anchorT=!(sl&&sl.hSide==='top');    // שיפוע בראש  ⇒ התחתית היא העוגן
-    let TLx,TRx,BLx,BRx,TLy,TRy,BLy,BRy;
-    if(anchorL){ TLx=x;     BLx=x;     TRx=x+W1;   BRx=x+W2;   }
-    else       { TRx=x+w;   BRx=x+w;   TLx=x+w-W1; BLx=x+w-W2; }
-    if(anchorT){ TLy=y;     TRy=y;     BLy=y+H1;   BRy=y+H2;   }
-    else       { BLy=y+h;   BRy=y+h;   TLy=y+h-H1; TRy=y+h-H2; }
-    let poly=[[TLx,TLy],[TRx,TRy],[BRx,BRy],[BLx,BLy]];
+    // המתאר נבנה פעם אחת במילימטרים; כאן רק מכפילים ומזיזים למקום. כל
+    // שייף נמסר לצייר כפוליגון, גם מלבן — ככה הצייר לא צריך לדעת מה זה
+    // שיפוע, באיזה צד הוא יורד ומה ברירת המחדל.
+    const ol=outlines[i];
+    const poly=ol.poly.map(p=>[x+p[0]*sc, y+p[1]*sc]);
     const nt=notches[i];
-    if(nt){
-      const cut=_applyNotch(poly,nt,sc,mmW);
-      poly=cut.poly;
-      nt.shoulder=cut.shoulder; nt.inner=cut.inner; nt.foot=cut.foot; nt.restMM=cut.rest;
+    if(nt && ol.cut){
+      const put=p=>[x+p[0]*sc, y+p[1]*sc];
+      nt.shoulder=put(ol.cut.shoulder); nt.inner=put(ol.cut.inner);
+      nt.foot=put(ol.cut.foot);         nt.restMM=ol.cut.rest;
     }
 
     const o={ idx:i, id:(s&&s.id)||('s'+i), kind:kind,
@@ -822,4 +850,67 @@ function lgLayout(shower,opts){
   return res;
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { lgLayout: lgLayout };
+// ─── ליקוט הזכוכית ───────────────────────────────────────────────────────
+//
+// ‏lgBOM מלקט את הפרזול. זה מלקט את מה שנחתך.
+//
+// **השטח נמדד לפי הגובה הגדול ביותר והרוחב הגדול ביותר** — המלבן
+// החוסם. זה נכון גם לשיפוע וגם לפינוי, כי מהלוח נחתך מלבן ומה שיורד
+// ממנו הולך לפח: משלמים על מה שקונים, לא על מה שנשאר.
+//
+// השטח נטו מוצג לצידו כמידע בלבד — הוא מראה כמה זכוכית באמת יוצאת,
+// וההפרש ביניהם הוא הפחת.
+function lgGlass(shower){
+  const outs=lgOutline(shower);
+  const js=(typeof lgJunctions==='function')?lgJunctions(shower):[];
+  const shapes=(shower&&shower.shapes)||[];
+
+  // שטח פוליגון — נוסחת שרוכי הנעל. פשוטה, מדויקת, ולא אכפת לה כמה
+  // צלעות יש: מרובע, משופע, או שש-צלעות של פינוי.
+  const area=P=>{ let a=0;
+    for(let i=0,n=P.length;i<n;i++){ const b=P[(i+1)%n];
+      a += P[i][0]*b[1] - b[0]*P[i][1]; }
+    return Math.abs(a)/2; };
+
+  return outs.map((o,i)=>{
+    const src=shapes[i]||{};
+    const grossMM2=o.mmW*o.mmH, netMM2=area(o.poly);
+    const round2=v=>Math.round(v*100)/100;
+
+    // קידוחים: חור לידית, וחור לכל פריט פרזול שנתלה על הזכוכית הזאת.
+    // ציר נספר פעם אחת בצומת, אבל **קודח בשתי הזכוכיות** — לכן הוא
+    // נספר כאן שוב, מצד הזכוכית.
+    let holes = o.kind==='door' ? 1 : 0;
+    [js[i],js[i+1]].forEach(j=>{ if(j&&j.type) holes += (j.qty||2); });
+
+    return {
+      idx:i, id:o.id, kind:o.kind, label:o.label,
+      cutW:o.mmW, cutH:o.mmH,                  // הגדול ביותר בכל כיוון
+      // הפחת נגזר מהמספרים המעוגלים ולא מהגולמיים, אחרת השורה בטבלה לא
+      // מתחברת: 1.00 פחות 0.87 חייב להיות 0.13 גם על הנייר.
+      m2:round2(grossMM2/1e6),                 // זה מה שמחייבים
+      netM2:round2(netMM2/1e6),                // כמה זכוכית באמת יוצאת
+      wasteM2:round2(round2(grossMM2/1e6)-round2(netMM2/1e6)),
+      thickness:src.thickness||null,
+      sloped:!!(o.slope&&(o.slope.hSide||o.slope.vSide)),
+      notched:!!o.notch,
+      shape: o.notch ? 'פינוי מדרגה'
+           : (o.slope&&o.slope.hSide&&o.slope.vSide) ? 'משופע בגובה וברוחב'
+           : (o.slope&&o.slope.hSide) ? 'משופע בגובה'
+           : (o.slope&&o.slope.vSide) ? 'משופע ברוחב' : 'מלבן',
+      holes:holes,
+      poly:o.poly,
+    };
+  });
+}
+
+// סיכום להזמנה: כמה זכוכיות, כמה מ"ר, וכמה הולך לפח.
+function lgGlassTotals(shower){
+  const g=lgGlass(shower);
+  const sum=(k)=>Math.round(g.reduce((n,x)=>n+x[k],0)*100)/100;
+  return { panes:g.length, m2:sum('m2'), netM2:sum('netM2'),
+           wasteM2:sum('wasteM2'), holes:g.reduce((n,x)=>n+x.holes,0) };
+}
+
+if (typeof module !== 'undefined' && module.exports)
+  module.exports = { lgLayout, lgOutline, lgGlass, lgGlassTotals };
