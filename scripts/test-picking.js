@@ -180,5 +180,46 @@ console.log('');
   check('and the holes to drill', t.holes > 0, true);
 }
 
+/* ── order lines: the bridge to a catalogue and a price ─────────────────── */
+/* The engine derives TYPES, never part numbers — a part number inside the
+   engine would tie it to one customer's catalogue. Order lines carry the
+   catalogue KEY, and the mapping to a real SKU comes from outside. That is
+   what lets prices come from Hashavshevet without the engine knowing what a
+   price is. */
+{
+  const s = shower([fixed('a'), door('b', 'right')], { right: 'wall', left: 'open' });
+  s.thickness = 8; s.glassType = 'shakuf';
+  const lines = ctx.lgOrderLines(s);
+
+  const glass = lines.filter(l => l.key.kind === 'glass');
+  check('glass of one type and thickness is one order line', glass.length, 1);
+  check('sold by the square metre', glass[0].unit, 'm2');
+  check('and the quantity is the sum of the panes',
+        glass[0].qty, Math.round((1 + 0.8 * 1.985) * 100) / 100);
+  check('the key carries what decides the part number',
+        [glass[0].key.glassType, glass[0].key.thickness], ['shakuf', 8]);
+  check('and the panes are still listed underneath, for the cutter',
+        glass[0].detail.length, 2);
+
+  const hw = lines.filter(l => l.key.kind === 'hardware');
+  check('every hardware line comes across', hw.length > 0, true);
+  check('sold by the unit', hw.every(l => l.unit === 'unit'), true);
+  check('with finish and quality in the key — they change the part number',
+        [hw[0].key.finish, hw[0].key.quality], ['shahor', 'zamak']);
+
+  /* two thicknesses are two lines, because they are two products */
+  const mixed = shower([fixed('a'), door('b', 'right', 1985, { thickness: 10 })],
+                       { right: 'wall', left: 'open' });
+  mixed.thickness = 8; mixed.glassType = 'shakuf';
+  check('a different thickness is a different line',
+        ctx.lgOrderLines(mixed).filter(l => l.key.kind === 'glass').length, 2);
+
+  /* without a catalogue there is no part number, and none is invented */
+  check('no catalogue means no part number', lines.every(l => l.sku === null), true);
+  check('and with one, every line gets its own',
+        ctx.lgOrderLines(s, k => k.kind + ':' + (k.type || k.glassType))
+           .every(l => typeof l.sku === 'string' && l.sku.length), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll picking checks passed.');

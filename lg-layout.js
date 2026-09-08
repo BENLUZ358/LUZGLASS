@@ -187,6 +187,66 @@ function _applyNotch(P,nt,sc,mmW){
            shoulder:S, inner:N, foot:B, rest:restMM };
 }
 
+// ─── מהצייר אל המנוע ─────────────────────────────────────────────────────
+//
+// הצייר מחזיק שני מבנים: ‏panels (מה זה — דלת, קבוע, באיזה צד הציר)
+// ו-‏pStates (כמה — רוחב, גובה, שיפוע). המנוע מכיר מבנה אחד. ההמרה
+// יושבת כאן ולא בתוך הצייר, כי היא הנקודה היחידה שבה שני המודלים
+// נוגעים — ומקום שבו שני מודלים נוגעים בלי בדיקה הוא מקום שבו הם
+// מתפצלים.
+//
+// ‏pStates מגיע כאובייקט לפי מפתח מספרי ולא כמערך. זה כבר הפיל את
+// הציור פעם אחת, כש-‏.map נקרא על משהו שאין לו ‏.map — ולכן הקריאה כאן
+// מקבלת את שתי הצורות.
+function lgFromPanels(panels,pStates,opts){
+  const o=opts||{};
+  const ps=i=>{ const v=pStates && (Array.isArray(pStates)?pStates[i]:pStates[i]);
+                return v||{}; };
+  const list=panels||[];
+
+  return {
+    boundary: o.boundary || { right:'wall', left:'wall' },
+    finish: o.finish||'', quality: o.quality||'', thickness: o.thickness||null,
+    shapes: list.map((p,i)=>{
+      const st=ps(i), kind=(p&&p.type)==='door'?'door':'fixed';
+      const s={ id:(p&&p.id)||('p'+i), kind:kind, label:(p&&p.label)||'',
+                w:Number(st.w)||(kind==='door'?800:500), h:Number(st.h)||2000 };
+
+      // ⚠️ מוסכמת הציר הפוכה בין השניים, וזה כבר היה באג: אצל המנוע
+      // 'right' פונה לשייף הקודם במערך — שהוא **שמאל** על הקנבס.
+      if(kind==='door') s.hingeSide = (p&&p.hingeSide)==='left' ? 'right' : 'left';
+
+      // שיפוע: הצייר מחזיק ציר ('height'/'width') וצד; המנוע מחזיק זוג
+      // מידות לכל כיוון, ויכול להחזיק את שניהם יחד.
+      if(st.hasSlope){
+        const a=Number(st.slopeH1)||0, b=Number(st.slopeH2)||0;
+        if(st.slopeAxis==='width'){ s.slopeW1=a; s.slopeW2=b;
+          if(st.slopeSide==='left'||st.slopeSide==='right') s.slopeSideV=st.slopeSide; }
+        else { s.slopeH1=a; s.slopeH2=b;
+          if(st.slopeSide==='top'||st.slopeSide==='bottom') s.slopeSideH=st.slopeSide; }
+      }
+
+      // פינוי מדרגה
+      if(Number(st.notchW)>0 && Number(st.notchH)>0){
+        s.notchW=Number(st.notchW); s.notchH=Number(st.notchH);
+        if(Number(st.notchHIn)>0)  s.notchHIn=Number(st.notchHIn);
+        if(Number(st.notchRest)>0) s.notchRest=Number(st.notchRest);
+        if(st.notchSide)    s.notchSide=st.notchSide;
+        if(st.notchBracket) s.notchBracket=st.notchBracket;
+      }
+
+      // פרזול ומידות שהלקוח שינה. ‏!=null ולא ||, כדי ש-0 יישמר.
+      ['hingeTop','hingeBot','bracketTop','bracketBot','bracketInset',
+       'handleDist','handleRef','thickness'].forEach(k=>{
+        if(st[k]!=null && st[k]!=='') s[k]=st[k];
+      });
+      if(st.handleEdge!=null) s.handleEdge=Number(st.handleEdge);
+      if(st.floorBracket) s.floorBracket=true;
+      return s;
+    }),
+  };
+}
+
 // ─── מתאר הזכוכית ────────────────────────────────────────────────────────
 //
 // המתאר הוא **מה שנחתך בפועל**, ולכן הוא נבנה פעם אחת במילימטרים ומשמש
@@ -897,6 +957,7 @@ function lgGlass(shower){
       // העובי נבחר בזמן בניית השרטוט — לכל המקלחון, ואפשר לדרוס לזכוכית
       // בודדת. ממנו נגזר המשקל, וזה מה שקובע כמה אנשים צריך להרמה.
       thickness:thick(src),
+      glassType:src.glassType || (shower&&shower.glassType) || null,
       kg:round2(grossMM2/1e6*(thick(src)||0)*LG_GLASS_KG),
       sloped:!!(o.slope&&(o.slope.hSide||o.slope.vSide)),
       notched:!!o.notch,
@@ -920,5 +981,50 @@ function lgGlassTotals(shower){
            heaviest:g.reduce((m,x)=>Math.max(m,x.kg||0),0) };
 }
 
+// ─── שורות הזמנה ─────────────────────────────────────────────────────────
+//
+// המנוע גוזר **סוגים**, לא מק"טים. מק"ט בתוך המנוע היה קושר אותו לקטלוג
+// של לקוח מסוים, וקבלן עם פרזול אחר היה מחייב שינוי במנוע.
+//
+// כאן שני הליקוטים מתאחדים לשורות עם **מפתח קטלוגי** — הצירוף שממנו
+// נגזר המק"ט. המיפוי עצמו מגיע מבחוץ: המחירון של חשבשבת, טבלה במסד,
+// או פונקציה. המנוע לא יודע מחירים ולא צריך לדעת.
+//
+//   lgOrderLines(shower, sku)  →  [{key, sku, qty, unit, ...}]
+//
+// ‏sku היא פונקציה אופציונלית שמקבלת מפתח ומחזירה מק"ט. בלעדיה השורות
+// חוזרות עם המפתח בלבד — מספיק כדי להציג ליקוט, לא מספיק כדי לתמחר.
+function lgOrderLines(shower,sku){
+  const map = typeof sku==='function' ? sku : ()=>null;
+  const out = [];
+
+  // זכוכית: מקובצת לפי (סוג, עובי) ונמכרת במ"ר. שתי זכוכיות באותו סוג
+  // ועובי הן שורה אחת בהזמנה, גם אם המידות שונות.
+  const glass = {};
+  lgGlass(shower).forEach(g=>{
+    const key = { kind:'glass', glassType:g.glassType, thickness:g.thickness };
+    const k = JSON.stringify(key);
+    if(!glass[k]) glass[k] = { key:key, sku:map(key), qty:0, unit:'m2', panes:0, detail:[] };
+    glass[k].qty += g.m2;
+    glass[k].panes += 1;
+    glass[k].detail.push({ id:g.id, cutW:g.cutW, cutH:g.cutH, m2:g.m2, shape:g.shape, holes:g.holes });
+  });
+  Object.keys(glass).forEach(k=>{
+    glass[k].qty = Math.round(glass[k].qty*100)/100;
+    out.push(glass[k]);
+  });
+
+  // פרזול: הצירוף שכבר יוצא מ-lgBOM הוא בדיוק המפתח הקטלוגי.
+  const bom = (typeof lgBOM==='function') ? lgBOM(shower) : [];
+  bom.forEach(l=>{
+    const key = { kind:'hardware', type:l.type, variant:l.variant,
+                  finish:l.finish, quality:l.quality };
+    out.push({ key:key, sku:map(key), qty:l.qty, unit:'unit' });
+  });
+
+  return out;
+}
+
 if (typeof module !== 'undefined' && module.exports)
-  module.exports = { lgLayout, lgOutline, lgGlass, lgGlassTotals };
+  module.exports = { lgLayout, lgOutline, lgGlass, lgGlassTotals,
+                     lgFromPanels, lgOrderLines };
