@@ -101,12 +101,15 @@ const CASES = [
   ['קבוע + דלת', shower([fixed('a'), door('b', 'right')])],
   ['קבוע דלת קבוע', shower([fixed('a'), door('b', 'right'), fixed('c')])],
   ['שתי דלתות', shower([fixed('a'), door('b', 'right'), door('c', 'left'), fixed('d')])],
-  ['חמישה פאנלים', shower([fixed('a'), door('b', 'right'), fixed('c'), door('d', 'left'), fixed('e')])],
+  /* חמישה פאנלים — הקבועים צמודים, כי קבוע בין שתי דלתות אינו נשען
+     על כלום. ‏lgValidate פוסל אותו. */
+  ['חמישה פאנלים', shower([fixed('a'), fixed('b'), door('c', 'right'), door('d', 'left'), fixed('e')])],
   ['שיפוע ברצפה (ברירת מחדל)', shower([Object.assign(fixed('a'), { slopeH1: 2000, slopeH2: 1950 }), door('b', 'right')])],
   ['שיפוע למעלה', shower([Object.assign(fixed('a'), { slopeH1: 2000, slopeH2: 1750, slopeSide: 'top' }), door('b', 'right')])],
   ['שיפוע בצד הקיר', shower([Object.assign(fixed('a'), { slopeW1: 500, slopeW2: 455 }), door('b', 'right')], { right: 'wall', left: 'open' })],
   ['דלת משופעת בצד הידית', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeW1: 800, slopeW2: 750 })])],
   ['שיפוע בפאנל אמצעי', shower([fixed('a'), Object.assign(door('b', 'right'), { slopeH1: 1985, slopeH2: 1800 }), fixed('c')])],
+  ['שיפוע בגובה וגם ברוחב', shower([Object.assign(fixed('a'), { slopeH1: 2000, slopeH2: 1950, slopeW1: 500, slopeW2: 455 }), door('b', 'right')], { right: 'wall', left: 'open' })],
   ['צירים לא בברירת מחדל', shower([fixed('a'), Object.assign(door('b', 'right'), { hingeTop: 150, hingeBot: 340 })])],
 ];
 

@@ -99,6 +99,22 @@ function lgValidate(shower) {
       errors.push({ at: sh.id, msg: 'דלת לא יכולה להיתלות על דלת' });
     }
   }
+
+  // קבוע נושא את עצמו רק אם הוא נשען על משהו — קיר או קבוע אחר. קבוע
+  // שיושב בין שתי דלתות לא מחובר לכלום: הצירים של שתי הדלתות נתלים
+  // עליו, ואין לו עצמו על מה להתברג.
+  for (var k = 0; k < shapes.length; k++) {
+    var fx = shapes[k];
+    if (!fx || fx.kind === 'door') continue;
+    var left  = k === 0 ? (bound.right === 'wall' ? 'wall' : null) : shapes[k - 1];
+    var right = k === shapes.length - 1 ? (bound.left === 'wall' ? 'wall' : null) : shapes[k + 1];
+    var held = [left, right].some(function (n) {
+      return n === 'wall' || (n && n.kind && n.kind !== 'door');
+    });
+    if (!held) {
+      errors.push({ at: fx.id, msg: 'קבוע חייב להישען על קיר או על קבוע — הוא לא יכול לשבת בין שתי דלתות' });
+    }
+  }
   return errors;
 }
 

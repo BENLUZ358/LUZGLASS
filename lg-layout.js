@@ -103,30 +103,28 @@ function _hingeLeft(src,js,i){
 //     ופאה משופעת מתחת לציר לא נותנת לו מה לאחוז.
 //
 // אופקי (top/bottom) נמדד בשני גבהים — שמאל וימין; אנכי (left/right)
-// בשני רוחבים — עליון ותחתון.
+// בשני רוחבים — עליון ותחתון. **השניים אינם מוציאים זה את זה**: זכוכית
+// שנחתכת גם מול קיר לא ישר וגם מול רצפה מנוקזת היא מרובע שארבע פאותיו
+// שונות, וכל אחת מהן צריכה מידה משלה. פחות מזה, והחותך מנחש פינה.
 function _slopeOf(src,js,i){
   const h1=(src&&src.slopeH1)||0, h2=(src&&src.slopeH2)||0;
   const w1=(src&&src.slopeW1)||0, w2=(src&&src.slopeW2)||0;
   const hasH=h1>0&&h2>0&&h1!==h2, hasW=w1>0&&w2>0&&w1!==w2;
   if(!hasH&&!hasW) return null;
 
-  let side=src&&src.slopeSide;
-  if(['top','bottom','left','right'].indexOf(side)<0) side=null;
-  if(!side){
-    if(hasW){
-      side = (src&&src.kind)==='door'
-        ? (_hingeLeft(src,js,i)?'right':'left')             // הצד ההפוך לציר
-        : ((js[i]&&js[i].type==='bracket-wall')?'left'      // הפאה שנוגעת בקיר
-          :(js[i+1]&&js[i+1].type==='bracket-wall')?'right':'left');
-    } else side='bottom';
-  }
+  const pick=(v,set)=>set.indexOf(v)>=0?v:null;
+  const one=src&&src.slopeSide;    // בחירה בודדת, כשיש רק שיפוע אחד
+  const out={hSide:null,h1:h1,h2:h2,vSide:null,w1:w1,w2:w2};
 
-  // הצד שנבחר חייב את המידות שמתאימות לו
-  const vertical=(side==='left'||side==='right');
-  if(vertical  && !hasW) return null;
-  if(!vertical && !hasH) return null;
-  return vertical ? {side:side, vertical:true,  w1:w1, w2:w2}
-                  : {side:side, vertical:false, h1:h1, h2:h2};
+  if(hasH) out.hSide = pick(src&&src.slopeSideH,['top','bottom'])
+                    || pick(one,['top','bottom']) || 'bottom';
+  if(hasW) out.vSide = pick(src&&src.slopeSideV,['left','right'])
+                    || pick(one,['left','right'])
+                    || ((src&&src.kind)==='door'
+                        ? (_hingeLeft(src,js,i)?'right':'left')          // הצד ההפוך לציר
+                        : ((js[i]&&js[i].type==='bracket-wall')?'left'   // הפאה שנוגעת בקיר
+                          :(js[i+1]&&js[i+1].type==='bracket-wall')?'right':'left'));
+  return out;
 }
 
 // ─── הפריסה ─────────────────────────────────────────────────────────────
@@ -150,9 +148,9 @@ function _layoutPass(shower,cW,mgL,mgR){
   // גוברים על h ו-w, אחרת ברירת המחדל 2000 של שייף משופע בלי h הייתה
   // מנפחת את הציור.
   const shapeMM=(s,i)=>{ const sl=slopes[i];
-    return (sl&&!sl.vertical) ? Math.max(sl.h1,sl.h2) : ((s&&s.h)||LG_DEF_H); };
+    return (sl&&sl.hSide) ? Math.max(sl.h1,sl.h2) : ((s&&s.h)||LG_DEF_H); };
   const shapeWM=(s,i)=>{ const sl=slopes[i];
-    return (sl&&sl.vertical) ? Math.max(sl.w1,sl.w2) : ((s&&s.w)||LG_DEF_W); };
+    return (sl&&sl.vSide) ? Math.max(sl.w1,sl.w2) : ((s&&s.w)||LG_DEF_W); };
 
   const totalMM=shapes.reduce((n,s,i)=>n+shapeWM(s,i),0);
   const maxMM=Math.max.apply(null,shapes.map(shapeMM));
@@ -176,19 +174,19 @@ function _layoutPass(shower,cW,mgL,mgR){
 
     // כל שייף נמסר לצייר כפוליגון, גם מלבן. ככה הצייר לא צריך לדעת מה
     // זה שיפוע, באיזה צד הוא יורד ומה ברירת המחדל — הוא מצייר נקודות.
-    const x2=x+w, y2=y+h;
-    let poly=[[x,y],[x2,y],[x2,y2],[x,y2]];
-    if(sl && !sl.vertical){
-      // אופקי: פאה אחת ישרה לכל האורך, השנייה נחתכת באלכסון
-      const a=sl.h1*sc, b=sl.h2*sc;
-      poly = sl.side==='bottom' ? [[x,y],[x2,y],[x2,y+b],[x,y+a]]
-                                : [[x,y2-a],[x2,y2-b],[x2,y2],[x,y2]];
-    } else if(sl){
-      // אנכי: ראש ותחתית ישרים, ופאה אחת יורדת באלכסון
-      const t=sl.w1*sc, bm=sl.w2*sc;
-      poly = sl.side==='left' ? [[x2-t,y],[x2,y],[x2,y2],[x2-bm,y2]]
-                              : [[x,y],[x+t,y],[x+bm,y2],[x,y2]];
-    }
+    // נוסחה אחת לכל תשעת המקרים — בלי שיפוע, אופקי, אנכי, או שניהם.
+    // הפאה שאינה משופעת היא העוגן, וארבע המידות קובעות את המרובע במלואו:
+    // רוחב עליון ותחתון, גובה שמאלי וימני.
+    const W1=sl&&sl.vSide?sl.w1*sc:w, W2=sl&&sl.vSide?sl.w2*sc:w;
+    const H1=sl&&sl.hSide?sl.h1*sc:h, H2=sl&&sl.hSide?sl.h2*sc:h;
+    const anchorL=!(sl&&sl.vSide==='left');   // שיפוע בשמאל ⇒ הפאה הימנית היא העוגן
+    const anchorT=!(sl&&sl.hSide==='top');    // שיפוע בראש  ⇒ התחתית היא העוגן
+    let TLx,TRx,BLx,BRx,TLy,TRy,BLy,BRy;
+    if(anchorL){ TLx=x;     BLx=x;     TRx=x+W1;   BRx=x+W2;   }
+    else       { TRx=x+w;   BRx=x+w;   TLx=x+w-W1; BLx=x+w-W2; }
+    if(anchorT){ TLy=y;     TRy=y;     BLy=y+H1;   BRy=y+H2;   }
+    else       { BLy=y+h;   BRy=y+h;   TLy=y+h-H1; TRy=y+h-H2; }
+    const poly=[[TLx,TLy],[TRx,TRy],[BRx,BRy],[BLx,BLy]];
 
     const o={ idx:i, id:(s&&s.id)||('s'+i), kind:kind,
               label:(s&&s.label)||'', x:x, y:y, w:w, h:h,
@@ -239,14 +237,15 @@ function _layoutPass(shower,cW,mgL,mgR){
   // כשהקיר לא ישר. השניים יושבים אחד מול השני, מעל הזכוכית ומתחתיה, כדי
   // שרואים מיד כמה הקיר סוטה.
   out.shapes.forEach(s=>{
-    const vs = s.slope && s.slope.vertical ? s.slope : null;
+    // הקצוות נקראים מהפוליגון עצמו, כדי שהמידה והצורה לא יוכלו לחלוק
+    const P=s.poly, vs = s.slope && s.slope.vSide ? s.slope : null;
     const topMM = vs ? vs.w1 : s.mmW;
-    const lane=place('top',s.x,s.x+s.w,String(topMM).length*8+16);
-    dim('width',topMM,s.x,oy-lane,s.x+s.w,oy-lane,{idx:s.idx,zone:'top',lane:lane});
+    const lane=place('top',P[0][0],P[1][0],String(topMM).length*8+16);
+    dim('width',topMM,P[0][0],oy-lane,P[1][0],oy-lane,{idx:s.idx,zone:'top',lane:lane});
     if(vs){
-      const bw=vs.w2*sc, bx = vs.side==='left' ? s.x+s.w-bw : s.x;
-      const bLane=place('bottom',bx,bx+bw,String(vs.w2).length*8+16);
-      dim('width',vs.w2,bx,asmB+bLane,bx+bw,asmB+bLane,{idx:s.idx,zone:'bottom',lane:bLane});
+      const bLane=place('bottom',P[3][0],P[2][0],String(vs.w2).length*8+16);
+      dim('width',vs.w2,P[3][0],asmB+bLane,P[2][0],asmB+bLane,
+          {idx:s.idx,zone:'bottom',lane:bLane});
     }
   });
   if(out.shapes.length>1){
@@ -369,13 +368,14 @@ function _layoutPass(shower,cW,mgL,mgR){
   // כי משם נגזרות שתי מידות החיתוך.
   const hEntries=[];
   out.shapes.forEach(s=>{
-    const hs = s.slope && !s.slope.vertical ? s.slope : null;
+    const hs = s.slope && s.slope.hSide ? s.slope : null;
     if(hs){
       // כל פאה נושאת את המידה שלה, בקצה שלה — אותו כלל כמו קצה ההרכבה.
-      // הפוליגון כבר יודע איפה כל פאה מתחילה ונגמרת, ולכן נגזר ממנו.
+      // הפוליגון כבר יודע איפה כל פאה מתחילה ונגמרת, ולכן נגזר ממנו:
+      // בשיפוע כפול הפאה עצמה נוטה, וה-x שלה אינו x של התיבה.
       const P=s.poly;
-      hEntries.push({idx:s.idx, mm:hs.h1, ax:s.x,     y1:P[0][1], y2:P[3][1], face:'L'});
-      hEntries.push({idx:s.idx, mm:hs.h2, ax:s.x+s.w, y1:P[1][1], y2:P[2][1], face:'R'});
+      hEntries.push({idx:s.idx, mm:hs.h1, ax:(P[0][0]+P[3][0])/2, y1:P[0][1], y2:P[3][1], face:'L'});
+      hEntries.push({idx:s.idx, mm:hs.h2, ax:(P[1][0]+P[2][0])/2, y1:P[1][1], y2:P[2][1], face:'R'});
     } else {
       hEntries.push({idx:s.idx, mm:s.mmH, ax:s.x+s.w/2, y1:s.y, y2:s.y+s.h});
     }
@@ -569,7 +569,7 @@ function lgLayout(shower,opts){
     // במקום אחת. שניהם צריכים יותר זכוכית מקבוע רגיל.
     const room=shp.reduce((n,s)=>n+80
       +((s&&s.kind)==='door'?15:0)
-      +((s&&(s.slopeH1||s.slopeW1))?25:0),0);
+      +((s&&s.slopeH1)?25:0)+((s&&s.slopeW1)?25:0),0);
     const need=Math.round(room/0.65);
     if(need>cW) cW=need;
   }

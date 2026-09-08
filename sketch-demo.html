@@ -437,10 +437,13 @@ const COMBOS={
       {type:'door', label:'דלת ב', hingeSide:'right',handleSide:'left',swingDir:'out',hingeOnFixed:'next'},
       {type:'fixed',label:'קבוע ב',wallSide:'left'},
     ]},
-    {id:'h_3k2d',label:'3 קבועים 2 דלתות',panels:[
+    // ‏h_3k2d ("3 קבועים 2 דלתות") הוסר: הקבוע האמצעי בו ישב בין שתי
+    // דלתות עם wallSide:'none' — שתי הדלתות נתלו עליו, ולו עצמו לא היה
+    // על מה להתברג. ‏lgValidate פוסל את זה עכשיו.
+    {id:'h_3k2d_wall',label:'3 קבועים 2 דלתות',panels:[
       {type:'fixed',label:'קבוע א',wallSide:'right'},
+      {type:'fixed',label:'קבוע ב',wallSide:'none'},
       {type:'door', label:'דלת א', hingeSide:'left', handleSide:'right',swingDir:'out',hingeOnFixed:'prev'},
-      {type:'fixed',label:'קבוע ב',wallSide:'none', hingeMarks:'both'},
       {type:'door', label:'דלת ב', hingeSide:'right',handleSide:'left', swingDir:'out',hingeOnFixed:'next'},
       {type:'fixed',label:'קבוע ג',wallSide:'left'},
     ]},
