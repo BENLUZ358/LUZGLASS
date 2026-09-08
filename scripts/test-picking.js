@@ -149,6 +149,29 @@ console.log('');
         L.hardware.filter(h => h.kind === 'hole').length, qty(bom, 'handle'));
 }
 
+/* ── thickness and weight ───────────────────────────────────────────────── */
+/* The customer picks the thickness while drawing. Weight follows from it,
+   and weight is what decides how many people it takes to lift a pane. */
+{
+  const s = shower([fixed('a'), door('b', 'right')], { right: 'wall', left: 'open' });
+  s.thickness = 8;
+  const g = lgGlass(s), t = lgGlassTotals(s);
+  check('the thickness reaches every pane', g.map(x => x.thickness), [8, 8]);
+  check('and one square metre of 8mm weighs 20kg', g[0].kg, 20);
+  check('the totals carry the weight', t.kg, Math.round((g[0].kg + g[1].kg) * 100) / 100);
+  check('and name the heaviest single pane', t.heaviest, Math.max(g[0].kg, g[1].kg));
+
+  /* a single pane can override — a door in 10mm beside 8mm fixed panels */
+  const mixed = shower([fixed('a'), door('b', 'right', 1985, { thickness: 10 })],
+                       { right: 'wall', left: 'open' });
+  mixed.thickness = 8;
+  check('a pane may be thicker than the rest',
+        lgGlass(mixed).map(x => x.thickness), [8, 10]);
+
+  check('and with no thickness chosen, nothing is invented',
+        lgGlass(shower([fixed('a')]))[0].thickness, null);
+}
+
 /* ── totals, for the order sheet ────────────────────────────────────────── */
 {
   const t = lgGlassTotals(shower([fixed('a'), door('b', 'right')], { right: 'wall', left: 'open' }));

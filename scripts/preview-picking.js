@@ -28,7 +28,7 @@ const HW_HE = {
 
 const shower = (shapes, boundary) => ({
   boundary: boundary || { right: 'wall', left: 'wall' },
-  finish: 'shahor', quality: 'zamak', shapes,
+  finish: 'shahor', quality: 'zamak', thickness: 8, shapes,
 });
 const fixed = (id, h, e) => Object.assign({ id, kind: 'fixed', w: 500, h: h || 2000 }, e || {});
 const door = (id, hs, h, e) => Object.assign({ id, kind: 'door', w: 800, h: h || 1985, hingeSide: hs || 'right' }, e || {});
@@ -69,15 +69,18 @@ const body = CASES.map(([name, sh]) => {
     <div>
       <h3>זכוכית</h3>
       <table>
-        <tr><th>#</th><th>סוג</th><th>חיתוך</th><th>צורה</th><th>מ״ר</th><th>נטו</th><th>פחת</th><th>קידוחים</th></tr>
+        <tr><th>#</th><th>סוג</th><th>חיתוך</th><th>צורה</th><th>עובי</th><th>מ״ר</th><th>נטו</th><th>פחת</th><th>ק״ג</th><th>קידוחים</th></tr>
         ${g.map(x => `<tr>
           <td>${x.idx + 1}</td><td>${x.kind === 'door' ? 'דלת' : 'קבוע'}</td>
           <td>${x.cutW} × ${x.cutH}</td><td>${esc(x.shape)}</td>
+          <td>${x.thickness ? x.thickness + ' מ״מ' : '—'}</td>
           <td><b>${x.m2}</b></td><td class="q">${x.netM2}</td>
-          <td class="${x.wasteM2 ? 'w' : 'q'}">${x.wasteM2 || '—'}</td><td>${x.holes}</td></tr>`).join('')}
-        <tr class="tot"><td colspan="4">סה״כ ${t.panes} זכוכיות</td>
+          <td class="${x.wasteM2 ? 'w' : 'q'}">${x.wasteM2 || '—'}</td>
+          <td>${x.kg || '—'}</td><td>${x.holes}</td></tr>`).join('')}
+        <tr class="tot"><td colspan="5">סה״כ ${t.panes} זכוכיות</td>
           <td><b>${t.m2}</b></td><td class="q">${t.netM2}</td>
-          <td class="w">${t.wasteM2 || '—'}</td><td>${t.holes}</td></tr>
+          <td class="w">${t.wasteM2 || '—'}</td>
+          <td><b>${t.kg || '—'}</b></td><td>${t.holes}</td></tr>
       </table>
 
       <h3>פרזול</h3>

@@ -88,6 +88,7 @@ const LG_EDGE_MM=200;          // ציר או זווית, 20 ס"מ מהקצה
 const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
 const MAX_NEAR=56;             // כמה רחוק מותר למידה לשבת ממה שהיא מודדת
+const LG_GLASS_KG=2.5;         // ק"ג למ"ר לכל מ"מ עובי — זכוכית מחוסמת
 
 // באיזו פאה תלויה הדלת. המנוע קובע, לא שדה ידני: ‏hingeSide היה סותר
 // את הצומת ודלתות צוירו עם הצירים בצד הידית.
@@ -867,6 +868,8 @@ function lgGlass(shower){
 
   // שטח פוליגון — נוסחת שרוכי הנעל. פשוטה, מדויקת, ולא אכפת לה כמה
   // צלעות יש: מרובע, משופע, או שש-צלעות של פינוי.
+  const thick=src=>Number(src.thickness || (shower&&shower.thickness)) || null;
+
   const area=P=>{ let a=0;
     for(let i=0,n=P.length;i<n;i++){ const b=P[(i+1)%n];
       a += P[i][0]*b[1] - b[0]*P[i][1]; }
@@ -891,7 +894,10 @@ function lgGlass(shower){
       m2:round2(grossMM2/1e6),                 // זה מה שמחייבים
       netM2:round2(netMM2/1e6),                // כמה זכוכית באמת יוצאת
       wasteM2:round2(round2(grossMM2/1e6)-round2(netMM2/1e6)),
-      thickness:src.thickness||null,
+      // העובי נבחר בזמן בניית השרטוט — לכל המקלחון, ואפשר לדרוס לזכוכית
+      // בודדת. ממנו נגזר המשקל, וזה מה שקובע כמה אנשים צריך להרמה.
+      thickness:thick(src),
+      kg:round2(grossMM2/1e6*(thick(src)||0)*LG_GLASS_KG),
       sloped:!!(o.slope&&(o.slope.hSide||o.slope.vSide)),
       notched:!!o.notch,
       shape: o.notch ? 'פינוי מדרגה'
@@ -909,7 +915,9 @@ function lgGlassTotals(shower){
   const g=lgGlass(shower);
   const sum=(k)=>Math.round(g.reduce((n,x)=>n+x[k],0)*100)/100;
   return { panes:g.length, m2:sum('m2'), netM2:sum('netM2'),
-           wasteM2:sum('wasteM2'), holes:g.reduce((n,x)=>n+x.holes,0) };
+           wasteM2:sum('wasteM2'), kg:sum('kg'),
+           holes:g.reduce((n,x)=>n+x.holes,0),
+           heaviest:g.reduce((m,x)=>Math.max(m,x.kg||0),0) };
 }
 
 if (typeof module !== 'undefined' && module.exports)
