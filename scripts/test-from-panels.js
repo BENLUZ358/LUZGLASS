@@ -58,6 +58,15 @@ console.log('');
   check("the drawer's 'left' becomes the engine's 'right'", conv('left'), 'right');
   check("and the drawer's 'right' becomes the engine's 'left'", conv('right'), 'left');
 
+  /* hingeOnFixed names the NEIGHBOUR rather than a side of the canvas, so it
+     is direct and it wins. The four old fields disagree with each other, and
+     only this one says what is actually joined to what. */
+  const byNeighbour = v => lgFromPanels(
+    [{ type: 'fixed' }, { type: 'door', hingeSide: 'right', hingeOnFixed: v }],
+    { 0: { w: 500 }, 1: { w: 800 } }).shapes[1].hingeSide;
+  check("hingeOnFixed:'prev' overrides a contradicting hingeSide", byNeighbour('prev'), 'right');
+  check("and 'next' does too", byNeighbour('next'), 'left');
+
   /* and the flip has to land the hinge on the shared face, not the wall */
   const sh = lgFromPanels([{ type: 'fixed' }, { type: 'door', hingeSide: 'left' }],
                           { 0: { w: 500, h: 2000 }, 1: { w: 800, h: 1985 } },
@@ -116,10 +125,31 @@ console.log('');
   check('zero survives instead of turning into the default', z.hingeTop, 0);
 }
 
+/* ── the wall comes off the end panels ──────────────────────────────────── */
+/* The drawer keeps wallSide on each panel; the engine keeps a boundary on
+   the shower. That boundary is what decides whether the first joint is a
+   wall bracket or an open edge — get it wrong and the hardware list is
+   wrong too. */
+{
+  const b = (first, last) => lgFromPanels(
+    [{ type: 'fixed', wallSide: first }, { type: 'fixed', wallSide: last }],
+    { 0: { w: 500, h: 2000 }, 1: { w: 500, h: 2000 } }).boundary;
+
+  check('a panel against the wall on the right gives a wall there',
+        b('right', 'none').right, 'wall');
+  check('and an open end stays open', b('right', 'none').left, 'open');
+  check('"both" counts on either side', [b('both', 'both').right, b('both', 'both').left],
+        ['wall', 'wall']);
+  check('an explicit boundary still wins',
+        lgFromPanels([{ type: 'fixed', wallSide: 'none' }], { 0: {} },
+                     { boundary: { right: 'wall', left: 'wall' } }).boundary.right, 'wall');
+}
+
 /* ── the result is something the engine accepts ─────────────────────────── */
 {
   const sh = lgFromPanels(
-    [{ type: 'fixed' }, { type: 'door', hingeSide: 'left' }, { type: 'fixed' }],
+    [{ type: 'fixed', wallSide: 'right' }, { type: 'door', hingeSide: 'left' },
+     { type: 'fixed', wallSide: 'left' }],
     { 0: { w: 500, h: 2000 }, 1: { w: 800, h: 1985 }, 2: { w: 500, h: 2000 } });
   check('a normal combination passes validation', lgValidate(sh), []);
   check('and lays out without throwing', lgLayout(sh, { canvasW: 900 }).shapes.length, 3);

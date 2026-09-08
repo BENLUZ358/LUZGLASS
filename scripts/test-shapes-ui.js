@@ -165,7 +165,10 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
  */
 {
   const vm = require('vm');
-  const ENG = fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8');
+  /* the drawer now delegates its panel conversion to lg-layout.js, so any
+     run that loads the drawer has to load the engine too */
+  const ENG = [fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8'),
+               fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8')].join('\n');
   const panelsFn = (DEMO.match(/function _shapePanels\(\)\{[\s\S]*?\n\}/) || [''])[0];
   const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
   check('_shapePanels is found', panelsFn.length > 0, true);
@@ -204,7 +207,10 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
  */
 {
   const vm = require('vm');
-  const ENG = fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8');
+  /* the drawer now delegates its panel conversion to lg-layout.js, so any
+     run that loads the drawer has to load the engine too */
+  const ENG = [fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8'),
+               fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8')].join('\n');
   const panelsFn = (DEMO.match(/function _shapePanels\(\)\{[\s\S]*?\n\}/) || [''])[0];
   const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
 
@@ -230,8 +236,25 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
         withDoor('bracket-wall'), 2);
   check('and the joint between them is a glass-to-glass hinge',
         withDoor('hinge-gg'), 2);
-  check('so the fixed has hinges drawn on it for the door to meet',
-        /_j\.right\.type==='hinge-gg'[\s\S]{0,120}drwHingeOnFixed/.test(DEMO), true);
+  /* and the hinge really is placed on the shared face. This used to be a
+     regex over the drawer's source, which proved a string existed and
+     nothing more. The geometry now lives in lg-layout.js and can answer the
+     question itself. */
+  {
+    const vm2 = require('vm');
+    const c2 = vm2.createContext({ Math, JSON, Object, Array, String, Number, console });
+    vm2.runInContext(fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8') + '\n' +
+                     fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8'), c2);
+    const L = c2.lgLayout({ boundary: { right: 'wall', left: 'open' },
+      finish: 'shahor', quality: 'zamak',
+      shapes: [{ id: 'a', kind: 'fixed', w: 500, h: 2000 },
+               { id: 'b', kind: 'door', w: 800, h: 1985, hingeSide: 'right' }] },
+      { canvasW: 900 });
+    const joint = L.shapes[1].x;
+    const hinges = L.hardware.filter(h => h.kind === 'hinge');
+    check('so hinges are placed on the face the two panes share',
+          hinges.length === 2 && hinges.every(h => Math.abs(h.x - joint) < 30), true);
+  }
 }
 
 /* ── the drawer and the engine must mean the same face ─────────────────── */
@@ -252,7 +275,10 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
  */
 {
   const vm = require('vm');
-  const ENG = fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8');
+  /* the drawer now delegates its panel conversion to lg-layout.js, so any
+     run that loads the drawer has to load the engine too */
+  const ENG = [fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8'),
+               fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8')].join('\n');
   const panelsFn = (DEMO.match(/function _shapePanels\(\)\{[\s\S]*?\n\}/) || [''])[0];
   const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
 

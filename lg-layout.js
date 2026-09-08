@@ -204,8 +204,18 @@ function lgFromPanels(panels,pStates,opts){
                 return v||{}; };
   const list=panels||[];
 
+  // הקיר נגזר מ-wallSide של פאנלי הקצה, אלא אם נמסר במפורש. הצייר
+  // מחזיק אותו על הפאנל, המנוע על המקלחון — וזה מה שקובע אם הצומת
+  // הראשון הוא זווית קיר או קצה פתוח.
+  // דלת בקצה נתלית תמיד על משהו, ולכן קצה כזה הוא קיר גם בלי wallSide.
+  const wallOn=(p,side)=>{ const w=(p&&p.wallSide)||'';
+    return w==='both'||w===side||(p&&p.type)==='door'; };
+  const auto = list.length ? { right: wallOn(list[0],'right')?'wall':'open',
+                               left:  wallOn(list[list.length-1],'left')?'wall':'open' }
+                           : { right:'wall', left:'wall' };
+
   return {
-    boundary: o.boundary || { right:'wall', left:'wall' },
+    boundary: o.boundary || auto,
     finish: o.finish||'', quality: o.quality||'', thickness: o.thickness||null,
     shapes: list.map((p,i)=>{
       const st=ps(i), kind=(p&&p.type)==='door'?'door':'fixed';
@@ -214,7 +224,17 @@ function lgFromPanels(panels,pStates,opts){
 
       // ⚠️ מוסכמת הציר הפוכה בין השניים, וזה כבר היה באג: אצל המנוע
       // 'right' פונה לשייף הקודם במערך — שהוא **שמאל** על הקנבס.
-      if(kind==='door') s.hingeSide = (p&&p.hingeSide)==='left' ? 'right' : 'left';
+      //
+      // ‏hingeOnFixed נמדד על המערך ולכן הוא ישיר וגובר: הוא אומר מי
+      // השכן, ורק זה קובע מה באמת מחובר. ‏hingeSide הוא גאומטריה על
+      // הקנבס, וארבעת השדות הישנים אינם עקביים ביניהם.
+      if(kind==='door'){
+        s.hingeSide = (p&&p.hingeOnFixed)==='prev' ? 'right'
+                    : (p&&p.hingeOnFixed)==='next' ? 'left'
+                    : (p&&p.hingeSide)==='left'    ? 'right'
+                    : (p&&p.hingeSide)==='right'   ? 'left'
+                    : (i===0 ? 'right' : 'left');
+      }
 
       // שיפוע: הצייר מחזיק ציר ('height'/'width') וצד; המנוע מחזיק זוג
       // מידות לכל כיוון, ויכול להחזיק את שניהם יחד.
