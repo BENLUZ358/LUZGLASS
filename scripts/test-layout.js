@@ -156,7 +156,7 @@ const CASES = [
   /* step notches */
   ['a fixed on a step', shower([fixed('a', 2000, { notchW: 200, notchH: 500 })], { right: 'wall', left: 'wall' })],
   ['a step carrying a door', shower([fixed('a', 2000, { notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
-  ['a step with a sloping shelf', shower([fixed('a', 2000, { notchW: 200, notchH: 500, notchHIn: 470, notchRest: 790 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['a step with a sloping shelf', shower([fixed('a', 2000, { notchW: 200, notchH: 500, notchHIn: 470, notchRest: 290 }), door('b', 'right')], { right: 'wall', left: 'open' })],
   ['a step and a sloped top', shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1940, notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
 ];
 
@@ -382,6 +382,26 @@ for (const [name, s] of CASES) {
         [h1985.ext, h1800.ext].every(e => !e || !e.length), true);
 }
 
+/* ── hardware follows the glass edge ───────────────────────────────────── */
+/* A bracket and a hinge both screw into the glass, so when the face they sit
+   on is out of plumb they lean with it. Pinning them to the panel's box put
+   them beside the glass instead of on it. */
+{
+  const L = lgLayout(shower([Object.assign(fixed('a', 2000), { slopeW1: 500, slopeW2: 430 }),
+                             door('b', 'right')],
+                            { right: 'wall', left: 'open' }), { canvasW: 900 });
+  const br = L.hardware.filter(h => h.kind === 'bracket').sort((a, b) => a.y - b.y);
+  check('two brackets on the sloping wall face', br.length, 2);
+  check('and they do not share an x — they follow the slope down',
+        Math.abs(br[0].x - br[1].x) > 2, true);
+
+  /* each one is 25mm in from where the edge actually is at ITS height */
+  const s0 = L.shapes[0], P = s0.poly;
+  const xAt = (A, B, y) => A[0] + (B[0] - A[0]) * ((y - A[1]) / (B[1] - A[1]));
+  const onEdge = h => Math.abs(Math.abs(h.x - xAt(P[0], P[3], h.y)) - 25 * L.scale) < 0.5;
+  check('both sit 25mm in from the leaning edge itself', br.every(onEdge), true);
+}
+
 /* ── the step notch ────────────────────────────────────────────────────── */
 /* A shower tray or a built step eats a rectangle out of the bottom corner of
    the glass. The notch always sits on the wall side, because the step is
@@ -416,22 +436,42 @@ for (const [name, s] of CASES) {
         Math.abs(sl.shapes[0].notch.shoulder[1] - sl.shapes[0].notch.inner[1]) > 1, true);
 
   /* the remaining width is entered, not derived — so it can disagree */
-  const off = notched({ notchRest: 780 });
+  const off = notched({ notchRest: 285 });
   check('the remaining width is taken as entered, not computed',
-        off.dims.some(d => d.kind === 'width' && Number(d.text) === 780), true);
+        off.dims.some(d => d.kind === 'width' && Number(d.text) === 285), true);
   check('so the notch face is out of plumb and the drawing shows it',
         Math.abs(off.shapes[0].notch.inner[0] - off.shapes[0].notch.foot[0]) > 1, true);
 
-  /* hardware: the wall face now ends at the notch shoulder */
-  const shoulderY = s0.notch.shoulder[1];
+  /* The bracket screws into GLASS. Below the notch shoulder, on the outer
+     face, there is no glass — that is the notch. So the bottom bracket moves
+     onto the notch's inner face and is measured 200mm up from the FLOOR,
+     which is where the glass actually reaches. */
+  const floorY = s0.y + s0.h;
   const lowBracket = L.hardware.filter(h => h.kind === 'bracket')
                               .sort((a, b) => b.y - a.y)[0];
-  check('the bottom bracket is measured from the notch shoulder, not the floor',
-        Math.abs((shoulderY - lowBracket.y) - 200 * L.scale) < 1.5, true);
+  check('the bottom bracket is 200mm up from the floor, not from the shoulder',
+        Math.abs((floorY - lowBracket.y) - 200 * L.scale) < 1.5, true);
+  check('and it sits on the notch inner face, where there is glass to screw into',
+        Math.abs(lowBracket.x - s0.notch.inner[0]) < 25 * L.scale + 1.5, true);
+  check('so it is well clear of the empty corner the notch cut out',
+        lowBracket.x > s0.notch.shoulder[0] + 1, true);
 
-  /* and it is still inset from the face, like every wall bracket */
-  check('a wall bracket sits 25mm in from the face, where the hole is drilled',
-        Math.abs(Math.abs(lowBracket.x - lowBracket.face) - 25 * L.scale) < 0.5, true);
+  /* and it is still inset from the edge it sits on, like every wall bracket */
+  check('a wall bracket sits 25mm in from the edge, where the hole is drilled',
+        Math.abs(Math.abs(lowBracket.x - lowBracket.edgeX) - 25 * L.scale) < 0.5, true);
+  check('and the layout says which edge that was',
+        lowBracket.onNotch, true);
+
+  /* not everyone wants it down there. The customer can put it on the notch
+     shoulder instead, or ask for both. */
+  const shoulder = notched({ notchBracket: 'shoulder' });
+  const sB = shoulder.hardware.filter(h => h.kind === 'bracket').sort((a, b) => b.y - a.y)[0];
+  check('asked for the shoulder, the bottom bracket goes there',
+        Math.abs((sB.y - shoulder.shapes[0].notch.shoulder[1]) - 200 * shoulder.scale) < 1.5, true);
+
+  const both = notched({ notchBracket: 'both' });
+  check('and "both" gives three brackets on that face, not two',
+        both.hardware.filter(h => h.kind === 'bracket').length, 3);
 
   /* 25mm is the default and every fitter knows it — a dimension line on it
      is noise. It appears only when the customer moved the bracket. */

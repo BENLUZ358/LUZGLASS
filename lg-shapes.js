@@ -127,6 +127,19 @@ function lgValidate(shower) {
       if (nb !== 'wall' && !fx.notchSide) {
         errors.push({ at: fx.id, msg: 'פינוי מדרגה בקבוע שאינו נוגע בקיר — יש לציין באיזה צד' });
       }
+      // הפינוי חייב להיכנס בתוך הזכוכית, ומה שנשאר לצידו חייב להתיישב
+      // עם הרוחב הכללי. רוחב נותר גדול מהזכוכית עצמה דוחף את הפינוי
+      // אל מחוץ לפאנל, ובציור זה נראה כמו זכוכית שברחה מהמקום.
+      var gw = fx.w || 0, gh = fx.h || 0;
+      if (gw && fx.notchW >= gw) {
+        errors.push({ at: fx.id, msg: 'פינוי המדרגה רחב מהזכוכית' });
+      }
+      if (gh && fx.notchH >= gh) {
+        errors.push({ at: fx.id, msg: 'פינוי המדרגה גבוה מהזכוכית' });
+      }
+      if (gw && fx.notchRest > 0 && fx.notchRest + fx.notchW > gw + 20) {
+        errors.push({ at: fx.id, msg: 'הרוחב שנשאר ליד הפינוי גדול מדי — יחד עם הפינוי הוא חורג מרוחב הזכוכית' });
+      }
     }
   }
   return errors;

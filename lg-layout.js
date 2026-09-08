@@ -416,27 +416,63 @@ function _layoutPass(shower,cW,mgL,mgR){
     const face=jx(j);
     const inset = hinge ? 0
       : (src.bracketInset!=null?src.bracketInset:LG_BRACKET_INSET)*sc;
-    // פנימה, לתוך הזכוכית של השייף שנושא את הזווית
-    const into = Math.abs(face-host.x)<0.5 ? 1 : -1;
-    const fx=face+into*inset;
-    // הפאה נגמרת בכתף הפינוי, לא ברצפה: פרזול נתלה על פאה, ומדרגה
-    // מקצרת פאה. מדידה מהרצפה הייתה מציבה את הזווית התחתונה בתוך
-    // האוויר שמתחת למדף.
-    const nt=host.notch;
-    const onNotch = nt && ((nt.side==='left') === (into>0));
-    const faceBot = onNotch ? host.y+host.h-nt.h*sc : host.y+host.h;
-    const yT=host.y+mmT*sc, yB=faceBot-mmB*sc;
-    out.hardware.push({kind:hinge?'hinge':'bracket',idx:host.idx,junction:j,jType:jt,
-                       x:fx,y:yT,face:face}); claim(fx,yT);
-    out.hardware.push({kind:hinge?'hinge':'bracket',idx:host.idx,junction:j,jType:jt,
-                       x:fx,y:yB,face:face}); claim(fx,yB);
-    hwAdd(hinge?'hinge-top':'bracket-top',mmT,host.y,yT,host.idx,fx,'start');
-    hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,yB,host.y+host.h,host.idx,fx,'end');
+    // פנימה, לתוך הזכוכית של השייף שנושא את הפרזול
+    const onLeft = Math.abs(face-host.x)<0.5;
+    const into = onLeft ? 1 : -1;
+
+    // ציר וזווית מוברגים **לזכוכית**, ולכן הם יושבים על הפאה כפי שהיא
+    // באמת בגובה שלהם. פאה משופעת נוטה, והפרזול נוטה איתה; הצמדה
+    // לתיבת השייף הייתה מציבה אותו לצד הזכוכית ולא עליה.
+    const P=host.poly;
+    const edge = onLeft ? [P[0],P[P.length-1]] : [P[1],P[2]];
+    const xAt=(A,B,y)=>{ const d=B[1]-A[1];
+      return Math.abs(d)<1e-6 ? A[0] : A[0]+(B[0]-A[0])*((y-A[1])/d); };
+
+    // הפינוי חותך את **תחתית** הפאה החיצונית — שם כבר אין זכוכית. הזווית
+    // התחתונה עוברת לפאה הפנימית של הפינוי, ונמדדת 20 ס"מ מהרצפה: זה
+    // הקצה התחתון שיש בו זכוכית לקדוח בה.
+    // איפה יושבת הזווית התחתונה כשיש פינוי — בחירה של הלקוח:
+    //   'floor'    (ברירת מחדל) 20 ס"מ מהרצפה, על הפאה הפנימית של הפינוי
+    //   'shoulder' 20 ס"מ מכתף הפינוי, על הפאה החיצונית
+    //   'both'     שתיהן
+    const nt=host.notch, floorY=host.y+host.h;
+    const onNotch = nt && ((nt.side==='left')===onLeft);
+    const where = onNotch ? (src.notchBracket||'floor') : 'floor';
+    const yT=host.y+mmT*sc;
+    const yB = (where==='shoulder') ? nt.shoulder[1]+mmB*sc : floorY-mmB*sc;
+    const useInner = onNotch && where!=='shoulder' && yB>nt.inner[1];
+    const botEdge = useInner ? [nt.inner,nt.foot] : edge;
+
+    const xT=xAt(edge[0],edge[1],yT)+into*inset;
+    const xB=xAt(botEdge[0],botEdge[1],yB)+into*inset;
+    // ‏edgeX הוא איפה הזכוכית באמת עוברת בגובה של הפריט הזה — לא ה-x של
+    // הצומת. הם נפרדים ברגע שיש שיפוע או פינוי, והצייר צריך את הראשון.
+    const kindHw=hinge?'hinge':'bracket';
+    out.hardware.push({kind:kindHw,idx:host.idx,junction:j,jType:jt,x:xT,y:yT,
+                       face:face,edgeX:xAt(edge[0],edge[1],yT)}); claim(xT,yT);
+    out.hardware.push({kind:kindHw,idx:host.idx,junction:j,jType:jt,x:xB,y:yB,
+                       face:face,edgeX:xAt(botEdge[0],botEdge[1],yB),
+                       onNotch:botEdge!==edge}); claim(xB,yB);
+    hwAdd(hinge?'hinge-top':'bracket-top',mmT,host.y,yT,host.idx,xT,'start');
+    hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,
+          yB, (where==='shoulder')?nt.shoulder[1]:floorY, host.idx,xB,
+          (where==='shoulder')?'start':'end');
+
+    // 'both' — גם על הפאה החיצונית, מכתף הפינוי כלפי מעלה
+    if(where==='both'){
+      const y2=nt.shoulder[1]+mmB*sc;
+      const x2=xAt(edge[0],edge[1],y2)+into*inset;
+      out.hardware.push({kind:kindHw,idx:host.idx,junction:j,jType:jt,x:x2,y:y2,
+                         face:face,edgeX:xAt(edge[0],edge[1],y2)}); claim(x2,y2);
+      hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,nt.shoulder[1],y2,host.idx,x2,'start');
+    }
     // 2.5 ס"מ הם ברירת המחדל וכל שרטט יודע אותם — קו מידה עליהם הוא
     // רעש. הוא מופיע רק כשהלקוח שינה את המרחק במפורש.
-    if(inset>0 && src.bracketInset!=null)
+    if(inset>0 && src.bracketInset!=null){
+      const ex=xAt(edge[0],edge[1],yT);
       insetPend.push({idx:host.idx, mm:src.bracketInset,
-                      a:Math.min(face,fx), b:Math.max(face,fx), y:yT, into:into});
+                      a:Math.min(ex,xT), b:Math.max(ex,xT), y:yT, into:into});
+    }
   }
 
   // ── הידית ──
@@ -691,12 +727,13 @@ function lgLayout(shower,opts){
   // דורשות, והציור גדול מהמסך. שרטט מצייר גדול וגולל; הוא לא מקטין את
   // הסקיצה עד שאי אפשר לקרוא אותה. ‏canvas.w הוא מה שהצייר צריך לגלול.
   const shp=(shower&&shower.shapes)||[];
-  if(shp.length>=3){
+  if(shp.length>=2){
     // דלת נושאת גם חור וגם מרחק ידית; שייף משופע נושא שתי מידות חיתוך
     // במקום אחת. שניהם צריכים יותר זכוכית מקבוע רגיל.
     const room=shp.reduce((n,s)=>n+80
       +((s&&s.kind)==='door'?15:0)
-      +((s&&s.slopeH1)?25:0)+((s&&s.slopeW1)?25:0),0);
+      +((s&&s.slopeH1)?25:0)+((s&&s.slopeW1)?25:0)
+      +((s&&s.notchW)?60:0),0);      // פינוי מוסיף רוחב, גובה, ומה שנשאר
     const need=Math.round(room/0.65);
     if(need>cW) cW=need;
   }

@@ -119,9 +119,11 @@ const CASES = [
   ['צירים לא בברירת מחדל', shower([fixed('a'), Object.assign(door('b', 'right'), { hingeTop: 150, hingeBot: 340 })])],
   ['קבוע מדרגה', shower([fixed('a', 2000, { notchW: 200, notchH: 500 })], { right: 'wall', left: 'wall' })],
   ['קבוע מדרגה נושא דלת', shower([fixed('a', 2000, { notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
-  ['מדרגה עם מדף משופע', shower([fixed('a', 2000, { notchW: 200, notchH: 500, notchHIn: 470, notchRest: 790 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['מדרגה עם מדף משופע', shower([fixed('a', 2000, { notchW: 200, notchH: 500, notchHIn: 470, notchRest: 290 }), door('b', 'right')], { right: 'wall', left: 'open' })],
   ['מדרגה + שיפוע למעלה', shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1940, notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
-  ['זווית שהוזזה מ-2.5', shower([fixed('a', 2000, { bracketInset: 40 }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['מדרגה — זווית על הכתף', shower([fixed('a', 2000, { notchW: 200, notchH: 500, notchBracket: 'shoulder' }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['מדרגה — זווית בשתי הנקודות', shower([fixed('a', 2000, { notchW: 200, notchH: 500, notchBracket: 'both' }), door('b', 'right')], { right: 'wall', left: 'open' })],
+  ['זווית ששונתה ידנית ל-4 ס"מ (רק אז מוצגת מידה)', shower([fixed('a', 2000, { bracketInset: 40 }), door('b', 'right')], { right: 'wall', left: 'open' })],
 ];
 
 const WIDTHS = [375, 768, 1440];
