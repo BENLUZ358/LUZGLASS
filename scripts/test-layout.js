@@ -69,18 +69,26 @@ const onHardware = L => {
   return out;
 };
 
-/* A dimension has to sit beside the thing it measures. Pushing hinge heights
-   outside the whole assembly kept them off the symbols, but left a hinge on
-   the left face measured by a number on the far right, joined by a dashed
-   line across the entire drawing. That is not a dimension, it is a puzzle. */
-/* A dimension is either tight against its face, or out at the margin with a
-   straight extension line reaching back to it. Orphaned in the middle is not
-   an option. */
+/* THE rule, and it holds for every vertical dimension without exception:
+   a number sits beside the thing it measures.
+
+   Two attempts broke it. Hinge heights were pushed outside the whole
+   assembly to keep them off the symbols, and a hinge on the left face ended
+   up measured by a number on the far right. Then the two cut heights of a
+   sloped door were sent out to the margins, where they read as belonging to
+   the fixed panels on either side — nothing tied them to the door at all.
+
+   Both times the honest fix was to move the number back, not to draw a
+   longer line to it. When space is tight the type gets smaller and the lanes
+   narrower. The number does not leave. */
+const MAX_AWAY = 56;
 const HW_KINDS = /^(hinge|bracket|handle-dist)/;
-const reaches = (d) => (d.ext || []).some(e =>
-  Math.abs(e.x1 - d.face) < 2 || Math.abs(e.x2 - d.face) < 2);
-const strandedDims = L => L.dims.filter(d => HW_KINDS.test(d.kind))
-  .filter(d => d.face == null || (Math.abs(d.x1 - d.face) > 46 && !reaches(d)))
+const strayDims = L => L.dims.filter(d => d.near != null)
+  .filter(d => Math.abs(d.x1 - d.near) > MAX_AWAY)
+  .map(d => `${d.kind}:${d.text} is ${Math.round(Math.abs(d.x1 - d.near))}px from what it measures`);
+
+/* and no vertical dimension may leave out what it is anchored to */
+const unanchored = L => L.dims.filter(d => d.rot && d.near == null)
   .map(d => d.kind + ':' + d.text);
 
 /* And every piece of hardware has to be measured. A hinge or a wall bracket
@@ -156,7 +164,8 @@ for (const [name, s] of CASES) {
     check(`${label}: no two dimension labels overlap`, overlappingLabels(L), []);
     check(`${label}: every dimension is inside the canvas`, outsideCanvas(L), []);
     check(`${label}: no dimension sits on a hardware symbol`, onHardware(L), []);
-    check(`${label}: every hardware dimension sits beside its own face`, strandedDims(L), []);
+    check(`${label}: every dimension sits beside what it measures`, strayDims(L), []);
+    check(`${label}: and says what that is`, unanchored(L), []);
     check(`${label}: every hinge and bracket has its height stated`, unmeasuredHardware(L), []);
     check(`${label}: no leader runs diagonally across the glass`, diagonalLeaders(L), []);
     check(`${label}: no dimension line runs through its own number`, struckThrough(L), []);
@@ -320,18 +329,23 @@ for (const [name, s] of CASES) {
   check('and does not overlap the panel beside it',
         Math.max(...pair.shapes[0].poly.map(p => p[0])) <= pair.shapes[1].x + 0.5, true);
 
-  /* an inner face has no end to sit at, so its dimension goes out to the
-     margin with a straight extension line back to the face it measures */
-  const inner = lgLayout(shower([sq({ slopeH1: 2000, slopeH2: 1950 }), door('b', 'right')],
-                                { right: 'wall', left: 'wall' }), { canvasW: 768 });
-  const d1950 = inner.dims.find(d => d.kind === 'height' && Number(d.text) === 1950);
-  const iAsmL = Math.min(...inner.shapes.map(s => s.x));
-  const iAsmR = Math.max(...inner.shapes.map(s => s.x + s.w));
-  check('an inner slope face is measured out at the margin',
-        d1950.x1 < iAsmL || d1950.x1 > iAsmR, true);
-  check('with a straight extension line reaching back to it',
-        (d1950.ext || []).length > 0 &&
-        d1950.ext.every(e => Math.abs(e.y1 - e.y2) < 0.5), true);
+  /* Both cut heights of a sloped panel stay ON that panel — one at each of
+     its own two faces. Sending them out to the margins made them read as if
+     they belonged to the neighbours. */
+  const mid = lgLayout(shower([fixed('a'),
+                               Object.assign(door('b', 'right'), { slopeH1: 1985, slopeH2: 1800 }),
+                               fixed('c')], { right: 'wall', left: 'wall' }), { canvasW: 768 });
+  const dr = mid.shapes[1];
+  const h1985 = mid.dims.find(d => d.kind === 'height' && Number(d.text) === 1985);
+  const h1800 = mid.dims.find(d => d.kind === 'height' && Number(d.text) === 1800);
+  check('the tall face of a middle slope is measured at that face',
+        Math.abs(h1985.x1 - dr.x) <= MAX_AWAY, true);
+  check('and the short face at its own face',
+        Math.abs(h1800.x1 - (dr.x + dr.w)) <= MAX_AWAY, true);
+  check('both of them land on the sloped panel, not on its neighbours',
+        [h1985, h1800].every(d => d.x1 > dr.x - MAX_AWAY && d.x1 < dr.x + dr.w + MAX_AWAY), true);
+  check('and neither needs a leader to explain itself',
+        [h1985.ext, h1800.ext].every(e => !e || !e.length), true);
 }
 
 /* ── it must not throw on the shapes the drawing really hands it ───────── */
