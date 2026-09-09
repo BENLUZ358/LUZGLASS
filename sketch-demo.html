@@ -778,6 +778,8 @@ let shapeList=[];
 //
 // קבוע שדלת נתלית עליו הוא מקרה אחר לגמרי — שם הצומת הוא זכוכית-זכוכית,
 // המנוע מחזיר hinge-gg, והצירים מצוירים על הקבוע. ר' _lgSidesOf.
+// ‏let ולא const: התמונה בגלריה מצוירת בהקשר משוקף כשהכרטיס הפוך,
+// וההקשר מוחלף לרגע וחוזר — כמו shapeList ו-shapePS לצדו.
 let shapeBoundary={right:'wall',left:'open'};
 
 function _shapeShower(){
@@ -844,14 +846,17 @@ let _shapeSeq=0;
 //
 // כשדלת אמיתית תישען על הקבוע הזה, הצומת יטפל בפאה והקדחים המוצהרים
 // יושמטו — פיסת מתכת אחת, ספירה אחת, כמו שנקבע.
-function hingeHolesFromEngine(doorOn){
+function hingeHolesFromEngine(doorOn,mirrorCtx){
   const fixedFirst = doorOn==='right';
   const fx={id:'f',kind:'fixed',hingeSide:undefined,label:''};
   // ‏hingeSide של המנוע הפוך לקנבס; הדלת חייבת להיתלות **על הקבוע**
   const dr={id:'d',kind:'door',hingeSide:fixedFirst?'right':'left',label:''};
-  const saveList=shapeList, savePS=shapePS;
+  const saveList=shapeList, savePS=shapePS, saveB=shapeBoundary;
   shapeList = fixedFirst ? [fx,dr] : [dr,fx];
   shapePS   = {f:mkPS({type:'fixed'}), d:mkPS({type:'door'})};
+  // נמדד באותו הקשר שבו הוא ייצויר; אחרת הקדח נמדד מול קיר אחד ומצויר
+  // מול אחר, ו"אותה פאה" מפסיקה להיות אותה פאה.
+  if(mirrorCtx) shapeBoundary={right:shapeBoundary.left,left:shapeBoundary.right};
   let holes=[];
   try{
     const pss=Object.fromEntries(shapeList.map((x,i)=>[i,shapePS[x.id]]));
@@ -868,9 +873,13 @@ function hingeHolesFromEngine(doorOn){
       }));
     }
   } catch(e){ holes=[]; }
-  finally { shapeList=saveList; shapePS=savePS; }
+  finally { shapeList=saveList; shapePS=savePS; shapeBoundary=saveB; }
   return holes;
 }
+
+// הקשר קבוע לתמונה: קיר בשמאל הקנבס, פתוח בימין. אינו נקרא מהקנבס
+// החי, כדי שהגלריה לא תשתנה לפי מה שהמשתמש בונה כרגע.
+const THUMB_BOUNDARY={right:'wall',left:'open'};
 
 function shapeThumb(cv, entry){
   const a=entry.add||{};
@@ -878,17 +887,32 @@ function shapeThumb(cv, entry){
   const ghost=[{id:'t',kind:a.kind,hingeSide:a.hingeSide,label:''}];
   const st=mkPS({type:a.kind});
   if(a.slope) st.hasSlope=true;
+  if(a.slopeFlip){ const t=st.slopeH1; st.slopeH1=st.slopeH2; st.slopeH2=t; }
   if(a.notch) Object.assign(st,NOTCH_DEF);
   if(a.notchSide)  st.notchSide=a.notchSide;
   if(a.slopeSideV) st.slopeSideV=a.slopeSideV;
-  if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor);
+  if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor,entry.flipped);
   if(a.holes) st.holes=a.holes;
 
-  const saveList=shapeList, savePS=shapePS;
-  shapeList=ghost; shapePS={t:st};
+  // ── ההקשר מתהפך יחד עם הזכוכית ──
+  //
+  // "הפוך" הוא שיקוף של התמונה, ותמונה כוללת את מה שהזכוכית נשענת עליו.
+  // בלי זה השיקוף היה חלקי וגרוע משבור: הזוויות נגזרות מהקיר, ולכן הן
+  // נשארו במקומן בזמן שהצירים עברו צד — ואז הצירים נחתו על הפאה שהקיר
+  // כבר תפס, וכלל "פיסת מתכת אחת לצומת" השמיט אותם. הציר לא נעלם בבאג;
+  // הוא הושמט על ידי כלל נכון, בהקשר שלא שוקף.
+  //
+  // ⚠️ מוסכמת הגבולות הפוכה לקנבס: ‏boundary.right הוא שמאל הקנבס.
+  // שיקוף אופקי הוא בדיוק החלפת השניים.
+  const bound = entry.flipped
+    ? {right:THUMB_BOUNDARY.left, left:THUMB_BOUNDARY.right}
+    : THUMB_BOUNDARY;
+
+  const saveList=shapeList, savePS=shapePS, saveB=shapeBoundary;
+  shapeList=ghost; shapePS={t:st}; shapeBoundary=bound;
   let L=null;
   try { L=lgLayout(_lgShowerOf(_shapePanels(),{0:st}),{canvasW:260}); }
-  finally { shapeList=saveList; shapePS=savePS; }
+  finally { shapeList=saveList; shapePS=savePS; shapeBoundary=saveB; }
   if(!L) return;
 
   const box=cv.width, boxH=cv.height;
@@ -1121,6 +1145,10 @@ function shapeAddFromCatalog(i){
   if(!e) return;
   const a=e.add||{};
   const extra = a.notch ? Object.assign({},NOTCH_DEF) : {};
+  // הגבהים מוחלפים כאן ולא בקטלוג: המספרים באים מ-mkPS, והקטלוג נושא
+  // רק את הכוונה. אותה החלפה בדיוק נעשית בתמונה שבגלריה.
+  if(a.slopeFlip){ const d=mkPS({type:a.kind});
+                   extra.slopeH1=d.slopeH2; extra.slopeH2=d.slopeH1; }
   if(a.notchSide)  extra.notchSide=a.notchSide;
   if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
   if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
@@ -1140,14 +1168,18 @@ function shapeAdd(kind,hingeSide,slope,extra,side){
   shapePS[id]=mkPS({type:kind});
   if(slope) shapePS[id].hasSlope=true;
   if(extra) Object.assign(shapePS[id],extra);
-  addSide=null;               // הבחירה נעשתה; הגלריה חוזרת להיות מלאה
-  renderShapeUI();draw();
+  // הבחירה נעשתה: הסינון יורד **והגלריה מצוירת מחדש**. בלי הציור מחדש
+  // היא נשארה תקועה על הסינון הקודם, צורות נעלמו ממנה ולא חזרו — ואי
+  // אפשר היה להוסיף עוד. גם החוקיות השתנתה עכשיו, כי יש זכוכית נוספת.
+  addSide=null;
+  renderShapeUI(); renderShapeGallery(); draw();
 }
 
 function shapeRemove(id){
   shapeList=shapeList.filter(s=>s.id!==id);
   delete shapePS[id];
-  renderShapeUI();draw();
+  // כל שינוי בהרכבה משנה מה חוקי להוסיף, ולכן הגלריה נשאלת מחדש
+  renderShapeUI(); renderShapeGallery(); draw();
 }
 // צד הציר תלוי בשטח — אותה דלת נבנית ימין או שמאל. הליקוט לא משתנה.
 function shapeFlipHinge(id){

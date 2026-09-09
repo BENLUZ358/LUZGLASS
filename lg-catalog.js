@@ -31,7 +31,7 @@ var LG_CAT_KINDS = { fixed: 1, door: 1, mirror: 1, shape: 1 };
 // ‏slope הוא hasSlope, ו-notch הוא מה שהמתג בגיליון המאפיינים כותב.
 // שניהם מתורגמים במקום אחד ב-shapeAdd, ולא כאן.
 var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1,
-                     notchSide: 1, slopeSideV: 1 };
+                     notchSide: 1, slopeSideV: 1, slopeFlip: 1 };
 
 // תפקידי קדחים שצורה רשאית לשאת בעצמה. **תפקידי צומת אינם כאן**: ציר
 // וזווית קיר נגזרים ממה שהזכוכית נפגשת איתו, ולתת להם להיכתב ביד היה
@@ -88,6 +88,14 @@ function lgFlipAdd(add) {
   if (out.hingesFor)  out.hingesFor  = _lgOther(out.hingesFor);
   if (out.notchSide)  out.notchSide  = _lgOther(out.notchSide);
   if (out.slopeSideV) out.slopeSideV = _lgOther(out.slopeSideV);
+  // שיפוע גובה אין לו "צד": הגבוה והנמוך נקבעים לפי **סדר** שני
+  // המספרים — הראשון שמאל, השני ימין. שיקוף אופקי מחליף ביניהם, ולכן
+  // דגל, לא ערך: המספרים עצמם באים מברירת המחדל של המסך, לא מכאן.
+  // הדגל נמחק כשהוא כבוי, כדי שהיפוך כפול יחזיר בדיוק את המקור.
+  if (out.slope) {
+    if (out.slopeFlip) delete out.slopeFlip;
+    else out.slopeFlip = true;
+  }
   if (Array.isArray(out.holes)) out.holes = out.holes.map(function (h) {
     return { role: h.role, dia: h.dia,
              x: { from: _lgOther(h.x.from), mm: h.x.mm },
