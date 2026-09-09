@@ -959,12 +959,14 @@ function renderShapeGallery(){
   const all=galleryEntries();
   // אחרי לחיצה על + הגלריה מציגה רק מה שחוקי באותו צד. זה אינו סינון
   // נוסף על החוקיות אלא **אותה תשובה** של lgValidate, בתצוגה.
+  // אחרי לחיצה על + הגלריה מציגה רק מה שחוקי באותו צד, **ובאוריינטציה
+  // שהמנוע אישר**. זה לא סינון נוסף על החוקיות אלא אותה תשובה בתצוגה.
   const only = addSide ? allowedAt(addSide) : null;
-  const okIdx = only ? new Set(only.map(c=>c.i)) : null;
+  const okEnt = only ? new Map(only.map(c=>[c.i,c.ent])) : null;
   const rows=[];
   all.forEach((e,i)=>{
-    if(okIdx&&!okIdx.has(i)) return;
-    const shown=galleryShown(i);
+    if(okEnt&&!okEnt.has(i)) return;
+    const shown = okEnt ? okEnt.get(i) : galleryShown(i);
     rows.push('<div class="shape-card">'+
       '<button type="button" class="sc-pick" onclick="shapeAddFromCatalog('+i+')" '+
         'aria-label="הוסף '+_shEsc(shown.name)+'">'+
@@ -973,7 +975,9 @@ function renderShapeGallery(){
         (e.origin&&e.origin!=='seed'
           ? '<em class="sh-own">'+(e.origin==='factory'?'מפעל':'שלי')+'</em>' : '')+
       '</button>'+
-      (entryCanFlip(e)
+      // ההיפוך מוצע רק כשהקנבס באמת מרשה את שתי האוריינטציות. כפתור
+      // שמחזיר צורה שאי אפשר להרכיב כאן הוא הבטחה שהמערכת תפר.
+      (entryCanFlip(e) && (!addSide || _bothFit(e,addSide))
         ? '<button type="button" class="sc-flip'+(flipped[e.id]?' on':'')+'" '+
           'onclick="galleryFlip('+i+')">⇄ הפוך</button>' : '')+
     '</div>');
@@ -981,9 +985,9 @@ function renderShapeGallery(){
   host.innerHTML=rows.join('');
   const cards=host.querySelectorAll('.shape-card');
   let n=0;
-  all.forEach((e,i)=>{ if(okIdx&&!okIdx.has(i)) return;
+  all.forEach((e,i)=>{ if(okEnt&&!okEnt.has(i)) return;
                        const cv=cards[n++]&&cards[n-1].querySelector('canvas');
-                       if(cv) shapeThumb(cv,galleryShown(i)); });
+                       if(cv) shapeThumb(cv, okEnt ? okEnt.get(i) : galleryShown(i)); });
 }
 
 // מה הכרטיס מציג כרגע — הערך עצמו, או ההיפוך שלו.
@@ -1036,29 +1040,58 @@ function _arrangementErrors(list){
 // אילו ערכים מהגלריה מותר להוסיף בצד הזה. הרשימה הזאת היא גם התשובה
 // לשאלה אם להציג + בכלל: רשימה ריקה פירושה שאין חיבור חוקי.
 function allowedAt(side){
-  // קצה חסום פוסל הכל, וזה נבדק **כאן** ולא רק בכפתור. כשהבדיקה ישבה
-  // רק ב-canAddAt, שתי הפונקציות ענו תשובות שונות לאותה שאלה: הכפתור
-  // לא הופיע אבל ההוספה בכל זאת אושרה. שאלה אחת, תשובה אחת.
-  if(sideBlocked(side)) return [];
   const cand=[];
   galleryEntries().forEach((e,i)=>{
-    const ent = flipped[e.id] ? lgFlipEntry(e) : e;
-    const a=ent.add||{};
-    // לדלת יש שתי ידיים, ושתיהן אותה דלת. מנסים את שתיהן ולוקחים את מה
-    // שהמנוע מאשר — כך דלת שנוספת ליד קבוע "זוויות בלבד" נתלית מהצד
-    // השני במקום להיאסר, ואם אין לה על מה להיתלות בכלל היא לא מוצעת.
-    const hands = a.kind==='door' ? [a.hingeSide, a.hingeSide==='right'?'left':'right']
-                                  : [a.hingeSide];
-    for(let h=0;h<hands.length;h++){
-      const probe={id:'__probe',kind:a.kind,hingeSide:hands[h],
-                   carriesDoor:a.carriesDoor};
-      const list = side==='left' ? [probe].concat(shapeList)
-                                 : shapeList.concat([probe]);
-      if(_tryArrangement(list)){ cand.push({i:i,hinge:hands[h]}); break; }
-    }
+    const ent=_legalVariant(e,side);
+    if(ent) cand.push({i:i, ent:ent});
   });
   return cand;
 }
+
+// ─── האוריינטציה שהקנבס מרשה ──────────────────────────────────────────
+//
+// **הקנבס הוא מקור האמת, לא הכרטיס.** צורה יכולה להיראות בשתי
+// אוריינטציות, והשאלה איזו מהן מתאימה כאן נענית בדרך היחידה שאי אפשר
+// לזייף: בונים את ההרכבה המועמדת ומריצים עליה את מנוע החוקיות.
+//
+// זה מחליף שתי החלטות נפרדות שהיו כאן. ‏flipped היה מתג תצוגה שלא ידע
+// כלום על הקנבס, ורק **היד** של הדלת תוקנה לפי המנוע — כך שכל שאר שדות
+// הצד (‏hingesFor, ‏notchSide, קדחים) הגיעו מהמתג בזמן שהיד הגיעה
+// מהחוקיות. שני מקורות לאוריינטציה אחת, ומשם הסתירות.
+//
+// העדפת המשתמש נשמרת: אם הוא הפך את הכרטיס, מנסים קודם את מה שהוא
+// רואה. היא רק לא גוברת על מה שאי אפשר להרכיב.
+function _variantsOf(e){
+  const flippedFirst = !!flipped[e.id];
+  if(typeof lgFlipEntry!=='function' || !entryCanFlip(e)) return [e];
+  const other = lgFlipEntry(e);
+  return flippedFirst ? [other, e] : [e, other];
+}
+
+function _fits(ent,side){
+  const a=ent.add||{};
+  const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide,
+               carriesDoor:a.carriesDoor};
+  const list = side==='left' ? [probe].concat(shapeList) : shapeList.concat([probe]);
+  return _tryArrangement(list);
+}
+
+// האם שתי האוריינטציות מתאימות כאן. רק אז יש טעם בכפתור "הפוך".
+function _bothFit(e,side){
+  const vs=_variantsOf(e);
+  return vs.length>1 && vs.every(v=>_fits(v,side));
+}
+
+function _legalVariant(e,side){
+  // החסימה נבדקת **כאן**, כי כאן עוברים כולם — הגלריה, ההיפוך וההוספה.
+  // כשהיא ישבה ב-allowedAt בלבד, הכפתור לא הופיע בצד חסום אבל ההוספה
+  // דרך אותו צד כן עברה. אותה שאלה, ושוב שתי תשובות.
+  if(sideBlocked(side)) return null;
+  const vs=_variantsOf(e);
+  for(let k=0;k<vs.length;k++) if(_fits(vs[k],side)) return vs[k];
+  return null;
+}
+
 
 // הקצה הזה חסום? קיר הוא חסימה, ולכן אין שם +. זה לא כלל חדש: זה אותו
 // shapeBoundary שמזין את המנוע, רק נקרא ממנו.
@@ -1071,19 +1104,22 @@ function sideBlocked(side){
 
 // למה המנוע סירב. ההודעה באה **ממנו**, כדי שהמסך לא ינחש סיבה שאינה
 // הסיבה האמיתית.
-function _whyNot(a,side){
-  const hands = a.kind==='door' ? [a.hingeSide, a.hingeSide==='right'?'left':'right']
-                                : [a.hingeSide];
+function _whyNot(entry,side){
+  if(!side) return 'החיבור אינו חוקי';
+  if(sideBlocked(side)) return 'הצד הזה חסום — יש שם קיר';
+  const vs=_variantsOf(entry);
   let first='החיבור אינו חוקי';
-  for(let h=0;h<hands.length;h++){
-    const probe={id:'__probe',kind:a.kind,hingeSide:hands[h],carriesDoor:a.carriesDoor};
+  for(let k=0;k<vs.length;k++){
+    const a=vs[k].add||{};
+    const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide,carriesDoor:a.carriesDoor};
     const list = side==='left' ? [probe].concat(shapeList) : shapeList.concat([probe]);
     const errs=_arrangementErrors(list);
-    if(!errs.length) return '';          // דווקא חוקי — אין מה להסביר
-    if(h===0) first=errs[0].msg;
+    if(!errs.length) return '';        // דווקא חוקי — אין מה להסביר
+    if(k===0) first=errs[0].msg;
   }
   return first;
 }
+
 
 
 function canAddAt(side){ return allowedAt(side).length>0; }
@@ -1186,10 +1222,22 @@ function shapeToast(msg,bad){
 
 
 function shapeAddFromCatalog(i){
-  // מה שנבחר הוא **מה שרואים**: אם הכרטיס הופך, הצורה נכנסת הפוכה.
-  // היפוך נוסף כאן היה מחזיר אותה לאוריינטציה שהמשתמש בדיוק שינה.
-  const e=galleryShown(i);
-  if(!e) return;
+  const e0=galleryEntries()[i];
+  if(!e0) return;
+  const side=addSide;
+
+  // ── האוריינטציה נקבעת פעם אחת ──
+  //
+  // כשמוסיפים דרך + , **הקנבס מכריע**: המנוע מחזיר את הצורה באוריינטציה
+  // שהוא מסוגל להרכיב, וזו בדיוק זו שהוצגה בכרטיס. בלי + אין הקשר,
+  // ואז מה שרואים הוא מה שנבחר.
+  //
+  // קודם תוקנה כאן **היד בלבד** לפי המנוע, בזמן שכל שאר שדות הצד —
+  // ‏hingesFor, ‏notchSide, קדחים — הגיעו ממתג התצוגה. שני מקורות
+  // לאוריינטציה אחת, ומשם באו הסתירות בין מה שהוצג למה שנכנס.
+  const e = side ? _legalVariant(e0,side) : galleryShown(i);
+  if(!e){ shapeToast('אי אפשר לחבר כאן: '+_whyNot(e0,side),true); return; }
+
   const a=e.add||{};
   const extra = a.notch ? Object.assign({},NOTCH_DEF) : {};
   if(a.carriesDoor!=null) extra.carriesDoor=a.carriesDoor;
@@ -1204,19 +1252,8 @@ function shapeAddFromCatalog(i){
   // היה גורם לעריכת קדח בלוח אחד לשנות אותו בכל השאר.
   if(a.holes) extra.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
                 x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
-  // היד שהמנוע אישר גוברת על זו שבכרטיס: הכרטיס מציע, החוקיות מכריעה.
-  //
-  // וכשאין יד חוקית בכלל — **לא מוסיפים**. קודם הלוח נוצר בכל זאת עם היד
-  // שעל הכרטיס, ואז הצומת לא ייצר כלום: דלת בלי צירים משני צדדיה, שנראית
-  // כאילו הצורה שלה נעלמה. עדיף לומר למה מאשר לצייר משהו בלתי אפשרי.
-  const side=addSide;
-  let hand=a.hingeSide;
-  if(side){
-    const ok=allowedAt(side).find(x=>x.i===i);
-    if(!ok){ shapeToast('אי אפשר לחבר כאן: '+_whyNot(a,side),true); return; }
-    if(ok.hinge) hand=ok.hinge;
-  }
-  shapeAdd(a.kind,hand,a.slope,Object.keys(extra).length?extra:null,side);
+
+  shapeAdd(a.kind,a.hingeSide,a.slope,Object.keys(extra).length?extra:null,side);
 }
 
 function shapeAdd(kind,hingeSide,slope,extra,side){

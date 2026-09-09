@@ -50,7 +50,7 @@ const grab = n => {
 };
 
 function screen(boundary) {
-  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console, Set });
+  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console, Set, Map, Map });
   ['lg-shapes.js', 'lg-layout.js', 'lg-catalog.js'].forEach(f =>
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
   vm.runInContext('var selQ="zamak"; var appMode="shape"; var DOOR_H_MM=1985;' +
@@ -64,7 +64,7 @@ function screen(boundary) {
     'let TOAST=null; function shapeToast(m){TOAST=m;}' +
     'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', '_shapeShower', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
-   'entryCanFlip', 'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', 'allowedAt', '_whyNot',
+   'entryCanFlip', 'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_fits', '_bothFit', '_legalVariant', 'allowedAt', '_whyNot',
    'sideBlocked', 'canAddAt', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove', 'shapeFlipHinge'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
@@ -237,7 +237,7 @@ console.log('');
   check('holes are copied out of the catalogue, not borrowed',
         has('extra.holes=a.holes.map('), true);
   check('and an illegal add stops before it creates anything',
-        has("if(!ok){ shapeToast('אי אפשר לחבר כאן: '+_whyNot(a,side),true); return; }"), true);
+        has("if(!e){ shapeToast('אי אפשר לחבר כאן: '+_whyNot(e0,side),true); return; }"), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

@@ -153,7 +153,10 @@ seeds.forEach(e => {
 /* ── the canvas gets what the preview showed ────────────────────────────── */
 {
   const has = s => DEMO.indexOf(s) > -1;
-  check('picking a card takes the orientation on show', has('const e=galleryShown(i);'), true);
+  /* Without a +, there is no context to obey, so what was shown is what is
+     taken. With a +, the canvas decides — see test-context-orientation.js. */
+  check('picking a card with no context takes the orientation on show',
+        has('const e = side ? _legalVariant(e0,side) : galleryShown(i);'), true);
   check('and the context is mirrored with the glass, not left behind',
         has('const bound = entry.flipped'), true);
   check('the declared hinges are measured in that same context',

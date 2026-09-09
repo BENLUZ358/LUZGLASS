@@ -43,7 +43,7 @@ const grab = n => {
 };
 
 function screen(boundary) {
-  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console, Set });
+  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console, Set, Map, Map });
   ['lg-shapes.js', 'lg-layout.js', 'lg-catalog.js'].forEach(f =>
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
   vm.runInContext('var selQ="zamak"; var appMode="shape"; var DOOR_H_MM=1985;' +
@@ -55,7 +55,7 @@ function screen(boundary) {
     'var curCombo={panels:[]}; function shapeToast(){}' +
     'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', '_shapeShower', 'getPStates', 'getPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip', 'galleryShown',
-   '_tryArrangement', '_arrangementErrors', 'allowedAt', 'sideBlocked', 'canAddAt', 'hingeHolesFromEngine',
+   '_tryArrangement', '_arrangementErrors', '_variantsOf', '_fits', '_bothFit', '_legalVariant', 'allowedAt', 'sideBlocked', 'canAddAt', 'hingeHolesFromEngine',
    'shapeAdd', 'shapeAddFromCatalog'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
@@ -173,8 +173,11 @@ console.log('');
 
   /* the screen tries both hands, so it would find the legal one when it can */
   const has = s => DEMO.indexOf(s) > -1;
-  check('the screen tries both hands of a door',
-        has("a.kind==='door' ? [a.hingeSide, a.hingeSide==='right'?'left':'right']"), true);
+  /* the screen tries every orientation a card can be shown in, and takes
+     the one the engine accepts — for doors and for anything else that has
+     two hands */
+  check('the screen tries every orientation and keeps the legal one',
+        has('function _legalVariant(') && has('for(let k=0;k<vs.length;k++) if(_fits(vs[k],side)) return vs[k];'), true);
 }
 
 /* ── the declaration really travels from the card to the engine ─────────── */

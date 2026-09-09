@@ -39,7 +39,7 @@ const grab = n => {
 };
 
 function bench() {
-  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console, Set });
+  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console, Set, Map, Map });
   ['lg-shapes.js', 'lg-layout.js', 'lg-catalog.js'].forEach(f =>
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
   vm.runInContext('var selQ="zamak"; var shapeBoundary={right:"wall",left:"open"};' +
@@ -47,7 +47,7 @@ function bench() {
     'var appMode="shape"; var DOOR_H_MM=1985; var HANDLE_EDGE_CM=6;' +
     'var TOWEL_SPACING_CM=40; let panelState={},items=[]; var curCombo={panels:[]};', ctx);
   ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
-   'entryCanFlip', '_tryArrangement', '_arrangementErrors', 'allowedAt',
+   'entryCanFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_fits', '_bothFit', '_legalVariant', 'allowedAt',
    'sideBlocked', 'canAddAt'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }

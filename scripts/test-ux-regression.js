@@ -34,7 +34,7 @@ const grab = n => {
 
 /* the screen, with just enough browser to run its own functions */
 function screen() {
-  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console, Set });
+  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console, Set, Map, Map });
   ['lg-shapes.js', 'lg-layout.js', 'lg-catalog.js'].forEach(f =>
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
   vm.runInContext(
@@ -52,7 +52,7 @@ function screen() {
     '    shapeList.map(function(s,i){return [i,shapePS[s.id]];}))),{canvasW:900}) : null; }',
     ctx);
   ['mkPS', '_shapeShower', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip',
-   'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', 'allowedAt', 'sideBlocked',
+   'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_fits', '_bothFit', '_legalVariant', 'allowedAt', 'sideBlocked',
    'canAddAt', '_whyNot', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove', 'pickOrder', 'getPS', 'getPStates'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
