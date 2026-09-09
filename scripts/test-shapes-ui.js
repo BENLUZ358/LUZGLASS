@@ -65,7 +65,10 @@ check('and so is item-by-item', /setMode\('item'\)/.test(DEMO), true);
   /* the sloped panel is a shortcut, not a kind — a fixed with the slope on */
   check('a sloped fixed is a fixed with the slope already on',
         /kind: 'fixed', slope: true/.test(CAT), true);
-  check('the gallery stays short', (CAT.match(/kind: '/g) || []).length <= 8, true);
+  /* the SHIPPED set stays small enough to scan on a phone. What the
+     factory adds later is the factory's business — this bounds what we
+     put there without being asked. */
+  check('the shipped set stays scannable', (CAT.match(/kind: '/g) || []).length <= 12, true);
 
   /* hardware is never baked into a gallery item */
   check('no entry carries a hinge count',   /hingeQty|hinges:/.test(CAT), false);

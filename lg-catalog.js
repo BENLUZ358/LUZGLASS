@@ -30,7 +30,7 @@ var LG_CAT_KINDS = { fixed: 1, door: 1, mirror: 1, shape: 1 };
 // דגלים שאינם סוג זכוכית אלא **קיצור למצב התחלתי** שכבר קיים במסך:
 // ‏slope הוא hasSlope, ו-notch הוא מה שהמתג בגיליון המאפיינים כותב.
 // שניהם מתורגמים במקום אחד ב-shapeAdd, ולא כאן.
-var LG_CAT_FLAGS = { slope: 1, notch: 1 };
+var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1 };
 
 function lgCatalogSeeds() {
   return [
@@ -42,6 +42,12 @@ function lgCatalogSeeds() {
     // המאפיינים כותב מאז שהוא נבנה, ושניהם קוראים אותם מ-NOTCH_DEF.
     { id: 'fixed-notch', name: 'קבוע עם מדרגה',   origin: 'seed',
       add: { kind: 'fixed', notch: true } },
+    // ‏hingesFor אומר **באיזה צד תישען הדלת**, לא איפה יֵשבו הצירים.
+    // את זה המסך שואל את המנוע, ולכן הצד כאן אינו יכול לסתור אותו.
+    { id: 'fixed-hinge-r', name: 'קבוע · דלת מימין', origin: 'seed',
+      add: { kind: 'fixed', hingesFor: 'right' } },
+    { id: 'fixed-hinge-l', name: 'קבוע · דלת משמאל', origin: 'seed',
+      add: { kind: 'fixed', hingesFor: 'left' } },
     { id: 'door-right',  name: 'דלת · ציר ימין',  origin: 'seed',
       add: { kind: 'door', hingeSide: 'right' } },
     { id: 'door-left',   name: 'דלת · ציר שמאל',  origin: 'seed',
@@ -71,6 +77,8 @@ function lgCatalogValidate(entry) {
   // צד ציר על זכוכית שאינה דלת אין לו משמעות, והוא היה מטעה במסך
   if (a.kind !== 'door' && a.hingeSide) e.push('צד ציר שייך לדלת בלבד');
   // דגל שאינו מוכר היה נבלע בשקט והצורה הייתה נפתחת בלי מה שהובטח
+  if (a.hingesFor && a.hingesFor !== 'left' && a.hingesFor !== 'right')
+    e.push('צד הדלת חייב להיות ימין או שמאל');
   Object.keys(a).forEach(function (k) {
     if (k !== 'kind' && k !== 'hingeSide' && !LG_CAT_FLAGS[k])
       e.push('דגל לא מוכר: ' + k);

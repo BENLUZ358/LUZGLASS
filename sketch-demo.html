@@ -831,6 +831,45 @@ function renderBuildDir(){
 // זה לא ייעול. הניסיון הקודם תיאר כל צורה מחדש בקטלוג — כמה זוויות
 // ובאיזה צד — ומיד יצאו דלתות שהידית והציר שלהן באותו צד וקבועים עם
 // ארבע זוויות בלי סיבה. מקור אמת אחד לצורה, ובו הכל נכון או הכל שבור.
+// ─── קבוע שנושא דלת ──────────────────────────────────────────────────
+//
+// הצירים על הקבוע אינם נכתבים ביד. ההרכבה נבנית לרגע — הקבוע ולידו דלת
+// שנתלית עליו — והמנוע נשאל **איפה הוא שם את הצירים בפועל**. התשובה
+// מומרת חזרה למילימטרים ונשמרת על הזכוכית.
+//
+// זאת הסיבה שהצד לא יכול לסתור את המנוע: הוא לא נבחר כאן, הוא נמדד.
+// הפעם הקודמת שכתבתי אותו ביד נתנה דלתות שהידית והציר שלהן באותו צד.
+//
+// כשדלת אמיתית תישען על הקבוע הזה, הצומת יטפל בפאה והקדחים המוצהרים
+// יושמטו — פיסת מתכת אחת, ספירה אחת, כמו שנקבע.
+function hingeHolesFromEngine(doorOn){
+  const fixedFirst = doorOn==='right';
+  const fx={id:'f',kind:'fixed',hingeSide:undefined,label:''};
+  // ‏hingeSide של המנוע הפוך לקנבס; הדלת חייבת להיתלות **על הקבוע**
+  const dr={id:'d',kind:'door',hingeSide:fixedFirst?'right':'left',label:''};
+  const saveList=shapeList, savePS=shapePS;
+  shapeList = fixedFirst ? [fx,dr] : [dr,fx];
+  shapePS   = {f:mkPS({type:'fixed'}), d:mkPS({type:'door'})};
+  let holes=[];
+  try{
+    const pss=Object.fromEntries(shapeList.map((x,i)=>[i,shapePS[x.id]]));
+    const L=lgLayout(_lgShowerOf(_shapePanels(),pss),{canvasW:600});
+    const fi=shapeList.findIndex(x=>x.id==='f');
+    const g=L.shapes.find(x=>x.idx===fi);
+    if(g){
+      const sc=L.scale, left=g.x, right=g.x+g.w, bottom=g.y+g.h;
+      holes=L.hardware.filter(h=>h.kind==='hinge').map(h=>({
+        role:'hinge', dia:20,
+        x:{from: Math.abs(h.x-left)<Math.abs(h.x-right) ? 'left' : 'right',
+           mm: Math.round(Math.min(Math.abs(h.x-left),Math.abs(h.x-right))/sc)},
+        y:{from:'bottom', mm: Math.round((bottom-h.y)/sc)},
+      }));
+    }
+  } catch(e){ holes=[]; }
+  finally { shapeList=saveList; shapePS=savePS; }
+  return holes;
+}
+
 function shapeThumb(cv, entry){
   const a=entry.add||{};
   // אותה זכוכית בדיוק ש-shapeAdd היה יוצר, על מקלחון של פריט אחד
@@ -838,6 +877,7 @@ function shapeThumb(cv, entry){
   const st=mkPS({type:a.kind});
   if(a.slope) st.hasSlope=true;
   if(a.notch) Object.assign(st,NOTCH_DEF);
+  if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor);
 
   const saveList=shapeList, savePS=shapePS;
   shapeList=ghost; shapePS={t:st};
@@ -883,7 +923,9 @@ function shapeAddFromCatalog(i){
   const e=(typeof lgCatalogSeeds==='function'?lgCatalogSeeds():[])[i];
   if(!e) return;
   const a=e.add||{};
-  shapeAdd(a.kind,a.hingeSide,a.slope,a.notch?NOTCH_DEF:null);
+  const extra = a.notch ? Object.assign({},NOTCH_DEF) : {};
+  if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
+  shapeAdd(a.kind,a.hingeSide,a.slope,Object.keys(extra).length?extra:null);
 }
 
 function shapeAdd(kind,hingeSide,slope,extra){

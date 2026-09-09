@@ -293,6 +293,17 @@ function lgFromPanels(panels,pStates,opts){
       });
       if(st.handleEdge!=null) s.handleEdge=Number(st.handleEdge);
       if(st.floorBracket) s.floorBracket=true;
+
+      // קדחים שהזכוכית נושאת בעצמה. הם נחתכים בדיוק כמו הנגזרים, ולכן
+      // עוברים סינון: ערך פגום היה מצייר קדח באפס-אפס במקום ליפול.
+      if(Array.isArray(st.holes) && st.holes.length){
+        const ok=st.holes.filter(h=>h&&h.role&&h.x&&h.y&&
+                                    Number(h.x.mm)>=0&&Number(h.y.mm)>=0)
+          .map(h=>({role:h.role, dia:Number(h.dia)>0?Number(h.dia):null,
+                    x:{from:h.x.from==='right'?'right':'left', mm:Number(h.x.mm)},
+                    y:{from:h.y.from==='top'?'top':'bottom',   mm:Number(h.y.mm)}}));
+        if(ok.length) s.holes=ok;
+      }
       return s;
     }),
   };

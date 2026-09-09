@@ -53,11 +53,17 @@ console.log('');
    that produced handles on the hinge side is back. */
 {
   const ALLOWED_ENTRY = ['id', 'name', 'origin', 'add'];
-  const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope', 'notch'];
+  const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope', 'notch', 'hingesFor'];
   const strayEntry = seeds.flatMap(e => Object.keys(e).filter(k => !ALLOWED_ENTRY.includes(k)));
   const strayAdd   = seeds.flatMap(e => Object.keys(e.add).filter(k => !ALLOWED_ADD.includes(k)));
   check('an entry carries only a name and what to add', strayEntry, []);
   check('and never says where hardware goes or how much of it', strayAdd, []);
+  /* hingesFor names WHICH SIDE THE DOOR IS ON — a fact about the assembly.
+     Where the hinges then land is measured from the engine, never written
+     here. An entry that spelled out a position would be the old mistake. */
+  check('a side is named, never a hole position',
+        seeds.every(e => !e.add.hingesFor ||
+                    e.add.hingesFor === 'left' || e.add.hingesFor === 'right'), true);
 }
 
 /* ── the seeds are exactly what the screen already offered ──────────────── */
@@ -66,9 +72,12 @@ console.log('');
 {
   const kinds = seeds.map(e => [e.add.kind, e.add.hingeSide || '', e.add.slope ? 'slope' : ''].join('|'));
   check('and adds the step notch we already built', seeds.some(e => e.add.notch), true);
-  check('the catalogue keeps the six the chips offered', kinds, [
-    'fixed||', 'fixed||slope', 'fixed||', 'door|right|', 'door|left|', 'mirror||', 'shape||',
-  ]);
+  check('the catalogue keeps every kind the chips offered',
+        [...new Set(kinds.map(k => k.split('|')[0]))].sort(),
+        ['door', 'fixed', 'mirror', 'shape']);
+  check('and still offers both door hands',
+        kinds.filter(k => k.startsWith('door')).sort(), ['door|left|', 'door|right|']);
+  check('and the sloped fixed', kinds.includes('fixed||slope'), true);
 }
 
 /* ── the picture is painted by the drawer, not described again ──────────── */
@@ -124,7 +133,7 @@ console.log('');
         (DEMO.match(/notchW:\s*200/g) || []).length, 1);
   check('the property sheet reads it',
         DEMO.indexOf('notch') > -1 && DEMO.indexOf(',this.checked,NOTCH_DEF)') > -1, true);
-  check('and so does the gallery', DEMO.indexOf('a.notch?NOTCH_DEF:null') > -1, true);
+  check('and so does the gallery', DEMO.indexOf('Object.assign({},NOTCH_DEF)') > -1, true);
   check('the thumbnail uses it too', DEMO.indexOf('Object.assign(st,NOTCH_DEF)') > -1, true);
 
   /* an unrecognised flag must be refused, not silently ignored — otherwise
@@ -145,6 +154,77 @@ console.log('');
         DEMO.indexOf('{hwMin:3/k}') > -1, true);
   check('the hinge scales with the same floor, not a fixed pixel size',
         /const w=24\*mul, hh=16\*mul/.test(DEMO), true);
+}
+
+/* ── a fixed that carries a door ────────────────────────────────────────── */
+/* The hinges on such a pane are not written down anywhere. The screen
+   builds the assembly for a moment — the fixed with a door leaning on it —
+   and asks the engine WHERE IT PUT THE HINGES. The side is measured, not
+   chosen, which is why it cannot contradict the engine. Writing it by hand
+   is what produced doors whose handle and hinge sat on the same face. */
+{
+  const grab = n => {
+    const i = DEMO.indexOf('function ' + n + '(');
+    if (i < 0) throw new Error('missing ' + n);
+    let d = 0, j = i;
+    for (; j < DEMO.length; j++) {
+      if (DEMO[j] === '{') d++; else if (DEMO[j] === '}') { d--; if (!d) break; }
+    }
+    return DEMO.slice(i, j + 1);
+  };
+  const c = vm.createContext({ Math, JSON, Object, Array, String, Number, console });
+  ['lg-shapes.js', 'lg-layout.js'].forEach(f =>
+    vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), c));
+  vm.runInContext('let shapeList=[],shapePS={};var selQ="zamak";' +
+    'var shapeBoundary={right:"wall",left:"open"};var DOOR_H_MM=1985;' +
+    'var HANDLE_EDGE_CM=6;var TOWEL_SPACING_CM=40;', c);
+  ['mkPS', '_shapePanels', '_lgShowerOf', 'hingeHolesFromEngine'].forEach(n =>
+    vm.runInContext(grab(n), c));
+
+  const holesFor = side => vm.runInContext('hingeHolesFromEngine(' + JSON.stringify(side) + ')', c);
+
+  ['right', 'left'].forEach(side => {
+    const h = holesFor(side);
+    check('a door on the ' + side + ' gives the fixed two hinges', h.length, 2);
+    check('both on the face the door leans against',
+          h.every(x => x.x.from === side && x.x.mm === 0), true);
+  });
+
+  /* The bottom hinge is 215 from the fixed and 200 from the door: the door
+     hangs from the head and the fixed stands on the floor, so the same
+     piece of metal is a different number on each pane. That rule was
+     settled long before this gallery, and the engine still holds it. */
+  {
+    const ys = holesFor('right').map(x => x.y.mm).sort((a, b) => a - b);
+    check('the bottom hinge sits 215 up the fixed, not 200', ys[0], 215);
+    check('and the top one 200 down from its head', 2000 - ys[1], 200);
+  }
+
+  /* and the two sides are mirror images */
+  check('the two directions mirror each other',
+        holesFor('right').map(x => x.y.mm), holesFor('left').map(x => x.y.mm));
+
+  /* the holes really reach the drawing — lgFromPanels used to drop them */
+  {
+    const P = [{ type: 'fixed', wallSide: 'right', label: '' }];
+    const S = { 0: { w: 500, h: 2000, holes: holesFor('right') } };
+    const L = vm.runInContext('lgLayout(lgFromPanels(P,S,{finish:"shahor",quality:"zamak"}),{canvasW:400})',
+      Object.assign(c, (c.P = P, c.S = S, c)));
+    const declared = L.hardware.filter(x => x.source === 'declared');
+    check('a carried hinge survives the trip from the screen to the drawing',
+          declared.length, 2);
+    check('and is drawn as a hinge', declared.every(x => x.kind === 'hinge'), true);
+  }
+
+  /* a malformed hole must be dropped, not drawn at zero */
+  {
+    const P = [{ type: 'fixed', wallSide: 'right', label: '' }];
+    const S = { 0: { w: 500, h: 2000, holes: [{ role: 'hinge' }, null, { role: 'hinge', x: {}, y: {} }] } };
+    c.P = P; c.S = S;
+    const L = vm.runInContext('lgLayout(lgFromPanels(P,S,{finish:"shahor",quality:"zamak"}),{canvasW:400})', c);
+    check('a hole with no position is dropped rather than drawn at the corner',
+          L.hardware.filter(x => x.source === 'declared').length, 0);
+  }
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
