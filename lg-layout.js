@@ -89,6 +89,14 @@ const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
 // קוטר הקדח בזכוכית. זווית וציר יושבים על בורג עבה יותר מידית.
 const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
+// אילו תפקידים נולדים מצומת. רק אלה מושמטים כשהצומת כבר ייצר אותם;
+// זווית רצפה, שאינה שייכת לשום צומת, תמיד שורדת.
+const _LG_JUNCTION_ROLE={'hinge':1,'hinge-gg':1,'hinge-wall':1,
+                         'bracket-wall':1,'bracket-gg':1};
+// תפקיד → איך הוא מצויר. ציר הוא סמל מלא; זווית וידית הן קדח חשוף.
+function _lgHoleKind(role){
+  return /hinge/.test(role) ? 'hinge' : /bracket/.test(role) ? 'bracket' : 'hole';
+}
 const MAX_NEAR=56;             // כמה רחוק מותר למידה לשבת ממה שהיא מודדת
 const LG_GLASS_KG=2.5;         // ק"ג למ"ר לכל מ"מ עובי — זכוכית מחוסמת
 

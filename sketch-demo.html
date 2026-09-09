@@ -1560,10 +1560,12 @@ function engDim(d,pfx){
 function engHardware(h,sc){
   cx.save();
   if(h.kind==='hinge'){
+    // ‏24x16 ולא 14x10: בציר נכנסים שני קדחים של 20, אחד בכל צד של
+    // הפאה, ועוד רווח ביניהם — בגודל הקודם הוא נראה קטן ממה שהוא.
     cx.fillStyle='#2b2620';
     cx.beginPath();
-    if(cx.roundRect) cx.roundRect(h.x-7,h.y-5,14,10,2);
-    else cx.rect(h.x-7,h.y-5,14,10);
+    if(cx.roundRect) cx.roundRect(h.x-12,h.y-8,24,16,3);
+    else cx.rect(h.x-12,h.y-8,24,16);
     cx.fill();
   } else {
     const mm = h.dia || (h.kind==='hole' ? 12 : 20);

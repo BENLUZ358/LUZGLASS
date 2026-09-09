@@ -65,6 +65,12 @@ const SC = 1;   /* full scale, so the 3px floor never masks the diameter */
   check('and the body sits on the face it grips',
         [r.boxes[0].x + r.boxes[0].w / 2, r.boxes[0].y + r.boxes[0].h / 2], [400, 300]);
   check('filled solid, so it reads as metal', r.fills, ['#2b2620']);
+
+  /* A hinge grips both panes: a 20mm hole on each side of the face, plus
+     the gap between them. At the old 14x10 it was drawn smaller than the
+     thing it stands for. */
+  const b = r.boxes[0];
+  check('and it is drawn big enough to read as a hinge', [b.w >= 24, b.h >= 16], [true, true]);
 }
 
 /* ── the bracket is a bare hole, as asked ───────────────────────────────── */

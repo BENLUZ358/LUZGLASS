@@ -44,7 +44,7 @@ function svg(L, title) {
      כי הוא אוחז בשתי הזכוכיות ואינו נקדח לתוך אחת. */
   L.hardware.forEach(h => {
     if (h.kind === 'hinge') {
-      p.push(`<rect x="${(h.x-7).toFixed(1)}" y="${(h.y-5).toFixed(1)}" width="14" height="10" rx="2" fill="#2b2620"/>`);
+      p.push(`<rect x="${(h.x-12).toFixed(1)}" y="${(h.y-8).toFixed(1)}" width="24" height="16" rx="3" fill="#2b2620"/>`);
       return;
     }
     const mm = h.dia || (h.kind === 'hole' ? 12 : 20);
