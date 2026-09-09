@@ -51,7 +51,8 @@ function screen(boundary) {
     'var NOTCH_DEF={notchW:200,notchH:500};' +
     'let shapeBoundary=' + JSON.stringify(boundary || { right: 'wall', left: 'open' }) + ';' +
     'let shapeList=[],shapePS={},_shapeSeq=0,flipped={},libFactory=[],libPersonal=[];' +
-    'let addSide=null,lastL=null;' +
+    'let addSide=null,lastL=null,panelState={},items=[];' +
+    'var curCombo={panels:[]}; function shapeToast(){}' +
     'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip', 'galleryShown',
    '_tryArrangement', 'allowedAt', 'sideBlocked', 'canAddAt', 'hingeHolesFromEngine',
@@ -134,27 +135,31 @@ console.log('');
           .indexOf('door') > -1, true);
 }
 
-/* ── with a wall behind it, the door sits beside and hinges away ────────── */
+/* ── with a wall behind it, the door hinges away, not onto the fixed ────── */
 /* This is the case the rule is for: the door is not forbidden, it simply
-   hangs on the other side. The hand is chosen by the engine, not the card. */
+   hangs on the other side. The engine supports it directly; through the
+   screen it is unreachable, because a walled end shows no + at all. */
 {
-  const ctx = screen({ right: 'wall', left: 'wall' });
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
-  const offer = run(ctx, 'allowedAt("right").filter(function(x){' +
-    'return galleryEntries()[x.i].add.kind==="door";})');
-  check('a door is offered when it has a wall of its own', offer.length, 1);
-
-  run(ctx, 'addSide="right"; shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
-  check('and it lands beside the fixed', run(ctx, 'shapeList.length'), 2);
-  check('with no complaint', run(ctx, 'lgValidate(' + SHOWER + ')'), []);
-  check('hinged to the wall, not to the fixed',
-        run(ctx, 'lgJunctions(' + SHOWER + ').map(function(j){return j.type;})'),
+  const ctx = screen();
+  ctx.S = { boundary: { right: 'wall', left: 'wall' }, finish: 'shahor', quality: 'zamak',
+    shapes: [{ id: 'f', kind: 'fixed', carriesDoor: false },
+             { id: 'd', kind: 'door', hingeSide: 'left' }] };
+  check('a door beside a brackets-only fixed, hinged the other way, is legal',
+        run(ctx, 'lgValidate(S)'), []);
+  check('and it hangs on the wall, not on the fixed',
+        run(ctx, 'lgJunctions(S).map(function(j){return j.type;})'),
         ['bracket-wall', null, 'hinge-wall']);
 
-  /* the card said one hand; the engine chose the other, and the engine won */
-  const card = run(ctx, 'lgCatalogSeeds().find(function(e){return e.add.kind==="door";}).add.hingeSide');
-  check('the hand on the card was overruled by the rules',
-        run(ctx, 'shapeList[1].hingeSide') !== card, true);
+  /* the same door hinged INTO the fixed is refused */
+  ctx.T = { boundary: { right: 'wall', left: 'wall' }, finish: 'shahor', quality: 'zamak',
+    shapes: [{ id: 'f', kind: 'fixed', carriesDoor: false },
+             { id: 'd', kind: 'door', hingeSide: 'right' }] };
+  check('while hinging it into the fixed is not', run(ctx, 'lgValidate(T).length'), 1);
+
+  /* the screen tries both hands, so it would find the legal one when it can */
+  const has = s => DEMO.indexOf(s) > -1;
+  check('the screen tries both hands of a door',
+        has("a.kind==='door' ? [a.hingeSide, a.hingeSide==='right'?'left':'right']"), true);
 }
 
 /* ── the declaration really travels from the card to the engine ─────────── */

@@ -718,7 +718,12 @@ function getPS(pfx,i){
     if(!shapePS[s.id]) shapePS[s.id]=mkPS({type:s.kind});
     return shapePS[s.id];
   }
-  return pfx==='combo'?panelState[i]:items[i];
+  if(pfx==='combo'){
+    // אותה סיבה: פאנל בלי מצב קיבל ברירות מחדל טריות בכל קריאה
+    if(!panelState[i]) panelState[i]=mkPS(curCombo.panels[i]||{type:'fixed'});
+    return panelState[i];
+  }
+  return items[i];
 }
 
 function setPSv(pfx,i,k,el){
@@ -896,7 +901,8 @@ function shapeThumb(cv, entry){
   if(a.notchSide)  st.notchSide=a.notchSide;
   if(a.slopeSideV) st.slopeSideV=a.slopeSideV;
   if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor,entry.flipped);
-  if(a.holes) st.holes=a.holes;
+  if(a.holes) st.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
+                x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
 
   // ── ההקשר מתהפך יחד עם הזכוכית ──
   //
@@ -1020,6 +1026,10 @@ function _tryArrangement(list){
 // אילו ערכים מהגלריה מותר להוסיף בצד הזה. הרשימה הזאת היא גם התשובה
 // לשאלה אם להציג + בכלל: רשימה ריקה פירושה שאין חיבור חוקי.
 function allowedAt(side){
+  // קצה חסום פוסל הכל, וזה נבדק **כאן** ולא רק בכפתור. כשהבדיקה ישבה
+  // רק ב-canAddAt, שתי הפונקציות ענו תשובות שונות לאותה שאלה: הכפתור
+  // לא הופיע אבל ההוספה בכל זאת אושרה. שאלה אחת, תשובה אחת.
+  if(sideBlocked(side)) return [];
   const cand=[];
   galleryEntries().forEach((e,i)=>{
     const ent = flipped[e.id] ? lgFlipEntry(e) : e;
@@ -1049,10 +1059,20 @@ function sideBlocked(side){
   return shapeBoundary[side==='left'?'right':'left']==='wall';
 }
 
-function canAddAt(side){
-  if(sideBlocked(side)) return false;
-  return allowedAt(side).length>0;
+// למה המנוע סירב. ההודעה באה **ממנו**, כדי שהמסך לא ינחש סיבה שאינה
+// הסיבה האמיתית.
+function _whyNot(a,side){
+  const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide,carriesDoor:a.carriesDoor};
+  const list = side==='left' ? [probe].concat(shapeList) : shapeList.concat([probe]);
+  const sh={boundary:shapeBoundary, finish:'shahor',
+            quality:selQ==='pliz'?'pliz':'zamak',
+            shapes:list.map(x=>({id:x.id,kind:x.kind,hingeSide:x.hingeSide,
+                                 carriesDoor:x.carriesDoor}))};
+  const errs=(typeof lgValidate==='function')?lgValidate(sh):[];
+  return errs.length?errs[0].msg:'החיבור אינו חוקי';
 }
+
+function canAddAt(side){ return allowedAt(side).length>0; }
 
 // ─── ציור כפתורי ההוספה ──────────────────────────────────────────────
 //
@@ -1166,14 +1186,23 @@ function shapeAddFromCatalog(i){
   if(a.notchSide)  extra.notchSide=a.notchSide;
   if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
   if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
-  if(a.holes) extra.holes=a.holes;
+  // עותק ולא הפניה: ערך בקטלוג משמש כל לוח שנוצר ממנו, ומערך משותף
+  // היה גורם לעריכת קדח בלוח אחד לשנות אותו בכל השאר.
+  if(a.holes) extra.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
+                x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
   // היד שהמנוע אישר גוברת על זו שבכרטיס: הכרטיס מציע, החוקיות מכריעה.
+  //
+  // וכשאין יד חוקית בכלל — **לא מוסיפים**. קודם הלוח נוצר בכל זאת עם היד
+  // שעל הכרטיס, ואז הצומת לא ייצר כלום: דלת בלי צירים משני צדדיה, שנראית
+  // כאילו הצורה שלה נעלמה. עדיף לומר למה מאשר לצייר משהו בלתי אפשרי.
+  const side=addSide;
   let hand=a.hingeSide;
-  if(a.kind==='door'&&addSide){
-    const ok=allowedAt(addSide).find(x=>x.i===i);
-    if(ok&&ok.hinge) hand=ok.hinge;
+  if(side){
+    const ok=allowedAt(side).find(x=>x.i===i);
+    if(!ok){ shapeToast('אי אפשר לחבר כאן: '+_whyNot(a,side),true); return; }
+    if(ok.hinge) hand=ok.hinge;
   }
-  shapeAdd(a.kind,hand,a.slope,Object.keys(extra).length?extra:null,addSide);
+  shapeAdd(a.kind,hand,a.slope,Object.keys(extra).length?extra:null,side);
 }
 
 function shapeAdd(kind,hingeSide,slope,extra,side){
@@ -1642,9 +1671,17 @@ function getPanels(){
   if(appMode==='shape') return _shapePanels();
   return appMode==='combo'?curCombo.panels:items.map(it=>it._panel||{type:'fixed',label:'פריט',wallSide:'both'});
 }
+// כל קורא של מצב זכוכית עובר דרך getPS, שגם **שומר** את מה שהוא יצר.
+//
+// קודם היו שני מסלולים: ‏getPS יצר ושמר, ו-getPStates יצר ולא שמר. לוח
+// שהמצב שלו חסר קיבל ברירות מחדל טריות בכל ציור, ושתי הפונקציות החזירו
+// **אובייקטים שונים לאותו לוח** — מה שנכתב דרך אחת נעלם דרך השנייה.
+// זה הדפוס שגורם לפרטים של לוח אחד להיעלם בעקבות פעולה על לוח אחר.
 function getPStates(){
-  if(appMode==='shape') return Object.fromEntries(shapeList.map((s,i)=>[i,shapePS[s.id]||mkPS({type:s.kind})]));
-  if(appMode==='combo') return panelState;
+  if(appMode==='shape')
+    return Object.fromEntries(shapeList.map((s,i)=>[i,getPS('shape',i)]));
+  if(appMode==='combo')
+    return Object.fromEntries(curCombo.panels.map((p,i)=>[i,getPS('combo',i)]));
   return Object.fromEntries(items.map((it,i)=>[i,it]));
 }
 

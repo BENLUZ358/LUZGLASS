@@ -46,14 +46,15 @@ function screen() {
     'let libFactory=[],libPersonal=[]; let addSide=null; let lastL=null;' +
     'function renderShapeUI(){} function draw(){ lastL=layoutNow(); }' +
     'function renderShapeGallery(){} function _shEsc(s){return s;}' +
+    'function shapeToast(){} let panelState={},items=[]; var curCombo={panels:[]};' +
     'function layoutNow(){ return shapeList.length ?' +
     '  lgLayout(_lgShowerOf(_shapePanels(), Object.fromEntries(' +
     '    shapeList.map(function(s,i){return [i,shapePS[s.id]];}))),{canvasW:900}) : null; }',
     ctx);
   ['mkPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip',
    'galleryShown', 'galleryFlip', '_tryArrangement', 'allowedAt', 'sideBlocked',
-   'canAddAt', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
-   'shapeRemove', 'pickOrder'].forEach(n => vm.runInContext(grab(n), ctx));
+   'canAddAt', '_whyNot', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
+   'shapeRemove', 'pickOrder', 'getPS', 'getPStates'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
 const run = (ctx, e) => vm.runInContext(e, ctx);
@@ -119,13 +120,16 @@ console.log('');
   const ctx = screen();
   run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
   check('the wall side shows no +', run(ctx, 'canAddAt("left")'), false);
-  check('and nothing may be added through it', run(ctx, 'allowedAt("left").length > 0 && sideBlocked("left")'), true);
+  /* one answer, not two: the blocked side offers nothing and shows nothing */
+  check('and nothing may be added through it', run(ctx, 'allowedAt("left").length'), 0);
 }
 
 /* ── 8. a + places the new pane beside the one that asked ───────────────── */
 {
+  /* a door needs a pane prepared to carry it; the brackets-only case is
+     its own test file */
   const ctx = screen();
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
+  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ')');
   const first = run(ctx, 'shapeList[0].id');
   run(ctx, 'addSide="right"; shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
   check('a shape added on the right sits after the pane it joined',
