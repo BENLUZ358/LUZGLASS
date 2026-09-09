@@ -963,6 +963,7 @@ function shapeFlipHinge(id){
 }
 let shapePS={};
 let _galleryDrawn=0;
+let lastL=null;
 
 // שם הסוג במקום אחד. שלוש רשימות נפרדות בצייר, ברצועה ובגיליון היו
 // מתפצלות — וצורה חופשית באמת הוצגה כ"קבוע" בשניים מהם.
@@ -1741,6 +1742,7 @@ function engPaint(L,pfx,dy,idxOf,opts){
 
 function drawFromEngine(panels,pss,DPR,cW,pfx){
   const L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
+  lastL=L;   // העריכה צריכה לדעת איפה כל לוח יושב, ולא לגזור את זה שוב
 
   // הקנבס יכול לצאת רחב מהמסך: מקלחון של חמישה פאנלים לא נכנס לפלאפון
   // בלי שהמספרים יתרחקו מהזכוכית או ייחתכו זה על זה. שרטט מצייר גדול
@@ -1846,10 +1848,53 @@ function _dimRead(t){
   if(v==null) return null;
   return f.cm?Math.round(v*10):v;      // תמיד מ"מ החוצה
 }
+// ─── מי שותף לציר הזה ────────────────────────────────────────────────
+//
+// הציר הוא פיסת מתכת אחת שעוברת דרך שתי הזכוכיות, ולכן שני המספרים
+// שעליו מתארים **אותו ציר** משתי נקודות מדידה. הדלת תלויה מהמשקוף
+// והקבוע עומד על הרצפה, ולכן התחתית שלהם נפרדת — 330 על הדלת ו-345 על
+// הקבוע הם אותו בורג.
+//
+// המנוע מקשיב לדלת בלבד. לכן עריכה מצד הדלת הזיזה את שניהם, ועריכה מצד
+// הקבוע נפלה לבור ולא עשתה כלום.
+//
+// ההמרה אינה מחושבת כאן מחדש אלא **נלקחת מהפריסה**: המנוע כותב את
+// המספר כ-(תחתית הלוח פחות גובה הציר), ולכן ההפרש בין שני המספרים הוא
+// בדיוק ההפרש בין תחתיות הלוחות. חישוב מקביל היה נפרד מהמנוע ביום שבו
+// מישהו ישנה שם משהו.
+function _hingePartner(idx){
+  if(!lastL||!lastL.hardware) return null;
+  const hw=lastL.hardware.filter(h=>h.kind==='hinge'&&h.source!=='declared');
+  if(!hw.length) return null;
+  const me=lastL.shapes.find(s=>s.idx===idx);
+  if(!me) return null;
+  // הצומת שבו יושב הציר נוגע בשני לוחות; השני הוא זה שאינו אני
+  const near=hw.find(h=>Math.abs(h.x-me.x)<2||Math.abs(h.x-(me.x+me.w))<2);
+  if(!near) return null;
+  const other=lastL.shapes.find(s=>s.idx!==idx&&
+    (Math.abs(near.x-s.x)<2||Math.abs(near.x-(s.x+s.w))<2));
+  return other?{me:me,other:other}:null;
+}
+
 function _dimWrite(t,mm){
   const ps=getPS(t.pfx,t.idx); if(!ps) return false;
   const f=DIM_FIELDS[t.field]||{};
-  ps[t.field]=f.cm?(mm/10):mm;
+  const val=f.cm?(mm/10):mm;
+  ps[t.field]=val;
+
+  // ציר משותף: המספר נכתב גם על הלוח שממול, מתורגם לנקודת המדידה שלו,
+  // כדי ששני הצדדים יישארו תואמים לא משנה מאיזה מהם ערכו.
+  if(t.field==='hingeTop'||t.field==='hingeBot'){
+    const pair=_hingePartner(t.idx);
+    if(pair&&lastL.scale){
+      const sc=lastL.scale, me=pair.me, other=pair.other;
+      const shift = t.field==='hingeBot'
+        ? ((other.y+other.h)-(me.y+me.h))/sc     // תחתיות נפרדות
+        : (me.y-other.y)/sc;                     // ראשים, בדרך כלל זהים
+      const ops=getPS(t.pfx,other.idx);
+      if(ops) ops[t.field]=Math.round(val+shift);
+    }
+  }
   return true;
 }
 
