@@ -236,14 +236,31 @@ function lgFromPanels(panels,pStates,opts){
                     : (i===0 ? 'right' : 'left');
       }
 
-      // שיפוע: הצייר מחזיק ציר ('height'/'width') וצד; המנוע מחזיק זוג
-      // מידות לכל כיוון, ויכול להחזיק את שניהם יחד.
-      if(st.hasSlope){
-        const a=Number(st.slopeH1)||0, b=Number(st.slopeH2)||0;
-        if(st.slopeAxis==='width'){ s.slopeW1=a; s.slopeW2=b;
-          if(st.slopeSide==='left'||st.slopeSide==='right') s.slopeSideV=st.slopeSide; }
-        else { s.slopeH1=a; s.slopeH2=b;
-          if(st.slopeSide==='top'||st.slopeSide==='bottom') s.slopeSideH=st.slopeSide; }
+      // שיפוע — **תמיד לפי דגל, לעולם לא לפי נוכחות המספרים.**
+      //
+      // ‏mkPS נותן slopeH1:2000 ו-slopeH2:1800 לכל שייף כברירת מחדל. אלה
+      // "מה יהיה אם תדליק", לא מצב. הסקה מנוכחותם הייתה הופכת כל זכוכית
+      // במערכת למשופעת בבת אחת.
+      //
+      //   hasSlope   — שיפוע בגובה (או ברוחב, כש-slopeAxis הישן אומר כך)
+      //   hasSlopeW  — שיפוע ברוחב, בנפרד. שני הדגלים יחד נותנים מרובע
+      //                שארבע פאותיו שונות.
+      const dH1=Number(st.slopeH1)||0, dH2=Number(st.slopeH2)||0;
+      const dW1=Number(st.slopeW1)||0, dW2=Number(st.slopeW2)||0;
+      const oldWidthAxis = st.hasSlope && st.slopeAxis==='width';
+
+      if(st.hasSlope && !oldWidthAxis && dH1>0 && dH2>0){
+        s.slopeH1=dH1; s.slopeH2=dH2;
+        const side = st.slopeSideH || st.slopeSide;
+        if(side==='top'||side==='bottom') s.slopeSideH=side;
+      }
+      if(st.hasSlopeW && dW1>0 && dW2>0){
+        s.slopeW1=dW1; s.slopeW2=dW2;
+        if(st.slopeSideV) s.slopeSideV=st.slopeSideV;
+      } else if(oldWidthAxis && dH1>0 && dH2>0){
+        // המבנה הישן: זוג אחד של מספרים משמש את הציר שנבחר
+        s.slopeW1=dH1; s.slopeW2=dH2;
+        if(st.slopeSide==='left'||st.slopeSide==='right') s.slopeSideV=st.slopeSide;
       }
 
       // פינוי מדרגה
