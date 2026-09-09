@@ -23,8 +23,15 @@
 // לדלת שני קצוות שונים: קצה-ציר וקצה-ידית. השייף מצהיר באיזה צד הוא
 // נתלה, והידית **נגזרת** מזה — תמיד בצד ההפוך. אין שדה שאפשר לשים בו
 // ידית בצד הציר, ולכן אי אפשר לטעות.
+// ‏free הוא זכוכית שאינה חלק מהרכבת המקלחון — צורה חופשית או מראה.
+// היא אינה נושאת פרזול ואינה נושאת דבר, ולכן שום צומת שלה אינו מייצר
+// פריט. עד עכשיו כל מה שאינו דלת נחשב קבוע, וצורה חופשית קיבלה זוויות
+// קיר שאיש לא ביקש — בדיוק מה שנראה על המסך.
+var _LG_FREE = { shape: 1, mirror: 1, panel: 1 };
+
 function _lgEdge(shape, side) {
   if (!shape) return 'wall';
+  if (shape.kind && _LG_FREE[shape.kind]) return 'free';
   if (shape.kind !== 'door') return 'fixed';
   return shape.hingeSide === side ? 'hinge' : 'handle';
 }
@@ -39,6 +46,12 @@ var _LG_JUNCTION = {
   'handle|handle': { type: null,           qty: 0 },   // שתי דלתות נפגשות
   'fixed|handle':  { type: null,           qty: 0 },
   'hinge|hinge':   { type: null,           qty: 0 },   // חסום ב-lgValidate
+  // זכוכית חופשית אינה מתחברת לכלום, לא לקיר ולא לשכנתה
+  'free|wall':     { type: null,           qty: 0 },
+  'free|free':     { type: null,           qty: 0 },
+  'free|fixed':    { type: null,           qty: 0 },
+  'free|hinge':    { type: null,           qty: 0 },
+  'free|handle':   { type: null,           qty: 0 },
 };
 
 function _lgPairKey(a, b) { return [a, b].sort().join('|'); }
@@ -97,6 +110,8 @@ function lgValidate(shower) {
     if (neighbour === 'wall') continue;
     if (neighbour.kind === 'door') {
       errors.push({ at: sh.id, msg: 'דלת לא יכולה להיתלות על דלת' });
+    } else if (_LG_FREE[neighbour.kind]) {
+      errors.push({ at: sh.id, msg: 'דלת לא יכולה להיתלות על זכוכית חופשית — נדרש קבוע או קיר' });
     }
   }
 
@@ -106,10 +121,13 @@ function lgValidate(shower) {
   for (var k = 0; k < shapes.length; k++) {
     var fx = shapes[k];
     if (!fx || fx.kind === 'door') continue;
+    // זכוכית חופשית עומדת בפני עצמה — אין לה פרזול ואין מי שנתלה עליה,
+    // ולכן החוק שדורש מקבוע להישען אינו חל עליה.
+    if (_LG_FREE[fx.kind]) continue;
     var left  = k === 0 ? (bound.right === 'wall' ? 'wall' : null) : shapes[k - 1];
     var right = k === shapes.length - 1 ? (bound.left === 'wall' ? 'wall' : null) : shapes[k + 1];
     var held = [left, right].some(function (n) {
-      return n === 'wall' || (n && n.kind && n.kind !== 'door');
+      return n === 'wall' || (n && n.kind && n.kind !== 'door' && !_LG_FREE[n.kind]);
     });
     if (!held) {
       errors.push({ at: fx.id, msg: 'קבוע חייב להישען על קיר או על קבוע — הוא לא יכול לשבת בין שתי דלתות' });

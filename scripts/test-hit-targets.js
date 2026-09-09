@@ -159,6 +159,8 @@ const door = (id, hs, h) => ({ id, kind: 'door', w: 800, h: h || 1985, hingeSide
     ['a sloped fixed',   shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1750 }), door('b', 'right')], { right: 'wall', left: 'open' })],
     ['a notched fixed',  shower([fixed('a', 2000, { notchW: 200, notchH: 500 }), door('b', 'right')], { right: 'wall', left: 'open' })],
   ];
+  /* the engine names the field for anything with more than one of its
+     kind on the same pane; the map is only the fallback */
   const FIELD = { 'width': 'w', 'height': 'h', 'hinge-top': 'hingeTop',
     'hinge-bot': 'hingeBot', 'bracket-top': 'bracketTop', 'bracket-bot': 'bracketBot',
     'bracket-inset': 'bracketInset', 'handle-edge': 'handleEdge',
@@ -169,7 +171,7 @@ const door = (id, hs, h) => ({ id, kind: 'door', w: 800, h: h || 1985, hingeSide
       const { L, hits } = paint(sh, cw);
       const wrong = [];
       L.dims.forEach(d => {
-        const field = FIELD[d.kind];
+        const field = d.field || FIELD[d.kind];
         if (!field || d.idx == null) return;      // the overall width has no editor
         const t = d.t == null ? 0.5 : d.t;
         const mx = d.x1 + (d.x2 - d.x1) * t, my = d.y1 + (d.y2 - d.y1) * t;
@@ -183,6 +185,64 @@ const door = (id, hs, h) => ({ id, kind: 'door', w: 800, h: h || 1985, hingeSide
       check(`${name} @${cw}: every number opens its own editor`, wrong, []);
     });
   });
+}
+
+/* ── two dimensions of one kind are two different fields ────────────────── */
+/* A sloped pane carries two heights. Both are kind 'height', and a map from
+   kind to field gave both the same one — so tapping the 1800 opened the
+   overall height showing 2000, and changing it moved the wrong number.
+   The engine knows which face each belongs to, so the engine names it. */
+{
+  const sloped = shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1800 }),
+                         door('b', 'right')], { right: 'wall', left: 'open' });
+  const { L } = paint(sloped, 900);
+  const hs = L.dims.filter(d => d.kind === 'height' && d.idx === 0);
+  check('a sloped pane states both its heights', hs.length, 2);
+  check('and each names its own field',
+        hs.map(d => d.field).sort(), ['slopeH1', 'slopeH2']);
+  check('the 2000 belongs to the left face',
+        hs.find(d => d.text === '2000').field, 'slopeH1');
+  check('and the 1800 to the right one',
+        hs.find(d => d.text === '1800').field, 'slopeH2');
+
+  /* the same for a width slope */
+  const wide = shower([fixed('a', 2000, { slopeW1: 500, slopeW2: 455 }),
+                       door('b', 'right')], { right: 'wall', left: 'open' });
+  const ws = paint(wide, 900).L.dims.filter(d => d.kind === 'width' && d.idx === 0);
+  check('a width slope names its two widths apart',
+        ws.map(d => d.field).sort(), ['slopeW1', 'slopeW2']);
+
+  /* and a plain pane still edits its own height */
+  const plain = paint(shower([fixed('a'), door('b', 'right')],
+                             { right: 'wall', left: 'open' }), 900).L;
+  check('a plain pane edits the height itself',
+        plain.dims.filter(d => d.kind === 'height').every(d => d.field === 'h'), true);
+}
+
+/* ── the editor opens on the number that was tapped ─────────────────────── */
+/* A dimension the engine computed does not always sit in the panel state.
+   A bracket that follows the hinges, a height derived from a neighbour — the
+   drawing says 700 and the state holds nothing, so reading the state alone
+   opened the editor on the 200mm default while 700 was printed on the glass.
+   The target carries the number that was drawn. */
+{
+  const { hits } = paint(shower([fixed('a', 2500), fixed('b', 2000)],
+                                { right: 'wall', left: 'wall' }), 900);
+  check('every target carries the value it shows',
+        hits.every(h => h.t.shown != null), true);
+
+  const { L, hits: h2 } = paint(shower([fixed('a', 2000, { slopeH1: 2000, slopeH2: 1800 }),
+                                        door('b', 'right')], { right: 'wall', left: 'open' }), 900);
+  const byField = f => h2.find(h => h.t.field === f);
+  check('the left face target shows 2000', byField('slopeH1').t.shown, 2000);
+  check('and the right face target shows 1800', byField('slopeH2').t.shown, 1800);
+
+  /* the numbers on the drawing and the numbers in the targets are the same
+     set — nothing is offered for editing that is not written down */
+  const drawn = L.dims.filter(d => d.field || /^(width|height|hinge-|bracket-|handle-|notch-)/.test(d.kind))
+                      .filter(d => d.idx != null).map(d => Number(d.text)).sort();
+  const offered = h2.map(h => h.t.shown).sort();
+  check('and they agree with what is drawn', offered, drawn);
 }
 
 /* ── the click has to land where the finger did ─────────────────────────── */

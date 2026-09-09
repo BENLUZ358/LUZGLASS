@@ -41,14 +41,12 @@ function svg(L, title) {
   });
 
   /* הפרזול */
+  /* הכל קדחים: 20 מ"מ לזווית ולציר, 12 לידית */
   L.hardware.forEach(h => {
-    if (h.kind === 'hole') {
-      /* חור. זה מה שהחותך צריך לקדוח, וזה כל מה שהשרטוט צריך להראות. */
-      p.push(`<circle cx="${h.x}" cy="${h.y}" r="4" fill="#fff" stroke="#334155" stroke-width="1.5"/>`);
-    } else {
-      const c = h.kind === 'bracket' ? '#b45309' : '#1e293b';
-      p.push(`<rect x="${h.x - 7}" y="${h.y - 5}" width="14" height="10" rx="2" fill="${c}"/>`);
-    }
+    const mm = h.dia || (h.kind === 'hole' ? 12 : 20);
+    const r = Math.max(mm * L.scale / 2, 3);
+    const c = h.kind === 'bracket' ? '#b45309' : '#334155';
+    p.push(`<circle cx="${h.x}" cy="${h.y}" r="${r.toFixed(1)}" fill="#fff" stroke="${c}" stroke-width="1.5"/>`);
   });
 
   /* המידות.

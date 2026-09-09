@@ -1455,28 +1455,35 @@ function engDim(d,pfx){
   cx.restore();
 
   // יעד מגע של 44 פיקסלים, גם כשהמספר קטן ממנו
-  const field=ENG_FIELD[d.kind];
+  // המנוע יודע מה כל מידה מתארת, ולכן הוא זה שאומר איזה שדה היא משנה.
+  // ‏ENG_FIELD נשאר כמפה לפי סוג, למידות שאין להן שדה משלהן — אבל שתי
+  // מידות גובה של אותו שיפוע הן אותו סוג ושני שדות שונים, ומיפוי לפי
+  // סוג בלבד פתח לשתיהן את הגובה הכללי.
+  const field=d.field||ENG_FIELD[d.kind];
   if(field && d.idx!=null){
     const w=Math.max(tw+10,44), h=44;
+    // הערך שמוצג נוסע עם היעד. המנוע מחשב מידות שאינן יושבות ב-ps —
+    // זווית שעוקבת אחרי הצירים, גובה שנגזר משכן — ולכן קריאה מ-ps בלבד
+    // פתחה את החלון על ברירת המחדל בזמן שעל השרטוט כתוב מספר אחר.
+    // מי שלוחץ על 700 מתכוון לערוך את 700.
+    const shown=Number(d.text);
     dimHits.push({ x:mx-w/2, y:my-h/2, w:w, h:h,
-                   t:{pfx:pfx, field:field, idx:d.idx} });
+                   t:{pfx:pfx, field:field, idx:d.idx,
+                      shown:isFinite(shown)?shown:null} });
   }
 }
 
-function engHardware(h){
+// כל הפרזול הוא **קדח**, ומה שהחותך צריך הוא המיקום והקוטר. זווית וציר
+// יושבים על בורג של 20 מ"מ, ידית על 12 — והחור מצויר בקנה המידה של
+// הציור, כך שההפרש ביניהם נראה בעין ולא רק ברשימה.
+function engHardware(h,sc){
+  const mm = h.dia || (h.kind==='hole' ? 12 : 20);
+  const r  = Math.max(mm*(sc||0)/2, 3);   // לעולם לא קטן מכדי להיראות
   cx.save();
-  if(h.kind==='hole'){
-    // בשרטוט לחותך מה שקיים הוא החור. הידית מוברגת בו.
-    cx.beginPath(); cx.arc(h.x,h.y,4.5,0,Math.PI*2);
-    cx.fillStyle='#fff'; cx.fill();
-    cx.strokeStyle='#3a3128'; cx.lineWidth=1.4; cx.stroke();
-  } else {
-    cx.fillStyle = h.kind==='bracket' ? '#8a6a2a' : '#2b2620';
-    cx.beginPath();
-    if(cx.roundRect) cx.roundRect(h.x-7,h.y-5,14,10,2);
-    else cx.rect(h.x-7,h.y-5,14,10);
-    cx.fill();
-  }
+  cx.beginPath(); cx.arc(h.x,h.y,r,0,Math.PI*2);
+  cx.fillStyle='#fff'; cx.fill();
+  cx.strokeStyle = h.kind==='bracket' ? '#8a6a2a' : '#3a3128';
+  cx.lineWidth=1.4; cx.stroke();
   cx.restore();
 }
 
@@ -1503,7 +1510,7 @@ function engPaint(L,pfx,dy,idxOf){
     cx.restore();
   });
 
-  L.hardware.forEach(engHardware);
+  L.hardware.forEach(h=>engHardware(h,L.scale));
 
   // אזורי המגע נרשמים בקואורדינטות הקנבס ולא בקואורדינטות המוזזות: הם
   // נבדקים מול נקודת הלחיצה אחרי שה-transform כבר נגמר.
@@ -1575,7 +1582,10 @@ function setEditMode(on){
 const DIM_FIELDS={
   w:          {label:'רוחב'},
   h:          {label:'גובה'},
-  slopeH2:    {label:'גובה צד שני'},
+  slopeH1:    {label:'גובה הפאה השמאלית'},
+  slopeH2:    {label:'גובה הפאה הימנית'},
+  slopeW1:    {label:'הרוחב העליון'},
+  slopeW2:    {label:'הרוחב התחתון'},
   hingeTop:   {label:'הציר העליון — מלמעלה'},
   hingeBot:   {label:'הציר התחתון — מלמטה'},
   // ref מציין שלמידה יש נקודת ייחוס שאפשר להחליף — מלמעלה או מלמטה
@@ -1601,7 +1611,10 @@ function _dimTarget(hit){
 function _dimRead(t){
   const ps=getPS(t.pfx,t.idx); if(!ps) return null;
   const f=DIM_FIELDS[t.field]||{};
+  // מה שכתוב על השרטוט קודם לברירת מחדל, אבל לא לערך שהוזן: אם הלקוח
+  // כבר קבע מספר, הוא זה שנפתח לעריכה.
   let v=ps[t.field];
+  if(v==null && t.shown!=null) v = (DIM_FIELDS[t.field]||{}).cm ? t.shown/10 : t.shown;
   // ברירת מחדל לכל שדה שהמנוע יודע לצייר בלי שהוזן. בלעדיה הערך יוצא
   // undefined, ‏openDimEditor יוצא בשקט, והלחיצה לא עושה כלום — מידה
   // שרואים על השרטוט ואי אפשר לגעת בה.
@@ -1611,6 +1624,8 @@ function _dimRead(t){
     else if(t.field==='bracketInset')  v=BRACKET_INSET_MM;
     else if(t.field==='handleDist')    v=Math.round((ps.h||2000)/2);
     else if(t.field==='handleEdge')    v=HANDLE_EDGE_CM;
+    else if(t.field==='slopeH1'||t.field==='slopeH2') v=ps.h||2000;
+    else if(t.field==='slopeW1'||t.field==='slopeW2') v=ps.w||500;
   }
   if(v==null) return null;
   return f.cm?Math.round(v*10):v;      // תמיד מ"מ החוצה

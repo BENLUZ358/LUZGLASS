@@ -48,10 +48,12 @@ function mini(L) {
              `<rect width="100%" height="100%" fill="#fff"/>`];
   L.shapes.forEach(s => p.push(`<polygon points="${s.poly.map(q => q[0] + ',' + q[1]).join(' ')}"
       fill="${s.kind === 'door' ? '#dbeafe' : '#e8f4f8'}" stroke="#0f766e" stroke-width="4"/>`));
-  L.hardware.forEach(h => p.push(h.kind === 'hole'
-    ? `<circle cx="${h.x}" cy="${h.y}" r="9" fill="#fff" stroke="#334155" stroke-width="4"/>`
-    : `<rect x="${h.x - 14}" y="${h.y - 10}" width="28" height="20" rx="4"
-             fill="${h.kind === 'bracket' ? '#b45309' : '#1e293b'}"/>`));
+  L.hardware.forEach(h => {
+    const mm = h.dia || (h.kind === 'hole' ? 12 : 20);
+    const r = Math.max(mm * L.scale / 2, 6);
+    p.push(`<circle cx="${h.x}" cy="${h.y}" r="${r.toFixed(1)}" fill="#fff"
+            stroke="${h.kind === 'bracket' ? '#b45309' : '#334155'}" stroke-width="3"/>`);
+  });
   p.push('</svg>');
   return p.join('');
 }

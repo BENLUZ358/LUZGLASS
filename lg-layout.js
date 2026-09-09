@@ -87,6 +87,8 @@ const LG_DEF_W=500, LG_DEF_H=2000;
 const LG_EDGE_MM=200;          // ציר או זווית, 20 ס"מ מהקצה
 const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
+// קוטר הקדח בזכוכית. זווית וציר יושבים על בורג עבה יותר מידית.
+const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
 const MAX_NEAR=56;             // כמה רחוק מותר למידה לשבת ממה שהיא מודדת
 const LG_GLASS_KG=2.5;         // ק"ג למ"ר לכל מ"מ עובי — זכוכית מחוסמת
 
@@ -218,7 +220,11 @@ function lgFromPanels(panels,pStates,opts){
     boundary: o.boundary || auto,
     finish: o.finish||'', quality: o.quality||'', thickness: o.thickness||null,
     shapes: list.map((p,i)=>{
-      const st=ps(i), kind=(p&&p.type)==='door'?'door':'fixed';
+      // הסוג נשמר כפי שהוא. הפיכת כל מה שאינו דלת לקבוע נתנה זוויות קיר
+      // לצורה חופשית ולמראה — זכוכיות שאינן חלק מהרכבת המקלחון כלל.
+      const st=ps(i), t=(p&&p.type)||'fixed';
+      const kind = t==='door' ? 'door'
+                 : (t==='shape'||t==='mirror'||t==='panel') ? t : 'fixed';
       const s={ id:(p&&p.id)||('p'+i), kind:kind, label:(p&&p.label)||'',
                 w:Number(st.w)||(kind==='door'?800:500), h:Number(st.h)||2000 };
 
@@ -435,11 +441,12 @@ function _layoutPass(shower,cW,mgL,mgR){
     const P=s.poly, vs = s.slope && s.slope.vSide ? s.slope : null;
     const topMM = vs ? vs.w1 : s.mmW;
     const lane=place('top',P[0][0],P[1][0],String(topMM).length*8+16);
-    dim('width',topMM,P[0][0],oy-lane,P[1][0],oy-lane,{idx:s.idx,zone:'top',lane:lane});
+    dim('width',topMM,P[0][0],oy-lane,P[1][0],oy-lane,
+        {idx:s.idx,zone:'top',lane:lane,field:vs?'slopeW1':'w'});
     if(vs){
       const bLane=place('bottom',P[3][0],P[2][0],String(vs.w2).length*8+16);
       dim('width',vs.w2,P[3][0],asmB+bLane,P[2][0],asmB+bLane,
-          {idx:s.idx,zone:'bottom',lane:bLane});
+          {idx:s.idx,zone:'bottom',lane:bLane,field:'slopeW2'});
     }
     // ── הפינוי ──
     //
@@ -590,10 +597,13 @@ function _layoutPass(shower,cW,mgL,mgR){
     const xB=xAt(botEdge[0],botEdge[1],yB)+into*inset;
     // ‏edgeX הוא איפה הזכוכית באמת עוברת בגובה של הפריט הזה — לא ה-x של
     // הצומת. הם נפרדים ברגע שיש שיפוע או פינוי, והצייר צריך את הראשון.
+    // ציר וזווית מוברגים דרך **קדח** בזכוכית, בדיוק כמו ידית. מה שהחותך
+    // צריך הוא המיקום והקוטר; סמל מלבני רק הסתיר את שניהם.
     const kindHw=hinge?'hinge':'bracket';
-    out.hardware.push({kind:kindHw,idx:host.idx,junction:j,jType:jt,x:xT,y:yT,
+    const dia=LG_HOLE_BRACKET;
+    out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xT,y:yT,
                        face:face,edgeX:xAt(edge[0],edge[1],yT)}); claim(xT,yT);
-    out.hardware.push({kind:kindHw,idx:host.idx,junction:j,jType:jt,x:xB,y:yB,
+    out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xB,y:yB,
                        face:face,edgeX:xAt(botEdge[0],botEdge[1],yB),
                        onNotch:botEdge!==edge}); claim(xB,yB);
     // הפרזול הוא פיסת מתכת אחת שעוברת דרך שתי הזכוכיות, אבל **כל זכוכית
@@ -627,8 +637,8 @@ function _layoutPass(shower,cW,mgL,mgR){
     if(where==='both'){
       const y2=nt.shoulder[1]+mmB*sc;
       const x2=xAt(edge[0],edge[1],y2)+into*inset;
-      out.hardware.push({kind:kindHw,idx:host.idx,junction:j,jType:jt,x:x2,y:y2,
-                         face:face,edgeX:xAt(edge[0],edge[1],y2)}); claim(x2,y2);
+      out.hardware.push({kind:kindHw,hole:true,dia:LG_HOLE_BRACKET,idx:host.idx,junction:j,
+                         jType:jt,x:x2,y:y2,face:face,edgeX:xAt(edge[0],edge[1],y2)}); claim(x2,y2);
       hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,nt.shoulder[1],y2,host.idx,x2,'start');
     }
     // 2.5 ס"מ הם ברירת המחדל וכל שרטט יודע אותם — קו מידה עליהם הוא
@@ -656,7 +666,7 @@ function _layoutPass(shower,cW,mgL,mgR){
     const hyU=ref==='top'? s.y+dMM*sc : s.y+s.h-dMM*sc;
     // בשרטוט לחותך הזכוכית מה שקיים הוא **החור**. הידית מוברגת בו, וסמל
     // מפורט שלה רק מסתיר את מה שצריך לקדוח.
-    out.hardware.push({kind:'hole',idx:s.idx,x:hxU,y:hyU});
+    out.hardware.push({kind:'hole',hole:true,dia:LG_HOLE_HANDLE,idx:s.idx,x:hxU,y:hyU});
     claim(hxU,hyU);
 
     hwAdd('handle-dist',dMM,ref==='top'?s.y:hyU,ref==='top'?hyU:s.y+s.h,s.idx,hxU,
@@ -678,10 +688,13 @@ function _layoutPass(shower,cW,mgL,mgR){
       // הפוליגון כבר יודע איפה כל פאה מתחילה ונגמרת, ולכן נגזר ממנו:
       // בשיפוע כפול הפאה עצמה נוטה, וה-x שלה אינו x של התיבה.
       const P=s.poly;
-      hEntries.push({idx:s.idx, mm:hs.h1, ax:(P[0][0]+P[3][0])/2, y1:P[0][1], y2:P[3][1], face:'L'});
-      hEntries.push({idx:s.idx, mm:hs.h2, ax:(P[1][0]+P[2][0])/2, y1:P[1][1], y2:P[2][1], face:'R'});
+      // כל פאה נושאת את **השדה** שלה ולא רק את המספר. בלי זה לחיצה על
+      // 1800 של הפאה הימנית פתחה את הגובה הכללי, כי כל מידת גובה מופתה
+      // לאותו שדה אחד.
+      hEntries.push({idx:s.idx, mm:hs.h1, ax:(P[0][0]+P[3][0])/2, y1:P[0][1], y2:P[3][1], face:'L', field:'slopeH1'});
+      hEntries.push({idx:s.idx, mm:hs.h2, ax:(P[1][0]+P[2][0])/2, y1:P[1][1], y2:P[2][1], face:'R', field:'slopeH2'});
     } else {
-      hEntries.push({idx:s.idx, mm:s.mmH, ax:s.x+s.w/2, y1:s.y, y2:s.y+s.h});
+      hEntries.push({idx:s.idx, mm:s.mmH, ax:s.x+s.w/2, y1:s.y, y2:s.y+s.h, field:'h'});
     }
   });
   // ── איפה נרשם כל גובה ──
@@ -771,7 +784,7 @@ function _layoutPass(shower,cW,mgL,mgR){
     }
     dim('height',hd.mm,x,top,x,bot,
         {zone:hd.side, idxs:idxs, idx:idxs[0], t:t, near:near, size:size,
-         inside:hd.side==='inside'});
+         field:hd.pts[0].field||'h', inside:hd.side==='inside'});
   };
   // כל מידת פרזול יורדת לצד הפאה שלה. לאיזה צד — לזה שיש בו מקום: בין
   // חמישה פאנלים על מסך פלאפון פאנל שלם הוא 36 פיקסלים, ומידה שיוצאת
