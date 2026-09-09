@@ -214,10 +214,21 @@ for (const [name, s] of CASES) {
   check('one on the left and one on the right',
         [ends.some(d => d.x1 < asmL(fddf)), ends.some(d => d.x1 > asmR(fddf))], [true, true]);
 
+  /* Each door carries its OWN height, even when the two are equal.
+     Merging them into one number saved a repetition and cost the second
+     door its measurement entirely — nothing to read, and nothing to touch
+     to give it a height of its own. Shrink one door and its height simply
+     vanished. The rule this project holds everywhere applies here too: a
+     measurement is written on the glass it measures. */
   const mid = fddf.dims.filter(d => d.kind === 'height' && Number(d.text) === 1985);
-  check('two doors of the same height are measured once, not twice', mid.length, 1);
-  check('and that measurement sits inside the door itself',
-        mid[0].x1 > asmL(fddf) && mid[0].x1 < asmR(fddf), true);
+  check('each door of the same height still carries its own number', mid.length, 2);
+  check('and each sits inside the door it measures',
+        mid.every(d => {
+          const g = fddf.shapes.find(s => s.idx === d.idx);
+          return d.x1 >= g.x - 2 && d.x1 <= g.x + g.w + 2;
+        }), true);
+  check('so every door can be given a height of its own',
+        mid.map(d => d.idx).sort(), [1, 2]);
 
   /* nothing to distinguish — one number is enough */
   const same = lgLayout(shower([fixed('a', 2000), fixed('b', 2000), fixed('c', 2000)],

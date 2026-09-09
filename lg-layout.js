@@ -425,16 +425,44 @@ function _layoutPass(shower,cW,mgL,mgR){
   // קבוע של 1900 היא בדיוק המקרה החריג, ומול המקסימום ההפרש היה יוצא
   // אפס והחריג לא היה נכנס.
   const isDoor=s=>((s&&s.kind)||'fixed')==='door';
-  const fixedTop=shapes.reduce((m,s,i)=>
-    (!isDoor(s)&&!(s&&s.kind&&_LG_FREE[s.kind])) ? Math.max(m,shapeMM(s,i)) : m, 0);
+  const isPart=s=>!isDoor(s)&&!(s&&s.kind&&_LG_FREE[s.kind]);
+
+  // ── מול מי הדלת מיושרת ──
+  //
+  // מול **הקבוע שהיא נתלית עליו**, ובגובה של הפאה המשותפת דווקא.
+  //
+  // קודם ההשוואה הייתה מול הקבוע הגבוה במקלחון, וזה יצר מספרים שנראים
+  // שרירותיים: קבוע משופע 2000/2010 בקצה הרחוק גרר דלת של 1985 להפרש
+  // 25, כלומר למקרה החריג — ואז הראש שלה יצא חמישה מילימטרים מעל הקבוע
+  // שלידה, והציר העליון נקרא 195 על הקבוע ו-200 על הדלת. הזכוכית שהדלת
+  // באמת נוגעת בה היא זו שקובעת.
+  //
+  // בפאה משופעת נלקח הגובה **בפאה המשותפת**, לא הגבוה מביניהן: זה
+  // המקום שבו שתי הזכוכיות באמת נפגשות.
+  const faceMM=(i,side)=>{
+    const sl=slopes[i];
+    if(!(sl&&sl.hSide)) return shapeMM(shapes[i],i);
+    return side==='left' ? sl.h1 : sl.h2;
+  };
+  const alignAgainst=i=>{
+    // הצומת שבו הדלת תלויה: 'right' של המנוע פונה לשייף הקודם במערך
+    const left=_hingeLeft(shapes[i],js,i);
+    const j=left ? i-1 : i+1;
+    if(shapes[j]&&isPart(shapes[j])) return faceMM(j, left ? 'right':'left');
+    // אין קבוע בצד הציר — נופלים לגבוה ביותר, כפי שהיה
+    let m=0;
+    shapes.forEach((x,k)=>{ if(isPart(x)) m=Math.max(m,shapeMM(x,k)); });
+    return m;
+  };
 
   const lifts=shapes.map((s,i)=>{
     if(!isDoor(s)) return 0;
-    // דלת בלי קבוע לידה אין מול מה ליישר אותה, והיא נשארת כפי שהייתה
-    if(!fixedTop) return 0;
-    const mmH=shapeMM(s,i), diff=Math.abs(fixedTop-mmH);
+    const ref=alignAgainst(i);
+    // דלת בלי קבוע בכלל אין מול מה ליישר אותה, והיא נשארת כפי שהייתה
+    if(!ref) return 0;
+    const mmH=shapeMM(s,i), diff=Math.abs(ref-mmH);
     // ‏Math.max כדי שדלת גבוהה מהקבוע ביותר מהמרווח לא תשקע מתחת לרצפה
-    return diff<=LG_TOP_ALIGN ? Math.max(fixedTop-mmH,0) : LG_DOOR_GAP;
+    return diff<=LG_TOP_ALIGN ? Math.max(ref-mmH,0) : LG_DOOR_GAP;
   });
 
   const maxMM=Math.max.apply(null,shapes.map((s,i)=>lifts[i]+shapeMM(s,i)));
@@ -880,10 +908,16 @@ function _layoutPass(shower,cW,mgL,mgR){
       else if(e.idx===0)             hDims.push({mm:e.mm, pts:[e], side:'left'});
       else if(nS>1 && e.idx===nS-1)  hDims.push({mm:e.mm, pts:[e], side:'right'});
       else {
-        // שייפים אמצעיים: כל גובה ייחודי פעם אחת. שתי דלתות באותו גובה
-        // הן מידה אחת, לא שתיים.
-        const g=mids.find(m=>m.mm===e.mm);
-        if(g) g.pts.push(e); else mids.push({mm:e.mm, pts:[e]});
+        // שייף אמצעי נושא את הגובה שלו, על הזכוכית שלו.
+        //
+        // קודם גבהים זהים מוזגו למידה אחת "כדי לא לכתוב אותו מספר
+        // פעמיים". המחיר היה שהזכוכית השנייה נשארה **בלי מספר בכלל** —
+        // אין מה ללחוץ עליו, ואי אפשר לתת לה גובה משלה. מי שהקטין דלת
+        // אחת גילה שהגובה שלה נעלם.
+        //
+        // זה גם הכלל שהפרויקט כבר מחזיק בכל מקום אחר: המידה נרשמת על
+        // הזכוכית שהיא מודדת.
+        mids.push({mm:e.mm, pts:[e]});
       }
     });
     mids.forEach(m=>hDims.push({mm:m.mm, pts:m.pts, side:'inside'}));
@@ -915,8 +949,17 @@ function _layoutPass(shower,cW,mgL,mgR){
       const useR=!freeR||freeL, dir=useR?-1:1;
       near=useR ? s0.x+s0.w : s0.x;
       size=LG_SZ_SUB;
-      const bI = dir>0 ? [near,near+MAX_NEAR] : [near-MAX_NEAR,near];
+      // **החסם הוא הזכוכית עצמה.** המידה מתארת את הלוח הזה, ולכן היא
+      // לא עוזבת אותו גם כשהוא צר: בדלת של 55 פיקסלים היא נדחפה החוצה
+      // ונקראה כאילו היא שייכת לשכן.
+      const half=LG_HALF(size);
+      const lo=Math.min(s0.x+half, s0.x+s0.w-half);
+      const hi=Math.max(s0.x+half, s0.x+s0.w-half);
+      const bI = dir>0 ? [Math.max(near,lo), hi] : [lo, Math.min(near,hi)];
       x=placeV(near+dir*cfg.subFirst, dir*cfg.sub, top-13, bot+13, size, bI);
+      // ‏placeV מחזיר את הטוב ביותר שהוא מצא; אם גם זה בחוץ, מהדקים.
+      // מספר צפוף בתוך הזכוכית עדיף על מספר נקי על הזכוכית של מישהו אחר.
+      x=Math.min(Math.max(x,lo),hi);
     } else {
       // הגובה הכללי נשאר **מחוץ** להרכבה. הפרזול תפס כבר את הנתיבים
       // שבתוך הזכוכית, ובלי החסם הזה הגובה היה נדחף פנימה ומתחלף איתם
@@ -977,7 +1020,18 @@ function _layoutPass(shower,cW,mgL,mgR){
     const bound = !atEdge ? null
       : (dir>0 ? [p.face, p.face+MAX_NEAR] : [p.face-MAX_NEAR, p.face]);
     const gap=Math.max(9+LG_HALF(LG_SZ_SUB),Math.min(HW_GAP,room/2));
-    const x=placeV(p.face+dir*gap,dir*cfg.sub,lo,hi,LG_SZ_SUB,bound);
+    let x=placeV(p.face+dir*gap,dir*cfg.sub,lo,hi,LG_SZ_SUB,bound);
+
+    // **המידה לא עוזבת את הזכוכית שהיא מודדת**, גם כשהיא צרה. מרחק
+    // הידית בדלת של 38 פיקסלים נדחף אל מעבר לפאה ונקרא כאילו הוא של
+    // השכנה. מספר צפוף במקום הנכון עדיף על מספר נקי במקום הלא נכון.
+    const own=out.shapes.find(g=>g.idx===p.idx);
+    if(own){
+      const h2=LG_HALF(LG_SZ_SUB);
+      const oLo=Math.min(own.x+h2, own.x+own.w-h2);
+      const oHi=Math.max(own.x+h2, own.x+own.w-h2);
+      x=Math.min(Math.max(x,oLo),oHi);
+    }
 
     dim(p.kind,p.mm,x,p.a,x,p.b,
         {idx:p.idx, idxs:p.idxs, zone:'hw', face:p.face, near:p.face,
