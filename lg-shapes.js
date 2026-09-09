@@ -29,10 +29,17 @@
 // קיר שאיש לא ביקש — בדיוק מה שנראה על המסך.
 var _LG_FREE = { shape: 1, mirror: 1, panel: 1 };
 
+// ‏carriesDoor === false אומר: הקבוע הזה נבחר **עם זוויות בלבד**. אין
+// עליו הכנה לצירים, ולכן דלת לא יכולה להיתלות עליו. זו הצהרה מפורשת של
+// מי שבחר את הצורה, ולכן היא נשמרת בערך עצמו.
+//
+// ‏undefined הוא לא "לא": קומבינציות, מצב פריט וסקיצות שנשמרו בעבר אינם
+// מצהירים כלום, והם ממשיכים להתנהג כפי שהתנהגו תמיד. רק מי שאמר במפורש
+// "בלי צירים" מקבל את הסירוב.
 function _lgEdge(shape, side) {
   if (!shape) return 'wall';
   if (shape.kind && _LG_FREE[shape.kind]) return 'free';
-  if (shape.kind !== 'door') return 'fixed';
+  if (shape.kind !== 'door') return shape.carriesDoor === false ? 'fixed-solo' : 'fixed';
   return shape.hingeSide === side ? 'hinge' : 'handle';
 }
 
@@ -45,6 +52,14 @@ var _LG_JUNCTION = {
   'handle|wall':   { type: null,           qty: 0 },   // ידית מול קיר — כלום
   'handle|handle': { type: null,           qty: 0 },   // שתי דלתות נפגשות
   'fixed|handle':  { type: null,           qty: 0 },
+  // קבוע שנבחר "זוויות בלבד". זהה לקבוע בכל דבר — פרט לציר, שאין לו
+  // עליו הכנה. הצומת מול ציר חסום ב-lgValidate ולכן אינו מייצר פרזול.
+  'fixed-solo|wall':       { type: 'bracket-wall', qty: 2 },
+  'fixed-solo|fixed':      { type: 'bracket-gg',   qty: 2 },
+  'fixed-solo|fixed-solo': { type: 'bracket-gg',   qty: 2 },
+  'fixed-solo|handle':     { type: null,           qty: 0 },
+  'fixed-solo|hinge':      { type: null,           qty: 0 },   // חסום ב-lgValidate
+  'free|fixed-solo':       { type: null,           qty: 0 },
   'hinge|hinge':   { type: null,           qty: 0 },   // חסום ב-lgValidate
   // זכוכית חופשית אינה מתחברת לכלום, לא לקיר ולא לשכנתה
   'free|wall':     { type: null,           qty: 0 },
@@ -110,6 +125,8 @@ function lgValidate(shower) {
     if (neighbour === 'wall') continue;
     if (neighbour.kind === 'door') {
       errors.push({ at: sh.id, msg: 'דלת לא יכולה להיתלות על דלת' });
+    } else if (neighbour.carriesDoor === false) {
+      errors.push({ at: sh.id, msg: 'הקבוע נבחר עם זוויות בלבד — אין עליו הכנה לצירים' });
     } else if (_LG_FREE[neighbour.kind]) {
       errors.push({ at: sh.id, msg: 'דלת לא יכולה להיתלות על זכוכית חופשית — נדרש קבוע או קיר' });
     }

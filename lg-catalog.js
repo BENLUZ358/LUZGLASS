@@ -31,7 +31,8 @@ var LG_CAT_KINDS = { fixed: 1, door: 1, mirror: 1, shape: 1 };
 // ‏slope הוא hasSlope, ו-notch הוא מה שהמתג בגיליון המאפיינים כותב.
 // שניהם מתורגמים במקום אחד ב-shapeAdd, ולא כאן.
 var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1,
-                     notchSide: 1, slopeSideV: 1, slopeFlip: 1 };
+                     notchSide: 1, slopeSideV: 1, slopeFlip: 1,
+                     carriesDoor: 1 };
 
 // תפקידי קדחים שצורה רשאית לשאת בעצמה. **תפקידי צומת אינם כאן**: ציר
 // וזווית קיר נגזרים ממה שהזכוכית נפגשת איתו, ולתת להם להיכתב ביד היה
@@ -41,8 +42,10 @@ var LG_CAT_OWN_ROLES = { 'bracket-floor': 20, 'hole': 12 };
 
 function lgCatalogSeeds() {
   return [
-    { id: 'fixed',       name: 'קבוע',           origin: 'seed',
-      add: { kind: 'fixed' } },
+    // "זוויות בלבד" היא הצהרה, לא היעדר מידע: מי שבוחר את הכרטיס הזה
+    // אומר שאין על הקבוע הכנה לצירים, ולכן דלת לא תוכל להיתלות עליו.
+    { id: 'fixed',       name: 'קבוע · זוויות בלבד', origin: 'seed',
+      add: { kind: 'fixed', carriesDoor: false } },
     { id: 'fixed-slope', name: 'קבוע משופע',     origin: 'seed',
       add: { kind: 'fixed', slope: true } },
     // המדרגה אינה הגדרה חדשה: אלה בדיוק המספרים שהמתג בגיליון
@@ -52,7 +55,7 @@ function lgCatalogSeeds() {
     // ‏hingesFor אומר באיזה צד תישען הדלת, לא איפה יֵשבו הצירים. את זה
     // המסך שואל את המנוע, ולכן הצד כאן אינו יכול לסתור אותו.
     { id: 'fixed-hinge', name: 'קבוע נושא דלת',  origin: 'seed',
-      add: { kind: 'fixed', hingesFor: 'right' } },
+      add: { kind: 'fixed', hingesFor: 'right', carriesDoor: true } },
     // צורה אחת לדלת. "הפוך" נותן את היד השנייה, ולכן אין כאן שתי שורות
     // לאותו דבר — היו שתי הגדרות שיכולות להיפרד.
     { id: 'door',        name: 'דלת',            origin: 'seed',
@@ -130,6 +133,10 @@ function lgCatalogValidate(entry) {
   // צד ציר על זכוכית שאינה דלת אין לו משמעות, והוא היה מטעה במסך
   if (a.kind !== 'door' && a.hingeSide) e.push('צד ציר שייך לדלת בלבד');
   // דגל שאינו מוכר היה נבלע בשקט והצורה הייתה נפתחת בלי מה שהובטח
+  if (a.carriesDoor != null && typeof a.carriesDoor !== 'boolean')
+    e.push('carriesDoor הוא כן או לא');
+  if (a.carriesDoor === false && a.hingesFor)
+    e.push('קבוע שאינו נושא דלת לא יכול לשאת צירים');
   ['hingesFor', 'notchSide', 'slopeSideV'].forEach(function (k) {
     if (a[k] && a[k] !== 'left' && a[k] !== 'right') e.push(k + ' חייב להיות ימין או שמאל');
   });

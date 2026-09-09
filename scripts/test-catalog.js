@@ -53,8 +53,13 @@ console.log('');
    that produced handles on the hinge side is back. */
 {
   const ALLOWED_ENTRY = ['id', 'name', 'origin', 'add'];
+  /* carriesDoor is not a hardware position — it is a declaration ABOUT the
+     glass, which the engine then acts on. "This pane has no hinge
+     preparation" is a fact the factory decides, not a place a bracket
+     goes. */
   const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope', 'notch', 'hingesFor',
-                         'notchSide', 'slopeSideV', 'holes'];
+                         'notchSide', 'slopeSideV', 'slopeFlip', 'holes',
+                         'carriesDoor'];
   const strayEntry = seeds.flatMap(e => Object.keys(e).filter(k => !ALLOWED_ENTRY.includes(k)));
   const strayAdd   = seeds.flatMap(e => Object.keys(e.add).filter(k => !ALLOWED_ADD.includes(k)));
   check('an entry carries only a name and what to add', strayEntry, []);

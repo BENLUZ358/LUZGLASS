@@ -235,6 +235,10 @@ function lgFromPanels(panels,pStates,opts){
                  : (t==='shape'||t==='mirror'||t==='panel') ? t : 'fixed';
       const s={ id:(p&&p.id)||('p'+i), kind:kind, label:(p&&p.label)||'',
                 w:Number(st.w)||(kind==='door'?800:500), h:Number(st.h)||2000 };
+      // ‏"זוויות בלבד" היא הצהרה של מי שבחר את הצורה, ולכן היא עוברת
+      // כמו שהיא. ‏undefined אינו "לא": פאנל שלא הצהיר כלום ממשיך
+      // להתנהג כפי שהתנהג תמיד.
+      if(p&&p.carriesDoor!=null) s.carriesDoor=p.carriesDoor;
 
       // ⚠️ מוסכמת הציר הפוכה בין השניים, וזה כבר היה באג: אצל המנוע
       // 'right' פונה לשייף הקודם במערך — שהוא **שמאל** על הקנבס.

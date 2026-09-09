@@ -57,6 +57,9 @@ function screen() {
   return ctx;
 }
 const run = (ctx, e) => vm.runInContext(e, ctx);
+/* the plain fixed is the one that declares "brackets only" */
+const PLAIN   = 'קבוע · זוויות בלבד';   /* declares: no hinge preparation */
+const CARRIER = 'קבוע נושא דלת';        /* the one a door may hang on */
 const idOf = (ctx, name) => run(ctx, 'galleryEntries().findIndex(function(e){return e.name===' +
   JSON.stringify(name) + ';})');
 
@@ -114,7 +117,7 @@ console.log('');
 /* ── 7. a blocked side offers nothing ───────────────────────────────────── */
 {
   const ctx = screen();
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, 'קבוע') + ')');
+  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
   check('the wall side shows no +', run(ctx, 'canAddAt("left")'), false);
   check('and nothing may be added through it', run(ctx, 'allowedAt("left").length > 0 && sideBlocked("left")'), true);
 }
@@ -122,7 +125,7 @@ console.log('');
 /* ── 8. a + places the new pane beside the one that asked ───────────────── */
 {
   const ctx = screen();
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, 'קבוע') + ')');
+  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
   const first = run(ctx, 'shapeList[0].id');
   run(ctx, 'addSide="right"; shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
   check('a shape added on the right sits after the pane it joined',
@@ -136,9 +139,11 @@ console.log('');
 }
 
 /* ── 9. the connection still comes from the engine ──────────────────────── */
+/* A door may only hang on the pane prepared for it. The brackets-only
+   fixed is covered by test-carries-door.js. */
 {
   const ctx = screen();
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, 'קבוע') + ')');
+  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ')');
   run(ctx, 'addSide="right"; shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
   const errs = run(ctx, 'lgValidate(_lgShowerOf(_shapePanels(), Object.fromEntries(' +
                         'shapeList.map(function(s,i){return [i,shapePS[s.id]];}))))');
@@ -153,8 +158,8 @@ console.log('');
 {
   const ctx = screen();
   run(ctx, 'addSide="right"');
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, 'קבוע') + ')');
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, 'קבוע') + ')');
+  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
+  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ')');
   const di = idOf(ctx, 'דלת');
   run(ctx, 'galleryFlip(' + di + ')');
   run(ctx, 'shapeAddFromCatalog(' + di + ')');
@@ -176,7 +181,7 @@ console.log('');
 {
   const ctx = screen();
   run(ctx, 'addSide="right"');
-  ['קבוע', 'דלת', 'מראה'].forEach(n => run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, n) + ')'));
+  [PLAIN, 'מראה', 'צורה חופשית'].forEach(n => run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, n) + ')'));
   run(ctx, 'addSide=null');
 
   const order = run(ctx, 'pickOrder()');

@@ -785,7 +785,8 @@ let shapeBoundary={right:'wall',left:'open'};
 function _shapeShower(){
   return {boundary:shapeBoundary,finish:'shahor',
           quality:selQ==='pliz'?'pliz':'zamak',
-          shapes:shapeList.map(s=>({id:s.id,kind:s.kind,hingeSide:s.hingeSide}))};
+          shapes:shapeList.map(s=>({id:s.id,kind:s.kind,hingeSide:s.hingeSide,
+                                    carriesDoor:s.carriesDoor}))};
 }
 
 // המצב שהצייר צורך — אותו מבנה בדיוק שהקומבינציות מייצרות, כדי שלא יהיה
@@ -816,6 +817,9 @@ function _shapePanels(){
       handleSide: canvasHinge==='right'?'left':'right',
       // prev/next נמדד על המערך, ולכן הוא נגזר מהמוסכמה של המנוע ולא מהקנבס
       hingeOnFixed: s.kind==='door' ? (s.hingeSide==='right'?'prev':'next') : undefined,
+      // ההצהרה "זוויות בלבד" נוסעת עם הזכוכית עד למנוע, אחרת הכלל היה
+      // מוכרע בכרטיס ולא בחוקיות.
+      carriesDoor: s.carriesDoor,
     };
     const rW=shapeBoundary.right==='wall', lW=shapeBoundary.left==='wall';
     if(n===1)            p.wallSide = rW&&lW?'both':rW?'right':lW?'left':'none';
@@ -1008,7 +1012,8 @@ function _tryArrangement(list){
   if(typeof lgValidate!=='function') return true;
   const sh={boundary:shapeBoundary, finish:'shahor',
             quality:selQ==='pliz'?'pliz':'zamak',
-            shapes:list.map(x=>({id:x.id,kind:x.kind,hingeSide:x.hingeSide}))};
+            shapes:list.map(x=>({id:x.id,kind:x.kind,hingeSide:x.hingeSide,
+                               carriesDoor:x.carriesDoor}))};
   return lgValidate(sh).length===0;
 }
 
@@ -1019,10 +1024,18 @@ function allowedAt(side){
   galleryEntries().forEach((e,i)=>{
     const ent = flipped[e.id] ? lgFlipEntry(e) : e;
     const a=ent.add||{};
-    const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide};
-    const list = side==='left' ? [probe].concat(shapeList)
-                               : shapeList.concat([probe]);
-    if(_tryArrangement(list)) cand.push({i:i});
+    // לדלת יש שתי ידיים, ושתיהן אותה דלת. מנסים את שתיהן ולוקחים את מה
+    // שהמנוע מאשר — כך דלת שנוספת ליד קבוע "זוויות בלבד" נתלית מהצד
+    // השני במקום להיאסר, ואם אין לה על מה להיתלות בכלל היא לא מוצעת.
+    const hands = a.kind==='door' ? [a.hingeSide, a.hingeSide==='right'?'left':'right']
+                                  : [a.hingeSide];
+    for(let h=0;h<hands.length;h++){
+      const probe={id:'__probe',kind:a.kind,hingeSide:hands[h],
+                   carriesDoor:a.carriesDoor};
+      const list = side==='left' ? [probe].concat(shapeList)
+                                 : shapeList.concat([probe]);
+      if(_tryArrangement(list)){ cand.push({i:i,hinge:hands[h]}); break; }
+    }
   });
   return cand;
 }
@@ -1145,6 +1158,7 @@ function shapeAddFromCatalog(i){
   if(!e) return;
   const a=e.add||{};
   const extra = a.notch ? Object.assign({},NOTCH_DEF) : {};
+  if(a.carriesDoor!=null) extra.carriesDoor=a.carriesDoor;
   // הגבהים מוחלפים כאן ולא בקטלוג: המספרים באים מ-mkPS, והקטלוג נושא
   // רק את הכוונה. אותה החלפה בדיוק נעשית בתמונה שבגלריה.
   if(a.slopeFlip){ const d=mkPS({type:a.kind});
@@ -1153,7 +1167,13 @@ function shapeAddFromCatalog(i){
   if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
   if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
   if(a.holes) extra.holes=a.holes;
-  shapeAdd(a.kind,a.hingeSide,a.slope,Object.keys(extra).length?extra:null,addSide);
+  // היד שהמנוע אישר גוברת על זו שבכרטיס: הכרטיס מציע, החוקיות מכריעה.
+  let hand=a.hingeSide;
+  if(a.kind==='door'&&addSide){
+    const ok=allowedAt(addSide).find(x=>x.i===i);
+    if(ok&&ok.hinge) hand=ok.hinge;
+  }
+  shapeAdd(a.kind,hand,a.slope,Object.keys(extra).length?extra:null,addSide);
 }
 
 function shapeAdd(kind,hingeSide,slope,extra,side){
@@ -1164,6 +1184,7 @@ function shapeAdd(kind,hingeSide,slope,extra,side){
   // אינדקס גדל => x גדל: תחילת המערך היא שמאל הקנבס וסופו ימין. הצד
   // מגיע מכפתור ה-+ שנלחץ, ולכן הזכוכית נוחתת צמוד למי שביקש אותה.
   const item={id,kind,hingeSide:hingeSide||undefined,label};
+  if(extra&&extra.carriesDoor!=null) item.carriesDoor=extra.carriesDoor;
   if(side==='left') shapeList.unshift(item); else shapeList.push(item);
   shapePS[id]=mkPS({type:kind});
   if(slope) shapePS[id].hasSlope=true;
