@@ -22,6 +22,15 @@
    הגלריה קצרה בכוונה. ההפרדה בין מה שנוגעים על הציור למה שנוגעים
    ברצועה היא לפי **גודל המטרה**: קו מידה הוא ~90×30px ונלחץ על הציור;
    ציר הוא ~10px ולכן יושב ברצועה. */
+.build-dir{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 10px 0;font-size:13px;}
+.bd-label{color:var(--muted);}
+.bd-seg{display:flex;gap:6px;flex:1;min-width:220px;}
+.bd-seg button{flex:1;min-height:44px;font-size:13px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);}
+.bd-seg button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.bd-seg button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.bd-next{color:var(--gold-text);font-weight:600;}
 .shape-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px;}
 .shape-chip{
   min-height:44px;padding:10px 8px;
@@ -100,6 +109,7 @@
 .sh-tog{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;font-size:14px;}
 .sh-tog input{width:22px;height:22px;accent-color:var(--gold);}
 .sh-note{font-size:12px;color:var(--muted);margin:2px 0 8px;}
+.sh-unit{font-size:12px;color:var(--muted);font-weight:400;}
 .sh-gear{font-size:13px;}
 @media (min-width:601px){
   .sheet{left:auto;right:0;top:0;bottom:0;width:380px;max-height:none;
@@ -316,6 +326,12 @@ canvas{display:block;height:auto;cursor:pointer;}
     <input id="dimEditorInput" type="text" inputmode="decimal" autocomplete="off"
            onkeydown="if(event.key==='Enter'){event.preventDefault();dimEditorApply();}
                       else if(event.key==='Escape'){closeDimEditor();}">
+    <!-- היחידה שבה מוקלד המספר. הכל נשמר במילימטרים; זו רק השפה שבה
+         נוח למי שמזין. מי שרגיל למדוד בסנטימטרים יקליד 20 ולא 200. -->
+    <span class="dim-ed-row" id="dimEditorUnit">
+      <button type="button" id="dimUnitMm" onclick="dimEditorSetUnit('mm')">מ״מ</button>
+      <button type="button" id="dimUnitCm" onclick="dimEditorSetUnit('cm')">ס״מ</button>
+    </span>
     <span class="dim-ed-row">
       <button class="dim-ed-ok" onclick="dimEditorApply()">שמור</button>
       <button class="dim-ed-x"  onclick="closeDimEditor()">ביטול</button>
@@ -362,6 +378,16 @@ canvas{display:block;height:auto;cursor:pointer;}
      ה-kind:'shape' שכבר קיים בכלי. אף פריט בגלריה לא נושא פרזול — המנוע
      גוזר אותו מהצמתים, וצ'יפ עם ספירת צירים משלו היה סותר אותו. -->
 <div id="shapeUI" style="display:none;">
+  <!-- כיוון הבנייה. הבונה צריך לדעת לאיזה צד הזכוכית הבאה נוספת, אחרת
+       הוא מגלה באמצע שהוא בנה את המקלחון הפוך. הכיוון נכתב במפורש ולא
+       נלמד מהניסיון. -->
+  <div class="build-dir" role="group" aria-label="כיוון הבנייה">
+    <span class="bd-label">הבנייה מתקדמת</span>
+    <span class="bd-seg">
+      <button type="button" id="bdRtl" onclick="setBuildDir('rtl')">← מימין לשמאל</button>
+      <button type="button" id="bdLtr" onclick="setBuildDir('ltr')">מ<span dir="ltr">שמאל</span> לימין →</button>
+    </span>
+  </div>
   <div class="shape-gallery">
     <button class="shape-chip" data-shape="fixed"  onclick="shapeAdd('fixed')"><span class="gi">▭</span>קבוע</button>
     <button class="shape-chip" data-shape="fixed"  data-slope="1" onclick="shapeAdd('fixed',null,true)"><span class="gi">◸</span>קבוע משופע</button>
@@ -763,12 +789,39 @@ function _shEsc(s){
 }
 
 let _shapeSeq=0;
+
+// כיוון הבנייה. במקלחון אמיתי מתחילים מקיר וממשיכים לכיוון אחד — לא
+// מהאמצע. כשהכיוון מוצהר, הזכוכית הבאה יודעת לאן להיכנס, והבונה רואה
+// את זה לפני שהוא לוחץ ולא אחרי.
+//
+// ‏'rtl' הוא הסדר הטבעי בעברית: הזכוכית הראשונה בימין, והבאות נוספות
+// שמאלה — כלומר בסוף המערך, שהוא שמאל על הקנבס.
+let buildDir = (function(){
+  try { return localStorage.getItem('lgBuildDir')==='ltr' ? 'ltr' : 'rtl'; }
+  catch(e){ return 'rtl'; }
+})();
+
+function setBuildDir(d){
+  buildDir = d==='ltr' ? 'ltr' : 'rtl';
+  try { localStorage.setItem('lgBuildDir',buildDir); } catch(e){}
+  renderBuildDir();
+  renderShapeUI();
+}
+
+function renderBuildDir(){
+  const rtl=document.getElementById('bdRtl'), ltr=document.getElementById('bdLtr');
+  if(rtl) rtl.className = buildDir==='rtl' ? 'on' : '';
+  if(ltr) ltr.className = buildDir==='ltr' ? 'on' : '';
+}
+
 function shapeAdd(kind,hingeSide,slope){
   _shapeSeq++;
   const id='sh'+_shapeSeq;
   const label = kind==='door' ? 'דלת' : kind==='mirror' ? 'מראה'
               : kind==='shape' ? 'צורה' : (slope?'קבוע משופע':'קבוע');
-  shapeList.push({id,kind,hingeSide:hingeSide||undefined,label});
+  // 'rtl' מוסיף בסוף המערך — שמאלה על הקנבס. 'ltr' מוסיף בתחילתו.
+  const item={id,kind,hingeSide:hingeSide||undefined,label};
+  if(buildDir==='ltr') shapeList.unshift(item); else shapeList.push(item);
   shapePS[id]=mkPS({type:kind});
   if(slope) shapePS[id].hasSlope=true;
   renderShapeUI();draw();
@@ -793,6 +846,13 @@ function shapeFlipHinge(id){
   renderShapeUI();draw();
 }
 let shapePS={};
+
+// שם הסוג במקום אחד. שלוש רשימות נפרדות בצייר, ברצועה ובגיליון היו
+// מתפצלות — וצורה חופשית באמת הוצגה כ"קבוע" בשניים מהם.
+const KIND_HE={door:'דלת',mirror:'מראה',shape:'צורה חופשית',fixed:'קבוע'};
+function kindName(k){ return KIND_HE[k]||KIND_HE.fixed; }
+// זכוכית שאינה חלק מהרכבת המקלחון: אין לה פרזול ואיש אינו נתלה עליה.
+function isFreeGlass(k){ return k==='shape'||k==='mirror'||k==='panel'; }
 
 // ════════════════════════════════════════════════════════════════════════
 //  גיליון המאפיינים
@@ -832,7 +892,7 @@ function sheetSet(field,val,redraw){
 function sheetNum(field,el){
   const v=String(el.value).trim();
   if(v===''){ sheetSet(field,null); return; }
-  const r=(typeof lgParseDimensionInput==='function')?lgParseDimensionInput(v):{ok:true,mm:Number(v)};
+  const r=_dimParse(v);
   if(!r.ok){ el.style.borderColor='#c0392b'; return; }
   el.style.borderColor='';
   sheetSet(field,r.mm);
@@ -851,10 +911,15 @@ function _shSeg(field,opts,cur){
     '<button type="button" class="'+(cur===o[0]?'on':'')+'" '+
     'onclick="sheetSet(\''+field+'\',\''+o[0]+'\')">'+_shEsc(o[1])+'</button>').join('')+'</span>';
 }
+// אותה יחידה כמו חלון המידה, ומצוינת בתווית. מספר בלי יחידה לידו הוא
+// הזמנה לטעות של פי עשרה, וזו טעות שבית מלאכה לזכוכית משלם עליה.
 function _shNum(field,label,val,ph){
-  return '<div class="sh-row"><label for="sh_'+field+'">'+_shEsc(label)+'</label>'+
-    '<input id="sh_'+field+'" type="text" inputmode="decimal" value="'+(val==null?'':val)+'" '+
-    'placeholder="'+(ph||'')+'" onchange="sheetNum(\''+field+'\',this)"></div>';
+  const shown = val==null ? '' : _dimToUnit(val);
+  const hint  = (ph==null||ph==='') ? '' : String(_dimToUnit(Number(ph)||0));
+  return '<div class="sh-row"><label for="sh_'+field+'">'+_shEsc(label)+
+      ' <span class="sh-unit">'+_dimUnitLabel()+'</span></label>'+
+    '<input id="sh_'+field+'" type="text" inputmode="decimal" value="'+shown+'" '+
+    'placeholder="'+hint+'" onchange="sheetNum(\''+field+'\',this)"></div>';
 }
 
 function renderShapeSheet(){
@@ -863,7 +928,7 @@ function renderShapeSheet(){
   if(!body||i<0) return;
   const s=shapeList[i], ps=getPS('shape',i)||{};
   document.getElementById('shapeSheetTitle').innerHTML=
-    _shEsc(s.label)+' <span class="sub">'+(s.kind==='door'?'דלת':s.kind==='mirror'?'מראה':'קבוע')+'</span>';
+    _shEsc(s.label)+' <span class="sub">'+kindName(s.kind)+'</span>';
 
   const hasSlopeH = !!ps.hasSlope  && ps.slopeH1>0 && ps.slopeH2>0;
   const hasSlopeW = !!ps.hasSlopeW && ps.slopeW1>0 && ps.slopeW2>0;
@@ -897,7 +962,7 @@ function renderShapeSheet(){
         _shSeg('slopeSideV',[['left','שמאל'],['right','ימין']],ps.slopeSideV||'left')+'</div>' : '')+
   '</div>'+
 
-  (s.kind==='door' ? '' :
+  (s.kind!=='fixed' ? '' :
   '<div class="sh-grp"><h4>פינוי מדרגה</h4>'+
     '<label class="sh-tog"><input type="checkbox" '+(hasNotch?'checked':'')+
       ' onchange="sheetToggle(\'notch\',this.checked,{notchW:200,notchH:500})">'+
@@ -917,22 +982,29 @@ function renderShapeSheet(){
   '</div>')+
 
   '<div class="sh-grp"><h4>זכוכית</h4>'+
-    '<div class="sh-row"><label for="sh_thickness">עובי</label>'+
+    '<div class="sh-row"><label for="sh_thickness">עובי <span class="sh-unit">מ״מ</span></label>'+
       '<select id="sh_thickness" onchange="sheetSet(\'thickness\',this.value===\'\'?null:Number(this.value))">'+
         ['','6','8','10','12'].map(v=>'<option value="'+v+'"'+
           ((String(ps.thickness||'')===v)?' selected':'')+'>'+(v?v+' מ"מ':'כמו המקלחון')+'</option>').join('')+
       '</select></div>'+
   '</div>'+
 
-  '<div class="sh-grp"><h4>פרזול</h4>'+
-    '<label class="sh-tog"><input type="checkbox" '+(ps.floorBracket?'checked':'')+
-      ' onchange="sheetSet(\'floorBracket\',this.checked?true:null)">זווית רצפה</label>'+
-    _shNum('bracketInset','מרחק הזווית מהפאה',ps.bracketInset,'25')+
-    '<p class="sh-note">2.5 ס"מ כברירת מחדל, ואז המידה לא מופיעה בשרטוט.</p>'+
-  '</div>';
+  (isFreeGlass(s.kind)
+    // זכוכית חופשית אינה חלק מהרכבת המקלחון: אין לה זוויות ואיש אינו
+    // נתלה עליה. פינוי וחורים יקבלו מנוע משלהם.
+    ? '<div class="sh-grp"><h4>פרזול</h4>'+
+        '<p class="sh-note">זכוכית חופשית אינה נושאת פרזול. פינוי וחורים יתווספו בהמשך.</p>'+
+      '</div>'
+    : '<div class="sh-grp"><h4>פרזול</h4>'+
+        '<label class="sh-tog"><input type="checkbox" '+(ps.floorBracket?'checked':'')+
+          ' onchange="sheetSet(\'floorBracket\',this.checked?true:null)">זווית רצפה</label>'+
+        _shNum('bracketInset','מרחק הזווית מהפאה',ps.bracketInset,'25')+
+        '<p class="sh-note">2.5 ס"מ כברירת מחדל, ואז המידה לא מופיעה בשרטוט.</p>'+
+      '</div>');
 }
 
 function renderShapeUI(){
+  renderBuildDir();
   const strip=document.getElementById('shapeStrip');
   const errEl=document.getElementById('shapeErr');
   const bomEl=document.getElementById('shapeBom');
@@ -943,9 +1015,13 @@ function renderShapeUI(){
   const badIds={};errs.forEach(e=>{badIds[e.at]=e.msg;});
 
   // קצה = קיר או כלום. יושב בקצוות הרצועה, במקום שהוא מייצג על הציור.
+  // הבנייה מתקדמת לצד אחד. הצד הזה מסומן ברצועה כדי שהבונה יראה לאן
+  // הזכוכית הבאה נכנסת לפני שהוא לוחץ, ולא אחרי.
+  const growSide = buildDir==='rtl' ? 'left' : 'right';
   const endBtn=(side)=>
     '<div class="strip-item strip-end">'+
-      '<span class="sn">'+(side==='right'?'קצה ימין':'קצה שמאל')+'</span>'+
+      '<span class="sn">'+(side==='right'?'קצה ימין':'קצה שמאל')+
+        (side===growSide?' <span class="bd-next">· הבאה כאן</span>':'')+'</span>'+
       '<span class="strip-row">'+
         '<button class="'+(shapeBoundary[side]==='wall'?'on':'')+'" '+
           'onclick="shapeSetEnd(\''+side+'\',\'wall\')">קיר</button>'+
@@ -1506,7 +1582,7 @@ function engPaint(L,pfx,dy,idxOf){
 
     cx.fillStyle='rgba(58,49,40,0.45)';
     cx.font='11px Heebo,sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
-    cx.fillText(s.label || (s.kind==='door'?'דלת':'קבוע'), s.x+s.w/2, s.y+s.h/2);
+    cx.fillText(s.label || kindName(s.kind), s.x+s.w/2, s.y+s.h/2);
     cx.restore();
   });
 
@@ -1648,9 +1724,10 @@ function openDimEditor(hit,clientX,clientY){
   const lbl=document.getElementById('dimEditorLabel');
   lbl.style.color='';
   const f=DIM_FIELDS[t.field]||{};
-  lbl.textContent=(f.label||'מידה')+' — מ"מ';
+  lbl.textContent=(f.label||'מידה')+' — '+_dimUnitLabel();
   // מתחיל מהערך שיושב שם עכשיו, כדי שאפשר יהיה לתקן ולא רק להקליד מחדש
-  inp.value=lgMmToInputStr(cur);
+  inp.value=String(_dimToUnit(cur));
+  _dimUnitPaint();
   // בורר נקודת הייחוס, למידות שיש להן אחת
   const refRow=document.getElementById('dimEditorRef');
   if(f.ref){
@@ -1688,19 +1765,71 @@ function closeDimEditor(){
 // החלפת נקודת הייחוס. הידית **לא זזה** — רק המספר משתנה למרחק מהפאה
 // החדשה. אחרת החלפת "מלמטה" ל"מלמעלה" הייתה מקפיצה אותה לצד השני של
 // הזכוכית, וזו לא בקשה שמישהו התכוון אליה.
+// היחידה היא **שפת ההקלדה בלבד**. כל מידה נשמרת במילימטרים, כי זה מה
+// שהחותך מקבל ומה שהמנוע מחשב בו; היחידה קובעת רק מה נוח למי שמזין.
+// מי שרגיל למדוד בסנטימטרים יקליד 20 במקום 200.
+//
+// ההעדפה נשמרת, כי מי שמודד בסנטימטרים ימשיך למדוד בסנטימטרים.
+let dimUnit = (function(){
+  try { return localStorage.getItem('lgDimUnit')==='cm' ? 'cm' : 'mm'; }
+  catch(e){ return 'mm'; }
+})();
+
+function _dimUnitLabel(){ return dimUnit==='cm' ? 'ס"מ' : 'מ"מ'; }
+function _dimToUnit(mm){ return dimUnit==='cm' ? mm/10 : mm; }
+function _dimFromUnit(v){ return dimUnit==='cm' ? Math.round(v*10) : Math.round(v); }
+
+// ‏lgParseDimensionInput מנחש: "20" הופך ל-200 ו-"200" ל-2000, כי בלי
+// יחידה מוצהרת אין דרך אחרת. ברגע שהיחידה מוצהרת הניחוש מזיק — מי
+// שבמצב מ"מ והקליד 200 מתכוון ל-200.
+function _dimParse(str){
+  const raw=String(str==null?'':str).trim().replace(',','.');
+  if(!raw) return {ok:false,error:'צריך מספר'};
+  const n=parseFloat(raw);
+  if(!isFinite(n)) return {ok:false,error:'צריך מספר'};
+  if(n<0) return {ok:false,error:'מידה לא יכולה להיות שלילית'};
+  const mm=_dimFromUnit(n);
+  if(mm>5000) return {ok:false,error:'מידה גדולה מדי — מקסימום '+_dimToUnit(5000)+' '+_dimUnitLabel()};
+  return {ok:true,mm:mm};
+}
+
+function _dimUnitPaint(){
+  const mmB=document.getElementById('dimUnitMm'), cmB=document.getElementById('dimUnitCm');
+  if(mmB) mmB.className = dimUnit==='mm' ? 'dim-ed-ok' : 'dim-ed-x';
+  if(cmB) cmB.className = dimUnit==='cm' ? 'dim-ed-ok' : 'dim-ed-x';
+}
+
+function dimEditorSetUnit(u){
+  const next = u==='cm' ? 'cm' : 'mm';
+  if(next===dimUnit){ _dimUnitPaint(); return; }
+  // המספר שכבר מוקלד עובר יחידה איתו, כדי שלא ישתנה מתחת ליד
+  const inp=document.getElementById('dimEditorInput');
+  const cur=_dimParse(inp.value);
+  dimUnit=next;
+  try { localStorage.setItem('lgDimUnit',dimUnit); } catch(e){}
+  const t=dimEditTarget;
+  const mm = cur.ok ? cur.mm : (t ? _dimRead(t) : null);
+  if(mm!=null) inp.value=String(_dimToUnit(mm));
+  const lbl=document.getElementById('dimEditorLabel');
+  const f=(t&&DIM_FIELDS[t.field])||{};
+  if(lbl) lbl.textContent=(f.label||'מידה')+' — '+_dimUnitLabel();
+  _dimUnitPaint();
+  inp.focus(); inp.select();
+}
+
 function dimEditorSetRef(val){
   const t=dimEditTarget; if(!t) return;
   const f=DIM_FIELDS[t.field]||{}; if(!f.ref) return;
   const ps=getPS(t.pfx,t.idx); if(!ps) return;
 
   const h=ps.h||2000;
-  const typed=lgParseDimensionInput(document.getElementById('dimEditorInput').value);
+  const typed=_dimParse(document.getElementById('dimEditorInput').value);
   const curRef=ps[f.ref]||f.refDefault;
   const curDist=typed.ok?typed.mm:(ps[t.field]!=null?ps[t.field]:Math.round(h/2));
   if(val!==curRef) ps[t.field]=Math.max(0,h-curDist);   // אותו מקום, מדידה מהצד השני
   ps[f.ref]=val;
 
-  document.getElementById('dimEditorInput').value=lgMmToInputStr(ps[t.field]);
+  document.getElementById('dimEditorInput').value=String(_dimToUnit(ps[t.field]));
   document.getElementById('dimRefBot').className=val==='bottom'?'dim-ed-ok':'dim-ed-x';
   document.getElementById('dimRefTop').className=val==='top'?'dim-ed-ok':'dim-ed-x';
   draw();
@@ -1710,7 +1839,7 @@ function dimEditorSetRef(val){
 function dimEditorApply(){
   if(!dimEditTarget) return;
   const raw=document.getElementById('dimEditorInput').value;
-  const r=lgParseDimensionInput(raw);
+  const r=_dimParse(raw);
   if(!r.ok){
     const lbl=document.getElementById('dimEditorLabel');
     lbl.textContent=r.error; lbl.style.color='#c0392b';

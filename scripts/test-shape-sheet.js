@@ -105,11 +105,14 @@ check('and that button says what it is', has('aria-label="מאפייני הזכ�
         WANT.filter(f => !has("'" + f + "'") && !has(f + ':')), []);
 }
 
-/* ── a notch belongs to a fixed panel, never a door ─────────────────────── */
+/* ── a notch belongs to a fixed panel and to nothing else ───────────────── */
 /* The step comes from the wall side, and a door hangs from the wall side.
-   lgValidate refuses the combination, so the sheet must not offer it. */
-check('the notch group is hidden on a door',
-      /s\.kind==='door' \? '' :[\s\S]{0,140}פינוי מדרגה/.test(FLAT), true);
+   Free glass carries no hardware at all and will get its own way to cut
+   openings. So the notch is offered on a fixed panel only. */
+check('the notch group is offered on a fixed panel only',
+      /s\.kind!=='fixed' \? '' :[\s\S]{0,140}פינוי מדרגה/.test(FLAT), true);
+check('and free glass is told it carries no hardware',
+      has('זכוכית חופשית אינה נושאת פרזול'), true);
 
 /* ── clearing a field returns to the engine's default ───────────────────── */
 /* Writing 0 instead of deleting would pin a value that happens to equal the

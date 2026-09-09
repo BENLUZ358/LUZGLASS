@@ -51,14 +51,17 @@ function paint(shower, canvasW) {
     return DEMO.slice(i, j + 1);
   };
   const engField = DEMO.match(/const ENG_FIELD=\{[\s\S]*?\};/)[0];
+  /* the painter names the kind on the glass, so the helper travels with it */
+  const kindHe = [DEMO.match(/const KIND_HE=\{[\s\S]*?\};/)[0],
+                  (DEMO.match(/function kindName\(k\)\{[^}]*\}/) || [''])[0]].join('\n');
 
   const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console });
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8') + '\n' +
                   fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8'), ctx);
   ctx.cx = stubCx();
   ctx.dimHits = [];
-  vm.runInContext(engField + '\n' + grab('engDim') + '\n' + grab('engHardware') +
-                  '\n' + grab('engPaint'), ctx);
+  vm.runInContext([engField, kindHe, grab('engDim'), grab('engHardware'),
+                   grab('engPaint')].join('\n'), ctx);
 
   const L = ctx.lgLayout(shower, { canvasW });
   ctx.L = L;
@@ -129,8 +132,10 @@ const door = (id, hs, h) => ({ id, kind: 'door', w: 800, h: h || 1985, hingeSide
                   fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8'), ctx);
   ctx.cx = stubCx();
   ctx.dimHits = [];
-  vm.runInContext(DEMO.match(/const ENG_FIELD=\{[\s\S]*?\};/)[0] + '\n' +
-                  g('engDim') + '\n' + g('engHardware') + '\n' + g('engPaint'), ctx);
+  vm.runInContext([DEMO.match(/const ENG_FIELD=\{[\s\S]*?\};/)[0],
+                   DEMO.match(/const KIND_HE=\{[\s\S]*?\};/)[0],
+                   (DEMO.match(/function kindName\(k\)\{[^}]*\}/) || [''])[0],
+                   g('engDim'), g('engHardware'), g('engPaint')].join('\n'), ctx);
 
   ctx.L1 = ctx.lgLayout(shower([fixed('a')]), { canvasW: 700 });
   ctx.L2 = ctx.lgLayout(shower([door('b', 'right')]), { canvasW: 700 });
