@@ -200,7 +200,8 @@ function lgCatalogToShape(entry, id) {
 // והם בדיוק מה שייחתך בלוח בודד שמוזמן להחלפה.
 function lgCatalogThumb(entry, opts) {
   if (typeof lgLayout !== 'function') return '';
-  var o = opts || {}, box = o.size || 96, pad = o.pad != null ? o.pad : 6;
+  var o = opts || {};
+  var W = o.w || o.size || 132, H = o.h || o.size || 132;
   var sh = lgCatalogToShape(entry, 'thumb');
   if (!sh) return '';
 
@@ -210,35 +211,52 @@ function lgCatalogThumb(entry, opts) {
   var g = L.shapes[0];
   if (!g) return '';
 
-  // מכווצים את מה שהמנוע צייר לתוך ריבוע התמונה, שומרים על היחס
+  // ציר יושב **על** הפאה וחציו בולט החוצה — ככה הוא באמת. השוליים
+  // חייבים להכיל אותו, אחרת הוא נחתך בקצה התמונה ונראה שבור.
+  var pad = o.pad != null ? o.pad : 9;
+
   var xs = g.poly.map(function (p) { return p[0]; });
   var ys = g.poly.map(function (p) { return p[1]; });
   var x0 = Math.min.apply(Math, xs), x1 = Math.max.apply(Math, xs);
   var y0 = Math.min.apply(Math, ys), y1 = Math.max.apply(Math, ys);
-  var k  = Math.min((box - pad * 2) / (x1 - x0 || 1),
-                    (box - pad * 2) / (y1 - y0 || 1));
-  var ox = (box - (x1 - x0) * k) / 2 - x0 * k;
-  var oy = (box - (y1 - y0) * k) / 2 - y0 * k;
+  var k  = Math.min((W - pad * 2) / (x1 - x0 || 1),
+                    (H - pad * 2) / (y1 - y0 || 1));
+  var ox = (W - (x1 - x0) * k) / 2 - x0 * k;
+  var oy = (H - (y1 - y0) * k) / 2 - y0 * k;
   var X = function (v) { return (v * k + ox).toFixed(1); };
   var Y = function (v) { return (v * k + oy).toFixed(1); };
 
-  var p = ['<svg viewBox="0 0 ' + box + ' ' + box + '" width="' + box +
-           '" height="' + box + '" aria-hidden="true">'];
-  p.push('<polygon points="' + g.poly.map(function (q) { return X(q[0]) + ',' + Y(q[1]); }).join(' ') +
+  var p = ['<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W +
+           '" height="' + H + '" aria-hidden="true">'];
+  p.push('<polygon points="' +
+         g.poly.map(function (q) { return X(q[0]) + ',' + Y(q[1]); }).join(' ') +
          '" fill="#eef4f5" stroke="#2f4f4f" stroke-width="1.2"/>');
 
-  // אותה חלוקה כמו על הקנבס: ציר סמל מלא, זווית וידית קדח חשוף
+  // ─── גודל הפרזול בתמונה ─────────────────────────────────────────────
+  //
+  // **המיקום נאמן, הגודל קריא.** קדח של 20 מ"מ על לוח של 2000 הוא אחוז
+  // אחד מהגובה; בתמונה של 130 פיקסל הוא פחות מפיקסל אחד, וכל הפרזול
+  // נעלם או מתכווץ לנקודה. זה מה שקרה בגרסה הראשונה.
+  //
+  // בקנבס הבעיה לא קיימת כי שם רואים מקלחון שלם ברוחב מסך. תמונה בגלריה
+  // היא סכמה: היא אומרת **מה** מוברג ו**איפה**, לא כמה מילימטרים הוא
+  // תופס. לכן יש רצפה לגודל — אותה חלוקה כמו על הקנבס, ציר סמל מלא
+  // וזווית קדח חשוף, רק שאף אחד מהם לא יורד מתחת לסף הקריאוּת.
+  var trueR = function (mm) { return mm * L.scale * k / 2; };
+
   L.hardware.forEach(function (h) {
     if (h.kind === 'hinge') {
-      p.push('<rect x="' + X(h.x - 12 / k) + '" y="' + Y(h.y - 8 / k) +
-             '" width="' + (24 * k).toFixed(1) + '" height="' + (16 * k).toFixed(1) +
+      var hw = Math.max(24 * k, 11), hh = Math.max(16 * k, 7);
+      p.push('<rect x="' + (X(h.x) - hw / 2).toFixed(1) +
+             '" y="' + (Y(h.y) - hh / 2).toFixed(1) +
+             '" width="' + hw.toFixed(1) + '" height="' + hh.toFixed(1) +
              '" rx="2" fill="#2b2620"/>');
       return;
     }
-    var r = Math.max((h.dia || 20) * L.scale * k / 2, 1.6);
+    var r = Math.max(trueR(h.dia || 20), h.kind === 'hole' ? 2.4 : 3);
     p.push('<circle cx="' + X(h.x) + '" cy="' + Y(h.y) + '" r="' + r.toFixed(1) +
            '" fill="#fff" stroke="' + (h.kind === 'bracket' ? '#8a6a2a' : '#3a3128') +
-           '" stroke-width="1"/>');
+           '" stroke-width="1.2"/>');
   });
 
   p.push('</svg>');

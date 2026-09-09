@@ -186,5 +186,63 @@ console.log('');
         bare.map(e => e.id), []);
 }
 
+/* ── the picture must be legible, and must not lie about position ───────── */
+/* The first gallery drew every hole at true scale. A 20mm hole on a 2000mm
+   pane is one percent of the height, which at thumbnail size is less than
+   a pixel — so the hardware vanished or shrank to a speck, and the shapes
+   read as bare rectangles. Position stays exact; size gets a floor. */
+{
+  const parse = svg => ({
+    circles: [...svg.matchAll(/<circle cx="([-\d.]+)" cy="([-\d.]+)" r="([-\d.]+)"/g)]
+      .map(m => ({ x: +m[1], y: +m[2], r: +m[3] })),
+    rects: [...svg.matchAll(/<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g)]
+      .map(m => ({ x: +m[1], y: +m[2], w: +m[3], h: +m[4] })),
+    poly: (svg.match(/<polygon points="([^"]*)"/) || [, ''])[1]
+      .split(' ').filter(Boolean).map(q => q.split(',').map(Number)),
+  });
+
+  seeds.forEach(e => {
+    const t = parse(run('lgCatalogThumb(E,{w:120,h:150})', { E: e }));
+    t.circles.forEach(c => {
+      if (c.r < 2.4) { failed++; console.error('FAIL  ' + e.id + ': a hole too small to see (r=' + c.r + ')'); }
+    });
+    t.rects.forEach(r => {
+      if (r.w < 11 || r.h < 7) { failed++; console.error('FAIL  ' + e.id + ': a hinge too small to read'); }
+    });
+  });
+  console.log('ok    no hole and no hinge shrinks below what an eye can read');
+
+  /* nothing may be drawn outside the picture — a hinge straddles the face,
+     so half of it hangs past the glass and the padding must contain it */
+  seeds.forEach(e => {
+    const t = parse(run('lgCatalogThumb(E,{w:120,h:150})', { E: e }));
+    const out = t.rects.filter(r => r.x < 0 || r.y < 0 || r.x + r.w > 120 || r.y + r.h > 150)
+      .concat(t.circles.filter(c => c.x - c.r < 0 || c.y - c.r < 0 || c.x + c.r > 120 || c.y + c.r > 150));
+    if (out.length) { failed++; console.error('FAIL  ' + e.id + ': hardware clipped by the frame'); }
+  });
+  console.log('ok    and none of it is clipped by the frame');
+
+  /* the position is still the truth: a bracket 200mm down a 2000mm pane
+     belongs a tenth of the way down the drawn glass, not anywhere else */
+  {
+    const e = seeds.find(s => s.id === 'fixed');
+    const t = parse(run('lgCatalogThumb(E,{w:120,h:150})', { E: e }));
+    const ys = t.poly.map(q => q[1]);
+    const top = Math.min(...ys), bot = Math.max(...ys), span = bot - top;
+    const rel = t.circles.map(c => (c.y - top) / span).sort((a, b) => a - b);
+    const near = (a, b) => Math.abs(a - b) < 0.02;
+    check('the top brackets sit a tenth of the way down, as 200 of 2000 is',
+          [near(rel[0], 0.1), near(rel[1], 0.1)], [true, true]);
+    check('and the bottom pair a tenth of the way up',
+          [near(rel[2], 0.9), near(rel[3], 0.9)], [true, true]);
+
+    const xs = t.poly.map(q => q[0]);
+    const l = Math.min(...xs), r = Math.max(...xs), wide = r - l;
+    const relX = t.circles.map(c => (c.x - l) / wide).sort((a, b) => a - b);
+    check('and 25mm in from a 500mm face is a twentieth in from the edge',
+          [near(relX[0], 0.05), near(relX[3], 0.95)], [true, true]);
+  }
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll catalogue checks passed.');
