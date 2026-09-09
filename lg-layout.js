@@ -223,9 +223,34 @@ function lgFromPanels(panels,pStates,opts){
   // דלת בקצה נתלית תמיד על משהו, ולכן קצה כזה הוא קיר גם בלי wallSide.
   const wallOn=(p,side)=>{ const w=(p&&p.wallSide)||'';
     return w==='both'||w===side||(p&&p.type)==='door'; };
-  const auto = list.length ? { right: wallOn(list[0],'right')?'wall':'open',
-                               left:  wallOn(list[list.length-1],'left')?'wall':'open' }
-                           : { right:'wall', left:'wall' };
+
+  // ── קצה שאין לו על מה להישען הוא קיר ──
+  //
+  // זו אותה מחשבה שכבר הייתה כאן לדלת: "דלת בקצה נתלית תמיד על משהו".
+  // אותו דבר נכון לקבוע — זכוכית בקצה ריצה שאף שכן אינו מחזיק אותה
+  // נוגעת בקיר, כי אחרת היא עומדת באוויר.
+  //
+  // בלי זה נחסמה הרכבה אמיתית ונפוצה: **קבוע · דלת · דלת · קבוע**, שתי
+  // דלתות שנפגשות ידית מול ידית וכל אחת תלויה על הקבוע שבצדה. הקבוע
+  // האחרון נשען על הקיר שמעברו, אבל הקצה היה קפוא על "פתוח" — והוא
+  // נפסל כצף.
+  //
+  // ‏**לוח בודד אינו מושפע**: אין לו שכן פנימי, ולכן הצד השני מכריע —
+  // קבוע יחיד ממשיך לקבל שתי זוויות, כפי שצריך למי שמזמין לוח להחלפה.
+  const kindOf=p=>{ const t=(p&&p.type)||'fixed';
+    return t==='door' ? 'door'
+         : (t==='shape'||t==='mirror'||t==='panel') ? 'free' : 'fixed'; };
+  const endNeedsWall=(p,inner)=>{
+    if(kindOf(p)!=='fixed') return false;   // דלת מטופלת ב-wallOn; חופשית אינה נשענת
+    if(!inner) return false;                // לוח בודד — הצד השני מכריע
+    return kindOf(inner)!=='fixed';         // רק קבוע מחזיק קבוע
+  };
+
+  const last=list.length-1;
+  const auto = list.length
+    ? { right: (wallOn(list[0],'right')  || endNeedsWall(list[0],list[1]))       ? 'wall':'open',
+        left:  (wallOn(list[last],'left') || endNeedsWall(list[last],list[last-1])) ? 'wall':'open' }
+    : { right:'wall', left:'wall' };
 
   return {
     boundary: o.boundary || auto,

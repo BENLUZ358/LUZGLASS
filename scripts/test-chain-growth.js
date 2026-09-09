@@ -128,10 +128,11 @@ console.log('');
   check('four panes, still going', run(c, 'shapeList.length'), 4);
   check('all of it legal', VALID(c), []);
 
-  /* and a door at the entrance finishes it, on purpose */
+  /* a door does not end anything: glass may follow it, and the end of the
+     run becomes the wall that glass leans on */
   grow(c, 'right', DOOR);
-  check('a door closes the run', run(c, 'canAddAt("right")'), false);
-  check('and the finished run is legal', VALID(c), []);
+  check('a door does not close the run', run(c, 'canAddAt("right")'), true);
+  check('and the run is legal with it', VALID(c), []);
 }
 
 /* ── the brackets-only fixed puts the door's hinges on the far side ────── */
@@ -155,6 +156,44 @@ console.log('');
   grow(c2, 'right');
   check('so a third pane goes on', run(c2, 'shapeList.length'), 3);
   check('legally', VALID(c2), []);
+}
+
+/* ── the arrangement that was blocked: fixed | door | door | fixed ──────── */
+/* Two doors meeting handle to handle, each hung on the fixed at its own
+   end. A real and common shower, and the junction table has always had
+   'handle|handle' for it. What blocked it was the far end being frozen
+   open, so the LAST fixed was judged to be floating. Glass at the end of a
+   run that no neighbour holds meets a wall — the same thing the engine
+   already said about a door at an end. */
+{
+  const c = screen();
+  const steps = [CARRIER, DOOR, DOOR, CARRIER];
+  steps.forEach((n, k) => {
+    if (k === 0) run(c, 'shapeAddFromCatalog(' + idOf(c, n) + ')');
+    else grow(c, 'right', n);
+  });
+  check('all four panes go in', run(c, 'shapeList.length'), 4);
+  check('and the run is legal', VALID(c), []);
+  check('each door hangs on the fixed at its own end, and they meet in the middle',
+        run(c, 'lgJunctions(_shapeShower()).map(function(j){return j.type;})'),
+        ['bracket-wall', 'hinge-gg', null, 'hinge-gg', 'bracket-wall']);
+
+  /* the two doors are hinged outward, away from each other */
+  const hands = run(c, 'shapeList.filter(function(s){return s.kind==="door";})' +
+                      '.map(function(s){return s.hingeSide;})');
+  check('the two doors hang the opposite way from one another',
+        hands[0] !== hands[1], true);
+}
+
+/* ── and a lone pane is still a component, not an installation ──────────── */
+{
+  const c = screen();
+  run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
+  const L = run(c, 'lgLayout(_lgShowerOf(_shapePanels(),getPStates()),{canvasW:900})');
+  check('a lone fixed takes two brackets, not four',
+        L.hardware.filter(h => h.kind === 'bracket').length, 2);
+  check('because it has no inner neighbour, so the far end stays open',
+        run(c, '_lgShowerOf(_shapePanels(),getPStates()).boundary.left'), 'open');
 }
 
 /* ── nothing in the mechanism counts panes ──────────────────────────────── */
