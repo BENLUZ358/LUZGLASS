@@ -1159,17 +1159,16 @@ function renderAddButtons(){
     host.innerHTML=''; return;
   }
   const k=(C.clientWidth||lastL.canvas.w)/lastL.canvas.w;
+  // בונים **משמאל לימין**: הזכוכית הראשונה יושבת על הקיר השמאלי, וכל מה
+  // שנוסף ממשיך ימינה. לכן יש כפתור אחד, על הפאה הימנית של האחרונה —
+  // כפתור בשמאל היה מציע לבנות אחורה לתוך הקיר.
   const ends=[...lastL.shapes].sort((a,b)=>a.x-b.x);
-  const out=[];
-  [['left',ends[0],'x'],['right',ends[ends.length-1],'r']].forEach(pair=>{
-    const side=pair[0], g=pair[1], which=pair[2];
-    if(!g||!canAddAt(side)) return;
-    const x=(which==='x'?g.x:g.x+g.w)*k, y=(g.y+g.h/2)*k;
-    out.push('<button type="button" class="add-btn" style="left:'+x.toFixed(0)+
-      'px;top:'+y.toFixed(0)+'px" onclick="addAt(&quot;'+side+'&quot;)" '+
-      'aria-label="הוסף זכוכית ב'+(side==='left'?'שמאל':'ימין')+'">+</button>');
-  });
-  host.innerHTML=out.join('');
+  const g=ends[ends.length-1];
+  if(!g||!canAddAt('right')){ host.innerHTML=''; return; }
+  const x=(g.x+g.w)*k, y=(g.y+g.h/2)*k;
+  host.innerHTML='<button type="button" class="add-btn" style="left:'+x.toFixed(0)+
+    'px;top:'+y.toFixed(0)+'px" onclick="addAt(&quot;right&quot;)" '+
+    'aria-label="הוסף זכוכית מימין">+</button>';
 }
 
 // לחיצה על + : גוללים לגלריה ומסננים אותה למה שחוקי באותו צד.

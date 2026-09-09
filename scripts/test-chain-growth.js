@@ -74,12 +74,16 @@ const NAMES = c => run(c, 'galleryEntries().map(function(e){return e.name;})');
 const VALID = c => run(c, 'lgValidate(_shapeShower())');
 const PLAIN = 'קבוע · זוויות בלבד', CARRIER = 'קבוע נושא דלת', DOOR = 'דלת';
 
-/* add whatever the engine allows on that side, preferring `want` */
+/* add whatever the engine allows on that side, preferring `want`
+   (a single name, or a list tried in order) */
 function grow(c, side, want) {
   const cand = run(c, 'allowedAt(' + JSON.stringify(side) + ')');
   if (!cand.length) return null;
   const names = NAMES(c);
-  const pick = (want && cand.find(x => names[x.i] === want)) || cand[0];
+  const wants = want == null ? [] : [].concat(want);
+  let pick = null;
+  for (const w of wants) { pick = cand.find(x => names[x.i] === w); if (pick) break; }
+  pick = pick || cand[0];
   const before = run(c, 'shapeList.length');
   run(c, 'addSide=' + JSON.stringify(side) + '; shapeAddFromCatalog(' + pick.i + '); addSide=null;');
   return run(c, 'shapeList.length') > before ? names[pick.i] : null;
@@ -87,19 +91,19 @@ function grow(c, side, want) {
 
 console.log('');
 
-/* ── the chain keeps going, from any start, in both directions ──────────── */
+/* ── the chain keeps going, from any start ──────────────────────────────── */
+/* A run is built left to right. A door reaching the entrance CLOSES the
+   run — that is the shower being finished, not the chain failing — so
+   these grow with panes that leave the entrance open. */
 [PLAIN, CARRIER, DOOR, 'מראה', 'קבוע משופע'].forEach(start => {
   const c = screen();
   run(c, 'shapeAddFromCatalog(' + idOf(c, start) + ')');
-  /* A run has a wall side and an entrance. The entrance ends at a door, so
-     one end fills up while the other keeps going — a person would simply
-     press whichever + is there. Stopping at the first refusal would test
-     the loop, not the chain. */
   const added = [];
   for (let step = 0; step < 10; step++) {
-    const side = step % 2 ? 'left' : 'right';
-    const got = grow(c, side, DOOR);      /* prefer a door, to press the rules */
-    if (got) added.push(got);
+    /* prefer panes that leave the entrance open; a door would finish the run */
+    const got = grow(c, 'right', [PLAIN, 'מראה', 'צורה חופשית']);
+    if (!got) break;
+    added.push(got);
   }
   check(start + ': the chain keeps growing past the second pane',
         run(c, 'shapeList.length') >= 5, true);
@@ -108,46 +112,49 @@ console.log('');
 });
 
 /* ── the exact complaint: shape 1 → + → shape 2 → + → shape 3 ───────────── */
-/* The chain must not stop at two. Which END it grows from is the rules
-   engine's business — a run has a wall side and an entrance, and the
-   entrance fills up when a door reaches it. What matters is that after
-   every addition there is still somewhere to add. */
-const anyEnd = c => run(c, 'canAddAt("left")') || run(c, 'canAddAt("right")');
-const growAnywhere = (c, want) => grow(c, 'right', want) || grow(c, 'left', want);
 {
   const c = screen();
   run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
-  check('one pane offers a +', anyEnd(c), true);
+  check('one pane offers a +', run(c, 'canAddAt("right")'), true);
 
-  growAnywhere(c, DOOR);
-  check('two panes, and there is still somewhere to add', anyEnd(c), true);
+  grow(c, 'right', PLAIN);
+  check('two panes, and the second offers one too', run(c, 'canAddAt("right")'), true);
 
-  growAnywhere(c);
+  grow(c, 'right', PLAIN);
   check('three panes', run(c, 'shapeList.length'), 3);
-  check('and still somewhere to add', anyEnd(c), true);
+  check('and the third offers one as well', run(c, 'canAddAt("right")'), true);
 
-  growAnywhere(c);
+  grow(c, 'right', PLAIN);
   check('four panes, still going', run(c, 'shapeList.length'), 4);
   check('all of it legal', VALID(c), []);
+
+  /* and a door at the entrance finishes it, on purpose */
+  grow(c, 'right', DOOR);
+  check('a door closes the run', run(c, 'canAddAt("right")'), false);
+  check('and the finished run is legal', VALID(c), []);
 }
 
-/* ── the door beside a brackets-only fixed no longer ends the chain ─────── */
+/* ── the brackets-only fixed puts the door's hinges on the far side ────── */
 {
   const c = screen();
   run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
   const first = grow(c, 'right', DOOR);
   check('a door lands beside the brackets-only fixed', first, DOOR);
-  check('hinged away from it, as the rule says',
-        run(c, 'lgJunctions(_shapeShower())[1].type'), null);
+  check('nothing at all between them', run(c, 'lgJunctions(_shapeShower())[1].type'), null);
+  check('so the door hangs on its own wall, not on the fixed',
+        run(c, 'lgJunctions(_shapeShower())[2].type'), 'hinge-wall');
+  check('and the run is legal', VALID(c), []);
 
-  /* the entrance is now closed by that door — the run grows from the wall */
-  check('and the chain can still continue', anyEnd(c), true);
-  growAnywhere(c);
-  check('so a third pane goes on', run(c, 'shapeList.length'), 3);
-  check('legally', VALID(c), []);
-  growAnywhere(c);
-  check('and a fourth', run(c, 'shapeList.length'), 4);
-  check('still legally', VALID(c), []);
+  /* the pane prepared for a door takes it the other way, and continues */
+  const c2 = screen();
+  run(c2, 'shapeAddFromCatalog(' + idOf(c2, CARRIER) + ')');
+  grow(c2, 'right', DOOR);
+  check('the carrier takes the door onto its own face',
+        run(c2, 'lgJunctions(_shapeShower())[1].type'), 'hinge-gg');
+  check('and the chain can still continue past it', run(c2, 'canAddAt("right")'), true);
+  grow(c2, 'right');
+  check('so a third pane goes on', run(c2, 'shapeList.length'), 3);
+  check('legally', VALID(c2), []);
 }
 
 /* ── nothing in the mechanism counts panes ──────────────────────────────── */
@@ -217,10 +224,16 @@ const growAnywhere = (c, want) => grow(c, 'right', want) || grow(c, 'left', want
   check('a lone pane leans on one wall, not two',
         /let shapeBoundary=\{right:'wall',left:'open'\}/.test(DEMO), true);
   check('a wall is no longer treated as a barrier', /function sideBlocked/.test(DEMO), false);
-  check('the + is drawn on both free ends of the chain',
-        has("[['left',ends[0],'x'],['right',ends[ends.length-1],'r']]"), true);
-  check('and it asks the same function every pane asks',
-        has('if(!g||!canAddAt(side)) return;'), true);
+  /* A run is built left to right: the first pane sits on the left wall and
+     everything follows rightward. So there is ONE +, on the right face of
+     the last pane — a + on the left would offer to build back into the
+     wall. Which pane carries it is decided by position, never by how many
+     panes there are. */
+  check('the + sits on the right face of the last pane',
+        has('const g=ends[ends.length-1];'), true);
+  check('and only when the rules allow something there',
+        has("if(!g||!canAddAt('right')){ host.innerHTML=''; return; }"), true);
+  check('there is no + on the wall side', /addAt\(&quot;left&quot;\)/.test(DEMO), false);
   check('with no count of panes anywhere in the decision',
         /shapeList\.length\s*[<>=]=?\s*[0-9]/.test(
           DEMO.slice(DEMO.indexOf('function allowedAt'), DEMO.indexOf('function shapeAdd('))), false);
