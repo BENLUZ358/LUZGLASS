@@ -53,7 +53,7 @@ console.log('');
    that produced handles on the hinge side is back. */
 {
   const ALLOWED_ENTRY = ['id', 'name', 'origin', 'add'];
-  const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope'];
+  const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope', 'notch'];
   const strayEntry = seeds.flatMap(e => Object.keys(e).filter(k => !ALLOWED_ENTRY.includes(k)));
   const strayAdd   = seeds.flatMap(e => Object.keys(e.add).filter(k => !ALLOWED_ADD.includes(k)));
   check('an entry carries only a name and what to add', strayEntry, []);
@@ -65,8 +65,9 @@ console.log('');
    shapes too. */
 {
   const kinds = seeds.map(e => [e.add.kind, e.add.hingeSide || '', e.add.slope ? 'slope' : ''].join('|'));
-  check('the catalogue offers the six the chips offered', kinds, [
-    'fixed||', 'fixed||slope', 'door|right|', 'door|left|', 'mirror||', 'shape||',
+  check('and adds the step notch we already built', seeds.some(e => e.add.notch), true);
+  check('the catalogue keeps the six the chips offered', kinds, [
+    'fixed||', 'fixed||slope', 'fixed||', 'door|right|', 'door|left|', 'mirror||', 'shape||',
   ]);
 }
 
@@ -112,6 +113,38 @@ console.log('');
     const sameSide = (handle.x < mid) === (hinge.x < mid);
     check('a door hinged ' + side + ' puts its handle on the other face', sameSide, false);
   });
+}
+
+/* ── a flag is a shortcut to state the screen already has ───────────────── */
+/* The notch is not a new definition. The property sheet has written
+   {notchW:200, notchH:500} since it was built, and the gallery must use
+   THOSE numbers — two constants with one meaning always drift. */
+{
+  check('the notch default lives in one place',
+        (DEMO.match(/notchW:\s*200/g) || []).length, 1);
+  check('the property sheet reads it',
+        DEMO.indexOf('notch') > -1 && DEMO.indexOf(',this.checked,NOTCH_DEF)') > -1, true);
+  check('and so does the gallery', DEMO.indexOf('a.notch?NOTCH_DEF:null') > -1, true);
+  check('the thumbnail uses it too', DEMO.indexOf('Object.assign(st,NOTCH_DEF)') > -1, true);
+
+  /* an unrecognised flag must be refused, not silently ignored — otherwise
+     the shape opens without what the picture promised */
+  check('an unknown flag is refused',
+        run('lgCatalogValidate(E)', { E: { id: 'x', name: 'x', add: { kind: 'fixed', magic: true } } }).length > 0, true);
+}
+
+/* ── the card keeps hardware legible at card size ───────────────────────── */
+/* The painter floors a hole at 3px so it never vanishes. The card then
+   shrank the whole drawing fourfold, which shrank the floor with it — and
+   the brackets disappeared while the hinge, drawn at a fixed pixel size,
+   survived. The floor travels with the scale now. */
+{
+  check('the painter takes a legibility floor', /function engHardware\(h,sc,min\)/.test(DEMO), true);
+  check('the canvas keeps the floor it always had', /const floor = min \|\| 3/.test(DEMO), true);
+  check('and the card raises it by the amount it shrinks',
+        DEMO.indexOf('{hwMin:3/k}') > -1, true);
+  check('the hinge scales with the same floor, not a fixed pixel size',
+        /const w=24\*mul, hh=16\*mul/.test(DEMO), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

@@ -32,12 +32,12 @@
 .bd-seg button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
 .bd-seg button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 .bd-next{color:var(--gold-text);font-weight:600;}
-.shape-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
+.shape-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));
   gap:8px;padding:10px;}
 .shape-card{display:flex;flex-direction:column;align-items:center;gap:6px;
   min-height:44px;padding:8px 4px;cursor:pointer;border-radius:10px;
   border:1px solid var(--border);background:var(--bg);color:var(--text);}
-.shape-card canvas{display:block;width:72px;height:88px;}
+.shape-card canvas{display:block;width:74px;height:126px;}
 .shape-card span{font-size:12px;line-height:1.25;text-align:center;}
 .shape-card:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 @media (hover:hover){ .shape-card:hover{border-color:var(--gold);} }
@@ -595,6 +595,9 @@ const EDGE_MM=200;
 // זווית קיר-זכוכית מוברגת דרך חור, ולחור יש מרחק מהקצה. אותו מספר
 // כמו LG_BRACKET_INSET במנוע — הוא מצייר, וכאן קוראים אותו לעריכה.
 const BRACKET_INSET_MM=25;
+// ברירת המדרגה. הייתה כתובה בתוך המתג בגיליון המאפיינים בלבד; הגלריה
+// צריכה בדיוק אותה, ושני מספרים באותה משמעות בשני מקומות נפרדים בסוף.
+const NOTCH_DEF={notchW:200,notchH:500};
 // דלת ברירת מחדל: 15 מ"מ נמוכה מקבוע של 2000, והפער בתחתית.
 const DOOR_H_MM=1985;
 
@@ -834,6 +837,7 @@ function shapeThumb(cv, entry){
   const ghost=[{id:'t',kind:a.kind,hingeSide:a.hingeSide,label:''}];
   const st=mkPS({type:a.kind});
   if(a.slope) st.hasSlope=true;
+  if(a.notch) Object.assign(st,NOTCH_DEF);
 
   const saveList=shapeList, savePS=shapePS;
   shapeList=ghost; shapePS={t:st};
@@ -842,19 +846,23 @@ function shapeThumb(cv, entry){
   finally { shapeList=saveList; shapePS=savePS; }
   if(!L) return;
 
-  // המידות אינן נכנסות לתמונה — בכרטיס של 72 פיקסל הן רעש. הזכוכית
-  // והפרזול כן, כי הם מה שהלקוח בוחר לפיו.
-  const W=L.canvas.w, H=L.canvas.h, box=cv.width, boxH=cv.height;
-  const k=Math.min(box/W, boxH/H);
+  const box=cv.width, boxH=cv.height;
+  const k=Math.min(box/L.canvas.w, boxH/L.canvas.h);
   const g=cv.getContext('2d');
   g.clearRect(0,0,box,boxH);
   const saveCx=cx, saveHits=dimHits;
   cx=g;
   g.save();
-  g.translate((box-W*k)/2,(boxH-H*k)/2); g.scale(k,k);
-  try { engPaint({...L, dims:[]},'thumb',0,null); }
+  g.translate((box-L.canvas.w*k)/2,(boxH-L.canvas.h*k)/2); g.scale(k,k);
+  try {
+    // המידות אינן נכנסות לכרטיס — בגודל הזה הן רעש. ‏hwMin מוגדל ביחס
+    // ההקטנה, כדי שרצפת הקריאוּת של הצייר תישאר שלוש פיקסלים **על
+    // הכרטיס** ולא תתכווץ איתו.
+    engPaint({...L, dims:[]},'thumb',0,null,{hwMin:3/k});
+  }
   finally { g.restore(); cx=saveCx; dimHits=saveHits; }
 }
+
 
 function renderShapeGallery(){
   const host=document.getElementById('shapeGallery');
@@ -863,7 +871,7 @@ function renderShapeGallery(){
   host.innerHTML=seeds.map((e,i)=>
     '<button type="button" class="shape-card" data-i="'+i+'" '+
       'onclick="shapeAddFromCatalog('+i+')">'+
-      '<canvas width="144" height="176"></canvas>'+
+      '<canvas width="148" height="252"></canvas>'+
       '<span>'+_shEsc(e.name)+'</span>'+
     '</button>').join('');
   const cards=host.querySelectorAll('.shape-card');
@@ -875,10 +883,10 @@ function shapeAddFromCatalog(i){
   const e=(typeof lgCatalogSeeds==='function'?lgCatalogSeeds():[])[i];
   if(!e) return;
   const a=e.add||{};
-  shapeAdd(a.kind,a.hingeSide,a.slope);
+  shapeAdd(a.kind,a.hingeSide,a.slope,a.notch?NOTCH_DEF:null);
 }
 
-function shapeAdd(kind,hingeSide,slope){
+function shapeAdd(kind,hingeSide,slope,extra){
   _shapeSeq++;
   const id='sh'+_shapeSeq;
   const label = kind==='door' ? 'דלת' : kind==='mirror' ? 'מראה'
@@ -889,6 +897,7 @@ function shapeAdd(kind,hingeSide,slope){
   if(buildDir==='rtl') shapeList.unshift(item); else shapeList.push(item);
   shapePS[id]=mkPS({type:kind});
   if(slope) shapePS[id].hasSlope=true;
+  if(extra) Object.assign(shapePS[id],extra);
   renderShapeUI();draw();
 }
 function shapeRemove(id){
@@ -1031,7 +1040,7 @@ function renderShapeSheet(){
   (s.kind!=='fixed' ? '' :
   '<div class="sh-grp"><h4>פינוי מדרגה</h4>'+
     '<label class="sh-tog"><input type="checkbox" '+(hasNotch?'checked':'')+
-      ' onchange="sheetToggle(\'notch\',this.checked,{notchW:200,notchH:500})">'+
+      ' onchange="sheetToggle(\'notch\',this.checked,NOTCH_DEF)">'+
       'הזכוכית יושבת על מדרגה</label>'+
     (hasNotch ?
       _shNum('notchW','רוחב המדרגה',ps.notchW)+
@@ -1624,31 +1633,38 @@ function engDim(d,pfx){
 // **זווית** מוברגת דרך קדח, וזה כל מה שיש לחותך לדעת — עיגול חשוף
 // בקוטר 20, בדיוק כמו הידית ב-12. **ציר** נשאר הסמל שהיה לו מאז ומעולם:
 // גוף מלא היושב על הפאה, כי הוא אוחז בשתי הזכוכיות ולא נקדח לתוך אחת.
-function engHardware(h,sc){
+function engHardware(h,sc,min){
+  // ‏min הוא רצפת הקריאוּת **בפיקסלים הסופיים**. בקנבס היא 3; בכרטיס
+  // גלריה, שמצויר מוקטן, היא גדולה יותר באותו יחס — אחרת הרצפה עצמה
+  // מתכווצת ונעלמת, וזה בדיוק מה שקרה: הזוויות נעלמו מהכרטיסים והציר
+  // שרד רק כי הוא מצויר בפיקסלים קבועים.
+  const floor = min || 3, mul = floor/3;
   cx.save();
   if(h.kind==='hinge'){
-    // ‏24x16 ולא 14x10: בציר נכנסים שני קדחים של 20, אחד בכל צד של
-    // הפאה, ועוד רווח ביניהם — בגודל הקודם הוא נראה קטן ממה שהוא.
+    // בציר נכנסים שני קדחים של 20, אחד בכל צד של הפאה, ועוד רווח ביניהם.
+    const w=24*mul, hh=16*mul;
     cx.fillStyle='#2b2620';
     cx.beginPath();
-    if(cx.roundRect) cx.roundRect(h.x-12,h.y-8,24,16,3);
-    else cx.rect(h.x-12,h.y-8,24,16);
+    if(cx.roundRect) cx.roundRect(h.x-w/2,h.y-hh/2,w,hh,3*mul);
+    else cx.rect(h.x-w/2,h.y-hh/2,w,hh);
     cx.fill();
   } else {
     const mm = h.dia || (h.kind==='hole' ? 12 : 20);
-    const r  = Math.max(mm*(sc||0)/2, 3);   // לעולם לא קטן מכדי להיראות
+    const r  = Math.max(mm*(sc||0)/2, floor);
     cx.beginPath(); cx.arc(h.x,h.y,r,0,Math.PI*2);
     cx.fillStyle='#fff'; cx.fill();
     cx.strokeStyle = h.kind==='bracket' ? '#8a6a2a' : '#3a3128';
-    cx.lineWidth=1.4; cx.stroke();
+    cx.lineWidth=1.4*Math.min(mul,2); cx.stroke();
   }
   cx.restore();
 }
 
+
 // מצייר פריסה אחת בהיסט נתון. ההיסט הוא מה שמאפשר לערום כמה פריטים על
 // קנבס אחד בלי שכל אחד יחשב מיקומים אחרים — הוא מקבל את אותן קואורדינטות
 // ורק מוזז.
-function engPaint(L,pfx,dy,idxOf){
+function engPaint(L,pfx,dy,idxOf,opts){
+  const _o=opts||{};
   cx.save(); cx.translate(0,dy);
 
   L.shapes.forEach(s=>{
@@ -1668,7 +1684,7 @@ function engPaint(L,pfx,dy,idxOf){
     cx.restore();
   });
 
-  L.hardware.forEach(h=>engHardware(h,L.scale));
+  L.hardware.forEach(h=>engHardware(h,L.scale,_o.hwMin));
 
   // אזורי המגע נרשמים בקואורדינטות הקנבס ולא בקואורדינטות המוזזות: הם
   // נבדקים מול נקודת הלחיצה אחרי שה-transform כבר נגמר.
