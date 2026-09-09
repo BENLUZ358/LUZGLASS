@@ -27,6 +27,10 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const DEMO = fs.readFileSync(path.join(ROOT, 'sketch-demo.html'), 'utf8');
 
+/* the ends come from the source, so a test can never drift from it */
+const SRC_BOUNDARY = JSON.parse((DEMO.match(/let shapeBoundary=\{([^}]*)\};/)[1])
+  .replace(/(\w+):/g, '"$1":').replace(/'/g, '"').replace(/^/, '{').replace(/$/, '}'));
+
 let failed = 0;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
   ? console.log('ok    ' + name)
@@ -49,13 +53,13 @@ function screen(boundary) {
   vm.runInContext('var selQ="zamak"; var appMode="shape"; var DOOR_H_MM=1985;' +
     'var HANDLE_EDGE_CM=6; var TOWEL_SPACING_CM=40;' +
     'var NOTCH_DEF={notchW:200,notchH:500};' +
-    'let shapeBoundary=' + JSON.stringify(boundary || { right: 'wall', left: 'open' }) + ';' +
+    'let shapeBoundary=' + JSON.stringify(boundary || SRC_BOUNDARY) + ';' +
     'let shapeList=[],shapePS={},_shapeSeq=0,flipped={},libFactory=[],libPersonal=[];' +
     'let addSide=null,lastL=null,panelState={},items=[];' +
     'var curCombo={panels:[]}; function shapeToast(){}' +
     'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', '_shapeShower', 'getPStates', 'getPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip', 'galleryShown',
-   '_tryArrangement', '_arrangementErrors', '_variantsOf', '_fits', '_bothFit', '_legalVariant', 'allowedAt', 'sideBlocked', 'canAddAt', 'hingeHolesFromEngine',
+   '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt', 'canAddAt', 'hingeHolesFromEngine',
    'shapeAdd', 'shapeAddFromCatalog'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }

@@ -373,8 +373,13 @@ check('but the boundary that feeds the engine remains',
       /let shapeBoundary=/.test(DEMO), true);
 check('and the + is what asks whether a side is free',
       /function canAddAt/.test(DEMO), true);
-check('a lone panel starts against one wall, not two',
-      /shapeBoundary=\{right:'wall',left:'open'\}/.test(DEMO), true);
+/* A shower run spans wall to wall, and glass goes into that span. The far
+   end was frozen at 'open' once the end buttons were removed, and from
+   that a fixed could never end a chain and a door lost the wall it hung
+   on the moment anything went beyond it — which is what stopped the + from
+   continuing. A wall at an end is what the next pane leans on. */
+check('the run spans wall to wall',
+      /shapeBoundary=\{right:'wall',left:'wall'\}/.test(DEMO), true);
 
 /* the strip escapes what it prints — the page has no lgEsc of its own */
 check('a shape label is escaped before it becomes html', /_shEsc\(/.test(DEMO), true);

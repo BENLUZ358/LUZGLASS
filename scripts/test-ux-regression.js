@@ -52,7 +52,7 @@ function screen() {
     '    shapeList.map(function(s,i){return [i,shapePS[s.id]];}))),{canvasW:900}) : null; }',
     ctx);
   ['mkPS', '_shapeShower', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip',
-   'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_fits', '_bothFit', '_legalVariant', 'allowedAt', 'sideBlocked',
+   'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt',
    'canAddAt', '_whyNot', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove', 'pickOrder', 'getPS', 'getPStates'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
@@ -119,9 +119,11 @@ console.log('');
 {
   const ctx = screen();
   run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
-  check('the wall side shows no +', run(ctx, 'canAddAt("left")'), false);
-  /* one answer, not two: the blocked side offers nothing and shows nothing */
-  check('and nothing may be added through it', run(ctx, 'allowedAt("left").length'), 0);
+  /* a wall at an end is what the next pane leans on, so both ends grow */
+  check('both free ends of the chain offer a +',
+        [run(ctx, 'canAddAt("left")'), run(ctx, 'canAddAt("right")')], [true, true]);
+  check('and what each offers comes from the rules engine',
+        run(ctx, 'allowedAt("left").length') > 0, true);
 }
 
 /* ── 8. a + places the new pane beside the one that asked ───────────────── */

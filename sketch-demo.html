@@ -783,9 +783,19 @@ let shapeList=[];
 //
 // קבוע שדלת נתלית עליו הוא מקרה אחר לגמרי — שם הצומת הוא זכוכית-זכוכית,
 // המנוע מחזיר hinge-gg, והצירים מצוירים על הקבוע. ר' _lgSidesOf.
+// מקלחון משתרע **מקיר לקיר**, ולתוך המרווח הזה נכנסת הזכוכית.
+//
+// כאן היה קפוא 'open' בקצה הרחוק, מאז שכפתורי הקצה הוסרו — ומזה נבעו
+// שתי מגבלות שנראו כמו באגים בכפתור +:
+//   • קבוע לא יכול היה לעולם לסיים שרשרת, כי לא היה לו על מה להישען.
+//   • דלת שנתלתה על קיר הקצה איבדה אותו ברגע שמשהו נוסף מעבר לה,
+//     ואז שום צורה לא הייתה חוקית שם והכפתור נעלם.
+//
+// קיר בקצה אינו חסימה — הוא מה שהזכוכית הבאה נשענת עליו.
+//
 // ‏let ולא const: התמונה בגלריה מצוירת בהקשר משוקף כשהכרטיס הפוך,
 // וההקשר מוחלף לרגע וחוזר — כמו shapeList ו-shapePS לצדו.
-let shapeBoundary={right:'wall',left:'open'};
+let shapeBoundary={right:'wall',left:'wall'};
 
 function _shapeShower(){
   // אותה שרשרת שהציור עובר, ולא בנייה מקבילה. הרצועה מציגה את השגיאות
@@ -1022,7 +1032,7 @@ function galleryFlip(i){
 //
 // ‏side הוא **צד על הקנבס**: 'left' לפני הראשון במערך, 'right' אחרי
 // האחרון, כי אינדקס גדל עם x.
-function _tryArrangement(list){ return _arrangementErrors(list).length===0; }
+function _tryArrangement(list,extraPS){ return _arrangementErrors(list,extraPS).length===0; }
 
 // המקלחון המועמד נבנה **באותה שרשרת** שהציור עובר: פאנלים, ואז
 // ‏lgFromPanels. זה לא ייעול — הבנייה המקבילה החזירה תשובה אחרת.
@@ -1031,9 +1041,10 @@ function _tryArrangement(list){ return _arrangementErrors(list).length===0; }
 // משהו. הבדיקה כאן שאלה עם shapeBoundary הגולמי, שבו הקצה עדיין פתוח,
 // וקיבלה "לדלת אין על מה להיתלות" — אז כרטיס הדלת נעלם מהגלריה אחרי
 // לחיצה על +, בזמן שהציור היה מצייר אותה בלי שום בעיה.
-function _arrangementErrors(list){
+function _arrangementErrors(list,extraPS){
   if(typeof lgValidate!=='function') return [];
-  const pss=Object.fromEntries(list.map((s,i)=>[i, shapePS[s.id]||{}]));
+  const ex=extraPS||{};
+  const pss=Object.fromEntries(list.map((s,i)=>[i, ex[s.id]||shapePS[s.id]||{}]));
   return lgValidate(_lgShowerOf(_shapePanels(list),pss));
 }
 
@@ -1068,12 +1079,33 @@ function _variantsOf(e){
   return flippedFirst ? [other, e] : [e, other];
 }
 
+// המצב שערך קטלוג מייצר. **פונקציה אחת** ללוח אמיתי ולגשוש כאחד:
+// כשהגשוש נשא רק kind ו-hingeSide, הוא לא ידע על המדרגה — ולכן שתי
+// האוריינטציות "התאימו", נבחרה הראשונה, והלוח שנוצר יצא לא חוקי.
+// מה שנבדק חייב להיות מה שנוצר.
+function _stateFromAdd(a){
+  const extra = a.notch ? Object.assign({},NOTCH_DEF) : {};
+  if(a.carriesDoor!=null) extra.carriesDoor=a.carriesDoor;
+  // הגבהים מוחלפים כאן ולא בקטלוג: המספרים באים מ-mkPS, והקטלוג נושא
+  // רק את הכוונה. אותה החלפה בדיוק נעשית בתמונה שבגלריה.
+  if(a.slopeFlip){ const d=mkPS({type:a.kind});
+                   extra.slopeH1=d.slopeH2; extra.slopeH2=d.slopeH1; }
+  if(a.notchSide)  extra.notchSide=a.notchSide;
+  if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
+  if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
+  // עותק ולא הפניה: ערך בקטלוג משמש כל לוח שנוצר ממנו, ומערך משותף
+  // היה גורם לעריכת קדח בלוח אחד לשנות אותו בכל השאר.
+  if(a.holes) extra.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
+                x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
+  return extra;
+}
+
 function _fits(ent,side){
   const a=ent.add||{};
   const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide,
                carriesDoor:a.carriesDoor};
   const list = side==='left' ? [probe].concat(shapeList) : shapeList.concat([probe]);
-  return _tryArrangement(list);
+  return _tryArrangement(list, {'__probe': _stateFromAdd(a)});
 }
 
 // האם שתי האוריינטציות מתאימות כאן. רק אז יש טעם בכפתור "הפוך".
@@ -1083,44 +1115,37 @@ function _bothFit(e,side){
 }
 
 function _legalVariant(e,side){
-  // החסימה נבדקת **כאן**, כי כאן עוברים כולם — הגלריה, ההיפוך וההוספה.
-  // כשהיא ישבה ב-allowedAt בלבד, הכפתור לא הופיע בצד חסום אבל ההוספה
-  // דרך אותו צד כן עברה. אותה שאלה, ושוב שתי תשובות.
-  if(sideBlocked(side)) return null;
   const vs=_variantsOf(e);
   for(let k=0;k<vs.length;k++) if(_fits(vs[k],side)) return vs[k];
   return null;
 }
 
 
-// הקצה הזה חסום? קיר הוא חסימה, ולכן אין שם +. זה לא כלל חדש: זה אותו
-// shapeBoundary שמזין את המנוע, רק נקרא ממנו.
+// ‏+ יושב על **כל קצה פנוי של השרשרת**, בשני הכיוונים, ובלי תלות בכמה
+// זכוכיות כבר יש. אין כאן שום ידע על "הראשונה" או "השנייה": כל זכוכית
+// שאפשר לצמוד אליה משהו מקבלת את אותו כפתור, מאותו מנגנון.
 //
-// ⚠️ מוסכמת הגבולות הפוכה לקנבס — boundary.right חל על הצומת שלפני
-// האיבר הראשון, כלומר על **שמאל** הקנבס.
-function sideBlocked(side){
-  return shapeBoundary[side==='left'?'right':'left']==='wall';
-}
+// מה שהיה כאן קודם — sideBlocked — הפך קיר למחסום. אבל קיר בקצה הוא
+// בדיוק מה שהזכוכית הבאה נשענת עליו, ולכן הוא **מאפשר** הוספה ולא אוסר
+// אותה. הבדיקה היחידה שנשארה היא זו של מנוע החוקיות.
 
 // למה המנוע סירב. ההודעה באה **ממנו**, כדי שהמסך לא ינחש סיבה שאינה
-// הסיבה האמיתית.
+// הסיבה האמיתית. נבדקות כל האוריינטציות, כי צורה שנפסלה בכיוון אחד
+// עשויה להיות חוקית בשני.
 function _whyNot(entry,side){
   if(!side) return 'החיבור אינו חוקי';
-  if(sideBlocked(side)) return 'הצד הזה חסום — יש שם קיר';
   const vs=_variantsOf(entry);
   let first='החיבור אינו חוקי';
   for(let k=0;k<vs.length;k++){
     const a=vs[k].add||{};
     const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide,carriesDoor:a.carriesDoor};
     const list = side==='left' ? [probe].concat(shapeList) : shapeList.concat([probe]);
-    const errs=_arrangementErrors(list);
+    const errs=_arrangementErrors(list,{'__probe':_stateFromAdd(a)});
     if(!errs.length) return '';        // דווקא חוקי — אין מה להסביר
     if(k===0) first=errs[0].msg;
   }
   return first;
 }
-
-
 
 function canAddAt(side){ return allowedAt(side).length>0; }
 
@@ -1239,19 +1264,7 @@ function shapeAddFromCatalog(i){
   if(!e){ shapeToast('אי אפשר לחבר כאן: '+_whyNot(e0,side),true); return; }
 
   const a=e.add||{};
-  const extra = a.notch ? Object.assign({},NOTCH_DEF) : {};
-  if(a.carriesDoor!=null) extra.carriesDoor=a.carriesDoor;
-  // הגבהים מוחלפים כאן ולא בקטלוג: המספרים באים מ-mkPS, והקטלוג נושא
-  // רק את הכוונה. אותה החלפה בדיוק נעשית בתמונה שבגלריה.
-  if(a.slopeFlip){ const d=mkPS({type:a.kind});
-                   extra.slopeH1=d.slopeH2; extra.slopeH2=d.slopeH1; }
-  if(a.notchSide)  extra.notchSide=a.notchSide;
-  if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
-  if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
-  // עותק ולא הפניה: ערך בקטלוג משמש כל לוח שנוצר ממנו, ומערך משותף
-  // היה גורם לעריכת קדח בלוח אחד לשנות אותו בכל השאר.
-  if(a.holes) extra.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
-                x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
+  const extra=_stateFromAdd(a);
 
   shapeAdd(a.kind,a.hingeSide,a.slope,Object.keys(extra).length?extra:null,side);
 }

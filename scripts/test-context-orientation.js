@@ -28,6 +28,10 @@ const vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 const DEMO = fs.readFileSync(path.join(ROOT, 'sketch-demo.html'), 'utf8');
 
+/* the ends come from the source, so a test can never drift from it */
+const SRC_BOUNDARY = JSON.parse((DEMO.match(/let shapeBoundary=\{([^}]*)\};/)[1])
+  .replace(/(\w+):/g, '"$1":').replace(/'/g, '"').replace(/^/, '{').replace(/$/, '}'));
+
 let failed = 0;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
   ? console.log('ok    ' + name)
@@ -50,15 +54,15 @@ function screen(boundary) {
   vm.runInContext('var selQ="zamak"; var appMode="shape"; var DOOR_H_MM=1985;' +
     'var HANDLE_EDGE_CM=6; var TOWEL_SPACING_CM=40;' +
     'var NOTCH_DEF={notchW:200,notchH:500};' +
-    'let shapeBoundary=' + JSON.stringify(boundary || { right: 'wall', left: 'open' }) + ';' +
+    'let shapeBoundary=' + JSON.stringify(boundary || SRC_BOUNDARY) + ';' +
     'let shapeList=[],shapePS={},_shapeSeq=0,flipped={},libFactory=[],libPersonal=[];' +
     'let addSide=null,lastL=null,panelState={},items=[];' +
     'var curCombo={panels:[]}; let TOAST=null; function shapeToast(m){TOAST=m;}' +
     'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', '_shapeShower',
    'galleryEntries', 'entryCanFlip', 'galleryShown', 'galleryFlip',
-   '_tryArrangement', '_arrangementErrors', '_variantsOf', '_fits', '_bothFit',
-   '_legalVariant', 'allowedAt', '_whyNot', 'sideBlocked', 'canAddAt',
+   '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit',
+   '_legalVariant', 'allowedAt', '_whyNot', 'canAddAt',
    'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
@@ -166,7 +170,9 @@ console.log('');
         /* and it landed in the orientation that was shown */
         if (added && offered.has(i)) {
           const want = offered.get(i).add.hingeSide;
-          const got = run(c2, 'shapeList[shapeList.length-1].hingeSide');
+          /* a pane added on the left lands at the START of the array */
+          const at = side === 'left' ? 0 : run(c2, 'shapeList.length') - 1;
+          const got = run(c2, 'shapeList[' + at + '].hingeSide');
           if ((want || null) !== (got || null))
             mismatches.push(`${first}+${n}@${side}: shown ${want} but added ${got}`);
         }
@@ -181,18 +187,22 @@ console.log('');
   const c = screen();
   run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
   run(c, 'Object.assign(getPS("shape",0),{w:640,h:1910,notchW:250,notchH:420})');
-  const before = JSON.parse(JSON.stringify(run(c, 'getPStates()[0]')));
-  const wasList = JSON.parse(JSON.stringify(run(c, 'shapeList')));
+  /* track the pane BY ID: adding on the left shifts every index */
+  const id = run(c, 'shapeList[0].id');
+  const at = () => run(c, 'shapeList.findIndex(function(s){return s.id===' + JSON.stringify(id) + ';})');
+  const before = JSON.parse(JSON.stringify(run(c, 'getPStates()[' + at() + ']')));
+  const wasPane = JSON.parse(JSON.stringify(run(c, 'shapeList[' + at() + ']')));
 
   /* try to add everything, legal or not, on both sides */
   run(c, 'galleryEntries().forEach(function(e,i){' +
          '  ["left","right"].forEach(function(sd){ addSide=sd;' +
          '    try{ shapeAddFromCatalog(i); }catch(err){} addSide=null; });' +
          '});');
-  check('the first pane is untouched by all of it',
-        JSON.parse(JSON.stringify(run(c, 'getPStates()[0]'))), before);
+  check('the pane is still there after all of it', at() > -1, true);
+  check('untouched by any of it',
+        JSON.parse(JSON.stringify(run(c, 'getPStates()[' + at() + ']'))), before);
   check('and it is still the same pane it was',
-        JSON.parse(JSON.stringify(run(c, 'shapeList[0]'))), wasList[0]);
+        JSON.parse(JSON.stringify(run(c, 'shapeList[' + at() + ']'))), wasPane);
   check('whatever was added is valid', run(c, 'lgValidate(_shapeShower())'), []);
 }
 
@@ -212,9 +222,11 @@ console.log('');
   check('and every question goes through the one chain',
         has('return lgValidate(_lgShowerOf(_shapePanels(list),pss));'), true);
 
-  /* the blocked side is decided in the one place everybody passes through */
-  check('blocking is checked where every path goes',
-        /function _legalVariant\(e,side\)\{[\s\S]{0,300}sideBlocked\(side\)/.test(DEMO), true);
+  /* nothing blocks an end any more: a wall is what the next pane leans on,
+     and the only gate left is the rules engine itself */
+  check('no end is treated as a barrier', /function sideBlocked/.test(DEMO), false);
+  check('and the probe carries everything the rules read',
+        DEMO.indexOf("_tryArrangement(list, {'__probe': _stateFromAdd(a)})") > -1, true);
 
   /* no second opinion anywhere: the screen may NAME hardware for display,
      but it must not decide which hardware a junction produces */

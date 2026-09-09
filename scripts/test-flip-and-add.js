@@ -45,10 +45,11 @@ function bench() {
   vm.runInContext('var selQ="zamak"; var shapeBoundary={right:"wall",left:"open"};' +
     'let shapeList=[],shapePS={}; let flipped={}; let libFactory=[],libPersonal=[];' +
     'var appMode="shape"; var DOOR_H_MM=1985; var HANDLE_EDGE_CM=6;' +
-    'var TOWEL_SPACING_CM=40; let panelState={},items=[]; var curCombo={panels:[]};', ctx);
-  ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
-   'entryCanFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_fits', '_bothFit', '_legalVariant', 'allowedAt',
-   'sideBlocked', 'canAddAt'].forEach(n => vm.runInContext(grab(n), ctx));
+    'var TOWEL_SPACING_CM=40; let panelState={},items=[]; var curCombo={panels:[]};' +
+    'var NOTCH_DEF={notchW:200,notchH:500};', ctx);
+  ['mkPS', 'hingeHolesFromEngine', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
+   'entryCanFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt',
+   'canAddAt'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
 const run = (ctx, e) => vm.runInContext(e, ctx);
@@ -117,13 +118,15 @@ console.log('');
   const ctx = bench();
   run(ctx, ENGINE_OK);
 
-  /* an empty canvas: the wall end is blocked, the open end is not */
-  check('a wall end shows no +', run(ctx, 'canAddAt("left")'), false);
-  check('and the open end does', run(ctx, 'canAddAt("right")'), true);
+  /* A shower run spans wall to wall, and a wall is what the next pane
+     leans on — not a barrier. So both free ends of a chain offer a +,
+     and the only question is the one the rules engine answers. */
+  check('an empty canvas offers a + on both ends',
+        [run(ctx, 'canAddAt("left")'), run(ctx, 'canAddAt("right")')], [true, true]);
 
   run(ctx, 'shapeList=[{id:"a",kind:"fixed"}]');
-  check('a fixed against the wall still offers only the open side',
-        [run(ctx, 'canAddAt("left")'), run(ctx, 'canAddAt("right")')], [false, true]);
+  check('and so does a chain of one',
+        [run(ctx, 'canAddAt("left")'), run(ctx, 'canAddAt("right")')], [true, true]);
 
   const offered = run(ctx, 'allowedAt("right").map(function(c){return galleryEntries()[c.i].add.kind;})');
   check('a door may hang on that fixed', offered.indexOf('door') > -1, true);
@@ -161,8 +164,8 @@ console.log('');
   check('through the same chain the drawing uses',
         has('_arrangementErrors') && has('_shapePanels(list)'), true);
   check('and the gallery filter is that same answer', has('addSide ? allowedAt(addSide)'), true);
-  check('the blocked end is read from the boundary the engine uses',
-        has("shapeBoundary[side==='left'?'right':'left']==='wall'"), true);
+  check('the run spans wall to wall, so both ends can grow',
+        /let shapeBoundary=\{right:'wall',left:'wall'\}/.test(DEMO), true);
 
   /* the removed UI really is gone */
   check('build direction is gone', /buildDir|setBuildDir|renderBuildDir/.test(DEMO), false);
