@@ -73,7 +73,14 @@ check('and so is item-by-item', /setMode\('item'\)/.test(DEMO), true);
   /* hardware is never baked into a gallery item */
   check('no entry carries a hinge count',   /hingeQty|hinges:/.test(CAT), false);
   check('and none carries a bracket count', /bracketQty|brackets:/.test(CAT), false);
-  check('nor where a bracket sits',         /bracket-wall|holes:/.test(CAT), false);
+  /* A shape may carry a hole that no meeting produces — a floor bracket,
+     a free hole. It may NEVER carry a junction's hardware: hinges and wall
+     brackets are derived from what the glass meets, and writing them by
+     hand is what put a door's handle on its hinge side. */
+  check('no junction hardware is written by hand',
+        /'hinge'\s*:|'bracket-wall'|'bracket-gg'/.test(CAT.replace(/LG_CAT_OWN_ROLES[\s\S]*?\};/, '')), false);
+  check('and only non-junction roles may be carried',
+        /LG_CAT_OWN_ROLES = \{ 'bracket-floor'/.test(CAT), true);
 
   /* the cards are built from the catalogue, not written out by hand */
   check('the gallery is generated', /renderShapeGallery/.test(DEMO), true);

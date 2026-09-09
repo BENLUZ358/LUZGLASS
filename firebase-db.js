@@ -1619,6 +1619,69 @@ function lgGroupByQuantityId(items) {
   return groups;
 }
 
+// ─── ספריית הצורות ───────────────────────────────────────────────────
+//
+// שתי ספריות, ובכוונה:
+//
+//   factory   ספריית המפעל. אדמין כותב, כולם רואים. כאן נכנסות הצורות
+//             שבן בונה פעם אחת ומשרת בהן את כל הלקוחות.
+//   personal  הספרייה של הלקוח, לפי הטלפון שלו. לקוח שומר לעצמו צורה
+//             שהוא מזמין שוב ושוב.
+//
+// מה שנשמר הוא **ערך קטלוג**, לא ציור: שם, ומה להוסיף. הצורה עצמה
+// נבנית מהמנוע בכל פעם מחדש, ולכן צורה שנשמרה לפני חצי שנה מציירת את
+// עצמה לפי הכללים של היום ולא לפי אלה שהיו אז.
+
+const LG_SHAPE_LIB = 'shapeLibrary';
+
+function _lgShapePath(scope, phone) {
+  if (scope === 'factory') return LG_SHAPE_LIB + '/factory';
+  const p = _lgNormalizePhone(phone);
+  if (!p) throw new Error('ספרייה אישית דורשת טלפון');
+  return LG_SHAPE_LIB + '/personal/' + p;
+}
+
+// מזהה יציב ובטוח לנתיב. שם בעברית אינו יכול להיות מפתח ב-RTDB, ושתי
+// צורות באותו שם היו דורסות זו את זו.
+function lgShapeId(name) {
+  const slug = String(name || '').trim().replace(/[.#$/\[\]]/g, '').slice(0, 40);
+  return 'sh_' + Date.now().toString(36) + '_' + (slug ? encodeURIComponent(slug) : 'x');
+}
+
+async function lgSaveShape(entry, scope, phone) {
+  if (!entry || !entry.name) throw new Error('לצורה אין שם');
+  if (typeof lgCatalogValidate === 'function') {
+    const errs = lgCatalogValidate(entry);
+    if (errs.length) throw new Error(errs.join(' · '));
+  }
+  const id = entry.id || lgShapeId(entry.name);
+  const rec = { id, name: entry.name, add: entry.add,
+                origin: scope === 'factory' ? 'factory' : 'personal',
+                createdAt: entry.createdAt || Date.now(), updatedAt: Date.now() };
+  await _lgDb.ref(_lgShapePath(scope, phone) + '/' + id).set(_lgClean(rec));
+  return rec;
+}
+
+async function lgLoadShapes(scope, phone) {
+  try {
+    const snap = await _lgDb.ref(_lgShapePath(scope, phone)).once('value');
+    const v = snap.val() || {};
+    // ערך פגום בספרייה לא יפיל את הגלריה — הוא פשוט לא ייכנס אליה
+    return Object.keys(v).map(k => v[k]).filter(e =>
+      e && e.name && e.add &&
+      (typeof lgCatalogValidate !== 'function' || !lgCatalogValidate(e).length))
+      .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  } catch (e) {
+    console.warn('[LuzGlass] ספריית הצורות לא נטענה:', e && e.message);
+    return [];
+  }
+}
+
+async function lgDeleteShape(id, scope, phone) {
+  if (!id) return;
+  await _lgDb.ref(_lgShapePath(scope, phone) + '/' + id).remove();
+}
+
 // ─── הודעת טעינה ─────────────────────────────────────────────────────
-console.log('%c[LuzGlass] firebase-db.js v2.10 ✓', 'color:#b8922a;font-weight:bold');
+console.log('%c[LuzGlass] firebase-db.js v2.11 ✓', 'color:#b8922a;font-weight:bold');
 console.log('  לבדיקת חיבור: lgTest()');

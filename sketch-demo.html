@@ -12,6 +12,12 @@
 <script src="lg-shapes.js"></script>
 <script src="lg-layout.js"></script>
 <script src="lg-catalog.js"></script>
+<!-- הספרייה יושבת ב-RTDB. הדף עבד עד היום בלי Firebase, ולכן כל שימוש
+     בו מוגן: בלי חיבור הגלריה עדיין מציגה את הצורות המשוגרות. -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="firebase-db.js?v=20260909"></script>
 <style>
 .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 14px;position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;}
 .topbar .ti{font-size:15px;font-weight:700;}.topbar .su{font-size:12px;color:var(--muted);}
@@ -39,6 +45,7 @@
   border:1px solid var(--border);background:var(--bg);color:var(--text);}
 .shape-card canvas{display:block;width:74px;height:126px;}
 .shape-card span{font-size:12px;line-height:1.25;text-align:center;}
+.sh-own{font-size:12px;font-style:normal;color:var(--gold-text);}
 .shape-card:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 @media (hover:hover){ .shape-card:hover{border-color:var(--gold);} }
 .shape-chip{
@@ -878,6 +885,7 @@ function shapeThumb(cv, entry){
   if(a.slope) st.hasSlope=true;
   if(a.notch) Object.assign(st,NOTCH_DEF);
   if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor);
+  if(a.holes) st.holes=a.holes;
 
   const saveList=shapeList, savePS=shapePS;
   shapeList=ghost; shapePS={t:st};
@@ -904,27 +912,99 @@ function shapeThumb(cv, entry){
 }
 
 
+// כל הצורות שהגלריה מציגה: המשוגרות תחילה, ואחריהן מה שנשמר.
+function galleryEntries(){
+  const seeds=(typeof lgCatalogSeeds==='function')?lgCatalogSeeds():[];
+  return seeds.concat(libFactory,libPersonal);
+}
+
 function renderShapeGallery(){
   const host=document.getElementById('shapeGallery');
-  if(!host||typeof lgCatalogSeeds!=='function') return;
-  const seeds=lgCatalogSeeds();
-  host.innerHTML=seeds.map((e,i)=>
+  if(!host) return;
+  const all=galleryEntries();
+  host.innerHTML=all.map((e,i)=>
     '<button type="button" class="shape-card" data-i="'+i+'" '+
       'onclick="shapeAddFromCatalog('+i+')">'+
       '<canvas width="148" height="252"></canvas>'+
       '<span>'+_shEsc(e.name)+'</span>'+
+      (e.origin&&e.origin!=='seed'
+        ? '<em class="sh-own">'+(e.origin==='factory'?'מפעל':'שלי')+'</em>' : '')+
     '</button>').join('');
   const cards=host.querySelectorAll('.shape-card');
-  seeds.forEach((e,i)=>{ const cv=cards[i]&&cards[i].querySelector('canvas');
-                         if(cv) shapeThumb(cv,e); });
+  all.forEach((e,i)=>{ const cv=cards[i]&&cards[i].querySelector('canvas');
+                       if(cv) shapeThumb(cv,e); });
 }
 
+// ─── טעינת הספריות ───────────────────────────────────────────────────
+//
+// הכל מוגן: הדף הזה עבד עד היום בלי Firebase, ואם החיבור נופל הגלריה
+// חוזרת לצורות המשוגרות במקום להישבר. ספרייה היא תוספת, לא תנאי.
+async function loadShapeLibraries(){
+  if(typeof lgLoadShapes!=='function') return;
+  try { libFactory = await lgLoadShapes('factory'); } catch(e){ libFactory=[]; }
+  if(_clientPhone){
+    try { libPersonal = await lgLoadShapes('personal',_clientPhone); }
+    catch(e){ libPersonal=[]; }
+  }
+  renderShapeGallery();
+}
+
+// ─── שמירת צורה ──────────────────────────────────────────────────────
+//
+// נשמר **ערך קטלוג ולא ציור**: שם, ומה להוסיף. הצורה נבנית מהמנוע בכל
+// פעם מחדש, ולכן צורה שנשמרה לפני חצי שנה מציירת את עצמה לפי הכללים של
+// היום. ציור שמור היה קופא ברגע השמירה ומשקר בפעם הבאה שכלל משתנה.
+function shapeSaveOpen(id){
+  const s=shapeList.find(x=>x.id===id); if(!s) return;
+  const ps=shapePS[id]||{};
+  const suggest = s.label + (ps.notchW>0?' עם מדרגה':'') + (ps.hasSlope?' משופע':'');
+  const name=(prompt('שם הצורה בספרייה:',suggest)||'').trim();
+  if(!name) return;
+  const add={kind:s.kind};
+  if(s.kind==='door') add.hingeSide=s.hingeSide;
+  if(ps.hasSlope) add.slope=true;
+  if(Number(ps.notchW)>0&&Number(ps.notchH)>0) add.notch=true;
+  if(Array.isArray(ps.holes)&&ps.holes.length) add.holes=ps.holes;
+  const entry={name:name,add:add};
+  const errs=(typeof lgCatalogValidate==='function')?lgCatalogValidate(entry):[];
+  if(errs.length){ shapeToast(errs.join(' · '),true); return; }
+  shapeSaveTo(entry);
+}
+
+async function shapeSaveTo(entry){
+  const admin=_sess.role==='admin';
+  const scope = admin
+    ? (confirm('לשמור בספריית המפעל? (ביטול = לשמור אצלי בלבד)') ? 'factory' : 'personal')
+    : 'personal';
+  if(scope==='personal'&&!_clientPhone){
+    shapeToast('אין טלפון לשמור עליו — התחבר כדי לשמור צורה',true); return;
+  }
+  if(typeof lgSaveShape!=='function'){ shapeToast('אין חיבור לספרייה',true); return; }
+  try{
+    const rec=await lgSaveShape(entry,scope,_clientPhone);
+    if(scope==='factory') libFactory=libFactory.concat([rec]);
+    else                  libPersonal=libPersonal.concat([rec]);
+    renderShapeGallery();
+    shapeToast('נשמר: '+entry.name);
+  }catch(e){ shapeToast('השמירה נכשלה: '+(e&&e.message||''),true); }
+}
+
+function shapeToast(msg,bad){
+  const el=document.getElementById('shapeErr'); if(!el) return;
+  el.style.display='block';
+  el.textContent=msg;
+  el.style.color = bad ? '' : 'var(--gold-text)';
+  if(!bad) setTimeout(()=>{ el.style.color=''; renderShapeUI(); },2500);
+}
+
+
 function shapeAddFromCatalog(i){
-  const e=(typeof lgCatalogSeeds==='function'?lgCatalogSeeds():[])[i];
+  const e=galleryEntries()[i];
   if(!e) return;
   const a=e.add||{};
   const extra = a.notch ? Object.assign({},NOTCH_DEF) : {};
   if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
+  if(a.holes) extra.holes=a.holes;
   shapeAdd(a.kind,a.hingeSide,a.slope,Object.keys(extra).length?extra:null);
 }
 
@@ -963,6 +1043,9 @@ function shapeFlipHinge(id){
 }
 let shapePS={};
 let _galleryDrawn=0;
+// הגלריה = הצורות המשוגרות ואחריהן מה שנשמר. הספריות נטענות פעם אחת,
+// ואם אין חיבור נשארות ריקות — הגלריה עובדת בלעדיהן.
+let libFactory=[], libPersonal=[];
 let lastL=null;
 
 // שם הסוג במקום אחד. שלוש רשימות נפרדות בצייר, ברצועה ובגיליון היו
@@ -1123,7 +1206,7 @@ function renderShapeSheet(){
 
 function renderShapeUI(){
   renderBuildDir();
-  if(!_galleryDrawn){ _galleryDrawn=1; renderShapeGallery(); }
+  if(!_galleryDrawn){ _galleryDrawn=1; renderShapeGallery(); loadShapeLibraries(); }
   const strip=document.getElementById('shapeStrip');
   const errEl=document.getElementById('shapeErr');
   const bomEl=document.getElementById('shapeBom');

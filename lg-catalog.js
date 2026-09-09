@@ -30,7 +30,13 @@ var LG_CAT_KINDS = { fixed: 1, door: 1, mirror: 1, shape: 1 };
 // דגלים שאינם סוג זכוכית אלא **קיצור למצב התחלתי** שכבר קיים במסך:
 // ‏slope הוא hasSlope, ו-notch הוא מה שהמתג בגיליון המאפיינים כותב.
 // שניהם מתורגמים במקום אחד ב-shapeAdd, ולא כאן.
-var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1 };
+var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1 };
+
+// תפקידי קדחים שצורה רשאית לשאת בעצמה. **תפקידי צומת אינם כאן**: ציר
+// וזווית קיר נגזרים ממה שהזכוכית נפגשת איתו, ולתת להם להיכתב ביד היה
+// מחזיר בדיוק את הסתירה שהפילה את הגרסה הקודמת. זווית רצפה וקדח חופשי
+// אינם נובעים משום מפגש, ולכן רק הם מוצהרים.
+var LG_CAT_OWN_ROLES = { 'bracket-floor': 20, 'hole': 12 };
 
 function lgCatalogSeeds() {
   return [
@@ -79,6 +85,14 @@ function lgCatalogValidate(entry) {
   // דגל שאינו מוכר היה נבלע בשקט והצורה הייתה נפתחת בלי מה שהובטח
   if (a.hingesFor && a.hingesFor !== 'left' && a.hingesFor !== 'right')
     e.push('צד הדלת חייב להיות ימין או שמאל');
+  if (a.holes && !Array.isArray(a.holes)) e.push('הקדחים אינם רשימה');
+  (Array.isArray(a.holes) ? a.holes : []).forEach(function (h, i) {
+    var at = 'קדח ' + (i + 1) + ': ';
+    if (!h || !LG_CAT_OWN_ROLES[h.role]) { e.push(at + 'תפקיד שאינו נשמר על הצורה'); return; }
+    if (!(h.dia > 0)) e.push(at + 'קוטר חייב להיות גדול מאפס');
+    if (!h.x || !(h.x.mm >= 0)) e.push(at + 'מרחק מהפאה חסר');
+    if (!h.y || !(h.y.mm >= 0)) e.push(at + 'מרחק מהקצה חסר');
+  });
   Object.keys(a).forEach(function (k) {
     if (k !== 'kind' && k !== 'hingeSide' && !LG_CAT_FLAGS[k])
       e.push('דגל לא מוכר: ' + k);
