@@ -43,8 +43,11 @@ function bench() {
   ['lg-shapes.js', 'lg-layout.js', 'lg-catalog.js'].forEach(f =>
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
   vm.runInContext('var selQ="zamak"; var shapeBoundary={right:"wall",left:"open"};' +
-    'let shapeList=[]; let flipped={}; let libFactory=[],libPersonal=[];', ctx);
-  ['galleryEntries', 'entryCanFlip', '_tryArrangement', 'allowedAt',
+    'let shapeList=[],shapePS={}; let flipped={}; let libFactory=[],libPersonal=[];' +
+    'var appMode="shape"; var DOOR_H_MM=1985; var HANDLE_EDGE_CM=6;' +
+    'var TOWEL_SPACING_CM=40; let panelState={},items=[]; var curCombo={panels:[]};', ctx);
+  ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
+   'entryCanFlip', '_tryArrangement', '_arrangementErrors', 'allowedAt',
    'sideBlocked', 'canAddAt'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
@@ -52,9 +55,11 @@ const run = (ctx, e) => vm.runInContext(e, ctx);
 
 /* asks the engine directly, so the test never trusts the UI's own answer */
 const ENGINE_OK =
-  'function _ok(a){ return lgValidate({boundary:shapeBoundary,finish:"shahor",' +
-  'quality:"zamak",shapes:shapeList.concat([{id:"p",kind:a.kind,hingeSide:a.hingeSide}])' +
-  '.map(function(x){return {id:x.id,kind:x.kind,hingeSide:x.hingeSide};})}).length===0; }';
+  'function _ok(a){ var hands = a.kind==="door" ? [a.hingeSide, a.hingeSide==="right"?"left":"right"] : [a.hingeSide];' +
+  '  for (var h=0; h<hands.length; h++){' +
+  '    var probe={id:"p",kind:a.kind,hingeSide:hands[h],carriesDoor:a.carriesDoor};' +
+  '    if (_arrangementErrors(shapeList.concat([probe])).length===0) return true;' +
+  '  } return false; }';
 
 console.log('');
 
@@ -132,22 +137,29 @@ console.log('');
                  ' !allowedAt("right").some(function(c){return c.i===i;}); }).length'), 0);
 }
 
-/* ── a door with nothing to hang on is refused, by the engine ───────────── */
+/* ── what needs support is refused where there is none ──────────────────── */
+/* A door at the end of a run brings its own wall — lgFromPanels says so,
+   because a door always hangs on something. A FIXED brings nothing, so at
+   an open end with no neighbour it has nothing to lean on and is refused.
+   The screen must reach the same conclusion as the drawing, which is why
+   both now build the candidate through the same chain. */
 {
   const ctx = bench();
   run(ctx, 'shapeBoundary={right:"open",left:"open"}; shapeList=[]');
   const offered = run(ctx, 'allowedAt("right").map(function(c){return galleryEntries()[c.i].add.kind;})');
-  check('a door is not offered where it would hang on air',
-        offered.indexOf('door') > -1, false);
-  check('nor a fixed, which also needs something to lean on',
-        offered.indexOf('fixed') > -1, false);
-  check('while free glass needs nothing', offered.indexOf('mirror') > -1, true);
+  check('a fixed with nothing to lean on is refused', offered.indexOf('fixed') > -1, false);
+  check('free glass needs nothing and is offered', offered.indexOf('mirror') > -1, true);
+  check('and a door is offered, because a door at an end brings its own wall',
+        offered.indexOf('door') > -1, true);
 }
 
 /* ── the UI holds no copy of the rules ──────────────────────────────────── */
 {
   const has = s => DEMO.indexOf(s) > -1;
-  check('the + asks lgValidate for its answer', has('lgValidate(sh).length===0'), true);
+  check('the + asks lgValidate for its answer',
+        has('return lgValidate(_lgShowerOf(_shapePanels(list),pss));'), true);
+  check('through the same chain the drawing uses',
+        has('_arrangementErrors') && has('_shapePanels(list)'), true);
   check('and the gallery filter is that same answer', has('addSide ? allowedAt(addSide)'), true);
   check('the blocked end is read from the boundary the engine uses',
         has("shapeBoundary[side==='left'?'right':'left']==='wall'"), true);

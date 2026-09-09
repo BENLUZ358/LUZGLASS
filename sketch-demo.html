@@ -788,10 +788,10 @@ let shapeList=[];
 let shapeBoundary={right:'wall',left:'open'};
 
 function _shapeShower(){
-  return {boundary:shapeBoundary,finish:'shahor',
-          quality:selQ==='pliz'?'pliz':'zamak',
-          shapes:shapeList.map(s=>({id:s.id,kind:s.kind,hingeSide:s.hingeSide,
-                                    carriesDoor:s.carriesDoor}))};
+  // אותה שרשרת שהציור עובר, ולא בנייה מקבילה. הרצועה מציגה את השגיאות
+  // ואת הליקוט; כשהיא בנתה מקלחון משלה, היא יכלה לומר משהו אחר ממה
+  // שמצויר — וזה בדיוק איך ששני מסלולים נפרדים.
+  return _lgShowerOf(_shapePanels(), getPStates());
 }
 
 // המצב שהצייר צורך — אותו מבנה בדיוק שהקומבינציות מייצרות, כדי שלא יהיה
@@ -799,9 +799,13 @@ function _shapeShower(){
 //
 // wallSide נכתב על הפאנלים החיצוניים כי הגשר _lgShowerOf גוזר ממנו את
 // הגבולות. בלעדיו קבוע במצב שייפים לא היה מקבל אף זווית קיר.
-function _shapePanels(){
-  const n=shapeList.length;
-  return shapeList.map((s,i)=>{
+// מקבל רשימה, כדי שאפשר יהיה לשאול על **הרכבה מועמדת** בלי להחליף
+// גלובלים. בלי זה, מי שרצה לבדוק חוקיות של הוספה נאלץ לבנות את המקלחון
+// בעצמו — וכל בנייה מקבילה היא מסלול שני שיכול לענות תשובה אחרת.
+function _shapePanels(list){
+  const src=list||shapeList;
+  const n=src.length;
+  return src.map((s,i)=>{
     // ⚠️ שתי מוסכמות הפוכות, וזה היה הבאג:
     //
     //   המנוע:  'right' = לכיוון השייף הקודם במערך  → שמאל על הקנבס
@@ -1014,13 +1018,19 @@ function galleryFlip(i){
 //
 // ‏side הוא **צד על הקנבס**: 'left' לפני הראשון במערך, 'right' אחרי
 // האחרון, כי אינדקס גדל עם x.
-function _tryArrangement(list){
-  if(typeof lgValidate!=='function') return true;
-  const sh={boundary:shapeBoundary, finish:'shahor',
-            quality:selQ==='pliz'?'pliz':'zamak',
-            shapes:list.map(x=>({id:x.id,kind:x.kind,hingeSide:x.hingeSide,
-                               carriesDoor:x.carriesDoor}))};
-  return lgValidate(sh).length===0;
+function _tryArrangement(list){ return _arrangementErrors(list).length===0; }
+
+// המקלחון המועמד נבנה **באותה שרשרת** שהציור עובר: פאנלים, ואז
+// ‏lgFromPanels. זה לא ייעול — הבנייה המקבילה החזירה תשובה אחרת.
+//
+// ‏lgFromPanels קובע שדלת בקצה הופכת את הקצה לקיר, כי דלת תמיד נתלית על
+// משהו. הבדיקה כאן שאלה עם shapeBoundary הגולמי, שבו הקצה עדיין פתוח,
+// וקיבלה "לדלת אין על מה להיתלות" — אז כרטיס הדלת נעלם מהגלריה אחרי
+// לחיצה על +, בזמן שהציור היה מצייר אותה בלי שום בעיה.
+function _arrangementErrors(list){
+  if(typeof lgValidate!=='function') return [];
+  const pss=Object.fromEntries(list.map((s,i)=>[i, shapePS[s.id]||{}]));
+  return lgValidate(_lgShowerOf(_shapePanels(list),pss));
 }
 
 // אילו ערכים מהגלריה מותר להוסיף בצד הזה. הרשימה הזאת היא גם התשובה
@@ -1062,15 +1072,19 @@ function sideBlocked(side){
 // למה המנוע סירב. ההודעה באה **ממנו**, כדי שהמסך לא ינחש סיבה שאינה
 // הסיבה האמיתית.
 function _whyNot(a,side){
-  const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide,carriesDoor:a.carriesDoor};
-  const list = side==='left' ? [probe].concat(shapeList) : shapeList.concat([probe]);
-  const sh={boundary:shapeBoundary, finish:'shahor',
-            quality:selQ==='pliz'?'pliz':'zamak',
-            shapes:list.map(x=>({id:x.id,kind:x.kind,hingeSide:x.hingeSide,
-                                 carriesDoor:x.carriesDoor}))};
-  const errs=(typeof lgValidate==='function')?lgValidate(sh):[];
-  return errs.length?errs[0].msg:'החיבור אינו חוקי';
+  const hands = a.kind==='door' ? [a.hingeSide, a.hingeSide==='right'?'left':'right']
+                                : [a.hingeSide];
+  let first='החיבור אינו חוקי';
+  for(let h=0;h<hands.length;h++){
+    const probe={id:'__probe',kind:a.kind,hingeSide:hands[h],carriesDoor:a.carriesDoor};
+    const list = side==='left' ? [probe].concat(shapeList) : shapeList.concat([probe]);
+    const errs=_arrangementErrors(list);
+    if(!errs.length) return '';          // דווקא חוקי — אין מה להסביר
+    if(h===0) first=errs[0].msg;
+  }
+  return first;
 }
+
 
 function canAddAt(side){ return allowedAt(side).length>0; }
 

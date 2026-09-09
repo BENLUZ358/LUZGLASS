@@ -214,7 +214,7 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
      run that loads the drawer has to load the engine too */
   const ENG = [fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8'),
                fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8')].join('\n');
-  const panelsFn = (DEMO.match(/function _shapePanels\(\)\{[\s\S]*?\n\}/) || [''])[0];
+  const panelsFn = (DEMO.match(/function _shapePanels\(list\)\{[\s\S]*?\n\}/) || [''])[0];
   const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
   check('_shapePanels is found', panelsFn.length > 0, true);
   check('_lgShowerOf is found',  showerFn.length > 0, true);
@@ -256,7 +256,7 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
      run that loads the drawer has to load the engine too */
   const ENG = [fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8'),
                fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8')].join('\n');
-  const panelsFn = (DEMO.match(/function _shapePanels\(\)\{[\s\S]*?\n\}/) || [''])[0];
+  const panelsFn = (DEMO.match(/function _shapePanels\(list\)\{[\s\S]*?\n\}/) || [''])[0];
   const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
 
   const run = (list, bound) => {
@@ -324,7 +324,7 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
      run that loads the drawer has to load the engine too */
   const ENG = [fs.readFileSync(path.join(ROOT, 'lg-shapes.js'), 'utf8'),
                fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8')].join('\n');
-  const panelsFn = (DEMO.match(/function _shapePanels\(\)\{[\s\S]*?\n\}/) || [''])[0];
+  const panelsFn = (DEMO.match(/function _shapePanels\(list\)\{[\s\S]*?\n\}/) || [''])[0];
   const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
 
   const build = list => {

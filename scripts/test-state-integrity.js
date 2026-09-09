@@ -63,8 +63,8 @@ function screen(boundary) {
     'var curCombo={panels:[]};' +
     'let TOAST=null; function shapeToast(m){TOAST=m;}' +
     'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
-  ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
-   'entryCanFlip', 'galleryShown', 'galleryFlip', '_tryArrangement', 'allowedAt', '_whyNot',
+  ['mkPS', '_shapeShower', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
+   'entryCanFlip', 'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', 'allowedAt', '_whyNot',
    'sideBlocked', 'canAddAt', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove', 'shapeFlipHinge'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
@@ -164,24 +164,40 @@ console.log('');
 }
 
 /* ── an impossible pane is refused, not created broken ──────────────────── */
+/* A fixed at an open end has nothing to lean on. It must be refused with a
+   reason, and refusing must leave everything else untouched. (A door is
+   NOT this case — a door at an end brings its own wall.) */
 {
   const c = screen({ right: 'wall', left: 'open' });
   run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
-  const before = snap(c, 0);
-
   run(c, 'addSide="right"; shapeAddFromCatalog(' + idOf(c, 'דלת') + '); addSide=null;');
-  check('a door with nowhere to hang is not created', run(c, 'shapeList.length'), 1);
-  check('the fixed beside it is untouched', snap(c, 0), before);
-  check('and the reason comes from the rules engine, in words',
-        String(run(c, 'TOAST')).indexOf('זוויות בלבד') > -1, true);
+  const before0 = snap(c, 0), before1 = snap(c, 1);
+  const n = run(c, 'shapeList.length');
 
-  /* while the pane prepared for a door does take one */
-  const c2 = screen();
-  run(c2, 'shapeAddFromCatalog(' + idOf(c2, CARRIER) + ')');
+  /* now the door is last, and a fixed after it would float */
+  run(c, 'addSide="right"; shapeAddFromCatalog(' + idOf(c, PLAIN) + '); addSide=null;');
+  check('a pane with nothing to lean on is not created', run(c, 'shapeList.length'), n);
+  check('the first pane is untouched', snap(c, 0), before0);
+  check('and so is the second', snap(c, 1), before1);
+  /* the reason is whatever lgValidate actually said — not a sentence the
+     screen made up. Which of its rules fired depends on the arrangement,
+     so what matters is that the words came from the engine. */
+  const said = String(run(c, 'TOAST'));
+  const vocab = run(c, 'lgValidate({boundary:shapeBoundary,finish:"shahor",quality:"zamak",' +
+    'shapes:[{id:"a",kind:"fixed",carriesDoor:false},{id:"b",kind:"door",hingeSide:"right"},' +
+    '{id:"c",kind:"fixed",carriesDoor:false}]}).map(function(e){return e.msg;})');
+  check('a reason is given at all', said.length > 20, true);
+  check('and it is one the rules engine wrote',
+        vocab.some(m => said.indexOf(m) > -1), true);
+
+  /* the door beside a brackets-only fixed IS created, hinged away */
+  const c2 = screen({ right: 'wall', left: 'open' });
+  run(c2, 'shapeAddFromCatalog(' + idOf(c2, PLAIN) + ')');
   run(c2, 'addSide="right"; shapeAddFromCatalog(' + idOf(c2, 'דלת') + '); addSide=null;');
-  check('a door on the pane prepared for it is created', run(c2, 'shapeList.length'), 2);
-  check('with no complaint',
-        run(c2, 'lgValidate(_lgShowerOf(_shapePanels(),getPStates()))'), []);
+  check('a door beside a brackets-only fixed is created', run(c2, 'shapeList.length'), 2);
+  check('with no complaint', run(c2, 'lgValidate(_shapeShower())'), []);
+  check('and nothing between them, so it hangs on its own wall',
+        run(c2, 'lgJunctions(_shapeShower())[1].type'), null);
 }
 
 /* ── every pane always reaches the drawing whole ────────────────────────── */

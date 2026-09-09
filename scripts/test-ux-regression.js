@@ -51,8 +51,8 @@ function screen() {
     '  lgLayout(_lgShowerOf(_shapePanels(), Object.fromEntries(' +
     '    shapeList.map(function(s,i){return [i,shapePS[s.id]];}))),{canvasW:900}) : null; }',
     ctx);
-  ['mkPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip',
-   'galleryShown', 'galleryFlip', '_tryArrangement', 'allowedAt', 'sideBlocked',
+  ['mkPS', '_shapeShower', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip',
+   'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', 'allowedAt', 'sideBlocked',
    'canAddAt', '_whyNot', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove', 'pickOrder', 'getPS', 'getPStates'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;

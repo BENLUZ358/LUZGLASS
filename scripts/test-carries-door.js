@@ -54,8 +54,8 @@ function screen(boundary) {
     'let addSide=null,lastL=null,panelState={},items=[];' +
     'var curCombo={panels:[]}; function shapeToast(){}' +
     'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
-  ['mkPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip', 'galleryShown',
-   '_tryArrangement', 'allowedAt', 'sideBlocked', 'canAddAt', 'hingeHolesFromEngine',
+  ['mkPS', '_shapeShower', 'getPStates', 'getPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip', 'galleryShown',
+   '_tryArrangement', '_arrangementErrors', 'allowedAt', 'sideBlocked', 'canAddAt', 'hingeHolesFromEngine',
    'shapeAdd', 'shapeAddFromCatalog'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
@@ -119,20 +119,35 @@ console.log('');
   check('with no complaint from validation', run(ctx, 'lgValidate(C)'), []);
 }
 
-/* ── the gallery stops offering a door where it cannot hang ─────────────── */
+/* ── the door is still offered — hinged away, never onto the fixed ──────── */
+/* This is the point of the rule as it was asked for: the door is not
+   forbidden, it simply may not hang on that pane. A door at the end of a
+   run brings its own wall (lgFromPanels has always said so), so it hangs
+   there instead and sits quietly beside the fixed. */
 {
   const ctx = screen({ right: 'wall', left: 'open' });
   run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
-  const offered = run(ctx, 'allowedAt("right").map(function(x){return galleryEntries()[x.i].add.kind;})');
-  check('no door is offered beside a brackets-only fixed with an open far end',
-        offered.indexOf('door') > -1, false);
-  check('but the other panes still are', offered.indexOf('fixed') > -1, true);
+  const offer = run(ctx, 'allowedAt("right").filter(function(x){' +
+    'return galleryEntries()[x.i].add.kind==="door";})');
+  check('a door is still offered beside a brackets-only fixed', offer.length, 1);
 
+  const card = run(ctx, 'lgCatalogSeeds().find(function(e){return e.add.kind==="door";}).add.hingeSide');
+  check('but with the hand that points away from it', offer[0].hinge !== card, true);
+
+  run(ctx, 'addSide="right"; shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
+  check('and it lands beside the fixed', run(ctx, 'shapeList.length'), 2);
+  check('with no complaint', run(ctx, 'lgValidate(_shapeShower())'), []);
+  check('nothing at all between the two panes',
+        run(ctx, 'lgJunctions(_shapeShower()).map(function(j){return j.type;})'),
+        ['bracket-wall', null, 'hinge-wall']);
+
+  /* the carrier still takes the door onto itself */
   const c2 = screen({ right: 'wall', left: 'open' });
   run(c2, 'shapeAddFromCatalog(' + idOf(c2, CARRIER) + ')');
-  check('while a fixed prepared for a door does offer one',
-        run(c2, 'allowedAt("right").map(function(x){return galleryEntries()[x.i].add.kind;})')
-          .indexOf('door') > -1, true);
+  run(c2, 'addSide="right"; shapeAddFromCatalog(' + idOf(c2, 'דלת') + '); addSide=null;');
+  check('while the pane prepared for a door carries it on the shared face',
+        run(c2, 'lgJunctions(_shapeShower()).map(function(j){return j.type;})'),
+        ['bracket-wall', 'hinge-gg', null]);
 }
 
 /* ── with a wall behind it, the door hinges away, not onto the fixed ────── */
