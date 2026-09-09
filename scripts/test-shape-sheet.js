@@ -51,8 +51,13 @@ check('with a backdrop that closes it',
 check('it is a dialog for a screen reader', has('role="dialog" aria-modal="true"'), true);
 check('and it is labelled', has('aria-labelledby="shapeSheetTitle"'), true);
 check('escape closes it', has("Escape')closeShapeSheet()"), true);
-check('every shape in the strip has a way to open it', has('openShapeSheet('), true);
-check('and that button says what it is', has('aria-label="מאפייני הזכוכית"'), true);
+/* The gear beside each shape is gone. The way in is now "עריכה מתקדמת":
+   pick a pane on the drawing, then Edit — the same window, reached by
+   choosing what you are working on before you open it. */
+check('there is a way to open the sheet', has('openShapeSheet('), true);
+check('it is reached by picking a pane first', has('function pickEdit()'), true);
+check('and the picked pane is shown on the drawing', has('function paintPick('), true);
+check('the entry point says what it is', has('⚙ עריכה מתקדמת'), true);
 
 /* ── touch and type, per the design rules ───────────────────────────────── */
 {

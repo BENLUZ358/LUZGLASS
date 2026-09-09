@@ -30,7 +30,8 @@ var LG_CAT_KINDS = { fixed: 1, door: 1, mirror: 1, shape: 1 };
 // דגלים שאינם סוג זכוכית אלא **קיצור למצב התחלתי** שכבר קיים במסך:
 // ‏slope הוא hasSlope, ו-notch הוא מה שהמתג בגיליון המאפיינים כותב.
 // שניהם מתורגמים במקום אחד ב-shapeAdd, ולא כאן.
-var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1 };
+var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1,
+                     notchSide: 1, slopeSideV: 1 };
 
 // תפקידי קדחים שצורה רשאית לשאת בעצמה. **תפקידי צומת אינם כאן**: ציר
 // וזווית קיר נגזרים ממה שהזכוכית נפגשת איתו, ולתת להם להיכתב ביד היה
@@ -42,27 +43,65 @@ function lgCatalogSeeds() {
   return [
     { id: 'fixed',       name: 'קבוע',           origin: 'seed',
       add: { kind: 'fixed' } },
-    { id: 'fixed-slope', name: 'קבוע משופע',      origin: 'seed',
+    { id: 'fixed-slope', name: 'קבוע משופע',     origin: 'seed',
       add: { kind: 'fixed', slope: true } },
     // המדרגה אינה הגדרה חדשה: אלה בדיוק המספרים שהמתג בגיליון
     // המאפיינים כותב מאז שהוא נבנה, ושניהם קוראים אותם מ-NOTCH_DEF.
-    { id: 'fixed-notch', name: 'קבוע עם מדרגה',   origin: 'seed',
-      add: { kind: 'fixed', notch: true } },
-    // ‏hingesFor אומר **באיזה צד תישען הדלת**, לא איפה יֵשבו הצירים.
-    // את זה המסך שואל את המנוע, ולכן הצד כאן אינו יכול לסתור אותו.
-    { id: 'fixed-hinge-r', name: 'קבוע · דלת מימין', origin: 'seed',
+    { id: 'fixed-notch', name: 'קבוע עם מדרגה',  origin: 'seed',
+      add: { kind: 'fixed', notch: true, notchSide: 'left' } },
+    // ‏hingesFor אומר באיזה צד תישען הדלת, לא איפה יֵשבו הצירים. את זה
+    // המסך שואל את המנוע, ולכן הצד כאן אינו יכול לסתור אותו.
+    { id: 'fixed-hinge', name: 'קבוע נושא דלת',  origin: 'seed',
       add: { kind: 'fixed', hingesFor: 'right' } },
-    { id: 'fixed-hinge-l', name: 'קבוע · דלת משמאל', origin: 'seed',
-      add: { kind: 'fixed', hingesFor: 'left' } },
-    { id: 'door-right',  name: 'דלת · ציר ימין',  origin: 'seed',
+    // צורה אחת לדלת. "הפוך" נותן את היד השנייה, ולכן אין כאן שתי שורות
+    // לאותו דבר — היו שתי הגדרות שיכולות להיפרד.
+    { id: 'door',        name: 'דלת',            origin: 'seed',
       add: { kind: 'door', hingeSide: 'right' } },
-    { id: 'door-left',   name: 'דלת · ציר שמאל',  origin: 'seed',
-      add: { kind: 'door', hingeSide: 'left' } },
-    { id: 'mirror',      name: 'מראה',            origin: 'seed',
+    { id: 'mirror',      name: 'מראה',           origin: 'seed',
       add: { kind: 'mirror' } },
-    { id: 'shape',       name: 'צורה חופשית',     origin: 'seed',
+    { id: 'shape',       name: 'צורה חופשית',    origin: 'seed',
       add: { kind: 'shape' } },
   ];
+}
+
+// ─── היפוך ─────────────────────────────────────────────────────────────
+//
+// ‏"הפוך" אינו צורה חדשה ואינו חוקיות חדשה. הוא **טרנספורמציה על ההגדרה
+// הקיימת**: כל מה שמשויך לצד מתחלף, וכל השאר נשאר בדיוק כפי שהוא.
+//
+// לכן אין כאן שום ידע על פרזול. הצורה ההפוכה עוברת לאותו מנוע, נשפטת
+// באותם כללים, ומקבלת את הזוויות והצירים שלה מאותו מקום. וריאציות
+// נפרדות לימין ולשמאל בגלריה היו שתי הגדרות לאותו דבר.
+//
+// שים לב לשתי מוסכמות הצדדים, שהן קיימות ולא נוצרות כאן:
+//   ‏hingeSide  מוסכמת המנוע — 'right' פונה לשייף הקודם במערך
+//   ‏hingesFor, notchSide, holes[].x.from  צדדים על הקנבס
+// שתיהן דו-ערכיות, ולכן ההיפוך זהה לשתיהן: מחליפים ימין בשמאל.
+
+function _lgOther(side) { return side === 'left' ? 'right' : side === 'right' ? 'left' : side; }
+
+function lgFlipAdd(add) {
+  if (!add) return add;
+  var out = {};
+  for (var k in add) if (Object.prototype.hasOwnProperty.call(add, k)) out[k] = add[k];
+  if (out.hingeSide)  out.hingeSide  = _lgOther(out.hingeSide);
+  if (out.hingesFor)  out.hingesFor  = _lgOther(out.hingesFor);
+  if (out.notchSide)  out.notchSide  = _lgOther(out.notchSide);
+  if (out.slopeSideV) out.slopeSideV = _lgOther(out.slopeSideV);
+  if (Array.isArray(out.holes)) out.holes = out.holes.map(function (h) {
+    return { role: h.role, dia: h.dia,
+             x: { from: _lgOther(h.x.from), mm: h.x.mm },
+             y: { from: h.y.from, mm: h.y.mm } };   // הגובה אינו מתהפך
+  });
+  return out;
+}
+
+// ההיפוך פועל על הערך כולו, כדי שהגלריה תוכל להחזיק ערך אחד ולהראות
+// אותו בשתי האוריינטציות בלי לשכפל שורה.
+function lgFlipEntry(entry) {
+  if (!entry) return entry;
+  return { id: entry.id, name: entry.name, origin: entry.origin,
+           flipped: !entry.flipped, add: lgFlipAdd(entry.add) };
 }
 
 // ─── מה הקטלוג עוצר ────────────────────────────────────────────────────
@@ -83,8 +122,9 @@ function lgCatalogValidate(entry) {
   // צד ציר על זכוכית שאינה דלת אין לו משמעות, והוא היה מטעה במסך
   if (a.kind !== 'door' && a.hingeSide) e.push('צד ציר שייך לדלת בלבד');
   // דגל שאינו מוכר היה נבלע בשקט והצורה הייתה נפתחת בלי מה שהובטח
-  if (a.hingesFor && a.hingesFor !== 'left' && a.hingesFor !== 'right')
-    e.push('צד הדלת חייב להיות ימין או שמאל');
+  ['hingesFor', 'notchSide', 'slopeSideV'].forEach(function (k) {
+    if (a[k] && a[k] !== 'left' && a[k] !== 'right') e.push(k + ' חייב להיות ימין או שמאל');
+  });
   if (a.holes && !Array.isArray(a.holes)) e.push('הקדחים אינם רשימה');
   (Array.isArray(a.holes) ? a.holes : []).forEach(function (h, i) {
     var at = 'קדח ' + (i + 1) + ': ';
@@ -103,5 +143,6 @@ function lgCatalogValidate(entry) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { LG_CAT_VERSION: LG_CAT_VERSION, LG_CAT_KINDS: LG_CAT_KINDS,
                      lgCatalogSeeds: lgCatalogSeeds,
+                     lgFlipAdd: lgFlipAdd, lgFlipEntry: lgFlipEntry,
                      lgCatalogValidate: lgCatalogValidate };
 }

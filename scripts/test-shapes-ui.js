@@ -58,13 +58,18 @@ check('and so is item-by-item', /setMode\('item'\)/.test(DEMO), true);
   const CAT = fs.readFileSync(path.join(__dirname, '..', 'lg-catalog.js'), 'utf8');
   const kind = k => new RegExp("kind: '" + k + "'").test(CAT);
   check('a fixed panel is offered', kind('fixed'), true);
-  check('a door hinged right', /kind: 'door', hingeSide: 'right'/.test(CAT), true);
-  check('a door hinged left',  /kind: 'door', hingeSide: 'left'/.test(CAT), true);
+  /* One door, not two. The other hand comes from "הפוך", which is a
+     transform on this definition — two entries were two definitions of
+     one thing, free to drift. */
+  check('a door is offered', /kind: 'door'/.test(CAT), true);
+  check('and only one of it', (CAT.match(/kind: 'door'/g) || []).length, 1);
+  check('with a flip to reach the other hand', /function lgFlipAdd/.test(CAT), true);
   check('a mirror', kind('mirror'), true);
   check('and a free shape', kind('shape'), true);
   /* the sloped panel is a shortcut, not a kind — a fixed with the slope on */
   check('a sloped fixed is a fixed with the slope already on',
         /kind: 'fixed', slope: true/.test(CAT), true);
+  check('and the step notch is there too', /notch: true/.test(CAT), true);
   /* the SHIPPED set stays small enough to scan on a phone. What the
      factory adds later is the factory's business — this bounds what we
      put there without being asked. */
@@ -85,15 +90,20 @@ check('and so is item-by-item', /setMode\('item'\)/.test(DEMO), true);
   /* the cards are built from the catalogue, not written out by hand */
   check('the gallery is generated', /renderShapeGallery/.test(DEMO), true);
   check('and every card is drawn by the painter itself',
-        /engPaint\(\{\.\.\.L, dims:\[\]\},'thumb'/.test(DEMO), true);
+        DEMO.indexOf("engPaint({...L, dims:[]},'thumb'") > -1, true);
 }
 
 /* ── touch ─────────────────────────────────────────────────────────────── */
 {
-  const css = (DEMO.match(/\.shape-card\s*\{[^}]*\}/) || [''])[0];
-  check('the gallery card rule is found', css.length > 0, true);
-  check('a card is at least a 44px target',
-        Number((css.match(/min-height:\s*(\d+)px/) || [])[1]) >= 44, true);
+  /* the card is a frame now: a picture to pick, and a flip beneath it.
+     Both must be reachable with a thumb. */
+  const pick = (DEMO.match(/\.sc-pick\s*\{[^}]*\}/) || [''])[0];
+  const flip = (DEMO.match(/\.sc-flip\s*\{[^}]*\}/) || [''])[0];
+  check('the gallery card rules are found', pick.length > 0 && flip.length > 0, true);
+  check('picking a shape is a 44px target',
+        Number((pick.match(/min-height:\s*(\d+)px/) || [])[1]) >= 44, true);
+  check('and so is flipping it',
+        Number((flip.match(/min-height:\s*(\d+)px/) || [])[1]) >= 44, true);
 }
 {
   const css = (DEMO.match(/\.shape-strip\s*\{[^}]*\}/) || [''])[0];
@@ -165,7 +175,10 @@ check('and so can a gallery chip',
 /* ── the engine drives what the screen says ────────────────────────────── */
 check('adding a shape rebuilds the drawing', /function shapeAdd/.test(DEMO), true);
 check('and a shape can be removed again',    /function shapeRemove/.test(DEMO), true);
-check('the shapes can be reordered',         /function shapeMove/.test(DEMO), true);
+/* reordering by arrows is gone: a shape is added beside the pane whose +
+   was pressed, so the order is chosen when it is placed. */
+check('a shape lands on the side its + was pressed',
+      /if\(side==='left'\) shapeList\.unshift\(item\); else shapeList\.push\(item\);/.test(DEMO), true);
 check('validation runs on every change',     /lgValidate\(/.test(DEMO), true);
 check('and an error names the shape it is about',
       /lgValidate\([\s\S]{0,300}?\.at\b/.test(DEMO), true);
@@ -351,14 +364,15 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
   check('a fixed panel has no hinge side', r.panels[0].hingeSide, undefined);
 }
 
-/* the end of the enclosure is set by the operator, not guessed */
-check('each end can be set to a wall or to nothing', /function shapeSetEnd/.test(DEMO), true);
-/* order, not distance — the shapes are rendered between the two ends, so a
-   fixed-size window between them breaks as soon as the strip grows */
-check('the strip offers both ends',
-      DEMO.includes("endBtn('right')") && DEMO.includes("endBtn('left')"), true);
-check('and the right end is drawn before the shapes, the left end after',
-      DEMO.indexOf("endBtn('right')") < DEMO.indexOf("endBtn('left')"), true);
+/* The ends are no longer set by hand. The + already answers the same
+   question — may something connect here? — and it asks the rules engine
+   rather than the operator. shapeBoundary stays as the state that feeds
+   the engine; only its buttons are gone. */
+check('the end buttons are gone', /function shapeSetEnd/.test(DEMO), false);
+check('but the boundary that feeds the engine remains',
+      /let shapeBoundary=/.test(DEMO), true);
+check('and the + is what asks whether a side is free',
+      /function canAddAt/.test(DEMO), true);
 check('a lone panel starts against one wall, not two',
       /shapeBoundary=\{right:'wall',left:'open'\}/.test(DEMO), true);
 

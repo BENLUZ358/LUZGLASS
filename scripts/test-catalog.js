@@ -53,7 +53,8 @@ console.log('');
    that produced handles on the hinge side is back. */
 {
   const ALLOWED_ENTRY = ['id', 'name', 'origin', 'add'];
-  const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope', 'notch', 'hingesFor'];
+  const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope', 'notch', 'hingesFor',
+                         'notchSide', 'slopeSideV', 'holes'];
   const strayEntry = seeds.flatMap(e => Object.keys(e).filter(k => !ALLOWED_ENTRY.includes(k)));
   const strayAdd   = seeds.flatMap(e => Object.keys(e.add).filter(k => !ALLOWED_ADD.includes(k)));
   check('an entry carries only a name and what to add', strayEntry, []);
@@ -75,8 +76,13 @@ console.log('');
   check('the catalogue keeps every kind the chips offered',
         [...new Set(kinds.map(k => k.split('|')[0]))].sort(),
         ['door', 'fixed', 'mirror', 'shape']);
-  check('and still offers both door hands',
-        kinds.filter(k => k.startsWith('door')).sort(), ['door|left|', 'door|right|']);
+  /* One door. The other hand is a flip of this definition, not a second
+     row — two rows were two definitions of one thing. */
+  check('there is exactly one door',
+        kinds.filter(k => k.startsWith('door')).length, 1);
+  check('and flipping it gives the other hand',
+        run('lgFlipAdd(E).hingeSide', { E: seeds.find(e => e.add.kind === 'door').add }),
+        seeds.find(e => e.add.kind === 'door').add.hingeSide === 'right' ? 'left' : 'right');
   check('and the sloped fixed', kinds.includes('fixed||slope'), true);
 }
 
@@ -97,7 +103,8 @@ console.log('');
   check('the gallery is generated from the catalogue',
         has('id="shapeGallery"') && has('renderShapeGallery'), true);
   check('and no hand-written chip survives', /class="shape-chip"/.test(DEMO), false);
-  check('every card is a 44px target', /\.shape-card\{[^}]*min-height:44px/.test(DEMO), true);
+  check('picking a card is a 44px target', /\.sc-pick\{[^}]*min-height:44px/.test(DEMO), true);
+  check('and flipping it is too', /\.sc-flip\{[^}]*min-height:44px/.test(DEMO), true);
   check('the catalogue is loaded by the page', has('src="lg-catalog.js"'), true);
 }
 

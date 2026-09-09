@@ -29,20 +29,18 @@
    הגלריה קצרה בכוונה. ההפרדה בין מה שנוגעים על הציור למה שנוגעים
    ברצועה היא לפי **גודל המטרה**: קו מידה הוא ~90×30px ונלחץ על הציור;
    ציר הוא ~10px ולכן יושב ברצועה. */
-.build-dir{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  padding:10px 10px 0;font-size:13px;}
-.bd-label{color:var(--muted);}
-.bd-seg{display:flex;gap:6px;flex:1;min-width:220px;}
-.bd-seg button{flex:1;min-height:44px;font-size:13px;border-radius:8px;cursor:pointer;
-  border:1px solid var(--border);background:var(--bg);color:var(--text);}
-.bd-seg button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
-.bd-seg button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
-.bd-next{color:var(--gold-text);font-weight:600;}
 .shape-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));
   gap:8px;padding:10px;}
-.shape-card{display:flex;flex-direction:column;align-items:center;gap:6px;
-  min-height:44px;padding:8px 4px;cursor:pointer;border-radius:10px;
-  border:1px solid var(--border);background:var(--bg);color:var(--text);}
+.shape-card{display:flex;flex-direction:column;align-items:stretch;gap:4px;
+  border-radius:10px;border:1px solid var(--border);background:var(--bg);
+  color:var(--text);padding:6px 4px;}
+.sc-pick{display:flex;flex-direction:column;align-items:center;gap:6px;
+  min-height:44px;padding:4px;cursor:pointer;border:0;background:none;
+  color:inherit;font:inherit;border-radius:8px;}
+.sc-flip{min-height:44px;font-size:12px;cursor:pointer;border-radius:8px;
+  border:1px solid var(--border);background:var(--surface);color:var(--muted);}
+.sc-flip.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.sc-flip:focus-visible,.sc-pick:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 .shape-card canvas{display:block;width:74px;height:126px;}
 .shape-card span{font-size:12px;line-height:1.25;text-align:center;}
 .sh-own{font-size:12px;font-style:normal;color:var(--gold-text);}
@@ -136,8 +134,6 @@
 @media (prefers-reduced-motion:reduce){
   .sheet,.sheet-back{transition:none;}
 }
-.strip-item.strip-end{background:var(--surface);border-style:dashed;}
-.strip-item.strip-end .sn{color:var(--muted);font-size:12px;}
 .shape-err{
   margin:8px 10px;padding:10px 12px;border-radius:6px;
   background:#fdecea;border:1px solid #f5c6c2;color:#8f2d24;
@@ -163,6 +159,13 @@
    שלו, אחרת המספרים מתרחקים מהזכוכית או נחתכים. הקנבס גדל, והמכל גולל
    אליו. ‏overflow:hidden חתך את החלק שיצא, ואיתו כל מה שאפשר היה ללחוץ
    עליו שם. */
+#addBtns{position:absolute;inset:0;pointer-events:none;}
+.add-btn{position:absolute;width:44px;height:44px;transform:translate(-50%,-50%);
+  pointer-events:auto;cursor:pointer;border-radius:50%;font-size:22px;line-height:1;
+  border:1px solid var(--gold);background:var(--gold);color:var(--on-gold);
+  box-shadow:0 2px 8px rgba(0,0,0,.18);display:flex;align-items:center;
+  justify-content:center;padding:0;}
+.add-btn:focus-visible{outline:2px solid var(--gold-text);outline-offset:3px;}
 .canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
 /* הקנבס נושא רוחב מפורש מ-setupCanvas ולא נמתח למכל: כשהוא רחב ממנו,
    מותר לו לגלוש והמכל גולל. ‏width:100% היה מכווץ אותו בחזרה ומועך את
@@ -173,9 +176,28 @@ canvas{display:block;height:auto;cursor:pointer;}
 /* ── מצב עריכה ────────────────────────────────────────────────────
    הצייר מגיב למגע רק כאן. בלי זה, גרירה כדי לגלול נוחתת כלחיצה
    ופותחת משהו — ובפלאפון הקנבס תופס כמעט את כל המסך. */
+.edit-bar{display:flex;gap:8px;margin:0 10px 10px;}
+.edit-bar>button{flex:1;}
+#btnAdvEdit{
+  min-height:44px;padding:10px 14px;border:1px solid var(--border);
+  border-radius:6px;background:var(--surface);color:var(--text);
+  font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;cursor:pointer;
+}
+#btnAdvEdit.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+#btnAdvEdit:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.pick-bar{display:flex;align-items:center;gap:8px;margin:0 10px 10px;
+  padding:6px;border:1px solid var(--gold);border-radius:6px;
+  background:rgba(184,146,42,0.08);}
+.pick-bar>button{min-height:44px;min-width:44px;cursor:pointer;border-radius:6px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);
+  font-size:16px;font-family:'Heebo',sans-serif;}
+.pick-bar>button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.pick-bar .pick-go{background:var(--gold);color:var(--on-gold);border-color:var(--gold);
+  font-weight:700;font-size:14px;padding:0 14px;}
+#pickName{flex:1;text-align:center;font-size:14px;font-weight:700;color:var(--gold-text);}
 #btnEditMode{
-  min-height:44px;width:calc(100% - 20px);margin:0 10px 10px;
-  padding:10px 14px;border:1px solid var(--gold);border-radius:6px;
+  min-height:44px;padding:10px 14px;
+  border:1px solid var(--gold);border-radius:6px;
   background:var(--surface);color:var(--gold-text);
   font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;cursor:pointer;
   transition:background 180ms ease,color 180ms ease;
@@ -330,6 +352,9 @@ canvas{display:block;height:auto;cursor:pointer;}
 </div>
 <div class="canvas-wrap" id="canvasWrap">
   <canvas id="sk"></canvas>
+  <!-- כפתורי ההוספה. הם יושבים מעל הקנבס במקום הפאה שאליה יתחבר השייף
+       הבא, ומופיעים רק בצד שמנוע החוקיות מתיר. -->
+  <div id="addBtns" aria-hidden="false"></div>
   <div class="dim-tip" id="dimTip"></div>
   <!-- נפתח במקום שבו נגעו במידה, כדי שהעין לא תעזוב את הציור -->
   <div id="dimEditor" role="dialog" aria-label="שינוי מידה">
@@ -369,7 +394,19 @@ canvas{display:block;height:auto;cursor:pointer;}
 </div>
 <!-- מחוץ למצב עריכה הצייר אינו מגיב למגע, כדי שאפשר יהיה לגלול מעליו
      בלי לפתוח דברים בטעות. -->
-<button id="btnEditMode" onclick="setEditMode(!editMode)">✎ מצב עריכה</button>
+<div class="edit-bar">
+  <button id="btnEditMode" onclick="setEditMode(!editMode)">✎ מצב עריכה</button>
+  <button id="btnAdvEdit" onclick="setPickMode(!pickMode)">⚙ עריכה מתקדמת</button>
+</div>
+<!-- בחירת שייף לעריכה. אינו פותח חלון מיד: קודם בוחרים על מה עובדים,
+     ואז פותחים — כדי שהמשתמש יראה במה הוא נוגע לפני שהוא נוגע. -->
+<div id="pickBar" class="pick-bar" style="display:none" role="group"
+     aria-label="בחירת זכוכית לעריכה">
+  <button type="button" onclick="pickStep(-1)" aria-label="הזכוכית שמשמאל">→</button>
+  <span id="pickName" aria-live="polite"></span>
+  <button type="button" onclick="pickStep(1)" aria-label="הזכוכית שמימין">←</button>
+  <button type="button" class="pick-go" onclick="pickEdit()">ערוך</button>
+</div>
 <div id="editHint" class="edit-hint" style="display:none">
   לחץ על מידה בציור כדי לשנות אותה. בסיום — <b>שמור וסיים</b>.
 </div>
@@ -394,16 +431,6 @@ canvas{display:block;height:auto;cursor:pointer;}
      ה-kind:'shape' שכבר קיים בכלי. אף פריט בגלריה לא נושא פרזול — המנוע
      גוזר אותו מהצמתים, וצ'יפ עם ספירת צירים משלו היה סותר אותו. -->
 <div id="shapeUI" style="display:none;">
-  <!-- כיוון הבנייה. הבונה צריך לדעת לאיזה צד הזכוכית הבאה נוספת, אחרת
-       הוא מגלה באמצע שהוא בנה את המקלחון הפוך. הכיוון נכתב במפורש ולא
-       נלמד מהניסיון. -->
-  <div class="build-dir" role="group" aria-label="כיוון הבנייה">
-    <span class="bd-label">הבנייה מתקדמת</span>
-    <span class="bd-seg">
-      <button type="button" id="bdRtl" onclick="setBuildDir('rtl')">← מימין לשמאל</button>
-      <button type="button" id="bdLtr" onclick="setBuildDir('ltr')">מ<span dir="ltr">שמאל</span> לימין →</button>
-    </span>
-  </div>
   <div class="shape-gallery" id="shapeGallery"></div>
   <div class="shape-strip" id="shapeStrip"></div>
   <div id="shapeErr" class="shape-err" style="display:none" role="status" aria-live="polite"></div>
@@ -728,6 +755,12 @@ function setMode(m){
   const addBtn=document.getElementById('btnAddToSketch');
   if(addBtn) addBtn.textContent=m==='item'?'＋ הוסף פריט לסקיצה':'＋ הוסף לסקיצה';
   if(m==='shape') renderShapeUI();
+  // "עריכה מתקדמת" זמין בשייפים ובקומבינציה. במצב פריט-פריט כל זכוכית
+  // כבר מצוירת בנפרד עם הטופס שלה, ואין מה לבחור מביניהן.
+  const adv=document.getElementById('btnAdvEdit');
+  if(adv) adv.style.display = (m==='item') ? 'none' : '';
+  if(m==='item' && pickMode) setPickMode(false);
+  pickIdx=0; renderPickBar();
   draw();
 }
 
@@ -746,11 +779,6 @@ let shapeList=[];
 // קבוע שדלת נתלית עליו הוא מקרה אחר לגמרי — שם הצומת הוא זכוכית-זכוכית,
 // המנוע מחזיר hinge-gg, והצירים מצוירים על הקבוע. ר' _lgSidesOf.
 let shapeBoundary={right:'wall',left:'open'};
-
-function shapeSetEnd(side,val){
-  shapeBoundary[side] = val;
-  renderShapeUI();draw();
-}
 
 function _shapeShower(){
   return {boundary:shapeBoundary,finish:'shahor',
@@ -805,39 +833,6 @@ function _shEsc(s){
 
 let _shapeSeq=0;
 
-// כיוון הבנייה. במקלחון אמיתי מתחילים מקיר וממשיכים לכיוון אחד — לא
-// מהאמצע. כשהכיוון מוצהר, הזכוכית הבאה יודעת לאן להיכנס, והבונה רואה
-// את זה לפני שהוא לוחץ ולא אחרי.
-//
-// ‏'rtl' הוא הסדר הטבעי בעברית: הזכוכית הראשונה בימין, והבאות נוספות
-// שמאלה — כלומר בסוף המערך, שהוא שמאל על הקנבס.
-let buildDir = (function(){
-  try { return localStorage.getItem('lgBuildDir')==='ltr' ? 'ltr' : 'rtl'; }
-  catch(e){ return 'rtl'; }
-})();
-
-function setBuildDir(d){
-  buildDir = d==='ltr' ? 'ltr' : 'rtl';
-  try { localStorage.setItem('lgBuildDir',buildDir); } catch(e){}
-  renderBuildDir();
-  renderShapeUI();
-}
-
-function renderBuildDir(){
-  const rtl=document.getElementById('bdRtl'), ltr=document.getElementById('bdLtr');
-  if(rtl) rtl.className = buildDir==='rtl' ? 'on' : '';
-  if(ltr) ltr.className = buildDir==='ltr' ? 'on' : '';
-}
-
-// ─── גלריית הצורות ───────────────────────────────────────────────────
-//
-// התמונה בכרטיס מצוירת בידי **הצייר עצמו**, על קנבס קטן, דרך אותה
-// המרה שהקנבס הגדול עובר: פאנל ומצב → ‏_lgShowerOf → ‏lgLayout →
-// ‏engPaint. אין כאן ציור שני ואין תיאור שני של הצורה.
-//
-// זה לא ייעול. הניסיון הקודם תיאר כל צורה מחדש בקטלוג — כמה זוויות
-// ובאיזה צד — ומיד יצאו דלתות שהידית והציר שלהן באותו צד וקבועים עם
-// ארבע זוויות בלי סיבה. מקור אמת אחד לצורה, ובו הכל נכון או הכל שבור.
 // ─── קבוע שנושא דלת ──────────────────────────────────────────────────
 //
 // הצירים על הקבוע אינם נכתבים ביד. ההרכבה נבנית לרגע — הקבוע ולידו דלת
@@ -884,6 +879,8 @@ function shapeThumb(cv, entry){
   const st=mkPS({type:a.kind});
   if(a.slope) st.hasSlope=true;
   if(a.notch) Object.assign(st,NOTCH_DEF);
+  if(a.notchSide)  st.notchSide=a.notchSide;
+  if(a.slopeSideV) st.slopeSideV=a.slopeSideV;
   if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor);
   if(a.holes) st.holes=a.holes;
 
@@ -922,17 +919,136 @@ function renderShapeGallery(){
   const host=document.getElementById('shapeGallery');
   if(!host) return;
   const all=galleryEntries();
-  host.innerHTML=all.map((e,i)=>
-    '<button type="button" class="shape-card" data-i="'+i+'" '+
-      'onclick="shapeAddFromCatalog('+i+')">'+
-      '<canvas width="148" height="252"></canvas>'+
-      '<span>'+_shEsc(e.name)+'</span>'+
-      (e.origin&&e.origin!=='seed'
-        ? '<em class="sh-own">'+(e.origin==='factory'?'מפעל':'שלי')+'</em>' : '')+
-    '</button>').join('');
+  // אחרי לחיצה על + הגלריה מציגה רק מה שחוקי באותו צד. זה אינו סינון
+  // נוסף על החוקיות אלא **אותה תשובה** של lgValidate, בתצוגה.
+  const only = addSide ? allowedAt(addSide) : null;
+  const okIdx = only ? new Set(only.map(c=>c.i)) : null;
+  const rows=[];
+  all.forEach((e,i)=>{
+    if(okIdx&&!okIdx.has(i)) return;
+    const shown=galleryShown(i);
+    rows.push('<div class="shape-card">'+
+      '<button type="button" class="sc-pick" onclick="shapeAddFromCatalog('+i+')" '+
+        'aria-label="הוסף '+_shEsc(shown.name)+'">'+
+        '<canvas width="148" height="252"></canvas>'+
+        '<span>'+_shEsc(shown.name)+'</span>'+
+        (e.origin&&e.origin!=='seed'
+          ? '<em class="sh-own">'+(e.origin==='factory'?'מפעל':'שלי')+'</em>' : '')+
+      '</button>'+
+      (entryCanFlip(e)
+        ? '<button type="button" class="sc-flip'+(flipped[e.id]?' on':'')+'" '+
+          'onclick="galleryFlip('+i+')">⇄ הפוך</button>' : '')+
+    '</div>');
+  });
+  host.innerHTML=rows.join('');
   const cards=host.querySelectorAll('.shape-card');
-  all.forEach((e,i)=>{ const cv=cards[i]&&cards[i].querySelector('canvas');
-                       if(cv) shapeThumb(cv,e); });
+  let n=0;
+  all.forEach((e,i)=>{ if(okIdx&&!okIdx.has(i)) return;
+                       const cv=cards[n++]&&cards[n-1].querySelector('canvas');
+                       if(cv) shapeThumb(cv,galleryShown(i)); });
+}
+
+// מה הכרטיס מציג כרגע — הערך עצמו, או ההיפוך שלו.
+function galleryShown(i){
+  const e=galleryEntries()[i];
+  if(!e) return null;
+  return flipped[e.id] ? lgFlipEntry(e) : e;
+}
+
+// צורה סימטרית אין מה להפוך בה, וכפתור שלא עושה כלום מבלבל.
+function entryCanFlip(e){
+  if(!e||!e.add||typeof lgFlipAdd!=='function') return false;
+  return JSON.stringify(lgFlipAdd(e.add))!==JSON.stringify(e.add);
+}
+
+function galleryFlip(i){
+  const e=galleryEntries()[i]; if(!e) return;
+  flipped[e.id]=!flipped[e.id];
+  renderShapeGallery();
+}
+
+// ─── לאן מותר להוסיף ─────────────────────────────────────────────────
+//
+// ה-UI **שואל** את מנוע החוקיות; הוא לא מחזיק עותק שלו. השאלה "מותר
+// להוסיף בצד הזה?" נענית בדרך היחידה שאי אפשר לזייף: בונים את ההרכבה
+// המועמדת ומריצים עליה את lgValidate. אם היא נקייה — מותר.
+//
+// לכן אין כאן שום תנאי מסוג "אם זה קבוע אז ימין". קיר, קבוע שאין לו על
+// מה להישען, דלת שנתלית על אוויר — כולם נפסלים במקום אחד, וה-UI רק
+// מציית לתשובה. לכתוב את הכללים גם כאן היה מאפשר למסך להציע חיבור
+// שההזמנה תדחה.
+//
+// ‏side הוא **צד על הקנבס**: 'left' לפני הראשון במערך, 'right' אחרי
+// האחרון, כי אינדקס גדל עם x.
+function _tryArrangement(list){
+  if(typeof lgValidate!=='function') return true;
+  const sh={boundary:shapeBoundary, finish:'shahor',
+            quality:selQ==='pliz'?'pliz':'zamak',
+            shapes:list.map(x=>({id:x.id,kind:x.kind,hingeSide:x.hingeSide}))};
+  return lgValidate(sh).length===0;
+}
+
+// אילו ערכים מהגלריה מותר להוסיף בצד הזה. הרשימה הזאת היא גם התשובה
+// לשאלה אם להציג + בכלל: רשימה ריקה פירושה שאין חיבור חוקי.
+function allowedAt(side){
+  const cand=[];
+  galleryEntries().forEach((e,i)=>{
+    const ent = flipped[e.id] ? lgFlipEntry(e) : e;
+    const a=ent.add||{};
+    const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide};
+    const list = side==='left' ? [probe].concat(shapeList)
+                               : shapeList.concat([probe]);
+    if(_tryArrangement(list)) cand.push({i:i});
+  });
+  return cand;
+}
+
+// הקצה הזה חסום? קיר הוא חסימה, ולכן אין שם +. זה לא כלל חדש: זה אותו
+// shapeBoundary שמזין את המנוע, רק נקרא ממנו.
+//
+// ⚠️ מוסכמת הגבולות הפוכה לקנבס — boundary.right חל על הצומת שלפני
+// האיבר הראשון, כלומר על **שמאל** הקנבס.
+function sideBlocked(side){
+  return shapeBoundary[side==='left'?'right':'left']==='wall';
+}
+
+function canAddAt(side){
+  if(sideBlocked(side)) return false;
+  return allowedAt(side).length>0;
+}
+
+// ─── ציור כפתורי ההוספה ──────────────────────────────────────────────
+//
+// הכפתור יושב על הפאה שאליה יתחבר השייף הבא, ולא בשורית כפתורים בצד.
+// המיקום נלקח מהפריסה — אותו מקום שבו הזכוכית מצוירת — ולכן הוא נשאר
+// נכון גם כשהקנבס רחב מהמסך והמעטפת נגללת.
+function renderAddButtons(){
+  const host=document.getElementById('addBtns');
+  if(!host) return;
+  if(appMode!=='shape'||!lastL||!lastL.shapes||!lastL.shapes.length){
+    host.innerHTML=''; return;
+  }
+  const k=(C.clientWidth||lastL.canvas.w)/lastL.canvas.w;
+  const ends=[...lastL.shapes].sort((a,b)=>a.x-b.x);
+  const out=[];
+  [['left',ends[0],'x'],['right',ends[ends.length-1],'r']].forEach(pair=>{
+    const side=pair[0], g=pair[1], which=pair[2];
+    if(!g||!canAddAt(side)) return;
+    const x=(which==='x'?g.x:g.x+g.w)*k, y=(g.y+g.h/2)*k;
+    out.push('<button type="button" class="add-btn" style="left:'+x.toFixed(0)+
+      'px;top:'+y.toFixed(0)+'px" onclick="addAt(&quot;'+side+'&quot;)" '+
+      'aria-label="הוסף זכוכית ב'+(side==='left'?'שמאל':'ימין')+'">+</button>');
+  });
+  host.innerHTML=out.join('');
+}
+
+// לחיצה על + : גוללים לגלריה ומסננים אותה למה שחוקי באותו צד.
+let addSide=null;
+function addAt(side){
+  addSide=side;
+  renderShapeGallery();
+  const g=document.getElementById('shapeGallery');
+  if(g) g.scrollIntoView({behavior:'smooth',block:'center'});
 }
 
 // ─── טעינת הספריות ───────────────────────────────────────────────────
@@ -999,39 +1115,38 @@ function shapeToast(msg,bad){
 
 
 function shapeAddFromCatalog(i){
-  const e=galleryEntries()[i];
+  // מה שנבחר הוא **מה שרואים**: אם הכרטיס הופך, הצורה נכנסת הפוכה.
+  // היפוך נוסף כאן היה מחזיר אותה לאוריינטציה שהמשתמש בדיוק שינה.
+  const e=galleryShown(i);
   if(!e) return;
   const a=e.add||{};
   const extra = a.notch ? Object.assign({},NOTCH_DEF) : {};
+  if(a.notchSide)  extra.notchSide=a.notchSide;
+  if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
   if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
   if(a.holes) extra.holes=a.holes;
-  shapeAdd(a.kind,a.hingeSide,a.slope,Object.keys(extra).length?extra:null);
+  shapeAdd(a.kind,a.hingeSide,a.slope,Object.keys(extra).length?extra:null,addSide);
 }
 
-function shapeAdd(kind,hingeSide,slope,extra){
+function shapeAdd(kind,hingeSide,slope,extra,side){
   _shapeSeq++;
   const id='sh'+_shapeSeq;
   const label = kind==='door' ? 'דלת' : kind==='mirror' ? 'מראה'
               : kind==='shape' ? 'צורה' : (slope?'קבוע משופע':'קבוע');
-  // אינדקס גדל => x גדל: סוף המערך הוא **ימין** על הקנבס. לכן בנייה
-  // מימין לשמאל מוסיפה בתחילת המערך, ומשמאל לימין בסופו.
+  // אינדקס גדל => x גדל: תחילת המערך היא שמאל הקנבס וסופו ימין. הצד
+  // מגיע מכפתור ה-+ שנלחץ, ולכן הזכוכית נוחתת צמוד למי שביקש אותה.
   const item={id,kind,hingeSide:hingeSide||undefined,label};
-  if(buildDir==='rtl') shapeList.unshift(item); else shapeList.push(item);
+  if(side==='left') shapeList.unshift(item); else shapeList.push(item);
   shapePS[id]=mkPS({type:kind});
   if(slope) shapePS[id].hasSlope=true;
   if(extra) Object.assign(shapePS[id],extra);
+  addSide=null;               // הבחירה נעשתה; הגלריה חוזרת להיות מלאה
   renderShapeUI();draw();
 }
+
 function shapeRemove(id){
   shapeList=shapeList.filter(s=>s.id!==id);
   delete shapePS[id];
-  renderShapeUI();draw();
-}
-function shapeMove(id,dir){
-  const i=shapeList.findIndex(s=>s.id===id);
-  const j=i+dir;
-  if(i<0||j<0||j>=shapeList.length) return;
-  const t=shapeList[i];shapeList[i]=shapeList[j];shapeList[j]=t;
   renderShapeUI();draw();
 }
 // צד הציר תלוי בשטח — אותה דלת נבנית ימין או שמאל. הליקוט לא משתנה.
@@ -1046,6 +1161,9 @@ let _galleryDrawn=0;
 // הגלריה = הצורות המשוגרות ואחריהן מה שנשמר. הספריות נטענות פעם אחת,
 // ואם אין חיבור נשארות ריקות — הגלריה עובדת בלעדיהן.
 let libFactory=[], libPersonal=[];
+// איזה כרטיס בגלריה מוצג הפוך כרגע. ההיפוך הוא מצב תצוגה של הכרטיס,
+// ולא צורה נוספת בקטלוג — בחירה לוקחת את מה שרואים.
+let flipped={};
 let lastL=null;
 
 // שם הסוג במקום אחד. שלוש רשימות נפרדות בצייר, ברצועה ובגיליון היו
@@ -1064,18 +1182,31 @@ function isFreeGlass(k){ return k==='shape'||k==='mirror'||k==='panel'; }
 //
 // הוא כותב ישירות ל-ps ומצייר מחדש. אין כאן שכבת מצב שנייה: מה שהמנוע
 // קורא הוא מה שהגיליון כותב, ולכן אין מה שיתפצל.
-let sheetId=null;
+let sheetId=null, sheetPfx='shape';
 
-function openShapeSheet(id){
-  const i=shapeList.findIndex(s=>s.id===id);
-  if(i<0) return;
+// הגיליון שירת את טאב השייפים בלבד וחיפש ב-shapeList. אותו חלון נדרש
+// עכשיו גם בקומבינציה, ולכן המטרה מפורשת: איזה מצב, ואיזה אינדקס בו.
+// שני גיליונות היו שתי מערכות הגדרות לאותה זכוכית.
+function _sheetIdx(){
+  if(sheetPfx!=='shape') return (sheetId==null?-1:Number(sheetId));
+  return shapeList.findIndex(s=>s.id===sheetId);
+}
+function _sheetMeta(i){
+  if(sheetPfx==='shape'){ const s=shapeList[i]; return s?{label:s.label,kind:s.kind}:null; }
+  const p=(getPanels()||[])[i];
+  return p?{label:p.label||('זכוכית '+(i+1)),kind:p.type==='door'?'door':p.type||'fixed'}:null;
+}
+
+function openShapeSheet(id,pfx){
+  sheetPfx = pfx || (appMode==='shape' ? 'shape' : appMode);
   sheetId=id;
+  if(_sheetIdx()<0){ sheetId=null; return; }
   renderShapeSheet();
   document.getElementById('shapeSheetBack').classList.add('open');
   document.getElementById('shapeSheet').classList.add('open');
 }
 function closeShapeSheet(){
-  sheetId=null;
+  sheetId=null; sheetPfx='shape';
   document.getElementById('shapeSheetBack').classList.remove('open');
   document.getElementById('shapeSheet').classList.remove('open');
 }
@@ -1083,9 +1214,9 @@ function closeShapeSheet(){
 // שינוי שדה בודד. ריק מוחק את השדה במקום לכתוב אפס — כך חוזרים
 // לברירת המחדל של המנוע במקום לקבע ערך ששווה לה במקרה.
 function sheetSet(field,val,redraw){
-  const i=shapeList.findIndex(s=>s.id===sheetId);
+  const i=_sheetIdx();
   if(i<0) return;
-  const ps=getPS('shape',i); if(!ps) return;
+  const ps=getPS(sheetPfx,i); if(!ps) return;
   if(val===''||val==null) delete ps[field];
   else ps[field]=val;
   if(redraw!==false){ renderShapeSheet(); renderShapeUI(); draw(); }
@@ -1099,9 +1230,9 @@ function sheetNum(field,el){
   sheetSet(field,r.mm);
 }
 function sheetToggle(field,on,defaults){
-  const i=shapeList.findIndex(s=>s.id===sheetId);
+  const i=_sheetIdx();
   if(i<0) return;
-  const ps=getPS('shape',i); if(!ps) return;
+  const ps=getPS(sheetPfx,i); if(!ps) return;
   if(on) Object.keys(defaults).forEach(k=>{ if(ps[k]==null) ps[k]=defaults[k]; });
   else   Object.keys(defaults).forEach(k=>delete ps[k]);
   renderShapeSheet(); renderShapeUI(); draw();
@@ -1125,9 +1256,10 @@ function _shNum(field,label,val,ph){
 
 function renderShapeSheet(){
   const body=document.getElementById('shapeSheetBody');
-  const i=shapeList.findIndex(s=>s.id===sheetId);
-  if(!body||i<0) return;
-  const s=shapeList[i], ps=getPS('shape',i)||{};
+  const i=_sheetIdx();
+  const s=i<0?null:_sheetMeta(i);
+  if(!body||i<0||!s) return;
+  const ps=getPS(sheetPfx,i)||{};
   document.getElementById('shapeSheetTitle').innerHTML=
     _shEsc(s.label)+' <span class="sub">'+kindName(s.kind)+'</span>';
 
@@ -1205,7 +1337,6 @@ function renderShapeSheet(){
 }
 
 function renderShapeUI(){
-  renderBuildDir();
   if(!_galleryDrawn){ _galleryDrawn=1; renderShapeGallery(); loadShapeLibraries(); }
   const strip=document.getElementById('shapeStrip');
   const errEl=document.getElementById('shapeErr');
@@ -1216,33 +1347,18 @@ function renderShapeUI(){
   const errs=(typeof lgValidate==='function')?lgValidate(sh):[];
   const badIds={};errs.forEach(e=>{badIds[e.at]=e.msg;});
 
-  // קצה = קיר או כלום. יושב בקצוות הרצועה, במקום שהוא מייצג על הציור.
-  // הבנייה מתקדמת לצד אחד. הצד הזה מסומן ברצועה כדי שהבונה יראה לאן
-  // הזכוכית הבאה נכנסת לפני שהוא לוחץ, ולא אחרי.
-  const growSide = buildDir==='rtl' ? 'left' : 'right';
-  const endBtn=(side)=>
-    '<div class="strip-item strip-end">'+
-      '<span class="sn">'+(side==='right'?'קצה ימין':'קצה שמאל')+
-        (side===growSide?' <span class="bd-next">· הבאה כאן</span>':'')+'</span>'+
-      '<span class="strip-row">'+
-        '<button class="'+(shapeBoundary[side]==='wall'?'on':'')+'" '+
-          'onclick="shapeSetEnd(\''+side+'\',\'wall\')">קיר</button>'+
-        '<button class="'+(shapeBoundary[side]==='open'?'on':'')+'" '+
-          'onclick="shapeSetEnd(\''+side+'\',\'open\')">פתוח</button>'+
-      '</span>'+
-    '</div>';
-
-  strip.innerHTML = shapeList.length ? endBtn('right') + shapeList.map((s,i)=>
+  // הקצוות אינם מוצגים יותר. shapeBoundary נשאר כמצב פנימי שמזין את
+  // מנוע החוקיות — הוא זה שקובע איפה כפתור + מותר להופיע — אבל אין
+  // סיבה שהמשתמש יגדיר אותו ביד, כי ה-+ כבר עונה על אותה שאלה.
+  strip.innerHTML = shapeList.length ? shapeList.map((s,i)=>
     '<div class="strip-item'+(badIds[s.id]?' bad':'')+'">'+
       '<span class="sn">'+_shEsc(s.label)+(s.kind==='door'?' ('+(s.hingeSide==='right'?'ימין':'שמאל')+')':'')+'</span>'+
       '<span class="strip-row">'+
-        '<button onclick="shapeMove(\''+s.id+'\',-1)" aria-label="הזז ימינה">→</button>'+
-        '<button onclick="shapeMove(\''+s.id+'\',1)" aria-label="הזז שמאלה">←</button>'+
-        (s.kind==='door'?'<button onclick="shapeFlipHinge(\''+s.id+'\')" aria-label="החלף צד ציר">⇄</button>':'')+
-        '<button class="sh-gear" onclick="openShapeSheet(\''+s.id+'\')" aria-label="מאפייני הזכוכית">⚙</button>'+
-        '<button onclick="shapeRemove(\''+s.id+'\')" aria-label="הסר">✕</button>'+
+        (s.kind==='door'?'<button onclick="shapeFlipHinge(\'' + s.id + '\')" aria-label="החלף צד ציר">⇄</button>':'')+
+        '<button onclick="shapeSaveOpen(\'' + s.id + '\')" aria-label="שמור בספרייה" title="שמור בספרייה">☆</button>'+
+        '<button onclick="shapeRemove(\'' + s.id + '\')" aria-label="הסר">✕</button>'+
       '</span>'+
-    '</div>').join('') + endBtn('left')
+    '</div>').join('')
     : '<div style="padding:8px;color:var(--muted);font-size:13px">בחר צורה מהגלריה כדי להתחיל</div>';
 
   if(errs.length){
@@ -1426,17 +1542,16 @@ function buildPanelHTML(panel,ps,i,pfx){
   return h;
 }
 
+// טופס המידות שישב מתחת לקטגוריות הוסר. אותה עריכה נעשית עכשיו דרך
+// "עריכה מתקדמת" — בוחרים זכוכית על הציור ופותחים את גיליון המאפיינים —
+// וזו אותה זכוכית, אותו מצב, ואותו חלון שהיה בטאב השייפים.
+//
+// ‏buildPanelHTML **נשאר**: מצב "פריט פריט" עדיין בנוי עליו, ומחיקתו
+// הייתה שוברת אותו. מה שהוסר הוא השימוש בקומבינציה בלבד.
 function renderPanelCtrl(){
-  const el=document.getElementById('comboCtrl'); el.innerHTML='';
-  curCombo.panels.forEach((panel,i)=>{
-    const ps=panelState[i];
-    const div=document.createElement('div'); div.className='cs';
-    const typeLabel=panel.type==='door'?'דלת':panel.type==='fixed'?'קבוע':'הזזה';
-    div.innerHTML=`
-      <div class="ch open" onclick="tog(this)"><span>${panel.label} — ${typeLabel}</span><span class="arr">▾</span></div>
-      <div class="cb open">${buildPanelHTML(panel,ps,i,'combo')}</div>`;
-    el.appendChild(div);
-  });
+  const el=document.getElementById('comboCtrl');
+  if(el) el.innerHTML='';
+  renderPickBar();
 }
 
 // ══════════════ ITEM MODE ══════════════
@@ -1482,16 +1597,18 @@ function getPStates(){
 
 function draw(){
   const panels=getPanels(), pss=getPStates();
-  if(!panels.length){drawEmpty();return;}
+  if(!panels.length){lastL=null;drawEmpty();renderAddButtons();return;}
 
   const DPR=window.devicePixelRatio||1;
   const cW=C.parentElement.clientWidth;
 
   // In item mode, draw panels SEPARATELY (stacked vertically)
   if(appMode==='item'){
-    drawItemMode(panels,pss,DPR,cW); return;
+    lastL=null; drawItemMode(panels,pss,DPR,cW); renderAddButtons(); return;
   }
   drawComboMode(panels,pss,DPR,cW);
+  // הכפתורים נגזרים מהפריסה שהציור בדיוק יצר, ולכן הם באים אחריו
+  renderAddButtons();
 }
 
 // הגאומטריה עברה ל-lg-layout.js, וכאן נשארה רק ההפניה אליה. הצייר הישן
@@ -1825,7 +1942,7 @@ function engPaint(L,pfx,dy,idxOf,opts){
 
 function drawFromEngine(panels,pss,DPR,cW,pfx){
   const L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
-  lastL=L;   // העריכה צריכה לדעת איפה כל לוח יושב, ולא לגזור את זה שוב
+  lastL=L;   // העריכה וכפתורי ההוספה צריכים לדעת איפה כל לוח יושב
 
   // הקנבס יכול לצאת רחב מהמסך: מקלחון של חמישה פאנלים לא נכנס לפלאפון
   // בלי שהמספרים יתרחקו מהזכוכית או ייחתכו זה על זה. שרטט מצייר גדול
@@ -1833,6 +1950,7 @@ function drawFromEngine(panels,pss,DPR,cW,pfx){
   setupCanvas(DPR,L.canvas.w,L.canvas.h+28);
   drawGrid(L.canvas.w,L.canvas.h+28);
   dimHits=[];
+  paintPick(L);            // ההדגשה מתחת למספרים, כדי שיישארו קריאים
   engPaint(L,pfx||'combo',0,null);
   drawTitleBar(L.canvas.w,L.canvas.h+28);
   updateSpecs();
@@ -1849,6 +1967,71 @@ function drawTitleBar(cW,cH){
   cx.font='10px Heebo,sans-serif';cx.fillStyle='#8a8278';cx.textAlign='center';
   cx.fillText(sn||new Date().toLocaleDateString('he-IL'),cW/2,ty+18);
   cx.textAlign='left';cx.fillText(new Date().toLocaleDateString('he-IL'),10,ty+18);
+}
+
+// ══════════════ בחירת זכוכית לעריכה ══════════════
+//
+// "עריכה מתקדמת" אינו פותח חלון מיד. קודם בוחרים על מה עובדים — הזכוכית
+// הנבחרת מודגשת על הציור והחיצים מדלגים ביניהן — ורק אז "ערוך" פותח את
+// **אותו חלון** שהיה קודם מאחורי גלגל השיניים ברצועה. החלון לא השתנה;
+// רק הדרך אליו.
+//
+// הניווט אינו חוקיות: הוא רק בורר. הסדר הוא הסדר על הציור, כי זה מה
+// שהעין רואה — ולא הסדר במערך, שיכול להיות הפוך.
+let pickMode=false, pickIdx=0;
+
+function pickOrder(){
+  if(appMode==='shape') return shapeList.map((s,i)=>({id:s.id,i:i,label:s.label}));
+  const p=getPanels()||[];
+  return p.map((x,i)=>({id:i,i:i,label:(x&&x.label)||('זכוכית '+(i+1))}));
+}
+
+function setPickMode(on){
+  pickMode=!!on && pickOrder().length>0;
+  pickIdx=Math.min(pickIdx,Math.max(0,pickOrder().length-1));
+  const bar=document.getElementById('pickBar');
+  const btn=document.getElementById('btnAdvEdit');
+  if(bar) bar.style.display=pickMode?'flex':'none';
+  if(btn) btn.classList.toggle('on',pickMode);
+  renderPickBar();
+  draw();
+}
+
+function pickStep(d){
+  const n=pickOrder().length; if(!n) return;
+  // ‏d=+1 הוא ימינה על הציור. הסדר על הציור עולה עם x, כמו האינדקס.
+  pickIdx=(pickIdx+d+n)%n;
+  renderPickBar();
+  draw();
+}
+
+function renderPickBar(){
+  const el=document.getElementById('pickName'); if(!el) return;
+  const list=pickOrder();
+  const cur=list[pickIdx];
+  el.textContent=cur?(cur.label+' ('+(pickIdx+1)+' מתוך '+list.length+')'):'אין זכוכית';
+}
+
+function pickEdit(){
+  const cur=pickOrder()[pickIdx]; if(!cur) return;
+  // אותו חלון בשני הטאבים — רק המטרה שונה
+  openShapeSheet(appMode==='shape'?cur.id:cur.i, appMode==='shape'?'shape':appMode);
+}
+
+// ההדגשה מצוירת אחרי הזכוכית ולפני המידות, כדי שהמספרים יישארו קריאים.
+function paintPick(L){
+  if(!pickMode||!L||!L.shapes) return;
+  const order=[...L.shapes].sort((a,b)=>a.x-b.x);
+  const g=order[pickIdx];
+  if(!g||!g.poly) return;
+  cx.save();
+  cx.beginPath();
+  g.poly.forEach((q,i)=>i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1]));
+  cx.closePath();
+  cx.fillStyle='rgba(184,146,42,0.16)';
+  cx.fill();
+  cx.strokeStyle='#b8922a'; cx.lineWidth=2.5; cx.setLineDash([]); cx.stroke();
+  cx.restore();
 }
 
 // ══════════════ מצב עריכה ══════════════
