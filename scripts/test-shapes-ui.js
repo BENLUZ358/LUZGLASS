@@ -49,25 +49,40 @@ check('and so is item-by-item', /setMode\('item'\)/.test(DEMO), true);
 }
 
 /* ── the gallery ───────────────────────────────────────────────────────── */
-check('a fixed panel is offered',       /data-shape="fixed"/.test(DEMO), true);
-check('a door hinged right',            /data-shape="door"[^>]*data-hinge="right"/.test(DEMO), true);
-check('a door hinged left',             /data-shape="door"[^>]*data-hinge="left"/.test(DEMO), true);
-check('a mirror',                       /data-shape="mirror"/.test(DEMO), true);
-check('and a free shape',               /data-shape="shape"/.test(DEMO), true);
-/* the sloped panel is a shortcut, not a kind — it is a fixed with the slope on */
-check('a sloped fixed is a fixed with the slope already on',
-      /data-shape="fixed"[^>]*data-slope="1"/.test(DEMO), true);
-check('the gallery stays short', (DEMO.match(/data-shape="/g) || []).length <= 8, true);
+/* The chips became drawn cards, and the six shapes moved to lg-catalog.js.
+   What must not change is that the gallery offers exactly those six and
+   that not one of them describes its own hardware — the engine derives it.
+   A chip that carried a bracket count would be a second source of truth,
+   and that is what put a door's handle on its hinge side. */
+{
+  const CAT = fs.readFileSync(path.join(__dirname, '..', 'lg-catalog.js'), 'utf8');
+  const kind = k => new RegExp("kind: '" + k + "'").test(CAT);
+  check('a fixed panel is offered', kind('fixed'), true);
+  check('a door hinged right', /kind: 'door', hingeSide: 'right'/.test(CAT), true);
+  check('a door hinged left',  /kind: 'door', hingeSide: 'left'/.test(CAT), true);
+  check('a mirror', kind('mirror'), true);
+  check('and a free shape', kind('shape'), true);
+  /* the sloped panel is a shortcut, not a kind — a fixed with the slope on */
+  check('a sloped fixed is a fixed with the slope already on',
+        /kind: 'fixed', slope: true/.test(CAT), true);
+  check('the gallery stays short', (CAT.match(/kind: '/g) || []).length <= 8, true);
 
-/* hardware is never baked into a gallery item — the engine derives it */
-check('no chip carries a hinge count',   /data-shape="[^"]*"[^>]*data-hinge-qty/.test(DEMO), false);
-check('and none carries a bracket count', /data-shape="[^"]*"[^>]*data-bracket/.test(DEMO), false);
+  /* hardware is never baked into a gallery item */
+  check('no entry carries a hinge count',   /hingeQty|hinges:/.test(CAT), false);
+  check('and none carries a bracket count', /bracketQty|brackets:/.test(CAT), false);
+  check('nor where a bracket sits',         /bracket-wall|holes:/.test(CAT), false);
+
+  /* the cards are built from the catalogue, not written out by hand */
+  check('the gallery is generated', /renderShapeGallery/.test(DEMO), true);
+  check('and every card is drawn by the painter itself',
+        /engPaint\(\{\.\.\.L, dims:\[\]\},'thumb'/.test(DEMO), true);
+}
 
 /* ── touch ─────────────────────────────────────────────────────────────── */
 {
-  const css = (DEMO.match(/\.shape-chip\s*\{[^}]*\}/) || [''])[0];
-  check('the gallery chip rule is found', css.length > 0, true);
-  check('a chip is at least a 44px target',
+  const css = (DEMO.match(/\.shape-card\s*\{[^}]*\}/) || [''])[0];
+  check('the gallery card rule is found', css.length > 0, true);
+  check('a card is at least a 44px target',
         Number((css.match(/min-height:\s*(\d+)px/) || [])[1]) >= 44, true);
 }
 {

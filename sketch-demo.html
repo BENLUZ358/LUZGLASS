@@ -11,6 +11,7 @@
 <script src="lg-parse.js"></script>
 <script src="lg-shapes.js"></script>
 <script src="lg-layout.js"></script>
+<script src="lg-catalog.js"></script>
 <style>
 .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 14px;position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;}
 .topbar .ti{font-size:15px;font-weight:700;}.topbar .su{font-size:12px;color:var(--muted);}
@@ -31,7 +32,15 @@
 .bd-seg button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
 .bd-seg button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 .bd-next{color:var(--gold-text);font-weight:600;}
-.shape-gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px;}
+.shape-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));
+  gap:8px;padding:10px;}
+.shape-card{display:flex;flex-direction:column;align-items:center;gap:6px;
+  min-height:44px;padding:8px 4px;cursor:pointer;border-radius:10px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);}
+.shape-card canvas{display:block;width:72px;height:88px;}
+.shape-card span{font-size:12px;line-height:1.25;text-align:center;}
+.shape-card:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+@media (hover:hover){ .shape-card:hover{border-color:var(--gold);} }
 .shape-chip{
   min-height:44px;padding:10px 8px;
   background:var(--bg);border:1px solid var(--border);border-radius:6px;
@@ -388,14 +397,7 @@ canvas{display:block;height:auto;cursor:pointer;}
       <button type="button" id="bdLtr" onclick="setBuildDir('ltr')">מ<span dir="ltr">שמאל</span> לימין →</button>
     </span>
   </div>
-  <div class="shape-gallery">
-    <button class="shape-chip" data-shape="fixed"  onclick="shapeAdd('fixed')"><span class="gi">▭</span>קבוע</button>
-    <button class="shape-chip" data-shape="fixed"  data-slope="1" onclick="shapeAdd('fixed',null,true)"><span class="gi">◸</span>קבוע משופע</button>
-    <button class="shape-chip" data-shape="door"   data-hinge="right" onclick="shapeAdd('door','right')"><span class="gi">🚪</span>דלת · ציר ימין</button>
-    <button class="shape-chip" data-shape="door"   data-hinge="left"  onclick="shapeAdd('door','left')"><span class="gi">🚪</span>דלת · ציר שמאל</button>
-    <button class="shape-chip" data-shape="mirror" onclick="shapeAdd('mirror')"><span class="gi">▤</span>מראה</button>
-    <button class="shape-chip" data-shape="shape"  onclick="shapeAdd('shape')"><span class="gi">◇</span>צורה חופשית</button>
-  </div>
+  <div class="shape-gallery" id="shapeGallery"></div>
   <div class="shape-strip" id="shapeStrip"></div>
   <div id="shapeErr" class="shape-err" style="display:none" role="status" aria-live="polite"></div>
   <div id="shapeBom" class="shape-bom" style="display:none"></div>
@@ -625,7 +627,10 @@ let _dimLanes={};
 const HANDLE_EDGE_CM=6;
 const TOWEL_SPACING_CM=55;
 
-const C=document.getElementById('sk'),cx=C.getContext('2d');
+const C=document.getElementById('sk');
+// ‏let ולא const: כרטיס בגלריה מצויר בידי אותו engPaint על קנבס אחר,
+// ולשם כך ההקשר מוחלף לרגע וחוזר. שני ציירים היו שני מקורות אמת.
+let cx=C.getContext('2d');
 let selG='shafu',selF='shahor',selQ='zamak',sand=false;
 let appMode='combo',curCat='pinati',curCombo=COMBOS.pinati[0];
 let panelState={}, items=[], dimHits=[];
@@ -814,6 +819,65 @@ function renderBuildDir(){
   if(ltr) ltr.className = buildDir==='ltr' ? 'on' : '';
 }
 
+// ─── גלריית הצורות ───────────────────────────────────────────────────
+//
+// התמונה בכרטיס מצוירת בידי **הצייר עצמו**, על קנבס קטן, דרך אותה
+// המרה שהקנבס הגדול עובר: פאנל ומצב → ‏_lgShowerOf → ‏lgLayout →
+// ‏engPaint. אין כאן ציור שני ואין תיאור שני של הצורה.
+//
+// זה לא ייעול. הניסיון הקודם תיאר כל צורה מחדש בקטלוג — כמה זוויות
+// ובאיזה צד — ומיד יצאו דלתות שהידית והציר שלהן באותו צד וקבועים עם
+// ארבע זוויות בלי סיבה. מקור אמת אחד לצורה, ובו הכל נכון או הכל שבור.
+function shapeThumb(cv, entry){
+  const a=entry.add||{};
+  // אותה זכוכית בדיוק ש-shapeAdd היה יוצר, על מקלחון של פריט אחד
+  const ghost=[{id:'t',kind:a.kind,hingeSide:a.hingeSide,label:''}];
+  const st=mkPS({type:a.kind});
+  if(a.slope) st.hasSlope=true;
+
+  const saveList=shapeList, savePS=shapePS;
+  shapeList=ghost; shapePS={t:st};
+  let L=null;
+  try { L=lgLayout(_lgShowerOf(_shapePanels(),{0:st}),{canvasW:260}); }
+  finally { shapeList=saveList; shapePS=savePS; }
+  if(!L) return;
+
+  // המידות אינן נכנסות לתמונה — בכרטיס של 72 פיקסל הן רעש. הזכוכית
+  // והפרזול כן, כי הם מה שהלקוח בוחר לפיו.
+  const W=L.canvas.w, H=L.canvas.h, box=cv.width, boxH=cv.height;
+  const k=Math.min(box/W, boxH/H);
+  const g=cv.getContext('2d');
+  g.clearRect(0,0,box,boxH);
+  const saveCx=cx, saveHits=dimHits;
+  cx=g;
+  g.save();
+  g.translate((box-W*k)/2,(boxH-H*k)/2); g.scale(k,k);
+  try { engPaint({...L, dims:[]},'thumb',0,null); }
+  finally { g.restore(); cx=saveCx; dimHits=saveHits; }
+}
+
+function renderShapeGallery(){
+  const host=document.getElementById('shapeGallery');
+  if(!host||typeof lgCatalogSeeds!=='function') return;
+  const seeds=lgCatalogSeeds();
+  host.innerHTML=seeds.map((e,i)=>
+    '<button type="button" class="shape-card" data-i="'+i+'" '+
+      'onclick="shapeAddFromCatalog('+i+')">'+
+      '<canvas width="144" height="176"></canvas>'+
+      '<span>'+_shEsc(e.name)+'</span>'+
+    '</button>').join('');
+  const cards=host.querySelectorAll('.shape-card');
+  seeds.forEach((e,i)=>{ const cv=cards[i]&&cards[i].querySelector('canvas');
+                         if(cv) shapeThumb(cv,e); });
+}
+
+function shapeAddFromCatalog(i){
+  const e=(typeof lgCatalogSeeds==='function'?lgCatalogSeeds():[])[i];
+  if(!e) return;
+  const a=e.add||{};
+  shapeAdd(a.kind,a.hingeSide,a.slope);
+}
+
 function shapeAdd(kind,hingeSide,slope){
   _shapeSeq++;
   const id='sh'+_shapeSeq;
@@ -847,6 +911,7 @@ function shapeFlipHinge(id){
   renderShapeUI();draw();
 }
 let shapePS={};
+let _galleryDrawn=0;
 
 // שם הסוג במקום אחד. שלוש רשימות נפרדות בצייר, ברצועה ובגיליון היו
 // מתפצלות — וצורה חופשית באמת הוצגה כ"קבוע" בשניים מהם.
@@ -1006,6 +1071,7 @@ function renderShapeSheet(){
 
 function renderShapeUI(){
   renderBuildDir();
+  if(!_galleryDrawn){ _galleryDrawn=1; renderShapeGallery(); }
   const strip=document.getElementById('shapeStrip');
   const errEl=document.getElementById('shapeErr');
   const bomEl=document.getElementById('shapeBom');

@@ -2,16 +2,17 @@
 /**
  * Tests the shape catalogue.
  *
- * There is one catalogue, not "built-in shapes" plus "added shapes". The
- * shapes we ship are the first rows in it, in the same format the admin
- * builder will write. This file exists to keep that true: if a seed ever
- * needs a field the format cannot express, the two have already split.
+ * The catalogue does NOT define shapes. It gives a name and an id to what
+ * the screen already knows how to build — the same kind, hinge side and
+ * slope flag shapeAdd has always taken. The glass, the hardware and the
+ * dimensions all come from lg-shapes.js and lg-layout.js.
  *
- * The rule this file guards hardest: a shape may CARRY its holes, and a
- * carried hole that lands on a face the assembly already handled is the
- * SAME hole — one piece of metal per junction, counted once. That was the
- * rule that stopped the hinge being drawn twice, and declaring holes on a
- * shape is exactly the change that could break it again.
+ * That is the whole point of this file. The first version described every
+ * shape again in its own words — how many brackets, on which face, at what
+ * distance — and it immediately produced doors whose handle and hinge sat
+ * on the same side, and fixed panes with four brackets for no reason. Two
+ * sources of truth for one fact always drift apart. This file exists to
+ * keep there being one.
  *
  * Run: node scripts/test-catalog.js
  */
@@ -20,6 +21,7 @@ const path = require('path');
 const vm = require('vm');
 
 const ROOT = path.join(__dirname, '..');
+const DEMO = fs.readFileSync(path.join(ROOT, 'sketch-demo.html'), 'utf8');
 
 let failed = 0;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
@@ -29,14 +31,11 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console });
 ['lg-shapes.js', 'lg-layout.js', 'lg-catalog.js'].forEach(f =>
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
-
 const run = (expr, vars) => {
   Object.keys(vars || {}).forEach(k => { ctx[k] = vars[k]; });
   return vm.runInContext(expr, ctx);
 };
 const seeds = run('lgCatalogSeeds()');
-const layout = shapes => run('lgLayout({boundary:B,finish:"shahor",quality:"zamak",shapes:S},{canvasW:900})',
-  { B: shapes.boundary || { right: 'wall', left: 'wall' }, S: shapes.list });
 
 console.log('');
 
@@ -44,204 +43,75 @@ console.log('');
 {
   const bad = seeds.filter(e => run('lgCatalogValidate(E)', { E: e }).length);
   check('every seed passes validation', bad.map(e => e.id), []);
-  check('and there are no duplicate ids',
-        seeds.length, new Set(seeds.map(e => e.id)).size);
+  check('and there are no duplicate ids', seeds.length, new Set(seeds.map(e => e.id)).size);
   check('each seed names itself in Hebrew', seeds.every(e => e.name && e.name.trim()), true);
 }
 
-/* ── the format is the engine's own, not a translation ──────────────────── */
-/* A translation layer is a place where the catalogue and the drawing can
-   drift, and then the gallery promises one thing and the cut is another. */
+/* ── the catalogue describes nothing the engine already knows ───────────── */
+/* If an entry ever grows a field that says where a bracket goes, or how
+   many, the catalogue has started describing shapes again — and the drift
+   that produced handles on the hinge side is back. */
 {
-  const e = seeds.find(s => s.id === 'fixed-slope');
-  const sh = run('lgCatalogToShape(E,"x1")', { E: e });
-  check('a catalogue entry becomes a shape without renaming a field',
-        [sh.kind, sh.w, sh.h, sh.slopeH1, sh.slopeH2, sh.slopeSideH],
-        ['fixed', 500, 2000, 2000, 1800, 'bottom']);
-  check('and it carries the id it was given', sh.id, 'x1');
-  check('and remembers which catalogue row it came from', sh.fromCatalog, 'fixed-slope');
-
-  /* the engine really draws it sloped, not just stores the numbers */
-  const L = layout({ list: [sh] });
-  const ys = L.shapes[0].poly.map(p => p[1]);
-  check('the engine slopes it for real', Math.max(...ys) !== Math.min(...ys.slice(0, 2)) || true, true);
-  check('the two bottom corners sit at different heights',
-        L.shapes[0].poly[2][1] !== L.shapes[0].poly[3][1], true);
+  const ALLOWED_ENTRY = ['id', 'name', 'origin', 'add'];
+  const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope'];
+  const strayEntry = seeds.flatMap(e => Object.keys(e).filter(k => !ALLOWED_ENTRY.includes(k)));
+  const strayAdd   = seeds.flatMap(e => Object.keys(e.add).filter(k => !ALLOWED_ADD.includes(k)));
+  check('an entry carries only a name and what to add', strayEntry, []);
+  check('and never says where hardware goes or how much of it', strayAdd, []);
 }
 
-/* ── a carried hole is cut ──────────────────────────────────────────────── */
+/* ── the seeds are exactly what the screen already offered ──────────────── */
+/* The gallery replaced text chips. It must not have quietly replaced the
+   shapes too. */
 {
-  const e = seeds.find(s => s.id === 'fixed-floor');
-  const L = layout({ list: [run('lgCatalogToShape(E,"a")', { E: e })] });
-  const declared = L.hardware.filter(h => h.source === 'declared');
-  check('a floor bracket the shape carries is drawn',
-        declared.map(h => h.role), ['bracket-floor']);
-  check('as a bracket, so it reads as a hole', declared[0].kind, 'bracket');
-  check('and it survives beside the wall brackets the walls derive',
-        L.hardware.filter(h => h.source === 'junction').length > 0, true);
+  const kinds = seeds.map(e => [e.add.kind, e.add.hingeSide || '', e.add.slope ? 'slope' : ''].join('|'));
+  check('the catalogue offers the six the chips offered', kinds, [
+    'fixed||', 'fixed||slope', 'door|right|', 'door|left|', 'mirror||', 'shape||',
+  ]);
 }
 
-/* ── ...but never twice ─────────────────────────────────────────────────── */
-/* This is the whole risk of letting a shape carry its own hinges. */
+/* ── the picture is painted by the drawer, not described again ──────────── */
 {
-  const fixedHinges = run('lgCatalogToShape(E,"f")', { E: seeds.find(s => s.id === 'fixed-hinges') });
-  /* index grows with x, so shapes[0] is the canvas-left pane. The door at
-     index 1 hinges toward it — that is what hingeSide 'right' means here,
-     and it is the arrangement in the photograph that started this. */
-  const door = { id: 'd', kind: 'door', w: 800, h: 1985, hingeSide: 'right' };
+  const has = s => DEMO.indexOf(s) > -1;
+  check('the thumbnail runs the engine, not a second geometry',
+        has('lgLayout(_lgShowerOf(_shapePanels()'), true);
+  check('through the same panel conversion the canvas uses',
+        has('_shapePanels()') && has('_lgShowerOf('), true);
+  check('and is painted by engPaint itself', has("engPaint({...L, dims:[]},'thumb'"), true);
+  check('the drawing context is swappable, so there is one painter',
+        /let cx=C\.getContext/.test(DEMO), true);
+  check('and it is put back afterwards', has('cx=saveCx'), true);
+  check('touch targets are not polluted by a thumbnail', has('dimHits=saveHits'), true);
 
-  /* the junction derives hinges, and the shape declares them too */
-  const L = layout({ list: [fixedHinges, door] });
-  const hinges = L.hardware.filter(h => h.kind === 'hinge');
-  check('a door hinged onto the fixed gives hinges', hinges.length > 0, true);
-  check('and all of them come from the junction, none doubled by the shape',
-        hinges.every(h => h.source === 'junction'), true);
-
-  /* two per junction — top and bottom — and not four */
-  check('exactly one pair, as before shapes could carry holes', hinges.length, 2);
-
-  /* alone, the same shape keeps the hinges it carries: a replacement pane
-     has no neighbours to derive from, and must still show its cut */
-  const solo = layout({ list: [fixedHinges], boundary: { right: 'open', left: 'open' } });
-  const soloHinges = solo.hardware.filter(h => h.kind === 'hinge');
-  check('the same shape ordered alone still shows its hinges', soloHinges.length, 2);
-  check('declared, because nothing derived them', soloHinges.every(h => h.source === 'declared'), true);
+  /* the gallery must not have kept a hand-written list of chips */
+  check('the gallery is generated from the catalogue',
+        has('id="shapeGallery"') && has('renderShapeGallery'), true);
+  check('and no hand-written chip survives', /class="shape-chip"/.test(DEMO), false);
+  check('every card is a 44px target', /\.shape-card\{[^}]*min-height:44px/.test(DEMO), true);
+  check('the catalogue is loaded by the page', has('src="lg-catalog.js"'), true);
 }
 
-/* ── a floor bracket is not a junction, so it is never suppressed ───────── */
+/* ── the engine still decides the hardware ──────────────────────────────── */
+/* A door's handle and its hinge are derived from the SAME rule, so they
+   cannot land on the same face. This is what broke when the catalogue
+   wrote the hinge side by hand. */
 {
-  const g = { id: 'a', kind: 'fixed', w: 900, h: 2000, holes: [
-    { role: 'bracket-floor', dia: 20, x: { from: 'left', mm: 25 }, y: { from: 'bottom', mm: 200 } },
-    { role: 'bracket-wall',  dia: 20, x: { from: 'left', mm: 25 }, y: { from: 'top',    mm: 200 } },
-  ] };
-  const L = layout({ list: [g] });
-  const roles = L.hardware.filter(h => h.source === 'declared').map(h => h.role);
-  check('the floor bracket survives on a face the wall already claimed',
-        roles, ['bracket-floor']);
-  check('while the wall bracket on that same face is left to the junction',
-        roles.indexOf('bracket-wall'), -1);
-}
-
-/* ── free glass carries no hardware, declared or otherwise ──────────────── */
-{
-  const bad = { id: 'm', name: 'מראה עם ציר', glass: { kind: 'mirror', w: 600, h: 800,
-    holes: [{ role: 'hinge', dia: 20, x: { from: 'left', mm: 0 }, y: { from: 'top', mm: 200 } }] } };
-  check('a mirror may not declare hardware',
-        run('lgCatalogValidate(E)', { E: bad }).length > 0, true);
-  check('and the free shape ships empty',
-        (seeds.find(s => s.id === 'shape').glass.holes || []).length, 0);
-}
-
-/* ── what the validator refuses ─────────────────────────────────────────── */
-{
-  const v = e => run('lgCatalogValidate(E)', { E: e });
-  check('a shape with no name is refused',
-        v({ id: 'x', glass: { kind: 'fixed', w: 1, h: 1 } }).length > 0, true);
-  check('a door with no hinge side is refused',
-        v({ id: 'x', name: 'x', glass: { kind: 'door', w: 800, h: 1985 } }).length > 0, true);
-  check('a zero-width shape is refused',
-        v({ id: 'x', name: 'x', glass: { kind: 'fixed', w: 0, h: 2000 } }).length > 0, true);
-  check('an unknown hole role is refused',
-        v({ id: 'x', name: 'x', glass: { kind: 'fixed', w: 500, h: 2000,
-            holes: [{ role: 'magic', dia: 20, x: { from: 'left', mm: 25 }, y: { from: 'top', mm: 200 } }] } }).length > 0, true);
-  /* a hole outside the glass would be cut at the edge and hold nothing */
-  check('a hole past the far edge is refused',
-        v({ id: 'x', name: 'x', glass: { kind: 'fixed', w: 500, h: 2000,
-            holes: [{ role: 'bracket-wall', dia: 20, x: { from: 'left', mm: 900 }, y: { from: 'top', mm: 200 } }] } }).length > 0, true);
-}
-
-/* ── the picture comes from the engine ──────────────────────────────────── */
-{
-  seeds.forEach(e => {
-    const svg = run('lgCatalogThumb(E,{size:96})', { E: e });
-    if (!/^<svg /.test(svg) || svg.indexOf('<polygon') < 0)
-      { failed++; console.error('FAIL  ' + e.id + ' has no drawable thumbnail'); }
+  const doorFor = hingeSide => {
+    /* the same inversion _shapePanels applies, kept in one place there */
+    const s = { id: 'd', kind: 'door', w: 800, h: 1985, hingeSide };
+    return run('lgLayout({boundary:{right:"wall",left:"wall"},finish:"shahor",' +
+               'quality:"zamak",shapes:[S]},{canvasW:400})', { S: s });
+  };
+  ['left', 'right'].forEach(side => {
+    const L = doorFor(side);
+    const g = L.shapes[0];
+    const handle = L.hardware.find(h => h.role === 'handle');
+    const hinge  = L.hardware.find(h => h.kind === 'hinge');
+    if (!handle || !hinge) { failed++; console.error('FAIL  door(' + side + ') lost its hardware'); return; }
+    const mid = g.x + g.w / 2;
+    const sameSide = (handle.x < mid) === (hinge.x < mid);
+    check('a door hinged ' + side + ' puts its handle on the other face', sameSide, false);
   });
-  console.log('ok    every seed draws a thumbnail from the engine');
-
-  /* a sloped shape must not produce a rectangle */
-  const flat  = run('lgCatalogThumb(E,{size:96})', { E: seeds.find(s => s.id === 'fixed') });
-  const slope = run('lgCatalogThumb(E,{size:96})', { E: seeds.find(s => s.id === 'fixed-slope') });
-  const notch = run('lgCatalogThumb(E,{size:96})', { E: seeds.find(s => s.id === 'fixed-notch') });
-  check('the sloped shape does not draw as the flat one', flat !== slope, true);
-  check('and the notched one has more corners than four',
-        notch.match(/points="([^"]*)"/)[1].split(' ').length > 4, true);
-
-  /* the shape that carries hinges shows them; the plain one does not */
-  const plain  = run('lgCatalogThumb(E,{size:96})', { E: seeds.find(s => s.id === 'fixed') });
-  const hinged = run('lgCatalogThumb(E,{size:96})', { E: seeds.find(s => s.id === 'fixed-hinges') });
-  check('a shape that carries hinges shows them in the gallery',
-        hinged.indexOf('<rect') > -1, true);
-  check('and a plain fixed shows none', plain.indexOf('<rect') > -1, false);
-
-  /* the gallery must look like the factory. A shape drawn bare, with no
-     hardware at all, does not read as the thing it stands for — which is
-     what the first version of this catalogue got wrong. */
-  const bare = seeds.filter(e => {
-    if (e.glass.kind !== 'fixed' && e.glass.kind !== 'door') return false;
-    const svg = run('lgCatalogThumb(E,{size:96})', { E: e });
-    return svg.indexOf('<circle') < 0 && svg.indexOf('<rect') < 0;
-  });
-  check('every fixed and every door shows its hardware in the gallery',
-        bare.map(e => e.id), []);
-}
-
-/* ── the picture must be legible, and must not lie about position ───────── */
-/* The first gallery drew every hole at true scale. A 20mm hole on a 2000mm
-   pane is one percent of the height, which at thumbnail size is less than
-   a pixel — so the hardware vanished or shrank to a speck, and the shapes
-   read as bare rectangles. Position stays exact; size gets a floor. */
-{
-  const parse = svg => ({
-    circles: [...svg.matchAll(/<circle cx="([-\d.]+)" cy="([-\d.]+)" r="([-\d.]+)"/g)]
-      .map(m => ({ x: +m[1], y: +m[2], r: +m[3] })),
-    rects: [...svg.matchAll(/<rect x="([-\d.]+)" y="([-\d.]+)" width="([-\d.]+)" height="([-\d.]+)"/g)]
-      .map(m => ({ x: +m[1], y: +m[2], w: +m[3], h: +m[4] })),
-    poly: (svg.match(/<polygon points="([^"]*)"/) || [, ''])[1]
-      .split(' ').filter(Boolean).map(q => q.split(',').map(Number)),
-  });
-
-  seeds.forEach(e => {
-    const t = parse(run('lgCatalogThumb(E,{w:120,h:150})', { E: e }));
-    t.circles.forEach(c => {
-      if (c.r < 2.4) { failed++; console.error('FAIL  ' + e.id + ': a hole too small to see (r=' + c.r + ')'); }
-    });
-    t.rects.forEach(r => {
-      if (r.w < 11 || r.h < 7) { failed++; console.error('FAIL  ' + e.id + ': a hinge too small to read'); }
-    });
-  });
-  console.log('ok    no hole and no hinge shrinks below what an eye can read');
-
-  /* nothing may be drawn outside the picture — a hinge straddles the face,
-     so half of it hangs past the glass and the padding must contain it */
-  seeds.forEach(e => {
-    const t = parse(run('lgCatalogThumb(E,{w:120,h:150})', { E: e }));
-    const out = t.rects.filter(r => r.x < 0 || r.y < 0 || r.x + r.w > 120 || r.y + r.h > 150)
-      .concat(t.circles.filter(c => c.x - c.r < 0 || c.y - c.r < 0 || c.x + c.r > 120 || c.y + c.r > 150));
-    if (out.length) { failed++; console.error('FAIL  ' + e.id + ': hardware clipped by the frame'); }
-  });
-  console.log('ok    and none of it is clipped by the frame');
-
-  /* the position is still the truth: a bracket 200mm down a 2000mm pane
-     belongs a tenth of the way down the drawn glass, not anywhere else */
-  {
-    const e = seeds.find(s => s.id === 'fixed');
-    const t = parse(run('lgCatalogThumb(E,{w:120,h:150})', { E: e }));
-    const ys = t.poly.map(q => q[1]);
-    const top = Math.min(...ys), bot = Math.max(...ys), span = bot - top;
-    const rel = t.circles.map(c => (c.y - top) / span).sort((a, b) => a - b);
-    const near = (a, b) => Math.abs(a - b) < 0.02;
-    check('the top brackets sit a tenth of the way down, as 200 of 2000 is',
-          [near(rel[0], 0.1), near(rel[1], 0.1)], [true, true]);
-    check('and the bottom pair a tenth of the way up',
-          [near(rel[2], 0.9), near(rel[3], 0.9)], [true, true]);
-
-    const xs = t.poly.map(q => q[0]);
-    const l = Math.min(...xs), r = Math.max(...xs), wide = r - l;
-    const relX = t.circles.map(c => (c.x - l) / wide).sort((a, b) => a - b);
-    check('and 25mm in from a 500mm face is a twentieth in from the edge',
-          [near(relX[0], 0.05), near(relX[3], 0.95)], [true, true]);
-  }
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
