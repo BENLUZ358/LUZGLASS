@@ -89,6 +89,9 @@ const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
 // קוטר הקדח בזכוכית. זווית וציר יושבים על בורג עבה יותר מידית.
 const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
+// עד כמה הפרש גובה בין קבוע לדלת עדיין נבלע ביישור עליון, ומה המרווח
+// מהרצפה כשהוא כבר לא נבלע. שניהם במילימטרים.
+const LG_TOP_ALIGN=20, LG_DOOR_GAP=20;
 // אילו תפקידים נולדים מצומת. רק אלה מושמטים כשהצומת כבר ייצר אותם;
 // זווית רצפה, שאינה שייכת לשום צומת, תמיד שורדת.
 const _LG_JUNCTION_ROLE={'hinge':1,'hinge-gg':1,'hinge-wall':1,
@@ -378,7 +381,38 @@ function _layoutPass(shower,cW,mgL,mgR){
     return (sl&&sl.vSide) ? Math.max(sl.w1,sl.w2) : ((s&&s.w)||LG_DEF_W); };
 
   const totalMM=shapes.reduce((n,s,i)=>n+shapeWM(s,i),0);
-  const maxMM=Math.max.apply(null,shapes.map(shapeMM));
+
+  // ── כמה כל לוח מורם מהרצפה ─────────────────────────────────────────
+  //
+  // הרצפה היא הייחוס היחיד. קודם היו שניים: הדלת נתלתה מראש הציור
+  // והקבוע עמד על הרצפה — וכל עוד הגבהים היו שווים זה נראה נכון במקרה.
+  // ברגע שהקבוע 1900 והדלת 2000, כל לוח נחת במקום אחר ואף אחד לא היה
+  // במקום הנכון.
+  //
+  // הכלל:
+  //   • **ברירת מחדל — מיישרים למעלה.** ראש המקלחון ישר, וההפרש נשאר
+  //     למטה כמרווח בין הדלת לרצפה. ככה הדלת נפתחת, וככה זה נראה.
+  //   • **חריג — הפרש גדול מ-20 מ"מ.** אז לא מכריחים יישור עליון: הדלת
+  //     מקבלת מרווח קבוע של 20 מ"מ מהרצפה, וראשה נוחת איפה שגובהה מביא
+  //     אותו. קבוע שגבוה מהדלתות פשוט ממשיך כלפי מעלה.
+  //
+  // המידה נמדדת מול **הקבוע**, לא מול הלוח הגבוה ביותר: דלת של 2000 ליד
+  // קבוע של 1900 היא בדיוק המקרה החריג, ומול המקסימום ההפרש היה יוצא
+  // אפס והחריג לא היה נכנס.
+  const isDoor=s=>((s&&s.kind)||'fixed')==='door';
+  const fixedTop=shapes.reduce((m,s,i)=>
+    (!isDoor(s)&&!(s&&s.kind&&_LG_FREE[s.kind])) ? Math.max(m,shapeMM(s,i)) : m, 0);
+
+  const lifts=shapes.map((s,i)=>{
+    if(!isDoor(s)) return 0;
+    // דלת בלי קבוע לידה אין מול מה ליישר אותה, והיא נשארת כפי שהייתה
+    if(!fixedTop) return 0;
+    const mmH=shapeMM(s,i), diff=Math.abs(fixedTop-mmH);
+    // ‏Math.max כדי שדלת גבוהה מהקבוע ביותר מהמרווח לא תשקע מתחת לרצפה
+    return diff<=LG_TOP_ALIGN ? Math.max(fixedTop-mmH,0) : LG_DOOR_GAP;
+  });
+
+  const maxMM=Math.max.apply(null,shapes.map((s,i)=>lifts[i]+shapeMM(s,i)));
   const sc=(cW-mgL-mgR)/Math.max(totalMM,1);
   const oy=Math.min(mgL,mgR);
   out.scale=sc;
@@ -395,7 +429,8 @@ function _layoutPass(shower,cW,mgL,mgR){
     // ומרווח הרצפה נשאר מתחתיה — לכן דלת נמוכה מהקבוע בסנטימטר, והפער
     // בתחתית, בדיוק כמו במקלחון אמיתי.
     const kind=(s&&s.kind)||'fixed';
-    const y = kind==='door' ? oy : oy+(maxMM-mmH)*sc;
+    // ההרמה מהרצפה נקבעה למעלה; כאן רק הופכים אותה למיקום על הציור.
+    const y = oy+(maxMM-lifts[i]-mmH)*sc;
 
     // המתאר נבנה פעם אחת במילימטרים; כאן רק מכפילים ומזיזים למקום. כל
     // שייף נמסר לצייר כפוליגון, גם מלבן — ככה הצייר לא צריך לדעת מה זה
