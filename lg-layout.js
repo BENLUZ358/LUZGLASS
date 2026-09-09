@@ -89,10 +89,6 @@ const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
 // קוטר הקדח בזכוכית. זווית וציר יושבים על בורג עבה יותר מידית.
 const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
-// גוף הפרזול, במילימטרים. הקדח הוא מה שנחתך; הגוף הוא מה שמסביר למה
-// הקדח שם. ציר תופס את שתי הזכוכיות ולכן נפרש לשני צדי הפאה; זווית
-// אוחזת רק בזכוכית שהיא מוברגת אליה ולכן נפרשת פנימה בלבד.
-const LG_BODY_HINGE={reach:32,h:95}, LG_BODY_BRACKET={reach:52,h:58};
 const MAX_NEAR=56;             // כמה רחוק מותר למידה לשבת ממה שהיא מודדת
 const LG_GLASS_KG=2.5;         // ק"ג למ"ר לכל מ"מ עובי — זכוכית מחוסמת
 
@@ -542,6 +538,11 @@ function _layoutPass(shower,cW,mgL,mgR){
   const nJ=out.shapes.length;
   const jx=j=>j<=0?asmL:(j>=nJ?asmR:out.shapes[j].x);
 
+  // איזו פאה של איזו זכוכית כבר קיבלה פרזול מהצומת. חור מוצהר שנופל על
+  // פאה כזאת הוא **אותו חור** — לא שני. זה מה ששומר על "פרזול אחד לצומת"
+  // גם כשהצורה מגיעה מהקטלוג עם הצירים מצוירים עליה.
+  const derivedFaces={};
+
   const insetPend=[];
   // הזוויות עוקבות אחרי הצירים שבציור; אם אין צירים — 20 ס"מ.
   let defTop=LG_EDGE_MM, defBot=LG_EDGE_MM;
@@ -605,10 +606,13 @@ function _layoutPass(shower,cW,mgL,mgR){
     // צריך הוא המיקום והקוטר; סמל מלבני רק הסתיר את שניהם.
     const kindHw=hinge?'hinge':'bracket';
     const dia=LG_HOLE_BRACKET;
+    derivedFaces[host.idx+':'+(onLeft?'left':'right')]=1;
     out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xT,y:yT,
-                       face:face,into:into,edgeX:xAt(edge[0],edge[1],yT)}); claim(xT,yT);
+                       face:face,into:into,source:'junction',
+                       edgeX:xAt(edge[0],edge[1],yT)}); claim(xT,yT);
     out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xB,y:yB,
-                       face:face,into:into,edgeX:xAt(botEdge[0],botEdge[1],yB),
+                       face:face,into:into,source:'junction',
+                       edgeX:xAt(botEdge[0],botEdge[1],yB),
                        onNotch:botEdge!==edge}); claim(xB,yB);
     // הפרזול הוא פיסת מתכת אחת שעוברת דרך שתי הזכוכיות, אבל **כל זכוכית
     // נמדדת מהקצה שלה**. דלת תלויה מהמשקוף וקבוע עומד על הרצפה, ולכן
@@ -642,7 +646,7 @@ function _layoutPass(shower,cW,mgL,mgR){
       const y2=nt.shoulder[1]+mmB*sc;
       const x2=xAt(edge[0],edge[1],y2)+into*inset;
       out.hardware.push({kind:kindHw,hole:true,dia:LG_HOLE_BRACKET,idx:host.idx,junction:j,
-                         jType:jt,x:x2,y:y2,face:face,into:into,
+                         jType:jt,x:x2,y:y2,face:face,into:into,source:'junction',
                          edgeX:xAt(edge[0],edge[1],y2)}); claim(x2,y2);
       hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,nt.shoulder[1],y2,host.idx,x2,'start');
     }
@@ -671,7 +675,8 @@ function _layoutPass(shower,cW,mgL,mgR){
     const hyU=ref==='top'? s.y+dMM*sc : s.y+s.h-dMM*sc;
     // בשרטוט לחותך הזכוכית מה שקיים הוא **החור**. הידית מוברגת בו, וסמל
     // מפורט שלה רק מסתיר את מה שצריך לקדוח.
-    out.hardware.push({kind:'hole',hole:true,dia:LG_HOLE_HANDLE,idx:s.idx,x:hxU,y:hyU});
+    out.hardware.push({kind:'hole',hole:true,dia:LG_HOLE_HANDLE,idx:s.idx,
+                       source:'junction',role:'handle',x:hxU,y:hyU});
     claim(hxU,hyU);
 
     hwAdd('handle-dist',dMM,ref==='top'?s.y:hyU,ref==='top'?hyU:s.y+s.h,s.idx,hxU,
@@ -679,6 +684,52 @@ function _layoutPass(shower,cW,mgL,mgR){
     // מרחק החור מהפאה נפלט אחרון, כשכל שאר המידות כבר על הנייר
     edgePend.push({idx:s.idx, mm:eMM, a:Math.min(hxU,face), b:Math.max(hxU,face),
                    y:hyU, right:handleOnRight});
+  });
+
+  // ── חורים מוצהרים ────────────────────────────────────────────────────
+  //
+  // עד כאן כל קדח **נגזר** מהצומת: מי שכן קובע מה נקדח. זה נכון כשהלוח
+  // יושב בהרכבה, ולא מספיק בשני מקרים:
+  //
+  //   • לקוח שמזמין לוח בודד להחלפה — נשברה לו זכוכית אחת, והוא צריך
+  //     לראות בדיוק מה נחתך בה. אין לה שכנים שמהם אפשר לגזור.
+  //   • קדח שאינו שייך לשום צומת — זווית רצפה, למשל — שאף כלל הרכבה
+  //     לא ייצר לבד.
+  //
+  // לכן צורה יכולה **לשאת** את הקדחים שלה, וכל קדח נמדד כמו שקודחים
+  // באמת: קוטר, ומרחק משתי פאות. הפאות נלקחות מהמצולע ולא מהתיבה, כדי
+  // ששיפוע ופינוי יזיזו את הקדח איתם.
+  //
+  // קדח מוצהר שנופל על פאה שהצומת כבר טיפל בה מושמט — אותה פיסת מתכת,
+  // קדח אחד, ספירה אחת; זה מה ששומר על הכלל שנקבע כשהציר הפסיק להיות
+  // מצויר פעמיים. אבל **רק תפקיד של צומת** מושמט כך: זווית רצפה אינה
+  // צומת, ולכן היא שורדת גם לצד זווית קיר על אותה פאה.
+  out.shapes.forEach(s=>{
+    const src=shapes[s.idx]||{};
+    const list=src.holes;
+    if(!list||!list.length) return;
+    const P=s.poly, floorY=s.y+s.h;
+    const xAt=(A,B,y)=>{ const d=B[1]-A[1];
+      return Math.abs(d)<1e-6 ? A[0] : A[0]+(B[0]-A[0])*((y-A[1])/d); };
+    const L=[P[0],P[P.length-1]], R=[P[1],P[2]];
+    list.forEach(hl=>{
+      if(!hl) return;
+      const role=hl.role||'bracket-wall';
+      const kind=_lgHoleKind(role);
+      const hx=hl.x||{}, hy=hl.y||{};
+      const fromLeft = hx.from!=='right';
+      if(_LG_JUNCTION_ROLE[role] &&
+         derivedFaces[s.idx+':'+(fromLeft?'left':'right')]) return;
+      const y = hy.from==='top' ? s.y+(hy.mm||0)*sc : floorY-(hy.mm||0)*sc;
+      const ex = fromLeft ? xAt(L[0],L[1],y) : xAt(R[0],R[1],y);
+      const into = fromLeft ? 1 : -1;
+      const x = ex+into*(hx.mm||0)*sc;
+      const dia = hl.dia!=null ? hl.dia
+                : kind==='hole' ? LG_HOLE_HANDLE : LG_HOLE_BRACKET;
+      out.hardware.push({kind:kind,hole:true,dia:dia,idx:s.idx,x:x,y:y,
+                         into:into,edgeX:ex,source:'declared',role:role});
+      claim(x,y);
+    });
   });
 
   // ── גבהים, משמאל להרכבה ──

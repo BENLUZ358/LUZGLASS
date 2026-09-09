@@ -2,16 +2,16 @@
 /**
  * A hinge must not look like a bracket.
  *
- * Both are fastened through a 20mm hole, so once the bracket became a hole
- * the two were the same circle in two shades of the same brown — and on a
- * phone that is no difference at all. Someone reading the sketch could not
- * tell whether a pane carried hinges or wall brackets.
+ * Once the bracket became a hole, the two were the same circle in two
+ * shades of the same brown — and on a phone that is no difference at all.
+ * Someone reading the sketch could not tell whether a pane carried hinges
+ * or wall brackets.
  *
- * The hole stays exact, because it is what gets cut and a customer
- * ordering one replacement pane has nothing else to go on. The BODY is
- * what separates them: a hinge grips two glasses and straddles the face,
- * a bracket is screwed into one and reaches inward only. The handle stays
- * a bare hole, as decided.
+ * The split is the one that was asked for, and nothing more: a BRACKET is
+ * a bare hole, because a hole is all the cutter needs, exactly like the
+ * handle. A HINGE keeps the symbol it always had — a solid body sitting on
+ * the face, because it grips two glasses rather than being drilled into
+ * one.
  *
  * Run: node scripts/test-hardware-symbol.js
  */
@@ -39,63 +39,47 @@ function grab(name) {
 
 /* a canvas that only remembers the shapes asked of it */
 function draw(hw, sc) {
-  const boxes = [], circles = [];
-  const cx = { save(){}, restore(){}, beginPath(){}, fill(){}, stroke(){},
+  const boxes = [], circles = [], fills = [];
+  const cx = { save(){}, restore(){}, beginPath(){}, stroke(){},
+    get fillStyle(){ return this._f; }, set fillStyle(v){ this._f = v; },
+    fill() { fills.push(this._f); },
     roundRect: (x, y, w, h) => boxes.push({ x, y, w, h }),
     rect:      (x, y, w, h) => boxes.push({ x, y, w, h }),
     arc:       (x, y, r)    => circles.push({ x, y, r }) };
   const ctx = vm.createContext({ Math, cx });
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8'), ctx);
-  vm.runInContext([grab('engBody'), grab('engHardware')].join('\n'), ctx);
+  vm.runInContext(grab('engHardware'), ctx);
   ctx.h = hw;
   vm.runInContext('engHardware(h,' + sc + ')', ctx);
-  return { boxes, circles };
+  return { boxes, circles, fills };
 }
 
 console.log('');
 
-/* full scale, so the 3px minimum radius never masks the real diameter */
-const SC = 1;
-const EDGE = 400;
+const SC = 1;   /* full scale, so the 3px floor never masks the diameter */
 
-/* ── the hinge straddles the face ───────────────────────────────────────── */
+/* ── the hinge keeps its solid symbol ───────────────────────────────────── */
 {
-  const r = draw({ kind: 'hinge', dia: 20, x: EDGE, y: 300, edgeX: EDGE, into: 1 }, SC);
-  check('a hinge is drawn with a body', r.boxes.length, 1);
-  const b = r.boxes[0];
-  check('and the body crosses the face rather than stopping at it',
-        [b.x < EDGE, b.x + b.w > EDGE], [true, true]);
-  check('with the face at its centre', Math.round(b.x + b.w / 2), EDGE);
-  check('the hole is still drawn at full diameter', r.circles[0].r, 20 * SC / 2);
+  const r = draw({ kind: 'hinge', dia: 20, x: 400, y: 300, edgeX: 400, into: 1 }, SC);
+  check('a hinge is drawn as a body, not a hole', [r.boxes.length, r.circles.length], [1, 0]);
+  check('and the body sits on the face it grips',
+        [r.boxes[0].x + r.boxes[0].w / 2, r.boxes[0].y + r.boxes[0].h / 2], [400, 300]);
+  check('filled solid, so it reads as metal', r.fills, ['#2b2620']);
 }
 
-/* ── the bracket reaches into its own glass only ────────────────────────── */
+/* ── the bracket is a bare hole, as asked ───────────────────────────────── */
 {
-  const right = draw({ kind: 'bracket', dia: 20, x: EDGE + 2.5, y: 300, edgeX: EDGE, into: 1 }, SC);
-  const b = right.boxes[0];
-  check('a bracket is drawn with a body too', right.boxes.length, 1);
-  check('but it starts at the face and reaches inward', [b.x, b.x + b.w > EDGE], [EDGE, true]);
-
-  const left = draw({ kind: 'bracket', dia: 20, x: EDGE - 2.5, y: 300, edgeX: EDGE, into: -1 }, SC);
-  const l = left.boxes[0];
-  check('and a bracket on the other face reaches the other way',
-        [l.x < EDGE, Math.round(l.x + l.w)], [true, EDGE]);
+  const r = draw({ kind: 'bracket', dia: 20, x: 400, y: 300, edgeX: 400, into: 1 }, SC);
+  check('a bracket carries no body — a hole and nothing more',
+        [r.boxes.length, r.circles.length], [0, 1]);
+  check('at its true diameter', r.circles[0].r, 20 * SC / 2);
 }
 
-/* ── a hinge is not the same size as a bracket ──────────────────────────── */
-{
-  const hin = draw({ kind: 'hinge',   dia: 20, x: EDGE, y: 300, edgeX: EDGE, into: 1 }, SC).boxes[0];
-  const bra = draw({ kind: 'bracket', dia: 20, x: EDGE, y: 300, edgeX: EDGE, into: 1 }, SC).boxes[0];
-  check('the two bodies are different heights, so they read apart at a glance',
-        hin.h !== bra.h, true);
-  check('and the hinge is the taller of the two', hin.h > bra.h, true);
-}
-
-/* ── the handle stays a bare hole ───────────────────────────────────────── */
+/* ── the handle is the same idea, smaller ───────────────────────────────── */
 {
   const r = draw({ kind: 'hole', dia: 12, x: 700, y: 900 }, SC);
-  check('the handle carries no body — a plain hole, as asked', r.boxes.length, 0);
-  check('and it is the smaller hole', r.circles[0].r, 12 * SC / 2);
+  check('the handle is a bare hole too', [r.boxes.length, r.circles.length], [0, 1]);
+  check('and the smaller of the two', r.circles[0].r, 12 * SC / 2);
 }
 
 /* ── the engine still names the two apart ───────────────────────────────── */
@@ -115,9 +99,9 @@ const EDGE = 400;
   /* the door is hinged on its right, which is where the fixed sits */
   check('a door hinged toward the fixed puts hinges on that junction',
         kinds.hinge > 0, true);
-  check('and every hinge knows which way its glass lies',
-        L.hardware.filter(h => h.kind === 'hinge').every(h => h.into === 1 || h.into === -1), true);
   check('brackets still exist alongside them', kinds.bracket > 0, true);
+  check('and the two are never the same kind',
+        L.hardware.every(h => h.kind !== 'hinge' || !h.role || /hinge/.test(h.role)), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

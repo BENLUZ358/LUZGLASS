@@ -1552,41 +1552,27 @@ function engDim(d,pfx){
 // כל הפרזול הוא **קדח**, ומה שהחותך צריך הוא המיקום והקוטר. זווית וציר
 // יושבים על בורג של 20 מ"מ, ידית על 12 — והחור מצויר בקנה המידה של
 // הציור, כך שההפרש ביניהם נראה בעין ולא רק ברשימה.
-// גוף הפרזול מצויר מאחורי הקדח, לא במקומו.
+// ציר וזווית אינם אותו דבר, ולכן אינם נראים אותו דבר.
 //
-// הקדח הוא מה שנחתך בזכוכית, ולקוח שמזמין לוח בודד להחלפה חייב לראות
-// אותו במדויק. אבל כשציר וזווית הם אותו עיגול בדיוק, אי אפשר לדעת מה
-// יושב בצומת — וזה מה שקרה כאן. הגוף הוא ההבדל: **ציר** אוחז בשתי
-// הזכוכיות ולכן נפרש לשני צדי הפאה, **זווית** מוברגת לזכוכית אחת
-// ונפרשת פנימה בלבד. הידית נשארת קדח חשוף ותו לא, כפי שנקבע.
-function engBody(h,sc){
-  if(h.kind!=='hinge' && h.kind!=='bracket') return;
-  const B = h.kind==='hinge' ? LG_BODY_HINGE : LG_BODY_BRACKET;
-  const ex = (h.edgeX!=null) ? h.edgeX : h.x;
-  const into = h.into || 1;
-  // הציר חוצה את הפאה; הזווית מתחילה בה ונכנסת פנימה
-  const x1 = h.kind==='hinge' ? ex - B.reach*sc : ex;
-  const x2 = h.kind==='hinge' ? ex + B.reach*sc : ex + into*B.reach*sc;
-  const hh = B.h*sc/2, r = Math.min(3, Math.abs(x2-x1)/4);
-  cx.save();
-  cx.beginPath();
-  if(cx.roundRect) cx.roundRect(Math.min(x1,x2), h.y-hh, Math.abs(x2-x1), hh*2, r);
-  else cx.rect(Math.min(x1,x2), h.y-hh, Math.abs(x2-x1), hh*2);
-  cx.fillStyle = h.kind==='hinge' ? 'rgba(138,106,42,.16)' : 'rgba(138,106,42,.10)';
-  cx.fill();
-  cx.strokeStyle='rgba(138,106,42,.55)'; cx.lineWidth=1; cx.stroke();
-  cx.restore();
-}
-
+// **זווית** מוברגת דרך קדח, וזה כל מה שיש לחותך לדעת — עיגול חשוף
+// בקוטר 20, בדיוק כמו הידית ב-12. **ציר** נשאר הסמל שהיה לו מאז ומעולם:
+// גוף מלא היושב על הפאה, כי הוא אוחז בשתי הזכוכיות ולא נקדח לתוך אחת.
 function engHardware(h,sc){
-  const mm = h.dia || (h.kind==='hole' ? 12 : 20);
-  const r  = Math.max(mm*(sc||0)/2, 3);   // לעולם לא קטן מכדי להיראות
-  engBody(h,sc||0);
   cx.save();
-  cx.beginPath(); cx.arc(h.x,h.y,r,0,Math.PI*2);
-  cx.fillStyle='#fff'; cx.fill();
-  cx.strokeStyle = h.kind==='bracket' ? '#8a6a2a' : '#3a3128';
-  cx.lineWidth=1.4; cx.stroke();
+  if(h.kind==='hinge'){
+    cx.fillStyle='#2b2620';
+    cx.beginPath();
+    if(cx.roundRect) cx.roundRect(h.x-7,h.y-5,14,10,2);
+    else cx.rect(h.x-7,h.y-5,14,10);
+    cx.fill();
+  } else {
+    const mm = h.dia || (h.kind==='hole' ? 12 : 20);
+    const r  = Math.max(mm*(sc||0)/2, 3);   // לעולם לא קטן מכדי להיראות
+    cx.beginPath(); cx.arc(h.x,h.y,r,0,Math.PI*2);
+    cx.fillStyle='#fff'; cx.fill();
+    cx.strokeStyle = h.kind==='bracket' ? '#8a6a2a' : '#3a3128';
+    cx.lineWidth=1.4; cx.stroke();
+  }
   cx.restore();
 }
 

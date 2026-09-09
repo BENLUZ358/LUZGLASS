@@ -60,7 +60,7 @@ function paint(shower, canvasW) {
                   fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8'), ctx);
   ctx.cx = stubCx();
   ctx.dimHits = [];
-  vm.runInContext([engField, kindHe, grab('engDim'), grab('engBody'), grab('engHardware'),
+  vm.runInContext([engField, kindHe, grab('engDim'), grab('engHardware'),
                    grab('engPaint')].join('\n'), ctx);
 
   const L = ctx.lgLayout(shower, { canvasW });
@@ -135,7 +135,7 @@ const door = (id, hs, h) => ({ id, kind: 'door', w: 800, h: h || 1985, hingeSide
   vm.runInContext([DEMO.match(/const ENG_FIELD=\{[\s\S]*?\};/)[0],
                    DEMO.match(/const KIND_HE=\{[\s\S]*?\};/)[0],
                    (DEMO.match(/function kindName\(k\)\{[^}]*\}/) || [''])[0],
-                   g('engDim'), g('engBody'), g('engHardware'), g('engPaint')].join('\n'), ctx);
+                   g('engDim'), g('engHardware'), g('engPaint')].join('\n'), ctx);
 
   ctx.L1 = ctx.lgLayout(shower([fixed('a')]), { canvasW: 700 });
   ctx.L2 = ctx.lgLayout(shower([door('b', 'right')]), { canvasW: 700 });
