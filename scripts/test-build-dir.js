@@ -50,30 +50,44 @@ function adder(dir) {
 
 console.log('');
 
-/* ── right to left: the Hebrew reading order, and the default ───────────── */
-/* The array runs left-to-right on the canvas, so appending to its end puts
-   the new pane on the LEFT — which is what "מימין לשמאל" means to the eye. */
-{
-  const a = adder('rtl');
-  a.add('fixed'); a.add('door', 'right'); a.add('fixed');
-  check('a right-to-left build appends, so the newest pane sits leftmost',
-        a.order(), ['קבוע', 'דלת', 'קבוע']);
+/* Where a pane LANDS is decided by the engine, not by the array. Index
+   grows with x, so the end of the array is the RIGHT of the canvas — and
+   asserting on array order alone would have hidden the direction being
+   backwards, which is exactly what happened. */
+function places(dir, kinds) {
+  const a = adder(dir);
+  kinds.forEach(k => a.add(k));
+  const shapes = a.order().map((label, i) => ({ id: 'p' + i, kind: 'fixed', w: 400, h: 2000, label }));
+  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console });
+  ['lg-shapes.js', 'lg-layout.js'].forEach(f =>
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), ctx));
+  ctx.S = shapes;
+  const L = vm.runInContext('lgLayout({boundary:{right:"wall",left:"wall"},' +
+    'finish:"shahor",quality:"zamak",shapes:S},{canvasW:900})', ctx);
+  return L.shapes.slice().sort((p, q) => p.x - q.x).map(p => shapes[p.idx].label);
 }
 
-/* ── left to right: the same three, mirrored ────────────────────────────── */
+/* ── right to left: the first pane sits rightmost ───────────────────────── */
 {
-  const a = adder('ltr');
-  a.add('fixed'); a.add('door', 'right'); a.add('fixed');
-  check('a left-to-right build prepends, so the newest pane sits rightmost',
-        a.order(), ['קבוע', 'דלת', 'קבוע'].reverse());
+  const a = adder('rtl');
+  a.add('fixed'); a.add('door', 'right'); a.add('mirror');
+  check('a right-to-left build puts the newest pane leftmost on the canvas',
+        places('rtl', ['fixed', 'door', 'mirror']), ['מראה', 'דלת', 'קבוע']);
+  check('so the first pane chosen ends up on the right',
+        places('rtl', ['fixed', 'door', 'mirror']).slice(-1)[0], 'קבוע');
+}
+
+/* ── left to right: the mirror image ────────────────────────────────────── */
+{
+  check('a left-to-right build puts the newest pane rightmost',
+        places('ltr', ['fixed', 'door', 'mirror']), ['קבוע', 'דלת', 'מראה']);
 }
 
 /* the two directions really are mirror images of each other */
 {
-  const r = adder('rtl'), l = adder('ltr');
-  ['fixed', 'door', 'mirror', 'shape'].forEach(k => { r.add(k); l.add(k); });
-  check('and one order is the reverse of the other',
-        r.order(), l.order().slice().reverse());
+  const k = ['fixed', 'door', 'mirror', 'shape'];
+  check('and one arrangement is the reverse of the other',
+        places('rtl', k), places('ltr', k).slice().reverse());
 }
 
 /* ── it is declared, remembered, and shown ──────────────────────────────── */

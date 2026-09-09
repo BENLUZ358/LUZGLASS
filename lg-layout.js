@@ -614,7 +614,12 @@ function _layoutPass(shower,cW,mgL,mgR){
     // צריך הוא המיקום והקוטר; סמל מלבני רק הסתיר את שניהם.
     const kindHw=hinge?'hinge':'bracket';
     const dia=LG_HOLE_BRACKET;
-    derivedFaces[host.idx+':'+(onLeft?'left':'right')]=1;
+    // הצומת שייך ל**שתי** הפאות שנפגשות בו, לא רק לזו שנושאת את הפרזול.
+    // ציר מתארח על הדלת, אבל הוא גם הציר של הקבוע שממול; אם רק הדלת
+    // תסומן, קבוע שמגיע מהקטלוג עם צירים מצוירים יוסיף זוג שני ויֵצאו
+    // ארבעה. אותה פיסת מתכת, שני קדחים, ספירה אחת.
+    if(L) derivedFaces[L.idx+':right']=1;
+    if(R) derivedFaces[R.idx+':left']=1;
     out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xT,y:yT,
                        face:face,into:into,source:'junction',
                        edgeX:xAt(edge[0],edge[1],yT)}); claim(xT,yT);

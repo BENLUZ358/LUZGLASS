@@ -819,9 +819,10 @@ function shapeAdd(kind,hingeSide,slope){
   const id='sh'+_shapeSeq;
   const label = kind==='door' ? 'דלת' : kind==='mirror' ? 'מראה'
               : kind==='shape' ? 'צורה' : (slope?'קבוע משופע':'קבוע');
-  // 'rtl' מוסיף בסוף המערך — שמאלה על הקנבס. 'ltr' מוסיף בתחילתו.
+  // אינדקס גדל => x גדל: סוף המערך הוא **ימין** על הקנבס. לכן בנייה
+  // מימין לשמאל מוסיפה בתחילת המערך, ומשמאל לימין בסופו.
   const item={id,kind,hingeSide:hingeSide||undefined,label};
-  if(buildDir==='ltr') shapeList.unshift(item); else shapeList.push(item);
+  if(buildDir==='rtl') shapeList.unshift(item); else shapeList.push(item);
   shapePS[id]=mkPS({type:kind});
   if(slope) shapePS[id].hasSlope=true;
   renderShapeUI();draw();
