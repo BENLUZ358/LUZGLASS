@@ -89,6 +89,10 @@ const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
 // קוטר הקדח בזכוכית. זווית וציר יושבים על בורג עבה יותר מידית.
 const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
+// גוף הפרזול, במילימטרים. הקדח הוא מה שנחתך; הגוף הוא מה שמסביר למה
+// הקדח שם. ציר תופס את שתי הזכוכיות ולכן נפרש לשני צדי הפאה; זווית
+// אוחזת רק בזכוכית שהיא מוברגת אליה ולכן נפרשת פנימה בלבד.
+const LG_BODY_HINGE={reach:32,h:95}, LG_BODY_BRACKET={reach:52,h:58};
 const MAX_NEAR=56;             // כמה רחוק מותר למידה לשבת ממה שהיא מודדת
 const LG_GLASS_KG=2.5;         // ק"ג למ"ר לכל מ"מ עובי — זכוכית מחוסמת
 
@@ -602,9 +606,9 @@ function _layoutPass(shower,cW,mgL,mgR){
     const kindHw=hinge?'hinge':'bracket';
     const dia=LG_HOLE_BRACKET;
     out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xT,y:yT,
-                       face:face,edgeX:xAt(edge[0],edge[1],yT)}); claim(xT,yT);
+                       face:face,into:into,edgeX:xAt(edge[0],edge[1],yT)}); claim(xT,yT);
     out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xB,y:yB,
-                       face:face,edgeX:xAt(botEdge[0],botEdge[1],yB),
+                       face:face,into:into,edgeX:xAt(botEdge[0],botEdge[1],yB),
                        onNotch:botEdge!==edge}); claim(xB,yB);
     // הפרזול הוא פיסת מתכת אחת שעוברת דרך שתי הזכוכיות, אבל **כל זכוכית
     // נמדדת מהקצה שלה**. דלת תלויה מהמשקוף וקבוע עומד על הרצפה, ולכן
@@ -638,7 +642,8 @@ function _layoutPass(shower,cW,mgL,mgR){
       const y2=nt.shoulder[1]+mmB*sc;
       const x2=xAt(edge[0],edge[1],y2)+into*inset;
       out.hardware.push({kind:kindHw,hole:true,dia:LG_HOLE_BRACKET,idx:host.idx,junction:j,
-                         jType:jt,x:x2,y:y2,face:face,edgeX:xAt(edge[0],edge[1],y2)}); claim(x2,y2);
+                         jType:jt,x:x2,y:y2,face:face,into:into,
+                         edgeX:xAt(edge[0],edge[1],y2)}); claim(x2,y2);
       hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,nt.shoulder[1],y2,host.idx,x2,'start');
     }
     // 2.5 ס"מ הם ברירת המחדל וכל שרטט יודע אותם — קו מידה עליהם הוא

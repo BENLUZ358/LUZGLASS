@@ -40,9 +40,20 @@ function svg(L, title) {
     p.push(`<text x="${s.x + s.w / 2}" y="${s.y + s.h / 2}" font-size="11" fill="#64748b" text-anchor="middle">${esc(s.kind === 'door' ? 'דלת' : 'קבוע')}</text>`);
   });
 
-  /* הפרזול */
-  /* הכל קדחים: 20 מ"מ לזווית ולציר, 12 לידית */
+  /* הפרזול. הקדח הוא מה שנחתך; הגוף מאחוריו הוא מה שמסביר למה הוא שם.
+     ציר אוחז בשתי הזכוכיות ולכן חוצה את הפאה, זווית מוברגת לאחת ונפרשת
+     פנימה, והידית נשארת קדח חשוף. */
   L.hardware.forEach(h => {
+    if (h.kind === 'hinge' || h.kind === 'bracket') {
+      const B = h.kind === 'hinge' ? { reach: 32, h: 95 } : { reach: 52, h: 58 };
+      const ex = h.edgeX != null ? h.edgeX : h.x, into = h.into || 1;
+      const x1 = h.kind === 'hinge' ? ex - B.reach * L.scale : ex;
+      const x2 = h.kind === 'hinge' ? ex + B.reach * L.scale : ex + into * B.reach * L.scale;
+      const hh = B.h * L.scale / 2;
+      p.push(`<rect x="${Math.min(x1,x2).toFixed(1)}" y="${(h.y-hh).toFixed(1)}" `
+           + `width="${Math.abs(x2-x1).toFixed(1)}" height="${(hh*2).toFixed(1)}" rx="3" `
+           + `fill="rgba(138,106,42,${h.kind==='hinge'?.16:.10})" stroke="rgba(138,106,42,.55)"/>`);
+    }
     const mm = h.dia || (h.kind === 'hole' ? 12 : 20);
     const r = Math.max(mm * L.scale / 2, 3);
     const c = h.kind === 'bracket' ? '#b45309' : '#334155';
