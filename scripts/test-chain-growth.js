@@ -14,10 +14,11 @@
  *   A door hung on the end wall LOST that wall the moment anything was put
  *   beyond it, so every candidate became illegal and the button vanished.
  *
- * A shower run spans wall to wall, and glass goes into that span. A wall at
- * an end is not a barrier — it is what the next pane leans on. So the ends
- * are walls, and the only question left is the one the rules engine
- * answers.
+ * A wall at an end is not a barrier — it is what the next pane leans on.
+ * Treating it as one is what stopped the chain: the + never appeared on
+ * the wall side at all, so a run could only ever grow toward the entrance,
+ * and there it dead-ends at the door. The only question left is the one
+ * the rules engine answers.
  *
  * Nothing here knows about "the first" or "the second" pane. Every free end
  * of the chain goes through the same function.
@@ -90,12 +91,15 @@ console.log('');
 [PLAIN, CARRIER, DOOR, 'מראה', 'קבוע משופע'].forEach(start => {
   const c = screen();
   run(c, 'shapeAddFromCatalog(' + idOf(c, start) + ')');
+  /* A run has a wall side and an entrance. The entrance ends at a door, so
+     one end fills up while the other keeps going — a person would simply
+     press whichever + is there. Stopping at the first refusal would test
+     the loop, not the chain. */
   const added = [];
-  for (let step = 0; step < 8; step++) {
+  for (let step = 0; step < 10; step++) {
     const side = step % 2 ? 'left' : 'right';
     const got = grow(c, side, DOOR);      /* prefer a door, to press the rules */
-    if (!got) break;
-    added.push(got);
+    if (got) added.push(got);
   }
   check(start + ': the chain keeps growing past the second pane',
         run(c, 'shapeList.length') >= 5, true);
@@ -104,19 +108,25 @@ console.log('');
 });
 
 /* ── the exact complaint: shape 1 → + → shape 2 → + → shape 3 ───────────── */
+/* The chain must not stop at two. Which END it grows from is the rules
+   engine's business — a run has a wall side and an entrance, and the
+   entrance fills up when a door reaches it. What matters is that after
+   every addition there is still somewhere to add. */
+const anyEnd = c => run(c, 'canAddAt("left")') || run(c, 'canAddAt("right")');
+const growAnywhere = (c, want) => grow(c, 'right', want) || grow(c, 'left', want);
 {
   const c = screen();
   run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
-  check('one pane offers a +', run(c, 'canAddAt("right")'), true);
+  check('one pane offers a +', anyEnd(c), true);
 
-  grow(c, 'right', DOOR);
-  check('two panes, and the second offers one too', run(c, 'canAddAt("right")'), true);
+  growAnywhere(c, DOOR);
+  check('two panes, and there is still somewhere to add', anyEnd(c), true);
 
-  grow(c, 'right');
+  growAnywhere(c);
   check('three panes', run(c, 'shapeList.length'), 3);
-  check('and the third offers one as well', run(c, 'canAddAt("right")'), true);
+  check('and still somewhere to add', anyEnd(c), true);
 
-  grow(c, 'right');
+  growAnywhere(c);
   check('four panes, still going', run(c, 'shapeList.length'), 4);
   check('all of it legal', VALID(c), []);
 }
@@ -129,10 +139,15 @@ console.log('');
   check('a door lands beside the brackets-only fixed', first, DOOR);
   check('hinged away from it, as the rule says',
         run(c, 'lgJunctions(_shapeShower())[1].type'), null);
-  check('and the chain can still continue past it', run(c, 'canAddAt("right")'), true);
-  grow(c, 'right');
+
+  /* the entrance is now closed by that door — the run grows from the wall */
+  check('and the chain can still continue', anyEnd(c), true);
+  growAnywhere(c);
   check('so a third pane goes on', run(c, 'shapeList.length'), 3);
   check('legally', VALID(c), []);
+  growAnywhere(c);
+  check('and a fourth', run(c, 'shapeList.length'), 4);
+  check('still legally', VALID(c), []);
 }
 
 /* ── nothing in the mechanism counts panes ──────────────────────────────── */
@@ -199,7 +214,8 @@ console.log('');
 /* ── the shape of the fix, in the source ────────────────────────────────── */
 {
   const has = s => DEMO.indexOf(s) > -1;
-  check('the run spans wall to wall', /let shapeBoundary=\{right:'wall',left:'wall'\}/.test(DEMO), true);
+  check('a lone pane leans on one wall, not two',
+        /let shapeBoundary=\{right:'wall',left:'open'\}/.test(DEMO), true);
   check('a wall is no longer treated as a barrier', /function sideBlocked/.test(DEMO), false);
   check('the + is drawn on both free ends of the chain',
         has("[['left',ends[0],'x'],['right',ends[ends.length-1],'r']]"), true);

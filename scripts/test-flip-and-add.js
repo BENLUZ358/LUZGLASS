@@ -125,6 +125,7 @@ console.log('');
         [run(ctx, 'canAddAt("left")'), run(ctx, 'canAddAt("right")')], [true, true]);
 
   run(ctx, 'shapeList=[{id:"a",kind:"fixed"}]');
+  /* the wall end grows too — a wall is what the next pane leans on */
   check('and so does a chain of one',
         [run(ctx, 'canAddAt("left")'), run(ctx, 'canAddAt("right")')], [true, true]);
 
@@ -164,8 +165,8 @@ console.log('');
   check('through the same chain the drawing uses',
         has('_arrangementErrors') && has('_shapePanels(list)'), true);
   check('and the gallery filter is that same answer', has('addSide ? allowedAt(addSide)'), true);
-  check('the run spans wall to wall, so both ends can grow',
-        /let shapeBoundary=\{right:'wall',left:'wall'\}/.test(DEMO), true);
+  check('a lone pane leans on one wall, not two',
+        /let shapeBoundary=\{right:'wall',left:'open'\}/.test(DEMO), true);
 
   /* the removed UI really is gone */
   check('build direction is gone', /buildDir|setBuildDir|renderBuildDir/.test(DEMO), false);
