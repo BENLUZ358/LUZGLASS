@@ -246,5 +246,28 @@ const label = a => a.shapes.map(s => s.kind === 'door' ? ('ד' + (s.hingeSide ==
   check('a notch away from any wall is always caught', wrong, []);
 }
 
+/* ── every key in the table is a key the lookup can produce ─────────────── */
+/* _lgPairKey SORTS the two sides before looking up, so a key written in the
+   unsorted order is never found and quietly falls through to "no hardware".
+   Three of them were dead: a brackets-only fixed beside a normal fixed came
+   out with nothing joining them, while two brackets-only panes side by side
+   did get a bracket — the same case behaving two ways. */
+{
+  const dead = Object.keys(ctx._LG_JUNCTION).filter(k => {
+    const p = k.split('|');
+    return ctx._lgPairKey(p[0], p[1]) !== k;
+  });
+  check('no junction rule is written in an order the lookup cannot produce',
+        dead, []);
+
+  /* and the pairs that matter really do resolve */
+  const pair = (a, b) => (ctx._LG_JUNCTION[ctx._lgPairKey(a, b)] || {}).type || null;
+  check('a brackets-only fixed joins a normal fixed', pair('fixed-solo', 'fixed'), 'bracket-gg');
+  check('and joins another like itself the same way',
+        pair('fixed-solo', 'fixed-solo'), 'bracket-gg');
+  check('it still takes wall brackets', pair('fixed-solo', 'wall'), 'bracket-wall');
+  check('but never a hinge', pair('fixed-solo', 'hinge'), null);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll assembly rules hold.');

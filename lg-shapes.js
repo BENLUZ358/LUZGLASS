@@ -54,17 +54,21 @@ var _LG_JUNCTION = {
   'fixed|handle':  { type: null,           qty: 0 },
   // קבוע שנבחר "זוויות בלבד". זהה לקבוע בכל דבר — פרט לציר, שאין לו
   // עליו הכנה. הצומת מול ציר חסום ב-lgValidate ולכן אינו מייצר פרזול.
+  // ⚠️ ‏_lgPairKey **ממיין** את שני הצדדים לפני החיפוש, ולכן המפתח חייב
+  // להיכתב בסדר הממוין. שניים כאן נכתבו הפוך ומעולם לא נמצאו: קבוע
+  // "זוויות בלבד" ליד קבוע רגיל יצא בלי שום זווית ביניהם, בזמן ששניים
+  // כאלה זה לצד זה כן קיבלו — אותו מקרה, שתי התנהגויות.
   'fixed-solo|wall':       { type: 'bracket-wall', qty: 2 },
-  'fixed-solo|fixed':      { type: 'bracket-gg',   qty: 2 },
+  'fixed|fixed-solo':      { type: 'bracket-gg',   qty: 2 },
   'fixed-solo|fixed-solo': { type: 'bracket-gg',   qty: 2 },
   'fixed-solo|handle':     { type: null,           qty: 0 },
   'fixed-solo|hinge':      { type: null,           qty: 0 },   // חסום ב-lgValidate
-  'free|fixed-solo':       { type: null,           qty: 0 },
+  'fixed-solo|free':       { type: null,           qty: 0 },
   'hinge|hinge':   { type: null,           qty: 0 },   // חסום ב-lgValidate
   // זכוכית חופשית אינה מתחברת לכלום, לא לקיר ולא לשכנתה
   'free|wall':     { type: null,           qty: 0 },
   'free|free':     { type: null,           qty: 0 },
-  'free|fixed':    { type: null,           qty: 0 },
+  'fixed|free':    { type: null,           qty: 0 },
   'free|hinge':    { type: null,           qty: 0 },
   'free|handle':   { type: null,           qty: 0 },
 };
