@@ -38,7 +38,7 @@ function screen() {
   ['lg-shapes.js', 'lg-layout.js', 'lg-catalog.js'].forEach(f =>
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
   vm.runInContext(
-    'var selQ="zamak"; var appMode="shape"; var DOOR_H_MM=1985;' +
+    'var selQ="zamak"; var selMM=8; var selG="שקוף"; var appMode="shape"; var DOOR_H_MM=1985;' +
     'var HANDLE_EDGE_CM=6; var TOWEL_SPACING_CM=40;' +
     'var shapeBoundary={right:"wall",left:"open"};' +
     'var NOTCH_DEF={notchW:200,notchH:500};' +

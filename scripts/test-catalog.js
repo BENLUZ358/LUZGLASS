@@ -187,7 +187,7 @@ console.log('');
   const c = vm.createContext({ Math, JSON, Object, Array, String, Number, console });
   ['lg-shapes.js', 'lg-layout.js'].forEach(f =>
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), c));
-  vm.runInContext('let shapeList=[],shapePS={};var selQ="zamak";' +
+  vm.runInContext('let shapeList=[],shapePS={};var selQ="zamak"; var selMM=8; var selG="שקוף";' +
     'var shapeBoundary={right:"wall",left:"open"};var DOOR_H_MM=1985;' +
     'var HANDLE_EDGE_CM=6;var TOWEL_SPACING_CM=40;', c);
   ['mkPS', '_shapePanels', '_lgShowerOf', 'hingeHolesFromEngine'].forEach(n =>

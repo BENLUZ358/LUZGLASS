@@ -258,6 +258,8 @@ function lgFromPanels(panels,pStates,opts){
   return {
     boundary: o.boundary || auto,
     finish: o.finish||'', quality: o.quality||'', thickness: o.thickness||null,
+    // סוג הזכוכית הוא של המקלחון; לוח שקיבל סוג משלו גובר, כמו בעובי.
+    glassType: o.glassType||null,
     shapes: list.map((p,i)=>{
       // הסוג נשמר כפי שהוא. הפיכת כל מה שאינו דלת לקבוע נתנה זוויות קיר
       // לצורה חופשית ולמראה — זכוכיות שאינן חלק מהרכבת המקלחון כלל.

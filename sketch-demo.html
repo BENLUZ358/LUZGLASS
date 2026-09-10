@@ -149,6 +149,7 @@
   padding:3px 0;border-bottom:1px solid var(--border);}
 .bom-row b{white-space:nowrap;}
 .bom-sub{font-size:12px;color:var(--muted);padding:2px 0 6px;}
+.bom-sku{font-family:ui-monospace,monospace;font-size:12px;color:var(--gold-text);}
 .bom-tot{margin-top:8px;padding-top:6px;border-top:2px solid var(--gold);
   font-size:13px;font-weight:700;}
 .controls{padding:0 12px 12px;}
@@ -270,6 +271,14 @@ canvas{display:block;height:auto;cursor:pointer;}
 .tog{display:flex;gap:4px;}
 .tb{flex:1;padding:8px 4px;background:var(--bg);border:1px solid transparent;font-family:'Heebo',sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;text-align:center;transition:all 0.15s;}
 .tb.active{background:var(--bg2);border-color:var(--gold-text);color:var(--text);}
+.mm-row{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+.mm-row button{flex:1;min-width:56px;min-height:44px;cursor:pointer;
+  border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  color:var(--text);font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;}
+.mm-row button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.mm-row button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.mm-sku{margin-top:8px;font-size:13px;color:var(--muted);}
+.mm-sku b{color:var(--gold-text);font-family:ui-monospace,monospace;}
 .sw-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;}
 .sw{cursor:pointer;background:none;border:2px solid transparent;padding:4px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;border-radius:3px;}
 .sw.active{border-color:var(--gold-text);}
@@ -330,7 +339,15 @@ canvas{display:block;height:auto;cursor:pointer;}
   .topbar{padding:10px;}
   .canvas-wrap{margin:8px;}
   /* חמש דוגמיות בשורה זה 62px כל אחת במסך 375 — צר מדי לאצבע */
-  .sw-grid{grid-template-columns:repeat(4,1fr);}
+  .mm-row{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+.mm-row button{flex:1;min-width:56px;min-height:44px;cursor:pointer;
+  border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  color:var(--text);font-family:'Heebo',sans-serif;font-size:14px;font-weight:700;}
+.mm-row button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.mm-row button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.mm-sku{margin-top:8px;font-size:13px;color:var(--muted);}
+.mm-sku b{color:var(--gold-text);font-family:ui-monospace,monospace;}
+.sw-grid{grid-template-columns:repeat(4,1fr);}
   .row{flex-wrap:wrap;row-gap:6px;}
   .row label{flex:1 1 100%;}
   .row input[type=number],.row input[type=text],.row select{width:100%;}
@@ -482,7 +499,13 @@ canvas{display:block;height:auto;cursor:pointer;}
 <div class="controls">
   <div class="cs">
     <div class="ch" onclick="tog(this)"><span>זכוכית</span><span class="arr">▾</span></div>
-    <div class="cb"><div class="sw-grid" id="gSw"></div></div>
+    <div class="cb">
+      <!-- העובי קודם, והסוגים שמתחתיו הם מה שיש למפעל **באותו עובי**.
+           שניהם יחד נותנים את המק"ט, ולכן אי אפשר לבחור צירוף שלא קיים. -->
+      <div class="mm-row" id="mmSw" role="group" aria-label="עובי הזכוכית"></div>
+      <div class="sw-grid" id="gSw"></div>
+      <div class="mm-sku" id="glassSku"></div>
+    </div>
   </div>
   <div class="cs">
     <div class="ch" onclick="tog(this)"><span>פרזול</span><span class="arr">▾</span></div>
@@ -698,7 +721,10 @@ const C=document.getElementById('sk');
 // ‏let ולא const: כרטיס בגלריה מצויר בידי אותו engPaint על קנבס אחר,
 // ולשם כך ההקשר מוחלף לרגע וחוזר. שני ציירים היו שני מקורות אמת.
 let cx=C.getContext('2d');
-let selG='shafu',selF='shahor',selQ='zamak',sand=false;
+// הזכוכית נבחרת כ**עובי + סוג**, ומהם נגזר המק"ט. קודם selG החזיק מזהה
+// פנימי ('shafu') שלא היה קשור לכלום; עכשיו הוא השם שבחשבשבת, וזה מה
+// שמאפשר לגזור מק"ט בלי טבלת תרגום שנייה.
+let selMM=8, selG='שקוף', selF='shahor', selQ='zamak', sand=false;
 let appMode='combo',curCat='pinati',curCombo=COMBOS.pinati[0];
 let panelState={}, items=[], dimHits=[];
 
@@ -1581,11 +1607,17 @@ function renderBom(el, shower){
       // המידות הן **מידות חיתוך** — מה שהחותך מקבל. השטח נמדד לפי תיבה
       // חוסמת, כמו שנקבע: הגובה הגדול ביותר והרוחב הגדול ביותר.
       const cuts=(l.detail||[]).map(d=>d.cutW+'×'+d.cutH+(d.shape&&d.shape!=='מלבן'?' ('+d.shape+')':''));
+      // המק"ט מוצג לצד השורה. הוא נגזר מ-LG_SKU_MAP ולא נכתב כאן, ולכן
+      // אם אין פריט לצירוף — נאמר במפורש במקום להמציא מספר.
+      const sku=(typeof lgGlassSku==='function' && l.key.thickness && l.key.glassType)
+                ? lgGlassSku(l.key.thickness,l.key.glassType) : null;
       rows.push('<div class="bom-row"><span>'+
         (l.key.thickness?l.key.thickness+' מ"מ':'עובי לא נבחר')+
         (l.key.glassType?' · '+_shEsc(l.key.glassType):'')+
+        (sku?' <b class="bom-sku">'+sku+'</b>':'')+
         '</span><b>'+l.qty+' מ"ר</b></div>'+
-        '<div class="bom-sub">'+l.panes+' לוחות · '+cuts.join(' · ')+'</div>');
+        '<div class="bom-sub">'+l.panes+' לוחות · '+cuts.join(' · ')+
+        (l.key.thickness&&l.key.glassType&&!sku?' · אין פריט לצירוף הזה':'')+'</div>');
     });
   }
   if(hw.length){
@@ -1947,6 +1979,8 @@ function _lgShowerOf(allPanels, allPS){
   return lgFromPanels(allPanels, allPS, {
     finish:'shahor',
     quality: selQ==='pliz' ? 'pliz' : 'zamak',
+    thickness: selMM,
+    glassType: selG,
   });
 }
 
@@ -2771,16 +2805,63 @@ function dlPNG(){const l=document.createElement('a');l.download=`luzglass-${Date
 
 // ══════════════ SWATCHES ══════════════
 function renderSw(){
-  document.getElementById('gSw').innerHTML=GL.map(g=>`
-    <button class="sw ${g.id===selG?'active':''}" onclick="selG='${g.id}';renderSw();draw()">
-      <div class="sw-dot" style="background:${g.dot};${g.b?'border:'+g.b:''}"></div>
-      <div class="sw-name">${g.name}</div><div class="sw-price">₪${g.price}</div>
-    </button>`).join('');
+  const opts=(typeof lgGlassOptions==='function')?lgGlassOptions():{};
+  // העוביים שמוצעים הם אלה שבאמת יש להם פריטים, ולא רשימה קבועה שתשקר
+  // ביום שהמפעל יוסיף או יוריד עובי.
+  const mms=Object.keys(opts).map(Number).filter(m=>m>=6).sort((a,b)=>a-b);
+  if(mms.length && mms.indexOf(selMM)<0) selMM=mms.indexOf(8)>=0?8:mms[0];
+
+  const mmEl=document.getElementById('mmSw');
+  if(mmEl) mmEl.innerHTML=mms.map(m=>
+    '<button type="button" class="'+(m===selMM?'on':'')+'" '+
+    'onclick="setGlassMM('+m+')">'+m+' מ"מ</button>').join('');
+
+  // הסוגים הם מה שקיים **בעובי הזה**. ‏GL נותן רק את העיגול הצבעוני
+  // ואת המחיר; מה שקובע מי מופיע הוא הפריטים בחשבשבת.
+  const types=(opts[selMM]||[]);
+  if(types.length && !types.some(t=>t.type===selG)) selG=types[0].type;
+  const look=n=>GL.filter(g=>g.name===n)[0]||{};
+
+  const gEl=document.getElementById('gSw');
+  // האינדקס ולא השם: שם עברי בתוך onclick חייב בריחה, ובריחה בתוך מחרוזת
+  // בתוך HTML היא בדיוק המקום שבו ציטוט אחד שגוי שובר את כל הדף.
+  if(gEl) gEl.innerHTML=types.map((t,i)=>{ const v=look(t.type);
+    return '<button class="sw '+(t.type===selG?'active':'')+'" '+
+      'onclick="setGlassType('+i+')">'+
+      '<div class="sw-dot" style="background:'+(v.dot||'rgba(210,230,245,0.6)')+';'+
+        (v.b?'border:'+v.b:'')+'"></div>'+
+      '<div class="sw-name">'+t.type+'</div>'+
+      (v.price?'<div class="sw-price">₪'+v.price+'</div>':'')+
+    '</button>'; }).join('');
+
+  // המק"ט מוצג כפי שהוא, כדי שמי שמזמין יראה בדיוק מה יוזמן.
+  const skEl=document.getElementById('glassSku');
+  if(skEl){ const sku=(typeof lgGlassSku==='function')?lgGlassSku(selMM,selG):null;
+    skEl.innerHTML = sku ? 'מק"ט: <b>'+sku+'</b> · '+_shEsc(selMM+' מ"מ '+selG+' מחוסם')
+                         : 'אין פריט לצירוף הזה'; }
+
   document.getElementById('fSw').innerHTML=FN.map(f=>`
     <button class="sw ${f.id===selF?'active':''}" onclick="selF='${f.id}';renderSw();draw()">
       <div class="sw-dot" style="background:${f.dot}"></div><div class="sw-name">${f.name}</div>
     </button>`).join('');
 }
+
+function setGlassMM(mm){ selMM=Number(mm); afterGlassChange(); }
+function setGlassType(i){
+  const list=((typeof lgGlassOptions==='function')?lgGlassOptions():{})[selMM]||[];
+  if(list[i]) selG=list[i].type;
+  afterGlassChange();
+}
+
+// העובי והסוג הם של **המקלחון**, ולכן הם נכנסים למקלחון ולא ללוח בודד.
+// לוח שקיבל עובי משלו בגיליון המאפיינים גובר, כמו שהיה תמיד.
+function afterGlassChange(){
+  renderSw();
+  renderPanelCtrl();
+  if(appMode==='shape') renderShapeUI();
+  draw();
+}
+
 
 // ══════════════ INIT ══════════════
 renderCombos(); initPS(); renderPanelCtrl(); renderSw();
