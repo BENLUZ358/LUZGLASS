@@ -109,7 +109,19 @@ console.log('');
   const top = i => Math.round(L.shapes.find(s => s.idx === i).y / sc);
 
   check('the fixed and the door beside it share a head line', top(1), top(0));
-  check('and so does the second door', top(2), top(0));
+
+  /* The second door hangs on the SLOPED pane, which is 2010 tall. That is
+     25mm more than the door — past the tolerance — so the rule says do not
+     force the heads together, and the door takes its 20mm of floor
+     clearance instead. Correct, and it is the rule doing its job. */
+  const sc2 = L.scale;
+  const floorY = Math.max.apply(null, L.shapes.map(g => g.y + g.h));
+  const clearance = i => { const g = L.shapes.find(s => s.idx === i);
+                           return Math.round((floorY - (g.y + g.h)) / sc2); };
+  check('the door on the sloped pane is past the tolerance, so it takes 20',
+        clearance(2), 20);
+  check('while the one on the plain fixed keeps the difference as clearance',
+        clearance(1), 15);
 
   /* which is what makes the shared hinge read the same on both panes */
   const at = i => L.dims.filter(d => d.kind === 'hinge-top' && d.idx === i).map(d => d.text);
@@ -130,7 +142,10 @@ console.log('');
   };
   check('a taller pane at the far end does not move the door beside the fixed',
         rel(b)[1] - rel(b)[0], rel(a)[1] - rel(a)[0]);
-  check('nor the second door', rel(b)[2] - rel(b)[0], rel(a)[2] - rel(a)[0]);
+  /* the second door DOES move, because that pane is the one it hangs on —
+     which is the whole point: a door lines up with its own neighbour */
+  check('while the door that hangs on it follows it, as it should',
+        rel(b)[2] !== rel(a)[2], true);
 }
 
 /* ── the exception still fires when it should ───────────────────────────── */
@@ -154,6 +169,83 @@ console.log('');
     check(`a ${w}mm door leaves the run legal`,
           vm.runInContext('lgValidate(SH)', ctx), []);
   });
+}
+
+/* ── no pane ever comes out with no hardware of its own ─────────────────── */
+/* Add a fixed beside a fixed and the new one arrived bare: its far end was
+   open, so no bracket there, and the shared bracket is hosted on its
+   neighbour. Nothing held it and nothing could be built. Glass at the end
+   of a RUN meets a wall. A single pane is the exception — no inner
+   neighbour, so its declared side stands and it keeps its two brackets. */
+{
+  const shower = (panels, states) => {
+    ctx.P = panels; ctx.S = states;
+    return vm.runInContext('lgFromPanels(P,S,{finish:"shahor",quality:"zamak"})', ctx);
+  };
+  const layout = () => vm.runInContext('lgLayout(SH,{canvasW:900})', ctx);
+  const load = sh => { ctx.SH = sh; return layout(); };
+
+  const two = load(shower(
+    [{ type: 'fixed', wallSide: 'right' }, { type: 'fixed', wallSide: 'none' }],
+    { 0: { w: 500, h: 2000 }, 1: { w: 500, h: 2000 } }));
+  const perPane = L => L.shapes.map(g => L.hardware.filter(h => h.idx === g.idx).length);
+  check('a fixed added beside a fixed is not left bare',
+        perPane(two).every(n => n > 0), true);
+  check('the run is held at both ends and joined in the middle',
+        vm.runInContext('lgJunctions(SH).map(function(j){return j.type;})', ctx),
+        ['bracket-wall', 'bracket-gg', 'bracket-wall']);
+
+  const one = load(shower([{ type: 'fixed', wallSide: 'right' }],
+                          { 0: { w: 500, h: 2000 } }));
+  check('while a single pane still takes two brackets, not four',
+        one.hardware.filter(h => h.kind === 'bracket').length, 2);
+
+  /* every run, whatever it is made of, leaves no pane empty */
+  const KINDS = [
+    { type: 'fixed', wallSide: 'right', carriesDoor: true },
+    { type: 'door', hingeSide: 'right', handleSide: 'left', hingeOnFixed: 'prev' },
+    { type: 'fixed', wallSide: 'none', carriesDoor: true },
+    { type: 'fixed', wallSide: 'none' },
+  ];
+  for (let n = 2; n <= 4; n++) {
+    const panels = KINDS.slice(0, n);
+    const st = {}; panels.forEach((p, i) => { st[i] = { w: p.type === 'door' ? 800 : 500, h: p.type === 'door' ? 1985 : 2000 }; });
+    const L = load(shower(panels, st));
+    check(`a run of ${n} leaves no pane without hardware`,
+          perPane(L).filter(x => x === 0).length, 0);
+  }
+}
+
+/* ── a slope at the BOTTOM leaves the head level ────────────────────────── */
+/* A pane of 2000/1800 sloped at the bottom is 2000 tall right across its
+   head — the two numbers differ underneath. Reading it as 1800 put a 1985
+   door 185mm away, deep into the exception, and the shared hinge came out
+   195 on one pane and 200 on the other. */
+{
+  const P = [{ type: 'fixed', wallSide: 'right', carriesDoor: true, hasSlope: true },
+             { type: 'door', hingeSide: 'right', handleSide: 'left', hingeOnFixed: 'prev' }];
+  const S = { 0: { w: 500, h: 2000, hasSlope: true, slopeH1: 2000, slopeH2: 1800,
+                   slopeSideH: 'bottom' },
+              1: { w: 800, h: 1985 } };
+  ctx.P = P; ctx.S = S;
+  const L = vm.runInContext('lgLayout(lgFromPanels(P,S,{finish:"shahor",' +
+    'quality:"zamak"}),{canvasW:900})', ctx);
+  const at = (k, i) => L.dims.filter(d => d.kind === k && d.idx === i).map(d => d.text);
+  check('the heads line up under a bottom slope',
+        Math.round(L.shapes[0].y), Math.round(L.shapes[1].y));
+  check('the top hinge reads 200 on both panes', [at('hinge-top', 0), at('hinge-top', 1)],
+        [['200'], ['200']]);
+  check('and the bottom reads 215 on the fixed, 200 on the door',
+        [at('hinge-bot', 0), at('hinge-bot', 1)], [['215'], ['200']]);
+
+  /* a slope at the TOP does lower that face, and then it counts */
+  const S2 = { 0: { w: 500, h: 2000, hasSlope: true, slopeH1: 2000, slopeH2: 1800,
+                    slopeSideH: 'top' }, 1: { w: 800, h: 1985 } };
+  ctx.S = S2;
+  const L2 = vm.runInContext('lgLayout(lgFromPanels(P,S,{finish:"shahor",' +
+    'quality:"zamak"}),{canvasW:900})', ctx);
+  check('a slope at the top is a different shape from one at the bottom',
+        JSON.stringify(L2.shapes[0].poly) !== JSON.stringify(L.shapes[0].poly), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

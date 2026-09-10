@@ -137,7 +137,16 @@ console.log('');
 
   check('a panel against the wall on the right gives a wall there',
         b('right', 'none').right, 'wall');
-  check('and an open end stays open', b('right', 'none').left, 'open');
+  /* Glass at the end of a RUN meets a wall even when the panel does not
+     say so. Without it the last fixed came out with no brackets at all —
+     nothing holding it, and nothing to build. A single pane is the one
+     exception: it has no inner neighbour, so its declared side stands and
+     it keeps two brackets, which is what a replacement order needs. */
+  check('but glass at the end of a run meets a wall',
+        b('right', 'none').left, 'wall');
+  check('while a single pane keeps the side it declared',
+        lgFromPanels([{ type: 'fixed', wallSide: 'right' }],
+                     { 0: { w: 500, h: 2000 } }).boundary.left, 'open');
   check('"both" counts on either side', [b('both', 'both').right, b('both', 'both').left],
         ['wall', 'wall']);
   check('an explicit boundary still wins',
