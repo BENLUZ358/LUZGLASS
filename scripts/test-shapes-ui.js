@@ -178,7 +178,13 @@ check('and a shape can be removed again',    /function shapeRemove/.test(DEMO), 
 /* reordering by arrows is gone: a shape is added beside the pane whose +
    was pressed, so the order is chosen when it is placed. */
 check('a shape lands on the side its + was pressed',
-      /if\(side==='left'\) shapeList\.unshift\(item\); else shapeList\.push\(item\);/.test(DEMO), true);
+      /if\(at==='left'\) shapeList\.unshift\(item\); else shapeList\.push\(item\);/.test(DEMO), true);
+/* and no path reaches the canvas without the rules: the check lives in
+   shapeAdd, which every caller goes through */
+check('the rules are enforced at the gate, not at one caller',
+      /function shapeAdd[\s\S]{0,900}_arrangementErrors\(cand/.test(DEMO), true);
+check('and a direct click goes through the same side as a +',
+      DEMO.indexOf("const side=addSide||'right';") > -1, true);
 check('validation runs on every change',     /lgValidate\(/.test(DEMO), true);
 check('and an error names the shape it is about',
       /lgValidate\([\s\S]{0,300}?\.at\b/.test(DEMO), true);

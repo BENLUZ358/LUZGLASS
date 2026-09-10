@@ -208,11 +208,23 @@ console.log('');
 {
   const c = screen();
   run(c, 'addSide="right"');
-  [PLAIN, 'מראה', CARRIER, 'דלת'].forEach(n =>
+  [PLAIN, CARRIER, 'דלת', 'מראה'].forEach(n =>
     run(c, 'shapeAddFromCatalog(' + idOf(c, n) + ')'));
   run(c, 'addSide=null');
   const n = run(c, 'shapeList.length');
   check('a chain of four builds', n, 4);
+  check('and it is legal', run(c, 'lgValidate(_shapeShower())'), []);
+
+  /* the gate refuses one that is not: a carrier fixed between free glass
+     and a door would have nothing to lean on */
+  const c2 = screen();
+  run(c2, 'addSide="right"');
+  [PLAIN, 'מראה', CARRIER, 'דלת'].forEach(x =>
+    run(c2, 'shapeAddFromCatalog(' + idOf(c2, x) + ')'));
+  run(c2, 'addSide=null');
+  check('an illegal step is refused rather than built',
+        run(c2, 'shapeList.length'), 3);
+  check('and what remains is legal', run(c2, 'lgValidate(_shapeShower())'), []);
 
   const L = run(c, 'lgLayout(_lgShowerOf(_shapePanels(),getPStates()),{canvasW:1200})');
   check('and every one of them is drawn', L.shapes.length, n);

@@ -1246,7 +1246,10 @@ function shapeToast(msg,bad){
 function shapeAddFromCatalog(i){
   const e0=galleryEntries()[i];
   if(!e0) return;
-  const side=addSide;
+  // **אין מסלול בלי חוקיות.** לחיצה ישירה על כרטיס נכנסת בקצה הימני
+  // בדיוק כאילו נלחץ שם +, ועוברת את אותה בדיקה. קודם היא דילגה עליה
+  // לגמרי, וזו הייתה הדרך היחידה להגיע להרכבה אסורה.
+  const side=addSide||'right';
 
   // ── האוריינטציה נקבעת פעם אחת ──
   //
@@ -1266,25 +1269,44 @@ function shapeAddFromCatalog(i){
   shapeAdd(a.kind,a.hingeSide,a.slope,Object.keys(extra).length?extra:null,side);
 }
 
+// ─── השער היחיד שדרכו נכנסת זכוכית ───────────────────────────────────
+//
+// **הבדיקה יושבת כאן ולא אצל הקורא.** קודם היא ישבה ב-shapeAddFromCatalog
+// ורצה רק כשהיה addSide — כלומר רק אחרי לחיצה על +. לחיצה ישירה על
+// כרטיס בגלריה השאירה אותו null, וכל מנגנון ה-Shape→Shape נעקף: הזכוכית
+// נדחפה לסוף המערך בעיוורון. משם הגיעה "דלת על דלת".
+//
+// כל מי שמוסיף זכוכית — הגלריה, ה-+, וכל קורא עתידי — עובר כאן, ולכן
+// אין יותר מסלול עוקף.
 function shapeAdd(kind,hingeSide,slope,extra,side){
-  _shapeSeq++;
-  const id='sh'+_shapeSeq;
+  const id='sh'+(_shapeSeq+1);
   const label = kind==='door' ? 'דלת' : kind==='mirror' ? 'מראה'
               : kind==='shape' ? 'צורה' : (slope?'קבוע משופע':'קבוע');
-  // אינדקס גדל => x גדל: תחילת המערך היא שמאל הקנבס וסופו ימין. הצד
-  // מגיע מכפתור ה-+ שנלחץ, ולכן הזכוכית נוחתת צמוד למי שביקש אותה.
   const item={id,kind,hingeSide:hingeSide||undefined,label};
   if(extra&&extra.carriesDoor!=null) item.carriesDoor=extra.carriesDoor;
-  if(side==='left') shapeList.unshift(item); else shapeList.push(item);
-  shapePS[id]=mkPS({type:kind});
-  if(slope) shapePS[id].hasSlope=true;
-  if(extra) Object.assign(shapePS[id],extra);
+
+  // מצב הזכוכית נבנה **לפני** הבדיקה, כי החוקיות קוראת אותו: מדרגה,
+  // שיפוע וקדחים כולם משתתפים בשאלה אם החיבור אפשרי.
+  const st=mkPS({type:kind});
+  if(slope) st.hasSlope=true;
+  if(extra) Object.assign(st,extra);
+
+  // אינדקס גדל => x גדל: תחילת המערך היא שמאל הקנבס וסופו ימין.
+  const at = side==='left' ? 'left' : 'right';
+  const cand = at==='left' ? [item].concat(shapeList) : shapeList.concat([item]);
+  const errs=_arrangementErrors(cand, {[id]: st});
+  if(errs.length){ shapeToast('אי אפשר לחבר כאן: '+errs[0].msg, true); return false; }
+
+  _shapeSeq++;
+  if(at==='left') shapeList.unshift(item); else shapeList.push(item);
+  shapePS[id]=st;
   // הבחירה נעשתה: הסינון יורד **והגלריה מצוירת מחדש**. בלי הציור מחדש
-  // היא נשארה תקועה על הסינון הקודם, צורות נעלמו ממנה ולא חזרו — ואי
-  // אפשר היה להוסיף עוד. גם החוקיות השתנתה עכשיו, כי יש זכוכית נוספת.
+  // היא נשארה תקועה על הסינון הקודם, צורות נעלמו ממנה ולא חזרו.
   addSide=null;
   renderShapeUI(); renderShapeGallery(); draw();
+  return true;
 }
+
 
 function shapeRemove(id){
   shapeList=shapeList.filter(s=>s.id!==id);
@@ -1295,9 +1317,16 @@ function shapeRemove(id){
 // צד הציר תלוי בשטח — אותה דלת נבנית ימין או שמאל. הליקוט לא משתנה.
 function shapeFlipHinge(id){
   const s=shapeList.find(x=>x.id===id);
-  if(!s||s.kind!=='door') return;
-  s.hingeSide = s.hingeSide==='right'?'left':'right';
-  renderShapeUI();draw();
+  if(!s||s.kind!=='door') return false;
+  const to = s.hingeSide==='right'?'left':'right';
+  // גם ההיפוך עובר בשער. בלי זה אפשר היה להרכיב הרכבה חוקית ואז להפוך
+  // ציר ולהגיע לאותו "דלת על דלת" מהדלת האחורית.
+  const cand=shapeList.map(x=>x===s?Object.assign({},x,{hingeSide:to}):x);
+  const errs=_arrangementErrors(cand);
+  if(errs.length){ shapeToast('אי אפשר להפוך כאן: '+errs[0].msg, true); return false; }
+  s.hingeSide=to;
+  renderShapeUI(); renderShapeGallery(); draw();
+  return true;
 }
 let shapePS={};
 let _galleryDrawn=0;
