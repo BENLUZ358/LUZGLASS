@@ -44,7 +44,7 @@ function screen() {
     'var NOTCH_DEF={notchW:200,notchH:500};' +
     'let shapeList=[]; let shapePS={}; let _shapeSeq=0; let flipped={};' +
     'let libFactory=[],libPersonal=[]; let addSide=null; let lastL=null;' +
-    'function renderShapeUI(){} function draw(){ lastL=layoutNow(); }' +
+    'var document={getElementById:function(){return null;}};var setTimeout=function(){};var document={getElementById:function(){return null;}};var setTimeout=function(){};function renderShapeUI(){} function draw(){ lastL=layoutNow(); }' +
     'function renderShapeGallery(){} function _shEsc(s){return s;}' +
     'function shapeToast(){} let panelState={},items=[]; var curCombo={panels:[]};' +
     'function layoutNow(){ return shapeList.length ?' +
@@ -53,7 +53,7 @@ function screen() {
     ctx);
   ['mkPS', '_shapeShower', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip',
    'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt',
-   'canAddAt', '_whyNot', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
+   'canAddAt', '_whyNot', 'hingeHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove', 'pickOrder', 'getPS', 'getPStates'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
@@ -74,7 +74,7 @@ console.log('');
   names.forEach(n => {
     const c = screen();
     try {
-      run(c, 'shapeAddFromCatalog(' + idOf(c, n) + ')');
+      run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, n) + ');');
       if (run(c, 'shapeList.length') !== 1) broke.push(n);
     } catch (e) { broke.push(n + ' (' + e.message + ')'); }
   });
@@ -91,7 +91,7 @@ console.log('');
   const after = run(ctx, 'galleryShown(' + di + ').add.hingeSide');
   check('flipping a card changes the hand it shows', after !== before, true);
 
-  run(ctx, 'shapeAddFromCatalog(' + di + ')');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + di + ');');
   check('and the pane that lands carries the flipped hand',
         run(ctx, 'shapeList[0].hingeSide'), after);
   check('with no second flip applied on the way in',
@@ -105,7 +105,7 @@ console.log('');
   const onLeft = hingeX.length > 0 && hingeX.every(x => Math.abs(x - g.x) < Math.abs(x - (g.x + g.w)));
 
   const c2 = screen();
-  run(c2, 'shapeAddFromCatalog(' + idOf(c2, 'דלת') + ')');
+  run(c2, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c2, 'דלת') + ');');
   run(c2, 'draw()');
   const hx2 = run(c2, 'lastL.hardware.filter(function(h){return h.kind==="hinge";})' +
                       '.map(function(h){return Math.round(h.x);})');
@@ -118,7 +118,7 @@ console.log('');
 /* ── 7. a blocked side offers nothing ───────────────────────────────────── */
 {
   const ctx = screen();
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ');');
   /* a wall at an end is what the next pane leans on, so both ends grow */
   check('both free ends of the chain offer a +',
         [run(ctx, 'canAddAt("left")'), run(ctx, 'canAddAt("right")')], [true, true]);
@@ -131,9 +131,9 @@ console.log('');
   /* a door needs a pane prepared to carry it; the brackets-only case is
      its own test file */
   const ctx = screen();
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ')');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ');');
   const first = run(ctx, 'shapeList[0].id');
-  run(ctx, 'addSide="right"; shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
+  run(ctx, 'addAt("right"); shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
   check('a shape added on the right sits after the pane it joined',
         run(ctx, 'shapeList.map(function(s){return s.id;})')[0], first);
   check('and there are two panes now', run(ctx, 'shapeList.length'), 2);
@@ -149,8 +149,8 @@ console.log('');
    fixed is covered by test-carries-door.js. */
 {
   const ctx = screen();
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ')');
-  run(ctx, 'addSide="right"; shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ');');
+  run(ctx, 'addAt("right"); shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
   const errs = run(ctx, 'lgValidate(_lgShowerOf(_shapePanels(), Object.fromEntries(' +
                         'shapeList.map(function(s,i){return [i,shapePS[s.id]];}))))');
   check('the arrangement the + built is one the engine accepts', errs, []);
@@ -164,11 +164,11 @@ console.log('');
 {
   const ctx = screen();
   run(ctx, 'addSide="right"');
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ')');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ');');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(ctx, CARRIER) + ');');
   const di = idOf(ctx, 'דלת');
   run(ctx, 'galleryFlip(' + di + ')');
-  run(ctx, 'shapeAddFromCatalog(' + di + ')');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + di + ');');
   run(ctx, 'addSide=null');
   check('a chain of three builds', run(ctx, 'shapeList.length'), 3);
 
@@ -187,7 +187,7 @@ console.log('');
 {
   const ctx = screen();
   run(ctx, 'addSide="right"');
-  [PLAIN, 'מראה', 'צורה חופשית'].forEach(n => run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, n) + ')'));
+  [PLAIN, 'מראה', 'צורה חופשית'].forEach(n => run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(ctx, n) + ');'));
   run(ctx, 'addSide=null');
 
   const order = run(ctx, 'pickOrder()');

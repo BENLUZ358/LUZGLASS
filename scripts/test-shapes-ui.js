@@ -183,8 +183,12 @@ check('a shape lands on the side its + was pressed',
    shapeAdd, which every caller goes through */
 check('the rules are enforced at the gate, not at one caller',
       /function shapeAdd[\s\S]{0,900}_arrangementErrors\(cand/.test(DEMO), true);
-check('and a direct click goes through the same side as a +',
-      DEMO.indexOf("const side=addSide||'right';") > -1, true);
+/* glass enters through the + only. Without a side there is no context to
+   ask the rules about, so there is nothing to add. */
+check('there is no adding without a +',
+      DEMO.indexOf('const side=addSide;') > -1 && DEMO.indexOf('if(!side) return;') > -1, true);
+check('and an empty canvas has a + of its own to start with',
+      DEMO.indexOf('id="btnFirstShape"') > -1, true);
 check('validation runs on every change',     /lgValidate\(/.test(DEMO), true);
 check('and an error names the shape it is about',
       /lgValidate\([\s\S]{0,300}?\.at\b/.test(DEMO), true);

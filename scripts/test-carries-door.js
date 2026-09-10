@@ -57,10 +57,10 @@ function screen(boundary) {
     'let shapeList=[],shapePS={},_shapeSeq=0,flipped={},libFactory=[],libPersonal=[];' +
     'let addSide=null,lastL=null,panelState={},items=[];' +
     'var curCombo={panels:[]}; function shapeToast(){}' +
-    'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
+    'var document={getElementById:function(){return null;}};var setTimeout=function(){};var document={getElementById:function(){return null;}};var setTimeout=function(){};function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', '_shapeShower', 'getPStates', 'getPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip', 'galleryShown',
    '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt', 'canAddAt', 'hingeHolesFromEngine',
-   'shapeAdd', 'shapeAddFromCatalog'].forEach(n => vm.runInContext(grab(n), ctx));
+   'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
 const run = (c, e) => vm.runInContext(e, c);
@@ -130,7 +130,7 @@ console.log('');
    there instead and sits quietly beside the fixed. */
 {
   const ctx = screen({ right: 'wall', left: 'open' });
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ');');
   const offer = run(ctx, 'allowedAt("right").filter(function(x){' +
     'return galleryEntries()[x.i].add.kind==="door";})');
   check('a door is still offered beside a brackets-only fixed', offer.length, 1);
@@ -138,7 +138,7 @@ console.log('');
   const card = run(ctx, 'lgCatalogSeeds().find(function(e){return e.add.kind==="door";}).add.hingeSide');
   check('but with the hand that points away from it', offer[0].hinge !== card, true);
 
-  run(ctx, 'addSide="right"; shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
+  run(ctx, 'addAt("right"); shapeAddFromCatalog(' + idOf(ctx, 'דלת') + '); addSide=null;');
   check('and it lands beside the fixed', run(ctx, 'shapeList.length'), 2);
   check('with no complaint', run(ctx, 'lgValidate(_shapeShower())'), []);
   check('nothing at all between the two panes',
@@ -147,8 +147,8 @@ console.log('');
 
   /* the carrier still takes the door onto itself */
   const c2 = screen({ right: 'wall', left: 'open' });
-  run(c2, 'shapeAddFromCatalog(' + idOf(c2, CARRIER) + ')');
-  run(c2, 'addSide="right"; shapeAddFromCatalog(' + idOf(c2, 'דלת') + '); addSide=null;');
+  run(c2, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c2, CARRIER) + ');');
+  run(c2, 'addAt("right"); shapeAddFromCatalog(' + idOf(c2, 'דלת') + '); addSide=null;');
   check('while the pane prepared for a door carries it on the shared face',
         run(c2, 'lgJunctions(_shapeShower()).map(function(j){return j.type;})'),
         ['bracket-wall', 'hinge-gg', null]);
@@ -187,14 +187,14 @@ console.log('');
 /* ── the declaration really travels from the card to the engine ─────────── */
 {
   const ctx = screen();
-  run(ctx, 'shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ')');
+  run(ctx, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(ctx, PLAIN) + ');');
   check('the pane on the canvas carries the declaration',
         run(ctx, 'shapeList[0].carriesDoor'), false);
   check('and it reaches the shower the engine is given',
         run(ctx, SHOWER + '.shapes[0].carriesDoor'), false);
 
   const c2 = screen();
-  run(c2, 'shapeAddFromCatalog(' + idOf(c2, CARRIER) + ')');
+  run(c2, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c2, CARRIER) + ');');
   check('and the carrier declares the opposite',
         run(c2, SHOWER + '.shapes[0].carriesDoor'), true);
 }

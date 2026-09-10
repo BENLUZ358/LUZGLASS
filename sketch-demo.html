@@ -29,6 +29,11 @@
    הגלריה קצרה בכוונה. ההפרדה בין מה שנוגעים על הציור למה שנוגעים
    ברצועה היא לפי **גודל המטרה**: קו מידה הוא ~90×30px ונלחץ על הציור;
    ציר הוא ~10px ולכן יושב ברצועה. */
+#btnFirstShape{min-height:44px;width:calc(100% - 20px);margin:10px;
+  padding:10px 14px;border:1px solid var(--gold);border-radius:6px;
+  background:var(--gold);color:var(--on-gold);
+  font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;cursor:pointer;}
+#btnFirstShape:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 .shape-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));
   gap:8px;padding:10px;}
 .shape-card{display:flex;flex-direction:column;align-items:stretch;gap:4px;
@@ -382,6 +387,21 @@ canvas{display:block;height:auto;cursor:pointer;}
 
 <!-- גיליון המאפיינים של שייף בודד. כל מה שהמנוע יודע לצייר ולא היה
      דרך להזין: פינוי מדרגה, שיפוע בשני צירים, עובי וסוג זכוכית. -->
+<!-- הגלריה. נפתחת מלחיצה על + ומסוננת לצד שממנו נלחץ, כדי שהבחירה
+     תהיה בין מה שאפשר לחבר שם — ולא רשימה שחלקה ייפסל. -->
+<div class="sheet-back" id="galleryBack" onclick="closeGallery()"></div>
+<div class="sheet" id="gallerySheet" role="dialog" aria-modal="true"
+     aria-labelledby="galleryTitle" onkeydown="if(event.key==='Escape')closeGallery()">
+  <div class="sheet-grip" aria-hidden="true"></div>
+  <div class="sheet-head">
+    <h3 id="galleryTitle">בחר זכוכית</h3>
+    <button class="sheet-x" onclick="closeGallery()" aria-label="סגור">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div class="shape-gallery" id="shapeGallery"></div>
+  </div>
+</div>
+
 <div class="sheet-back" id="shapeSheetBack" onclick="closeShapeSheet()"></div>
 <div class="sheet" id="shapeSheet" role="dialog" aria-modal="true"
      aria-labelledby="shapeSheetTitle" onkeydown="if(event.key==='Escape')closeShapeSheet()">
@@ -431,7 +451,9 @@ canvas{display:block;height:auto;cursor:pointer;}
      ה-kind:'shape' שכבר קיים בכלי. אף פריט בגלריה לא נושא פרזול — המנוע
      גוזר אותו מהצמתים, וצ'יפ עם ספירת צירים משלו היה סותר אותו. -->
 <div id="shapeUI" style="display:none;">
-  <div class="shape-gallery" id="shapeGallery"></div>
+  <!-- זכוכית נכנסת דרך ה-+ בלבד. כשהקנבס ריק אין על מה ללחוץ, ולכן
+       הכפתור הזה הוא ה-+ הראשון. -->
+  <button type="button" id="btnFirstShape" onclick="addAt('right')">＋ הוסף זכוכית</button>
   <div class="shape-strip" id="shapeStrip"></div>
   <div id="shapeErr" class="shape-err" style="display:none" role="status" aria-live="polite"></div>
   <div id="shapeBom" class="shape-bom" style="display:none"></div>
@@ -1171,14 +1193,28 @@ function renderAddButtons(){
     'aria-label="הוסף זכוכית מימין">+</button>';
 }
 
-// לחיצה על + : גוללים לגלריה ומסננים אותה למה שחוקי באותו צד.
+// לחיצה על + פותחת את הגלריה, מסוננת לצד שממנו נלחצה.
+//
+// הגלריה כבר אינה יושבת מתחת לקנבס. זכוכית נכנסת **דרך ה-+ בלבד**, ולכן
+// אין טעם להציג רשימה שלמה כל הזמן — היא נפתחת כשמבקשים אותה, ומראה רק
+// את מה שאפשר לחבר במקום שביקשו.
 let addSide=null;
+
 function addAt(side){
   addSide=side;
   renderShapeGallery();
-  const g=document.getElementById('shapeGallery');
-  if(g) g.scrollIntoView({behavior:'smooth',block:'center'});
+  document.getElementById('galleryBack')?.classList.add('open');
+  const sh=document.getElementById('gallerySheet');
+  if(sh){ sh.classList.add('open');
+          setTimeout(()=>sh.querySelector('.sc-pick')?.focus(),60); }
 }
+
+function closeGallery(){
+  addSide=null;
+  document.getElementById('galleryBack')?.classList.remove('open');
+  document.getElementById('gallerySheet')?.classList.remove('open');
+}
+
 
 // ─── טעינת הספריות ───────────────────────────────────────────────────
 //
@@ -1246,10 +1282,11 @@ function shapeToast(msg,bad){
 function shapeAddFromCatalog(i){
   const e0=galleryEntries()[i];
   if(!e0) return;
-  // **אין מסלול בלי חוקיות.** לחיצה ישירה על כרטיס נכנסת בקצה הימני
-  // בדיוק כאילו נלחץ שם +, ועוברת את אותה בדיקה. קודם היא דילגה עליה
-  // לגמרי, וזו הייתה הדרך היחידה להגיע להרכבה אסורה.
-  const side=addSide||'right';
+  // **אין מסלול בלי +.** הצד שממנו נלחץ הוא מה שקובע מה חוקי, ובלעדיו
+  // אין שאלה לשאול את המנוע. הגלריה נפתחת רק מ-+, ולכן addSide תמיד
+  // מלא כשמגיעים לכאן; הבדיקה היא רשת ביטחון לקורא עתידי.
+  const side=addSide;
+  if(!side) return;
 
   // ── האוריינטציה נקבעת פעם אחת ──
   //
@@ -1303,7 +1340,8 @@ function shapeAdd(kind,hingeSide,slope,extra,side){
   // הבחירה נעשתה: הסינון יורד **והגלריה מצוירת מחדש**. בלי הציור מחדש
   // היא נשארה תקועה על הסינון הקודם, צורות נעלמו ממנה ולא חזרו.
   addSide=null;
-  renderShapeUI(); renderShapeGallery(); draw();
+  closeGallery();
+  renderShapeUI(); draw();
   return true;
 }
 
@@ -1311,8 +1349,7 @@ function shapeAdd(kind,hingeSide,slope,extra,side){
 function shapeRemove(id){
   shapeList=shapeList.filter(s=>s.id!==id);
   delete shapePS[id];
-  // כל שינוי בהרכבה משנה מה חוקי להוסיף, ולכן הגלריה נשאלת מחדש
-  renderShapeUI(); renderShapeGallery(); draw();
+  renderShapeUI(); draw();
 }
 // צד הציר תלוי בשטח — אותה דלת נבנית ימין או שמאל. הליקוט לא משתנה.
 function shapeFlipHinge(id){
@@ -1325,7 +1362,7 @@ function shapeFlipHinge(id){
   const errs=_arrangementErrors(cand);
   if(errs.length){ shapeToast('אי אפשר להפוך כאן: '+errs[0].msg, true); return false; }
   s.hingeSide=to;
-  renderShapeUI(); renderShapeGallery(); draw();
+  renderShapeUI(); draw();
   return true;
 }
 let shapePS={};
@@ -1509,7 +1546,7 @@ function renderShapeSheet(){
 }
 
 function renderShapeUI(){
-  if(!_galleryDrawn){ _galleryDrawn=1; renderShapeGallery(); loadShapeLibraries(); }
+  if(!_galleryDrawn){ _galleryDrawn=1; loadShapeLibraries(); }
   const strip=document.getElementById('shapeStrip');
   const errEl=document.getElementById('shapeErr');
   const bomEl=document.getElementById('shapeBom');

@@ -58,12 +58,12 @@ function screen(boundary) {
     'let shapeList=[],shapePS={},_shapeSeq=0,flipped={},libFactory=[],libPersonal=[];' +
     'let addSide=null,lastL=null,panelState={},items=[];' +
     'var curCombo={panels:[]}; let TOAST=null; function shapeToast(m){TOAST=m;}' +
-    'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
+    'var document={getElementById:function(){return null;}};var setTimeout=function(){};var document={getElementById:function(){return null;}};var setTimeout=function(){};function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', '_shapeShower',
    'galleryEntries', 'entryCanFlip', 'galleryShown', 'galleryFlip',
    '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit',
    '_legalVariant', 'allowedAt', '_whyNot', 'canAddAt',
-   'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
+   'hingeHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
@@ -78,7 +78,7 @@ console.log('');
 /* left-hand fixed on the wall, no hinges. Only one door fits beside it. */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, PLAIN) + ');');
   const di = idOf(c, DOOR);
 
   const offer = run(c, 'allowedAt("right").filter(function(x){return x.i===' + di + ';})');
@@ -93,7 +93,7 @@ console.log('');
   check('the other orientation does not fit',
         run(c, '_fits(galleryEntries()[' + di + '],"right")'), false);
 
-  run(c, 'addSide="right"; shapeAddFromCatalog(' + di + '); addSide=null;');
+  run(c, 'addAt("right"); shapeAddFromCatalog(' + di + '); addSide=null;');
   check('the door that lands is the one that was shown',
         run(c, 'shapeList[1].hingeSide'), 'left');
   check('nothing sits between it and the fixed',
@@ -104,7 +104,7 @@ console.log('');
 /* ── the pane prepared for a door takes it the other way ────────────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, CARRIER) + ');');
   const di = idOf(c, DOOR);
 
   const offer = run(c, 'allowedAt("right").filter(function(x){return x.i===' + di + ';})');
@@ -113,7 +113,7 @@ console.log('');
   check('and here both orientations are possible, so a flip is offered',
         run(c, '_bothFit(galleryEntries()[' + di + '],"right")'), true);
 
-  run(c, 'addSide="right"; shapeAddFromCatalog(' + di + '); addSide=null;');
+  run(c, 'addAt("right"); shapeAddFromCatalog(' + di + '); addSide=null;');
   check('the joint between them is a glass-to-glass hinge',
         run(c, JUNCTIONS), ['bracket-wall', 'hinge-gg', null]);
 }
@@ -121,7 +121,7 @@ console.log('');
 /* ── a user's flip is a preference, not an override ─────────────────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, PLAIN) + ');');
   const di = idOf(c, DOOR);
 
   /* the user flips the card the wrong way for this canvas */
@@ -134,7 +134,7 @@ console.log('');
   const b = run(c, 'allowedAt("right").filter(function(x){return x.i===' + di + ';})');
   check('a preference the canvas forbids is overruled', b[0].ent.add.hingeSide, 'left');
 
-  run(c, 'addSide="right"; shapeAddFromCatalog(' + di + '); addSide=null;');
+  run(c, 'addAt("right"); shapeAddFromCatalog(' + di + '); addSide=null;');
   check('and what lands is what the canvas allowed, not what was preferred',
         run(c, 'shapeList[1].hingeSide'), 'left');
   check('with no complaint', run(c, 'lgValidate(_shapeShower())'), []);
@@ -149,15 +149,15 @@ console.log('');
   base.forEach(first => {
     ['right', 'left'].forEach(side => {
       const c = screen();
-      run(c, 'shapeAddFromCatalog(' + idOf(c, first) + ')');
+      run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, first) + ');');
       const names = run(c, 'galleryEntries().map(function(e){return e.name;})');
       const offered = new Map(run(c, 'allowedAt(' + JSON.stringify(side) + ')').map(x => [x.i, x.ent]));
 
       names.forEach((n, i) => {
         const c2 = screen();
-        run(c2, 'shapeAddFromCatalog(' + idOf(c2, first) + ')');
+        run(c2, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c2, first) + ');');
         const before = run(c2, 'shapeList.length');
-        run(c2, 'addSide=' + JSON.stringify(side) + '; shapeAddFromCatalog(' + i + '); addSide=null;');
+        run(c2, 'addAt(' + JSON.stringify(side) + '); shapeAddFromCatalog(' + i + '); addSide=null;');
         const added = run(c2, 'shapeList.length') > before;
         const clean = added && run(c2, 'lgValidate(_shapeShower())').length === 0;
 
@@ -185,7 +185,7 @@ console.log('');
 /* ── a refusal never damages what is already there ──────────────────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, PLAIN) + ');');
   run(c, 'Object.assign(getPS("shape",0),{w:640,h:1910,notchW:250,notchH:420})');
   /* track the pane BY ID: adding on the left shifts every index */
   const id = run(c, 'shapeList[0].id');
@@ -195,8 +195,8 @@ console.log('');
 
   /* try to add everything, legal or not, on both sides */
   run(c, 'galleryEntries().forEach(function(e,i){' +
-         '  ["left","right"].forEach(function(sd){ addSide=sd;' +
-         '    try{ shapeAddFromCatalog(i); }catch(err){} addSide=null; });' +
+         '  ["left","right"].forEach(function(sd){ addAt(sd);' +
+         '    try{ shapeAddFromCatalog(i); }catch(err){} closeGallery(); });' +
          '});');
   check('the pane is still there after all of it', at() > -1, true);
   check('untouched by any of it',

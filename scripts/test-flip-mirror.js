@@ -174,15 +174,17 @@ seeds.forEach(e => {
         /mirror: 1/.test(SHAPES), true);
 }
 
-/* ── after adding, the gallery is asked again ───────────────────────────── */
-/* The `+` filters the gallery to what is legal on that side. Adding then
-   cleared the filter but never repainted, so the shapes stayed hidden and
-   nothing more could be added. */
+/* ── the gallery opens from the +, filtered, and closes on choosing ─────── */
+/* It used to sit under the canvas the whole time, and a stale filter could
+   leave shapes hidden with no way to bring them back. It is a sheet now:
+   opened by a +, filtered to that side, closed the moment something is
+   chosen — so there is no stale state to get stuck in. */
 {
   const has = s => DEMO.indexOf(s) > -1;
-  check('adding repaints the gallery', has('renderShapeUI(); renderShapeGallery(); draw();'), true);
-  check('and so does removing',
-        (DEMO.match(/renderShapeUI\(\); renderShapeGallery\(\); draw\(\);/g) || []).length >= 2, true);
+  check('the + opens the gallery', /function addAt\(side\)\{[\s\S]{0,200}gallerySheet/.test(DEMO), true);
+  check('filtered to the side it was pressed on',
+        /function addAt\(side\)\{[\s\S]{0,120}renderShapeGallery\(\)/.test(DEMO), true);
+  check('and choosing closes it', has('closeGallery();'), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

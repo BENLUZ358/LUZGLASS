@@ -60,11 +60,11 @@ function screen() {
     'let shapeList=[],shapePS={},_shapeSeq=0,flipped={},libFactory=[],libPersonal=[];' +
     'let addSide=null,lastL=null,panelState={},items=[];' +
     'var curCombo={panels:[]}; let TOAST=null; function shapeToast(m){TOAST=m;}' +
-    'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
+    'var document={getElementById:function(){return null;}};var setTimeout=function(){};var document={getElementById:function(){return null;}};var setTimeout=function(){};function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', '_shapeShower',
    'galleryEntries', 'entryCanFlip', 'galleryShown', '_tryArrangement',
    '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant',
-   'allowedAt', '_whyNot', 'canAddAt', 'hingeHolesFromEngine', 'shapeAdd',
+   'allowedAt', '_whyNot', 'canAddAt', 'hingeHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd',
    'shapeAddFromCatalog', 'shapeRemove'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
@@ -85,7 +85,7 @@ function grow(c, side, want) {
   for (const w of wants) { pick = cand.find(x => names[x.i] === w); if (pick) break; }
   pick = pick || cand[0];
   const before = run(c, 'shapeList.length');
-  run(c, 'addSide=' + JSON.stringify(side) + '; shapeAddFromCatalog(' + pick.i + '); addSide=null;');
+  run(c, 'addAt(' + JSON.stringify(side) + '); shapeAddFromCatalog(' + pick.i + '); addSide=null;');
   return run(c, 'shapeList.length') > before ? names[pick.i] : null;
 }
 
@@ -97,7 +97,7 @@ console.log('');
    these grow with panes that leave the entrance open. */
 [PLAIN, CARRIER, DOOR, 'מראה', 'קבוע משופע'].forEach(start => {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, start) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, start) + ');');
   const added = [];
   for (let step = 0; step < 10; step++) {
     /* prefer panes that leave the entrance open; a door would finish the run */
@@ -114,7 +114,7 @@ console.log('');
 /* ── the exact complaint: shape 1 → + → shape 2 → + → shape 3 ───────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, CARRIER) + ');');
   check('one pane offers a +', run(c, 'canAddAt("right")'), true);
 
   grow(c, 'right', PLAIN);
@@ -138,7 +138,7 @@ console.log('');
 /* ── the brackets-only fixed puts the door's hinges on the far side ────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, PLAIN) + ');');
   const first = grow(c, 'right', DOOR);
   check('a door lands beside the brackets-only fixed', first, DOOR);
   check('nothing at all between them', run(c, 'lgJunctions(_shapeShower())[1].type'), null);
@@ -148,7 +148,7 @@ console.log('');
 
   /* the pane prepared for a door takes it the other way, and continues */
   const c2 = screen();
-  run(c2, 'shapeAddFromCatalog(' + idOf(c2, CARRIER) + ')');
+  run(c2, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c2, CARRIER) + ');');
   grow(c2, 'right', DOOR);
   check('the carrier takes the door onto its own face',
         run(c2, 'lgJunctions(_shapeShower())[1].type'), 'hinge-gg');
@@ -169,7 +169,7 @@ console.log('');
   const c = screen();
   const steps = [CARRIER, DOOR, DOOR, CARRIER];
   steps.forEach((n, k) => {
-    if (k === 0) run(c, 'shapeAddFromCatalog(' + idOf(c, n) + ')');
+    if (k === 0) run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, n) + ');');
     else grow(c, 'right', n);
   });
   check('all four panes go in', run(c, 'shapeList.length'), 4);
@@ -188,7 +188,7 @@ console.log('');
 /* ── and a lone pane is still a component, not an installation ──────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, PLAIN) + ');');
   const L = run(c, 'lgLayout(_lgShowerOf(_shapePanels(),getPStates()),{canvasW:900})');
   check('a lone fixed takes two brackets, not four',
         L.hardware.filter(h => h.kind === 'bracket').length, 2);
@@ -202,13 +202,13 @@ console.log('');
    offer the same things. */
 {
   const a = screen();
-  run(a, 'shapeAddFromCatalog(' + idOf(a, CARRIER) + ')');
+  run(a, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(a, CARRIER) + ');');
   grow(a, 'right', DOOR);
 
   /* the extra pane goes on the OTHER end, so the right end of both chains
      is the same door hinged the same way — only the length differs */
   const b = screen();
-  run(b, 'shapeAddFromCatalog(' + idOf(b, CARRIER) + ')');
+  run(b, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(b, CARRIER) + ');');
   grow(b, 'right', DOOR);
   grow(b, 'left');
   grow(b, 'left');
@@ -229,7 +229,7 @@ console.log('');
 /* ── growing does not disturb what is already built ─────────────────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, CARRIER) + ');');
   run(c, 'Object.assign(getPS("shape",0),{w:640,h:1910,notchW:250,notchH:420,bracketTop:180})');
   const before = JSON.parse(JSON.stringify(run(c, 'getPStates()[0]')));
   const firstId = run(c, 'shapeList[0].id');
@@ -246,7 +246,7 @@ console.log('');
 /* ── every pane drawn, none overlapping, however long the run ───────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, CARRIER) + ');');
   for (let i = 0; i < 6; i++) grow(c, 'right', DOOR);
   const n = run(c, 'shapeList.length');
   const L = run(c, 'lgLayout(_lgShowerOf(_shapePanels(),getPStates()),{canvasW:1600})');

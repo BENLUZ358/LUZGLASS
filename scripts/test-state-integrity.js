@@ -66,10 +66,10 @@ function screen(boundary) {
     'let addSide=null,lastL=null,panelState={},items=[];' +
     'var curCombo={panels:[]};' +
     'let TOAST=null; function shapeToast(m){TOAST=m;}' +
-    'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
+    'var document={getElementById:function(){return null;}};var setTimeout=function(){};var document={getElementById:function(){return null;}};var setTimeout=function(){};function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', '_shapeShower', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
    'entryCanFlip', 'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt', '_whyNot',
-   'canAddAt', 'hingeHolesFromEngine', 'shapeAdd', 'shapeAddFromCatalog',
+   'canAddAt', 'hingeHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove', 'shapeFlipHinge'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
@@ -85,7 +85,7 @@ console.log('');
 /* ── one store, not two ─────────────────────────────────────────────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, PLAIN) + ');');
   check('both readers hand back the very same object',
         run(c, 'getPS("shape",0)===getPStates()[0]'), true);
 
@@ -105,14 +105,14 @@ console.log('');
 /* ── adding a pane leaves every other pane untouched ────────────────────── */
 {
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, CARRIER) + ');');
   /* give it a full set of edits, the kind a customer makes */
   run(c, 'Object.assign(getPS("shape",0),{w:640,h:1910,hasSlope:true,' +
          'slopeH1:1910,slopeH2:1750,notchW:250,notchH:420,notchSide:"left",' +
          'bracketTop:180,bracketInset:30,thickness:10})');
   const before = snap(c, 0);
 
-  run(c, 'addSide="right"; shapeAddFromCatalog(' + idOf(c, 'דלת') + '); addSide=null;');
+  run(c, 'addAt("right"); shapeAddFromCatalog(' + idOf(c, 'דלת') + '); addSide=null;');
   check('adding a door beside it changes nothing about it', snap(c, 0), before);
   check('and the door really was added', run(c, 'shapeList.length'), 2);
 
@@ -130,7 +130,7 @@ console.log('');
     ['flipping a gallery card',   'galleryFlip(' + idOf(c, 'דלת') + ')'],
     ['reading the layout',        'lgLayout(_lgShowerOf(_shapePanels(),getPStates()),{canvasW:900})'],
     /* a refused add must be as harmless as an accepted one */
-    ['an add the rules refuse',   'addSide="right"; shapeAddFromCatalog(' + idOf(c, PLAIN) + '); addSide=null;'],
+    ['an add the rules refuse',   'addAt("right"); shapeAddFromCatalog(' + idOf(c, PLAIN) + '); addSide=null;'],
     ['removing the last pane',    'shapeRemove(shapeList[shapeList.length-1].id)'],
   ];
 
@@ -144,8 +144,8 @@ console.log('');
 {
   const c = screen();
   run(c, 'addSide="right"');
-  run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
-  run(c, 'shapeAddFromCatalog(' + idOf(c, CARRIER) + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, CARRIER) + ');');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, CARRIER) + ');');
   run(c, 'addSide=null');
   check('two panes from the same card are two panes', run(c, 'shapeList.length'), 2);
   check('with different ids', run(c, 'shapeList[0].id!==shapeList[1].id'), true);
@@ -173,13 +173,13 @@ console.log('');
    NOT this case — a door at an end brings its own wall.) */
 {
   const c = screen({ right: 'wall', left: 'open' });
-  run(c, 'shapeAddFromCatalog(' + idOf(c, PLAIN) + ')');
-  run(c, 'addSide="right"; shapeAddFromCatalog(' + idOf(c, 'דלת') + '); addSide=null;');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, PLAIN) + ');');
+  run(c, 'addAt("right"); shapeAddFromCatalog(' + idOf(c, 'דלת') + '); addSide=null;');
   const before0 = snap(c, 0), before1 = snap(c, 1);
   const n = run(c, 'shapeList.length');
 
   /* now the door is last, and a fixed after it would float */
-  run(c, 'addSide="right"; shapeAddFromCatalog(' + idOf(c, PLAIN) + '); addSide=null;');
+  run(c, 'addAt("right"); shapeAddFromCatalog(' + idOf(c, PLAIN) + '); addSide=null;');
   check('a pane with nothing to lean on is not created', run(c, 'shapeList.length'), n);
   check('the first pane is untouched', snap(c, 0), before0);
   check('and so is the second', snap(c, 1), before1);
@@ -196,8 +196,8 @@ console.log('');
 
   /* the door beside a brackets-only fixed IS created, hinged away */
   const c2 = screen({ right: 'wall', left: 'open' });
-  run(c2, 'shapeAddFromCatalog(' + idOf(c2, PLAIN) + ')');
-  run(c2, 'addSide="right"; shapeAddFromCatalog(' + idOf(c2, 'דלת') + '); addSide=null;');
+  run(c2, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c2, PLAIN) + ');');
+  run(c2, 'addAt("right"); shapeAddFromCatalog(' + idOf(c2, 'דלת') + '); addSide=null;');
   check('a door beside a brackets-only fixed is created', run(c2, 'shapeList.length'), 2);
   check('with no complaint', run(c2, 'lgValidate(_shapeShower())'), []);
   check('and nothing between them, so it hangs on its own wall',
@@ -209,7 +209,7 @@ console.log('');
   const c = screen();
   run(c, 'addSide="right"');
   [PLAIN, CARRIER, 'דלת', 'מראה'].forEach(n =>
-    run(c, 'shapeAddFromCatalog(' + idOf(c, n) + ')'));
+    run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, n) + ');'));
   run(c, 'addSide=null');
   const n = run(c, 'shapeList.length');
   check('a chain of four builds', n, 4);
@@ -220,7 +220,7 @@ console.log('');
   const c2 = screen();
   run(c2, 'addSide="right"');
   [PLAIN, 'מראה', CARRIER, 'דלת'].forEach(x =>
-    run(c2, 'shapeAddFromCatalog(' + idOf(c2, x) + ')'));
+    run(c2, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c2, x) + ');'));
   run(c2, 'addSide=null');
   check('an illegal step is refused rather than built',
         run(c2, 'shapeList.length'), 3);

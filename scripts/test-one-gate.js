@@ -55,12 +55,12 @@ function screen() {
     'let shapeList=[],shapePS={},_shapeSeq=0,flipped={},libFactory=[],libPersonal=[];' +
     'let addSide=null,lastL=null,panelState={},items=[];var curCombo={panels:[]};' +
     'let TOAST=null; function shapeToast(m){TOAST=m;}' +
-    'function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
+    'var document={getElementById:function(){return null;}};var setTimeout=function(){};var document={getElementById:function(){return null;}};var setTimeout=function(){};function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', '_shapeShower',
    'galleryEntries', 'entryCanFlip', 'galleryShown', 'galleryFlip', '_tryArrangement',
    '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit',
    '_legalVariant', 'allowedAt', '_whyNot', 'canAddAt', 'hingeHolesFromEngine',
-   'shapeAdd', 'shapeAddFromCatalog', 'shapeRemove',
+   'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog', 'shapeRemove',
    'shapeFlipHinge'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
@@ -76,10 +76,10 @@ const CARDS = NAMES(screen());
 /* Every way a person can put glass on the canvas. Each is swept over every
    pair of shapes, in both orientations. */
 const WAYS = [
-  ['pressing +', (c, i) => run(c, 'addSide="right"; shapeAddFromCatalog(' + i + '); addSide=null;')],
-  ['clicking a card', (c, i) => run(c, 'shapeAddFromCatalog(' + i + ')')],
+  ['pressing +', (c, i) => run(c, 'addAt("right"); shapeAddFromCatalog(' + i + '); addSide=null;')],
+  ['clicking a card', (c, i) => run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + i + ');')],
   ['clicking, then flipping a hinge', (c, i) => {
-    run(c, 'shapeAddFromCatalog(' + i + ')');
+    run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + i + ');');
     run(c, 'shapeList.forEach(function(s){ if(s.kind==="door") shapeFlipHinge(s.id); })');
   }],
   ['calling shapeAdd straight', (c, i) => {
@@ -94,7 +94,7 @@ WAYS.forEach(([label, act]) => {
   const illegal = [];
   CARDS.forEach((a, ai) => CARDS.forEach((b, bi) => [false, true].forEach(flip => {
     const c = screen();
-    run(c, 'shapeAddFromCatalog(' + ai + ')');
+    run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + ai + ');');
     if (flip) run(c, 'galleryFlip(' + bi + ')');
     const before = run(c, 'shapeList.length');
     act(c, bi);
@@ -113,7 +113,7 @@ WAYS.forEach(([label, act]) => {
   let built = 0;
   CARDS.forEach((a, ai) => CARDS.forEach((b, bi) => CARDS.forEach((d, ci) => {
     const c = screen();
-    [ai, bi, ci].forEach(i => run(c, 'shapeAddFromCatalog(' + i + ')'));
+    [ai, bi, ci].forEach(i => run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + i + ');'));
     if (run(c, 'shapeList.length') < 2) return;
     built++;
     const e = ERRS(c);
@@ -127,8 +127,8 @@ WAYS.forEach(([label, act]) => {
 {
   const c = screen();
   const di = idOf(c, 'דלת');
-  run(c, 'shapeAddFromCatalog(' + di + ')');
-  run(c, 'shapeAddFromCatalog(' + di + ')');     /* a plain click, no + */
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + di + ');');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + di + ');');     /* a plain click, no + */
 
   check('a second door added by clicking is allowed in', run(c, 'shapeList.length'), 2);
   check('but only in the orientation that works',
@@ -152,8 +152,8 @@ WAYS.forEach(([label, act]) => {
      way onto its own wall, is fine. The gate finds that orientation rather
      than refusing outright. */
   const c = screen();
-  run(c, 'shapeAddFromCatalog(' + idOf(c, 'מראה') + ')');
-  run(c, 'shapeAddFromCatalog(' + idOf(c, 'דלת') + ')');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, 'מראה') + ');');
+  run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, 'דלת') + ');');
   check('a door beside free glass is allowed in', run(c, 'shapeList.length'), 2);
   check('hinged away from it, onto its own wall',
         run(c, 'lgJunctions(_shapeShower()).map(function(j){return j.type;})'),
@@ -170,10 +170,10 @@ WAYS.forEach(([label, act]) => {
   const c3 = screen();
   run(c3, 'addSide="right"');
   ['קבוע · זוויות בלבד', 'מראה', 'קבוע נושא דלת'].forEach(n =>
-    run(c3, 'shapeAddFromCatalog(' + idOf(c3, n) + ')'));
+    run(c3, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c3, n) + ');'));
   run(c3, 'addSide=null');
   const before = JSON.parse(JSON.stringify(run(c3, 'shapeList')));
-  run(c3, 'shapeAddFromCatalog(' + idOf(c3, 'דלת') + ')');
+  run(c3, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c3, 'דלת') + ');');
   check('a step with no legal orientation is refused',
         JSON.parse(JSON.stringify(run(c3, 'shapeList'))), before);
   check('and the reason comes from the engine, in its own words',
@@ -197,8 +197,12 @@ WAYS.forEach(([label, act]) => {
   check('and refuses instead of building', /return false;/.test(body('shapeAdd')), true);
   check('flipping a hinge checks too',
         /_arrangementErrors\(cand/.test(body('shapeFlipHinge')), true);
-  check('a click enters at the same end a + would',
-        has("const side=addSide||'right';"), true);
+  /* there is no click-to-add any more: the gallery opens from a + and the
+     side it was pressed on is what makes the question answerable */
+  check('there is no adding without a side',
+        has('const side=addSide;') && has('if(!side) return;'), true);
+  check('and the gallery is only reachable from a +',
+        /function addAt\(side\)\{[\s\S]{0,200}gallerySheet/.test(DEMO), true);
   check('and no caller reaches the canvas around it',
         /shapeList\.(push|unshift)\(/.test(
           DEMO.replace(body('shapeAdd'), '')), false);
