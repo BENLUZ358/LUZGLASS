@@ -39,6 +39,8 @@ const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, consol
 [/const LG_SKU_MAP = \{[\s\S]*?\n\};/,
  /const LG_GLASS_DEFAULT_BASE = [^\n]*/,
  /const LG_GLASS_WORK = \{[\s\S]*?\n\};/,
+ /function _lgWorkRows\(\)[\s\S]*?\n\}/,
+ /const LG_SHOWER_WORKS = _lgWorkRows\(\);/,
  /function lgGlassOptions\(\)[\s\S]*?\n\}/,
  /function lgGlassSku\([\s\S]*?\n\}/,
  /function lgGlassWorks\([\s\S]*?\n\}/].forEach(r => {
@@ -165,50 +167,56 @@ console.log('');
         /const types=GL\b/.test(DEMO), false);
 }
 
-/* ── inside work: graphics and sandblasting ─────────────────────────────── */
+/* ── inside work: graphics, and the sandblasting that is not there ──────── */
 /* Neither is a KIND of glass — they are what is DONE to it — but each has
    its own item and its own price, so each pulls a different part number.
-   Two different rules, and both come from the item names themselves:
-   graphics is ADDED to the type (שקוף → שקוף גרפיקה), while חלבי REPLACES
-   it, because it is sandblasting on plain glass. */
+   And the list of them is DERIVED from the items, never written by hand:
+   an option with no part number is an order that cannot be placed. */
 {
   const sku = (mm, t, w) => run('lgGlassSku(' + mm + ',' + JSON.stringify(t) + ',' +
                                 JSON.stringify(w) + ')');
-  const works = (mm, t) => run('lgGlassWorks(' + mm + ',' + JSON.stringify(t) + ')');
+  const works = (mm, t) => run('lgGlassWorks(' + mm + ',' + JSON.stringify(t) + ')')
+                             .filter(w => w);
+  const ROWS = run('LG_SHOWER_WORKS');
 
-  /* the two examples from the brief, exactly */
-  check('8mm clear with nothing done to it', sku(8, 'שקוף', ''), '8SMH');
-  check('8mm clear sandblasted is its own item', sku(8, 'שקוף', 'chalavi'), '8HMH');
-  check('and reads as חלבי, not as שקוף חלבי',
-        MAP[sku(8, 'שקוף', 'chalavi')], '8 מ"מ חלבי מחוסם');
-  check('8mm clear with graphics', sku(8, 'שקוף', 'graphic'), '8SGMH');
-  check('and that one keeps the type in its name',
+  check('every work row points at an item that exists',
+        ROWS.filter(r => !MAP[r.sku]).map(r => r.sku), []);
+  check('and every graphic item in the catalogue became a row',
+        Object.keys(MAP).filter(k => /גרפיקה מחוסם$/.test(MAP[k]) && !/מראה/.test(MAP[k])
+          && !ROWS.some(r => r.sku === k)), []);
+
+  /* what the graphic items actually give */
+  check('8mm plain with graphics', sku(8, 'שקוף', 'graphic'), '8SGMH');
+  check('8mm clear with graphics', sku(8, 'קליר', 'graphic'), '8CGMH');
+  check('and the item name really says graphics',
         MAP[sku(8, 'שקוף', 'graphic')], '8 מ"מ שקוף גרפיקה מחוסם');
 
-  /* every work still lands on a tempered item */
-  ['', 'chalavi', 'graphic'].forEach(w => {
-    const s = sku(8, 'שקוף', w);
-    check(`  ${w || 'plain'} is tempered like everything else`,
-          /מחוסם$/.test(MAP[s]), true);
-  });
+  /* graphics keeps the type in its name; that is why it is added, not
+     substituted */
+  ROWS.filter(r => r.work === 'graphic').forEach(r =>
+    check('  ' + r.sku + ' names its own type', MAP[r.sku].indexOf(r.type) > -1, true));
 
-  /* sandblasting is done to PLAIN glass, so it is offered nowhere else.
-     Without this it resolved to the clear-glass item from a granite
-     choice — one item answering to two different combinations. */
-  check('sandblasting is offered on plain glass', works(8, 'שקוף').indexOf('chalavi') > -1, true);
-  check('but not on granite', works(8, 'גרניט').indexOf('chalavi') > -1, false);
-  check('nor on acid', works(8, 'אסיד').indexOf('chalavi') > -1, false);
-  check('and asking for it anyway returns nothing', sku(8, 'גרניט', 'chalavi'), null);
+  /* every work item is tempered, like everything in a shower */
+  check('every work item is tempered',
+        ROWS.filter(r => !/מחוסם$/.test(MAP[r.sku])).map(r => r.sku), []);
 
-  /* graphics exist only where the factory has the item */
-  check('graphics on plain glass', sku(8, 'שקוף', 'graphic'), '8SGMH');
-  check('graphics on clear', sku(8, 'קליר', 'graphic'), '8CGMH');
-  check('but not on granite', sku(8, 'גרניט', 'graphic'), null);
-  check('nor at 12mm, where no graphic item exists', sku(12, 'שקוף', 'graphic'), null);
-  check('so it is not offered there either',
-        works(12, 'שקוף').indexOf('graphic') > -1, false);
+  /* SANDBLASTING HAS NO PART NUMBERS IN THIS FILE.
+     Hashavshevet has the items — the name parser reads "8 מ''מ חלבי
+     מחוסם" — but their codes were never recorded in LG_SKU_MAP. Until
+     they are, the option is not offered: better no choice than an
+     invented part number that stalls in the order. Delete this check the
+     day the codes are added. */
+  check('sandblasting has no items yet, so it is not offered anywhere',
+        ROWS.filter(r => r.work === 'chalavi'), []);
+  check('and asking for it returns nothing rather than a guess',
+        [sku(8, 'שקוף', 'chalavi'), sku(6, 'שקוף', 'chalavi')], [null, null]);
 
-  /* what IS offered always resolves */
+  /* nothing is offered on a type that has no item for it */
+  check('no work on granite', works(8, 'גרניט'), []);
+  check('nor on acid', works(8, 'אסיד'), []);
+  check('nor at 12mm, where no work item exists', works(12, 'שקוף'), []);
+
+  /* whatever IS offered always resolves */
   const broken = [];
   Object.keys(OPTS).forEach(mm => OPTS[mm].forEach(o =>
     works(mm, o.type).forEach(w => { if (!sku(mm, o.type, w)) broken.push(mm + ' ' + o.type + ' ' + w); })));
@@ -221,7 +229,7 @@ console.log('');
            { type: 'door', wallSide: 'none', hingeSide: 'right',
              handleSide: 'left', hingeOnFixed: 'prev' }];
   ctx.S = { 0: { w: 500, h: 2000 }, 1: { w: 800, h: 1985 } };
-  [['', '8SMH'], ['chalavi', '8HMH'], ['graphic', '8SGMH']].forEach(([w, want]) => {
+  [['', '8SMH'], ['graphic', '8SGMH']].forEach(([w, want]) => {
     ctx.W = w;
     ctx.SH = run('lgFromPanels(P,S,{finish:"shahor",quality:"zamak",' +
                  'thickness:8,glassType:"שקוף",glassWork:W})');
@@ -232,8 +240,8 @@ console.log('');
   });
 
   /* the same glass with different work is a DIFFERENT item, not the same one */
-  const seen = ['', 'chalavi', 'graphic'].map(w => run('lgGlassSku(8,"שקוף",' + JSON.stringify(w) + ')'));
-  check('three works give three different part numbers', new Set(seen).size, 3);
+  const seen = ['', 'graphic'].map(w => run('lgGlassSku(8,"שקוף",' + JSON.stringify(w) + ')'));
+  check('plain and graphic are two different part numbers', new Set(seen).size, 2);
 }
 
 /* ── the screen offers only what resolves ───────────────────────────────── */
