@@ -229,6 +229,47 @@ canvas{display:block;height:auto;cursor:pointer;}
    בדיוק כשהיא הכי נחוצה: כשמחפשים את המידה שרוצים לשנות. */
 .canvas-wrap.editing{outline:2px solid var(--gold);outline-offset:-2px;}
 
+/* ── מסך מלא לעריכה ──────────────────────────────────────────────
+   שינוי תצוגה בלבד: אף אלמנט לא זז ב-DOM, אף מאזין לא נרשם מחדש,
+   ואף פונקציה לא מקבלת מסלול שני. רק המעטפת גדלה, והציור מחושב
+   מחדש כי רוחבו נגזר ממנה.
+
+   ‏overflow-y חייב להשתנות ל-auto: במצב הרגיל גובה המעטפת נגזר
+   מהקנבס והדף גולל, ובמסך מלא המעטפת קבועה בגובה החלון — עם hidden
+   ציור של 2000 מ"מ היה נחתך. */
+#fullBar{display:none;}
+body.sketch-full{overflow:hidden;}
+body.sketch-full #fullBar{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  position:fixed;top:0;left:0;right:0;height:52px;z-index:60;padding:0 12px;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;color:var(--gold-text);
+}
+body.sketch-full #fullBar button{
+  min-width:44px;min-height:44px;font-size:20px;cursor:pointer;
+  border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);color:var(--text);
+}
+body.sketch-full #fullBar button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+body.sketch-full .canvas-wrap{
+  position:fixed;top:52px;left:0;right:0;bottom:var(--full-bottom,0px);
+  margin:0;border-radius:0;z-index:55;
+  overflow-x:auto;overflow-y:auto;
+}
+/* הפקדים נשארים מעל הציור ולא נעלמים מאחוריו */
+body.sketch-full .edit-bar,
+body.sketch-full .pick-bar,
+body.sketch-full .edit-hint{
+  position:fixed;left:0;right:0;z-index:58;margin:0;
+  background:var(--surface);border-top:1px solid var(--border);padding:8px 10px;
+}
+/* הערימה נבנית מלמטה למעלה, וכל שכבה יושבת על גובה
+   הקודמת לפי מדידה אמיתית. מספר קבוע כאן נשבר עם כל שינוי
+   גופן או רוחב מסך. */
+body.sketch-full .edit-bar{bottom:0;}
+body.sketch-full .pick-bar{bottom:var(--full-bar-h,0px);border-radius:0;}
+body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-h,0px));}
+
 #dimEditor{
   position:absolute;z-index:30;display:none;
   background:var(--surface);border:1px solid var(--gold);border-radius:8px;
@@ -380,6 +421,12 @@ canvas{display:block;height:auto;cursor:pointer;}
     <option value="">-- בחר לקוח --</option>
   </select>
 </div>
+<!-- הסרגל של מצב מסך מלא. מוצג רק כשאחד ממצבי העריכה פעיל, וה-X שלו
+     קורא לאותן פונקציות שהכפתורים הרגילים קוראים — אין מסלול יציאה שני. -->
+<div id="fullBar" aria-hidden="true">
+  <span id="fullBarTitle">מצב עריכה</span>
+  <button type="button" onclick="exitFullEdit()" aria-label="סגור וחזור">✕</button>
+</div>
 <div class="canvas-wrap" id="canvasWrap">
   <canvas id="sk"></canvas>
   <!-- כפתורי ההוספה. הם יושבים מעל הקנבס במקום הפאה שאליה יתחבר השייף
@@ -439,7 +486,7 @@ canvas{display:block;height:auto;cursor:pointer;}
 </div>
 <!-- מחוץ למצב עריכה הצייר אינו מגיב למגע, כדי שאפשר יהיה לגלול מעליו
      בלי לפתוח דברים בטעות. -->
-<div class="edit-bar">
+<div class="edit-bar" id="editBar">
   <button id="btnEditMode" onclick="setEditMode(!editMode)">✎ מצב עריכה</button>
   <button id="btnAdvEdit" onclick="setPickMode(!pickMode)">⚙ עריכה מתקדמת</button>
 </div>
@@ -2313,7 +2360,7 @@ function setPickMode(on){
   if(bar) bar.style.display=pickMode?'flex':'none';
   if(btn) btn.classList.toggle('on',pickMode);
   renderPickBar();
-  draw();
+  syncFullEdit();
 }
 
 function pickStep(d){
@@ -2365,6 +2412,52 @@ function paintPick(L){
 let editMode=false;
 let dimEditTarget=null;
 
+// ─── מסך מלא לעריכה ──────────────────────────────────────────────────
+//
+// הפקדים שיושבים בתחתית משתנים בגובהם לפי המצב, הגופן ורוחב המסך,
+// ולכן המקום שנשמר להם נמדד ולא מנוחש. מספר קבוע נשבר בשקט:
+// הציור נחתך מאחורי הפקדים במקום שתוצג שגיאה.
+function fitFullBottom(){
+  const bs=document.body.style;
+  if(!document.body.classList.contains('sketch-full')){
+    bs.setProperty('--full-bottom','0px'); return;
+  }
+  // offsetParent של אלמנט fixed הוא null תמיד, ולכן הבדיקה היא על display
+  const hOf=id=>{
+    const e=document.getElementById(id);
+    if(!e || getComputedStyle(e).display==='none') return 0;
+    return e.offsetHeight;
+  };
+  const bar=hOf('editBar'), pick=hOf('pickBar'), hint=hOf('editHint');
+  bs.setProperty('--full-bar-h',  bar +'px');
+  bs.setProperty('--full-pick-h', pick+'px');
+  bs.setProperty('--full-bottom', (bar+pick+hint)+'px');
+}
+
+// **תצוגה בלבד.** אין כאן שום החלטה על שייפים, על + או על מידות — רק
+// מחלקה על body ו-draw() אחריה, כי רוחב הקנבס נגזר מרוחב המעטפת.
+//
+// שני המצבים חולקים את הפונקציה הזאת, ולכן אין מצב שבו אחד פתח מסך מלא
+// והשני סגר אותו מתחתיו.
+function syncFullEdit(){
+  const on = editMode || pickMode;
+  document.body.classList.toggle('sketch-full', on);
+  fitFullBottom();
+  const t=document.getElementById('fullBarTitle');
+  if(t) t.textContent = pickMode ? 'עריכה מתקדמת' : 'מצב עריכה';
+  const bar=document.getElementById('fullBar');
+  if(bar) bar.setAttribute('aria-hidden', on?'false':'true');
+  // הרוחב השתנה, ולכן הציור נבנה מחדש. הפריסה, החוקיות והמצב לא נגעו.
+  draw();
+}
+
+// ה-X יוצא ממה שפתוח. הוא קורא לאותן פונקציות שהכפתורים קוראים, ולכן
+// אין לו התנהגות משלו שיכולה להיפרד מהן.
+function exitFullEdit(){
+  if(pickMode) setPickMode(false);
+  if(editMode) setEditMode(false);
+}
+
 function setEditMode(on){
   editMode=!!on;
   const btn=document.getElementById('btnEditMode');
@@ -2378,6 +2471,7 @@ function setEditMode(on){
   if(wrap) wrap.classList.toggle('editing',editMode);
   if(hint) hint.style.display=editMode?'block':'none';
   if(!editMode) closeDimEditor();
+  syncFullEdit();
 }
 
 // מה כל מטרה משנה בפועל. השדות במ"מ, חוץ מ-handleEdge שהפקד שלו בס"מ —
@@ -2897,7 +2991,14 @@ function afterGlassChange(){
 
 // ══════════════ INIT ══════════════
 renderCombos(); initPS(); renderPanelCtrl(); renderSw();
-window.addEventListener('resize',draw); draw();
+window.addEventListener('resize',()=>{ fitFullBottom(); draw(); }); draw();
+// ‏Escape יוצא ממסך מלא — אותה יציאה בדיוק, לא מסלול נוסף. כשחלון מידה
+// פתוח הוא נסגר קודם, כי הוא השכבה העליונה.
+window.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if(document.getElementById('dimEditor')?.classList.contains('open')){ closeDimEditor(); return; }
+  if(editMode||pickMode) exitFullEdit();
+});
 </script>
 </body>
 </html>

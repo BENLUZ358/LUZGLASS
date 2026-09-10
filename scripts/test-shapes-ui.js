@@ -147,8 +147,14 @@ check('and so can a gallery chip',
      there is not room for it to wrap */
   check('the strip wraps instead of scrolling once there is room',
         /shape-strip\{flex-wrap:wrap;overflow-x:visible/.test(desktop), true);
+  /* The PAGE must never scroll sideways — only the canvas wrapper may.
+     A descendant selector like `body.sketch-full .canvas-wrap` is the
+     wrapper's rule, not the page's, so the check looks at selectors that
+     end at body itself. */
   check('no rule makes the page itself scroll sideways',
-        /body[^{]*\{[^}]*overflow-x\s*:\s*auto/.test(DEMO), false);
+        /(^|[},])\s*body[\w.#:\[\]-]*\s*\{[^}]*overflow-x\s*:\s*auto/.test(DEMO), false);
+  check('and full-screen editing locks the page instead of scrolling it',
+        /body\.sketch-full\{overflow:hidden;\}/.test(DEMO), true);
 
   /* the canvas must not swallow the page scroll. It carries a click listener
      and no gesture handler at all, so touch-action:none bought nothing and
