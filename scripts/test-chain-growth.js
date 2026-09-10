@@ -53,7 +53,7 @@ function screen() {
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
   /* the boundary is taken from the source, so the test cannot drift from it */
   const bnd = (DEMO.match(/let shapeBoundary=(\{[^}]*\});/) || [, '{right:"wall",left:"wall"}'])[1];
-  vm.runInContext('var selQ="zamak"; var selMM=8; var selG="שקוף"; var appMode="shape"; var DOOR_H_MM=1985;' +
+  vm.runInContext('var selQ="zamak"; var selMM=8; var selG="שקוף"; var selWork=""; var appMode="shape"; var DOOR_H_MM=1985;' +
     'var HANDLE_EDGE_CM=6; var TOWEL_SPACING_CM=40;' +
     'var NOTCH_DEF={notchW:200,notchH:500};' +
     'let shapeBoundary=' + bnd + ';' +

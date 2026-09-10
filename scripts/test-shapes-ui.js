@@ -233,7 +233,7 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
   check('_shapePanels is found', panelsFn.length > 0, true);
   check('_lgShowerOf is found',  showerFn.length > 0, true);
 
-  const ctx = vm.createContext({ selQ: 'zamak', selMM: 8, selG: 'שקוף' });
+  const ctx = vm.createContext({ selQ: 'zamak', selMM: 8, selG: 'שקוף', selWork: '' });
   vm.runInContext(ENG + '\n' +
     'var shapeBoundary={right:"wall",left:"wall"};\n' +
     'var shapeList=[{id:"a",kind:"fixed",label:"קבוע"},' +
@@ -274,7 +274,7 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
   const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
 
   const run = (list, bound) => {
-    const ctx = vm.createContext({ selQ: 'zamak', selMM: 8, selG: 'שקוף' });
+    const ctx = vm.createContext({ selQ: 'zamak', selMM: 8, selG: 'שקוף', selWork: '' });
     vm.runInContext(ENG + '\nvar shapeBoundary=' + JSON.stringify(bound) +
       ';\nvar shapeList=' + JSON.stringify(list) + ';\n' + panelsFn + '\n' + showerFn, ctx);
     const bom = ctx.lgBOM(ctx._lgShowerOf(ctx._shapePanels(), {}));
@@ -342,7 +342,7 @@ check('the shape mode reuses drawComboMode rather than a second drawing path',
   const showerFn = (DEMO.match(/function _lgShowerOf\(allPanels, ?allPS\)\{[\s\S]*?\n\}/) || [''])[0];
 
   const build = list => {
-    const ctx = vm.createContext({ selQ: 'zamak', selMM: 8, selG: 'שקוף' });
+    const ctx = vm.createContext({ selQ: 'zamak', selMM: 8, selG: 'שקוף', selWork: '' });
     vm.runInContext(ENG + '\nvar shapeBoundary={right:"wall",left:"open"};\n' +
       'var shapeList=' + JSON.stringify(list) + ';\n' + panelsFn + '\n' + showerFn, ctx);
     const panels = ctx._shapePanels();

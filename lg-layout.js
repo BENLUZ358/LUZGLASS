@@ -260,6 +260,9 @@ function lgFromPanels(panels,pStates,opts){
     finish: o.finish||'', quality: o.quality||'', thickness: o.thickness||null,
     // סוג הזכוכית הוא של המקלחון; לוח שקיבל סוג משלו גובר, כמו בעובי.
     glassType: o.glassType||null,
+    // עבודת פנים — חלבי או גרפיקה. אינה סוג, אבל כן פריט אחר, ולכן היא
+    // חייבת להגיע לשורת ההזמנה כדי שהמק"ט יימשך נכון.
+    glassWork: o.glassWork||null,
     shapes: list.map((p,i)=>{
       // הסוג נשמר כפי שהוא. הפיכת כל מה שאינו דלת לקבוע נתנה זוויות קיר
       // לצורה חופשית ולמראה — זכוכיות שאינן חלק מהרכבת המקלחון כלל.
@@ -1219,6 +1222,7 @@ function lgGlass(shower){
       // בודדת. ממנו נגזר המשקל, וזה מה שקובע כמה אנשים צריך להרמה.
       thickness:thick(src),
       glassType:src.glassType || (shower&&shower.glassType) || null,
+      glassWork:src.glassWork || (shower&&shower.glassWork) || null,
       kg:round2(grossMM2/1e6*(thick(src)||0)*LG_GLASS_KG),
       sloped:!!(o.slope&&(o.slope.hSide||o.slope.vSide)),
       notched:!!o.notch,
@@ -1263,7 +1267,7 @@ function lgOrderLines(shower,sku){
   // ועובי הן שורה אחת בהזמנה, גם אם המידות שונות.
   const glass = {};
   lgGlass(shower).forEach(g=>{
-    const key = { kind:'glass', glassType:g.glassType, thickness:g.thickness };
+    const key = { kind:'glass', glassType:g.glassType, glassWork:g.glassWork, thickness:g.thickness };
     const k = JSON.stringify(key);
     if(!glass[k]) glass[k] = { key:key, sku:map(key), qty:0, unit:'m2', panes:0, detail:[] };
     glass[k].qty += g.m2;

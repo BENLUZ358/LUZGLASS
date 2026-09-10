@@ -519,7 +519,12 @@ canvas{display:block;height:auto;cursor:pointer;}
   </div>
   <div class="cs">
     <div class="ch" onclick="tog(this)"><span>תוספות</span><span class="arr">▾</span></div>
-    <div class="cb"><div class="tog"><button class="tb" id="bSand" onclick="toggleSand()">התזת חול</button></div></div>
+    <div class="cb">
+      <!-- עבודת פנים. אינה סוג זכוכית, אבל כן משנה את הפריט — לכל אחת
+           מק"ט משלה. מוצגות רק אלה שיש להן פריט בעובי ובסוג שנבחרו. -->
+      <div class="mm-row" id="workSw" role="group" aria-label="עבודת פנים"></div>
+      <div class="mm-sku" id="workSku"></div>
+    </div>
   </div>
 </div>
 <div class="specs" id="specs"><strong>פרטי הזמנה</strong>בחר מקלחון</div>
@@ -724,7 +729,11 @@ let cx=C.getContext('2d');
 // הזכוכית נבחרת כ**עובי + סוג**, ומהם נגזר המק"ט. קודם selG החזיק מזהה
 // פנימי ('shafu') שלא היה קשור לכלום; עכשיו הוא השם שבחשבשבת, וזה מה
 // שמאפשר לגזור מק"ט בלי טבלת תרגום שנייה.
-let selMM=8, selG='שקוף', selF='shahor', selQ='zamak', sand=false;
+// ‏selWork היא **עבודת פנים** — חלבי או גרפיקה — ולא סוג זכוכית. היא
+// משנה את המק"ט, ולכן היא חלק מהבחירה ולא הערה בצד.
+// ‏sand נשאר כשם ישן שמצביע על אותו דבר, כדי שהסיכום והשמירה לא ישברו.
+let selMM=8, selG='שקוף', selF='shahor', selQ='zamak', selWork='';
+let sand=false;
 let appMode='combo',curCat='pinati',curCombo=COMBOS.pinati[0];
 let panelState={}, items=[], dimHits=[];
 
@@ -760,7 +769,13 @@ function initPS(){panelState={};curCombo.panels.forEach((p,i)=>panelState[i]=mkP
 function tog(h){h.classList.toggle('open');h.nextElementSibling.classList.toggle('open');}
 function v(id){const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;}
 function setQ(q){selQ=q;document.getElementById('bZ').classList.toggle('active',q==='zamak');document.getElementById('bP').classList.toggle('active',q==='pliz');draw();}
-function toggleSand(){sand=!sand;document.getElementById('bSand').classList.toggle('active',sand);}
+function setGlassWork(w){
+  selWork = w||'';
+  // ‏sand הוא הדגל הישן של התזת חול. חלבי **הוא** התזת חול, ולכן הוא
+  // ממשיך להזין אותו — הסיכום וההזמנה השמורה ממשיכים לעבוד כפי שעבדו.
+  sand = (selWork==='chalavi');
+  afterGlassChange();
+}
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 
 // במצב שייפים המצב יושב לפי מזהה השייף ולא לפי מיקום, כדי שהזזה או
@@ -1610,10 +1625,12 @@ function renderBom(el, shower){
       // המק"ט מוצג לצד השורה. הוא נגזר מ-LG_SKU_MAP ולא נכתב כאן, ולכן
       // אם אין פריט לצירוף — נאמר במפורש במקום להמציא מספר.
       const sku=(typeof lgGlassSku==='function' && l.key.thickness && l.key.glassType)
-                ? lgGlassSku(l.key.thickness,l.key.glassType) : null;
+                ? lgGlassSku(l.key.thickness,l.key.glassType,l.key.glassWork) : null;
       rows.push('<div class="bom-row"><span>'+
         (l.key.thickness?l.key.thickness+' מ"מ':'עובי לא נבחר')+
         (l.key.glassType?' · '+_shEsc(l.key.glassType):'')+
+        (l.key.glassWork&&typeof LG_GLASS_WORK!=='undefined'&&LG_GLASS_WORK[l.key.glassWork]
+          ? ' · '+LG_GLASS_WORK[l.key.glassWork].he : '')+
         (sku?' <b class="bom-sku">'+sku+'</b>':'')+
         '</span><b>'+l.qty+' מ"ר</b></div>'+
         '<div class="bom-sub">'+l.panes+' לוחות · '+cuts.join(' · ')+
@@ -1981,6 +1998,7 @@ function _lgShowerOf(allPanels, allPS){
     quality: selQ==='pliz' ? 'pliz' : 'zamak',
     thickness: selMM,
     glassType: selG,
+    glassWork: selWork,
   });
 }
 
@@ -2834,11 +2852,25 @@ function renderSw(){
       (v.price?'<div class="sw-price">₪'+v.price+'</div>':'')+
     '</button>'; }).join('');
 
+  // ── עבודת פנים ──
+  //
+  // מוצעות רק העבודות שיש להן פריט בעובי ובסוג שנבחרו: חלבי הוא התזת
+  // חול על שקוף ואינו קיים על גרניט, וגרפיקה קיימת בשקוף ובקליר בלבד.
+  // בחירה שאין לה פריט אינה בחירה.
+  const works=(typeof lgGlassWorks==='function')?lgGlassWorks(selMM,selG):[''];
+  if(works.indexOf(selWork)<0){ selWork=''; sand=false; }
+  const wEl=document.getElementById('workSw');
+  if(wEl) wEl.innerHTML=works.map(w=>{
+    const he=(typeof LG_GLASS_WORK!=='undefined'&&LG_GLASS_WORK[w])?LG_GLASS_WORK[w].he:'';
+    return '<button type="button" class="'+(w===selWork?'on':'')+'" '+
+      'onclick="setGlassWork(&quot;'+w+'&quot;)">'+(he||'ללא')+'</button>'; }).join('');
+
   // המק"ט מוצג כפי שהוא, כדי שמי שמזמין יראה בדיוק מה יוזמן.
-  const skEl=document.getElementById('glassSku');
-  if(skEl){ const sku=(typeof lgGlassSku==='function')?lgGlassSku(selMM,selG):null;
-    skEl.innerHTML = sku ? 'מק"ט: <b>'+sku+'</b> · '+_shEsc(selMM+' מ"מ '+selG+' מחוסם')
-                         : 'אין פריט לצירוף הזה'; }
+  const sku=(typeof lgGlassSku==='function')?lgGlassSku(selMM,selG,selWork):null;
+  const nm=(sku&&typeof LG_SKU_MAP!=='undefined')?LG_SKU_MAP[sku]:'';
+  [['glassSku',sku,nm],['workSku',sku,nm]].forEach(([id,k,n])=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.innerHTML = k ? 'מק"ט: <b>'+k+'</b> · '+_shEsc(n) : 'אין פריט לצירוף הזה'; });
 
   document.getElementById('fSw').innerHTML=FN.map(f=>`
     <button class="sw ${f.id===selF?'active':''}" onclick="selF='${f.id}';renderSw();draw()">

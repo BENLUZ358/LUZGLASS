@@ -47,7 +47,7 @@ const grab = n => {
 const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console });
 ['lg-shapes.js', 'lg-layout.js', 'lg-catalog.js'].forEach(f =>
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
-vm.runInContext('var selQ="zamak"; var selMM=8; var selG="שקוף"; var DOOR_H_MM=1985; var HANDLE_EDGE_CM=6;' +
+vm.runInContext('var selQ="zamak"; var selMM=8; var selG="שקוף"; var selWork=""; var DOOR_H_MM=1985; var HANDLE_EDGE_CM=6;' +
   'var TOWEL_SPACING_CM=40; var NOTCH_DEF={notchW:200,notchH:500};' +
   'let shapeBoundary={right:"wall",left:"open"}; let shapeList=[],shapePS={};', ctx);
 ['mkPS', '_shapePanels', '_lgShowerOf', 'hingeHolesFromEngine'].forEach(n =>
