@@ -702,6 +702,11 @@ function lgNormalizeOrder(o) {
     cat:           o.cat          || '',
     quality:       o.quality      || '',
     sand:          o.sand         || false,
+    // תוספות שהלקוח ביקש בבחירת הפרזול. הרשימה הזאת היא לבנה:
+    // שדה שאינו נקוב כאן חוזר undefined בכל דף, ולכן בחירה
+    // שלא נרשמה כאן נעלמת בדרך למפעל בלי שאף אחד יראה שגיאה.
+    supportBar:    o.supportBar   || false,
+    blackTrim:     o.blackTrim    || false,
     workdayStatus:  o.workdayStatus  || '',
     readyStatus:    o.readyStatus    || '',
     chisumArrived:     o.chisumArrived   || false,

@@ -91,10 +91,13 @@
 /* ── גיליון המאפיינים ──────────────────────────────────────────────────
    נפתח מלמטה, כי שם האגודל. המנוע יודע פינוי, שיפוע בשני צירים, עובי
    וסוג זכוכית — ואף אחד מהם לא היה נגיש למי שבונה את הסקיצה. */
-.sheet-back{position:fixed;inset:0;background:rgba(26,23,20,0.45);z-index:40;
+/* מעל שכבות המסך המלא (55–60): הגלריה נפתחת מה-+ שעל הציור,
+   וגיליון המאפיינים הוא כל מטרתה של "עריכה מתקדמת" — שניהם נפתחים
+   דווקא כשהציור תופס את כל המסך. */
+.sheet-back{position:fixed;inset:0;background:rgba(26,23,20,0.45);z-index:70;
   opacity:0;pointer-events:none;transition:opacity .2s ease;}
 .sheet-back.open{opacity:1;pointer-events:auto;}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--surface);
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:71;background:var(--surface);
   border-top-left-radius:16px;border-top-right-radius:16px;
   box-shadow:0 -4px 24px rgba(0,0,0,0.18);
   transform:translateY(100%);transition:transform .24s cubic-bezier(.32,.72,0,1);
@@ -125,6 +128,23 @@
   border:1px solid var(--border);background:var(--bg);color:var(--text);}
 .sh-seg button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
 .sh-seg button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+/* שתי תוספות בבחירת הפרזול. 44px גם לתווית, כדי שהלחיצה תעבוד
+   גם כשמנסים לפגוע במילה ולא בריבוע. */
+.offer-text{margin:0 0 14px;font-family:'Heebo',sans-serif;font-size:14px;
+  line-height:1.6;color:var(--text);}
+.offer-text b{color:var(--gold-text);}
+.offer-btns{display:flex;flex-direction:column;gap:8px;}
+.offer-btns button{min-height:48px;border-radius:8px;cursor:pointer;
+  font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;}
+.offer-yes{background:var(--gold);color:var(--on-gold);border:1px solid var(--gold);}
+.offer-no{background:var(--bg);color:var(--text);border:1px solid var(--border);}
+.offer-btns button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.add-tog{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.add-tog label{display:flex;align-items:center;gap:8px;flex:1 1 46%;min-height:44px;
+  padding:0 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;
+  font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);background:var(--bg);}
+.add-tog input{width:18px;height:18px;accent-color:var(--gold);cursor:pointer;}
+.add-tog label:focus-within{outline:2px solid var(--gold-text);outline-offset:2px;}
 .sh-tog{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;font-size:14px;}
 .sh-tog input{width:22px;height:22px;accent-color:var(--gold);}
 .sh-note{font-size:12px;color:var(--muted);margin:2px 0 8px;}
@@ -474,6 +494,23 @@ body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-
   </div>
 </div>
 
+<!-- ההצעה לזווית רצפה. **הצעה, לא חוק.** אין לה אקס ואין לה רקע
+     שנסגר בלחיצה: שאלה שנסגרת בלי תשובה תישאל שוב בציור הבא, וזה
+     נודניק. שתי התשובות מפורשות, ו"לא" הוא גם Escape. -->
+<div class="sheet-back" id="offerBack"></div>
+<div class="sheet" id="offerSheet" role="dialog" aria-modal="true"
+     aria-labelledby="offerTitle" onkeydown="if(event.key==='Escape')offerAnswer(false)">
+  <div class="sheet-grip" aria-hidden="true"></div>
+  <div class="sheet-head"><h3 id="offerTitle">להוסיף זווית רצפה?</h3></div>
+  <div class="sheet-body">
+    <p id="offerText" class="offer-text"></p>
+    <div class="offer-btns">
+      <button type="button" class="offer-yes" onclick="offerAnswer(true)">כן, הוסף זווית רצפה</button>
+      <button type="button" class="offer-no"  onclick="offerAnswer(false)">לא, תודה</button>
+    </div>
+  </div>
+</div>
+
 <div class="sheet-back" id="shapeSheetBack" onclick="closeShapeSheet()"></div>
 <div class="sheet" id="shapeSheet" role="dialog" aria-modal="true"
      aria-labelledby="shapeSheetTitle" onkeydown="if(event.key==='Escape')closeShapeSheet()">
@@ -561,6 +598,14 @@ body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-
       <div class="tog" style="margin-top:4px">
         <button class="tb active" id="bZ" onclick="setQ('zamak')">זאמק</button>
         <button class="tb" id="bP" onclick="setQ('pliz')">פליז ✦</button>
+      </div>
+      <!-- תוספות שאין עליהן חוקיות — הן בקשת הלקוח ולא נגזרות משום דבר,
+           ולכן הן יושבות כאן ולא נשאלות כשאלה. -->
+      <div class="add-tog">
+        <label><input type="checkbox" id="cbSupportBar"
+               onchange="setExtra('supportBar',this.checked)">מוט חיזוק</label>
+        <label><input type="checkbox" id="cbBlackTrim"
+               onchange="setExtra('blackTrim',this.checked)">מעטפת שחורה</label>
       </div>
     </div>
   </div>
@@ -780,6 +825,9 @@ let cx=C.getContext('2d');
 // משנה את המק"ט, ולכן היא חלק מהבחירה ולא הערה בצד.
 // ‏sand נשאר כשם ישן שמצביע על אותו דבר, כדי שהסיכום והשמירה לא ישברו.
 let selMM=8, selG='שקוף', selF='shahor', selQ='zamak', selWork='';
+// תוספות שהלקוח מבקש על המקלחון כולו. אין עליהן חוקיות ואף אחת לא
+// נגזרת מהצורה — ולכן הן מתחילות כבויות ונדלקות רק ביד.
+let selSupportBar=false, selBlackTrim=false;
 let sand=false;
 let appMode='combo',curCat='pinati',curCombo=COMBOS.pinati[0];
 let panelState={}, items=[], dimHits=[];
@@ -816,6 +864,24 @@ function initPS(){panelState={};curCombo.panels.forEach((p,i)=>panelState[i]=mkP
 function tog(h){h.classList.toggle('open');h.nextElementSibling.classList.toggle('open');}
 function v(id){const e=document.getElementById(id);return e?parseFloat(e.value)||0:0;}
 function setQ(q){selQ=q;document.getElementById('bZ').classList.toggle('active',q==='zamak');document.getElementById('bP').classList.toggle('active',q==='pliz');draw();}
+
+// תוספת על המקלחון כולו. היא נכנסת למקלחון דרך _lgShowerOf ומשם
+// לליקוט — אותה שרשרת אחת, בלי עותק של המידע על המסך.
+function setExtra(field,on){
+  if(field==='supportBar')      selSupportBar=!!on;
+  else if(field==='blackTrim')  selBlackTrim =!!on;
+  else return;
+  renderExtras();
+  // אותו מסלול רענון של בחירת הזכוכית: הליקוט בשני הטאבים והציור.
+  afterGlassChange();
+}
+
+// התיבות מציגות את המצב, ולא המצב נגזר מהן: טעינת סקיצה שמורה
+// משנה את המשתנים, והמסך צריך לעקוב אחריהם.
+function renderExtras(){
+  const sb=document.getElementById('cbSupportBar'); if(sb) sb.checked=selSupportBar;
+  const bt=document.getElementById('cbBlackTrim');  if(bt) bt.checked=selBlackTrim;
+}
 function setGlassWork(w){
   selWork = w||'';
   // ‏sand הוא הדגל הישן של התזת חול. חלבי **הוא** התזת חול, ולכן הוא
@@ -1651,7 +1717,11 @@ function renderShapeSheet(){
 // המחיר, ובלעדיה הפירוט לא אומר כמעט כלום.
 const LG_HW_HE={'bracket-wall':'זווית קיר','bracket-gg':'זווית זכוכית-זכוכית',
                 'bracket-floor':'זווית רצפה','hinge-gg':'ציר זכוכית-זכוכית',
-                'hinge-wall':'ציר קיר-זכוכית','handle':'ידית'};
+                'hinge-wall':'ציר קיר-זכוכית','handle':'ידית',
+                // תוספות לבקשת הלקוח, והגומיות שהחוקיות שלהן עוד לא נקבעה
+                'support-bar':'מוט חיזוק','black-trim':'מעטפת שחורה',
+                'seal-floor-wiper':'מגב רצפה','seal-magnet-corner':'מגנט פינתי',
+                'seal-magnet-straight':'מגנט ישר'};
 
 function renderBom(el, shower){
   if(!el) return;
@@ -1958,7 +2028,106 @@ function getPStates(){
   return Object.fromEntries(items.map((it,i)=>[i,it]));
 }
 
+// ─── הצעה לזווית רצפה ──────────────────────────────
+//
+// את הקצה החופשי של קבוע לא מחזיק שום דבר חוץ מזוויות הקיר.
+// כשהקבוע גדול יש לקוחות שמעדיפים להוסיף זווית רצפה לחיזוק.
+//
+// **זו הצעה, לא חוק.** המנוע אינו מוסיף זווית ואינו פוסל קבוע רחב
+// בלעדיה; המסך שואל פעם אחת ומכבד את התשובה. מי שסירב יכול תמיד
+// להדליק אותה בעצמו בגיליון המאפיינים, שם היא הייתה מאז ומתמיד.
+const LG_FLOOR_OFFER_MM = 800;      // 80 ס"מ. מספר אחד, במקום אחד.
+
+// מי כבר נשאל. בלי זה השאלה הייתה חוזרת בכל ציור מחדש עד
+// שהלקוח היה עונה "כן" רק כדי שתיפסיק — וזו לא הסכמה.
+const _fbAsked = new Set();
+let _fbSeeded = false, _fbTarget = null;
+
+// מפתח יציב ללוח. במצב השייפים יש מזהה אמיתי; בשאר המצבים
+// האינדקס הוא מה שיש. מחיקת לוח מזיזה שם את האינדקסים, והמחיר
+// הוא שאלה אחת מיותרת — לא זווית שנוספה לבד.
+function _fbKey(p,i){ return appMode+':'+((p&&p.id)||i); }
+
+// קבוע רחב אחד שעדיין לא נשאל עליו. אחד בלבד: שתי שאלות זו על
+// גבי זו הן חסימה, לא הצעה. השנייה תעלה בציור הבא.
+function _fbCandidate(){
+  const panels=getPanels(), pss=getPStates();
+  for(let i=0;i<panels.length;i++){
+    const p=panels[i]||{}, st=pss[i]||{};
+    if(((p.type)||'fixed')!=='fixed') continue;   // דלת, מראה וצורה אינן נשענות על רצפה
+    if(st.floorBracket) continue;                 // כבר יש לו
+    if((Number(st.w)||0)<=LG_FLOOR_OFFER_MM) continue;
+    const key=_fbKey(p,i);
+    if(_fbAsked.has(key)) continue;
+    return {i:i, key:key, w:Number(st.w)};
+  }
+  return null;
+}
+
+function offerFloorBracket(){
+  const panels=getPanels();
+
+  // הזרעה בציור הראשון שיש בו משהו: סקיצה שנפתחת עם קבוע רחב
+  // שמור אינה שאלה שהלקוח שאל — ההצעה עוקבת אחרי מה שנעשה עכשיו.
+  if(!_fbSeeded){
+    if(!panels.length) return;
+    const pss=getPStates();
+    panels.forEach((p,i)=>{
+      const st=pss[i]||{};
+      if(((p&&p.type)||'fixed')==='fixed' && (Number(st.w)||0)>LG_FLOOR_OFFER_MM)
+        _fbAsked.add(_fbKey(p,i));
+    });
+    _fbSeeded=true;
+    return;
+  }
+
+  if(_fbTarget) return;                       // שאלה אחת פתוחה בכל רגע
+
+  // לא קופצים מעל חלון שפתוח. מי שמקליד מידה עוד לא סיים
+  // להחליט, והשאלה תעלה בציור הבא — בלי לסמן אותו כנשאל.
+  if(document.querySelector('.sheet.open')) return;
+  if(document.getElementById('dimEditor')?.classList.contains('open')) return;
+
+  const c=_fbCandidate();
+  if(!c) return;
+  _fbTarget=c;
+
+  const txt=document.getElementById('offerText');
+  if(txt) txt.innerHTML='הקבוע הזה ברוחב <b>'+Math.round(c.w/10)+' ס"מ</b> ('+c.w+' ממ). '+
+    'בקבוע רחב יש לקוחות שמעדיפים להוסיף זווית רצפה לחיזוק.<br>'+
+    'אין בזה חובה — הקבוע מוחזק בזוויות הקיר.';
+
+  document.getElementById('offerBack')?.classList.add('open');
+  const sh=document.getElementById('offerSheet');
+  if(sh){ sh.classList.add('open'); sh.querySelector('.offer-yes')?.focus(); }
+}
+
+// שתי התשובות נגמרות אותו דבר: הלוח נרשם כנשאל ולא יישאל שוב.
+function offerAnswer(yes){
+  const t=_fbTarget; _fbTarget=null;
+  document.getElementById('offerBack')?.classList.remove('open');
+  document.getElementById('offerSheet')?.classList.remove('open');
+  if(!t) return;
+  _fbAsked.add(t.key);
+  if(yes){
+    const ps=getPS(appMode==='combo'?'combo':appMode, t.i);
+    if(ps) ps.floorBracket=true;
+    // המסלול הרגיל של שינוי מצב: הליקוט והציור מתעדכנים יחד
+    renderPanelCtrl();
+    if(appMode==='shape') renderShapeUI();
+    draw();
+  }
+}
+
+// הציור והשאלה מופרדים, ולכן יש נקודה אחת בלבד שבה ההצעה עולה.
+// שלושה מקומות משנים רוחב — הפקד, גיליון המאפיינים וחלון המידה —
+// וכולם מסתיימים ב-draw(). בדיקה בכל אחד מהם הייתה שלוש אמיתות.
 function draw(){
+  _drawFrame();
+  offerFloorBracket();
+}
+
+function _drawFrame(){
   const panels=getPanels(), pss=getPStates();
   if(!panels.length){lastL=null;drawEmpty();renderAddButtons();return;}
 
@@ -2046,6 +2215,9 @@ function _lgShowerOf(allPanels, allPS){
     thickness: selMM,
     glassType: selG,
     glassWork: selWork,
+    // התוספות נכנסות כאן, במקום היחיד שבו המסך בונה מקלחון.
+    supportBar: selSupportBar ? 1 : null,
+    blackTrim:  selBlackTrim  ? 1 : null,
   });
 }
 
@@ -2845,6 +3017,9 @@ function saveAndSendOrder(){
     source:'system',
     type:appMode==='combo'?(sketchParts.length>0?'סקיצה מרובה':curCombo.label):'פריט פריט',
     glass:g.name,glassPrice:g.price,finish:f.name,quality:selQ,sand,area,total,
+    // התוספות נוסעות עם ההזמנה. בחירה שנראית בליקוט ונעלמת
+    // בשמירה גרועה מבחירה שלא היתה — הלקוח בטוח שהזמין אותה.
+    supportBar:selSupportBar, blackTrim:selBlackTrim,
     panels:panels.map((p,i)=>({label:p.label||p.type,type:p.type,w:pss[i]?.w||500,h:pss[i]?.h||2000})),
     parts:sketchParts,
     date:new Date().toLocaleDateString('he-IL'),
@@ -2990,7 +3165,7 @@ function afterGlassChange(){
 
 
 // ══════════════ INIT ══════════════
-renderCombos(); initPS(); renderPanelCtrl(); renderSw();
+renderCombos(); initPS(); renderPanelCtrl(); renderSw(); renderExtras();
 window.addEventListener('resize',()=>{ fitFullBottom(); draw(); }); draw();
 // ‏Escape יוצא ממסך מלא — אותה יציאה בדיוק, לא מסלול נוסף. כשחלון מידה
 // פתוח הוא נסגר קודם, כי הוא השכבה העליונה.

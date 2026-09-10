@@ -240,6 +240,30 @@ function lgBOM(shower) {
     if (sh.floorBracket)    add('bracket-floor', null, 1);
   }
 
+  // ── מה שנוגע במקלחון כולו ─────────────────────────────────────────
+  //
+  // מוט חיזוק ומעטפת שחורה הם **בקשת לקוח שאין עליה חוקיות**. המנוע
+  // אינו מחליט עליהם ואינו מציע אותם — הוא רק סופר מה שנבחר.
+  //
+  // שניהם על ההרכבה ולא על לוח בודד, כמו שהם נבחרים — בבחירת
+  // הפרזול, שהיא של המקלחון כולו. מספר מתקבל כמות, כדי שמקלחון
+  // גדול שצריך שני מוטות לא יחייב שינוי במנוע.
+  if (shower.supportBar) add('support-bar', null, Number(shower.supportBar) || 1);
+  if (shower.blackTrim)  add('black-trim',  null, Number(shower.blackTrim)  || 1);
+
+  // ── גומיות ───────────────────────────────────────────────────────
+  //
+  // כל מקלחון מקבל מגב רצפה ומגנט — פינתי או ישר, תלוי במקלחון.
+  // **החוקיות שקובעת איזה מגנט עוד לא נבנתה**, ולכן אין כאן ניחוש:
+  // מה שנבחר במפורש נספר, ומה שלא — לא. כשהכלל ייקבע, זה המקום היחיד
+  // שצריך לגעת בו.
+  if (shower.seals) {
+    var seals = shower.seals;
+    if (seals.floorWiper) add('seal-floor-wiper', null, Number(seals.floorWiper) || 1);
+    if (seals.magnet === 'corner')   add('seal-magnet-corner', null, 1);
+    if (seals.magnet === 'straight') add('seal-magnet-straight', null, 1);
+  }
+
   var out = [];
   for (var key2 in lines) if (lines.hasOwnProperty(key2)) out.push(lines[key2]);
   return out;
