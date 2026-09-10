@@ -192,8 +192,12 @@ check('and an empty canvas has a + of its own to start with',
 check('validation runs on every change',     /lgValidate\(/.test(DEMO), true);
 check('and an error names the shape it is about',
       /lgValidate\([\s\S]{0,300}?\.at\b/.test(DEMO), true);
+/* the list now carries glass as well as hardware, and lgOrderLines is what
+   merges them — the screen counts nothing itself */
 check('the picking list is shown from the engine, not recounted',
-      /lgBOM\(/.test(DEMO), true);
+      /lgOrderLines\(/.test(DEMO), true);
+check('and it covers glass, not hardware alone',
+      /lgGlassTotals\(/.test(DEMO), true);
 
 /* ── the shape mode actually reaches the drawing ───────────────────────── */
 /*

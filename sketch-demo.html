@@ -144,6 +144,14 @@
   background:#fdecea;border:1px solid #f5c6c2;color:#8f2d24;
   font-family:'Heebo',sans-serif;font-size:13px;line-height:1.5;
 }
+.shape-bom h5,.controls h5{margin:10px 0 4px;font-size:13px;color:var(--gold-text);}
+.bom-row{display:flex;justify-content:space-between;gap:10px;font-size:13px;
+  padding:3px 0;border-bottom:1px solid var(--border);}
+.bom-row b{white-space:nowrap;}
+.bom-sub{font-size:12px;color:var(--muted);padding:2px 0 6px;}
+.bom-tot{margin-top:8px;padding-top:6px;border-top:2px solid var(--gold);
+  font-size:13px;font-weight:700;}
+.controls{padding:0 12px 12px;}
 .shape-bom{
   margin:8px 10px;padding:10px 12px;border:1px solid var(--border);
   background:var(--bg);font-family:'Heebo',sans-serif;font-size:13px;
@@ -1545,6 +1553,53 @@ function renderShapeSheet(){
       '</div>');
 }
 
+// ─── הפירוט ──────────────────────────────────────────────────────────
+//
+// **פירוט אחד, שני טאבים.** ‏lgOrderLines כבר מאחד זכוכית ופרזול לשורות
+// עם מפתח קטלוגי — הצירוף שממנו ייגזר המק"ט. המנוע אינו יודע מק"טים
+// ואינו צריך: המיפוי יגיע מבחוץ, מהמחירון של חשבשבת, וייכנס כאן.
+//
+// עד היום הליקוט הוצג בטאב הצורות בלבד ובפרזול בלבד. זכוכית היא רוב
+// המחיר, ובלעדיה הפירוט לא אומר כמעט כלום.
+const LG_HW_HE={'bracket-wall':'זווית קיר','bracket-gg':'זווית זכוכית-זכוכית',
+                'bracket-floor':'זווית רצפה','hinge-gg':'ציר זכוכית-זכוכית',
+                'hinge-wall':'ציר קיר-זכוכית','handle':'ידית'};
+
+function renderBom(el, shower){
+  if(!el) return;
+  const lines=(typeof lgOrderLines==='function')?lgOrderLines(shower):[];
+  if(!lines.length){ el.style.display='none'; el.innerHTML=''; return; }
+
+  const glass=lines.filter(l=>l.key.kind==='glass');
+  const hw   =lines.filter(l=>l.key.kind==='hardware');
+  const tot  =(typeof lgGlassTotals==='function')?lgGlassTotals(shower):null;
+
+  const rows=[];
+  if(glass.length){
+    rows.push('<h5>זכוכית</h5>');
+    glass.forEach(l=>{
+      // המידות הן **מידות חיתוך** — מה שהחותך מקבל. השטח נמדד לפי תיבה
+      // חוסמת, כמו שנקבע: הגובה הגדול ביותר והרוחב הגדול ביותר.
+      const cuts=(l.detail||[]).map(d=>d.cutW+'×'+d.cutH+(d.shape&&d.shape!=='מלבן'?' ('+d.shape+')':''));
+      rows.push('<div class="bom-row"><span>'+
+        (l.key.thickness?l.key.thickness+' מ"מ':'עובי לא נבחר')+
+        (l.key.glassType?' · '+_shEsc(l.key.glassType):'')+
+        '</span><b>'+l.qty+' מ"ר</b></div>'+
+        '<div class="bom-sub">'+l.panes+' לוחות · '+cuts.join(' · ')+'</div>');
+    });
+  }
+  if(hw.length){
+    rows.push('<h5>פרזול</h5>');
+    hw.forEach(l=>rows.push('<div class="bom-row"><span>'+
+      (LG_HW_HE[l.key.type]||l.key.type)+'</span><b>'+l.qty+'</b></div>'));
+  }
+  if(tot) rows.push('<div class="bom-tot">סה"כ '+tot.panes+' לוחות · '+
+    tot.m2+' מ"ר · '+tot.kg+' ק"ג · '+tot.holes+' קדחים</div>');
+
+  el.style.display='block';
+  el.innerHTML=rows.join('');
+}
+
 function renderShapeUI(){
   if(!_galleryDrawn){ _galleryDrawn=1; loadShapeLibraries(); }
   const strip=document.getElementById('shapeStrip');
@@ -1576,14 +1631,7 @@ function renderShapeUI(){
   } else errEl.style.display='none';
 
   // הליקוט מוצג מהמנוע ולא נספר מחדש — שתי ספירות מתפצלות.
-  const bom=(typeof lgBOM==='function')?lgBOM(sh):[];
-  if(bom.length){
-    const NAME={'bracket-wall':'זווית קיר','bracket-gg':'זווית זכוכית-זכוכית',
-                'bracket-floor':'מחזיק רצפה','hinge-gg':'ציר זכוכית-זכוכית',
-                'hinge-wall':'ציר קיר-זכוכית','handle':'ידית'};
-    bomEl.style.display='block';
-    bomEl.innerHTML='<b>ליקוט</b> — '+bom.map(b=>(NAME[b.type]||b.type)+' ×'+b.qty).join(' · ');
-  } else bomEl.style.display='none';
+  renderBom(bomEl, sh);
 }
 function setCat(cat,btn){
   curCat=cat;
@@ -1758,8 +1806,10 @@ function buildPanelHTML(panel,ps,i,pfx){
 // ‏buildPanelHTML **נשאר**: מצב "פריט פריט" עדיין בנוי עליו, ומחיקתו
 // הייתה שוברת אותו. מה שהוסר הוא השימוש בקומבינציה בלבד.
 function renderPanelCtrl(){
+  // אותו פירוט בדיוק של טאב הצורות. שני מרנדרים היו שתי אמיתות על אותה
+  // הזמנה, וזה בדיוק מה שהפרויקט הזה נלחם בו לאורך כל הדרך.
   const el=document.getElementById('comboCtrl');
-  if(el) el.innerHTML='';
+  if(el) renderBom(el, _lgShowerOf(getPanels(), getPStates()));
   renderPickBar();
 }
 
