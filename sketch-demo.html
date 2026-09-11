@@ -1684,10 +1684,12 @@ function _shNum(field,label,val,ph){
 // והיא המקור היחיד — גם למסך וגם לבדיקה לפני השמירה.
 const LG_HOLE_HE={'bracket-floor':'זווית רצפה','hole':'קדח חופשי'};
 
-// קדח חדש נולד במרחק שכבר קיים במערכת — ברירת המחדל של
-// bracketInset — ולא במספר חדש שהמצאתי. מי שממקם קדח מקליד
-// את המספר האמיתי בשני השדות מיד, ורואה אותו זז על הציור.
-const LG_HOLE_INSET_DEF=25;
+// קדח חדש נולד במקום שהחוקיות קובעת לו, ולא במספר שהמצאתי:
+// זווית רצפה יושבת 2.5 ס"מ מלמטה ו-5 ס"מ מהפאה. אותם שני מספרים
+// משמשים את המתג בגיליון ואת הקדח שנוסף כאן — שתי דרכים,
+// אותה חוקיות. קדח חופשי אינו בנוי על כלל כזה, ומי שממקם
+// אותו מקליד את שני המספרים מיד.
+const LG_HOLE_POS_DEF={'bracket-floor':{side:50,bot:25},'hole':{side:50,bot:25}};
 
 // כל הקוראים עוברים דרך getPS, כמו כל שאר המסך. רשימה שנשמרת
 // בצד היתה העותק השני שהפרויקט הזה נלחם בו לאורך כל הדרך.
@@ -1703,9 +1705,10 @@ function _holeRedraw(){ renderShapeSheet(); renderShapeUI(); draw(); }
 function holeAdd(role){
   const L=_holeList(); if(!L) return;
   if(typeof LG_CAT_OWN_ROLES==='undefined'||!LG_CAT_OWN_ROLES[role]) return;
+  const at=LG_HOLE_POS_DEF[role]||{side:50,bot:25};
   L.push({role:role, dia:LG_CAT_OWN_ROLES[role],
-          x:{from:'left',   mm:LG_HOLE_INSET_DEF},
-          y:{from:'bottom', mm:LG_HOLE_INSET_DEF}});
+          x:{from:'left',   mm:at.side},
+          y:{from:'bottom', mm:at.bot}});
   _holeRedraw();
 }
 
@@ -1873,9 +1876,19 @@ function renderShapeSheet(){
     ? '<div class="sh-grp"><h4>פרזול</h4>'+
         '<p class="sh-note">זכוכית חופשית אינה נושאת פרזול של הרכבה. פינוי יתווסף בהמשך.</p>'+
       '</div>'
+    // **זווית רצפה היא של קבוע בלבד.** היא מחברת את הזכוכית לרצפה, ודלת
+    // זזה — אי אפשר להבריג אותה לרצפה. המתג הוצע לכל זכוכית שאינה
+    // חופשית, ולכן הופיע גם על דלת.
+    : s.kind!=='fixed'
+    ? '<div class="sh-grp"><h4>פרזול</h4>'+
+        '<p class="sh-note">דלת נושאת צירים וידית, ושניהם נגזרים מהמפגש עם '+
+        'הקבוע שהיא תלויה עליו. זווית רצפה היא של קבוע — דלת זזה.</p>'+
+      '</div>'
     : '<div class="sh-grp"><h4>פרזול</h4>'+
         '<label class="sh-tog"><input type="checkbox" '+(ps.floorBracket?'checked':'')+
           ' onchange="sheetSet(\'floorBracket\',this.checked?true:null)">זווית רצפה</label>'+
+        (ps.floorBracket?'<p class="sh-note">הקדח יושב 2.5 ס"מ מלמטה ו-5 ס"מ '+
+          'מהפאה החופשית — זו שאינה נשענת על קיר.</p>':'')+
         _shNum('bracketInset','מרחק הזווית מהפאה',ps.bracketInset,'25')+
         '<p class="sh-note">2.5 ס"מ כברירת מחדל, ואז המידה לא מופיעה בשרטוט.</p>'+
       '</div>')+
@@ -2845,6 +2858,10 @@ const DIM_FIELDS={
   bracketInset: {label:'מרחק הזווית מהפאה'},
   notchW:       {label:'רוחב פינוי המדרגה'},
   notchH:       {label:'גובה פינוי המדרגה'},
+  // שני אלה צוירו תמיד ולא היה אפשר ללחוץ עליהם: הרוחב שנשאר
+  // פתח את הרוחב הכללי, והגובה הפנימי פתח את החיצוני.
+  notchRest:    {label:'הרוחב שנשאר לצד המדרגה'},
+  notchHIn:     {label:'גובה המדרגה מבפנים'},
 };
 
 // המטרה מתוארת כ-{pfx, field, idx} ולא כמזהה של שדה טופס. במצב שייפים
@@ -2873,6 +2890,8 @@ function _dimRead(t){
     else if(t.field==='handleEdge')    v=HANDLE_EDGE_CM;
     else if(t.field==='slopeH1'||t.field==='slopeH2') v=ps.h||2000;
     else if(t.field==='slopeW1'||t.field==='slopeW2') v=ps.w||500;
+    else if(t.field==='notchRest') v=(ps.w||500)-(Number(ps.notchW)||0);
+    else if(t.field==='notchHIn')  v=Number(ps.notchH)||0;
   }
   if(v==null) return null;
   return f.cm?Math.round(v*10):v;      // תמיד מ"מ החוצה

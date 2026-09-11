@@ -235,8 +235,17 @@ console.log('');
         Math.round(L.shapes[0].y), Math.round(L.shapes[1].y));
   check('the top hinge reads 200 on both panes', [at('hinge-top', 0), at('hinge-top', 1)],
         [['200'], ['200']]);
-  check('and the bottom reads 215 on the fixed, 200 on the door',
-        [at('hinge-bot', 0), at('hinge-bot', 1)], [['215'], ['200']]);
+  /* The fixed is cut 2000/1800 and the DOOR HANGS ON ITS SHORT FACE: the
+     glass there stops 200mm above the floor. So the bottom hinge cannot be
+     215 above the floor — that would be 15mm from the edge of the fixed, a
+     hole in thin air. It sits 200 above the edge that actually exists, and
+     the door, whose own bottom is 15 above the floor, reads 385.
+
+     This used to read 215/200 only because the label was measured from the
+     pane's bounding box rather than from the face the hinge is drilled
+     into. The box said "floor"; the glass said 200mm up. */
+  check('the bottom hinge clears the sloped face it is drilled into',
+        [at('hinge-bot', 0), at('hinge-bot', 1)], [['200'], ['385']]);
 
   /* a slope at the TOP does lower that face, and then it counts */
   const S2 = { 0: { w: 500, h: 2000, hasSlope: true, slopeH1: 2000, slopeH2: 1800,

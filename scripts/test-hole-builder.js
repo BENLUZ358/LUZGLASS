@@ -127,7 +127,7 @@ function sheet(ps, role) {
     'function _shEsc(s){ return String(s); }' +
     'var PAINT=0; function renderShapeSheet(){PAINT++;} function renderShapeUI(){} function draw(){}', ctx);
   vm.runInContext(DEMO.match(/const LG_HOLE_HE=\{[^}]*\};/)[0], ctx);
-  vm.runInContext(DEMO.match(/const LG_HOLE_INSET_DEF=\d+;/)[0], ctx);
+  vm.runInContext(DEMO.match(/const LG_HOLE_POS_DEF=\{[^}]*\}[^;]*;/)[0], ctx);
   ['_holeList', '_holeRedraw', 'holeAdd', 'holeDel', 'holeSet', 'holeNum', '_shHole', '_shHoles']
     .forEach(n => vm.runInContext(grab(n), ctx));
   return { run: e => vm.runInContext(e, ctx), ps: () => ctx.PS };
@@ -142,6 +142,9 @@ function sheet(ps, role) {
   check('the two faces are named the way the engine names them',
         [Object.keys(h.x).sort(), Object.keys(h.y).sort()], [['from', 'mm'], ['from', 'mm']]);
   check('a floor bracket starts at the diameter the catalogue gives it', h.dia, 20);
+  /* Ben's rule, 2026-09-11: a floor bracket sits 2.5cm up and 5cm in */
+  check('and at the position the rule gives it — 25 up, 50 in',
+        [h.y.mm, h.x.mm], [25, 50]);
   check('and it is a real 20mm hole, not a guess',
         h.dia, vm.runInContext('LG_CAT_OWN_ROLES["bracket-floor"]',
           vm.createContext({ LG_CAT_OWN_ROLES: { 'bracket-floor': 20, 'hole': 12 } })));

@@ -85,10 +85,22 @@ function _heightGroups(entries,nShapes){
 
 const LG_DEF_W=500, LG_DEF_H=2000;
 const LG_EDGE_MM=200;          // ציר או זווית, 20 ס"מ מהקצה
+// ‏**תקרת הציר התחתון, נמדדת מהרצפה.**
+//
+// ציר הוא פיסת מתכת אחת שעוברת בשתי הזכוכיות, והקבוע שלידו
+// עומד על הרצפה. הגובה מהרצפה הוא לכן המספר המשותף, והוא
+// לא עולה על 215. בלעדיו כל דבר שמרים את הדלת — מרווח רצפה
+// גדול יותר, או פאה שנחתכה בשיפוע — היה מרים את הציר איתה,
+// וכל מקלחון היה מקבל ציר בגובה אחר. מקלחון רגיל מגיע ל-215
+// מעצמו (200 מתחתית הדלת, שתלויה 15 מעל הרצפה), ולכן התקרה
+// אינה משנה דבר במקרה הרגיל — רק עוצרת את החריגים.
+const LG_HINGE_FLOOR_MAX=215;
 const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
 // קוטר הקדח בזכוכית. זווית וציר יושבים על בורג עבה יותר מידית.
 const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
+// איפה יושבת זווית רצפה על הזכוכית: 2.5 ס"מ מלמטה, 5 ס"מ מהפאה.
+const LG_FLOOR_BRACKET_BOT=25, LG_FLOOR_BRACKET_SIDE=50;
 // עד כמה הפרש גובה בין קבוע לדלת עדיין נבלע ביישור עליון, ומה המרווח
 // מהרצפה כשהוא כבר לא נבלע. שניהם במילימטרים.
 const LG_TOP_ALIGN=20, LG_DOOR_GAP=20;
@@ -594,13 +606,17 @@ function _layoutPass(shower,cW,mgL,mgR){
       const seg=(a,b)=>[Math.min(a,b),Math.max(a,b)];
       // הזכוכית שנשארה, לאורך התחתית
       const [r1,r2]=seg(far,nt.foot[0]);
+      // **כל מידה נושאת את השדה שלה.** הרוחב שנשאר הוא מסוג 'width',
+      // ובלי שדה משלו הוא נפל למיפוי לפי סוג — ולחיצה עליו פתחה את
+      // הרוחב הכללי של הלוח. מי שלוחץ על 350 מתכוון ל-350.
       const rLane=place('bottom',r1,r2,String(nt.restMM).length*8+16);
-      dim('width',nt.restMM,r1,asmB+rLane,r2,asmB+rLane,{idx:s.idx,zone:'bottom',lane:rLane});
+      dim('width',nt.restMM,r1,asmB+rLane,r2,asmB+rLane,
+          {idx:s.idx,zone:'bottom',lane:rLane,field:'notchRest'});
       // רוחב הפינוי עצמו
       const [w1,w2]=seg(nt.inner[0],nt.shoulder[0]);
       const wLane=place('bottom',w1,w2,String(nt.w).length*8+16);
       dim('notch-w',nt.w,w1,asmB+wLane,w2,asmB+wLane,
-          {idx:s.idx,zone:'bottom',lane:wLane,size:LG_SZ_SUB});
+          {idx:s.idx,zone:'bottom',lane:wLane,size:LG_SZ_SUB,field:'notchW'});
       notchPend.push({idx:s.idx, nt:nt, botY:asmB, right:right});
     }
   });
@@ -679,6 +695,9 @@ function _layoutPass(shower,cW,mgL,mgR){
   const derivedFaces={};
 
   const insetPend=[];
+  // הרצפה — קו אחד לכל ההרכבה. כל לוח עומד עליה חוץ מדלת, שתלויה מעליה,
+  // ולכן הנמוך מכולם הוא הרצפה.
+  const asmFloor=out.shapes.reduce((m,s)=>Math.max(m,s.y+s.h),0);
   // הזוויות עוקבות אחרי הצירים שבציור; אם אין צירים — 20 ס"מ.
   let defTop=LG_EDGE_MM, defBot=LG_EDGE_MM;
   shapes.forEach(d=>{ if(d&&d.kind==='door'){
@@ -728,8 +747,46 @@ function _layoutPass(shower,cW,mgL,mgR){
     const nt=host.notch, floorY=host.y+host.h;
     const onNotch = nt && ((nt.side==='left')===onLeft);
     const where = onNotch ? (src.notchBracket||'floor') : 'floor';
-    const yT=host.y+mmT*sc;
-    const yB = (where==='shoulder') ? nt.shoulder[1]+mmB*sc : floorY-mmB*sc;
+    // ── מאיפה נמדד הפרזול ──
+    //
+    // מקצה הזכוכית **בפאה שבה הוא נקדח**, ולא מתיבת השייף.
+    // פאה שנחתכה בשיפוע מסתיימת גבוה יותר מהתיבה, והמדידה
+    // מהתיבה רשמה על הציור 200 בזמן שהמרחק האמיתי מהזכוכית
+    // היה 150. מי שקודח לפי השרטוט מפספס בהפרש.
+    //
+    // ‏**פינוי אינו המקרה הזה.** לו יש חוקיות משלו — רצפה, כתף,
+    // או שתיהן — שכבר קובעת מאיפה נמדד, והיא ממשיכה כשהייתה.
+    const faceTop=edge[0][1];
+    const faceBot=onNotch ? floorY : edge[1][1];
+    const yT=faceTop+mmT*sc;
+    let   yB = (where==='shoulder') ? nt.shoulder[1]+mmB*sc : faceBot-mmB*sc;
+
+    // ── שתי המגבלות על הציר התחתון ──
+    //
+    // ציר הוא פיסה אחת שעוברת בשתי הזכוכיות, ולכן הוא חייב לעמוד
+    // בשתיהן. **מספר שהוזן ביד גובר על שתיהן** — מי שהקליד מידה
+    // התכוון אליה, וזה גם מה שמאפשר לערוך ציר משותף.
+    if(hinge && where!=='shoulder' && src.hingeBot==null){
+      // התקרה: לא יותר מ-215 מהרצפה. מקלחון רגיל מגיע ל-215 מעצמו
+      // (200 מתחתית דלת שתלויה 15 מעל), ולכן היא עוצרת רק את
+      // החריגים — מרווח רצפה גדול יותר, או פאה שנחתכה בשיפוע.
+      // ‏y גדל כלפי מטה, ולכן "לא גבוה מ-" הוא max.
+      yB = Math.max(yB, asmFloor - LG_HINGE_FLOOR_MAX*sc);
+
+      // הרצפה הפיזית: אותם 20 ס"מ, אבל מהזכוכית **שממול**. הציר
+      // נקדח בשתי הזכוכיות, ואם פאת השכנה נחתכה בשיפוע היא
+      // מסתיימת גבוה — ותקרה שנמדדת מהרצפה הייתה מציבה את הקדח
+      // סנטימטר וחצי מקצה הזכוכית ההיא, כלומר באוויר.
+      const mate = (host===L) ? R : L;
+      if(mate){
+        const Q=mate.poly;
+        const mateFace = (mate===L) ? [Q[1],Q[2]] : [Q[0],Q[Q.length-1]];
+        const mn=mate.notch;
+        const mateNotched = mn && ((mn.side==='left') === (mate!==L));
+        const mateBot = mateNotched ? (mate.y+mate.h) : mateFace[1][1];
+        yB = Math.min(yB, mateBot - LG_EDGE_MM*sc);
+      }
+    }
     const useInner = onNotch && where!=='shoulder' && yB>nt.inner[1];
     const botEdge = useInner ? [nt.inner,nt.foot] : edge;
 
@@ -770,13 +827,24 @@ function _layoutPass(shower,cW,mgL,mgR){
     const sideOf=s=>(s===L?-1:1);
     const anchor=(s,x)=>(s===host?x:face);
 
-    panes.forEach(s=>hwAdd(kT,Math.round((yT-s.y)/sc),s.y,yT,s.idx,
-                           anchor(s,xT),'start',sideOf(s)));
+    // כל זכוכית נמדדת מהקצה שלה **בפאה שבה יושב הפרזול**. השמאלית
+    // נוגעת בצומת בפאה הימנית שלה, והימנית — בשמאלית שלה.
+    const faceOf=s=>{ const Q=s.poly;
+      return (s===L) ? [Q[1],Q[2]] : [Q[0],Q[Q.length-1]]; };
+    const topOf=s=>faceOf(s)[0][1];
+    // פינוי בצד הזה ממשיך להימדד מהרצפה, כמו שהחוקיות שלו קובעת
+    const botOf=s=>{ const n=s.notch;
+      const notched = n && ((n.side==='left') === (s!==L));
+      return notched ? (s.y+s.h) : faceOf(s)[1][1]; };
+
+    panes.forEach(s=>{ const t=topOf(s);
+      hwAdd(kT,Math.round((yT-t)/sc),t,yT,s.idx,
+            anchor(s,xT),'start',sideOf(s)); });
 
     if(where==='shoulder'){
       hwAdd(kB,mmB,yB,nt.shoulder[1],host.idx,xB,'start',sideOf(host));
     } else {
-      panes.forEach(s=>{ const b=s.y+s.h;
+      panes.forEach(s=>{ const b=botOf(s);
         hwAdd(kB,Math.round((b-yB)/sc),yB,b,s.idx,
               anchor(s,xB),'end',sideOf(s)); });
     }
@@ -844,9 +912,33 @@ function _layoutPass(shower,cW,mgL,mgR){
   // קדח אחד, ספירה אחת; זה מה ששומר על הכלל שנקבע כשהציר הפסיק להיות
   // מצויר פעמיים. אבל **רק תפקיד של צומת** מושמט כך: זווית רצפה אינה
   // צומת, ולכן היא שורדת גם לצד זווית קיר על אותה פאה.
+  // ── זווית רצפה שנבחרה במתג ──
+  //
+  // עד היום היא נספרה בליקוט ולא צוירה: הלקוח סימן "זווית רצפה" והקנבס
+  // לא השתנה, כך שאי אפשר היה לראות מה נקדח.
+  //
+  // היא **אותו קדח מוצהר** כמו זה שבא מהקטלוג, ולכן היא נכנסת לאותה
+  // רשימה ולא למסלול ציור שני. מיקומה: 2.5 ס"מ מלמטה ו-5 ס"מ מהפאה.
+  //
+  // **מאיזו פאה** — זו שאינה נשענת על קיר. זווית רצפה מייצבת את הקצה
+  // החופשי; בקצה שכבר יש בו זווית קיר אין מה לייצב. אם שני הקצוות קיר
+  // או שניהם פתוחים אין הכרעה כזאת, ואז השמאלי.
+  const ownHoles=s=>{
+    const src=shapes[s.idx]||{};
+    const own=Array.isArray(src.holes)?src.holes.slice():[];
+    if(!src.floorBracket) return own;
+    const wallAt=j=>((js[j]||{}).type==='bracket-wall');
+    const lWall=wallAt(s.idx), rWall=wallAt(s.idx+1);
+    const from = (lWall && !rWall) ? 'right' : (rWall && !lWall) ? 'left' : 'left';
+    own.push({role:'bracket-floor', dia:LG_HOLE_BRACKET,
+              x:{from:from, mm:LG_FLOOR_BRACKET_SIDE},
+              y:{from:'bottom', mm:LG_FLOOR_BRACKET_BOT}});
+    return own;
+  };
+
   out.shapes.forEach(s=>{
     const src=shapes[s.idx]||{};
-    const list=src.holes;
+    const list=ownHoles(s);
     if(!list||!list.length) return;
     const P=s.poly, floorY=s.y+s.h;
     const xAt=(A,B,y)=>{ const d=B[1]-A[1];
@@ -1077,7 +1169,7 @@ function _layoutPass(shower,cW,mgL,mgR){
     const xOut=placeV(S[0]+dirOut*cfg.subFirst, dirOut*cfg.sub, S[1]-13, botY+13,
                       LG_SZ_SUB, bnd(S[0],dirOut));
     dim('notch-h',nt.h,xOut,S[1],xOut,botY,
-        {idx:p.idx,zone:'notch',near:S[0],size:LG_SZ_SUB});
+        {idx:p.idx,zone:'notch',near:S[0],size:LG_SZ_SUB,field:'notchH'});
     // מדף נוטה מקבל שתי מידות גם כששני הגבהים שווים. הנטייה יכולה לבוא
     // מהרצפה ולא מהמדרגה, ואז העין רואה שיפוע ומוצא מספר אחד — בדיוק
     // המצב שבו לא ברור אם המדף ישר או לא.
@@ -1087,8 +1179,10 @@ function _layoutPass(shower,cW,mgL,mgR){
       const dirIn = dirOut;
       const xIn=placeV(N[0]+dirIn*cfg.subFirst, dirIn*cfg.sub, N[1]-13, botY+13,
                        LG_SZ_SUB, bnd(N[0],dirIn));
+      // הגובה הפנימי הוא שדה אחר מהחיצוני, ושניהם מסוג 'notch-h' —
+      // בדיוק כמו שני גבהי שיפוע. מיפוי לפי סוג פתח לשניהם את החיצוני.
       dim('notch-h',nt.hIn,xIn,N[1],xIn,botY,
-          {idx:p.idx,zone:'notch',near:N[0],size:LG_SZ_SUB});
+          {idx:p.idx,zone:'notch',near:N[0],size:LG_SZ_SUB,field:'notchHIn'});
     }
   });
 
