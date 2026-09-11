@@ -145,6 +145,17 @@
   font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);background:var(--bg);}
 .add-tog input{width:18px;height:18px;accent-color:var(--gold);cursor:pointer;}
 .add-tog label:focus-within{outline:2px solid var(--gold-text);outline-offset:2px;}
+.gal-tabs{display:flex;gap:8px;margin:0 0 12px;}
+.gal-tabs button{flex:1;min-height:44px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg);color:var(--text);
+  font-family:'Heebo',sans-serif;font-size:13px;font-weight:600;}
+.gal-tabs button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.gal-tabs button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.gal-empty{margin:24px 8px;font-family:'Heebo',sans-serif;font-size:13px;
+  line-height:1.6;color:var(--muted);text-align:center;}
+/* הקוד קטן מהשם ואפור: מזהה, לא כותרת. */
+.sc-code{display:block;margin-top:2px;font-family:ui-monospace,Menlo,monospace;
+  font-size:12px;letter-spacing:.04em;color:var(--muted);direction:ltr;}
 .sh-hole{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;}
 .sh-hole-top{display:flex;align-items:center;justify-content:space-between;
   margin-bottom:8px;font-size:13px;font-weight:700;color:var(--gold-text);}
@@ -501,6 +512,7 @@ body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-
     <button class="sheet-x" onclick="closeGallery()" aria-label="סגור">✕</button>
   </div>
   <div class="sheet-body">
+    <div class="gal-tabs" id="galleryTabs" role="group" aria-label="בחירת גלריה"></div>
     <div class="shape-gallery" id="shapeGallery"></div>
   </div>
 </div>
@@ -1151,9 +1163,37 @@ function shapeThumb(cv, entry){
 
 
 // כל הצורות שהגלריה מציגה: המשוגרות תחילה, ואחריהן מה שנשמר.
+// הרשימה המלאה נשארת אחת, כי האינדקס שלה הוא מה שעובר ל-shapeAdd.
+// הפיצול לשתי גלריות הוא **תצוגה** — סינון בציור, לא רשימה שנייה.
+// שתי רשימות היו שתי מערכות אינדקסים, והכרטיס היה מוסיף צורה אחרת.
 function galleryEntries(){
   const seeds=(typeof lgCatalogSeeds==='function')?lgCatalogSeeds():[];
   return seeds.concat(libFactory,libPersonal);
+}
+
+// איזו גלריה פתוחה: הצורות של המפעל, או מה שהלקוח בנה.
+// הצורות המשוגרות וספריית המפעל הן אותו דבר מבחינת הלקוח —
+// מה שהמפעל מציע — ולכן הן יחד.
+let galleryView='factory';
+function galleryIsMine(e){ return !!e && e.origin==='personal'; }
+function setGalleryView(v){
+  galleryView = v==='mine' ? 'mine' : 'factory';
+  renderShapeGallery();
+}
+
+// הקוד נגזר במקום אחד — בקטלוג — והמסך רק שואל אותו.
+function shapeCodeOf(e){
+  return (typeof lgShapeCode==='function') ? lgShapeCode(e) : (e&&e.id)||'';
+}
+
+// שתי הגלריות. "הגלריה שלי" מופיעה גם כשהיא ריקה, עם הסבר —
+// כפתור שנעלם כשאין תוכן משאיר את הלקוח בלי לדעת שהמקום קיים.
+function renderGalleryTabs(mineN){
+  const el=document.getElementById('galleryTabs'); if(!el) return;
+  const tab=(v,txt)=>'<button type="button" class="gal-tab'+(galleryView===v?' on':'')+'" '+
+    'onclick="setGalleryView(&quot;'+v+'&quot;)">'+txt+'</button>';
+  el.innerHTML = tab('factory','צורות המפעל')+
+                 tab('mine','הגלריה שלי'+(mineN?' · '+mineN:''));
 }
 
 function renderShapeGallery(){
@@ -1166,17 +1206,22 @@ function renderShapeGallery(){
   // שהמנוע אישר**. זה לא סינון נוסף על החוקיות אלא אותה תשובה בתצוגה.
   const only = addSide ? allowedAt(addSide) : null;
   const okEnt = only ? new Map(only.map(c=>[c.i,c.ent])) : null;
+  const inView = e => galleryView==='mine' ? galleryIsMine(e) : !galleryIsMine(e);
+  const mineN = all.filter(galleryIsMine).length;
+  renderGalleryTabs(mineN);
   const rows=[];
   all.forEach((e,i)=>{
     if(okEnt&&!okEnt.has(i)) return;
+    if(!inView(e)) return;
     const shown = okEnt ? okEnt.get(i) : galleryShown(i);
     rows.push('<div class="shape-card">'+
       '<button type="button" class="sc-pick" onclick="shapeAddFromCatalog('+i+')" '+
         'aria-label="הוסף '+_shEsc(shown.name)+'">'+
         '<canvas width="148" height="252"></canvas>'+
         '<span>'+_shEsc(shown.name)+'</span>'+
-        (e.origin&&e.origin!=='seed'
-          ? '<em class="sh-own">'+(e.origin==='factory'?'מפעל':'שלי')+'</em>' : '')+
+        // הקוד הוא מה שמזהה את הצורה עצמה. שני לקוחות יכולים
+        // לקרוא לשתי צורות שונות באותו שם; לקוד אין שתיים.
+        '<code class="sc-code">'+_shEsc(shapeCodeOf(e))+'</code>'+
       '</button>'+
       // ההיפוך מוצע רק כשהקנבס באמת מרשה את שתי האוריינטציות. כפתור
       // שמחזיר צורה שאי אפשר להרכיב כאן הוא הבטחה שהמערכת תפר.
@@ -1185,10 +1230,18 @@ function renderShapeGallery(){
           'onclick="galleryFlip('+i+')">⇄ הפוך</button>' : '')+
     '</div>');
   });
-  host.innerHTML=rows.join('');
+  // ריק משתי סיבות שונות, והודעה אחת לשתיהן משקרת באחת מהן:
+  // לא שמרת כלום, או שמרת ואף אחת לא מתחברת במקום הזה.
+  const empty = galleryView!=='mine'
+    ? 'אין צורה שאפשר לחבר כאן.'
+    : mineN ? 'אף צורה משלך לא מתחברת במקום הזה.'
+            : 'עדיין לא שמרת צורות. בנה צורה, ולחץ על ☆ ברצועה כדי לשמור אותה כאן.';
+  host.innerHTML = rows.length ? rows.join('')
+                               : '<p class="gal-empty">'+empty+'</p>';
   const cards=host.querySelectorAll('.shape-card');
   let n=0;
   all.forEach((e,i)=>{ if(okEnt&&!okEnt.has(i)) return;
+                       if(!inView(e)) return;
                        const cv=cards[n++]&&cards[n-1].querySelector('canvas');
                        if(cv) shapeThumb(cv, okEnt ? okEnt.get(i) : galleryShown(i)); });
 }
@@ -1285,6 +1338,17 @@ function _stateFromAdd(a){
                    extra.slopeH1=d.slopeH2; extra.slopeH2=d.slopeH1; }
   if(a.notchSide)  extra.notchSide=a.notchSide;
   if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
+  if(a.slopeSideH) extra.slopeSideH=a.slopeSideH;
+  if(a.notchBracket) extra.notchBracket=a.notchBracket;
+
+  // המידות שמגדירות את הצורה חוזרות **כפי שנשמרו**, וגוברות
+  // על ברירות המחדל של NOTCH_DEF ושל mkPS. מי ששמר מדרגה
+  // של 30×60 וקיבל בחזרה 20×50 קיבל צורה אחרת מזו ששמר.
+  // רוחב וגובה אינם ברשימה: הם המידות של העבודה.
+  (typeof LG_CAT_NUMS!=='undefined'?LG_CAT_NUMS:[]).forEach(k=>{
+    if(a[k]!=null) extra[k]=a[k];
+  });
+  if(a.slopeW1!=null&&a.slopeW2!=null) extra.hasSlopeW=true;
   // הכוונה נשמרת לצד הקדחים שנגזרו ממנה. הקדחים הם תוצאה של
   // חישוב ולא הצהרה, ובלעדיה שמירת הצורה לספרייה היתה צריכה
   // לנחש מהם באיזה צד תיתלה הדלת.
@@ -1424,11 +1488,27 @@ function shapeSaveOpen(id){
   if(s.kind==='door') add.hingeSide=s.hingeSide;
   if(s.carriesDoor!=null) add.carriesDoor=s.carriesDoor;
   if(ps.hingesFor) add.hingesFor=ps.hingesFor;
-  if(ps.hasSlope) add.slope=true;
+  if(ps.hasSlope){
+    add.slope=true;
+    if(ps.slopeSideH==='top'||ps.slopeSideH==='bottom') add.slopeSideH=ps.slopeSideH;
+  }
   if(Number(ps.notchW)>0&&Number(ps.notchH)>0){
     add.notch=true;
     if(ps.notchSide==='left'||ps.notchSide==='right') add.notchSide=ps.notchSide;
+    if(ps.notchBracket) add.notchBracket=ps.notchBracket;
   }
+  // המידות שמגדירות את הצורה נשמרות כמות שהן, ורק כשהדגל
+  // שלהן דלוק: מספרי שיפוע על צורה לא משופעת הם ברירות מחדל
+  // של mkPS, לא בחירה — ושמירתן היתה הופכת כל צורה למשופעת.
+  const numOf=k=>{ const v=Number(ps[k]); return v>0?Math.round(v):null; };
+  if(add.notch) ['notchW','notchH','notchHIn','notchRest'].forEach(k=>{
+    const v=numOf(k); if(v!=null) add[k]=v; });
+  if(add.slope) ['slopeH1','slopeH2'].forEach(k=>{
+    const v=numOf(k); if(v!=null) add[k]=v; });
+  if(ps.hasSlopeW) ['slopeW1','slopeW2'].forEach(k=>{
+    const v=numOf(k); if(v!=null) add[k]=v; });
+  if(ps.hasSlopeW&&(ps.slopeSideV==='left'||ps.slopeSideV==='right'))
+    add.slopeSideV=ps.slopeSideV;
   // **רק קדחים שהצורה נושאת בעצמה.** ציר וזווית קיר נגזרים ממה
   // שהזכוכית נפגשת איתו, והם ישבו ב-ps.holes רק כתוצאה של חישוב.
   // שמירתם כהצהרה היא בדיוק מקור אמת שני — ו-lgCatalogValidate פוסל

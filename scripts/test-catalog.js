@@ -52,17 +52,29 @@ console.log('');
    many, the catalogue has started describing shapes again — and the drift
    that produced handles on the hinge side is back. */
 {
-  const ALLOWED_ENTRY = ['id', 'name', 'origin', 'add'];
+  /* `code` is an IDENTITY, not a description: it says WHICH shape this is,
+     never what it looks like or where its hardware sits. Two customers can
+     call two different shapes by the same name; the code cannot collide. */
+  const ALLOWED_ENTRY = ['id', 'code', 'name', 'origin', 'add'];
   /* carriesDoor is not a hardware position — it is a declaration ABOUT the
      glass, which the engine then acts on. "This pane has no hinge
      preparation" is a fact the factory decides, not a place a bracket
      goes. */
+  /* The shaping numbers joined the list on 2026-09-11. A notch of 30x60 is
+     a DIFFERENT SHAPE from one of 20x50, so a catalogue that dropped them
+     handed back something other than what was saved. They still say nothing
+     about hardware — and w/h stay out, because those are the job's. */
   const ALLOWED_ADD   = ['kind', 'hingeSide', 'slope', 'notch', 'hingesFor',
-                         'notchSide', 'slopeSideV', 'slopeFlip', 'holes',
-                         'carriesDoor'];
+                         'notchSide', 'slopeSideV', 'slopeSideH', 'slopeFlip',
+                         'holes', 'carriesDoor', 'notchBracket',
+                         'notchW', 'notchH', 'notchHIn', 'notchRest',
+                         'slopeH1', 'slopeH2', 'slopeW1', 'slopeW2'];
   const strayEntry = seeds.flatMap(e => Object.keys(e).filter(k => !ALLOWED_ENTRY.includes(k)));
   const strayAdd   = seeds.flatMap(e => Object.keys(e.add).filter(k => !ALLOWED_ADD.includes(k)));
-  check('an entry carries only a name and what to add', strayEntry, []);
+  check('an entry carries only a name, a code, and what to add', strayEntry, []);
+  /* the line that must never move: the job's own measurements */
+  check('and never the width or height, which belong to the order',
+        ALLOWED_ADD.filter(k => k === 'w' || k === 'h'), []);
   check('and never says where hardware goes or how much of it', strayAdd, []);
   /* hingesFor names WHICH SIDE THE DOOR IS ON — a fact about the assembly.
      Where the hinges then land is measured from the engine, never written
