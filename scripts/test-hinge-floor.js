@@ -265,6 +265,50 @@ console.log('');
         dist2(solo, 1), 993);
 }
 
+/* ── a handle never climbs past a metre ───────────────────────────────── */
+/* Ben, 2026-09-11: the default is the middle of the glass, and on an
+   ordinary door that is right. On a tall one the middle comes out too high
+   to open comfortably, so the default stops at 1000mm off the floor. It is
+   a ceiling on the DEFAULT only — a typed height is a decision. */
+{
+  const at = h => {
+    const L = lay({ w: 500, h: Math.max(2000, h + 15) }, { w: 800, h: h });
+    return Number(L.dims.filter(d => d.kind === 'handle-dist' && d.idx === 1)[0].text);
+  };
+  check('a short door still takes half its height', at(1200), 600);
+  check('and an ordinary one', at(1985), 993);
+  check('exactly 2000 lands on the metre', at(2000), 1000);
+  check('a taller door stops there', at(2400), 1000);
+  check('however tall it gets', at(3000), 1000);
+  check('the metre is named once', /const LG_HANDLE_MAX_MM=1000;/.test(ENG), true);
+  check('and the editor opens on the same number, not on half the door',
+        /handleDist'\)\s*v=Math\.min\(Math\.round\(\(ps\.h\|\|2000\)\/2\),1000\)/.test(DEMO), true);
+
+  /* a typed height is obeyed, above the metre or below it */
+  const typed = lay({ w: 500, h: 2500 }, { w: 800, h: 2400, handleDist: 1400 });
+  check('a typed handle height is not capped',
+        typed.dims.filter(d => d.kind === 'handle-dist' && d.idx === 1).map(d => d.text),
+        ['1400']);
+}
+
+{
+  /* and the ceiling survives the pair rule: two doors that meet align to
+     one height, and that height may not push either past the metre */
+  const PAIR = [
+    { type: 'fixed', wallSide: 'right', carriesDoor: true },
+    { type: 'door', hingeOnFixed: 'prev', handleSide: 'left' },
+    { type: 'door', hingeOnFixed: 'next', handleSide: 'right' },
+    { type: 'fixed', wallSide: 'left', carriesDoor: true }];
+  ctx.P = PAIR;
+  ctx.S = { 0: { w: 500, h: 2500 }, 1: { w: 800, h: 2400 },
+            2: { w: 800, h: 2200 }, 3: { w: 500, h: 2500 } };
+  ctx.SH = vm.runInContext('lgFromPanels(P,S,{finish:"shahor",quality:"zamak"})', ctx);
+  const L = vm.runInContext('lgLayout(SH,{canvasW:900})', ctx);
+  const d = i => Number(L.dims.filter(x => x.kind === 'handle-dist' && x.idx === i)[0].text);
+  check('two tall doors still meet at one height', d(1), d(2));
+  check('and neither of them passes the metre', [d(1) <= 1000, d(2) <= 1000], [true, true]);
+}
+
 /* ── the hole carries its two numbers onto the drawing ────────────────── */
 /* through the SAME two functions every other dimension uses — hwAdd for the
    vertical one, shortH for the distance to the face. Nothing new was built

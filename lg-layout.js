@@ -96,6 +96,11 @@ const LG_EDGE_MM=200;          // ציר או זווית, 20 ס"מ מהקצה
 // אינה משנה דבר במקרה הרגיל — רק עוצרת את החריגים.
 const LG_HINGE_FLOOR_MAX=215;
 const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
+// ‏**ידית לא עולה על מטר מתחתית הזכוכית.** ברירת המחדל היא אמצע הדלת,
+// וזה נכון בגובה רגיל — אבל בדלת גבוהה האמצע יוצא גבוה מדי והידית
+// מפסיקה להיות נוחה לפתיחה. המטר הוא תקרה על **ברירת המחדל בלבד**:
+// מי שמקליד גובה ידית התכוון אליו.
+const LG_HANDLE_MAX_MM=1000;
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
 // קוטר הקדח בזכוכית. זווית וציר יושבים על בורג עבה יותר מידית.
 const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
@@ -891,7 +896,13 @@ function _layoutPass(shower,cW,mgL,mgR){
     const hFace = handleOnRight ? [Q[1],Q[2]] : [Q[0],Q[Q.length-1]];
     const fTop=hFace[0][1], fBot=hFace[1][1];
     const ref=src.handleRef||'bottom';
-    const dMM=src.handleDist!=null?src.handleDist:Math.round((fBot-fTop)/sc/2);
+    // ברירת המחדל נגזרת תמיד **מלמטה** — שם עומד מי שפותח — ורק אז
+    // מומרת לנקודת הייחוס שנבחרה. אחרת התקרה של המטר הייתה חלה על
+    // מספר שנמדד מהראש ולא אומרת כלום.
+    const faceMM=Math.round((fBot-fTop)/sc);
+    const upMM=Math.min(Math.round(faceMM/2), LG_HANDLE_MAX_MM);
+    const dMM=src.handleDist!=null ? src.handleDist
+            : (ref==='top' ? faceMM-upMM : upMM);
     const hyU=ref==='top'? fTop+dMM*sc : fBot-dMM*sc;
     handles.push({s:s, ref:ref, eMM:eMM, face:face, x:hxU, y:hyU,
                   fTop:fTop, fBot:fBot, right:handleOnRight,
@@ -912,7 +923,12 @@ function _layoutPass(shower,cW,mgL,mgR){
     if(A.s.idx+1!==B.s.idx) continue;
     if(!A.right || B.right) continue;          // אינן פונות זו לזו
     if(A.typed && B.typed) continue;           // שתיהן נקבעו ביד
-    const y = A.typed ? A.y : B.typed ? B.y : (A.y+B.y)/2;
+    let y = A.typed ? A.y : B.typed ? B.y : (A.y+B.y)/2;
+    // התקרה שורדת גם את היישור. שתי דלתות שנפגשות בגבהים שונים
+    // מהרצפה יכולות להתיישר על גובה שעובר מטר באחת מהן, ואז הכלל
+    // היה נשבר דווקא בזוג. מי שהקליד מספר גובר גם כאן.
+    if(!A.typed && !B.typed)
+      y = Math.max(y, A.fBot-LG_HANDLE_MAX_MM*sc, B.fBot-LG_HANDLE_MAX_MM*sc);
     A.y=y; B.y=y;
   }
 

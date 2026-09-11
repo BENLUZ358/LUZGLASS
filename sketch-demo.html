@@ -2899,7 +2899,9 @@ function _dimRead(t){
     if(t.field==='hingeTop'||t.field==='hingeBot')       v=EDGE_MM;
     else if(t.field==='bracketTop'||t.field==='bracketBot') v=EDGE_MM;
     else if(t.field==='bracketInset')  v=BRACKET_INSET_MM;
-    else if(t.field==='handleDist')    v=Math.round((ps.h||2000)/2);
+    // אותה תקרה של המנוע: חלון שנפתח על מספר אחר ממה שעל השרטוט
+    // הוא מקור אמת שני לאותה עובדה.
+    else if(t.field==='handleDist')    v=Math.min(Math.round((ps.h||2000)/2),1000);
     else if(t.field==='handleEdge')    v=HANDLE_EDGE_CM;
     else if(t.field==='slopeH1'||t.field==='slopeH2') v=ps.h||2000;
     else if(t.field==='slopeW1'||t.field==='slopeW2') v=ps.w||500;
