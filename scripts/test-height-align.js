@@ -76,23 +76,28 @@ console.log('');
   check(`  and the clearance is the difference itself (${gap}mm)`, r.door.bottom, gap);
 });
 
-/* ── past twenty: the door takes its clearance and the tops part ────────── */
+/* ── past twenty: the tops part, but the clearance never changes ────────── */
+/* Ben, 2026-09-11: a door is 15mm off the floor, ALWAYS. The clearance used
+   to be 20 in this branch, and then one hinge read 200 on the door and 220
+   on the fixed — and correcting that number moved the door's hinge for
+   nothing. At 15 the pair comes out 200/215 by itself, at every door
+   height, and the hinge is never touched to fix a number. */
 {
   /* the case from the photograph */
   const r = pair(1900, 2000);
-  check('a door taller than the fixed by more than 20 takes 20 off the floor',
-        r.door.bottom, 20);
+  check('a door taller than the fixed by more than 20 still sits 15 off the floor',
+        r.door.bottom, 15);
   check('the fixed still stands on the floor', r.fixed.bottom, 0);
   check('and the door now rises above the fixed', r.door.top > r.fixed.top, true);
   check('by exactly what its height and clearance give it',
-        r.door.top - r.fixed.top, 2000 + 20 - 1900);
+        r.door.top - r.fixed.top, 2000 + 15 - 1900);
 }
 {
   /* the other direction: the fixed carries on upward */
   const r = pair(2100, 1985);
   check('a fixed taller than the door by more than 20 keeps its own head',
         r.fixed.top, 2100);
-  check('the door still takes 20 off the floor', r.door.bottom, 20);
+  check('the door still sits 15 off the floor', r.door.bottom, 15);
   check('and its head sits below the fixed', r.door.top < r.fixed.top, true);
   check('the fixed is not dragged down to meet it', r.fixed.bottom, 0);
 }
@@ -102,7 +107,7 @@ console.log('');
   check('at exactly 20 the tops are still aligned', pair(2000, 1980).fixed.top,
         pair(2000, 1980).door.top);
   check('at 21 they are not', pair(2000, 1979).fixed.top === pair(2000, 1979).door.top, false);
-  check('and the clearance jumps to the fixed 20', pair(2000, 1979).door.bottom, 20);
+  check('and the clearance becomes the fixed 15', pair(2000, 1979).door.bottom, 15);
 }
 
 /* ── the shared hinge survives all of it ────────────────────────────────── */
@@ -150,7 +155,7 @@ console.log('');
 {
   const SRC = fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8');
   check('the alignment tolerance has a name', /LG_TOP_ALIGN\s*=\s*20/.test(SRC), true);
-  check('and so does the floor clearance', /LG_DOOR_GAP\s*=\s*20/.test(SRC), true);
+  check('and so does the floor clearance', /LG_DOOR_GAP\s*=\s*15/.test(SRC), true);
   check('the floor is the only reference left',
         /kind==='door' \? oy :/.test(SRC), false);
 }

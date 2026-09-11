@@ -113,13 +113,15 @@ console.log('');
 }
 
 /* ── the editor writes exactly the shape the engine reads ─────────────── */
-function sheet(ps, role) {
+function sheet(ps, role, kind) {
   const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console,
     LG_CAT_OWN_ROLES: { 'bracket-floor': 20, 'hole': 12 },
     _sess: { role: role || 'admin' } });
   vm.runInContext(
     'var sheetPfx="shape", PS=' + JSON.stringify(ps) + ';' +
+    'var KIND=' + JSON.stringify(kind || 'fixed') + ';' +
     'function _sheetIdx(){ return 0; }' +
+    'function _sheetMeta(){ return {kind:KIND, label:"x"}; }' +
     'function getPS(){ return PS; }' +
     'function _dimParse(v){ var n=Number(v); return isFinite(n)?{ok:true,mm:n}:{ok:false}; }' +
     'function _dimToUnit(mm){ return mm; }' +
@@ -128,8 +130,8 @@ function sheet(ps, role) {
     'var PAINT=0; function renderShapeSheet(){PAINT++;} function renderShapeUI(){} function draw(){}', ctx);
   vm.runInContext(DEMO.match(/const LG_HOLE_HE=\{[^}]*\};/)[0], ctx);
   vm.runInContext(DEMO.match(/const LG_HOLE_POS_DEF=\{[^}]*\}[^;]*;/)[0], ctx);
-  ['_holeList', '_holeRedraw', 'holeAdd', 'holeDel', 'holeSet', 'holeNum', '_shHole', '_shHoles']
-    .forEach(n => vm.runInContext(grab(n), ctx));
+  ['_holeRolesFor', '_holeList', '_holeRedraw', 'holeAdd', 'holeDel', 'holeSet',
+   'holeNum', '_shHole', '_shHoles'].forEach(n => vm.runInContext(grab(n), ctx));
   return { run: e => vm.runInContext(e, ctx), ps: () => ctx.PS };
 }
 
@@ -219,11 +221,11 @@ function sheet(ps, role) {
 {
   const admin = sheet({ w: 900, h: 2000 }, 'admin');
   check('an admin sees the hole editor',
-        admin.run('_shHoles(PS)').indexOf('holeAdd') > -1, true);
+        admin.run('_shHoles(PS,"fixed")').indexOf('holeAdd') > -1, true);
 
   const client = sheet({ w: 900, h: 2000 }, 'client');
   check('a customer does not — a mis-placed hole is glass that cannot be fixed',
-        client.run('_shHoles(PS)'), '');
+        client.run('_shHoles(PS,"fixed")'), '');
 }
 
 {
@@ -232,13 +234,33 @@ function sheet(ps, role) {
     { role: 'hinge', dia: 20, x: { from: 'right', mm: 60 }, y: { from: 'bottom', mm: 215 } },
     { role: 'bracket-floor', dia: 20, x: { from: 'left', mm: 60 }, y: { from: 'bottom', mm: 50 } },
   ] }, 'admin');
-  const html = mixed.run('_shHoles(PS)');
+  const html = mixed.run('_shHoles(PS,"fixed")');
   check('only the owned hole gets a delete button',
         (html.match(/holeDel\(/g) || []).length, 1);
   check('and it is the one at index 1, not renumbered',
         html.indexOf('holeDel(1)') > -1, true);
   check('the derived one is explained instead of hidden',
         /המנוע גזר מהמפגש/.test(html), true);
+}
+
+/* ── a door cannot be bolted to the floor ─────────────────────────────── */
+/* the toggle in the hardware group already knew this; the hole builder was
+   the second way in, and it offered the floor bracket to anything */
+{
+  const door = sheet({ w: 800, h: 1985 }, 'admin', 'door');
+  check('a door is not offered a floor bracket',
+        door.run('_shHoles(PS,"door")').indexOf('bracket-floor') > -1, false);
+  check('but it is still offered a free hole',
+        door.run('_shHoles(PS,"door")').indexOf('&quot;hole&quot;') > -1, true);
+  door.run('holeAdd("bracket-floor")');
+  check('and adding one directly is refused too — without touching the state',
+        Object.prototype.hasOwnProperty.call(door.ps(), 'holes'), false);
+  door.run('holeAdd("hole")');
+  check('while a free hole goes on as usual', door.ps().holes.length, 1);
+
+  const fixed = sheet({ w: 900, h: 2000 }, 'admin', 'fixed');
+  check('a fixed is offered both',
+        fixed.run('_shHoles(PS,"fixed")').indexOf('bracket-floor') > -1, true);
 }
 
 /* ── saving: only what the shape owns, only what can be restored ──────── */

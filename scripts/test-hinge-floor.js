@@ -81,15 +81,20 @@ console.log('');
 
 /* ── the ceiling, where the old number was 220 ────────────────────────── */
 {
-  /* more than 20mm apart, so the door takes a 20mm floor gap instead of
-     lining up at the head — and 200 up from there used to read 220 */
+  /* More than 20mm apart, so the heads do not line up. The floor clearance
+     is 15 all the same — Ben, 2026-09-11 — and that is what keeps the pair
+     at 200/215 without anyone touching the door's hinge. It used to be 20
+     here, which read 220 on the fixed; correcting THAT number by lowering
+     the hinge moved the door's own 200 to 195 for nothing. */
   const L = lay({ w: 500, h: 2000 }, { w: 800, h: 1900 });
-  check('a bigger floor gap no longer pushes the hinge to 220',
-        label(L, 'hinge-bot', 0), ['215']);
-  check('the door gives up the 5mm instead', label(L, 'hinge-bot', 1), ['195']);
-  check('and it really is 215 above the floor', aboveFloor(L), 215);
-  check('the ceiling is named once, not spelled into the arithmetic',
-        /const LG_HINGE_FLOOR_MAX=215;/.test(ENG), true);
+  check('a shorter door still reads 215 on the fixed', label(L, 'hinge-bot', 0), ['215']);
+  check('and the door keeps its own 200 — untouched', label(L, 'hinge-bot', 1), ['200']);
+  check('because it hangs 15 off the floor, like every door',
+        Math.round((Math.max(...L.shapes.map(s => s.y + s.h)) -
+                    (L.shapes[1].y + L.shapes[1].h)) / L.scale), 15);
+  check('and the hinge is 215 above the floor', aboveFloor(L), 215);
+  check('the clearance is named once', /LG_TOP_ALIGN=20, LG_DOOR_GAP=15;/.test(ENG), true);
+  check('and so is the ceiling', /const LG_HINGE_FLOOR_MAX=215;/.test(ENG), true);
 }
 
 /* ── a slope on the face the hinge is drilled into ────────────────────── */
@@ -196,6 +201,86 @@ console.log('');
   check('with a default each, so the window opens on a number',
         [/t\.field==='notchRest'\)\s*v=/.test(DEMO),
          /t\.field==='notchHIn'\)\s*v=/.test(DEMO)], [true, true]);
+}
+
+/* ── two doors that meet are a pair ──────────────────────────────────── */
+/* Handle facing handle is grabbed with two hands, so both must come out at
+   the SAME height. "half the door" for each one separately put them at two
+   heights the moment the doors differed — which a slope does on its own. */
+{
+  const PAIR = [
+    { type: 'fixed', wallSide: 'right', carriesDoor: true },
+    { type: 'door', hingeOnFixed: 'prev', handleSide: 'left' },
+    { type: 'door', hingeOnFixed: 'next', handleSide: 'right' },
+    { type: 'fixed', wallSide: 'left', carriesDoor: true }];
+  const run = (d1, d2) => {
+    ctx.P = PAIR;
+    ctx.S = { 0: { w: 500, h: 2000 }, 1: d1, 2: d2, 3: { w: 500, h: 2000 } };
+    ctx.SH = vm.runInContext('lgFromPanels(P,S,{finish:"shahor",quality:"zamak"})', ctx);
+    return vm.runInContext('lgLayout(SH,{canvasW:900})', ctx);
+  };
+  const handleY = (L, idx) => {
+    const h = L.hardware.find(x => x.role === 'handle' && x.idx === idx);
+    const floor = Math.max(...L.shapes.map(s => s.y + s.h));
+    return Math.round((floor - h.y) / L.scale);
+  };
+
+  const same = run({ w: 800, h: 1985 }, { w: 800, h: 1985 });
+  check('two identical doors put their handles at one height',
+        handleY(same, 1), handleY(same, 2));
+
+  /* the case from the photograph: one door cut by a slope */
+  const cut = run({ w: 800, h: 1935, hasSlope: true, slopeH1: 1935, slopeH2: 1885,
+                    slopeSideH: 'bottom' },
+                  { w: 800, h: 1985 });
+  check('and so do two doors of different heights',
+        handleY(cut, 1), handleY(cut, 2));
+  check('which is what the sloped one used to break',
+        handleY(cut, 1) === handleY(cut, 2), true);
+
+  /* each pane still reports the distance to ITS OWN edge at that face —
+     the same height, two honest numbers */
+  const dist = idx => cut.dims.filter(d => d.kind === 'handle-dist' && d.idx === idx)
+                              .map(d => Number(d.text))[0];
+  check('and each door measures it from its own handle face',
+        dist(1) !== dist(2), true);
+
+  /* a typed number wins, and drags its partner to stay opposite */
+  const typed = run({ w: 800, h: 1985, handleDist: 1100 }, { w: 800, h: 1985 });
+  check('a typed handle height is honoured', dist2(typed, 1), 1100);
+  check('and the door opposite follows it', handleY(typed, 1), handleY(typed, 2));
+
+  function dist2(L, idx) {
+    return L.dims.filter(d => d.kind === 'handle-dist' && d.idx === idx)
+                 .map(d => Number(d.text))[0];
+  }
+
+  /* a lone door is unaffected — there is nothing to face */
+  ctx.P = [{ type: 'fixed', wallSide: 'right', carriesDoor: true },
+           { type: 'door', hingeOnFixed: 'prev', handleSide: 'left' }];
+  ctx.S = { 0: { w: 500, h: 2000 }, 1: { w: 800, h: 1985 } };
+  ctx.SH = vm.runInContext('lgFromPanels(P,S,{finish:"shahor",quality:"zamak"})', ctx);
+  const solo = vm.runInContext('lgLayout(SH,{canvasW:900})', ctx);
+  check('a single door still sits at half its own height',
+        dist2(solo, 1), 993);
+}
+
+/* ── the hole carries its two numbers onto the drawing ────────────────── */
+/* through the SAME two functions every other dimension uses — hwAdd for the
+   vertical one, shortH for the distance to the face. Nothing new was built
+   for them; only the name differs, so a click does not open the wrong
+   editor. A hole with no numbers cannot be drilled. */
+{
+  const L = lay({ w: 900, h: 2000, floorBracket: true }, { w: 800, h: 1985 });
+  const at = k => L.dims.filter(d => d.kind === k).map(d => d.text);
+  check('the hole says how far up it is', at('hole-dist'), ['25']);
+  check('and how far in from the face', at('hole-edge'), ['50']);
+  check('they are drawn at the same size as every other hardware dimension',
+        L.dims.filter(d => /^hole-/.test(d.kind))
+              .every(d => d.size === L.dims.filter(x => x.kind === 'handle-edge')[0].size),
+        true);
+  check('and neither opens an editor, because a declared hole is edited in the sheet',
+        L.dims.filter(d => /^hole-/.test(d.kind)).every(d => !d.field), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

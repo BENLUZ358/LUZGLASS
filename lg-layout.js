@@ -103,7 +103,11 @@ const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
 const LG_FLOOR_BRACKET_BOT=25, LG_FLOOR_BRACKET_SIDE=50;
 // עד כמה הפרש גובה בין קבוע לדלת עדיין נבלע ביישור עליון, ומה המרווח
 // מהרצפה כשהוא כבר לא נבלע. שניהם במילימטרים.
-const LG_TOP_ALIGN=20, LG_DOOR_GAP=20;
+// ‏**דלת מורמת סנטימטר וחצי מהרצפה, תמיד.** קודם החריג הרים אותה 20,
+// ואז אותו ציר יצא 200 מהדלת ו-220 מהקבוע — ומי שתיקן את המספר הזיז
+// את הציר של הדלת בחינם. עם 15 המקלחון מגיע ל-200/215 מעצמו, בכל גובה
+// דלת, ואין צורך לגעת בציר כדי לתקן מספר.
+const LG_TOP_ALIGN=20, LG_DOOR_GAP=15;
 // אילו תפקידים נולדים מצומת. רק אלה מושמטים כשהצומת כבר ייצר אותם;
 // זווית רצפה, שאינה שייכת לשום צומת, תמיד שורדת.
 const _LG_JUNCTION_ROLE={'hinge':1,'hinge-gg':1,'hinge-wall':1,
@@ -868,7 +872,12 @@ function _layoutPass(shower,cW,mgL,mgR){
   }
 
   // ── הידית ──
+  //
+  // כמו הציר, היא נמדדת **מהפאה שבה היא נקדחת** ולא מתיבת הדלת: פאה
+  // שנחתכה בשיפוע מסתיימת גבוה יותר, והמספר על השרטוט חייב לתאר את
+  // הזכוכית שקודחים בה.
   const edgePend=[];
+  const handles=[];
   out.shapes.forEach(s=>{
     if(s.kind!=='door') return;
     const src=shapes[s.idx]||{};
@@ -878,20 +887,52 @@ function _layoutPass(shower,cW,mgL,mgR){
     const eMM=src.handleEdge!=null?src.handleEdge*10:LG_HANDLE_EDGE_MM;
     const face=handleOnRight ? s.x+s.w : s.x;
     const hxU=handleOnRight ? face-eMM*sc : face+eMM*sc;
-    const dMM=src.handleDist!=null?src.handleDist:Math.round(s.mmH/2);
+    const Q=s.poly;
+    const hFace = handleOnRight ? [Q[1],Q[2]] : [Q[0],Q[Q.length-1]];
+    const fTop=hFace[0][1], fBot=hFace[1][1];
     const ref=src.handleRef||'bottom';
-    const hyU=ref==='top'? s.y+dMM*sc : s.y+s.h-dMM*sc;
+    const dMM=src.handleDist!=null?src.handleDist:Math.round((fBot-fTop)/sc/2);
+    const hyU=ref==='top'? fTop+dMM*sc : fBot-dMM*sc;
+    handles.push({s:s, ref:ref, eMM:eMM, face:face, x:hxU, y:hyU,
+                  fTop:fTop, fBot:fBot, right:handleOnRight,
+                  typed:src.handleDist!=null});
+  });
+
+  // ── שתי דלתות שנפגשות הן זוג ──
+  //
+  // ידית מול ידית נתפסת בשתי ידיים, ולכן שתיהן חייבות לצאת **באותו
+  // גובה**. "חצי הדלת" לכל אחת בנפרד הוציא אותן בשני גבהים ברגע
+  // שהדלתות לא זהות — למשל כששיפוע הנמיך אחת מהן.
+  //
+  // הזוג מזוהה מהצורה עצמה: ידית בפאה הימנית של אחת ובפאה השמאלית של
+  // הבאה אחריה, כלומר הן פונות זו לזו. מספר שהוזן ביד גובר, וכשרק
+  // אחת הוזנה השנייה נצמדת אליה — כך הן נשארות מול זו גם אחרי עריכה.
+  for(let k=0;k+1<handles.length;k++){
+    const A=handles[k], B=handles[k+1];
+    if(A.s.idx+1!==B.s.idx) continue;
+    if(!A.right || B.right) continue;          // אינן פונות זו לזו
+    if(A.typed && B.typed) continue;           // שתיהן נקבעו ביד
+    const y = A.typed ? A.y : B.typed ? B.y : (A.y+B.y)/2;
+    A.y=y; B.y=y;
+  }
+
+  handles.forEach(h=>{
+    const s=h.s;
     // בשרטוט לחותך הזכוכית מה שקיים הוא **החור**. הידית מוברגת בו, וסמל
     // מפורט שלה רק מסתיר את מה שצריך לקדוח.
     out.hardware.push({kind:'hole',hole:true,dia:LG_HOLE_HANDLE,idx:s.idx,
-                       source:'junction',role:'handle',x:hxU,y:hyU});
-    claim(hxU,hyU);
+                       source:'junction',role:'handle',x:h.x,y:h.y});
+    claim(h.x,h.y);
 
-    hwAdd('handle-dist',dMM,ref==='top'?s.y:hyU,ref==='top'?hyU:s.y+s.h,s.idx,hxU,
-          ref==='top'?'start':'end');
+    // המידה נגזרת מהמקום שבו הידית **באמת** יושבת, אחרי היישור. מספר
+    // שנרשם לפני ההזזה היה מתאר ידית שאינה שם.
+    const mm = h.ref==='top' ? Math.round((h.y-h.fTop)/sc)
+                             : Math.round((h.fBot-h.y)/sc);
+    hwAdd('handle-dist',mm,h.ref==='top'?h.fTop:h.y,h.ref==='top'?h.y:h.fBot,s.idx,h.x,
+          h.ref==='top'?'start':'end');
     // מרחק החור מהפאה נפלט אחרון, כשכל שאר המידות כבר על הנייר
-    edgePend.push({idx:s.idx, mm:eMM, a:Math.min(hxU,face), b:Math.max(hxU,face),
-                   y:hyU, right:handleOnRight});
+    edgePend.push({idx:s.idx, mm:h.eMM, a:Math.min(h.x,h.face), b:Math.max(h.x,h.face),
+                   y:h.y, right:h.right});
   });
 
   // ── חורים מוצהרים ────────────────────────────────────────────────────
@@ -961,6 +1002,25 @@ function _layoutPass(shower,cW,mgL,mgR){
       out.hardware.push({kind:kind,hole:true,dia:dia,idx:s.idx,x:x,y:y,
                          into:into,edgeX:ex,source:'declared',role:role});
       claim(x,y);
+
+      // ── שתי המידות של הקדח ──
+      //
+      // חור על השרטוט בלי מספרים הוא חור שאי אפשר לקדוח. שתיהן
+      // נגזרות **מאותם שני מספרים שמיקמו אותו**, ולכן הן לא יכולות
+      // לתאר מקום אחר ממה שמצויר.
+      //
+      // ‏hole-dist אינו ממופה לשדה במסך, ולכן אין עליו לחיצה: קדח
+      // מוצהר נערך בגיליון המאפיינים, ששם גם התפקיד והקוטר.
+      const vMM=Math.round(hy.mm||0), hMM=Math.round(hx.mm||0);
+      if(vMM>0){
+        const edgeY = hy.from==='top' ? s.y : floorY;
+        hwAdd('hole-dist',vMM,Math.min(edgeY,y),Math.max(edgeY,y),s.idx,x,
+              hy.from==='top'?'start':'end', fromLeft?-1:1);
+      }
+      if(hMM>0){
+        edgePend.push({idx:s.idx, mm:hMM, a:Math.min(ex,x), b:Math.max(ex,x),
+                       y:y, right:!fromLeft, kind:'hole-edge'});
+      }
     });
   });
 
@@ -1208,7 +1268,10 @@ function _layoutPass(shower,cW,mgL,mgR){
       y=p.y+lane+(++k)*16;
     dim(kind,p.mm,p.a,y,p.b,y,{idx:p.idx,zone:'handle',t:t,size:LG_SZ_SUB});
   };
-  edgePend.forEach(p=>shortH('handle-edge',p,p.right));
+  // קדח מוצהר נושא סוג משלו. בלעדיו המרחק שלו מהפאה נראה למסך
+  // כמרחק הידית, ולחיצה על 5 ס"מ של זווית רצפה היתה פותחת
+  // את עורך הידית — על קבוע שאין לו ידית בכלל.
+  edgePend.forEach(p=>shortH(p.kind||'handle-edge',p,p.right));
   insetPend.forEach(p=>shortH('bracket-inset',p,p.into<0));
 
   // מה חורג בפועל מהקנבס, לכל צד — זה מה שהמעבר השני מתקן.

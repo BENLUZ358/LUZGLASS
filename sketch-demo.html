@@ -1702,9 +1702,22 @@ function _holeList(){
 
 function _holeRedraw(){ renderShapeSheet(); renderShapeUI(); draw(); }
 
+// אילו תפקידים הזכוכית הזאת רשאית לשאת. **זווית רצפה היא של קבוע
+// בלבד** — היא מחברת את הזכוכית לרצפה, ודלת זזה. המתג בפרזול
+// כבר יודע את זה, והרשימה הזאת היא אותו כלל במקום השני שבו
+// אפשר היה להוסיף אותה: ממשק הקדחים.
+function _holeRolesFor(kind){
+  const all=Object.keys((typeof LG_CAT_OWN_ROLES!=='undefined')?LG_CAT_OWN_ROLES:{});
+  return all.filter(r=>r!=='bracket-floor'||kind==='fixed');
+}
+
 function holeAdd(role){
-  const L=_holeList(); if(!L) return;
   if(typeof LG_CAT_OWN_ROLES==='undefined'||!LG_CAT_OWN_ROLES[role]) return;
+  // השער יושב כאן ולא רק בציור הכפתורים, כדי שלא יהיה מסלול
+  // עוקף — ולפני _holeList, שיוצר רשימה כתופעת לוואי.
+  const me=_sheetMeta(_sheetIdx());
+  if(me && _holeRolesFor(me.kind).indexOf(role)<0) return;
+  const L=_holeList(); if(!L) return;
   const at=LG_HOLE_POS_DEF[role]||{side:50,bot:25};
   L.push({role:role, dia:LG_CAT_OWN_ROLES[role],
           x:{from:'left',   mm:at.side},
@@ -1751,8 +1764,8 @@ function holeNum(k,path,el){
 
 // שורה אחת לקדח: תפקיד, קוטר, ומרחק משתי פאות — בדיוק
 // המבנה שהמנוע קורא, ובדיוק כמו שקודחים באמת.
-function _shHole(k,h){
-  const roles=Object.keys((typeof LG_CAT_OWN_ROLES!=='undefined')?LG_CAT_OWN_ROLES:{});
+function _shHole(k,h,kind){
+  const roles=_holeRolesFor(kind);
   const seg=(path,opts,cur)=>'<div class="sh-seg">'+opts.map(o=>
     '<button type="button" class="'+(o[0]===cur?'on':'')+'" '+
     'onclick="holeSet('+k+',&quot;'+path+'&quot;,&quot;'+o[0]+'&quot;)">'+o[1]+'</button>').join('')+'</div>';
@@ -1775,7 +1788,7 @@ function _shHole(k,h){
 
 // הקבוצה עצמה. מוצגת לאדמין בלבד — זה כלי לבניית הספרייה,
 // וקדח שמישהו הניח בטעות מגיע למפעל כזכוכית קדוחה שאי אפשר לתקן.
-function _shHoles(ps){
+function _shHoles(ps,kind){
   if(_sess.role!=='admin') return '';
   const all=Array.isArray(ps.holes)?ps.holes:[];
   const own=[], derived=[];
@@ -1783,9 +1796,9 @@ function _shHoles(ps){
     if(h&&h.role&&typeof LG_CAT_OWN_ROLES!=='undefined'&&LG_CAT_OWN_ROLES[h.role]) own.push([i,h]);
     else if(h&&h.role) derived.push(h);
   });
-  const roles=Object.keys((typeof LG_CAT_OWN_ROLES!=='undefined')?LG_CAT_OWN_ROLES:{});
+  const roles=_holeRolesFor(kind);
   return '<div class="sh-grp"><h4>קדחים על הצורה <span class="sub">אדמין</span></h4>'+
-    own.map(e=>_shHole(e[0],e[1])).join('')+
+    own.map(e=>_shHole(e[0],e[1],kind)).join('')+
     '<div class="sh-hole-add">'+roles.map(r=>
       '<button type="button" onclick="holeAdd(&quot;'+r+'&quot;)">+ '+
       (LG_HOLE_HE[r]||r)+'</button>').join('')+'</div>'+
@@ -1895,7 +1908,7 @@ function renderShapeSheet(){
 
   // קדחים שהצורה נושאת בעצמה — גם על זכוכית חופשית, שהרי היא
   // הזכוכית שהכי צריכה אותם: אין לה שכנים שמהם אפשר לגזור כלום.
-  _shHoles(ps);
+  _shHoles(ps,s.kind);
 }
 
 // ─── הפירוט ──────────────────────────────────────────────────────────

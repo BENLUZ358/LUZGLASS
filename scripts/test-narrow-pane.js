@@ -112,14 +112,14 @@ console.log('');
 
   /* The second door hangs on the SLOPED pane, which is 2010 tall. That is
      25mm more than the door — past the tolerance — so the rule says do not
-     force the heads together, and the door takes its 20mm of floor
-     clearance instead. Correct, and it is the rule doing its job. */
+     force the heads together. The clearance it falls back to is the same
+     15mm every door gets; only the head line parts. */
   const sc2 = L.scale;
   const floorY = Math.max.apply(null, L.shapes.map(g => g.y + g.h));
   const clearance = i => { const g = L.shapes.find(s => s.idx === i);
                            return Math.round((floorY - (g.y + g.h)) / sc2); };
-  check('the door on the sloped pane is past the tolerance, so it takes 20',
-        clearance(2), 20);
+  check('the door on the sloped pane is past the tolerance, but the clearance is still 15',
+        clearance(2), 15);
   check('while the one on the plain fixed keeps the difference as clearance',
         clearance(1), 15);
 
@@ -156,7 +156,7 @@ console.log('');
   const floor = Math.max.apply(null, L.shapes.map(g => g.y + g.h));
   const gap = i => Math.round((floor - (L.shapes.find(s => s.idx === i).y +
                                         L.shapes.find(s => s.idx === i).h)) / sc);
-  check('a door more than 20mm shorter takes its 20mm off the floor', gap(2), 20);
+  check('a door more than 20mm shorter still sits 15 off the floor', gap(2), 15);
   check('while the one within 20mm keeps the difference as clearance', gap(1), 15);
   check('and the fixed panes stand on the floor', [gap(0), gap(3)], [0, 0]);
 }
