@@ -1629,11 +1629,28 @@ function sheetNum(field,el){
   el.style.borderColor='';
   sheetSet(field,r.mm);
 }
+// הדלקה **כותבת את הערכים**, וכיבוי מוחק אותם.
+//
+// קודם היה כאן ps[k]==null — שמירה על מספרים שנושא המשתמש כבר הקליד.
+// זה נשבר בשתי דרכים בבת אחת:
+//
+//   1. ב-JavaScript השוואה false==null היא **לא**. ו-mkPS נותן hasSlope:false
+//      לכל לוח, ולכן הדגל לא נדלק מעולם — התיבה נדלקה ומיד
+//      נכבתה בציור מחדש. שיפוע ברוחב כן עבד, כי hasSlopeW אינו
+//      קיים ב-mkPS בכלל — וזה בדיוק ההבדל שנראה על המסך.
+//
+//   2. גם לו-הדגל היה נדלק, slopeH1/H2 של mkPS הם 2000/1800 קבועים.
+//      אלה אינם מספרים שמישהו בחר — הם "מה יהיה אם תדליק" — ולוח
+//      בגובה 2200 היה מקבל שיפוע 2000/1800, זאת אומרת נמוך מעצמו.
+//      המספרים שהגיליון שולח נגזרים מהגובה האמיתי של הלוח.
+//
+// כיבוי מוחק בלאו הכי את הערכים, ולכן כיבוי-והדלקה מאפס גם היום.
+// הכתיבה כאן אינה מאבדת שום דבר שלא היה אבוד בלאו הכי.
 function sheetToggle(field,on,defaults){
   const i=_sheetIdx();
   if(i<0) return;
   const ps=getPS(sheetPfx,i); if(!ps) return;
-  if(on) Object.keys(defaults).forEach(k=>{ if(ps[k]==null) ps[k]=defaults[k]; });
+  if(on) Object.keys(defaults).forEach(k=>{ ps[k]=defaults[k]; });
   else   Object.keys(defaults).forEach(k=>delete ps[k]);
   renderShapeSheet(); renderShapeUI(); draw();
 }
@@ -1790,6 +1807,11 @@ function renderShapeSheet(){
   const hasSlopeW = !!ps.hasSlopeW && ps.slopeW1>0 && ps.slopeW2>0;
   const hasNotch  = ps.notchW>0  && ps.notchH>0;
   const H=ps.h||2000, W=ps.w||(s.kind==='door'?800:500);
+  // הפרש השיפוע שמוצע כשמדליקים. המנוע מצייר שיפוע רק כששתי
+  // המידות חיוביות **ושונות זו מזו**, ולכן הפרש קבוע של 50
+  // היה מחזיר את אותו כשל שקט על לוח קטן ממנו: התיבה נדלקת
+  // ולא קורה כלום. עשירית המידה תמיד קטנה ממנה וגדולה מאפס.
+  const drop=v=>Math.max(1, v-Math.min(50, Math.round(v/10)));
 
   body.innerHTML =
   '<div class="sh-grp"><h4>מידות</h4>'+
@@ -1799,7 +1821,7 @@ function renderShapeSheet(){
 
   '<div class="sh-grp"><h4>שיפוע</h4>'+
     '<label class="sh-tog"><input type="checkbox" '+(hasSlopeH?'checked':'')+
-      ' onchange="sheetToggle(\'slopeH\',this.checked,{hasSlope:true,slopeH1:'+H+',slopeH2:'+(H-50)+'})">'+
+      ' onchange="sheetToggle(\'slopeH\',this.checked,{hasSlope:true,slopeH1:'+H+',slopeH2:'+drop(H)+'})">'+
       'שיפוע בגובה — שתי פאות בגבהים שונים</label>'+
     (hasSlopeH ?
       _shNum('slopeH1','גובה שמאל',ps.slopeH1)+
@@ -1809,7 +1831,7 @@ function renderShapeSheet(){
       '<p class="sh-note">מקלחון נחתך ברצפה — האגן מנוקז.</p>' : '')+
 
     '<label class="sh-tog"><input type="checkbox" '+(hasSlopeW?'checked':'')+
-      ' onchange="sheetToggle(\'slopeW\',this.checked,{hasSlopeW:true,slopeW1:'+W+',slopeW2:'+(W-45)+'})">'+
+      ' onchange="sheetToggle(\'slopeW\',this.checked,{hasSlopeW:true,slopeW1:'+W+',slopeW2:'+drop(W)+'})">'+
       'שיפוע ברוחב — קיר לא ישר</label>'+
     (hasSlopeW ?
       _shNum('slopeW1','רוחב עליון',ps.slopeW1)+
