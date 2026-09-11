@@ -145,6 +145,17 @@
   font-family:'Heebo',sans-serif;font-size:13px;color:var(--text);background:var(--bg);}
 .add-tog input{width:18px;height:18px;accent-color:var(--gold);cursor:pointer;}
 .add-tog label:focus-within{outline:2px solid var(--gold-text);outline-offset:2px;}
+.sh-hole{border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;}
+.sh-hole-top{display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;font-size:13px;font-weight:700;color:var(--gold-text);}
+.sh-hole-x{min-width:44px;min-height:44px;border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);color:var(--text);cursor:pointer;font-size:15px;}
+.sh-hole-x:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.sh-hole-add{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px;}
+.sh-hole-add button{flex:1 1 46%;min-height:44px;border-radius:8px;cursor:pointer;
+  border:1px dashed var(--border);background:var(--bg);color:var(--text);
+  font-family:'Heebo',sans-serif;font-size:13px;}
+.sh-hole-add button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 .sh-tog{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer;font-size:14px;}
 .sh-tog input{width:22px;height:22px;accent-color:var(--gold);}
 .sh-note{font-size:12px;color:var(--muted);margin:2px 0 8px;}
@@ -1274,7 +1285,11 @@ function _stateFromAdd(a){
                    extra.slopeH1=d.slopeH2; extra.slopeH2=d.slopeH1; }
   if(a.notchSide)  extra.notchSide=a.notchSide;
   if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
-  if(a.hingesFor) extra.holes=hingeHolesFromEngine(a.hingesFor);
+  // הכוונה נשמרת לצד הקדחים שנגזרו ממנה. הקדחים הם תוצאה של
+  // חישוב ולא הצהרה, ובלעדיה שמירת הצורה לספרייה היתה צריכה
+  // לנחש מהם באיזה צד תיתלה הדלת.
+  if(a.hingesFor){ extra.hingesFor=a.hingesFor;
+                   extra.holes=hingeHolesFromEngine(a.hingesFor); }
   // עותק ולא הפניה: ערך בקטלוג משמש כל לוח שנוצר ממנו, ומערך משותף
   // היה גורם לעריכת קדח בלוח אחד לשנות אותו בכל השאר.
   if(a.holes) extra.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
@@ -1403,11 +1418,25 @@ function shapeSaveOpen(id){
   const suggest = s.label + (ps.notchW>0?' עם מדרגה':'') + (ps.hasSlope?' משופע':'');
   const name=(prompt('שם הצורה בספרייה:',suggest)||'').trim();
   if(!name) return;
+  // נשמר **רק מה שאפשר לשחזר**. שדה שהשמירה מקבלת והטעינה אינה
+  // מחזירה הוא הבטחה שלא תקוים, והצורה תיפתח בפעם הבאה אחרת.
   const add={kind:s.kind};
   if(s.kind==='door') add.hingeSide=s.hingeSide;
+  if(s.carriesDoor!=null) add.carriesDoor=s.carriesDoor;
+  if(ps.hingesFor) add.hingesFor=ps.hingesFor;
   if(ps.hasSlope) add.slope=true;
-  if(Number(ps.notchW)>0&&Number(ps.notchH)>0) add.notch=true;
-  if(Array.isArray(ps.holes)&&ps.holes.length) add.holes=ps.holes;
+  if(Number(ps.notchW)>0&&Number(ps.notchH)>0){
+    add.notch=true;
+    if(ps.notchSide==='left'||ps.notchSide==='right') add.notchSide=ps.notchSide;
+  }
+  // **רק קדחים שהצורה נושאת בעצמה.** ציר וזווית קיר נגזרים ממה
+  // שהזכוכית נפגשת איתו, והם ישבו ב-ps.holes רק כתוצאה של חישוב.
+  // שמירתם כהצהרה היא בדיוק מקור אמת שני — ו-lgCatalogValidate פוסל
+  // אותם, כך שעד היום שמירת קבוע נושא דלת פשוט נכשלה.
+  const own=(Array.isArray(ps.holes)?ps.holes:[])
+    .filter(h=>h&&h.role&&typeof LG_CAT_OWN_ROLES!=='undefined'&&LG_CAT_OWN_ROLES[h.role]);
+  if(own.length) add.holes=own.map(h=>({role:h.role,dia:h.dia,
+    x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
   const entry={name:name,add:add};
   const errs=(typeof lgCatalogValidate==='function')?lgCatalogValidate(entry):[];
   if(errs.length){ shapeToast(errs.join(' · '),true); return; }
@@ -1625,6 +1654,129 @@ function _shNum(field,label,val,ph){
     'placeholder="'+hint+'" onchange="sheetNum(\''+field+'\',this)"></div>';
 }
 
+// ─── קדחים שהצורה נושאת בעצמה ────────────────────────
+//
+// זה המנגנון שבו הספרייה גדלה בלי לגעת בקוד: ממקמים קדח על
+// הזכוכית לפי קוטר ומרחק משתי פאות, שומרים את הצורה, והיא
+// מופיעה בגלריה של הלקוחות.
+//
+// מוצגים כאן **רק קדחים שאינם נובעים משום מפגש**. זווית רצפה
+// וקדח חופשי הם החלטה; ציר וזווית קיר נגזרים ממה שהזכוכית
+// נפגשת איתו, ולתת לערוך אותם ביד היה מחזיר את אותה סתירה
+// שהפילה את הקטלוג הקודם. הרשימה המותרת היא LG_CAT_OWN_ROLES,
+// והיא המקור היחיד — גם למסך וגם לבדיקה לפני השמירה.
+const LG_HOLE_HE={'bracket-floor':'זווית רצפה','hole':'קדח חופשי'};
+
+// קדח חדש נולד במרחק שכבר קיים במערכת — ברירת המחדל של
+// bracketInset — ולא במספר חדש שהמצאתי. מי שממקם קדח מקליד
+// את המספר האמיתי בשני השדות מיד, ורואה אותו זז על הציור.
+const LG_HOLE_INSET_DEF=25;
+
+// כל הקוראים עוברים דרך getPS, כמו כל שאר המסך. רשימה שנשמרת
+// בצד היתה העותק השני שהפרויקט הזה נלחם בו לאורך כל הדרך.
+function _holeList(){
+  const i=_sheetIdx(); if(i<0) return null;
+  const ps=getPS(sheetPfx,i); if(!ps) return null;
+  if(!Array.isArray(ps.holes)) ps.holes=[];
+  return ps.holes;
+}
+
+function _holeRedraw(){ renderShapeSheet(); renderShapeUI(); draw(); }
+
+function holeAdd(role){
+  const L=_holeList(); if(!L) return;
+  if(typeof LG_CAT_OWN_ROLES==='undefined'||!LG_CAT_OWN_ROLES[role]) return;
+  L.push({role:role, dia:LG_CAT_OWN_ROLES[role],
+          x:{from:'left',   mm:LG_HOLE_INSET_DEF},
+          y:{from:'bottom', mm:LG_HOLE_INSET_DEF}});
+  _holeRedraw();
+}
+
+function holeDel(k){
+  const L=_holeList(); if(!L||!L[k]) return;
+  L.splice(k,1);
+  // רשימה ריקה נמחקת ולא נשארת כמערך ריק: כך המצב חוזר
+  // לבדיוק מה שהיה לפני שנגעו בו.
+  if(!L.length){ const ps=getPS(sheetPfx,_sheetIdx()); if(ps) delete ps.holes; }
+  _holeRedraw();
+}
+
+function holeSet(k,path,val){
+  const L=_holeList(), h=L&&L[k]; if(!h) return;
+  if(path==='role'){
+    if(typeof LG_CAT_OWN_ROLES==='undefined'||!LG_CAT_OWN_ROLES[val]) return;
+    // הקוטר נגזר מהתפקיד רק כל עוד לא נגעו בו ביד
+    if(h.dia===LG_CAT_OWN_ROLES[h.role]) h.dia=LG_CAT_OWN_ROLES[val];
+    h.role=val;
+  }
+  else if(path==='x.from') h.x.from = val==='right' ? 'right' : 'left';
+  else if(path==='y.from') h.y.from = val==='top'   ? 'top'   : 'bottom';
+  else return;
+  _holeRedraw();
+}
+
+function holeNum(k,path,el){
+  const L=_holeList(), h=L&&L[k]; if(!h) return;
+  const r=_dimParse(String(el.value).trim());
+  if(!r.ok){ el.style.borderColor='#c0392b'; return; }
+  el.style.borderColor='';
+  if(path==='dia'){ if(r.mm>0) h.dia=r.mm; }
+  else if(path==='x') h.x.mm=r.mm;
+  else if(path==='y') h.y.mm=r.mm;
+  else return;
+  // בלי renderShapeSheet: ציור מחדש של הגיליון היה מוציא את הפוקוס
+  // מהשדה שבו מקלידים, בדיוק באמצע ההקלדה.
+  renderShapeUI(); draw();
+}
+
+// שורה אחת לקדח: תפקיד, קוטר, ומרחק משתי פאות — בדיוק
+// המבנה שהמנוע קורא, ובדיוק כמו שקודחים באמת.
+function _shHole(k,h){
+  const roles=Object.keys((typeof LG_CAT_OWN_ROLES!=='undefined')?LG_CAT_OWN_ROLES:{});
+  const seg=(path,opts,cur)=>'<div class="sh-seg">'+opts.map(o=>
+    '<button type="button" class="'+(o[0]===cur?'on':'')+'" '+
+    'onclick="holeSet('+k+',&quot;'+path+'&quot;,&quot;'+o[0]+'&quot;)">'+o[1]+'</button>').join('')+'</div>';
+  const num=(path,val)=>'<input type="text" inputmode="decimal" value="'+_dimToUnit(val)+'" '+
+    'onchange="holeNum('+k+',&quot;'+path+'&quot;,this)">';
+  return '<div class="sh-hole">'+
+    '<div class="sh-hole-top"><span>קדח '+(k+1)+'</span>'+
+      '<button type="button" class="sh-hole-x" onclick="holeDel('+k+')" '+
+      'aria-label="מחק קדח '+(k+1)+'">✕</button></div>'+
+    '<div class="sh-row"><label>תפקיד</label>'+
+      seg('role',roles.map(r=>[r,LG_HOLE_HE[r]||r]),h.role)+'</div>'+
+    '<div class="sh-row"><label>קוטר <span class="sh-unit">'+_dimUnitLabel()+'</span></label>'+
+      num('dia',h.dia)+'</div>'+
+    '<div class="sh-row"><label>מהפאה</label>'+
+      seg('x.from',[['left','שמאל'],['right','ימין']],h.x.from)+num('x',h.x.mm)+'</div>'+
+    '<div class="sh-row"><label>מלמעלה/למטה</label>'+
+      seg('y.from',[['bottom','מלמטה'],['top','מלמעלה']],h.y.from)+num('y',h.y.mm)+'</div>'+
+  '</div>';
+}
+
+// הקבוצה עצמה. מוצגת לאדמין בלבד — זה כלי לבניית הספרייה,
+// וקדח שמישהו הניח בטעות מגיע למפעל כזכוכית קדוחה שאי אפשר לתקן.
+function _shHoles(ps){
+  if(_sess.role!=='admin') return '';
+  const all=Array.isArray(ps.holes)?ps.holes:[];
+  const own=[], derived=[];
+  all.forEach((h,i)=>{
+    if(h&&h.role&&typeof LG_CAT_OWN_ROLES!=='undefined'&&LG_CAT_OWN_ROLES[h.role]) own.push([i,h]);
+    else if(h&&h.role) derived.push(h);
+  });
+  const roles=Object.keys((typeof LG_CAT_OWN_ROLES!=='undefined')?LG_CAT_OWN_ROLES:{});
+  return '<div class="sh-grp"><h4>קדחים על הצורה <span class="sub">אדמין</span></h4>'+
+    own.map(e=>_shHole(e[0],e[1])).join('')+
+    '<div class="sh-hole-add">'+roles.map(r=>
+      '<button type="button" onclick="holeAdd(&quot;'+r+'&quot;)">+ '+
+      (LG_HOLE_HE[r]||r)+'</button>').join('')+'</div>'+
+    (derived.length ? '<p class="sh-note">ועוד '+derived.length+
+      ' קדחים שהמנוע גזר מהמפגש — ציר או זווית קיר. הם אינם נערכים '+
+      'כאן ואינם נשמרים על הצורה: הם נגזרים מחדש בכל הרכבה.</p>' : '')+
+    '<p class="sh-note">מרחק נמדד מהפאה עצמה, ולכן שיפוע ומדרגה מזיזים את הקדח '+
+    'איתם. בסיום — הכוכב על הרצועה שומר את הצורה בספרייה.</p>'+
+  '</div>';
+}
+
 function renderShapeSheet(){
   const body=document.getElementById('shapeSheetBody');
   const i=_sheetIdx();
@@ -1697,14 +1849,18 @@ function renderShapeSheet(){
     // זכוכית חופשית אינה חלק מהרכבת המקלחון: אין לה זוויות ואיש אינו
     // נתלה עליה. פינוי וחורים יקבלו מנוע משלהם.
     ? '<div class="sh-grp"><h4>פרזול</h4>'+
-        '<p class="sh-note">זכוכית חופשית אינה נושאת פרזול. פינוי וחורים יתווספו בהמשך.</p>'+
+        '<p class="sh-note">זכוכית חופשית אינה נושאת פרזול של הרכבה. פינוי יתווסף בהמשך.</p>'+
       '</div>'
     : '<div class="sh-grp"><h4>פרזול</h4>'+
         '<label class="sh-tog"><input type="checkbox" '+(ps.floorBracket?'checked':'')+
           ' onchange="sheetSet(\'floorBracket\',this.checked?true:null)">זווית רצפה</label>'+
         _shNum('bracketInset','מרחק הזווית מהפאה',ps.bracketInset,'25')+
         '<p class="sh-note">2.5 ס"מ כברירת מחדל, ואז המידה לא מופיעה בשרטוט.</p>'+
-      '</div>');
+      '</div>')+
+
+  // קדחים שהצורה נושאת בעצמה — גם על זכוכית חופשית, שהרי היא
+  // הזכוכית שהכי צריכה אותם: אין לה שכנים שמהם אפשר לגזור כלום.
+  _shHoles(ps);
 }
 
 // ─── הפירוט ──────────────────────────────────────────────────────────
