@@ -36,6 +36,7 @@ var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1,
                      // המידות שמגדירות את הצורה — ראה למטה
                      notchW: 1, notchH: 1, notchHIn: 1, notchRest: 1,
                      notchBracket: 1, slopeH1: 1, slopeH2: 1, slopeSideH: 1,
+                     cutouts: 1,
                      slopeW: 1, slopeW1: 1, slopeW2: 1 };
 
 // ─── מה נשמר במספרים ────────────────────────────────
@@ -144,6 +145,13 @@ function lgFlipAdd(add) {
     else out.slopeFlip = true;
   }
   // שיפוע ברוחב הוא עליון מול תחתון, ושיקוף אופקי אינו נוגע בו
+  // פינוי חופשי משתקף כמו קדח: הפאה מתחלפת, הגובה לא, ונקודת
+  // הייחוס נשארת — "עד האמצע" הוא אותו דבר משני הכיוונים.
+  if (Array.isArray(out.cutouts)) out.cutouts = out.cutouts.map(function (c) {
+    return { w: c.w, h: c.h, ref: c.ref,
+             x: { from: _lgOther(c.x.from), mm: c.x.mm },
+             y: { from: c.y.from, mm: c.y.mm } };
+  });
   if (Array.isArray(out.holes)) out.holes = out.holes.map(function (h) {
     return { role: h.role, dia: h.dia,
              x: { from: _lgOther(h.x.from), mm: h.x.mm },
@@ -214,6 +222,19 @@ function lgCatalogValidate(entry) {
   // מדרגה היא רוחב וגובה יחד; אחד מהם לבדו אינו פינוי
   if ((a.notchW != null) !== (a.notchH != null))
     e.push('למדרגה דרושים רוחב וגובה');
+
+  if (a.cutouts && !Array.isArray(a.cutouts)) e.push('הפינויים אינם רשימה');
+  (Array.isArray(a.cutouts) ? a.cutouts : []).forEach(function (c, i) {
+    var at = 'פינוי ' + (i + 1) + ': ';
+    if (!c) { e.push(at + 'ריק'); return; }
+    if (!(c.w > 0) || !(c.h > 0)) e.push(at + 'רוחב וגובה חייבים להיות גדולים מאפס');
+    if (!c.x || !(c.x.mm >= 0)) e.push(at + 'מרחק מהפאה חסר');
+    if (!c.y || !(c.y.mm >= 0)) e.push(at + 'מרחק מהקצה חסר');
+    // נקודת הייחוס חייבת להיות מפורשת: בלעדיה אותם שני מספרים
+    // מתארים שני מלבנים שונים, והמפעל ינחש באיזה מדובר.
+    if (c.ref !== 'edge' && c.ref !== 'center')
+      e.push(at + 'נקודת המדידה חייבת להיות תחילת הפינוי או אמצעו');
+  });
 
   Object.keys(a).forEach(function (k) {
     if (k !== 'kind' && k !== 'hingeSide' && !LG_CAT_FLAGS[k])

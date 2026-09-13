@@ -1754,11 +1754,14 @@ function lgShapeId(name) {
 
 async function lgSaveShape(entry, scope, phone) {
   if (!entry || !entry.name) throw new Error('לצורה אין שם');
+  // ‏**המזהה נוצר לפני הבדיקה.** הבדיקה דורשת מזהה, והמזהה
+  // נוצר כאן — כך שכל שמירה נפלה על "לצורה אין מזהה" לפני שהגיעה
+  // לשורה שיוצרת אותו. שתי השורות היו בסדר ההפוך.
+  const id = entry.id || lgShapeId(entry.name);
   if (typeof lgCatalogValidate === 'function') {
-    const errs = lgCatalogValidate(entry);
+    const errs = lgCatalogValidate(Object.assign({}, entry, { id: id }));
     if (errs.length) throw new Error(errs.join(' · '));
   }
-  const id = entry.id || lgShapeId(entry.name);
   const rec = { id, name: entry.name, add: entry.add,
                 origin: scope === 'factory' ? 'factory' : 'personal',
                 createdAt: entry.createdAt || Date.now(), updatedAt: Date.now() };

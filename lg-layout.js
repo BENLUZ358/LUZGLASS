@@ -373,6 +373,23 @@ function lgFromPanels(panels,pStates,opts){
                     y:{from:h.y.from==='top'?'top':'bottom',   mm:Number(h.y.mm)}}));
         if(ok.length) s.holes=ok;
       }
+
+      // ── פינוי חופשי ──
+      //
+      // מלבן שנחתך מתוך הזכוכית, בכל מקום עליה — לא המדרגה שבפינה.
+      // שני מספרים אומרים איפה הוא, **ונקודת הייחוס היא בחירה**: יש מי
+      // שמודד עד תחילת הפינוי ויש מי שמודד עד אמצעו, ושתי השיטות
+      // נותנות מלבן אחר לגמרי עם אותם מספרים. לכן היא נשמרת ולא
+      // נקבעת כאן.
+      if(Array.isArray(st.cutouts) && st.cutouts.length){
+        const ok=st.cutouts.filter(c=>c&&Number(c.w)>0&&Number(c.h)>0&&c.x&&c.y&&
+                                      Number(c.x.mm)>=0&&Number(c.y.mm)>=0)
+          .map(c=>({w:Number(c.w), h:Number(c.h),
+                    ref:c.ref==='center'?'center':'edge',
+                    x:{from:c.x.from==='right'?'right':'left', mm:Number(c.x.mm)},
+                    y:{from:c.y.from==='top'?'top':'bottom',   mm:Number(c.y.mm)}}));
+        if(ok.length) s.cutouts=ok;
+      }
       return s;
     }),
   };
@@ -1037,6 +1054,64 @@ function _layoutPass(shower,cW,mgL,mgR){
         edgePend.push({idx:s.idx, mm:hMM, a:Math.min(ex,x), b:Math.max(ex,x),
                        y:y, right:!fromLeft, kind:'hole-edge'});
       }
+    });
+  });
+
+  // ── פינויים חופשיים ────────────────────────────────────────────────
+  //
+  // מלבן שנחתך מהזכוכית בכל מקום עליה. הוא **אינו** המדרגה שבפינה, שיש
+  // לה חוקיות משלה ושמשנה את מתאר הזכוכית; הפינוי החופשי הוא חיתוך
+  // פנימי, ולכן הוא אינו נוגע במצולע, בשטח או במידות החיתוך. מה שהוא
+  // כן צריך הוא ארבעה מספרים: כמה רוחב, כמה גובה, וכמה משתי פאות.
+  //
+  // ‏**נקודת הייחוס היא בחירה של מי שמזמין.** "20 מלמטה" יכול להיות עד
+  // תחילת הפינוי או עד אמצעו, ושתי השיטות נותנות מלבן אחר עם אותם
+  // מספרים בדיוק. לכן היא נוסעת עם הפינוי, ואינה מוכרעת כאן.
+  //
+  // המידות נמדדות מהתיבה החוסמת ולא מהפאה: פאה משופעת נוטה, ולמלבן יש
+  // צלע אנכית — מי שמודד בשטח מודד מהקצה הקיצוני של הזכוכית.
+  out.cutouts=[];
+  out.shapes.forEach(s=>{
+    const src=shapes[s.idx]||{};
+    const list=src.cutouts;
+    if(!list||!list.length) return;
+    const topY=s.y, botY=s.y+s.h, leftX=s.x, rightX=s.x+s.w;
+    list.forEach(c=>{
+      if(!c) return;
+      const cw=(c.w||0)*sc, ch=(c.h||0)*sc;
+      const mid = c.ref==='center';
+      const dx=(c.x&&c.x.mm||0)*sc, dy=(c.y&&c.y.mm||0)*sc;
+      const fromLeft = !(c.x&&c.x.from==='right');
+      const fromTop  = !!(c.y&&c.y.from==='top');
+      // הקצה השמאלי־עליון של המלבן, אחרי שנקודת הייחוס נלקחה בחשבון
+      const x0 = fromLeft ? leftX + dx - (mid?cw/2:0)
+                          : rightX - dx - (mid?cw/2:cw);
+      const y0 = fromTop  ? topY  + dy - (mid?ch/2:0)
+                          : botY  - dy - (mid?ch/2:ch);
+      out.cutouts.push({idx:s.idx, x:x0, y:y0, w:cw, h:ch,
+                        mmW:c.w, mmH:c.h, ref:c.ref,
+                        fromX:fromLeft?'left':'right', fromY:fromTop?'top':'bottom',
+                        distX:c.x&&c.x.mm||0, distY:c.y&&c.y.mm||0});
+      // התוויות לא ינחתו על המלבן עצמו
+      claim(x0+cw/2, y0+ch/2);
+
+      // ארבע המידות, דרך אותם שני מנגנונים שמציירים כל מידת פרזול.
+      hwAdd('cut-h', Math.round(c.h), y0, y0+ch, s.idx, x0+cw/2,
+            'start', fromLeft?-1:1);
+      edgePend.push({idx:s.idx, mm:Math.round(c.w), a:x0, b:x0+cw,
+                     y:y0+ch/2, right:!fromLeft, kind:'cut-w'});
+      // והמרחקים: עד הנקודה שממנה נמדד — הקצה או האמצע
+      const refX = fromLeft ? (mid?x0+cw/2:x0) : (mid?x0+cw/2:x0+cw);
+      const refY = fromTop  ? (mid?y0+ch/2:y0) : (mid?y0+ch/2:y0+ch);
+      if(c.x&&c.x.mm>0)
+        edgePend.push({idx:s.idx, mm:Math.round(c.x.mm),
+                       a:Math.min(fromLeft?leftX:rightX, refX),
+                       b:Math.max(fromLeft?leftX:rightX, refX),
+                       y:refY, right:!fromLeft, kind:'cut-x'});
+      if(c.y&&c.y.mm>0)
+        hwAdd('cut-y', Math.round(c.y.mm),
+              Math.min(fromTop?topY:botY, refY), Math.max(fromTop?topY:botY, refY),
+              s.idx, refX, fromTop?'start':'end', fromLeft?-1:1);
     });
   });
 

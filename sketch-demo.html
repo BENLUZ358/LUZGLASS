@@ -87,6 +87,9 @@
 .strip-row button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 .strip-row button.on{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
 .strip-row{gap:8px;}
+/* השמירה נושאת מילה ולא סימן, ולכן היא רחבה מהשאר */
+.strip-row button.strip-save{padding:0 10px;font-size:12px;font-weight:600;
+  min-width:auto;white-space:nowrap;}
 /* הקצוות אינם צורות — הם מה שיושב מעבר לצורה האחרונה */
 /* ── גיליון המאפיינים ──────────────────────────────────────────────────
    נפתח מלמטה, כי שם האגודל. המנוע יודע פינוי, שיפוע בשני צירים, עובי
@@ -1358,6 +1361,10 @@ function _stateFromAdd(a){
   // היה גורם לעריכת קדח בלוח אחד לשנות אותו בכל השאר.
   if(a.holes) extra.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
                 x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
+  // אותו עותק עמוק ומאותה סיבה: ערך בקטלוג משמש כל לוח שנוצר
+  // ממנו, ומערך משותף היה מזיז פינוי בכל הלוחות בבת אחת.
+  if(a.cutouts) extra.cutouts=a.cutouts.map(c=>({w:c.w,h:c.h,ref:c.ref,
+                  x:{from:c.x.from,mm:c.x.mm}, y:{from:c.y.from,mm:c.y.mm}}));
   return extra;
 }
 
@@ -1517,7 +1524,18 @@ function shapeSaveOpen(id){
     .filter(h=>h&&h.role&&typeof LG_CAT_OWN_ROLES!=='undefined'&&LG_CAT_OWN_ROLES[h.role]);
   if(own.length) add.holes=own.map(h=>({role:h.role,dia:h.dia,
     x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
-  const entry={name:name,add:add};
+  // הפינויים החופשיים נשמרים עם נקודת הייחוס שלהם. בלעדיה
+  // אותם שני מספרים מתארים שני מלבנים שונים.
+  const cuts=(Array.isArray(ps.cutouts)?ps.cutouts:[])
+    .filter(c=>c&&Number(c.w)>0&&Number(c.h)>0&&c.x&&c.y);
+  if(cuts.length) add.cutouts=cuts.map(c=>({w:Number(c.w),h:Number(c.h),
+    ref:c.ref==='center'?'center':'edge',
+    x:{from:c.x.from,mm:Number(c.x.mm)||0}, y:{from:c.y.from,mm:Number(c.y.mm)||0}}));
+  // המזהה נוצר כאן ולא בשמירה, כדי שהקוד יוצג למשתמש מיד
+  // וכדי שהבדיקה תראה מה שנשמר באמת. בלעדיו כל שמירה
+  // נפלה על "לצורה אין מזהה".
+  const entry={ id:(typeof lgShapeId==='function')?lgShapeId(name):('sh_'+Date.now()),
+                name:name, add:add };
   const errs=(typeof lgCatalogValidate==='function')?lgCatalogValidate(entry):[];
   if(errs.length){ shapeToast(errs.join(' · '),true); return; }
   shapeSaveTo(entry);
@@ -1537,7 +1555,10 @@ async function shapeSaveTo(entry){
     if(scope==='factory') libFactory=libFactory.concat([rec]);
     else                  libPersonal=libPersonal.concat([rec]);
     renderShapeGallery();
-    shapeToast('נשמר: '+entry.name);
+    // הקוד נאמר ברגע השמירה, כדי שיהיה מה לרשום ליד הצורה
+    // בלי לחפש אותו אחר כך בגלריה.
+    shapeToast('נשמר: '+entry.name+' · '+shapeCodeOf(rec)+
+               (scope==='factory'?' · ספריית המפעל':' · הגלריה שלי'));
   }catch(e){ shapeToast('השמירה נכשלה: '+(e&&e.message||''),true); }
 }
 
@@ -1866,6 +1887,83 @@ function _shHole(k,h,kind){
   '</div>';
 }
 
+// ─── פינוי חופשי ────────────────────────────────────
+//
+// מלבן שנחתך מתוך הזכוכית בכל מקום עליה. הוא **אינו** המדרגה
+// שבפינה: לזו יש חוקיות משלה, היא משנה את מתאר הזכוכית, והיא
+// נשארת במקומה במעלה הגיליון בלי שינוי.
+//
+// **נקודת הייחוס היא בחירה ולא הנחה.** "20 מלמטה" יכול להיות עד
+// תחילת הפינוי או עד אמצעו, ושתי השיטות נותנות מלבן אחר לגמרי
+// עם אותם מספרים. מי שמודד בשטח יודע איזו שיטה הוא עובד לפיה.
+const LG_CUT_DEF={w:200,h:100,side:50,bot:50};
+
+function _cutList(){
+  const i=_sheetIdx(); if(i<0) return null;
+  const ps=getPS(sheetPfx,i); if(!ps) return null;
+  if(!Array.isArray(ps.cutouts)) ps.cutouts=[];
+  return ps.cutouts;
+}
+
+function cutAdd(){
+  const L=_cutList(); if(!L) return;
+  L.push({w:LG_CUT_DEF.w, h:LG_CUT_DEF.h, ref:'edge',
+          x:{from:'left',   mm:LG_CUT_DEF.side},
+          y:{from:'bottom', mm:LG_CUT_DEF.bot}});
+  _holeRedraw();
+}
+
+function cutDel(k){
+  const L=_cutList(); if(!L||!L[k]) return;
+  L.splice(k,1);
+  if(!L.length){ const ps=getPS(sheetPfx,_sheetIdx()); if(ps) delete ps.cutouts; }
+  _holeRedraw();
+}
+
+function cutSet(k,path,val){
+  const L=_cutList(), c=L&&L[k]; if(!c) return;
+  if(path==='ref')        c.ref = val==='center' ? 'center' : 'edge';
+  else if(path==='x.from') c.x.from = val==='right' ? 'right' : 'left';
+  else if(path==='y.from') c.y.from = val==='top'   ? 'top'   : 'bottom';
+  else return;
+  _holeRedraw();
+}
+
+function cutNum(k,path,el){
+  const L=_cutList(), c=L&&L[k]; if(!c) return;
+  const r=_dimParse(String(el.value).trim());
+  if(!r.ok){ el.style.borderColor='#c0392b'; return; }
+  el.style.borderColor='';
+  if(path==='w'||path==='h'){ if(r.mm>0) c[path]=r.mm; }
+  else if(path==='x') c.x.mm=r.mm;
+  else if(path==='y') c.y.mm=r.mm;
+  else return;
+  // בלי ציור מחדש של הגיליון — הפוקוס יקפוץ מהשדה באמצע ההקלדה
+  renderShapeUI(); draw();
+}
+
+function _shCut(k,c){
+  const seg=(path,opts,cur)=>'<div class="sh-seg">'+opts.map(o=>
+    '<button type="button" class="'+(o[0]===cur?'on':'')+'" '+
+    'onclick="cutSet('+k+',&quot;'+path+'&quot;,&quot;'+o[0]+'&quot;)">'+o[1]+'</button>').join('')+'</div>';
+  const num=(path,val)=>'<input type="text" inputmode="decimal" value="'+_dimToUnit(val)+'" '+
+    'onchange="cutNum('+k+',&quot;'+path+'&quot;,this)">';
+  const u='<span class="sh-unit">'+_dimUnitLabel()+'</span>';
+  return '<div class="sh-hole">'+
+    '<div class="sh-hole-top"><span>פינוי '+(k+1)+'</span>'+
+      '<button type="button" class="sh-hole-x" onclick="cutDel('+k+')" '+
+      'aria-label="מחק פינוי '+(k+1)+'">✕</button></div>'+
+    '<div class="sh-row"><label>רוחב '+u+'</label>'+num('w',c.w)+'</div>'+
+    '<div class="sh-row"><label>גובה '+u+'</label>'+num('h',c.h)+'</div>'+
+    '<div class="sh-row"><label>המרחק נמדד עד</label>'+
+      seg('ref',[['edge','תחילת הפינוי'],['center','אמצע הפינוי']],c.ref||'edge')+'</div>'+
+    '<div class="sh-row"><label>מהפאה</label>'+
+      seg('x.from',[['left','שמאל'],['right','ימין']],c.x.from)+num('x',c.x.mm)+'</div>'+
+    '<div class="sh-row"><label>מלמעלה/למטה</label>'+
+      seg('y.from',[['bottom','מלמטה'],['top','מלמעלה']],c.y.from)+num('y',c.y.mm)+'</div>'+
+  '</div>';
+}
+
 // הקבוצה עצמה. מוצגת לאדמין בלבד — זה כלי לבניית הספרייה,
 // וקדח שמישהו הניח בטעות מגיע למפעל כזכוכית קדוחה שאי אפשר לתקן.
 function _shHoles(ps,kind){
@@ -1877,11 +1975,14 @@ function _shHoles(ps,kind){
     else if(h&&h.role) derived.push(h);
   });
   const roles=_holeRolesFor(kind);
-  return '<div class="sh-grp"><h4>קדחים על הצורה <span class="sub">אדמין</span></h4>'+
+  const cuts=Array.isArray(ps.cutouts)?ps.cutouts:[];
+  return '<div class="sh-grp"><h4>קדחים ופינויים על הצורה <span class="sub">אדמין</span></h4>'+
     own.map(e=>_shHole(e[0],e[1],kind)).join('')+
+    cuts.map((c,k)=>_shCut(k,c)).join('')+
     '<div class="sh-hole-add">'+roles.map(r=>
       '<button type="button" onclick="holeAdd(&quot;'+r+'&quot;)">+ '+
-      (LG_HOLE_HE[r]||r)+'</button>').join('')+'</div>'+
+      (LG_HOLE_HE[r]||r)+'</button>').join('')+
+      '<button type="button" onclick="cutAdd()">+ פינוי חופשי</button>'+'</div>'+
     (derived.length ? '<p class="sh-note">ועוד '+derived.length+
       ' קדחים שהמנוע גזר מהמפגש — ציר או זווית קיר. הם אינם נערכים '+
       'כאן ואינם נשמרים על הצורה: הם נגזרים מחדש בכל הרכבה.</p>' : '')+
@@ -2069,7 +2170,9 @@ function renderShapeUI(){
       '<span class="sn">'+_shEsc(s.label)+(s.kind==='door'?' ('+(s.hingeSide==='right'?'ימין':'שמאל')+')':'')+'</span>'+
       '<span class="strip-row">'+
         (s.kind==='door'?'<button onclick="shapeFlipHinge(\'' + s.id + '\')" aria-label="החלף צד ציר">⇄</button>':'')+
-        '<button onclick="shapeSaveOpen(\'' + s.id + '\')" aria-label="שמור בספרייה" title="שמור בספרייה">☆</button>'+
+        // כוכב אינו אומר מה הוא עושה. מילה כן.
+        '<button class="strip-save" onclick="shapeSaveOpen(\'' + s.id + '\')" '+
+          'title="שמור את הצורה בספרייה">שמור צורה</button>'+
         '<button onclick="shapeRemove(\'' + s.id + '\')" aria-label="הסר">✕</button>'+
       '</span>'+
     '</div>').join('')
@@ -2746,6 +2849,18 @@ function engPaint(L,pfx,dy,idxOf,opts){
     cx.fillStyle='rgba(58,49,40,0.45)';
     cx.font='11px Heebo,sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
     cx.fillText(s.label || kindName(s.kind), s.x+s.w/2, s.y+s.h/2);
+    cx.restore();
+  });
+
+  // פינוי חופשי — זכוכית שאינה שם. הוא מצויר אחרי הזכוכית ולפני
+  // הפרזול: הוא חלק מהחיתוך, לא פריט שמורכב עליה. המילוי מכסה את
+  // גוון הזכוכית כדי שייראה כחור במלבן ולא כמלבן שצויר עליו.
+  (L.cutouts||[]).forEach(k=>{
+    cx.save();
+    cx.fillStyle='#ffffff';
+    cx.fillRect(k.x,k.y,k.w,k.h);
+    cx.strokeStyle='#2f6b6b'; cx.lineWidth=1.6;
+    cx.strokeRect(k.x,k.y,k.w,k.h);
     cx.restore();
   });
 
