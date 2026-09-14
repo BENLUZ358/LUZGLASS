@@ -101,6 +101,9 @@ const LG_HANDLE_EDGE_MM=60;    // ידית, 6 ס"מ מהפאה
 // מפסיקה להיות נוחה לפתיחה. המטר הוא תקרה על **ברירת המחדל בלבד**:
 // מי שמקליד גובה ידית התכוון אליו.
 const LG_HANDLE_MAX_MM=1000;
+// ידית מגבת: 55 ס"מ בין שני החורים. החור הראשון יושב באותו
+// מרחק מהפאה כמו כפתור, והשני 55 אחריו.
+const LG_TOWEL_MM=550;
 const LG_BRACKET_INSET=25;     // זווית קיר-זכוכית, 2.5 ס"מ מהפאה פנימה
 // קוטר הקדח בזכוכית. זווית וציר יושבים על בורג עבה יותר מידית.
 const LG_HOLE_BRACKET=20, LG_HOLE_HANDLE=12;
@@ -361,6 +364,16 @@ function lgFromPanels(panels,pStates,opts){
         if(st[k]!=null && st[k]!=='') s[k]=st[k];
       });
       if(st.handleEdge!=null) s.handleEdge=Number(st.handleEdge);
+      // סוג הידית קובע כמה חורים נקדחים ואיפה. עד היום השדה
+      // הזה ישב במצב והמנוע התעלם ממנו — כל דלת קיבלה חור אחד.
+      if(st.handleType==='towel'||st.handleType==='towel-center')
+        s.handleType=st.handleType;
+      // מה שהליקוט סופר: כפתור ומגבת הם שני פריטים שונים. מרכוז
+      // הוא אותה ידית במיקום אחר, ולכן אותו פריט.
+      if(s.kind==='door')
+        s.handleVariant = (st.handleType==='towel'||st.handleType==='towel-center')
+                        ? 'towel' : 'knob';
+      if(Number(st.towelSpacing)>0) s.towelSpacing=Number(st.towelSpacing)*10;
       if(st.floorBracket) s.floorBracket=true;
 
       // קדחים שהזכוכית נושאת בעצמה. הם נחתכים בדיוק כמו הנגזרים, ולכן
@@ -921,7 +934,34 @@ function _layoutPass(shower,cW,mgL,mgR){
     const dMM=src.handleDist!=null ? src.handleDist
             : (ref==='top' ? faceMM-upMM : upMM);
     const hyU=ref==='top'? fTop+dMM*sc : fBot-dMM*sc;
-    handles.push({s:s, ref:ref, eMM:eMM, face:face, x:hxU, y:hyU,
+
+    // ── כמה חורים, ואיפה ──
+    //
+    //   כפתור        חור אחד, במרחק שנבחר מפאת הידית
+    //   מגבת        שני חורים, הראשון באותו מרחק והשני 55 אחריו.
+    //                שינוי המרחק מהפאה מזיז את שניהם יחד —
+    //                ה-55 נשמר.
+    //   מרכוז מגבת שני חורים, **כל אחד באותו מרחק מהפאה שלו**.
+    //                זו השיטה — לא המרחק ביניהם, שנגזר מרוחב
+    //                הזכוכית. הוא יוצא מה שיוצא.
+    const hType = src.handleType==='towel-center' ? 'towel-center'
+                : src.handleType==='towel'        ? 'towel' : 'knob';
+    const gap = (src.towelSpacing>0 ? src.towelSpacing : LG_TOWEL_MM)*sc;
+    const into = handleOnRight ? -1 : 1;          // פנימה, לתוך הזכוכית
+    let xs, edges;
+    if(hType==='towel-center'){
+      xs    = [s.x+eMM*sc, s.x+s.w-eMM*sc];
+      edges = [{x:s.x+eMM*sc, face:s.x, right:false},
+               {x:s.x+s.w-eMM*sc, face:s.x+s.w, right:true}];
+    } else if(hType==='towel'){
+      xs    = [hxU, hxU+into*gap];
+      edges = [{x:hxU, face:face, right:handleOnRight}];
+    } else {
+      xs    = [hxU];
+      edges = [{x:hxU, face:face, right:handleOnRight}];
+    }
+    handles.push({s:s, ref:ref, eMM:eMM, face:face, x:hxU, xs:xs, edges:edges,
+                  type:hType, gap:gap, y:hyU,
                   fTop:fTop, fBot:fBot, right:handleOnRight,
                   typed:src.handleDist!=null});
   });
@@ -952,20 +992,32 @@ function _layoutPass(shower,cW,mgL,mgR){
   handles.forEach(h=>{
     const s=h.s;
     // בשרטוט לחותך הזכוכית מה שקיים הוא **החור**. הידית מוברגת בו, וסמל
-    // מפורט שלה רק מסתיר את מה שצריך לקדוח.
-    out.hardware.push({kind:'hole',hole:true,dia:LG_HOLE_HANDLE,idx:s.idx,
-                       source:'junction',role:'handle',x:h.x,y:h.y});
-    claim(h.x,h.y);
+    // מפורט שלה רק מסתיר את מה שצריך לקדוח. ידית מגבת היא
+    // שני חורים באותו גובה, ולכן הרשימה ולא נקודה אחת.
+    h.xs.forEach(x=>{
+      out.hardware.push({kind:'hole',hole:true,dia:LG_HOLE_HANDLE,idx:s.idx,
+                         source:'junction',role:'handle',x:x,y:h.y});
+      claim(x,h.y);
+    });
 
     // המידה נגזרת מהמקום שבו הידית **באמת** יושבת, אחרי היישור. מספר
     // שנרשם לפני ההזזה היה מתאר ידית שאינה שם.
     const mm = h.ref==='top' ? Math.round((h.y-h.fTop)/sc)
                              : Math.round((h.fBot-h.y)/sc);
-    hwAdd('handle-dist',mm,h.ref==='top'?h.fTop:h.y,h.ref==='top'?h.y:h.fBot,s.idx,h.x,
+    hwAdd('handle-dist',mm,h.ref==='top'?h.fTop:h.y,h.ref==='top'?h.y:h.fBot,s.idx,h.xs[0],
           h.ref==='top'?'start':'end');
-    // מרחק החור מהפאה נפלט אחרון, כשכל שאר המידות כבר על הנייר
-    edgePend.push({idx:s.idx, mm:h.eMM, a:Math.min(h.x,h.face), b:Math.max(h.x,h.face),
-                   y:h.y, right:h.right});
+
+    // מרחק מהפאה — אחד לכפתור ולמגבת, ו**שניים למרכוז**:
+    // שם השיטה היא המרחק מכל פאה, והמרחק בין החורים יוצא
+    // מה שיוצא. קו מידה עליו היה מתאר תוצאה, לא החלטה.
+    h.edges.forEach(e=>edgePend.push({idx:s.idx, mm:h.eMM,
+      a:Math.min(e.x,e.face), b:Math.max(e.x,e.face), y:h.y, right:e.right}));
+
+    // ובמגבת רגילה — ה-55 עצמו, שהוא ההחלטה שם
+    if(h.type==='towel')
+      edgePend.push({idx:s.idx, mm:Math.round(h.gap/sc),
+                     a:Math.min(h.xs[0],h.xs[1]), b:Math.max(h.xs[0],h.xs[1]),
+                     y:h.y, right:h.right, kind:'towel-gap'});
   });
 
   // ── חורים מוצהרים ────────────────────────────────────────────────────

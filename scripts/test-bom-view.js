@@ -42,6 +42,7 @@ const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, consol
 ['lg-shapes.js', 'lg-layout.js'].forEach(f =>
   vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
 vm.runInContext('function _shEsc(s){return String(s);}', ctx);
+vm.runInContext(DEMO.match(/const LG_HW_VAR=\{[^}]*\};/)[0], ctx);
 vm.runInContext(DEMO.match(/const LG_HW_HE=\{[\s\S]*?\};/)[0], ctx);
 vm.runInContext(grab('renderBom'), ctx);
 
@@ -80,6 +81,13 @@ console.log('');
     check(`  ${l.key.thickness}mm shows its area`, r.html.indexOf(l.qty + ' מ"ר') > -1, true);
     check('  and its thickness', r.html.indexOf(l.key.thickness + ' מ"מ') > -1, true);
   });
+
+  /* a knob and a towel rail are two different parts; two rows that both
+     say only "ידית" cannot be picked from */
+  check('a handle variant is named beside it',
+        /LG_HW_VAR\[l\.key\.variant\]/.test(DEMO), true);
+  check('and both variants have a Hebrew word',
+        /const LG_HW_VAR=\{'knob':'[֐-׿]+','towel':'[֐-׿]+'\};/.test(DEMO), true);
 
   const hw = r.lines.filter(l => l.key.kind === 'hardware');
   check('every piece of hardware is listed', hw.length > 0, true);
