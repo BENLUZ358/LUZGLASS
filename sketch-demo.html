@@ -693,6 +693,16 @@ function updateSketchClient(){
 }
 
 // ══════════════ DATA ══════════════
+// ‏**הבחירה היא שם סוג, לא מזהה.** מאז שבורר הזכוכית נגזר מפריטי
+// חשבשבת, ‏selG מחזיק 'שקוף' ולא 'shafu' — והחיפוש לפי id החזיר
+// undefined בשלושה מקומות, אחד מהם בונה את ההזמנה עצמה.
+//
+// סוג שאינו במחירון הישן מחזיר מחיר null ולא אפס: אפס נראה כמו
+// מחיר, ו-null אומר שאין.
+function glassOf(){
+  const hit=GL.filter(x=>x.name===selG)[0];
+  return hit || {id:null, name:selG, price:null};
+}
 const GL=[
   {id:'shafu',name:'שקוף',price:200,dot:'rgba(210,230,245,0.6)'},
   {id:'klir',name:'קליר',price:260,dot:'rgba(195,225,245,0.9)'},
@@ -3387,20 +3397,22 @@ document.addEventListener('keydown',function(e){
 function updateSpecs(){
   const panels=getPanels(),pss=getPStates();
   if(!panels.length){document.getElementById('specs').innerHTML='<strong>פרטי הזמנה</strong>הוסף פריטים';return;}
-  const g=GL.find(x=>x.id===selG),f=FN.find(x=>x.id===selF);
+  const g=glassOf(),f=FN.find(x=>x.id===selF);
   const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
   const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||2000,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):2000;
   const area=(totalW*maxH/1000000).toFixed(2);
-  const total=Math.round(parseFloat(area)*g.price)+(selQ==='zamak'?f.pZ:f.pP);
+  // מחיר חסר נאמר במפורש. סכום שחושב על אפס נראה כמו סכום נכון.
+  const hwP=(selQ==='zamak'?f.pZ:f.pP);
+  const total=g.price!=null ? Math.round(parseFloat(area)*g.price)+hwP : null;
   const sn=document.getElementById('sketchName')?.value;
   const det=panels.map((p,i)=>`${p.label||p.type}: ${pss[i]?.w||500}×${pss[i]?.h||2000} מ"מ`).join(' | ');
   document.getElementById('specs').innerHTML=`<strong>פרטי הזמנה</strong>
     ${sn?`<span style="color:var(--gold-text);font-weight:700">${sn}</span><br>`:''}
     ${det}<br>
-    זכוכית: ${g.name} 8מ״מ מחוסם · ₪${g.price}/מ״ר<br>
+    זכוכית: ${selMM}מ״מ ${g.name} מחוסם${g.price!=null?` · ₪${g.price}/מ״ר`:''}<br>
     פרזול: ${f.name} (${selQ==='zamak'?'זאמק':'פליז'})<br>${sand?'+ התזת חול<br>':''}
     שטח: ${area} מ״ר<br>
-    <strong style="color:var(--gold-text)">סה״כ: ₪${total.toLocaleString()}</strong>`;
+    <strong style="color:var(--gold-text)">${total!=null?`סה״כ: ₪${total.toLocaleString()}`:'אין מחיר לסוג הזה במחירון'}</strong>`;
 }
 
 function handleAddToSketch(){
@@ -3420,7 +3432,7 @@ function addComboToSketch(){
   const panels=getPanels(),pss=getPStates();
   if(!panels.length){showToast('בחר קומבינציה תחילה');return;}
   if(sketchParts.length>=3){showToast('ניתן להוסיף עד 3 מקלחונים לסקיצה');return;}
-  const g=GL.find(x=>x.id===selG),f=FN.find(x=>x.id===selF);
+  const g=glassOf(),f=FN.find(x=>x.id===selF);
   const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
   const maxH=Math.max(...panels.map((_,i)=>pss[i]?.h||2000));
   const area=(totalW*maxH/1000000).toFixed(2);
@@ -3437,11 +3449,14 @@ function saveAndSendOrder(){
   const panels=getPanels(),pss=getPStates();
   // בקומבינציה תמיד יש פאנלים - רק בפריט פריט בודקים
   if(appMode==='item' && !items.length && !sketchParts.length){showToast('הוסף פריטים תחילה');return null;}
-  const g=GL.find(x=>x.id===selG),f=FN.find(x=>x.id===selF);
+  const g=glassOf(),f=FN.find(x=>x.id===selF);
   const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
   const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||2000,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):2000;
   const area=(totalW*maxH/1000000).toFixed(2);
-  const total=Math.round(parseFloat(area)*g.price)+(selQ==='zamak'?f.pZ:f.pP);
+  // סוג שאינו במחירון הישן נשמר בלי סכום. סכום שחושב על אפס
+  // נראה כמו מחיר, ומי שקורא את ההזמנה אינו יודע שהוא חסר.
+  const total=g.price!=null
+    ? Math.round(parseFloat(area)*g.price)+(selQ==='zamak'?f.pZ:f.pP) : null;
   const orders=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
   const _s = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
   const _cName = (_s.role==='admin' && window._sketchClient)
