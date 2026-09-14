@@ -67,18 +67,40 @@ const idOf = (ctx, name) => run(ctx, 'galleryEntries().findIndex(function(e){ret
 console.log('');
 
 /* ── 1. every shipped shape can be chosen, and lands ────────────────────── */
+/* A folding door is the one exception, and a real one: it folds ONTO
+   something, so on an empty canvas nothing holds it. The point of this
+   check was never "everything works everywhere" — it is that the gallery
+   and the canvas agree. So what cannot land must not be offered either,
+   which is the check right below. */
 {
   const ctx = screen();
   const names = run(ctx, 'galleryEntries().map(function(e){return e.name;})');
-  const broke = [];
+  const broke = [], alone = [];
   names.forEach(n => {
     const c = screen();
     try {
       run(c, 'addAt(\"right\"); shapeAddFromCatalog(' + idOf(c, n) + ');');
-      if (run(c, 'shapeList.length') !== 1) broke.push(n);
+      if (run(c, 'shapeList.length') !== 1) alone.push(n);
     } catch (e) { broke.push(n + ' (' + e.message + ')'); }
   });
-  check('every shape in the gallery can be picked and lands on the canvas', broke, []);
+  check('nothing in the gallery throws when picked', broke, []);
+  check('and only a folding door needs something to fold onto',
+        alone, ['דלת מתקפלת', 'דלת אמצעית באקורדיון']);
+
+  /* the agreement itself */
+  const empty = screen();
+  const offered = run(empty,
+    'addAt("right"); allowedAt("right").map(function(c){return c.ent.name;})');
+  check('so an empty canvas does not offer them',
+        offered.filter(n => alone.indexOf(n) > -1), []);
+
+  const withFixed = screen();
+  run(withFixed, 'shapeList=[{id:"f",kind:"fixed"}]; shapePS={f:mkPS({type:"fixed"})};');
+  const now = run(withFixed,
+    'addAt("right"); allowedAt("right").map(function(c){return c.ent.name;})');
+  check('and a fixed to fold onto brings the folding door back',
+        now.indexOf('דלת מתקפלת') > -1, true);
+
   check('and the gallery is not empty', names.length > 0, true);
 }
 

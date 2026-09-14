@@ -36,7 +36,7 @@ var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1,
                      // המידות שמגדירות את הצורה — ראה למטה
                      notchW: 1, notchH: 1, notchHIn: 1, notchRest: 1,
                      notchBracket: 1, slopeH1: 1, slopeH2: 1, slopeSideH: 1,
-                     cutouts: 1,
+                     cutouts: 1, harmonicaSide: 1,
                      slopeW: 1, slopeW1: 1, slopeW2: 1 };
 
 // ─── מה נשמר במספרים ────────────────────────────────
@@ -103,6 +103,21 @@ function lgCatalogSeeds() {
       add: { kind: 'mirror' } },
     { code: 'SH-01', id: 'shape',       name: 'צורה חופשית',    origin: 'seed',
       add: { kind: 'shape' } },
+
+    // ─── אקורדיון ───────────────────────────────────────
+    //
+    // הכרטיס אומר באיזו פאה הדלת מתקפלת, ולא על מה — את זה
+    // קובע המפגש. לכן אותו כרטיס משמש גם לקיפול על קבוע וגם
+    // לקיפול על דלת, ו-lgValidate הוא שאומר אם זה חוקי במקום הזה.
+    { code: 'DR-02', id: 'door-fold',   name: 'דלת מתקפלת', origin: 'seed',
+      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'right' } },
+    // הדלת האמצעית באקורדיון מלא: תלויה מצד אחד, מתקפלת מהשני
+    { code: 'DR-03', id: 'door-fold-mid', name: 'דלת אמצעית באקורדיון', origin: 'seed',
+      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'left' } },
+    // ‏**אחרון בגלריה.** התצורה הנדירה שבה אותה דלת מתקפלת
+    // משתי פאותיה — והיחידה שבה הרמוניקה נוגעת בקיר.
+    { code: 'DR-04', id: 'door-fold-both', name: 'דלת מתקפלת משני הצדדים', origin: 'seed',
+      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'both' } },
   ];
 }
 
@@ -129,6 +144,9 @@ function lgFlipAdd(add) {
   if (out.hingeSide)  out.hingeSide  = _lgOther(out.hingeSide);
   if (out.hingesFor)  out.hingesFor  = _lgOther(out.hingesFor);
   if (out.notchSide)  out.notchSide  = _lgOther(out.notchSide);
+  // צד הקיפול מתהפך כמו כל צד — חוץ מ-'both', שהוא סימטרי במהותו
+  if (out.harmonicaSide && out.harmonicaSide !== 'both')
+    out.harmonicaSide = _lgOther(out.harmonicaSide);
   if (out.slopeSideV) out.slopeSideV = _lgOther(out.slopeSideV);
   // שיפוע גובה אין לו "צד": הגבוה והנמוך נקבעים לפי **סדר** שני
   // המספרים — הראשון שמאל, השני ימין. שיקוף אופקי מחליף ביניהם, ולכן
@@ -190,6 +208,10 @@ function lgCatalogValidate(entry) {
     e.push('carriesDoor הוא כן או לא');
   if (a.carriesDoor === false && a.hingesFor)
     e.push('קבוע שאינו נושא דלת לא יכול לשאת צירים');
+  if (a.harmonicaSide && ['left','right','both'].indexOf(a.harmonicaSide) < 0)
+    e.push('צד הקיפול חייב להיות ימין, שמאל או שניהם');
+  if (a.harmonicaSide && a.kind !== 'door')
+    e.push('רק דלת מתקפלת');
   ['hingesFor', 'notchSide', 'slopeSideV'].forEach(function (k) {
     if (a[k] && a[k] !== 'left' && a[k] !== 'right') e.push(k + ' חייב להיות ימין או שמאל');
   });

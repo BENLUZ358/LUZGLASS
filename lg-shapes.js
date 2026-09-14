@@ -36,10 +36,26 @@ var _LG_FREE = { shape: 1, mirror: 1, panel: 1 };
 // ‏undefined הוא לא "לא": קומבינציות, מצב פריט וסקיצות שנשמרו בעבר אינם
 // מצהירים כלום, והם ממשיכים להתנהג כפי שהתנהגו תמיד. רק מי שאמר במפורש
 // "בלי צירים" מקבל את הסירוב.
+// ‏**אקורדיון.** ציר הרמוניקה הוא סוג ציר, לא פרזול אחר: אותו סמל,
+// אותו מיקום 20/20, אותה ספירה לצומת. מה ששונה הוא **אל מה מותר לו
+// להתחבר**, ולכן הוא תווית פאה משלו ולא דגל צדדי.
+//
+// ‏**דלת יכולה לשאת צירים בשתי הפאות.** עד היום הנחנו שלכל דלת
+// צירים בצד אחד וידית בשני, וזה נכון לכל מקלחון רגיל — אבל באקורדיון
+// הדלת האמצעית תלויה מצד אחד ומתקפלת מהשני. לכן ההרמוניקה
+// מוצהרת בשדה נפרד — 'left', 'right' או 'both' — ואינה דורסת את hingeSide.
+//
+// שתי המוסכמות זהות: 'right' פונה לשייף הקודם במערך, 'left' לבא אחריו.
+function _lgHarmonicaOn(shape, side) {
+  var h = shape && shape.harmonicaSide;
+  return h === 'both' || h === side;
+}
+
 function _lgEdge(shape, side) {
   if (!shape) return 'wall';
   if (shape.kind && _LG_FREE[shape.kind]) return 'free';
   if (shape.kind !== 'door') return shape.carriesDoor === false ? 'fixed-solo' : 'fixed';
+  if (_lgHarmonicaOn(shape, side)) return 'hinge-h';
   return shape.hingeSide === side ? 'hinge' : 'handle';
 }
 
@@ -71,6 +87,27 @@ var _LG_JUNCTION = {
   'fixed|free':    { type: null,           qty: 0 },
   'free|hinge':    { type: null,           qty: 0 },
   'free|handle':   { type: null,           qty: 0 },
+
+  // ── הרמוניקה ───────────────────────────────────────────────────
+  //
+  // אותו פרזול בדיוק — hinge-gg ו-hinge-wall — בווריאנט אחר.
+  // הווריאנט יושב **בטבלה** ולא נגזר בליקוט, כדי שלא יהיה
+  // צורך בתנאי "אם הרמוניקה" בעוד מקום.
+  //
+  // ציר אחד עובר בשתי הזכוכיות ולכן יש לו שני פינויים — אחד
+  // בכל זכוכית — ובליקוט הוא **ציר אחד**. הספירה לפי צומת
+  // כבר עושה בדיוק את זה, ולכן qty 2 הוא עליון ותחתון.
+  'fixed|hinge-h':   { type: 'hinge-gg',   qty: 2, variant: 'harmonica' },
+  'hinge-h|hinge-h': { type: 'hinge-gg',   qty: 2, variant: 'harmonica' },
+  // מול קיר — **רק באקורדיון שכולו מתקפל**, ולזה דואגת lgValidate.
+  // הטבלה אומרת מה הפרזול כשזה חוקי; הולידציה אומרת מתי.
+  'hinge-h|wall':    { type: 'hinge-wall', qty: 2, variant: 'harmonica' },
+  // צומת אחד הוא פיסת מתכת אחת. שתי הזכוכיות חייבות להסכים
+  // על סוג הציר; אחת שאומרת רגיל ואחת הרמוניקה היא סתירה.
+  'hinge|hinge-h':      { type: null, qty: 0 },   // חסום ב-lgValidate
+  'handle|hinge-h':     { type: null, qty: 0 },   // חסום ב-lgValidate
+  'fixed-solo|hinge-h': { type: null, qty: 0 },   // חסום ב-lgValidate
+  'free|hinge-h':       { type: null, qty: 0 },   // חסום ב-lgValidate
 };
 
 function _lgPairKey(a, b) { return [a, b].sort().join('|'); }
@@ -96,6 +133,9 @@ function lgJunctions(shower) {
       between: [left ? left.id : 'wall', right ? right.id : 'wall'],
       type: rule.type,
       qty:  rule.qty,
+      // סוג הציר נקבע במפגש ולכן הוא נוסע על הצומת,
+      // ומשם הליקוט והציור קוראים אותו — שניהם מאותו מקום.
+      variant: rule.variant || null,
     });
   }
   return out;
@@ -106,6 +146,27 @@ function lgJunctions(shower) {
 // ההודעה נושאת את מזהה השייף, כדי שהמסך יוכל להצביע עליו.
 // "דלת לא יושבת על דלת" חל **רק על צד הציר**: שתי דלתות שנפגשות ידית מול
 // ידית הן קומבינציה לגיטימית וקיימת — כל דלת נתלית על הקבוע שלה.
+// האם האקורדיון שהדלת הזאת שייכת אליו נתלה על הקיר **בציר**
+// ולא יושב על קבוע. הולכים אחורה בשרשרת הדלתות עד לקצה:
+// אם הגענו לקיר — זה אקורדיון של דלתות; אם הגענו לקבוע — לא.
+function _lgAccordionOnWall(shapes, bound, i) {
+  var seen = {};
+  var cur = i;
+  while (cur >= 0 && cur < shapes.length && !seen[cur]) {
+    seen[cur] = 1;
+    var d = shapes[cur];
+    if (!d || d.kind !== 'door') return false;
+    // הצד שבו הדלת תלויה: hingeSide אם יש, אחרת צד ההרמוניקה
+    var side = d.hingeSide === 'left' ? 'left'
+             : d.hingeSide === 'right' ? 'right'
+             : (d.harmonicaSide === 'left' ? 'left' : 'right');
+    var j = side === 'right' ? cur - 1 : cur + 1;
+    if (j < 0 || j >= shapes.length) return bound[side === 'right' ? 'right' : 'left'] === 'wall';
+    cur = j;
+  }
+  return false;
+}
+
 function lgValidate(shower) {
   if (!shower) return [];
   var shapes = shower.shapes || [];
@@ -128,7 +189,13 @@ function lgValidate(shower) {
     }
     if (neighbour === 'wall') continue;
     if (neighbour.kind === 'door') {
-      errors.push({ at: sh.id, msg: 'דלת לא יכולה להיתלות על דלת' });
+      // ‏**החריג היחיד.** באקורדיון דלת מתקפלת אל הדלת שלפניה, וזה
+      // בדיוק "דלת על דלת". החוק נפתח במידה אחת בלבד: **רק כשהציר
+      // ביניהן הוא הרמוניקה** — ושתיהן חייבות להסכים על כך.
+      var bothSay = _lgHarmonicaOn(sh, side) &&
+                    _lgHarmonicaOn(neighbour, side === 'right' ? 'left' : 'right');
+      if (!bothSay)
+        errors.push({ at: sh.id, msg: 'דלת לא יכולה להיתלות על דלת — אלא אם הציר ביניהן הוא הרמוניקה' });
     } else if (neighbour.carriesDoor === false) {
       errors.push({ at: sh.id, msg: 'הקבוע נבחר עם זוויות בלבד — אין עליו הכנה לצירים' });
     } else if (_LG_FREE[neighbour.kind]) {
@@ -181,6 +248,77 @@ function lgValidate(shower) {
       }
     }
   }
+  // ══════════════ אקורדיון ══════════════
+  //
+  // כל מה שמיוחד להרמוניקה יושב כאן, במקום אחד, ולא מפוזר
+  // בצייר ובמסך. מי שיוסיף סוג ציר נוסף ידע איפה לכתוב.
+  var folding = [];
+  for (var h = 0; h < shapes.length; h++) {
+    var d = shapes[h];
+    if (!d || d.kind !== 'door' || !d.harmonicaSide) continue;
+    folding.push(h);
+
+    var sides = d.harmonicaSide === 'both' ? ['right', 'left'] : [d.harmonicaSide];
+    for (var q = 0; q < sides.length; q++) {
+      var sd = sides[q];
+      // מי עומד מול הפאה הזאת. 'right' פונה לשייף הקודם במערך.
+      var n = sd === 'right'
+        ? (h === 0 ? (bound.right === 'wall' ? 'wall' : null) : shapes[h - 1])
+        : (h === shapes.length - 1 ? (bound.left === 'wall' ? 'wall' : null) : shapes[h + 1]);
+
+      if (!n) {
+        errors.push({ at: d.id, msg: 'לציר הרמוניקה אין על מה להיתלות' });
+        continue;
+      }
+
+      // ‏**הרמוניקה לא מגיעה לקיר** — חוץ ממקרה אחד: אקורדיון
+      // שכולו מתקפל, שבו אותה דלת נושאת הרמוניקה גם בפאה שמול.
+      // זו תצורה נדירה וקיימת, ולכן היא חריג מפורש ולא פרצה.
+      if (n === 'wall' && d.harmonicaSide !== 'both') {
+        errors.push({ at: d.id, msg: 'ציר הרמוניקה לא מתחבר לקיר — רק לזכוכית' });
+        continue;
+      }
+      if (n === 'wall') continue;
+
+      if (_LG_FREE[n.kind]) {
+        errors.push({ at: d.id, msg: 'ציר הרמוניקה לא מתחבר לזכוכית חופשית' });
+        continue;
+      }
+      if (n.kind !== 'door' && n.carriesDoor === false) {
+        errors.push({ at: d.id, msg: 'הקבוע נבחר עם זוויות בלבד — אין עליו הכנה לצירים' });
+        continue;
+      }
+
+      if (n.kind === 'door') {
+        // צומת אחד הוא פיסת מתכת אחת: שתי הזכוכיות חייבות להסכים על סוגו
+        if (!_lgHarmonicaOn(n, sd === 'right' ? 'left' : 'right')) {
+          errors.push({ at: d.id, msg: 'שתי הזכוכיות חייבות להסכים על סוג הציר — הרמוניקה בצד אחד בלבד' });
+          continue;
+        }
+        // ‏**אותו גובה.** שתי דלתות שמתקפלות זו על זו ואינן באותו
+        // גובה הן מקלחון עקום. כאן אין חוק קבוע-מול-דלת — אלה שתי דלתות.
+        var ha = Number(d.h) || 0, hb = Number(n.h) || 0;
+        if (ha && hb && ha !== hb) {
+          errors.push({ at: d.id, msg: 'שתי דלתות שמחוברות בהרמוניקה חייבות להיות באותו גובה' });
+        }
+      }
+    }
+
+    // שיפוע — רק באקורדיון שנתלה על הקיר בציר, לא בזה שיושב על קבוע
+    var sloped = (d.slopeH1 > 0 && d.slopeH2 > 0 && d.slopeH1 !== d.slopeH2) ||
+                 (d.slopeW1 > 0 && d.slopeW2 > 0 && d.slopeW1 !== d.slopeW2);
+    if (sloped && !_lgAccordionOnWall(shapes, bound, h)) {
+      errors.push({ at: d.id, msg: 'שיפוע באקורדיון מותר רק כשהוא נתלה על הקיר בציר' });
+    }
+  }
+
+  // ‏**עד שתי דלתות מתקפלות.** בסוף הכול נשען על צירי הקיר,
+  // והם מוגבלים במשקל. זו מגבלה של חומרה, לא של ציור.
+  if (folding.length > 2) {
+    errors.push({ at: shapes[folding[2]].id,
+                  msg: 'עד שתי דלתות מתקפלות — צירי הקיר מוגבלים במשקל' });
+  }
+
   return errors;
 }
 
@@ -227,7 +365,9 @@ function lgBOM(shower) {
     var qty = isBracket
       ? (Number(owner.wallBracketQty) || j.qty)
       : (Number(owner.hingeQty) || j.qty);
-    add(j.type, isBracket ? owner.bracketVariant : owner.hingeVariant, qty);
+    // הווריאנט של הצומת גובר — הרמוניקה נקבעת במפגש ולא
+    // בהעדפה של לוח בודד. ההעדפה נשארת למי שבוחר גימור אחר.
+    add(j.type, j.variant || (isBracket ? owner.bracketVariant : owner.hingeVariant), qty);
   }
 
   // ידית לכל דלת. היא נגזרת מצד הציר — תמיד בצד ההפוך — ולעולם לא נבחרת,

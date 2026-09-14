@@ -62,7 +62,9 @@ check('and so is item-by-item', /setMode\('item'\)/.test(DEMO), true);
      transform on this definition — two entries were two definitions of
      one thing, free to drift. */
   check('a door is offered', /kind: 'door'/.test(CAT), true);
-  check('and only one of it', (CAT.match(/kind: 'door'/g) || []).length, 1);
+  // אחת רגילה; המתקפלות נושאות harmonicaSide והן צורות אחרות
+  check('and only one plain one',
+        (CAT.match(/kind: 'door'(?![^}]*harmonicaSide)/g) || []).length, 1);
   check('with a flip to reach the other hand', /function lgFlipAdd/.test(CAT), true);
   check('a mirror', kind('mirror'), true);
   check('and a free shape', kind('shape'), true);
@@ -188,7 +190,7 @@ check('a shape lands on the side its + was pressed',
 /* and no path reaches the canvas without the rules: the check lives in
    shapeAdd, which every caller goes through */
 check('the rules are enforced at the gate, not at one caller',
-      /function shapeAdd[\s\S]{0,900}_arrangementErrors\(cand/.test(DEMO), true);
+      /function shapeAdd[\s\S]{0,1200}_arrangementErrors\(cand/.test(DEMO), true);
 /* glass enters through the + only. Without a side there is no context to
    ask the rules about, so there is nothing to add. */
 check('there is no adding without a +',

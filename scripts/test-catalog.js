@@ -68,7 +68,11 @@ console.log('');
                          'notchSide', 'slopeSideV', 'slopeSideH', 'slopeFlip',
                          'holes', 'carriesDoor', 'notchBracket',
                          'notchW', 'notchH', 'notchHIn', 'notchRest',
-                         'slopeH1', 'slopeH2', 'slopeW1', 'slopeW2'];
+                         'slopeH1', 'slopeH2', 'slopeW1', 'slopeW2',
+                         /* which FACE folds — a side, like notchSide. Where
+                            the folding hinge then lands, and whether it is
+                            allowed there at all, the engine decides. */
+                         'harmonicaSide'];
   const strayEntry = seeds.flatMap(e => Object.keys(e).filter(k => !ALLOWED_ENTRY.includes(k)));
   const strayAdd   = seeds.flatMap(e => Object.keys(e.add).filter(k => !ALLOWED_ADD.includes(k)));
   check('an entry carries only a name, a code, and what to add', strayEntry, []);
@@ -95,11 +99,20 @@ console.log('');
         ['door', 'fixed', 'mirror', 'shape']);
   /* One door. The other hand is a flip of this definition, not a second
      row — two rows were two definitions of one thing. */
-  check('there is exactly one door',
-        kinds.filter(k => k.startsWith('door')).length, 1);
+  /* One PLAIN door: the other hand is a flip of this definition, not a
+     second row. A folding door is not the same door in another hand — it
+     is a different piece of glass, hinged on a face an ordinary door
+     carries a handle on. */
+  const seedDoors = seeds.filter(e => e.add.kind === 'door');
+  check('there is exactly one plain door',
+        seedDoors.filter(e => !e.add.harmonicaSide).length, 1);
+  check('and the folding ones differ only in which face folds',
+        seedDoors.filter(e => e.add.harmonicaSide)
+                 .map(e => e.add.harmonicaSide).sort(),
+        ['both', 'left', 'right']);
   check('and flipping it gives the other hand',
-        run('lgFlipAdd(E).hingeSide', { E: seeds.find(e => e.add.kind === 'door').add }),
-        seeds.find(e => e.add.kind === 'door').add.hingeSide === 'right' ? 'left' : 'right');
+        run('lgFlipAdd(E).hingeSide', { E: seedDoors.find(e => !e.add.harmonicaSide).add }),
+        seedDoors.find(e => !e.add.harmonicaSide).add.hingeSide === 'right' ? 'left' : 'right');
   check('and the sloped fixed', kinds.includes('fixed||slope'), true);
 }
 

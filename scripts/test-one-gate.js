@@ -142,8 +142,10 @@ WAYS.forEach(([label, act]) => {
   const c2 = screen();
   run(c2, 'shapeList=[{id:"a",kind:"door",hingeSide:"right"},' +
           '{id:"b",kind:"door",hingeSide:"right"}]');
+  /* the message gained its exception when the harmonica arrived: a door
+     MAY hang on a door, through a folding hinge and only through one */
   check('while door-on-door is still what the engine calls it',
-        ERRS(c2), ['דלת לא יכולה להיתלות על דלת']);
+        ERRS(c2), ['דלת לא יכולה להיתלות על דלת — אלא אם הציר ביניהן הוא הרמוניקה']);
 }
 
 /* ── the gate redirects where it can, and refuses where it cannot ──────── */

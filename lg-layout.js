@@ -320,6 +320,15 @@ function lgFromPanels(panels,pStates,opts){
                     : (p&&p.hingeSide)==='left'    ? 'right'
                     : (p&&p.hingeSide)==='right'   ? 'left'
                     : (i===0 ? 'right' : 'left');
+
+        // ‏**אקורדיון.** אותה מוסכמה הפוכה של hingeSide — אצל המנוע
+        // 'right' פונה לשייף הקודם במערך, שהוא שמאל על הקנבס. שדה
+        // שלא יהפוך היה מצייר את הקיפול בצד הלא נכון — בדיוק הבאג
+        // שכבר היה כאן עם הצירים הרגילים.
+        const hs = (p&&p.harmonicaSide) || st.harmonicaSide;
+        if(hs==='both') s.harmonicaSide='both';
+        else if(hs==='left')  s.harmonicaSide='right';
+        else if(hs==='right') s.harmonicaSide='left';
       }
 
       // שיפוע — **תמיד לפי דגל, לעולם לא לפי נוכחות המספרים.**
@@ -845,10 +854,16 @@ function _layoutPass(shower,cW,mgL,mgR){
     // ארבעה. אותה פיסת מתכת, שני קדחים, ספירה אחת.
     if(L) derivedFaces[L.idx+':right']=1;
     if(R) derivedFaces[R.idx+':left']=1;
-    out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xT,y:yT,
+    // סוג הציר נוסע עם הפריט כדי שהצייר ידע באיזה צבע לצייר אותו.
+    // הוא נלקח מהצומת — אותו מקור שהליקוט קורא ממנו, כדי
+    // שהצבע על השרטוט והשורה בליקוט לא יוכלו להיפרד.
+    const jVar=(js[j]||{}).variant||null;
+    out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,
+                       variant:jVar,x:xT,y:yT,
                        face:face,into:into,source:'junction',
                        edgeX:xAt(edge[0],edge[1],yT)}); claim(xT,yT);
-    out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,x:xB,y:yB,
+    out.hardware.push({kind:kindHw,hole:true,dia:dia,idx:host.idx,junction:j,jType:jt,
+                       variant:jVar,x:xB,y:yB,
                        face:face,into:into,source:'junction',
                        edgeX:xAt(botEdge[0],botEdge[1],yB),
                        onNotch:botEdge!==edge}); claim(xB,yB);
@@ -920,7 +935,19 @@ function _layoutPass(shower,cW,mgL,mgR){
     const src=shapes[s.idx]||{};
     // הפאה שהדלת נתלית עליה נגזרת מהמנוע, לא משדה ידני
     const hingeLeft=_hingeLeft(src,js,s.idx);
-    const handleOnRight=hingeLeft;
+
+    // ── איפה הידית ──
+    //
+    // הכלל הרגיל: בצד ההפוך לציר. באקורדיון יש דלת שצירים
+    // **בשתי פאותיה**, ולכלל הזה אין מה לענות שם: הידית עוברת
+    // לצד הקיפול, כי שם אוחזים כדי לקפל.
+    const hm = src.harmonicaSide;
+    const bothHinged = hm==='both' || (hm && hm!==src.hingeSide);
+    const handleOnRight =
+      !bothHinged            ? hingeLeft
+      : hm!=='both'          ? hm==='left'          // מוסכמת המנוע הפוכה: left = ימין על הקנבס
+      // שתי הפאות מתקפלות — הידית לא יכולה לשבת על הפאה שבקיר
+      : !!(js[s.idx] && js[s.idx].type==='hinge-wall');
     const eMM=src.handleEdge!=null?src.handleEdge*10:LG_HANDLE_EDGE_MM;
     const face=handleOnRight ? s.x+s.w : s.x;
     const hxU=handleOnRight ? face-eMM*sc : face+eMM*sc;
@@ -1620,6 +1647,101 @@ function lgOrderLines(shower,sku){
   return out;
 }
 
+// ══════════════ מהסקיצה אל ההזמנה ══════════════
+//
+// החוליה שהופכת סקיצה למשהו שהמפעל מקבל. שאר המערכת — תור
+// הסקיצות, תחנת הבדיקה, יום העבודה והזמנת הסוכן בחשבשבת —
+// בנויה כולה על `order.items[]`, ולכן הסקיצה לא ממציאה מבנה חדש
+// אלא ממלאת את הקיים. תור הסקיצות קורא `o.items` ונפתח מלא.
+//
+// ‏**לוח = פריט.** לכל לוח מידה משלו, ולכן אין כמות: שני לוחות
+// זהים הם שני פריטים, כי המפעל חותך שני לוחות.
+//
+// ‏**המק"ט מגיע מבחוץ.** כמו ב-lgOrderLines, המנוע אינו יודע מספרי
+// פריטים ואינו צריך לדעת: קטלוג בתוך המנוע היה קושר אותו למפעל
+// אחד. הקורא מעביר פונקציה שמקבלת צירוף ומחזירה {sku, name}.
+
+// מה נעשה בזכוכית, נגזר מהמק"ט עצמו ולא מונח. קוד שמסתיים
+// ב-MH הוא מחוסם, וב-M מלוטש. מקלחון הוא תמיד מחוסם, אבל הנחה
+// שהיא נכתבת בקוד היא הנחה שתשרוד גם כשתפסיק להיות נכונה.
+function _lgProcOf(sku){
+  var c = String(sku || '').toUpperCase();
+  if (/MH$/.test(c)) return 'chisum';
+  if (/M$/.test(c))  return 'litush';
+  return null;
+}
+
+// פריט לכל לוח, במבנה שתור הסקיצות וחשבשבת כבר קוראים.
+//
+// חשבשבת צריכה שלושה: sku, w, h. כל השאר הוא למסך ולמסלול
+// במפעל. לוח שאין לו מק"ט **נכנס בכל זאת**, עם sku ריק: לוח שנעלם
+// מהרשימה הוא זכוכית שלא תיחתך, והדילוג בחשבשבת כבר אומר בקול
+// מה חסר. שתיקה גרועה משורה שאי אפשר לתמחר.
+function lgSketchItems(shower, skuOf){
+  var resolve = typeof skuOf === 'function' ? skuOf : function(){ return null; };
+  return lgGlass(shower).map(function (g) {
+    var hit  = resolve({ thickness:g.thickness, glassType:g.glassType,
+                         glassWork:g.glassWork }) || {};
+    var sku  = hit.sku || null;
+    var proc = _lgProcOf(sku);
+    var item = {
+      // מה שהמסך מראה — שם הפריט בחשבשבת כשיש, אחרת תיאור הזכוכית
+      name:  hit.name || [g.thickness ? g.thickness + ' \u05de"\u05de' : '', g.glassType || '']
+                          .filter(Boolean).join(' ') || '\u05d6\u05db\u05d5\u05db\u05d9\u05ea',
+      glass: g.glassType || '',
+      mm:    g.thickness || null,
+      w:     g.cutW,
+      h:     g.cutH,
+      sku:   sku,
+      // המסלול במפעל נגזר מאלה, ולכן הם על הפריט ולא רק בשם
+      chisum:  proc === 'chisum',
+      litush:  proc === 'litush',
+      graphic: g.glassWork === 'graphic',
+      chalavi: g.glassWork === 'chalavi',
+      // החזרה אל הציור: איזה לוח בסקיצה הוא הפריט הזה
+      paneId:    g.id,
+      paneLabel: g.label || '',
+      shape:     g.shape,
+      holes:     g.holes,
+      // המידות הגיעו מסקיצה שעברה ולידציה. שינוי רוחב של לוח
+      // אחד בלי להריץ את המנוע מנתק את הרשימה מהשרטוט.
+      locked: true
+    };
+    return item;
+  });
+}
+
+// הפרזול, לעיני העובד. הוא **אינו פריט בהזמנה** כל עוד אין לו
+// מק"ט, ולכן הוא נוסע בשדה משלו: רשימה ללקט לפיה, לא שורה
+// לתמחר. כשיהיו מק"טים לפרזול הוא יעבור ל-items בלי לשנות כלום
+// ממה שנבנה עכשיו — המפתח כבר שם.
+function lgSketchHardware(shower){
+  var bom = (typeof lgBOM === 'function') ? lgBOM(shower) : [];
+  return bom.map(function (l) {
+    return { type:l.type, variant:l.variant || null,
+             finish:l.finish || null, quality:l.quality || null, qty:l.qty };
+  });
+}
+
+// כל מה שנשמר על ההזמנה, במקום אחד.
+//
+// ‏**המקלחון עצמו נשמר, ולא רק מה שנגזר ממנו.** זה מה שמבטיח
+// שהוספת חוקיות בעתיד — ציר שלישי, סוג זווית, הזזה — תוכל
+// להיגזר מחדש גם מהזמנות שנשמרו היום. אילו היינו שומרים רק את
+// הפלט, כל כלל חדש היה משאיר את ההזמנות הישנות מאחור — וזה
+// בדיוק הדבר שלא רוצים לזרוק לפח אחר כך.
+var LG_BUILDER_VERSION = 1;
+
+function lgSketchOrder(shower, skuOf){
+  return {
+    items:    lgSketchItems(shower, skuOf),
+    hardware: lgSketchHardware(shower),
+    builder:  { version: LG_BUILDER_VERSION, shower: shower },
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports)
   module.exports = { lgLayout, lgOutline, lgGlass, lgGlassTotals,
-                     lgFromPanels, lgOrderLines };
+                     lgFromPanels, lgOrderLines,
+                     lgSketchItems, lgSketchHardware, lgSketchOrder,
+                     LG_BUILDER_VERSION };

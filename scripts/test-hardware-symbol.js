@@ -48,7 +48,8 @@ function draw(hw, sc) {
     arc:       (x, y, r)    => circles.push({ x, y, r }) };
   const ctx = vm.createContext({ Math, cx });
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8'), ctx);
-  vm.runInContext(grab('engHardware'), ctx);
+  vm.runInContext(DEMO.match(/const LG_HINGE_COLOR=\{[^}]*\};/)[0], ctx);
+vm.runInContext(grab('engHardware'), ctx);
   ctx.h = hw;
   vm.runInContext('engHardware(h,' + sc + ')', ctx);
   return { boxes, circles, fills };

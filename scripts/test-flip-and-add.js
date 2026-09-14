@@ -104,8 +104,11 @@ console.log('');
   const ctx = bench();
   const seeds = run(ctx, 'lgCatalogSeeds()');
   const doors = seeds.filter(e => e.add.kind === 'door');
-  check('there is one door in the gallery, not two', doors.length, 1);
-  ctx.D = doors[0];
+  // דלת רגילה אחת. המתקפלות אינן היד השנייה של אותה דלת — הן
+  // זכוכית אחרת, עם ציר בפאה שבדלת רגילה יש בה ידית.
+  const plainDoors = doors.filter(d=>!(d.add||{}).harmonicaSide);
+  check('there is one plain door in the gallery, not two', plainDoors.length, 1);
+  ctx.D = plainDoors[0];
   check('and it can be flipped to the other hand', run(ctx, 'entryCanFlip(D)'), true);
 
   /* a symmetric shape offers no flip, because it would do nothing */

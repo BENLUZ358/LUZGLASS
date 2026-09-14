@@ -1057,6 +1057,12 @@ function _shapePanels(list){
       // ההצהרה "זוויות בלבד" נוסעת עם הזכוכית עד למנוע, אחרת הכלל היה
       // מוכרע בכרטיס ולא בחוקיות.
       carriesDoor: s.carriesDoor,
+      // צד הקיפול עובר את **אותה היפוך** כמו צד הציר, כי שתיהם
+      // נוסעים באותו מסלול. שדה שלא יהפוך היה מצייר את הקיפול
+      // בצד הנגדי — בדיוק הבאג שכבר היה כאן עם הצירים.
+      harmonicaSide: s.harmonicaSide==='both' ? 'both'
+                   : s.harmonicaSide==='right' ? 'left'
+                   : s.harmonicaSide==='left'  ? 'right' : undefined,
     };
     const rW=shapeBoundary.right==='wall', lW=shapeBoundary.left==='wall';
     if(n===1)            p.wallSide = rW&&lW?'both':rW?'right':lW?'left':'none';
@@ -1349,6 +1355,7 @@ function _stateFromAdd(a){
   // רק את הכוונה. אותה החלפה בדיוק נעשית בתמונה שבגלריה.
   if(a.slopeFlip){ const d=mkPS({type:a.kind});
                    extra.slopeH1=d.slopeH2; extra.slopeH2=d.slopeH1; }
+  if(a.harmonicaSide) extra.harmonicaSide=a.harmonicaSide;
   if(a.notchSide)  extra.notchSide=a.notchSide;
   if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
   if(a.slopeSideH) extra.slopeSideH=a.slopeSideH;
@@ -1380,8 +1387,12 @@ function _stateFromAdd(a){
 
 function _fits(ent,side){
   const a=ent.add||{};
+  // הבדיקה חייבת לשאול על **אותה זכוכית** שתיכנס בפועל. שדה
+  // שחסר כאן הופך את הגלריה למבטיחה שהקנבס מפר: הכרטיס הוצע,
+  // הלחיצה נכשלה, והמשתמש לא יודע למה. צד הקיפול נשכח כאן
+  // ובדיוק זה קרה.
   const probe={id:'__probe',kind:a.kind,hingeSide:a.hingeSide,
-               carriesDoor:a.carriesDoor};
+               carriesDoor:a.carriesDoor, harmonicaSide:a.harmonicaSide};
   const list = side==='left' ? [probe].concat(shapeList) : shapeList.concat([probe]);
   return _tryArrangement(list, {'__probe': _stateFromAdd(a)});
 }
@@ -1623,6 +1634,9 @@ function shapeAdd(kind,hingeSide,slope,extra,side){
               : kind==='shape' ? 'צורה' : (slope?'קבוע משופע':'קבוע');
   const item={id,kind,hingeSide:hingeSide||undefined,label};
   if(extra&&extra.carriesDoor!=null) item.carriesDoor=extra.carriesDoor;
+  // צד הקיפול יושב על השייף ולא על המצב, כמו צד הציר — הוא
+  // מה שהצורה **היא**, לא מידה שלה.
+  if(extra&&extra.harmonicaSide) item.harmonicaSide=extra.harmonicaSide;
 
   // מצב הזכוכית נבנה **לפני** הבדיקה, כי החוקיות קוראת אותו: מדרגה,
   // שיפוע וקדחים כולם משתתפים בשאלה אם החיבור אפשרי.
@@ -2844,6 +2858,38 @@ function engDim(d,pfx){
 // **זווית** מוברגת דרך קדח, וזה כל מה שיש לחותך לדעת — עיגול חשוף
 // בקוטר 20, בדיוק כמו הידית ב-12. **ציר** נשאר הסמל שהיה לו מאז ומעולם:
 // גוף מלא היושב על הפאה, כי הוא אוחז בשתי הזכוכיות ולא נקדח לתוך אחת.
+// צבע לכל סוג ציר. המפתח הוא הווריאנט שהצומת נתן, ולכן הצבע
+// והשורה בליקוט קוראים מאותו מקום ולא יכולים להיפרד.
+const LG_HINGE_COLOR={ regular:'#2b2620', harmonica:'#9a4f2b' };
+const LG_HINGE_HE   ={ regular:'ציר E400',  harmonica:'ציר הרמוניקה' };
+
+// המקרא. מופיע **רק כשיש יותר מסוג ציר אחד בשרטוט** — במקלחון
+// רגיל אין מה להסביר, ומקרא שמופיע תמיד הופך לרעש שאיש לא קורא.
+function engHingeLegend(L){
+  const kinds=[...new Set((L.hardware||[])
+    .filter(h=>h.kind==='hinge')
+    .map(h=>h.variant||'regular'))];
+  if(kinds.length<2) return;
+  const pad=8, box=11, gap=7, lh=17;
+  cx.save();
+  cx.font='11px Heebo,sans-serif'; cx.textBaseline='middle';
+  const w=Math.max(...kinds.map(k=>cx.measureText(LG_HINGE_HE[k]||k).width))+box+gap+pad*2;
+  const h=kinds.length*lh+pad*2-4;
+  const x=6, y=6;
+  cx.fillStyle='rgba(255,255,255,0.88)';
+  cx.strokeStyle='rgba(58,49,40,0.18)'; cx.lineWidth=1;
+  if(cx.roundRect){ cx.beginPath(); cx.roundRect(x,y,w,h,6); cx.fill(); cx.stroke(); }
+  else { cx.fillRect(x,y,w,h); cx.strokeRect(x,y,w,h); }
+  kinds.forEach((k,i)=>{
+    const cy=y+pad+lh*i+box/2-1;
+    cx.fillStyle=LG_HINGE_COLOR[k]||LG_HINGE_COLOR.regular;
+    cx.fillRect(x+pad, cy-box/2, box, box*0.7);
+    cx.fillStyle='#3a3128'; cx.textAlign='left';
+    cx.fillText(LG_HINGE_HE[k]||k, x+pad+box+gap, cy);
+  });
+  cx.restore();
+}
+
 function engHardware(h,sc,min){
   // ‏min הוא רצפת הקריאוּת **בפיקסלים הסופיים**. בקנבס היא 3; בכרטיס
   // גלריה, שמצויר מוקטן, היא גדולה יותר באותו יחס — אחרת הרצפה עצמה
@@ -2853,8 +2899,10 @@ function engHardware(h,sc,min){
   cx.save();
   if(h.kind==='hinge'){
     // בציר נכנסים שני קדחים של 20, אחד בכל צד של הפאה, ועוד רווח ביניהם.
+    // ‏**אותו סמל, צבע אחר.** סמל שני לאותו פרזול היה מחייב את
+    // הקורא ללמוד שתי צורות; צבע הוא הבדל שרואים בלי ללמוד.
     const w=24*mul, hh=16*mul;
-    cx.fillStyle='#2b2620';
+    cx.fillStyle = LG_HINGE_COLOR[h.variant] || LG_HINGE_COLOR.regular;
     cx.beginPath();
     if(cx.roundRect) cx.roundRect(h.x-w/2,h.y-hh/2,w,hh,3*mul);
     else cx.rect(h.x-w/2,h.y-hh/2,w,hh);
@@ -2911,6 +2959,8 @@ function engPaint(L,pfx,dy,idxOf,opts){
 
   // אזורי המגע נרשמים בקואורדינטות הקנבס ולא בקואורדינטות המוזזות: הם
   // נבדקים מול נקודת הלחיצה אחרי שה-transform כבר נגמר.
+  engHingeLegend(L);
+
   const before=dimHits.length;
   L.dims.forEach(d=>engDim(d,pfx));
   for(let i=before;i<dimHits.length;i++){
