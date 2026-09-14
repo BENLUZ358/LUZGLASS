@@ -366,12 +366,14 @@ function lgFromPanels(panels,pStates,opts){
       if(st.handleEdge!=null) s.handleEdge=Number(st.handleEdge);
       // סוג הידית קובע כמה חורים נקדחים ואיפה. עד היום השדה
       // הזה ישב במצב והמנוע התעלם ממנו — כל דלת קיבלה חור אחד.
-      if(st.handleType==='towel'||st.handleType==='towel-center')
+      if(st.handleType==='towel'||st.handleType==='towel-center'||
+         st.handleType==='vertical')
         s.handleType=st.handleType;
       // מה שהליקוט סופר: כפתור ומגבת הם שני פריטים שונים. מרכוז
       // הוא אותה ידית במיקום אחר, ולכן אותו פריט.
       if(s.kind==='door')
-        s.handleVariant = (st.handleType==='towel'||st.handleType==='towel-center')
+        s.handleVariant = st.handleType==='vertical' ? 'vertical'
+                        : (st.handleType==='towel'||st.handleType==='towel-center')
                         ? 'towel' : 'knob';
       if(Number(st.towelSpacing)>0) s.towelSpacing=Number(st.towelSpacing)*10;
       if(st.floorBracket) s.floorBracket=true;
@@ -944,12 +946,24 @@ function _layoutPass(shower,cW,mgL,mgR){
     //   מרכוז מגבת שני חורים, **כל אחד באותו מרחק מהפאה שלו**.
     //                זו השיטה — לא המרחק ביניהם, שנגזר מרוחב
     //                הזכוכית. הוא יוצא מה שיוצא.
+    //   ורטיקל      אותו קונצפט של מגבת, מסובב 90°: שני חורים זה
+    //                מעל זה, **באותו מרחק מהפאה**. אין לו מרכוז:
+    //                המרחק בין החורים נמסר תמיד, ולכן הוא תמיד
+    //                מצויר גם כמידה.
     const hType = src.handleType==='towel-center' ? 'towel-center'
-                : src.handleType==='towel'        ? 'towel' : 'knob';
+                : src.handleType==='towel'        ? 'towel'
+                : src.handleType==='vertical'     ? 'vertical' : 'knob';
     const gap = (src.towelSpacing>0 ? src.towelSpacing : LG_TOWEL_MM)*sc;
     const into = handleOnRight ? -1 : 1;          // פנימה, לתוך הזכוכית
-    let xs, edges;
-    if(hType==='towel-center'){
+    let xs, edges, ys=null;
+    if(hType==='vertical'){
+      // שני החורים חולקים עמודה אחת, והגובה שנמדד הוא **התחתון** —
+      // משם תופסים, ועליו חלה תקרת המטר. הידית עולה ממנו
+      // כלפי מעלה, כמו שמגבת נמשכת פנימה מהפאה.
+      xs    = [hxU, hxU];
+      ys    = [hyU, hyU-gap];
+      edges = [{x:hxU, face:face, right:handleOnRight}];
+    } else if(hType==='towel-center'){
       xs    = [s.x+eMM*sc, s.x+s.w-eMM*sc];
       edges = [{x:s.x+eMM*sc, face:s.x, right:false},
                {x:s.x+s.w-eMM*sc, face:s.x+s.w, right:true}];
@@ -960,7 +974,7 @@ function _layoutPass(shower,cW,mgL,mgR){
       xs    = [hxU];
       edges = [{x:hxU, face:face, right:handleOnRight}];
     }
-    handles.push({s:s, ref:ref, eMM:eMM, face:face, x:hxU, xs:xs, edges:edges,
+    handles.push({s:s, ref:ref, eMM:eMM, face:face, x:hxU, xs:xs, ys:ys, edges:edges,
                   type:hType, gap:gap, y:hyU,
                   fTop:fTop, fBot:fBot, right:handleOnRight,
                   typed:src.handleDist!=null});
@@ -994,10 +1008,12 @@ function _layoutPass(shower,cW,mgL,mgR){
     // בשרטוט לחותך הזכוכית מה שקיים הוא **החור**. הידית מוברגת בו, וסמל
     // מפורט שלה רק מסתיר את מה שצריך לקדוח. ידית מגבת היא
     // שני חורים באותו גובה, ולכן הרשימה ולא נקודה אחת.
-    h.xs.forEach(x=>{
+    // מגבת פורשת לרוחב וורטיקל לאורך, ולכן לכל חור יש גם x וגם y
+    h.xs.forEach((x,i)=>{
+      const y = h.ys ? h.ys[i] : h.y;
       out.hardware.push({kind:'hole',hole:true,dia:LG_HOLE_HANDLE,idx:s.idx,
-                         source:'junction',role:'handle',x:x,y:h.y});
-      claim(x,h.y);
+                         source:'junction',role:'handle',x:x,y:y});
+      claim(x,y);
     });
 
     // המידה נגזרת מהמקום שבו הידית **באמת** יושבת, אחרי היישור. מספר
@@ -1018,6 +1034,12 @@ function _layoutPass(shower,cW,mgL,mgR){
       edgePend.push({idx:s.idx, mm:Math.round(h.gap/sc),
                      a:Math.min(h.xs[0],h.xs[1]), b:Math.max(h.xs[0],h.xs[1]),
                      y:h.y, right:h.right, kind:'towel-gap'});
+    // ובורטיקל — אותו מרחק, אנכי. הוא **תמיד** נרשם, כי בורטיקל
+    // אין מרכוז והמרחק בין החורים הוא החלטה שחייבים למסור.
+    if(h.type==='vertical')
+      hwAdd('vert-gap',Math.round(h.gap/sc),
+            Math.min(h.ys[0],h.ys[1]), Math.max(h.ys[0],h.ys[1]),
+            s.idx, h.xs[0], 'start', h.right?1:-1);
   });
 
   // ── חורים מוצהרים ────────────────────────────────────────────────────

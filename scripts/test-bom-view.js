@@ -86,8 +86,8 @@ console.log('');
      say only "ידית" cannot be picked from */
   check('a handle variant is named beside it',
         /LG_HW_VAR\[l\.key\.variant\]/.test(DEMO), true);
-  check('and both variants have a Hebrew word',
-        /const LG_HW_VAR=\{'knob':'[֐-׿]+','towel':'[֐-׿]+'\};/.test(DEMO), true);
+  check('and every variant has a Hebrew word',
+        /const LG_HW_VAR=\{('[a-z-]+':'[֐-׿]+',?)+\};/.test(DEMO), true);
 
   const hw = r.lines.filter(l => l.key.kind === 'hardware');
   check('every piece of hardware is listed', hw.length > 0, true);

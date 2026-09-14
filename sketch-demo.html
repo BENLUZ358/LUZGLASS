@@ -2082,14 +2082,18 @@ function renderShapeSheet(){
     ? '<div class="sh-grp"><h4>ידית</h4>'+
         '<div class="sh-row"><label>סוג</label>'+
           _shSeg('handleType',[['knob','כפתור'],['towel','מגבת'],
-                               ['towel-center','מרכוז מגבת']],ps.handleType||'knob')+'</div>'+
+                               ['towel-center','מרכוז מגבת'],
+                               ['vertical','ורטיקל']],ps.handleType||'knob')+'</div>'+
         _shNum('handleEdge','מרחק מהפאה',
                ps.handleEdge!=null?ps.handleEdge*10:null,String(HANDLE_EDGE_CM*10))+
-        (ps.handleType==='towel'
+        (ps.handleType==='towel'||ps.handleType==='vertical'
           ? _shNum('towelSpacing','המרחק בין החורים',
                    ps.towelSpacing!=null?ps.towelSpacing*10:null,String(TOWEL_SPACING_CM*10))+
-            '<p class="sh-note">החור הראשון יושב במרחק שלמעלה מפאת הידית, '+
-            'והשני אחריו. שינוי המרחק מהפאה מזיז את שניהם יחד.</p>'
+            '<p class="sh-note">'+(ps.handleType==='vertical'
+              ? 'שני החורים זה מעל זה, באותו מרחק מהפאה. הגובה שנמדד הוא '+
+                'של החור התחתון, והידית עולה ממנו. אין לו מרכוז — המרחק נמסר תמיד.'
+              : 'החור הראשון יושב במרחק שלמעלה מפאת הידית, והשני אחריו. '+
+                'שינוי המרחק מהפאה מזיז את שניהם יחד.')+'</p>'
           : ps.handleType==='towel-center'
           ? '<p class="sh-note">שני החורים באותו מרחק משתי הפאות. '+
             'זו השיטה — המרחק ביניהם יוצא מרוחב הזכוכית.</p>'
@@ -2124,7 +2128,7 @@ function renderShapeSheet(){
 // עד היום הליקוט הוצג בטאב הצורות בלבד ובפרזול בלבד. זכוכית היא רוב
 // המחיר, ובלעדיה הפירוט לא אומר כמעט כלום.
 // ווריאנטים שהליקוט מפריד ביניהם — פריט אחר במחסן, לא רק מיקום אחר.
-const LG_HW_VAR={'knob':'כפתור','towel':'מגבת'};
+const LG_HW_VAR={'knob':'כפתור','towel':'מגבת','vertical':'ורטיקל'};
 const LG_HW_HE={'bracket-wall':'זווית קיר','bracket-gg':'זווית זכוכית-זכוכית',
                 'bracket-floor':'זווית רצפה','hinge-gg':'ציר זכוכית-זכוכית',
                 'hinge-wall':'ציר קיר-זכוכית','handle':'ידית',

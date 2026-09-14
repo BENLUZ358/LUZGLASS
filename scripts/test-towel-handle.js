@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Three handles, and the two ways a towel rail is set out.
+ * Four handles, and the two ways a towel rail is set out.
  *
  * `handleType` and `towelSpacing` have sat in mkPS since the beginning and
  * the ENGINE NEVER READ THEM — no mention of either in lg-layout. Choosing
@@ -20,6 +20,11 @@
  *                 "זו השיטה, לא כמה בין החורים" — the spacing is whatever
  *                 the glass width leaves, and so it is never dimensioned:
  *                 a line on it would be describing a result, not a choice.
+ *
+ *   VERTICAL      the same idea turned ninety degrees: two holes one above
+ *                 the other, both the same distance in from the face. It
+ *                 has NO centred form — "חייב לציין את המידה בין החורים" —
+ *                 so its spacing is always written on the drawing.
  *
  * Run: node scripts/test-towel-handle.js
  */
@@ -124,6 +129,37 @@ console.log('');
         door({ handleType: 'towel' }, 1000).fromHandleFace, [60, 610]);
 }
 
+/* ── a vertical handle ────────────────────────────────────────────────── */
+{
+  const d = door({ handleType: 'vertical' });
+  check('a vertical handle is two holes', d.n, 2);
+  check('both the same distance in from the face', d.fromHandleFace, [60, 60]);
+  check('one above the other', d.heights.slice().sort((a, b) => a - b), [993, 1543]);
+  check('the height that is measured is the LOWER hole — where the hand goes',
+        Math.min.apply(null, d.heights), Number(d.dim('handle-dist')[0]));
+  check('and the spacing is written, always', d.dim('vert-gap'), ['550']);
+  check('and there is no horizontal gap to write', d.dim('towel-gap'), []);
+
+  const g = door({ handleType: 'vertical', towelSpacing: 40 });
+  check('a spacing typed by hand is obeyed',
+        g.heights.slice().sort((a, b) => a - b), [993, 1393]);
+  check('and written as what was typed', g.dim('vert-gap'), ['400']);
+
+  const e = door({ handleType: 'vertical', handleEdge: 8 });
+  check('moving it in from the face moves both holes', e.fromHandleFace, [80, 80]);
+  check('without touching the distance between them', e.dim('vert-gap'), ['550']);
+
+  /* it has no centred form, so nothing about the glass width changes it */
+  check('a wider door does not spread it',
+        door({ handleType: 'vertical' }, 1400).heights.slice().sort((a, b) => a - b),
+        [993, 1543]);
+
+  check('and it is its own part in the picking list',
+        door({ handleType: 'vertical' }).bom()[0].variant, 'vertical');
+  check('one per door', door({ handleType: 'vertical' }).bom()[0].qty, 1);
+  check('with a Hebrew name of its own', /'vertical':'ורטיקל'/.test(DEMO), true);
+}
+
 /* ── the rules already in place still hold ────────────────────────────── */
 {
   /* the metre ceiling applies to the pair, which is at one height */
@@ -162,10 +198,12 @@ console.log('');
 {
   check('a door gets a handle group',
         /s\.kind==='door'[\s\S]{0,200}<h4>ידית<\/h4>/.test(DEMO), true);
-  check('with all three types offered',
-        /\['knob','כפתור'\],\['towel','מגבת'\],\s*\['towel-center','מרכוז מגבת'\]/.test(DEMO), true);
-  check('the spacing field appears only for a plain towel rail',
-        /ps\.handleType==='towel'\s*\?\s*_shNum\('towelSpacing'/.test(DEMO), true);
+  check('with all four types offered',
+        /\['knob','כפתור'\],\['towel','מגבת'\],\s*\['towel-center','מרכוז מגבת'\],\s*\['vertical','ורטיקל'\]/
+          .test(DEMO), true);
+  check('the spacing field appears for the two kinds that have one',
+        /ps\.handleType==='towel'\|\|ps\.handleType==='vertical'\s*\?\s*_shNum\('towelSpacing'/
+          .test(DEMO), true);
   check('and the centred one explains that the gap is a result',
         /המרחק ביניהם יוצא מרוחב הזכוכית/.test(DEMO), true);
 
