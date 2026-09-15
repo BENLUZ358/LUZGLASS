@@ -152,6 +152,25 @@ console.log('');
   check('an explicit boundary still wins',
         lgFromPanels([{ type: 'fixed', wallSide: 'none' }], { 0: {} },
                      { boundary: { right: 'wall', left: 'wall' } }).boundary.right, 'wall');
+
+  /* A folding door is a door on ONE face and a fold on the other — the old
+     "a door at an edge is always a wall" rule does not know the difference,
+     so it marked the fold face a wall too. A harmonica may not touch a
+     wall (see test-harmonica.js), so that face has to read 'open' until
+     something is actually placed there — otherwise the very first folding
+     door can never be added on an empty canvas. */
+  const foldB = lgFromPanels(
+    [{ type: 'door', hingeSide: 'left', harmonicaSide: 'right' }],
+    { 0: { w: 800, h: 1985 } }).boundary;
+  check('the hinge face of a folding door is still a wall',
+        foldB.right, 'wall');
+  check('but the folding face is not assumed to be one',
+        foldB.left, 'open');
+  /* the one exception: a door that folds on BOTH faces really can end at
+     a wall (see the "rare accordion" case in test-harmonica.js) */
+  check('a door folding on both faces still allows a wall',
+        lgFromPanels([{ type: 'door', hingeSide: 'left', harmonicaSide: 'both' }],
+                     { 0: { w: 800, h: 1985 } }).boundary.left, 'wall');
 }
 
 /* ── the result is something the engine accepts ─────────────────────────── */

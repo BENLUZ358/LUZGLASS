@@ -110,6 +110,20 @@ console.log('');
                    { right: 'wall', left: 'open' })).errors.length > 0, true);
 }
 
+/* ── a lone folding door, mid-build ──────────────────────────────────── */
+/* The whole point of "+ one shape at a time" is that the first door of an
+   accordion sits alone for a moment before its partner is added. Its fold
+   face has nothing next to it yet — not glass, not a wall — and that is
+   not an error, just unfinished. Only once a neighbour actually exists
+   does the fold face get judged. */
+{
+  const midAlone = run(shower([
+    door('a', { hingeSide: 'right', harmonicaSide: 'left' }),
+  ], { right: 'wall', left: 'open' }));
+  check('a lone folding door waiting for its partner is not an error',
+        midAlone.errors, []);
+}
+
 /* ── the harmonica and the wall ───────────────────────────────────────── */
 {
   const touching = run(shower([
@@ -239,13 +253,19 @@ console.log('');
 
   /* The drawer carries the field and places the handle — both are drawing,
      not rule. What it must NOT hold is any opinion about what a harmonica
-     may connect to, or how many are allowed. Those live in one file. */
+     may connect to, or how many are allowed. Those live in one file.
+     One more read was added for the auto-boundary guess at an empty
+     canvas: a door's OWN declared side (its hinge, or 'both' when it
+     folds on both faces) is what may stand for a wall — not "any door
+     edge," which used to wrongly claim the fold face too. That is a
+     read of what the card already declared, same as wallSide already
+     was — not a new opinion about what a harmonica may reach. */
   check('the drawer holds no junction rule for it',
         /hinge-h/.test(LAY), false);
   check('nor any of the refusals',
         /לא מתחבר לקיר|עד שתי דלתות|חייבות להיות באותו גובה/.test(LAY), false);
-  check('all it does is carry the side through and place the handle',
-        (LAY.match(/harmonicaSide/g) || []).length, 6);
+  check('all it does is carry the side through, guess the boundary, and place the handle',
+        (LAY.match(/harmonicaSide/g) || []).length, 7);
   /* the screen carries the side and paints a colour — neither is a rule.
      What it must never hold is the decision itself. */
   check('the screen holds no junction rule either', /hinge-h/.test(DEMO), false);

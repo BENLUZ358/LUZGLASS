@@ -67,11 +67,15 @@ const idOf = (ctx, name) => run(ctx, 'galleryEntries().findIndex(function(e){ret
 console.log('');
 
 /* ── 1. every shipped shape can be chosen, and lands ────────────────────── */
-/* A folding door is the one exception, and a real one: it folds ONTO
-   something, so on an empty canvas nothing holds it. The point of this
-   check was never "everything works everywhere" — it is that the gallery
-   and the canvas agree. So what cannot land must not be offered either,
-   which is the check right below. */
+/* Only ONE folding door has nothing to land on alone: "דלת מתקפלת" folds
+   through the same face it would otherwise hinge from, so it has no
+   ordinary hinge at all — on an empty canvas there is truly nothing for
+   it to attach to. "דלת אמצעית באקורדיון" is different: its hinge and its
+   fold sit on OPPOSITE faces, so the hinge face hangs on the wall exactly
+   like a plain door, and the fold face simply waits — unbuilt, not
+   invalid — for the door that will complete the accordion. The point of
+   this check was never "everything works everywhere" — it is that the
+   gallery and the canvas agree on which of the two that is. */
 {
   const ctx = screen();
   const names = run(ctx, 'galleryEntries().map(function(e){return e.name;})');
@@ -84,15 +88,17 @@ console.log('');
     } catch (e) { broke.push(n + ' (' + e.message + ')'); }
   });
   check('nothing in the gallery throws when picked', broke, []);
-  check('and only a folding door needs something to fold onto',
-        alone, ['דלת מתקפלת', 'דלת אמצעית באקורדיון']);
+  check('and only the harmonica-only door needs something to fold onto',
+        alone, ['דלת מתקפלת']);
 
   /* the agreement itself */
   const empty = screen();
   const offered = run(empty,
     'addAt("right"); allowedAt("right").map(function(c){return c.ent.name;})');
-  check('so an empty canvas does not offer them',
+  check('so an empty canvas does not offer it',
         offered.filter(n => alone.indexOf(n) > -1), []);
+  check('but the mid-accordion door IS offered — its hinge hangs on the wall',
+        offered.indexOf('דלת אמצעית באקורדיון') > -1, true);
 
   const withFixed = screen();
   run(withFixed, 'shapeList=[{id:"f",kind:"fixed"}]; shapePS={f:mkPS({type:"fixed"})};');
