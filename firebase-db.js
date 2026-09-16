@@ -1153,6 +1153,95 @@ function lgGlassWorks(mm, type) {
   });
 }
 
+// ─── תפריט הזכוכיות של "הזמנה לפי מידה" ─────────────────────────────
+//
+//  הטופס הזה נבנה לפני שהיה API לחשבשבת, והרשימה שבו נכתבה ביד: אחת-
+//  עשרה מחרוזות כמו 'גלינה שקוף 8מ"מ', שאף אחת מהן אינה מק"ט ושתיים
+//  מהן אפילו לא קיימות בקטלוג. התוצאה הייתה שקטה וחמורה — פריט שנוצר
+//  כאן יצא **בלי `sku`**, ו-hashavshevet-order.js מדלג על כל שורה בלי
+//  מק"ט. הזמנה שלמה נפתחה בחשבשבת בלי אף שורה.
+//
+//  מכאן והלאה הרשימה **נגזרת מהקטלוג החי** ולא נכתבת פעם שנייה. מה שאין
+//  לו מק"ט לא מוצע, ומה שנוסף לקטלוג מופיע לבד.
+
+// מה לא מוצע בטופס המידות, ולמה:
+//   טריפלקס / דלתות נגרים — נמכרים בשיחה, לא בטופס מידות
+//   גרפיקה — התזה **לפי בקשת הלקוח**, ולכן היא מחייבת סקיצה. חלבי הוא
+//            התזה על כל הזכוכית ולכן כן נמצא כאן. זה ההבדל היחיד ביניהם
+//            מבחינת הטופס, והוא כל הסיבה שאחד בפנים והשני בחוץ.
+//   צורתי / עגול / CNC / צבע — אינם מלבן, ורוחב×גובה לא מתאר אותם
+const LG_MEASURE_EXCLUDE = /טריפלקס|דלתות נגרים|גרפיקה|צורתי|עגול|CNC|צבע/;
+
+const LG_MEASURE_PROCS = [
+  { key: 'cut',    he: 'חתוך'  },
+  { key: 'litush', he: 'מלוטש' },
+  { key: 'chisum', he: 'מחוסם' },
+];
+
+// שם פריט מהקטלוג → { mm, type, chalavi, proc }, או null כשאינו זכוכית
+// מלבנית שאפשר להזמין לפי מידה.
+//
+// הפירוק הוא מהשם ולא מהקוד בכוונה: הקודים אינם עקביים — `08HH` נושא אפס
+// מוביל ו-`8HMH` לא, `8SH` מסתיים ב-H כמו `8SMH` אך האחד חתוך והשני
+// מחוסם. השם הוא מה שהמפעל כותב, והוא היחיד שאפשר לסמוך עליו.
+function lgParseGlassName(raw) {
+  const n = String(raw || '').replace(/''/g, '"').trim();
+  if (!n || LG_MEASURE_EXCLUDE.test(n)) return null;
+  const m = n.match(/^(\d+)\s*מ"מ\s+(.*?)\s*(חתוך|מלוטש|מחוסם)$/);
+  if (!m) return null;
+  const proc = { 'חתוך': 'cut', 'מלוטש': 'litush', 'מחוסם': 'chisum' }[m[3]];
+  let rest = m[2].trim();
+  // חלבי אינו סוג זכוכית אלא מה שנעשה עליה, ולכן הוא יוצא מהשם והופך
+  // לדגל. "8 מ"מ חלבי מחוסם" הוא שקוף שעוד יעבור במתיז — ובלי ההפרדה
+  // הזו הוא היה מופיע ברשימת הסוגים כאילו הוא חומר בפני עצמו.
+  const chalavi = /חלבי/.test(rest);
+  rest = rest.replace(/\s*חלבי\s*/, ' ').trim();
+  return { mm: Number(m[1]), type: rest || LG_GLASS_DEFAULT_BASE, chalavi, proc };
+}
+
+// בונה את התפריט מהקטלוג. `hasPrice` הוא מי שקובע מה מוצע בפועל:
+// צירוף בלי מחיר **ללקוח הזה** הוא צירוף שאי אפשר לתמחר, ולכן גם אי
+// אפשר להזמין — hashavshevet-order.js מדלג עליו בשקט. עדיף שלא יופיע.
+//
+// מחזיר: { <סוג>: { <עובי>: { plain:{proc:code}, chalavi:{proc:code} } } }
+function lgMeasureMenu(catalog, hasPrice) {
+  const ok = typeof hasPrice === 'function' ? hasPrice : function () { return true; };
+  const byType = {};
+  (catalog || []).forEach(function (e) {
+    const code = e && (e.code || e.sku);
+    if (!code || e.active === false) return;
+    if (!ok(String(code).toUpperCase())) return;
+    const p = lgParseGlassName(e.name);
+    if (!p) return;
+    const t   = byType[p.type] || (byType[p.type] = {});
+    const row = t[p.mm] || (t[p.mm] = { plain: {}, chalavi: {} });
+    (p.chalavi ? row.chalavi : row.plain)[p.proc] = String(code).toUpperCase();
+  });
+  return byType;
+}
+
+// צירוף → מק"ט, או null כשאין כזה. null הוא תשובה לגיטימית: למראה אין
+// מחוסם, ולרוב הסוגים אין חלבי — והמסך חייב להציג את זה ולא להמציא קוד.
+function lgMeasureSku(menu, type, mm, chalavi, proc) {
+  const t = menu && menu[type];             if (!t)   return null;
+  const row = t[mm];                        if (!row) return null;
+  return (chalavi ? row.chalavi : row.plain)[proc] || null;
+}
+
+// האם לצירוף הזה יש חלבי בכלל — קובע אם תיבת הסימון מוצגת.
+function lgMeasureHasChalavi(menu, type, mm) {
+  const t = menu && menu[type], row = t && t[mm];
+  return !!(row && Object.keys(row.chalavi).length);
+}
+
+// אילו עיבודים אפשריים לצירוף, לפי הסדר הקבוע של LG_MEASURE_PROCS.
+function lgMeasureProcs(menu, type, mm, chalavi) {
+  const t = menu && menu[type], row = t && t[mm];
+  if (!row) return [];
+  const have = chalavi ? row.chalavi : row.plain;
+  return LG_MEASURE_PROCS.filter(function (p) { return !!have[p.key]; });
+}
+
 // ממיר מק"ט לשם מלא — מקור אמת יחיד לכל המערכת
 // אם המק"ט לא קיים — מחזיר את הערך המקורי (לא שובר)
 function lgSkuToName(sku) {

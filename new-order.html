@@ -62,6 +62,14 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   .mf-input{padding:10px 12px;background:var(--bg);border:1px solid var(--border);font-family:'Heebo',sans-serif;font-size:14px;color:var(--text);outline:none;width:100%;-webkit-appearance:none;border-radius:0;}
   .mf-input:focus{border-color:var(--gold-text);}
   .mf-row{display:grid;grid-template-columns:1fr 1fr 76px;gap:8px;}
+  .mf-row2{display:grid;grid-template-columns:1fr 110px;gap:8px;}
+  /* יעד מגע 44px — הלקוח ממלא את זה בטלפון */
+  .mf-chk{display:flex;align-items:center;gap:9px;min-height:44px;cursor:pointer;
+          font-size:14px;color:var(--text);}
+  .mf-chk input{width:20px;height:20px;accent-color:var(--gold-text);cursor:pointer;flex:none;}
+  .mf-chk .sub{font-size:12px;color:var(--muted);}
+  .mf-sku{font-size:12px;color:var(--muted);padding:2px 0;min-height:16px;}
+  .mf-sku b{color:var(--gold-text);font-weight:700;letter-spacing:0.04em;}
   .mf-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);margin-bottom:4px;font-size:12px;}
   .mf-item-info{flex:1;}
   .mf-item-del{background:none;border:none;color:#c0392b;cursor:pointer;font-size:14px;padding:0 4px;font-family:'Heebo',sans-serif;}
@@ -96,7 +104,13 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 // הזהות נלקחת מהתוצאה ולא מקריאה מיידית של sessionStorage — בטעינה ראשונה
 // הוא עדיין ריק או מחזיק את המשתמש הקודם.
 let _sess = {};
-lgRequireAuthAsync('client').then(session => { if(session) _sess = session; });
+// הקטלוג נטען רק אחרי שהזהות ידועה — המחירון שקובע מה מוצע הוא של
+// הלקוח המחובר, ולכן אין מה לבנות תפריט לפני שיודעים מי הוא.
+lgRequireAuthAsync('client').then(session => {
+  if(!session) return;
+  _sess = session;
+  mfLoadCatalog();
+});
 </script>
 
 <nav>
@@ -142,30 +156,31 @@ lgRequireAuthAsync('client').then(session => { if(session) _sess = session; });
       <input type="text" id="mfOrderName" class="mf-input" placeholder="לדוג': מקלחון כניסה" maxlength="60" autocomplete="off">
     </div>
 
-    <div class="mf-field">
-      <div class="mf-label">סוג זכוכית</div>
-      <select id="mfGlass" class="mf-input">
-        <option value='שקוף 8מ"מ'>שקוף 8מ"מ</option>
-        <option value='שקוף 6מ"מ'>שקוף 6מ"מ</option>
-        <option value='שקוף 10מ"מ'>שקוף 10מ"מ</option>
-        <option value='קליר 8מ"מ'>קליר 8מ"מ</option>
-        <option value='קליר 6מ"מ'>קליר 6מ"מ</option>
-        <option value='קליר 10מ"מ'>קליר 10מ"מ</option>
-        <option value='אפור 8מ"מ'>אפור 8מ"מ</option>
-        <option value='ברונזה 8מ"מ'>ברונזה 8מ"מ</option>
-        <option value='מראה 5מ"מ'>מראה 5מ"מ</option>
-        <option value='אסיד קליר 8מ"מ'>אסיד קליר 8מ"מ</option>
-        <option value='גלינה שקוף 8מ"מ'>גלינה שקוף 8מ"מ</option>
-      </select>
+    <!-- סוג · עובי · חלבי · עיבוד — כולם נבנים מהקטלוג החי ב-mfMenuBuild(),
+         ולכן אין כאן אף אפשרות כתובה ביד. מה שאין לו מק"ט לא מוצע. -->
+    <div class="mf-row2">
+      <div class="mf-field">
+        <div class="mf-label">סוג זכוכית</div>
+        <select id="mfType" class="mf-input" onchange="mfTypeChanged()"></select>
+      </div>
+      <div class="mf-field">
+        <div class="mf-label">עובי</div>
+        <select id="mfMm" class="mf-input" onchange="mfMmChanged()"></select>
+      </div>
+    </div>
+
+    <!-- מוצג רק כשלצירוף הזה באמת יש חלבי — 8 צירופים מתוך 40 -->
+    <div class="mf-field" id="mfChalaviWrap" style="display:none">
+      <label class="mf-chk">
+        <input type="checkbox" id="mfChalavi" onchange="mfProcFill()">
+        <span>חלבי <span class="sub">— התזת חול על כל הזכוכית</span></span>
+      </label>
     </div>
 
     <div class="mf-field">
       <div class="mf-label">עיבוד</div>
-      <select id="mfProc" class="mf-input">
-        <option value="ליטוש">ליטוש</option>
-        <option value="חיסום">חיסום</option>
-        <option value="חיתוך בלבד">חיתוך בלבד</option>
-      </select>
+      <select id="mfProc" class="mf-input" onchange="mfSkuEcho()"></select>
+      <div class="mf-sku" id="mfSkuLine"></div>
     </div>
 
     <div class="mf-row">
@@ -227,6 +242,109 @@ lgRequireAuthAsync('client').then(session => { if(session) _sess = session; });
 <script>
 let mfItems = [];
 
+// ── תפריט הזכוכיות ─────────────────────────────────────────────────────
+//
+//  נבנה מ-skuCatalog החי ומהמחירון של הלקוח, ולא מרשימה כתובה ביד.
+//  הכלל שקובע מה מוצע הוא "יש לזה מחיר עבור הלקוח הזה" — מחירון הלקוח
+//  קודם ואחריו הגלובלי, **אותו סדר בדיוק** שבו lgCalcOrderTotal ו-
+//  hashavshevet-order.js מתמחרים. בלי זה הטופס היה מציע צירוף שחשבשבת
+//  מדלגת עליו בשקט, והלקוח היה מגלה זאת רק כשהשורה חסרה במסמך.
+let _mfCatalog = [], _mfGlobal = {}, _mfClient = {}, _mfMenu = {}, _mfName = {};
+
+function _mfHasPrice(code){
+  const c = _mfClient[code], g = _mfGlobal[code];
+  return (c != null && c !== '') || (g != null && g !== '');
+}
+
+function mfMenuBuild(){
+  _mfMenu = lgMeasureMenu(_mfCatalog, _mfHasPrice);
+  _mfName = {};
+  _mfCatalog.forEach(e => { if(e && e.code) _mfName[String(e.code).toUpperCase()] =
+    String(e.name || '').replace(/''/g, '"'); });
+
+  const sel = document.getElementById('mfType');
+  if(!sel) return;
+  const keep  = sel.value;
+  const types = Object.keys(_mfMenu).sort((a,b) => a.localeCompare(b,'he'));
+  sel.innerHTML = types.map(t => `<option value="${lgEsc(t)}">${lgEsc(t)}</option>`).join('');
+  if(types.indexOf(keep) > -1) sel.value = keep;
+  mfTypeChanged();
+}
+
+function mfTypeChanged(){
+  const type = document.getElementById('mfType')?.value || '';
+  const mms  = Object.keys(_mfMenu[type] || {}).map(Number).sort((a,b) => a-b);
+  const sel  = document.getElementById('mfMm');
+  if(!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = mms.map(m => `<option value="${m}">${m} מ"מ</option>`).join('');
+  if(mms.indexOf(Number(keep)) > -1) sel.value = String(Number(keep));
+  mfMmChanged();
+}
+
+// תיבת החלבי מוצגת רק כשלצירוף הזה באמת יש מק"ט חלבי — שמונה צירופים
+// מתוך ארבעים. תיבה שמוצגת תמיד הייתה מזמינה משהו שלא קיים.
+function mfMmChanged(){
+  const type = document.getElementById('mfType')?.value || '';
+  const mm   = Number(document.getElementById('mfMm')?.value || 0);
+  const box  = document.getElementById('mfChalaviWrap');
+  const chk  = document.getElementById('mfChalavi');
+  const has  = lgMeasureHasChalavi(_mfMenu, type, mm);
+  if(box) box.style.display = has ? '' : 'none';
+  if(!has && chk) chk.checked = false;
+  mfProcFill();
+}
+
+function mfProcFill(){
+  const type  = document.getElementById('mfType')?.value || '';
+  const mm    = Number(document.getElementById('mfMm')?.value || 0);
+  const chal  = !!document.getElementById('mfChalavi')?.checked;
+  const sel   = document.getElementById('mfProc');
+  if(!sel) return;
+  const keep  = sel.value;
+  const procs = lgMeasureProcs(_mfMenu, type, mm, chal);
+  sel.innerHTML = procs.map(p => `<option value="${p.key}">${lgEsc(p.he)}</option>`).join('');
+  if(procs.some(p => p.key === keep)) sel.value = keep;
+  mfSkuEcho();
+}
+
+function mfCurrentSku(){
+  return lgMeasureSku(_mfMenu,
+    document.getElementById('mfType')?.value,
+    Number(document.getElementById('mfMm')?.value || 0),
+    !!document.getElementById('mfChalavi')?.checked,
+    document.getElementById('mfProc')?.value);
+}
+
+// מציג את המק"ט שייצא בפועל. לא קישוט — זה מה שיגיע לחשבשבת, ופריט
+// בלי מק"ט נדחה שם בשקט. עדיף שייראה כאן, לפני השליחה.
+function mfSkuEcho(){
+  const el = document.getElementById('mfSkuLine');
+  if(!el) return;
+  const sku = mfCurrentSku();
+  el.innerHTML = sku ? 'מק"ט: <b>' + lgEsc(sku) + '</b>' : '';
+}
+
+function mfLoadCatalog(){
+  listenSkuCatalog(list => { _mfCatalog = list || []; mfMenuBuild(); });
+  listenGlobalPrices(gp  => { _mfGlobal  = gp   || {}; mfMenuBuild(); });
+
+  // המחירון של הלקוח עצמו — אותו נתיב מדויק כמו בפורטל. חוקי Firebase
+  // מתירים את הענף שלו בלבד, ולכן אי אפשר להציץ למחירון של לקוח אחר.
+  const p = String(_sess.phone || '').replace(/[-\s]/g, '');
+  if(!p) return;
+  firebase.database().ref('users/' + p + '/customerId').once('value')
+    .then(s => {
+      const cid = s.val();
+      if(!cid) return;
+      firebase.database().ref('prices/clients/' + cid).on('value', s2 => {
+        _mfClient = s2.val() || {};
+        mfMenuBuild();
+      });
+    })
+    .catch(e => console.warn('client price list:', e));
+}
+
 function showMeasureForm() {
   const f = document.getElementById('measureForm');
   f.classList.toggle('open');
@@ -253,15 +371,33 @@ function mfFieldErr(id, msg) {
 }
 
 function mfAddItem() {
-  const glass = document.getElementById('mfGlass').value;
-  const proc  = document.getElementById('mfProc').value;
+  // המק"ט נפתר לפני הכל. בלעדיו הפריט ייפול בשקט בחשבשבת, ולכן עדיף
+  // לסרב כאן מאשר לתת ללקוח לשלוח הזמנה שתגיע לשם חסרה.
+  const sku = mfCurrentSku();
+  if (!sku) { alert('הצירוף הזה אינו זמין להזמנה. בחר סוג, עובי או עיבוד אחר.'); return; }
+
   const rW = lgParseDimensionInput(document.getElementById('mfW').value);
   const rH = lgParseDimensionInput(document.getElementById('mfH').value);
   if (!rW.ok) { mfFieldErr('mfW', rW.error); return; }
   if (!rH.ok) { mfFieldErr('mfH', rH.error); return; }
   const qtyRaw = parseInt(document.getElementById('mfQty')?.value || '1', 10);
   const qty = Math.max(1, Math.min(500, isNaN(qtyRaw) ? 1 : qtyRaw));
-  mfItems.push({ glass, proc, w: rW.mm, h: rH.mm, quantity: qty });
+
+  const type = document.getElementById('mfType').value;
+  const mm   = Number(document.getElementById('mfMm').value);
+  const chal = !!document.getElementById('mfChalavi').checked;
+  const proc = document.getElementById('mfProc').value;
+
+  mfItems.push({
+    sku,
+    // השם מגיע מהקטלוג ולא מורכב כאן. שמות המפעל אינם עקביים
+    // ("8 מ''מ חלבי מחוסם" בלי המילה שקוף), ובנייה בקוד הייתה
+    // מייצרת שם שלא קיים באף מקום אחר במערכת.
+    name:    _mfName[sku] || (mm + ' מ"מ ' + type),
+    glass:   type,
+    mm, chalavi: chal, proc,
+    w: rW.mm, h: rH.mm, quantity: qty
+  });
   mfRender();
   document.getElementById('mfW').value = '';
   document.getElementById('mfH').value = '';
@@ -283,7 +419,8 @@ function mfRender() {
     const qLabel = (it.quantity || 1) > 1 ? ` · <strong>כמות: ${it.quantity}</strong>` : '';
     return `
       <div class="mf-item">
-        <div class="mf-item-info">${it.glass} · ${it.proc} · ${it.w}×${it.h} מ"מ${qLabel}</div>
+        <div class="mf-item-info">${lgEsc(it.name)} · ${it.w}×${it.h} מ"מ${qLabel}
+          <span class="mf-sku">· <b>${lgEsc(it.sku)}</b></span></div>
         <button aria-label="הסר פריט" class="mf-item-del" onclick="mfRemove(${i})">✕</button>
       </div>`;
   }).join('');
@@ -325,13 +462,22 @@ async function mfSubmit() {
       orderNum:    refNum,
       notes:       notes || '', // הערות הלקוח בלבד — הפריטים נשמרים ב-items[]
       items:       mfItems.flatMap(it => lgMakeQuantityGroup({
-        name:          it.glass + ' ' + it.proc,
-        glassFullName: it.glass,
+        // sku הוא מה שחשבשבת קוראת. עד עכשיו הוא פשוט לא נכתב כאן,
+        // ולכן כל שורה מההזמנות האלה דולגה שם בשקט.
+        sku:           it.sku,
+        name:          it.name,
+        glassFullName: it.name,
         glass:         it.glass,
         w:             it.w,
         h:             it.h,
-        chisum:        it.proc === 'חיסום',
-        litush:        it.proc === 'ליטוש'
+        // "חתוך" הוא היעדר שניהם, ולא דגל שלישי — כך המערכת כבר מזהה
+        // אותו (workday: chisum ? 'חיסום' : litush ? 'ליטוש' : 'חיתוך')
+        // והוא זורם במסלול הליטוש בלי שרשרת נפרדת.
+        chisum:        it.proc === 'chisum',
+        litush:        it.proc === 'litush',
+        // חלבי הוא עבודת פנים, ולכן _lgItemHasSurfaceWork מנתב אותו
+        // לתחנת ההתזה בדיוק כמו גרפיקה.
+        chalavi:       !!it.chalavi
       }, it.quantity || 1)),
       type:  'measure',
       read:  false,
