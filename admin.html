@@ -2665,19 +2665,55 @@ function sqMarkSeen(){
 }
 
 // ── MEASURE ORDER LIST SVG ──
+//
+//  שורות זהות מתקבצות לשורה אחת עם כמות.
+//
+//  הזמנה של שלוש יחידות מאותה מידה היא שלוש רשומות ב-items, ובכוונה:
+//  מעקב החיסום סופר יחידות פיזיות לפי אינדקס, ושורה אחת עם quantity:3
+//  הייתה שוברת אותו. אבל על הנייר זו שורה אחת — חזרה על אותה מידה שלוש
+//  פעמים מאריכה את הסקיצה בלי להוסיף מידע, ומי שקורא אותה סופר במקום
+//  לקרוא.
+//
+//  הקיבוץ הוא לפי **תוכן** ולא לפי quantityGroupId, ולכן גם שתי מידות
+//  זהות שהוזנו בנפרד מתאחדות — מה שהמשתמש מצפה לו כשהוא רואה את אותו
+//  מספר פעמיים.
+const _MEASURE_PROC = {
+  chisum: { he: '🔥 חיסום', color: '#8e44ad' },
+  litush: { he: '✂ ליטוש',  color: '#2980b9' },
+  cut:    { he: 'חיתוך',    color: '#8a8278' },
+};
+
+function _measureRows(items){
+  const out = [], seen = Object.create(null);
+  (items||[]).forEach(it => {
+    // "חיתוך" הוא היעדר שני הדגלים, בדיוק כמו בכל שאר המערכת
+    const proc = it.chisum ? 'chisum' : it.litush ? 'litush' : 'cut';
+    const key  = [it.sku||'', it.w||0, it.h||0, proc, it.chalavi?1:0].join('|');
+    if(key in seen){ out[seen[key]].qty++; return; }
+    seen[key] = out.length;
+    out.push({ w: it.w||0, h: it.h||0, proc, chalavi: !!it.chalavi, qty: 1 });
+  });
+  return out;
+}
+
 function makeMeasureListSVG(o){
   const items=o.items||[];
   if(!items.length) return null;
+  const list=_measureRows(items);
   const W=400,PAD=12,ROW=30,HEAD=42,COLH=24,FOOT=16;
-  const H=HEAD+COLH+items.length*ROW+FOOT;
-  const rows=items.map((it,i)=>{
+  const H=HEAD+COLH+list.length*ROW+FOOT;
+  const rows=list.map((r,i)=>{
     const y=HEAD+COLH+i*ROW;
     const bg=i%2===0?'#f9f7f3':'#fff';
-    const pc=it.chisum?'#8e44ad':'#2980b9';
-    const pl=it.chisum?'🔥 חיסום':'✂ ליטוש';
+    const p=_MEASURE_PROC[r.proc]||_MEASURE_PROC.cut;
+    const pl=p.he+(r.chalavi?' · חלבי':'');
+    // ×1 אינו מידע, ורק מוסיף רעש. מוצג רק כשיש באמת יותר מאחד.
+    const qty=r.qty>1
+      ? `<text x="${W/2+34}" y="${y+20}" text-anchor="middle" font-family="Heebo,Arial" font-size="13" fill="#b8922a" font-weight="900">×${r.qty}</text>`
+      : '';
     return `<rect x="${PAD}" y="${y}" width="${W-PAD*2}" height="${ROW}" fill="${bg}"/>
-    <text x="${PAD+8}" y="${y+20}" font-family="Heebo,Arial" font-size="13" fill="#333" font-weight="600">${it.w||0} × ${it.h||0} מ"מ</text>
-    <text x="${W-PAD-8}" y="${y+20}" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="${pc}" font-weight="700">${pl}</text>`;
+    <text x="${PAD+8}" y="${y+20}" font-family="Heebo,Arial" font-size="13" fill="#333" font-weight="600">${r.w} × ${r.h} מ"מ</text>${qty}
+    <text x="${W-PAD-8}" y="${y+20}" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="${p.color}" font-weight="700">${pl}</text>`;
   }).join('');
   const num=o.orderNum||o.refNum||'';
   const totalM2=Math.round(items.reduce((s,it)=>s+lgCalcAreaM2(it.w||0,it.h||0),0)*100)/100;
@@ -2687,6 +2723,7 @@ function makeMeasureListSVG(o){
     <text x="${W-PAD}" y="33" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="rgba(247,244,239,0.5)">${o.client||''}${o.client&&num?' · ':''}${num} · ${items.length} פריטים · ${totalM2} מ"ר</text>
     <rect x="0" y="${HEAD}" width="${W}" height="${COLH}" fill="rgba(184,146,42,0.12)"/>
     <text x="${PAD+8}" y="${HEAD+16}" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">מידות (מ"מ)</text>
+    <text x="${W/2+34}" y="${HEAD+16}" text-anchor="middle" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">כמות</text>
     <text x="${W-PAD-8}" y="${HEAD+16}" text-anchor="end" font-family="Heebo,Arial" font-size="10" fill="#b8922a" font-weight="700">עיבוד</text>
     ${rows}
     <rect x="0" y="${H-FOOT}" width="${W}" height="${FOOT}" fill="#f5f2ed"/>

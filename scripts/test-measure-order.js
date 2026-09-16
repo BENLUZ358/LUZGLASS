@@ -213,5 +213,72 @@ const menu = all => call('lgMeasureMenu(__a[0], __a[1] ? (c => __a[1].indexOf(c)
         /\/api\/hashavshevet|updateStage\(/.test(FORM), false);
 }
 
+/* ── the generated sketch groups identical rows ───────────────────────── */
+/*
+ * Three panes of one size are three records in items[] and must stay three —
+ * the tempering station ticks arrivals by index, and collapsing them into one
+ * row with quantity:3 would break that. On paper, though, they are one line.
+ * Repeating the same measurement three times lengthens the sheet without
+ * adding anything, and whoever reads it ends up counting instead of reading.
+ */
+{
+  const ADMIN = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+  const actx  = vm.createContext({ Object, Array, String, Number, console });
+  [/const _MEASURE_PROC = \{[\s\S]*?\n\};/, /function _measureRows[\s\S]*?\n}/]
+    .forEach(re => {
+      const hit = ADMIN.match(re);
+      if (!hit) { console.error('FAIL  could not extract ' + re); process.exit(1); }
+      vm.runInContext(hit[0], actx);
+    });
+  const rows = items => { actx.__i = items; return vm.runInContext('_measureRows(__i)', actx); };
+
+  const three = [
+    { sku: '8SMH', w: 1250, h: 655, chisum: true },
+    { sku: '8SMH', w: 1250, h: 655, chisum: true },
+    { sku: '8SMH', w: 1250, h: 655, chisum: true },
+  ];
+  check('three identical panes become one line',
+        rows(three), [{ w: 1250, h: 655, proc: 'chisum', chalavi: false, qty: 3 }]);
+  check('and the items array is untouched — the station still ticks by index',
+        three.length, 3);
+
+  check('different sizes stay apart',
+        rows([{ sku: '8SMH', w: 800, h: 550, litush: true },
+              { sku: '8SMH', w: 800, h: 550, litush: true },
+              { sku: '8SMH', w: 1250, h: 655, chisum: true }]).map(r => [r.w, r.qty]),
+        [[800, 2], [1250, 3 - 2]]);
+
+  /* grouping is by content, not by quantityGroupId — two separate adds of the
+     same size merge, which is what someone seeing the number twice expects */
+  check('two separate adds of one size merge anyway',
+        rows([{ sku: '8SMH', w: 900, h: 900, chisum: true, quantityGroupId: 'a' },
+              { sku: '8SMH', w: 900, h: 900, chisum: true, quantityGroupId: 'b' }]),
+        [{ w: 900, h: 900, proc: 'chisum', chalavi: false, qty: 2 }]);
+
+  /* the same rectangle in two different products is two lines */
+  check('chalavi does not merge into the plain pane',
+        rows([{ sku: '8SMH', w: 800, h: 600, chisum: true },
+              { sku: '8HMH', w: 800, h: 600, chisum: true, chalavi: true }]).length, 2);
+  check('and neither does a different processing',
+        rows([{ sku: '8SM', w: 800, h: 600, litush: true },
+              { sku: '8SH', w: 800, h: 600 }]).length, 2);
+
+  /* cut is the absence of both flags, here as everywhere */
+  check('an item with neither flag is cut, not polished',
+        rows([{ sku: '8SH', w: 800, h: 600 }])[0].proc, 'cut');
+  check('and cut has a label of its own',
+        vm.runInContext('_MEASURE_PROC.cut.he', actx), 'חיתוך');
+  check('all three processings are labelled',
+        vm.runInContext('Object.keys(_MEASURE_PROC).sort().join(",")', actx),
+        'chisum,cut,litush');
+
+  check('×1 is not drawn — it is noise, not information',
+        /r\.qty>1/.test(ADMIN), true);
+  check('the header still counts physical panes, not lines',
+        /\$\{items\.length\} פריטים/.test(ADMIN), true);
+  check('and the height follows the grouped rows',
+        /HEAD\+COLH\+list\.length\*ROW\+FOOT/.test(ADMIN), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll measure-order checks passed.');
