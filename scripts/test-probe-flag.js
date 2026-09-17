@@ -75,8 +75,14 @@ console.log('');
 
   check('the three header sums are probed — one per factor',
         ['S_ExtraSum1', 'S_ExtraSum2', 'S_ExtraSum3'].filter(f => block.indexOf(f + ':') < 0), []);
-  check('and three text fields, header and line and details',
+  check('and the text fields, header and line and details',
         ['S_ExtraText1', 'SM_Extratext1', 'SM_Details'].filter(f => block.indexOf(f + ':') < 0), []);
+
+  /* a probe that lands where nobody can look reads exactly like a probe that
+     failed. details and remarks show on the order's main screen, which Ben
+     already knows how to reach — so at least two values can always be judged */
+  check('two values go somewhere visible without hunting',
+        ['details', 'remarks'].filter(f => block.indexOf(f + ':') < 0), []);
 
   check('the four fields ruled out in round one are not retried',
         ['SM_ExtraSum1', 'SM_Extrasum2', 'SM_ExtraNum1', 'SM_ExtraNum2']
@@ -84,9 +90,9 @@ console.log('');
 
   /* every value distinct, or the answer is ambiguous */
   const vals = (block.match(/'([^']+)'/g) || []).map(v => v.replace(/'/g, ''));
-  check('six values', vals.length, 6);
+  check('eight values', vals.length, 8);
   check('and no two alike — an ambiguous answer is no answer',
-        new Set(vals).size, 6);
+        new Set(vals).size, 8);
 
   check('the numbers carry three decimals, to test what the pipe keeps',
         vals.filter(v => /^\d\.\d{3}$/.test(v)).length, 3);
