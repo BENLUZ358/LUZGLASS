@@ -42,8 +42,12 @@ console.log('');
 {
   check('the combination mode asks the engine for its layout',
         /function drawComboMode[\s\S]{0,200}drawFromEngine/.test(DEMO), true);
-  check('and the item mode does too',
-        /function drawItemMode\b[\s\S]{0,400}lgLayout/.test(DEMO), true);
+  /* item-by-item was removed on 2026-09-17: shapes are the same idea, so a
+     second way to say it was a second thing to keep true. What this check was
+     really protecting is that nothing draws glass by hand — and with that mode
+     gone, the combination path above is the only path left. */
+  check('and the mode that had its own drawing path is gone',
+        /drawItemMode/.test(DEMO), false);
   check('the conversion is the engine\'s, not a second copy here',
         /function _lgShowerOf[\s\S]{0,300}lgFromPanels/.test(DEMO), true);
 }

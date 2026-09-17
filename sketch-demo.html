@@ -37,7 +37,7 @@ lgRequireAuthAsync('admin');
 .mode-tabs{display:flex;gap:2px;padding:8px 10px;background:var(--surface);border-bottom:1px solid var(--border);}
 .mode-tab{flex:1;padding:9px;font-family:'Heebo',sans-serif;font-size:13px;font-weight:700;border:1px solid transparent;cursor:pointer;text-align:center;color:var(--muted);background:var(--bg);}
 .mode-tab.active{background:var(--text);color:#f7f4ef;}
-/* ── בונה השייפים ──────────────────────────────────────────────────
+/* ── בונה הצורות ──────────────────────────────────────────────────
    הגלריה קצרה בכוונה. ההפרדה בין מה שנוגעים על הציור למה שנוגעים
    ברצועה היא לפי **גודל המטרה**: קו מידה הוא ~90×30px ונלחץ על הציור;
    ציר הוא ~10px ולכן יושב ברצועה. */
@@ -296,20 +296,27 @@ canvas{display:block;height:auto;cursor:pointer;}
    ציור של 2000 מ"מ היה נחתך. */
 #fullBar{display:none;}
 body.sketch-full{overflow:hidden;}
+/* ── ה-X צף מעל הציור, ולא יושב על סרגל משלו ──
+   סרגל עליון ברוחב מלא לקח 52 פיקסלים מהגובה כדי להציג שתי מילים
+   שממילא ברור מהן — אתה רואה את הסקיצה ממלאת את המסך. באייפד לאורך
+   זה כמעט 7% מהמסך, ועל זה בדיוק המאבק כאן.
+   הכפתור עצמו נשאר 44px ליעד מגע, והרקע שקוף-למחצה כדי שהקנבס יימשך
+   מתחתיו במקום להיחתך בו. */
 body.sketch-full #fullBar{
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  position:fixed;top:0;left:0;right:0;height:52px;z-index:60;padding:0 12px;
-  background:var(--surface);border-bottom:1px solid var(--border);
-  font-family:'Heebo',sans-serif;font-size:15px;font-weight:700;color:var(--gold-text);
+  display:block;position:fixed;z-index:62;
+  top:calc(8px + env(safe-area-inset-top,0px));left:8px;
+  height:auto;padding:0;background:none;border:none;
 }
 body.sketch-full #fullBar button{
-  min-width:44px;min-height:44px;font-size:20px;cursor:pointer;
-  border:1px solid var(--border);border-radius:8px;
-  background:var(--bg);color:var(--text);
+  min-width:44px;min-height:44px;font-size:18px;cursor:pointer;
+  border:1px solid rgba(0,0,0,0.10);border-radius:50%;
+  background:rgba(255,255,255,0.72);color:var(--text);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  box-shadow:0 2px 10px rgba(0,0,0,0.12);
 }
 body.sketch-full #fullBar button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 body.sketch-full .canvas-wrap{
-  position:fixed;top:52px;left:0;right:0;bottom:var(--full-bottom,0px);
+  position:fixed;top:0;left:0;right:0;bottom:var(--full-bottom,0px);
   margin:0;border-radius:0;z-index:55;
   overflow-x:auto;overflow-y:auto;
 }
@@ -426,7 +433,7 @@ body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-
   .canvas-wrap{margin:14px;}
   /* שש הצורות נכנסות בשורה אחת, ואין צורך לגלול בשביל אף אחת מהן */
   .shape-gallery{grid-template-columns:repeat(6,1fr);}
-  /* ברוחב הזה הרצועה לא צריכה לגלול — עדיף לראות את כל השייפים יחד */
+  /* ברוחב הזה הרצועה לא צריכה לגלול — עדיף לראות את כל הצורות יחד */
   .shape-strip{flex-wrap:wrap;overflow-x:visible;}
 }
 @media (min-width:601px) and (max-width:900px){
@@ -466,8 +473,7 @@ body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-
 </div>
 <div class="mode-tabs" id="sdMain">
   <button class="mode-tab active" id="mTab1" onclick="setMode('combo')">⬡ קומבינציה</button>
-  <button class="mode-tab" id="mTab3" onclick="setMode('shape')">◫ שייפים</button>
-  <button class="mode-tab" id="mTab2" onclick="setMode('item')">＋ פריט פריט</button>
+  <button class="mode-tab" id="mTab3" onclick="setMode('shape')">◫ צורות</button>
 </div>
 <div class="sn-wrap" style="margin-top:10px;">
   <input class="sn-input" id="sketchName" placeholder="שם / מספר סקיצה" oninput="draw()">
@@ -481,7 +487,6 @@ body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-
 <!-- הסרגל של מצב מסך מלא. מוצג רק כשאחד ממצבי העריכה פעיל, וה-X שלו
      קורא לאותן פונקציות שהכפתורים הרגילים קוראים — אין מסלול יציאה שני. -->
 <div id="fullBar" aria-hidden="true">
-  <span id="fullBarTitle">מצב עריכה</span>
   <button type="button" onclick="exitFullEdit()" aria-label="סגור וחזור">✕</button>
 </div>
 <div class="canvas-wrap" id="canvasWrap">
@@ -593,7 +598,7 @@ body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-
 </div>
 
 <!-- ITEM UI -->
-<!-- בונה השייפים. שש צורות, ושתיים מהן קיצורי דרך ולא סוגים נפרדים:
+<!-- בונה הצורות. שש צורות, ושתיים מהן קיצורי דרך ולא סוגים נפרדים:
      "קבוע משופע" הוא קבוע עם hasSlope מסומן מראש, ו"צורה חופשית" היא
      ה-kind:'shape' שכבר קיים בכלי. אף פריט בגלריה לא נושא פרזול — המנוע
      גוזר אותו מהצמתים, וצ'יפ עם ספירת צירים משלו היה סותר אותו. -->
@@ -604,17 +609,6 @@ body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-
   <div class="shape-strip" id="shapeStrip"></div>
   <div id="shapeErr" class="shape-err" style="display:none" role="status" aria-live="polite"></div>
   <div id="shapeBom" class="shape-bom" style="display:none"></div>
-</div>
-
-<div id="itemUI" style="display:none;">
-  <div class="item-list" id="itemList"></div>
-  <div class="add-grid">
-    <button class="add-btn" onclick="addItem('fixed')"><span class="ai">⬡</span>קבוע</button>
-    <button class="add-btn" onclick="addItem('door')"><span class="ai">🚪</span>דלת</button>
-    <button class="add-btn" onclick="addItem('shape')"><span class="ai">▭</span>צורה</button>
-    <button class="add-btn" onclick="addItem('mirror')"><span class="ai">🪞</span>מראה</button>
-  </div>
-  <!-- finish moved to main btns -->
 </div>
 
 <!-- SHARED CONTROLS -->
@@ -878,7 +872,7 @@ let selMM=8, selG='שקוף', selF='shahor', selQ='zamak', selWork='';
 let selSupportBar=false, selBlackTrim=false;
 let sand=false;
 let appMode='combo',curCat='pinati',curCombo=COMBOS.pinati[0];
-let panelState={}, items=[], dimHits=[];
+let panelState={}, dimHits=[];
 
 function mkPS(panel){
   return {
@@ -939,7 +933,7 @@ function setGlassWork(w){
 }
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
 
-// במצב שייפים המצב יושב לפי מזהה השייף ולא לפי מיקום, כדי שהזזה או
+// במצב צורות המצב יושב לפי מזהה השייף ולא לפי מיקום, כדי שהזזה או
 // מחיקה של שייף באמצע לא תזיז את המידות של השכנים.
 // ‏getPStates נופל ל-mkPS כששייף עדיין בלי מצב, ולכן הציור עבד; ‏getPS
 // לא נפל, ולכן **העריכה** לא עבדה — לחיצה על מספר החזירה undefined
@@ -974,34 +968,27 @@ function setPSv(pfx,i,k,el){
   }
   draw();
 }
-function setPSb(pfx,i,k,val){const ps=getPS(pfx,i);if(!ps)return;ps[k]=val;if(pfx==='combo')renderPanelCtrl();else renderItemList();draw();}
-function setPSs(pfx,i,k,val){const ps=getPS(pfx,i);if(!ps)return;ps[k]=typeof val==='string'?val:val.value;if(pfx==='combo')renderPanelCtrl();else renderItemList();draw();}
-function addHole(pfx,i){const ps=getPS(pfx,i);if(!ps)return;if(!ps.holes)ps.holes=[];ps.holes.push({diam:12,fromTop:100,fromRight:10});if(pfx==='combo')renderPanelCtrl();else renderItemList();draw();}
-function rmHole(pfx,i,hi){const ps=getPS(pfx,i);if(!ps)return;ps.holes.splice(hi,1);if(pfx==='combo')renderPanelCtrl();else renderItemList();draw();}
+function setPSb(pfx,i,k,val){const ps=getPS(pfx,i);if(!ps)return;ps[k]=val;if(pfx==='combo')renderPanelCtrl();else renderShapeUI();draw();}
+function setPSs(pfx,i,k,val){const ps=getPS(pfx,i);if(!ps)return;ps[k]=typeof val==='string'?val:val.value;if(pfx==='combo')renderPanelCtrl();else renderShapeUI();draw();}
+function addHole(pfx,i){const ps=getPS(pfx,i);if(!ps)return;if(!ps.holes)ps.holes=[];ps.holes.push({diam:12,fromTop:100,fromRight:10});if(pfx==='combo')renderPanelCtrl();else renderShapeUI();draw();}
+function rmHole(pfx,i,hi){const ps=getPS(pfx,i);if(!ps)return;ps.holes.splice(hi,1);if(pfx==='combo')renderPanelCtrl();else renderShapeUI();draw();}
 function setHole(pfx,i,hi,k,el){const ps=getPS(pfx,i);if(ps&&ps.holes[hi])ps.holes[hi][k]=parseFloat(el.value)||0;draw();}
 
 // ══════════════ MODE ══════════════
 function setMode(m){
   appMode=m;
   document.getElementById('mTab1').classList.toggle('active',m==='combo');
-  document.getElementById('mTab2').classList.toggle('active',m==='item');
   document.getElementById('mTab3')?.classList.toggle('active',m==='shape');
   document.getElementById('comboUI').style.display=m==='combo'?'':'none';
-  document.getElementById('itemUI').style.display=m==='item'?'':'none';
   document.getElementById('shapeUI').style.display=m==='shape'?'':'none';
   const addBtn=document.getElementById('btnAddToSketch');
-  if(addBtn) addBtn.textContent=m==='item'?'＋ הוסף פריט לסקיצה':'＋ הוסף לסקיצה';
+  if(addBtn) addBtn.textContent='＋ הוסף לסקיצה';
   if(m==='shape') renderShapeUI();
-  // "עריכה מתקדמת" זמין בשייפים ובקומבינציה. במצב פריט-פריט כל זכוכית
-  // כבר מצוירת בנפרד עם הטופס שלה, ואין מה לבחור מביניהן.
-  const adv=document.getElementById('btnAdvEdit');
-  if(adv) adv.style.display = (m==='item') ? 'none' : '';
-  if(m==='item' && pickMode) setPickMode(false);
   pickIdx=0; renderPickBar();
   draw();
 }
 
-// ══════════════ בונה השייפים ══════════════
+// ══════════════ בונה הצורות ══════════════
 //
 // הרכבה לינארית: הקבלן מניח צורה אחרי צורה, והמנוע גוזר מה יושב בכל
 // צומת. אין כאן שדה פרזול — הוא נגזר, ולכן אי אפשר לסתור את הציור.
@@ -1038,7 +1025,7 @@ function _shapeShower(){
 // נתיב ציור שני.
 //
 // wallSide נכתב על הפאנלים החיצוניים כי הגשר _lgShowerOf גוזר ממנו את
-// הגבולות. בלעדיו קבוע במצב שייפים לא היה מקבל אף זווית קיר.
+// הגבולות. בלעדיו קבוע במצב צורות לא היה מקבל אף זווית קיר.
 // מקבל רשימה, כדי שאפשר יהיה לשאול על **הרכבה מועמדת** בלי להחליף
 // גלובלים. בלי זה, מי שרצה לבדוק חוקיות של הוספה נאלץ לבנות את המקלחון
 // בעצמו — וכל בנייה מקבילה היא מסלול שני שיכול לענות תשובה אחרת.
@@ -1726,7 +1713,7 @@ function isFreeGlass(k){ return k==='shape'||k==='mirror'||k==='panel'; }
 // קורא הוא מה שהגיליון כותב, ולכן אין מה שיתפצל.
 let sheetId=null, sheetPfx='shape';
 
-// הגיליון שירת את טאב השייפים בלבד וחיפש ב-shapeList. אותו חלון נדרש
+// הגיליון שירת את טאב הצורות בלבד וחיפש ב-shapeList. אותו חלון נדרש
 // עכשיו גם בקומבינציה, ולכן המטרה מפורשת: איזה מצב, ואיזה אינדקס בו.
 // שני גיליונות היו שתי מערכות הגדרות לאותה זכוכית.
 function _sheetIdx(){
@@ -2358,80 +2345,11 @@ function buildRecess(ps,i,pfx){
     <div class="row"><label>מצד ימין</label><input type="number" value="${ps.recessFromSide||0}" min="0" max="400" oninput="setPSv('${pfx}',${i},'recessFromSide',this)"><span class="unit">ס״מ</span></div>`:''}`;
 }
 
-function buildPanelHTML(panel,ps,i,pfx){
-  const isDoor=panel.type==='door',isFixed=panel.type==='fixed'||panel.type==='mirror',isMirror=panel.type==='mirror';
-  let h=`
-    <div class="row"><label>רוחב</label>
-      <input type="text" id="${pfx}_w_${i}" value="${lgMmToInputStr(ps.w)}"
-        oninput="setPSv('${pfx}',${i},'w',this);this.classList.add('hi')" onblur="this.classList.remove('hi')">
-      <span class="unit dim-prev"></span></div>
-    <div class="row"><label>גובה${ps.hasSlope&&ps.slopeAxis==='height'?' (שמאל)':''}</label>
-      <input type="text" id="${pfx}_h_${i}" value="${lgMmToInputStr(ps.h)}"
-        oninput="setPSv('${pfx}',${i},'h',this);this.classList.add('hi')" onblur="this.classList.remove('hi')">
-      <span class="unit dim-prev"></span></div>`;
-
-  if(isDoor){
-    h+=`
-    <div class="row"><label>צירים</label>
-      <div class="tog" style="flex:1">
-        <button class="tb ${!ps.extraHinge?'active':''}" onclick="setPSb('${pfx}',${i},'extraHinge',false)">2 סטנד׳</button>
-        <button class="tb ${ps.extraHinge?'active':''}" onclick="setPSb('${pfx}',${i},'extraHinge',true)">3 צירים</button>
-      </div></div>
-    ${ps.extraHinge?`<div class="row"><label>ציר 3 מלמעלה</label>
-      <input type="number" id="${pfx}_hg3_${i}" value="${ps.hinge3pos}" min="10" max="200" oninput="setPSv('${pfx}',${i},'hinge3pos',this)">
-      <span class="unit">ס״מ</span></div>`:''}
-    <div class="row"><label>ידית</label>
-      <div class="tog" style="flex:1">
-        <button class="tb ${ps.handleType==='knob'?'active':''}" onclick="setPSs('${pfx}',${i},'handleType','knob')">כפתור</button>
-        <button class="tb ${ps.handleType==='towel'?'active':''}" onclick="setPSs('${pfx}',${i},'handleType','towel')">מגבת</button>
-      </div></div>
-    <div class="row"><label>מרחק מקצה</label>
-      <input type="number" id="${pfx}_hEd_${i}" value="${ps.handleEdge}" min="3" max="30" oninput="setPSv('${pfx}',${i},'handleEdge',this)">
-      <span class="unit">ס״מ</span></div>
-    ${ps.handleType==='towel'?`<div class="row"><label>מרחק בין חורים</label>
-      <input type="number" value="${ps.towelSpacing}" min="20" max="120" oninput="setPSv('${pfx}',${i},'towelSpacing',this)">
-      <span class="unit">ס״מ</span></div>`:''}`;
-  }
-  if(isFixed){
-    const ws=panel.wallSide||ps.wallSide||'both';
-    const showBrackets=ws!=='none';
-    if(showBrackets) h+=`
-    <div class="row"><label>זוויות קיר</label>
-      <div class="tog" style="flex:1">
-        <button class="tb ${!ps.extraBracket?'active':''}" onclick="setPSb('${pfx}',${i},'extraBracket',false)">2 סטנד׳</button>
-        <button class="tb ${ps.extraBracket?'active':''}" onclick="setPSb('${pfx}',${i},'extraBracket',true)">3 זוויות</button>
-      </div></div>
-    ${ps.extraBracket?`<div class="row"><label>זווית 3 מלמעלה</label>
-      <input type="number" value="${ps.bracket3pos}" min="10" max="200" oninput="setPSv('${pfx}',${i},'bracket3pos',this)">
-      <span class="unit">ס״מ</span></div>`:''}
-    <div class="row"><label>סוג זווית</label>
-      <select onchange="setPSs('${pfx}',${i},'bracketType',this)" style="width:130px">
-        <option value="normal" ${ps.bracketType==='normal'?'selected':''}>רגילה</option>
-        <option value="open" ${ps.bracketType==='open'?'selected':''}>פתוחה</option>
-      </select><span class="unit"></span></div>
-    ${ws==='both'?`<div class="row"><label>זווית רצפה</label>
-      <div class="tog" style="flex:1">
-        <button class="tb ${!ps.floorBracket?'active':''}" onclick="setPSb('${pfx}',${i},'floorBracket',false)">ללא</button>
-        <button class="tb ${ps.floorBracket?'active':''}" onclick="setPSb('${pfx}',${i},'floorBracket',true)">+ רצפה</button>
-      </div></div>`:''}`;
-  }
-
-  // SLOPE
-  h+=`<div class="sub">${buildSlope(ps,i,pfx)}</div>`;
-  // HOLES
-  h+=`<div class="sub">${buildHoles(ps,i,pfx)}</div>`;
-  // RECESS (mirrors only)
-  if(isMirror||panel.type==='mirror') h+=`<div class="sub">${buildRecess(ps,i,pfx)}</div>`;
-
-  return h;
-}
-
 // טופס המידות שישב מתחת לקטגוריות הוסר. אותה עריכה נעשית עכשיו דרך
-// "עריכה מתקדמת" — בוחרים זכוכית על הציור ופותחים את גיליון המאפיינים —
-// וזו אותה זכוכית, אותו מצב, ואותו חלון שהיה בטאב השייפים.
+// "עריכה מתקדמת" — בוחרים זכוכית על הציור ופותחים את גיליון המאפיינים.
 //
-// ‏buildPanelHTML **נשאר**: מצב "פריט פריט" עדיין בנוי עליו, ומחיקתו
-// הייתה שוברת אותו. מה שהוסר הוא השימוש בקומבינציה בלבד.
+// וbuildPanelHTML ירד איתו: מצב "פריט פריט" היה הקורא האחרון שלו,
+// וכשהוא הוסר הוא הפך לקוד מת.
 function renderPanelCtrl(){
   // אותו פירוט בדיוק של טאב הצורות. שני מרנדרים היו שתי אמיתות על אותה
   // הזמנה, וזה בדיוק מה שהפרויקט הזה נלחם בו לאורך כל הדרך.
@@ -2440,40 +2358,12 @@ function renderPanelCtrl(){
   renderPickBar();
 }
 
-// ══════════════ ITEM MODE ══════════════
-function addItem(type){
-  const fakePanel={type,label:({fixed:'קבוע',door:'דלת',shape:'צורה',mirror:'מראה'}[type])||type,wallSide:'both',hingeSide:'right',handleSide:'left'};
-  const ps=mkPS(fakePanel);
-  ps._panel=fakePanel;
-  items.push(ps);
-  renderItemList(); draw();
-}
-function removeItem(i){items.splice(i,1);renderItemList();draw();}
-function renderItemList(){
-  const el=document.getElementById('itemList'); el.innerHTML='';
-  items.forEach((ps,i)=>{
-    const panel=ps._panel||{type:ps.type||'fixed',label:'פריט',wallSide:'both',hingeSide:'right',handleSide:'left'};
-    const typeIcon={'fixed':'⬡','door':'🚪','shape':'▭','mirror':'🪞'}[panel.type]||'●';
-    const card=document.createElement('div'); card.className='ic';
-    card.innerHTML=`
-      <div class="ic-hdr">
-        <div class="ic-num">${i+1}</div>
-        <div style="flex:1"><div class="ic-title">${typeIcon} ${panel.label}</div>
-          <div class="ic-sub">${ps.w}×${ps.h} ס״מ${ps.hasSlope?' | שיפוע':''}${(ps.holes||[]).length?' | '+(ps.holes||[]).length+' חורים':''}</div>
-        </div>
-        <button class="ic-del" onclick="removeItem(${i})">הסר</button>
-      </div>
-      <div class="ic-body">${buildPanelHTML(panel,ps,i,'item')}</div>`;
-    el.appendChild(card);
-  });
-}
-
 // ══════════════ DRAW ENGINE ══════════════
 function getPanels(){
-  // מצב השייפים מזין את אותו נתיב ציור בדיוק כמו הקומבינציות — אותו מבנה
+  // מצב הצורות מזין את אותו נתיב ציור בדיוק כמו הקומבינציות — אותו מבנה
   // פאנלים, אותו drawComboMode. נתיב ציור שני היה מתפצל מהראשון.
   if(appMode==='shape') return _shapePanels();
-  return appMode==='combo'?curCombo.panels:items.map(it=>it._panel||{type:'fixed',label:'פריט',wallSide:'both'});
+  return curCombo.panels;
 }
 // כל קורא של מצב זכוכית עובר דרך getPS, שגם **שומר** את מה שהוא יצר.
 //
@@ -2484,9 +2374,7 @@ function getPanels(){
 function getPStates(){
   if(appMode==='shape')
     return Object.fromEntries(shapeList.map((s,i)=>[i,getPS('shape',i)]));
-  if(appMode==='combo')
-    return Object.fromEntries(curCombo.panels.map((p,i)=>[i,getPS('combo',i)]));
-  return Object.fromEntries(items.map((it,i)=>[i,it]));
+  return Object.fromEntries(curCombo.panels.map((p,i)=>[i,getPS('combo',i)]));
 }
 
 // ─── הצעה לזווית רצפה ──────────────────────────────
@@ -2504,7 +2392,7 @@ const LG_FLOOR_OFFER_MM = 800;      // 80 ס"מ. מספר אחד, במקום א�
 const _fbAsked = new Set();
 let _fbSeeded = false, _fbTarget = null;
 
-// מפתח יציב ללוח. במצב השייפים יש מזהה אמיתי; בשאר המצבים
+// מפתח יציב ללוח. במצב הצורות יש מזהה אמיתי; בשאר המצבים
 // האינדקס הוא מה שיש. מחיקת לוח מזיזה שם את האינדקסים, והמחיר
 // הוא שאלה אחת מיותרת — לא זווית שנוספה לבד.
 function _fbKey(p,i){ return appMode+':'+((p&&p.id)||i); }
@@ -2595,10 +2483,6 @@ function _drawFrame(){
   const DPR=window.devicePixelRatio||1;
   const cW=C.parentElement.clientWidth;
 
-  // In item mode, draw panels SEPARATELY (stacked vertically)
-  if(appMode==='item'){
-    lastL=null; drawItemMode(panels,pss,DPR,cW); renderAddButtons(); return;
-  }
   drawComboMode(panels,pss,DPR,cW);
   // הכפתורים נגזרים מהפריסה שהציור בדיוק יצר, ולכן הם באים אחריו
   renderAddButtons();
@@ -2616,24 +2500,6 @@ function drawComboMode(panels,pss,DPR,cW){
 // ביניהן צמתים. לכן כל אחת עוברת במנוע לחוד ומקבלת את המידות המלאות
 // שלה, והן נערמות אנכית: לצייר אותן זו לצד זו על מסך פלאפון היה מקטין
 // כל אחת לרבע ומעלים את המספרים.
-function drawItemMode(panels,pss,DPR,cW){
-  const GAP=18;
-  const Ls=panels.map((p,i)=>lgLayout(_lgShowerOf([p],{0:(pss[i]||{})}),{canvasW:cW}));
-  const maxW=Math.max.apply(null,Ls.map(L=>L.canvas.w));
-  const totalH=Ls.reduce((n,L)=>n+L.canvas.h+GAP,0)+28;
-
-  setupCanvas(DPR,maxW,totalH);
-  drawGrid(maxW,totalH);
-  dimHits=[];
-
-  let dy=0;
-  Ls.forEach((L,i)=>{ engPaint(L,'item',dy,()=>i); dy+=L.canvas.h+GAP; });
-
-  drawTitleBar(maxW,totalH);
-  updateSpecs();
-}
-
-
 function setupCanvas(DPR,cW,cH){
   C.width=cW*DPR; C.height=cH*DPR;
   C.style.width=cW+'px'; C.style.height=cH+'px';
@@ -2661,7 +2527,7 @@ function drawEmpty(){
 // הפאנלים נושאים את אוצר המילים הישן — wallSide, glassGlass, hingeMarks,
 // hingeOnFixed — ארבעה שדות שנכתבו ביד לכל קומבינציה ואינם עקביים
 // ביניהם. hingeSide הוא גאומטריה על הקנבס; hingeOnFixed הוא מי השכן.
-// רק השני אומר אילו שייפים באמת מחוברים, וזה מה שצומת הוא.
+// רק השני אומר אילו צורות באמת מחוברים, וזה מה שצומת הוא.
 //
 // הגאומטריה של הציור לא משתנה בשורה אחת. מה שמשתנה הוא מאיפה מגיעה
 // ההחלטה כמה חתיכות לצייר ואיפה.
@@ -2683,7 +2549,7 @@ function _lgShowerOf(allPanels, allPS){
 }
 
 // הצמתים משני צדי פאנל idx. junction[idx] הוא הצד הימני שלו,
-// junction[idx+1] הצד השמאלי — n שייפים נותנים n+1 צמתים.
+// junction[idx+1] הצד השמאלי — n צורות נותנים n+1 צמתים.
 function _lgSidesOf(allPanels,allPS,idx){
   const js=(typeof lgJunctions==='function') ? lgJunctions(_lgShowerOf(allPanels,allPS)) : [];
   return {right:js[idx]||{type:null,qty:0}, left:js[idx+1]||{type:null,qty:0}};
@@ -2749,7 +2615,7 @@ function drwHole(x,y){
 //
 // המטרה האחרונה היא או מזהה שדה טופס (הקריאות הוותיקות) או אובייקט
 // {pfx, field, idx} — הצורה החדשה, שאינה תלויה בכך שהפקד מרונדר על המסך.
-// במצב שייפים הפקדים אינם קיימים כלל, ולכן מזהה מחרוזת לבדו לא הספיק.
+// במצב צורות הפקדים אינם קיימים כלל, ולכן מזהה מחרוזת לבדו לא הספיק.
 function dLine(x1,y1,x2,y2,txt,off,horiz,inputId){
   if(x1===x2&&y1===y2)return;
   cx.save();
@@ -2987,8 +2853,42 @@ function engPaint(L,pfx,dy,idxOf,opts){
   cx.restore();
 }
 
+// כמה גובה נשאר על המסך מתחת לראש המעטפת.
+//
+// במסך מלא המעטפת קבועה בגובה החלון, ולכן clientHeight הוא התשובה. במצב
+// הרגיל הגובה שלה נגזר מהקנבס — היא תמיד "בדיוק בגודל הנכון" ולא מגבילה
+// כלום — ולכן שם מודדים כמה חלון נשאר מתחתיה בפועל.
+function _availCanvasH(){
+  const w=document.getElementById('canvasWrap');
+  if(!w) return 0;
+  if(document.body.classList.contains('sketch-full')) return w.clientHeight;
+  const top=w.getBoundingClientRect().top;
+  return Math.max(0, window.innerHeight - top - 12);
+}
+
+// מתחת לזה המספרים מתחילים להידחס זה על זה. עדיף לגלול מאשר לא לקרוא.
+const LG_MIN_CANVAS_W = 320;
+
 function drawFromEngine(panels,pss,DPR,cW,pfx){
-  const L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
+  let L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
+
+  // ── שהציור ייכנס לגובה המסך ──
+  //
+  // המנוע מותאם לרוחב, והגובה יוצא כמה שיוצא. על מסך צר — אייפד לאורך או
+  // טלפון — מקלחון של שני מטר נמתח לגובה שדורש גלילה כדי לראות את הזכוכית
+  // כולה. סקיצה שצריך לגלול בה כדי לראות לוח שלם היא סקיצה שקשה להשוות
+  // אותה למשהו, וזה כל תפקידה.
+  //
+  // הפתרון הוא מעבר שני דרך אותו מנוע: אם הציור גבוה מהמקום הפנוי, מבקשים
+  // רוחב קטן יותר באותו יחס. יחס הצדדים נקבע במקלחון עצמו, ולכן הקטנת
+  // הרוחב מקטינה את הגובה במדויק. **אין כאן קנה מידה שני** — אותו
+  // lgLayout, רק עם מספר אחר, וכל המידות והצירים נגזרים ממנו כרגיל.
+  const availH=_availCanvasH();
+  if(availH && L.canvas.h+28 > availH){
+    const want=Math.floor(cW*(availH-28)/L.canvas.h);
+    if(want>=LG_MIN_CANVAS_W) L=lgLayout(_lgShowerOf(panels,pss),{canvasW:want});
+  }
+
   lastL=L;   // העריכה וכפתורי ההוספה צריכים לדעת איפה כל לוח יושב
 
   // הקנבס יכול לצאת רחב מהמסך: מקלחון של חמישה פאנלים לא נכנס לפלאפון
@@ -3115,7 +3015,7 @@ function fitFullBottom(){
   bs.setProperty('--full-bottom', (bar+pick+hint)+'px');
 }
 
-// **תצוגה בלבד.** אין כאן שום החלטה על שייפים, על + או על מידות — רק
+// **תצוגה בלבד.** אין כאן שום החלטה על צורות, על + או על מידות — רק
 // מחלקה על body ו-draw() אחריה, כי רוחב הקנבס נגזר מרוחב המעטפת.
 //
 // שני המצבים חולקים את הפונקציה הזאת, ולכן אין מצב שבו אחד פתח מסך מלא
@@ -3124,8 +3024,6 @@ function syncFullEdit(){
   const on = editMode || pickMode;
   document.body.classList.toggle('sketch-full', on);
   fitFullBottom();
-  const t=document.getElementById('fullBarTitle');
-  if(t) t.textContent = pickMode ? 'עריכה מתקדמת' : 'מצב עריכה';
   const bar=document.getElementById('fullBar');
   if(bar) bar.setAttribute('aria-hidden', on?'false':'true');
   // הרוחב השתנה, ולכן הציור נבנה מחדש. הפריסה, החוקיות והמצב לא נגעו.
@@ -3185,7 +3083,7 @@ const DIM_FIELDS={
   notchHIn:     {label:'גובה המדרגה מבפנים'},
 };
 
-// המטרה מתוארת כ-{pfx, field, idx} ולא כמזהה של שדה טופס. במצב שייפים
+// המטרה מתוארת כ-{pfx, field, idx} ולא כמזהה של שדה טופס. במצב צורות
 // פקדי הפאנל אינם מרונדרים כלל, ולכן getElementById החזיר null והחלון
 // פשוט לא נפתח — בדיוק מה שנראה על המסך.
 function _dimTarget(hit){
@@ -3405,7 +3303,6 @@ function dimEditorApply(){
   if(!_dimWrite(dimEditTarget,r.mm)) return;
   // הפקדים שמתחת לציור, אם הם מרונדרים במצב הזה, צריכים להראות את הערך החדש
   if(appMode==='combo') renderPanelCtrl();
-  else if(appMode==='item') renderItemList();
   closeDimEditor();
   draw();
 }
@@ -3483,11 +3380,7 @@ function updateSpecs(){
 }
 
 function handleAddToSketch(){
-  if(appMode==='item'){
-    // In item mode: scroll to add buttons
-    document.querySelector('.add-grid')?.scrollIntoView({behavior:'smooth',block:'center'});
-    showToast('בחר סוג פריט להוספה');
-  } else {
+  {
     // In combo mode: add current combo to sketch list (up to 3)
     addComboToSketch();
   }
@@ -3514,8 +3407,6 @@ function addComboToSketch(){
 
 function saveAndSendOrder(){
   const panels=getPanels(),pss=getPStates();
-  // בקומבינציה תמיד יש פאנלים - רק בפריט פריט בודקים
-  if(appMode==='item' && !items.length && !sketchParts.length){showToast('הוסף פריטים תחילה');return null;}
   const g=glassOf(),f=FN.find(x=>x.id===selF);
   const totalW=panels.reduce((s,_,i)=>s+(pss[i]?.w||500),0);
   const maxH=panels.length?Math.max(...panels.map((_,i)=>Math.max(pss[i]?.h||2000,pss[i]?.slopeH1||0,pss[i]?.slopeH2||0))):2000;
@@ -3565,7 +3456,6 @@ function saveAndSendOrder(){
 
 function finishOrder(){
   const panels=getPanels(),pss=getPStates();
-  if(appMode==='item'&&!items.length&&!sketchParts.length){showToast('הוסף פריטים תחילה');return;}
   const saved=saveAndSendOrder();
   if(saved===null){return;} // save failed
   sketchParts=[];
@@ -3601,8 +3491,7 @@ function buildAnother(){
   // Reset for new sketch
   items=[];sketchParts=[];
   document.getElementById('sketchName').value='';
-  if(appMode==='item') renderItemList();
-  else {initPanelState();renderPanelCtrl();}
+  initPanelState(); renderPanelCtrl();
   draw();
   window.scrollTo({top:0,behavior:'smooth'});
   showToast('בנה סקיצה חדשה');

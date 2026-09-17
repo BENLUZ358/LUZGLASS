@@ -245,8 +245,9 @@ console.log('');
   check('no wall-end buttons remain', /shapeSetEnd|endBtn\(/.test(DEMO), false);
   check('the old dimension form no longer fills the combination tab',
         /buildPanelHTML\(panel,ps,i,'combo'\)/.test(DEMO), false);
-  check('but the form itself survives, because item mode still uses it',
-        has("buildPanelHTML(panel,ps,i,'item')"), true);
+  /* and when item mode went, so did its form: it was the last caller left */
+  check('and the form went with the mode that was its last caller',
+        has('function buildPanelHTML'), false);
   check('and the combination tab keeps its container for nothing else to break',
         has('id="comboCtrl"'), true);
 }
@@ -254,8 +255,9 @@ console.log('');
 /* ── 15. both tabs, one behaviour ───────────────────────────────────────── */
 {
   const has = s => DEMO.indexOf(s) > -1;
-  check('advanced edit is offered outside the shape tab too',
-        has("adv.style.display = (m==='item') ? 'none' : ''"), true);
+  /* nothing hides it any more — both remaining tabs offer it always */
+  check('advanced edit is no longer switched off for any tab',
+        /adv\.style\.display/.test(DEMO), false);
   check('the picker knows both tabs', has("if(appMode==='shape') return shapeList.map"), true);
   check('and the sheet opens against whichever tab is showing',
         has("sheetPfx = pfx || (appMode==='shape' ? 'shape' : appMode)"), true);

@@ -39,7 +39,10 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
  */
 check('the shape mode is a third tab', /setMode\('shape'\)/.test(DEMO), true);
 check('and the combination mode is still there', /setMode\('combo'\)/.test(DEMO), true);
-check('and so is item-by-item', /setMode\('item'\)/.test(DEMO), true);
+/* item-by-item was removed on 2026-09-17 — shapes build the same thing from
+   the same pieces, and two tabs for one idea is two places to keep correct */
+check('and item-by-item is gone, shapes do that job',
+      /setMode\('item'\)/.test(DEMO), false);
 {
   const fn = (DEMO.match(/function setMode\(m\)\{[\s\S]*?\n\}/) || [''])[0];
   check('setMode is found', fn.length > 0, true);

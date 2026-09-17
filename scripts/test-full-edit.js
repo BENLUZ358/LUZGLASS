@@ -180,11 +180,12 @@ console.log('');
   check('the ordinary view reserves nothing', s.props['--full-bottom'], '0px');
 }
 
-/* ── the bar names the mode it is in ────────────────────────────────────── */
+/* ── leaving, however it is done ──────────────────────────────── */
 {
   const has = s => DEMO.indexOf(s) > -1;
-  check('the title follows the mode',
-        has("t.textContent = pickMode ? 'עריכה מתקדמת' : 'מצב עריכה'"), true);
+  /* the bar used to name the mode it was in. On an iPad that cost 52 pixels
+     of height to say something the filled screen already says, so the title
+     went and the X became a floating button — see the block further down. */
   check('the X is a 44px target',
         /#fullBar button\{[^}]*min-height:44px/.test(DEMO), true);
   check('and Escape leaves the same way the X does',
@@ -246,6 +247,82 @@ console.log('');
         /<div class="canvas-wrap" id="canvasWrap">\s*<canvas id="sk">/.test(DEMO), true);
   check('and the full-screen bar is the only thing added',
         (DEMO.match(/id="fullBar"/g) || []).length, 1);
+}
+
+/* ── the screen is the sketch, and nothing else ───────────────────────── */
+/*
+ * Ben on an iPad, 2026-09-17: full-screen editing still spent 52 pixels on a
+ * bar whose whole content was the words "מצב עריכה" — two words you can read
+ * off the screen itself, since the sketch is filling it. On an iPad in
+ * portrait that bar is nearly 7% of the height, and height is exactly what
+ * was short.
+ *
+ * So the bar stops being a bar. The X floats over the drawing, translucent,
+ * and the canvas starts at the very top.
+ */
+{
+  check('no bar spans the top any more',
+        /body\.sketch-full #fullBar\{[^}]*right:0/.test(DEMO), false);
+  check('the canvas starts at the top of the screen',
+        /body\.sketch-full \.canvas-wrap\{[\s\S]{0,60}top:0/.test(DEMO), true);
+  /* the phrase itself stays on the button that ENTERS the mode — what went
+     is the copy of it that was costing 52 pixels while you were already in it */
+  check('and the title that cost the height is gone',
+        /fullBarTitle/.test(DEMO), false);
+  check('while the button that opens the mode keeps its label',
+        /id="btnEditMode"[^>]*>✎ מצב עריכה/.test(DEMO), true);
+
+  check('the X floats at the top left', /#fullBar\{[\s\S]{0,140}left:8px/.test(DEMO), true);
+  check('clear of the notch', /env\(safe-area-inset-top/.test(DEMO), true);
+  check('the drawing shows through behind it',
+        /#fullBar button\{[\s\S]{0,220}background:rgba\(255,255,255,0\.72\)/.test(DEMO), true);
+  check('and it is still a 44px target, small as it looks',
+        /#fullBar button\{[\s\S]{0,60}min-width:44px;min-height:44px/.test(DEMO), true);
+  check('the label it lost from the screen it keeps for a reader',
+        /aria-label="סגור וחזור"/.test(DEMO), true);
+}
+
+/* ── and the drawing fits the screen it is given ──────────────────────── */
+/*
+ * The engine is fitted to WIDTH, and the height comes out however tall the
+ * shower is. On a narrow screen a two-metre shower stretched past the bottom
+ * and had to be scrolled to be seen whole — which defeats a sketch, whose
+ * whole job is to be compared against something at a glance.
+ *
+ * The fix is a second pass through the same engine at a narrower width. The
+ * aspect ratio belongs to the shower, so narrowing the width shortens the
+ * height exactly. There is no second scale anywhere — it is lgLayout twice.
+ */
+{
+  /* body() is scoped to the block above; the same one-liner, locally */
+  const fnOf = n => {
+    const i = DEMO.indexOf('function ' + n + '(');
+    let d = 0, j = i;
+    for (; j < DEMO.length; j++) {
+      if (DEMO[j] === '{') d++; else if (DEMO[j] === '}') { d--; if (!d) break; }
+    }
+    return DEMO.slice(i, j + 1);
+  };
+  const fn = fnOf('drawFromEngine');
+  check('the layout is asked for twice when it does not fit',
+        (fn.match(/lgLayout\(/g) || []).length, 2);
+  check('the second ask is narrower, by the ratio that was missing',
+        /Math\.floor\(cW\*\(availH-28\)\/L\.canvas\.h\)/.test(fn), true);
+  check('and it is the same engine, not a scale factor of our own',
+        /ctx\.scale|\* *scale|zoom/.test(fn), false);
+
+  check('there is a floor — below it numbers collide and scrolling is better',
+        /want>=LG_MIN_CANVAS_W/.test(fn), true);
+  check('and the floor is named once', /const LG_MIN_CANVAS_W = \d+;/.test(DEMO), true);
+
+  const avail = fnOf('_availCanvasH');
+  check('full screen measures the wrapper, which is fixed to the window',
+        /sketch-full'\)\) return w\.clientHeight/.test(avail), true);
+  check('and the normal mode measures what is left below it — its own height '
+        + 'comes from the canvas and so limits nothing',
+        /window\.innerHeight - top/.test(avail), true);
+  check('a missing wrapper means no limit, not a zero-width drawing',
+        /if\(!w\) return 0/.test(avail), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
