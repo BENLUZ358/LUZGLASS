@@ -313,6 +313,35 @@ console.log('');
     return DEMO.slice(i, j + 1);
   };
 
+  /* Two ways to shrink a drawing that is too tall, and they are not equal.
+     Asking the engine for a narrower canvas makes it LAY THE DIMENSIONS OUT
+     AGAIN at that scale, so the numbers stay their normal size against the
+     glass. Shrinking the display shrinks the numbers with everything else.
+     The first is always better, so it is tried first — and the engine's
+     refusal is what makes the second necessary at all.
+
+     This is exactly why one pane looked worse than two on Ben's iPad: the
+     engine only applies its minimum from two panes up, so a single pane was
+     drawn large and tall and every bit of the shrinking fell on the display. */
+  const draw = fnOf('drawFromEngine');
+  check('the engine is asked to draw smaller before the display is shrunk',
+        (draw.match(/lgLayout\(/g) || []).length, 2);
+  check('and the second layout is only kept when the engine actually obeyed',
+        /if\(L2\.canvas\.h<L\.canvas\.h\) L=L2;/.test(draw), true);
+  check('with a floor on what is asked of it',
+        /want>=LG_MIN_ENGINE_W/.test(draw), true);
+  check('named once, beside the other', /const LG_MIN_ENGINE_W = \d+;/.test(DEMO), true);
+
+  /* the + sits on the canvas, and the canvas is not always where the wrapper
+     starts: the page is dir="rtl", and a narrow block element goes to the
+     RIGHT edge while #addBtns spans the wrapper and measures from the left */
+  const add = fnOf('renderAddButtons');
+  check('the + is placed from the canvas origin, not the wrapper corner',
+        /const ox=C\.offsetLeft\|\|0, oy=C\.offsetTop\|\|0;/.test(add), true);
+  check('on both axes', /const x=ox\+\(g\.x\+g\.w\)\*k, y=oy\+\(g\.y\+g\.h\/2\)\*k;/.test(add), true);
+  check('and it still scales with the rendered width',
+        /const k=\(C\.clientWidth\|\|lastL\.canvas\.w\)\/lastL\.canvas\.w;/.test(add), true);
+
   const setup = fnOf('setupCanvas');
   check('the internal size is still the full drawing',
         /C\.width=cW\*DPR; C\.height=cH\*DPR;/.test(setup), true);
@@ -330,8 +359,10 @@ console.log('');
   const eng = fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8');
   check("the engine still refuses to shrink below what the dimensions need",
         /if\(need>cW\) cW=need;/.test(eng), true);
-  check('and nothing here asks it to do otherwise',
-        /canvasW:\s*(want|scaled|fit)/.test(DEMO), false);
+  /* we do ask it for less, and we accept the refusal rather than work around
+     it — that acceptance is the `L2.canvas.h < L.canvas.h` guard above */
+  check('the screen asks for less but never overrides the answer',
+        /canvasW:want/.test(DEMO) && /if\(L2\.canvas\.h<L\.canvas\.h\)/.test(DEMO), true);
 
   const box = fnOf('_availCanvasBox');
   check('full screen measures the wrapper, which is pinned to the window',

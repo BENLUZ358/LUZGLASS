@@ -1460,7 +1460,12 @@ function renderAddButtons(){
   const ends=[...lastL.shapes].sort((a,b)=>a.x-b.x);
   const g=ends[ends.length-1];
   if(!g||!canAddAt('right')){ host.innerHTML=''; return; }
-  const x=(g.x+g.w)*k, y=(g.y+g.h/2)*k;
+  // הקנבס עשוי להיות צר מהמכל — ובדף RTL אלמנט בלוק צר נצמד
+  // לימין. הכפתורים יושבים על #addBtns שפרוש על כל המכל ונמדד
+  // מהשוליים השמאליים, ולכן הנקודה חייבת לצאת ממיקום הקנבס
+  // בתוך המכל ולא מפינת המכל.
+  const ox=C.offsetLeft||0, oy=C.offsetTop||0;
+  const x=ox+(g.x+g.w)*k, y=oy+(g.y+g.h/2)*k;
   host.innerHTML='<button type="button" class="add-btn" style="left:'+x.toFixed(0)+
     'px;top:'+y.toFixed(0)+'px" onclick="addAt(&quot;right&quot;)" '+
     'aria-label="הוסף זכוכית מימין">+</button>';
@@ -2895,8 +2900,37 @@ function _availCanvasBox(){
 // מתחת לזה הציור קטן מכדי מכדי כדי לקרוא בו מידה, ועדיף לגלול.
 const LG_MIN_VIEW_SCALE = 0.40;
 
+// וזה הרוחב המינימלי שבו מבקשים מהמנוע לצייר מלכתחילה.
+const LG_MIN_ENGINE_W = 300;
+
 function drawFromEngine(panels,pss,DPR,cW,pfx){
-  const L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
+  let L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
+
+  // ── קודם מבקשים מהמנוע לצייר קטן יותר ──
+  //
+  // לציור שגבוה מהמסך יש שתי דרכי הקטנה, והן לא שקולות:
+  //
+  //   לבקש מהמנוע רוחב קטן יותר — ואז הוא **מפרק מחדש** את המידות
+  //   לקנה המידה החדש, והמספרים נשארים בגודלם הרגיל.
+  //
+  //   להקטין את התצוגה — ואז גם המספרים קטנים איתו.
+  //
+  // הראשונה עדיפה תמיד, ולכן היא נבדקת ראשונה. אבל המנוע מסרב לרדת
+  // מתחת לרוחב שהמידות דורשות, ומשני לוחות ומעלה הסירוב תופס —
+  // ואז נשאר רק להקטין בתצוגה, ב-setupCanvas.
+  //
+  // וזו בדיוק הסיבה שלוח בודד נראה גרוע משניים: המנוע מטיל את
+  // המינימום שלו רק משני לוחות ומעלה, ולכן לוח אחד צויר גדול וגבוה
+  // וכל ההקטנה נפלה על התצוגה.
+  const _box=_availCanvasBox();
+  if(_box.h && L.canvas.h+28>_box.h){
+    const want=Math.floor(cW*(_box.h-28)/L.canvas.h);
+    if(want>=LG_MIN_ENGINE_W){
+      const L2=lgLayout(_lgShowerOf(panels,pss),{canvasW:want});
+      // רק אם המנוע באמת נענה. כשהוא מסרב הוא מחזיר אותו גודל.
+      if(L2.canvas.h<L.canvas.h) L=L2;
+    }
+  }
 
   lastL=L;   // העריכה וכפתורי ההוספה צריכים לדעת איפה כל לוח יושב
 
