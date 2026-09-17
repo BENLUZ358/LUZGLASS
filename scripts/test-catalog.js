@@ -109,7 +109,10 @@ console.log('');
   check('and the folding ones differ only in which face folds',
         seedDoors.filter(e => e.add.harmonicaSide)
                  .map(e => e.add.harmonicaSide).sort(),
-        ['both', 'left', 'right']);
+        // two cards share 'left' now — the plain mid-accordion door and
+        // the same door with a slope (DR-05, Ben asked for both to exist
+        // side by side, not one replacing the other)
+        ['both', 'left', 'left', 'right']);
   check('and flipping it gives the other hand',
         run('lgFlipAdd(E).hingeSide', { E: seedDoors.find(e => !e.add.harmonicaSide).add }),
         seedDoors.find(e => !e.add.harmonicaSide).add.hingeSide === 'right' ? 'left' : 'right');

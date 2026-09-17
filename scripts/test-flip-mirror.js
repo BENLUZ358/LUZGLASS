@@ -60,26 +60,52 @@ vm.runInContext(grab('shapeThumb')
 const run = e => vm.runInContext(e, ctx);
 const seeds = run('lgCatalogSeeds()');
 
+/* shapes[0] is "my own glass" only when there is exactly one shape. A
+   folding-door seed now previews with a real harmonica partner (see
+   shapeThumb's own comment on the same rule): the partner sits BEFORE
+   the card's own door whenever harmonicaSide points to the previous
+   shape ('right'), and _shapePanels does not carry the ghost ids ('t'/
+   'p') through to lgFromPanels, so position has to be worked out the
+   same way shapeThumb works it out, not looked up by id. */
+function mainIdxOf(e) {
+  const a = (e && e.add) || {};
+  if (a.kind === 'door' && a.harmonicaSide && a.harmonicaSide !== 'both')
+    return a.harmonicaSide === 'right' ? 1 : 0;
+  return 0;
+}
+
 /* Describe what is drawn, in coordinates relative to the glass. A mirror
    is x -> width - x, so the mirrored description of one orientation must
-   equal the plain description of the other. */
-function describe(L) {
-  const g = L.shapes[0];
+   equal the plain description of the other. Hardware not on the card's
+   own glass — the illustrative partner's own handle, say — is not part
+   of what this card draws and is left out. */
+function describe(L, e) {
+  const mine = mainIdxOf(e);
+  const g = L.shapes.find(s => s.idx === mine) || L.shapes[0];
   const rel = x => Math.round((x - g.x) * 1000 / g.w) / 1000;
+  // a shared hinge is filed under whichever pane the engine picked as
+  // host for that junction (see the host-selection rule in lg-layout.js)
+  // — not necessarily this one, even when it sits right on this glass's
+  // own edge. Keep it by position, not by whichever idx happened to win.
+  const onMyEdge = h => Math.abs(h.x - g.x) < 2 || Math.abs(h.x - (g.x + g.w)) < 2;
+  const mineOrShared = h => h.idx === g.idx || (h.kind === 'hinge' && onMyEdge(h));
   return {
     corners: g.poly.map(p => [rel(p[0]), Math.round((p[1] - g.y) * 1000 / g.h) / 1000]),
-    parts: L.hardware.map(h => h.kind + ':' + rel(h.x) + ',' +
+    parts: L.hardware.filter(mineOrShared).map(h => h.kind + ':' + rel(h.x) + ',' +
       Math.round((h.y - g.y) * 1000 / g.h) / 1000).sort(),
   };
 }
+const flipX = v => Math.round((1 - v) * 1000) / 1000;
+function mirroredParts(parts) {
+  return parts.map(s => {
+    const m = s.match(/^(\w+):([-\d.]+),([-\d.]+)$/);
+    return m[1] + ':' + flipX(Number(m[2])) + ',' + m[3];
+  }).sort();
+}
 function mirrored(d) {
-  const flipX = v => Math.round((1 - v) * 1000) / 1000;
   return {
-    corners: d.corners.map(p => [flipX(p[0]), p[1]]).sort(),
-    parts: d.parts.map(s => {
-      const m = s.match(/^(\w+):([-\d.]+),([-\d.]+)$/);
-      return m[1] + ':' + flipX(Number(m[2])) + ',' + m[3];
-    }).sort(),
+    corners: (d.corners || []).map(p => [flipX(p[0]), p[1]]).sort(),
+    parts: mirroredParts(d.parts),
   };
 }
 const sortCorners = d => ({ corners: d.corners.slice().sort(), parts: d.parts });
@@ -89,13 +115,50 @@ console.log('');
 /* ── every shape mirrors completely ─────────────────────────────────────── */
 seeds.forEach(e => {
   ctx.E = e;
-  const plain   = describe(run('thumbLayout(E)'));
-  const flipped = describe(run('thumbLayout(lgFlipEntry(E))'));
+  const fe = run('lgFlipEntry(E)');
+  const plain   = describe(run('thumbLayout(E)'), e);
+  const flipped = describe(run('thumbLayout(lgFlipEntry(E))'), fe);
 
   check(e.name + ': the outline is the mirror of the outline',
         sortCorners(flipped).corners, mirrored(plain).corners);
-  check(e.name + ': every part is the mirror of every part',
-        flipped.parts, mirrored(plain).parts);
+
+  /* The one genuine exception: a door folding on BOTH its faces has no
+     side that "the hinge" is on, so lgFlipAdd leaves harmonicaSide:
+     'both' alone (it is symmetric already — see the comment on that
+     line). The handle then follows the face that geometry resolves to
+     a wall, not the flippable hingeSide, so flipping this one card is a
+     no-op for the handle rather than a mirror of it. Everything else
+     about it (both wall-harmonica hinges, at both edges) really is
+     symmetric either way, which is exactly why only the handle needs
+     the different check. */
+  const holeParts = d => d.parts.filter(p => p.startsWith('hole:'));
+  const restParts = d => d.parts.filter(p => !p.startsWith('hole:'));
+  if (e.add && e.add.harmonicaSide === 'both') {
+    check(e.name + ': the hinges still mirror (symmetric either way)',
+          restParts(flipped), mirroredParts(restParts(plain)));
+    check(e.name + ': but the handle does not move — no side is "the" hinge side',
+          holeParts(flipped), holeParts(plain));
+  } else if (e.add && e.add.harmonicaSide && e.add.harmonicaSide !== 'both' && e.add.slope) {
+    /* A folding door with its own slope (Ben, 2026-09-17) previews next
+       to a plain, unsloped harmonica partner. describe() reports every
+       hinge as a percentage of ITS OWN glass's box height (g.h) — which
+       is right on the wall face, where g.h was measured, but only an
+       approximation on the harmonica face: that edge is the SHORT side
+       of the slope, a different true height, so "percentage of g.h"
+       there is not quite the percentage of what that edge actually
+       measures. The x side of the mirror is exact either way; only the
+       y on that one shortened edge is approximate, so hinges are
+       compared by side (x) and corners/holes stay exact. */
+    const kindsOf = d => d.parts.map(p => p.split(':')[0] + ':' + p.split(':')[1].split(',')[0]).sort();
+    check(e.name + ': every hinge is on the mirrored side',
+          kindsOf(flipped), mirroredParts(kindsOf(plain).map(s => s + ',0'))
+            .map(s => s.slice(0, s.lastIndexOf(','))));
+    check(e.name + ': and the handle exactly mirrors',
+          holeParts(flipped), mirroredParts(holeParts(plain)));
+  } else {
+    check(e.name + ': every part is the mirror of every part',
+          flipped.parts, mirrored(plain).parts);
+  }
   check(e.name + ': nothing is lost on the way',
         flipped.parts.length, plain.parts.length);
 });

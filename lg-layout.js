@@ -1075,11 +1075,12 @@ function _layoutPass(shower,cW,mgL,mgR){
     const into = handleOnRight ? -1 : 1;          // פנימה, לתוך הזכוכית
     let xs, edges, ys=null;
     if(hType==='vertical'){
-      // שני החורים חולקים עמודה אחת, והגובה שנמדד הוא **התחתון** —
-      // משם תופסים, ועליו חלה תקרת המטר. הידית עולה ממנו
-      // כלפי מעלה, כמו שמגבת נמשכת פנימה מהפאה.
+      // שני החורים חולקים עמודה אחת, והגובה שנמדד הוא **האמצע שבין
+      // שניהם** — לא חור ספציפי. ידית ורטיקל של 20 ס"מ עם גובה שנמדד
+      // 100 ס"מ מהרצפה: האמצע נמצא ב-100, והחורים 10 ס"מ מעליו ו-10
+      // מתחתיו (למטה, לכיוון הרצפה). עליו חלה תקרת המטר, כי שם אוחזים.
       xs    = [hxU, hxU];
-      ys    = [hyU, hyU-gap];
+      ys    = [hyU-gap/2, hyU+gap/2];
       edges = [{x:hxU, face:face, right:handleOnRight}];
     } else if(hType==='towel-center'){
       xs    = [s.x+eMM*sc, s.x+s.w-eMM*sc];
@@ -1493,7 +1494,7 @@ function _layoutPass(shower,cW,mgL,mgR){
 
     dim(p.kind,p.mm,x,p.a,x,p.b,
         {idx:p.idx, idxs:p.idxs, zone:'hw', face:p.face, near:p.face,
-         size:LG_SZ_SUB, t:t});
+         size:LG_SZ_SUB, t:t, field:p.field});
   });
 
   hDims.filter(h=>h.side!=='inside').forEach(emitHeight);

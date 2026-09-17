@@ -134,15 +134,20 @@ console.log('');
   const d = door({ handleType: 'vertical' });
   check('a vertical handle is two holes', d.n, 2);
   check('both the same distance in from the face', d.fromHandleFace, [60, 60]);
-  check('one above the other', d.heights.slice().sort((a, b) => a - b), [993, 1543]);
-  check('the height that is measured is the LOWER hole — where the hand goes',
-        Math.min.apply(null, d.heights), Number(d.dim('handle-dist')[0]));
+  /* Ben, 2026-09-17: the height typed is the MIDPOINT between the two
+     holes, not either hole itself — a 55cm vertical handle measured to
+     993 from the floor puts one hole 27.5cm below that and one 27.5cm
+     above, not both above it. */
+  check('one above the other, straddling the measured height',
+        d.heights.slice().sort((a, b) => a - b), [718, 1268]);
+  check('the height that is measured is the MIDPOINT between the two holes',
+        (d.heights[0] + d.heights[1]) / 2, Number(d.dim('handle-dist')[0]));
   check('and the spacing is written, always', d.dim('vert-gap'), ['550']);
   check('and there is no horizontal gap to write', d.dim('towel-gap'), []);
 
   const g = door({ handleType: 'vertical', towelSpacing: 40 });
   check('a spacing typed by hand is obeyed',
-        g.heights.slice().sort((a, b) => a - b), [993, 1393]);
+        g.heights.slice().sort((a, b) => a - b), [793, 1193]);
   check('and written as what was typed', g.dim('vert-gap'), ['400']);
 
   const e = door({ handleType: 'vertical', handleEdge: 8 });
@@ -152,7 +157,7 @@ console.log('');
   /* it has no centred form, so nothing about the glass width changes it */
   check('a wider door does not spread it',
         door({ handleType: 'vertical' }, 1400).heights.slice().sort((a, b) => a - b),
-        [993, 1543]);
+        [718, 1268]);
 
   check('and it is its own part in the picking list',
         door({ handleType: 'vertical' }).bom()[0].variant, 'vertical');

@@ -206,14 +206,13 @@ console.log('');
         /body\.sketch-full \.canvas-wrap\{[^}]*bottom:var\(--full-bottom/.test(DEMO), true);
   check('and each control sits on the height of the one below it',
         /body\.sketch-full \.pick-bar\{bottom:var\(--full-bar-h/.test(DEMO), true);
-  check('the hint above both of them',
-        /body\.sketch-full \.edit-hint\{bottom:calc\(var\(--full-bar-h[^)]*\) \+ var\(--full-pick-h/.test(DEMO), true);
-
-  /* the bug this replaced: #pickBar is in the DOM even when hidden, so a
-     sibling combinator matched always and swallowed the hint in plain
-     edit mode — the one mode whose whole instruction lives in it */
-  check('no sibling rule hides the hint whenever pickBar merely exists',
-        /\.pick-bar ~ \.edit-hint/.test(DEMO), false);
+  /* Ben, 2026-09-17: full screen should show only the sketch, the
+     numbers he can edit, and the X — the hint's own words were one of
+     the "unnecessary things" he pointed at, so it is dropped entirely
+     rather than repositioned. fitFullBottom already treats display:none
+     as zero height, so hiding it hands that room back to the drawing. */
+  check('the hint is dropped entirely in full screen, not just moved',
+        /body\.sketch-full \.edit-hint\{display:none;\}/.test(DEMO), true);
 }
 
 /* ── presentation only: no logic moved ──────────────────────────────────── */

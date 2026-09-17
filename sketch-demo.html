@@ -341,7 +341,10 @@ body.sketch-full .edit-hint{
    גופן או רוחב מסך. */
 body.sketch-full .edit-bar{bottom:0;}
 body.sketch-full .pick-bar{bottom:var(--full-bar-h,0px);border-radius:0;}
-body.sketch-full .edit-hint{bottom:calc(var(--full-bar-h,0px) + var(--full-pick-h,0px));}
+/* בן: במסך מלא הוא רוצה רק את הסקיצה, המידות שאפשר לערוך, וה-X —
+   ההסבר המלולי הוא בדיוק אחד מה"דברים המיותרים" שהוא ציין, ו-
+   fitFullBottom כבר מודד display:none כ-0 ומחזיר את הגובה לציור. */
+body.sketch-full .edit-hint{display:none;}
 
 #dimEditor{
   position:absolute;z-index:30;display:none;
@@ -1138,8 +1141,11 @@ const THUMB_BOUNDARY={right:'wall',left:'open'};
 
 function shapeThumb(cv, entry){
   const a=entry.add||{};
-  // אותה זכוכית בדיוק ש-shapeAdd היה יוצר, על מקלחון של פריט אחד
-  const ghost=[{id:'t',kind:a.kind,hingeSide:a.hingeSide,label:''}];
+  // אותה זכוכית בדיוק ש-shapeAdd היה יוצר, על מקלחון של פריט אחד.
+  // ‏harmonicaSide היה חסר כאן — הכרטיס לא הצהיר על הפאה שלו כלל, ולכן
+  // אף שותפה לא יכולה הייתה להסכים איתו, וזה בדיוק מה שהעלים את ציר
+  // ההרמוניקה מהכרטיס: לא רק חוסר שותפה, אלא הצהרה חסרה על הזכוכית עצמה.
+  const ghost=[{id:'t',kind:a.kind,hingeSide:a.hingeSide,harmonicaSide:a.harmonicaSide,label:''}];
   const st=mkPS({type:a.kind});
   if(a.slope) st.hasSlope=true;
   if(a.slopeFlip){ const t=st.slopeH1; st.slopeH1=st.slopeH2; st.slopeH2=t; }
@@ -1149,6 +1155,25 @@ function shapeThumb(cv, entry){
   if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor,entry.flipped);
   if(a.holes) st.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
                 x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
+
+  // ── דלת מתקפלת צריכה שותפה, לא ניחוש ──
+  //
+  // ציר הרמוניקה הוא צומת בין שתי זכוכיות; דלת בודדת (חוץ מהיוצא מן
+  // הכלל "משני הצדדים") אין לה במה לפגוש, והצומת נשאר "עדיין לא נבנה"
+  // בלי שום סמל — בדיוק ההבדל שבן ראה בין הכרטיס לקנבס. שותפה אמיתית
+  // מריצה את אותה שרשרת ציור שתייצר את הצומת הזה כשמישהו יבנה אותו
+  // באמת, ולכן הסמל על הכרטיס הוא הסמל שיהיה, לא קירוב.
+  let partnerId=null, pst=null;
+  if(a.kind==='door' && a.harmonicaSide && a.harmonicaSide!=='both'){
+    partnerId='p';
+    const partnerSide=a.harmonicaSide==='right'?'left':'right';
+    const partner={id:partnerId, kind:'door', label:'',
+                   hingeSide:partnerSide, harmonicaSide:partnerSide};
+    pst=mkPS({type:'door'});
+    // ‏harmonicaSide='right' פונה לשייף הקודם — השותפה נכנסת לפניי
+    if(a.harmonicaSide==='right') ghost.unshift(partner);
+    else ghost.push(partner);
+  }
 
   // ── ההקשר מתהפך יחד עם הזכוכית ──
   //
@@ -1165,9 +1190,14 @@ function shapeThumb(cv, entry){
     : THUMB_BOUNDARY;
 
   const saveList=shapeList, savePS=shapePS, saveB=shapeBoundary;
-  shapeList=ghost; shapePS={t:st}; shapeBoundary=bound;
+  shapeList=ghost; shapePS=partnerId?{t:st,p:pst}:{t:st}; shapeBoundary=bound;
   let L=null;
-  try { L=lgLayout(_lgShowerOf(_shapePanels(),{0:st}),{canvasW:260}); }
+  try {
+    // ‏pss נבנה לפי סדר המערך בפועל — לא {0:st} קבוע — כי השותפה
+    // עלולה להיכנס **לפני** הדלת (unshift), ואז אינדקס 0 הוא שלה.
+    const pss=Object.fromEntries(ghost.map((x,i)=>[i, shapePS[x.id]]));
+    L=lgLayout(_lgShowerOf(_shapePanels(),pss),{canvasW:260});
+  }
   finally { shapeList=saveList; shapePS=savePS; shapeBoundary=saveB; }
   if(!L) return;
 
@@ -1459,7 +1489,11 @@ function canAddAt(side){ return allowedAt(side).length>0; }
 function renderAddButtons(){
   const host=document.getElementById('addBtns');
   if(!host) return;
-  if(appMode!=='shape'||!lastL||!lastL.shapes||!lastL.shapes.length){
+  // ‏"+" מוסיף זכוכית — שינוי מבנה, לא מידה. במצב עריכה הכוונה היחידה
+  // היא ללחוץ על מספר, והכפתור הצף (באמצע הפאה הימנית) יושב בדיוק
+  // איפה שמידות גובה/ידית/ציר גם יושבות — ומכסה אותן. בן ראה את זה
+  // בפועל: מידת הגובה של הדלת הימנית נעלמה מאחוריו.
+  if(editMode || appMode!=='shape'||!lastL||!lastL.shapes||!lastL.shapes.length){
     host.innerHTML=''; return;
   }
   const k=(C.clientWidth||lastL.canvas.w)/lastL.canvas.w;
@@ -2921,7 +2955,11 @@ function engPaint(L,pfx,dy,idxOf,opts){
 
   // אזורי המגע נרשמים בקואורדינטות הקנבס ולא בקואורדינטות המוזזות: הם
   // נבדקים מול נקודת הלחיצה אחרי שה-transform כבר נגמר.
-  engHingeLegend(L);
+  //
+  // במסך מלא בן רוצה רק את הסקיצה והמידות שאפשר לערוך — המקרא הוא
+  // עוד "דבר מיותר" שתופס פינה מהציור בדיוק כשרוצים כל פיקסל.
+  const inFullEdit = typeof document!=='undefined' && document.body.classList.contains('sketch-full');
+  if(!inFullEdit) engHingeLegend(L);
 
   const before=dimHits.length;
   L.dims.forEach(d=>engDim(d,pfx));
@@ -3263,14 +3301,20 @@ function _hingePartner(idx,field){
 
   // איזו פאה (קנבס) שדה זה מתאר. רק כשלדלת יש שתי פאות שונות מוצהרות
   // יש מה לבחור — אחרת ה"קרוב" הישן (משתי הפאות) עדיין נכון.
-  const p=(typeof getPanels==='function'?getPanels():[])[idx];
-  const isHarmonicaField = field==='harmonicaHingeTop'||field==='harmonicaHingeBot';
-  let wantX=null;
-  if(p && p.harmonicaSide && p.hingeSide && p.harmonicaSide!==p.hingeSide && p.harmonicaSide!=='both'){
-    const faceSide = isHarmonicaField ? p.harmonicaSide : p.hingeSide;
-    if(faceSide==='left') wantX=me.x;
-    else if(faceSide==='right') wantX=me.x+me.w;
-  }
+  // איזו נקודת צומת על השייף הזה קיבלה את השדה שנערך. נשאל את המידה
+  // עצמה (lastL.dims) — היא כבר יודעת, מהמנוע, איזה שדה כל צומת קיבל
+  // (ר' isHarmonicaFace ב-lgLayout), ולכן זה אותו מקור שקבע את t.field
+  // מלכתחילה. ניחוש מחדש מ-hingeSide/harmonicaSide של הפאנל נשען על
+  // שדה שיכול להיות ריק כשהצד הראשון בהרכבה מקבל אותו כברירת מחדל —
+  // ואז "אין מה לבחור" והבחירה חוזרת ל"קרוב" הישן, לפעמים לפאה הלא נכונה.
+  // ‏idxs, לא רק idx: שני הזכוכיות שחולקות צומת מתמזגות למידה אחת
+  // (אותה פיסת מתכת, קדח אחד, ספירה אחת — ר' hwAdd), והבעלים הרשום
+  // הוא רק הראשונה שנוצרה. חיפוש לפי idx בלבד היה מפספס את השנייה.
+  const engField = typeof ENG_FIELD!=='undefined' ? ENG_FIELD : {};
+  const own=(lastL.dims||[]).find(d=>
+    ((d.idxs&&d.idxs.indexOf(idx)>=0)||d.idx===idx) &&
+    (d.field||engField[d.kind])===field);
+  const wantX = own ? (own.near!=null?own.near:own.face) : null;
 
   // הצומת שבו יושב הציר נוגע בשני לוחות; השני הוא זה שאינו אני
   const near = wantX!=null

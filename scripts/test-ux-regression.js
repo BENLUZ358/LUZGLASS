@@ -70,7 +70,7 @@ console.log('');
 /* Only ONE folding door has nothing to land on alone: "דלת מתקפלת" folds
    through the same face it would otherwise hinge from, so it has no
    ordinary hinge at all — on an empty canvas there is truly nothing for
-   it to attach to. "דלת אמצעית באקורדיון" is different: its hinge and its
+   it to attach to. "דלת צירים+הרמוניקה" is different: its hinge and its
    fold sit on OPPOSITE faces, so the hinge face hangs on the wall exactly
    like a plain door, and the fold face simply waits — unbuilt, not
    invalid — for the door that will complete the accordion. The point of
@@ -98,7 +98,7 @@ console.log('');
   check('so an empty canvas does not offer it',
         offered.filter(n => alone.indexOf(n) > -1), []);
   check('but the mid-accordion door IS offered — its hinge hangs on the wall',
-        offered.indexOf('דלת אמצעית באקורדיון') > -1, true);
+        offered.indexOf('דלת צירים+הרמוניקה') > -1, true);
 
   const withFixed = screen();
   run(withFixed, 'shapeList=[{id:"f",kind:"fixed"}]; shapePS={f:mkPS({type:"fixed"})};');

@@ -111,9 +111,16 @@ function lgCatalogSeeds() {
     // לקיפול על דלת, ו-lgValidate הוא שאומר אם זה חוקי במקום הזה.
     { code: 'DR-02', id: 'door-fold',   name: 'דלת מתקפלת', origin: 'seed',
       add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'right' } },
-    // הדלת האמצעית באקורדיון מלא: תלויה מצד אחד, מתקפלת מהשני
-    { code: 'DR-03', id: 'door-fold-mid', name: 'דלת אמצעית באקורדיון', origin: 'seed',
+    // תלויה מצד אחד (E400, לקיר או לקבוע) ומתקפלת מהשני — הדלת האמצעית
+    // באקורדיון מלא, אבל השם מתאר את הזכוכית עצמה ולא רק את התפקיד
+    // שלה בהרכבה אחת (בן, 2026-09-17).
+    { code: 'DR-03', id: 'door-fold-mid', name: 'דלת צירים+הרמוניקה', origin: 'seed',
       add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'left' } },
+    // אותה דלת, עם שיפוע — מותר כאן בדיוק מהסיבה ש-lgValidate כותב:
+    // האקורדיון הזה נתלה על הקיר בציר (לא על קבוע), ובן ביקש אותה
+    // בפירוש (2026-09-17) לצד הכרטיס הרגיל, לא במקומו.
+    { code: 'DR-05', id: 'door-fold-mid-slope', name: 'דלת צירים+הרמוניקה עם שיפוע', origin: 'seed',
+      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'left', slope: true } },
     // ‏**אחרון בגלריה.** התצורה הנדירה שבה אותה דלת מתקפלת
     // משתי פאותיה — והיחידה שבה הרמוניקה נוגעת בקיר.
     { code: 'DR-04', id: 'door-fold-both', name: 'דלת מתקפלת משני הצדדים', origin: 'seed',
