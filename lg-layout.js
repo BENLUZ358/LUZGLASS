@@ -224,6 +224,56 @@ function _applyNotch(P,nt,sc,mmW){
            shoulder:S, inner:N, foot:B, rest:restMM };
 }
 
+// ─── פינוי חופשי: מלבן במ״מ, יחסי לפינת התיבה החוסמת ──────────────────────
+//
+// **אותה נוסחה בשני מקומות**: כאן נטו במ״מ, לבדיקת הכלה מול המתאר האמיתי
+// (‏lgOutline); בציור (‏lgLayout) היא מוכפלת בקנה המידה ומוזזת למקום. נוסחה
+// אחת שמשרתת את שניהם, כי שתי גרסאות מתפצלות בדיוק כמו שקרה כבר כאן פעם.
+function _cutoutRectMM(c, boxW, boxH){
+  if(!c || !(Number(c.w)>0) || !(Number(c.h)>0)) return null;
+  const cw=Number(c.w), ch=Number(c.h);
+  const mid = c.ref==='center';
+  const dx=(c.x&&c.x.mm)||0, dy=(c.y&&c.y.mm)||0;
+  const fromLeft = !(c.x&&c.x.from==='right');
+  const fromTop  = !!(c.y&&c.y.from==='top');
+  const x = fromLeft ? dx-(mid?cw/2:0) : boxW-dx-(mid?cw/2:cw);
+  const y = fromTop  ? dy-(mid?ch/2:0) : boxH-dy-(mid?ch/2:ch);
+  return {x,y,w:cw,h:ch};
+}
+
+// ray casting רגיל, ב-x,y יחסיים לאותה תיבה כמו poly.
+function _pointInPoly(pt,poly){
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i][0], yi=poly[i][1], xj=poly[j][0], yj=poly[j][1];
+    const hit=((yi>pt[1])!==(yj>pt[1])) &&
+      (pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi);
+    if(hit) inside=!inside;
+  }
+  return inside;
+}
+
+// ─── פינוי חופשי מול המתאר האמיתי ───────────────────────────────────────
+//
+// הפינוי החופשי נמדד מהתיבה החוסמת בכוונה — כך מודדים בשטח (ר' lgLayout).
+// אבל כשלפאה הזאת יש גם שיפוע או פינוי מדרגה, התיבה החוסמת אינה הזכוכית:
+// יש משולש שנחתך ואיננו שם. פינוי שנופל שם מבקש זכוכית שלא קיימת — ובלי
+// הבדיקה הזאת זה מתגלה רק כשהזכוכית מגיעה חתוכה לא נכון. ארבע פינות
+// הפינוי מספיקות: הן קמורות/קעורות בפינה אחת בלבד (מדרגת הפינוי), ולא
+// באמצע צלע.
+function _cutoutErrorsOf(list,poly,mmW,mmH){
+  const errs=[];
+  (list||[]).forEach((c,ci)=>{
+    const r=_cutoutRectMM(c,mmW,mmH);
+    if(!r) return;
+    const eps=0.5; // נגיעה בקו עצמו אינה חריגה — רק חציה שלו
+    const corners=[[r.x+eps,r.y+eps],[r.x+r.w-eps,r.y+eps],
+                   [r.x+r.w-eps,r.y+r.h-eps],[r.x+eps,r.y+r.h-eps]];
+    if(corners.some(p=>!_pointInPoly(p,poly))) errs.push(ci);
+  });
+  return errs;
+}
+
 // ─── מהצייר אל המנוע ─────────────────────────────────────────────────────
 //
 // הצייר מחזיק שני מבנים: ‏panels (מה זה — דלת, קבוע, באיזה צד הציר)
@@ -470,7 +520,8 @@ function lgOutline(shower){
 
     return { idx:i, id:(s&&s.id)||('s'+i), kind:(s&&s.kind)||'fixed',
              label:(s&&s.label)||'', mmW:mmW, mmH:mmH, poly:poly,
-             slope:sl, notch:nt, cut:cut };
+             slope:sl, notch:nt, cut:cut,
+             cutoutErrors:_cutoutErrorsOf(s&&s.cutouts,poly,mmW,mmH) };
   });
 }
 
@@ -1196,17 +1247,16 @@ function _layoutPass(shower,cW,mgL,mgR){
     if(!list||!list.length) return;
     const topY=s.y, botY=s.y+s.h, leftX=s.x, rightX=s.x+s.w;
     list.forEach(c=>{
-      if(!c) return;
-      const cw=(c.w||0)*sc, ch=(c.h||0)*sc;
+      // אותה נוסחה בדיוק כמו ב-lgOutline (‏_cutoutRectMM), רק נטו במ״מ שם
+      // ומוכפלת ומוזזת למקום כאן — כדי ששתי הגרסאות לא יוכלו להיפרד.
+      const rectMM=_cutoutRectMM(c,s.mmW,s.mmH);
+      if(!rectMM) return;
+      const cw=rectMM.w*sc, ch=rectMM.h*sc;
       const mid = c.ref==='center';
-      const dx=(c.x&&c.x.mm||0)*sc, dy=(c.y&&c.y.mm||0)*sc;
       const fromLeft = !(c.x&&c.x.from==='right');
       const fromTop  = !!(c.y&&c.y.from==='top');
-      // הקצה השמאלי־עליון של המלבן, אחרי שנקודת הייחוס נלקחה בחשבון
-      const x0 = fromLeft ? leftX + dx - (mid?cw/2:0)
-                          : rightX - dx - (mid?cw/2:cw);
-      const y0 = fromTop  ? topY  + dy - (mid?ch/2:0)
-                          : botY  - dy - (mid?ch/2:ch);
+      const x0 = leftX + rectMM.x*sc;
+      const y0 = topY  + rectMM.y*sc;
       out.cutouts.push({idx:s.idx, x:x0, y:y0, w:cw, h:ch,
                         mmW:c.w, mmH:c.h, ref:c.ref,
                         fromX:fromLeft?'left':'right', fromY:fromTop?'top':'bottom',

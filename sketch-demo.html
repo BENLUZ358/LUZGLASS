@@ -2584,6 +2584,16 @@ function _lgShowerOf(allPanels, allPS){
   });
 }
 
+// המתאם בין lgSketchItems ל-lgGlassSku: אותו מק"ט שהמסך כבר מציג
+// ליד הבחירה (renderSw), רק שקריאה כאן מגיעה פר-לוח מתוך המנוע.
+function _skuOf(g){
+  const sku = (typeof lgGlassSku==='function')
+    ? lgGlassSku(g.thickness, g.glassType, g.glassWork) : null;
+  if(!sku) return null;
+  const name = (typeof LG_SKU_MAP!=='undefined') ? LG_SKU_MAP[sku] : null;
+  return {sku, name: name||null};
+}
+
 // הצמתים משני צדי פאנל idx. junction[idx] הוא הצד הימני שלו,
 // junction[idx+1] הצד השמאלי — n צורות נותנים n+1 צמתים.
 function _lgSidesOf(allPanels,allPS,idx){
@@ -2801,8 +2811,18 @@ function engHingeLegend(L){
   else { cx.fillRect(x,y,w,h); cx.strokeRect(x,y,w,h); }
   kinds.forEach((k,i)=>{
     const cy=y+pad+lh*i+box/2-1;
-    cx.fillStyle=LG_HINGE_COLOR[k]||LG_HINGE_COLOR.regular;
-    cx.fillRect(x+pad, cy-box/2, box, box*0.7);
+    if(k==='harmonica'){
+      // אותו זוג חורים שמצויר על הזכוכית, מוקטן ואנכי כמוהו — המקרא לא
+      // יכול להראות מלבן כשהסימן עצמו הוא שני עיגולים אחד מעל השני,
+      // אחרת הוא מטעה ולא מסביר.
+      const r=box*0.24, cx0=x+pad+box/2;
+      cx.fillStyle='#fff'; cx.strokeStyle=LG_HINGE_COLOR.harmonica; cx.lineWidth=1.1;
+      [-1,1].forEach(sgn=>{ cx.beginPath();
+        cx.arc(cx0, cy+sgn*(r+1), r, 0, Math.PI*2); cx.fill(); cx.stroke(); });
+    } else {
+      cx.fillStyle=LG_HINGE_COLOR[k]||LG_HINGE_COLOR.regular;
+      cx.fillRect(x+pad, cy-box/2, box, box*0.7);
+    }
     cx.fillStyle='#3a3128'; cx.textAlign='left';
     cx.fillText(LG_HINGE_HE[k]||k, x+pad+box+gap, cy);
   });
@@ -2816,8 +2836,23 @@ function engHardware(h,sc,min){
   // שרד רק כי הוא מצויר בפיקסלים קבועים.
   const floor = min || 3, mul = floor/3;
   cx.save();
-  if(h.kind==='hinge'){
-    // בציר נכנסים שני קדחים של 20, אחד בכל צד של הפאה, ועוד רווח ביניהם.
+  if(h.kind==='hinge' && h.variant==='harmonica'){
+    // ציר הרמוניקה — שני חורים, לא גוף אחד, כי כך זה נראה במציאות וכך
+    // הקבלנים מסמנים אותו בסקיצה. **אנכי, לא לרוחב**: הם נערמים אחד
+    // מעל השני על קו התפר, ואמצע הרווח שביניהם הוא בדיוק הנקודה
+    // שכל ציר אחר גם יושב עליה — 20 ס"מ מלמעלה/מלמטה, בלי לגעת בחוקי
+    // המיקום הקיימים. קוטר 20 מ"מ, 4 מ"מ רווח בין החורים — אז כל
+    // חור במרכזו 12 מ"מ (חצי מ-24) מהנקודה. מוכפל ב-sc כמו כל חור אחר.
+    const color=LG_HINGE_COLOR.harmonica;
+    const r=Math.max(20*(sc||0)/2, floor);
+    const off=Math.max((10+2)*(sc||0), r+1); // חצי מרחק בין מרכזים: (20+4)/2
+    cx.fillStyle='#fff'; cx.strokeStyle=color; cx.lineWidth=1.4*Math.min(mul,2);
+    [-1,1].forEach(sgn=>{
+      cx.beginPath();
+      cx.arc(h.x, h.y+sgn*off, r, 0, Math.PI*2);
+      cx.fill(); cx.stroke();
+    });
+  } else if(h.kind==='hinge'){
     // ‏**אותו סמל, צבע אחר.** סמל שני לאותו פרזול היה מחייב את
     // הקורא ללמוד שתי צורות; צבע הוא הבדל שרואים בלי ללמוד.
     const w=24*mul, hh=16*mul;
@@ -3467,6 +3502,16 @@ function saveAndSendOrder(){
   // נראה כמו מחיר, ומי שקורא את ההזמנה אינו יודע שהוא חסר.
   const total=g.price!=null
     ? Math.round(parseFloat(area)*g.price)+(selQ==='zamak'?f.pZ:f.pP) : null;
+  // items/hardware אמיתיים — רק לסקיצה בודדת (מקלחון אחד על הקנבס).
+  // סקיצה מרובה (sketchParts) שומרת כל חלק בלי thickness/glassWork
+  // משלו, ואי אפשר לבנות ממנו שוב shower תקין; היא ממשיכה כמו שהיתה.
+  let _sketchOrd = null;
+  if(!sketchParts.length){
+    try{
+      _sketchOrd = (typeof lgSketchOrder==='function')
+        ? lgSketchOrder(_lgShowerOf(panels,pss), _skuOf) : null;
+    }catch(e){ console.error('lgSketchOrder failed:', e); }
+  }
   const orders=JSON.parse(safeStorage.getItem('lgOrders')||'[]');
   const _s = JSON.parse(sessionStorage.getItem('lgSession')||'{}');
   const _cName = (_s.role==='admin' && window._sketchClient)
@@ -3489,6 +3534,11 @@ function saveAndSendOrder(){
     // בשמירה גרועה מבחירה שלא היתה — הלקוח בטוח שהזמין אותה.
     supportBar:selSupportBar, blackTrim:selBlackTrim,
     panels:panels.map((p,i)=>({label:p.label||p.type,type:p.type,w:pss[i]?.w||500,h:pss[i]?.h||2000})),
+    // מה שהמפעל, תחנת הבדיקה ויום העבודה כבר קוראים — לוח לוח, עם מק"ט
+    // ומסלול (chisum/litush). ריק בסקיצה מרובה, כמו שהיה עד היום.
+    items:    _sketchOrd ? _sketchOrd.items    : [],
+    hardware: _sketchOrd ? _sketchOrd.hardware : [],
+    builder:  _sketchOrd ? _sketchOrd.builder  : null,
     parts:sketchParts,
     date:new Date().toLocaleDateString('he-IL'),
     status:'התקבלה',

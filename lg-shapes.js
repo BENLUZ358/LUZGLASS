@@ -51,6 +51,14 @@ function _lgHarmonicaOn(shape, side) {
   return h === 'both' || h === side;
 }
 
+// מי עומד בפאה side של השייף idx. אותה נוסחה בדיוק ששוכנת כבר בתוך
+// לולאת האקורדיון — כאן שם, כדי שאפשר לשאול אותה גם על הפאה השנייה.
+function _lgSideNeighbor(shapes, bound, idx, side) {
+  return side === 'right'
+    ? (idx === 0 ? (bound.right === 'wall' ? 'wall' : null) : shapes[idx - 1])
+    : (idx === shapes.length - 1 ? (bound.left === 'wall' ? 'wall' : null) : shapes[idx + 1]);
+}
+
 function _lgEdge(shape, side) {
   if (!shape) return 'wall';
   if (shape.kind && _LG_FREE[shape.kind]) return 'free';
@@ -262,9 +270,8 @@ function lgValidate(shower) {
     for (var q = 0; q < sides.length; q++) {
       var sd = sides[q];
       // מי עומד מול הפאה הזאת. 'right' פונה לשייף הקודם במערך.
-      var n = sd === 'right'
-        ? (h === 0 ? (bound.right === 'wall' ? 'wall' : null) : shapes[h - 1])
-        : (h === shapes.length - 1 ? (bound.left === 'wall' ? 'wall' : null) : shapes[h + 1]);
+      var nIdx = sd === 'right' ? h - 1 : h + 1;
+      var n = _lgSideNeighbor(shapes, bound, h, sd);
 
       // ‏קצה פתוח (לא קיר, ואין שם עוד זכוכית) אינו שגיאה — הוא פשוט טרם
       // נבנה. בהוספה אחת-אחת הדלת המתקפלת הראשונה יושבת לבדה לרגע, לפני
@@ -302,6 +309,23 @@ function lgValidate(shower) {
         if (ha && hb && ha !== hb) {
           errors.push({ at: d.id, msg: 'שתי דלתות שמחוברות בהרמוניקה חייבות להיות באותו גובה' });
         }
+
+        // ‏**שני חלקים, קצה אחד לקיר.** הזוג נפתח בכיוון אחד — הפאה
+        // שממנה d נתלה על הקיר (אם יש) היא העוגן היחיד שמחזיק את כל
+        // הזוג. הפאה המקבילה ב-n, שאינה ההרמוניקה שביניהם, היא הקצה
+        // החופשי שנפתח — ובנוי אי אפשר לתלות אותה גם היא על קיר, כמו
+        // מנוף שמחובר משני קצותיו ולא יכול לזוז. ‏d < n בודק את הזוג
+        // פעם אחת, לא פעמיים משני הכיוונים.
+        if (d.harmonicaSide !== 'both' && n.harmonicaSide !== 'both' && h < nIdx) {
+          var dOtherSide = sd === 'right' ? 'left' : 'right';
+          var nOtherSide = sd; // הפאה של n שאינה פונה ל-d היא אותו כיוון כמו sd, נמדד מ-n
+          var dOther = _lgSideNeighbor(shapes, bound, h, dOtherSide);
+          var nOther = _lgSideNeighbor(shapes, bound, nIdx, nOtherSide);
+          if (dOther === 'wall' && nOther === 'wall') {
+            errors.push({ at: d.id,
+              msg: 'שני חלקי ההרמוניקה תלויים על קיר משני הקצוות — הזוג לא יכול להיפתח, לקצה אחד חייב להיות חופשי' });
+          }
+        }
       }
     }
 
@@ -318,6 +342,25 @@ function lgValidate(shower) {
   if (folding.length > 2) {
     errors.push({ at: shapes[folding[2]].id,
                   msg: 'עד שתי דלתות מתקפלות — צירי הקיר מוגבלים במשקל' });
+  }
+
+  // ══════════════ פינוי חופשי מול פאה משופעת/מדורגת ══════════════
+  //
+  // הפינוי החופשי נמדד מהתיבה החוסמת של הזכוכית, לא מהפאה — כך מודדים
+  // בשטח (ר' lgLayout). אבל שיפוע או פינוי מדרגה על אותה פאה גורעים
+  // משולש מהזכוכית האמיתית, שהתיבה החוסמת לא יודעת עליו. פינוי שנופל
+  // שם מבקש זכוכית שלא קיימת, ובלי הבדיקה הזאת זה מתגלה רק כשהזכוכית
+  // מגיעה חתוכה לא נכון. ‏lgOutline כבר בונה את המתאר האמיתי ובודק מולו
+  // — כאן רק מתרגמים לשגיאה, במקום אחד שהמסך כבר קורא ממנו.
+  if (typeof lgOutline === 'function') {
+    var outlines = lgOutline(shower);
+    for (var oi = 0; oi < outlines.length; oi++) {
+      var ol = outlines[oi];
+      if (ol.cutoutErrors && ol.cutoutErrors.length) {
+        errors.push({ at: ol.id,
+          msg: 'פינוי חופשי חורג מהזכוכית — הפאה משופעת או במדרגה שם, ואין שם זכוכית למדוד ממנה' });
+      }
+    }
   }
 
   return errors;
