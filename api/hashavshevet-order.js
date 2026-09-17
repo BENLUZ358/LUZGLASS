@@ -99,6 +99,31 @@ function clientPricesByName(prices) {
   return out;
 }
 
+// ── ניסוי זמני: איתור גורמי המכפלה ──────────────────────────────────────
+//
+//  חשבשבת מחזיקה מידה כשלושה "גורמים" שמכפלתם היא הכמות:
+//
+//      1 יחידות · 2 רוחב · 3 אורך          (0.5500 = 550 מ"מ)
+//
+//  בחלון הם ממוספרים 1/2/3, אבל ב-API יש **ארבעה** שדות מספריים ברמת
+//  השורה — SM_ExtraSum1 · SM_Extrasum2 · SM_ExtraNum1 · SM_ExtraNum2 —
+//  ואיש לא אמר לנו מי מהם מגיע לאיזו משבצת. ניחוש כאן שם מידה שגויה על
+//  חשבונית של לקוח, ו"אורך במקום רוחב" נותן אותו שטח בדיוק — כלומר
+//  הטעות לא תיתפס בסכום אלא רק בהעתק שהלקוח מחזיק ביד.
+//
+//  ולכן ארבעה מספרים שאי אפשר לבלבל. מי שיופיע בחלון המכפלה מזהה את
+//  השדה שלו. הערכים העשרוניים בודקים גם את הדיוק באותה נסיעה: התיעוד
+//  אומר decimal 9.2 — שתי ספרות — בעוד שהמסך מציג ארבע. אם 1.111 חוזר
+//  כ-1.11, הצינור מעגל והמידות לא ישרדו אותו.
+//
+//  שלוש תשובות בהזמנה אחת. **זמני — יורד ברגע שיש תשובה.**
+const LG_PROBE_FIELDS = {
+  SM_ExtraSum1: '1.111',
+  SM_Extrasum2: '2.222',
+  SM_ExtraNum1: '333',
+  SM_ExtraNum2: '444',
+};
+
 // בונה שורה אחת לכל פריט. Quantity = שטח במ"ר, כי הפריטים בחשבשבת הם
 // מסוג "מכפלה" והמחיר שם הוא למ"ר.
 //
@@ -106,7 +131,7 @@ function clientPricesByName(prices) {
 // ההזמנה האמיתית הראשונה (1058) הוכיחה שזה לא קורה: השורה נכנסה עם מחיר
 // 0.000 וסה"כ 0, בעוד שאותו מק"ט שהוקלד ביד בממשק שלהם קיבל 171. התמחור
 // האוטומטי הוא של מסך ההקלדה, לא של הקליטה דרך ה-API.
-function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices) {
+function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices, probe) {
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
   const lines = [];
@@ -134,7 +159,7 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     if (!ppm2) { skipped.push({ name, sku, reason: 'אין מחיר למק"ט הזה — לא במחירון הלקוח ולא בגלובלי' }); return; }
 
     // סדר המפתחות הוא חלק מחוזה החתימה — אין לשנות.
-    lines.push({
+    const line = {
       accountKey: String(accountKey),
       documentid: documentId,
       Reference:  reference,
@@ -142,7 +167,11 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
       Quantity:   qty.toFixed(3),
       price:      ppm2.toFixed(3),
       Agent:      String(agent),
-    });
+    };
+    // שדות הניסוי נוספים בסוף. החתימה מחושבת על המחרוזת שנשלחת בפועל
+    // (ר' pluginDataJson למטה), ולכן תוספת בסוף אינה שוברת אותה.
+    if (probe) Object.assign(line, LG_PROBE_FIELDS);
+    lines.push(line);
 
     preview.push({ name, sku, qty: qty.toFixed(3), ppm2 });
   });
@@ -173,6 +202,9 @@ module.exports = async function handler(req, res) {
   const body    = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
   const orderId = String(body.orderId || '').trim();
   const dryRun  = body.dryRun !== false;   // ברירת מחדל: לא שולחים. חייבים dryRun:false במפורש.
+  // ניסוי איתור גורמי המכפלה — ר' LG_PROBE_FIELDS. חייב להיאמר במפורש,
+  // ולעולם לא דולק מעצמו: אלה מספרי זבל שאין להם מה לחפש בהזמנה אמיתית.
+  const probe   = body.probe === true;
   const force   = body.force === true;
 
   if (!orderId) { res.status(400).json({ error: 'orderId חסר' }); return; }
@@ -247,7 +279,7 @@ module.exports = async function handler(req, res) {
     // מחירון הלקוח ל-undefined, וכל מחיר נפל לגלובלי: 190 במקום 171 ל"המקום
     // לאמבט". היא לא הזיקה כל עוד המחיר לא נשלח בכלל.
     const { lines, preview, skipped } = buildLines(order, accountKey, ref.reference,
-      documentId, agent, prices.global, clientPricesByName(prices));
+      documentId, agent, prices.global, clientPricesByName(prices), probe);
 
     if (!lines.length) {
       res.status(422).json({ error: 'אין אף פריט לשליחה', skipped });
@@ -378,6 +410,8 @@ module.exports = async function handler(req, res) {
       reference: ref.reference, accountKey,
       lineCount: lines.length, skipped,
       warn,
+      // בניסוי — מה שיצא בפועל, כדי שאפשר יהיה להשוות מול מה שנחת בחלון
+      probeSent: probe ? lines[0] : undefined,
       response: parsed || text.slice(0, 4000),
     });
 
