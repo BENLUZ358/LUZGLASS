@@ -329,6 +329,11 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <a class="unav-a" href="check-station.html"><span class="ic" data-icon="search"></span>תחנת בדיקה</a>
     <a class="unav-a" href="workday.html"><span class="ic" data-icon="factory"></span>יום עבודה</a>
     <div class="unav-sec" id="navSecUsers" style="display:none">מערכת</div>
+    <!-- בונה הסקיצות עדיין בפיתוח, ולכן הוא מוצג לאדמין הראשי בלבד —
+         אותו שער בדיוק כמו ניהול המשתמשים. עד עכשיו הוא לא היה מקושר
+         משום מקום פרט ל-order-view.html, שהוא עצמו דף יתום שאיש אינו
+         מקשר אליו: כל מה שנבנה שם ישב מאחורי כתובת שאיש לא מקליד. -->
+    <a class="unav-a" id="navBuilder" href="sketch-demo.html" style="display:none"><span class="ic" data-icon="ruler"></span>בונה סקיצות <span style="opacity:0.5;">· בפיתוח</span></a>
     <a class="unav-a" id="navUsers" href="#" style="display:none" onclick="openUserMgmt()"><span class="ic" data-icon="users"></span>משתמשים</a>
   </nav>
   <div class="unav-bot">
@@ -4222,8 +4227,10 @@ function initUserDisplay(){
   if(sess.isMainAdmin){
     const ns = document.getElementById('navSecUsers');
     const nu = document.getElementById('navUsers');
+    const nb = document.getElementById('navBuilder');
     if(ns) ns.style.display = '';
     if(nu) nu.style.display = '';
+    if(nb) nb.style.display = '';
   }
 }
 

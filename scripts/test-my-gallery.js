@@ -182,6 +182,47 @@ console.log('');
     check(`  ${k} is a flag the catalogue knows`, known.indexOf(k) > -1, true));
 }
 
+/* ── and the database lets it be written at all ───────────────────────── */
+/*
+ * The two libraries had paths, helpers, a validator and a round trip — and no
+ * rule. The root of database.rules.json is ".read": false / ".write": false,
+ * so every save was denied in production: the whole feature worked perfectly
+ * in every test and could not store a single shape. Nothing in the code says
+ * so, which is exactly why it went unnoticed; a missing rule fails silently,
+ * as an empty screen.
+ */
+{
+  const RULES = JSON.parse(fs.readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8')).rules;
+  const lib = RULES.shapeLibrary;
+
+  check('the node has rules at all', !!lib, true);
+  check('and it cannot be read whole — the root denies by default',
+        !lib['.read'] && !lib['.write'], true);
+
+  /* the factory's shapes are what the business offers, so everyone signed in
+     sees them; only an admin adds one */
+  check('any signed-in user may read the factory library',
+        /users.*\.exists\(\)/.test(lib.factory['.read']), true);
+  check('but only an admin may write there',
+        /role'\)\.val\(\) === 'admin'/.test(lib.factory['.write']), true);
+
+  /* the personal library is keyed by phone, and the phone is the identity */
+  const p = lib.personal.$phone;
+  check('a customer reads their own personal library',
+        /\$phone === auth\.token\.email/.test(p['.read']), true);
+  check('and writes to it', /\$phone === auth\.token\.email/.test(p['.write']), true);
+  check('an admin reaches any of them',
+        [/role'\)\.val\(\) === 'admin'/.test(p['.read']),
+         /role'\)\.val\(\) === 'admin'/.test(p['.write'])], [true, true]);
+  check('and nobody else — every clause is anchored to auth',
+        [p['.read'].indexOf('auth != null'), p['.write'].indexOf('auth != null')], [0, 0]);
+
+  /* the rule has to describe the paths the code actually writes to */
+  check('the rules follow the paths firebase-db.js uses',
+        [/LG_SHAPE_LIB \+ '\/factory'/.test(DB),
+         /LG_SHAPE_LIB \+ '\/personal\/' \+ p/.test(DB)], [true, true]);
+}
+
 /* ── a saved shape survives its own validator ─────────────────────────── */
 {
   const ok = add => cat.lgCatalogValidate({ id: 'x', name: 'y', add });

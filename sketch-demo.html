@@ -18,6 +18,18 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20260909"></script>
+<script>
+// שער הרשאה — אדמין בלבד.
+//
+// עד עכשיו הדף הזה לא היה מוגן כלל, וזה לא הפריע כי הוא גם לא היה מקושר
+// משום מקום: כדי להגיע אליו היה צריך להקליד את הכתובת. מרגע שהוא נכנס
+// לתפריט הוא נגיש, ודף נגיש חייב שער — כמו drafter.html שעבר בדיוק את
+// אותו תיקון.
+//
+// הצורות עצמן נבנות בדפדפן ואינן סוד; מה שכן דורש הגנה הוא ספריית
+// הצורות, שיושבת תחת shapeLibrary ומכילה את מה שלקוחות שמרו.
+lgRequireAuthAsync('admin');
+</script>
 <style>
 .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 14px;position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;}
 .topbar .ti{font-size:15px;font-weight:700;}.topbar .su{font-size:12px;color:var(--muted);}
