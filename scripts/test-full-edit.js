@@ -284,17 +284,26 @@ console.log('');
 
 /* ── and the drawing fits the screen it is given ──────────────────────── */
 /*
- * The engine is fitted to WIDTH, and the height comes out however tall the
- * shower is. On a narrow screen a two-metre shower stretched past the bottom
- * and had to be scrolled to be seen whole — which defeats a sketch, whose
- * whole job is to be compared against something at a glance.
+ * Ben on an iPad, 2026-09-17: the shape ran off the bottom and had to be
+ * scrolled to be seen whole — which defeats a sketch, whose job is to be
+ * compared against something at a glance.
  *
- * The fix is a second pass through the same engine at a narrower width. The
- * aspect ratio belongs to the shower, so narrowing the width shortens the
- * height exactly. There is no second scale anywhere — it is lgLayout twice.
+ * The first attempt asked lgLayout for a narrower canvas, and nothing moved.
+ * The engine has a minimum of its own and refuses to go below it, on purpose:
+ * "כל פאנל מקבל את הרוחב שהמידות שלו דורשות... שרטט מצייר גדול וגולל; הוא לא
+ * מקטין את הסקיצה עד שאי אפשר לקרוא אותה." That rule is right, and it is not
+ * the rule to bend.
+ *
+ * But it governs the RESOLUTION of the drawing, not the size it is shown at.
+ * So the canvas keeps its full internal size and is displayed smaller —
+ * exactly what DPR does in the other direction, which is why the result is
+ * sharper rather than blurrier: more pixels inside than on screen.
+ *
+ * The clicks survive untouched because _canvasPoint already derives its ratio
+ * from the rendered size rather than the requested one, and already handles
+ * the two axes separately.
  */
 {
-  /* body() is scoped to the block above; the same one-liner, locally */
   const fnOf = n => {
     const i = DEMO.indexOf('function ' + n + '(');
     let d = 0, j = i;
@@ -303,26 +312,41 @@ console.log('');
     }
     return DEMO.slice(i, j + 1);
   };
-  const fn = fnOf('drawFromEngine');
-  check('the layout is asked for twice when it does not fit',
-        (fn.match(/lgLayout\(/g) || []).length, 2);
-  check('the second ask is narrower, by the ratio that was missing',
-        /Math\.floor\(cW\*\(availH-28\)\/L\.canvas\.h\)/.test(fn), true);
-  check('and it is the same engine, not a scale factor of our own',
-        /ctx\.scale|\* *scale|zoom/.test(fn), false);
 
-  check('there is a floor — below it numbers collide and scrolling is better',
-        /want>=LG_MIN_CANVAS_W/.test(fn), true);
-  check('and the floor is named once', /const LG_MIN_CANVAS_W = \d+;/.test(DEMO), true);
+  const setup = fnOf('setupCanvas');
+  check('the internal size is still the full drawing',
+        /C\.width=cW\*DPR; C\.height=cH\*DPR;/.test(setup), true);
+  check('and only the displayed size is reduced',
+        /C\.style\.width=\(cW\*k\)\+'px'; C\.style\.height=\(cH\*k\)\+'px';/.test(setup), true);
+  check('the fit is taken from both axes',
+        /cW>box\.w[\s\S]{0,80}cH\*k>box\.h/.test(setup), true);
+  check('there is a floor — below it a dimension cannot be read at all',
+        /k<LG_MIN_VIEW_SCALE/.test(setup), true);
+  check('and it is named once', /const LG_MIN_VIEW_SCALE = 0\.\d+;/.test(DEMO), true);
+  check('a small drawing is never blown up to fill the space',
+        /if\(k>1\) k=1;/.test(setup), true);
 
-  const avail = fnOf('_availCanvasH');
-  check('full screen measures the wrapper, which is fixed to the window',
-        /sketch-full'\)\) return w\.clientHeight/.test(avail), true);
-  check('and the normal mode measures what is left below it — its own height '
-        + 'comes from the canvas and so limits nothing',
-        /window\.innerHeight - top/.test(avail), true);
-  check('a missing wrapper means no limit, not a zero-width drawing',
-        /if\(!w\) return 0/.test(avail), true);
+  /* the engine's own minimum is left exactly as it was */
+  const eng = fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8');
+  check("the engine still refuses to shrink below what the dimensions need",
+        /if\(need>cW\) cW=need;/.test(eng), true);
+  check('and nothing here asks it to do otherwise',
+        /canvasW:\s*(want|scaled|fit)/.test(DEMO), false);
+
+  const box = fnOf('_availCanvasBox');
+  check('full screen measures the wrapper, which is pinned to the window',
+        /full \? \(w\.clientHeight\|\|0\)/.test(box), true);
+  check('and the normal mode measures what is left of the window below it',
+        /window\.innerHeight - r\.top/.test(box), true);
+  check('a missing wrapper means no limit, not a zero-sized drawing',
+        /if\(!w\) return \{w:0,h:0\}/.test(box), true);
+
+  /* the property that makes the whole approach safe */
+  const pt = fnOf('_canvasPoint');
+  check('hits are mapped from the rendered size, so shrinking cannot break them',
+        /rect\.width\s*\?\s*\(cw \/ rect\.width\)/.test(pt), true);
+  check('with each axis on its own ratio',
+        /const sy = rect\.height/.test(pt), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

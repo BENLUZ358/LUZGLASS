@@ -2502,7 +2502,29 @@ function drawComboMode(panels,pss,DPR,cW){
 // כל אחת לרבע ומעלים את המספרים.
 function setupCanvas(DPR,cW,cH){
   C.width=cW*DPR; C.height=cH*DPR;
-  C.style.width=cW+'px'; C.style.height=cH+'px';
+
+  // ── הציור נכנס למסך ──
+  //
+  // המנוע לא מקטין את הציור מתחת לרוחב שהמידות דורשות,
+  // ובצדק: מספר שנדחס על מספר אחר גרוע מציור שצריך לגלול בו.
+  // לכן בקשת canvasW צר יותר פשוט נדחית שם — ניסינו ולא קרה כלום.
+  //
+  // אבל הכלל הזה נכון ל**רזולוציה** של הציור, לא לגודל שבו הוא
+  // מוצג. ולכן הקנבס נשאר בגודלו המלא בפנים, ומוצג מוקטן כדי
+  // להיכנס למסך. זה בדיוק מה ש-DPR עושה בכיוון ההפוך, והמשמעות
+  // שהציור אפילו חד יותר: יותר פיקסלים פנימיים ממה שמוצג.
+  //
+  // הלחיצות ממשיכות לפגוע בלי שום שינוי: _canvasPoint גוזר את יחס
+  // ההמרה מהגודל המוצג בפועל ולא מהמונח, וכבר מטפל בשני הצירים
+  // בנפרד.
+  const box=_availCanvasBox();
+  let k=1;
+  if(box.w && cW>box.w)     k=box.w/cW;
+  if(box.h && cH*k>box.h)   k=box.h/cH;
+  if(k<LG_MIN_VIEW_SCALE)   k=LG_MIN_VIEW_SCALE;   // מכאן ולמטה עדיף לגלול
+  if(k>1) k=1;                                      // לעולם לא מגדילים
+
+  C.style.width=(cW*k)+'px'; C.style.height=(cH*k)+'px';
   cx.setTransform(1,0,0,1,0,0);
   cx.scale(DPR,DPR);
   cx.clearRect(0,0,cW,cH);
@@ -2853,41 +2875,28 @@ function engPaint(L,pfx,dy,idxOf,opts){
   cx.restore();
 }
 
-// כמה גובה נשאר על המסך מתחת לראש המעטפת.
+// כמה מקום יש על המסך לציור.
 //
-// במסך מלא המעטפת קבועה בגובה החלון, ולכן clientHeight הוא התשובה. במצב
-// הרגיל הגובה שלה נגזר מהקנבס — היא תמיד "בדיוק בגודל הנכון" ולא מגבילה
-// כלום — ולכן שם מודדים כמה חלון נשאר מתחתיה בפועל.
-function _availCanvasH(){
+// במסך מלא המעטפת קבועה בגובה החלון, ולכן clientHeight הוא
+// התשובה. במצב הרגיל הגובה שלה נגזר מהקנבס — היא תמיד "בדיוק
+// בגודל הנכון" ולא מגבילה כלום — ולכן שם מודדים כמה חלון
+// נשאר מתחתיה בפועל.
+function _availCanvasBox(){
   const w=document.getElementById('canvasWrap');
-  if(!w) return 0;
-  if(document.body.classList.contains('sketch-full')) return w.clientHeight;
-  const top=w.getBoundingClientRect().top;
-  return Math.max(0, window.innerHeight - top - 12);
+  if(!w) return {w:0,h:0};
+  const full=document.body.classList.contains('sketch-full');
+  const r=w.getBoundingClientRect();
+  return {
+    w: w.clientWidth || 0,
+    h: full ? (w.clientHeight||0) : Math.max(0, window.innerHeight - r.top - 12),
+  };
 }
 
-// מתחת לזה המספרים מתחילים להידחס זה על זה. עדיף לגלול מאשר לא לקרוא.
-const LG_MIN_CANVAS_W = 320;
+// מתחת לזה הציור קטן מכדי מכדי כדי לקרוא בו מידה, ועדיף לגלול.
+const LG_MIN_VIEW_SCALE = 0.40;
 
 function drawFromEngine(panels,pss,DPR,cW,pfx){
-  let L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
-
-  // ── שהציור ייכנס לגובה המסך ──
-  //
-  // המנוע מותאם לרוחב, והגובה יוצא כמה שיוצא. על מסך צר — אייפד לאורך או
-  // טלפון — מקלחון של שני מטר נמתח לגובה שדורש גלילה כדי לראות את הזכוכית
-  // כולה. סקיצה שצריך לגלול בה כדי לראות לוח שלם היא סקיצה שקשה להשוות
-  // אותה למשהו, וזה כל תפקידה.
-  //
-  // הפתרון הוא מעבר שני דרך אותו מנוע: אם הציור גבוה מהמקום הפנוי, מבקשים
-  // רוחב קטן יותר באותו יחס. יחס הצדדים נקבע במקלחון עצמו, ולכן הקטנת
-  // הרוחב מקטינה את הגובה במדויק. **אין כאן קנה מידה שני** — אותו
-  // lgLayout, רק עם מספר אחר, וכל המידות והצירים נגזרים ממנו כרגיל.
-  const availH=_availCanvasH();
-  if(availH && L.canvas.h+28 > availH){
-    const want=Math.floor(cW*(availH-28)/L.canvas.h);
-    if(want>=LG_MIN_CANVAS_W) L=lgLayout(_lgShowerOf(panels,pss),{canvasW:want});
-  }
+  const L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
 
   lastL=L;   // העריכה וכפתורי ההוספה צריכים לדעת איפה כל לוח יושב
 
