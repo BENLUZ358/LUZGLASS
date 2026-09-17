@@ -259,13 +259,22 @@ console.log('');
      folds on both faces) is what may stand for a wall — not "any door
      edge," which used to wrongly claim the fold face too. That is a
      read of what the card already declared, same as wallSide already
-     was — not a new opinion about what a harmonica may reach. */
+     was — not a new opinion about what a harmonica may reach.
+
+     A fourth read was added later, for a different reason: a door can
+     carry E400 on one face and harmonica on the other, and the two used
+     to share one hingeTop/hingeBot pair — editing one moved both. Which
+     pair a junction reads (hingeTop/Bot or harmonicaHingeTop/Bot) is
+     still just "which number to show," decided from the door's own
+     hingeSide vs harmonicaSide — not a new opinion about what may
+     connect. Four more matches: the guard itself plus the three
+     comparisons that make it up. */
   check('the drawer holds no junction rule for it',
         /hinge-h/.test(LAY), false);
   check('nor any of the refusals',
         /לא מתחבר לקיר|עד שתי דלתות|חייבות להיות באותו גובה/.test(LAY), false);
   check('all it does is carry the side through, guess the boundary, and place the handle',
-        (LAY.match(/harmonicaSide/g) || []).length, 7);
+        (LAY.match(/harmonicaSide/g) || []).length, 11);
   /* the screen carries the side and paints a colour — neither is a rule.
      What it must never hold is the decision itself. */
   check('the screen holds no junction rule either', /hinge-h/.test(DEMO), false);

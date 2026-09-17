@@ -1762,6 +1762,7 @@ function sheetSet(field,val,redraw){
   const ps=getPS(sheetPfx,i); if(!ps) return;
   if(val===''||val==null) delete ps[field];
   else ps[field]=val;
+  if(field==='h' && val!=='' && val!=null) _harmonicaHeightSync(sheetPfx,i,val);
   if(redraw!==false){ renderShapeSheet(); renderShapeUI(); draw(); }
 }
 // הגיליון מדבר מילימטרים, אבל שני שדות נשמרים בסנטימטרים מאז
@@ -2836,7 +2837,13 @@ function engHardware(h,sc,min){
   // שרד רק כי הוא מצויר בפיקסלים קבועים.
   const floor = min || 3, mul = floor/3;
   cx.save();
-  if(h.kind==='hinge' && h.variant==='harmonica'){
+  if(h.kind==='hinge' && h.variant==='harmonica' && h.jType==='hinge-gg'){
+    // הזוג הכפול הוא רק **זכוכית-זכוכית**: שתי פאות, שתי קדיחות
+    // נפרדות. באקורדיון הנדיר שנוגע בקיר בווריאנט הרמוניקה (jType
+    // מהמנוע אומר hinge-wall שם, לא hinge-gg), אין פאה שנייה לקדוח
+    // בה; זה חופף לקיר בדיוק כמו E400 רגיל, ונופל לסמל המלבן שמתחת,
+    // בצבע הרמוניקה.
+    //
     // ציר הרמוניקה תופס שתי זכוכיות, וכל אחת נקדחת **בנפרד**, 3.6 ס"מ
     // מהקצה שלה — לא על קו התפר עצמו, כמו כל קדח בזכוכית שצריך מרווח
     // מהשפה. לכן שני הזוגות, אחד בכל פאה, לא זוג אחד על הקו. בכל
@@ -2974,6 +2981,26 @@ function drawFromEngine(panels,pss,DPR,cW,pfx){
       const L2=lgLayout(_lgShowerOf(panels,pss),{canvasW:want});
       // רק אם המנוע באמת נענה. כשהוא מסרב הוא מחזיר אותו גודל.
       if(L2.canvas.h<L.canvas.h) L=L2;
+    }
+  }
+
+  // ── ואז מבקשים לצייר גדול יותר, אם נשאר שטח פנוי במסך המלא ──
+  //
+  // הכיוון ההפוך מההקטנה שלמעלה: ציור נמוך בהרבה מהגובה שיש משאיר שטח
+  // מת מתחתיו — בדיוק מה שמסך מלא בפלאפון בא לנצל. אותו עיקרון: מבקשים
+  // מהמנוע רוחב אחר כדי שהוא יפרק מחדש את המידות בקנה מידה גדול יותר,
+  // ולא מותחים את התצוגה (setupCanvas אף פעם לא מגדיל מעבר לרזולוציה
+  // הפנימית — ר' שם). רק במסך מלא: בכרטיס המוקטן אין "שטח פנוי" שרוצים
+  // למלא, ורוחב שגדל שם רק היה מרחיק את המידות מהזכוכית.
+  if(document.body.classList.contains('sketch-full') &&
+     _box.h && L.canvas.h>0 && L.canvas.h+28<_box.h){
+    const want=Math.floor(cW*(_box.h-28)/L.canvas.h);
+    if(want>cW){
+      const L3=lgLayout(_lgShowerOf(panels,pss),{canvasW:want});
+      // רק אם המנוע באמת גדל — בדיוק כמו ההקטנה למעלה, שגם היא מסתפקת
+      // ב"קטן יותר" ולא ב"נכנס בדיוק". חריגה קטנה מהגובה שיש נשארת
+      // ל-setupCanvas לתקן בעצמו, כמו שהוא כבר עושה תמיד.
+      if(L3.canvas.h>L.canvas.h) L=L3;
     }
   }
 
@@ -3152,6 +3179,10 @@ const DIM_FIELDS={
   slopeW2:    {label:'הרוחב התחתון'},
   hingeTop:   {label:'הציר העליון — מלמעלה'},
   hingeBot:   {label:'הציר התחתון — מלמטה'},
+  // הפאה השנייה של דלת עם E400 בפאה אחת והרמוניקה בשנייה — שדה משלה,
+  // כי שני הצירים אינם חייבים לשבת באותו גובה.
+  harmonicaHingeTop: {label:'ציר ההרמוניקה — מלמעלה'},
+  harmonicaHingeBot: {label:'ציר ההרמוניקה — מלמטה'},
   // ref מציין שלמידה יש נקודת ייחוס שאפשר להחליף — מלמעלה או מלמטה
   handleDist: {label:'גובה הידית', ref:'handleRef', refDefault:'bottom'},
   handleEdge: {label:'מרחק הידית מהפאה', cm:true},
@@ -3191,6 +3222,7 @@ function _dimRead(t){
   // שרואים על השרטוט ואי אפשר לגעת בה.
   if(v==null){
     if(t.field==='hingeTop'||t.field==='hingeBot')       v=EDGE_MM;
+    else if(t.field==='harmonicaHingeTop'||t.field==='harmonicaHingeBot') v=EDGE_MM;
     else if(t.field==='bracketTop'||t.field==='bracketBot') v=EDGE_MM;
     else if(t.field==='bracketInset')  v=BRACKET_INSET_MM;
     // אותה תקרה של המנוע: חלון שנפתח על מספר אחר ממה שעל השרטוט
@@ -3219,18 +3251,51 @@ function _dimRead(t){
 // המספר כ-(תחתית הלוח פחות גובה הציר), ולכן ההפרש בין שני המספרים הוא
 // בדיוק ההפרש בין תחתיות הלוחות. חישוב מקביל היה נפרד מהמנוע ביום שבו
 // מישהו ישנה שם משהו.
-function _hingePartner(idx){
+// ‏field מבחין בין שתי הפאות של דלת שנושאת שני צירים (E400 בפאה אחת,
+// הרמוניקה בשנייה): בלעדיו "הצומת הראשון שנמצא" עלול להיות הפאה
+// הלא נכונה, ועריכת ציר אחד הייתה מסנכרנת בטעות עם השכן של הפאה השנייה.
+function _hingePartner(idx,field){
   if(!lastL||!lastL.hardware) return null;
   const hw=lastL.hardware.filter(h=>h.kind==='hinge'&&h.source!=='declared');
   if(!hw.length) return null;
   const me=lastL.shapes.find(s=>s.idx===idx);
   if(!me) return null;
+
+  // איזו פאה (קנבס) שדה זה מתאר. רק כשלדלת יש שתי פאות שונות מוצהרות
+  // יש מה לבחור — אחרת ה"קרוב" הישן (משתי הפאות) עדיין נכון.
+  const p=(typeof getPanels==='function'?getPanels():[])[idx];
+  const isHarmonicaField = field==='harmonicaHingeTop'||field==='harmonicaHingeBot';
+  let wantX=null;
+  if(p && p.harmonicaSide && p.hingeSide && p.harmonicaSide!==p.hingeSide && p.harmonicaSide!=='both'){
+    const faceSide = isHarmonicaField ? p.harmonicaSide : p.hingeSide;
+    if(faceSide==='left') wantX=me.x;
+    else if(faceSide==='right') wantX=me.x+me.w;
+  }
+
   // הצומת שבו יושב הציר נוגע בשני לוחות; השני הוא זה שאינו אני
-  const near=hw.find(h=>Math.abs(h.x-me.x)<2||Math.abs(h.x-(me.x+me.w))<2);
+  const near = wantX!=null
+    ? hw.find(h=>Math.abs(h.x-wantX)<2)
+    : hw.find(h=>Math.abs(h.x-me.x)<2||Math.abs(h.x-(me.x+me.w))<2);
   if(!near) return null;
   const other=lastL.shapes.find(s=>s.idx!==idx&&
     (Math.abs(near.x-s.x)<2||Math.abs(near.x-(s.x+s.w))<2));
   return other?{me:me,other:other}:null;
+}
+
+// נוחות מסך, לא חוק: המנוע כבר מסרב לזוג הרמוניקה בשני גבהים שונים,
+// ובלי המילוי הזה כל שינוי גובה בדלת אחת היה מחייב לזכור לערוך את
+// השותפה ביד, ולפגוש את הסירוב רק בסיום אם שכחת. לא חל כשהשייף הזה
+// או שכנו כבר הצהיר שיפוע — שם הגבהים נבדלים בכוונה.
+function _harmonicaHeightSync(pfx,idx,mm){
+  const panels=getPanels()||[];
+  const me=panels[idx];
+  if(!me||me.type!=='door'||!me.harmonicaSide) return;
+  const myPS=getPS(pfx,idx); if(!myPS||myPS.hasSlope||myPS.hasSlopeW) return;
+  panels.forEach((p,j)=>{
+    if(j===idx||!p||p.type!=='door'||!p.harmonicaSide) return;
+    const ps=getPS(pfx,j); if(!ps||ps.hasSlope||ps.hasSlopeW) return;
+    ps.h=mm;
+  });
 }
 
 function _dimWrite(t,mm){
@@ -3238,14 +3303,20 @@ function _dimWrite(t,mm){
   const f=DIM_FIELDS[t.field]||{};
   const val=f.cm?(mm/10):mm;
   ps[t.field]=val;
+  if(t.field==='h') _harmonicaHeightSync(t.pfx,t.idx,val);
 
   // ציר משותף: המספר נכתב גם על הלוח שממול, מתורגם לנקודת המדידה שלו,
-  // כדי ששני הצדדים יישארו תואמים לא משנה מאיזה מהם ערכו.
-  if(t.field==='hingeTop'||t.field==='hingeBot'){
-    const pair=_hingePartner(t.idx);
+  // כדי ששני הצדדים יישארו תואמים לא משנה מאיזה מהם ערכו. ‏field עובר
+  // ל-_hingePartner כדי שדלת עם שני צירים (E400 והרמוניקה) תסתנכרן עם
+  // השכן הנכון לפי הפאה שבאמת נערכה — לא עם הפאה השנייה של עצמה.
+  const isHingeField = t.field==='hingeTop'||t.field==='hingeBot'||
+                        t.field==='harmonicaHingeTop'||t.field==='harmonicaHingeBot';
+  if(isHingeField){
+    const pair=_hingePartner(t.idx,t.field);
     if(pair&&lastL.scale){
       const sc=lastL.scale, me=pair.me, other=pair.other;
-      const shift = t.field==='hingeBot'
+      const isBot = t.field==='hingeBot'||t.field==='harmonicaHingeBot';
+      const shift = isBot
         ? ((other.y+other.h)-(me.y+me.h))/sc     // תחתיות נפרדות
         : (me.y-other.y)/sc;                     // ראשים, בדרך כלל זהים
       const ops=getPS(t.pfx,other.idx);

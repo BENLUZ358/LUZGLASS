@@ -322,12 +322,22 @@ console.log('');
 
      This is exactly why one pane looked worse than two on Ben's iPad: the
      engine only applies its minimum from two panes up, so a single pane was
-     drawn large and tall and every bit of the shrinking fell on the display. */
+     drawn large and tall and every bit of the shrinking fell on the display.
+
+     A third call mirrors this in the other direction: in full-screen edit
+     mode on a phone, a drawing much shorter than the available height left
+     dead space below it, because the display is never stretched past its
+     own resolution either (setupCanvas caps its scale at 1). So the engine
+     is asked for a WIDER canvas instead, and kept only if it actually grew
+     without crossing the height available — same shape of guard as the
+     shrink direction, just aimed the other way. */
   const draw = fnOf('drawFromEngine');
   check('the engine is asked to draw smaller before the display is shrunk',
-        (draw.match(/lgLayout\(/g) || []).length, 2);
+        (draw.match(/lgLayout\(/g) || []).length, 3);
   check('and the second layout is only kept when the engine actually obeyed',
         /if\(L2\.canvas\.h<L\.canvas\.h\) L=L2;/.test(draw), true);
+  check('and growing to fill full-screen height accepts any improvement, same as shrinking does',
+        /if\(L3\.canvas\.h>L\.canvas\.h\) L=L3;/.test(draw), true);
   check('with a floor on what is asked of it',
         /want>=LG_MIN_ENGINE_W/.test(draw), true);
   check('named once, beside the other', /const LG_MIN_ENGINE_W = \d+;/.test(DEMO), true);

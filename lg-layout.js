@@ -792,11 +792,11 @@ function _layoutPass(shower,cW,mgL,mgR){
   // אבל שתי פאות שונות מקבלות כל אחת את שלה. קיבוץ גלובלי מיזג את כל
   // ה-200 של הציור למספר בודד, ואז לחצי מהפרזול לא היה גובה כלל.
   const hwPend=[];
-  const hwAdd=(kind,mm,a,b,idx,face,outward,side)=>{
+  const hwAdd=(kind,mm,a,b,idx,face,outward,side,field)=>{
     const g=hwPend.find(p=>p.kind===kind&&p.mm===mm&&Math.abs(p.face-face)<1&&
                            p.side===side&&Math.abs(p.a-a)<1&&Math.abs(p.b-b)<1);
     if(g){ if(g.idxs.indexOf(idx)<0) g.idxs.push(idx); }
-    else hwPend.push({kind,mm,a,b,face,outward,side,idx,idxs:[idx]});
+    else hwPend.push({kind,mm,a,b,face,outward,side,idx,idxs:[idx],field:field});
   };
   // מרווח שמפנה את סמל הפרזול (רדיוס 9) מהתווית (רוחב 16 מסובבת)
   const HW_GAP=cfg.subFirst;
@@ -833,10 +833,27 @@ function _layoutPass(shower,cW,mgL,mgR){
                        : ((L&&L.kind!=='door')?L:(R&&R.kind!=='door')?R:(L||R));
     if(!host) continue;
     const src=shapes[host.idx]||{};
-    const mmT = hinge ? (src.hingeTop!=null?src.hingeTop:LG_EDGE_MM)
-                      : (src.bracketTop!=null?src.bracketTop:defTop);
-    const mmB = hinge ? (src.hingeBot!=null?src.hingeBot:LG_EDGE_MM)
-                      : (src.bracketBot!=null?src.bracketBot:defBot);
+
+    // ‏**דלת יכולה לשאת שני צירים, בשתי פאות שונות** — E400 לקיר
+    // והרמוניקה לדלת שממול. עד עכשיו שתי הפאות קראו את אותו hingeTop/
+    // hingeBot, ועריכת אחת הזיזה גם את השנייה בטעות: שני צמתים נפרדים,
+    // שני מספרים שלא חייבים להסכים. הפאה שאינה זו שהוזכרה כ-hingeSide
+    // (הפאה ה"רגילה") מקבלת שדה משלה. ‏host.idx===j הוא הפאה הימנית של
+    // המנוע (R); host.idx===j-1 היא השמאלית (L) — ר' ההערה על 'right'
+    // שפונה לשייף הקודם, למעלה בקובץ.
+    const hostFaceEngine = (host.idx===j) ? 'right' : 'left';
+    const isHarmonicaFace = hinge && src.kind==='door' && src.harmonicaSide &&
+      src.harmonicaSide!=='both' && src.hingeSide && src.hingeSide!==src.harmonicaSide &&
+      hostFaceEngine===src.harmonicaSide;
+
+    const mmT = hinge
+      ? (isHarmonicaFace ? (src.harmonicaHingeTop!=null?src.harmonicaHingeTop:LG_EDGE_MM)
+                          : (src.hingeTop!=null?src.hingeTop:LG_EDGE_MM))
+      : (src.bracketTop!=null?src.bracketTop:defTop);
+    const mmB = hinge
+      ? (isHarmonicaFace ? (src.harmonicaHingeBot!=null?src.harmonicaHingeBot:LG_EDGE_MM)
+                          : (src.hingeBot!=null?src.hingeBot:LG_EDGE_MM))
+      : (src.bracketBot!=null?src.bracketBot:defBot);
     // ציר תופס את שתי הזכוכיות ולכן יושב על הגבול. **זווית קיר-זכוכית
     // מוברגת דרך חור בזכוכית**, ולחור יש מרחק מהקצה — 2.5 ס"מ כברירת
     // מחדל. עד עכשיו הזוויות צוירו בדיוק על הפאה, ומי שקודח לפי הסקיצה
@@ -962,16 +979,21 @@ function _layoutPass(shower,cW,mgL,mgR){
       const notched = n && ((n.side==='left') === (s!==L));
       return notched ? (s.y+s.h) : faceOf(s)[1][1]; };
 
+    // הפאה השנייה של דלת דו-צירית נושאת שדה נפרד (ר' isHarmonicaFace
+    // למעלה), כדי שהשדה יגיע גם למידה שמוצגת — לא רק למספר שנקרא.
+    const fieldT = isHarmonicaFace ? 'harmonicaHingeTop' : undefined;
+    const fieldB = isHarmonicaFace ? 'harmonicaHingeBot' : undefined;
+
     panes.forEach(s=>{ const t=topOf(s);
       hwAdd(kT,Math.round((yT-t)/sc),t,yT,s.idx,
-            anchor(s,xT),'start',sideOf(s)); });
+            anchor(s,xT),'start',sideOf(s),fieldT); });
 
     if(where==='shoulder'){
-      hwAdd(kB,mmB,yB,nt.shoulder[1],host.idx,xB,'start',sideOf(host));
+      hwAdd(kB,mmB,yB,nt.shoulder[1],host.idx,xB,'start',sideOf(host),fieldB);
     } else {
       panes.forEach(s=>{ const b=botOf(s);
         hwAdd(kB,Math.round((b-yB)/sc),yB,b,s.idx,
-              anchor(s,xB),'end',sideOf(s)); });
+              anchor(s,xB),'end',sideOf(s),fieldB); });
     }
 
     // 'both' — גם על הפאה החיצונית, מכתף הפינוי כלפי מעלה
@@ -981,7 +1003,7 @@ function _layoutPass(shower,cW,mgL,mgR){
       out.hardware.push({kind:kindHw,hole:true,dia:LG_HOLE_BRACKET,idx:host.idx,junction:j,
                          jType:jt,x:x2,y:y2,face:face,into:into,source:'junction',
                          edgeX:xAt(edge[0],edge[1],y2)}); claim(x2,y2);
-      hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,nt.shoulder[1],y2,host.idx,x2,'start');
+      hwAdd(hinge?'hinge-bot':'bracket-bot',mmB,nt.shoulder[1],y2,host.idx,x2,'start',null,fieldB);
     }
     // 2.5 ס"מ הם ברירת המחדל וכל שרטט יודע אותם — קו מידה עליהם הוא
     // רעש. הוא מופיע רק כשהלקוח שינה את המרחק במפורש.
