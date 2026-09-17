@@ -332,6 +332,18 @@ console.log('');
         /want>=LG_MIN_ENGINE_W/.test(draw), true);
   check('named once, beside the other', /const LG_MIN_ENGINE_W = \d+;/.test(DEMO), true);
 
+  /* the drawing is centred once it is narrower than its wrapper.
+     It never was before — the canvas always filled the width or overflowed it
+     — so RTL had nothing to push. The moment the height fit started shrinking
+     it, a narrow block element went to the right edge and took the shape with
+     it. The shape itself was never off-centre: it fills the canvas. */
+  check('a canvas narrower than its wrapper is centred',
+        /canvas\{[^}]*margin-inline:auto/.test(DEMO), true);
+  check('and it may still be wider and scroll — auto margins collapse there',
+        /\.canvas-wrap\{[^}]*overflow-x:auto/.test(DEMO), true);
+  check('nothing stretches it back to the wrapper',
+        /canvas\{[^}]*width:100%/.test(DEMO), false);
+
   /* the + sits on the canvas, and the canvas is not always where the wrapper
      starts: the page is dir="rtl", and a narrow block element goes to the
      RIGHT edge while #addBtns spans the wrapper and measures from the left */

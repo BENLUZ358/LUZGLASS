@@ -240,8 +240,17 @@ lgRequireAuthAsync('admin');
 .canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
 /* הקנבס נושא רוחב מפורש מ-setupCanvas ולא נמתח למכל: כשהוא רחב ממנו,
    מותר לו לגלוש והמכל גולל. ‏width:100% היה מכווץ אותו בחזרה ומועך את
-   קנה המידה. */
-canvas{display:block;height:auto;cursor:pointer;}
+   קנה המידה.
+
+   ‏margin-inline:auto ממרכז אותו כשהוא **צר** מהמכל. זה קרה לראשונה
+   כשהציור התחיל להצטמצם כדי להיכנס לגובה המסך: הקנבס נהיה צר מהמכל,
+   ובדף dir="rtl" אלמנט בלוק צר נצמד לימין — והצורה נסעה איתו לפינה.
+   הצורה עצמה אף פעם לא הייתה צמודה; היא ממלאת את רוחב הקנבס. מה שזז
+   היה הקנבס.
+
+   ובמקרה ההפוך, כשהקנבס רחב מהמכל, שוליים אוטומטיים מתאפסים לפי
+   הגדרת CSS — ולכן הגלישה והגלילה נשארות בדיוק כפי שהיו. */
+canvas{display:block;height:auto;cursor:pointer;margin-inline:auto;}
 .dim-tip{position:absolute;background:var(--gold);color:var(--on-gold);padding:2px 7px;font-size:12px;font-weight:700;border-radius:3px;pointer-events:none;display:none;z-index:5;}
 
 /* ── מצב עריכה ────────────────────────────────────────────────────
