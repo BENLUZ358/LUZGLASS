@@ -72,7 +72,10 @@ console.log('');
                          /* which FACE folds — a side, like notchSide. Where
                             the folding hinge then lands, and whether it is
                             allowed there at all, the engine decides. */
-                         'harmonicaSide'];
+                         'harmonicaSide',
+                         /* a declaration about the glass, like carriesDoor:
+                            this pane starts with no handle preparation. */
+                         'noHandle'];
   const strayEntry = seeds.flatMap(e => Object.keys(e).filter(k => !ALLOWED_ENTRY.includes(k)));
   const strayAdd   = seeds.flatMap(e => Object.keys(e.add).filter(k => !ALLOWED_ADD.includes(k)));
   check('an entry carries only a name, a code, and what to add', strayEntry, []);
@@ -111,8 +114,10 @@ console.log('');
                  .map(e => e.add.harmonicaSide).sort(),
         // two cards share 'left' now — the plain mid-accordion door and
         // the same door with a slope (DR-05, Ben asked for both to exist
-        // side by side, not one replacing the other)
-        ['both', 'left', 'left', 'right']);
+        // side by side, not one replacing the other). The standalone
+        // 'both' card (DR-04) is gone — Ben called it illogical on its
+        // own and asked for it to be deleted outright (2026-09-18).
+        ['left', 'left', 'right']);
   check('and flipping it gives the other hand',
         run('lgFlipAdd(E).hingeSide', { E: seedDoors.find(e => !e.add.harmonicaSide).add }),
         seedDoors.find(e => !e.add.harmonicaSide).add.hingeSide === 'right' ? 'left' : 'right');

@@ -1192,6 +1192,7 @@ function shapeThumb(cv, entry){
   if(a.notch) Object.assign(st,NOTCH_DEF);
   if(a.notchSide)  st.notchSide=a.notchSide;
   if(a.slopeSideV) st.slopeSideV=a.slopeSideV;
+  if(a.noHandle)   st.handleType='none';
   if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor,entry.flipped);
   // ‏דלת מתקפלת לבדה: בדיוק כמו "קבוע נושא דלת" — קדח מוצהר, לא זכוכית
   // שנייה אמיתית. פאת ההרמוניקה שלה מסומנת כממתינה לשותפה, בדיוק כמו
@@ -1443,6 +1444,7 @@ function _stateFromAdd(a){
   if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
   if(a.slopeSideH) extra.slopeSideH=a.slopeSideH;
   if(a.notchBracket) extra.notchBracket=a.notchBracket;
+  if(a.noHandle) extra.handleType='none';
 
   // המידות שמגדירות את הצורה חוזרות **כפי שנשמרו**, וגוברות
   // על ברירות המחדל של NOTCH_DEF ושל mkPS. מי ששמר מדרגה
@@ -2203,9 +2205,10 @@ function renderShapeSheet(){
     : s.kind==='door'
     ? '<div class="sh-grp"><h4>ידית</h4>'+
         '<div class="sh-row"><label>סוג</label>'+
-          _shSeg('handleType',[['knob','כפתור'],['towel','מגבת'],
+          _shSeg('handleType',[['none','בלי ידית'],['knob','כפתור'],['towel','מגבת'],
                                ['towel-center','מרכוז מגבת'],
                                ['vertical','ורטיקל']],ps.handleType||'knob')+'</div>'+
+        (ps.handleType==='none' ? '' :
         _shNum('handleEdge','מרחק מהפאה',
                ps.handleEdge!=null?ps.handleEdge*10:null,String(HANDLE_EDGE_CM*10))+
         (ps.handleType==='towel'||ps.handleType==='vertical'
@@ -2219,7 +2222,7 @@ function renderShapeSheet(){
           : ps.handleType==='towel-center'
           ? '<p class="sh-note">שני החורים באותו מרחק משתי הפאות. '+
             'זו השיטה — המרחק ביניהם יוצא מרוחב הזכוכית.</p>'
-          : '')+
+          : ''))+
         '<p class="sh-note">הצירים נגזרים מהמפגש עם הקבוע שהדלת תלויה עליו. '+
         'זווית רצפה היא של קבוע — דלת זזה.</p>'+
       '</div>'
@@ -2939,7 +2942,13 @@ function engHardware(h,sc,min){
     const vOff=Math.max((9+2.1)*(sc||0), r+1);  // חצי מרחק בין מרכזים אנכית: (18+4.2)/2
     const hOff=Math.max(36*(sc||0), r+1);       // מרחק מהתפר לכל צד: 3.6 ס"מ
     cx.fillStyle='#fff'; cx.strokeStyle=color; cx.lineWidth=1.4*Math.min(mul,2);
-    [-1,1].forEach(hx=>{ [-1,1].forEach(vy=>{
+    // ‏קדח מוצהר כבר יושב במרכז הזוג שלו — h.x חושב עם ה-3.6 ס״מ מהתפר
+    // בתוכו (ר' lg-layout.js). זו הזכוכית היחידה שקיימת עדיין, ולכן זוג
+    // אחד בלבד; זוג שני היה מצייר חורים של זכוכית שעוד לא הגיעה, מחוץ
+    // לשייף הזה. צומת אמיתי (hinge-gg) הוא ההפך: h.x שם הוא קו התפר בין
+    // שתי זכוכיות אמיתיות, ולכן שני הזוגות, אחד בכל פאה (בן, 2026-09-18).
+    const hxs = h.source==='declared' ? [0] : [-1,1];
+    hxs.forEach(hx=>{ [-1,1].forEach(vy=>{
       cx.beginPath();
       cx.arc(h.x+hx*hOff, h.y+vy*vOff, r, 0, Math.PI*2);
       cx.fill(); cx.stroke();

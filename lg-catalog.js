@@ -32,7 +32,7 @@ var LG_CAT_KINDS = { fixed: 1, door: 1, mirror: 1, shape: 1 };
 // שניהם מתורגמים במקום אחד ב-shapeAdd, ולא כאן.
 var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1,
                      notchSide: 1, slopeSideV: 1, slopeFlip: 1,
-                     carriesDoor: 1,
+                     carriesDoor: 1, noHandle: 1,
                      // המידות שמגדירות את הצורה — ראה למטה
                      notchW: 1, notchH: 1, notchHIn: 1, notchRest: 1,
                      notchBracket: 1, slopeH1: 1, slopeH2: 1, slopeSideH: 1,
@@ -114,17 +114,16 @@ function lgCatalogSeeds() {
     // תלויה מצד אחד (E400, לקיר או לקבוע) ומתקפלת מהשני — הדלת האמצעית
     // באקורדיון מלא, אבל השם מתאר את הזכוכית עצמה ולא רק את התפקיד
     // שלה בהרכבה אחת (בן, 2026-09-17).
+    // ‏noHandle: זו הדלת ש"מתקפלת משני הצדדים" בעיני הלקוח — צד אחד
+    // נפתח על הציר, השני מתקפל על ההרמוניקה — ובברירת מחדל אין לה ידית;
+    // עריכה מתקדמת יכולה להוסיף אחת (בן, 2026-09-18).
     { code: 'DR-03', id: 'door-fold-mid', name: 'דלת צירים+הרמוניקה', origin: 'seed',
-      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'left' } },
+      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'left', noHandle: true } },
     // אותה דלת, עם שיפוע — מותר כאן בדיוק מהסיבה ש-lgValidate כותב:
     // האקורדיון הזה נתלה על הקיר בציר (לא על קבוע), ובן ביקש אותה
     // בפירוש (2026-09-17) לצד הכרטיס הרגיל, לא במקומו.
     { code: 'DR-05', id: 'door-fold-mid-slope', name: 'דלת צירים+הרמוניקה עם שיפוע', origin: 'seed',
-      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'left', slope: true } },
-    // ‏**אחרון בגלריה.** התצורה הנדירה שבה אותה דלת מתקפלת
-    // משתי פאותיה — והיחידה שבה הרמוניקה נוגעת בקיר.
-    { code: 'DR-04', id: 'door-fold-both', name: 'דלת מתקפלת משני הצדדים', origin: 'seed',
-      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'both' } },
+      add: { kind: 'door', hingeSide: 'right', harmonicaSide: 'left', slope: true, noHandle: true } },
   ];
 }
 

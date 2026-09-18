@@ -444,7 +444,7 @@ function lgFromPanels(panels,pStates,opts){
       // סוג הידית קובע כמה חורים נקדחים ואיפה. עד היום השדה
       // הזה ישב במצב והמנוע התעלם ממנו — כל דלת קיבלה חור אחד.
       if(st.handleType==='towel'||st.handleType==='towel-center'||
-         st.handleType==='vertical')
+         st.handleType==='vertical'||st.handleType==='none')
         s.handleType=st.handleType;
       // מה שהליקוט סופר: כפתור ומגבת הם שני פריטים שונים. מרכוז
       // הוא אותה ידית במיקום אחר, ולכן אותו פריט.
@@ -1025,6 +1025,9 @@ function _layoutPass(shower,cW,mgL,mgR){
   out.shapes.forEach(s=>{
     if(s.kind!=='door') return;
     const src=shapes[s.idx]||{};
+    // ‏'none' הוא בקשה מפורשת של הלקוח — בלי ידית, בלי קדח. דלת עם ציר
+    // רגיל והרמוניקה מגיעה כך כברירת מחדל; עריכה מתקדמת יכולה להחזיר.
+    if(src.handleType==='none') return;
     // הפאה שהדלת נתלית עליה נגזרת מהמנוע, לא משדה ידני
     const hingeLeft=_hingeLeft(src,js,s.idx);
 

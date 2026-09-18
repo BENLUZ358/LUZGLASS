@@ -60,7 +60,7 @@ console.log('');
   check('and no two share one', new Set(codes).size, seeds.length);
   check('the code says what kind of glass it is',
         seeds.map(e => cat.lgShapeCode(e).slice(0, 2)),
-        ['FX', 'FX', 'FX', 'FX', 'DR', 'MR', 'SH', 'DR', 'DR', 'DR', 'DR']);
+        ['FX', 'FX', 'FX', 'FX', 'DR', 'MR', 'SH', 'DR', 'DR', 'DR']);
 
   /* a saved shape gets one too, derived from its own id — not from a
      counter in the cloud, which would need a lock and would hand two

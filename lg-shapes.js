@@ -420,7 +420,7 @@ function lgBOM(shower) {
   for (var m = 0; m < shapes.length; m++) {
     var sh = shapes[m];
     if (!sh) continue;
-    if (sh.kind === 'door') add('handle', sh.handleVariant, 1);
+    if (sh.kind === 'door' && sh.handleType !== 'none') add('handle', sh.handleVariant, 1);
     if (sh.floorBracket)    add('bracket-floor', null, 1);
   }
 
