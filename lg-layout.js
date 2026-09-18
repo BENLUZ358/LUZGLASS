@@ -461,6 +461,7 @@ function lgFromPanels(panels,pStates,opts){
         const ok=st.holes.filter(h=>h&&h.role&&h.x&&h.y&&
                                     Number(h.x.mm)>=0&&Number(h.y.mm)>=0)
           .map(h=>({role:h.role, dia:Number(h.dia)>0?Number(h.dia):null,
+                    variant:h.variant||null,
                     x:{from:h.x.from==='right'?'right':'left', mm:Number(h.x.mm)},
                     y:{from:h.y.from==='top'?'top':'bottom',   mm:Number(h.y.mm)}}));
         if(ok.length) s.holes=ok;
@@ -1225,8 +1226,13 @@ function _layoutPass(shower,cW,mgL,mgR){
       const x = ex+into*(hx.mm||0)*sc;
       const dia = hl.dia!=null ? hl.dia
                 : kind==='hole' ? LG_HOLE_HANDLE : LG_HOLE_BRACKET;
+      // ‏variant נוסע גם על קדח מוצהר — קדח הרמוניקה מוצהר הוא עדיין
+      // הרמוניקה, וזה מה שאומר לצייר לצייר שני חורים ולא מלבן. jType
+      // אין לו טעם כאן (אין צומת אמיתי), ולכן הצייר שואל variant בלבד
+      // כשהמקור הוא 'declared'.
       out.hardware.push({kind:kind,hole:true,dia:dia,idx:s.idx,x:x,y:y,
-                         into:into,edgeX:ex,source:'declared',role:role});
+                         into:into,edgeX:ex,source:'declared',role:role,
+                         variant:hl.variant||null});
       claim(x,y);
 
       // ── שתי המידות של הקדח ──

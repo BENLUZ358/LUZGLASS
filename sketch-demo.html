@@ -1135,6 +1135,46 @@ function hingeHolesFromEngine(doorOn,mirrorCtx){
   return holes;
 }
 
+// ─── דלת מתקפלת לבדה ─────────────────────────────────────────────────
+//
+// אותו רעיון בדיוק כמו hingeHolesFromEngine, רק שהשותפה כאן היא דלת
+// הרמוניקה ולא קבוע: בונים לרגע דלת וליד שמסכימה איתה, שואלים את המנוע
+// איפה הוא שם את ציר ההרמוניקה, וממירים חזרה לקדח מוצהר — עם variant
+// שנוסע איתו, כדי שהצייר ידע לצייר שני חורים ולא מלבן. כשדלת אמיתית
+// תתפוס את המקום הזה, הצומת יטפל בפאה והקדח המוצהר יושמט — אותו כלל
+// בדיוק שכבר קיים לציר הרגיל.
+function harmonicaHolesFromEngine(mySide,mirrorCtx){
+  const partnerSide = mySide==='right' ? 'left' : 'right';
+  const me      = {id:'m', kind:'door', harmonicaSide:mySide, label:''};
+  const partner = {id:'p', kind:'door', harmonicaSide:partnerSide, hingeSide:partnerSide, label:''};
+  const saveList=shapeList, savePS=shapePS, saveB=shapeBoundary;
+  // ‏mySide='right' פונה לשייף הקודם במערך — השותפה חייבת לשבת לפניי
+  shapeList = mySide==='right' ? [partner, me] : [me, partner];
+  shapePS   = {m:mkPS({type:'door'}), p:mkPS({type:'door'})};
+  // שני קצוות פתוחים: מה שמעניין כאן הוא רק הצומת בין שתי הדלתות,
+  // לא איך הזוג הזה נתלה על העולם. סימטרי משני הכיוונים ולכן mirrorCtx
+  // (המתקבל לאחידות עם hingeHolesFromEngine) אינו משנה כאן כלום.
+  shapeBoundary = {right:'open',left:'open'};
+  let holes=[];
+  try{
+    const pss=Object.fromEntries(shapeList.map((x,i)=>[i,shapePS[x.id]]));
+    const L=lgLayout(_lgShowerOf(_shapePanels(),pss),{canvasW:600});
+    const mi=shapeList.findIndex(x=>x.id==='m');
+    const g=L.shapes.find(x=>x.idx===mi);
+    if(g){
+      const sc=L.scale, left=g.x, right=g.x+g.w, bottom=g.y+g.h;
+      holes=L.hardware.filter(h=>h.kind==='hinge'&&h.variant==='harmonica').map(h=>({
+        role:'hinge', variant:'harmonica', dia:20,
+        x:{from: Math.abs(h.x-left)<Math.abs(h.x-right) ? 'left' : 'right',
+           mm: Math.round(Math.min(Math.abs(h.x-left),Math.abs(h.x-right))/sc)},
+        y:{from:'bottom', mm: Math.round((bottom-h.y)/sc)},
+      }));
+    }
+  } catch(e){ holes=[]; }
+  finally { shapeList=saveList; shapePS=savePS; shapeBoundary=saveB; }
+  return holes;
+}
+
 // הקשר קבוע לתמונה: קיר בשמאל הקנבס, פתוח בימין. אינו נקרא מהקנבס
 // החי, כדי שהגלריה לא תשתנה לפי מה שהמשתמש בונה כרגע.
 const THUMB_BOUNDARY={right:'wall',left:'open'};
@@ -1153,27 +1193,14 @@ function shapeThumb(cv, entry){
   if(a.notchSide)  st.notchSide=a.notchSide;
   if(a.slopeSideV) st.slopeSideV=a.slopeSideV;
   if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor,entry.flipped);
+  // ‏דלת מתקפלת לבדה: בדיוק כמו "קבוע נושא דלת" — קדח מוצהר, לא זכוכית
+  // שנייה אמיתית. פאת ההרמוניקה שלה מסומנת כממתינה לשותפה, בדיוק כמו
+  // שהקבוע מסמן שהוא ממתין לדלת (בן, 2026-09-17: "אל תמציא דברים
+  // חדשים" — אותו מנגנון, לא ארכיטקטורה חדשה).
+  if(a.kind==='door' && a.harmonicaSide && a.harmonicaSide!=='both')
+    st.holes=(st.holes||[]).concat(harmonicaHolesFromEngine(a.harmonicaSide,entry.flipped));
   if(a.holes) st.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
                 x:{from:h.x.from,mm:h.x.mm}, y:{from:h.y.from,mm:h.y.mm}}));
-
-  // ── דלת מתקפלת צריכה שותפה, לא ניחוש ──
-  //
-  // ציר הרמוניקה הוא צומת בין שתי זכוכיות; דלת בודדת (חוץ מהיוצא מן
-  // הכלל "משני הצדדים") אין לה במה לפגוש, והצומת נשאר "עדיין לא נבנה"
-  // בלי שום סמל — בדיוק ההבדל שבן ראה בין הכרטיס לקנבס. שותפה אמיתית
-  // מריצה את אותה שרשרת ציור שתייצר את הצומת הזה כשמישהו יבנה אותו
-  // באמת, ולכן הסמל על הכרטיס הוא הסמל שיהיה, לא קירוב.
-  let partnerId=null, pst=null;
-  if(a.kind==='door' && a.harmonicaSide && a.harmonicaSide!=='both'){
-    partnerId='p';
-    const partnerSide=a.harmonicaSide==='right'?'left':'right';
-    const partner={id:partnerId, kind:'door', label:'',
-                   hingeSide:partnerSide, harmonicaSide:partnerSide};
-    pst=mkPS({type:'door'});
-    // ‏harmonicaSide='right' פונה לשייף הקודם — השותפה נכנסת לפניי
-    if(a.harmonicaSide==='right') ghost.unshift(partner);
-    else ghost.push(partner);
-  }
 
   // ── ההקשר מתהפך יחד עם הזכוכית ──
   //
@@ -1185,18 +1212,31 @@ function shapeThumb(cv, entry){
   //
   // ⚠️ מוסכמת הגבולות הפוכה לקנבס: ‏boundary.right הוא שמאל הקנבס.
   // שיקוף אופקי הוא בדיוק החלפת השניים.
-  const bound = entry.flipped
+  let bound = entry.flipped
     ? {right:THUMB_BOUNDARY.left, left:THUMB_BOUNDARY.right}
     : THUMB_BOUNDARY;
+  // ‏דלת שכל הציר שלה הוא הרמוניקה (hingeSide ו-harmonicaSide אותה פאה,
+  // כמו "דלת מתקפלת") אין לה שום פאה אחרת שיכולה לגעת בקיר — ו-lgLayout
+  // עצמו לא בודק את זה (הבדיקה הזאת יושבת רק ב-lgValidate, שהתצוגה
+  // הזאת לא עוברת בו). בלי העקיפה כאן, THUMB_BOUNDARY.right='wall' היה
+  // מייצר צומת הרמוניקה-קיר אמיתי אבל לא חוקי — בדיוק המקרה שההרמוניקה
+  // המוצהרת (למעלה) נועדה להראות במקומו.
+  let forceOpen=false;
+  if(a.kind==='door' && a.harmonicaSide && a.harmonicaSide!=='both' &&
+     a.harmonicaSide===a.hingeSide){ bound={right:'open',left:'open'}; forceOpen=true; }
 
   const saveList=shapeList, savePS=shapePS, saveB=shapeBoundary;
-  shapeList=ghost; shapePS=partnerId?{t:st,p:pst}:{t:st}; shapeBoundary=bound;
+  shapeList=ghost; shapePS={t:st}; shapeBoundary=bound;
   let L=null;
   try {
-    // ‏pss נבנה לפי סדר המערך בפועל — לא {0:st} קבוע — כי השותפה
-    // עלולה להיכנס **לפני** הדלת (unshift), ואז אינדקס 0 הוא שלה.
-    const pss=Object.fromEntries(ghost.map((x,i)=>[i, shapePS[x.id]]));
-    L=lgLayout(_lgShowerOf(_shapePanels(),pss),{canvasW:260});
+    const SH=_lgShowerOf(_shapePanels(),{0:st});
+    // ‏_lgShowerOf מנחש קיר מהציר כשאין דלת אחרת ("דלת בקצה נתלית תמיד
+    // על משהו") — בלי לשאול את shapeBoundary בכלל, ולדלת שכל הציר שלה
+    // הוא הרמוניקה זה מנחש קיר לא נכון גם אחרי העקיפה למעלה. נכתב מחדש
+    // רק במקרה הזה הספציפי — לא בכל כרטיס, כדי לא לדרוס ניחוש אחר
+    // שכן נכון (כמו 'both', ששני הצדדים שלו כן יכולים להישען על קיר).
+    if(forceOpen) SH.boundary=bound;
+    L=lgLayout(SH,{canvasW:260});
   }
   finally { shapeList=saveList; shapePS=savePS; shapeBoundary=saveB; }
   if(!L) return;
@@ -1417,6 +1457,11 @@ function _stateFromAdd(a){
   // לנחש מהם באיזה צד תיתלה הדלת.
   if(a.hingesFor){ extra.hingesFor=a.hingesFor;
                    extra.holes=hingeHolesFromEngine(a.hingesFor); }
+  // דלת מתקפלת שנוספה לבדה: בדיוק כמו hingesFor למעלה, קדח מוצהר על
+  // הפאה שממתינה לשותפה — כך שהיא נראית על הקנבס האמיתי בדיוק כמו
+  // שהיא נראתה בכרטיס, לא רק בתצוגה המקדימה (בן, 2026-09-17).
+  if(a.kind==='door' && a.harmonicaSide && a.harmonicaSide!=='both')
+    extra.holes=(extra.holes||[]).concat(harmonicaHolesFromEngine(a.harmonicaSide));
   // עותק ולא הפניה: ערך בקטלוג משמש כל לוח שנוצר ממנו, ומערך משותף
   // היה גורם לעריכת קדח בלוח אחד לשנות אותו בכל השאר.
   if(a.holes) extra.holes=a.holes.map(h=>({role:h.role,dia:h.dia,
@@ -2871,7 +2916,12 @@ function engHardware(h,sc,min){
   // שרד רק כי הוא מצויר בפיקסלים קבועים.
   const floor = min || 3, mul = floor/3;
   cx.save();
-  if(h.kind==='hinge' && h.variant==='harmonica' && h.jType==='hinge-gg'){
+  // קדח מוצהר (source:'declared') הוא הרמוניקה ממתינה — כמו "קבוע נושא
+  // דלת" — ואין לו jType כלל, כי אין שם צומת אמיתי עדיין. הרמוניקה
+  // מוצהרת היא תמיד זכוכית-זכוכית באופייה (לא מצהירים הרמוניקה על קיר),
+  // ולכן variant בלבד מספיק כשהמקור מוצהר.
+  if(h.kind==='hinge' && h.variant==='harmonica' &&
+     (h.jType==='hinge-gg' || h.source==='declared')){
     // הזוג הכפול הוא רק **זכוכית-זכוכית**: שתי פאות, שתי קדיחות
     // נפרדות. באקורדיון הנדיר שנוגע בקיר בווריאנט הרמוניקה (jType
     // מהמנוע אומר hinge-wall שם, לא hinge-gg), אין פאה שנייה לקדוח

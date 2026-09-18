@@ -63,7 +63,7 @@ function screen(boundary) {
    'galleryEntries', 'entryCanFlip', 'galleryShown', 'galleryFlip',
    '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit',
    '_legalVariant', 'allowedAt', '_whyNot', 'canAddAt',
-   'hingeHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog',
+   'hingeHolesFromEngine', 'harmonicaHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }

@@ -53,7 +53,7 @@ function screen() {
     ctx);
   ['mkPS', '_shapeShower', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip',
    'galleryShown', 'galleryFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt',
-   'canAddAt', '_whyNot', 'hingeHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog',
+   'canAddAt', '_whyNot', 'hingeHolesFromEngine', 'harmonicaHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog',
    'shapeRemove', 'pickOrder', 'getPS', 'getPStates'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }

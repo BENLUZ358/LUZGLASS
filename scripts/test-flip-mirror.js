@@ -50,7 +50,7 @@ const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, consol
 vm.runInContext('var selQ="zamak"; var selMM=8; var selG="שקוף"; var selWork=""; var selSupportBar=false, selBlackTrim=false; var DOOR_H_MM=1985; var HANDLE_EDGE_CM=6;' +
   'var TOWEL_SPACING_CM=40; var NOTCH_DEF={notchW:200,notchH:500};' +
   'let shapeBoundary={right:"wall",left:"open"}; let shapeList=[],shapePS={};', ctx);
-['mkPS', '_shapePanels', '_lgShowerOf', 'hingeHolesFromEngine'].forEach(n =>
+['mkPS', '_shapePanels', '_lgShowerOf', 'hingeHolesFromEngine', 'harmonicaHolesFromEngine'].forEach(n =>
   vm.runInContext(grab(n), ctx));
 vm.runInContext(DEMO.match(/const THUMB_BOUNDARY=\{[^}]*\};/)[0], ctx);
 vm.runInContext(grab('shapeThumb')
@@ -221,7 +221,11 @@ seeds.forEach(e => {
   check('picking a card with no context takes the orientation on show',
         has('const e = side ? _legalVariant(e0,side) : galleryShown(i);'), true);
   check('and the context is mirrored with the glass, not left behind',
-        has('const bound = entry.flipped'), true);
+        // ‏let, not const: a harmonica-only door (its whole hinge IS the
+        // fold, e.g. "door-fold") then overrides bound to open/open, since
+        // it has no face that can lean on a wall at all — see the comment
+        // right after this line in shapeThumb.
+        has('let bound = entry.flipped'), true);
   check('the declared hinges are measured in that same context',
         has('hingeHolesFromEngine(a.hingesFor,entry.flipped)'), true);
   check('the preview context does not leak from the live canvas',

@@ -47,7 +47,7 @@ function bench() {
     'var appMode="shape"; var DOOR_H_MM=1985; var HANDLE_EDGE_CM=6;' +
     'var TOWEL_SPACING_CM=40; let panelState={},items=[]; var curCombo={panels:[]};' +
     'var NOTCH_DEF={notchW:200,notchH:500};', ctx);
-  ['mkPS', 'hingeHolesFromEngine', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
+  ['mkPS', 'hingeHolesFromEngine', 'harmonicaHolesFromEngine', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', 'galleryEntries',
    'entryCanFlip', '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt',
    'canAddAt'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;

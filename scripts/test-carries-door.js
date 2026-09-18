@@ -59,7 +59,7 @@ function screen(boundary) {
     'var curCombo={panels:[]}; function shapeToast(){}' +
     'var document={getElementById:function(){return null;}};var setTimeout=function(){};var document={getElementById:function(){return null;}};var setTimeout=function(){};function renderShapeUI(){} function renderShapeGallery(){} function draw(){}', ctx);
   ['mkPS', '_shapeShower', 'getPStates', 'getPS', '_shapePanels', '_lgShowerOf', 'galleryEntries', 'entryCanFlip', 'galleryShown',
-   '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt', 'canAddAt', 'hingeHolesFromEngine',
+   '_tryArrangement', '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant', 'allowedAt', 'canAddAt', 'hingeHolesFromEngine', 'harmonicaHolesFromEngine',
    'addAt', 'closeGallery', 'shapeAdd', 'shapeAddFromCatalog'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }

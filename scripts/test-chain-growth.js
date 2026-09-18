@@ -64,7 +64,7 @@ function screen() {
   ['mkPS', 'getPS', 'getPStates', '_shapePanels', '_lgShowerOf', '_shapeShower',
    'galleryEntries', 'entryCanFlip', 'galleryShown', '_tryArrangement',
    '_arrangementErrors', '_variantsOf', '_stateFromAdd', '_fits', '_bothFit', '_legalVariant',
-   'allowedAt', '_whyNot', 'canAddAt', 'hingeHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd',
+   'allowedAt', '_whyNot', 'canAddAt', 'hingeHolesFromEngine', 'harmonicaHolesFromEngine', 'addAt', 'closeGallery', 'shapeAdd',
    'shapeAddFromCatalog', 'shapeRemove'].forEach(n => vm.runInContext(grab(n), ctx));
   return ctx;
 }
