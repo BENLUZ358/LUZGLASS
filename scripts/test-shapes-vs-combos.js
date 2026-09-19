@@ -46,9 +46,9 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 check('COMBOS was extracted', typeof COMBOS, 'object');
 const all = [];
 for (const cat of Object.keys(COMBOS)) for (const c of COMBOS[cat]) all.push({ cat, c });
-/* four corner, six front, five bath, one plain — the spec's prose says
-   fifteen, the file holds sixteen */
-check('every combination in the file is covered', all.length, 16);
+/* five corner, seven front, five bath, one plain — sixteen plus the two
+   fold-pair combos added 2026-09-19 (one per corner/front category) */
+check('every combination in the file is covered', all.length, 18);
 
 /* ── the bridge ────────────────────────────────────────────────────────── */
 /*
@@ -72,7 +72,14 @@ function showerFromCombo(combo) {
                       : p.hingeSide === 'left'    ? 'right'
                       : p.hingeSide === 'right'   ? 'left'
                       : (i === 0 ? 'right' : 'left');
-      shapes.push({ id: 's' + i, kind: 'door', hingeSide });
+      /* harmonicaSide is canvas-relative on the panel, exactly like
+         hingeSide, and gets the same flip going into the engine — added
+         2026-09-19 alongside the first combos that use it; every older
+         combo has no harmonicaSide at all and is untouched by this. */
+      const harmonicaSide = p.harmonicaSide === 'both' ? 'both'
+                           : p.harmonicaSide === 'left' ? 'right'
+                           : p.harmonicaSide === 'right' ? 'left' : undefined;
+      shapes.push({ id: 's' + i, kind: 'door', hingeSide, harmonicaSide });
       return;
     }
     shapes.push({ id: 's' + i, kind: 'fixed' });
@@ -165,9 +172,17 @@ for (const { cat, c } of all) {
     const dataFace = p.hingeSide === 'left' ? 'prev' : 'next';
     check(`${cat}/${c.id} panel ${i}: the data agrees with the engine on the hinge face`,
           dataFace, engineFace);
-    /* and the handle is always opposite the hinge */
-    check(`${cat}/${c.id} panel ${i}: the handle is opposite the hinge`,
-          p.handleSide, p.hingeSide === 'left' ? 'right' : 'left');
+    /* and the handle is always opposite the hinge — UNLESS that opposite
+       face is itself a harmonica hinge (added 2026-09-19): a door carrying
+       a real hinge on both its faces has no free edge left for a handle
+       at all, and none should be claimed. */
+    if (p.harmonicaSide && p.harmonicaSide !== p.hingeSide) {
+      check(`${cat}/${c.id} panel ${i}: no handle is claimed — both faces already carry a hinge`,
+            p.handleSide, undefined);
+    } else {
+      check(`${cat}/${c.id} panel ${i}: the handle is opposite the hinge`,
+            p.handleSide, p.hingeSide === 'left' ? 'right' : 'left');
+    }
   });
 }
 

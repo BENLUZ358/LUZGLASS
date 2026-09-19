@@ -761,6 +761,21 @@ const COMBOS={
       {type:'fixed',label:'קבוע',wallSide:'right'},
       {type:'door', label:'דלת', hingeSide:'left',handleSide:'right',swingDir:'left',hingeOnFixed:'prev'},
     ]},
+    // ‏דלת א נתלית על הקבוע בציר רגיל (E400); דלת ב מתקפלת עליה בהרמוניקה
+    // ואין לה תליה משלה — בדיוק כמו DR-03 בגלריית הצורות, רק כאן כהרכבה
+    // שלמה מוכנה. hingeSide של דלת ב זהה לצד ההרמוניקה שלה בכוונה: הצד
+    // הזה מוסכם עם דלת א ("דלת על דלת, אבל שתיהן אומרות הרמוניקה"), וזו
+    // הדרך שהמנוע מסכים שאין שם צורך בקיר — לא שגיאה, לא צירוף מקרים.
+    // הקצה השני של דלת ב הוא הכניסה, חופשי, בלי הכרזה (בן, 2026-09-19).
+    {id:'p_kdd_harm',label:'קבוע + 2 דלתות מתקפלות',panels:[
+      {type:'fixed',label:'קבוע',wallSide:'right'},
+      // ‏דלת א נושאת ציר בשתי הפאות שלה (E400 והרמוניקה) — אין לה שום
+      // פאה פנויה לידית, ולכן handleType:'none' (בלי זה המנוע היה מצייר
+      // ידית על פאת ההרמוניקה, בדיוק כמו הבאג שתוקן ב-DR-03).
+      {type:'door', label:'דלת א', hingeSide:'left', harmonicaSide:'right', hingeOnFixed:'prev',
+       handleType:'none'},
+      {type:'door', label:'דלת ב', hingeSide:'left', harmonicaSide:'left', handleSide:'right'},
+    ]},
     {id:'p_k2d',label:'קבוע 2 דלתות',panels:[
       {type:'fixed',label:'קבוע',wallSide:'right'},
       {type:'door', label:'דלת א',hingeSide:'left',handleSide:'right',swingDir:'left',hingeOnFixed:'prev'},
@@ -797,6 +812,13 @@ const COMBOS={
     {id:'h_kd',label:'קבוע ודלת',panels:[
       {type:'fixed',label:'קבוע',wallSide:'right'},
       {type:'door', label:'דלת', hingeSide:'left',handleSide:'right',swingDir:'out',hingeOnFixed:'prev'},
+    ]},
+    // אותו הרכבה בדיוק כמו p_kdd_harm בפינתי — ר' ההערה שם.
+    {id:'h_kdd_harm',label:'קבוע + 2 דלתות מתקפלות',panels:[
+      {type:'fixed',label:'קבוע',wallSide:'right'},
+      {type:'door', label:'דלת א', hingeSide:'left', harmonicaSide:'right', hingeOnFixed:'prev',
+       handleType:'none'},
+      {type:'door', label:'דלת ב', hingeSide:'left', harmonicaSide:'left', handleSide:'right'},
     ]},
     {id:'h_2d',label:'2 דלתות',panels:[
       // שתי הדלתות נתלו אחת על השנייה והידיות היו בחוץ — הפוך מהמציאות,
@@ -902,7 +924,12 @@ function mkPS(panel){
     // brackets
     extraBracket:false,bracket3pos:40,bracketType:'normal',floorBracket:false,
     // handle
-    handleType:'knob',handleEdge:HANDLE_EDGE_CM,towelSpacing:TOWEL_SPACING_CM,
+    // ‏panel.handleType נתון לדלת שאין לה בכלל פאה פנויה לידית — למשל
+    // דלת שנושאת ציר בשתי הפאות שלה (E400 והרמוניקה), כמו זו שב-
+    // p_kdd_harm/h_kdd_harm. בלי זה המנוע ממציא ידית על פאה שכבר תפוסה
+    // בציר, אותו באג בדיוק שתוקן בקטלוג הצורות עבור DR-03 (בן,
+    // 2026-09-19). ברירת המחדל 'knob' נשארת לכל דלת שלא ביקשה אחרת.
+    handleType:panel.handleType||'knob',handleEdge:HANDLE_EDGE_CM,towelSpacing:TOWEL_SPACING_CM,
     // slope
     hasSlope:false,
     slopeAxis:'height',   // 'height' or 'width'
