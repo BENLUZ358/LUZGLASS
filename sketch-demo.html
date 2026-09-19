@@ -1125,13 +1125,23 @@ function hingeHolesFromEngine(doorOn,mirrorCtx){
     const fi=shapeList.findIndex(x=>x.id==='f');
     const g=L.shapes.find(x=>x.idx===fi);
     if(g){
-      const sc=L.scale, left=g.x, right=g.x+g.w, bottom=g.y+g.h;
-      holes=L.hardware.filter(h=>h.kind==='hinge').map(h=>({
-        role:'hinge', dia:20,
-        x:{from: Math.abs(h.x-left)<Math.abs(h.x-right) ? 'left' : 'right',
-           mm: Math.round(Math.min(Math.abs(h.x-left),Math.abs(h.x-right))/sc)},
-        y:{from:'bottom', mm: Math.round((bottom-h.y)/sc)},
-      }));
+      // ‏המ"מ נמדד מהפינה האמיתית של הפאה שהציר נקדח בה, לא מתיבת
+      // הגבול — ומהקצה הקרוב, לא תמיד "מלמטה": הגשוש הזה תמיד בגובה
+      // סטנדרטי בלי שיפוע, וציר שנמדד "מלמטה" ביחס לגובה שלו יוצא לא
+      // נכון ברגע שהזכוכית האמיתית שעליה הוא מצויר משופעת וקצרה ממנו.
+      // אותן פונקציות בדיוק כמו ב-lg-layout.js (בן, 2026-09-19: "פתרון
+      // כולל, לא תיקון נקודתי").
+      const sc=L.scale, left=g.x, right=g.x+g.w;
+      holes=L.hardware.filter(h=>h.kind==='hinge').map(h=>{
+        const side = Math.abs(h.x-left)<Math.abs(h.x-right) ? 'left' : 'right';
+        const faceEdge=_lgFaceEdge(g.poly,side);
+        return {
+          role:'hinge', dia:20,
+          x:{from: side,
+             mm: Math.round(Math.min(Math.abs(h.x-left),Math.abs(h.x-right))/sc)},
+          y:_lgNearestFaceRef(faceEdge,h.y,sc),
+        };
+      });
     }
   } catch(e){ holes=[]; }
   finally { shapeList=saveList; shapePS=savePS; shapeBoundary=saveB; }
@@ -1165,13 +1175,19 @@ function harmonicaHolesFromEngine(mySide,mirrorCtx){
     const mi=shapeList.findIndex(x=>x.id==='m');
     const g=L.shapes.find(x=>x.idx===mi);
     if(g){
-      const sc=L.scale, left=g.x, right=g.x+g.w, bottom=g.y+g.h;
-      holes=L.hardware.filter(h=>h.kind==='hinge'&&h.variant==='harmonica').map(h=>({
-        role:'hinge', variant:'harmonica', dia:20,
-        x:{from: Math.abs(h.x-left)<Math.abs(h.x-right) ? 'left' : 'right',
-           mm: Math.round(Math.min(Math.abs(h.x-left),Math.abs(h.x-right))/sc)},
-        y:{from:'bottom', mm: Math.round((bottom-h.y)/sc)},
-      }));
+      // ‏אותו כלל, אותן פונקציות, כמו ב-hingeHolesFromEngine למעלה: מהפינה
+      // האמיתית של הפאה, לא מתיבת הגבול, ומהקצה הקרוב — לא תמיד מלמטה.
+      const sc=L.scale, left=g.x, right=g.x+g.w;
+      holes=L.hardware.filter(h=>h.kind==='hinge'&&h.variant==='harmonica').map(h=>{
+        const side = Math.abs(h.x-left)<Math.abs(h.x-right) ? 'left' : 'right';
+        const faceEdge=_lgFaceEdge(g.poly,side);
+        return {
+          role:'hinge', variant:'harmonica', dia:20,
+          x:{from: side,
+             mm: Math.round(Math.min(Math.abs(h.x-left),Math.abs(h.x-right))/sc)},
+          y:_lgNearestFaceRef(faceEdge,h.y,sc),
+        };
+      });
     }
   } catch(e){ holes=[]; }
   finally { shapeList=saveList; shapePS=savePS; shapeBoundary=saveB; }

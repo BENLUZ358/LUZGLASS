@@ -238,11 +238,18 @@ console.log('');
   /* The bottom hinge is 215 from the fixed and 200 from the door: the door
      hangs from the head and the fixed stands on the floor, so the same
      piece of metal is a different number on each pane. That rule was
-     settled long before this gallery, and the engine still holds it. */
+     settled long before this gallery, and the engine still holds it.
+     Each hole is declared from the edge it actually sits near — not
+     always "from bottom" — so a fixed that later turns out sloped (a
+     shorter edge than this flat 2000mm probe) still drills 200 from its
+     own top, not from a height that no longer matches (Ben, 2026-09-19:
+     the harmonica's top hinge did exactly this and landed 15mm off the
+     head instead of 200 once the real door was sloped). */
   {
-    const ys = holesFor('right').map(x => x.y.mm).sort((a, b) => a - b);
-    check('the bottom hinge sits 215 up the fixed, not 200', ys[0], 215);
-    check('and the top one 200 down from its head', 2000 - ys[1], 200);
+    const h = holesFor('right');
+    const top = h.find(x => x.y.from === 'top'), bot = h.find(x => x.y.from === 'bottom');
+    check('the bottom hinge sits 215 up the fixed, not 200', bot && bot.y.mm, 215);
+    check('and the top one 200 down from its head', top && top.y.mm, 200);
   }
 
   /* and the two sides are mirror images */

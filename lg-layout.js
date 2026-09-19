@@ -171,6 +171,52 @@ function _slopeOf(src,js,i){
   return out;
 }
 
+// ─── הפאה האמיתית, לא תיבת הגבול ──────────────────────────────────────────
+//
+// **כל פרזול וכל קדח נמדדים מקצה הזכוכית בפאה שבו הם נקדחים — אף פעם לא
+// מתיבת השייף.** פאה שנחתכה בשיפוע מסתיימת גבוה יותר מהתיבה; מדידה
+// מהתיבה נותנת מספר שמתאר קופסה שלא קיימת, לא את הזכוכית שקודחים בה.
+//
+// זה נכתב נכון פעם אחת בלולאת הצמתים (הציר האמיתי כבר קורא לזה), ואז
+// נכתב שוב — לא נכון — בקדחים המוצהרים: שם המרחק מ"למטה" חושב מ-s.y+s.h,
+// תיבת הגבול, ולא מהפינה האמיתית של הפאה. על זכוכית ישרה שני הדברים
+// זהים ולכן הבאג לא נראה; ברגע שיש שיפוע הם נפרדים, וכל קדח מוצהר
+// בפאה הקצרה יוצא נמוך מדי. אותה טעות בדיוק חזרה גם ב-hingeHolesFromEngine
+// וב-harmonicaHolesFromEngine (sketch-demo.html), שממירים בכיוון ההפוך —
+// מיקום אמיתי חזרה ל"כך וכך מ״מ" — וגם שם מול g.y+g.h.
+//
+// שלוש הפונקציות האלה הן המקור היחיד: כל קוד שממיר בין "מ״מ מהפאה"
+// למיקום אמיתי, בכל כיוון, עובר דרכן ולא כותב את זה בעצמו (בן,
+// 2026-09-19: "לבנות פתרון כולל על כל המערכת שהבעיה הזו לא תחזור").
+//
+// ‏poly[0]/poly[last] הם הפינה העליונה/תחתונה השמאלית; poly[1]/poly[2]
+// הימנית. זה נכון גם למצולע בן 6 נקודות של פינוי מדרגה, כי הפינוי
+// נוגע רק בפינות התחתונות שביניהן — לא בעליונות ולא בזו שממול.
+function _lgFaceEdge(poly, side){
+  return side==='left' ? [poly[0], poly[poly.length-1]] : [poly[1], poly[2]];
+}
+// מ"כך וכך מ״מ מלמעלה/מלמטה של הפאה" למיקום y אמיתי.
+function _lgYFromFace(faceEdge, from, mm, sc){
+  return from==='top' ? faceEdge[0][1]+mm*sc : faceEdge[1][1]-mm*sc;
+}
+// וההפך: ממיקום y אמיתי בחזרה ל"כך וכך מ״מ" — לשעתיים שבהן קודם נשאל
+// המנוע איפה הוא שם צומת אמיתי, ואז צריך להצהיר אותו מיקום כקדח.
+function _lgMMFromFace(faceEdge, from, y, sc){
+  return Math.round((from==='top' ? y-faceEdge[0][1] : faceEdge[1][1]-y)/sc);
+}
+// ‏**הקצה הקרוב, לא תמיד "מלמטה".** מי שמצהיר קדח מתוך צומת אמיתי ששאל
+// אותו את המנוע (ר' hingeHolesFromEngine, harmonicaHolesFromEngine)
+// חייב לבחור באיזו פאה למדוד ממנה — לא רק היכן על הפאה. ציר שיושב קרוב
+// לראש נמדד מהראש; קרוב לרצפה נמדד מהרצפה. בלי זה, קדח שנמדד "כך וכך
+// ממטה" ביחס לגובה **הגשוש** ששאל את המנוע (תמיד 1985 סטנדרטי, בלי
+// שיפוע) יוצא לא נכון ברגע שהזכוכית האמיתית שעליה הוא מצויר משופעת
+// וקצרה ממנו — בדיוק מה שקרה כשהציר העליון של ההרמוניקה נחת 15 מ"מ
+// מהראש במקום 200 (בן, 2026-09-19).
+function _lgNearestFaceRef(faceEdge, y, sc){
+  const fromTop=_lgMMFromFace(faceEdge,'top',y,sc), fromBot=_lgMMFromFace(faceEdge,'bottom',y,sc);
+  return fromTop<=fromBot ? {from:'top',mm:fromTop} : {from:'bottom',mm:fromBot};
+}
+
 // ─── פינוי מדרגה ─────────────────────────────────────────────────────────
 //
 // אגן מקלחת או מדרגה בנויה אוכלים מלבן מפינת הזכוכית התחתונה. המדרגה
@@ -870,7 +916,7 @@ function _layoutPass(shower,cW,mgL,mgR){
     // באמת בגובה שלהם. פאה משופעת נוטה, והפרזול נוטה איתה; הצמדה
     // לתיבת השייף הייתה מציבה אותו לצד הזכוכית ולא עליה.
     const P=host.poly;
-    const edge = onLeft ? [P[0],P[P.length-1]] : [P[1],P[2]];
+    const edge = _lgFaceEdge(P, onLeft?'left':'right');
     const xAt=(A,B,y)=>{ const d=B[1]-A[1];
       return Math.abs(d)<1e-6 ? A[0] : A[0]+(B[0]-A[0])*((y-A[1])/d); };
 
@@ -1211,10 +1257,9 @@ function _layoutPass(shower,cW,mgL,mgR){
     const src=shapes[s.idx]||{};
     const list=ownHoles(s);
     if(!list||!list.length) return;
-    const P=s.poly, floorY=s.y+s.h;
+    const P=s.poly;
     const xAt=(A,B,y)=>{ const d=B[1]-A[1];
       return Math.abs(d)<1e-6 ? A[0] : A[0]+(B[0]-A[0])*((y-A[1])/d); };
-    const L=[P[0],P[P.length-1]], R=[P[1],P[2]];
     list.forEach(hl=>{
       if(!hl) return;
       const role=hl.role||'bracket-wall';
@@ -1223,8 +1268,11 @@ function _layoutPass(shower,cW,mgL,mgR){
       const fromLeft = hx.from!=='right';
       if(_LG_JUNCTION_ROLE[role] &&
          derivedFaces[s.idx+':'+(fromLeft?'left':'right')]) return;
-      const y = hy.from==='top' ? s.y+(hy.mm||0)*sc : floorY-(hy.mm||0)*sc;
-      const ex = fromLeft ? xAt(L[0],L[1],y) : xAt(R[0],R[1],y);
+      // ‏הפאה שהקדח נקדח בה קובעת מאיפה נמדד "למעלה/למטה" — לא תיבת
+      // הגבול. פאה משופעת מסתיימת בגובה אחר מהתיבה, ר' _lgFaceEdge.
+      const faceEdge = _lgFaceEdge(P, fromLeft?'left':'right');
+      const y = _lgYFromFace(faceEdge, hy.from, hy.mm||0, sc);
+      const ex = xAt(faceEdge[0], faceEdge[1], y);
       const into = fromLeft ? 1 : -1;
       const x = ex+into*(hx.mm||0)*sc;
       const dia = hl.dia!=null ? hl.dia
@@ -1248,7 +1296,7 @@ function _layoutPass(shower,cW,mgL,mgR){
       // מוצהר נערך בגיליון המאפיינים, ששם גם התפקיד והקוטר.
       const vMM=Math.round(hy.mm||0), hMM=Math.round(hx.mm||0);
       if(vMM>0){
-        const edgeY = hy.from==='top' ? s.y : floorY;
+        const edgeY = hy.from==='top' ? faceEdge[0][1] : faceEdge[1][1];
         hwAdd('hole-dist',vMM,Math.min(edgeY,y),Math.max(edgeY,y),s.idx,x,
               hy.from==='top'?'start':'end', fromLeft?-1:1);
       }
