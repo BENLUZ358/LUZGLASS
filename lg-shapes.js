@@ -337,12 +337,49 @@ function lgValidate(shower) {
     }
   }
 
-  // ‏**עד שתי דלתות מתקפלות.** בסוף הכול נשען על צירי הקיר,
-  // והם מוגבלים במשקל. זו מגבלה של חומרה, לא של ציור.
-  if (folding.length > 2) {
-    errors.push({ at: shapes[folding[2]].id,
-                  msg: 'עד שתי דלתות מתקפלות — צירי הקיר מוגבלים במשקל' });
-  }
+  // ‏**עד שתי דלתות מתקפלות באותה שרשרת — לא בכל המקלחון.** המגבלה היא
+  // על ציר הקיר שנושא את המשקל, וכל שרשרת מתקפלת (דלת שתלויה על הקיר
+  // ועוד דלת שמתקפלת עליה) נושאת ציר קיר משלה. שרשרת בקצה אחד ועוד
+  // שרשרת נפרדת, עם ציר קיר משלה, בקצה השני — שתיהן מותרות יחד, כי כל
+  // אחת נושאת רק את המשקל של עצמה. מה שנשאר אסור: שרשרת אחת שיש בה
+  // יותר מזוג — שם יותר משתי דלתות באמת נשענות על אותו ציר קיר אחד
+  // (בן, 2026-09-19: "אם יש דלת עם צירים שנתפסת על הקיר ועליה עוד דלת
+  // הרמוניקה זה 2 יחידות שנשענות במשקל הכללי על הדלת הרגילה... אפשר
+  // לעשות מצד שני אותו דבר").
+  //
+  // ‏Union-find פשוט: כל דלת מתקפלת מתחילה כקבוצה של עצמה, ומתמזגת עם
+  // שכנתה בכל צומת הרמוניקה אמיתי (שהלולאה למעלה כבר אימתה). הספירה
+  // אז היא לפי קבוצה — שרשרת, לא כל המקלחון.
+  var foldGroup = {};
+  folding.forEach(function (h) { foldGroup[h] = h; });
+  var foldFind = function (x) { while (foldGroup[x] !== x) x = foldGroup[x]; return x; };
+  var foldUnion = function (a, b) {
+    var ra = foldFind(a), rb = foldFind(b);
+    if (ra !== rb) foldGroup[ra] = rb;
+  };
+  folding.forEach(function (h) {
+    var d = shapes[h];
+    var sides = d.harmonicaSide === 'both' ? ['right', 'left'] : [d.harmonicaSide];
+    sides.forEach(function (sd) {
+      var nIdx = sd === 'right' ? h - 1 : h + 1;
+      var n = shapes[nIdx];
+      if (n && n.kind === 'door' && n.harmonicaSide &&
+          _lgHarmonicaOn(n, sd === 'right' ? 'left' : 'right')) {
+        foldUnion(h, nIdx);
+      }
+    });
+  });
+  var foldGroupSize = {};
+  folding.forEach(function (h) {
+    var r = foldFind(h);
+    foldGroupSize[r] = (foldGroupSize[r] || 0) + 1;
+  });
+  Object.keys(foldGroupSize).forEach(function (r) {
+    if (foldGroupSize[r] > 2) {
+      errors.push({ at: shapes[r].id,
+                    msg: 'עד שתי דלתות מתקפלות באותה שרשרת — הציר שנושא אותן מוגבל במשקל' });
+    }
+  });
 
   // ══════════════ פינוי חופשי מול פאה משופעת/מדורגת ══════════════
   //

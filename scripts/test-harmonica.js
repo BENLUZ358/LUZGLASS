@@ -188,7 +188,25 @@ console.log('');
   check('three folding doors are refused',
         three.errors.some(m => /עד שתי דלתות/.test(m)), true);
   check('and the reason is written down, not just the limit',
-        /מוגבלים במשקל/.test(SRC), true);
+        /מוגבל.*במשקל/.test(SRC), true);
+
+  /* Ben, 2026-09-19: the limit is per wall hinge, not per shower — "אם יש
+     דלת עם צירים שנתפסת על הקיר ועליה עוד דלת הרמוניקה זה 2 יחידות
+     שנשענות במשקל הכללי על הדלת הרגילה... אפשר לעשות מצד שני אותו
+     דבר". Two independent pairs, each anchored to its own wall and
+     meeting the other pair handle-to-handle in the middle, is FOUR
+     folding doors in the shower but never more than two on either wall
+     hinge — a front shower that folds open from both ends at once. */
+  const twoChains = run(shower([
+    door('a', { hingeSide: 'right', harmonicaSide: 'left' }),
+    door('b', { hingeSide: 'right', harmonicaSide: 'right' }),
+    door('c', { hingeSide: 'left',  harmonicaSide: 'left' }),
+    door('d', { hingeSide: 'left',  harmonicaSide: 'right' }),
+  ], { right: 'wall', left: 'wall' }));
+  check('but two SEPARATE two-door chains, each on its own wall hinge, are both allowed',
+        twoChains.errors, []);
+  check('the middle join is a plain handle-to-handle meeting, no hardware of its own',
+        twoChains.js[2].type, null);
 }
 
 /* ── the slope ────────────────────────────────────────────────────────── */

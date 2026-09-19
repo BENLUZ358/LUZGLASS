@@ -820,6 +820,18 @@ const COMBOS={
        handleType:'none'},
       {type:'door', label:'דלת ב', hingeSide:'left', harmonicaSide:'left', handleSide:'right'},
     ]},
+    // ‏שני זוגות הרמוניקה נפרדים, כל אחד תלוי על הקיר שלו-שלו בציר E400
+    // ישירות (בלי קבוע), ונפגשים באמצע ידית מול ידית — בדיוק כמו שתי
+    // דלתות רגילות שנפגשות באמצע, רק שכל אחת מהן זוג מתקפל ולא דלת
+    // בודדת. זה לא חורג מהמגבלה של "עד שני חורים מתקפלים לצומת" — לכל
+    // זוג יש ציר קיר משלו שנושא רק את שני הפאנלים שלו, לא ארבעה
+    // (בן, 2026-09-19: "אפשר לעשות מצד שני אותו דבר").
+    {id:'h_4d_harm',label:'2 זוגות דלתות מתקפלות',panels:[
+      {type:'door', label:'דלת א', hingeSide:'left',  harmonicaSide:'right', handleType:'none'},
+      {type:'door', label:'דלת ב', hingeSide:'left',  harmonicaSide:'left',  handleSide:'right'},
+      {type:'door', label:'דלת ג', hingeSide:'right', harmonicaSide:'right', handleSide:'left'},
+      {type:'door', label:'דלת ד', hingeSide:'right', harmonicaSide:'left',  handleType:'none'},
+    ]},
     {id:'h_2d',label:'2 דלתות',panels:[
       // שתי הדלתות נתלו אחת על השנייה והידיות היו בחוץ — הפוך מהמציאות,
       // ודלת על דלת גם נפסלת במנוע. כל אחת נתלית על הקיר שלה.

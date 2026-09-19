@@ -46,9 +46,10 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 check('COMBOS was extracted', typeof COMBOS, 'object');
 const all = [];
 for (const cat of Object.keys(COMBOS)) for (const c of COMBOS[cat]) all.push({ cat, c });
-/* five corner, seven front, five bath, one plain — sixteen plus the two
-   fold-pair combos added 2026-09-19 (one per corner/front category) */
-check('every combination in the file is covered', all.length, 18);
+/* five corner, eight front, five bath, one plain — sixteen plus the two
+   fold-pair combos and the front double-chain combo, all added
+   2026-09-19 */
+check('every combination in the file is covered', all.length, 19);
 
 /* ── the bridge ────────────────────────────────────────────────────────── */
 /*
@@ -166,12 +167,24 @@ for (const { cat, c } of all) {
   panels.forEach((p, i) => {
     if (p.type !== 'door') return;
     const isHinge = j => !!(j && /hinge/.test(j.type || ''));
-    const engineFace = isHinge(js[i]) ? 'prev' : isHinge(js[i + 1]) ? 'next' : 'none';
     /* the drawer's hingeSide is canvas-relative: 'left' is the face shared
        with the previous panel, because panels are drawn in array order */
     const dataFace = p.hingeSide === 'left' ? 'prev' : 'next';
-    check(`${cat}/${c.id} panel ${i}: the data agrees with the engine on the hinge face`,
-          dataFace, engineFace);
+    if (p.harmonicaSide && p.harmonicaSide !== p.hingeSide) {
+      /* both faces carry a real hinge (E400 on one, harmonica on the
+         other) — added 2026-09-19. "prev wins" below cannot tell which
+         face hingeSide names when both sides are already hinges, so the
+         only thing to check is that the SPECIFIC face hingeSide names is
+         itself genuinely a hinge junction — not which one a priority
+         order would have picked. */
+      const named = dataFace === 'prev' ? js[i] : js[i + 1];
+      check(`${cat}/${c.id} panel ${i}: the face hingeSide names is itself a real hinge`,
+            isHinge(named), true);
+    } else {
+      const engineFace = isHinge(js[i]) ? 'prev' : isHinge(js[i + 1]) ? 'next' : 'none';
+      check(`${cat}/${c.id} panel ${i}: the data agrees with the engine on the hinge face`,
+            dataFace, engineFace);
+    }
     /* and the handle is always opposite the hinge — UNLESS that opposite
        face is itself a harmonica hinge (added 2026-09-19): a door carrying
        a real hinge on both its faces has no free edge left for a handle
