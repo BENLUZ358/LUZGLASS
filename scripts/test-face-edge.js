@@ -177,6 +177,12 @@ console.log('');
   const right = g.x + g.w;
   check('and both are drawn 36mm in from the seam, not sitting on it',
         dh.map(h => Math.round((right - h.x) / sc)).sort((a, b) => a - b), [36, 36]);
+  /* the inset is real and drawn, but it is a fixed constant no one edits
+     and it never changes — printing "36" next to every harmonica hinge
+     is noise, not information, and the regular hinge (whose own inset
+     really is 0) never gets a distance label either (Ben, 2026-09-19) */
+  check('but that fixed 36mm never prints as its own dimension on the sketch',
+        L.dims.some(d => d.mm === 36), false);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

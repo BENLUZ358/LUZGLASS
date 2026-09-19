@@ -1307,7 +1307,12 @@ function _layoutPass(shower,cW,mgL,mgR){
         hwAdd('hole-dist',vMM,Math.min(edgeY,y),Math.max(edgeY,y),s.idx,x,
               hy.from==='top'?'start':'end', fromLeft?-1:1);
       }
-      if(hMM>0){
+      // ‏הרמוניקה לא מקבלת מידה משלה כאן: 3.6 הס"מ קבועים לגמרי (אותו
+      // מספר תמיד, לא שדה עריך), בדיוק כמו הציר הרגיל שגם הוא לא נושא
+      // מידה נפרדת מהפאה — שם כי המרחק שלו הוא אפס, כאן למרות שהמרחק
+      // אמיתי. מידה שאי אפשר לערוך ולעולם לא משתנה היא רעש על השרטוט,
+      // לא מידע (בן, 2026-09-19).
+      if(hMM>0 && hl.variant!=='harmonica'){
         edgePend.push({idx:s.idx, mm:hMM, a:Math.min(ex,x), b:Math.max(ex,x),
                        y:y, right:!fromLeft, kind:'hole-edge'});
       }
