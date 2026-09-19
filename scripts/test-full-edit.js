@@ -359,7 +359,10 @@ console.log('');
   const add = fnOf('renderAddButtons');
   check('the + is placed from the canvas origin, not the wrapper corner',
         /const ox=C\.offsetLeft\|\|0, oy=C\.offsetTop\|\|0;/.test(add), true);
-  check('on both axes', /const x=ox\+\(g\.x\+g\.w\)\*k, y=oy\+\(g\.y\+g\.h\/2\)\*k;/.test(add), true);
+  // the + moved to the drawing's own bottom-right corner (Ben, 2026-09-18)
+  // — the middle of the last pane's right edge used to sit under the
+  // harmonica hole-distance dimension and cover it
+  check('on both axes', /const x=ox\+lastL\.canvas\.w\*k-M, y=oy\+lastL\.canvas\.h\*k-M;/.test(add), true);
   check('and it still scales with the rendered width',
         /const k=\(C\.clientWidth\|\|lastL\.canvas\.w\)\/lastL\.canvas\.w;/.test(add), true);
 

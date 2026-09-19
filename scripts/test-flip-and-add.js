@@ -186,7 +186,10 @@ console.log('');
   check('the sheet now serves both tabs', has('function _sheetIdx()'), true);
   check('every control in the bar is a 44px target',
         /\.pick-bar>button\{[^}]*min-height:44px/.test(DEMO), true);
-  check('and the + itself is 44px', /\.add-btn\{[^}]*width:44px;height:44px/.test(DEMO), true);
+  // it moved to the drawing's own bottom-right corner and shrank on
+  // purpose — it sits alone there with nothing to mis-tap next to it
+  // (Ben, 2026-09-18)
+  check('and the + itself is 36px', /#addBtns \.add-btn\{[^}]*width:36px;height:36px/.test(DEMO), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

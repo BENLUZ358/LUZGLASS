@@ -231,12 +231,15 @@ lgRequireAuthAsync('admin');
    אליו. ‏overflow:hidden חתך את החלק שיצא, ואיתו כל מה שאפשר היה ללחוץ
    עליו שם. */
 #addBtns{position:absolute;inset:0;pointer-events:none;}
-.add-btn{position:absolute;width:44px;height:44px;transform:translate(-50%,-50%);
-  pointer-events:auto;cursor:pointer;border-radius:50%;font-size:22px;line-height:1;
+/* ‏36px ולא 44: הכפתור הזה יושב לבדו בפינת הקנבס, בלי שכן שאפשר ללחוץ
+   עליו בטעות, ולכן קטן יותר עדיין נוח ללחיצה — ובעיקר פחות בולט מעל
+   השרטוט (בן, 2026-09-18). */
+#addBtns .add-btn{position:absolute;width:36px;height:36px;transform:translate(-50%,-50%);
+  pointer-events:auto;cursor:pointer;border-radius:50%;font-size:18px;line-height:1;
   border:1px solid var(--gold);background:var(--gold);color:var(--on-gold);
   box-shadow:0 2px 8px rgba(0,0,0,.18);display:flex;align-items:center;
   justify-content:center;padding:0;}
-.add-btn:focus-visible{outline:2px solid var(--gold-text);outline-offset:3px;}
+#addBtns .add-btn:focus-visible{outline:2px solid var(--gold-text);outline-offset:3px;}
 .canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
 /* הקנבס נושא רוחב מפורש מ-setupCanvas ולא נמתח למכל: כשהוא רחב ממנו,
    מותר לו לגלוש והמכל גולל. ‏width:100% היה מכווץ אותו בחזרה ומועך את
@@ -1434,6 +1437,12 @@ function _stateFromAdd(a){
   // בדיקת הגובה המשותף באקורדיון: הגשוש נמדד מול הדלת האמיתית שכבר
   // על הקנבס, ואף פעם לא יצא באותו גובה כמוה.
   const extra = Object.assign(mkPS({type:a.kind}), a.notch ? Object.assign({},NOTCH_DEF) : {});
+  // ‏**באג אמיתי שנמצא כאן (בן, 2026-09-18):** shapeAdd מדליק
+  // st.hasSlope=true מהפרמטר slope, אבל אז Object.assign(st,extra) דורס
+  // אותו בחזרה ל-false — כי mkPS בתוך extra נותן hasSlope:false כברירת
+  // מחדל, ועד עכשיו אף אחד כאן לא הדליק אותו מ-a.slope. זה בדיוק מה
+  // שהשאיר את "דלת צירים+הרמוניקה עם שיפוע" בלי שיפוע בכלל בציור.
+  if(a.slope) extra.hasSlope=true;
   if(a.carriesDoor!=null) extra.carriesDoor=a.carriesDoor;
   // הגבהים מוחלפים כאן ולא בקטלוג: המספרים באים מ-mkPS, והקטלוג נושא
   // רק את הכוונה. אותה החלפה בדיוק נעשית בתמונה שבגלריה.
@@ -1536,10 +1545,10 @@ function canAddAt(side){ return allowedAt(side).length>0; }
 function renderAddButtons(){
   const host=document.getElementById('addBtns');
   if(!host) return;
-  // ‏"+" מוסיף זכוכית — שינוי מבנה, לא מידה. במצב עריכה הכוונה היחידה
-  // היא ללחוץ על מספר, והכפתור הצף (באמצע הפאה הימנית) יושב בדיוק
-  // איפה שמידות גובה/ידית/ציר גם יושבות — ומכסה אותן. בן ראה את זה
-  // בפועל: מידת הגובה של הדלת הימנית נעלמה מאחוריו.
+  // ‏"+" מוסיף זכוכית — שינוי מבנה, לא מידה. הוא יושב בפינה הימנית-
+  // תחתונה של כל השרטוט (לא רק של הפאה האחרונה), כי שם אין שום קו מידה
+  // או מספר — לעומת אמצע הפאה, ששם גם יושבות מידות גובה/ידית/ציר, ובן
+  // ראה בפועל איך הכפתור מכסה אותן (2026-09-18).
   if(editMode || appMode!=='shape'||!lastL||!lastL.shapes||!lastL.shapes.length){
     host.innerHTML=''; return;
   }
@@ -1555,7 +1564,12 @@ function renderAddButtons(){
   // מהשוליים השמאליים, ולכן הנקודה חייבת לצאת ממיקום הקנבס
   // בתוך המכל ולא מפינת המכל.
   const ox=C.offsetLeft||0, oy=C.offsetTop||0;
-  const x=ox+(g.x+g.w)*k, y=oy+(g.y+g.h/2)*k;
+  // ‏פינת השרטוט, לא פינת הזכוכית: לקנבס יש שוליים סביב הזכוכית בדיוק
+  // כדי שקווי המידה החיצוניים יהיה להם איפה לשבת, ולכן הפינה עצמה תמיד
+  // ריקה. M מזיז את מרכז הכפתור פנימה כך שהוא נשאר בתוך הקנבס במקום
+  // להיתלות מעבר לקצה שלו.
+  const M=24;
+  const x=ox+lastL.canvas.w*k-M, y=oy+lastL.canvas.h*k-M;
   host.innerHTML='<button type="button" class="add-btn" style="left:'+x.toFixed(0)+
     'px;top:'+y.toFixed(0)+'px" onclick="addAt(&quot;right&quot;)" '+
     'aria-label="הוסף זכוכית מימין">+</button>';
