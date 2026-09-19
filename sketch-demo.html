@@ -1181,10 +1181,15 @@ function harmonicaHolesFromEngine(mySide,mirrorCtx){
       holes=L.hardware.filter(h=>h.kind==='hinge'&&h.variant==='harmonica').map(h=>{
         const side = Math.abs(h.x-left)<Math.abs(h.x-right) ? 'left' : 'right';
         const faceEdge=_lgFaceEdge(g.poly,side);
+        // ‏**36 ס"מ, לא המרחק שנמדד.** הציר האמיתי יושב על התפר עצמו
+        // (inset:0, כמו כל ציר) — זו נקודת הסיבוב הווירטואלית, לא איפה
+        // שקודחים. מרחק שנגזר מ-h.x היה יוצא כמעט אפס וממקם את הקדח
+        // המוצהר צמוד לתפר במקום 3.6 ס"מ פנימה, בדיוק מה שבן ראה
+        // (2026-09-19). ‏LG_HARMONICA_INSET_MM הוא אותו מספר בדיוק
+        // שמצייר את הצומת האמיתית ב-engHardware.
         return {
           role:'hinge', variant:'harmonica', dia:20,
-          x:{from: side,
-             mm: Math.round(Math.min(Math.abs(h.x-left),Math.abs(h.x-right))/sc)},
+          x:{from: side, mm: LG_HARMONICA_INSET_MM},
           y:_lgNearestFaceRef(faceEdge,h.y,sc),
         };
       });
@@ -2970,7 +2975,7 @@ function engHardware(h,sc,min){
     const color=LG_HINGE_COLOR.harmonica;
     const r=Math.max(18*(sc||0)/2, floor);
     const vOff=Math.max((9+2.1)*(sc||0), r+1);  // חצי מרחק בין מרכזים אנכית: (18+4.2)/2
-    const hOff=Math.max(36*(sc||0), r+1);       // מרחק מהתפר לכל צד: 3.6 ס"מ
+    const hOff=Math.max(LG_HARMONICA_INSET_MM*(sc||0), r+1);   // מרחק מהתפר לכל צד
     cx.fillStyle='#fff'; cx.strokeStyle=color; cx.lineWidth=1.4*Math.min(mul,2);
     // ‏קדח מוצהר כבר יושב במרכז הזוג שלו — h.x חושב עם ה-3.6 ס״מ מהתפר
     // בתוכו (ר' lg-layout.js). זו הזכוכית היחידה שקיימת עדיין, ולכן זוג

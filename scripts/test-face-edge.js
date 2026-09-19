@@ -150,6 +150,14 @@ console.log('');
         top && [top.y.from, top.y.mm], ['top', 200]);
   check('and the bottom one from the bottom, also at 200',
         bot && [bot.y.from, bot.y.mm], ['bottom', 200]);
+  /* the real hinge junction sits ON the seam (inset 0) — that is the
+     pivot, not where the holes are drilled. A declared hole that copied
+     that distance verbatim landed the hinge right against the edge, with
+     no visible gap at all (Ben, 2026-09-19). The 36mm belongs to the
+     drilled hole itself, the same constant the real symbol is drawn
+     with — never a distance read off the engine's own hinge position. */
+  check('and both sit the fixed 3.6cm drilling inset from the seam, not the ~0 the hinge itself sits at',
+        [top && top.x.mm, bot && bot.x.mm], [36, 36]);
 
   const L = run('lgLayout(_lgShowerOf(_shapePanels(),{0:shapePS.sh1}),{canvasW:900})');
   const g = L.shapes[0], sc = L.scale;
@@ -166,6 +174,9 @@ console.log('');
         nearTop && mmFromTop(nearTop.y), 200);
   check('and the bottom hole 200 from its own bottom corner',
         nearBot && mmFromBot(nearBot.y), 200);
+  const right = g.x + g.w;
+  check('and both are drawn 36mm in from the seam, not sitting on it',
+        dh.map(h => Math.round((right - h.x) / sc)).sort((a, b) => a - b), [36, 36]);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
