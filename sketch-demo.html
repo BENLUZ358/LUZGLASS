@@ -240,6 +240,20 @@ lgRequireAuthAsync('admin');
   box-shadow:0 2px 8px rgba(0,0,0,.18);display:flex;align-items:center;
   justify-content:center;padding:0;}
 #addBtns .add-btn:focus-visible{outline:2px solid var(--gold-text);outline-offset:3px;}
+/* ‏עיגול קטן על כל חיבור בין שתי זכוכיות — לחיצה מסמנת אותו כפינה
+   אמיתית. צבע שונה מ-.add-btn (לא זהב) כדי שלא ייראה כמו עוד "הוסף". */
+#cornerBar{position:absolute;inset:0;pointer-events:none;}
+#cornerBar .corner-mark{position:absolute;width:22px;height:22px;transform:translate(-50%,-50%);
+  pointer-events:auto;cursor:pointer;border-radius:50%;font-size:12px;line-height:1;
+  border:1.5px solid var(--border-strong,#8a8278);background:var(--surface);color:var(--muted,#8a8278);
+  box-shadow:0 1px 4px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;padding:0;}
+#cornerBar .corner-mark.on{border-color:var(--gold-text);background:var(--gold);color:var(--on-gold);}
+#cornerBar .corner-mark:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+/* תצוגה נעולה: אין עריכה — מסתירים כל נקודת כניסה לעריכה מעל הקנבס. */
+body.sketch-locked #addBtns,
+body.sketch-locked #cornerBar{display:none;}
+body.sketch-locked #btnEditMode,
+body.sketch-locked #btnAdvEdit{display:none;}
 .canvas-wrap{background:var(--surface);margin:10px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,0.06);position:relative;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;}
 /* הקנבס נושא רוחב מפורש מ-setupCanvas ולא נמתח למכל: כשהוא רחב ממנו,
    מותר לו לגלוש והמכל גולל. ‏width:100% היה מכווץ אותו בחזרה ומועך את
@@ -509,6 +523,9 @@ body.sketch-full .edit-hint{display:none;}
   <!-- כפתורי ההוספה. הם יושבים מעל הקנבס במקום הפאה שאליה יתחבר השייף
        הבא, ומופיעים רק בצד שמנוע החוקיות מתיר. -->
   <div id="addBtns" aria-hidden="false"></div>
+  <!-- סימוני פינה — עיגול על כל חיבור בין שתי זכוכיות, ליד תחתית
+       הקנבס. לחיצה מסמנת/מבטלת סימון של אותו חיבור כפינה אמיתית. -->
+  <div id="cornerBar" aria-hidden="false"></div>
   <div class="dim-tip" id="dimTip"></div>
   <!-- נפתח במקום שבו נגעו במידה, כדי שהעין לא תעזוב את הציור -->
   <div id="dimEditor" role="dialog" aria-label="שינוי מידה">
@@ -584,6 +601,9 @@ body.sketch-full .edit-hint{display:none;}
 <div class="edit-bar" id="editBar">
   <button id="btnEditMode" onclick="setEditMode(!editMode)">✎ מצב עריכה</button>
   <button id="btnAdvEdit" onclick="setPickMode(!pickMode)">⚙ עריכה מתקדמת</button>
+  <!-- סמן פינה (עיגול מתחת לקנבס) לפני שלוחצים כאן. שינוי מידה כלשהו
+       אחרי הנעילה חוזר לבד לתצוגה השטוחה — אין צורך בכפתור ביטול. -->
+  <button id="btnLockCorner" onclick="setLocked(!lgLocked)">⌐ נעילת הסקיצה</button>
 </div>
 <!-- בחירת שייף לעריכה. אינו פותח חלון מיד: קודם בוחרים על מה עובדים,
      ואז פותחים — כדי שהמשתמש יראה במה הוא נוגע לפני שהוא נוגע. -->
@@ -1609,7 +1629,7 @@ function renderAddButtons(){
   // תחתונה של כל השרטוט (לא רק של הפאה האחרונה), כי שם אין שום קו מידה
   // או מספר — לעומת אמצע הפאה, ששם גם יושבות מידות גובה/ידית/ציר, ובן
   // ראה בפועל איך הכפתור מכסה אותן (2026-09-18).
-  if(editMode || appMode!=='shape'||!lastL||!lastL.shapes||!lastL.shapes.length){
+  if(editMode || lgLocked || appMode!=='shape'||!lastL||!lastL.shapes||!lastL.shapes.length){
     host.innerHTML=''; return;
   }
   const k=(C.clientWidth||lastL.canvas.w)/lastL.canvas.w;
@@ -2649,14 +2669,26 @@ function draw(){
 
 function _drawFrame(){
   const panels=getPanels(), pss=getPStates();
-  if(!panels.length){lastL=null;drawEmpty();renderAddButtons();return;}
+  if(!panels.length){lastL=null;drawEmpty();renderAddButtons();renderCornerBar();return;}
+
+  // ‏שינוי כלשהו במידות מבטל את הנעילה לבד — אין כפתור "בטל נעילה"
+  // נפרד. כל עריכה, מכל מקור (קליק על מידה, טופס מתחת לקנבס, הוספת/
+  // הסרת זכוכית, מעבר קומבינציה) מגיעה ל-draw()→_drawFrame() בסוף,
+  // ולכן זו נקודת הבדיקה היחידה שצריכה (בן, 2026-09-20).
+  if(lgLocked && _lgStateSig(panels,pss)!==lgLockSig){
+    lgLocked=false; lgCornerAt=[];
+    document.body.classList.remove('sketch-locked');
+    _syncLockBtn();
+  }
 
   const DPR=window.devicePixelRatio||1;
   const cW=C.parentElement.clientWidth;
 
-  drawComboMode(panels,pss,DPR,cW);
+  if(lgLocked && lgCornerAt.length) drawFoldedMode(panels,pss,DPR,cW);
+  else drawComboMode(panels,pss,DPR,cW);
   // הכפתורים נגזרים מהפריסה שהציור בדיוק יצר, ולכן הם באים אחריו
   renderAddButtons();
+  renderCornerBar();
 }
 
 // הגאומטריה עברה ל-lg-layout.js, וכאן נשארה רק ההפניה אליה. הצייר הישן
@@ -2664,6 +2696,307 @@ function _drawFrame(){
 // וכל באג ציור בפרויקט הזה עבר את כל הבדיקות.
 function drawComboMode(panels,pss,DPR,cW){
   drawFromEngine(panels,pss,DPR,cW,'combo');
+}
+
+// ═══════════ תצוגת פינה (מקלחון פינתי מקופל) ═══════════
+//
+// בן, 2026-09-19/20: לסמן איזה חיבור בין שתי זכוכיות הוא פינה אמיתית
+// של 90 מעלות, ולנעול — ואז הציור השטוח הופך למקופל: זרוע ראשונה כמו
+// תמיד, כל זרוע הבאה מוטה כדי להראות את הזווית. תצוגה בלבד — אין
+// עריכה ישירה עליה; כל שינוי מידה מחזיר אוטומטית לשטוח (ר' _drawFrame).
+// זמני: לא נשמר לפיירבייס בשלב הזה (אין היום מקום בטוח לזה ברשימה
+// הלבנה של lgNormalizeOrder).
+let lgCornerAt=[];      // אינדקסי חיבור פנימיים שסומנו כפינה (1..n-1), עד 2
+let lgLocked=false;     // true => מציירים את התצוגה המקופלת
+let lgLockSig=null;     // חתימת המצב (panels+pss) שנלקחה בזמן הנעילה
+
+function _lgStateSig(panels,pss){
+  try{ return JSON.stringify(panels)+'|'+JSON.stringify(pss); }
+  catch(e){ return String(Date.now()); }
+}
+
+// מחלקת מצב זהה בפאנלים אינדקס-אינדקס (0..end-start-1) מתוך pss
+// הגלובלי, לזרוע שמתחילה ב-start ומסתיימת (לא כולל) ב-end.
+function _sliceP(pss,start,end){
+  const out={};
+  for(let i=start;i<end;i++) out[i-start]=pss[i]||{};
+  return out;
+}
+
+function toggleCornerAt(j){
+  if(lgLocked) return;
+  const i=lgCornerAt.indexOf(j);
+  if(i>=0) lgCornerAt.splice(i,1);
+  else if(lgCornerAt.length<2){ lgCornerAt.push(j); lgCornerAt.sort((a,b)=>a-b); }
+  else { shapeToast('אפשר לסמן עד שתי פינות'); return; }
+  draw();
+}
+
+// ‏תווית הכפתור מתעדכנת גם כשהנעילה מתבטלת לבד (ב-_drawFrame, בלי
+// לעבור דרך setLocked בכלל) — לכן זו פונקציה נפרדת שקוראים לה משני
+// המקומות, לא שורה בתוך setLocked בלבד.
+function _syncLockBtn(){
+  const btn=document.getElementById('btnLockCorner');
+  if(btn) btn.textContent = lgLocked ? '✎ חזרה לעריכה' : '⌐ נעילת הסקיצה';
+}
+
+function setLocked(on){
+  if(on && !lgCornerAt.length){ shapeToast('סמן קודם איפה הפינה, ואז נעל'); return; }
+  lgLocked=!!on;
+  lgLockSig = lgLocked ? _lgStateSig(getPanels(),getPStates()) : null;
+  document.body.classList.toggle('sketch-locked', lgLocked);
+  _syncLockBtn();
+  draw();
+}
+
+// כפתורי הסימון — עיגול קטן על כל חיבור פנימי בין שתי זכוכיות, בדיוק
+// כמו renderAddButtons: אותו host מוחלט מעל הקנבס, אותה נוסחת קואורדינטות.
+function renderCornerBar(){
+  const host=document.getElementById('cornerBar');
+  if(!host) return;
+  if(lgLocked || appMode!=='combo' && appMode!=='shape' || !lastL || !lastL.shapes || lastL.shapes.length<2){
+    host.innerHTML=''; return;
+  }
+  const ends=[...lastL.shapes].sort((a,b)=>a.x-b.x);
+  lgCornerAt = lgCornerAt.filter(j=>j>=1 && j<ends.length);
+  const k=(C.clientWidth||lastL.canvas.w)/lastL.canvas.w;
+  const ox=C.offsetLeft||0, oy=C.offsetTop||0;
+  let html='';
+  for(let i=1;i<ends.length;i++){
+    const jx=ends[i].x;
+    const x=ox+jx*k, y=oy+(lastL.canvas.h+28)*k-18;
+    const on=lgCornerAt.indexOf(i)>=0;
+    html+='<button type="button" class="corner-mark'+(on?' on':'')+'" style="left:'+x.toFixed(0)+
+      'px;top:'+y.toFixed(0)+'px" onclick="toggleCornerAt('+i+')" aria-label="סמן פינה כאן">⌐</button>';
+  }
+  host.innerHTML=html;
+}
+
+// זווית ההטיה וההקטנה של כל זרוע חוץ מהראשונה — קבועים חזותיים
+// שכוונו בעין; לא נוסחה מדעית. ר' _foldMatrix.
+const LG_FOLD_THETA = 32*Math.PI/180;
+const LG_FOLD_SHRINK = 0.55;
+
+// תיבה חוסמת אמיתית של הזרוע — לא תלויה בשדה פנימי של lg-layout.js,
+// רק בנקודות הפוליגון שהיא כבר מחזירה.
+function _bboxOfL(L){
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  L.shapes.forEach(s=>s.poly.forEach(p=>{
+    if(p[0]<minX)minX=p[0]; if(p[0]>maxX)maxX=p[0];
+    if(p[1]<minY)minY=p[1]; if(p[1]>maxY)maxY=p[1];
+  }));
+  return {minX,maxX,minY,maxY};
+}
+
+// ‏הטרנספורם: u הוא מרחק אופקי חתום מהפינה בקואורדינטות המקומיות של
+// הזרוע, v הוא גובה מעל הרצפה שלה. ב-u=0 (קו הפינה עצמו) זה תמיד נותן
+// בדיוק את נקודת ההצמדה (cornerX_target,floorY_target) לכל v — זו
+// הערובה היחידה שהנוסחה חייבת לתת; f/θ/sign הם רק איך זה *נראה*.
+//
+// ‏scaleFix מתקן עיוות אחר לגמרי: כל זרוע מקבלת lgLayout נפרד, וכל
+// קריאה כזאת בוחרת קנה מידה (מ"מ→פיקסל) משלה לפי הרוחב שהיא ביקשה —
+// לא לפי הרוחב האמיתי של הזרוע. שתי זרועות עם אורך מ"מ שונה יצאו
+// בקנה מידה שונה, וגובה זהה במ"מ (למשל 2000) התחיל להיראות שונה בין
+// הזרועות — בדיוק מה שבן ראה (2026-09-20). scaleFix הוא ref.scale/
+// arm.scale: מכפיל את u ואת v לפני ההטיה, כך שכל הזרועות יוצאות
+// באותו יחס מ"מ-לפיקסל כמו הזרוע הראשונה, לפני שההטיה בכלל נכנסת.
+function _foldMatrix(cornerX_local,floorY_local,cornerX_target,floorY_target,theta,f,sign,scaleFix){
+  const cosT=Math.cos(theta), sinT=Math.sin(theta), sf=scaleFix||1;
+  return function(px,py){
+    const u=(px-cornerX_local)*sf, v=(floorY_local-py)*sf;
+    return [ cornerX_target + sign*f*u*cosT,
+             floorY_target  - v - f*u*sinT ];
+  };
+}
+
+// כמו engPaint, אבל כל נקודה עוברת קודם דרך tf(x,y)→[x,y] — ולכן היא
+// עובדת גם לזרוע הראשונה (tf הוא רק הזזה) וגם לזרועות המוטות, בלי
+// לשכפל את engPaint הרגיל ובלי לגעת בו (הוא ממשיך לשרת את התצוגה
+// השטוחה בדיוק כמו היום). הטקסט של המידות נשאר זקוף — לא מוטה — גם
+// כשהזכוכית עצמה מוטה; ר' engDim's uprightText.
+// ‏מזיזה רק את מידת הגובה (kind:'height') של הפאה שנוגעת בפינה, ורק
+// אחרי הטרנספורם של הזרוע (tf) — לא לפני. זו הסיבה שהניסיון הקודם
+// (לדחוף לפני tf, בקואורדינטות המקומיות) שבר כל פעם מחדש: ה-tf כולל
+// הטיה (shear), וב-הטיה x מקומי ו-y מקומי מעורבבים זה בזה — דחיפה
+// "רק ב-x המקומי" בפועל הזיזה גם את ה-y הסופי, ולכן מידת הגובה נחתה
+// למטה מהרצפה (בן, 2026-09-20: "ירד למטה חרג"). דוחפים כאן רק את
+// ה-x הסופי (אחרי tf), אז ה-y הסופי בדיוק כמו שהיה, תמיד.
+// גם מוגבל במפורש ל-kind:'height' בלבד — הגרסה הקודמת דחפה כל מידה
+// עם zone:'top'/'bottom'/'left'/'right', ותפסה בטעות גם מידות רוחב
+// (בן: "הרוחב של הדלת הימנית עלה למעלה") שלא היו אמורות לזוז בכלל.
+function _lgFoldedDimPush(px,py,d,cornerPush,sign){
+  if(!cornerPush || d.idx!==0 || d.kind!=='height') return [px,py];
+  // ‏הזזה גדולה מדי כאן פשוט מעבירה את המספר לתוך השטח של הפאה
+  // השכנה — שתי הפאות בתפר נוגעות זו בזו בלי שום רווח, אז "החוצה
+  // מהפאה שלי" זהה בפועל ל"לתוך הפאה השנייה". בן ראה בדיוק את זה:
+  // המספר של דלת ב (126 פיקסל שמאלה) נחת באמצע השטח של דלת א, ובגלל
+  // ששתי הדלתות באותו גובה (1985) זה נראה כאילו "הגבהים התחלפו" —
+  // בפועל שום נתון לא התחלף, המספר פשוט צויר במקום הלא נכון. הפתרון
+  // האמיתי הוא קו מוביל (ר' למטה) שמראה בבירור לאיזו פאה כל מספר
+  // שייך, גם כשהוא לא יושב עליה ממש — לא להגדיל עוד את המרחק
+  // (בן, 2026-09-20: "הגובה של הדלת והקבוע התחלפו").
+  const heightExtra=20;
+  return [px-(sign||1)*(cornerPush+heightExtra), py];
+}
+function engPaintFolded(L,tf,pfx,uprightText,effScale,cornerPush,sign){
+  L.shapes.forEach(s=>{
+    const poly=s.poly.map(p=>tf(p[0],p[1]));
+    cx.save();
+    cx.beginPath();
+    poly.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));
+    cx.closePath();
+    const xs=poly.map(p=>p[0]), ys=poly.map(p=>p[1]);
+    const bx0=Math.min(...xs), bx1=Math.max(...xs), by0=Math.min(...ys), by1=Math.max(...ys);
+    const g=cx.createLinearGradient(bx0,by0,bx1,by1);
+    g.addColorStop(0, s.kind==='door'?'rgba(160,190,205,0.30)':'rgba(170,200,210,0.16)');
+    g.addColorStop(1, s.kind==='door'?'rgba(160,190,205,0.14)':'rgba(170,200,210,0.07)');
+    cx.fillStyle=g; cx.fill();
+    cx.strokeStyle='#2f6b6b'; cx.lineWidth=1.6; cx.stroke();
+    cx.fillStyle='rgba(58,49,40,0.45)';
+    cx.font='11px Heebo,sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillText(s.label || kindName(s.kind), (bx0+bx1)/2, (by0+by1)/2);
+    cx.restore();
+  });
+
+  // ‏הפרזול מצויר זקוף (לא מוטה), אבל **הגודל** שלו חייב את קנה המידה
+  // האמיתי על המסך — לא את קנה המידה שה-lgLayout של הזרוע הזאת בחר
+  // לעצמו, שאחרי scaleFix כבר לא מתאר את מה שבאמת מצויר. בלעדי זה
+  // הפרזול יצא בגודל לא עקבי עם שאר הזרוע, ונראה כאילו הוא לא יושב
+  // איפה שצריך (בן, 2026-09-20).
+  (L.hardware||[]).forEach(h=>{
+    const p=tf(h.x,h.y);
+    engHardware(Object.assign({},h,{x:p[0],y:p[1]}), effScale||L.scale, undefined);
+  });
+
+  // אין קליק על מידה בתצוגה נעולה (תצוגה בלבד) — משחזרים את dimHits
+  // למה שהיה, כדי ש-engDim לא ישאיר שם יעדים על קואורדינטות מוטות.
+  const before=dimHits.length;
+  L.dims.forEach(d=>{
+    // ‏'total' הוא הרוחב הכולל של הזרוע כמקשה אחת — לא רלוונטי כשהזרוע
+    // מוטה, ורק עומס נוסף על שרטוט שכבר מלא (בן, 2026-09-20).
+    if(d.kind==='total') return;
+    const q1=tf(d.x1,d.y1), q2=tf(d.x2,d.y2);
+    const p1=_lgFoldedDimPush(...q1,d,cornerPush,sign);
+    const p2=_lgFoldedDimPush(...q2,d,cornerPush,sign);
+    const dd=Object.assign({},d,{x1:p1[0],y1:p1[1],x2:p2[0],y2:p2[1],uprightText:uprightText});
+    if(d.ext) dd.ext=d.ext.map(e=>{
+      const a=tf(e.x1,e.y1), b=tf(e.x2,e.y2);
+      return {x1:a[0],y1:a[1],x2:b[0],y2:b[1]};
+    });
+    // ‏כשמידת הגובה נדחפת, היא יכולה לנחות בשטח הציור של הפאה
+    // השכנה (שתי הפאות נוגעות בלי רווח בתפר) — בלי סימן שמראה לאיזו
+    // פאה היא שייכת, זה נראה כאילו "הגבהים התחלפו" (בן, 2026-09-20).
+    // קו מוביל מקווקו בין המיקום האמיתי למיקום שהוזז מסלק את הספק.
+    if(p1[0]!==q1[0] || p1[1]!==q1[1]){
+      const trueMid=[(q1[0]+q2[0])/2,(q1[1]+q2[1])/2];
+      const shownMid=[(p1[0]+p2[0])/2,(p1[1]+p2[1])/2];
+      dd.ext=(dd.ext||[]).concat([{x1:trueMid[0],y1:trueMid[1],x2:shownMid[0],y2:shownMid[1]}]);
+    }
+    engDim(dd,pfx);
+  });
+  dimHits.length=before;
+}
+
+// מפצלת ל"זרועות" בנקודות שסומנו, מריצה lgLayout בנפרד על כל אחת
+// (בלי לשנות אותו בכלל — הגבול בצד הפינה תמיד 'open' מפורש, לא
+// מנוחש, כדי שלא "יניח" קיר שאין שם), ומרכיבה את התוצאות על קנבס אחד.
+// ‏'open' בצד הפינה אומר למנוע "אין שם כלום" — נכון כשהצומת המקורי היה
+// שתי זכוכיות קבועות (fixed|fixed), אבל כשהצומת המקורי היה ציר אמיתי
+// (דלת שתלויה בדיוק בפינה — מצב נפוץ, לא שולי), 'open' מוחק גם את הציר
+// עצמו, לא רק את הנחת-הקיר שהוא נועד לבטל. בן: "הצירים של הקבוע והדלת
+// נעלמו עם הפינה". הפתרון הזמני (עד שייקבעו חוקי פרזול-פינה ייעודיים,
+// שנדחו במפורש): שואלים את lgJunctions (ה-API הציבורי של המנוע, לא
+// טבלת הצמתים הפנימית — המסך לא מחזיק ולא מפרש חוקי צומת משלו) אם
+// הצומת המקורי היה hinge-gg; אם כן, לזרוע שבה יושבת הדלת עצמה (kind
+// שכבר קיים על הפאנל, לא שדה שנגזר מחוקי הצומת) נותנים 'wall' במקום
+// 'open' — המנוע כבר יודע לצייר hinge-wall שם בדיוק כמו דלת שתלויה על
+// קיר אמיתי, כך שהציר נשאר. הצד השני (הקבוע) נשאר 'open' כרגיל, כדי
+// שלא יצוייר אותו ציר פעמיים (בן, 2026-09-20).
+function drawFoldedMode(panels,pss,DPR,cW){
+  const cuts=lgCornerAt.filter(j=>j>=1&&j<panels.length).sort((a,b)=>a-b);
+  if(!cuts.length){ drawComboMode(panels,pss,DPR,cW); return; }
+
+  const ranges=[]; let start=0;
+  cuts.forEach(c=>{ ranges.push([start,c]); start=c; });
+  ranges.push([start,panels.length]);
+
+  const real=_lgShowerOf(panels,pss).boundary;
+  const fullJ=(typeof lgJunctions==='function') ? lgJunctions(_lgShowerOf(panels,pss)) : [];
+  const layouts=ranges.map(([a,b],i)=>{
+    const armPanels=panels.slice(a,b);
+    const armPss=_sliceP(pss,a,b);
+    const rightHinge = fullJ[a] && fullJ[a].type==='hinge-gg' && panels[a] && panels[a].type==='door';
+    const leftHinge  = fullJ[b] && fullJ[b].type==='hinge-gg' && panels[b-1] && panels[b-1].type==='door';
+    const bnd={
+      right: i===0 ? real.right : (rightHinge ? 'wall' : 'open'),
+      left:  i===ranges.length-1 ? real.left : (leftHinge ? 'wall' : 'open'),
+    };
+    const SH=_lgShowerOf(armPanels,armPss);
+    SH.boundary=bnd;
+    return lgLayout(SH,{canvasW:600});
+  });
+
+  // כל זרוע מתחברת לקצה **הרחוק** של הזרוע שלפניה, אחרי שזו כבר עברה
+  // את הטרנספורם שלה — שרשור, לא כולן מול הראשונה. זה מה שנותן ל-U
+  // (שתי פינות) כיוון נכון במקום סימטריה מקרית.
+  const identity=(x,y)=>[x,y];
+  const tfs=[identity];
+  const signs=[1];
+  let bb0=_bboxOfL(layouts[0]);
+  let prevX=bb0.maxX, prevY=bb0.maxY;
+  for(let i=1;i<layouts.length;i++){
+    const bb=_bboxOfL(layouts[i]);
+    // ‏כל זרוע קיבלה lgLayout נפרד, וכל קריאה בוחרת קנה מידה משלה לפי
+    // הרוחב שהיא ביקשה — לא לפי אורך הזרוע במ"מ. בלי לתקן את זה, אותו
+    // גובה אמיתי (למשל 2000) יוצא בגובה פיקסלים שונה בין הזרועות (בן,
+    // 2026-09-20).
+    const scaleFix=layouts[0].scale/layouts[i].scale;
+    // ‏צורת U: הפינה השנייה חייבת להטות לכיוון ההפוך מהראשונה, אחרת
+    // הזרוע השלישית ממשיכה "ישר" באותה נטייה כמו השנייה — יוצא כבש
+    // אלכסוני ארוך במקום U שנסגר (נמצא ב-2026-09-20 כשנבדק תרחיש של
+    // שתי פינות בפעם הראשונה — עד עכשיו נבדק רק תרחיש של פינה אחת).
+    const sign = i%2 ? 1 : -1;
+    const m=_foldMatrix(bb.minX,bb.maxY,prevX,prevY,LG_FOLD_THETA,LG_FOLD_SHRINK,sign,scaleFix);
+    tfs.push(m); signs.push(sign);
+    const far=m(bb.maxX,bb.maxY);
+    prevX=far[0]; prevY=far[1];
+  }
+
+  // גודל הקנבס: תיבה חוסמת אמיתית של כל מה שבאמת יצויר (כולל מידות),
+  // עם שוליים — לא ניחוש.
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  const grow=(p)=>{ if(p[0]<minX)minX=p[0]; if(p[0]>maxX)maxX=p[0];
+                     if(p[1]<minY)minY=p[1]; if(p[1]>maxY)maxY=p[1]; };
+  layouts.forEach((L,i)=>{
+    const cornerPush=i>0?46:0;
+    L.shapes.forEach(s=>s.poly.forEach(p=>grow(tfs[i](p[0],p[1]))));
+    // ‏'total' לא מצויר בתצוגה הזאת (ר' engPaintFolded) — אין לו מה
+    // לתפוס שוליים בגודל הקנבס. וכל מידה אחרת עוברת דרך אותה פונקציית
+    // דחיפה (_lgFoldedDimPush) שהציור עצמו משתמש בה — אחרת הקנבס נגזר
+    // מהמידות *לפני* שהן נדחפו, בעוד שהציור בפועל זז אחרי הדחיפה, ומידה
+    // דחופה יוצאת מחוץ לקנבס (בן, 2026-09-20).
+    L.dims.forEach(d=>{ if(d.kind==='total') return;
+      grow(_lgFoldedDimPush(...tfs[i](d.x1,d.y1),d,cornerPush,signs[i]));
+      grow(_lgFoldedDimPush(...tfs[i](d.x2,d.y2),d,cornerPush,signs[i])); });
+  });
+  const MARGIN=110;
+  const ox=MARGIN-minX, oy=MARGIN-minY;
+  const cwFull=Math.max(1,Math.ceil(maxX-minX+MARGIN*2));
+  const chFull=Math.max(1,Math.ceil(maxY-minY+MARGIN*2));
+
+  lastL={canvas:{w:cwFull,h:chFull-28},shapes:[],hardware:[],dims:[]};
+  setupCanvas(DPR,cwFull,chFull);
+  drawGrid(cwFull,chFull);
+  dimHits=[];
+  // ‏אחרי scaleFix כל הזרועות על אותו קנה מידה אמיתי — של הזרוע
+  // הראשונה. הפרזול קורא ממנו, לא מ-L.scale של הזרוע שלו.
+  const refScale=layouts[0].scale;
+  layouts.forEach((L,i)=>{
+    const tf=(x,y)=>{ const p=tfs[i](x,y); return [p[0]+ox,p[1]+oy]; };
+    engPaintFolded(L,tf,'combo',i>0,refScale,i>0?46:0,signs[i]);
+  });
+  drawTitleBar(cwFull,chFull);
+  updateSpecs();
 }
 
 
@@ -2896,7 +3229,22 @@ function engDim(d,pfx){
 
   const inside = t>0.02 && t<0.98;
   cx.beginPath();
-  if(d.rot){
+  if(d.uprightText){
+    // ‏קו שעבר את הטרנספורם של הזרוע המוטה (ר' engPaintFolded): d.rot
+    // חושב **לפני** ההטיה ואינו מתאר את כיוון הקו האמיתי על המסך יותר
+    // — אחריו הקווים יצאו מסולסלים/לא ניצבים לקו, בדיוק מה שבן ראה
+    // (2026-09-20). מחשבים כיוון אמיתי מהנקודות המותמרות עצמן, וממנו
+    // גם את פער הטקסט וגם את כיוון קווי הסימון — ניצב לקו בפועל, לא
+    // תמיד אופקי/אנכי.
+    const ddx=d.x2-d.x1, ddy=d.y2-d.y1, len=Math.hypot(ddx,ddy)||1;
+    const ux=ddx/len, uy=ddy/len, tx=-uy, ty=ux;
+    if(inside){ cx.moveTo(d.x1,d.y1); cx.lineTo(mx-ux*gap/2,my-uy*gap/2);
+                cx.moveTo(mx+ux*gap/2,my+uy*gap/2); cx.lineTo(d.x2,d.y2); }
+    else      { cx.moveTo(d.x1,d.y1); cx.lineTo(d.x2,d.y2); }
+    cx.stroke();
+    [[d.x1,d.y1],[d.x2,d.y2]].forEach(([ax,ay])=>{
+      cx.beginPath(); cx.moveTo(ax-4*tx,ay-4*ty); cx.lineTo(ax+4*tx,ay+4*ty); cx.stroke(); });
+  } else if(d.rot){
     if(inside){ cx.moveTo(d.x1,d.y1); cx.lineTo(d.x1,my-gap/2);
                 cx.moveTo(d.x1,my+gap/2); cx.lineTo(d.x2,d.y2); }
     else      { cx.moveTo(d.x1,d.y1); cx.lineTo(d.x2,d.y2); }
@@ -2912,6 +3260,11 @@ function engDim(d,pfx){
       cx.beginPath(); cx.moveTo(ax,ay-4); cx.lineTo(ax,ay+4); cx.stroke(); });
   }
 
+  // ‏d.rot נשאר נכון גם אחרי הטרנספורם של תצוגת הפינה: קו שהיה אנכי
+  // (x1===x2) נשאר אנכי בדיוק גם אחרי ההטיה — ר' _foldMatrix, u קובע
+  // את שניהם יחד — ולכן הוא עדיין צריך להסתובב כמו תמיד. uprightText
+  // משפיע רק על כיוון קווי הסימון למעלה (עבור הרוחב, שכן נהיה אלכסוני),
+  // לא על סיבוב הטקסט (בן, 2026-09-20).
   cx.translate(mx,my); if(d.rot) cx.rotate(-Math.PI/2);
   cx.textAlign='center'; cx.textBaseline='middle';
   cx.fillStyle='#1a1714'; cx.fillText(d.text,0,0);
