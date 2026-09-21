@@ -133,6 +133,35 @@ console.log('');
         label(L, 'hinge-bot', 1), ['385']);
 }
 
+/* ── the same ceiling, from the other end ─────────────────────────────── */
+/* Ben, 2026-09-21: he raised a door well past its fixed (rare, but the
+   rule still has to hold) and the top hinge did NOT stay put against the
+   fixed the way the rule says a shared hinge must. It was never clamped
+   at all — 200 from the door's OWN head, which on a much taller door
+   lands high above where the fixed's glass even reaches: a hole with
+   nothing behind it. The fix mirrors the floor-under-the-ceiling case
+   above, at the other edge: the top hole may not sit higher than 200
+   below the mate's own head. */
+{
+  const L = lay({ w: 500, h: 2000 }, { w: 800, h: 2500 });
+  check('the fixed keeps its ordinary 200 from its own head',
+        label(L, 'hinge-top', 0), ['200']);
+  check('the door no longer reads 200 from its own, much higher, head',
+        label(L, 'hinge-top', 1).join('') !== '200', true);
+  check('it reads the true distance down to where the fixed still is: ' +
+        '200 below the fixed\'s head, plus the door\'s own 15mm floor gap',
+        label(L, 'hinge-top', 1), ['715']);
+  const hinges = L.hardware.filter(h => h.kind === 'hinge');
+  check('both holes still land inside both panes of glass',
+        hinges.every(h => L.shapes.every(g => h.y >= g.y - 0.5 && h.y <= g.y + g.h + 0.5)),
+        true);
+
+  /* a typed hinge-top still beats the clamp, same as hinge-bot already does */
+  const T = lay({ w: 500, h: 2000 }, { w: 800, h: 2500, hingeTop: 300 });
+  check('an explicit hingeTop is honoured even past the ceiling',
+        label(T, 'hinge-top', 1), ['300']);
+}
+
 /* ── a number someone typed beats both ────────────────────────────────── */
 {
   const L = lay({ w: 500, h: 2000 }, { w: 800, h: 1985, hingeBot: 400 });

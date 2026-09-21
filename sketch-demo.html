@@ -2823,8 +2823,19 @@ function _foldMatrix(cornerX_local,floorY_local,cornerX_target,floorY_target,the
 // גם מוגבל במפורש ל-kind:'height' בלבד — הגרסה הקודמת דחפה כל מידה
 // עם zone:'top'/'bottom'/'left'/'right', ותפסה בטעות גם מידות רוחב
 // (בן: "הרוחב של הדלת הימנית עלה למעלה") שלא היו אמורות לזוז בכלל.
-function _lgFoldedDimPush(px,py,d,cornerPush,sign){
-  if(!cornerPush || d.idx!==0 || d.kind!=='height') return [px,py];
+//
+// ‏**כל תפר יש לו שני צדדים, וכל צד צריך את הדחיפה שלו.** הגרסה
+// הקודמת דחפה רק את השייף הראשון (idx 0) של כל זרוע — נכון לזרוע
+// שיש לה פינה רק בצד שמאל שלה. אבל בצורת U הזרוע האמצעית נוגעת
+// בפינה **משני הצדדים**: השייף הראשון שלה נוגע בפינה הקודמת, והאחרון
+// שלה (idx = מספר השייפים פחות 1) נוגע בפינה הבאה. בלי דחיפה לצד
+// הזה, המידה שלו נשארת בדיוק בתפר עם הזרוע הבאה — ובאותו אופן בדיוק
+// שדלת ב "נראתה" כאילו החליפה גובה עם הקבוע שלידה, זה לא נתון שגוי,
+// רק מספר שצויר בלי דחיפה, בדיוק על הגבול (בן, 2026-09-21: "הקבוע
+// הימני רשום 1985 במקום 2000"). ‏pushSpec מתאר את שני הצדדים בנפרד;
+// ר' _lgFoldedPushSpec למטה על איך כל צד נבנה.
+function _lgFoldedDimPush(px,py,d,pushSpec){
+  if(!pushSpec || d.kind!=='height') return [px,py];
   // ‏הזזה גדולה מדי כאן פשוט מעבירה את המספר לתוך השטח של הפאה
   // השכנה — שתי הפאות בתפר נוגעות זו בזו בלי שום רווח, אז "החוצה
   // מהפאה שלי" זהה בפועל ל"לתוך הפאה השנייה". בן ראה בדיוק את זה:
@@ -2835,9 +2846,27 @@ function _lgFoldedDimPush(px,py,d,cornerPush,sign){
   // שייך, גם כשהוא לא יושב עליה ממש — לא להגדיל עוד את המרחק
   // (בן, 2026-09-20: "הגובה של הדלת והקבוע התחלפו").
   const heightExtra=20;
-  return [px-(sign||1)*(cornerPush+heightExtra), py];
+  let nx=px;
+  const {first,last,firstIdx,lastIdx}=pushSpec;
+  if(first && d.idx===firstIdx) nx-=(first.sign||1)*(first.push+heightExtra);
+  if(last  && d.idx===lastIdx)  nx-=(last.sign||1)*(last.push+heightExtra);
+  return [nx,py];
 }
-function engPaintFolded(L,tf,pfx,uprightText,effScale,cornerPush,sign){
+// ‏בונה את שני הצדדים עבור זרוע i מתוך N: 'first' קיים רק אם יש פינה
+// לפני הזרוע (i>0), 'last' רק אם יש פינה אחריה (i<N-1). כיוון הדחיפה
+// של 'last' הוא **ההפך** מהכיוון שבו הזרוע הבאה (i+1) דוחפת את ה-idx
+// 0 שלה — כך ששני המספרים שנוגעים באותו תפר מתרחקים זה מזה, לא רק
+// אחד מהם זז. בזרוע של שייף בודד ששני צדדיה נוגעים בפינה (idx 0 הוא
+// גם הראשון וגם האחרון), שתי הדחיפות חלות יחד.
+function _lgFoldedPushSpec(L,i,N,signs){
+  return {
+    firstIdx: 0,
+    lastIdx: L.shapes.length-1,
+    first: i>0   ? {push:46, sign: signs[i]}     : null,
+    last:  i<N-1 ? {push:46, sign: -signs[i+1]}  : null,
+  };
+}
+function engPaintFolded(L,tf,pfx,uprightText,effScale,pushSpec){
   L.shapes.forEach(s=>{
     const poly=s.poly.map(p=>tf(p[0],p[1]));
     cx.save();
@@ -2875,8 +2904,8 @@ function engPaintFolded(L,tf,pfx,uprightText,effScale,cornerPush,sign){
     // מוטה, ורק עומס נוסף על שרטוט שכבר מלא (בן, 2026-09-20).
     if(d.kind==='total') return;
     const q1=tf(d.x1,d.y1), q2=tf(d.x2,d.y2);
-    const p1=_lgFoldedDimPush(...q1,d,cornerPush,sign);
-    const p2=_lgFoldedDimPush(...q2,d,cornerPush,sign);
+    const p1=_lgFoldedDimPush(...q1,d,pushSpec);
+    const p2=_lgFoldedDimPush(...q2,d,pushSpec);
     const dd=Object.assign({},d,{x1:p1[0],y1:p1[1],x2:p2[0],y2:p2[1],uprightText:uprightText});
     if(d.ext) dd.ext=d.ext.map(e=>{
       const a=tf(e.x1,e.y1), b=tf(e.x2,e.y2);
@@ -2967,7 +2996,7 @@ function drawFoldedMode(panels,pss,DPR,cW){
   const grow=(p)=>{ if(p[0]<minX)minX=p[0]; if(p[0]>maxX)maxX=p[0];
                      if(p[1]<minY)minY=p[1]; if(p[1]>maxY)maxY=p[1]; };
   layouts.forEach((L,i)=>{
-    const cornerPush=i>0?46:0;
+    const pushSpec=_lgFoldedPushSpec(L,i,layouts.length,signs);
     L.shapes.forEach(s=>s.poly.forEach(p=>grow(tfs[i](p[0],p[1]))));
     // ‏'total' לא מצויר בתצוגה הזאת (ר' engPaintFolded) — אין לו מה
     // לתפוס שוליים בגודל הקנבס. וכל מידה אחרת עוברת דרך אותה פונקציית
@@ -2975,8 +3004,8 @@ function drawFoldedMode(panels,pss,DPR,cW){
     // מהמידות *לפני* שהן נדחפו, בעוד שהציור בפועל זז אחרי הדחיפה, ומידה
     // דחופה יוצאת מחוץ לקנבס (בן, 2026-09-20).
     L.dims.forEach(d=>{ if(d.kind==='total') return;
-      grow(_lgFoldedDimPush(...tfs[i](d.x1,d.y1),d,cornerPush,signs[i]));
-      grow(_lgFoldedDimPush(...tfs[i](d.x2,d.y2),d,cornerPush,signs[i])); });
+      grow(_lgFoldedDimPush(...tfs[i](d.x1,d.y1),d,pushSpec));
+      grow(_lgFoldedDimPush(...tfs[i](d.x2,d.y2),d,pushSpec)); });
   });
   const MARGIN=110;
   const ox=MARGIN-minX, oy=MARGIN-minY;
@@ -2992,7 +3021,7 @@ function drawFoldedMode(panels,pss,DPR,cW){
   const refScale=layouts[0].scale;
   layouts.forEach((L,i)=>{
     const tf=(x,y)=>{ const p=tfs[i](x,y); return [p[0]+ox,p[1]+oy]; };
-    engPaintFolded(L,tf,'combo',i>0,refScale,i>0?46:0,signs[i]);
+    engPaintFolded(L,tf,'combo',i>0,refScale,_lgFoldedPushSpec(L,i,layouts.length,signs));
   });
   drawTitleBar(cwFull,chFull);
   updateSpecs();

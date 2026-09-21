@@ -670,8 +670,11 @@ function _layoutPass(shower,cW,mgL,mgR){
     // דלת בלי קבוע בכלל אין מול מה ליישר אותה, והיא נשארת כפי שהייתה
     if(!ref) return 0;
     const mmH=shapeMM(s,i), diff=Math.abs(ref-mmH);
-    // ‏Math.max כדי שדלת גבוהה מהקבוע ביותר מהמרווח לא תשקע מתחת לרצפה
-    return diff<=LG_TOP_ALIGN ? Math.max(ref-mmH,0) : LG_DOOR_GAP;
+    // ‏Math.max(...,LG_DOOR_GAP) — לא רק לא לשקוע מתחת לרצפה, אלא לא לרדת
+    // מתחת למרווח הרצפה המינימלי גם כשההפרש הטבעי בין הראשים קטן ממנו
+    // (כולל דלת שווה-גובה לקבוע, או גבוהה ממנו): דלת היא לא קבוע, ותמיד
+    // תלויה עם מרווח מהרצפה, לא יושבת עליה.
+    return diff<=LG_TOP_ALIGN ? Math.max(ref-mmH,LG_DOOR_GAP) : LG_DOOR_GAP;
   });
 
   const maxMM=Math.max.apply(null,shapes.map((s,i)=>lifts[i]+shapeMM(s,i)));
@@ -948,33 +951,46 @@ function _layoutPass(shower,cW,mgL,mgR){
     // או שתיהן — שכבר קובעת מאיפה נמדד, והיא ממשיכה כשהייתה.
     const faceTop=edge[0][1];
     const faceBot=onNotch ? floorY : edge[1][1];
-    const yT=faceTop+mmT*sc;
+    let   yT=faceTop+mmT*sc;
     let   yB = (where==='shoulder') ? nt.shoulder[1]+mmB*sc : faceBot-mmB*sc;
 
-    // ── שתי המגבלות על הציר התחתון ──
+    // ── שתי המגבלות על הציר התחתון, ואותה אחת על העליון ──
     //
     // ציר הוא פיסה אחת שעוברת בשתי הזכוכיות, ולכן הוא חייב לעמוד
     // בשתיהן. **מספר שהוזן ביד גובר על שתיהן** — מי שהקליד מידה
     // התכוון אליה, וזה גם מה שמאפשר לערוך ציר משותף.
-    if(hinge && where!=='shoulder' && src.hingeBot==null){
-      // התקרה: לא יותר מ-215 מהרצפה. מקלחון רגיל מגיע ל-215 מעצמו
-      // (200 מתחתית דלת שתלויה 15 מעל), ולכן היא עוצרת רק את
-      // החריגים — מרווח רצפה גדול יותר, או פאה שנחתכה בשיפוע.
-      // ‏y גדל כלפי מטה, ולכן "לא גבוה מ-" הוא max.
-      yB = Math.max(yB, asmFloor - LG_HINGE_FLOOR_MAX*sc);
-
-      // הרצפה הפיזית: אותם 20 ס"מ, אבל מהזכוכית **שממול**. הציר
-      // נקדח בשתי הזכוכיות, ואם פאת השכנה נחתכה בשיפוע היא
-      // מסתיימת גבוה — ותקרה שנמדדת מהרצפה הייתה מציבה את הקדח
-      // סנטימטר וחצי מקצה הזכוכית ההיא, כלומר באוויר.
+    if(hinge && where!=='shoulder'){
       const mate = (host===L) ? R : L;
-      if(mate){
-        const Q=mate.poly;
-        const mateFace = (mate===L) ? [Q[1],Q[2]] : [Q[0],Q[Q.length-1]];
-        const mn=mate.notch;
-        const mateNotched = mn && ((mn.side==='left') === (mate!==L));
-        const mateBot = mateNotched ? (mate.y+mate.h) : mateFace[1][1];
-        yB = Math.min(yB, mateBot - LG_EDGE_MM*sc);
+      const mateFace = mate && (mate===L
+        ? [mate.poly[1],mate.poly[2]] : [mate.poly[0],mate.poly[mate.poly.length-1]]);
+
+      // ‏**התקרה הפיזית של הציר העליון**: דלת יכולה להיות גבוהה בהרבה
+      // מהקבוע שלידה (נדיר, אבל אפשרי) — ואז 200 מ"מ מהראש **שלה**
+      // נופל הרבה מעל הזכוכית השכנה, וציר שם תלוי באוויר, בלי זכוכית
+      // שנייה לקדוח בה. אותם 20 ס"מ שמהם נמדד הציר התחתון מהשכן,
+      // הפעם מהראש שלו: לא גבוה יותר מפאת השכן פחות המרווח שלה.
+      // ‏y גדל כלפי מטה, ולכן "לא גבוה מ-" הוא max.
+      if(src.hingeTop==null && mateFace){
+        yT = Math.max(yT, mateFace[0][1] + LG_EDGE_MM*sc);
+      }
+
+      if(src.hingeBot==null){
+        // התקרה: לא יותר מ-215 מהרצפה. מקלחון רגיל מגיע ל-215 מעצמו
+        // (200 מתחתית דלת שתלויה 15 מעל), ולכן היא עוצרת רק את
+        // החריגים — מרווח רצפה גדול יותר, או פאה שנחתכה בשיפוע.
+        // ‏y גדל כלפי מטה, ולכן "לא גבוה מ-" הוא max.
+        yB = Math.max(yB, asmFloor - LG_HINGE_FLOOR_MAX*sc);
+
+        // הרצפה הפיזית: אותם 20 ס"מ, אבל מהזכוכית **שממול**. הציר
+        // נקדח בשתי הזכוכיות, ואם פאת השכנה נחתכה בשיפוע היא
+        // מסתיימת גבוה — ותקרה שנמדדת מהרצפה הייתה מציבה את הקדח
+        // סנטימטר וחצי מקצה הזכוכית ההיא, כלומר באוויר.
+        if(mate){
+          const mn=mate.notch;
+          const mateNotched = mn && ((mn.side==='left') === (mate!==L));
+          const mateBot = mateNotched ? (mate.y+mate.h) : mateFace[1][1];
+          yB = Math.min(yB, mateBot - LG_EDGE_MM*sc);
+        }
       }
     }
     const useInner = onNotch && where!=='shoulder' && yB>nt.inner[1];

@@ -14,9 +14,17 @@
  *   head, and the difference falls at the bottom as clearance under the
  *   door. That is what lets the door swing.
  *
+ *   But a door is never a fixed pane: it never sits flush on the floor,
+ *   whatever height it's given. Ben, 2026-09-21: a door typed at the same
+ *   height as its fixed — or close enough that aligning the tops would
+ *   leave less than 15mm underneath — "equalized" with the fixed instead
+ *   of keeping its centimetre and a half. So the tops align only when
+ *   that leaves at least 15mm of clearance on its own; short of that the
+ *   door keeps its 15mm and its head simply sits higher than the fixed's.
+ *
  *   When the difference between the fixed and the door is more than 20mm,
  *   forcing the tops together would lift the door too far off the floor.
- *   So the door takes a fixed 20mm of floor clearance instead, and its
+ *   So the door takes a fixed 15mm of floor clearance instead, and its
  *   head lands wherever its height puts it. A fixed taller than the doors
  *   simply carries on upward.
  *
@@ -69,12 +77,33 @@ console.log('');
   check('and the door hangs the difference above it', r.door.bottom, 15);
 }
 
-/* the rule holds for any difference up to twenty */
-[[2000, 2000, 0], [2000, 1990, 10], [2000, 1985, 15], [2000, 1980, 20]].forEach(([f, d, gap]) => {
+/* under 15mm natural difference: the 15mm floor clearance wins, and the
+   tops no longer line up — the door's head simply sits higher */
+[[2000, 2000], [2000, 1995], [2000, 1990], [1990, 2000]].forEach(([f, d]) => {
+  const r = pair(f, d);
+  check(`fixed ${f} with door ${d}: clearance never drops below 15mm`, r.door.bottom, 15);
+  check(`  so the tops do not line up`, r.fixed.top === r.door.top, false);
+  check(`  and the door's head sits at or above the fixed's`, r.door.top >= r.fixed.top, true);
+});
+
+/* from 15 up to 20mm difference: the natural gap already clears the
+   minimum, so the tops line up as before */
+[[2000, 1985, 15], [2000, 1980, 20]].forEach(([f, d, gap]) => {
   const r = pair(f, d);
   check(`fixed ${f} with door ${d}: the tops stay together`, r.fixed.top, r.door.top);
   check(`  and the clearance is the difference itself (${gap}mm)`, r.door.bottom, gap);
 });
+
+/* the exact bug Ben found: a door typed to match its fixed exactly must
+   still keep its own clearance, not "equalize" with the fixed */
+{
+  const r = pair(2200, 2200);
+  check('a door equal in height to its fixed still keeps 15mm off the floor',
+        r.door.bottom, 15);
+  check('  the fixed stands flush on the floor regardless', r.fixed.bottom, 0);
+  check('  so the two no longer sit at the same height',
+        r.fixed.bottom === r.door.bottom, false);
+}
 
 /* ── past twenty: the tops part, but the clearance never changes ────────── */
 /* Ben, 2026-09-11: a door is 15mm off the floor, ALWAYS. The clearance used
