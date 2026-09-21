@@ -301,11 +301,6 @@ canvas{display:block;height:auto;cursor:pointer;margin-inline:auto;}
 }
 #btnEditMode.on{background:var(--gold);color:var(--on-gold);}
 #btnEditMode:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
-.edit-hint{
-  margin:0 10px 10px;padding:9px 12px;border-radius:6px;
-  background:rgba(184,146,42,0.10);border:1px solid rgba(184,146,42,0.35);
-  color:var(--text);font-family:'Heebo',sans-serif;font-size:13px;line-height:1.5;
-}
 /* הקנבס לעולם לא תופס את המחווה, גם במצב עריכה. הדפדפן כבר מבחין בין
    גרירה לנגיעה — click לא נורה על גרירה — ולכן אפשר גם לגלול מעל הציור
    וגם ללחוץ על מידה, באותו מצב. touch-action:none כאן חסם את הגלילה
@@ -348,8 +343,7 @@ body.sketch-full .canvas-wrap{
 }
 /* הפקדים נשארים מעל הציור ולא נעלמים מאחוריו */
 body.sketch-full .edit-bar,
-body.sketch-full .pick-bar,
-body.sketch-full .edit-hint{
+body.sketch-full .pick-bar{
   position:fixed;left:0;right:0;z-index:58;margin:0;
   background:var(--surface);border-top:1px solid var(--border);padding:8px 10px;
 }
@@ -358,10 +352,15 @@ body.sketch-full .edit-hint{
    גופן או רוחב מסך. */
 body.sketch-full .edit-bar{bottom:0;}
 body.sketch-full .pick-bar{bottom:var(--full-bar-h,0px);border-radius:0;}
-/* בן: במסך מלא הוא רוצה רק את הסקיצה, המידות שאפשר לערוך, וה-X —
-   ההסבר המלולי הוא בדיוק אחד מה"דברים המיותרים" שהוא ציין, ו-
-   fitFullBottom כבר מודד display:none כ-0 ומחזיר את הגובה לציור. */
-body.sketch-full .edit-hint{display:none;}
+/* בן, 20.9.2026: "רק ה-X על המסך" — במצב "מצב עריכה" עצמו (לא
+   ב"עריכה מתקדמת" לבדה, שיש לה פס משלה ולא נגענו בה) גם פס הכפתורים
+   התחתון (נעילת הסקיצה / עריכה מתקדמת / שמור וסיים) נעלם לגמרי, לא
+   רק זז. "שמור וסיים" וה-X עושים בדיוק אותה פעולה, אז שום יכולת לא
+   אובדת — ושתי הפעולות האחרות פשוט לא זמינות באמצע עריכת מידה, בדיוק
+   כמו שהיה עם ההסבר המלולי שהוסר. sketch-editing הוא class נפרד
+   מ-sketch-full (שגם עריכה-מתקדמת-לבדה מדליקה) כדי שהחוק הזה לא
+   ישפיע על עריכה מתקדמת כשהיא לבד. */
+body.sketch-editing .edit-bar{display:none;}
 
 #dimEditor{
   position:absolute;z-index:30;display:none;
@@ -613,9 +612,6 @@ body.sketch-full .edit-hint{display:none;}
   <span id="pickName" aria-live="polite"></span>
   <button type="button" onclick="pickStep(1)" aria-label="הזכוכית שמימין">←</button>
   <button type="button" class="pick-go" onclick="pickEdit()">ערוך</button>
-</div>
-<div id="editHint" class="edit-hint" style="display:none">
-  לחץ על מידה בציור כדי לשנות אותה. בסיום — <b>שמור וסיים</b>.
 </div>
 
 <!-- COMBO UI -->
@@ -2754,7 +2750,10 @@ function setLocked(on){
 function renderCornerBar(){
   const host=document.getElementById('cornerBar');
   if(!host) return;
-  if(lgLocked || appMode!=='combo' && appMode!=='shape' || !lastL || !lastL.shapes || lastL.shapes.length<2){
+  // ‏editMode: אותו כלל כמו renderAddButtons — במסך מלא לעריכת מידה בן
+  // רוצה רק את הסקיצה וה-X, לא סמני פינה שאפשר ללחוץ עליהם בטעות
+  // (בן, 20.9.2026).
+  if(editMode || lgLocked || appMode!=='combo' && appMode!=='shape' || !lastL || !lastL.shapes || lastL.shapes.length<2){
     host.innerHTML=''; return;
   }
   const ends=[...lastL.shapes].sort((a,b)=>a.x-b.x);
@@ -3518,7 +3517,16 @@ function drawFromEngine(panels,pss,DPR,cW,pfx){
   // למלא, ורוחב שגדל שם רק היה מרחיק את המידות מהזכוכית.
   if(document.body.classList.contains('sketch-full') &&
      _box.h && L.canvas.h>0 && L.canvas.h+28<_box.h){
-    const want=Math.floor(cW*(_box.h-28)/L.canvas.h);
+    // ‏הרוחב המבוקש לא יכול לעבור את הרוחב הפנוי: setupCanvas תמיד
+    // מקטין קנבס רחב מהמעטפת בחזרה לפי הרוחב (k=box.w/cW), ובלי התקרה
+    // הזאת ההקטנה ההיא מבטלת בשקט בדיוק את הגובה שהרוחב-הרחב-יותר
+    // ניסה להרוויח — בפועל לא נשאר שום שיפור. זו הייתה הסיבה האמיתית
+    // לרווח הריק מתחת לציור בפלאפון: הזרוע הזאת ביקשה רוחב רחב מהמסך,
+    // ו-setupCanvas כיווץ הכול בחזרה כדי להיכנס לרוחב, לפני שהגובה
+    // הנוסף בכלל נוצל. תקרה על הבקשה עצמה נותנת את מרב הגובה שאפשר
+    // לקבל בלי גלילה אופקית, גם כשאי אפשר להגיע לגובה המלא (בן,
+    // 20.9.2026).
+    const want=Math.min(Math.floor(cW*(_box.h-28)/L.canvas.h), _box.w||Infinity);
     if(want>cW){
       const L3=lgLayout(_lgShowerOf(panels,pss),{canvasW:want});
       // רק אם המנוע באמת גדל — בדיוק כמו ההקטנה למעלה, שגם היא מסתפקת
@@ -3648,10 +3656,10 @@ function fitFullBottom(){
     if(!e || getComputedStyle(e).display==='none') return 0;
     return e.offsetHeight;
   };
-  const bar=hOf('editBar'), pick=hOf('pickBar'), hint=hOf('editHint');
+  const bar=hOf('editBar'), pick=hOf('pickBar');
   bs.setProperty('--full-bar-h',  bar +'px');
   bs.setProperty('--full-pick-h', pick+'px');
-  bs.setProperty('--full-bottom', (bar+pick+hint)+'px');
+  bs.setProperty('--full-bottom', (bar+pick)+'px');
 }
 
 // **תצוגה בלבד.** אין כאן שום החלטה על צורות, על + או על מידות — רק
@@ -3680,14 +3688,16 @@ function setEditMode(on){
   editMode=!!on;
   const btn=document.getElementById('btnEditMode');
   const wrap=document.getElementById('canvasWrap');
-  const hint=document.getElementById('editHint');
   if(btn){
     btn.classList.toggle('on',editMode);
     btn.textContent=editMode?'✓ שמור וסיים':'✎ מצב עריכה';
   }
   C.classList.toggle('editing',editMode);
   if(wrap) wrap.classList.toggle('editing',editMode);
-  if(hint) hint.style.display=editMode?'block':'none';
+  // ‏class נפרד מ-sketch-full (שגם עריכה-מתקדמת-לבדה מדליקה): רק
+  // כשעורכים מידה בפועל בן רוצה מסך שהוא X ותו לא — ר' CSS
+  // body.sketch-editing .edit-bar (בן, 20.9.2026).
+  document.body.classList.toggle('sketch-editing',editMode);
   if(!editMode) closeDimEditor();
   syncFullEdit();
 }

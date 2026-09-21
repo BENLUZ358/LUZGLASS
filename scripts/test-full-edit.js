@@ -45,10 +45,13 @@ const grab = n => {
 function screen() {
   const cls = new Set();
   const props = {};
-  /* the three bottom controls, with heights a real browser would report */
-  const BARS = { editBar:  { h: 56, shown: () => true },
-                 pickBar:  { h: 52, shown: c => c.pickMode },
-                 editHint: { h: 40, shown: c => c.editMode } };
+  /* the bottom controls, with heights a real browser would report.
+     editBar hides whenever plain editing is on — Ben, 20.9.2026: full
+     screen for editing a dimension is the sketch and the X, nothing else,
+     not even its own entry buttons. pickBar is untouched: advanced edit
+     on its own still gets its bar. */
+  const BARS = { editBar:  { h: 56, shown: c => !c.editMode },
+                 pickBar:  { h: 52, shown: c => c.pickMode } };
   const nodes = {};
   const el = id => nodes[id] || (nodes[id] = {
     id, style: { display: '', setProperty(){} }, textContent: '',
@@ -135,29 +138,32 @@ console.log('');
 }
 
 /* ── the space kept for the controls is measured, not guessed ──────── */
-/* editBar 56, pickBar 52, editHint 40 in this harness. A guessed constant
-   would have to be right for every mode, font size and screen width at
-   once; when it is wrong the drawing is quietly cut off behind them. */
+/* editBar 56, pickBar 52 in this harness. A guessed constant would have to
+   be right for every mode, font size and screen width at once; when it is
+   wrong the drawing is quietly cut off behind them.
+
+   Ben, 20.9.2026: plain editing (a dimension, full screen) now shows only
+   the X — editBar hides itself, so it reserves nothing at all. */
 {
   const s = screen();
 
   s.run('setEditMode(true)');
-  check('plain editing keeps room for the bar and its hint',
-        s.props['--full-bottom'], '96px');            // 56 + 40
-  check('and the hint is told to sit above the bar',
-        s.props['--full-bar-h'], '56px');
+  check('plain editing on its own keeps room for nothing — the bar hides itself',
+        s.props['--full-bottom'], '0px');
+  check('so there is nothing to sit above',
+        s.props['--full-bar-h'], '0px');
   check('with nothing reserved for a pick bar that is not there',
         s.props['--full-pick-h'], '0px');
 
   s.run('setPickMode(true)');
-  check('opening advanced edit makes room for its bar too',
-        s.props['--full-bottom'], '148px');           // 56 + 52 + 40
-  check('and the hint now clears both',
-        [s.props['--full-bar-h'], s.props['--full-pick-h']], ['56px', '52px']);
+  check('opening advanced edit on top only makes room for its own bar — editBar stays hidden',
+        s.props['--full-bottom'], '52px');
+  check('editBar still reserves nothing, pickBar reserves its own height',
+        [s.props['--full-bar-h'], s.props['--full-pick-h']], ['0px', '52px']);
 
   s.run('setPickMode(false)');
-  check('closing it gives the room back',
-        s.props['--full-bottom'], '96px');
+  check('closing it goes back to reserving nothing',
+        s.props['--full-bottom'], '0px');
 
   s.run('setEditMode(false)');
   check('and leaving releases all of it',
@@ -165,10 +171,11 @@ console.log('');
 }
 
 {
-  /* advanced edit on its own: no hint, so no room for one */
+  /* advanced edit on its own, editMode never touched: editBar is
+     untouched by the "only the X" rule, which is scoped to editMode */
   const s = screen();
   s.run('setPickMode(true)');
-  check('advanced edit alone reserves only the two bars',
+  check('advanced edit alone still reserves both of its own bars',
         s.props['--full-bottom'], '108px');           // 56 + 52
 }
 
@@ -207,12 +214,17 @@ console.log('');
   check('and each control sits on the height of the one below it',
         /body\.sketch-full \.pick-bar\{bottom:var\(--full-bar-h/.test(DEMO), true);
   /* Ben, 2026-09-17: full screen should show only the sketch, the
-     numbers he can edit, and the X — the hint's own words were one of
-     the "unnecessary things" he pointed at, so it is dropped entirely
-     rather than repositioned. fitFullBottom already treats display:none
-     as zero height, so hiding it hands that room back to the drawing. */
-  check('the hint is dropped entirely in full screen, not just moved',
-        /body\.sketch-full \.edit-hint\{display:none;\}/.test(DEMO), true);
+     numbers he can edit, and the X. First attempt hid the hint text
+     with a CSS rule keyed off sketch-full — but setEditMode was still
+     writing hint.style.display directly, and an inline style always
+     beats a class selector, so the "fix" never actually ran (Ben,
+     20.9.2026: still saw it live, weeks later). The element carried no
+     behaviour of its own, so the real fix removes it rather than
+     re-fighting the specificity. */
+  check('the hint element is gone from the page entirely, not hidden by CSS',
+        /id="editHint"/.test(DEMO), false);
+  check('and nothing still tries to toggle its display from JS',
+        /editHint/.test(DEMO), false);
 }
 
 /* ── presentation only: no logic moved ──────────────────────────────────── */
@@ -279,6 +291,30 @@ console.log('');
         /#fullBar button\{[\s\S]{0,60}min-width:44px;min-height:44px/.test(DEMO), true);
   check('the label it lost from the screen it keeps for a reader',
         /aria-label="סגור וחזור"/.test(DEMO), true);
+}
+
+/* ── round two of the same complaint: now the bar at the bottom ─────────── */
+/*
+ * Ben, 20.9.2026, weeks later: full-screen editing still wasn't just the
+ * sketch and the X. A corner-view lock button had joined the bar in the
+ * meantime, so it was now three buttons plus the (still-broken) hint text
+ * plus a bottom bar — the exact kind of clutter the 17.9 fix was supposed
+ * to have already removed. This time the whole bar goes, not just the
+ * title on top of it. "שמור וסיים" and the X already do the same thing,
+ * so nothing is lost; "עריכה מתקדמת" and "נעילת הסקיצה" are simply not
+ * reachable while a dimension is mid-edit — not a loss either, since they
+ * are things you would do between edits, not during one.
+ *
+ * Scoped to editMode specifically, via its own class (sketch-editing),
+ * not the shared sketch-full — advanced edit on its own still gets its bar.
+ */
+{
+  check('the bar hides itself once a dimension is actually being edited',
+        /body\.sketch-editing \.edit-bar\{display:none;\}/.test(DEMO), true);
+  check('setEditMode is what flips that class, paired with the mode itself',
+        /classList\.toggle\('sketch-editing',editMode\)/.test(DEMO), true);
+  check('advanced edit keeps its own separate class untouched by this rule',
+        /body\.sketch-editing \.pick-bar/.test(DEMO), false);
 }
 
 /* ── and the drawing fits the screen it is given ──────────────────────── */
