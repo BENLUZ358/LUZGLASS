@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>LuzGlass — בונה סקיצות</title>
-<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
 <link rel="stylesheet" href="lg-ui.css?v=20260807">
@@ -3073,7 +3073,9 @@ function setupCanvas(DPR,cW,cH){
   cx.fillStyle='#fff'; cx.fillRect(0,0,cW,cH);
 }
 function drawGrid(cW,cH){
-  cx.strokeStyle='rgba(0,0,0,0.025)'; cx.lineWidth=1;
+  // גוון חם (במקום אפור ניטרלי) כדי שהרשת תרגיש כמו נייר-שרטוט, לא
+  // כמו רקע-דיבוג גנרי — עדיין עדינה מאוד, לא מתחרה בשום דבר עליה.
+  cx.strokeStyle='rgba(184,146,42,0.05)'; cx.lineWidth=1;
   const gs=30;
   for(let x=0;x<cW;x+=gs){cx.beginPath();cx.moveTo(x,0);cx.lineTo(x,cH);cx.stroke();}
   for(let y=0;y<cH;y+=gs){cx.beginPath();cx.moveTo(0,y);cx.lineTo(cW,y);cx.stroke();}
@@ -3253,17 +3255,42 @@ const ENG_FIELD={
 // מידה: הקו נשבר סביב המספר במקום שהמספר יישב בקופסה מעליו, ותווית על
 // קו אנכי נקראת מלמטה למעלה. שניהם מהמנוע — ‏rot ו-‏t — כדי שהצייר
 // והבדיקות יסכימו על אותו מקום בדיוק.
+// ── שפה חזותית 2026-09-22 (Ben, שדרוג ויזואלי מבודד ל-rendering בלבד) ──
+//
+// שתי דרגות היררכיה, לפי d.size שהמנוע כבר קובע (LG_SZ_MAIN=10 למידות
+// הראשיות — רוחב/גובה/סה"כ; LG_SZ_SUB=9 לכל השאר — ציר/זווית/ידית/
+// פינוי). לא נוגעים בערך עצמו, רק קוראים אותו כדי לבחור עוצמת צבע/קו —
+// מידה ראשית קוראת חד וחזק, מידה משנית נשארת נוכחת אבל שקטה יותר.
+// הקבועים מוצהרים **בתוך** הפונקציה (לא ברמת המודול): test-hit-targets.js
+// מחלץ engDim בבידוד ל-VM נפרד, בלי שום דבר שיושב מעליה בקובץ.
 function engDim(d,pfx){
+  const LG_DIM_MAIN_COLOR='#b8922a', LG_DIM_SUB_COLOR='#9c8354';
+  const LG_DIM_MAIN_WEIGHT='600', LG_DIM_SUB_WEIGHT='500';
   const t=d.t==null?0.5:d.t;
   const mx=d.x1+(d.x2-d.x1)*t, my=d.y1+(d.y2-d.y1)*t;
   const sz=d.size||10;
+  const isMain=sz>=10;
+  const lineColor=isMain?LG_DIM_MAIN_COLOR:LG_DIM_SUB_COLOR;
+  const lineW=isMain?0.9:0.7;
   cx.save();
-  cx.font='bold '+sz+'px Heebo,sans-serif';
-  const tw=cx.measureText(d.text).width, gap=tw+8;
+  cx.font=(isMain?LG_DIM_MAIN_WEIGHT:LG_DIM_SUB_WEIGHT)+' '+sz+'px Heebo,sans-serif';
+  const tw=cx.measureText(d.text).width, gap=tw+10;
 
-  cx.strokeStyle='#b8922a'; cx.fillStyle='#b8922a'; cx.lineWidth=0.8;
-  (d.ext||[]).forEach(e=>{ cx.save(); cx.setLineDash([3,3]); cx.lineWidth=0.6;
+  cx.strokeStyle=lineColor; cx.fillStyle=lineColor; cx.lineWidth=lineW;
+  // קווי הפניה (ext) נשארים הכי דקים ושקטים מכל קו על השרטוט — הם
+  // מסמנים "עקוב לכאן", לא "כאן המידה".
+  (d.ext||[]).forEach(e=>{ cx.save(); cx.setLineDash([2,2]); cx.lineWidth=0.5;
+    cx.strokeStyle='rgba(184,146,42,0.55)';
     cx.beginPath(); cx.moveTo(e.x1,e.y1); cx.lineTo(e.x2,e.y2); cx.stroke(); cx.restore(); });
+
+  // קצה מידה: מקף באלכסון 45°, במקום קו-ניצב — מוסכמת שרטוט טכני
+  // (ISO 129) שקוראים אותה כ"קצה מידה", לא כחץ שרירותי. אורך הקו
+  // עצמו (הגיאומטריה — d.x1/y1/x2/y2) לא זז; רק צורת הקצה משתנה.
+  const tickLen=isMain?4.5:3.6;
+  const drawTick=(ax,ay,dx,dy)=>{
+    cx.beginPath(); cx.moveTo(ax-dx*tickLen,ay-dy*tickLen);
+    cx.lineTo(ax+dx*tickLen,ay+dy*tickLen); cx.stroke();
+  };
 
   const inside = t>0.02 && t<0.98;
   cx.beginPath();
@@ -3280,32 +3307,44 @@ function engDim(d,pfx){
                 cx.moveTo(mx+ux*gap/2,my+uy*gap/2); cx.lineTo(d.x2,d.y2); }
     else      { cx.moveTo(d.x1,d.y1); cx.lineTo(d.x2,d.y2); }
     cx.stroke();
-    [[d.x1,d.y1],[d.x2,d.y2]].forEach(([ax,ay])=>{
-      cx.beginPath(); cx.moveTo(ax-4*tx,ay-4*ty); cx.lineTo(ax+4*tx,ay+4*ty); cx.stroke(); });
+    // הקצה באלכסון 45° ביחס לקו עצמו (לא ביחס לצירי המסך) — כדי
+    // שיישאר עקבי גם כשהקו אלכסוני (תצוגת פינה). וקטור באמצע הדרך
+    // בין הכיוון האורכי (ux,uy) לניצב (tx,ty), מנורמל.
+    const dx=(ux+tx)*0.7071, dy=(uy+ty)*0.7071;
+    [[d.x1,d.y1],[d.x2,d.y2]].forEach(([ax,ay])=>drawTick(ax,ay,dx,dy));
   } else if(d.rot){
     if(inside){ cx.moveTo(d.x1,d.y1); cx.lineTo(d.x1,my-gap/2);
                 cx.moveTo(d.x1,my+gap/2); cx.lineTo(d.x2,d.y2); }
     else      { cx.moveTo(d.x1,d.y1); cx.lineTo(d.x2,d.y2); }
     cx.stroke();
-    [[d.x1,d.y1],[d.x2,d.y2]].forEach(([ax,ay])=>{
-      cx.beginPath(); cx.moveTo(ax-4,ay); cx.lineTo(ax+4,ay); cx.stroke(); });
+    [[d.x1,d.y1],[d.x2,d.y2]].forEach(([ax,ay])=>drawTick(ax,ay,0.7071,0.7071));
   } else {
     if(inside){ cx.moveTo(d.x1,d.y1); cx.lineTo(mx-gap/2,d.y1);
                 cx.moveTo(mx+gap/2,d.y2); cx.lineTo(d.x2,d.y2); }
     else      { cx.moveTo(d.x1,d.y1); cx.lineTo(d.x2,d.y2); }
     cx.stroke();
-    [[d.x1,d.y1],[d.x2,d.y2]].forEach(([ax,ay])=>{
-      cx.beginPath(); cx.moveTo(ax,ay-4); cx.lineTo(ax,ay+4); cx.stroke(); });
+    [[d.x1,d.y1],[d.x2,d.y2]].forEach(([ax,ay])=>drawTick(ax,ay,0.7071,0.7071));
   }
 
-  // ‏d.rot נשאר נכון גם אחרי הטרנספורם של תצוגת הפינה: קו שהיה אנכי
-  // (x1===x2) נשאר אנכי בדיוק גם אחרי ההטיה — ר' _foldMatrix, u קובע
-  // את שניהם יחד — ולכן הוא עדיין צריך להסתובב כמו תמיד. uprightText
-  // משפיע רק על כיוון קווי הסימון למעלה (עבור הרוחב, שכן נהיה אלכסוני),
-  // לא על סיבוב הטקסט (בן, 2026-09-20).
+  // תווית המספר: תג מוגבה מעל הקו, לא רק רקע שקוף מאחורי הטקסט —
+  // פינות מעוגלות, מסגרת דקה כשההבדל בין העוצמות עצמו לא מספיק בולט
+  // (המידה המשנית מקבלת רקע כמעט-שקוף כדי לא להתחרות במידה הראשית).
+  cx.save();
   cx.translate(mx,my); if(d.rot) cx.rotate(-Math.PI/2);
+  const bw=tw+(isMain?10:8), bh=sz+(isMain?7:6);
+  cx.beginPath();
+  if(cx.roundRect) cx.roundRect(-bw/2,-bh/2,bw,bh,3);
+  else cx.rect(-bw/2,-bh/2,bw,bh);
+  cx.fillStyle=isMain?'#ffffff':'rgba(255,255,255,0.92)';
+  cx.fill();
+  cx.strokeStyle=isMain?'rgba(184,146,42,0.35)':'rgba(184,146,42,0.18)';
+  cx.lineWidth=0.75;
+  cx.stroke();
+
   cx.textAlign='center'; cx.textBaseline='middle';
-  cx.fillStyle='#1a1714'; cx.fillText(d.text,0,0);
+  cx.fillStyle=isMain?'#161310':'#3a3128';
+  cx.fillText(d.text,0,0);
+  cx.restore();
   cx.restore();
 
   // יעד מגע של 44 פיקסלים, גם כשהמספר קטן ממנו
@@ -3451,14 +3490,23 @@ function engPaint(L,pfx,dy,idxOf,opts){
     cx.beginPath();
     s.poly.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));
     cx.closePath();
+    // שלושה עצירות במקום שתיים: פס-אור עדין באלכסון נותן תחושת
+    // "זכוכית" אמיתית במקום שטח שטוח — בלי לשנות את הגיאומטריה.
     const g=cx.createLinearGradient(s.x,s.y,s.x+s.w,s.y+s.h);
-    g.addColorStop(0, s.kind==='door'?'rgba(160,190,205,0.30)':'rgba(170,200,210,0.16)');
-    g.addColorStop(1, s.kind==='door'?'rgba(160,190,205,0.14)':'rgba(170,200,210,0.07)');
+    if(s.kind==='door'){
+      g.addColorStop(0,   'rgba(165,196,210,0.32)');
+      g.addColorStop(0.45,'rgba(198,220,228,0.22)');
+      g.addColorStop(1,   'rgba(160,190,205,0.13)');
+    } else {
+      g.addColorStop(0,   'rgba(175,205,214,0.18)');
+      g.addColorStop(0.45,'rgba(205,224,229,0.11)');
+      g.addColorStop(1,   'rgba(170,200,210,0.06)');
+    }
     cx.fillStyle=g; cx.fill();
-    cx.strokeStyle='#2f6b6b'; cx.lineWidth=1.6; cx.stroke();
+    cx.strokeStyle='#2b6363'; cx.lineWidth=1.5; cx.stroke();
 
-    cx.fillStyle='rgba(58,49,40,0.45)';
-    cx.font='11px Heebo,sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
+    cx.fillStyle='rgba(58,49,40,0.5)';
+    cx.font='500 11px Heebo,sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
     cx.fillText(s.label || kindName(s.kind), s.x+s.w/2, s.y+s.h/2);
     cx.restore();
   });
