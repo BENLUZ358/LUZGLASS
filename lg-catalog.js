@@ -35,7 +35,7 @@ var LG_CAT_FLAGS = { slope: 1, notch: 1, hingesFor: 1, holes: 1,
                      carriesDoor: 1, noHandle: 1,
                      // המידות שמגדירות את הצורה — ראה למטה
                      notchW: 1, notchH: 1, notchHIn: 1, notchRest: 1,
-                     notchBracket: 1, slopeH1: 1, slopeH2: 1, slopeSideH: 1,
+                     notchBracket: 1, notchFix: 1, slopeH1: 1, slopeH2: 1, slopeSideH: 1,
                      cutouts: 1, harmonicaSide: 1,
                      slopeW: 1, slopeW1: 1, slopeW2: 1 };
 

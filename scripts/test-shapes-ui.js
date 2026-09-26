@@ -95,7 +95,7 @@ check('and item-by-item is gone, shapes do that job',
   /* the cards are built from the catalogue, not written out by hand */
   check('the gallery is generated', /renderShapeGallery/.test(DEMO), true);
   check('and every card is drawn by the painter itself',
-        DEMO.indexOf("engPaint({...L, dims:[]},'thumb'") > -1, true);
+        DEMO.indexOf("engPaint({...L, dims:[], tags:[]},'thumb'") > -1, true);
 }
 
 /* ── touch ─────────────────────────────────────────────────────────────── */

@@ -62,7 +62,7 @@ function paint(shower, canvasW) {
   ctx.dimHits = [];
   const hingeColor = DEMO.match(/const LG_HINGE_COLOR=\{[^}]*\};/)[0];
   vm.runInContext([hingeColor, engField, kindHe, grab('engDim'), grab('engHardware'), grab('engHingeLegend'),
-                   grab('engPaint')].join('\n'), ctx);
+                   grab('engTag'), grab('engPaint')].join('\n'), ctx);
 
   const L = ctx.lgLayout(shower, { canvasW });
   ctx.L = L;
@@ -139,7 +139,7 @@ const door = (id, hs, h) => ({ id, kind: 'door', w: 800, h: h || 1985, hingeSide
                    DEMO.match(/const LG_HINGE_COLOR=\{[^}]*\};/)[0],
                    DEMO.match(/const LG_HINGE_HE   =\{[^}]*\};/)[0],
                    g('engDim'), g('engHardware'), g('engHingeLegend'),
-                   g('engPaint')].join('\n'), ctx);
+                   g('engTag'), g('engPaint')].join('\n'), ctx);
 
   ctx.L1 = ctx.lgLayout(shower([fixed('a')]), { canvasW: 700 });
   ctx.L2 = ctx.lgLayout(shower([door('b', 'right')]), { canvasW: 700 });

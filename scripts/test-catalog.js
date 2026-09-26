@@ -131,7 +131,7 @@ console.log('');
         has('lgLayout(_lgShowerOf(_shapePanels()'), true);
   check('through the same panel conversion the canvas uses',
         has('_shapePanels()') && has('_lgShowerOf('), true);
-  check('and is painted by engPaint itself', has("engPaint({...L, dims:[]},'thumb'"), true);
+  check('and is painted by engPaint itself', has("engPaint({...L, dims:[], tags:[]},'thumb'"), true);
   check('the drawing context is swappable, so there is one painter',
         /let cx=C\.getContext/.test(DEMO), true);
   check('and it is put back afterwards', has('cx=saveCx'), true);

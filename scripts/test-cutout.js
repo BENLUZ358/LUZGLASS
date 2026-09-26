@@ -174,8 +174,12 @@ const CUT = (over) => Object.assign({ w: 200, h: 100, ref: 'edge',
 {
   const L = place(CUT()).L;
   const at = k => L.dims.filter(d => d.kind === k).map(d => d.text);
-  check('the width is written', at('cut-w'), ['200']);
-  check('the height too', at('cut-h'), ['100']);
+  /* QA 2026-09-25 TEST 05/08: the size moved off the drawing into the
+     legend under it; the drawing keeps a small tag and the two positions */
+  check('the size is not written on the drawing', [at('cut-w'), at('cut-h')], [[], []]);
+  check('the cut-out carries a tag instead', (L.tags || []).map(t => t.text), ['פ1']);
+  check('and the legend gives its width and height',
+        /רוחב 200 מ״מ \| גובה 100 מ״מ/.test((L.legend[0] || {}).text || ''), true);
   check('and both distances', [at('cut-x'), at('cut-y')], [['300'], ['400']]);
   check('none of them opens an editor — a cut-out is edited in the sheet',
         L.dims.filter(d => /^cut-/.test(d.kind)).every(d => !d.field), true);
@@ -184,8 +188,8 @@ const CUT = (over) => Object.assign({ w: 200, h: 100, ref: 'edge',
   const flush = place(CUT({ x: { from: 'left', mm: 0 } })).L;
   check('a cut-out flush with the face gets no distance line',
         flush.dims.filter(d => d.kind === 'cut-x').length, 0);
-  check('but still says how wide it is',
-        flush.dims.filter(d => d.kind === 'cut-w').length, 1);
+  check('but still says how wide it is — in the legend',
+        /רוחב 200 מ״מ/.test((flush.legend[0] || {}).text || ''), true);
 }
 
 /* ── the drawing shows it as absence of glass ─────────────────────────── */

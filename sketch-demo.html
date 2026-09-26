@@ -196,6 +196,19 @@ lgRequireAuthAsync('admin');
 @media (prefers-reduced-motion:reduce){
   .sheet,.sheet-back{transition:none;}
 }
+.geo-warn{position:relative;z-index:4;margin:0;padding:8px 12px;
+  background:#fff4e5;border-bottom:1px solid #f0c890;color:#7a4300;font-size:13px;line-height:1.45;}
+/* במסך מלא המעטפת היא שגוללת, ושם הפס נשאר למעלה; בדף הרגיל הוא זורם
+   עם הקנבס — דביקות שם הסתירה אותו מתחת לכותרת הדף. */
+body.sketch-full .geo-warn{position:sticky;top:0;left:0;}
+.geo-warn button{display:block;width:100%;text-align:right;background:none;border:none;padding:4px 0;
+  min-height:32px;font:inherit;color:inherit;cursor:pointer;}
+.geo-warn button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.sh-ask{border:1px solid #f0c890;background:#fff8ee;border-radius:8px;padding:10px;margin:8px 0;}
+.sh-ask p{margin:0 0 8px;font-size:13px;line-height:1.5;color:#5a3a10;}
+.sh-ask .sh-ask-btns{display:flex;flex-direction:column;gap:6px;}
+.sh-ask .sh-ask-btns button{min-height:44px;border-radius:8px;cursor:pointer;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font:inherit;font-size:13px;text-align:right;padding:6px 10px;}
 .shape-err{
   margin:8px 10px;padding:10px 12px;border-radius:6px;
   background:#fdecea;border:1px solid #f5c6c2;color:#8f2d24;
@@ -518,6 +531,9 @@ body.sketch-editing .edit-bar{display:none;}
   <button type="button" onclick="exitFullEdit()" aria-label="סגור וחזור">✕</button>
 </div>
 <div class="canvas-wrap" id="canvasWrap">
+  <!-- בעיות בגאומטריה עצמה — קדח מחוץ לזכוכית, פינוי שחורג, מדרגה שאינה
+       נסגרת. יושב בתוך המעטפת כדי שיראו אותו גם במסך מלא. -->
+  <div id="geoWarn" class="geo-warn" role="status" aria-live="polite" hidden></div>
   <canvas id="sk"></canvas>
   <!-- כפתורי ההוספה. הם יושבים מעל הקנבס במקום הפאה שאליה יתחבר השייף
        הבא, ומופיעים רק בצד שמנוע החוקיות מתיר. -->
@@ -1270,6 +1286,7 @@ function shapeThumb(cv, entry){
   if(a.slopeFlip){ const t=st.slopeH1; st.slopeH1=st.slopeH2; st.slopeH2=t; }
   if(a.notch) Object.assign(st,NOTCH_DEF);
   if(a.notchSide)  st.notchSide=a.notchSide;
+  if(a.notchFix==='width'||a.notchFix==='height') st.notchFix=a.notchFix;
   if(a.slopeSideV) st.slopeSideV=a.slopeSideV;
   if(a.noHandle)   st.handleType='none';
   if(a.hingesFor) st.holes=hingeHolesFromEngine(a.hingesFor,entry.flipped);
@@ -1333,7 +1350,7 @@ function shapeThumb(cv, entry){
     // המידות אינן נכנסות לכרטיס — בגודל הזה הן רעש. ‏hwMin מוגדל ביחס
     // ההקטנה, כדי שרצפת הקריאוּת של הצייר תישאר שלוש פיקסלים **על
     // הכרטיס** ולא תתכווץ איתו.
-    engPaint({...L, dims:[]},'thumb',0,null,{hwMin:3/k});
+    engPaint({...L, dims:[], tags:[]},'thumb',0,null,{hwMin:3/k});
   }
   finally { g.restore(); cx=saveCx; dimHits=saveHits; }
 }
@@ -1526,6 +1543,7 @@ function _stateFromAdd(a){
                    extra.slopeH1=d.slopeH2; extra.slopeH2=d.slopeH1; }
   if(a.harmonicaSide) extra.harmonicaSide=a.harmonicaSide;
   if(a.notchSide)  extra.notchSide=a.notchSide;
+  if(a.notchFix==='width'||a.notchFix==='height') extra.notchFix=a.notchFix;
   if(a.slopeSideV) extra.slopeSideV=a.slopeSideV;
   if(a.slopeSideH) extra.slopeSideH=a.slopeSideH;
   if(a.notchBracket) extra.notchBracket=a.notchBracket;
@@ -1713,6 +1731,8 @@ function shapeSaveOpen(id){
     add.notch=true;
     if(ps.notchSide==='left'||ps.notchSide==='right') add.notchSide=ps.notchSide;
     if(ps.notchBracket) add.notchBracket=ps.notchBracket;
+    // התשובה לשאלת המדרגה (TEST 09) היא חלק מהצורה — בלעדיה השאלה חוזרת
+    if(ps.notchFix==='width'||ps.notchFix==='height') add.notchFix=ps.notchFix;
   }
   // המידות שמגדירות את הצורה נשמרות כמות שהן, ורק כשהדגל
   // שלהן דלוק: מספרי שיפוע על צורה לא משופעת הם ברירות מחדל
@@ -2084,7 +2104,11 @@ function holeNum(k,path,el){
 
 // שורה אחת לקדח: תפקיד, קוטר, ומרחק משתי פאות — בדיוק
 // המבנה שהמנוע קורא, ובדיוק כמו שקודחים באמת.
-function _shHole(k,h,kind){
+// ‏freeN — מספר הקדח החופשי בין הקדחים החופשיים, אותו מספר שהשרטוט והמקרא
+// נושאים (ק1). קודם הכותרת הייתה האינדקס ברשימה הגולמית, שכוללת גם את
+// הקדחים שהמנוע גזר מהצירים: "קדח 3" לקדח החופשי היחיד על הזכוכית.
+function _shHole(k,h,kind,freeN){
+  const title = freeN!=null ? 'קדח '+freeN : ((LG_HOLE_HE[h.role]||'קדח')+' '+(k+1));
   const roles=_holeRolesFor(kind);
   const seg=(path,opts,cur)=>'<div class="sh-seg">'+opts.map(o=>
     '<button type="button" class="'+(o[0]===cur?'on':'')+'" '+
@@ -2092,16 +2116,19 @@ function _shHole(k,h,kind){
   const num=(path,val)=>'<input type="text" inputmode="decimal" value="'+_dimToUnit(val)+'" '+
     'onchange="holeNum('+k+',&quot;'+path+'&quot;,this)">';
   return '<div class="sh-hole">'+
-    '<div class="sh-hole-top"><span>קדח '+(k+1)+'</span>'+
+    '<div class="sh-hole-top"><span>'+title+'</span>'+
       '<button type="button" class="sh-hole-x" onclick="holeDel('+k+')" '+
-      'aria-label="מחק קדח '+(k+1)+'">✕</button></div>'+
+      'aria-label="מחק '+title+'">✕</button></div>'+
     '<div class="sh-row"><label>תפקיד</label>'+
       seg('role',roles.map(r=>[r,LG_HOLE_HE[r]||r]),h.role)+'</div>'+
     '<div class="sh-row"><label>קוטר <span class="sh-unit">'+_dimUnitLabel()+'</span></label>'+
       num('dia',h.dia)+'</div>'+
-    '<div class="sh-row"><label>מהפאה</label>'+
+    // ‏**כל שדה מספר נושא יחידה** (מסמך ה-QA, TEST 03). קוטר קיבל אותה
+    // ושני שדות המיקום לא — ומיקום הוא בדיוק המספר שטעות של פי עשרה בו
+    // קודחת חור במקום אחר לגמרי.
+    '<div class="sh-row"><label>מהפאה <span class="sh-unit">'+_dimUnitLabel()+'</span></label>'+
       seg('x.from',[['left','שמאל'],['right','ימין']],h.x.from)+num('x',h.x.mm)+'</div>'+
-    '<div class="sh-row"><label>מלמעלה/למטה</label>'+
+    '<div class="sh-row"><label>מלמעלה/למטה <span class="sh-unit">'+_dimUnitLabel()+'</span></label>'+
       seg('y.from',[['bottom','מלמטה'],['top','מלמעלה']],h.y.from)+num('y',h.y.mm)+'</div>'+
   '</div>';
 }
@@ -2176,9 +2203,9 @@ function _shCut(k,c){
     '<div class="sh-row"><label>גובה '+u+'</label>'+num('h',c.h)+'</div>'+
     '<div class="sh-row"><label>המרחק נמדד עד</label>'+
       seg('ref',[['edge','תחילת הפינוי'],['center','אמצע הפינוי']],c.ref||'edge')+'</div>'+
-    '<div class="sh-row"><label>מהפאה</label>'+
+    '<div class="sh-row"><label>מהפאה '+u+'</label>'+
       seg('x.from',[['left','שמאל'],['right','ימין']],c.x.from)+num('x',c.x.mm)+'</div>'+
-    '<div class="sh-row"><label>מלמעלה/למטה</label>'+
+    '<div class="sh-row"><label>מלמעלה/למטה '+u+'</label>'+
       seg('y.from',[['bottom','מלמטה'],['top','מלמעלה']],c.y.from)+num('y',c.y.mm)+'</div>'+
   '</div>';
 }
@@ -2196,7 +2223,7 @@ function _shHoles(ps,kind){
   const roles=_holeRolesFor(kind);
   const cuts=Array.isArray(ps.cutouts)?ps.cutouts:[];
   return '<div class="sh-grp"><h4>קדחים ופינויים על הצורה <span class="sub">אדמין</span></h4>'+
-    own.map(e=>_shHole(e[0],e[1],kind)).join('')+
+    (()=>{ let nf=0; return own.map(e=>_shHole(e[0],e[1],kind,e[1].role==='hole'?++nf:null)).join(''); })()+
     cuts.map((c,k)=>_shCut(k,c)).join('')+
     '<div class="sh-hole-add">'+roles.map(r=>
       '<button type="button" onclick="holeAdd(&quot;'+r+'&quot;)">+ '+
@@ -2210,12 +2237,74 @@ function _shHoles(ps,kind){
   '</div>';
 }
 
+// ‏**הכפתור מראה את מה שייחתך, לא ברירת מחדל משלו.** קודם הוצג
+// ‏ps.slopeSideV||'left': "שמאל" נראה בחור גם כשלא נשמר כלום, והמנוע —
+// שלא קיבל כלום — חתך לפי ברירת המחדל שלו, בצד השני (מסמך ה-QA, TEST 02).
+// הצד נקרא עכשיו מהמתאר שהמנוע בנה, כך שהמסך והשרטוט לא יכולים להיפרד.
+function _sheetResolved(i){
+  try{
+    const ol=lgOutline(_lgShowerOf(getPanels(),getPStates()))[i]||{};
+    return { vSide:ol.slope&&ol.slope.vSide||null, notchSide:ol.notch&&ol.notch.side||null };
+  }catch(e){ return {vSide:null,notchSide:null}; }
+}
+
+// ─── מדרגה שאינה נסגרת: שואלים, לא חוסמים ───────────────────────────
+//
+// ‏(מסמך ה-QA, TEST 09) זנב 250 ורוחב שנשאר 350 על זכוכית של 500 אינם
+// מדרגה ישרה. המטרה אינה לחסום את המרכיב אלא לעזור לו להשלים את הכוונה:
+// המנוע כבר בדק אם שיפוע שקיים על הזכוכית סוגר את החשבון (ואז אין שאלה).
+// אם לא — שלוש אפשרויות, ואחרי הבחירה נדרש רק הנתון החסר.
+function _notchAskHtml(i,ps){
+  let g=null;
+  try{ g=(lgGeometryIssues(_lgShowerOf(getPanels(),getPStates()))||[])
+           .find(q=>q.idx===i&&q.code==='notch-open')||null; }catch(e){}
+  if(ps.notchFix==='width')
+    return '<div class="sh-ask"><p>המדרגה משופעת ברוחב: למעלה '+ps.notchW+' מ״מ, ולמטה נשארים '+
+      ps.notchRest+' מ״מ של זכוכית — דופן הפינוי נוטה.</p>'+
+      '<div class="sh-ask-btns"><button type="button" onclick="notchAnswer(null)">שנה תשובה</button></div></div>';
+  if(ps.notchFix==='height')
+    return '<div class="sh-ask"><p>המדף משופע והמדרגה ישרה ברוחב '+ps.notchW+' מ״מ. '+
+      'הנתון החסר: <b>גובה פנימי</b> — הגובה של המדף בצד הפנימי של הפינוי (בשדה למעלה).</p>'+
+      '<div class="sh-ask-btns"><button type="button" onclick="notchAnswer(null)">שנה תשובה</button></div></div>';
+  if(!g) return '';
+  return '<div class="sh-ask" role="group" aria-label="המדרגה לא נסגרת">'+
+    '<p>'+_shEsc(g.msg)+'</p>'+
+    '<div class="sh-ask-btns">'+
+      '<button type="button" onclick="notchAnswer(\'width\')">שיפוע ברוחב הפינוי — דופן הפינוי נוטה</button>'+
+      '<button type="button" onclick="notchAnswer(\'height\')">שיפוע בגובה הפינוי — המדף נוטה</button>'+
+      '<button type="button" onclick="notchAnswer(\'glass\')">שיפוע בפאה של הזכוכית — הזכוכית '+
+        g.width+' למעלה ו-'+g.sum+' למטה</button>'+
+    '</div><p class="sh-note" style="margin-top:6px">או תקן את אחד המספרים למעלה, אם הוזן בטעות.</p></div>';
+}
+// ‏'glass' אינו דגל על המדרגה אלא שיפוע אמיתי בזכוכית: הרוחב למעלה נשאר,
+// ולמטה הוא הזנב + מה שנשאר, בצד שבו המדרגה יושבת (צד הקיר).
+function notchAnswer(fix){
+  const i=_sheetIdx(); if(i<0) return;
+  const ps=getPS(sheetPfx,i); if(!ps) return;
+  if(fix==='glass'){
+    const top=Number(ps.w)||500;
+    const side=_sheetResolved(i).notchSide||ps.notchSide||'left';
+    Object.assign(ps,{hasSlopeW:true, slopeW1:top,
+                      slopeW2:Number(ps.notchW)+Number(ps.notchRest), slopeSideV:side});
+    delete ps.notchFix;
+  } else if(fix==='height'){
+    // מדף משופע = מדרגה ישרה ברוחבה, ולכן "הרוחב שנשאר" נגזר מהרוחב.
+    // המספר שהוזן נמחק כדי שהשדה יציג את מה שבאמת ייחתך, לא 350 שאיש
+    // כבר לא קורא.
+    ps.notchFix='height'; delete ps.notchRest;
+  } else if(fix) ps.notchFix=fix;
+  else delete ps.notchFix;
+  renderShapeSheet(); renderShapeUI(); draw();
+}
+
 function renderShapeSheet(){
   const body=document.getElementById('shapeSheetBody');
   const i=_sheetIdx();
   const s=i<0?null:_sheetMeta(i);
   if(!body||i<0||!s) return;
   const ps=getPS(sheetPfx,i)||{};
+  const rs=_sheetResolved(i);
+  const notchAsk=_notchAskHtml(i,ps);
   document.getElementById('shapeSheetTitle').innerHTML=
     _shEsc(s.label)+' <span class="sub">'+kindName(s.kind)+'</span>';
 
@@ -2253,7 +2342,7 @@ function renderShapeSheet(){
       _shNum('slopeW1','רוחב עליון',ps.slopeW1)+
       _shNum('slopeW2','רוחב תחתון',ps.slopeW2)+
       '<div class="sh-row"><label>הפאה שנחתכת</label>'+
-        _shSeg('slopeSideV',[['left','שמאל'],['right','ימין']],ps.slopeSideV||'left')+'</div>' : '')+
+        _shSeg('slopeSideV',[['left','שמאל'],['right','ימין']],rs.vSide||ps.slopeSideV)+'</div>' : '')+
   '</div>'+
 
   (s.kind!=='fixed' ? '' :
@@ -2267,10 +2356,11 @@ function renderShapeSheet(){
       _shNum('notchHIn','גובה פנימי',ps.notchHIn,String(ps.notchH))+
       _shNum('notchRest','רוחב שנשאר',ps.notchRest,String((ps.w||W)-(ps.notchW||0)))+
       '<div class="sh-row"><label>צד המדרגה</label>'+
-        _shSeg('notchSide',[['left','שמאל'],['right','ימין']],ps.notchSide||'left')+'</div>'+
+        _shSeg('notchSide',[['left','שמאל'],['right','ימין']],rs.notchSide||ps.notchSide)+'</div>'+
       '<div class="sh-row"><label>הזווית התחתונה</label>'+
         _shSeg('notchBracket',[['floor','מהרצפה'],['shoulder','מהכתף'],['both','שתיהן']],
                ps.notchBracket||'floor')+'</div>'+
+      notchAsk+
       '<p class="sh-note">המדרגה תמיד בצד הקיר — לא בצד שהדלת נתלית עליו. '+
       'גובה פנימי שונה מהחיצוני אומר שהמדף משופע.</p>' : '')+
   '</div>')+
@@ -2685,6 +2775,27 @@ function _drawFrame(){
   // הכפתורים נגזרים מהפריסה שהציור בדיוק יצר, ולכן הם באים אחריו
   renderAddButtons();
   renderCornerBar();
+  renderGeoWarn(panels,pss);
+}
+
+// ‏**בעיה בצורה נאמרת במקום שבו רואים את הצורה** (מסמך ה-QA, TEST 09).
+// עד היום השגיאה היחידה על פינוי הופיעה ברצועת מצב הצורות בלבד — לא
+// בקומבינציה ולא במסך מלא — והקדח שמחוץ לזכוכית בצילומי TEST 08 לא
+// קיבל שום הודעה. כל שורה נפתחת לגיליון של הזכוכית שלה, ששם גם עונים.
+function renderGeoWarn(panels,pss){
+  const el=document.getElementById('geoWarn'); if(!el) return;
+  let list=[];
+  try{ list=(typeof lgGeometryIssues==='function') ? lgGeometryIssues(_lgShowerOf(panels,pss)) : []; }
+  catch(e){ list=[]; }
+  if(!list.length){ el.hidden=true; el.innerHTML=''; return; }
+  el.hidden=false;
+  el.innerHTML=list.map(g=>
+    '<button type="button" onclick="geoWarnOpen('+g.idx+')">⚠ '+_shEsc(g.msg)+
+    (g.code==='notch-open'?' <u>לחץ כדי לענות</u>':'')+'</button>').join('');
+}
+function geoWarnOpen(idx){
+  if(appMode==='shape'){ const s=shapeList[idx]; if(s) openShapeSheet(s.id,'shape'); }
+  else openShapeSheet(idx,appMode);
 }
 
 // הגאומטריה עברה ל-lg-layout.js, וכאן נשארה רק ההפניה אליה. הצייר הישן
@@ -2891,10 +3002,22 @@ function engPaintFolded(L,tf,pfx,uprightText,effScale,pushSpec){
   // לעצמו, שאחרי scaleFix כבר לא מתאר את מה שבאמת מצויר. בלעדי זה
   // הפרזול יצא בגודל לא עקבי עם שאר הזרוע, ונראה כאילו הוא לא יושב
   // איפה שצריך (בן, 2026-09-20).
+  // ‏פינוי חופשי — עד היום לא צויר בתצוגה הזאת בכלל, ושרטוט פינה יצא
+  // לשרטט בלי החור. ארבע פינות דרך אותו טרנספורם כמו הזכוכית.
+  (L.cutouts||[]).forEach(k=>{
+    const q=[[k.x,k.y],[k.x+k.w,k.y],[k.x+k.w,k.y+k.h],[k.x,k.y+k.h]].map(p=>tf(p[0],p[1]));
+    cx.save(); cx.beginPath();
+    q.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1])); cx.closePath();
+    cx.fillStyle='#ffffff'; cx.fill();
+    cx.strokeStyle='#2f6b6b'; cx.lineWidth=1.6; cx.stroke();
+    cx.restore();
+  });
+
   (L.hardware||[]).forEach(h=>{
     const p=tf(h.x,h.y);
     engHardware(Object.assign({},h,{x:p[0],y:p[1]}), effScale||L.scale, undefined);
   });
+  (L.tags||[]).forEach(t=>{ const p=tf(t.x,t.y); engTag(Object.assign({},t,{x:p[0],y:p[1]})); });
 
   // אין קליק על מידה בתצוגה נעולה (תצוגה בלבד) — משחזרים את dimHits
   // למה שהיה, כדי ש-engDim לא ישאיר שם יעדים על קואורדינטות מוטות.
@@ -3010,7 +3133,12 @@ function drawFoldedMode(panels,pss,DPR,cW){
   const MARGIN=110;
   const ox=MARGIN-minX, oy=MARGIN-minY;
   const cwFull=Math.max(1,Math.ceil(maxX-minX+MARGIN*2));
-  const chFull=Math.max(1,Math.ceil(maxY-minY+MARGIN*2));
+  const chArt=Math.max(1,Math.ceil(maxY-minY+MARGIN*2));
+  // ‏המקרא נלקח מהפריסה **המלאה**: כל זרוע רצה במנוע לחוד ומספרת את
+  // הזכוכיות שלה מאחת, ו"קבוע 1" של הזרוע השנייה אינו קבוע 1 של המקלחון.
+  const lgRows=engLegendRows(lgLayout(_lgShowerOf(panels,pss),{canvasW:600}).legend, cwFull);
+  const lgH=engLegendHeight(lgRows);
+  const chFull=chArt+lgH;
 
   lastL={canvas:{w:cwFull,h:chFull-28},shapes:[],hardware:[],dims:[]};
   setupCanvas(DPR,cwFull,chFull);
@@ -3023,6 +3151,7 @@ function drawFoldedMode(panels,pss,DPR,cW){
     const tf=(x,y)=>{ const p=tfs[i](x,y); return [p[0]+ox,p[1]+oy]; };
     engPaintFolded(L,tf,'combo',i>0,refScale,_lgFoldedPushSpec(L,i,layouts.length,signs));
   });
+  engLegend(lgRows,cwFull,chArt-28);
   drawTitleBar(cwFull,chFull);
   updateSpecs();
 }
@@ -3467,8 +3596,12 @@ function engHardware(h,sc,min){
     else cx.rect(h.x-w/2,h.y-hh/2,w,hh);
     cx.fill();
   } else {
+    // ‏**הרצפה גדלה עם הקוטר** (מסמך ה-QA, TEST 04). בפלאפון כ-0.18 פיקסל
+    // למ״מ: Ø20 יוצא 1.8 ו-Ø12 1.1 — ושניהם הורמו לאותם 3 פיקסלים, כך
+    // שחור זווית וחור ידית נראו זהים. ‏floor הוא עכשיו הגודל של Ø12, וכל
+    // קוטר אחר ביחס אליו; מתחת לשני שליש ממנו החור כבר לא נראה.
     const mm = h.dia || (h.kind==='hole' ? 12 : 20);
-    const r  = Math.max(mm*(sc||0)/2, floor);
+    const r  = Math.max(mm*(sc||0)/2, floor*mm/12, floor*2/3);
     cx.beginPath(); cx.arc(h.x,h.y,r,0,Math.PI*2);
     cx.fillStyle='#fff'; cx.fill();
     cx.strokeStyle = h.kind==='bracket' ? '#8a6a2a' : '#3a3128';
@@ -3477,6 +3610,60 @@ function engHardware(h,sc,min){
   cx.restore();
 }
 
+
+// ─── תג ומקרא ────────────────────────────────────────────────────────
+//
+// ‏**על השרטוט מספר קטן, ובתחתית — מקרא** (מסמך ה-QA, TEST 05/08). פ1 על
+// הפינוי, ק1 ליד הקדח החופשי; השורה במקרא אומרת גודל או קוטר, שני מרחקים
+// ונקודת ייחוס. המנוע קובע תוכן ומיקום (L.tags, L.legend) — כאן רק ציור.
+function engTag(t){
+  cx.save();
+  cx.font='700 8px Heebo,sans-serif';
+  const w=Math.max(cx.measureText(t.text).width+6,13), h=12;
+  cx.beginPath();
+  if(cx.roundRect) cx.roundRect(t.x-w/2,t.y-h/2,w,h,6); else cx.rect(t.x-w/2,t.y-h/2,w,h);
+  cx.fillStyle='#2f6b6b'; cx.fill();
+  cx.fillStyle='#fff'; cx.textAlign='center'; cx.textBaseline='middle';
+  cx.fillText(t.text,t.x,t.y+0.5);
+  cx.restore();
+}
+// שורות המקרא אחרי שבירה לרוחב הקנבס. נמדד **לפני** setupCanvas, כי
+// גובה המקרא הוא חלק מגובה הקנבס. שבירה רק בין חלקים (" | ").
+const LG_LEGEND_LH=14;
+function engLegendRows(legend,cW){
+  if(!legend||!legend.length) return [];
+  cx.save(); cx.font='10px Heebo,sans-serif';
+  const maxW=Math.max(120,cW-20-22), rows=[];
+  legend.forEach(l=>{
+    const parts=String(l.text).split(' | ');
+    let line='', first=true;
+    parts.forEach(p=>{
+      const next=line?line+' | '+p:p;
+      if(line && cx.measureText(next).width>maxW){
+        rows.push({tag:first?l.tag:'', text:line}); first=false; line=p;
+      } else line=next;
+    });
+    if(line) rows.push({tag:first?l.tag:'', text:line});
+  });
+  cx.restore();
+  return rows;
+}
+function engLegendHeight(rows){ return rows.length ? rows.length*LG_LEGEND_LH+12 : 0; }
+function engLegend(rows,cW,y0){
+  if(!rows.length) return;
+  cx.save();
+  cx.strokeStyle='rgba(0,0,0,0.08)'; cx.lineWidth=1;
+  cx.beginPath(); cx.moveTo(10,y0+2); cx.lineTo(cW-10,y0+2); cx.stroke();
+  cx.direction='rtl'; cx.textBaseline='middle';
+  rows.forEach((r,i)=>{
+    const y=y0+10+i*LG_LEGEND_LH+LG_LEGEND_LH/2-2;
+    if(r.tag) engTag({text:r.tag, x:cW-10-8, y:y});
+    cx.font='10px Heebo,sans-serif'; cx.fillStyle='#2b2620'; cx.textAlign='right';
+    cx.direction='rtl';
+    cx.fillText(r.text, cW-10-22, y);
+  });
+  cx.restore();
+}
 
 // מצייר פריסה אחת בהיסט נתון. ההיסט הוא מה שמאפשר לערום כמה פריטים על
 // קנבס אחד בלי שכל אחד יחשב מיקומים אחרים — הוא מקבל את אותן קואורדינטות
@@ -3524,6 +3711,7 @@ function engPaint(L,pfx,dy,idxOf,opts){
   });
 
   L.hardware.forEach(h=>engHardware(h,L.scale,_o.hwMin));
+  (L.tags||[]).forEach(engTag);
 
   // אזורי המגע נרשמים בקואורדינטות הקנבס ולא בקואורדינטות המוזזות: הם
   // נבדקים מול נקודת הלחיצה אחרי שה-transform כבר נגמר.
@@ -3600,6 +3788,9 @@ const LG_MIN_ENGINE_W = 300;
 
 function drawFromEngine(panels,pss,DPR,cW,pfx){
   let L=lgLayout(_lgShowerOf(panels,pss),{canvasW:cW});
+  // ‏המקרא התחתון הוא חלק מהגובה: מה שנכנס למסך הוא ציור + מקרא + שורת
+  // הכותרת, ולא הציור לבדו.
+  const FOOT=28+engLegendHeight(engLegendRows(L.legend,L.canvas.w))+((L.legend||[]).length&&L.shapes.length>=2?34:0);
 
   // ── קודם מבקשים מהמנוע לצייר קטן יותר ──
   //
@@ -3618,12 +3809,12 @@ function drawFromEngine(panels,pss,DPR,cW,pfx){
   // המינימום שלו רק משני לוחות ומעלה, ולכן לוח אחד צויר גדול וגבוה
   // וכל ההקטנה נפלה על התצוגה.
   const _box=_availCanvasBox();
-  if(_box.h && L.canvas.h+28>_box.h){
+  if(_box.h && L.canvas.h+FOOT>_box.h){
     // ‏קנה המידה נגזר מ-L.canvas.w (התוצאה בפועל), לא מ-cW שביקשנו —
     // כשהמנוע כבר סירב לרדת עד cW והחזיר רוחב גדול יותר משלו, יחס
     // ה-cW/L.canvas.h הישן לא מתאר את קנה המידה האמיתי של L (בן,
     // 21.9.2026).
-    const want=Math.floor(L.canvas.w*(_box.h-28)/L.canvas.h);
+    const want=Math.floor(L.canvas.w*(_box.h-FOOT)/L.canvas.h);
     if(want>=LG_MIN_ENGINE_W){
       const L2=lgLayout(_lgShowerOf(panels,pss),{canvasW:want});
       // רק אם המנוע באמת נענה. כשהוא מסרב הוא מחזיר אותו גודל.
@@ -3640,7 +3831,7 @@ function drawFromEngine(panels,pss,DPR,cW,pfx){
   // הפנימית — ר' שם). רק במסך מלא: בכרטיס המוקטן אין "שטח פנוי" שרוצים
   // למלא, ורוחב שגדל שם רק היה מרחיק את המידות מהזכוכית.
   if(document.body.classList.contains('sketch-full') &&
-     _box.h && L.canvas.h>0 && L.canvas.h+28<_box.h){
+     _box.h && L.canvas.h>0 && L.canvas.h+FOOT<_box.h){
     // ‏לא מגבילים את הבקשה לרוחב הפנוי: בן, 21.9.2026 — במסך מלא לעריכה
     // הוא רוצה קנבס **גדול יותר**, גם במחיר גלילה אופקית. setupCanvas
     // (למטה) משתנה בהתאם: במסך מלא הוא מתאים לגובה קודם, לא לרוחב,
@@ -3653,7 +3844,7 @@ function drawFromEngine(panels,pss,DPR,cW,pfx){
     // לא מתאר את L האמיתי (בן, 21.9.2026 — זו הייתה הסיבה שה"גדילה"
     // לא הצליחה לגדול בכלל בלוח הרחב על פלאפון: want יצא קטן מהמינימום
     // שהמנוע כבר קבע לעצמו, אז הוא סירב שוב וחזר לאותו גודל).
-    const want=Math.floor(L.canvas.w*(_box.h-28)/L.canvas.h);
+    const want=Math.floor(L.canvas.w*(_box.h-FOOT)/L.canvas.h);
     if(want>cW){
       const L3=lgLayout(_lgShowerOf(panels,pss),{canvasW:want});
       // רק אם המנוע באמת גדל — בדיוק כמו ההקטנה למעלה, שגם היא מסתפקת
@@ -3668,12 +3859,18 @@ function drawFromEngine(panels,pss,DPR,cW,pfx){
   // הקנבס יכול לצאת רחב מהמסך: מקלחון של חמישה פאנלים לא נכנס לפלאפון
   // בלי שהמספרים יתרחקו מהזכוכית או ייחתכו זה על זה. שרטט מצייר גדול
   // וגולל — הוא לא מקטין את הסקיצה עד שאי אפשר לקרוא אותה.
-  setupCanvas(DPR,L.canvas.w,L.canvas.h+28);
-  drawGrid(L.canvas.w,L.canvas.h+28);
+  // ‏כפתורי הפינה (renderCornerBar) יושבים ממש מתחת לציור כשיש שתי זכוכיות
+  // ומעלה; המקרא מתחיל מתחתיהם ולא מתחתם.
+  const lgRows=engLegendRows(L.legend,L.canvas.w);
+  const lgPad=(lgRows.length && L.shapes.length>=2) ? 34 : 0;
+  const lgH=lgRows.length ? engLegendHeight(lgRows)+lgPad : 0;
+  setupCanvas(DPR,L.canvas.w,L.canvas.h+lgH+28);
+  drawGrid(L.canvas.w,L.canvas.h+lgH+28);
   dimHits=[];
   paintPick(L);            // ההדגשה מתחת למספרים, כדי שיישארו קריאים
   engPaint(L,pfx||'combo',0,null);
-  drawTitleBar(L.canvas.w,L.canvas.h+28);
+  engLegend(lgRows,L.canvas.w,L.canvas.h+lgPad);
+  drawTitleBar(L.canvas.w,L.canvas.h+lgH+28);
   updateSpecs();
 }
 

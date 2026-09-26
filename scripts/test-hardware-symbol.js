@@ -89,6 +89,35 @@ const SC = 1;   /* full scale, so the 3px floor never masks the diameter */
   check('and the smaller of the two', r.circles[0].r, 12 * SC / 2);
 }
 
+/* ── at a phone's scale the diameter must still show (QA TEST 04) ──────────
+   A 2600mm run on a phone is ~0.18px per mm: Ø20 is 1.8px, Ø12 is 1.1px, and
+   BOTH were lifted to the same 3px floor — a hinge hole and a handle hole
+   looked identical. The floor has to grow with the diameter, so a small hole
+   stays visible without erasing the ratio. */
+{
+  const PHONE = 0.18;
+  const rOf = d => draw({ kind: 'hole', dia: d, x: 0, y: 0 }, PHONE).circles[0].r;
+  const rs = [8, 12, 16, 20, 30].map(rOf);
+  check('Ø8 < Ø12 < Ø16 < Ø20 < Ø30 on a phone', rs.every((r, i) => !i || r > rs[i - 1]), true);
+  check('Ø20 reads clearly bigger than Ø12 (at least the true 20:12)',
+        rOf(20) / rOf(12) >= 20 / 12 - 1e-9, true);
+  check('the smallest hole is still visible', rOf(8) >= 2, true);
+  check('a handle hole keeps the size it always had', rOf(12), 3);
+  const br = draw({ kind: 'bracket', dia: 20, x: 0, y: 0 }, PHONE).circles[0].r;
+  check('a bracket (Ø20) is drawn bigger than a handle (Ø12)', br > rOf(12), true);
+
+  /* gallery cards pass a larger floor; the ratio must survive that too */
+  const card = d => { const out = []; const cx = { save(){}, restore(){}, beginPath(){}, stroke(){}, fill(){},
+      arc: (x, y, r) => out.push(r) };
+    const ctx = vm.createContext({ Math, cx });
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'lg-layout.js'), 'utf8'), ctx);
+    vm.runInContext(DEMO.match(/const LG_HINGE_COLOR=\{[^}]*\};/)[0], ctx);
+    vm.runInContext(grab('engHardware'), ctx);
+    ctx.h = { kind: 'hole', dia: d, x: 0, y: 0 };
+    vm.runInContext('engHardware(h,0.05,6)', ctx); return out[0]; };
+  check('on a gallery card the ratio survives the bigger floor', card(20) / card(12) >= 20 / 12 - 1e-9, true);
+}
+
 /* ── the engine still names the two apart ───────────────────────────────── */
 {
   const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console });

@@ -171,11 +171,26 @@ function _slopeOf(src,js,i){
                     || pick(one,['top','bottom']) || 'bottom';
   if(hasW) out.vSide = pick(src&&src.slopeSideV,['left','right'])
                     || pick(one,['left','right'])
+                    || _lgWallSide(js,i)
                     || ((src&&src.kind)==='door'
                         ? (_hingeLeft(src,js,i)?'right':'left')          // הצד ההפוך לציר
-                        : ((js[i]&&js[i].type==='bracket-wall')?'left'   // הפאה שנוגעת בקיר
-                          :(js[i+1]&&js[i+1].type==='bracket-wall')?'right':'left'));
+                        : 'left');
   return out;
+}
+
+// ‏**שיפוע ברוחב נחתך בצד הקיר — תמיד.** "קיר לא ישר" פירושו שהפאה שנוגעת
+// בקיר היא זו שאינה ישרה, ולכן היא זו שנחתכת. זה כולל דלת שנתלית על
+// הקיר: שם צד הציר **הוא** צד הקיר (בן, 2026-09-26, מסמך ה-QA TEST 02 —
+// קודם דלת נחתכה תמיד בצד הידית, והשיפוע צויר בצד החיבור לדלת השכנה).
+//
+// ‏js[i] הוא הקצה השמאלי של שייף i על הקנבס ו-js[i+1] הימני — הצומת j
+// מצויר ב-shapes[j].x. כשאף קצה אינו נוגע בקיר (דלת תלויה על קבוע), או
+// ששניהם נוגעים, אין קיר אחד לעקוב אחריו והמחזיר null משאיר את ברירות
+// המחדל הישנות.
+function _lgWallSide(js,i){
+  const isW=j=>!!(j&&/-wall$/.test(j.type||''));
+  const L=isW(js[i]), R=isW(js[i+1]);
+  return L&&!R ? 'left' : R&&!L ? 'right' : null;
 }
 
 // ─── הפאה האמיתית, לא תיבת הגבול ──────────────────────────────────────────
@@ -240,9 +255,14 @@ function _notchOf(src,js,i){
   const side = pick(src&&src.notchSide)
     || ((js[i]&&js[i].type==='bracket-wall') ? 'left'
       : (js[i+1]&&js[i+1].type==='bracket-wall') ? 'right' : 'left');
-  return { side:side, w:w, h:h,
+  // ‏notchFix — התשובה לשאלה "המידות לא נסגרות, איפה השיפוע?" (TEST 09).
+  // ‏'height': המדף משופע והמדרגה ישרה ברוחבה, ולכן הרוחב שנשאר נגזר מהרוחב
+  // ולא מהמספר שהוזן. ‏'width' (דופן הפינוי נוטה) ושיפוע בפאה הכללית
+  // משאירים את המספר כמו שהוא — הוא בדיוק מה שמתאר אותם.
+  const fix=src&&src.notchFix;
+  return { side:side, w:w, h:h, fix:fix||null,
            hIn: (src&&src.notchHIn)>0 ? src.notchHIn : h,
-           rest:(src&&src.notchRest)>0 ? src.notchRest : null };
+           rest:(fix!=='height' && (src&&src.notchRest)>0) ? src.notchRest : null };
 }
 
 // חיתוך הפינוי מהמרובע. הפינוי מוחל **על גבי** הצורה שהשיפועים כבר
@@ -277,21 +297,84 @@ function _applyNotch(P,nt,sc,mmW){
            shoulder:S, inner:N, foot:B, rest:restMM };
 }
 
-// ─── פינוי חופשי: מלבן במ״מ, יחסי לפינת התיבה החוסמת ──────────────────────
+// ─── נקודה שנמדדת מהפאה האמיתית ──────────────────────────────────────────
+//
+// **כל מרחק של פינוי חופשי או קדח חופשי מתחיל על המצולע עצמו, ישר מול
+// הנקודה שנמדדת** (מסמך ה-QA, TEST 07). קודם פינוי נמדד מהתיבה החוסמת:
+// "1200 מלמטה" ליד רצפה משופעת נמדד מקו מלבני דמיוני מתחת לזכוכית, והשרטט
+// — שמודד מהקצה שקיים — חתך זכוכית אחרת. "כך מודדים בשטח" נכון רק כשהפאה
+// ישרה; כשהיא נוטה, מה שיש בשטח הוא הקצה, לא התיבה.
+//
+// על מלבן הקצה **הוא** התיבה, ולכן שם שום דבר לא זז.
+//
+// הקואורדינטות במ״מ, יחסיות לפינה השמאלית-עליונה של התיבה — כמו poly.
+function _polyYsAtX(poly,x){
+  const ys=[];
+  for(let i=0;i<poly.length;i++){
+    const A=poly[i], B=poly[(i+1)%poly.length];
+    if((A[0]<=x&&x<B[0])||(B[0]<=x&&x<A[0])) ys.push(A[1]+(B[1]-A[1])*(x-A[0])/(B[0]-A[0]));
+  }
+  return ys;
+}
+function _polyXsAtY(poly,y){
+  const xs=[];
+  for(let i=0;i<poly.length;i++){
+    const A=poly[i], B=poly[(i+1)%poly.length];
+    if((A[1]<=y&&y<B[1])||(B[1]<=y&&y<A[1])) xs.push(A[0]+(B[0]-A[0])*(y-A[1])/(B[1]-A[1]));
+  }
+  return xs;
+}
+// הקצה הקרוב בכיוון המבוקש: הראשון מתחת לנקודה (או מעליה, משמאלה, מימינה).
+// נקודה שנפלה מחוץ לזכוכית — אין קצה בכיוון — מקבלת את הקיצוני, כדי שהיא
+// תצויר איפה שביקשו ו-lgValidate יגיד שהיא בחוץ.
+function _nearestFace(list,v,after,fallback){
+  if(!list.length) return fallback;
+  const c = after ? list.filter(q=>q>=v-1e-6) : list.filter(q=>q<=v+1e-6);
+  if(c.length) return after ? Math.min.apply(null,c) : Math.max.apply(null,c);
+  return after ? Math.max.apply(null,list) : Math.min.apply(null,list);
+}
+// ‏dx ממעל הפאה הצדדית ו-dy מהפאה העליונה/התחתונה — שתיהן במקום שבו
+// הנקודה באמת יושבת. הפאה הצדדית נמדדת בגובה הנקודה והתחתונה ברוחב שלה,
+// וכל אחת תלויה בשנייה כשיש שתי פאות משופעות — לכן כמה סבבים; הם מתכנסים
+// מיד, כי שיפוע של זכוכית הוא כמה אחוזים בודדים.
+function _lgPointFromFaces(poly,boxW,boxH,fromLeft,dx,fromTop,dy){
+  // ‏**ציר אחרי ציר, לא שניהם מאותו ניחוש.** הניחוש הראשון נלקח מהתיבה,
+  // ונקודה "5 מלמטה" לפי התיבה יושבת מתחת לרצפה משופעת — מחוץ לזכוכית.
+  // מדידת הפאה הצדדית בגובה הזה פגעה בצלע הרצפה במקום בצד, והפינוי קפץ
+  // מעבר לפאה. לכן: קודם הגובה מול ה-x, ומיד הצד מול הגובה המתוקן.
+  const e=1e-6, has=poly && poly.length>=3;
+  let fL=0, fR=boxW, fT=0, fB=boxH;
+  let x = fromLeft ? fL+dx : fR-dx, y = fromTop ? fT+dy : fB-dy;
+  for(let k=0;k<4 && has;k++){
+    const ys=_polyYsAtX(poly, Math.min(Math.max(x,e),boxW-e));
+    fT=_nearestFace(ys,y,false,0);  fB=_nearestFace(ys,y,true,boxH);
+    y = fromTop ? fT+dy : fB-dy;
+    const xs=_polyXsAtY(poly, Math.min(Math.max(y,e),boxH-e));
+    fL=_nearestFace(xs,x,false,0);  fR=_nearestFace(xs,x,true,boxW);
+    x = fromLeft ? fL+dx : fR-dx;
+  }
+  return { x:x, y:y, faceX: fromLeft?fL:fR, faceY: fromTop?fT:fB };
+}
+
+// ─── פינוי חופשי: מלבן במ״מ ──────────────────────────────────────────────
 //
 // **אותה נוסחה בשני מקומות**: כאן נטו במ״מ, לבדיקת הכלה מול המתאר האמיתי
 // (‏lgOutline); בציור (‏lgLayout) היא מוכפלת בקנה המידה ומוזזת למקום. נוסחה
 // אחת שמשרתת את שניהם, כי שתי גרסאות מתפצלות בדיוק כמו שקרה כבר כאן פעם.
-function _cutoutRectMM(c, boxW, boxH){
+//
+// ‏ref/face — הנקודה שנמדדה (תחילת הפינוי או אמצעו) ונקודת הקצה שממנה
+// נמדדה, כדי שקווי המידה יתחילו ויסתיימו בדיוק במקומות שהמספרים מתארים.
+function _cutoutRectMM(c, boxW, boxH, poly){
   if(!c || !(Number(c.w)>0) || !(Number(c.h)>0)) return null;
   const cw=Number(c.w), ch=Number(c.h);
   const mid = c.ref==='center';
   const dx=(c.x&&c.x.mm)||0, dy=(c.y&&c.y.mm)||0;
   const fromLeft = !(c.x&&c.x.from==='right');
   const fromTop  = !!(c.y&&c.y.from==='top');
-  const x = fromLeft ? dx-(mid?cw/2:0) : boxW-dx-(mid?cw/2:cw);
-  const y = fromTop  ? dy-(mid?ch/2:0) : boxH-dy-(mid?ch/2:ch);
-  return {x,y,w:cw,h:ch};
+  const p=_lgPointFromFaces(poly,boxW,boxH,fromLeft,dx,fromTop,dy);
+  const x = p.x - (mid ? cw/2 : (fromLeft?0:cw));
+  const y = p.y - (mid ? ch/2 : (fromTop ?0:ch));
+  return {x,y,w:cw,h:ch, refX:p.x, refY:p.y, faceX:p.faceX, faceY:p.faceY};
 }
 
 // ray casting רגיל, ב-x,y יחסיים לאותה תיבה כמו poly.
@@ -308,16 +391,16 @@ function _pointInPoly(pt,poly){
 
 // ─── פינוי חופשי מול המתאר האמיתי ───────────────────────────────────────
 //
-// הפינוי החופשי נמדד מהתיבה החוסמת בכוונה — כך מודדים בשטח (ר' lgLayout).
-// אבל כשלפאה הזאת יש גם שיפוע או פינוי מדרגה, התיבה החוסמת אינה הזכוכית:
-// יש משולש שנחתך ואיננו שם. פינוי שנופל שם מבקש זכוכית שלא קיימת — ובלי
+// הפינוי החופשי נמדד מהפאה האמיתית (ר' _lgPointFromFaces), אבל עדיין יכול
+// לחרוג: מספרים גדולים מהזכוכית, או פינוי שחוצה צלע משופעת או מדרגה.
+// פינוי כזה מבקש זכוכית שלא קיימת — ובלי
 // הבדיקה הזאת זה מתגלה רק כשהזכוכית מגיעה חתוכה לא נכון. ארבע פינות
 // הפינוי מספיקות: הן קמורות/קעורות בפינה אחת בלבד (מדרגת הפינוי), ולא
 // באמצע צלע.
 function _cutoutErrorsOf(list,poly,mmW,mmH){
   const errs=[];
   (list||[]).forEach((c,ci)=>{
-    const r=_cutoutRectMM(c,mmW,mmH);
+    const r=_cutoutRectMM(c,mmW,mmH,poly);
     if(!r) return;
     const eps=0.5; // נגיעה בקו עצמו אינה חריגה — רק חציה שלו
     const corners=[[r.x+eps,r.y+eps],[r.x+r.w-eps,r.y+eps],
@@ -325,6 +408,93 @@ function _cutoutErrorsOf(list,poly,mmW,mmH){
     if(corners.some(p=>!_pointInPoly(p,poly))) errs.push(ci);
   });
   return errs;
+}
+
+// ─── בדיקת הגאומטריה עצמה ───────────────────────────────────────────────
+//
+// ‏**לא רק מספרים — הצורה** (מסמך ה-QA, TEST 09 ומה שנראה בצילומי TEST 08).
+// קדח "850 משמאל" על זכוכית של 500 צויר מחוץ לזכוכית בלי מילה; פינוי שבלט
+// מהפאה קיבל הודעה שהאשימה שיפוע שלא היה שם; ומדרגה שהזנב והרוחב שנשאר
+// שלה אינם מסתכמים לרוחב צוירה בשקט עם דופן נוטה.
+//
+// כל ממצא נושא את המספר של האלמנט (אותו מספר כמו בגיליון ובמקרא), וקוד
+// שהמסך יודע לפעול לפיו. ‏notch-open אינו חסימה אלא שאלה: המסך שואל איפה
+// השיפוע ומבקש רק את הנתון החסר.
+// ‏איך קוראים לזכוכית בשורה של מקרא או הודעה. בקומבינציה לזכוכיות כבר יש
+// שם ייחודי ("קבוע א") ואז מספר רק מבלבל ("קבוע א 1"); כששני לוחות חולקים
+// שם ("קבוע", "קבוע") המספר הוא מה שמבדיל ביניהם. זכוכית בודדת — בלי כלום.
+function _lgGlassName(shapes,i){
+  if(!shapes || shapes.length<2) return '';
+  const lab=(shapes[i]&&shapes[i].label)||'זכוכית';
+  const same=shapes.filter(q=>((q&&q.label)||'זכוכית')===lab).length;
+  return (same>1 ? lab+' '+(i+1) : lab)+': ';
+}
+
+function _segCross(a,b,c,d){
+  const o=(p,q,r)=>Math.sign((q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]));
+  return o(a,b,c)*o(a,b,d)<0 && o(c,d,a)*o(c,d,b)<0;
+}
+function _lgPolySelfIntersects(poly){
+  const n=poly.length;
+  for(let i=0;i<n;i++) for(let j=i+2;j<n;j++){
+    if(i===0 && j===n-1) continue;           // שתי צלעות סמוכות דרך נקודה 0
+    if(_segCross(poly[i],poly[(i+1)%n],poly[j],poly[(j+1)%n])) return true;
+  }
+  return false;
+}
+// המרחק מנקודה לקטע — כדי לדעת אם שפת הקדח חוצה את קצה הזכוכית
+function _distToSeg(p,a,b){
+  const dx=b[0]-a[0], dy=b[1]-a[1], L=dx*dx+dy*dy;
+  const t=L ? Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L)) : 0;
+  return Math.hypot(p[0]-a[0]-t*dx, p[1]-a[1]-t*dy);
+}
+function lgGeometryIssues(shower){
+  const shapes=(shower&&shower.shapes)||[];
+  const out=[];
+  const outs=lgOutline(shower);
+  outs.forEach((ol,i)=>{
+    const s=shapes[i]||{}, P=ol.poly;
+    const who=_lgGlassName(shapes,i);
+    const add=(code,extra,msg)=>out.push(Object.assign({at:ol.id, idx:i, code:code, msg:who+msg}, extra||{}));
+
+    if(_lgPolySelfIntersects(P))
+      add('poly-cross',{}, 'צורת הזכוכית חוצה את עצמה — יש מידות שסותרות זו את זו');
+
+    // קדחים חופשיים: המרכז בתוך הזכוכית, והשפה לא חוצה את הקצה
+    let nFree=0;
+    (s.holes||[]).forEach(h=>{
+      if(!h || h.role!=='hole') return;
+      const n=h.n||(++nFree);
+      const fromLeft=!(h.x&&h.x.from==='right');
+      const p=_lgPointFromFaces(P,ol.mmW,ol.mmH,fromLeft,(h.x&&h.x.mm)||0,
+                                !!(h.y&&h.y.from==='top'),(h.y&&h.y.mm)||0);
+      const pt=[p.x,p.y], r=(Number(h.dia)||LG_HOLE_HANDLE)/2;
+      if(!_pointInPoly(pt,P)) add('hole-out',{n:n}, 'קדח '+n+' מחוץ לזכוכית — בדוק את המרחקים שלו');
+      else if(P.some((a,k)=>_distToSeg(pt,a,P[(k+1)%P.length])<r))
+        add('hole-edge',{n:n}, 'קדח '+n+' חוצה את קצה הזכוכית — הוא קרוב לקצה יותר מחצי הקוטר שלו');
+    });
+
+    // פינויים חופשיים — כל אחד בשמו
+    (ol.cutoutErrors||[]).forEach(ci=>{
+      const c=(s.cutouts||[])[ci]||{}, n=c.n||(ci+1);
+      add('cut-out',{n:n}, 'פינוי '+n+' חורג מהזכוכית — בדוק את הגודל והמרחקים שלו');
+    });
+
+    // מדרגה שאינה נסגרת: זנב + רוחב שנשאר מול רוחב הזכוכית **בתחתית**.
+    // שיפוע שכבר קיים על הזכוכית נכנס לרוחב הזה — ואם הוא סוגר את
+    // החשבון, אין מה לשאול (בן: "קודם לבדוק אם שיפוע קיים פותר").
+    const nt=ol.notch;
+    if(nt && nt.rest!=null && !nt.fix){
+      const bottomW = (ol.slope&&ol.slope.vSide) ? ol.slope.w2 : ol.mmW;
+      const sum=nt.w+nt.rest;
+      if(Math.abs(sum-bottomW)>1)
+        add('notch-open',{sum:sum, width:bottomW, w:nt.w, rest:nt.rest},
+            // במילים ולא במשוואה: "250 + 350 = 600" מתהפך בטקסט מימין לשמאל
+            'המדרגה לא נסגרת כמדרגה ישרה: רוחב המדרגה '+nt.w+' מ״מ ועוד הרוחב שנשאר '+
+            nt.rest+' מ״מ יוצאים '+sum+' מ״מ, אבל רוחב הזכוכית בתחתית '+bottomW+' מ״מ. יש שיפוע?');
+    }
+  });
+  return out;
 }
 
 // ─── מהצייר אל המנוע ─────────────────────────────────────────────────────
@@ -485,6 +655,7 @@ function lgFromPanels(panels,pStates,opts){
         if(Number(st.notchHIn)>0)  s.notchHIn=Number(st.notchHIn);
         if(Number(st.notchRest)>0) s.notchRest=Number(st.notchRest);
         if(st.notchSide)    s.notchSide=st.notchSide;
+        if(st.notchFix==='width'||st.notchFix==='height') s.notchFix=st.notchFix;
         if(st.notchBracket) s.notchBracket=st.notchBracket;
       }
 
@@ -511,10 +682,15 @@ function lgFromPanels(panels,pStates,opts){
       // קדחים שהזכוכית נושאת בעצמה. הם נחתכים בדיוק כמו הנגזרים, ולכן
       // עוברים סינון: ערך פגום היה מצייר קדח באפס-אפס במקום ליפול.
       if(Array.isArray(st.holes) && st.holes.length){
-        const ok=st.holes.filter(h=>h&&h.role&&h.x&&h.y&&
+        // ‏n — מספרו של קדח חופשי בין הקדחים החופשיים של הזכוכית, בסדר
+        // שבו הוזנו. זה המספר שהגיליון מציג ("קדח 1") ושהשרטוט והמקרא
+        // נושאים ("ק1"), ולכן הוא נקבע כאן פעם אחת, לפני הסינון.
+        let nFree=0;
+        const ok=st.holes.map(h=>(h&&h.role==='hole') ? Object.assign({},h,{n:++nFree}) : h)
+          .filter(h=>h&&h.role&&h.x&&h.y&&
                                     Number(h.x.mm)>=0&&Number(h.y.mm)>=0)
           .map(h=>({role:h.role, dia:Number(h.dia)>0?Number(h.dia):null,
-                    variant:h.variant||null,
+                    variant:h.variant||null, n:h.n||null,
                     x:{from:h.x.from==='right'?'right':'left', mm:Number(h.x.mm)},
                     y:{from:h.y.from==='top'?'top':'bottom',   mm:Number(h.y.mm)}}));
         if(ok.length) s.holes=ok;
@@ -528,9 +704,12 @@ function lgFromPanels(panels,pStates,opts){
       // נותנות מלבן אחר לגמרי עם אותם מספרים. לכן היא נשמרת ולא
       // נקבעת כאן.
       if(Array.isArray(st.cutouts) && st.cutouts.length){
-        const ok=st.cutouts.filter(c=>c&&Number(c.w)>0&&Number(c.h)>0&&c.x&&c.y&&
+        // ‏n — "פינוי 1" של הגיליון הוא האינדקס הגולמי ועוד אחד; נשמר לפני
+        // הסינון כדי שהשרטוט לא ימספר מחדש כשאחד מהם פגום.
+        const ok=st.cutouts.map((c,i)=>c&&Object.assign({},c,{n:i+1}))
+          .filter(c=>c&&Number(c.w)>0&&Number(c.h)>0&&c.x&&c.y&&
                                       Number(c.x.mm)>=0&&Number(c.y.mm)>=0)
-          .map(c=>({w:Number(c.w), h:Number(c.h),
+          .map(c=>({w:Number(c.w), h:Number(c.h), n:c.n,
                     ref:c.ref==='center'?'center':'edge',
                     x:{from:c.x.from==='right'?'right':'left', mm:Number(c.x.mm)},
                     y:{from:c.y.from==='top'?'top':'bottom',   mm:Number(c.y.mm)}}));
@@ -589,7 +768,7 @@ function _layoutPass(shower,cW,mgL,mgR){
 
   const shapes=(shower&&shower.shapes)||[];
   const out={ canvas:{w:cW,h:0}, scale:1, lanes:cfg, margins:{l:mgL,r:mgR},
-              shapes:[], dims:[], hardware:[] };
+              shapes:[], dims:[], hardware:[], tags:[], legend:[] };
   if(!shapes.length){ out.canvas.h=200; return out; }
 
   const MG=mgL;
@@ -849,11 +1028,23 @@ function _layoutPass(shower,cW,mgL,mgR){
   // אבל שתי פאות שונות מקבלות כל אחת את שלה. קיבוץ גלובלי מיזג את כל
   // ה-200 של הציור למספר בודד, ואז לחצי מהפרזול לא היה גובה כלל.
   const hwPend=[];
-  const hwAdd=(kind,mm,a,b,idx,face,outward,side,field)=>{
-    const g=hwPend.find(p=>p.kind===kind&&p.mm===mm&&Math.abs(p.face-face)<1&&
+  // ─── המקרא התחתון ───
+  //
+  // שורה אחת לכל פינוי וקדח חופשי: התג שעל השרטוט, ואז הכל — גודל או
+  // קוטר, שני המרחקים ונקודת הייחוס. כשיש יותר מזכוכית אחת השורה אומרת גם
+  // של איזו, כי "פ1" יכול להופיע על כל אחת מהן.
+  const legendAdd=(s,tag,text)=>{
+    const who = _lgGlassName(out.shapes, s.idx);
+    out.legend.push({tag:tag, idx:s.idx, text:who+text});
+  };
+
+  // ‏owner — האלמנט שיצר את המידה ({idx, feat:'cut:1'|'hole:1'}). מידה של
+  // פינוי או קדח חופשי אינה ממוזגת עם אחרת ונושאת את בעליה עד לציור.
+  const hwAdd=(kind,mm,a,b,idx,face,outward,side,field,owner)=>{
+    const g=!owner && hwPend.find(p=>!p.owner&&p.kind===kind&&p.mm===mm&&Math.abs(p.face-face)<1&&
                            p.side===side&&Math.abs(p.a-a)<1&&Math.abs(p.b-b)<1);
     if(g){ if(g.idxs.indexOf(idx)<0) g.idxs.push(idx); }
-    else hwPend.push({kind,mm,a,b,face,outward,side,idx,idxs:[idx],field:field});
+    else hwPend.push({kind,mm,a,b,face,outward,side,idx,idxs:[idx],field:field,owner:owner||null});
   };
   // מרווח שמפנה את סמל הפרזול (רדיוס 9) מהתווית (רוחב 16 מסובבת)
   const HW_GAP=cfg.subFirst;
@@ -1218,14 +1409,15 @@ function _layoutPass(shower,cW,mgL,mgR){
     // מרחק מהפאה — אחד לכפתור ולמגבת, ו**שניים למרכוז**:
     // שם השיטה היא המרחק מכל פאה, והמרחק בין החורים יוצא
     // מה שיוצא. קו מידה עליו היה מתאר תוצאה, לא החלטה.
+    const hOwner={idx:s.idx, feat:'handle'};
     h.edges.forEach(e=>edgePend.push({idx:s.idx, mm:h.eMM,
-      a:Math.min(e.x,e.face), b:Math.max(e.x,e.face), y:h.y, right:e.right}));
+      a:Math.min(e.x,e.face), b:Math.max(e.x,e.face), y:h.y, right:e.right, owner:hOwner}));
 
     // ובמגבת רגילה — ה-55 עצמו, שהוא ההחלטה שם
     if(h.type==='towel')
       edgePend.push({idx:s.idx, mm:Math.round(h.gap/sc),
                      a:Math.min(h.xs[0],h.xs[1]), b:Math.max(h.xs[0],h.xs[1]),
-                     y:h.y, right:h.right, kind:'towel-gap'});
+                     y:h.y, right:h.right, kind:'towel-gap', owner:hOwner});
     // ובורטיקל — אותו מרחק, אנכי. הוא **תמיד** נרשם, כי בורטיקל
     // אין מרכוז והמרחק בין החורים הוא החלטה שחייבים למסור.
     if(h.type==='vertical')
@@ -1294,10 +1486,21 @@ function _layoutPass(shower,cW,mgL,mgR){
       // ‏הפאה שהקדח נקדח בה קובעת מאיפה נמדד "למעלה/למטה" — לא תיבת
       // הגבול. פאה משופעת מסתיימת בגובה אחר מהתיבה, ר' _lgFaceEdge.
       const faceEdge = _lgFaceEdge(P, fromLeft?'left':'right');
-      const y = _lgYFromFace(faceEdge, hy.from, hy.mm||0, sc);
-      const ex = xAt(faceEdge[0], faceEdge[1], y);
       const into = fromLeft ? 1 : -1;
-      const x = ex+into*(hx.mm||0)*sc;
+      let x, y, ex, edgeY;
+      if(role==='hole'){
+        // ‏**קדח חופשי נמדד כמו פינוי חופשי** — מהקצה האמיתי ישר מתחתיו
+        // ולצידו (TEST 07). פרזול (ציר, זווית) נשאר מדוד לאורך הפאה שלו:
+        // "200 מראש הפאה" הוא מה שהמספר שלו אומר.
+        const pm=_lgPointFromFaces((outlines[s.idx]||{}).poly, s.mmW, s.mmH,
+                                   fromLeft, hx.mm||0, hy.from==='top', hy.mm||0);
+        x=s.x+pm.x*sc; y=s.y+pm.y*sc; ex=s.x+pm.faceX*sc; edgeY=s.y+pm.faceY*sc;
+      } else {
+        y  = _lgYFromFace(faceEdge, hy.from, hy.mm||0, sc);
+        ex = xAt(faceEdge[0], faceEdge[1], y);
+        x  = ex+into*(hx.mm||0)*sc;
+        edgeY = hy.from==='top' ? faceEdge[0][1] : faceEdge[1][1];
+      }
       const dia = hl.dia!=null ? hl.dia
                 : kind==='hole' ? LG_HOLE_HANDLE : LG_HOLE_BRACKET;
       // ‏variant נוסע גם על קדח מוצהר — קדח הרמוניקה מוצהר הוא עדיין
@@ -1309,6 +1512,21 @@ function _layoutPass(shower,cW,mgL,mgR){
                          variant:hl.variant||null});
       claim(x,y);
 
+      // ‏**קדח חופשי מקבל מספר, והקוטר שלו עובר למקרא** (TEST 04/08). חור
+      // פרזול סטנדרטי — ציר, זווית, ידית — אינו צריך את זה: הקוטר שלו
+      // ידוע והוא מזוהה מעצמו. קדח שמישהו מיקם ביד הוא מה שחייב תווית.
+      let owner=null;
+      if(role==='hole'){
+        const n=hl.n||(out.tags.filter(t=>t.kind==='hole'&&t.idx===s.idx).length+1);
+        owner={idx:s.idx, feat:'hole:'+n};
+        const rr=Math.max(dia*sc/2,3*dia/12,2);
+        out.tags.push({kind:'hole', text:'ק'+n, idx:s.idx, owner:owner,
+                       x:x+into*(rr+9), y:y-rr-7});
+        legendAdd(s, 'ק'+n, 'קדח '+n+' — Ø'+dia+' מ״מ'+
+          (hx.mm>0 ? ' | '+(fromLeft?'משמאל ':'מימין ')+Math.round(hx.mm)+' מ״מ' : '')+
+          (hy.mm>0 ? ' | '+(hy.from==='top'?'מלמעלה ':'מלמטה ')+Math.round(hy.mm)+' מ״מ' : ''));
+      }
+
       // ── שתי המידות של הקדח ──
       //
       // חור על השרטוט בלי מספרים הוא חור שאי אפשר לקדוח. שתיהן
@@ -1319,9 +1537,8 @@ function _layoutPass(shower,cW,mgL,mgR){
       // מוצהר נערך בגיליון המאפיינים, ששם גם התפקיד והקוטר.
       const vMM=Math.round(hy.mm||0), hMM=Math.round(hx.mm||0);
       if(vMM>0){
-        const edgeY = hy.from==='top' ? faceEdge[0][1] : faceEdge[1][1];
         hwAdd('hole-dist',vMM,Math.min(edgeY,y),Math.max(edgeY,y),s.idx,x,
-              hy.from==='top'?'start':'end', fromLeft?-1:1);
+              hy.from==='top'?'start':'end', fromLeft?-1:1, undefined, owner||undefined);
       }
       // ‏הרמוניקה לא מקבלת מידה משלה כאן: 3.6 הס"מ קבועים לגמרי (אותו
       // מספר תמיד, לא שדה עריך), בדיוק כמו הציר הרגיל שגם הוא לא נושא
@@ -1330,7 +1547,7 @@ function _layoutPass(shower,cW,mgL,mgR){
       // לא מידע (בן, 2026-09-19).
       if(hMM>0 && hl.variant!=='harmonica'){
         edgePend.push({idx:s.idx, mm:hMM, a:Math.min(ex,x), b:Math.max(ex,x),
-                       y:y, right:!fromLeft, kind:'hole-edge'});
+                       y:y, right:!fromLeft, kind:'hole-edge', owner:owner||undefined});
       }
     });
   });
@@ -1346,21 +1563,21 @@ function _layoutPass(shower,cW,mgL,mgR){
   // תחילת הפינוי או עד אמצעו, ושתי השיטות נותנות מלבן אחר עם אותם
   // מספרים בדיוק. לכן היא נוסעת עם הפינוי, ואינה מוכרעת כאן.
   //
-  // המידות נמדדות מהתיבה החוסמת ולא מהפאה: פאה משופעת נוטה, ולמלבן יש
-  // צלע אנכית — מי שמודד בשטח מודד מהקצה הקיצוני של הזכוכית.
+  // המידות נמדדות **מהפאה האמיתית**, ישר מול נקודת הייחוס — ר'
+  // _lgPointFromFaces. על מלבן זה בדיוק התיבה, כמו שהיה תמיד.
   out.cutouts=[];
   out.shapes.forEach(s=>{
     const src=shapes[s.idx]||{};
     const list=src.cutouts;
     if(!list||!list.length) return;
-    const topY=s.y, botY=s.y+s.h, leftX=s.x, rightX=s.x+s.w;
+    const topY=s.y, leftX=s.x;
+    const polyMM=(outlines[s.idx]||{}).poly;
     list.forEach(c=>{
       // אותה נוסחה בדיוק כמו ב-lgOutline (‏_cutoutRectMM), רק נטו במ״מ שם
       // ומוכפלת ומוזזת למקום כאן — כדי ששתי הגרסאות לא יוכלו להיפרד.
-      const rectMM=_cutoutRectMM(c,s.mmW,s.mmH);
+      const rectMM=_cutoutRectMM(c,s.mmW,s.mmH,polyMM);
       if(!rectMM) return;
       const cw=rectMM.w*sc, ch=rectMM.h*sc;
-      const mid = c.ref==='center';
       const fromLeft = !(c.x&&c.x.from==='right');
       const fromTop  = !!(c.y&&c.y.from==='top');
       const x0 = leftX + rectMM.x*sc;
@@ -1372,23 +1589,31 @@ function _layoutPass(shower,cW,mgL,mgR){
       // התוויות לא ינחתו על המלבן עצמו
       claim(x0+cw/2, y0+ch/2);
 
-      // ארבע המידות, דרך אותם שני מנגנונים שמציירים כל מידת פרזול.
-      hwAdd('cut-h', Math.round(c.h), y0, y0+ch, s.idx, x0+cw/2,
-            'start', fromLeft?-1:1);
-      edgePend.push({idx:s.idx, mm:Math.round(c.w), a:x0, b:x0+cw,
-                     y:y0+ch/2, right:!fromLeft, kind:'cut-w'});
-      // והמרחקים: עד הנקודה שממנה נמדד — הקצה או האמצע
-      const refX = fromLeft ? (mid?x0+cw/2:x0) : (mid?x0+cw/2:x0+cw);
-      const refY = fromTop  ? (mid?y0+ch/2:y0) : (mid?y0+ch/2:y0+ch);
+      // ‏**על השרטוט: מספר קטן. במקרא: הגודל** (מסמך ה-QA, TEST 05/08).
+      // ‏120×60 בתוך המלבן ושתי מידות גודל סביבו הפכו שני פינויים לסבך
+      // שבו אי אפשר לדעת איזה מספר של מי. קווי המיקום נשארים על השרטוט
+      // ומסתיימים בפינוי; הגודל ונקודת הייחוס עוברים לשורה אחת במקרא.
+      const n=c.n||(out.cutouts.filter(q=>q.idx===s.idx).length);
+      const owner={idx:s.idx, feat:'cut:'+n};
+      const big = cw>=18 && ch>=14;
+      out.tags.push({kind:'cut', text:'פ'+n, idx:s.idx, owner:owner,
+                     x: big ? x0+cw/2 : x0+cw+9, y: big ? y0+ch/2 : y0-7});
+      legendAdd(s, 'פ'+n, 'פינוי '+n+' — רוחב '+Math.round(c.w)+' מ״מ | גובה '+Math.round(c.h)+' מ״מ'+
+        (c.x&&c.x.mm>0 ? ' | '+(fromLeft?'משמאל ':'מימין ')+Math.round(c.x.mm)+' מ״מ' : '')+
+        (c.y&&c.y.mm>0 ? ' | '+(fromTop?'מלמעלה ':'מלמטה ')+Math.round(c.y.mm)+' מ״מ' : '')+
+        ' | ייחוס: '+(c.ref==='center'?'מרכז הפינוי':'תחילת הפינוי'));
+
+      // המרחקים: מהקצה האמיתי עד הנקודה שממנה נמדד — הקצה או האמצע
+      const refX  = leftX + rectMM.refX*sc,  refY  = topY + rectMM.refY*sc;
+      const faceX = leftX + rectMM.faceX*sc, faceY = topY + rectMM.faceY*sc;
       if(c.x&&c.x.mm>0)
         edgePend.push({idx:s.idx, mm:Math.round(c.x.mm),
-                       a:Math.min(fromLeft?leftX:rightX, refX),
-                       b:Math.max(fromLeft?leftX:rightX, refX),
-                       y:refY, right:!fromLeft, kind:'cut-x'});
+                       a:Math.min(faceX, refX), b:Math.max(faceX, refX),
+                       y:refY, right:!fromLeft, kind:'cut-x', owner:owner});
       if(c.y&&c.y.mm>0)
         hwAdd('cut-y', Math.round(c.y.mm),
-              Math.min(fromTop?topY:botY, refY), Math.max(fromTop?topY:botY, refY),
-              s.idx, refX, fromTop?'start':'end', fromLeft?-1:1);
+              Math.min(faceY, refY), Math.max(faceY, refY),
+              s.idx, refX, fromTop?'start':'end', fromLeft?-1:1, undefined, owner);
     });
   });
 
@@ -1577,9 +1802,14 @@ function _layoutPass(shower,cW,mgL,mgR){
       x=Math.min(Math.max(x,oLo),oHi);
     }
 
+    // ‏**מידה של אלמנט קשורה אליו בקו.** הקו של "1200 מלמטה" זז הצידה כדי
+    // לא לדרוס את הפינוי, ובלי קווי הפניה הוא ריחף באמצע הזכוכית ולא אמר
+    // של מי הוא (TEST 08). שני קווים — מנקודת הייחוס ומהקצה — מחברים אותו.
+    const ext = (p.owner && Math.abs(x-p.face)>0.5)
+      ? [{x1:p.face,y1:p.a,x2:x,y2:p.a},{x1:p.face,y1:p.b,x2:x,y2:p.b}] : undefined;
     dim(p.kind,p.mm,x,p.a,x,p.b,
         {idx:p.idx, idxs:p.idxs, zone:'hw', face:p.face, near:p.face,
-         size:LG_SZ_SUB, t:t, field:p.field});
+         size:LG_SZ_SUB, t:t, field:p.field, owner:p.owner||undefined, ext:ext});
   });
 
   hDims.filter(h=>h.side!=='inside').forEach(emitHeight);
@@ -1622,25 +1852,50 @@ function _layoutPass(shower,cW,mgL,mgR){
   // שנפגשות מביאות שתי ידיות זו מול זו, ושתי המידות רצו לאותו מקום.
   // מרחק החור מהפאה, ומרחק הזווית מהפאה — שתיהן מידות אופקיות קצרות
   // שמחפשות שורה פנויה מתחת למה שהן מתארות.
+  //
+  // ‏**המספר נכנס לזכוכית של מי שיצר אותו — לעולם לא מעבר לפאה** (מסמך
+  // ה-QA, TEST 01). קודם מספר שלא נכנס בקו קצר נדחף "כלפי הפאה והלאה" — ומעבר
+  // לפאה יושבת הדלת השכנה: ה-60 של דלת אחת נכתב על השנייה וה-90 שלה על
+  // הראשונה. עכשיו הוא יוצא מהצד של החור, פנימה, ונשאר בתוך הזכוכית שלו.
+  //
+  // המרחק בין חורי המגבת מקבל שורה משלו, מתחת למרחק מהפאה. באותה שורה
+  // השניים נקראו כשרשרת אחת מהפאה, וה-550 נראה כאילו נמדד ממנה.
+  //
+  // וקווי הפניה מהאלמנט עד שורת המידה: הקו יורד מתחת לחור כדי לא לדרוס
+  // אותו, ובלעדיהם לא היה ברור לאיזה חור הוא שייך.
   const shortH=(kind,p,dirRight)=>{
     const need=Math.max(String(p.mm).length*LG_SZ_SUB*0.64+8, LG_SZ_SUB*2.2);
     const len=Math.abs(p.b-p.a);
     let t=0.5;
     if(len<need+4){
       const over=(need/2+5)/Math.max(len,1);
-      t = dirRight ? 1+over : -over;     // כלפי הפאה והלאה
+      t = dirRight ? -over : 1+over;     // מהצד של החור, פנימה — לא מעבר לפאה
     }
-    const lane=cfg.first+14;
+    const own=out.shapes.find(g=>g.idx===p.idx);
+    if(own && len>0.5){
+      const lo=own.x+need/2, hi=own.x+own.w-need/2;
+      if(lo<=hi){
+        const c=Math.min(Math.max(p.a+(p.b-p.a)*t, lo), hi);
+        t=(c-p.a)/(p.b-p.a);
+      }
+    }
+    const lane=cfg.first+14+(kind==='towel-gap'?16:0);
     let k=0, y=p.y+lane;
     while(k<12 && !labelClear(labelBox(p.mm,0,p.a,y,p.b,y,t,LG_SZ_SUB)))
       y=p.y+lane+(++k)*16;
-    dim(kind,p.mm,p.a,y,p.b,y,{idx:p.idx,zone:'handle',t:t,size:LG_SZ_SUB});
+    const ext=[{x1:p.a,y1:p.y,x2:p.a,y2:y},{x1:p.b,y1:p.y,x2:p.b,y2:y}];
+    dim(kind,p.mm,p.a,y,p.b,y,{idx:p.idx,zone:'handle',t:t,size:LG_SZ_SUB,
+                               ext:ext, owner:p.owner||undefined});
   };
   // קדח מוצהר נושא סוג משלו. בלעדיו המרחק שלו מהפאה נראה למסך
   // כמרחק הידית, ולחיצה על 5 ס"מ של זווית רצפה היתה פותחת
   // את עורך הידית — על קבוע שאין לו ידית בכלל.
   edgePend.forEach(p=>shortH(p.kind||'handle-edge',p,p.right));
   insetPend.forEach(p=>shortH('bracket-inset',p,p.into<0));
+
+  // המקרא בסדר קבוע: לפי הזכוכית משמאל לימין, פינויים ואז קדחים, ולפי מספר
+  const tagOrd=t=>(t.charAt(0)==='פ'?0:1)*1000+Number(t.slice(1)||0);
+  out.legend.sort((a,b)=>(a.idx-b.idx)||(tagOrd(a.tag)-tagOrd(b.tag)));
 
   // מה חורג בפועל מהקנבס, לכל צד — זה מה שהמעבר השני מתקן.
   const boxW=d=>(d.rot?16:Math.max(String(d.text).length*7+10,26))/2;

@@ -254,8 +254,10 @@ console.log('');
   check('and adds nothing else', /sketch-full|classList/.test(exit), false);
 
   /* nothing was moved in the markup */
+  /* the geometry warning (QA TEST 09) sits inside the wrapper, above the
+     canvas, so it is seen in full screen too — nothing else was added */
   check('the canvas still lives in its wrapper',
-        /<div class="canvas-wrap" id="canvasWrap">\s*<canvas id="sk">/.test(DEMO), true);
+        /<div class="canvas-wrap" id="canvasWrap">\s*(<!--[\s\S]*?-->\s*<div id="geoWarn"[^>]*><\/div>\s*)?<canvas id="sk">/.test(DEMO), true);
   check('and the full-screen bar is the only thing added',
         (DEMO.match(/id="fullBar"/g) || []).length, 1);
 }
