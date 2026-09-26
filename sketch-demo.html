@@ -3548,15 +3548,48 @@ function engPaint(L,pfx,dy,idxOf,opts){
 // התשובה. במצב הרגיל הגובה שלה נגזר מהקנבס — היא תמיד "בדיוק
 // בגודל הנכון" ולא מגבילה כלום — ולכן שם מודדים כמה חלון
 // נשאר מתחתיה בפועל.
+//
+// ‏**גלילה אינה שינוי גודל** (מסמך ה-QA, TEST 06). קודם נמדד כאן
+// ‏innerHeight פחות r.top — ושניהם זזים בזמן גלילה: r.top יחסי לחלון ולכן
+// קטן כשהדף עולה, ו-innerHeight גדל כש-Safari מסתיר את סרגל הכתובת (ומודיע
+// על זה ב-resize, שצייר מחדש). אותה צורה צוירה 200×574, 287×824 ו-343×986
+// באותו דף, בלי שום עריכה. גם במחשב: כל עריכה אחרי גלילה קיבלה גודל אחר.
+//
+// עכשיו המיקום נמדד **במסמך** (r.top + scrollY), מול גובה חלון שמתעדכן
+// רק בשינוי אמיתי — ר' _stableViewportH.
 function _availCanvasBox(){
   const w=document.getElementById('canvasWrap');
   if(!w) return {w:0,h:0};
   const full=document.body.classList.contains('sketch-full');
   const r=w.getBoundingClientRect();
+  const docTop=r.top+(window.scrollY||0);
   return {
     w: w.clientWidth || 0,
-    h: full ? (w.clientHeight||0) : Math.max(0, window.innerHeight - r.top - 12),
+    h: full ? (w.clientHeight||0) : Math.max(0, _stableViewportH() - docTop - 12),
   };
+}
+
+// ‏גובה החלון, **יציב**. במכשיר מגע גובה שמשתנה לבדו הוא סרגל הדפדפן
+// שנפתח/נסגר בגלילה, או המקלדת שנפתחת בעריכת מידה — ואף אחד מהם אינו
+// סיבה לשנות את קנה המידה של השרטוט. רוחב שמשתנה הוא שינוי אמיתי (סיבוב
+// המסך), ובמחשב — שאין בו סרגל כזה — גם גובה שמשתנה הוא הקטנת חלון אמיתית.
+let _stableVH=0, _stableVW=0;
+function _isCoarsePointer(){
+  return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+}
+function _stableViewportH(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  if(!_stableVH || vw!==_stableVW || !_isCoarsePointer()){ _stableVH=vh; _stableVW=vw; }
+  return _stableVH;
+}
+
+// ‏resize של גובה בלבד במכשיר מגע אינו מצייר מחדש — ר' למעלה. הציור
+// מחדש הזה הוא שהזיז את השרטוט בזמן גלילה ובפתיחת המקלדת.
+function _onViewportResize(){
+  fitFullBottom();
+  if(_isCoarsePointer() && window.innerWidth===_stableVW) return;
+  _stableViewportH();
+  draw();
 }
 
 // מתחת לזה הציור קטן מכדי מכדי כדי לקרוא בו מידה, ועדיף לגלול.
@@ -4388,7 +4421,7 @@ function afterGlassChange(){
 
 // ══════════════ INIT ══════════════
 renderCombos(); initPS(); renderPanelCtrl(); renderSw(); renderExtras();
-window.addEventListener('resize',()=>{ fitFullBottom(); draw(); }); draw();
+window.addEventListener('resize',_onViewportResize); draw();
 // ‏Escape יוצא ממסך מלא — אותה יציאה בדיוק, לא מסלול נוסף. כשחלון מידה
 // פתוח הוא נסגר קודם, כי הוא השכבה העליונה.
 window.addEventListener('keydown',e=>{

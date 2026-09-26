@@ -427,8 +427,10 @@ console.log('');
   const box = fnOf('_availCanvasBox');
   check('full screen measures the wrapper, which is pinned to the window',
         /full \? \(w\.clientHeight\|\|0\)/.test(box), true);
+  // ‏מול גובה חלון יציב ומיקום במסמך — לא innerHeight−r.top, ששניהם זזים
+  // בגלילה (TEST 06). ההתנהגות עצמה נבדקת ב-test-viewport-stable.js.
   check('and the normal mode measures what is left of the window below it',
-        /window\.innerHeight - r\.top/.test(box), true);
+        /_stableViewportH\(\) - docTop/.test(box), true);
   check('a missing wrapper means no limit, not a zero-sized drawing',
         /if\(!w\) return \{w:0,h:0\}/.test(box), true);
 
