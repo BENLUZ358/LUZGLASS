@@ -37,8 +37,8 @@ const path = require('path');
 const vm   = require('vm');
 
 const ROOT = path.join(__dirname, '..');
-const SRC  = fs.readFileSync(path.join(ROOT, 'api', 'hashavshevet-order.js'), 'utf8');
-const DB   = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+const SRC  = fs.readFileSync(path.join(ROOT, 'api', 'hashavshevet-order.js'), 'utf8').replace(/\r\n/g, '\n');
+const DB   = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8').replace(/\r\n/g, '\n');
 
 let failed = 0;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
@@ -49,10 +49,11 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 const ctx = { module: {}, exports: {} };
 vm.createContext(ctx);
 for (const re of [/function areaM2[\s\S]*?\n}/, /function clientPricesByName[\s\S]*?\n}/,
-                  /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped \};\n}/]) {
+                  /const LG_LINE_TEXT_MAX = \d+;/, /function lineText[\s\S]*?\n}/,
+                  /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines \};\n}/]) {
   const m = SRC.match(re);
   if (!m) { console.error('FAIL  could not find ' + re); process.exit(1); }
-  vm.runInContext(m[0], ctx);
+  vm.runInContext(m[0].replace(/^const /, 'var '), ctx);
 }
 /* the browser's own area helper, to prove the two agree */
 vm.runInContext((DB.match(/function lgCalcAreaM2[\s\S]*?\n}/) || [''])[0], ctx);

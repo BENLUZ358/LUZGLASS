@@ -99,48 +99,28 @@ function clientPricesByName(prices) {
   return out;
 }
 
-// ── ניסוי זמני: לאן מגיע כל שדה בחשבשבת ────────────────────────────────
+// ── המידה על השורה: SM_Extratext1 ─────────────────────────────────────
 //
-//  סיבוב א' (16/09) ניסה את ארבעת השדות המספריים ברמת התנועה —
-//  SM_ExtraSum1 · SM_Extrasum2 · SM_ExtraNum1 · SM_ExtraNum2 — ובחשבשבת
-//  נרשם "אין נתוני מכפלה". כלומר **אלה אינם גורמי המכפלה**, וזו תשובה
-//  שלילית ודאית שאין טעם לחזור עליה.
+//  "3) 550x1885" — מספר השורה ורוחב×גובה במ"מ. 50 תווים מותרים.
 //
-//  סיבוב ב' בודק את מה שנשאר, ובשתי חזיתות בבת אחת:
+//  גורמי המכפלה עצמם לא ניתנים לכתיבה דרך ה-API — שני סיבובי ניסוי, שבעה
+//  שדות, אפס. אבל הטקסט נקלט (נבדק), ומה שחשוב באמת הוא שהמידה תופיע על
+//  השורה בחשבשבת, ליד המק"ט, כדי שאפשר יהיה להשוות אותה מול הסקיצה.
 //
-//    S_ExtraSum1/2/3   שדות **כותרת** מספריים. ההיגיון אומר שכותרת לא
-//                      יכולה להזין גורמים של שורה — אבל חשבשבת עצמם
-//                      הצביעו עליהם, ויש בדיוק שלושה כמספר הגורמים
-//                      (יחידות · רוחב · אורך). ההזמנה לניסוי היא בת
-//                      פריט אחד, ואז ההבדל בין כותרת לשורה אינו משנה.
+//  ⚠️ המספר הוא של השורה שנשלחה, לא של הפריט. buildLines מדלג על פריטים
+//  בלי מק"ט, מידות או מחיר — וספירה לפי מיקום הפריט הייתה מתפצלת מהמספור
+//  בחשבשבת בשקט: הפריט הרביעי שלנו היה השורה השלישית שלהם. לכן המונה רץ
+//  על השורות שנכנסות למערך, והמספר נרשם חזרה על הפריט (hsLine). כך שני
+//  הצדדים מסכימים בהגדרה, ולא משנה באיזה סדר חשבשבת מציגים את השורות.
 //
-//    הטקסטים           אם המספרים לא ייקלטו, עדיין נשאר מה שחשוב באמת:
-//                      שהמידות **יופיעו בהעתק** שהמזכירה משווה מול
-//                      הסקיצה. טקסט אפילו עדיף שם — הוא לא מעוגל, ולכן
-//                      885 נשאר 885 במקום להיחתך ל-89 ע"י decimal 9.2.
-//
-//  הערכים באנגלית בכוונה: עברית בשדה חדש הייתה מערבבת שאלת קידוד בשאלת
-//  מיפוי, וכישלון לא היה אומר לנו מי משניהם אשם.
-//
-//  זמני. יורד ברגע שיש תשובה.
-//  ובן העלה את המכשול המעשי: הוא יודע להגיע לחלון המכפלה, אבל לא יודע
-//  היכן בממשק יושבים השדות הנוספים — וניסוי שהצליח במקום שאי אפשר
-//  להסתכל בו נראה בדיוק כמו ניסוי שנכשל. לכן נוספו details ו-remarks:
-//  לפי הטבלה אלה "פרטים" ו"הערות", ושניהם אמורים להופיע על המסך הראשי
-//  של ההזמנה — מקום שהוא כבר מכיר. שדה שרואים הוא שדה שאפשר לפסוק עליו.
-const LG_PROBE_FIELDS = {
-  // המספרים — אולי גורמי המכפלה
-  S_ExtraSum1:   '1.111',
-  S_ExtraSum2:   '2.222',
-  S_ExtraSum3:   '3.333',
-  // הטקסטים שנראים בלי לחפש
-  details:       'PROBE-DETAILS',
-  remarks:       'PROBE-REMARKS',
-  // והטקסטים שצריך למצוא
-  S_ExtraText1:  'PROBE-A',
-  SM_Extratext1: 'PROBE-B',
-  SM_Details:    '550x1885',
-};
+//  ובתיקון: "בטל יתרה" על השורה הישנה ושורה חדשה עם אותו מספר — ר'
+//  INVOICE_STATION_BUILD.md חלק ב.
+const LG_LINE_TEXT_MAX = 50;
+function lineText(n, w, h) {
+  const mm = v => String(Math.round(Number(v) || 0));
+  return (n + ') ' + mm(w) + 'x' + mm(h)).slice(0, LG_LINE_TEXT_MAX);
+}
+
 // בונה שורה אחת לכל פריט. Quantity = שטח במ"ר, כי הפריטים בחשבשבת הם
 // מסוג "מכפלה" והמחיר שם הוא למ"ר.
 //
@@ -148,18 +128,24 @@ const LG_PROBE_FIELDS = {
 // ההזמנה האמיתית הראשונה (1058) הוכיחה שזה לא קורה: השורה נכנסה עם מחיר
 // 0.000 וסה"כ 0, בעוד שאותו מק"ט שהוקלד ביד בממשק שלהם קיבל 171. התמחור
 // האוטומטי הוא של מסך ההקלדה, לא של הקליטה דרך ה-API.
-function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices, probe) {
+//
+// hsLines ממפה מפתח פריט (אינדקס במערך, או המפתח ב-Firebase) למספר השורה
+// שלו בחשבשבת, ו-null לפריט שדולג — כדי ששליחה חוזרת תנקה מספר ישן.
+function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices) {
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
   const lines = [];
   const preview = [];
   const skipped = [];
+  const hsLines = {};
 
-  const items = Array.isArray(order.items) ? order.items
-              : (order.items && typeof order.items === 'object') ? Object.values(order.items)
-              : [];
+  const entries = Array.isArray(order.items) ? order.items.map((it, k) => [String(k), it])
+                : (order.items && typeof order.items === 'object') ? Object.entries(order.items)
+                : [];
 
-  items.forEach((item, i) => {
+  entries.forEach(([key, item], i) => {
+    if (!item || typeof item !== 'object') return;
+    hsLines[key] = null;
     const name = item.glassFullName || item.name || `פריט ${i + 1}`;
     const sku  = item.sku;
     if (!sku) { skipped.push({ name, reason: 'אין מק"ט (sku) על הפריט' }); return; }
@@ -175,7 +161,13 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     // ואי אפשר להתעלם ממנו.
     if (!ppm2) { skipped.push({ name, sku, reason: 'אין מחיר למק"ט הזה — לא במחירון הלקוח ולא בגלובלי' }); return; }
 
+    // המספר נקבע כאן, אחרי כל הדילוגים — ר' lineText למעלה.
+    const n    = lines.length + 1;
+    const text = lineText(n, item.w, item.h);
+
     // סדר המפתחות הוא חלק מחוזה החתימה — אין לשנות.
+    // SM_Extratext1 בסוף: החתימה מחושבת על המחרוזת שנשלחת בפועל
+    // (ר' pluginDataJson למטה), ולכן תוספת בסוף אינה שוברת אותה.
     const line = {
       accountKey: String(accountKey),
       documentid: documentId,
@@ -184,16 +176,15 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
       Quantity:   qty.toFixed(3),
       price:      ppm2.toFixed(3),
       Agent:      String(agent),
+      SM_Extratext1: text,
     };
-    // שדות הניסוי נוספים בסוף. החתימה מחושבת על המחרוזת שנשלחת בפועל
-    // (ר' pluginDataJson למטה), ולכן תוספת בסוף אינה שוברת אותה.
-    if (probe) Object.assign(line, LG_PROBE_FIELDS);
     lines.push(line);
+    hsLines[key] = n;
 
-    preview.push({ name, sku, qty: qty.toFixed(3), ppm2 });
+    preview.push({ name, sku, qty: qty.toFixed(3), ppm2, hsLine: n, text });
   });
 
-  return { lines, preview, skipped };
+  return { lines, preview, skipped, hsLines };
 }
 
 module.exports = async function handler(req, res) {
@@ -219,9 +210,6 @@ module.exports = async function handler(req, res) {
   const body    = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
   const orderId = String(body.orderId || '').trim();
   const dryRun  = body.dryRun !== false;   // ברירת מחדל: לא שולחים. חייבים dryRun:false במפורש.
-  // ניסוי איתור גורמי המכפלה — ר' LG_PROBE_FIELDS. חייב להיאמר במפורש,
-  // ולעולם לא דולק מעצמו: אלה מספרי זבל שאין להם מה לחפש בהזמנה אמיתית.
-  const probe   = body.probe === true;
   const force   = body.force === true;
 
   if (!orderId) { res.status(400).json({ error: 'orderId חסר' }); return; }
@@ -295,8 +283,8 @@ module.exports = async function handler(req, res) {
     // prices.clients, לא prices.client — הצומת הוא ברבים. הטעות הזו הפכה את
     // מחירון הלקוח ל-undefined, וכל מחיר נפל לגלובלי: 190 במקום 171 ל"המקום
     // לאמבט". היא לא הזיקה כל עוד המחיר לא נשלח בכלל.
-    const { lines, preview, skipped } = buildLines(order, accountKey, ref.reference,
-      documentId, agent, prices.global, clientPricesByName(prices), probe);
+    const { lines, preview, skipped, hsLines } = buildLines(order, accountKey, ref.reference,
+      documentId, agent, prices.global, clientPricesByName(prices));
 
     if (!lines.length) {
       res.status(422).json({ error: 'אין אף פריט לשליחה', skipped });
@@ -398,6 +386,14 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    // ── מספר השורה חוזר אל הפריט ──
+    // רק אחרי שהבקשה התקבלה: מספר על פריט אומר "זו השורה שלו בחשבשבת", ובלי
+    // מסמך אין שורה. פריט שדולג מקבל null, כך ששליחה חוזרת (force) לא משאירה
+    // עליו מספר של שורה שכבר לא קיימת.
+    const numbering = {};
+    for (const [key, n] of Object.entries(hsLines)) numbering['items/' + key + '/hsLine'] = n;
+    if (Object.keys(numbering).length) await db.ref('orders/' + orderId).update(numbering);
+
     // ── מתי להטריד את מי שעובד על המסך ──
     //
     // המסך מראה הודעה רגילה כשהכל תקין ואזהרה כשלא, ולכן ההחלטה הזו חייבת
@@ -427,8 +423,6 @@ module.exports = async function handler(req, res) {
       reference: ref.reference, accountKey,
       lineCount: lines.length, skipped,
       warn,
-      // בניסוי — מה שיצא בפועל, כדי שאפשר יהיה להשוות מול מה שנחת בחלון
-      probeSent: probe ? lines[0] : undefined,
       response: parsed || text.slice(0, 4000),
     });
 

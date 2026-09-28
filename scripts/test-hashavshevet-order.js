@@ -22,7 +22,7 @@
 const fs   = require('fs');
 const path = require('path');
 
-const SRC = fs.readFileSync(path.join(__dirname, '..', 'api', 'hashavshevet-order.js'), 'utf8');
+const SRC = fs.readFileSync(path.join(__dirname, '..', 'api', 'hashavshevet-order.js'), 'utf8').replace(/\r\n/g, '\n');
 
 let failed = 0;
 const check = (name, cond, detail) => cond
@@ -55,11 +55,11 @@ responses.forEach((m, i) => {
 });
 
 /* ── 2. the line payload is exactly the confirmed fields ───────────────── */
-const build = SRC.match(/lines\.push\(\{([\s\S]*?)\}\);/);
+const build = SRC.match(/const line = \{([\s\S]*?)\};/);
 check('found the line builder', !!build);
 if (build) {
   const fields = [...build[1].matchAll(/^\s*([A-Za-z_$][\w$]*)\s*:/gm)].map(m => m[1]);
-  const EXPECTED = ['accountKey', 'documentid', 'Reference', 'itemkey', 'Quantity', 'price', 'Agent'];
+  const EXPECTED = ['accountKey', 'documentid', 'Reference', 'itemkey', 'Quantity', 'price', 'Agent', 'SM_Extratext1'];
   check('the line carries exactly the expected fields',
         JSON.stringify(fields) === JSON.stringify(EXPECTED),
         `got: ${fields.join(', ')}`);
@@ -138,7 +138,7 @@ check('force does not turn a test order into a real send',
 
 {
   /* the flag has to survive the normaliser, or no screen can mark it */
-  const db = fs.readFileSync(path.join(__dirname, '..', 'firebase-db.js'), 'utf8');
+  const db = fs.readFileSync(path.join(__dirname, '..', 'firebase-db.js'), 'utf8').replace(/\r\n/g, '\n');
   const norm = (db.match(/function lgNormalizeOrder[\s\S]*?\n}/) || [''])[0];
   check('isTest survives lgNormalizeOrder', /isTest:\s*!!o\.isTest/.test(norm),
         'dropped there, a test order would look identical to a real one on every screen');
