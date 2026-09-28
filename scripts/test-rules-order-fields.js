@@ -58,6 +58,8 @@ const MUST_BLOCK = {
   monthlyBilling:      'makes finishing a delivery stop asking about the invoice',
   readyStatus:         'moves an order towards being collectable',
   sketchSeenAt:        'is the review sub-stage, owned by the queue',
+  invoiceCheck:        'marks the items as verified against the sketch, ahead of invoicing',
+  invoiceDone:         'marks the order as invoiced, so it leaves the invoice station',
 };
 for (const [field, why] of Object.entries(MUST_BLOCK)) {
   check(`a client cannot set ${field} — it ${why}`,

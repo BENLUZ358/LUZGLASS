@@ -754,8 +754,220 @@ function lgNormalizeOrder(o) {
     clientPhone:   o.clientPhone  || '',
     vatId:         o.vatId        || '',
     paymentStatus: o.paymentStatus|| 'unpaid',
+    // תחנת הבקרה לחשבונית — ר' INVOICE_STATION_BUILD.md חלק ה. שני שדות
+    // נפרדים ובכוונה, ו-stage לא נוגע בהם. חייבים לעבור כאן: שדה שלא רשום
+    // ברשימה הזו נמחק בשקט בדרך לכל מסך, וזה כבר הכשיל ארבע פעמים.
+    // (כתוב כאן ולא בפונקציית עזר — בדיקות טוענות את lgNormalizeOrder לבדה.)
+    invoiceCheck:  (o.invoiceCheck && typeof o.invoiceCheck === 'object') ? {
+      verifiedAt:   Number(o.invoiceCheck.verifiedAt) || 0,
+      verifiedBy:   o.invoiceCheck.verifiedBy   || '',
+      itemsHash:    o.invoiceCheck.itemsHash    || '',
+      note:         o.invoiceCheck.note         || '',
+      revokedAt:    Number(o.invoiceCheck.revokedAt) || 0,
+      revokedBy:    o.invoiceCheck.revokedBy    || '',
+      revokeReason: o.invoiceCheck.revokeReason || '',
+    } : null,
+    // בלי מספר מסמך אין חשבונית — החלטה 1 של בן: המספר חובה
+    invoiceDone:   (o.invoiceDone && typeof o.invoiceDone === 'object' && o.invoiceDone.docNumber) ? {
+      markedAt:  Number(o.invoiceDone.markedAt) || 0,
+      markedBy:  o.invoiceDone.markedBy || '',
+      docNumber: String(o.invoiceDone.docNumber),
+    } : null,
     _isSub:        String(o.id).startsWith('sub_')
   };
+}
+
+// ─── 9א. תחנת הבקרה לחשבונית ──────────────────────────────────────────
+//
+//  הייצור הולך לפי הסקיצה; הפריטים הם העתקה ידנית שלה. התחנה משווה ביניהם
+//  לפני שמפיקים חשבונית ידנית בחשבשבת. המערכת היא הבקרה — לא המנפיקה.
+//
+//  invoiceCheck = { verifiedAt, verifiedBy, itemsHash, note }      — "אומתה"
+//                 + revokedAt, revokedBy, revokeReason              — בוטל האימות
+//  invoiceDone  = { markedAt, markedBy, docNumber }                 — "הופקה חשבונית"
+//
+//  החלטות בן (2026-09-28): מספר המסמך חובה · חשבונית אחת יכולה לכסות כמה
+//  הזמנות · רק בן (isMainAdmin) מבטל אימות, עם סיבה, ורק לפני שהופקה חשבונית.
+
+// טביעת אצבע של הפריטים ברגע האימות. בלעדיה "מאומתת" היא הבטחה ריקה:
+// מאמתים ב-10:00, מישהו משנה ב-11:00, ומפיקים ב-14:00 על הבדיקה של 10:00.
+// נכנס רק מה שהאימות בודק — מה החתיכה ומה המידות — ובסדר של ההזמנה, כי
+// שתי חתיכות שהחליפו מקום הן שני פריטים שונים מול הסקיצה.
+function lgItemsHash(items) {
+  const list = Array.isArray(items) ? items
+             : (items && typeof items === 'object') ? Object.values(items) : [];
+  const s = JSON.stringify(list.filter(it => it && typeof it === 'object').map(it => [
+    String(it.sku || ''),
+    Math.round(Number(it.w) || 0),
+    Math.round(Number(it.h) || 0),
+    String(it.glassFullName || it.name || ''),
+  ]));
+  // FNV-1a 32 — לא הגנה מפני זדון, רק זיהוי שינוי. דטרמיניסטי בכל דפדפן.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return list.length + ':' + h.toString(16).padStart(8, '0');
+}
+
+// חשבונית שהופקה פעם דרך ה-API (hashavshevetInvoice) — לפני שהתחנה קיימת.
+// היא כבר חויבה, ולכן לא חוזרת לאימות.
+function _lgLegacyInvoiced(o) {
+  const inv = o && o.invoice;
+  return !!(inv && inv.sentAt && (inv.httpOk || inv.simulated));
+}
+
+//  המצב של הזמנה בתחנה. null = ההזמנה לא בתחנה (עוד לא נאספה).
+//    'pending'   ממתינה לאימות
+//    'verified'  מאומתת, והפריטים לא השתנו מאז
+//    'changed'   אומתה, אבל הפריטים השתנו אחרי האימות — חוזרת לבדיקה, בדגל אדום
+//    'invoiced'  הופקה חשבונית — יוצאת מהתהליך
+//  המקום היחיד שמחליט. מסך לא גוזר מצב בעצמו.
+const LG_INVOICE_STATES = ['pending', 'verified', 'changed', 'invoiced'];
+function lgInvoiceState(o) {
+  if (!o || o.stage !== 'collected') return null;
+  if ((o.invoiceDone && o.invoiceDone.docNumber) || _lgLegacyInvoiced(o)) return 'invoiced';
+  const c = o.invoiceCheck;
+  if (!c || !c.verifiedAt || c.revokedAt) return 'pending';
+  return c.itemsHash === lgItemsHash(o.items) ? 'verified' : 'changed';
+}
+
+// מונים לקבוצה של הזמנות (לקוח אחד) — מה שמניע את השער.
+// השער נפתח רק כשאין אף הזמנה ממתינה או משתנה, ויש לפחות אחת מאומתת.
+function lgInvoiceCounts(list) {
+  const n = { pending: 0, verified: 0, changed: 0, invoiced: 0 };
+  (list || []).forEach(o => { const s = lgInvoiceState(o); if (s) n[s]++; });
+  n.open = n.pending + n.changed;
+  n.gateOpen = n.open === 0 && n.verified > 0;
+  return n;
+}
+
+// מספר המסמך מחשבשבת. חובה, ספרות בלבד — זה מה שחשבשבת נותנים.
+function lgDocNumberParse(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s) return { ok: false, error: 'חובה להקליד את מספר המסמך מחשבשבת' };
+  if (!/^\d{1,12}$/.test(s)) return { ok: false, error: 'מספר המסמך הוא ספרות בלבד' };
+  return { ok: true, docNumber: String(Number(s)) };
+}
+
+// חשבונית כפולה: אותו מספר כבר רשום על הזמנות אחרות, מחוץ לבחירה הנוכחית.
+// אותו מספר על כמה הזמנות שנבחרו יחד הוא תקין — חשבונית אחת לכמה הזמנות.
+function lgDocNumberConflicts(allOrders, docNumber, selectedIds) {
+  const sel = new Set((selectedIds || []).map(String));
+  const dn  = String(docNumber);
+  return (allOrders || []).filter(o =>
+    o && o.invoiceDone && o.invoiceDone.docNumber === dn && !sel.has(String(o.id)));
+}
+
+function _lgInvoiceActor() {
+  const s = lgVerifiedSession();
+  if (!s) throw new Error('לא מחובר — התחבר מחדש ונסה שוב');
+  return s;
+}
+
+// "✓ סקיצה מאומתת". items = הפריטים כפי שהוצגו לעובד ברגע הלחיצה, ולא
+// קריאה מחדש: אם הם השתנו מתחת לידיים שלו, הטביעה לא תתאים והמצב יהיה
+// 'changed' — בדיוק מה שצריך לקרות.
+async function lgVerifyInvoice(orderId, items, note) {
+  if (!orderId) throw new Error('lgVerifyInvoice: orderId חסר');
+  const who = _lgInvoiceActor();
+  const now = Date.now();
+  await _lgDb.ref('orders/' + orderId).update({
+    invoiceCheck: _lgClean({
+      verifiedAt: now,
+      verifiedBy: who.name || who.phone,
+      itemsHash:  lgItemsHash(items),
+      note:       String(note || '').slice(0, 500),
+    }),
+    updatedAt: now,
+  });
+}
+
+// ביטול אימות — בן בלבד, עם סיבה, ורק לפני שהופקה חשבונית.
+// לא מוחקים: הרשומה נשארת עם revokedAt, כך שרואים שהיה אימות ומי ביטל ולמה.
+function lgCanRevokeInvoiceCheck(session, order) {
+  if (!session || !session.isMainAdmin) return false;
+  const s = lgInvoiceState(order);
+  return s === 'verified' || s === 'changed';
+}
+async function lgRevokeInvoiceCheck(order, reason) {
+  const who = _lgInvoiceActor();
+  if (!who.isMainAdmin) throw new Error('רק בן יכול לבטל אימות');
+  const r = String(reason || '').trim();
+  if (!r) throw new Error('חובה לכתוב סיבה לביטול האימות');
+  if (!lgCanRevokeInvoiceCheck(who, order)) throw new Error('אי אפשר לבטל אימות של הזמנה שכבר הופקה לה חשבונית');
+  const now = Date.now();
+  await _lgDb.ref('orders/' + order.id).update({
+    'invoiceCheck/revokedAt':    now,
+    'invoiceCheck/revokedBy':    who.name || who.phone,
+    'invoiceCheck/revokeReason': r.slice(0, 500),
+    updatedAt: now,
+  });
+}
+
+// "החשבונית הופקה" — על הזמנה אחת או כמה יחד, עם אותו מספר מסמך.
+// כל הזמנה חייבת להיות 'verified' עכשיו; אחרת לא מסמנים אף אחת.
+// allOrders — לבדיקת כפילות מול מה שכבר סומן.
+async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
+  const who = _lgInvoiceActor();
+  const p = lgDocNumberParse(docNumberRaw);
+  if (!p.ok) throw new Error(p.error);
+  const list = (selected || []).filter(Boolean);
+  if (!list.length) throw new Error('לא נבחרה אף הזמנה');
+  const notReady = list.filter(o => lgInvoiceState(o) !== 'verified');
+  if (notReady.length) {
+    throw new Error('יש הזמנות שלא מאומתות: ' + notReady.map(o => o.orderNum || o.id).join(', '));
+  }
+  const dup = lgDocNumberConflicts(allOrders, p.docNumber, list.map(o => o.id));
+  if (dup.length) {
+    throw new Error('מספר המסמך ' + p.docNumber + ' כבר רשום על: ' + dup.map(o => o.orderNum || o.id).join(', '));
+  }
+  const now = Date.now();
+  const update = {};
+  list.forEach(o => {
+    update[o.id + '/invoiceDone'] = { markedAt: now, markedBy: who.name || who.phone, docNumber: p.docNumber };
+    update[o.id + '/updatedAt']   = now;
+  });
+  await _lgDb.ref('orders').update(update);
+  return { docNumber: p.docNumber, count: list.length };
+}
+
+// מפתח לקוח = הטלפון בספרות בלבד. אותו כלל בדיוק כמו _billKey באדמין —
+// ולא לפי שם: שני לקוחות עם אותו שם תצוגה היו מחויבים שניהם לחשבון הראשון.
+// scripts/test-invoice-station.js מוודא ששני המפתחות מסכימים.
+function lgClientKey(o) {
+  return String((o && (o.clientPhone || o.phone)) || '').replace(/[-\s]/g, '');
+}
+
+// ההזמנות שבתחנה, מקובצות לפי לקוח. הזמנה שהופקה לה חשבונית יוצאת מהתחנה.
+// הזמנה בלי טלפון אינה לקוח — היא מקבלת קבוצה משלה, ולעולם לא נכנסת לדלי
+// משותף שבו חשבונית אחת הייתה מכסה הזמנות של אנשים שונים.
+// המיון: קודם מי שיש לו הזמנה שהשתנתה אחרי אימות, אחר כך לפי כמה פתוחות.
+function lgInvoiceGroups(allOrders, q) {
+  const by = {};
+  (allOrders || []).forEach(o => {
+    const s = lgInvoiceState(o);
+    if (!s || s === 'invoiced') return;
+    const phone = lgClientKey(o);
+    const key = phone || ('order:' + o.id);
+    const g = by[key] || (by[key] = { key, phone, name: '', ords: [] });
+    if (!g.name && o.orderClient && o.orderClient !== '—') g.name = o.orderClient;
+    g.ords.push(o);
+  });
+  const needle = String(q || '').trim().toLowerCase();
+  return Object.values(by)
+    .map(g => {
+      g.ords.sort((a, b) => String(a.orderNum || '').localeCompare(String(b.orderNum || '')));
+      g.counts = lgInvoiceCounts(g.ords);
+      if (!g.name) g.name = g.phone || (g.ords[0] && (g.ords[0].orderNum || g.ords[0].id)) || '—';
+      return g;
+    })
+    .filter(g => !needle || g.name.toLowerCase().includes(needle) || (g.phone && g.phone.includes(needle.replace(/[-\s]/g, '')))
+                 || g.ords.some(o => String(o.orderNum || '').toLowerCase().includes(needle)))
+    .sort((a, b) => (b.counts.changed > 0) - (a.counts.changed > 0)
+                 || b.counts.open - a.counts.open
+                 || a.name.localeCompare(b.name, 'he'));
 }
 
 // ─── 10. lgTest — בדיקת חיבור מהקונסול ──────────────────────────────

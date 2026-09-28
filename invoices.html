@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>LuzGlass — תחנת חשבוניות</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<!-- בסיס העיצוב המשותף — אין להגדיר :root בדף הזה -->
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+<style>
+/* ═══ תחנת הבקרה לחשבונית ═════════════════════════════════════════════════
+   המפרט: INVOICE_STATION_BUILD.md חלק ד. הלוגיקה כולה ב-firebase-db.js (9א);
+   הדף רק מציג ולוחץ. שום מצב לא נגזר כאן — lgInvoiceState הוא המקום היחיד.
+
+   פריסה (נקודות השבירה של lg-ui.css בלבד):
+     ≥ 1200   שלוש עמודות: לקוחות · הזמנות · אימות
+     900–1199 שתיים: הזמנות · אימות. הלקוחות במגירה
+     < 900    מסך אחד בכל פעם, עם חזרה. אייפד לאורך וטלפון
+   ═════════════════════════════════════════════════════════════════════════ */
+
+html,body{height:100%;overflow:hidden;}
+*{-webkit-tap-highlight-color:transparent;}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
+
+/* ── סרגל עליון ─────────────────────────────────────────────────────────── */
+.topbar{flex-shrink:0;min-height:56px;background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 var(--space-3);padding-top:env(safe-area-inset-top);display:flex;align-items:center;gap:var(--space-2);}
+.tb-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-width:44px;min-height:44px;
+  padding:0 var(--space-3);border:1px solid var(--border);background:var(--surface);color:var(--text);
+  border-radius:var(--radius);font-size:var(--fs-sm);font-weight:var(--fw-bold);cursor:pointer;text-decoration:none;
+  transition:border-color var(--dur-fast) var(--ease);}
+.tb-btn:hover{border-color:var(--gold);}
+.tb-title{flex:1;min-width:0;font-size:var(--fs-lg);font-weight:var(--fw-black);}
+.tb-title small{display:block;font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--muted);}
+#btnBack,#btnCustomers{display:none;}
+
+/* ── שלוש העמודות ───────────────────────────────────────────────────────── */
+.panes{flex:1;min-height:0;display:grid;grid-template-columns:280px 340px minmax(0,1fr);}
+.pane{min-height:0;display:flex;flex-direction:column;background:var(--bg);}
+.pane + .pane{border-inline-start:1px solid var(--border);}
+.pane-head{flex-shrink:0;padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);background:var(--surface);}
+.pane-head h2{font-size:var(--fs-xs);font-weight:var(--fw-bold);color:var(--muted);letter-spacing:0.04em;}
+.pane-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+
+.search{position:relative;margin-top:var(--space-2);}
+.search input{width:100%;min-height:44px;padding:0 40px 0 var(--space-3);background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--radius);font-size:var(--fs-base);color:var(--text);outline:none;}
+.search input:focus{border-color:var(--gold);}
+.search [data-icon]{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);}
+
+/* ── לקוחות ─────────────────────────────────────────────────────────────── */
+.cust{display:flex;align-items:center;gap:var(--space-3);width:100%;min-height:56px;padding:var(--space-3) var(--space-4);
+  background:none;border:none;border-bottom:1px solid var(--border);text-align:right;cursor:pointer;color:var(--text);
+  transition:background var(--dur-fast) var(--ease);}
+.cust:hover{background:var(--surface);}
+.cust[aria-current="true"]{background:var(--surface);box-shadow:inset -3px 0 0 var(--gold);}
+.cust-name{flex:1;min-width:0;font-size:var(--fs-base);font-weight:var(--fw-bold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cust-sub{display:block;font-size:var(--fs-xs);font-weight:var(--fw-normal);color:var(--muted);}
+.count{min-width:28px;height:28px;padding:0 var(--space-2);border-radius:14px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:var(--fs-xs);font-weight:var(--fw-black);background:var(--bg2);color:var(--text);}
+.count.alert{background:var(--red);color:#fff;gap:2px;}
+
+/* ── מצב הזמנה: צורה · צבע · מילה. אף פעם לא צבע לבדו ───────────────────── */
+.st{display:inline-flex;align-items:center;gap:var(--space-1);font-size:var(--fs-xs);font-weight:var(--fw-bold);white-space:nowrap;}
+.st [data-icon]{width:16px;height:16px;}
+.st-pending{color:var(--muted);}
+.st-verified{color:var(--green);}
+.st-changed{color:var(--red);}
+.st-invoiced{color:var(--muted);}
+
+/* ── הזמנות ─────────────────────────────────────────────────────────────── */
+.ord{display:block;width:calc(100% - 2 * var(--space-3));margin:var(--space-2) var(--space-3);padding:var(--space-3);
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);text-align:right;cursor:pointer;color:var(--text);
+  transition:box-shadow var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease);}
+.ord:hover{box-shadow:var(--shadow-sm);}
+.ord.is-verified{border:2px solid var(--green);}
+.ord.is-changed{border:2px solid var(--red);animation:lgFlashOnce 900ms var(--ease) 1;}
+.ord[aria-current="true"]{box-shadow:0 0 0 3px rgba(184,146,42,0.35);}
+.ord-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);}
+.ord-num{font-size:var(--fs-lg);font-weight:var(--fw-black);}
+.ord-meta{margin-top:2px;font-size:var(--fs-xs);color:var(--muted);}
+@keyframes lgFlashOnce{0%,100%{background:var(--surface)}40%{background:#f6dcd8}}
+
+/* המונים והשער — תמיד גלויים בתחתית עמודת ההזמנות */
+.gate{flex-shrink:0;padding:var(--space-4);padding-bottom:calc(var(--space-4) + env(safe-area-inset-bottom));
+  background:var(--surface);border-top:1px solid var(--border);}
+.gate-rows{display:grid;gap:var(--space-1);margin-bottom:var(--space-3);font-size:var(--fs-sm);}
+.gate-rows div{display:flex;justify-content:space-between;}
+.gate-rows b{font-size:var(--fs-lg);}
+.gate-rows .is-red{color:var(--red);font-weight:var(--fw-bold);}
+.gate-btn{width:100%;min-height:52px;font-size:var(--fs-base);}
+.gate-note{margin-top:var(--space-2);font-size:var(--fs-sm);color:var(--muted);text-align:center;}
+.gate-note.ok{color:var(--green);font-weight:var(--fw-bold);}
+
+/* ── אימות ──────────────────────────────────────────────────────────────── */
+#pVerify{container-type:inline-size;container-name:verify;}
+.v-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;}
+.v-num{font-size:var(--fs-2xl);font-weight:var(--fw-black);line-height:1;}
+.v-client{font-size:var(--fs-sm);color:var(--muted);}
+.banner{margin:var(--space-3) var(--space-4) 0;padding:var(--space-3);border-radius:var(--radius-lg);font-size:var(--fs-sm);
+  display:flex;align-items:flex-start;gap:var(--space-2);}
+.banner [data-icon]{width:20px;height:20px;margin-top:1px;}
+.banner-red{background:#fbeae7;color:#7c241b;border:2px solid var(--red);font-weight:var(--fw-bold);}
+.banner-green{background:#e7f3ec;color:#155d33;border:1px solid var(--green);}
+.banner .banner-act{margin-inline-start:auto;}
+
+.vtabs{display:none;gap:var(--space-2);padding:var(--space-3) var(--space-4) 0;}
+.vtab{flex:1;min-height:44px;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);font-weight:var(--fw-bold);
+  font-size:var(--fs-sm);color:var(--muted);cursor:pointer;}
+.vtab[aria-selected="true"]{border-color:var(--gold);color:var(--text);box-shadow:inset 0 -3px 0 var(--gold);}
+
+.vgrid{display:flex;flex-direction:column;gap:var(--space-4);padding:var(--space-4);}
+.sketch-box{order:-1;position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  min-height:260px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.sketch-box img{max-height:70vh;width:100%;object-fit:contain;}
+.sketch-full{position:absolute;top:var(--space-2);left:var(--space-2);}
+/* זה לצד זה רק כשיש באמת מקום. אייפד לאורך (768) נערם — בשני חצאים של
+   380px סקיצת A4 נותנת מידה בגובה חמישה פיקסלים (המפרט, ד.6) */
+@container verify (min-width: 800px){
+  .vgrid{display:grid;grid-template-columns:minmax(280px,2fr) 3fr;align-items:start;}
+  .sketch-box{order:0;position:sticky;top:var(--space-4);}
+}
+
+.items{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);}
+.items-head{padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);font-size:var(--fs-xs);font-weight:var(--fw-bold);color:var(--muted);}
+.item{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);}
+.item:last-child{border-bottom:none;}
+.item-n{min-width:28px;font-size:var(--fs-sm);font-weight:var(--fw-bold);color:var(--muted);}
+.item-main{flex:1;min-width:0;}
+/* המידות הן הדבר היחיד שנבדק כאן — 24px, וכל השאר משני */
+.item-dim{font-size:24px;font-weight:var(--fw-black);line-height:1.2;direction:ltr;text-align:right;font-variant-numeric:tabular-nums;}
+.item-sub{font-size:var(--fs-xs);color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* סימון לעין בלבד — לא נשמר ולא חוסם את האימות */
+.tick{min-width:44px;min-height:44px;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);
+  color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+.tick[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#fff;}
+.tick [data-icon]{width:20px;height:20px;}
+
+.v-foot{flex-shrink:0;padding:var(--space-3) var(--space-4);padding-bottom:calc(var(--space-3) + env(safe-area-inset-bottom));
+  background:var(--surface);border-top:1px solid var(--border);display:flex;gap:var(--space-2);align-items:center;}
+.v-foot .btn{min-height:52px;font-size:var(--fs-base);}
+.v-foot .grow{flex:1;}
+
+/* ── מסך מלא לסקיצה ─────────────────────────────────────────────────────── */
+.full{position:fixed;inset:0;z-index:600;background:#111;display:none;flex-direction:column;}
+.full.open{display:flex;}
+.full-bar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:var(--space-2) var(--space-3);
+  padding-top:calc(var(--space-2) + env(safe-area-inset-top));color:#f0ede8;}
+.full-img{flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;}
+.full-img img{max-width:none;width:100%;height:auto;}
+.full-strip{max-height:30vh;overflow:auto;background:rgba(255,255,255,0.96);padding:var(--space-2) var(--space-3);
+  padding-bottom:calc(var(--space-2) + env(safe-area-inset-bottom));display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);}
+.full-strip span{font-size:20px;font-weight:var(--fw-black);direction:ltr;}
+
+/* ── חלונות ─────────────────────────────────────────────────────────────── */
+.modal-in{padding:var(--space-5);}
+.modal-in h3{font-size:var(--fs-xl);font-weight:var(--fw-black);margin-bottom:var(--space-1);}
+.modal-in .sub{color:var(--muted);font-size:var(--fs-sm);margin-bottom:var(--space-4);}
+.steps{margin:0 0 var(--space-4);padding-inline-start:var(--space-5);font-size:var(--fs-base);line-height:1.9;}
+.pick{display:flex;align-items:center;gap:var(--space-3);min-height:44px;padding:var(--space-1) 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.pick input{width:22px;height:22px;accent-color:var(--gold);}
+.pick-list{margin-bottom:var(--space-4);max-height:34vh;overflow-y:auto;}
+.modal-actions{display:flex;gap:var(--space-2);justify-content:flex-start;flex-wrap:wrap;}
+.modal-actions .btn{min-height:48px;}
+.doc-input{font-size:24px !important;font-weight:var(--fw-black);letter-spacing:0.05em;direction:ltr;text-align:right;}
+
+.toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:700;
+  background:var(--text);color:var(--bg);padding:var(--space-3) var(--space-5);border-radius:var(--radius-lg);font-weight:var(--fw-bold);
+  box-shadow:var(--shadow-md);animation:lgSlideUp var(--dur-base) var(--ease);max-width:calc(100vw - 32px);}
+.toast.err{background:var(--red);color:#fff;}
+.spin{width:18px;height:18px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:lgSpin 700ms linear infinite;}
+@keyframes lgSpin{to{transform:rotate(360deg)}}
+.loading{padding:var(--space-8);text-align:center;color:var(--muted);}
+
+/* ── 900–1199: הלקוחות במגירה ──────────────────────────────────────────── */
+@media (max-width:1199px){
+  .panes{grid-template-columns:340px minmax(0,1fr);}
+  #btnCustomers{display:inline-flex;}
+  #pCustomers{position:fixed;top:0;bottom:0;right:0;width:min(320px,86vw);z-index:500;box-shadow:var(--shadow-lg);
+    transform:translateX(105%);transition:transform var(--dur-base) var(--ease);padding-top:env(safe-area-inset-top);}
+  body.drawer #pCustomers{transform:none;}
+  .scrim{position:fixed;inset:0;background:rgba(26,23,20,0.45);z-index:490;display:none;}
+  body.drawer .scrim{display:block;}
+}
+/* ── < 900: מסך אחד בכל פעם ────────────────────────────────────────────── */
+@media (max-width:899px){
+  .panes{display:block;position:relative;}
+  .pane{position:absolute;inset:0;border:none !important;}
+  #pCustomers{position:absolute;transform:none;width:auto;box-shadow:none;transition:none;z-index:auto;padding-top:0;}
+  body.drawer .scrim{display:none;}
+  #btnCustomers{display:none;}
+  body[data-view="customers"] #pOrders, body[data-view="customers"] #pVerify{display:none;}
+  body[data-view="orders"]    #pCustomers, body[data-view="orders"] #pVerify{display:none;}
+  body[data-view="verify"]    #pCustomers, body[data-view="verify"] #pOrders{display:none;}
+  body:not([data-view="customers"]) #btnBack{display:inline-flex;}
+  /* שני חצים זה לצד זה מבלבלים — כשיש "חזרה", הבית מחכה למסך הלקוחות */
+  body:not([data-view="customers"]) #btnHome{display:none;}
+}
+/* ── טלפון: פריטים וסקיצה בלשוניות ──────────────────────────────────────── */
+@media (max-width:599px){
+  .vtabs{display:flex;}
+  .vgrid[data-tab="items"]  .sketch-box{display:none;}
+  .vgrid[data-tab="sketch"] .items{display:none;}
+  .v-num{font-size:var(--fs-xl);}
+  .item-dim{font-size:22px;}
+  .tb-title small{display:none;}
+}
+@media (prefers-reduced-motion: reduce){
+  .ord.is-changed{animation:none;}
+  #pCustomers{transition:none;}
+}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="firebase-db.js?v=20260928"></script>
+<script src="lg-icons.js?v=20260807"></script>
+</head>
+<body data-view="customers">
+<a class="skip-link" href="#pVerify">דלג לאימות</a>
+<div class="app">
+  <header class="topbar">
+    <a class="tb-btn" id="btnHome" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
+    <button class="tb-btn" id="btnBack" type="button" aria-label="חזרה"><span data-icon="arrow-right"></span><span>חזרה</span></button>
+    <div class="tb-title" id="tbTitle">תחנת חשבוניות<small>בודקים פריטים מול סקיצה, ורק אז מפיקים חשבונית בחשבשבת</small></div>
+    <button class="tb-btn" id="btnCustomers" type="button" aria-controls="pCustomers" aria-expanded="false"><span data-icon="users"></span><span>לקוחות</span></button>
+  </header>
+
+  <main class="panes">
+    <section class="pane" id="pCustomers" aria-label="לקוחות">
+      <div class="pane-head">
+        <h2>לקוחות עם הזמנות לחשבונית</h2>
+        <label class="search"><span class="sr-only">חיפוש לקוח או הזמנה</span>
+          <span data-icon="search"></span>
+          <input id="q" type="search" placeholder="שם, טלפון או מספר הזמנה" autocomplete="off">
+        </label>
+      </div>
+      <div class="pane-body" id="custList"><div class="loading">טוען…</div></div>
+    </section>
+
+    <section class="pane" id="pOrders" aria-label="הזמנות הלקוח">
+      <div class="pane-head"><h2 id="ordHead">הזמנות</h2></div>
+      <div class="pane-body" id="ordList"></div>
+      <div class="gate" id="gate" hidden></div>
+    </section>
+
+    <section class="pane" id="pVerify" aria-label="אימות הזמנה" tabindex="-1">
+      <div class="pane-head" id="vHead"><h2>אימות</h2></div>
+      <div class="pane-body" id="vBody"></div>
+      <div class="v-foot" id="vFoot" hidden></div>
+    </section>
+  </main>
+</div>
+<div class="scrim" id="scrim"></div>
+
+<div class="full" id="full" role="dialog" aria-modal="true" aria-label="סקיצה במסך מלא">
+  <div class="full-bar"><b id="fullTitle"></b>
+    <button class="tb-btn" id="fullClose" type="button"><span data-icon="x"></span><span>סגור</span></button></div>
+  <div class="full-img"><img id="fullImg" alt="סקיצה"></div>
+  <div class="full-strip" id="fullStrip"></div>
+</div>
+
+<div class="overlay" id="ov" role="dialog" aria-modal="true" aria-labelledby="ovTitle"><div class="modal" id="ovBox"></div></div>
+
+<script>
+// ═══ מצב הדף ════════════════════════════════════════════════════════════════
+let ORDERS = [];          // כל ההזמנות, מנורמלות, חיות
+let SESSION = null;
+let selKey = null;        // הלקוח שנבחר
+let selId  = null;        // ההזמנה שבאימות
+let vTab   = 'items';     // טלפון בלבד
+const ticks = {};         // סימון לעין, לפי הזמנה. לא נשמר
+
+const $ = id => document.getElementById(id);
+const esc = s => lgEsc(s);
+const nOrders = n => n === 1 ? 'הזמנה אחת' : n + ' הזמנות';
+const nItems  = n => n === 1 ? 'פריט אחד'  : n + ' פריטים';
+const isNarrow = () => matchMedia('(max-width:899px)').matches;
+
+const STATE_UI = {
+  pending:  { icon: 'circle',       word: 'ממתינה' },
+  verified: { icon: 'check-circle', word: 'מאומתת' },
+  changed:  { icon: 'alert',        word: 'השתנתה — לבדוק שוב' },
+  invoiced: { icon: 'receipt',      word: 'הופקה' },
+};
+function stChip(s, extra) {
+  const u = STATE_UI[s]; if (!u) return '';
+  return `<span class="st st-${s}"><span data-icon="${u.icon}"></span>${esc(u.word)}${extra ? ' · ' + esc(extra) : ''}</span>`;
+}
+function fmtDate(ts) {
+  if (!ts) return '';
+  const d = new Date(Number(ts));
+  return d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' }) + ' ' +
+         d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+}
+function toast(msg, err) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (err ? ' err' : ''); t.setAttribute('role', err ? 'alert' : 'status'); t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), err ? 5000 : 2800);
+}
+const groups   = () => lgInvoiceGroups(ORDERS, $('q').value);
+const groupOf  = key => lgInvoiceGroups(ORDERS, '').find(g => g.key === key) || null;
+const orderOf  = id => ORDERS.find(o => String(o.id) === String(id)) || null;
+
+// ═══ ניווט — מסך אחד בכל פעם מתחת ל-900, עם חזרה אמיתית ═══════════════════
+function go(view, push) {
+  document.body.dataset.view = view;
+  if (push && isNarrow()) history.pushState({ view, key: selKey, id: selId }, '');
+  updateTitle();
+}
+window.addEventListener('popstate', e => {
+  const s = e.state || { view: 'customers' };
+  selKey = s.key || null; selId = s.id || null;
+  document.body.dataset.view = s.view || 'customers';
+  renderAll();
+});
+$('btnBack').onclick = () => history.back();
+function updateTitle() {
+  const v = document.body.dataset.view, g = selKey && groupOf(selKey), o = selId && orderOf(selId);
+  const t = !isNarrow() || v === 'customers' ? 'תחנת חשבוניות'
+          : v === 'orders' ? (g ? g.name : 'הזמנות')
+          : (o ? o.orderNum || 'הזמנה' : 'אימות');
+  $('tbTitle').firstChild.textContent = t;
+}
+function openDrawer(open) {
+  document.body.classList.toggle('drawer', open);
+  $('btnCustomers').setAttribute('aria-expanded', String(open));
+}
+$('btnCustomers').onclick = () => openDrawer(!document.body.classList.contains('drawer'));
+$('scrim').onclick = () => openDrawer(false);
+
+// ═══ עמודה 1 · לקוחות ═════════════════════════════════════════════════════
+function renderCustomers() {
+  const gs = groups();
+  if (!gs.length) {
+    $('custList').innerHTML = $('q').value
+      ? `<div class="empty-state"><span data-icon="search"></span><div class="empty-state-title">לא נמצא</div><div class="empty-state-msg">נסה שם אחר, טלפון או מספר הזמנה</div></div>`
+      : `<div class="empty-state"><span data-icon="check-circle"></span><div class="empty-state-title">אין הזמנות שממתינות לחשבונית</div><div class="empty-state-msg">הזמנה מגיעה לכאן כשהיא נאספת</div></div>`;
+    return;
+  }
+  $('custList').innerHTML = gs.map(g => {
+    const c = g.counts;
+    const badge = c.changed
+      ? `<span class="count alert" aria-label="${c.changed} השתנו אחרי אימות"><span data-icon="alert" style="width:12px;height:12px"></span>${c.open}</span>`
+      : c.open ? `<span class="count" aria-label="${c.open} ממתינות לאימות">${c.open}</span>`
+      : `<span class="st st-verified" aria-label="הכול מאומת"><span data-icon="check-circle"></span></span>`;
+    return `<button class="cust" type="button" data-key="${esc(g.key)}" aria-current="${g.key === selKey}">
+      <span class="cust-name">${esc(g.name)}<span class="cust-sub">${nOrders(g.ords.length)}${g.phone ? ' · ' + esc(g.phone) : ' · בלי טלפון'}</span></span>${badge}</button>`;
+  }).join('');
+}
+$('custList').addEventListener('click', e => {
+  const b = e.target.closest('.cust'); if (!b) return;
+  selKey = b.dataset.key;
+  const g = groupOf(selKey);
+  // ההזמנה הראשונה שצריכה עין — משתנה קודם, אחר כך ממתינה
+  const first = g && (g.ords.find(o => lgInvoiceState(o) === 'changed') || g.ords.find(o => lgInvoiceState(o) === 'pending'));
+  selId = !isNarrow() && first ? first.id : null;
+  openDrawer(false);
+  go('orders', true);
+  renderAll();
+});
+$('q').addEventListener('input', renderCustomers);
+
+// ═══ עמודה 2 · ההזמנות, המונים והשער ════════════════════════════════════════
+function renderOrders() {
+  const g = selKey && groupOf(selKey);
+  if (!g) {
+    $('ordHead').textContent = 'הזמנות';
+    $('ordList').innerHTML = `<div class="empty-state"><span data-icon="users"></span><div class="empty-state-title">בחר לקוח</div><div class="empty-state-msg">ההזמנות שלו יופיעו כאן</div></div>`;
+    $('gate').hidden = true; return;
+  }
+  $('ordHead').textContent = g.name + ' · ' + nOrders(g.ords.length);
+  $('ordList').innerHTML = g.ords.map(o => {
+    const s = lgInvoiceState(o);
+    const n = o.items.length;
+    return `<button class="ord is-${s}" type="button" data-id="${esc(o.id)}" aria-current="${String(o.id) === String(selId)}">
+      <div class="ord-row"><span class="ord-num">${esc(o.orderNum || o.id)}</span>${stChip(s)}</div>
+      <div class="ord-meta">${nItems(n)}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}${o.date ? ' · ' + esc(o.date) : ''}</div></button>`;
+  }).join('');
+
+  const c = g.counts;
+  $('gate').hidden = false;
+  $('gate').innerHTML = `
+    <div class="gate-rows">
+      <div><span>ממתינות לבדיקה</span><b>${c.pending}</b></div>
+      ${c.changed ? `<div class="is-red"><span><span data-icon="alert"></span> השתנו אחרי אימות</span><b>${c.changed}</b></div>` : ''}
+      <div><span>מאומתות</span><b>${c.verified}</b></div>
+    </div>
+    ${c.gateOpen
+      ? `<button class="btn btn-primary gate-btn" id="gateBtn" type="button"><span data-icon="receipt"></span>הפק חשבונית בחשבשבת</button>
+         <div class="gate-note ok">${c.verified === 1 ? "ההזמנה אומתה" : "כל " + c.verified + " ההזמנות אומתו"}</div>`
+      : `<button class="btn btn-secondary gate-btn" type="button" aria-disabled="true" aria-describedby="gateWhy"><span data-icon="lock"></span>הפק חשבונית בחשבשבת</button>
+         <div class="gate-note" id="gateWhy">${c.open === 1 ? "נותרה הזמנה אחת לאימות" : "נותרו " + c.open + " הזמנות לאימות"}</div>`}`;
+}
+$('ordList').addEventListener('click', e => {
+  const b = e.target.closest('.ord'); if (!b) return;
+  selId = b.dataset.id; vTab = 'items';
+  go('verify', true);
+  renderAll();
+  if (!isNarrow()) $('pVerify').focus({ preventScroll: true });
+});
+$('gate').addEventListener('click', e => {
+  if (e.target.closest('#gateBtn')) openInvoiceModal();
+  else if (e.target.closest('[aria-disabled="true"]')) toast('קודם מאמתים את כל ההזמנות של הלקוח');
+});
+
+// ═══ עמודה 3 · אימות ════════════════════════════════════════════════════════
+let _shownSketchFor = null;
+function renderVerify() {
+  const o = selId && orderOf(selId);
+  const s = o && lgInvoiceState(o);
+  if (!o || !s || s === 'invoiced') {
+    $('vHead').innerHTML = '<h2>אימות</h2>';
+    $('vBody').innerHTML = `<div class="empty-state"><span data-icon="clipboard"></span><div class="empty-state-title">בחר הזמנה</div><div class="empty-state-msg">הפריטים והסקיצה יופיעו כאן, זה לצד זה</div></div>`;
+    $('vFoot').hidden = true; _shownSketchFor = null; return;
+  }
+  const c = o.invoiceCheck;
+  $('vHead').innerHTML = `<div class="v-head"><span class="v-num">${esc(o.orderNum || o.id)}</span>${stChip(s)}</div>
+    <div class="v-client">${esc(o.orderClient)}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}</div>`;
+
+  let banner = '';
+  if (s === 'changed') {
+    banner = `<div class="banner banner-red" role="alert"><span data-icon="alert"></span>
+      <span>הפריטים השתנו אחרי שההזמנה אומתה${c && c.verifiedBy ? ' (אומתה ע״י ' + esc(c.verifiedBy) + ', ' + esc(fmtDate(c.verifiedAt)) + ')' : ''}. בדוק שוב מול הסקיצה.</span></div>`;
+  } else if (s === 'verified') {
+    const canRevoke = lgCanRevokeInvoiceCheck(SESSION, o);
+    banner = `<div class="banner banner-green"><span data-icon="check-circle"></span>
+      <span>אומתה ע״י ${esc(c.verifiedBy || '—')} · ${esc(fmtDate(c.verifiedAt))}${c.note ? '<br>' + esc(c.note) : ''}</span>
+      ${canRevoke ? `<button class="btn btn-ghost banner-act" id="revokeBtn" type="button">בטל אימות</button>` : ''}</div>`;
+  } else if (c && c.revokedAt) {
+    banner = `<div class="banner banner-green" style="background:var(--bg2);color:var(--text);border-color:var(--border)"><span data-icon="refresh"></span>
+      <span>האימות בוטל ע״י ${esc(c.revokedBy)} · ${esc(fmtDate(c.revokedAt))}: ${esc(c.revokeReason)}</span></div>`;
+  }
+
+  const t = ticks[o.id] || (ticks[o.id] = {});
+  const rows = o.items.map((it, i) => {
+    const n = it.hsLine || (i + 1);
+    const w = Math.round(Number(it.w) || 0), h = Math.round(Number(it.h) || 0);
+    return `<div class="item">
+      <span class="item-n">${esc(n)}</span>
+      <div class="item-main"><div class="item-dim">${w} × ${h}</div>
+        <div class="item-sub">${esc(it.glassFullName || it.name || '')}${it.sku ? ' · ' + esc(it.sku) : ''}</div></div>
+      <button class="tick" type="button" data-tick="${i}" aria-pressed="${!!t[i]}" aria-label="סמן שורה ${esc(n)} כנבדקה"><span data-icon="check"></span></button>
+    </div>`;
+  }).join('') || `<div class="empty-state"><div class="empty-state-title">אין פריטים בהזמנה</div></div>`;
+
+  const keepSketch = _shownSketchFor === String(o.id) && $('skImg');
+  const sketchHtml = keepSketch ? null : `<div class="sketch-box" id="skBox">
+      <img id="skImg" alt="הסקיצה של ${esc(o.orderNum || '')}" hidden>
+      <div class="empty-state" id="skEmpty"><span data-icon="image"></span><div class="empty-state-msg">טוען סקיצה…</div></div>
+      <button class="tb-btn sketch-full" id="skFull" type="button" aria-label="סקיצה במסך מלא" hidden><span data-icon="external"></span></button>
+    </div>`;
+
+  if (keepSketch) {
+    // הזמנה זו כבר מוצגת — מחליפים רק את מה שסביב הסקיצה, כדי שהתמונה לא תהבהב בכל עדכון חי
+    $('vBanner').innerHTML = banner;
+    $('vItems').innerHTML = `<div class="items-head">פריטי ההזמנה · ${o.items.length}</div>${rows}`;
+  } else {
+    $('vBody').innerHTML = `<div id="vBanner">${banner}</div>
+      <div class="vtabs" role="tablist" aria-label="תצוגה">
+        <button class="vtab" role="tab" type="button" data-tab="items" aria-selected="${vTab === 'items'}">פריטים</button>
+        <button class="vtab" role="tab" type="button" data-tab="sketch" aria-selected="${vTab === 'sketch'}">סקיצה</button></div>
+      <div class="vgrid" id="vGrid" data-tab="${vTab}">
+        <div class="items" id="vItems"><div class="items-head">פריטי ההזמנה · ${o.items.length}</div>${rows}</div>
+        ${sketchHtml}
+      </div>`;
+    _shownSketchFor = String(o.id);
+    const img = $('skImg');
+    img.onload = () => { img.hidden = false; $('skEmpty').hidden = true; $('skFull').hidden = false; };
+    if (o.hasSketch) lgSketchIntoImg(img, o);
+    else $('skEmpty').querySelector('.empty-state-msg').textContent = 'אין סקיצה להזמנה הזו';
+  }
+
+  $('vFoot').hidden = false;
+  $('vFoot').innerHTML = s === 'verified'
+    ? `<div class="grow">${stChip('verified')}</div><button class="btn btn-secondary" type="button" id="nextBtn">להזמנה הבאה</button>`
+    : `<button class="btn btn-primary grow" type="button" id="verifyBtn"><span data-icon="check"></span>סקיצה מאומתת</button>`;
+}
+
+$('vBody').addEventListener('click', e => {
+  const tk = e.target.closest('[data-tick]');
+  if (tk) { const t = ticks[selId] || (ticks[selId] = {}); const i = tk.dataset.tick; t[i] = !t[i]; tk.setAttribute('aria-pressed', String(!!t[i])); return; }
+  const tab = e.target.closest('.vtab');
+  if (tab) { vTab = tab.dataset.tab; $('vGrid').dataset.tab = vTab;
+    document.querySelectorAll('.vtab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === vTab))); return; }
+  if (e.target.closest('#skFull')) { openFull(); return; }
+  if (e.target.closest('#revokeBtn')) { openRevokeModal(); return; }
+});
+$('vFoot').addEventListener('click', async e => {
+  const vb = e.target.closest('#verifyBtn');
+  if (vb) {
+    const o = orderOf(selId); if (!o) return;
+    vb.disabled = true; vb.innerHTML = '<span class="spin"></span>שומר…';
+    try {
+      // הפריטים כפי שהם מוצגים עכשיו — אם השתנו בדרך, המצב יהיה "השתנתה"
+      await lgVerifyInvoice(o.id, o.items);
+      toast('הזמנה ' + (o.orderNum || '') + ' אומתה');
+      goNext();
+    } catch (err) { toast(err.message || 'השמירה נכשלה', true); renderVerify(); }
+    return;
+  }
+  if (e.target.closest('#nextBtn')) goNext();
+});
+// אחרי אימות — ישר להזמנה הבאה שצריכה עין, כדי שלא יחפשו אותה
+function goNext() {
+  const g = selKey && groupOf(selKey);
+  const next = g && (g.ords.find(o => lgInvoiceState(o) === 'changed' && String(o.id) !== String(selId))
+                  || g.ords.find(o => lgInvoiceState(o) === 'pending' && String(o.id) !== String(selId)));
+  if (next) { selId = next.id; vTab = 'items'; if (isNarrow()) history.replaceState({ view: 'verify', key: selKey, id: selId }, ''); }
+  else if (isNarrow()) { history.back(); return; }
+  renderAll();
+}
+
+// ═══ מסך מלא ════════════════════════════════════════════════════════════════
+function openFull() {
+  const o = orderOf(selId); if (!o) return;
+  $('fullImg').src = $('skImg').src;
+  $('fullTitle').textContent = o.orderNum || '';
+  $('fullStrip').innerHTML = o.items.map((it, i) =>
+    `<span>${esc(it.hsLine || i + 1)}) ${Math.round(+it.w || 0)}×${Math.round(+it.h || 0)}</span>`).join('');
+  $('full').classList.add('open'); $('fullClose').focus();
+}
+$('fullClose').onclick = () => $('full').classList.remove('open');
+
+// ═══ חלונות ═════════════════════════════════════════════════════════════════
+function openModal(html) { $('ovBox').innerHTML = html; $('ov').classList.add('open'); }
+function closeModal() { $('ov').classList.remove('open'); $('ovBox').innerHTML = ''; }
+$('ov').addEventListener('click', e => { if (e.target === $('ov') || e.target.closest('[data-close]')) closeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if ($('full').classList.contains('open')) $('full').classList.remove('open');
+  else if ($('ov').classList.contains('open')) closeModal();
+  else if (document.body.classList.contains('drawer')) openDrawer(false);
+});
+
+// "הפק חשבונית בחשבשבת" — לא מפיק כלום. מסביר, ורושם את מספר המסמך.
+function openInvoiceModal() {
+  const g = selKey && groupOf(selKey); if (!g || !g.counts.gateOpen) return;
+  const ready = g.ords.filter(o => lgInvoiceState(o) === 'verified');
+  openModal(`<div class="modal-in">
+    <h3 id="ovTitle">${esc(g.name)}</h3>
+    <div class="sub">${ready.length === 1 ? "הזמנה אחת מאומתת" : ready.length + " הזמנות מאומתות"}</div>
+    <ol class="steps"><li>עבור לחשבשבת</li><li>הפק חשבונית ללקוח</li><li>חזור לכאן והקלד את מספר המסמך</li></ol>
+    <div class="field" style="margin-bottom:var(--space-2)"><label>ההזמנות שבחשבונית הזו</label></div>
+    <div class="pick-list">${ready.map(o => `<label class="pick"><input type="checkbox" data-pick="${esc(o.id)}" checked>
+      <span><b>${esc(o.orderNum || o.id)}</b> · ${nItems(o.items.length)}</span></label>`).join('')}</div>
+    <div class="field" id="docField"><label for="docNum">מספר המסמך מחשבשבת (חובה)</label>
+      <input id="docNum" class="doc-input" inputmode="numeric" autocomplete="off" enterkeyhint="done">
+      <div class="field-msg" id="docMsg">חשבונית אחת יכולה לכסות כמה הזמנות. הורד סימון מהזמנה שלא בחשבונית הזו.</div></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="markBtn" type="button"><span data-icon="check"></span>החשבונית הופקה</button>
+      <button class="btn btn-ghost" type="button" data-close>ביטול</button></div></div>`);
+  const input = $('docNum'), msg = $('docMsg'), field = $('docField');
+  const picked = () => [...document.querySelectorAll('[data-pick]:checked')].map(x => orderOf(x.dataset.pick)).filter(Boolean);
+  const validate = () => {
+    const p = lgDocNumberParse(input.value);
+    let err = input.value.trim() && !p.ok ? p.error : '';
+    if (p.ok) {
+      const dup = lgDocNumberConflicts(ORDERS, p.docNumber, picked().map(o => o.id));
+      if (dup.length) err = 'המספר ' + p.docNumber + ' כבר רשום על ' + dup.map(o => o.orderNum || o.id).join(', ') + ' — חשבונית כפולה?';
+    }
+    field.classList.toggle('field-error', !!err);
+    msg.textContent = err || 'חשבונית אחת יכולה לכסות כמה הזמנות. הורד סימון מהזמנה שלא בחשבונית הזו.';
+    return !err;
+  };
+  input.addEventListener('input', validate);
+  $('ovBox').addEventListener('change', validate);
+  setTimeout(() => input.focus(), 50);
+  $('markBtn').onclick = async () => {
+    if (!validate()) { input.focus(); return; }
+    const sel = picked();
+    if (!sel.length) { toast('סמן לפחות הזמנה אחת', true); return; }
+    const b = $('markBtn'); b.disabled = true; b.innerHTML = '<span class="spin"></span>שומר…';
+    try {
+      const r = await lgMarkInvoiced(sel, input.value, ORDERS);
+      closeModal();
+      toast(`נרשם: חשבונית ${r.docNumber} על ${nOrders(r.count)}`);
+    } catch (err) {
+      field.classList.add('field-error'); msg.textContent = err.message;
+      b.disabled = false; b.innerHTML = '<span data-icon="check"></span>החשבונית הופקה';
+    }
+  };
+}
+
+// ביטול אימות — בן בלבד, עם סיבה
+function openRevokeModal() {
+  const o = orderOf(selId); if (!o || !lgCanRevokeInvoiceCheck(SESSION, o)) return;
+  openModal(`<div class="modal-in">
+    <h3 id="ovTitle">ביטול אימות · ${esc(o.orderNum || '')}</h3>
+    <div class="sub">ההזמנה תחזור ל"ממתינה". האימות הקודם נשאר רשום, עם הסיבה.</div>
+    <div class="field" id="rvField"><label for="rvReason">סיבה (חובה)</label>
+      <textarea id="rvReason" rows="3" maxlength="500"></textarea><div class="field-msg" id="rvMsg"></div></div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="rvBtn" type="button">בטל אימות</button>
+      <button class="btn btn-ghost" type="button" data-close>חזרה</button></div></div>`);
+  setTimeout(() => $('rvReason').focus(), 50);
+  $('rvBtn').onclick = async () => {
+    const b = $('rvBtn'); b.disabled = true;
+    try { await lgRevokeInvoiceCheck(o, $('rvReason').value); closeModal(); toast('האימות בוטל'); }
+    catch (err) { $('rvField').classList.add('field-error'); $('rvMsg').textContent = err.message; b.disabled = false; }
+  };
+}
+
+// ═══ רינדור וחיבור ══════════════════════════════════════════════════════════
+function renderAll() {
+  // הזמנה שיצאה מהתחנה (הופקה, או שהלקוח התרוקן) — לא נשארים עליה
+  if (selKey && !groupOf(selKey)) { selKey = null; selId = null; if (isNarrow()) document.body.dataset.view = 'customers'; }
+  if (selId) { const o = orderOf(selId), s = o && lgInvoiceState(o); if (!s || s === 'invoiced') selId = null; }
+  renderCustomers(); renderOrders(); renderVerify(); updateTitle();
+}
+
+lgRequireAuthAsync('admin').then(session => {
+  if (!session) return;
+  SESSION = session;
+  history.replaceState({ view: 'customers' }, '');
+  listenAllOrders(list => { ORDERS = list; renderAll(); },
+    () => { $('custList').innerHTML = `<div class="empty-state"><span data-icon="alert"></span><div class="empty-state-title">הטעינה נכשלה</div><div class="empty-state-msg">בדוק חיבור ורענן</div></div>`; });
+});
+matchMedia('(max-width:899px)').addEventListener('change', () => { if (!isNarrow()) openDrawer(false); renderAll(); });
+</script>
+</body>
+</html>
