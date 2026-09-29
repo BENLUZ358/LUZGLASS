@@ -2306,6 +2306,11 @@ document.addEventListener('visibilitychange', () => {
   white-space:nowrap;
 }
 .sq-action-btn:disabled{opacity:0.35;cursor:not-allowed;}
+/* משני בכוונה: השליחה היא הפעולה, התצוגה המקדימה היא בדיקה שעושים
+   כשרוצים. בצבע מלא הן היו נראות כמו שתי דרכים לאותו דבר. */
+.sq-action-quiet{background:none;border-style:dashed;color:#8a8278;flex:0 1 auto;}
+.sq-action-quiet:hover{background:#f5f2ed;color:#555;}
+.sq-action-quiet [data-icon]{width:14px;height:14px;vertical-align:-2px;}
 .sq-dl-btn{
   width:36px;height:38px;background:#f5f2ed;border:1px solid rgba(0,0,0,0.1);
   cursor:pointer;border-radius:6px;font-size:14px;flex-shrink:0;
@@ -2565,6 +2570,7 @@ document.addEventListener('visibilitychange', () => {
             <button id="sqBtnSeen" class="sq-action-btn" onclick="sqMarkSeen()">✓ סקיצה טופלה</button>
             <button id="sqBtnDrafter" class="sq-action-btn" onclick="sqSetStage('drafter')" style="display:none;">✏️ שלח לשרטט</button>
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
+            <button id="sqBtnPreview" class="sq-action-btn sq-action-quiet" onclick="sqPreviewChash()" title="מראה בדיוק מה ייכנס למסמך — מק\"טים, מידות, כמויות ומחירים — בלי לשלוח כלום"><span data-icon="search"></span> הצג מה יישלח</button>
             <button id="sqBtnTest"    class="sq-action-btn" onclick="sqMarkTestOrder()" title="אותו תהליך בדיוק, רק שלא ייפתח מסמך בחשבשבת">🧪 הזמנה פיקטיבית</button>
             <button id="sqBtnOpty"    class="sq-action-btn" onclick="sqSetStage('opty')"><span data-icon="settings"></span> הוכנס ל-OptyWay</button>
             <button class="sq-dl-btn" onclick="sqDownload()" title="הורד" aria-label="הורד"><span data-icon="download"></span></button>
@@ -3145,13 +3151,13 @@ function sqSetStage(stage){
   }
 
   else if(stage==='chash'){
-    sqStageMap[id]='chash';
-    updateStage(id, 'chash');
-
     // לחיצה אחת. פעם היה כאן חלון תצוגה מקדימה ואחריו חלון תוצאה, ושניהם
     // נכתבו מסיבה טובה — אבל בעשרים הזמנות ברצף זה ארבעים לחיצות על שני
     // חלונות שכמעט תמיד אומרים "בסדר". החלון נשאר בדיוק למקרים שבהם הוא
-    // באמת אומר משהו: שגיאה, או פריט שדולג.
+    // באמת אומר משהו: שגיאה, או פריט שדולג. מי שרוצה להציץ לוחץ
+    // "הצג מה יישלח" (sqPreviewChash).
+    //
+    // העברת השלב ירדה מכאן לתוך sqSendHashavshevet — ר' שם.
     sqSendHashavshevet(id);
     return;
   }
@@ -3222,6 +3228,17 @@ async function sqMarkTestOrder(){
   sqRender();
   // ומכאן זהה לחלוטין למסלול הרגיל
   sqSetStage('chash');
+}
+
+// "הצג מה יישלח" — אותה בקשה בדיוק שתצא, בנויה בשרת, בלי לשלוח אותה.
+//
+// המסלול המהיר (כפתור ירוק) שולח בלחיצה אחת בכוונה — עשרים הזמנות ברצף
+// הן ארבעים לחיצות על חלונות שכמעט תמיד אומרים "בסדר". הכפתור הזה מחזיר
+// את היכולת להציץ בלי להחזיר את המס לכל הזמנה.
+function sqPreviewChash(){
+  const id = sqCurrent && sqCurrent.id;
+  if(!id) return;
+  sqPreviewHashavshevet(id);
 }
 
 async function sqPreviewHashavshevet(id, agent){
@@ -3403,6 +3420,15 @@ function _sqHbRender(id, data, ok){
 // כל שליחה; עכשיו לחיצה שנייה על הכפתור הירוק הייתה פותחת מסמך שני
 // בחשבשבת. בלעדיו השרת עונה 409 ואנחנו מציגים מה כבר נשלח.
 async function sqSendHashavshevet(id, force){
+  // השלב נקבע כאן ולא אצל הקורא, כי יש שני קוראים: הכפתור הירוק ו"פתח
+  // הזמנה בחשבשבת" שבתוך חלון התצוגה המקדימה. כשזה ישב רק בכפתור הירוק,
+  // שליחה מתוך החלון הייתה פותחת מסמך בחשבשבת ומשאירה את ההזמנה בתור —
+  // אותה הזמנה נשלחת שוב מחר. שליחה משמעה chash, מאיפה שלא באה.
+  if((sqStageMap[id] || '') !== 'chash'){
+    sqStageMap[id] = 'chash';
+    updateStage(id, 'chash');
+    sqSaveState();
+  }
   const btn   = document.getElementById('sqHbSend') || document.getElementById('sqBtnChash');
   const label = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = 'שולח לחשבשבת...'; }

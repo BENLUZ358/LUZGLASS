@@ -196,14 +196,55 @@ const bodyOf = (name, src = ADMIN) =>
         /כל הסקיצות טופלו/.test(toast), true);
 }
 
-/* the ordering that causes it, pinned so the reason stays visible */
+/* the ordering that causes it, pinned so the reason stays visible.
+
+   The stage used to be written in sqSetStage, before it called the send. It
+   now lives inside sqSendHashavshevet, because there are two ways in: the
+   green button, and "פתח הזמנה בחשבשבת" inside the preview window. With the
+   write at the caller, the second one opened a document in Hashavshevet and
+   left the order sitting in the queue, to be sent again tomorrow.
+
+   ⚠️ this check was an indexOf comparison against sqSetStage. When the line
+   moved out, indexOf returned -1, and -1 < anything is true — so it passed
+   while guarding nothing. An ordering check must assert both parts are
+   present before comparing them. */
 {
-  const stage = bodyOf('sqSetStage');
-  check('the stage is written before the send',
-        stage.indexOf("updateStage(id, 'chash')") < stage.indexOf('sqSendHashavshevet(id)'), true);
+  const send = bodyOf('sqSendHashavshevet');
+  const iStage = send.indexOf("updateStage(id, 'chash')");
+  const iPost  = send.indexOf("_lgAuthPost");
+  check('the send is what writes the stage, not its caller', iStage > -1, true);
+  check('and it does so before the request goes out', iPost > -1 && iStage < iPost, true);
+  check('it is skipped when the order is already there, so nothing is written twice',
+        /if\(\(sqStageMap\[id\] \|\| ''\) !== 'chash'\)\{/.test(send), true);
+  check('sqSetStage no longer writes it itself',
+        /updateStage\(id, 'chash'\)/.test(bodyOf('sqSetStage')), false);
+
   const build = bodyOf('buildSQItems');
   check('and the queue excludes anything with a stage',
         /if \(o\.stage && o\.stage !== ''\) return;/.test(build), true);
+}
+
+/* ── "הצג מה יישלח" ──────────────────────────────────── */
+/*
+ * The one-click path is deliberate and stays. But it left no way at all to see
+ * what a document will contain before it exists — "הצג מה נשלח" sat inside
+ * the error window, reachable only once something had already gone wrong.
+ * Ben asked for a way in on a healthy order (2026-09-29).
+ */
+{
+  check('the card offers a preview that does not send',
+        /id="sqBtnPreview"[^>]*onclick="sqPreviewChash\(\)"/.test(ADMIN), true);
+  const prev = bodyOf('sqPreviewChash');
+  check('and it previews rather than sending',
+        /sqPreviewHashavshevet\(id\)/.test(prev) && !/sqSendHashavshevet/.test(prev), true);
+  check('it reads the open order, so it cannot preview the wrong one',
+        /const id = sqCurrent && sqCurrent\.id;/.test(prev), true);
+  /* the preview request must stay a dry run, or the button becomes the thing
+     it exists to avoid */
+  check('the preview never leaves dryRun',
+        /dryRun: true/.test(bodyOf('sqPreviewHashavshevet')), true);
+  check('closing the preview sends nothing',
+        /onclick="_sqHbClose\(\)">ביטול</.test(ADMIN), true);
 }
 
 /* ── the loud cases stay loud ──────────────────────────────────────────── */
