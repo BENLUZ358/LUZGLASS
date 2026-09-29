@@ -906,6 +906,94 @@ async function lgRevokeInvoiceCheck(order, reason) {
   });
 }
 
+// ── עריכת מידה בתחנה ────────────────────────────────────────────────────────
+//
+// למה זה קיים: המידה בפועל התגלתה שונה ממה שהוזן. בחשבשבת מתקנים ב"בטל
+// יתרה לאספקה" ושורה חדשה במקומה, כך שהמספור נשמר, וכאן מתקנים את המידה
+// עצמה. שינוי מידה משנה את טביעת האצבע, ולכן הזמנה שהייתה "מאומתת" הופכת
+// מיד ל"השתנתה" וחוזרת לבדיקה — בכוונה, ובלי לאפס את invoiceCheck ביד:
+// הרשומה נשארת ורואים מי אימת ומתי, לפני שהמידה זזה.
+//
+// המלכודת שנסגרת כאן: המחיר של הזמנה נעולה יושב ב-lockedItems וב-totalFinal
+// ולא נגזר מ-items. עדכון w/h בלבד היה משאיר את כרטיס ההזמנה באדמין מציג את
+// המידה הישנה ואת המחיר הישן — עוד מקור אמת מקביל. לכן כל עריכה מחשבת את
+// שניהם מחדש מאותו מקור: ה-items אחרי השינוי.
+function lgCanEditInvoiceItems(order) {
+  const s = lgInvoiceState(order);
+  return s === 'pending' || s === 'verified' || s === 'changed';
+}
+
+function lgParseMm(raw, label) {
+  const n = Number(String(raw == null ? '' : raw).trim());
+  if (!isFinite(n) || n <= 0) throw new Error(label + ' חייב להיות מספר גדול מאפס');
+  const mm = Math.round(n);
+  if (mm > 10000) throw new Error(label + ' נראה שגוי — ' + mm + ' מ"מ');
+  return mm;
+}
+
+// מחשב מחדש lockedItems ו-totalFinal מהפריטים המעודכנים, לפי המחיר למ"ר
+// שננעל בזמנו. לא פונה למחירונים בכוונה: המחיר של הזמנה נעולה לא משתנה —
+// רק השטח שהוא מוכפל בו. פריט שאין לו מחיר נעול נשאר בלי שורה, כמו בנעילה.
+function lgRepriceLockedItems(items, prevLocked) {
+  const ppm2 = Object.create(null);
+  (prevLocked || []).forEach(li => { if (li && li.sku) ppm2[li.sku] = Number(li.pricePerM2) || 0; });
+  const lockedItems = [];
+  let totalFinal = 0;
+  lgGroupByQuantityId(items || []).forEach(g => {
+    const rep = g.items[0], qty = g.items.length;
+    const sku = rep.sku || '';
+    const p   = ppm2[sku] || 0;
+    if (!sku || !p) return;
+    const area      = lgCalcAreaM2(rep.w || 0, rep.h || 0);
+    const lineTotal = Math.round(area * p * qty);
+    totalFinal += lineTotal;
+    lockedItems.push({
+      name: rep.glassFullName || rep.name || '', sku, w: rep.w || 0, h: rep.h || 0,
+      area, quantity: qty, quantityGroupId: g.quantityGroupId, pricePerM2: p, lineTotal,
+    });
+  });
+  return { lockedItems, totalFinal };
+}
+
+// עריכת המידות של פריט אחד. index הוא המקום ב-items כפי שהוצג לעובד.
+async function lgEditInvoiceItem(order, index, next) {
+  const who = _lgInvoiceActor();
+  if (!order || !order.id) throw new Error('lgEditInvoiceItem: הזמנה חסרה');
+  if (!lgCanEditInvoiceItems(order)) throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  const items = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}))
+                  .map(it => Object.assign({}, it));
+  const it = items[Number(index)];
+  if (!it) throw new Error('הפריט לא נמצא בהזמנה');
+  const w = lgParseMm(next && next.w, 'רוחב');
+  const h = lgParseMm(next && next.h, 'גובה');
+  const oldW = Math.round(Number(it.w) || 0), oldH = Math.round(Number(it.h) || 0);
+  if (w === oldW && h === oldH) return { changed: false };
+
+  // הפריט יוצא מקבוצת הכמות: שלוש חתיכות זהות הפכו לשתיים ועוד אחת אחרת.
+  // בלי זה הנציג של הקבוצה היה נשאר עם המידה הישנה, והשינוי לא היה מגיע למחיר.
+  // גם originalQuantity ו-groupIndex הולכים: חתיכה שיצאה מהקבוצה אינה
+  // "2 מתוך 5" יותר, וכל מי שיקרא אותם אחר כך יקבל מספר שקרי.
+  if (it.quantityGroupId && items.filter(x => x.quantityGroupId === it.quantityGroupId).length > 1) {
+    delete it.quantityGroupId;
+    delete it.originalQuantity;
+    delete it.groupIndex;
+  }
+  it.w = w; it.h = h;
+  it.editedAt   = Date.now();
+  it.editedBy   = who.name || who.phone;
+  it.editedFrom = oldW + '×' + oldH;
+
+  const update = { items, updatedAt: Date.now() };
+  if (order.pricesLockedAt && Array.isArray(order.lockedItems) && order.lockedItems.length) {
+    const r = lgRepriceLockedItems(items, order.lockedItems);
+    update.lockedItems = r.lockedItems;
+    update.totalFinal  = r.totalFinal;
+    update.totalM2     = lgCalcOrderM2({ items });
+  }
+  await _lgDb.ref('orders/' + order.id).update(update);
+  return { changed: true, from: oldW + '×' + oldH, to: w + '×' + h };
+}
+
 // "החשבונית הופקה" — על הזמנה אחת או כמה יחד, עם אותו מספר מסמך.
 // כל הזמנה חייבת להיות 'verified' עכשיו; אחרת לא מסמנים אף אחת.
 // allOrders — לבדיקת כפילות מול מה שכבר סומן.

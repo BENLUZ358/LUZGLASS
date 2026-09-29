@@ -137,6 +137,21 @@ html,body{height:100%;overflow:hidden;}
   color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
 .tick[aria-pressed="true"]{background:var(--green);border-color:var(--green);color:#fff;}
 .tick [data-icon]{width:20px;height:20px;}
+/* עריכת מידה בשורה. הכפתור שקט עד שנוגעים בו: האימות הוא הפעולה הראשית,
+   העריכה היא החריג. */
+.edit{min-width:44px;min-height:44px;border:1px solid transparent;background:none;border-radius:var(--radius);
+  display:flex;align-items:center;justify-content:center;color:var(--muted);cursor:pointer;}
+.edit:hover,.edit:focus-visible{border-color:var(--border);background:var(--surface);color:var(--text);}
+.edit [data-icon]{width:18px;height:18px;}
+.item-editing{background:var(--bg2);}
+.edit-row{display:flex;align-items:center;gap:var(--space-2);direction:ltr;justify-content:flex-end;}
+.edit-mm{width:6ch;min-height:44px;padding:0 var(--space-2);border:2px solid var(--gold);border-radius:var(--radius);
+  background:var(--surface);color:var(--text);font:inherit;font-size:22px;font-weight:var(--fw-black);
+  text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield;}
+.edit-mm::-webkit-outer-spin-button,.edit-mm::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.edit-x{font-size:20px;font-weight:var(--fw-black);color:var(--muted);}
+.edit-was{font-size:var(--fs-xs);color:var(--muted);direction:ltr;text-align:right;}
+.tick.tick-save{background:var(--green);border-color:var(--green);color:#fff;}
 
 .v-foot{flex-shrink:0;padding:var(--space-3) var(--space-4);padding-bottom:calc(var(--space-3) + env(safe-area-inset-bottom));
   background:var(--surface);border-top:1px solid var(--border);display:flex;gap:var(--space-2);align-items:center;}
@@ -272,6 +287,7 @@ let selKey = null;        // הלקוח שנבחר
 let selId  = null;        // ההזמנה שבאימות
 let vTab   = 'items';     // טלפון בלבד
 const ticks = {};         // סימון לעין, לפי הזמנה. לא נשמר
+let editIdx = null;       // הפריט שנמצא כרגע בעריכת מידה. null = אף אחד
 
 const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
@@ -396,7 +412,7 @@ function renderOrders() {
 }
 $('ordList').addEventListener('click', e => {
   const b = e.target.closest('.ord'); if (!b) return;
-  selId = b.dataset.id; vTab = 'items';
+  selId = b.dataset.id; vTab = 'items'; editIdx = null;
   go('verify', true);
   renderAll();
   if (!isNarrow()) $('pVerify').focus({ preventScroll: true });
@@ -435,13 +451,35 @@ function renderVerify() {
   }
 
   const t = ticks[o.id] || (ticks[o.id] = {});
+  if (editIdx !== null && !o.items[editIdx]) editIdx = null;
   const rows = o.items.map((it, i) => {
     const n = it.hsLine || (i + 1);
     const w = Math.round(Number(it.w) || 0), h = Math.round(Number(it.h) || 0);
+    const sub = `${esc(it.glassFullName || it.name || '')}${it.sku ? ' · ' + esc(it.sku) : ''}`;
+    // המידה שהייתה לפני התיקון נשארת מתחת לשורה: מי שמתקן בחשבשבת צריך לדעת
+    // איזו מידה הולכת ל"בטל יתרה לאספקה" ואיזו נכנסת במקומה
+    const was = it.editedFrom
+      ? `<div class="edit-was">היה ${esc(it.editedFrom)}${it.editedBy ? ' · ' + esc(it.editedBy) : ''}</div>` : '';
+    if (i === editIdx) {
+      return `<div class="item item-editing">
+        <span class="item-n">${esc(n)}</span>
+        <div class="item-main">
+          <div class="edit-row">
+            <input class="edit-mm" id="edW" type="number" inputmode="numeric" value="${w}" aria-label="רוחב במילימטרים">
+            <span class="edit-x" aria-hidden="true">×</span>
+            <input class="edit-mm" id="edH" type="number" inputmode="numeric" value="${h}" aria-label="גובה במילימטרים">
+          </div>
+          <div class="item-sub">${sub}</div>
+        </div>
+        <button class="tick tick-save" type="button" id="edSave" aria-label="שמור את המידה"><span data-icon="check"></span></button>
+        <button class="tick" type="button" id="edCancel" aria-label="בטל עריכה"><span data-icon="x"></span></button>
+      </div>`;
+    }
     return `<div class="item">
       <span class="item-n">${esc(n)}</span>
       <div class="item-main"><div class="item-dim">${w} × ${h}</div>
-        <div class="item-sub">${esc(it.glassFullName || it.name || '')}${it.sku ? ' · ' + esc(it.sku) : ''}</div></div>
+        <div class="item-sub">${sub}</div>${was}</div>
+      <button class="edit" type="button" data-edit="${i}" aria-label="תקן את המידה של שורה ${esc(n)}"><span data-icon="pencil"></span></button>
       <button class="tick" type="button" data-tick="${i}" aria-pressed="${!!t[i]}" aria-label="סמן שורה ${esc(n)} כנבדקה"><span data-icon="check"></span></button>
     </div>`;
   }).join('') || `<div class="empty-state"><div class="empty-state-title">אין פריטים בהזמנה</div></div>`;
@@ -456,7 +494,11 @@ function renderVerify() {
   if (keepSketch) {
     // הזמנה זו כבר מוצגת — מחליפים רק את מה שסביב הסקיצה, כדי שהתמונה לא תהבהב בכל עדכון חי
     $('vBanner').innerHTML = banner;
-    $('vItems').innerHTML = `<div class="items-head">פריטי ההזמנה · ${o.items.length}</div>${rows}`;
+    // טופס עריכה שכבר פתוח בדף לא נדרס, אחרת עדכון חי מוחק מידה באמצע
+    // ההקלדה. הציור הראשון של הטופס כן עובר כאן, כי edW עדיין לא קיים.
+    if (!(editIdx !== null && $('edW'))) {
+      $('vItems').innerHTML = `<div class="items-head">פריטי ההזמנה · ${o.items.length}</div>${rows}`;
+    }
   } else {
     $('vBody').innerHTML = `<div id="vBanner">${banner}</div>
       <div class="vtabs" role="tablist" aria-label="תצוגה">
@@ -487,7 +529,46 @@ $('vBody').addEventListener('click', e => {
     document.querySelectorAll('.vtab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === vTab))); return; }
   if (e.target.closest('#skFull')) { openFull(); return; }
   if (e.target.closest('#revokeBtn')) { openRevokeModal(); return; }
+  const ed = e.target.closest('[data-edit]');
+  if (ed) {
+    editIdx = Number(ed.dataset.edit); renderVerify();
+    const f = $('edW'); if (f) { f.focus(); f.select(); }
+    return;
+  }
+  if (e.target.closest('#edCancel')) { editIdx = null; renderVerify(); return; }
+  if (e.target.closest('#edSave'))   { saveEdit(); return; }
 });
+// Enter על אחד השדות שומר — באייפד זה כפתור "סיום" של המקלדת
+$('vBody').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || !e.target.classList || !e.target.classList.contains('edit-mm')) return;
+  e.preventDefault(); saveEdit();
+});
+// שמירת מידה מתוקנת. השינוי מזיז את טביעת האצבע, ולכן הזמנה שהייתה מאומתת
+// חוזרת מיד ל"השתנתה" — זו הנקודה, והעובד רואה זאת כי renderAll מצייר מחדש
+// את המצב ואת המונים.
+async function saveEdit() {
+  const o = orderOf(selId);
+  if (!o || editIdx === null) return;
+  const idx = editIdx;
+  const btn = $('edSave');
+  const w = $('edW') && $('edW').value, h = $('edH') && $('edH').value;
+  const wasVerified = lgInvoiceState(o) === 'verified';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>'; }
+  try {
+    const r = await lgEditInvoiceItem(o, idx, { w, h });
+    editIdx = null;
+    if (!r.changed) { toast('המידה לא השתנתה'); renderVerify(); return; }
+    // הווי שסומן על השורה הזו היה על המידה הישנה — הוא כבר לא אומר כלום
+    if (ticks[o.id]) delete ticks[o.id][String(idx)];
+    toast(wasVerified ? 'המידה תוקנה ל-' + r.to + ' — ההזמנה חזרה לאימות'
+                      : 'המידה תוקנה ל-' + r.to);
+  } catch (err) {
+    toast(err.message || 'השמירה נכשלה', true);
+    if (btn) { btn.disabled = false; btn.innerHTML = '<span data-icon="check"></span>'; }
+    return;
+  }
+  renderAll();
+}
 $('vFoot').addEventListener('click', async e => {
   const vb = e.target.closest('#verifyBtn');
   if (vb) {
@@ -508,7 +589,7 @@ function goNext() {
   const g = selKey && groupOf(selKey);
   const next = g && (g.ords.find(o => lgInvoiceState(o) === 'changed' && String(o.id) !== String(selId))
                   || g.ords.find(o => lgInvoiceState(o) === 'pending' && String(o.id) !== String(selId)));
-  if (next) { selId = next.id; vTab = 'items'; if (isNarrow()) history.replaceState({ view: 'verify', key: selKey, id: selId }, ''); }
+  if (next) { selId = next.id; vTab = 'items'; editIdx = null; if (isNarrow()) history.replaceState({ view: 'verify', key: selKey, id: selId }, ''); }
   else if (isNarrow()) { history.back(); return; }
   renderAll();
 }

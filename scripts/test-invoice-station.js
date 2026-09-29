@@ -250,6 +250,112 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
           /href="invoices\.html"/.test(fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8')), true);
   }
 
+  /* ── תיקון מידה · lgEditInvoiceItem ───────────────────────────────────
+     The half of the correction workflow that lives on our side: in Hashavshevet
+     the line gets "בטל יתרה לאספקה" and a new one by hand, and here the
+     measurement itself changes. Two properties matter more than the write:
+       1. a verified order goes straight back to 'changed' — the hash does it,
+          and invoiceCheck is NOT deleted, so who verified and when survives
+       2. a locked order's money follows the measurement, in lockedItems AND in
+          totalFinal, or the admin card keeps showing the measurement we fixed  */
+  {
+    vm.runInContext([
+      pick(/function lgCalcAreaM2[\s\S]*?\n}/),
+      pick(/function lgCalcOrderM2[\s\S]*?\n}/),
+      pick(/function lgGroupByQuantityId[\s\S]*?\n}/),
+    ].join('\n'), ctx);
+
+    const GLASS  = 'שקוף 8 מחוסם';
+    const piece  = (extra) => Object.assign({ sku: '8SMH', w: 1000, h: 1000, glassFullName: GLASS }, extra);
+    const locked = (items) => ctx.lgNormalizeOrder({
+      id: 'e1', orderNum: 'L900', stage: 'collected', items,
+      pricesLockedAt: 1, totalFinal: 200,
+      lockedItems: [{ name: GLASS, sku: '8SMH', w: 1000, h: 1000, area: 1,
+                      quantity: 1, quantityGroupId: null, pricePerM2: 200, lineTotal: 200 }],
+    });
+    const lastWrite = () => writes[writes.length - 1].update;
+
+    /* a verified order stops being verified the moment a measurement moves */
+    {
+      const items = [piece()];
+      const o = locked(items);
+      o.invoiceCheck = { verifiedAt: 1, verifiedBy: 'בן', itemsHash: ctx.lgItemsHash(items) };
+      check('verified before the edit', ctx.lgInvoiceState(o), 'verified');
+      writes.length = 0;
+      const r = await ctx.lgEditInvoiceItem(o, 0, { w: 1200, h: 1000 });
+      const u = lastWrite();
+      check('the edit reports what changed', [r.changed, r.from, r.to], [true, '1000×1000', '1200×1000']);
+      check('the new measurement is written', [u.items[0].w, u.items[0].h], [1200, 1000]);
+      check('the old one stays on the item — that is the line to cancel in חשבשבת',
+            u.items[0].editedFrom, '1000×1000');
+      check('and who changed it', u.items[0].editedBy, session.name);
+      check('the locked line follows the measurement',
+            [u.lockedItems[0].w, u.lockedItems[0].area], [1200, 1.2]);
+      check('and so does the money — 1.2 מ״ר × 200', [u.lockedItems[0].lineTotal, u.totalFinal], [240, 240]);
+      check('the price per m² is re-applied, never re-fetched', u.lockedItems[0].pricePerM2, 200);
+      check('the total m² is recomputed too', u.totalM2, 1.2);
+      check('stage is not touched', 'stage' in u, false);
+      check('invoiceCheck is not deleted — the record of who verified survives', 'invoiceCheck' in u, false);
+      check('…and yet the order is back for another look',
+            ctx.lgInvoiceState(Object.assign({}, o, { items: u.items })), 'changed');
+    }
+
+    /* three identical pieces, one of them corrected: the group splits 2 + 1 */
+    {
+      const gid = 'q7';
+      const of3 = (i) => piece({ quantityGroupId: gid, originalQuantity: 3, groupIndex: i });
+      writes.length = 0;
+      await ctx.lgEditInvoiceItem(locked([of3(1), of3(2), of3(3)]), 1, { w: 500, h: 1000 });
+      const u = lastWrite();
+      check('the corrected piece leaves the quantity group', u.items[1].quantityGroupId, undefined);
+      check('and stops claiming to be 2 of 3 — nobody may read a false count later',
+            [u.items[1].originalQuantity, u.items[1].groupIndex], [undefined, undefined]);
+      check('the ones that stayed keep their count',
+            [u.items[0].originalQuantity, u.items[2].groupIndex], [3, 3]);
+      check('the two that did not change stay together',
+            [u.items[0].quantityGroupId, u.items[2].quantityGroupId], [gid, gid]);
+      check('so the locked lines are 2 + 1, not three identical ones',
+            u.lockedItems.map(l => [l.quantity, l.w]), [[2, 1000], [1, 500]]);
+      check('and the total is 2×200 + 0.5×200', u.totalFinal, 500);
+    }
+
+    /* the guards */
+    {
+      const invoiced = locked([piece()]);
+      invoiced.invoiceDone = { markedAt: 2, markedBy: 'בן', docNumber: '4821' };
+      check('an invoiced order may not be edited', ctx.lgCanEditInvoiceItems(invoiced), false);
+      check('nor one that is not in the station at all',
+            ctx.lgCanEditInvoiceItems(ctx.lgNormalizeOrder({ id: 'e2', stage: 'graphic', items: [piece()] })), false);
+      await rejects('and the function refuses, not only the button',
+        () => ctx.lgEditInvoiceItem(invoiced, 0, { w: 1200, h: 1000 }), /חשבונית/);
+
+      const o = locked([piece()]);
+      await rejects('zero is refused',            () => ctx.lgEditInvoiceItem(o, 0, { w: 0, h: 1000 }), /רוחב/);
+      await rejects('an empty field is refused',  () => ctx.lgEditInvoiceItem(o, 0, { w: '', h: 1000 }), /רוחב/);
+      await rejects('a non-number is refused',    () => ctx.lgEditInvoiceItem(o, 0, { w: 'abc', h: 1000 }), /רוחב/);
+      await rejects('99000 מ״מ is a typo, not a measurement',
+        () => ctx.lgEditInvoiceItem(o, 0, { w: 99000, h: 1000 }), /שגוי/);
+      await rejects('an index that is not in the order is refused',
+        () => ctx.lgEditInvoiceItem(o, 9, { w: 1200, h: 1000 }), /לא נמצא/);
+
+      writes.length = 0;
+      const same = await ctx.lgEditInvoiceItem(o, 0, { w: 1000, h: 1000 });
+      check('re-typing the same measurement is not a change', same.changed, false);
+      check('and writes nothing — a verified order is not disturbed', writes.length, 0);
+    }
+  }
+
+  /* the page offers the edit, and decides nothing itself */
+  {
+    const PAGE = fs.readFileSync(path.join(ROOT, 'invoices.html'), 'utf8');
+    check('every item row offers a correction', /data-edit="\$\{i\}"/.test(PAGE), true);
+    check('it saves through lgEditInvoiceItem', /await lgEditInvoiceItem\(/.test(PAGE), true);
+    check('the edit button carries an accessible name', /class="edit"[\s\S]{0,120}?aria-label="תקן/.test(PAGE), true);
+    check('a live update cannot wipe a field being typed',
+          /editIdx !== null && \$\('edW'\)/.test(PAGE), true);
+    check('the measurement inputs are 44px targets', /\.edit-mm\{[^}]*min-height:44px/.test(PAGE), true);
+  }
+
   /* stage is never touched by the station */
   const station = pick(/\/\/ ─── 9א\.[\s\S]*?\nasync function lgMarkInvoiced[\s\S]*?\n}/);
   check('nothing in the station writes stage', /\bstage\s*:|updateStage\(/.test(station), false);
