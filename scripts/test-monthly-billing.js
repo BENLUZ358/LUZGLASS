@@ -137,49 +137,38 @@ check('the button is on the row', /umToggleMonthly\('\$\{u\.id\}'/.test(ADMIN), 
         /_isMonthlyClient\(o\.orderClient, o\.clientPhone \|\| o\.phone\) && !o\.monthlyBilling[\s\S]{0,220}?updateOrder\(_sid, \{ monthlyBilling: true \}\)/.test(WD), true);
 }
 
-/* ── the question that stops being asked ───────────────────────────────── */
+/* -- the question nobody is asked any more ------------------------------ */
 /*
- * For a שוטף 30 client the finish-delivery dialog does not ask about an
- * invoice — the order goes straight to collected and waits for the monthly
- * run. For everyone else the dialog is untouched, which is the whole point:
- * this is the only existing behaviour the feature changes.
+ * The finish-delivery dialog used to ask about an invoice, and skipped the
+ * question only for a שוטף 30 client. On 2026-09-29 Ben removed invoicing from
+ * the delivery screen altogether: every client goes straight to collected and
+ * the invoice is produced by hand from the invoice station.
+ *
+ * So the שוטף 30 behaviour did not disappear -- it became the behaviour. The
+ * flag itself stays, and carries more weight than before: it is what splits
+ * the station into a daily queue and a monthly one, so the secretary is never
+ * looking at both at once. What is still specific here is the message: a
+ * monthly client's invoice is consolidated, and silence would read as
+ * "nothing happened".
  */
 {
   const fn = bodyOf(WD, 'showClientDeliveryPrompt');
-  check('the dialog reads the flag through the fallback, not the order alone',
-        /if\(_orderIsMonthly\(firstO\)\)\{/.test(fn), true);
-  /* relaxed from a literal "finalizeDelivery(id, false));" — the toast-ordering
-     fix below wraps the calls in Promise.all(...map...), which changes the
-     closing punctuation but not the intent: finalizeDelivery(id, false) runs,
-     then the branch returns without ever reaching the dialog. */
-  check('a monthly client skips straight to collected',
-        /finalizeDelivery\(id, false\)[\s\S]{0,200}?return;/.test(fn), true);
-  /* silence would look like nothing happened. The old check matched "שוטף 30"
-     anywhere in the function — which the Hebrew comment above the branch
-     satisfies — so deleting the toast left it green. It must be inside a
-     showToast call. */
-  check('and is told what happened, in a toast and not in a comment',
-        /showToast\([^;\n]*שוטף 30/.test(fn), true);
-  /* the ordinary path must survive untouched */
-  check('everyone else still gets the choice',
-        /_cldInv'\)\.onclick/.test(fn), true);
-  check('and can still issue from there',
-        /_deliveryInvoice\(orderIds\)/.test(fn), true);
-
-  /* finalizeDelivery is async and shows its own toast after its Firebase
-     write resolves. showToast only sets textContent — there is no queue —
-     so a monthly toast fired synchronously right after a bare forEach is
-     always overwritten by finalizeDelivery's generic one. */
-  {
-    const monthlyBranch = (fn.match(/if\(_orderIsMonthly\(firstO\)\)\{[\s\S]*?\n  \}/) || [''])[0];
-    check('the monthly branch exists', monthlyBranch.length > 0, true);
-    check('it waits for every finalizeDelivery before toasting',
-          /Promise\.all\(orderIds\.map\(id => finalizeDelivery\(id, false\)\)\)/.test(monthlyBranch), true);
-    check('the toast is in the continuation, not a bare statement after the forEach',
-          /\.then\(\(\) => showToast\(/.test(monthlyBranch), true);
-    check('and does not fire synchronously right after a bare forEach',
-          !/forEach\(id => finalizeDelivery\(id, false\)\);\s*\n\s*showToast\(/.test(monthlyBranch), true);
-  }
+  check('nobody is asked about an invoice any more',
+        /_cldInv|_deliveryInvoice/.test(fn), false);
+  check('every client goes straight to collected',
+        /Promise\.all\(orderIds\.map\(id => finalizeDelivery\(id\)\)\)/.test(fn), true);
+  check('the monthly flag is still read, through the fallback and not the order alone',
+        /_orderIsMonthly\(firstO\)/.test(fn), true);
+  /* silence would look like nothing happened, and a comment is not a toast */
+  check('a monthly client is told the invoice is consolidated, in a toast',
+        /showToast\([\s\S]{0,200}?שוטף 30/.test(fn), true);
+  check('everyone else is told where the order went',
+        /בנאסף, ממתינות לחשבונית/.test(fn), true);
+  /* finalizeDelivery is async and shows its own toast once its Firebase write
+     resolves. showToast only sets textContent -- there is no queue -- so a
+     summary fired synchronously after a bare forEach is always overwritten. */
+  check('the summary waits for every finalizeDelivery before it is shown',
+        /\.then\(\(\) => showToast\(/.test(fn), true);
 }
 
 /* ══ the issuing screen — run, not read ════════════════════════════════════
