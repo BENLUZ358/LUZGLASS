@@ -1391,28 +1391,40 @@ function addItemsToWork(orderId){
   renderAll();
 }
 
+// "הוסף הזמנה שלמה" = בדיוק כמו ללחוץ "+ הוסף" על כל שורה ושורה, רק בלחיצה
+// אחת. הכל נכנס לטיוטה — חיסום, ליטוש וחיתוך — והפיצול קורה אחר כך, ב"הורד
+// לעבודה" (commitDraftToWork → handleWorkdayStart).
+//
+// ⚠️ עד 2026-09-29 הפונקציה הזו עקפה את הטיוטה לגמרי: היא דחפה ישר ל-inWork,
+// מילאה itemsSel בכל הפריטים וסימנה stage='workday'. התוצאה הייתה שפריטי
+// החיסום נפלו בין הכיסאות — getActiveItemsForOrder מסתירה אותם מיום העבודה
+// כי היא מניחה שהם כבר בתחנת הבדיקה, אבל handleWorkdayStart, שהוא היחיד
+// שמעביר אותם לשם, עוד לא רץ. הזמנה שכולה חיסום (L1068-1) נראתה ריקה לגמרי,
+// כאילו נמחקה. הפריטים עצמם מעולם לא אבדו — הם פשוט לא היו גלויים בשום מסך.
 function addWholeOrder(orderId){
   const sid = String(orderId);
   const o = allOrders.find(x=>x.id===sid);
   const _oi = o ? (Array.isArray(o.items) ? o.items
     : (o.items && typeof o.items === 'object') ? Object.values(o.items) : []) : [];
-  // [תיקון באג 18] — הזמנה ללא פריטים לא נכנסת ל-inWork:
-  //   getFiltered מסתיר אותה (uniqueSel.length===totalItems שניהם 0)
-  //   וב"יום עבודה פעיל" אין מה להציג, אז ההזמנה נעלמת לגמרי.
+  // [תיקון באג 18] — הזמנה ללא פריטים אין מה להוסיף ממנה, ובלי הבדיקה הזו
+  // היא נעלמה לגמרי מהמסך.
   if(!_oi.length){
     showToast('הזמנה זו אין לה פריטים — הוסף פריטים ידנית תחילה');
     return;
   }
-  if(!workDay.inWork.includes(sid)) workDay.inWork.push(sid);
-  // מלא itemsSel קודם, ואז סמן stage
-  if(!workDay.itemsSel) workDay.itemsSel = {};
-  workDay.itemsSel[sid] = _oi.map((_,i)=>i);
-  markStageWorkday(sid); // stage רק אחרי מילוי itemsSel
-  expandedOrders.delete(orderId);
-  saveWorkDay();
-  document.getElementById('finishBtn').disabled = false;
-  showToast('✓ הזמנה שלמה נוספה');
-  renderAll();
+  // פריט שכבר ביום העבודה לא חוזר לטיוטה — אותו סינון בדיוק שהכפתור בכל
+  // שורה עושה (availIdx). בלעדיו "הוסף הזמנה שלמה" על הזמנה שחלקה כבר נבחרה
+  // היה מוסיף את אותו פריט פעם שנייה.
+  const _sel = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
+  const _selIdxs = (Array.isArray(_sel) ? _sel : Object.values(_sel)).map(Number);
+  const _avail = _oi.map((_,i)=>i).filter(i => !_selIdxs.includes(i));
+  if(!_avail.length){
+    showToast('כל הפריטים של ההזמנה כבר ביום העבודה או בטיוטה');
+    return;
+  }
+  // addGroupToDraft מדלג לבד על מה שכבר בטיוטה, ומרענן את המסך ואת המונה
+  addGroupToDraft(sid, _avail);
+  expandedOrders.delete(sid);
 }
 
 function wdDimPrev(inputId, prevId) {

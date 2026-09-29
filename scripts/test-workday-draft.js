@@ -1,0 +1,117 @@
+#!/usr/bin/env node
+/**
+ * הטיוטה של יום העבודה — הדרך היחידה פנימה.
+ *
+ * "בנה יום עבודה" עובד בשני שלבים בכוונה:
+ *   1. בוחרים פריטים  → draftItems (טיוטה)
+ *   2. "הורד לעבודה"  → commitDraftToWork → addSingleItem לכל פריט
+ *                       ואז handleWorkdayStart, שמפצל: ליטוש נשאר ביום
+ *                       העבודה, חיסום עובר ל-workday/inChisum = תחנת הבדיקה
+ *
+ * מה שנשבר (נמצא 2026-09-29 על שלוש הזמנות אמיתיות): "הוסף הזמנה שלמה"
+ * עקף את שלב 1 לגמרי — דחף ישר ל-inWork, מילא itemsSel בכל הפריטים וסימן
+ * stage='workday'. הפיצול קורה רק ב-handleWorkdayStart, שלא רץ.
+ *
+ * התוצאה הייתה שקטה וגרועה: getActiveItemsForOrder מסתירה פריטי חיסום
+ * מיום העבודה כי היא מניחה שהם כבר בתחנת הבדיקה — אבל הם לא הגיעו לשם.
+ * L1065-3 הציגה 3 מראות מתוך 7 פריטים; L1068-1, שכולה חיסום, הציגה כלום
+ * ונראתה כאילו נמחקה. הפריטים לא אבדו מ-Firebase — הם פשוט לא היו גלויים
+ * בשום מסך, ולא היה שום דבר שמודיע על כך.
+ *
+ * הכלל שהקובץ הזה נועל: שום מסלול הוספה לא מדלג על הטיוטה, והמקום היחיד
+ * שמעביר לתחנת הבדיקה הוא handleWorkdayStart.
+ *
+ * Run: node scripts/test-workday-draft.js
+ */
+const fs   = require('fs');
+const path = require('path');
+
+const ROOT = path.join(__dirname, '..');
+const WD   = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8').replace(/\r\n/g, '\n');
+
+let failed = 0;
+const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
+  ? console.log('ok    ' + name)
+  : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
+
+const bodyOf = name =>
+  (WD.match(new RegExp('(async )?function ' + name + '\\([\\s\\S]*?\\n}')) || [''])[0];
+
+/* ── "הוסף הזמנה שלמה" עובר דרך הטיוטה, כמו כל פריט בודד ──────────────── */
+{
+  const fn = bodyOf('addWholeOrder');
+  check('the function exists', fn.length > 0, true);
+  check('it adds to the draft', /addGroupToDraft\(sid, _avail\)/.test(fn), true);
+
+  /* אלה שלוש השורות שהיו שם ועקפו את הטיוטה. כל אחת מהן לבדה מחזירה את הבאג */
+  check('it does not push straight into inWork',
+        /workDay\.inWork\.push/.test(fn), false);
+  check('it does not fill itemsSel itself',
+        /workDay\.itemsSel\[sid\]\s*=/.test(fn), false);
+  check('and it does not mark the stage — that belongs to the commit',
+        /markStageWorkday/.test(fn), false);
+
+  /* הזמנה ללא פריטים (באג 18) — נשאר */
+  check('an order with no items is still refused, not silently added',
+        /if\(!_oi\.length\)\{[\s\S]{0,140}?return;/.test(fn), true);
+
+  /* פריט שכבר ביום העבודה לא חוזר לטיוטה — אותו סינון כמו availIdx בשורה */
+  check('items already in the work day are filtered out first',
+        /_avail = _oi\.map\(\(_,i\)=>i\)\.filter\(i => !_selIdxs\.includes\(i\)\)/.test(fn), true);
+  check('and when nothing is left it says so instead of doing nothing',
+        /כבר ביום העבודה או בטיוטה/.test(fn), true);
+}
+
+/* ── הטיוטה היא השער היחיד ליום העבודה ───────────────────────────────── */
+{
+  const commit = bodyOf('commitDraftToWork');
+  check('the commit is what calls addSingleItem', /addSingleItem\(d\.orderId, d\.itemIdx\)/.test(commit), true);
+  check('and it is what starts the day, so the split always follows',
+        /handleWorkdayStart\(\)/.test(commit), true);
+  check('it empties the draft, so a second press cannot add twice',
+        /draftItems = \[\]/.test(commit), true);
+}
+
+/* ── הפיצול יושב במקום אחד בלבד ──────────────────────────────────────── */
+{
+  /* inChisum נכתב רק ב-handleWorkdayStart. אם עוד מישהו יכתוב לשם, שני
+     מקורות אמת יחליטו מה נמצא בתחנת הבדיקה — וזה הדפוס שנשבר כאן שוב ושוב */
+  const pushes = (WD.match(/workDay\.inChisum\.push/g) || []).length;
+  check('exactly one place pushes into the check station', pushes, 1);
+  check('and it is inside handleWorkdayStart',
+        /workDay\.inChisum\.push/.test(bodyOf('handleWorkdayStart')), true);
+
+  const start = bodyOf('handleWorkdayStart');
+  check('the split keeps only non-chisum items in the work day',
+        /workDay\.itemsSel\[_sid\] = _allSelIdxs\.filter/.test(start), true);
+  /* אותה פעולה, שני חצאים: מוחקים את החיסום מיום העבודה רק כי הוא עובר
+     לתחנה. חצי אחד בלי השני הוא בדיוק הבאג הזה */
+  check('and the same run is what moves them to the station',
+        /hasChisum && !workDay\.inChisum/.test(start), true);
+}
+
+/* ── תחנת הבדיקה מציגה בדיוק את inChisum ─────────────────────────────── */
+{
+  const CS = fs.readFileSync(path.join(ROOT, 'check-station.html'), 'utf8').replace(/\r\n/g, '\n');
+  check('the check station shows exactly what is in inChisum',
+        /fbOrders\.filter\(o=>wdInChisum\.includes\(String\(o\.id\)\)\)/.test(CS), true);
+  /* ולכן הזמנה שלא נדחפה לשם פשוט לא קיימת שם — אין מסלול חלופי שיציל אותה.
+     ההצהרה הריקה לא נספרת; מה שנספר הוא מאיפה הערך באמת מגיע */
+  const sources = (CS.match(/wdInChisum\s*=\s*(?!\[\];)/g) || []).length;
+  check('the queue has exactly one source, and it is Firebase', sources, 1);
+  check('and that source is workday/inChisum',
+        /wdInChisum = objToArr\(wd\.inChisum\)/.test(CS), true);
+}
+
+/* ── ההסתרה שהפכה את הבאג לשקט ───────────────────────────────────────── */
+{
+  const fn = bodyOf('getActiveItemsForOrder');
+  check('the work day view hides chisum items', /!it\.chisum/.test(fn), true);
+  /* זו הסיבה שאיש לא ראה את הפריטים החסרים: הם נעלמו מהמסך בלי הודעה.
+     ההסתרה נכונה — אבל רק כשהם באמת עברו לתחנה, וזה מה שהטיוטה מבטיחה */
+  check('which is only correct because the draft guarantees the split ran',
+        /addGroupToDraft/.test(bodyOf('addWholeOrder')), true);
+}
+
+if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
+console.log('\nAll workday-draft checks passed.');
