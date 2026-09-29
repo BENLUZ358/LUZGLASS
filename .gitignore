@@ -1,5 +1,10 @@
 node_modules/
 scripts/serviceAccountKey.json
+# כל מפתח שירות, לא רק השם המדויק שלמעלה — סביבת TEST הוסיפה מפתח שני,
+# ודפוס רחב עדיף על רשימה ששוכחים לעדכן
+*serviceAccountKey*.json
+*-key.json
+serviceAccount*.json
 # גיבויים מקומיים לפני מחיקה — נתוני לקוחות אמיתיים, לא נכנסים ל-git
 backups/
 .superpowers/
