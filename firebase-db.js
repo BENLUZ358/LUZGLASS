@@ -1035,6 +1035,30 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
   return { docNumber: p.docNumber, count: list.length };
 }
 
+// ─── שוטף 30 ─────────────────────────────────────────────────────────────
+//
+//  הכלל ישב רק ב-workday.html (_orderIsMonthly), ותחנת החשבוניות הייתה
+//  צריכה אותו גם. עותק שני היה בדיוק הדפוס שנשבר כאן שוב ושוב, ולכן הוא
+//  עבר לכאן ושני המסכים קוראים ממנו.
+//
+//  הזיהוי לפי טלפון בלבד, כי שם לקוח משתנה — אותה צורה בדיוק כמו
+//  _isDeliveryClient. הזמנה נושאת את המשטר שבו נפתחה, ולכן monthlyBilling
+//  עליה מנצח תמיד; רשומת הלקוח משלימה הזמנות שנוצרו אחרי שהלקוח סומן
+//  ומעולם לא קיבלו את הדגל.
+function lgMonthlyPhoneSet(users) {
+  const s = new Set();
+  (users || []).forEach(u => {
+    if (u && u.monthlyBilling && u.phone) s.add(String(u.phone).replace(/[-\s]/g, ''));
+  });
+  return s;
+}
+function lgIsMonthlyOrder(o, monthlyPhones) {
+  if (!o) return false;
+  if (o.monthlyBilling) return true;
+  const p = String((o.clientPhone || o.phone) || '').replace(/[-\s]/g, '');
+  return !!(p && monthlyPhones && monthlyPhones.has(p));
+}
+
 // האסמכתא להצגה, או '' כשאין. הזמנה פיקטיבית מוחזרת ריקה בכוונה: היא
 // נראתה כאילו נשלחה, אבל בחשבשבת אין לה מסמך, ומספר על המסך היה שולח
 // את המזכירה לחפש משהו שלא קיים.
@@ -1055,11 +1079,25 @@ function lgClientKey(o) {
 // הזמנה בלי טלפון אינה לקוח — היא מקבלת קבוצה משלה, ולעולם לא נכנסת לדלי
 // משותף שבו חשבונית אחת הייתה מכסה הזמנות של אנשים שונים.
 // המיון: קודם מי שיש לו הזמנה שהשתנתה אחרי אימות, אחר כך לפי כמה פתוחות.
-function lgInvoiceGroups(allOrders, q) {
+//
+// opts.scope — 'all' (ברירת מחדל) · 'daily' · 'monthly'
+//   ברירת המחדל היא 'all' ולא 'daily' בכוונה: קורא ששוכח להעביר scope יראה
+//   הכול מעורבב — מכוער ומיד גלוי. עם 'daily' הוא היה מאבד הזמנות בשקט.
+//   שוטף 30 עובד לפי חודש ולא לפי יום, ותור מעורב היה מציג למזכירה חמישה
+//   לקוחות שצריך לטפל בהם היום לצד שנים־עשר שנוגעים בהם בסוף החודש. ההפרדה
+//   היא כדי שמה שעל המסך יהיה מה שצריך לעשות עכשיו.
+//
+// הסינון הוא ברמת ההזמנה ולא ברמת הלקוח, בכוונה: לקוח שעבר לשוטף 30 באמצע
+// נושא הזמנות משני המשטרים, וסינון לפי הלקוח היה מחביא את היומיות שלו בטאב
+// החודשי. כך כל הזמנה מופיעה באחד מהשניים, ואף אחת לא נעלמת.
+function lgInvoiceGroups(allOrders, q, opts) {
+  const scope   = (opts && opts.scope) || 'all';
+  const phones  = opts && opts.monthlyPhones;
   const by = {};
   (allOrders || []).forEach(o => {
     const s = lgInvoiceState(o);
     if (!s || s === 'invoiced') return;
+    if (scope !== 'all' && lgIsMonthlyOrder(o, phones) !== (scope === 'monthly')) return;
     const phone = lgClientKey(o);
     const key = phone || ('order:' + o.id);
     const g = by[key] || (by[key] = { key, phone, name: '', ords: [] });

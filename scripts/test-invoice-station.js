@@ -208,6 +208,8 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
   /* ── grouping by client: the same key the admin billing screen uses ── */
   {
     vm.runInContext([
+      pick(/function lgMonthlyPhoneSet[\s\S]*?\n}/),
+      pick(/function lgIsMonthlyOrder[\s\S]*?\n}/),
       pick(/function lgHsReference[\s\S]*?\n}/),
       pick(/function lgClientKey[\s\S]*?\n}/),
       pick(/function lgInvoiceGroups[\s\S]*?\n}/),
@@ -283,6 +285,62 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
           ctx.lgInvoiceGroups(refAll, '99999').length, 0);
     check('searching by our own order number still works',
           ctx.lgInvoiceGroups(refAll, 'L1070').map(g => g.name), ['המקום לאמבט']);
+  }
+
+  /* ── שוטף 30 · the two queues ──────────────────────────────────────────
+     A monthly client is billed once at the end of the month, so their orders
+     are not what the secretary works on today. Mixed together, five clients
+     that need an invoice now sit among twelve that do not.
+
+     The split is per ORDER, not per client, and that is the whole subtlety: a
+     client who moved onto שוטף 30 mid-stream carries orders from both regimes,
+     and filtering by the client would hide their daily orders inside the
+     monthly tab. Every order lands in exactly one of the two. */
+  {
+    const users = [
+      { phone: '050-333 3333', monthlyBilling: true },
+      { phone: '0504444444',   monthlyBilling: false },
+      { phone: '',             monthlyBilling: true },   // no phone — not a client
+    ];
+    const MP = ctx.lgMonthlyPhoneSet(users);
+    check('the phone set is normalised and skips the phoneless',
+          [...MP].sort(), ['0503333333']);
+
+    const ord = (id, phone, flag) => ctx.lgNormalizeOrder(Object.assign(
+      { id, orderNum: id, orderClient: 'לקוח ' + phone, clientPhone: phone,
+        stage: 'collected', items: ITEMS },
+      flag === undefined ? {} : { monthlyBilling: flag }));
+
+    check('the order flag alone is enough',
+          ctx.lgIsMonthlyOrder(ord('a', '0501111111', true), MP), true);
+    check('the client record fills in an order that never got the flag',
+          ctx.lgIsMonthlyOrder(ord('b', '050-333 3333'), MP), true);
+    check('an ordinary client is daily', ctx.lgIsMonthlyOrder(ord('c', '0504444444'), MP), false);
+    check('and so is an order with no phone at all', ctx.lgIsMonthlyOrder(ord('d', ''), MP), false);
+    /* the order carries the regime it was opened under, so it wins */
+    check('an order flagged monthly stays monthly even for a daily client',
+          ctx.lgIsMonthlyOrder(ord('e', '0504444444', true), MP), true);
+
+    /* a client mid-transition: one order from each regime */
+    const mid = [ord('m1', '0507777777', true), ord('m2', '0507777777')];
+    const g = (sc) => ctx.lgInvoiceGroups(mid, '', { scope: sc, monthlyPhones: MP });
+    check('the monthly tab shows only the monthly order',
+          g('monthly').map(x => x.ords.map(o => o.id)), [['m1']]);
+    check('the daily tab shows only the daily one — it is not hidden',
+          g('daily').map(x => x.ords.map(o => o.id)), [['m2']]);
+    check('every order lands in exactly one tab',
+          g('monthly')[0].ords.length + g('daily')[0].ords.length, mid.length);
+    check('and the counters count each tab on its own',
+          [g('monthly')[0].counts.open, g('daily')[0].counts.open], [1, 1]);
+
+    /* the default must not hide anything from a caller who forgets */
+    check('no scope means everything, not silently "daily"',
+          ctx.lgInvoiceGroups(mid, '')[0].ords.length, 2);
+    check('and "all" says so explicitly',
+          ctx.lgInvoiceGroups(mid, '', { scope: 'all', monthlyPhones: MP })[0].ords.length, 2);
+    /* without the user records we still honour the flag on the order */
+    check('a missing phone set degrades to the order flag alone',
+          ctx.lgInvoiceGroups(mid, '', { scope: 'monthly' }).map(x => x.ords.map(o => o.id)), [['m1']]);
   }
 
   /* ── the page uses the shared functions and decides nothing itself ── */
@@ -407,6 +465,19 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
           /lgHsReference\(o\)/.test(PAGE) && !/orderNum[^\n]*replace\(\/\\D\//.test(PAGE), true);
     check('and the search box says it can be searched',
           /placeholder="[^"]*אסמכתא/.test(PAGE), true);
+    /* the two queues */
+    check('the page offers both tabs',
+          /data-scope="daily"/.test(PAGE) && /data-scope="monthly"/.test(PAGE), true);
+    check('and passes the scope to the shared function rather than filtering itself',
+          /lgInvoiceGroups\(ORDERS, [^)]*opts\(\)\)/.test(PAGE), true);
+    check('groupOf uses the same scope as the list, so a selection cannot vanish',
+          /const opts\s*=\s*\(\) => \(\{ scope, monthlyPhones: MONTHLY \}\)/.test(PAGE), true);
+    check('the monthly flags come from the user records, through the shared builder',
+          /lgMonthlyPhoneSet\(await lgGetAllUsers\(\)\)/.test(PAGE), true);
+    check('and a failure to load them does not take the page down',
+          /catch \(e\) \{ console\.warn\('שוטף 30/.test(PAGE), true);
+    check('switching tabs drops the selected client, which belonged to the other one',
+          /scope = b\.dataset\.scope;[\s\S]{0,160}?selKey = null; selId = null;/.test(PAGE), true);
     check('the measurement inputs are 44px targets', /\.edit-mm\{[^}]*min-height:44px/.test(PAGE), true);
   }
 

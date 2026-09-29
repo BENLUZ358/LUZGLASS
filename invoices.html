@@ -127,6 +127,13 @@ html,body{height:100%;overflow:hidden;}
 .items-head{padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);font-size:var(--fs-xs);font-weight:var(--fw-bold);color:var(--muted);}
 .item{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);}
 .item:last-child{border-bottom:none;}
+.scopes{display:flex;gap:var(--space-1);margin-bottom:var(--space-2);}
+.scope{flex:1;min-height:44px;padding:0 var(--space-2);border:1px solid var(--border);background:var(--surface);
+  border-radius:var(--radius);font:inherit;font-size:var(--fs-sm);font-weight:var(--fw-bold);color:var(--muted);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+.scope[aria-selected="true"]{background:var(--gold);border-color:var(--gold);color:var(--on-gold);}
+.scope-n{font-size:var(--fs-xs);font-weight:var(--fw-black);opacity:.75;font-variant-numeric:tabular-nums;}
+.scope-n:empty{display:none;}
 .ord-hs{margin-top:var(--space-1);font-size:var(--fs-xs);color:var(--muted);display:flex;align-items:center;gap:4px;
   direction:ltr;justify-content:flex-end;}
 .ord-hs [data-icon]{width:13px;height:13px;}
@@ -250,6 +257,12 @@ html,body{height:100%;overflow:hidden;}
     <section class="pane" id="pCustomers" aria-label="לקוחות">
       <div class="pane-head">
         <h2>לקוחות עם הזמנות לחשבונית</h2>
+        <!-- שוטף 30 עובד לפי חודש. תור מעורב היה מציג את מה שצריך היום
+             לצד מה שנוגעים בו בסוף החודש. -->
+        <div class="scopes" role="tablist" aria-label="סוג החשבונית">
+          <button class="scope" role="tab" type="button" data-scope="daily"   aria-selected="true">יומיות<span class="scope-n" id="nDaily"></span></button>
+          <button class="scope" role="tab" type="button" data-scope="monthly" aria-selected="false">שוטף 30<span class="scope-n" id="nMonthly"></span></button>
+        </div>
         <label class="search"><span class="sr-only">חיפוש לקוח או הזמנה</span>
           <span data-icon="search"></span>
           <input id="q" type="search" placeholder="שם, טלפון, מספר הזמנה או אסמכתא" autocomplete="off">
@@ -291,6 +304,8 @@ let selId  = null;        // ההזמנה שבאימות
 let vTab   = 'items';     // טלפון בלבד
 const ticks = {};         // סימון לעין, לפי הזמנה. לא נשמר
 let editIdx = null;       // הפריט שנמצא כרגע בעריכת מידה. null = אף אחד
+let scope = 'daily';      // 'daily' | 'monthly' — איזה תור מוצג
+let MONTHLY = new Set();  // טלפוני לקוחות שוטף 30, מרשומות המשתמשים
 
 const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
@@ -319,8 +334,11 @@ function toast(msg, err) {
   t.className = 'toast' + (err ? ' err' : ''); t.setAttribute('role', err ? 'alert' : 'status'); t.textContent = msg;
   document.body.appendChild(t); setTimeout(() => t.remove(), err ? 5000 : 2800);
 }
-const groups   = () => lgInvoiceGroups(ORDERS, $('q').value);
-const groupOf  = key => lgInvoiceGroups(ORDERS, '').find(g => g.key === key) || null;
+// scope נכנס לשתיהן: groupOf חייב לראות בדיוק את מה שהמסך רואה, אחרת לקוח
+// שנבחר בטאב אחד היה "נעלם" ברינדור הבא ו-renderAll היה מנקה את הבחירה
+const opts     = () => ({ scope, monthlyPhones: MONTHLY });
+const groups   = () => lgInvoiceGroups(ORDERS, $('q').value, opts());
+const groupOf  = key => lgInvoiceGroups(ORDERS, '', opts()).find(g => g.key === key) || null;
 const orderOf  = id => ORDERS.find(o => String(o.id) === String(id)) || null;
 
 // ═══ ניווט — מסך אחד בכל פעם מתחת ל-900, עם חזרה אמיתית ═══════════════════
@@ -352,10 +370,13 @@ $('scrim').onclick = () => openDrawer(false);
 
 // ═══ עמודה 1 · לקוחות ═════════════════════════════════════════════════════
 function renderCustomers() {
+  renderScopes();
   const gs = groups();
   if (!gs.length) {
     $('custList').innerHTML = $('q').value
-      ? `<div class="empty-state"><span data-icon="search"></span><div class="empty-state-title">לא נמצא</div><div class="empty-state-msg">נסה שם אחר, טלפון או מספר הזמנה</div></div>`
+      ? `<div class="empty-state"><span data-icon="search"></span><div class="empty-state-title">לא נמצא</div><div class="empty-state-msg">נסה שם אחר, טלפון, מספר הזמנה או אסמכתא</div></div>`
+      : scope === 'monthly'
+      ? `<div class="empty-state"><span data-icon="check-circle"></span><div class="empty-state-title">אין הזמנות שוטף 30</div><div class="empty-state-msg">לקוח מוגדר כשוטף 30 בניהול המשתמשים</div></div>`
       : `<div class="empty-state"><span data-icon="check-circle"></span><div class="empty-state-title">אין הזמנות שממתינות לחשבונית</div><div class="empty-state-msg">הזמנה מגיעה לכאן כשהיא נאספת</div></div>`;
     return;
   }
@@ -369,6 +390,25 @@ function renderCustomers() {
       <span class="cust-name">${esc(g.name)}<span class="cust-sub">${nOrders(g.ords.length)}${g.phone ? ' · ' + esc(g.phone) : ' · בלי טלפון'}</span></span>${badge}</button>`;
   }).join('');
 }
+// המספר על כל טאב הוא הזמנות פתוחות (ממתינות + השתנו), לא לקוחות: זה מה
+// שנשאר לעשות. מונה ריק לא מוצג — אפס הוא חדשות טובות ולא עוד מספר לקרוא.
+function renderScopes() {
+  [['daily', 'nDaily'], ['monthly', 'nMonthly']].forEach(([sc, el]) => {
+    const open = lgInvoiceGroups(ORDERS, '', { scope: sc, monthlyPhones: MONTHLY })
+                   .reduce((n, g) => n + g.counts.open, 0);
+    $(el).textContent = open || '';
+  });
+  document.querySelectorAll('.scope').forEach(b =>
+    b.setAttribute('aria-selected', String(b.dataset.scope === scope)));
+}
+document.querySelector('.scopes').addEventListener('click', e => {
+  const b = e.target.closest('.scope'); if (!b || b.dataset.scope === scope) return;
+  scope = b.dataset.scope;
+  // הלקוח וההזמנה שייכים לטאב שממנו נבחרו, ולכן יורדים יחד איתו
+  selKey = null; selId = null; editIdx = null;
+  if (isNarrow()) document.body.dataset.view = 'customers';
+  renderAll();
+});
 $('custList').addEventListener('click', e => {
   const b = e.target.closest('.cust'); if (!b) return;
   selKey = b.dataset.key;
@@ -705,10 +745,16 @@ function renderAll() {
   renderCustomers(); renderOrders(); renderVerify(); updateTitle();
 }
 
-lgRequireAuthAsync('admin').then(session => {
+lgRequireAuthAsync('admin').then(async session => {
   if (!session) return;
   SESSION = session;
   history.replaceState({ view: 'customers' }, '');
+  // רשומות הלקוחות, בשביל דגל שוטף 30. קריאה אחת, ולא האזנה: הדגל משתנה
+  // בניהול המשתמשים ולא תוך כדי עבודה בתחנה. כישלון כאן לא מפיל את הדף —
+  // ההזמנה עדיין נושאת monthlyBilling משלה, והטאב פשוט פחות מדויק לגבי
+  // הזמנות ישנות שמעולם לא קיבלו את הדגל.
+  try { MONTHLY = lgMonthlyPhoneSet(await lgGetAllUsers()); }
+  catch (e) { console.warn('שוטף 30 — לא נטענו רשומות הלקוחות:', e); }
   listenAllOrders(list => { ORDERS = list; renderAll(); },
     () => { $('custList').innerHTML = `<div class="empty-state"><span data-icon="alert"></span><div class="empty-state-title">הטעינה נכשלה</div><div class="empty-state-msg">בדוק חיבור ורענן</div></div>`; });
 });
