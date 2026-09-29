@@ -559,6 +559,13 @@
 //  STATE
 // ═══════════════════════════════════════
 let allOrders = [];
+
+// טיוטת יום העבודה: [{ orderId, itemIdx, orderName, glass, type, w, h }]
+// הפונקציות שמנהלות אותה יושבות בתחתית הקובץ, אבל ההצהרה חייבת להיות כאן:
+// renderAll() נקרא ברמה העליונה של הסקריפט, לפני אותן שורות, ו-getFiltered
+// קוראת את draftItems. זה לא נפל עד עכשיו רק כי allOrders עדיין ריק באותו
+// רגע והלולאה לא נכנסת — הסתמכות על מקריות, לא על סדר.
+let draftItems = [];
 // מחירים — נטענים כדי שנוכל לנעול מחיר סופי בעת מעבר ל-done/delivery
 let _wdGlobalPrices = {}, _wdClientPrices = {};
 let skuCatalogMap = {}; // קטלוג מק"טים חדש (skuCatalog) — תוספתי, ריק כברירת מחדל
@@ -960,15 +967,21 @@ function getFiltered(){
     if(stage !== 'opty' && stage !== 'workday') return false;
     // אל תציג אם כבר ב-inChisum
     if(workDay.inChisum.includes(sid)) return false;
-    // אם ב-inWork — בדוק אם יש עדיין פריטים שלא נבחרו
-    if(workDay.inWork.includes(sid)){
-      const selIdxs = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
-      const totalItems = (o.items||[]).length;
-      // אם כל הפריטים כבר נבחרו — הסתר
-      const uniqueSel = [...new Set(selIdxs.map(Number))];
-      if(uniqueSel.length === totalItems) return false;
-      // אחרת — המשך להציג (יש פריטים שלא נבחרו עדיין)
-    }
+    // הזמנה שאין בה יותר מה להוסיף יורדת מהרשימה. "אין מה להוסיף" = כל
+    // פריטיה כבר ביום העבודה (itemsSel) או בטיוטה (draftItems) — בדיוק שני
+    // המקורות ש-availIdx מסנן לפיהם בשורת הפריט, אחרת הכותרת נשארת בלי
+    // אף שורה מתחתיה.
+    //
+    // ⚠️ קודם נספר רק itemsSel, וגם זה רק כשההזמנה ב-inWork. מאז
+    // ש"הוסף הזמנה שלמה" עובר דרך הטיוטה, הזמנה שכולה בטיוטה אינה ב-inWork
+    // ו-itemsSel שלה ריק — ולכן היא נשארה ברשימה כשורה ריקה.
+    const totalItems = (o.items||[]).length;
+    const _sel = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
+    const taken = new Set((Array.isArray(_sel) ? _sel : Object.values(_sel)).map(Number));
+    draftItems.forEach(d => { if(String(d.orderId) === sid) taken.add(Number(d.itemIdx)); });
+    // הזמנה ללא פריטים כלל נשארת מוצגת (באג 18) — אחרת אי אפשר להוסיף לה
+    // פריטים ידנית, והיא פשוט נעלמת מהמערכת.
+    if(totalItems && taken.size >= totalItems) return false;
     // היו כאן חמש בדיקות תת-מחרוזת חופפות בשני כיוונים. עכשיו התאמה מדויקת
     // על הזוג {עובי, סוג}, ברמת הפריט — "8 שקוף" מפסיק לתפוס "18 שקוף".
     if(glass && !lgOrderHasGlass(o, glass, skuCatalogMap)) return false;
@@ -3262,8 +3275,7 @@ function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();
 //  DRAFT PREVIEW — שכבת ביניים זמנית
 // ═══════════════════════════════════════
 
-// draftItems: [{ orderId, itemIdx, orderName, glass, type }]
-let draftItems = [];
+// draftItems מוצהר בראש הסקריפט, ליד allOrders — ר' ההערה שם.
 
 // הוסף פריט לטיוטה (מחליף את addSingleItem הישיר)
 function addToDraft(orderId, itemIdx){

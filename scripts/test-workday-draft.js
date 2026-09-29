@@ -62,6 +62,41 @@ const bodyOf = name =>
         /כבר ביום העבודה או בטיוטה/.test(fn), true);
 }
 
+/* ── הזמנה שכולה בטיוטה יורדת מרשימת "בנה יום עבודה" ─────────────────── */
+/*
+ * שורת פריט נעלמת כשהוא נבחר או בטיוטה (availIdx). הכותרת של ההזמנה נשלטת
+ * ב-getFiltered, וקודם היא ספרה רק את itemsSel — וגם זה רק כשההזמנה ב-inWork.
+ * מאז ש"הוסף הזמנה שלמה" עובר דרך הטיוטה, הזמנה שכולה בטיוטה אינה ב-inWork
+ * ו-itemsSel שלה ריק, ולכן היא נשארה על המסך ככותרת בלי אף שורה מתחתיה.
+ */
+{
+  const fn = bodyOf('getFiltered');
+  check('the list counts what is in the draft, not only what is in the work day',
+        /draftItems\.forEach\(d => \{ if\(String\(d\.orderId\) === sid\) taken\.add/.test(fn), true);
+  check('and it counts itemsSel too, so both routes hide the order',
+        /workDay\.itemsSel && workDay\.itemsSel\[sid\]/.test(fn), true);
+  check('an order with nothing left to add is hidden',
+        /if\(totalItems && taken\.size >= totalItems\) return false;/.test(fn), true);
+  /* באג 18 — הזמנה ללא פריטים חייבת להישאר, אחרת אי אפשר להוסיף לה ידנית */
+  check('but an order with no items at all stays visible',
+        /totalItems &&/.test(fn), true);
+  check('the old inWork-only gate is gone',
+        /if\(workDay\.inWork\.includes\(sid\)\)\{[\s\S]{0,200}?uniqueSel/.test(fn), false);
+}
+
+/* ── סדר ההצהרות ─────────────────────────────────────────────────────── */
+/*
+ * renderAll() נקרא ברמה העליונה של הסקריפט, ו-getFiltered קוראת draftItems.
+ * כל עוד ההצהרה ישבה בתחתית הקובץ זה היה ReferenceError בהמתנה — הוא לא
+ * נדלק רק כי allOrders עדיין ריק באותו רגע והלולאה לא נכנסת.
+ */
+{
+  const decl = WD.indexOf('let draftItems');
+  const call = WD.indexOf('\nrenderAll();');
+  check('draftItems is declared exactly once', (WD.match(/let draftItems/g) || []).length, 1);
+  check('and before the top-level renderAll that reads it', decl > -1 && call > -1 && decl < call, true);
+}
+
 /* ── הטיוטה היא השער היחיד ליום העבודה ───────────────────────────────── */
 {
   const commit = bodyOf('commitDraftToWork');
