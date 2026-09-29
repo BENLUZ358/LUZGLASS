@@ -127,6 +127,9 @@ html,body{height:100%;overflow:hidden;}
 .items-head{padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);font-size:var(--fs-xs);font-weight:var(--fw-bold);color:var(--muted);}
 .item{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);}
 .item:last-child{border-bottom:none;}
+.ord-hs{margin-top:var(--space-1);font-size:var(--fs-xs);color:var(--muted);display:flex;align-items:center;gap:4px;
+  direction:ltr;justify-content:flex-end;}
+.ord-hs [data-icon]{width:13px;height:13px;}
 .item-n{min-width:28px;font-size:var(--fs-sm);font-weight:var(--fw-bold);color:var(--muted);}
 .item-main{flex:1;min-width:0;}
 /* המידות הן הדבר היחיד שנבדק כאן — 24px, וכל השאר משני */
@@ -249,7 +252,7 @@ html,body{height:100%;overflow:hidden;}
         <h2>לקוחות עם הזמנות לחשבונית</h2>
         <label class="search"><span class="sr-only">חיפוש לקוח או הזמנה</span>
           <span data-icon="search"></span>
-          <input id="q" type="search" placeholder="שם, טלפון או מספר הזמנה" autocomplete="off">
+          <input id="q" type="search" placeholder="שם, טלפון, מספר הזמנה או אסמכתא" autocomplete="off">
         </label>
       </div>
       <div class="pane-body" id="custList"><div class="loading">טוען…</div></div>
@@ -379,6 +382,14 @@ $('custList').addEventListener('click', e => {
 });
 $('q').addEventListener('input', renderCustomers);
 
+// האסמכתא בחשבשבת, כשיש. זה הגשר לכיוון השני: מסתכלים על חשבונית בחשבשבת,
+// רואים 10683, ומקלידים אותו בחיפוש כאן. בלעדיו צריך לדעת בעל פה ש-10683
+// הוא L1068-3.
+const hsRef = o => {
+  const r = lgHsReference(o);
+  return r ? `<div class="ord-hs"><span data-icon="receipt"></span>אסמכתא ${esc(r)}</div>` : '';
+};
+
 // ═══ עמודה 2 · ההזמנות, המונים והשער ════════════════════════════════════════
 function renderOrders() {
   const g = selKey && groupOf(selKey);
@@ -393,7 +404,8 @@ function renderOrders() {
     const n = o.items.length;
     return `<button class="ord is-${s}" type="button" data-id="${esc(o.id)}" aria-current="${String(o.id) === String(selId)}">
       <div class="ord-row"><span class="ord-num">${esc(o.orderNum || o.id)}</span>${stChip(s)}</div>
-      <div class="ord-meta">${nItems(n)}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}${o.date ? ' · ' + esc(o.date) : ''}</div></button>`;
+      <div class="ord-meta">${nItems(n)}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}${o.date ? ' · ' + esc(o.date) : ''}</div>
+      ${hsRef(o)}</button>`;
   }).join('');
 
   const c = g.counts;
@@ -433,8 +445,9 @@ function renderVerify() {
     $('vFoot').hidden = true; _shownSketchFor = null; return;
   }
   const c = o.invoiceCheck;
+  const ref = lgHsReference(o);
   $('vHead').innerHTML = `<div class="v-head"><span class="v-num">${esc(o.orderNum || o.id)}</span>${stChip(s)}</div>
-    <div class="v-client">${esc(o.orderClient)}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}</div>`;
+    <div class="v-client">${esc(o.orderClient)}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}${ref ? ' · אסמכתא ' + esc(ref) : ''}</div>`;
 
   let banner = '';
   if (s === 'changed') {

@@ -677,6 +677,20 @@ function lgNormalizeOrder(o) {
       simulated:  !!o.hashavshevetInvoice.simulated,
       httpOk:     !!o.hashavshevetInvoice.httpOk,
     } : null,
+    // האסמכתא שנשלחה בפועל לחשבשבת. אותו טעם בדיוק כמו invoice למעלה —
+    // orders/<id>/hashavshevet מחזיקה response באורך 4000 תווים
+    // ו-requestSample, וזה נכפל בכל הזמנה בצומת שכל דף מוריד במלואו.
+    //
+    // למה זה כאן בכלל: זה המספר שרשום על המסמך בחשבשבת, והוא מה שמאפשר
+    // למצוא הזמנה כשמסתכלים על החשבונית שם. הוא נקרא מהרשומה ולא מחושב
+    // ממספר ההזמנה, כי חישוב היה מציג אסמכתא גם להזמנה שמעולם לא נשלחה —
+    // מספר שמצביע על מסמך שלא קיים.
+    hsOrder:       o.hashavshevet ? {
+      reference:  o.hashavshevet.reference || '',
+      sentAt:     Number(o.hashavshevet.sentAt) || 0,
+      httpOk:     !!o.hashavshevet.httpOk,
+      simulated:  !!o.hashavshevet.simulated,
+    } : null,
     glass:         o.glass        || '',
     glassFullName: o.glassFullName|| o.glass       || '',
     finish:        o.finish       || '',
@@ -1021,6 +1035,15 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
   return { docNumber: p.docNumber, count: list.length };
 }
 
+// האסמכתא להצגה, או '' כשאין. הזמנה פיקטיבית מוחזרת ריקה בכוונה: היא
+// נראתה כאילו נשלחה, אבל בחשבשבת אין לה מסמך, ומספר על המסך היה שולח
+// את המזכירה לחפש משהו שלא קיים.
+function lgHsReference(o) {
+  const h = o && o.hsOrder;
+  if (!h || !h.reference || h.simulated || !h.httpOk) return '';
+  return String(h.reference);
+}
+
 // מפתח לקוח = הטלפון בספרות בלבד. אותו כלל בדיוק כמו _billKey באדמין —
 // ולא לפי שם: שני לקוחות עם אותו שם תצוגה היו מחויבים שניהם לחשבון הראשון.
 // scripts/test-invoice-station.js מוודא ששני המפתחות מסכימים.
@@ -1052,7 +1075,10 @@ function lgInvoiceGroups(allOrders, q) {
       return g;
     })
     .filter(g => !needle || g.name.toLowerCase().includes(needle) || (g.phone && g.phone.includes(needle.replace(/[-\s]/g, '')))
-                 || g.ords.some(o => String(o.orderNum || '').toLowerCase().includes(needle)))
+                 // מחפשים גם לפי האסמכתא: המזכירה מסתכלת על חשבונית 10683
+                 // בחשבשבת ומקלידה את המספר הזה, לא את L1068-3
+                 || g.ords.some(o => String(o.orderNum || '').toLowerCase().includes(needle)
+                                  || (lgHsReference(o) && lgHsReference(o).includes(needle))))
     .sort((a, b) => (b.counts.changed > 0) - (a.counts.changed > 0)
                  || b.counts.open - a.counts.open
                  || a.name.localeCompare(b.name, 'he'));

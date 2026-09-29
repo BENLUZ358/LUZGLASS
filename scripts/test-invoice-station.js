@@ -207,7 +207,11 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
 
   /* ── grouping by client: the same key the admin billing screen uses ── */
   {
-    vm.runInContext(pick(/function lgClientKey[\s\S]*?\n}/) + '\n' + pick(/function lgInvoiceGroups[\s\S]*?\n}/), ctx);
+    vm.runInContext([
+      pick(/function lgHsReference[\s\S]*?\n}/),
+      pick(/function lgClientKey[\s\S]*?\n}/),
+      pick(/function lgInvoiceGroups[\s\S]*?\n}/),
+    ].join('\n'), ctx);
     const ADMIN = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8').replace(/\r\n/g, '\n');
     const billKeySrc = (ADMIN.match(/function _billKey[\s\S]*?\n}/) || [''])[0];
     check('admin still has _billKey to compare against', billKeySrc.length > 0, true);
@@ -235,6 +239,50 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
     check('a client with a changed order comes first', gs[0].name, 'א.מ מראות');
     check('search by order number finds the client', ctx.lgInvoiceGroups(all, 'L3').map(g => g.name), ['טל']);
     check('search by phone ignores dashes', ctx.lgInvoiceGroups(all, '050-222').map(g => g.name), ['טל']);
+  }
+
+  /* ── האסמכתא בחשבשבת ───────────────────────────────────────────────────
+     The bridge in the other direction. The secretary is looking at invoice
+     10683 in Hashavshevet and needs the order behind it; without the number
+     on screen she has to know by heart that 10683 is L1068-3.
+
+     The number is OURS — toReference strips the non-digits off the order
+     number and sends it — so it is read from the record of the send and
+     never recomputed here. A computed number would appear on an order that
+     was never sent, pointing at a document that does not exist. */
+  {
+    const sent = (hs) => ctx.lgNormalizeOrder({
+      id: 'r1', orderNum: 'L1068-3', stage: 'collected', items: ITEMS, hashavshevet: hs,
+    });
+    check('the reference survives normalisation',
+          sent({ reference: '10683', sentAt: 5, httpOk: true }).hsOrder.reference, '10683');
+    check('and the bulky parts of the record do not',
+          Object.keys(sent({ reference: '10683', httpOk: true, response: 'x'.repeat(4000),
+                             requestSample: { a: 1 } }).hsOrder).sort(),
+          ['httpOk', 'reference', 'sentAt', 'simulated']);
+    check('an order never sent carries none at all', sent(null).hsOrder, null);
+    check('…and shows nothing', ctx.lgHsReference(sent(null)), '');
+    check('a send that was rejected shows nothing either',
+          ctx.lgHsReference(sent({ reference: '10683', httpOk: false })), '');
+    check('a fictitious order shows nothing — there is no document to find',
+          ctx.lgHsReference(sent({ reference: '10683', httpOk: true, simulated: true })), '');
+    check('a real one shows the number',
+          ctx.lgHsReference(sent({ reference: '10683', httpOk: true })), '10683');
+
+    const mk = (num, ref) => ctx.lgNormalizeOrder({
+      // הטלפון בכוונה בלי ספרות חוזרות: החיפוש בודק גם אותו, ומספר כמו
+      // 0509999999 היה נתפס על ידי כל מחרוזת של תשיעיות ומסתיר כישלון אמיתי
+      id: num, orderNum: num, orderClient: 'המקום לאמבט', clientPhone: '0541230000',
+      stage: 'collected', items: ITEMS,
+      hashavshevet: ref ? { reference: ref, httpOk: true } : null,
+    });
+    const refAll = [mk('L1068-3', '10683'), mk('L1070', null)];
+    check('typing the Hashavshevet reference finds the client',
+          ctx.lgInvoiceGroups(refAll, '10683').map(g => g.name), ['המקום לאמבט']);
+    check('a reference nobody has finds nothing',
+          ctx.lgInvoiceGroups(refAll, '99999').length, 0);
+    check('searching by our own order number still works',
+          ctx.lgInvoiceGroups(refAll, 'L1070').map(g => g.name), ['המקום לאמבט']);
   }
 
   /* ── the page uses the shared functions and decides nothing itself ── */
@@ -353,6 +401,12 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
     check('the edit button carries an accessible name', /class="edit"[\s\S]{0,120}?aria-label="תקן/.test(PAGE), true);
     check('a live update cannot wipe a field being typed',
           /editIdx !== null && \$\('edW'\)/.test(PAGE), true);
+    /* the reference is shown through the shared function, so the page cannot
+       print a number for an order that was never sent */
+    check('the reference is read through lgHsReference, not computed',
+          /lgHsReference\(o\)/.test(PAGE) && !/orderNum[^\n]*replace\(\/\\D\//.test(PAGE), true);
+    check('and the search box says it can be searched',
+          /placeholder="[^"]*אסמכתא/.test(PAGE), true);
     check('the measurement inputs are 44px targets', /\.edit-mm\{[^}]*min-height:44px/.test(PAGE), true);
   }
 
