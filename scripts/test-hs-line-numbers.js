@@ -96,6 +96,74 @@ const build = items => ctx.buildLines({ orderClient: 'x', items }, '14201', '106
   check('only after a rejected send has already returned', notOk > -1 && writeAt > notOk, true);
 }
 
+/* ── כמות · a group of identical pieces ────────────────────────────────────
+   5 units of the same size are 5 items here and 5 LINES in Hashavshevet, each
+   carrying the area of ONE piece. That is what makes the total m² right, and
+   what lets a single piece be cancelled with "בטל יתרה לאספקה" later. The
+   "(2/5)" says so on the line, so five identical rows do not read as a slip. */
+{
+  const g = 'grp_1';
+  const { lines, preview } = build([
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g, originalQuantity: 5, groupIndex: 1 },
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g, originalQuantity: 5, groupIndex: 2 },
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g, originalQuantity: 5, groupIndex: 3 },
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g, originalQuantity: 5, groupIndex: 4 },
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g, originalQuantity: 5, groupIndex: 5 },
+    { sku: '8HMH', w: 900, h: 2000 },
+  ]);
+  check('five units are five lines, not one', lines.length, 6);
+  check('each line carries the area of a single piece — the sum is the quantity',
+        lines.slice(0, 5).map(l => l.Quantity), ['1.037', '1.037', '1.037', '1.037', '1.037']);
+  check('and the line says which of the five it is',
+        lines.slice(0, 5).map(l => l.SM_Extratext1),
+        ['1) 550x1885 (1/5)', '2) 550x1885 (2/5)', '3) 550x1885 (3/5)',
+         '4) 550x1885 (4/5)', '5) 550x1885 (5/5)']);
+  check('a piece that stands alone gets no count — it would be noise',
+        lines[5].SM_Extratext1, '6) 900x2000');
+  check('the preview the office sees says the same', preview[1].text, '2) 550x1885 (2/5)');
+}
+
+/* a skipped piece must not be counted: the document would promise glass that
+   is not on it. The count is of the lines sent, never of originalQuantity. */
+{
+  const g = 'grp_2';
+  const { lines, skipped } = build([
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g, originalQuantity: 3, groupIndex: 1 },
+    { sku: '',     w: 550, h: 1885, quantityGroupId: g, originalQuantity: 3, groupIndex: 2 },
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g, originalQuantity: 3, groupIndex: 3 },
+  ]);
+  check('one of the three was skipped', skipped.length, 1);
+  check('so the lines say 2, not 3 — originalQuantity is never trusted',
+        lines.map(l => l.SM_Extratext1), ['1) 550x1885 (1/2)', '2) 550x1885 (2/2)']);
+}
+
+/* two different groups in one order do not bleed into each other */
+{
+  const { lines } = build([
+    { sku: '8SMH', w: 500, h: 500, quantityGroupId: 'a' },
+    { sku: '8HMH', w: 600, h: 600, quantityGroupId: 'b' },
+    { sku: '8SMH', w: 500, h: 500, quantityGroupId: 'a' },
+    { sku: '8HMH', w: 600, h: 600, quantityGroupId: 'b' },
+  ]);
+  check('each group counts itself only',
+        lines.map(l => l.SM_Extratext1),
+        ['1) 500x500 (1/2)', '2) 600x600 (1/2)', '3) 500x500 (2/2)', '4) 600x600 (2/2)']);
+}
+
+/* a piece split out of its group by a measurement correction (lgEditInvoiceItem
+   drops quantityGroupId) is one piece again, and the rest still count together */
+{
+  const g = 'grp_3';
+  const { lines } = build([
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g },
+    { sku: '8SMH', w: 500, h: 1885 },
+    { sku: '8SMH', w: 550, h: 1885, quantityGroupId: g },
+  ]);
+  check('the corrected piece stands alone, the other two stay a pair',
+        lines.map(l => l.SM_Extratext1),
+        ['1) 550x1885 (1/2)', '2) 500x1885', '3) 550x1885 (2/2)']);
+}
+
 /* ── the probe is gone ─────────────────────────────────────────────────── */
 check('no probe flag left in the handler', /probe/i.test(SRC), false);
 

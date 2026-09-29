@@ -115,10 +115,19 @@ function clientPricesByName(prices) {
 //
 //  ובתיקון: "בטל יתרה" על השורה הישנה ושורה חדשה עם אותו מספר — ר'
 //  INVOICE_STATION_BUILD.md חלק ב.
+//  כמות: הזמנה של 5 יחידות מאותה מידה היא 5 פריטים אצלנו ו-5 שורות אצלם,
+//  כל אחת עם השטח של חתיכה אחת — הסה"כ נכון, אבל 5 שורות זהות נראות כמו
+//  כפילות. seq/total מוסיף "(2/5)" כדי שיהיה כתוב על השורה שהיא אחת מתוך
+//  קבוצה. רק כשיש יותר מאחת: על שורה בודדת זה רעש.
+//
+//  ⚠️ הספירה היא של השורות שנשלחו, לא של הכמות שהוזמנה (originalQuantity).
+//  אם חתיכה אחת מתוך החמש דולגה — אין לה מחיר, למשל — יש 4 שורות, ו-"2/5"
+//  היה מכריז במסמך על חתיכה חמישית שאיננה בו.
 const LG_LINE_TEXT_MAX = 50;
-function lineText(n, w, h) {
+function lineText(n, w, h, seq, total) {
   const mm = v => String(Math.round(Number(v) || 0));
-  return (n + ') ' + mm(w) + 'x' + mm(h)).slice(0, LG_LINE_TEXT_MAX);
+  const qty = total > 1 ? ' (' + seq + '/' + total + ')' : '';
+  return (n + ') ' + mm(w) + 'x' + mm(h) + qty).slice(0, LG_LINE_TEXT_MAX);
 }
 
 // בונה שורה אחת לכל פריט. Quantity = שטח במ"ר, כי הפריטים בחשבשבת הם
@@ -143,6 +152,9 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
                 : (order.items && typeof order.items === 'object') ? Object.entries(order.items)
                 : [];
 
+  // מעבר ראשון: מי נכנס בכלל. המספור והספירה לפי קבוצה חייבים להיקבע על
+  // הרשימה הזו ולא על entries, כי הדילוגים הם שמפרידים בין המספר שלנו לשלהם.
+  const ok = [];
   entries.forEach(([key, item], i) => {
     if (!item || typeof item !== 'object') return;
     hsLines[key] = null;
@@ -161,9 +173,25 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     // ואי אפשר להתעלם ממנו.
     if (!ppm2) { skipped.push({ name, sku, reason: 'אין מחיר למק"ט הזה — לא במחירון הלקוח ולא בגלובלי' }); return; }
 
+    ok.push({ key, item, name, sku, qty, ppm2 });
+  });
+
+  // כמה שורות יש בכל קבוצת כמות, מבין אלה שנשלחות. פריט בלי quantityGroupId
+  // (ידני, ישן, או כזה שפוצל מהקבוצה בתיקון מידה) הוא קבוצה של עצמו.
+  const groupTotal = Object.create(null);
+  ok.forEach(o => {
+    const g = o.item.quantityGroupId;
+    if (g) groupTotal[g] = (groupTotal[g] || 0) + 1;
+  });
+  const groupSeen = Object.create(null);
+
+  ok.forEach(({ key, item, name, sku, qty, ppm2 }) => {
     // המספר נקבע כאן, אחרי כל הדילוגים — ר' lineText למעלה.
-    const n    = lines.length + 1;
-    const text = lineText(n, item.w, item.h);
+    const n     = lines.length + 1;
+    const g     = item.quantityGroupId;
+    const total = g ? groupTotal[g] : 1;
+    const seq   = g ? (groupSeen[g] = (groupSeen[g] || 0) + 1) : 1;
+    const text  = lineText(n, item.w, item.h, seq, total);
 
     // סדר המפתחות הוא חלק מחוזה החתימה — אין לשנות.
     // SM_Extratext1 בסוף: החתימה מחושבת על המחרוזת שנשלחת בפועל
