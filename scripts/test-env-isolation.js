@@ -147,6 +147,36 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
         !/LG_LIVE_PROJECT\s*=\s*process\.env/.test(env), true);
 }
 
+/* ── כתובת ה-Database של השרת ────────────────────────────────────────── */
+/*
+ * הייתה קשיחה בארבעה קבצים, ועל הפרודקשן זה עבד במקרה — זו הייתה הכתובת
+ * הנכונה. ב-TEST זה נשבר בשקט ובצורה מטעה: הפונקציה מתאמתת עם מפתח השירות
+ * של TEST אבל פונה לבסיס של הייצור, שאין לה בו הרשאה, והבקשה נתקעת עד
+ * timeout בלי שום הודעה. נתפס בבדיקת הקבלה ב-2026-09-30, כשכל ששת
+ * ה-endpoints של TEST נתקעו.
+ */
+{
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('lussglass'), FIREBASE_DATABASE_URL: undefined }, m =>
+    check('production derives byte-for-byte the URL that used to be hard-coded',
+          m.lgDatabaseUrl(), 'https://lussglass-default-rtdb.europe-west1.firebasedatabase.app'));
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('luz-glass-test'), FIREBASE_DATABASE_URL: undefined }, m =>
+    check('and the test project derives its own',
+          m.lgDatabaseUrl(), 'https://luz-glass-test-default-rtdb.europe-west1.firebasedatabase.app'));
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('x'), FIREBASE_DATABASE_URL: 'https://custom.example.app' }, m =>
+    check('an explicit FIREBASE_DATABASE_URL wins', m.lgDatabaseUrl(), 'https://custom.example.app'));
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: undefined, FIREBASE_DATABASE_URL: undefined }, m => {
+    let threw = false;
+    try { m.lgDatabaseUrl(); } catch (_) { threw = true; }
+    check('with no service account it throws rather than guessing a database', threw, true);
+  });
+
+  /* אף קובץ לא מחזיק את הכתובת בעצמו יותר */
+  const hard = fs.readdirSync(path.join(ROOT, 'api'))
+    .filter(f => f.endsWith('.js'))
+    .filter(f => /const DATABASE_URL = 'https/.test(fs.readFileSync(path.join(ROOT, 'api', f), 'utf8')));
+  check('no endpoint hard-codes a database URL any more', hard, []);
+}
+
 /* ── הדפדפן: איזה פרויקט Firebase נבחר, ולפי מה ─────────────────────── */
 /*
  * לאתר אין שלב בנייה, ולכן אין איך להזריק משתנה סביבה לדפדפן. הבחירה היא

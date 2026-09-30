@@ -25,12 +25,14 @@
 
 const crypto = require('crypto');
 const { verifyAdmin } = require('./_verifyAdmin');
-const { lgExternal } = require('./_env');
+const { lgExternal, lgDatabaseUrl } = require('./_env');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
 const ENDPOINT     = 'https://ws.wizground.com/api';
-const DATABASE_URL = 'https://lussglass-default-rtdb.europe-west1.firebasedatabase.app';
+// נגזרת ממפתח השירות — ר' lgDatabaseUrl ב-_env.js. הייתה קשיחה כאן, וזה
+// נשבר בשקט בכל סביבה שאינה הייצור.
+const DATABASE_URL = lgDatabaseUrl();
 
 // סוגי המסמכים הרלוונטיים מתוך הטבלה בתיעוד:
 //   30 = הזמנה        31 = הזמ' סוכן        34 = הזמ' רכש

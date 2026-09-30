@@ -19,8 +19,11 @@
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getDatabase } = require('firebase-admin/database');
+const { lgDatabaseUrl } = require('./_env');
 
-const DATABASE_URL = 'https://lussglass-default-rtdb.europe-west1.firebasedatabase.app';
+// נגזרת ממפתח השירות — ר' lgDatabaseUrl ב-_env.js. הייתה קשיחה כאן, וזה
+// נשבר בשקט בכל סביבה שאינה הייצור.
+const DATABASE_URL = lgDatabaseUrl();
 
 function _adminApp() {
   if (getApps().length) return getApps()[0];

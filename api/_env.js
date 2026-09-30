@@ -78,4 +78,29 @@ function lgBlockExternal(res, what) {
   });
 }
 
-module.exports = { lgExternal, lgBlockExternal, LG_LIVE_PROJECT };
+//  כתובת ה-Realtime Database של הסביבה שבה הפונקציה רצה.
+//
+//  ⚠️ הייתה קשיחה בארבעה קבצים, ועל הפרודקשן זה עבד במקרה: זו הייתה
+//  הכתובת הנכונה. ב-TEST זה נשבר בשקט ובצורה מטעה — הפונקציה מתאמתת
+//  עם מפתח השירות של TEST אבל פונה לבסיס של הייצור, שאין לו בו הרשאה,
+//  והבקשה פשוט נתקעת עד timeout בלי שום הודעה.
+//
+//  (הצד השני של אותו מטבע, וכדאי לזכור: זו גם הייתה חומה — סביבת TEST
+//  לא הצליחה לקרוא מהייצור, כי ההרשאה נבדקת בצד של Firebase.)
+//
+//  נגזר משם הפרויקט, כי שתי הסביבות בנויות באותה תבנית ובאותו אזור:
+//    lussglass       → https://lussglass-default-rtdb.europe-west1...
+//    luz-glass-test  → https://luz-glass-test-default-rtdb.europe-west1...
+//  התוצאה עבור הייצור **זהה תו-בתו** למחרוזת שהייתה קשיחה, ולכן אין שם
+//  שום שינוי התנהגות.
+//
+//  FIREBASE_DATABASE_URL גובר, למקרה של מופע שאינו ברירת המחדל או אזור אחר.
+function lgDatabaseUrl() {
+  const explicit = String(process.env.FIREBASE_DATABASE_URL || '').trim();
+  if (explicit) return explicit;
+  const pid = _projectId();
+  if (!pid) throw new Error('missing FIREBASE_SERVICE_ACCOUNT — cannot resolve database URL');
+  return 'https://' + pid + '-default-rtdb.europe-west1.firebasedatabase.app';
+}
+
+module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl, LG_LIVE_PROJECT };
