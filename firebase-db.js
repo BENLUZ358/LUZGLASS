@@ -35,19 +35,82 @@
 
 'use strict';
 
-// ─── 1. הגדרת Firebase ──────────────────────────────────────────────
-const LG_CONFIG = {
-  apiKey:            'AIzaSyD7hylVJlzCACQVLtmJPRhYvkArSDE4xz4',
-  authDomain:        'lussglass.firebaseapp.com',
-  databaseURL:       'https://lussglass-default-rtdb.europe-west1.firebasedatabase.app',
-  projectId:         'lussglass',
-  storageBucket:     'lussglass.firebasestorage.app',
-  messagingSenderId: '493589302388',
-  appId:             '1:493589302388:web:4e5dc00e9590eb41415521'
+// ─── 1. הגדרת Firebase — ייצור מול בדיקות ───────────────────────────
+//
+//  שתי סביבות, ואותו קוד בדיוק רץ בשתיהן. הבחירה היא לפי שם המארח, כי
+//  לאתר הזה אין שלב בנייה: אין איך להזריק משתנה סביבה לדפדפן, ושני
+//  קבצים בשני ענפים היו נפרדים זה מזה תוך שבוע.
+//
+//  ⚠️ כיוון הסכנה אינו סימטרי, וזה מה שקובע את ברירת המחדל:
+//
+//    ייצור שמצביע בטעות על בדיקות  → המסך ריק. רועש, מיידי, הפיך.
+//    בדיקות שמצביעות בטעות על ייצור → הזמנות בדיקה נכתבות לנתונים
+//                                      אמיתיים, בשקט. בלתי הפיך.
+//
+//  לכן **רק מארח שמופיע ברשימה המפורשת מקבל את הייצור**, וכל השאר —
+//  localhost, קובץ מקומי, תצוגות מקדימות של Vercel, וכל מארח שלא הכרנו
+//  — מקבלים את סביבת הבדיקות. מארח חדש שנשכח לרשום יראה מסך ריק ויצעק;
+//  ההפך היה משחית נתונים בלי שאיש ידע.
+//
+//  להוספת דומיין ייצור (למשל luzglass.co.il) — שורה אחת ב-LG_PROD_HOSTS,
+//  ובלעדיה הדומיין החדש יעבוד מול בסיס הבדיקות.
+const LG_PROD_HOSTS = ['luzglass.vercel.app'];
+
+const LG_ENVIRONMENTS = {
+  production: {
+    apiKey:            'AIzaSyD7hylVJlzCACQVLtmJPRhYvkArSDE4xz4',
+    authDomain:        'lussglass.firebaseapp.com',
+    databaseURL:       'https://lussglass-default-rtdb.europe-west1.firebasedatabase.app',
+    projectId:         'lussglass',
+    storageBucket:     'lussglass.firebasestorage.app',
+    messagingSenderId: '493589302388',
+    appId:             '1:493589302388:web:4e5dc00e9590eb41415521'
+  },
+  test: {
+    apiKey:            'AIzaSyBCA1kCBVTF4Gwnv0LVphS2m3rP41sN4nU',
+    authDomain:        'luz-glass-test.firebaseapp.com',
+    databaseURL:       'https://luz-glass-test-default-rtdb.europe-west1.firebasedatabase.app',
+    projectId:         'luz-glass-test',
+    storageBucket:     'luz-glass-test.firebasestorage.app',
+    messagingSenderId: '181902194112',
+    appId:             '1:181902194112:web:9ee1e052fdcdc4a1864425'
+  }
 };
+
+// שם המארח → שם הסביבה. מופרד מהבחירה עצמה כדי שאפשר יהיה לבדוק אותו
+// בלי דפדפן — ר' scripts/test-env-isolation.js.
+function lgEnvForHost(host) {
+  return LG_PROD_HOSTS.indexOf(String(host || '').toLowerCase()) > -1 ? 'production' : 'test';
+}
+
+const LG_ENV_NAME = lgEnvForHost(typeof location !== 'undefined' ? location.hostname : '');
+const LG_IS_TEST  = LG_ENV_NAME !== 'production';
+const LG_CONFIG   = LG_ENVIRONMENTS[LG_ENV_NAME];
 
 if (!firebase.apps.length) firebase.initializeApp(LG_CONFIG);
 const _lgDb = firebase.database();
+
+// סימון קבוע על המסך בסביבת בדיקות.
+//
+// שני תפקידים, והשני חשוב לא פחות: הוא אומר לך איפה אתה עומד, **וגם**
+// יצעק אם הייצור יצביע יום אחד על בסיס הבדיקות — התג פשוט יופיע שם.
+// בלי זה התקלה הזו הייתה נראית כמו "המערכת ריקה" בלי סיבה.
+(function () {
+  if (!LG_IS_TEST || typeof document === 'undefined') return;
+  var paint = function () {
+    if (!document.body || document.getElementById('lgEnvBadge')) return;
+    var b = document.createElement('div');
+    b.id = 'lgEnvBadge';
+    b.textContent = 'TEST · ' + LG_CONFIG.projectId;
+    b.setAttribute('role', 'status');
+    b.style.cssText = 'position:fixed;bottom:0;left:0;z-index:2147483647;pointer-events:none;' +
+      'background:#c0392b;color:#fff;font:700 11px/1 Heebo,sans-serif;letter-spacing:.3px;' +
+      'padding:4px 9px;border-top-right-radius:4px;direction:ltr;opacity:.92;';
+    document.body.appendChild(b);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', paint);
+  else paint();
+})();
 
 // ─── 2. מפות stage ↔ status ─────────────────────────────────────────
 const LG_STAGE_TO_STATUS = {

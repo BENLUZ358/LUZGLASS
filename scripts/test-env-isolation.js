@@ -147,5 +147,60 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
         !/LG_LIVE_PROJECT\s*=\s*process\.env/.test(env), true);
 }
 
+/* ── הדפדפן: איזה פרויקט Firebase נבחר, ולפי מה ─────────────────────── */
+/*
+ * לאתר אין שלב בנייה, ולכן אין איך להזריק משתנה סביבה לדפדפן. הבחירה היא
+ * לפי שם המארח.
+ *
+ * ⚠️ כיוון הסכנה אינו סימטרי, וזה כל מה שקובע כאן:
+ *   ייצור שמצביע על בדיקות  → מסך ריק. רועש, מיידי, הפיך.
+ *   בדיקות שמצביעות על ייצור → הזמנות בדיקה נכתבות לנתונים אמיתיים, בשקט.
+ * לכן רק מארח ברשימה מפורשת מקבל את הייצור, וכל השאר מקבלים בדיקות.
+ */
+{
+  const DB = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+  const m = DB.match(/const LG_PROD_HOSTS[\s\S]*?function lgEnvForHost[\s\S]*?\n}/);
+  check('the host→environment mapping exists and is isolated enough to test', !!m, true);
+  const lgEnvForHost = new Function(m[0] + '; return lgEnvForHost;')();
+
+  check('the production host gets production', lgEnvForHost('luzglass.vercel.app'), 'production');
+  check('and case does not matter', lgEnvForHost('LUZGLASS.VERCEL.APP'), 'production');
+
+  /* everything else is test — each of these would be a silent corruption
+     if it resolved the other way */
+  const mustBeTest = ['luz-glass-test.vercel.app', 'localhost', '127.0.0.1', '',
+                      'luzglass-git-main-benluz.vercel.app', 'luzglass.co.il',
+                      'evil.example.com', 'luzglass.vercel.app.evil.com'];
+  const leaked = mustBeTest.filter(h => lgEnvForHost(h) === 'production');
+  check('no other host reaches production — including a look-alike domain', leaked, []);
+
+  /* the list itself */
+  const hosts = new Function(m[0] + '; return LG_PROD_HOSTS;')();
+  check('exactly one production host is listed today', hosts, ['luzglass.vercel.app']);
+
+  /* both configs present, and pointing at different projects */
+  check('both environments are defined',
+        /production: \{[\s\S]*?projectId:\s*'lussglass'/.test(DB) &&
+        /test: \{[\s\S]*?projectId:\s*'luz-glass-test'/.test(DB), true);
+  check('and the test config points at the test database',
+        /luz-glass-test-default-rtdb\.europe-west1/.test(DB), true);
+  check('firebase is initialised from the selected config, not a literal',
+        /firebase\.initializeApp\(LG_CONFIG\)/.test(DB) &&
+        /const LG_CONFIG\s*=\s*LG_ENVIRONMENTS\[LG_ENV_NAME\]/.test(DB), true);
+
+  /* the badge is the loud half of the safety story: if production ever
+     resolves to test, it appears there and the mistake is visible */
+  check('a test environment paints a permanent badge',
+        /id = 'lgEnvBadge'/.test(DB) && /if \(!LG_IS_TEST/.test(DB), true);
+  check('and the badge names the project, so you know which one',
+        /LG_CONFIG\.projectId/.test(DB), true);
+
+  /* the CSP must allow the test auth domain, or login breaks there */
+  const vercel = fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8');
+  check('the CSP allows both auth domains',
+        /lussglass\.firebaseapp\.com/.test(vercel) &&
+        /luz-glass-test\.firebaseapp\.com/.test(vercel), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll environment-isolation checks passed.');
