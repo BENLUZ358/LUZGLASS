@@ -191,10 +191,16 @@ check('the account key is resolved server-side',
         /invSelClient !== client/.test(admin), true);
   check('a preview runs before anything is issued',
         /invPreview\(\)[\s\S]{0,400}?dryRun: true/.test(admin), true);
-  /* the order matters: an order collected without an invoice is worse than one
-     that stayed put, so the stage only moves after the document succeeds */
-  check('the stage moves only after the invoice succeeds',
-        /if\(res\.ok && data\.ok\)\{[\s\S]{0,220}?updateStage\(id, 'collected'\)/.test(admin), true);
+  /* ⚠️ כאן היה הכלל "השלב זז רק אחרי שהחשבונית הצליחה" — הוא היה נכון כל עוד
+     המסך הפיק. מ-2026-09-30 הוא כבר לא מפיק: ההפקה עברה כולה לתחנת החשבוניות,
+     אחרי אימות מול הסקיצה. הכלל החדש הוא שהמסך **רק** מעביר לנאסף, ושהמעבר
+     הזה לא מסתיר מהמשתמש לאן ההזמנה הלכה. */
+  check('the screen moves to collected and issues nothing',
+        /movedToCollected: ids\.length/.test(admin), true);
+  check('the real issuing call is gone',
+        /hashavshevet-invoice', \{ orderIds: ids, dryRun: false \}/.test(admin), false);
+  check('a failure to move says so instead of passing silently',
+        /ההעברה לנאסף נכשלה/.test(admin), true);
 }
 
 /* the screen has to say it, or a simulated run reads as a real one */

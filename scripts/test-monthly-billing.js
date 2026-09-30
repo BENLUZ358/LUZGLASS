@@ -361,10 +361,14 @@ const ord = (o) => Object.assign({ stage: 'collected', orderNum: 'L1000', orderC
         /Array\.from\(invSel\)/.test(send), false);
   check('a send with nothing previewed issues nothing',
         /if\(!ids\.length\)\{ _invRender\(/.test(send), true);
-  /* and the rule the whole flow rests on survives: the stage moves only after
-     the document succeeded */
-  check('the stage still moves only after the invoice succeeds',
-        /if\(res\.ok && data\.ok\)\{[\s\S]{0,260}?updateStage\(id, 'collected'\)/.test(send), true);
+  /* ⚠️ הכלל שהיה כאן — "השלב זז רק אחרי שהחשבונית הצליחה" — היה נכון כל עוד
+     המסך הפיק. מ-2026-09-30 הוא לא מפיק: החשבוניות מופקות ביד בחשבשבת אחרי
+     אימות בתחנה, ושוטף 30 מקבל שם טאב משלו. המסך הזה רק מעביר לנאסף. */
+  check('the monthly screen only moves to collected',
+        /movedToCollected: ids\.length/.test(send), true);
+  /* ההערה בגוף הפונקציה מצטטת את הקריאה שנמחקה, בכוונה — לכן מחפשים
+     קריאה חיה ולא את שם הנתיב */
+  check('and never issues', /_lgAuthPost\('\/api\/hashavshevet-invoice'/.test(send), false);
   check('and only what was sent leaves the selection',
         /ids\.forEach\(function\(id\)\{ invSel\.delete\(String\(id\)\); \}\);/.test(send), true);
 }

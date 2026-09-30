@@ -352,6 +352,32 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
     check('it reads state only through lgInvoiceState', /\.invoiceCheck\.itemsHash|itemsHash\s*===/.test(PAGE), false);
     check('the gate marks through lgMarkInvoiced, not a direct write', /lgMarkInvoiced\(/.test(PAGE) && !/_lgDb\.ref/.test(PAGE), true);
     check('it never calls the old API invoicing', /hashavshevet-invoice/.test(PAGE), false);
+
+    /* ── מסלול אחד לחשבונית, ולא שניים ──────────────────────────────────
+       שתי דרכים באדמין הפיקו חשבונית בלי לעבור באימות מול הסקיצה, ואחרי
+       שהן הפיקו — _lgLegacyInvoiced סימן את ההזמנה כ"הופקה", כך שהיא לא
+       הופיעה בתחנה בכלל ואי אפשר היה לבדוק אותה גם בדיעבד. שתיהן הוסרו
+       2026-09-30, והבדיקות כאן קיימות כדי שלא יחזרו בשקט. */
+    const ADMIN = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+    check('the admin never issues an invoice for real',
+          /hashavshevet-invoice', \{ orderIds: ids, dryRun: false \}/.test(ADMIN), false);
+    check('the only call left is the read-only preview',
+          (ADMIN.match(/hashavshevet-invoice'/g) || []).length, 1);
+    check('and it is a dry run', /hashavshevet-invoice', \{ orderIds: ids, dryRun: true \}/.test(ADMIN), true);
+    check('the monthly screen moves to collected instead of issuing',
+          /movedToCollected: ids\.length/.test(ADMIN), true);
+    check('and says where the orders went, so they do not look lost',
+          /תור החשבוניות<\/b> לטיפול המזכירה/.test(ADMIN), true);
+
+    /* "העבר לנאסף" — בלי אופציית חשבונית */
+    /* ההערה מעל showCollectedPrompt מצטטת את הכפתור שנמחק, בכוונה — לכן
+       מחפשים קריאה חיה ולא את המילים */
+    check('the collected prompt no longer offers to issue one',
+          /openInvoicePreview\('\$\{order\.id\}','collected'\)/.test(ADMIN), false);
+    check('it moves and then explains where the order went',
+          /collectAndNotify\('\$\{order\.id\}'\)/.test(ADMIN), true);
+    check('with a toast that names the invoice queue',
+          /showToast\('✓ הועבר לנאסף — ממתין בתור החשבוניות/.test(ADMIN), true);
     check('the admin menu points at it',
           /href="invoices\.html"/.test(fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8')), true);
   }
