@@ -54,6 +54,10 @@
 //
 //  להוספת דומיין ייצור (למשל luzglass.co.il) — שורה אחת ב-LG_PROD_HOSTS,
 //  ובלעדיה הדומיין החדש יעבוד מול בסיס הבדיקות.
+//
+//  הקוד זהה בשתי הסביבות; מה שנפרד הוא הענף שממנו כל אתר נפרס —
+//  main → luzglass.vercel.app, test → luzglass-test.vercel.app.
+//  ר' ENVIRONMENTS.md.
 const LG_PROD_HOSTS = ['luzglass.vercel.app'];
 
 const LG_ENVIRONMENTS = {
