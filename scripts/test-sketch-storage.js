@@ -61,10 +61,15 @@ for (const fn of ['saveOrder', 'saveSubmission']) {
         /hasSketch:\s+!!data\.sketch,/.test(body), true);
 }
 
+/* המזהה נקרא _id מאז שהעורך הוצא מ-sqCurrent. הכלל לא השתנה: שתי הכתיבות,
+   הישנה והחדשה, יוצאות מאותה פונקציה ועל אותו מזהה */
 check('the sketch editor writes the old field',
-      /updateOrder\(sqCurrent\.id, \{ sketch: newSrc, hasSketch: true \}\)/.test(ADMIN), true);
+      /updateOrder\(\w+, \{ sketch: newSrc, hasSketch: true \}\)/.test(ADMIN), true);
 check('and the new node too',
-      /lgSaveSketch\(sqCurrent\.id, newSrc\)/.test(ADMIN), true);
+      /lgSaveSketch\(\w+, newSrc\)/.test(ADMIN), true);
+check('and both on the same id, not two different ones',
+      (ADMIN.match(/updateOrder\((\w+), \{ sketch: newSrc/) || [])[1] ===
+      (ADMIN.match(/lgSaveSketch\((\w+), newSrc\)/)  || [])[1], true);
 
 /* the writer list itself — a new one must be caught here, not in production */
 {
@@ -73,7 +78,12 @@ check('and the new node too',
   for (const f of files) {
     const src = read(f);
     for (const m of src.matchAll(/updateOrder\([^)]*\bsketch\s*:/g)) writers.push(f);
-    for (const m of src.matchAll(/\bsketch:\s+(imgData|newSrc|dataUrl|base64)/g)) writers.push(f);
+    /* ⚠️ כאן היו ארבעה שמות משתנה קשיחים (imgData|newSrc|dataUrl|base64),
+       והם פספסו את upload.html שכותב `sketch: images[i].data` — כלומר
+       הבדיקה שנועדה לתפוס כותב חדש לא תפסה את הכותב השני שכבר היה.
+       עכשיו נחשב כתיבה כל ערך שהוא ביטוי חדש — לא '' ולא null, **ולא**
+       העתקה של o.sketch, שהיא קריאה לצורך תצוגה ולא כתיבה. */
+    for (const m of src.matchAll(/\bsketch:\s+(?!''|""|null\b|false\b|0\b)(?!\w+\.sketch\b)[A-Za-z_$]/g)) writers.push(f);
   }
   check('the known writers are the only ones', [...new Set(writers)].sort(),
         ['admin.html', 'upload.html']);
@@ -85,7 +95,11 @@ check('and the new node too',
      new node is unreachable — rules not deployed, quota, offline — the sketch
      is still saved exactly where it has always been saved. */
   const body = bodyOf(DB, 'lgSaveSketch');
-  check('lgSaveSketch swallows its own failure', /catch \(e\) \{[\s\S]{0,140}return false;/.test(body), true);
+  /* החלון היה 140 תווים ונסגר כשנוספה הערה בעברית בתוך ה-catch. הכלל הוא
+     שהכישלון נבלע ומוחזר false — לא כמה תווים יש בדרך */
+  check('lgSaveSketch swallows its own failure',
+        /catch \(e\) \{[\s\S]*?return false;/.test(body), true);
+  check('and does not re-throw', /catch \(e\) \{[\s\S]*?throw/.test(body), false);
   check('and never touches the old field', /orders\//.test(body), false);
 }
 
