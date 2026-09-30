@@ -548,26 +548,45 @@ function load() {
 // findPriceItem ו-lgCalcOrderTotal מוגדרים ב-firebase-db.js (lgFindPriceItem / lgCalcOrderTotal)
 function findPriceItem(name){ return lgFindPriceItem(name); }
 
-// Popup שאלה: "האם להעביר לתשלום/חשבונית?" לפני stage=done או delivery
+// Popup אישור לפני stage=done או delivery.
+//
+// כאן הייתה שאלה — "האם להעביר לתשלום / חשבונית?" — עם "כן" שפתח תצוגת
+// חשבונית ו"לא" שרק העביר שלב. היא נמחקה (2026-09-30): החשבוניות מופקות
+// היום רק מתור החשבוניות, אחרי אימות הפריטים מול הסקיצה, ושאלה על חשבונית
+// בשלב הזה רק בלבלה. נשאר אישור אחד, שאומר מה קורה: המחיר ננעל.
 function showInvoicePrompt(order, newStage){
   const isDelivery = newStage === 'delivery';
-  const title = isDelivery ? 'העבר להובלה — האם להוציא חשבונית?' : 'האם להעביר לתשלום / חשבונית?';
-  const icon  = isDelivery ? '🚚' : '🧾';
+  const title = isDelivery ? 'העבר להובלה' : 'העבר למוכן לאיסוף';
+  const icon  = isDelivery ? '🚚' : '📦';
   const ov = document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
   ov.innerHTML=`
     <div style="background:#fff;border-radius:12px;max-width:340px;width:100%;padding:28px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
       <div style="font-size:26px;text-align:center;margin-bottom:12px;">${icon}</div>
       <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">${title}</div>
-      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;">${lgEsc(order.orderClient||'')} · ${lgEsc(order.orderNum||'')}</div>
-      <div style="display:flex;gap:10px;">
-        <button onclick="this.closest('[style*=fixed]').remove();openInvoicePreview('${order.id}');"
-          style="flex:1;padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ כן</button>
-        <button onclick="this.closest('[style*=fixed]').remove();invoiceMarkDone('${order.id}').catch(e=>console.error(e));"
-          style="flex:1;padding:13px;background:#f0ede8;color:#555;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">לא</button>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:6px;text-align:center;">${lgEsc(order.orderClient||'')} · ${lgEsc(order.orderNum||'')}</div>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:22px;text-align:center;line-height:1.5;">
+        המחיר ננעל עכשיו.<br>החשבונית תופק בהמשך מתור החשבוניות.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button onclick="this.closest('[style*=fixed]').remove();markDoneAndNotify('${order.id}','${isDelivery ? 'delivery' : 'done'}');"
+          style="padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">✓ ${title}</button>
+        <button onclick="this.closest('[style*=fixed]').remove();"
+          style="padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול</button>
       </div>
     </div>`;
   document.body.appendChild(ov);
+}
+
+// נועל מחיר, מעביר שלב, ואומר מה קרה.
+async function markDoneAndNotify(orderId, target){
+  try {
+    await invoiceMarkDone(orderId);
+    showToast(target === 'delivery' ? '✓ הועבר להובלה — המחיר ננעל' : '✓ מוכן לאיסוף — המחיר ננעל');
+  } catch(e){
+    console.error('markDoneAndNotify:', e);
+    showToast('הפעולה נכשלה — נסה שוב');
+  }
 }
 
 // ── popup "העבר לנאסף" ───────────────────────────────────────────────
@@ -616,86 +635,10 @@ async function collectAndNotify(orderId){
   }
 }
 
-// מסך תצוגת חשבונית — targetStage: 'done' (מוכן לאיסוף) או 'collected' (נאסף)
-function openInvoicePreview(orderId, targetStage){
-  const stage = targetStage || 'done';
-  const o = orders.find(x => x.id === String(orderId));
-  if(!o) return;
-  const clientName = o.orderClient||'';
-  const cp = clientPrices[clientName]||{};
-  let itemsHtml='', calcTotal=0;
-  // אם ההזמנה כבר ננעלה (o.lockedItems) — מציגים בדיוק את מה שנעול,
-  // לא חישוב חי שיכול להיות שונה (למשל אם מחירון השתנה מאז הנעילה).
-  // רק הזמנה שעדיין לא ננעלה מציגה תחשיב-חי, כתצוגה מקדימה למה שיינעל.
-  const isLocked = !!(o.pricesLockedAt && Array.isArray(o.lockedItems) && o.lockedItems.length);
-  if(isLocked){
-    o.lockedItems.forEach(li=>{
-      calcTotal += li.lineTotal||0;
-      const qtyLabel = li.quantity>1 ? ` × ${li.quantity}` : '';
-      itemsHtml+=`
-      <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px;">
-        <div style="flex:1">
-          <div style="font-weight:700">${lgEsc(li.name)}${qtyLabel}</div>
-          <div style="color:#8a8278;margin-top:1px">${li.w||''}×${li.h||''} מ"מ · ${(li.area||0).toFixed(2)} מ"ר</div>
-        </div>
-        <div style="font-weight:700;color:var(--gold-text);white-space:nowrap">₪${(li.lineTotal||0).toLocaleString()}</div>
-      </div>`;
-    });
-  } else {
-    (o.items||[]).forEach(item=>{
-      const name = item.glassFullName||item.name||'—';
-      const pid  = findPriceItem(name);
-      const ppm2 = pid ? parseFloat(cp[pid]||globalPrices[pid]||0) : 0;
-      const area = lgCalcAreaM2(item.w||0, item.h||0);
-      const price = ppm2 ? Math.round(area*ppm2) : null;
-      if(price) calcTotal+=price;
-      itemsHtml+=`
-      <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid rgba(0,0,0,0.06);font-size:12px;">
-        <div style="flex:1">
-          <div style="font-weight:700">${lgEsc(name)}</div>
-          <div style="color:#8a8278;margin-top:1px">${item.w||''}×${item.h||''} מ"מ · ${area.toFixed(2)} מ"ר</div>
-        </div>
-        <div style="font-weight:700;color:var(--gold-text);white-space:nowrap">${price?'₪'+price.toLocaleString():'לפי הצעה'}</div>
-      </div>`;
-    });
-  }
-  if(!itemsHtml) itemsHtml='<div style="padding:14px;color:#8a8278;text-align:center;font-size:13px">אין פריטים מוזנים</div>';
-  const displayTotal = isLocked ? (o.totalFinal ?? calcTotal) : (calcTotal || o.total || 0);
-  // כפתור פעולה לפי stage
-  const actionLabel = stage==='collected' ? '✓ העבר לנאסף' : '✓ מוכן לאיסוף';
-  const actionOnclick = stage==='collected'
-    ? `updateStage('${o.id}','collected').catch(e=>console.error(e));this.closest('[style*=fixed]').remove();`
-    : `invoiceMarkDone('${o.id}');this.closest('[style*=fixed]').remove();`;
-  const ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:601;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
-  ov.innerHTML=`
-    <div style="background:#fff;border-radius:12px;width:100%;max-width:460px;max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,0.35);display:flex;flex-direction:column;">
-      <div style="background:#1a1714;padding:16px 20px;border-radius:12px 12px 0 0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-        <span style="font-size:15px;font-weight:900;color:#f0ede8;">🧾 ${stage==='collected'?'קבלה / חשבונית — מסירה':'תצוגת חשבונית'}</span>
-        <button aria-label="סגור" onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:none;color:rgba(255,255,255,0.5);font-size:18px;cursor:pointer;">✕</button>
-      </div>
-      <div style="padding:18px 20px;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-          <span style="font-size:14px;font-weight:900">${lgEsc(clientName)}</span>
-          <span style="font-size:12px;color:#8a8278">${lgEsc(o.orderNum||'')} · ${lgEsc(o.date||'')}</span>
-        </div>
-        <div style="font-size:12px;color:#8a8278;margin-bottom:16px">${lgEsc(o.sketchName||o.type||'')}</div>
-        <div style="border:1px solid rgba(0,0,0,0.08);border-radius:6px;overflow:hidden;margin-bottom:16px;">${itemsHtml}</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f7f4ef;border-radius:6px;margin-bottom:18px;">
-          <span style="font-size:13px;font-weight:700;">סה"כ</span>
-          <span style="font-size:22px;font-weight:900;color:var(--gold-text);">₪${displayTotal.toLocaleString()}</span>
-        </div>
-        <div style="display:flex;gap:10px;">
-          <button onclick="${actionOnclick}"
-            style="flex:2;padding:13px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">${actionLabel}</button>
-          <button onclick="alert('חיבור API לחשבשבת — בקרוב!')"
-            style="flex:1;padding:13px;background:#f0ede8;color:#1a1714;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(0,0,0,0.12);cursor:pointer;border-radius:6px;">🧾 הוצא חשבונית</button>
-        </div>
-        <button onclick="this.closest('[style*=fixed]').remove();" style="width:100%;margin-top:8px;padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">ביטול</button>
-      </div>
-    </div>`;
-  document.body.appendChild(ov);
-}
+// openInvoicePreview הוסרה (2026-09-30). היא הציגה "תצוגת חשבונית" עם
+// כפתור "🧾 הוצא חשבונית" שרק פתח alert('בקרוב'), והכניסה היחידה אליה
+// הייתה מהשאלה שנמחקה למעלה. החשבוניות מופקות היום רק מתור החשבוניות,
+// אחרי אימות הפריטים מול הסקיצה.
 
 async function invoiceMarkDone(orderId){
   const o = orders.find(x => x.id === String(orderId));

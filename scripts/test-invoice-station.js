@@ -378,6 +378,24 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
           /collectAndNotify\('\$\{order\.id\}'\)/.test(ADMIN), true);
     check('with a toast that names the invoice queue',
           /showToast\('✓ הועבר לנאסף — ממתין בתור החשבוניות/.test(ADMIN), true);
+
+    /* גם השאלה שלפני "מוכן לאיסוף"/"הובלה" לא מדברת על חשבונית יותר.
+       היא לא הפיקה כלום — "כן" רק פתח תצוגת קבלה — אבל המילה עצמה בלבלה
+       אחרי שההפקה רוכזה בתחנה. הפונקציה שהיא פתחה נמחקה איתה. */
+    /* ההערה מעל הפונקציה מצטטת את השאלה שנמחקה, בכוונה — לכן בודקים את
+       הכותרת החיה שמוצגת למשתמש */
+    check('the done/delivery prompt no longer asks about an invoice',
+          /const title = isDelivery \? 'העבר להובלה' : 'העבר למוכן לאיסוף';/.test(ADMIN), true);
+    check('and the receipt screen it opened is gone, not just unreachable',
+          /function openInvoicePreview/.test(ADMIN), false);
+    check('the dead "coming soon" invoice button went with it',
+          /חיבור API לחשבשבת/.test(ADMIN), false);
+    check('what is left is one confirmation that says the price is locked',
+          /markDoneAndNotify\('\$\{order\.id\}'/.test(ADMIN) && /המחיר ננעל עכשיו/.test(ADMIN), true);
+    /* נעילת המחיר עצמה חייבת להמשיך לרוץ — היא מה שקובע את totalFinal */
+    check('and it still runs the price lock',
+          /await invoiceMarkDone\(orderId\)/.test(ADMIN) &&
+          /lgLockAndAdvance\(String\(orderId\)/.test(ADMIN), true);
     check('the admin menu points at it',
           /href="invoices\.html"/.test(fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8')), true);
   }
