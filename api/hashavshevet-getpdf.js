@@ -29,6 +29,7 @@
 
 const crypto = require('crypto');
 const { verifyAdmin } = require('./_verifyAdmin');
+const { lgExternal, lgBlockExternal } = require('./_env');
 
 const ENDPOINT = 'https://ws.wizground.com/api';
 
@@ -70,6 +71,10 @@ module.exports = async function handler(req, res) {
 
   const auth = await verifyAdmin(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
+  // ── חסימת סביבה ──
+  // נקודת קריאה: החזרת נתונים מזויפים הייתה מטעה — מי שקורא אותם בונה
+  // עליהם. עדיף לומר בבירור שזו סביבת בדיקות. ר' _env.js.
+  if (!lgExternal().allowed) { lgBlockExternal(res, 'PDF מחשבשבת'); return; }
 
   const SECRET  = process.env.WIZGROUND_SECRET;
   const STATION = process.env.HASHAVSHEVET_STATION;

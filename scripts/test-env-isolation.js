@@ -1,0 +1,151 @@
+#!/usr/bin/env node
+/**
+ * החסימה של פניות חיצוניות בסביבה שאינה הייצור.
+ *
+ * שתי מערכות חיצוניות גורמות נזק שאי אפשר להחזיר: חשבשבת פותחת מסמך
+ * חשבונאי אמיתי, ו-WhatsApp שולח ללקוח אמיתי. מסמך מיותר מבטלים; הודעה
+ * שיצאה כבר נקראה.
+ *
+ * ⚠️ הכלל שהקובץ הזה נועל, ושתי הטעויות שהוא מונע:
+ *
+ *   1. fail-open — "חסום כש-LG_ENV=test" נשבר ממשתנה שנשכח, מ-LG_ENV=Test
+ *      באות גדולה, או מפרויקט Vercel שהועתק. לכן ההחלטה נגזרת ממפתח
+ *      השירות, שכבר שונה בין הסביבות בהכרח ואי אפשר לשכוח להגדיר אותו.
+ *
+ *   2. שבירת הפרודקשן — "שלח רק כש-LG_ENV=production" הוא fail-safe, אבל
+ *      הפרודקשן אינו מגדיר משתנה כזה והתוספת הייתה משביתה אותו. לכן
+ *      project_id='lussskip' ובלי שום משתנה = שולח, בדיוק כמו היום.
+ *
+ * LG_ENV יכול רק להחמיר. אם אי פעם יתווסף ערך שמתיר משהו שאסור בלעדיו,
+ * החסימה חוזרת להיות fail-open — והבדיקה האחרונה כאן תיפול.
+ *
+ * Run: node scripts/test-env-isolation.js
+ */
+const fs   = require('fs');
+const path = require('path');
+
+const ROOT = path.join(__dirname, '..');
+let failed = 0;
+const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
+  ? console.log('ok    ' + name)
+  : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
+
+// טוען את _env.js מחדש בכל פעם, עם סביבה אחרת
+function withEnv(vars, fn) {
+  const saved = { ...process.env };
+  Object.keys(vars).forEach(k => {
+    if (vars[k] === undefined) delete process.env[k]; else process.env[k] = vars[k];
+  });
+  delete require.cache[require.resolve(path.join(ROOT, 'api', '_env.js'))];
+  try { return fn(require(path.join(ROOT, 'api', '_env.js'))); }
+  finally { process.env = saved; }
+}
+const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_key: 'k' });
+
+/* ── הפרודקשן ממשיך לשלוח, בלי שום קונפיגורציה חדשה ─────────────────── */
+{
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('lussglass'), LG_ENV: undefined }, m => {
+    const e = m.lgExternal();
+    check('production sends, with no new env var at all', e.allowed, true);
+    check('and says which project it is', e.projectId, 'lussglass');
+    check('with no reason to show, because nothing is blocked', e.reason, '');
+  });
+  /* משתנה ריק או רווחים הוא לא "test" */
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('lussglass'), LG_ENV: '' }, m =>
+    check('an empty LG_ENV does not block production', m.lgExternal().allowed, true));
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('lussglass'), LG_ENV: 'production' }, m =>
+    check('LG_ENV=production is allowed too', m.lgExternal().allowed, true));
+}
+
+/* ── TEST חסום אוטומטית, בלי שהגדירו בו כלום ────────────────────────── */
+{
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('luz-glass-test'), LG_ENV: undefined }, m => {
+    const e = m.lgExternal();
+    check('the test project is blocked with no configuration', e.allowed, false);
+    check('and the reason names it, in Hebrew', /luz-glass-test/.test(e.reason), true);
+  });
+}
+
+/* ── שלוש הדרכים שבהן fail-open היה נשבר ────────────────────────────── */
+{
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('some-other-project'), LG_ENV: undefined }, m =>
+    check('an unknown project is blocked — default is deny, not allow',
+          m.lgExternal().allowed, false));
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: undefined, LG_ENV: undefined }, m =>
+    check('a missing service account is blocked', m.lgExternal().allowed, false));
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: '{not json', LG_ENV: undefined }, m =>
+    check('a corrupt service account is blocked, not crashed', m.lgExternal().allowed, false));
+}
+
+/* ── LG_ENV מחמיר בלבד ──────────────────────────────────────────────── */
+{
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('lussglass'), LG_ENV: 'test' }, m =>
+    check('LG_ENV=test blocks even on the production project — a dry run',
+          m.lgExternal().allowed, false));
+  withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('lussglass'), LG_ENV: ' TEST ' }, m =>
+    check('…and case and spaces do not get around it', m.lgExternal().allowed, false));
+  /* הכיוון ההפוך: אין ערך של LG_ENV שפותח פרויקט שאינו הייצור */
+  const opens = ['production', 'prod', 'live', 'lussglass', '1', 'true', 'yes', ''].filter(v =>
+    withEnv({ FIREBASE_SERVICE_ACCOUNT: sa('luz-glass-test'), LG_ENV: v }, m => m.lgExternal().allowed));
+  check('no LG_ENV value can open a non-production project', opens, []);
+}
+
+/* ── כל endpoint שפונה החוצה מתייעץ עם השומר ────────────────────────── */
+{
+  const files = fs.readdirSync(path.join(ROOT, 'api')).filter(f => f.endsWith('.js'));
+  const missing = [];
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
+    const callsOut = /await fetch\(/.test(src);
+    const guarded  = /lgExternal\(\)/.test(src);
+    if (callsOut && !guarded) missing.push(f);
+  }
+  check('every endpoint that calls out consults the guard', missing, []);
+
+  /* והשומר נבדק לפני ה-fetch, לא אחריו */
+  for (const f of ['hashavshevet-order.js', 'hashavshevet-invoice.js', 'whatsapp-send.js',
+                   'hashavshevet-items.js', 'hashavshevet-accounts.js', 'hashavshevet-getpdf.js']) {
+    const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
+    check(f.padEnd(28) + ' checks before it fetches',
+          src.indexOf('lgExternal()') < src.indexOf('await fetch('), true);
+  }
+}
+
+/* ── נקודות הכתיבה מדמות הצלחה, נקודות הקריאה אומרות שנחסמו ─────────── */
+{
+  for (const f of ['hashavshevet-order.js', 'hashavshevet-invoice.js']) {
+    const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
+    check(f.padEnd(28) + ' simulates instead of sending',
+          /if \(!env\.allowed\) \{[\s\S]{0,200}?simulated: true, blocked: true/.test(src), true);
+    /* הרישום ל-Firebase חייב להמשיך לקרות — אחרת לא רואים שהניסיון היה */
+    check(f.padEnd(28) + ' still records the attempt',
+          /orders\/'? ?\+ ?orderId|update\(/.test(src), true);
+  }
+  const wa = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-send.js'), 'utf8');
+  check('whatsapp adds the block to the existing preview gate',
+        /if \(dryRun \|\| !configured \|\| !env\.allowed\)/.test(wa), true);
+  check('and reports it as blocked, not as a silent dry run',
+        /blocked: !env\.allowed/.test(wa), true);
+
+  for (const f of ['hashavshevet-items.js', 'hashavshevet-accounts.js', 'hashavshevet-getpdf.js']) {
+    const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
+    check(f.padEnd(28) + ' refuses rather than faking data',
+          /lgBlockExternal\(res,/.test(src), true);
+  }
+  /* 503 ולא 403 — זו אינה בעיית הרשאה אלא שירות שלא קיים בסביבה הזו */
+  const env = fs.readFileSync(path.join(ROOT, 'api', '_env.js'), 'utf8');
+  check('a blocked read answers 503, not 403', /res\.status\(503\)/.test(env), true);
+}
+
+/* ── השומר לא נעקף דרך משתנה סביבה ──────────────────────────────────── */
+{
+  const env = fs.readFileSync(path.join(ROOT, 'api', '_env.js'), 'utf8');
+  /* שם הפרויקט החי נעול בקוד. ברגע שהוא ייקרא ממשתנה סביבה, אפשר יהיה
+     להפוך כל סביבה ל"ייצור" בלי commit — וזו בדיוק הדלת שסגרנו */
+  check('the live project name is hard-coded, not read from the environment',
+        /const LG_LIVE_PROJECT = 'lussglass';/.test(env) &&
+        !/LG_LIVE_PROJECT\s*=\s*process\.env/.test(env), true);
+}
+
+if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
+console.log('\nAll environment-isolation checks passed.');

@@ -25,6 +25,7 @@
 
 const crypto = require('crypto');
 const { verifyAdmin } = require('./_verifyAdmin');
+const { lgExternal } = require('./_env');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -358,8 +359,16 @@ module.exports = async function handler(req, res) {
     //
     // הבדיקה על ההזמנה עצמה ולא על פרמטר מהדפדפן, כי פרמטר אפשר לזייף
     // ו-isTest נקבע פעם אחת בפתיחת ההזמנה.
+    // ── חסימת סביבה ──
+    // isTest הוא פר-הזמנה ובבחירה מפורשת. זו חסימה גלובלית: בסביבה שאינה
+    // הייצור שום פנייה לא יוצאת, גם כשקוראים ל-endpoint ישירות. ר' _env.js.
+    const env = lgExternal();
     let wgRes, text;
-    if (isTest) {
+    if (!env.allowed) {
+      wgRes = { status: 200, ok: true };
+      text  = JSON.stringify({ simulated: true, blocked: true, environment: env.projectId,
+                               note: env.reason });
+    } else if (isTest) {
       wgRes = { status: 200, ok: true };
       text  = JSON.stringify({ simulated: true, note: 'הזמנה פיקטיבית — לא נשלחה לחשבשבת' });
     } else {

@@ -73,8 +73,13 @@ check('a burst is paced rather than fired at once', /await sleep\(GAP_MS\)/.test
 check('and capped per run', /orderIds\.length > MAX_PER_RUN/.test(SRC), true);
 
 /* ── it must be harmless before Meta is connected ──────────────────────── */
+/* the gate gained a third condition (the environment block, 2026-09-30), so
+   match the rule rather than the exact line — but keep !configured pinned,
+   because dropping it is what would send before Meta exists */
 check('missing Meta config falls back to preview',
-      /if \(dryRun \|\| !configured\)/.test(SRC), true);
+      /if \(dryRun \|\| !configured\b[^)]*\)/.test(SRC), true);
+check('and a non-production environment falls back to preview too',
+      /if \(dryRun \|\| !configured \|\| !env\.allowed\)/.test(SRC), true);
 check('configured means all three variables',
       /const configured = !!\(PHONE_ID && TOKEN && TEMPLATE\)/.test(SRC), true);
 

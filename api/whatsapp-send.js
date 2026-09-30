@@ -30,6 +30,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const { verifyAdmin } = require('./_verifyAdmin');
+const { lgExternal } = require('./_env');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -112,6 +113,11 @@ module.exports = async function handler(req, res) {
   // חסרה הגדרה — עדיין עונים, אבל בלי לשלוח. ככה אפשר לבדוק את כל הזרימה
   // לפני שיש חשבון Meta, במקום לגלות את הפערים ביום שהוא נפתח.
   const configured = !!(PHONE_ID && TOKEN && TEMPLATE);
+  // ── חסימת סביבה ──
+  // הנזק כאן חמור מכל השאר: מסמך מיותר בחשבשבת מבטלים, הודעה שיצאה ללקוח
+  // כבר נקראה. בסביבה שאינה הייצור שום הודעה לא יוצאת, גם כשקוראים ישירות
+  // ל-endpoint ובלי dryRun. ר' _env.js.
+  const env = lgExternal();
 
   try {
     const db      = _db();
@@ -161,11 +167,14 @@ module.exports = async function handler(req, res) {
         },
       };
 
-      if (dryRun || !configured) {
+      if (dryRun || !configured || !env.allowed) {
         results.push({
           orderId, status: 'preview', to, phoneSource: target.source,
           accountKey: target.accountKey, params,
-          reason: configured ? null : 'חסרים משתני סביבה של Meta — לא נשלח',
+          blocked: !env.allowed || undefined,
+          reason: !env.allowed ? env.reason
+                : configured   ? null
+                : 'חסרים משתני סביבה של Meta — לא נשלח',
         });
         continue;
       }
@@ -214,7 +223,10 @@ module.exports = async function handler(req, res) {
     }
 
     const tally = results.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {});
-    res.status(200).json({ ok: true, dryRun: dryRun || !configured, configured, tally, results });
+    res.status(200).json({ ok: true, dryRun: dryRun || !configured || !env.allowed, configured,
+                           blocked: !env.allowed || undefined,
+                           environment: env.allowed ? undefined : env.projectId,
+                           tally, results });
 
   } catch (e) {
     console.error('whatsapp-send: unexpected error', e);
