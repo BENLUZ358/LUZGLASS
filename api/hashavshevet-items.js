@@ -84,11 +84,25 @@ module.exports = async function handler(req, res) {
     const json = JSON.parse(text);
     const rows = (json && json.apiRes && json.apiRes.data) || [];
 
-    // בשלב זה: רק פריטי "מכפלה" (זכוכית — מחיר לפי מ"ר) עם שם תקין.
+    // ── איזה סוג פריט מחזירים ──
+    //
+    // ברירת המחדל היא "מכפלה" — זכוכית, שמחירה לפי מ"ר. זה מה שהסנכרון
+    // ל-skuCatalog צורך, וכך הוא התנהג מאז ומתמיד.
+    //
+    // ⚠️ עד 2026-09-30 הסינון היה קבוע, ולכן **הפרזול** ("פריט רגיל") נזרק
+    // כאן בשרת ולא הגיע לשום מקום — גם לא למי שרצה רק להסתכל. מחירוני
+    // פרזול דורשים אותו, ולכן הסוג ניתן לבחירה:
+    //
+    //   (ללא)              → מכפלה בלבד. התנהגות זהה להיום.
+    //   itemType:'פריט רגיל' → פרזול
+    //   itemType:'all'      → הכל, עם itemType על כל שורה
+    //
     // הערה: הדוח הנוכחי (netPassportID) לא מחזיר שדה "פעיל/לא פעיל" בכלל — אין
     // לפי מה לסנן לפי סטטוס פעיל עד שהדוח בחשבשבת יעודכן להכליל את העמודה הזו.
+    const want = String((req.body && req.body.itemType) || (req.query && req.query.itemType) || 'מכפלה').trim();
+
     const items = rows
-      .filter(r => r['שם פריט'] && r['סוג הפריט'] === 'מכפלה')
+      .filter(r => r['שם פריט'] && (want === 'all' || r['סוג הפריט'] === want))
       .map(r => ({
         code:     String(r['מפתח פריט'] || '').trim(),
         name:     String(r['שם פריט'] || '').trim(),
@@ -97,7 +111,11 @@ module.exports = async function handler(req, res) {
       }))
       .filter(it => it.code);
 
-    res.status(200).json({ ok: true, count: items.length, items });
+    // אילו סוגים קיימים בדוח בכלל — כדי שלא צריך לנחש את המחרוזת המדויקת
+    const types = {};
+    rows.forEach(r => { const t = r['סוג הפריט'] || '(ריק)'; types[t] = (types[t] || 0) + 1; });
+
+    res.status(200).json({ ok: true, count: items.length, itemType: want, types, items });
   } catch (e) {
     console.error('hashavshevet-items: unexpected error', e);
     res.status(500).json({ error: 'internal error' });
