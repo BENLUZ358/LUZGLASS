@@ -59,8 +59,11 @@ check('with a visible label, not a placeholder standing in for one',
 /* below the image: it is the only screen showing the sketch full size, which
    is the entire reason naming moved here */
 check('it sits below the image, not above it',
+      // ‎-1‎ קטן מכל דבר — בלי בדיקת קיום זו בדיקה שעוברת תמיד
+      ADMIN.includes('id="sqImgWrap"') && ADMIN.includes('id="sqNameWrap"') &&
       ADMIN.indexOf('id="sqImgWrap"') < ADMIN.indexOf('id="sqNameWrap"'), true);
 check('and before the items, which is the same pass of work',
+      ADMIN.includes('id="sqNameWrap"') && ADMIN.includes('id="sqItemsWrap"') &&
       ADMIN.indexOf('id="sqNameWrap"') < ADMIN.indexOf('id="sqItemsWrap"'), true);
 
 /* ── one write per name ────────────────────────────────────────────────── */

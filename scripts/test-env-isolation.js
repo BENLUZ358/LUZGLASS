@@ -107,6 +107,8 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
                    'hashavshevet-items.js', 'hashavshevet-accounts.js', 'hashavshevet-getpdf.js']) {
     const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
     check(f.padEnd(28) + ' checks before it fetches',
+          // ‎-1‎ על צד חסר קטן מכל דבר, ולכן בלי הקיום הבדיקה חסרת ערך
+          src.includes('lgExternal()') && src.includes('await fetch(') &&
           src.indexOf('lgExternal()') < src.indexOf('await fetch('), true);
   }
 }

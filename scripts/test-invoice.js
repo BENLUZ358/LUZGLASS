@@ -212,8 +212,17 @@ check('the account key is resolved server-side',
         /data\.simulated \? '🧪 הורץ כפיקטיבי'/.test(admin), true);
   check('an order already in progress can still be marked fictitious',
         /function markOrderTest\(/.test(admin), true);
+  /* ⚠️ הבדיקה הזו אימתה שהשורה קיימת בטקסט, לא שהיא עובדת — והשורה שהיא
+     אימתה קראה את o.hashavshevetInvoice, השם הגולמי ב-Firebase.
+     lgNormalizeOrder מחזיר אותו בשם invoice, ולכן הביטוי היה תמיד
+     undefined והמנגנון מעולם לא חסם. הבדיקה עברה כל הזמן. */
   check('but not once it has been invoiced',
-        /const invoiced = !!\(o\.hashavshevetInvoice && o\.hashavshevetInvoice\.sentAt\)/.test(admin), true);
+        /const invoiced = _billIsBilled\(o\);/.test(admin), true);
+  check('and the check reads the normalised field, not the raw one',
+        /o\.hashavshevetInvoice\s*&&/.test(admin), false);
+  /* מקור אחד להחלטה "האם חויבה" — ולא העתק שני שיכול להתפצל */
+  check('_billIsBilled is the only place that decides it',
+        /function _billIsBilled\(o\)\{[\s\S]{0,160}?o\.invoice/.test(admin), true);
 }
 
 /* Finishing a delivery does NOT issue an invoice.

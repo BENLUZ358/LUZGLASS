@@ -200,6 +200,9 @@ const CUT = (over) => Object.assign({ w: 200, h: 100, ref: 'edge',
   check('and outlined like a cut edge',
         /cx\.strokeRect\(k\.x,k\.y,k\.w,k\.h\)/.test(DEMO), true);
   check('before the hardware, because it is part of the cutting',
+        // שני הצדדים חייבים להיות קיימים: indexOf מחזיר ‎-1‎ על מה שנעלם,
+        // ו‎-1‎ קטן מכל דבר — כלומר הבדיקה הייתה עוברת בלי לשמור על כלום
+        DEMO.includes('(L.cutouts||[]).forEach') && DEMO.includes('L.hardware.forEach(h=>engHardware') &&
         DEMO.indexOf('(L.cutouts||[]).forEach') < DEMO.indexOf('L.hardware.forEach(h=>engHardware'), true);
 }
 

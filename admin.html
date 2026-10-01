@@ -810,7 +810,11 @@ function openMod(id) {
   const testBtn = document.getElementById('modalTestBtn');
   if(testBtn){
     const already = !!o.isTest;
-    const invoiced = !!(o.hashavshevetInvoice && o.hashavshevetInvoice.sentAt);
+    // ⚠️ כאן נבדק o.hashavshevetInvoice — השם הגולמי ב-Firebase.
+    // lgNormalizeOrder מחזיר אותו בשם invoice, ולכן הביטוי היה תמיד
+    // undefined והמנגנון מעולם לא חסם. _billIsBilled הוא המקום היחיד
+    // שמחליט "האם חויבה", והוא כבר מטפל גם ב-httpOk וגם בריצה פיקטיבית.
+    const invoiced = _billIsBilled(o);
     testBtn.style.display = (already || invoiced) ? 'none' : '';
     testBtn.title = 'ההזמנה תרוץ בכל התהליך אבל לא תיצור מסמך בחשבשבת';
   }

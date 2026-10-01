@@ -387,6 +387,8 @@ check('there is a way to deploy the rules',
         /srch\.value=''/.test(showList),
         'a stale search makes the list look empty after every sketch');
   check('and clears it before the list is drawn',
+        // בלי בדיקת קיום, שינוי שם של אחד השניים הופך את זה לירוק תמידי
+        showList.includes("srch.value=''") && showList.includes('renderList()') &&
         showList.indexOf("srch.value=''") < showList.indexOf('renderList()'),
         'clearing after the render leaves the filtered list on screen');
   check('the standing filters are not reset with it',
