@@ -788,8 +788,15 @@ function lgNormalizeOrder(o) {
     // שלא נרשמה כאן נעלמת בדרך למפעל בלי שאף אחד יראה שגיאה.
     supportBar:    o.supportBar   || false,
     blackTrim:     o.blackTrim    || false,
-    workdayStatus:  o.workdayStatus  || '',
-    readyStatus:    o.readyStatus    || '',
+    // חמישה סימוני תהליך נכתבים יחד ב-saveOrderToStorage (workday.html),
+    // ושניים מהם — inspectionStatus ו-temperingStatus — נשכחו כאן. התוצאה
+    // הייתה שהם נכתבים ל-Firebase ולא חוזרים בקריאה: 12 הזמנות בייצור
+    // נושאות אותם, וכל קוד שיקרא אותם יקבל undefined בלי שום שגיאה.
+    // אותה רשימה לבנה שמתוארת למעלה, ואותה מלכודת.
+    workdayStatus:    o.workdayStatus    || '',
+    readyStatus:      o.readyStatus      || '',
+    inspectionStatus: o.inspectionStatus || '',
+    temperingStatus:  o.temperingStatus  || '',
     chisumArrived:     o.chisumArrived   || false,
     chisumReportId:    o.chisumReportId  || null,
     chisumReportNum:   o.chisumReportNum || null,

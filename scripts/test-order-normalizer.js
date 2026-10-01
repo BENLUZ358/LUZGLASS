@@ -168,5 +168,29 @@ check('the scan actually found fields to check', Object.keys(written).length > 1
           .test(fs.readFileSync(path.join(ROOT, 'portal.html'), 'utf8')), true);
 }
 
+/* ── כל סימון תהליך שנכתב חייב גם לחזור ────────────────────────────────
+ *
+ * saveOrderToStorage ב-workday.html כותב חמישה שדות יחד, באותה שורה כמעט.
+ * ⚠️ שניים מהם — inspectionStatus ו-temperingStatus — לא היו ברשימה הלבנה
+ * עד 2026-10-01, ולכן נכתבו ל-Firebase ולא חזרו בקריאה. 12 הזמנות בייצור
+ * נושאות אותם, וכל קוד שהיה קורא אותם היה מקבל undefined בלי שום שגיאה —
+ * תנאי שלא מתקיים לעולם, בלי שום רמז למה.
+ *
+ * הבדיקה הזו גוזרת את הרשימה מהכתיבה עצמה, ולא מרשימה קבועה: שדה שיתווסף
+ * ל-saveOrderToStorage ולא לנרמול ייפול כאן.
+ */
+{
+  const WD = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
+  const saveFn = (WD.match(/function saveOrderToStorage[\s\S]*?\n}/) || [''])[0];
+  const written = [...saveFn.matchAll(/^\s{4}(\w+):\s*o\./gm)].map(m => m[1]);
+  check('saveOrderToStorage still writes the five process markers',
+        written.sort(),
+        ['inspectionStatus', 'readyStatus', 'status', 'temperingStatus', 'workdayStatus']);
+
+  const norm = (SRC.match(/function lgNormalizeOrder[\s\S]*?\n\}/) || [''])[0];
+  const missing = written.filter(f => !new RegExp('^\\s{4}' + f + '[:,]', 'm').test(norm));
+  check('and every one of them survives normalisation', missing, []);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll order-normaliser checks passed.');
