@@ -640,15 +640,23 @@ async function collectAndNotify(orderId){
 // הייתה מהשאלה שנמחקה למעלה. החשבוניות מופקות היום רק מתור החשבוניות,
 // אחרי אימות הפריטים מול הסקיצה.
 
+// ⚠️ הפונקציה הזו חייבת להיכשל כלפי חוץ.
+//
+// עד 2026-10-01 היו כאן שני catch שהדפיסו ל-console והחזירו הצלחה, ולכן
+// markDoneAndNotify — שעוטף אותה ב-try/catch — לא יכול היה לתפוס כלום,
+// והציג "✓ המחיר ננעל" גם כשהנעילה נכשלה. ה-catch שם היה קוד מת.
+//
+// כישלון כאן משאיר הזמנה בלי pricesLockedAt ובלי totalFinal, ומכאן
+// lgCalcOrderTotal מחשב מחיר חי — כלומר המחיר יכול לזוז אחרי שהלקוח כבר
+// ראה סכום. זה חייב להגיע למסך, לא ל-console.
 async function invoiceMarkDone(orderId){
   const o = orders.find(x => x.id === String(orderId));
   const target = o ? (lgNextStage(o) || 'done') : 'done';
   if(o && (target === 'done' || target === 'delivery')){
-    await lgLockAndAdvance(String(orderId), o, globalPrices, clientPrices, target)
-      .then(_lgWarnUnpriced)
-      .catch(e=>console.error('invoiceMarkDone:',e));
+    const r = await lgLockAndAdvance(String(orderId), o, globalPrices, clientPrices, target);
+    _lgWarnUnpriced(r);
   } else {
-    await updateStage(String(orderId), target).catch(e=>console.error('invoiceMarkDone:',e));
+    await updateStage(String(orderId), target);
   }
 }
 
@@ -2600,8 +2608,9 @@ let sqNoteMap={}, sqStageMap={};
 function sqSaveNotes(id){
   const notes = document.getElementById('sqNotes')?.value || '';
   sqNoteMap[id] = notes;
-  updateOrder(id, { notes });
-  showToast('✓ הערה נשמרה');
+  updateOrder(id, { notes })
+    .then(()  => showToast('✓ הערה נשמרה'))
+    .catch(e  => { console.error('sqSaveNotes:', e); showToast('שמירת ההערה נכשלה — נסה שוב'); });
 }
 
 // הטאב הנוכחי. 'unseen' — מה שעוד לא עברו עליו. 'seen' — מסך העבודה המלא.
@@ -2639,8 +2648,9 @@ function sqMarkSeen(){
   sqCurrent.sketchSeenAt = now;
   var it = sqItems.find(function(i){ return i.id === id; });
   if(it) it.sketchSeenAt = now;
-  updateOrder(id, { sketchSeenAt: now });
-  showToast('✓ הסקיצה טופלה');
+  updateOrder(id, { sketchSeenAt: now })
+    .then(()  => showToast('✓ הסקיצה טופלה'))
+    .catch(e  => { console.error('sqMarkSeen:', e); showToast('הסימון לא נשמר — נסה שוב'); });
   // הבאה בתור, כמו אחרי כל פעולה אחרת במסך הזה
   sqCurrent = null; sqCurrentIdx = -1;
   sqShowDetail();
@@ -3567,10 +3577,13 @@ function sqMarkOptyDone(id){
 }
 
 
+// השדה מעודכן בזיכרון מיד כדי שהמסך יגיב, אבל אם הכתיבה נכשלת המשתמש
+// חייב לדעת — אחרת הוא רואה את הערך החדש וברענון הבא הוא חוזר לישן.
 function sqUpdateField(field, value){
   if(!sqCurrent) return;
   sqCurrent[field] = value;
-  updateOrder(sqCurrent.id, { [field]: value });
+  updateOrder(sqCurrent.id, { [field]: value })
+    .catch(e => { console.error('sqUpdateField:', e); showToast('השמירה נכשלה — נסה שוב'); });
 }
 </script>
 
@@ -4202,10 +4215,13 @@ function iwRemove(i){
   iwRender(); // → calls sqRefreshMetrics()
 }
 
+// ⚠️ הפריטים מניעים את הייצור ואת החשבונית. עריכה שלא נשמרה לא תיתפס
+// בתחנת החשבוניות, כי שני הצדדים יראו את אותו מידע ישן.
 function iwSave(){
   if(!sqCurrent) return;
   // שמור פריטים ב-Firebase
-  updateOrder(sqCurrent.id, { items: sqCurrentItems });
+  updateOrder(sqCurrent.id, { items: sqCurrentItems })
+    .catch(e => { console.error('iwSave:', e); showToast('שמירת הפריטים נכשלה — נסה שוב'); });
   sqCurrent.items = sqCurrentItems;
 }
 

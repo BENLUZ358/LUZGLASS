@@ -1329,10 +1329,13 @@ function markStageWorkday(sid){
 }
 
 // כותב stage произвольный ל-lgSQState
+// שינוי שלב שנכשל והודפס ל-console בלבד היה משאיר את המסך ממשיך כאילו
+// השלב זז, וברענון ההזמנה חוזרת לשלב הקודם בלי שאיש הבין למה.
 function markStageValue(sid, stage){
   // עדכן stage ב-Firebase (מקור האמת היחיד)
   const ordKey = sid.startsWith('ord_')||sid.startsWith('sub_') ? sid : 'ord_'+sid;
-  updateStage(ordKey, stage).catch(e=>console.error('markStageValue:', e));
+  updateStage(ordKey, stage)
+    .catch(e => { console.error('markStageValue:', e); showToast('שינוי השלב לא נשמר — רענן ונסה שוב'); });
 }
 
 // סימון סופי — שלב הבא לפי לוגיקה דינמית (done / graphic / delivery)
@@ -1484,8 +1487,11 @@ function saveManualItem(orderId){
   }
   if(cat) baseItem.sku = cat.sku;
   o.items.push(...lgMakeQuantityGroup(baseItem, qty));
-  updateOrder(String(o.id), { items: o.items }).catch(e=>console.error('addItem:', e));
-  showToast(qty > 1 ? `✓ ${qty} פריטים נשמרו` : '✓ פריט נשמר');
+  // הפריטים מניעים את הייצור ואת החשבונית — כישלון שקט כאן מחזיר את
+  // ההזמנה למצב הישן ברענון הבא, בלי שאיש ידע.
+  updateOrder(String(o.id), { items: o.items })
+    .then(()  => showToast(qty > 1 ? `✓ ${qty} פריטים נשמרו` : '✓ פריט נשמר'))
+    .catch(e  => { console.error('addItem:', e); showToast('שמירת הפריט נכשלה — נסה שוב'); });
   renderAvailable();
 }
 
@@ -2528,9 +2534,18 @@ function markChisumReportArrived(reportId, reportNum){
       <div style="display:flex;gap:10px;">
         <button onclick="(function(){
           const orders=[${reportOrders.map(o=>`'${o.id}'`).join(',')}];
-          orders.forEach(id=>updateOrder(id,{chisumArrived:true}).catch(e=>console.error('markReport:',e)));
-          showToast('✓ דוח ${lgJsStr(reportNum)} — ${reportOrders.length} הזמנות הגיעו מהמפעל');
-          this.closest('[style*=fixed]').remove();
+          const _ov=this.closest('[style*=fixed]');
+          // היה כאן forEach בלי await: אם שלוש מתוך חמש נכשלו, ההודעה
+          // דיווחה על כולן ושלוש הזמנות נשארו "בחוץ" בלי שאיש ידע.
+          Promise.allSettled(orders.map(id=>updateOrder(id,{chisumArrived:true})))
+            .then(rs=>{
+              const bad=rs.filter(r=>r.status==='rejected');
+              bad.forEach(r=>console.error('markReport:',r.reason));
+              showToast(bad.length
+                ? (orders.length-bad.length)+' מתוך '+orders.length+' נשמרו — '+bad.length+' נכשלו, נסה שוב'
+                : '✓ דוח ${lgJsStr(reportNum)} — ${reportOrders.length} הזמנות הגיעו מהמפעל');
+              if(_ov) _ov.remove();
+            });
         }).call(this)"
           style="flex:2;padding:12px;background:var(--chisum);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">
           ✓ כן, קיבלתי
