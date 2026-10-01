@@ -58,7 +58,19 @@ module.exports = async function handler(req, res) {
 
   const idInstance = String(process.env.GREENAPI_ID_INSTANCE).trim();
   const token      = String(process.env.GREENAPI_TOKEN).trim();
-  const chatId     = gate.to + '@c.us';
+
+  // ⚠️ chatId דורש פורמט בין-לאומי בלי 0 מוביל: 0547725552 → 972547725552.
+  // שליחה עם המספר המקומי מוחזרת ב-"Validation failed. Details: 'chatId'".
+  // אותה המרה בדיוק כמו toWaNumber ב-whatsapp-send.js.
+  const intl   = gate.to.startsWith('972') ? gate.to : '972' + gate.to.replace(/^0/, '');
+  const chatId = intl + '@c.us';
+
+  // ⚠️ GREEN API מחזירה את ה-URL המלא בתוך גוף השגיאה (שדה path), ובו
+  // הטוקן. הנחנו שגוף התשובה נקי — ההנחה הייתה שגויה, והטוקן דלף בשליחה
+  // הראשונה (2026-10-01). מכאן והלאה כל מחרוזת שיוצאת מכאן — לתשובה או
+  // ללוג — עוברת דרך redact, שמוחק את הטוקן בכל מקום שבו הוא מופיע.
+  // הגנה אחרונה ולא יחידה: מה שמוחזר הוא ממילא רק message ו-statusCode.
+  const redact = s => String(s == null ? '' : s).split(token).join('***');
 
   // ⚠️ הטוקן יושב בתוך ה-URL — זו הדרך ש-GREEN API עובדת. ולכן ה-URL
   // עצמו הוא סוד: הוא לא נכנס ללוג, לא לתשובה, ולא להודעת שגיאה. כל מה
@@ -88,13 +100,13 @@ module.exports = async function handler(req, res) {
   console.log('whatsapp-test: ' + (ok ? 'sent' : 'failed'),
               { idInstance, to: gate.to, httpStatus, idMessage: (parsed && parsed.idMessage) || null });
 
+  // ⚠️ לא מחזירים את הגוף הגולמי. הוא מכיל path, ובתוכו הטוקן. מוחזר רק
+  // מה שמסביר כישלון — ההודעה והקוד — וגם הם עוברים redact.
   res.status(ok ? 200 : 502).json({
     ok,
     to:        gate.to,
     httpStatus,
     idMessage: (parsed && parsed.idMessage) || null,
-    // גוף התשובה של GREEN API אינו מכיל את הטוקן, ולכן מותר להחזירו —
-    // הוא מה שמסביר כישלון. חתוך, כדי שלא יבלע את התשובה.
-    response:  raw.slice(0, 500),
+    reason:    ok ? null : redact((parsed && (parsed.message || parsed.error)) || raw.slice(0, 200)),
   });
 };

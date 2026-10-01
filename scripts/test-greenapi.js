@@ -124,6 +124,20 @@ const READY = {
     jsonBodies.push(SRC.slice(i, j + 1));
   }
   check('every response body was found', jsonBodies.length > 0, true);
+
+  /* ⚠️ נלמד בדרך הקשה, 2026-10-01. ההנחה הייתה ש"גוף התשובה של GREEN API
+     אינו מכיל את הטוקן", וההנחה הייתה שגויה: בשגיאה הם מחזירים שדה path
+     עם ה-URL המלא, ובו הטוקן. השליחה הראשונה הדליפה אותו, והוא הוחלף.
+     מכאן: הגוף הגולמי לא מוחזר, ומה שכן מוחזר עובר redact. */
+  check('the raw GREEN API body is never returned',
+        jsonBodies.filter(b => /\braw\b/.test(b) && !/redact\(/.test(b)), []);
+  check('a redactor strips the token from anything that leaves',
+        /const redact = s => String\(s == null \? '' : s\)\.split\(token\)\.join\('\*\*\*'\)/.test(SRC), true);
+  check('and the failure reason goes through it',
+        /reason:\s+ok \? null : redact\(/.test(SRC), true);
+  /* path הוא השדה שהחזיק את ה-URL — אסור שיוחזר בשום צורה */
+  check('the path field is never echoed back',
+        jsonBodies.filter(b => /\bpath\b/.test(b)), []);
   check('the token is never put in a response',
         jsonBodies.filter(b => /\btoken\b/i.test(b)), []);
   check('nor the instance id',
