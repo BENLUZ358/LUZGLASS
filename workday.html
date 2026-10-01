@@ -566,6 +566,11 @@ let allOrders = [];
 // קוראת את draftItems. זה לא נפל עד עכשיו רק כי allOrders עדיין ריק באותו
 // רגע והלולאה לא נכנסת — הסתמכות על מקריות, לא על סדר.
 let draftItems = [];
+// המפתח והדגל יושבים כאן ולא ליד הפונקציות שמשתמשות בהן: renderAll()
+// נקרא ברמה העליונה של הסקריפט, לפני אותן שורות, וכל נגיעה בהן משם
+// הייתה ReferenceError. אותו לקח כמו draftItems עצמו.
+const LG_DRAFT_KEY = 'lgWorkdayDraft';
+let _draftRestored = false;
 // מחירים — נטענים כדי שנוכל לנעול מחיר סופי בעת מעבר ל-done/delivery
 let _wdGlobalPrices = {}, _wdClientPrices = {};
 let skuCatalogMap = {}; // קטלוג מק"טים חדש (skuCatalog) — תוספתי, ריק כברירת מחדל
@@ -844,6 +849,9 @@ async function load(){
 
     renderAll();
     updateCounts();
+    // שחזור הטיוטה — רק כאן, אחרי שההזמנות הגיעו. הוא מאמת כל שורה מול
+    // המצב הנוכחי, ולכן אינו יכול לרוץ לפני שיש מול מה לאמת.
+    restoreDraft();
     // הסתר loading overlay אחרי הטעינה הראשונה
     const ov = document.getElementById('lgLoading');
     if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
@@ -3345,11 +3353,59 @@ function addGroupToDraft(ordKey, indices){
 }
 
 // עדכן את הכפתור / badge
+// הטיוטה שורדת רענון.
+//
+// היא הייתה משתנה בזיכרון בלבד: בונים טיוטה של חמישה-עשר פריטים, מרעננים
+// בטעות או שהדפדפן נסגר — והכל נעלם בלי שום אזהרה. אותו מנגנון בדיוק כמו
+// lgCheckState בתחנת הבדיקה.
+//
+// updateDraftBadge היא הנקודה היחידה שנקראת מכל שינוי בטיוטה — הוספה,
+// הסרה, ניקוי והורדה לעבודה — ולכן השמירה יושבת כאן ולא בשישה מקומות.
 function updateDraftBadge(){
   const btn   = document.getElementById('draftPreviewBtn');
   const badge = document.getElementById('draftCount');
   if(btn)   btn.style.display = draftItems.length ? 'inline-block' : 'none';
   if(badge) badge.textContent = draftItems.length;
+  try {
+    if(draftItems.length) safeStorage.setItem(LG_DRAFT_KEY, JSON.stringify(draftItems));
+    else                  safeStorage.removeItem(LG_DRAFT_KEY);
+  } catch(e){ console.warn('draft save:', e); }
+}
+
+// שחזור, אחרי שההזמנות הגיעו מ-Firebase.
+//
+// ⚠️ הטיוטה מצביעה על orderId ו-itemIdx, ושניהם יכולים להתיישן: ההזמנה
+// ירדה לעבודה, הפריט נמחק, או מישהו כבר בחר אותו ממכשיר אחר. שחזור עיוור
+// היה מאפשר להוריד לעבודה פריט שכבר לא קיים, או פעמיים את אותו אחד.
+// לכן כל שורה נבדקת מול המצב הנוכחי, ומה שלא תקף נושר בשקט.
+function restoreDraft(){
+  if(_draftRestored || !allOrders.length) return;
+  _draftRestored = true;
+  let saved;
+  try { saved = JSON.parse(safeStorage.getItem(LG_DRAFT_KEY) || '[]'); }
+  catch(e){ console.warn('draft restore:', e); return; }
+  if(!Array.isArray(saved) || !saved.length) return;
+
+  const kept = saved.filter(d => {
+    const o = allOrders.find(x => String(x.id) === String(d.orderId));
+    if(!o) return false;                                   // ההזמנה כבר לא בתור
+    if(!['opty','workday'].includes(o.stage||'')) return false;
+    const items = Array.isArray(o.items) ? o.items
+      : (o.items && typeof o.items === 'object') ? Object.values(o.items) : [];
+    if(!items[Number(d.itemIdx)]) return false;            // הפריט נמחק
+    const sel = (workDay.itemsSel && workDay.itemsSel[String(d.orderId)]) || [];
+    const selIdxs = (Array.isArray(sel) ? sel : Object.values(sel)).map(Number);
+    return !selIdxs.includes(Number(d.itemIdx));           // כבר ירד לעבודה
+  });
+
+  draftItems = kept;
+  updateDraftBadge();
+  if(kept.length) renderAll();
+  const dropped = saved.length - kept.length;
+  if(dropped) showToast(dropped === saved.length
+    ? 'הטיוטה שנשמרה כבר אינה רלוונטית ונוקתה'
+    : kept.length + ' פריטים שוחזרו לטיוטה · ' + dropped + ' כבר לא רלוונטיים');
+  else if(kept.length) showToast('✓ ' + kept.length + ' פריטים שוחזרו לטיוטה');
 }
 
 // פתח modal טיוטה

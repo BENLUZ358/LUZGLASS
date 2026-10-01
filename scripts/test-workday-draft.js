@@ -84,6 +84,48 @@ const bodyOf = name =>
         /if\(workDay\.inWork\.includes\(sid\)\)\{[\s\S]{0,200}?uniqueSel/.test(fn), false);
 }
 
+/* ── הטיוטה שורדת רענון ──────────────────────────────────────────────── */
+/*
+ * draftItems היה משתנה בזיכרון בלבד: טיוטה של חמישה-עשר פריטים נעלמה
+ * ברענון בטעות, בלי שום אזהרה. אותו מנגנון כמו lgCheckState בתחנת הבדיקה.
+ *
+ * ⚠️ והשחזור חייב לאמת. הטיוטה מצביעה על orderId ו-itemIdx, ושניהם
+ * מתיישנים: ההזמנה ירדה לעבודה, הפריט נמחק, או שמישהו בחר אותו ממכשיר
+ * אחר. שחזור עיוור היה מאפשר להוריד לעבודה פריט שכבר לא קיים, או פעמיים
+ * את אותו אחד.
+ */
+{
+  check('the draft is persisted', /safeStorage\.setItem\(LG_DRAFT_KEY/.test(WD), true);
+  /* נקודה אחת לשמירה — updateDraftBadge נקראת מכל שינוי בטיוטה */
+  const badge = bodyOf('updateDraftBadge');
+  check('and saved from the one place every change already goes through',
+        /safeStorage\.setItem\(LG_DRAFT_KEY/.test(badge), true);
+  check('an empty draft clears the key instead of storing []',
+        /else\s+safeStorage\.removeItem\(LG_DRAFT_KEY\)/.test(badge), true);
+  /* כשל ב-localStorage לא מפיל את הדף — safari בגלישה פרטית זורק */
+  check('a storage failure cannot break the page', /catch\(e\)\{ console\.warn\('draft save/.test(WD), true);
+
+  const restore = bodyOf('restoreDraft');
+  check('restore runs once', /if\(_draftRestored \|\| !allOrders\.length\) return;/.test(restore), true);
+  check('it drops an order that left the queue',
+        /if\(!\['opty','workday'\]\.includes\(o\.stage\|\|''\)\) return false;/.test(restore), true);
+  check('an item that no longer exists',
+        /if\(!items\[Number\(d\.itemIdx\)\]\) return false;/.test(restore), true);
+  check('and one that is already in the work day',
+        /return !selIdxs\.includes\(Number\(d\.itemIdx\)\);/.test(restore), true);
+  check('it says how many were restored and how many were dropped',
+        /כבר לא רלוונטיים/.test(restore), true);
+
+  /* השחזור חייב לרוץ אחרי שההזמנות הגיעו — אין מול מה לאמת לפני כן */
+  const listen = (WD.match(/_workdayUnsub = listenAllOrders\(function\(fbOrders\)\{[\s\S]*?\n  \}\);/) || [''])[0];
+  check('and only after the orders have arrived', /restoreDraft\(\);/.test(listen), true);
+
+  /* ⚠️ אותה מלכודת TDZ כמו draftItems: renderAll() נקרא ברמה העליונה */
+  check('the key is declared before the top-level renderAll that can reach it',
+        WD.indexOf("const LG_DRAFT_KEY") > -1 && WD.indexOf('\nrenderAll();') > -1 &&
+        WD.indexOf("const LG_DRAFT_KEY") < WD.indexOf('\nrenderAll();'), true);
+}
+
 /* ── סדר ההצהרות ─────────────────────────────────────────────────────── */
 /*
  * renderAll() נקרא ברמה העליונה של הסקריפט, ו-getFiltered קוראת draftItems.
