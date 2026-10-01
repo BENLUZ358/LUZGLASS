@@ -623,6 +623,9 @@ function _waTarget(o){
 //
 // אוסף את כל ההזמנות שנסגרו וקורא פעם אחת, ולא קריאה להזמנה. השרת מקצב
 // בעצמו, ומדלג על מה שכבר נשלח ועל הזמנות פיקטיביות.
+// רשת הביטחון של התור רצה פעם אחת בטעינה — ר' listenAllOrders
+let _waKicked = false;
+
 async function _waSendBulk(orderIds){
   const ids = [...new Set((orderIds||[]).map(String))];
   if(!ids.length) return;
@@ -648,6 +651,17 @@ function _waReport(data){
     showToast(`📱 ${n} הודעות מוכנות — וואטסאפ עדיין לא מחובר, לא נשלח כלום`);
     return;
   }
+  // ── ספק שמקצב לאט מחזיר "queued" ולא "sent" ──
+  //
+  //  ⚠️ זו הנקודה שבה הפעולה העסקית נגמרת וההודעות רק מתחילות לצאת. עם
+  //  GREEN API הקצב הוא 10 שניות בין נמענים, ולכן 30-40 לקוחות שנסגרים
+  //  בלחיצה אחת הם מעל 6 דקות — והמשתמש לא ממתין להם.
+  if(t.queued){
+    showToast(`📤 ${t.queued} הודעות נכנסו לתור — יוצאות בהדרגה`);
+    _waDrainWithProgress();
+    return;
+  }
+
   const bits = [];
   if(t.sent)    bits.push(`✓ ${t.sent} הודעות נשלחו`);
   if(t.skipped) bits.push(`${t.skipped} דולגו`);
@@ -852,6 +866,18 @@ async function load(){
     // שחזור הטיוטה — רק כאן, אחרי שההזמנות הגיעו. הוא מאמת כל שורה מול
     // המצב הנוכחי, ולכן אינו יכול לרוץ לפני שיש מול מה לאמת.
     restoreDraft();
+    // ⚠️ רשת הביטחון של התור: אם הטאב נסגר באמצע ריקון, ההודעות שנשארו
+    // יוצאות כאן. פעם אחת בטעינה — listenAllOrders רץ על כל שינוי, ובלי
+    // הדגל זה היה הופך לקריאה חוזרת על כל כתיבה.
+    //
+    //  בשקט. מי שפתח את המסך לא ביקש לשלוח כלום, ולכן אין טוסטים אם אין
+    //  מה להוציא. הודעה בת יממה ממילא פגה מעצמה בשרת ולא תצא.
+    if(!_waKicked){
+      _waKicked = true;
+      lgWaDrain().then(r => {
+        if(r && r.ok && r.sent) showToast('📤 ' + r.sent + ' הודעות שהמתינו בתור נשלחו');
+      }).catch(()=>{});
+    }
     // הסתר loading overlay אחרי הטעינה הראשונה
     const ov = document.getElementById('lgLoading');
     if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
@@ -2266,9 +2292,62 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
   // מסתיימת. showToast רק קובע textContent ואין תור — בלי ההמתנה, ההודעה
   // המסכמת הייתה מוצגת ראשונה ומיד נדרסת.
   Promise.all(orderIds.map(id => finalizeDelivery(id)))
-    .then(() => showToast(_orderIsMonthly(firstO)
-      ? '✓ הובלה הושלמה — ' + clientName + ' בשוטף 30, החשבונית תופק מרוכזת'
-      : '✓ הובלה הושלמה — ' + orderIds.length + ' בנאסף, ממתינות לחשבונית'));
+    .then(() => {
+      showToast(_orderIsMonthly(firstO)
+        ? '✓ הובלה הושלמה — ' + clientName + ' בשוטף 30, החשבונית תופק מרוכזת'
+        : '✓ הובלה הושלמה — ' + orderIds.length + ' בנאסף, ממתינות לחשבונית');
+      // ⚠️ אחרי שהשלב נכתב, ולא במקומו. הפעולה העסקית הסתיימה — וכשל
+      // בהודעה לא מחזיר אותה לאחור, בדיוק כמו ב-completeGraphic. השהיה
+      // קצרה כדי שהכתיבות ייקלטו לפני שהשרת קורא את ההזמנות.
+      setTimeout(() => _waDispatch(orderIds, clientName), 1200);
+    });
+}
+
+// ── "ההובלה יצאה" — הודעה אחת ללקוח עם כל ההזמנות שבהובלה ──
+//
+//  הדפדפן מוסר **מזהי הזמנות בלבד**. הטלפון נפתר בשרת מכרטיס הלקוח, ואם
+//  הזמנות בקבוצה מובילות למספרים שונים — השרת מסרב ולא מנחש. ר'
+//  api/whatsapp-dispatch.js.
+async function _waDispatch(orderIds, clientName){
+  const ids = [...new Set((orderIds||[]).map(String))];
+  if(!ids.length) return;
+  try {
+    const res  = await _lgAuthPost('/api/whatsapp-dispatch', { orderIds: ids, dryRun: false });
+    const data = await res.json();
+
+    if(res.status === 409){
+      // ⚠️ לא תקלה טכנית אלא ממצא בנתונים: שני כרטיסים עם אותו שם. חייב
+      // להיראות, אחרת הודעה אחת תצא ללקוח הלא נכון.
+      showToast('⚠️ לא נשלחה הודעה — ההזמנות של ' + clientName + ' מובילות למספרים שונים');
+      return;
+    }
+    if(!res.ok){ showToast('⚠️ הודעת ההובלה נכשלה: ' + (data.error||res.status)); return; }
+
+    if(data.preview){
+      showToast('📱 הודעת ההובלה מוכנה — ' + (data.reason || 'לא נשלחה'));
+      return;
+    }
+    if(!data.queued){ showToast('📱 הודעת ההובלה ' + (data.reason || 'לא נכנסה לתור')); return; }
+
+    showToast('📱 הודעה אחת ל' + clientName + ' נכנסה לתור — ' + (data.orderNums||[]).join(', '));
+    _waDrainWithProgress();
+  } catch(e){
+    console.error('whatsapp dispatch:', e);
+    showToast('⚠️ לא הצלחתי להגיע לשרת השליחה');
+  }
+}
+
+// מריק את התור ומראה התקדמות. השליחה יכולה לקחת דקות (10 שניות בין
+// נמענים), ולכן המשתמש צריך לראות שמשהו קורה — אבל הוא לא ממתין לה.
+async function _waDrainWithProgress(){
+  const r = await lgWaDrain(p => {
+    if(p.remaining) showToast('📤 נשלחו ' + p.sent + ' · ' + p.remaining + ' ממתינות בתור');
+  });
+  if(!r || r.alreadyRunning) return;
+  if(!r.ok){            showToast('⚠️ ריקון התור נעצר: ' + (r.error||'')); return; }
+  if(r.failed)          showToast('⚠️ ' + r.sent + ' נשלחו · ' + r.failed + ' נכשלו');
+  else if(r.sent)       showToast('✓ ' + r.sent + ' הודעות נשלחו');
+  if(r.remaining)       showToast('📤 ' + r.remaining + ' ממתינות — ייצאו בפעם הבאה');
 }
 
 async function finalizeDelivery(orderId){

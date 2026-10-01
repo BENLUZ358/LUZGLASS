@@ -167,8 +167,13 @@ check('the button is on the row', /umToggleMonthly\('\$\{u\.id\}'/.test(ADMIN), 
   /* finalizeDelivery is async and shows its own toast once its Firebase write
      resolves. showToast only sets textContent -- there is no queue -- so a
      summary fired synchronously after a bare forEach is always overwritten. */
+  /* ⚠️ הטוסט עבר לתוך בלוק, כי אחריו נוספה גם הודעת ה-WhatsApp על ההובלה.
+     הטענה לא השתנתה — הסיכום עדיין מחכה ל-Promise.all — ולכן נבדק הסדר
+     עצמו ולא הצורה. */
   check('the summary waits for every finalizeDelivery before it is shown',
-        /\.then\(\(\) => showToast\(/.test(fn), true);
+        /Promise\.all\(orderIds\.map\(id => finalizeDelivery\(id\)\)\)\s*\n\s*\.then\(/.test(fn), true);
+  check('and the toast is inside that .then, not fired alongside it',
+        fn.indexOf('.then(') > -1 && fn.indexOf('showToast(') > fn.indexOf('.then('), true);
 }
 
 /* ══ the issuing screen — run, not read ════════════════════════════════════

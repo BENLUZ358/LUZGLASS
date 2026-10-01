@@ -169,9 +169,48 @@ const READY = {
   check('it never reads or writes orders', /orders\//.test(SRC), false);
   check('it never opens a database at all', /getDatabase|firebase-admin/.test(SRC), false);
   check('it still requires an authenticated admin', /await verifyAdmin\(req\)/.test(SRC), true);
-  /* מסלול הייצור לא נגע */
-  check('the Meta sender knows nothing about GREEN API', /green|GREENAPI/i.test(SEND), false);
-  check('and still goes through the global block', /lgExternal\(\)/.test(SEND), true);
+  /* ⚠️ הטענה הזו השתנתה, ובכוונה. היא הייתה "whatsapp-send אינו מזכיר
+     GREEN API", ועכשיו הוא פונה לשכבת ספק שאחד הספקים בה **הוא** GREEN API.
+     לכן נועלים את הטענה החזקה יותר במקומה: **הייצור אינו יכול להגיע ל-GREEN
+     API**, וזה נבדק בהרצה ולא בחיפוש מחרוזת.
+
+     ומה שכן נשאר טענה מבנית: whatsapp-send עצמו לא קורא שום משתנה של
+     GREEN API — האישורים נקראים רק בספק, ברגע השליחה. */
+  /* ⚠️ מפשיטים הערות לפני בדיקת היעדרות. זו טעות שחזרה בפרויקט הזה חמש
+     פעמים: הביטוי תפס את ההערה שמסבירה את הכלל, לא קוד. "אין X" חייב לרוץ
+     על קוד חי בלבד. */
+  const strip = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+  check('the Meta sender never reads a GREEN API credential',
+        /GREENAPI_(TOKEN|ID_INSTANCE|TEST_)/.test(strip(SEND)), false);
+
+  /* ⚠️ השער נקרא **בתוך** תחום הסביבה ולא אחריו. lgGreenApiTest קורא את
+     process.env ברגע הקריאה, ולכן gate() שנקרא אחרי השחזור היה נחסם תמיד —
+     והבדיקה הייתה "עוברת" מהסיבה הלא נכונה. */
+  const provGate = (id, phone) => {
+    const saved = { ...process.env };
+    process.env.FIREBASE_SERVICE_ACCOUNT = sa(id);
+    process.env.WA_PROVIDER = 'green';
+    process.env.GREENAPI_TEST_ENABLED = '1';
+    process.env.GREENAPI_TEST_TO      = '0501234567';
+    process.env.GREENAPI_ID_INSTANCE  = '1101900001';
+    process.env.GREENAPI_TOKEN        = TOKEN;
+    ['api/_env.js', 'api/_wa-provider.js', 'api/_wa-recipient.js']
+      .forEach(m => { delete require.cache[require.resolve(path.join(ROOT, m))]; });
+    try {
+      const p = require(path.join(ROOT, 'api', '_wa-provider.js')).lgWaProvider();
+      return p.gate(phone);
+    }
+    finally { process.env = saved; }
+  };
+  /* ⚠️ גם אם מישהו יגדיר WA_PROVIDER=green בפרודקשן בטעות — הנעילה
+     הראשונה חוסמת, ושום הודעה לא תצא דרך GREEN API ללקוח אמיתי. */
+  check('even WA_PROVIDER=green on production cannot send',
+        provGate('lussglass', '0501234567').allowed, false);
+  check('while on TEST the same configuration is allowed',
+        provGate('luz-glass-test', '0501234567').allowed, true);
+  /* והחסימה הגלובלית נשארת המקור לשער של Meta — ר' test-env-isolation.js */
+  check('and the meta gate still is lgExternal',
+        /lgExternal\(\)/.test(fs.readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8')), true);
 
   /* lgExternal לא שונה — החסימה הגלובלית נשארת על כל ששת ה-endpoints */
   const ENV = fs.readFileSync(path.join(ROOT, 'api', '_env.js'), 'utf8');

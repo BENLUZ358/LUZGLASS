@@ -84,6 +84,12 @@
       }
     },
 
+    "waOutbox": {
+      ".indexOn": ["createdAt"],
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": false
+    },
+
     "hashavshevetAccounts": {
       ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
       ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'"

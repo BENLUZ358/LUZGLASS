@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "api/whatsapp-drain.js": { "maxDuration": 60 }
+  },
   "headers": [
     {
       "source": "/(.*)",

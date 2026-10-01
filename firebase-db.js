@@ -1989,6 +1989,53 @@ async function _lgAuthPost(url, payload){
   });
 }
 
+// ─── ריקון תור ההודעות היוצאות ──────────────────────────────────────────
+//
+//  הפעולה העסקית מכניסה הודעות ל-waOutbox ומסתיימת מיד. כאן מוציאים אותן.
+//
+//  ⚠️ למה בלופ ולא בקריאה אחת: אצל GREEN API הקצב הבטוח הוא 10 שניות בין
+//  נמענים, ולכן 40 לקוחות הם מעל 6 דקות. כל קריאה ל-drain מוציאה פרוסה
+//  קצרה ומחזירה remaining — אין request אחד שמחזיק את כל הזמן הזה.
+//
+//  ⚠️ ואם הטאב נסגר באמצע, שום הודעה לא אובדת: היא ממתינה בתור ויוצאת
+//  בקריאה הבאה. התפיסה בשרת היא טרנזקציה, ולכן שני טאבים שמריצים את זה
+//  יחד אינם יכולים לשלוח את אותה הודעה פעמיים.
+let _lgDraining = false;
+
+async function lgWaDrain(onProgress){
+  // single-flight בתוך הטאב. השרת מוגן בטרנזקציה בכל מקרה, אבל אין טעם
+  // לשלוח שתי קריאות שרק ייחסמו זו את זו.
+  if(_lgDraining) return { ok: true, alreadyRunning: true };
+  _lgDraining = true;
+  let sent = 0, failed = 0, remaining = 0;
+  try {
+    // תקרה קשה — גם אם משהו בשרת מחזיר remaining לנצח, זה לא הופך ללופ
+    // אינסופי שמכה ב-API.
+    for(let round = 0; round < 40; round++){
+      const res = await _lgAuthPost('/api/whatsapp-drain', {});
+      if(!res.ok){
+        const e = await res.json().catch(()=>({}));
+        return { ok: false, sent, failed, remaining, error: e.error || ('HTTP ' + res.status) };
+      }
+      const d = await res.json();
+      sent      += (d.tally && d.tally.sent)  || 0;
+      failed    += (d.tally && d.tally.error) || 0;
+      remaining  = d.remaining || 0;
+      if(onProgress) try { onProgress({ sent, failed, remaining, provider: d.provider }); } catch(_){}
+      if(!remaining) break;
+      // ⚠️ בלי זה היינו מסתובבים לנצח כשאין התקדמות — למשל כשהספק חסום
+      // בסביבה הזו, או כש-drain אחר תפס את הרשומות.
+      if(!d.processed) break;
+    }
+    return { ok: true, sent, failed, remaining };
+  } catch(e){
+    console.error('lgWaDrain:', e);
+    return { ok: false, sent, failed, remaining, error: e.message };
+  } finally {
+    _lgDraining = false;
+  }
+}
+
 // ─── לאיזה מספר יוצאת ההודעה ללקוח ──────────────────────────────────────
 //
 //  מקור האמת הוא הטלפון בכרטיס הלקוח בחשבשבת. שם הוא מתוחזק, ומשם הוא

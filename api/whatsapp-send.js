@@ -30,7 +30,10 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const { verifyAdmin } = require('./_verifyAdmin');
-const { lgExternal, lgDatabaseUrl } = require('./_env');
+const { lgDatabaseUrl } = require('./_env');
+const { lgWaProvider }  = require('./_wa-provider');
+const { lgWaEnqueue }   = require('./_wa-outbox');
+const { resolvePhone, toWaNumber } = require('./_wa-recipient');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -38,9 +41,10 @@ const { getDatabase } = require('firebase-admin/database');
 // נשבר בשקט בכל סביבה שאינה הייצור.
 const DATABASE_URL = lgDatabaseUrl();
 
-// Meta מגבילה קצב. שליחה טורית עם הפסקה קצרה במקום מטח — עשרים הזמנות
-// שנסגרות יחד הן בדיוק המקרה שבו מטח נחסם.
-const GAP_MS      = 250;
+//  ⚠️ תקרת הבקשה, ולא תקרת השליחה. היא מגבילה כמה הזמנות אפשר למסור
+//  בקריאה אחת — 40 הזמנות שנכנסות לתור הן זולות ואסור לדחות אותן. הקצב
+//  והתקרה של השליחה עצמה הם מאפיין של הספק (ר' _wa-provider.js), כי Meta
+//  ו-GREEN API רחוקות זו מזו בשלושה סדרי גודל.
 const MAX_PER_RUN = 60;
 
 function _db() {
@@ -52,41 +56,6 @@ function _db() {
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// ── מספר בפורמט שה-API דורש: בין-לאומי, בלי + ובלי 0 מוביל ──
-//    052-2578559 → 972522578559
-function toWaNumber(raw) {
-  let p = String(raw || '').replace(/[^\d+]/g, '').replace(/^\+/, '');
-  if (!p) return '';
-  if (p.startsWith('972')) return p;
-  return '972' + p.replace(/^0/, '');
-}
-
-// ── לאיזה מספר ההודעה יוצאת ──
-//
-// אותה שרשרת בדיוק כמו lgResolveClientPhone בדפדפן, ומאותה סיבה: המספר
-// שבכרטיס הלקוח בחשבשבת הוא המתוחזק. order.phone הוא עותק מיום פתיחת
-// ההזמנה, והוא לא מתעדכן כשהלקוח מחליף מספר.
-async function resolvePhone(db, order) {
-  const norm = p => String(p || '').replace(/[-\s]/g, '');
-
-  let key = order.customerId || null;
-  if (!key) {
-    const login = norm(order.clientPhone || order.phone);
-    if (login) {
-      const snap = await db.ref('users/' + login).once('value');
-      const u = snap.val();
-      key = (u && u.customerId) || null;
-    }
-  }
-  if (key) {
-    const snap = await db.ref('hashavshevetAccounts/' + String(key).trim()).once('value');
-    const acc  = snap.val();
-    if (acc && acc.phone) return { phone: norm(acc.phone), source: 'hashavshevet', accountKey: String(key) };
-  }
-  const own = norm(order.phone);
-  return { phone: own, source: own ? 'order' : 'none', accountKey: null };
-}
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return; }
@@ -107,19 +76,18 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: 'server not configured — missing FIREBASE_SERVICE_ACCOUNT' }); return;
   }
 
-  const PHONE_ID = process.env.WA_PHONE_NUMBER_ID;
-  const TOKEN    = process.env.WA_ACCESS_TOKEN;
-  const TEMPLATE = process.env.WA_TEMPLATE_NAME;
-  const LANG     = process.env.WA_TEMPLATE_LANG  || 'he';
-  const GRAPH    = process.env.WA_GRAPH_VERSION  || 'v21.0';
+  //  ── מי שולח ──
+  //  ברירת המחדל היא Meta, והפרודקשן אינו מגדיר WA_PROVIDER — ולכן שם
+  //  שום דבר בקובץ הזה לא מתנהג אחרת מאתמול.
+  const provider = lgWaProvider();
   // חסרה הגדרה — עדיין עונים, אבל בלי לשלוח. ככה אפשר לבדוק את כל הזרימה
   // לפני שיש חשבון Meta, במקום לגלות את הפערים ביום שהוא נפתח.
-  const configured = !!(PHONE_ID && TOKEN && TEMPLATE);
+  const configured = provider.configured;
   // ── חסימת סביבה ──
   // הנזק כאן חמור מכל השאר: מסמך מיותר בחשבשבת מבטלים, הודעה שיצאה ללקוח
-  // כבר נקראה. בסביבה שאינה הייצור שום הודעה לא יוצאת, גם כשקוראים ישירות
-  // ל-endpoint ובלי dryRun. ר' _env.js.
-  const env = lgExternal();
+  // כבר נקראה. אצל Meta זו החסימה הגלובלית של _env.js; אצל GREEN API אלה
+  // ארבע הנעילות, והן נבדקות **לכל נמען בנפרד**. ר' _wa-provider.js.
+  const envGate = provider.gate();
 
   try {
     const db      = _db();
@@ -152,50 +120,55 @@ module.exports = async function handler(req, res) {
         continue;
       }
 
-      const to     = toWaNumber(target.phone);
-      const params = [
-        String(order.orderClient || 'לקוח'),
-        String(order.orderNum || order.refNum || ''),
-      ];
+      const to        = toWaNumber(target.phone);
+      const orderNums = [String(order.orderNum || order.refNum || '')];
+      const facts     = { to: target.phone, kind: 'ready',
+                          clientName: String(order.orderClient || 'לקוח'), orderNums };
+      const params    = provider.params(facts);
 
-      const payload = {
-        messaging_product: 'whatsapp',
-        to,
-        type: 'template',
-        template: {
-          name: TEMPLATE || '(לא מוגדר)',
-          language: { code: LANG },
-          components: [{ type: 'body', parameters: params.map(t => ({ type: 'text', text: t })) }],
-        },
-      };
+      // ⚠️ השער נבדק כאן עם הטלפון בפורמט **המקומי** ולא עם to. אצל GREEN
+      // API נעילה 3 משווה אותו ל-GREENAPI_TEST_TO כפי שהוא מוגדר, ו-972...
+      // לא היה תואם לו לעולם.
+      const gate = provider.gate(target.phone);
 
-      if (dryRun || !configured || !env.allowed) {
+      if (dryRun || !configured || !gate.allowed) {
         results.push({
           orderId, status: 'preview', to, phoneSource: target.source,
           accountKey: target.accountKey, params,
-          blocked: !env.allowed || undefined,
-          reason: !env.allowed ? env.reason
-                : configured   ? null
-                : 'חסרים משתני סביבה של Meta — לא נשלח',
+          blocked: !gate.allowed || undefined,
+          reason: !gate.allowed ? gate.reason
+                : configured    ? null
+                : 'חסרים משתני סביבה של ' + provider.name + ' — לא נשלח',
         });
         continue;
       }
 
-      let httpStatus = 0, text = '', parsed = null;
-      try {
-        const r = await fetch(`https://graph.facebook.com/${GRAPH}/${PHONE_ID}/messages`, {
-          method:  'POST',
-          headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
-          body:    JSON.stringify(payload),
+      // ── ספק שמקצב לאט שולח דרך תור ──
+      //
+      //  ⚠️ זה הסעיף שמאפשר לפעולה העסקית להסתיים מיד. אצל GREEN API הקצב
+      //  הבטוח הוא 10 שניות בין נמענים, ו-40 לקוחות הם מעל 6 דקות — זמן
+      //  שאין שום request HTTP שיכול להחזיק. ההכנסה לתור זולה, ולכן גם אין
+      //  כאן sleep: הלולאה רק רושמת, וה-drain מוציא.
+      //
+      //  Meta אינה בתור (provider.queued === false) ולכן ממשיכה לשלוח כאן
+      //  בתוך הבקשה, בדיוק כמו עד היום.
+      if (provider.queued) {
+        const q = await lgWaEnqueue(db, {
+          kind: 'ready', to: target.phone,
+          clientName: facts.clientName, orderNums,
+          orderIds: [orderId], queuedBy: auth.phone,
         });
-        httpStatus = r.status;
-        text = await r.text();
-        try { parsed = JSON.parse(text); } catch (_) { /* לא JSON — נשמור גולמי */ }
-      } catch (e) {
-        text = String(e && e.message || e);
+        results.push({
+          orderId, status: q.queued ? 'queued' : 'skipped',
+          to, phoneSource: target.source, accountKey: target.accountKey,
+          outboxKey: q.key, reason: q.queued ? null : q.reason,
+        });
+        continue;
       }
 
-      const ok = httpStatus >= 200 && httpStatus < 300;
+      const out = await provider.send(facts);
+      const { ok, httpStatus } = out;
+      const text = out.detail;
       // רישום מלא תמיד, גם בכישלון. בחשבשבת למדנו ש-HTTP 200 אינו "נוצר
       // מסמך"; כאן 200 אינו "הלקוח קיבל" — הוא רק "Meta קיבלה ממני".
       // מסירה אמיתית מגיעה ב-webhook נפרד.
@@ -206,11 +179,12 @@ module.exports = async function handler(req, res) {
         to,
         phoneSource: target.source,
         accountKey:  target.accountKey,
-        template:    TEMPLATE,
+        template:    provider.template,
+        provider:    provider.name,
         params,
         httpStatus,
         httpOk:      ok,
-        waMessageId: (parsed && parsed.messages && parsed.messages[0] && parsed.messages[0].id) || null,
+        waMessageId: out.messageId,
         response:    String(text).slice(0, 2000),
       };
       await db.ref('orders/' + orderId + '/whatsapp').set(record);
@@ -218,16 +192,17 @@ module.exports = async function handler(req, res) {
       results.push({
         orderId, status: ok ? 'sent' : 'error', to, phoneSource: target.source,
         httpStatus, waMessageId: record.waMessageId,
-        reason: ok ? null : (parsed && parsed.error && parsed.error.message) || String(text).slice(0, 300),
+        reason: ok ? null : out.reason,
       });
 
-      await sleep(GAP_MS);
+      await sleep(provider.gapMs);
     }
 
     const tally = results.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {});
-    res.status(200).json({ ok: true, dryRun: dryRun || !configured || !env.allowed, configured,
-                           blocked: !env.allowed || undefined,
-                           environment: env.allowed ? undefined : env.projectId,
+    res.status(200).json({ ok: true, dryRun: dryRun || !configured || !envGate.allowed, configured,
+                           provider: provider.name, queued: provider.queued,
+                           blocked: !envGate.allowed || undefined,
+                           reason: envGate.allowed ? undefined : envGate.reason,
                            tally, results });
 
   } catch (e) {
