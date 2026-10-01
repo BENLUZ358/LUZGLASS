@@ -103,4 +103,53 @@ function lgDatabaseUrl() {
   return 'https://' + pid + '-default-rtdb.europe-west1.firebasedatabase.app';
 }
 
-module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl, LG_LIVE_PROJECT };
+// ─── GREEN API · שער בדיקה זמני ומבודד ─────────────────────────────
+//
+//  ⚠️ זה אינו חלק מהארכיטקטורה של WhatsApp. השליחה ללקוחות רצה דרך
+//  api/whatsapp-send.js מול Meta Cloud API, והיא לא נגעה. השער הזה קיים
+//  כדי להוכיח דבר אחד: ש-TEST מסוגל לשלוח הודעה אחת דרך GREEN API.
+//  אחרי ההוכחה תתקבל החלטה אם GREEN API מחליף את Meta, ואז דרך שכבת
+//  ספקים מסודרת — לא דרך הקובץ הזה.
+//
+//  lgExternal לא שונה. החסימה הגלובלית נשארת על כל ששת ה-endpoints;
+//  זהו חור נפרד, בעל שם, שאי אפשר לפתוח בטעות — וארבע נעילות שומרות עליו:
+//
+//    1. חסום בייצור. ⚠️ הכיוון ההפוך מ-lgExternal, ובכוונה: כלי בדיקה
+//       לא אמור לרוץ על הסביבה שמדברת עם לקוחות אמיתיים.
+//    2. GREENAPI_TEST_ENABLED=1 — חסר, ריק או כל ערך אחר = חסום.
+//    3. הנמען חייב להיות בדיוק GREENAPI_TEST_TO. אין רשימה, יש מספר אחד.
+//    4. אישורי החיבור חייבים להיות שניהם.
+//
+//  ⚠️ ולא מחזיר את הטוקן. ב-GREEN API הטוקן יושב בתוך ה-URL
+//  (/waInstance{id}/sendMessage/{token}), ולכן כל אובייקט שמכיל אותו עלול
+//  להגיע ללוג או לתשובה. הקורא קורא אותו מהסביבה בעצמו, ברגע השליחה בלבד.
+const _digits = p => String(p || '').replace(/\D/g, '');
+
+function lgGreenApiTest(to) {
+  const projectId = _projectId();
+
+  if (projectId === LG_LIVE_PROJECT) {
+    return { allowed: false, reason: 'כלי הבדיקה של GREEN API חסום בסביבת הייצור' };
+  }
+  if (String(process.env.GREENAPI_TEST_ENABLED || '').trim() !== '1') {
+    return { allowed: false, reason: 'GREEN API לא הופעל בסביבה הזו (GREENAPI_TEST_ENABLED)' };
+  }
+
+  const allowTo = _digits(process.env.GREENAPI_TEST_TO);
+  if (!allowTo) {
+    return { allowed: false, reason: 'לא הוגדר נמען מורשה (GREENAPI_TEST_TO)' };
+  }
+  // נמען לא נמסר — נשלח למורשה. נמסר ושונה — מסורב, ולא "מתוקן" בשקט.
+  const target = _digits(to);
+  if (target && target !== allowTo) {
+    return { allowed: false, reason: 'הנמען אינו המספר המורשה לבדיקה' };
+  }
+  if (!process.env.GREENAPI_ID_INSTANCE || !process.env.GREENAPI_TOKEN) {
+    return { allowed: false, reason: 'חסרים אישורי GREEN API בסביבה' };
+  }
+
+  // to בלבד. בלי idInstance ובלי token — ר' ההערה למעלה.
+  return { allowed: true, reason: '', to: allowTo };
+}
+
+module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl, lgGreenApiTest, LG_LIVE_PROJECT };

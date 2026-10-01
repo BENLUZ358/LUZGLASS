@@ -92,15 +92,30 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
 
 /* ── כל endpoint שפונה החוצה מתייעץ עם השומר ────────────────────────── */
 {
+  /* ⚠️ חריג יחיד ומפורש: api/whatsapp-test.js הוא כלי בדיקה של GREEN API,
+     ויש לו שומר משלו — lgGreenApiTest — שנעילותיו הפוכות: הוא חסום דווקא
+     בייצור. הוא נרשם כאן בשם ולא מוחרג לפי דפוס, כדי ש-endpoint חדש שישכח
+     את lgExternal עדיין ייפול. */
+  const OWN_GUARD = { 'whatsapp-test.js': 'lgGreenApiTest' };
+
   const files = fs.readdirSync(path.join(ROOT, 'api')).filter(f => f.endsWith('.js'));
   const missing = [];
   for (const f of files) {
     const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
     const callsOut = /await fetch\(/.test(src);
-    const guarded  = /lgExternal\(\)/.test(src);
+    const guard    = OWN_GUARD[f] || 'lgExternal';
+    const guarded  = new RegExp(guard + '\\(').test(src);
     if (callsOut && !guarded) missing.push(f);
   }
-  check('every endpoint that calls out consults the guard', missing, []);
+  check('every endpoint that calls out consults a guard', missing, []);
+
+  /* והחריג חייב להישאר חריג: רק הוא רשאי לא לעבור ב-lgExternal */
+  const exempt = files.filter(f => {
+    const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
+    return /await fetch\(/.test(src) && !/lgExternal\(/.test(src);
+  });
+  check('and only the GREEN API test tool is exempt from the global block',
+        exempt, ['whatsapp-test.js']);
 
   /* והשומר נבדק לפני ה-fetch, לא אחריו */
   for (const f of ['hashavshevet-order.js', 'hashavshevet-invoice.js', 'whatsapp-send.js',
