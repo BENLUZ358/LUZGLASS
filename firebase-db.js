@@ -2007,7 +2007,7 @@ async function lgWaDrain(onProgress){
   // לשלוח שתי קריאות שרק ייחסמו זו את זו.
   if(_lgDraining) return { ok: true, alreadyRunning: true };
   _lgDraining = true;
-  let sent = 0, failed = 0, remaining = 0;
+  let sent = 0, failed = 0, remaining = 0, deferred = 0, detail = null;
   try {
     // תקרה קשה — גם אם משהו בשרת מחזיר remaining לנצח, זה לא הופך ללופ
     // אינסופי שמכה ב-API.
@@ -2015,19 +2015,28 @@ async function lgWaDrain(onProgress){
       const res = await _lgAuthPost('/api/whatsapp-drain', {});
       if(!res.ok){
         const e = await res.json().catch(()=>({}));
-        return { ok: false, sent, failed, remaining, error: e.error || ('HTTP ' + res.status) };
+        return { ok: false, sent, failed, remaining,
+                 error: e.error || ('HTTP ' + res.status) };
       }
       const d = await res.json();
-      sent      += (d.tally && d.tally.sent)  || 0;
-      failed    += (d.tally && d.tally.error) || 0;
+      sent      += (d.tally && d.tally.sent)     || 0;
+      failed    += (d.tally && d.tally.error)    || 0;
+      deferred  += (d.tally && d.tally.deferred) || 0;
       remaining  = d.remaining || 0;
+      // ⚠️ מה שהשרת החזיר על הסבב האחרון, כדי שיהיה מה לחקור. בלי זה
+      // "לא קרה כלום" ו"נכשל" נראים בדיוק אותו דבר — וזה בדיוק מה שהסתיר
+      // את L9005 במשך שעה.
+      detail = (d.results || []).slice(0, 5);
       if(onProgress) try { onProgress({ sent, failed, remaining, provider: d.provider }); } catch(_){}
       if(!remaining) break;
       // ⚠️ בלי זה היינו מסתובבים לנצח כשאין התקדמות — למשל כשהספק חסום
       // בסביבה הזו, או כש-drain אחר תפס את הרשומות.
       if(!d.processed) break;
     }
-    return { ok: true, sent, failed, remaining };
+    // ⚠️ "יש מה לשלוח, ושום דבר לא זז, ואיש לא דחה בכוונה" — זו תקלה.
+    // זה המצב המדויק שבו L9005 ישבה בתור: pending, attempts=0, ושקט מוחלט.
+    const stalled = remaining > 0 && sent === 0 && failed === 0 && deferred === 0;
+    return { ok: true, sent, failed, remaining, deferred, stalled, detail };
   } catch(e){
     console.error('lgWaDrain:', e);
     return { ok: false, sent, failed, remaining, error: e.message };

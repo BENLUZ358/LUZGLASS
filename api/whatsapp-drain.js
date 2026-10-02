@@ -23,7 +23,7 @@
 const { verifyAdmin }   = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
-const { lgWaClaim, lgWaComplete, lgWaPending } = require('./_wa-outbox');
+const { lgWaClaim, lgWaComplete, lgWaPending, lgWaReserveSlot } = require('./_wa-outbox');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -32,6 +32,10 @@ const DATABASE_URL = lgDatabaseUrl();
 // ⚠️ חייב להישאר מתחת ל-maxDuration שמוגדר ב-vercel.json (60). 45 משאיר
 // מרווח לשליחה שנתקעת ולסגירת הרשומה אחריה.
 const BUDGET_MS = 45 * 1000;
+
+//  כמה מותר להמתין לחלון שליחה. חייב להיות קטן מספיק כדי להישאר בתקציב,
+//  וגדול מספיק כדי שדילוג על חלון לא יהפוך לשגרה. gap אחד ועוד מרווח.
+const SLOT_MAX_WAIT_MS = 15 * 1000;
 
 function _db() {
   const app = getApps().length ? getApps()[0] : initializeApp({
@@ -65,6 +69,24 @@ module.exports = async function handler(req, res) {
     for (const key of keys) {
       if (processed >= provider.maxPerRun)         break;
       if (Date.now() - started > BUDGET_MS)        break;
+
+      // ── חלון השליחה, לפני התפיסה ──
+      //
+      //  ⚠️ הסדר מכוון. אילו תפסנו קודם ולא היינו מקבלים חלון, היינו
+      //  צריכים לשחרר תפיסה שכבר ספרה ניסיון. כך, מי שאינו מקבל חלון
+      //  פשוט פורש בלי לגעת באף הודעה.
+      //
+      //  המחיר: אם החלון התקבל והתפיסה נכשלה (drain אחר הקדים), החלון
+      //  מתבזבז — gap אחד של שקט. מחיר סביר על קוד פשוט יותר.
+      if (provider.globalSlot) {
+        const slot = await lgWaReserveSlot(db, provider.nextGap(), SLOT_MAX_WAIT_MS);
+        if (!slot.ok) {
+          // העתיד הקרוב תפוס על ידי drain אחר. לא ממתינים — חוזרים אחר כך.
+          results.push({ key, status: 'deferred', reason: 'חלון השליחה תפוס' });
+          break;
+        }
+        if (slot.waitMs) await sleep(slot.waitMs);
+      }
 
       const { claimed, entry, reason } = await lgWaClaim(db, key, auth.phone);
       if (!claimed) { results.push({ key, status: 'skipped', reason }); continue; }
@@ -120,8 +142,11 @@ module.exports = async function handler(req, res) {
       results.push({ key, status: out.ok ? 'sent' : 'error',
                      orderNums: entry.orderNums, reason: out.reason || null });
 
-      // הפסקה רק אם יש עוד מה לשלוח ויש תקציב. אין טעם להמתין בסוף פרוסה.
-      if (processed < provider.maxPerRun && Date.now() - started < BUDGET_MS) {
+      //  ⚠️ רק לספק שאינו עובד עם חלון גלובלי — כלומר Meta, שאצלה הקצב
+      //  נשאר בדיוק כפי שהיה. אצל green ההמתנה כבר קרתה לפני השליחה,
+      //  והמתנה נוספת כאן הייתה מכפילה את המרווח.
+      if (!provider.globalSlot &&
+          processed < provider.maxPerRun && Date.now() - started < BUDGET_MS) {
         await sleep(provider.nextGap());
       }
     }

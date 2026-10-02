@@ -874,9 +874,9 @@ async function load(){
     //  מה להוציא. הודעה בת יממה ממילא פגה מעצמה בשרת ולא תצא.
     if(!_waKicked){
       _waKicked = true;
-      lgWaDrain().then(r => {
-        if(r && r.ok && r.sent) showToast('📤 ' + r.sent + ' הודעות שהמתינו בתור נשלחו');
-      }).catch(()=>{});
+      lgWaDrain().then(_waDrainOutcome).catch(e => {
+        console.error('[WhatsApp] ריקון התור בטעינה נכשל:', e);
+      });
     }
     // הסתר loading overlay אחרי הטעינה הראשונה
     const ov = document.getElementById('lgLoading');
@@ -2343,11 +2343,37 @@ async function _waDrainWithProgress(){
   const r = await lgWaDrain(p => {
     if(p.remaining) showToast('📤 נשלחו ' + p.sent + ' · ' + p.remaining + ' ממתינות בתור');
   });
-  if(!r || r.alreadyRunning) return;
-  if(!r.ok){            showToast('⚠️ ריקון התור נעצר: ' + (r.error||'')); return; }
-  if(r.failed)          showToast('⚠️ ' + r.sent + ' נשלחו · ' + r.failed + ' נכשלו');
-  else if(r.sent)       showToast('✓ ' + r.sent + ' הודעות נשלחו');
-  if(r.remaining)       showToast('📤 ' + r.remaining + ' ממתינות — ייצאו בפעם הבאה');
+  _waDrainOutcome(r);
+}
+
+// ── מה נחשב תקלה ומה שגרה ───────────────────────────────────────────
+//
+//  ⚠️ הכלל: מי שלא ביקש לשלוח כלום לא יקבל טוסטים. אבל **כשיש הודעות
+//  בתור ושום דבר לא זז — זו תקלה והיא חייבת להיראות**.
+//
+//  עד היום ה-kick בטעינה היה `.catch(()=>{})` ותנאי אחד על הצלחה, ולכן
+//  401, 500, חריגה ו"לא נתפסה" נראו כולם בדיוק אותו דבר: כלום. L9005
+//  ישבה בתור שעה שלמה, השרת החזיר בכל רענון
+//  {"status":"skipped","reason":"לא נתפסה"}, ואיש לא ראה את זה. (02/10/2026)
+function _waDrainOutcome(r){
+  if(!r || r.alreadyRunning) return;          // ריקון אחר כבר באוויר — שגרה
+
+  if(!r.ok){
+    console.error('[WhatsApp] ריקון התור נעצר:', r);
+    showToast('⚠️ ריקון תור ההודעות נעצר: ' + (r.error || 'שגיאה לא ידועה'));
+    return;
+  }
+  if(r.stalled){
+    // ⚠️ הודעות ממתינות ואף אחת לא זזה, ואיש לא דחה אותן בכוונה.
+    const why = (r.detail && r.detail[0] && (r.detail[0].reason || r.detail[0].status)) || 'לא ידוע';
+    console.error('[WhatsApp] ' + r.remaining + ' הודעות תקועות בתור. תשובת השרת:', r.detail);
+    showToast('⚠️ ' + r.remaining + ' הודעות תקועות בתור (' + why + ') — ראה קונסולה');
+    return;
+  }
+  if(r.failed)    showToast('⚠️ ' + r.sent + ' נשלחו · ' + r.failed + ' נכשלו');
+  else if(r.sent) showToast('✓ ' + r.sent + ' הודעות נשלחו');
+  // נדחה בגלל חלון תפוס, או תור ארוך — שגרה, לא תקלה
+  if(r.remaining && !r.stalled) showToast('📤 ' + r.remaining + ' ממתינות — ייצאו בהמשך');
 }
 
 async function finalizeDelivery(orderId){

@@ -98,6 +98,9 @@ function metaProvider() {
     // ⚠️ לא דרך תור. זו התנהגות הייצור של היום, ושינוי שלה היה משנה את
     // הייצור — בדיוק מה שנאסר. התור נדרש בגלל הקצב של GREEN API, לא כאן.
     queued:     false,
+    //  ⚠️ Meta היא הערוץ הרשמי ואין בה סיכון חסימה של המספר. הקצב נשאר
+    //  sleep בתוך הבקשה, בדיוק כפי שהיה — בלי צומת חדש ובלי טרנזקציה.
+    globalSlot: false,
     gapMs:      250,
     maxPerRun:  60,
     template:   TEMPLATE,
@@ -167,6 +170,9 @@ function greenProvider() {
     // request HTTP פתוח כל כך. הפעולה העסקית נסגרת מיד, ההודעות יוצאות
     // בהדרגה מ-waOutbox.
     queued:     true,
+    //  ⚠️ הקצב נאכף גלובלית דרך waMeta/sendSlot. sleep מקומי לא מספיק:
+    //  WhatsApp סופרת את הקצב של המספר, לא של התהליך ששלח.
+    globalSlot: true,
     gapMs,
     maxPerRun,
     template:   null,

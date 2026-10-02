@@ -229,7 +229,17 @@ function fakeDb(initial) {
         once: async () => snapOf(get(p)),
         set:  async v => put(p, v),
         update: async v => put(p, { ...(get(p) || {}), ...v }),
+        //  ⚠️ פיירבייס קוראת לפונקציה **פעמיים**: תחילה עם הערך שבמטמון
+        //  המקומי — שהוא null — ורק אחר כך עם הערך מהשרת. פונקציה שמחזירה
+        //  undefined בקריאה הראשונה מבטלת את הטרנזקציה כולה, ופיירבייס
+        //  לעולם לא מביאה את הערך האמיתי.
+        //
+        //  הכפיל הקודם קרא פעם אחת בלבד, עם הערך האמיתי. הוא היה נדיב מדי,
+        //  ולכן אחת-עשרה בדיקות idempotency עברו על קוד ששום תפיסה בו לא
+        //  עבדה בפועל. L9005 נתקעה בתור בגלל בדיוק זה.
         async transaction(fn) {
+          const first = fn(null);
+          if (first === undefined) return { committed: false, snapshot: snapOf(undefined) };
           const cur  = get(p);
           const next = fn(cur === undefined ? null : cur);
           if (next === undefined) return { committed: false, snapshot: snapOf(cur) };
@@ -337,6 +347,133 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
   check('it is closed as expired',       db._data.waOutbox[q.key].state, 'expired');
   check('and never retried',             await ob.lgWaPending(db, 10), []);
 })();
+
+/* ═══ 5ב · הלקח של הטרנזקציה ═══════════════════════════════════════ */
+//
+//  ⚠️ זה הבאג שהחזיק את L9005 בתור שעה שלמה (02/10/2026):
+//
+//      if (!cur) return;   // abort
+//
+//  פיירבייס קוראת לפונקציית העדכון פעמיים — תחילה עם המטמון המקומי,
+//  שהוא null, ורק אחר כך עם הערך מהשרת. undefined פירושו "בטל", ולכן
+//  הטרנזקציה מתה בקריאה הראשונה והערך האמיתי מעולם לא נקרא.
+//
+//  committed=false תמיד · attempts נשאר 0 · שום הודעה לא יצאה אי פעם.
+{
+  const SRC = fs.readFileSync(path.join(ROOT, 'api', '_wa-outbox.js'), 'utf8');
+  const strip = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+  const claim = strip(SRC.slice(SRC.indexOf('async function lgWaClaim'),
+                               SRC.indexOf('async function lgWaComplete')));
+  check('the claim never aborts on the initial null pass',
+        /if\s*\(\s*!\s*cur\s*\)\s*return\s*;/.test(claim), false);
+  check('it returns null there so firebase re-runs with the server value',
+        /if\s*\(cur === null\)\s*return null;/.test(claim), true);
+  /* ⚠️ commit על null פירושו שהרשומה באמת אינה קיימת — אחרת היינו
+     "תופסים" רשומה ריקה ומנסים לשלוח אותה */
+  check('and a commit on null is not treated as a claim',
+        /if \(!entry\) return \{ claimed: false/.test(SRC), true);
+
+  /* ואותה טעות לא חוזרת בהזמנת החלון */
+  const slot = strip(SRC.slice(SRC.indexOf('async function lgWaReserveSlot')));
+  check('the slot reservation never aborts on null either',
+        /if\s*\(\s*!\s*cur\s*\)\s*return\s*;/.test(slot), false);
+}
+
+/* ═══ 5ג · הקצב גלובלי, לא לכל תהליך ═══════════════════════════════ */
+//
+//  ⚠️ הגרסה הראשונה הסתמכה על sleep בתוך ה-drain. שני טאבים פתוחים נתנו
+//  קצב אפקטיבי של gap/2 — ו-WhatsApp סופרת את הקצב של **המספר**, לא של
+//  התהליך ששלח. המרווח הוא תכונה של המופע, ולכן הוא חי בבסיס הנתונים.
+(async () => {
+  const GAP = 10000, MAX_WAIT = 15000;
+
+  withEnv(GREEN_ENV, m => {
+    check('green paces through the global slot', m.lgWaProvider().globalSlot, true);
+  });
+  withEnv(META_ENV, m => {
+    /* ⚠️ Meta היא הערוץ הרשמי, אין סיכון חסימה, וההתנהגות בייצור לא זזה */
+    check('meta does NOT — its pacing stays in-process', m.lgWaProvider().globalSlot, false);
+  });
+
+  const db = fakeDb({});
+  const r1 = await ob.lgWaReserveSlot(db, GAP, MAX_WAIT);
+  const r2 = await ob.lgWaReserveSlot(db, GAP, MAX_WAIT);
+
+  check('the first sender goes immediately', [r1.ok, r1.waitMs < 500], [true, true]);
+  /* ⚠️ זו הטענה שבן ביקש: שני drain-ים מקבילים לא יכולים לשלוח לשני
+     נמענים בתוך פחות מ-10 שניות. השני **חייב** להמתין gap מלא. */
+  check('a second concurrent sender must wait a full gap',
+        [r2.ok, r2.waitMs >= GAP - 500], [true, true]);
+  check('and their send windows are a full gap apart',
+        r2.slotAt - r1.slotAt >= GAP, true);
+
+  /* השלישי כבר מעבר למה שמותר להמתין — נסוג במקום לתפוס עתיד רחוק */
+  const r3 = await ob.lgWaReserveSlot(db, GAP, MAX_WAIT);
+  check('a third one is refused rather than queued far into the future', r3.ok, false);
+  check('and refusing costs nothing — it took no window',
+        db._data.waMeta.sendSlot.nextAllowedAt - Date.now() <= 2 * GAP + 500, true);
+
+  /* ⚠️ crash אחרי תפיסת חלון: החלון מתבזבז, אבל התור אינו נתקע. המחיר
+     חסום ב-gap אחד, כי nextAllowedAt מתקדם ב-gap בדיוק. */
+  const before = db._data.waMeta.sendSlot.nextAllowedAt;
+  await ob.lgWaReserveSlot(db, GAP, 60000);          // "נתפס ואז קרס"
+  const after = db._data.waMeta.sendSlot.nextAllowedAt;
+  check('a crash after reserving costs exactly one window, no more',
+        after - before, GAP);
+
+  /* ⚠️ ערך פגום או שעון שסטה היו מקפיאים את התור לשעות. התקרה מאפסת. */
+  const db2 = fakeDb({ waMeta: { sendSlot: { nextAllowedAt: Date.now() + 86400000 } } });
+  const r4 = await ob.lgWaReserveSlot(db2, GAP, MAX_WAIT);
+  check('a corrupt far-future value does not freeze the queue', r4.ok, true);
+  check('it sends now instead of in a day', r4.waitMs < 500, true);
+
+  /* הקצב אינו ניתן לעקיפה בריבוי "תהליכים" — עשר הזמנות, עשרה חלונות */
+  const db3 = fakeDb({});
+  const slots = [];
+  for (let i = 0; i < 10; i++) {
+    const r = await ob.lgWaReserveSlot(db3, GAP, 10 * GAP);
+    if (r.ok) slots.push(r.slotAt);
+  }
+  check('ten concurrent drains get ten windows, not ten sends', slots.length, 10);
+  const tooClose = slots.slice(1).filter((t, i) => t - slots[i] < GAP);
+  check('and no two windows are closer than the gap', tooClose, []);
+})();
+
+/* ═══ 5ד · ה-drain מכבד את החלון ═══════════════════════════════════ */
+{
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  check('the drain reserves a window before it claims',
+        DRAIN.indexOf('lgWaReserveSlot') > -1 &&
+        DRAIN.indexOf('lgWaReserveSlot') < DRAIN.indexOf('await lgWaClaim'), true);
+  /* ⚠️ הסדר מכוון: תפיסה לפני חלון הייתה מחייבת לשחרר תפיסה שכבר ספרה ניסיון */
+  check('only for a provider that paces globally', /if \(provider\.globalSlot\)/.test(DRAIN), true);
+  check('and the in-process sleep is now meta-only',
+        /if \(!provider\.globalSlot &&/.test(DRAIN), true);
+  check('a busy window defers rather than sending early',
+        /status: 'deferred'/.test(DRAIN), true);
+}
+
+/* ═══ 5ה · הכשל מפסיק להיות שקט ════════════════════════════════════ */
+{
+  const FB = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+  const WD = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
+
+  /* ⚠️ זה מה שהסתיר את L9005 שעה שלמה: ענף אחד להצלחה ו-catch ריק */
+  check('the load kick no longer swallows everything',
+        /lgWaDrain\(\)\.then\(r => \{\s*if\(r && r\.ok && r\.sent\)/.test(WD), false);
+  check('it routes through one outcome handler',
+        /lgWaDrain\(\)\.then\(_waDrainOutcome\)/.test(WD), true);
+  check('messages waiting with nothing moving is reported as a fault',
+        /const stalled = remaining > 0 && sent === 0 && failed === 0 && deferred === 0/.test(FB), true);
+  check('and the server answer is kept so there is something to investigate',
+        /detail = \(d\.results \|\| \[\]\)\.slice/.test(FB), true);
+  const outcome = (WD.match(/function _waDrainOutcome[\s\S]*?\n}/) || [''])[0];
+  check('a stall reaches both the screen and the console',
+        /console\.error\('\[WhatsApp\]/.test(outcome) && /showToast\(/.test(outcome), true);
+  /* ⚠️ אבל בלי הצפה: מי שרק פתח מסך ואין מה לשלוח לא מקבל כלום */
+  check('while a quiet queue stays quiet',
+        /if\(!r \|\| r\.alreadyRunning\) return;/.test(outcome), true);
+}
 
 /* ═══ 6 · מקור אמת אחד ═════════════════════════════════════════════ */
 {

@@ -96,7 +96,21 @@ async function lgWaClaim(db, key, claimedBy) {
   const now = Date.now();
 
   const r = await db.ref(OUTBOX + '/' + key).transaction(cur => {
-    if (!cur)                   return;   // abort — נעלמה
+    //  ⚠️ null ולא undefined, וזה ההבדל בין עובד לשבור.
+    //
+    //  פיירבייס קוראת לפונקציה הזו **פעמיים**: תחילה עם הערך שבמטמון
+    //  המקומי — שבפונקציה serverless הוא תמיד null — ורק אחר כך עם הערך
+    //  מהשרת. undefined פירושו "בטל", ולכן `if (!cur) return;` ביטל את
+    //  הטרנזקציה בקריאה הראשונה, והערך האמיתי מעולם לא נקרא.
+    //
+    //  התוצאה: committed=false תמיד, attempts נשאר 0, ו**שום הודעה לא
+    //  יצאה אי פעם**. L9005 ישבה בתור pending בלי שאף תנאי אמיתי נכשל.
+    //  (02/10/2026)
+    //
+    //  החזרת null שומרת על ההיעדר ומאפשרת לפיירבייס לקרוא שוב עם הערך
+    //  מהשרת. אם הרשומה באמת אינה קיימת — הטרנזקציה תסגור על null,
+    //  וזה נבדק אחרי ה-commit.
+    if (cur === null)           return null;
     if (cur.state === 'sent')   return;   // abort — הלקוח קיבל
     if (cur.state === 'expired') return;  // abort — פג תוקף
     if (cur.claimedAt && (now - cur.claimedAt) < CLAIM_TTL_MS) return;  // abort — באוויר
@@ -116,7 +130,10 @@ async function lgWaClaim(db, key, claimedBy) {
     const cur = r.snapshot.val() || {};
     return { claimed: false, entry: cur, reason: cur.state || 'לא נתפסה' };
   }
-  const entry = r.snapshot.val() || {};
+  const entry = r.snapshot.val();
+  // ⚠️ commit על null פירושו שהרשומה באמת אינה קיימת — ר' ההערה בטרנזקציה.
+  // בלי הבדיקה הזו היינו "תופסים" רשומה ריקה ומנסים לשלוח אותה.
+  if (!entry) return { claimed: false, entry: {}, reason: 'נעלמה' };
   // התפיסה "הצליחה" גם כשהיא רק סימנה פג-תוקף — אבל אין מה לשלוח
   if (entry.state === 'expired') return { claimed: false, entry, reason: 'expired' };
   return { claimed: true, entry, reason: '' };
@@ -139,6 +156,53 @@ async function lgWaComplete(db, key, result) {
   });
 }
 
+// ─── חלון השליחה הגלובלי ────────────────────────────────────────────
+//
+//  ⚠️ המרווח בין נמענים הוא תכונה של **מופע ה-WhatsApp**, לא של התהליך.
+//
+//  הגרסה הראשונה הסתמכה על sleep בתוך ה-drain. זה עובד כל עוד יש drain
+//  אחד — ושני טאבים פתוחים, או drain בדפדפן יחד עם אחד בשרת, נתנו קצב
+//  אפקטיבי של gap/N. GREEN API מריצה מספר אמיתי של העסק, ו-WhatsApp סופרת
+//  את הקצב של המספר ולא של התהליך ששלח.
+//
+//  לכן הזמן עבר לבסיס הנתונים: כל שליחה **מזמינה חלון** בטרנזקציה אטומית,
+//  וזו נקודת הסנכרון היחידה. עשרה drain-ים מקבילים מקבלים עשרה חלונות
+//  במרווח gap זה מזה.
+//
+//  מה זה מבטיח ומה לא:
+//    ✓ ריווח בין **זמני ההתחלה** של שליחות, בכל התהליכים יחד
+//    ✗ לא נעילה הדדית. עם 10 שניות בין חלונות ושליחה של ~שנייה, חפיפה
+//      אינה אפשרית מעשית — וריווח הוא מה שמגבלת הקצב דורשת.
+//
+//  crash אחרי הזמנת חלון: החלון מתבזבז, והמחיר הוא gap אחד של שקט. התור
+//  אינו נתקע, כי התפיסה של ההודעה עצמה פגה אחרי CLAIM_TTL_MS.
+const SLOT = 'waMeta/sendSlot';
+
+//  ⚠️ תקרת שפיות. maxWait ממילא מונע מ-nextAllowedAt להתרחק יותר מ-
+//  gap+maxWait, ולכן ערך רחוק מכאן פירושו שעון שסטה או נתון פגום. בלי
+//  התקרה, ערך כזה היה מקפיא את התור לשעות בלי שאיש יבין למה.
+const SLOT_MAX_FUTURE_MS = 10 * 60 * 1000;
+
+//  מזמין את החלון הפנוי הבא. מחזיר { ok, waitMs, slotAt }.
+//  ok=false פירושו שהעתיד הקרוב תפוס — הקורא יפסיק את הסבב ויחזור.
+async function lgWaReserveSlot(db, gapMs, maxWaitMs) {
+  const r = await db.ref(SLOT).transaction(cur => {
+    // ⚠️ null-first — אותו לקח כמו ב-lgWaClaim. כאן זה לא מסוכן כי אנחנו
+    // לא מבטלים על ערך ריק, אבל הצורה חייבת להישאר נכונה: הפונקציה נקראת
+    // פעמיים, ורק הקריאה השנייה רואה את הערך מהשרת.
+    const now  = Date.now();
+    const prev = (cur && Number(cur.nextAllowedAt)) || 0;
+    const base = (prev > now + SLOT_MAX_FUTURE_MS) ? now : prev;
+    const slot = Math.max(now, base);
+    if (slot - now > maxWaitMs) return;          // abort — העתיד הקרוב תפוס
+    return { nextAllowedAt: slot + gapMs, updatedAt: now };
+  });
+
+  if (!r.committed) return { ok: false, waitMs: 0, slotAt: 0 };
+  const slotAt = (Number((r.snapshot.val() || {}).nextAllowedAt) || 0) - gapMs;
+  return { ok: true, waitMs: Math.max(0, slotAt - Date.now()), slotAt };
+}
+
 //  מה ממתין לשליחה. מחזיר מפתחות בלבד, ובסדר הכניסה.
 //  limit קטן בכוונה: ה-drain מוגבל ממילא, ואין טעם לקרוא תור שלם.
 async function lgWaPending(db, limit) {
@@ -153,6 +217,6 @@ async function lgWaPending(db, limit) {
 }
 
 module.exports = {
-  lgWaMsgKey, lgWaEnqueue, lgWaClaim, lgWaComplete, lgWaPending,
-  OUTBOX, CLAIM_TTL_MS, MAX_ATTEMPTS, MAX_AGE_MS,
+  lgWaMsgKey, lgWaEnqueue, lgWaClaim, lgWaComplete, lgWaPending, lgWaReserveSlot,
+  OUTBOX, SLOT, CLAIM_TTL_MS, MAX_ATTEMPTS, MAX_AGE_MS, SLOT_MAX_FUTURE_MS,
 };
