@@ -87,7 +87,7 @@ module.exports = async function handler(req, res) {
   // הנזק כאן חמור מכל השאר: מסמך מיותר בחשבשבת מבטלים, הודעה שיצאה ללקוח
   // כבר נקראה. אצל Meta זו החסימה הגלובלית של _env.js; אצל GREEN API אלה
   // ארבע הנעילות, והן נבדקות **לכל נמען בנפרד**. ר' _wa-provider.js.
-  const envGate = provider.gate();
+  const envGate = provider.ready();
 
   try {
     const db      = _db();
@@ -126,10 +126,10 @@ module.exports = async function handler(req, res) {
                           clientName: String(order.orderClient || 'לקוח'), orderNums };
       const params    = provider.params(facts);
 
-      // ⚠️ השער נבדק כאן עם הטלפון בפורמט **המקומי** ולא עם to. אצל GREEN
-      // API נעילה 3 משווה אותו ל-GREENAPI_TEST_TO כפי שהוא מוגדר, ו-972...
-      // לא היה תואם לו לעולם.
-      const gate = provider.gate(target.phone);
+      // ⚠️ השער מקבל את מה ש-resolvePhone החזיר — מפתח הכרטיס והטלפון
+      // בפורמט המקומי. ההרשאה נשענת על המפתח; הטלפון משמש רק לנעילת
+      // הנמען האופציונלית. 972... כאן היה מכשיל כל שליחה.
+      const gate = provider.gate({ phone: target.phone, accountKey: target.accountKey });
 
       if (dryRun || !configured || !gate.allowed) {
         results.push({

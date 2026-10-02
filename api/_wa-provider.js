@@ -45,7 +45,7 @@
 //    GREENAPI_MAX_PER_RUN    ברירת מחדל 10
 // ═══════════════════════════════════════════════════════════════════
 
-const { lgExternal, lgGreenApiTest } = require('./_env');
+const { lgExternal, lgGreenApiGate, lgGreenApiEnvReady } = require('./_env');
 const { toWaNumber } = require('./_wa-recipient');
 
 //  ⚠️ המלכודת כאן אמיתית ועלתה בבדיקה: Number('') הוא 0, ו-0 הוא מספר
@@ -106,8 +106,10 @@ function metaProvider() {
     template:   TEMPLATE,
     nextGap() { return 250; },
 
-    // אותה חסימה גלובלית שהייתה כאן תמיד — ר' _env.js
-    gate() { const e = lgExternal(); return { allowed: e.allowed, reason: e.reason }; },
+    // אותה חסימה גלובלית שהייתה כאן תמיד — ר' _env.js.
+    // ⚠️ ctx מתעלם: אצל Meta ההחלטה אינה תלויה בנמען, והיא לא השתנתה.
+    gate(_ctx) { const e = lgExternal(); return { allowed: e.allowed, reason: e.reason }; },
+    ready()    { const e = lgExternal(); return { allowed: e.allowed, reason: e.reason }; },
 
     // התבנית מקבלת שני משתנים: שם הלקוח ומספר ההזמנה. עבור kind='ready'
     // עם הזמנה אחת זו **אותה מחרוזת בדיוק** שנשלחה עד היום.
@@ -184,12 +186,21 @@ function greenProvider() {
       return Math.max(500, jittered);
     },
 
-    // ⚠️ מקבל את הטלפון **לפני** ההמרה לפורמט הבין-לאומי, כי lgGreenApiTest
-    // משווה אותו ל-GREENAPI_TEST_TO כפי שהוא מוגדר — בפורמט מקומי. העברת
-    // 972... לכאן הייתה מכשילה כל שליחה, וזו טעות שקל ליפול בה.
-    gate(localPhone) {
-      const g = lgGreenApiTest(localPhone);
+    //  ⚠️ מקבל את מה ש-resolvePhone החזיר: accountKey וטלפון **בפורמט
+    //  המקומי**, לפני ההמרה ל-972. GREENAPI_ONLY_TO מוגדר בפורמט מקומי,
+    //  והעברת 972... לכאן הייתה מכשילה כל שליחה ב-TEST.
+    //
+    //  ⚠️ ההרשאה נשענת על accountKey ולא על הטלפון: טלפון אפשר להחליף
+    //  בהזמנה, מפתח כרטיס לא.
+    gate(ctx) {
+      const g = lgGreenApiGate(ctx || {});
       return { allowed: g.allowed, reason: g.reason };
+    },
+    //  נעילות הסביבה בלבד, בלי נמען — כדי שתשובת ה-API תוכל לומר "הסביבה
+    //  מוכנה" מבלי להמציא לקוח. אותן נעילות, לא עותק שלהן.
+    ready() {
+      const e = lgGreenApiEnvReady();
+      return { allowed: e.allowed, reason: e.reason };
     },
 
     params({ kind, clientName, orderNums }) { return [renderText({ kind, clientName, orderNums })]; },

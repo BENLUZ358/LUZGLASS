@@ -120,7 +120,7 @@ module.exports = async function handler(req, res) {
     const liveIds    = live.map(x => x.id);
     const facts      = { to, kind: 'dispatched', clientName, orderNums };
 
-    const gate = provider.gate(to);
+    const gate = provider.gate({ phone: to, accountKey: targets[0].accountKey });
 
     if (dryRun || !provider.configured || !gate.allowed) {
       res.status(200).json({

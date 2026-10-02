@@ -149,11 +149,14 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
         /blocked: !gate\.allowed/.test(wa), true);
   /* ⚠️ השער נבדק לפני כל שליחה, והשליחה עצמה יושבת בספק. בלי בדיקת הקיום
      ההשוואה חסרת ערך: -1 קטן מכל דבר. */
+  /* ⚠️ השער מקבל עכשיו את מה ש-resolvePhone החזיר — מפתח הכרטיס והטלפון —
+     כי ההרשאה נשענת על המפתח ולא על המספר. הסדר לא השתנה: שער, ואז שליחה. */
   check('whatsapp-send.js consults the gate before it hands off to the provider',
-        wa.includes('provider.gate(target.phone)') && wa.includes('await provider.send(facts)') &&
-        wa.indexOf('provider.gate(target.phone)') < wa.indexOf('await provider.send(facts)'), true);
+        wa.includes('provider.gate({ phone: target.phone, accountKey: target.accountKey })') &&
+        wa.includes('await provider.send(facts)') &&
+        wa.indexOf('provider.gate({') < wa.indexOf('await provider.send(facts)'), true);
   check('and the meta gate is still lgExternal itself',
-        /gate\(\) \{ const e = lgExternal\(\); return \{ allowed: e\.allowed, reason: e\.reason \}; \}/.test(prv), true);
+        /gate\(_ctx\) \{ const e = lgExternal\(\);/.test(prv), true);
 
   /* ── ובהרצה, לא בקריאה: החסימה עצמה ──
      זו הטענה שבאמת חשובה, ולכן היא נבדקת על ידי הרצת הקוד מול שתי סביבות
@@ -171,13 +174,13 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
                  WA_PROVIDER: undefined, LG_ENV: undefined };
 
   asEnv({ ...META, FIREBASE_SERVICE_ACCOUNT: key('lussglass') }, m =>
-    check('running on production, whatsapp is allowed out', m.lgWaProvider().gate().allowed, true));
+    check('running on production, whatsapp is allowed out', m.lgWaProvider().gate({}).allowed, true));
   asEnv({ ...META, FIREBASE_SERVICE_ACCOUNT: key('luz-glass-test') }, m =>
     check('running on TEST, it is blocked — no message reaches a real customer',
-          m.lgWaProvider().gate().allowed, false));
+          m.lgWaProvider().gate({}).allowed, false));
   asEnv({ ...META, FIREBASE_SERVICE_ACCOUNT: key('') }, m =>
     check('and an unrecognised project is blocked by default',
-          m.lgWaProvider().gate().allowed, false));
+          m.lgWaProvider().gate({}).allowed, false));
 
   for (const f of ['hashavshevet-items.js', 'hashavshevet-accounts.js', 'hashavshevet-getpdf.js']) {
     const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');

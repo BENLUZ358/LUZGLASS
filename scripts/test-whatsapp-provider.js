@@ -135,39 +135,161 @@ const GREEN_ENV = {
   });
 }
 
-/* ═══ 3 · ארבע הנעילות, דרך הספק ════════════════════════════════════ */
+/* ═══ 3 · השער המשותף — שש נעילות, קוד אחד לשתי הסביבות ═══════════ */
+//
+//  ⚠️ אין בשער שום הסתעפות על "איזו סביבה זו" לצורך לוגיקה עסקית.
+//  ההבדל היחיד שמודע לסביבה הוא ה-invariant של הרשימה החתומה, והוא
+//  בדיקת שפיות ולא כלל עסקי.
 {
-  withEnv({ ...GREEN_ENV, FIREBASE_SERVICE_ACCOUNT: sa('lussglass') }, m =>
-    check('green is refused on production even when fully configured',
-          m.lgWaProvider().gate('0501234567').allowed, false));
-  withEnv({ ...GREEN_ENV, GREENAPI_TEST_ENABLED: undefined }, m =>
-    check('green is refused without GREENAPI_TEST_ENABLED=1',
-          m.lgWaProvider().gate('0501234567').allowed, false));
-  withEnv({ ...GREEN_ENV }, m => {
+  const LIVE = { ...GREEN_ENV,
+    FIREBASE_SERVICE_ACCOUNT:  sa('lussglass'),
+    GREENAPI_ALLOWED_ACCOUNTS: 'lussglass:14201',
+    GREENAPI_ONLY_TO:          undefined };        // בייצור אין נעילת נמען
+  const TESTENV = { ...GREEN_ENV,
+    GREENAPI_ALLOWED_ACCOUNTS: 'luz-glass-test:TEST-WA',
+    GREENAPI_ONLY_TO:          '0547725552' };
+
+  /* ── TEST ── */
+  withEnv(TESTENV, m => {
     const p = m.lgWaProvider();
-    check('the allowed number passes',    p.gate('0501234567').allowed, true);
-    check('a different number is refused', p.gate('0509999999').allowed, false);
-    check('and refused, not silently redirected',
-          /אינו המספר המורשה/.test(p.gate('0509999999').reason), true);
+    check('TEST-WA with the test number passes',
+          p.gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed, true);
+    check('and the number may be written with dashes',
+          p.gate({ accountKey: 'TEST-WA', phone: '054-772-5552' }).allowed, true);
+
+    /* ⚠️ נעילה 6 — "GREENAPI_ONLY_TO חוסם נמען אחר" */
+    check('GREENAPI_ONLY_TO blocks a different recipient',
+          p.gate({ accountKey: 'TEST-WA', phone: '0509999999' }).allowed, false);
+    check('and says so, rather than silently redirecting',
+          /אינו המספר המורשה/.test(p.gate({ accountKey: 'TEST-WA', phone: '0509999999' }).reason), true);
+
+    /* ⚠️ נעילה 3 — "הזמנה ללא כרטיס נחסמת" */
+    for (const k of [null, undefined, '', '   ']) {
+      check('an order with no account card is blocked (' + JSON.stringify(k) + ')',
+            p.gate({ accountKey: k, phone: '0547725552' }).allowed, false);
+    }
+    check('and the reason names the missing card',
+          /אין כרטיס לקוח/.test(p.gate({ accountKey: null, phone: '0547725552' }).reason), true);
+
+    /* ⚠️ נעילה 5 — "account שאינו מורשה נחסם" */
+    check('an account outside the allowlist is blocked',
+          p.gate({ accountKey: '14201', phone: '0547725552' }).allowed, false);
+    check('and the reason names it',
+          /14201 אינו ברשימת המורשים/.test(p.gate({ accountKey: '14201', phone: '0547725552' }).reason), true);
   });
 
-  /* ⚠️ המלכודת שעלתה לנו דקה של חשיבה ושווה בדיקה לנצח: lgGreenApiTest
-     משווה ל-GREENAPI_TEST_TO בפורמט מקומי. אם מעבירים לשער את המספר אחרי
-     ההמרה לבין-לאומי, הוא לא תואם — וכל שליחה הייתה נחסמת בלי סיבה. */
-  withEnv({ ...GREEN_ENV }, m => {
+  /* ── ה-invariant: הרשימה חתומה על שם הפרויקט ──
+     ⚠️ הדרישה המרכזית: טעות אנוש שתעתיק את משתני הייצור לפרויקט TEST
+     לא תאפשר ל-TEST לשלוח ללקוחות אמיתיים. */
+  withEnv({ ...TESTENV, GREENAPI_ALLOWED_ACCOUNTS: 'lussglass:14201' }, m => {
     const p = m.lgWaProvider();
-    check('the gate takes the LOCAL phone, not the 972 form',
-          [p.gate('0501234567').allowed, p.gate('972501234567').allowed], [true, false]);
+    check('copying the production allowlist into TEST blocks the real customer',
+          p.gate({ accountKey: '14201', phone: '0505887576' }).allowed, false);
+    check('and blocks everything else too — not partially',
+          p.gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed, false);
+    check('the reason points at the mismatch, not at the customer',
+          /מונפקת לפרויקט lussglass/.test(p.gate({ accountKey: '14201' }).reason), true);
+  });
+  /* ⚠️ והכיוון ההפוך: רשימת TEST לא פותחת כלום בייצור */
+  withEnv({ ...LIVE, GREENAPI_ALLOWED_ACCOUNTS: 'luz-glass-test:TEST-WA' }, m =>
+    check('and a TEST allowlist opens nothing on production',
+          m.lgWaProvider().gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed, false));
+
+  check('TEST-WA works under luz-glass-test, and only where the list says so',
+        [ withEnv(TESTENV, m => m.lgWaProvider().gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed),
+          withEnv({ ...TESTENV, FIREBASE_SERVICE_ACCOUNT: sa('lussglass') },
+                  m => m.lgWaProvider().gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed) ],
+        [true, false]);
+
+  /* ── ייצור: אותו קוד, הגדרה אחרת ── */
+  withEnv(LIVE, m => {
+    const p = m.lgWaProvider();
+    check('the approved pilot customer passes on production',
+          p.gate({ accountKey: '14201', phone: '0505887576' }).allowed, true);
+    /* ⚠️ בייצור אין נעילת נמען — חייבים לשלוח לכל לקוח מאושר */
+    check('and any phone of theirs is fine, because ONLY_TO is unset',
+          p.gate({ accountKey: '14201', phone: '0500000000' }).allowed, true);
+    check('while a different customer is still blocked',
+          p.gate({ accountKey: '9021', phone: '0525187857' }).allowed, false);
+    check('and a missing card is blocked on production too',
+          p.gate({ accountKey: null, phone: '0505887576' }).allowed, false);
   });
 
-  /* Meta עוברת דרך החסימה הגלובלית, ובכיוון ההפוך: הייצור הוא המותר */
+  /* ── נעילות 1, 2, 4 ── */
+  withEnv({ ...TESTENV, WA_PROVIDER: undefined }, m =>
+    check('without WA_PROVIDER=green nothing is allowed',
+          m.lgWaProvider().gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed, false));
+  for (const bad of [undefined, '', '   ', 'TEST-WA', ':TEST-WA', 'luz-glass-test:', 'luz-glass-test']) {
+    withEnv({ ...TESTENV, GREENAPI_ALLOWED_ACCOUNTS: bad }, m =>
+      check('a malformed allowlist (' + JSON.stringify(bad) + ') blocks everything',
+            m.lgWaProvider().gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed, false));
+  }
+  withEnv({ ...TESTENV, GREENAPI_TOKEN: undefined }, m =>
+    check('missing credentials block',
+          m.lgWaProvider().gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed, false));
+  withEnv({ ...TESTENV, FIREBASE_SERVICE_ACCOUNT: '{bad json' }, m =>
+    check('an unreadable service account blocks — fail-safe, not fail-open',
+          m.lgWaProvider().gate({ accountKey: 'TEST-WA', phone: '0547725552' }).allowed, false));
+
+  /* ── רשימה עם כמה לקוחות ── */
+  withEnv({ ...LIVE, GREENAPI_ALLOWED_ACCOUNTS: 'lussglass:14201, 9021 ,509' }, m => {
+    const p = m.lgWaProvider();
+    check('several accounts can be approved, spaces and all',
+          ['14201', '9021', '509', '999'].map(k => p.gate({ accountKey: k }).allowed),
+          [true, true, true, false]);
+  });
+
+  /* ⚠️ אותה רשימה לשני סוגי ההודעות: השער אינו מקבל kind בכלל, ולכן אי
+     אפשר לאשר ready ולשכוח dispatched */
+  const ENVSRC = fs.readFileSync(path.join(ROOT, 'api', '_env.js'), 'utf8');
+  const gateFn = ENVSRC.slice(ENVSRC.indexOf('function lgGreenApiGate'));
+  check('the gate cannot tell ready from dispatched — one list covers both',
+        /\bkind\b/.test(gateFn.slice(0, gateFn.indexOf('\n}'))), false);
+
+  /* ── Meta לא נגעה ── */
   withEnv(META_ENV, m =>
-    check('meta is allowed on production', m.lgWaProvider().gate().allowed, true));
+    check('meta is still allowed on production', m.lgWaProvider().gate({}).allowed, true));
   withEnv({ ...META_ENV, FIREBASE_SERVICE_ACCOUNT: sa('luz-glass-test') }, m =>
-    check('and blocked everywhere else', m.lgWaProvider().gate().allowed, false));
+    check('and blocked everywhere else', m.lgWaProvider().gate({}).allowed, false));
   withEnv({ ...META_ENV, LG_ENV: 'test' }, m =>
     check('LG_ENV=test still blocks meta even on production',
-          m.lgWaProvider().gate().allowed, false));
+          m.lgWaProvider().gate({}).allowed, false));
+  /* ⚠️ ומסלול Meta אינו רואה את הרשימה בכלל */
+  withEnv({ ...META_ENV, GREENAPI_ALLOWED_ACCOUNTS: 'lussglass:999' }, m =>
+    check('meta ignores the allowlist entirely', m.lgWaProvider().gate({}).allowed, true));
+}
+
+/* ═══ 3ב · מה שהשער עצמו מחזיר ═════════════════════════════════════ */
+//
+//  הועבר מ-scripts/test-greenapi.js, שנמחק: הוא נבנה סביב lgGreenApiTest
+//  ובדק את אותו שער מזווית שנייה. שני קבצים שבודקים שער אחד הם בדיוק
+//  התחזוקה הכפולה שאנחנו מנסים למנוע.
+{
+  const SECRET = 'SECRET-TOKEN-abc123xyz';
+  withEnv({ ...GREEN_ENV,
+            GREENAPI_TOKEN: SECRET,
+            GREENAPI_ID_INSTANCE: '1101900001',
+            GREENAPI_ALLOWED_ACCOUNTS: 'luz-glass-test:TEST-WA',
+            GREENAPI_ONLY_TO: '0501234567' }, m => {
+    const g = m.lgWaProvider().gate({ accountKey: 'TEST-WA', phone: '0501234567' });
+    const asText = JSON.stringify(g);
+    /* ⚠️ ב-GREEN API הטוקן יושב בתוך ה-URL, ולכן כל אובייקט שמכיל אותו
+       עלול להגיע ללוג או לתשובה. השער מחזיר החלטה בלבד. */
+    check('the gate never returns the token',  asText.includes(SECRET), false);
+    check('nor the instance id',               asText.includes('1101900001'), false);
+    check('only the decision and its reason',  Object.keys(g).sort(), ['allowed', 'reason']);
+  });
+
+  /* החסימה הגלובלית לא ידעה ולא תדע דבר על GREEN API */
+  const ENV3 = fs.readFileSync(path.join(ROOT, 'api', '_env.js'), 'utf8');
+  const ext  = (ENV3.match(/function lgExternal\(\)[\s\S]*?\n\}/) || [''])[0];
+  check('lgExternal is untouched by the GREEN API gate', /GREENAPI/.test(ext), false);
+
+  /* ומסלול Meta אינו קורא אף אישור של GREEN API */
+  const strip3 = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+  const SEND3  = strip3(fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-send.js'), 'utf8'));
+  check('the sender never reads a GREEN API credential',
+        /GREENAPI_(TOKEN|ID_INSTANCE|ALLOWED|ONLY_TO)/.test(SEND3), false);
 }
 
 /* ═══ 4 · הטוקן אינו דולף ═══════════════════════════════════════════ */
@@ -296,18 +418,57 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
   check('and a missing account key is empty, not absent',
         db2._data.waOutbox[q2.key].accountKey, '');
 
-  /* ⚠️ והחשוב: הם לא נגעו בשליחה עצמה */
+  /* ⚠️ accountKey כבר אינו תיעוד בלבד — הוא **מפתח ההרשאה** של השער.
+     phoneSource נשאר תיעוד טהור, ואסור שישפיע על החלטה כלשהי. */
   const PROV = fs.readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8');
-  check('the provider never reads them — they are documentation only',
-        /phoneSource|accountKey/.test(PROV), false);
+  check('phoneSource never influences a decision',
+        /phoneSource/.test(PROV), false);
+  const ENVSRC2 = fs.readFileSync(path.join(ROOT, 'api', '_env.js'), 'utf8');
+  check('while accountKey is what the gate authorises on',
+        /env\.keys\.indexOf\(key\) < 0/.test(ENVSRC2), true);
   const REC = fs.readFileSync(path.join(ROOT, 'api', '_wa-recipient.js'), 'utf8');
   check('and resolvePhone itself was not touched',
         /return \{ phone: norm\(acc\.phone\), source: 'hashavshevet', accountKey: String\(key\) \};/.test(REC), true);
 
+  /* ⚠️ החותמת משקפת את מה שנפתר **ברגע השליחה**, לא את מה שנשמר בהכנסה
+     לתור. מה שנשמר נשאר לצד זה, כדי שאפשר יהיה לראות פער. */
   const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
-  check('the stamp on the order carries them through',
-        /phoneSource: entry\.phoneSource/.test(DRAIN) && /accountKey:\s+entry\.accountKey/.test(DRAIN), true);
+  check('the stamp records what actually decided the send',
+        /phoneSource: live\.source/.test(DRAIN) && /accountKey:\s+live\.accountKey/.test(DRAIN), true);
+  check('and keeps the queued value beside it for comparison',
+        /queuedAccountKey: entry\.accountKey/.test(DRAIN), true);
 })();
+
+/* ═══ 5ו · הבדיקה החוזרת מהנתונים החיים ════════════════════════════ */
+//
+//  ⚠️ ה-accountKey שברשומה הוא תיעוד, לא הרשאה. בין ההכנסה לתור לבין
+//  השליחה יכולים לחלוף דקות: הכרטיס יכול להשתנות, הלקוח יכול לרדת
+//  מרשימת המורשים, וההזמנה יכולה להיות מסומנת פיקטיבית.
+{
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+
+  check('the drain re-resolves the card from the order before sending',
+        /const live = await resolvePhone\(db, order\);/.test(DRAIN), true);
+  /* ⚠️ הסדר הוא העיקר: הפתרון מחדש **לפני** השער, והשער לפני השליחה */
+  check('and it does so before the gate, which is before the send',
+        DRAIN.indexOf('await resolvePhone(db, order)') < DRAIN.indexOf('provider.gate(') &&
+        DRAIN.indexOf('provider.gate(') < DRAIN.indexOf('await provider.send('), true);
+  check('the gate is asked with the live result, not the stored one',
+        /provider\.gate\(\{ phone: live\.phone, accountKey: live\.accountKey \}\)/.test(DRAIN), true);
+  /* ⚠️ לא רק ההרשאה — גם הנמען. הכרטיס הוא מקור האמת בשני הדברים. */
+  check('and the message goes to the live phone, not the queued one',
+        /to:\s+live\.phone/.test(DRAIN), true);
+  check('the stored accountKey is never consulted for permission',
+        /entry\.accountKey/.test(DRAIN.slice(DRAIN.indexOf('const live ='),
+                                             DRAIN.indexOf('await provider.send('))), false);
+
+  /* הזמנה שנעלמה או סומנה פיקטיבית אחרי ההכנסה לתור */
+  check('an order that vanished blocks the send', /ההזמנה לא נמצאה/.test(DRAIN), true);
+  check('and one marked fictitious after queueing blocks too',
+        /if \(order\.isTest\)/.test(DRAIN), true);
+  check('a blocked message is closed as failed, not left hanging',
+        (DRAIN.match(/status: 'blocked'/g) || []).length >= 3, true);
+}
 
 /* ── הכלי הזמני אינו קיים יותר ──────────────────────────────────────── */
 {
@@ -315,8 +476,10 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
         fs.existsSync(path.join(ROOT, 'api', 'whatsapp-test.js')), false);
   /* ⚠️ אבל השער שלו נשאר ועבר תפקיד: הוא היום השער של ספק green */
   const ENV = fs.readFileSync(path.join(ROOT, 'api', '_env.js'), 'utf8');
-  check('but lgGreenApiTest stayed — it guards the real path now',
-        /function lgGreenApiTest/.test(ENV), true);
+  /* ⚠️ lgGreenApiTest הוחלף ב-lgGreenApiGate — שער אחד לשתי הסביבות.
+     שתי פונקציות שער היו אומרות שכל תיקון עתידי צריך להיעשות פעמיים. */
+  check('there is exactly one gate, not one per environment',
+        [/function lgGreenApiGate/.test(ENV), /function lgGreenApiTest\s*\(/.test(ENV)], [true, false]);
   /* ⚠️ על קוד חי בלבד. ההפניה ההיסטורית בהערה של _env.js מסבירה מאיפה
      הנעילות הגיעו, והיא שווה יותר מההקפדה על היעדר המחרוזת. זו הפעם
      השלישית היום שביטוי "אין X" תפס תיעוד נכון. */
@@ -534,6 +697,75 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
   check('while a quiet queue stays quiet',
         /if\(!r \|\| r\.alreadyRunning\) return;/.test(outcome), true);
 }
+
+/* ═══ 5ז · ה-re-resolve חוסם בפועל, לא רק במבנה ════════════════════ */
+//
+//  ⚠️ הבדיקות הקודמות מאמתות שהקוד **כתוב** נכון. כאן מריצים את ההחלטה
+//  עצמה: resolvePhone האמיתי מול בסיס נתונים מדומה, ואז השער האמיתי.
+//
+//  זה התרחיש שבגללו ביקשנו re-resolve: רשומה יושבת בתור עם accountKey
+//  אחד, ועד שהיא יוצאת הכרטיס אומר משהו אחר. אם נסמוך על מה שנשמר —
+//  נשלח הודעה שאסור לשלוח.
+(async () => {
+  const { resolvePhone } = require(path.join(ROOT, 'api', '_wa-recipient.js'));
+
+  //  TEST: קיים כרטיס TEST-WA בלבד, בדיוק כמו בסביבה האמיתית
+  const db = fakeDb({
+    hashavshevetAccounts: { 'TEST-WA': { key: 'TEST-WA', phone: '0547725552' } },
+    users: { '0500000777': { customerId: 'TEST-WA' },
+             '0505887576': { customerId: '14201' } },
+    orders: {
+      ok:      { id: 'ok',      customerId: 'TEST-WA', phone: '0500000777' },
+      moved:   { id: 'moved',   customerId: '14201',   phone: '0505887576' },
+      viaUser: { id: 'viaUser', clientPhone: '0500000777', phone: '0500000777' },
+      noCard:  { id: 'noCard',  clientPhone: '0509999999', phone: '0509999999' },
+    },
+  });
+
+  const TESTENV = { ...GREEN_ENV,
+    GREENAPI_ALLOWED_ACCOUNTS: 'luz-glass-test:TEST-WA',
+    GREENAPI_ONLY_TO:          '0547725552' };
+
+  const decide = async id => {
+    const order = (await db.ref('orders/' + id).once('value')).val();
+    const live  = await resolvePhone(db, order);
+    const allowed = withEnv(TESTENV, m =>
+      m.lgWaProvider().gate({ phone: live.phone, accountKey: live.accountKey }).allowed);
+    return { allowed, key: live.accountKey, source: live.source };
+  };
+
+  const ok = await decide('ok');
+  check('a live card that is on the list sends',
+        [ok.allowed, ok.key, ok.source], [true, 'TEST-WA', 'hashavshevet']);
+
+  /* ⚠️ זה הלב: ההזמנה מצביעה על 14201, הכרטיס אינו קיים בסביבה הזו,
+     resolvePhone נופל ל-order.phone — ו**אין accountKey**. חסום. */
+  const moved = await decide('moved');
+  check('an order whose card is not in this environment resolves to no key',
+        [moved.key, moved.source], [null, 'order']);
+  check('and is therefore blocked, however it got into the outbox', moved.allowed, false);
+
+  /* המסלול שעובד בפרודקשן: בלי customerId, דרך טלפון ההתחברות */
+  const viaUser = await decide('viaUser');
+  check('the usual path — no customerId, found through the login phone',
+        [viaUser.allowed, viaUser.key], [true, 'TEST-WA']);
+
+  const noCard = await decide('noCard');
+  check('a customer with no card at all is blocked', noCard.allowed, false);
+
+  /* ⚠️ והתרחיש המלא שביקשנו: הרשומה בתור אומרת TEST-WA ומאושרת, אבל
+     הנתונים החיים אומרים אחרת. מה שנשמר אינו מה שמחליט. */
+  const q = await ob.lgWaEnqueue(db, {
+    kind: 'ready', to: '0547725552', clientName: 'ל', orderNums: ['L1'],
+    orderIds: ['moved'], queuedBy: 'a',
+    phoneSource: 'hashavshevet', accountKey: 'TEST-WA',   // ← נשמר כמאושר
+  });
+  check('the queued record claims an approved account',
+        db._data.waOutbox[q.key].accountKey, 'TEST-WA');
+  const atSendTime = await decide('moved');
+  check('but the live re-resolve overrides it and blocks the send',
+        atSendTime.allowed, false);
+})();
 
 /* ═══ 6 · מקור אמת אחד ═════════════════════════════════════════════ */
 {

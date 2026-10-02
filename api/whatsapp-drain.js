@@ -24,6 +24,7 @@ const { verifyAdmin }   = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaClaim, lgWaComplete, lgWaPending, lgWaReserveSlot } = require('./_wa-outbox');
+const { resolvePhone } = require('./_wa-recipient');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -91,18 +92,53 @@ module.exports = async function handler(req, res) {
       const { claimed, entry, reason } = await lgWaClaim(db, key, auth.phone);
       if (!claimed) { results.push({ key, status: 'skipped', reason }); continue; }
 
-      // ⚠️ השער נבדק על כל הודעה בנפרד, ועם הטלפון בפורמט המקומי — ר'
-      // ההערה ב-_wa-provider.js. בלי זה נעילה 3 של GREEN API לא עובדת.
-      const gate = provider.gate(entry.to);
-      if (!gate.allowed || !provider.configured) {
-        const why = !gate.allowed ? gate.reason : 'הספק אינו מוגדר בסביבה הזו';
+      // ── בדיקה חוזרת מהנתונים החיים, לפני כל יציאה אמיתית ──
+      //
+      //  ⚠️ ה-accountKey שנשמר ברשומה הוא **תיעוד, לא הרשאה**. בין ההכנסה
+      //  לתור לבין השליחה יכולים לחלוף דקות: הכרטיס יכול להשתנות, הלקוח
+      //  יכול לרדת מרשימת המורשים, וההזמנה יכולה להיות מסומנת פיקטיבית.
+      //  סמיכה על מה שנכתב פירושה שרשומה שנכתבה שגוי תישלח.
+      //
+      //  לכן פותרים מחדש מההזמנה עצמה, ומה שחוזר הוא שקובע — גם את
+      //  ההרשאה וגם את הנמען.
+      const firstId = (entry.orderIds || [])[0];
+      const snap    = firstId ? await db.ref('orders/' + firstId).once('value') : null;
+      const order   = snap && snap.val();
+
+      if (!order) {
+        const why = 'ההזמנה לא נמצאה — לא נשלחה הודעה';
+        await lgWaComplete(db, key, { ok: false, reason: why });
+        results.push({ key, status: 'blocked', reason: why });
+        continue;
+      }
+      // הזמנה שסומנה פיקטיבית אחרי ההכנסה לתור
+      if (order.isTest) {
+        const why = 'ההזמנה סומנה פיקטיבית — לא נשלחה הודעה';
         await lgWaComplete(db, key, { ok: false, reason: why });
         results.push({ key, status: 'blocked', reason: why });
         continue;
       }
 
+      const live = await resolvePhone(db, order);
+      const gate = provider.gate({ phone: live.phone, accountKey: live.accountKey });
+
+      if (!gate.allowed || !provider.configured || !live.phone) {
+        const why = !live.phone          ? 'אין מספר טלפון ללקוח'
+                  : !gate.allowed        ? gate.reason
+                  :                        'הספק אינו מוגדר בסביבה הזו';
+        await lgWaComplete(db, key, { ok: false, reason: why });
+        results.push({ key, status: 'blocked', reason: why });
+        continue;
+      }
+
+      // ⚠️ הכרטיס הוא מקור האמת גם לנמען. אם הלקוח החליף מספר מאז ההכנסה
+      // לתור, ההודעה תצא למספר המעודכן — וההפרש נרשם כדי שיהיה מה לחקור.
+      if (live.phone !== entry.to) {
+        console.log('whatsapp-drain: recipient changed since enqueue', { key, source: live.source });
+      }
+
       const out = await provider.send({
-        to:         entry.to,
+        to:         live.phone,
         kind:       entry.kind,
         clientName: entry.clientName,
         orderNums:  entry.orderNums,
@@ -122,12 +158,14 @@ module.exports = async function handler(req, res) {
         sentAt:      out.ok ? Date.now() : null,
         attemptedAt: Date.now(),
         sentBy:      entry.queuedBy || auth.phone,
-        to:          entry.to,
+        to:          live.phone,
         // ⚠️ דרך מה נמצא המספר. במסלול הישיר של Meta השדות האלה נכתבו
         // תמיד; ב-drain הם חסרו, ולכן אי אפשר היה לענות בדיעבד על
         // "למה ההודעה יצאה דווקא למספר הזה".
-        phoneSource: entry.phoneSource || null,
-        accountKey:  entry.accountKey  || null,
+        // ⚠️ מה שנפתר **בשליחה**, לא מה שנשמר בהכנסה. זה מה שבאמת קבע.
+        phoneSource: live.source     || null,
+        accountKey:  live.accountKey || null,
+        queuedAccountKey: entry.accountKey || null,
         provider:    provider.name,
         kind:        entry.kind,
         orderNums:   entry.orderNums,

@@ -103,51 +103,104 @@ function lgDatabaseUrl() {
   return 'https://' + pid + '-default-rtdb.europe-west1.firebasedatabase.app';
 }
 
-// ─── GREEN API · השער של ספק green ─────────────────────────────────
+// ─── GREEN API · שער אחד, לשתי הסביבות ────────────────────────────
 //
-//  ⚠️ נולד ככלי בדיקה זמני (api/whatsapp-test.js) — והוא **כבר לא** כזה.
-//  הקובץ ההוא נמחק ב-02/10/2026, והפונקציה הזו היא היום השער שדרכו עובר
-//  ספק green ב-_wa-provider.js. כל שליחה מ-TEST נבדקת כאן, פר-נמען.
+//  ⚠️ **אותו קוד רץ ב-TEST ובייצור.** אין כאן שום הסתעפות על "איזו
+//  סביבה זו" לצורך לוגיקה עסקית — ההבדל חי כולו בערכי הסביבה.
 //
-//  lgExternal לא שונה. החסימה הגלובלית נשארת על כל ה-endpoints; זהו חור
-//  נפרד, בעל שם, שאי אפשר לפתוח בטעות — וארבע נעילות שומרות עליו:
+//  הגרסה הקודמת (lgGreenApiTest) חסמה את הייצור מבנית, לפי project_id.
+//  ההגנה ההיא לא יכלה לשרוד את הדרישה "הייצור חייב לשלוח", ולכן היא
+//  הוחלפה בשש נעילות שכולן fail-safe:
 //
-//    1. חסום בייצור. ⚠️ הכיוון ההפוך מ-lgExternal, ובכוונה: הפרודקשן
-//       מדבר עם לקוחות אמיתיים דרך Meta, ו-green הוא מסלול TEST בלבד.
-//    2. GREENAPI_TEST_ENABLED=1 — חסר, ריק או כל ערך אחר = חסום.
-//    3. הנמען חייב להיות בדיוק GREENAPI_TEST_TO. אין רשימה, יש מספר אחד.
-//    4. אישורי החיבור חייבים להיות שניהם.
+//    1. WA_PROVIDER=green — הפעלה מפורשת
+//    2. אישורי החיבור קיימים שניהם
+//    3. יש accountKey. ⚠️ אין כרטיס לקוח → אין הודעה, לעולם. הזמנה
+//       שנפלה ל-order.phone אינה יכולה לעבור מכאן.
+//    4. הרשימה שייכת לפרויקט הזה — ר' למטה
+//    5. ה-accountKey נמצא ברשימה
+//    6. נעילת נמען, אם הוגדרה (GREENAPI_ONLY_TO)
+//
+//  ─── למה הרשימה חתומה על שם הפרויקט ────────────────────────────────
+//
+//  ⚠️ זה ה-invariant היחיד שמודע לסביבה, והוא **אינו לוגיקה עסקית אלא
+//  בדיקת שפיות**: טעות אנוש שתעתיק את משתני הייצור לפרויקט ה-TEST לא
+//  תאפשר ל-TEST לשלוח ללקוחות אמיתיים.
+//
+//      GREENAPI_ALLOWED_ACCOUNTS = lussglass:14201
+//                                  luz-glass-test:TEST-WA
+//
+//  הקידומת נבדקת מול project_id שנגזר ממפתח השירות — אותו מקור שעליו
+//  בנוי lgExternal, והיחיד שכבר מבדיל בין הסביבות ואי אפשר להעתיק אותו
+//  בלי שהעתקה כזו תהיה הבעיה הקטנה.
+//
+//  ושכבה שנייה קיימת בחינם: resolvePhone קורא את hashavshevetAccounts
+//  של בסיס הנתונים הנוכחי. ב-TEST קיים TEST-WA בלבד, ולכן שום הזמנה שם
+//  לא יכולה להיפתר ל-14201 — הכרטיס פשוט לא נמצא שם.
 //
 //  ⚠️ ולא מחזיר את הטוקן. ב-GREEN API הטוקן יושב בתוך ה-URL
 //  (/waInstance{id}/sendMessage/{token}), ולכן כל אובייקט שמכיל אותו עלול
 //  להגיע ללוג או לתשובה. הקורא קורא אותו מהסביבה בעצמו, ברגע השליחה בלבד.
 const _digits = p => String(p || '').replace(/\D/g, '');
 
-function lgGreenApiTest(to) {
-  const projectId = _projectId();
+//  "<project_id>:<key1>,<key2>" → { project, keys }
+//  כל צורה אחרת מחזירה רשימה ריקה, וריק פירושו חסום.
+function _lgParseAllowlist(raw) {
+  const s = String(raw || '').trim();
+  const i = s.indexOf(':');
+  if (i < 1) return { project: '', keys: [] };
+  return {
+    project: s.slice(0, i).trim(),
+    keys: s.slice(i + 1).split(',').map(k => k.trim()).filter(Boolean),
+  };
+}
 
-  if (projectId === LG_LIVE_PROJECT) {
-    return { allowed: false, reason: 'כלי הבדיקה של GREEN API חסום בסביבת הייצור' };
-  }
-  if (String(process.env.GREENAPI_TEST_ENABLED || '').trim() !== '1') {
-    return { allowed: false, reason: 'GREEN API לא הופעל בסביבה הזו (GREENAPI_TEST_ENABLED)' };
-  }
-
-  const allowTo = _digits(process.env.GREENAPI_TEST_TO);
-  if (!allowTo) {
-    return { allowed: false, reason: 'לא הוגדר נמען מורשה (GREENAPI_TEST_TO)' };
-  }
-  // נמען לא נמסר — נשלח למורשה. נמסר ושונה — מסורב, ולא "מתוקן" בשקט.
-  const target = _digits(to);
-  if (target && target !== allowTo) {
-    return { allowed: false, reason: 'הנמען אינו המספר המורשה לבדיקה' };
+//  נעילות 1, 2, 4 — כל מה שאינו תלוי בנמען מסוים.
+//  קיימת בנפרד כדי שמסך יוכל לשאול "האם הסביבה בכלל מוכנה" בלי להמציא
+//  לקוח, ו-lgGreenApiGate מרכיב אותה — אין כאן שני עותקים של אותו כלל.
+function lgGreenApiEnvReady() {
+  if (String(process.env.WA_PROVIDER || '').trim().toLowerCase() !== 'green') {
+    return { allowed: false, reason: 'GREEN API אינו הספק הפעיל בסביבה הזו (WA_PROVIDER)' };
   }
   if (!process.env.GREENAPI_ID_INSTANCE || !process.env.GREENAPI_TOKEN) {
     return { allowed: false, reason: 'חסרים אישורי GREEN API בסביבה' };
   }
-
-  // to בלבד. בלי idInstance ובלי token — ר' ההערה למעלה.
-  return { allowed: true, reason: '', to: allowTo };
+  const list = _lgParseAllowlist(process.env.GREENAPI_ALLOWED_ACCOUNTS);
+  if (!list.keys.length) {
+    return { allowed: false, reason: 'לא הוגדרה רשימת לקוחות מורשים (GREENAPI_ALLOWED_ACCOUNTS)' };
+  }
+  const pid = _projectId();
+  if (!pid || list.project !== pid) {
+    return { allowed: false,
+             reason: 'רשימת הלקוחות המורשים מונפקת לפרויקט ' +
+                     (list.project || 'ללא שם') + ' ולא לפרויקט הנוכחי — חסום' };
+  }
+  return { allowed: true, reason: '', keys: list.keys };
 }
 
-module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl, lgGreenApiTest, LG_LIVE_PROJECT };
+//  השער המלא. מקבל את מה ש-resolvePhone החזיר.
+function lgGreenApiGate(ctx) {
+  const env = lgGreenApiEnvReady();
+  if (!env.allowed) return { allowed: false, reason: env.reason };
+
+  const key = String((ctx && ctx.accountKey) == null ? '' : ctx.accountKey).trim();
+  // ⚠️ נעילה 3. זו שהופכת "לא מצאנו כרטיס" מחולשה להגנה.
+  if (!key) {
+    return { allowed: false, reason: 'אין כרטיס לקוח להזמנה — לא נשלחת הודעה' };
+  }
+  if (env.keys.indexOf(key) < 0) {
+    return { allowed: false, reason: 'הלקוח ' + key + ' אינו ברשימת המורשים לשליחה' };
+  }
+
+  // נעילה 6 — פעילה רק כשהוגדרה. ב-TEST היא מצמצמת למספר אחד; בייצור
+  // היא אינה מוגדרת, כי שם צריך לשלוח לכל לקוח מאושר.
+  const only = _digits(process.env.GREENAPI_ONLY_TO);
+  if (only && _digits(ctx && ctx.phone) !== only) {
+    return { allowed: false, reason: 'הנמען אינו המספר המורשה בסביבה הזו' };
+  }
+
+  // accountKey בלבד. בלי idInstance ובלי token — ר' ההערה למעלה.
+  return { allowed: true, reason: '', accountKey: key };
+}
+
+module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl,
+                   lgGreenApiGate, lgGreenApiEnvReady, LG_LIVE_PROJECT };
