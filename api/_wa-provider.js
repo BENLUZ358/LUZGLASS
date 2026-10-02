@@ -68,7 +68,8 @@ const num = (v, dflt) => {
 //  ומספרי הזמנה אחרים. זה יצא לטובה ולא בכוונה.
 const BUSINESS = 'לוז זגגות ומראות האחים בע"מ';
 
-const PORTAL_LINE = 'לפרטים נוספים ניתן להיכנס למשתמש שלך בלוז גלאס ולצפות בפרטי ההזמנה.';
+const portalLine = n => 'לפרטים נוספים ניתן להיכנס למשתמש שלך בלוז גלאס ולצפות ב' +
+                         (n > 1 ? 'פרטי ההזמנות.' : 'פרטי ההזמנה.');
 
 function renderText({ kind, clientName, orderNums, sketchNames }) {
   const who  = String(clientName || 'לקוח');
@@ -80,15 +81,21 @@ function renderText({ kind, clientName, orderNums, sketchNames }) {
     const s = String((sketchNames || [])[i] || '').trim();
     return s ? nums[i] + ' — ' + s : nums[i];
   };
-  const wrap = body => `שלום ${who},\n\n${body}\n\n${PORTAL_LINE}\n\n${BUSINESS}`;
+  //  ⚠️ שורת הסיום מתאימה את עצמה למספר ההזמנות. היא נוסחה ביחיד כשכל
+  //  הודעה נשאה הזמנה אחת; מרגע שיש קיבוץ, "בפרטי ההזמנה" על שלוש הזמנות
+  //  פשוט שגוי.
+  const wrap = body => `שלום ${who},\n\n${body}\n\n${portalLine(nums.length)}\n\n${BUSINESS}`;
+  const bullets = () => nums.map((_, i) => '• ' + label(i)).join('\n');
 
   if (kind === 'dispatched') {
     return nums.length > 1
-      ? wrap('ההובלה יצאה אליך עם ההזמנות:\n' + nums.map((_, i) => '• ' + label(i)).join('\n'))
+      ? wrap('ההובלה יצאה אליך עם ההזמנות:\n' + bullets())
       : wrap('ההובלה יצאה אליך עם הזמנה ' + label(0) + '.');
   }
+  //  ⚠️ רשימה ולא שרשור בפסיקים: שלוש הזמנות עם שמות סקיצה בשורה אחת
+  //  הופכות למשפט שאי אפשר לקרוא בטלפון.
   return nums.length > 1
-    ? wrap('ההזמנות ' + nums.map((_, i) => label(i)).join(', ') + ' מוכנות לאיסוף.')
+    ? wrap('ההזמנות הבאות מוכנות לאיסוף:\n' + bullets())
     : wrap('ההזמנה ' + label(0) + ' מוכנה לאיסוף.');
 }
 

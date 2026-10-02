@@ -1,11 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════
-//  /api/whatsapp-dispatch — הודעה אחת ללקוח על הובלה שיצאה.
+//  /api/whatsapp-dispatch — **הודעה אחת ללקוח**, על קבוצת הזמנות.
 //
-//  ─── למה endpoint נפרד ולא הרחבה של whatsapp-send ───────────────────
+//  ⚠️ השם נשאר מימיו כשטיפל בהובלות בלבד. היום הוא מטפל בשני הסוגים:
+//  kind='dispatched' (ההובלה יצאה) ו-kind='ready' (מוכן לאיסוף). שינוי
+//  השם היה שובר נתיב חי בשביל קוסמטיקה.
 //
-//  הסמנטיקה הפוכה. whatsapp-send הוא הודעה פר-הזמנה; כאן זו **הודעה אחת
-//  לכמה הזמנות**. לדחוף את שתיהן לאותה לולאה היה אומר שהתנאים של אחת
-//  נוגעים בשנייה, והמסלול שעובד בפרודקשן הוא זה שהיה משלם.
+//  ─── למה כאן ולא ב-whatsapp-send ────────────────────────────────────
+//
+//  whatsapp-send הוא הודעה **פר-הזמנה**; כאן זו הודעה אחת לכמה הזמנות.
+//  כשהתברר שגם "מוכן לאיסוף" צריך קיבוץ, הברירה הייתה לבנות מנגנון שני
+//  שם או למחזר את זה. הקיבוץ כאן כבר הוכח בייצור על L1071 — פתרון
+//  הנמען בשרת, הסירוב על טלפונים שונים, ומפתח דטרמיניסטי על הקבוצה —
+//  ולכן ההרחבה כאן, ולא עותק.
 //
 //  ─── הטריגר ────────────────────────────────────────────────────────
 //
@@ -61,6 +67,9 @@ module.exports = async function handler(req, res) {
   const orderIds = [...new Set((Array.isArray(body.orderIds) ? body.orderIds : []).map(String))].sort();
   // ברירת מחדל: לא שולחים. אותו כלל כמו whatsapp-send ומאותה סיבה.
   const dryRun   = body.dryRun !== false;
+  const force    = body.force === true;
+  //  'dispatched' נשאר ברירת המחדל — קוד ישן שאינו מוסר kind לא משנה התנהגות
+  const kind     = body.kind === 'ready' ? 'ready' : 'dispatched';
 
   if (!orderIds.length)             { res.status(400).json({ error: 'orderIds חסר' }); return; }
   if (orderIds.length > MAX_ORDERS) { res.status(400).json({ error: `יותר מדי הזמנות (מקסימום ${MAX_ORDERS})` }); return; }
@@ -81,6 +90,13 @@ module.exports = async function handler(req, res) {
       // הזמנה פיקטיבית לעולם לא שולחת ללקוח אמיתי. היא גם לא נכנסת למספרי
       // ההזמנות שבהודעה — אחרת היא הייתה מופיעה אצל הלקוח.
       if (order.isTest) { loaded.push({ id, skip: 'הזמנה פיקטיבית', isTest: true }); continue; }
+      //  ⚠️ חד-פעמיות פר-הזמנה, ורק ב-ready. בלי זה הזמנה שכבר קיבלה
+      //  "מוכן לאיסוף" הייתה נכנסת שוב לקבוצה אחרת ומקבלת הודעה שנייה —
+      //  המפתח הדטרמיניסטי שומר על קבוצה זהה, לא על הזמנה בודדת.
+      //  ב-dispatched אין שדה כזה: הובלה היא אירוע, לא מצב של ההזמנה.
+      if (kind === 'ready' && order.whatsapp && order.whatsapp.sentAt && !force) {
+        loaded.push({ id, skip: 'כבר נשלחה הודעת מוכן לאיסוף' }); continue;
+      }
       loaded.push({ id, order });
     }
 
@@ -120,13 +136,13 @@ module.exports = async function handler(req, res) {
     // ⚠️ אותו סדר בדיוק כמו orderNums — שתי המערכות נבנות מאותה רשימה
     const sketchNames = live.map(x => orderSketchName(x.order));
     const liveIds    = live.map(x => x.id);
-    const facts      = { to, kind: 'dispatched', clientName, orderNums, sketchNames };
+    const facts      = { to, kind, clientName, orderNums, sketchNames };
 
     const gate = provider.gate({ phone: to, accountKey: targets[0].accountKey });
 
     if (dryRun || !provider.configured || !gate.allowed) {
       res.status(200).json({
-        ok: true, queued: false, preview: true,
+        ok: true, queued: false, preview: true, kind,
         // ⚠️ המסך צריך להבדיל בין "לא מוגדר בסביבה" לבין "נחסם" —
         // הראשון אינו תקלה ואין להציג אותו למזכירה. ר' _waDispatch.
         configured: provider.configured,
@@ -145,14 +161,14 @@ module.exports = async function handler(req, res) {
     // ⚠️ מפתח התור נגזר מ-kind + מזהי ההזמנות הממוינים, ולכן לחיצה כפולה
     // מייצרת אותו מפתח ולא הודעה שנייה. ר' _wa-outbox.js.
     const q = await lgWaEnqueue(db, {
-      kind: 'dispatched', to, clientName, orderNums, sketchNames,
+      kind, to, clientName, orderNums, sketchNames,
       orderIds: liveIds, queuedBy: auth.phone,
       // תיעוד בלבד — ר' lgWaEnqueue
       phoneSource: targets[0].source, accountKey: targets[0].accountKey,
     });
 
     res.status(200).json({
-      ok: true, queued: q.queued, outboxKey: q.key, configured: provider.configured,
+      ok: true, queued: q.queued, outboxKey: q.key, configured: provider.configured, kind,
       provider: provider.name, to, clientName, orderNums, sketchNames,
       phoneSource: targets[0].source, accountKey: targets[0].accountKey,
       reason: q.queued ? null : q.reason,
