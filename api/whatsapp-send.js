@@ -33,7 +33,7 @@ const { verifyAdmin } = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaEnqueue }   = require('./_wa-outbox');
-const { resolvePhone, toWaNumber } = require('./_wa-recipient');
+const { resolvePhone, toWaNumber, orderSketchName } = require('./_wa-recipient');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -121,9 +121,12 @@ module.exports = async function handler(req, res) {
       }
 
       const to        = toWaNumber(target.phone);
-      const orderNums = [String(order.orderNum || order.refNum || '')];
-      const facts     = { to: target.phone, kind: 'ready',
-                          clientName: String(order.orderClient || 'לקוח'), orderNums };
+      const orderNums   = [String(order.orderNum || order.refNum || '')];
+      // שם הסקיצה — המזהה שהלקוח מכיר. ר' orderSketchName ב-_wa-recipient.
+      const sketchNames = [orderSketchName(order)];
+      const facts       = { to: target.phone, kind: 'ready',
+                            clientName: String(order.orderClient || 'לקוח'),
+                            orderNums, sketchNames };
       const params    = provider.params(facts);
 
       // ⚠️ השער מקבל את מה ש-resolvePhone החזיר — מפתח הכרטיס והטלפון
@@ -155,7 +158,7 @@ module.exports = async function handler(req, res) {
       if (provider.queued) {
         const q = await lgWaEnqueue(db, {
           kind: 'ready', to: target.phone,
-          clientName: facts.clientName, orderNums,
+          clientName: facts.clientName, orderNums, sketchNames,
           orderIds: [orderId], queuedBy: auth.phone,
           // תיעוד בלבד — ר' lgWaEnqueue
           phoneSource: target.source, accountKey: target.accountKey,

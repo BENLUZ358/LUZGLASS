@@ -292,6 +292,106 @@ const GREEN_ENV = {
         /GREENAPI_(TOKEN|ID_INSTANCE|ALLOWED|ONLY_TO)/.test(SEND3), false);
 }
 
+/* ═══ 3ג · נוסח ההודעה ושם הסקיצה ══════════════════════════════════ */
+//
+//  ⚠️ מספר ההזמנה הוא המזהה **שלנו**. שם הסקיצה הוא מה שהלקוח הקליד
+//  בתור הסקיצות, ומה שהפורטל מציג לו — ולכן זה מה שהוא מזהה לפיו את
+//  העבודה. שרשרת ה-fallback אינה חדשה: היא זו של lgNormalizeOrder.
+{
+  const R = (kind, nums, sketches, who) =>
+    m0.renderText({ kind, clientName: who || 'דני', orderNums: nums, sketchNames: sketches });
+  const m0 = require(path.join(ROOT, 'api', '_wa-provider.js'));
+
+  /* ── ready ── */
+  const ready1 = R('ready', ['L1234'], ['מקלחון']);
+  check('ready names the order and the sketch', /ההזמנה L1234 — מקלחון מוכנה לאיסוף\./.test(ready1), true);
+  check('and greets the client',                /^שלום דני,\n\n/.test(ready1), true);
+  check('and points at the portal',
+        /לפרטים נוספים ניתן להיכנס למשתמש שלך בלוז גלאס ולצפות בפרטי ההזמנה\./.test(ready1), true);
+  check('and signs off',                        /לוז זגגות ומראות האחים בע"מ$/.test(ready1), true);
+
+  /* ⚠️ בלי שם — רק המספר, **בלי מקף תלוי באוויר** */
+  const ready0 = R('ready', ['L1234'], ['']);
+  check('without a sketch name the order still goes out',
+        /ההזמנה L1234 מוכנה לאיסוף\./.test(ready0), true);
+  check('and no dangling dash is left behind', /—/.test(ready0), false);
+  for (const empty of [null, undefined, '   ', []]) {
+    const t = m0.renderText({ kind: 'ready', clientName: 'דני', orderNums: ['L1'],
+                              sketchNames: Array.isArray(empty) ? empty : [empty] });
+    check('an empty sketch name (' + JSON.stringify(empty) + ') leaves no dash', /—/.test(t), false);
+  }
+
+  /* ── dispatched ── */
+  const one = R('dispatched', ['L1234'], ['מקלחון']);
+  check('a single delivery reads naturally',
+        /ההובלה יצאה אליך עם הזמנה L1234 — מקלחון\./.test(one), true);
+
+  const two = R('dispatched', ['L1234', 'L1235'], ['מקלחון', 'מראה']);
+  check('a grouped delivery lists every order on its own line',
+        /ההובלה יצאה אליך עם ההזמנות:\n• L1234 — מקלחון\n• L1235 — מראה/.test(two), true);
+  /* ⚠️ הודעה אחת, לא אחת לכל הזמנה — זה הכלל שבן קבע */
+  check('and it is still one message, not one per order',
+        (two.match(/שלום/g) || []).length, 1);
+  check('each order keeps its own sketch name',
+        two.includes('L1234 — מקלחון') && two.includes('L1235 — מראה'), true);
+
+  /* ⚠️ המקרה המעורב: לאחת יש שם ולשנייה אין */
+  const mixed = R('dispatched', ['L1234', 'L1235'], ['מקלחון', '']);
+  check('a group where one order has no name keeps the other intact',
+        /• L1234 — מקלחון\n• L1235\n/.test(mixed + '\n'), true);
+  check('and the nameless one carries no dash',
+        (mixed.match(/—/g) || []).length, 1);
+
+  /* ── שם הסקיצה: שרשרת ה-fallback, הגדרה אחת ── */
+  const { orderSketchName } = require(path.join(ROOT, 'api', '_wa-recipient.js'));
+  check('sketchName wins',            orderSketchName({ sketchName: 'א', type: 'ב', desc: 'ג' }), 'א');
+  check('then type',                  orderSketchName({ type: 'ב', desc: 'ג' }), 'ב');
+  check('then desc',                  orderSketchName({ desc: 'ג' }), 'ג');
+  check('and nothing is an answer',   orderSketchName({}), '');
+  check('whitespace is not a name',   orderSketchName({ sketchName: '   ' }), '');
+  /* ⚠️ אותה שרשרת בדיוק כמו lgNormalizeOrder — לא עותק שהתפצל */
+  const FB = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+  check('the chain matches the one lgNormalizeOrder already uses',
+        /sketchName:\s+o\.sketchName\s+\|\| o\.type\s+\|\| o\.desc \|\| ''/.test(FB), true);
+
+  /* ── Meta לא ראתה דבר מזה ── */
+  withEnv(META_ENV, m =>
+    /* ⚠️ לתבנית של Meta שני משתנים קבועים. שם הסקיצה אינו נכנס אליהם,
+       אחרת התנהגות הייצור הייתה משתנה. */
+    check('the meta template params are untouched by the sketch name',
+          m.lgWaProvider().params({ kind: 'ready', clientName: 'דני',
+                                    orderNums: ['L1234'], sketchNames: ['מקלחון'] }),
+          ['דני', 'L1234']));
+}
+
+/* ═══ 3ה · הטוסט שותק כשאין WhatsApp בסביבה ════════════════════════ */
+//
+//  ⚠️ "WhatsApp אינו מוגדר כאן" הוא מצב, לא תקלה. המזכירה לא אמורה לראות
+//  אותו בכל "סיים הובלה". אבל נחסם או נכשל — כן.
+{
+  const WD = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
+  const report   = (WD.match(/function _waReport[\s\S]*?\n}/) || [''])[0];
+  const dispatch = (WD.match(/async function _waDispatch[\s\S]*?\n}/) || [''])[0];
+
+  for (const [name, fn] of [['the ready path', report], ['the delivery path', dispatch]]) {
+    check(name + ' stays silent when WhatsApp is not configured',
+          /if\(!data\.configured\)\{/.test(fn), true);
+    check(name + ' still leaves something in the console',
+          /console\.info\('\[WhatsApp\]/.test(fn), true);
+    check(name + ' returns without a toast in that case',
+          /console\.info\([\s\S]{0,120}?\n\s*return;/.test(fn), true);
+  }
+  /* ⚠️ ומה שכן חייב להישאר גלוי */
+  check('a mixed-phone refusal is still shown', /res\.status === 409/.test(dispatch), true);
+  check('and a real block is still shown',      /הודעת ההובלה לא נשלחה/.test(dispatch), true);
+  check('a failed send is still shown',         /נכשלו/.test(report), true);
+
+  /* השרת מספק את הדגל שהמסך מסתמך עליו */
+  const DISP = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-dispatch.js'), 'utf8');
+  check('the dispatch endpoint reports whether the provider is configured',
+        (DISP.match(/configured: provider\.configured/g) || []).length, 2);
+}
+
 /* ═══ 4 · הטוקן אינו דולף ═══════════════════════════════════════════ */
 {
   const SRC = fs.readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8');
@@ -697,6 +797,42 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
   check('while a quiet queue stays quiet',
         /if\(!r \|\| r\.alreadyRunning\) return;/.test(outcome), true);
 }
+
+/* ═══ 3ד · המערך המקביל לא נגע במנגנון ═════════════════════════════ */
+(async () => {
+  const db = fakeDb({});
+  const base = { kind: 'dispatched', to: '0501234567', clientName: 'ל',
+                 orderIds: ['b', 'a'], queuedBy: 'x' };
+
+  const q = await ob.lgWaEnqueue(db, { ...base,
+    orderNums: ['L2', 'L1'], sketchNames: ['מראה', 'מקלחון'] });
+  const e = db._data.waOutbox[q.key];
+
+  /* ⚠️ orderNums לא שינה צורה ולא סדר — הוא עדיין מערך מחרוזות כפי שהיה */
+  check('orderNums is still a plain array of strings', e.orderNums, ['L2', 'L1']);
+  check('and sketchNames sits beside it, in the same order', e.sketchNames, ['מראה', 'מקלחון']);
+  check('neither carries rendered text', /—|שלום/.test(JSON.stringify(e.orderNums)), false);
+
+  /* ⚠️ המפתח מגבב orderIds בלבד, ולכן שם סקיצה אינו יכול לשנות אותו —
+     וזה מה ששומר על ה-idempotency בדיוק כפי שנבדק אתמול */
+  check('the message key is unchanged by sketch names',
+        q.key, ob.lgWaMsgKey('dispatched', ['a', 'b']));
+  const db2 = fakeDb({});
+  const q2 = await ob.lgWaEnqueue(db2, { ...base,
+    orderNums: ['L2', 'L1'], sketchNames: ['שם אחר לגמרי', 'וגם זה'] });
+  check('two different sketch names still produce the same key', q2.key, q.key);
+
+  /* חסר/עודף באורך המערך לא שובר כלום */
+  const db3 = fakeDb({});
+  const q3 = await ob.lgWaEnqueue(db3, { ...base, orderNums: ['L1', 'L2', 'L3'], sketchNames: ['רק אחד'] });
+  check('a short sketch list is padded, never misaligned',
+        db3._data.waOutbox[q3.key].sketchNames, ['רק אחד', '', '']);
+
+  /* ה-drain מעביר את המערך הלאה */
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  check('the drain passes the sketch names to the provider',
+        /sketchNames: entry\.sketchNames \|\| \[\]/.test(DRAIN), true);
+})();
 
 /* ═══ 5ז · ה-re-resolve חוסם בפועל, לא רק במבנה ════════════════════ */
 //

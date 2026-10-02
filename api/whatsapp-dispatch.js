@@ -33,7 +33,7 @@ const { verifyAdmin }   = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaEnqueue }   = require('./_wa-outbox');
-const { resolvePhone }  = require('./_wa-recipient');
+const { resolvePhone, orderSketchName } = require('./_wa-recipient');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -117,15 +117,20 @@ module.exports = async function handler(req, res) {
     const to         = targets[0].phone;
     const clientName = String(live[0].order.orderClient || 'לקוח');
     const orderNums  = live.map(x => String(x.order.orderNum || x.order.refNum || x.id));
+    // ⚠️ אותו סדר בדיוק כמו orderNums — שתי המערכות נבנות מאותה רשימה
+    const sketchNames = live.map(x => orderSketchName(x.order));
     const liveIds    = live.map(x => x.id);
-    const facts      = { to, kind: 'dispatched', clientName, orderNums };
+    const facts      = { to, kind: 'dispatched', clientName, orderNums, sketchNames };
 
     const gate = provider.gate({ phone: to, accountKey: targets[0].accountKey });
 
     if (dryRun || !provider.configured || !gate.allowed) {
       res.status(200).json({
         ok: true, queued: false, preview: true,
-        provider: provider.name, to, clientName, orderNums,
+        // ⚠️ המסך צריך להבדיל בין "לא מוגדר בסביבה" לבין "נחסם" —
+        // הראשון אינו תקלה ואין להציג אותו למזכירה. ר' _waDispatch.
+        configured: provider.configured,
+        provider: provider.name, to, clientName, orderNums, sketchNames,
         phoneSource: targets[0].source, accountKey: targets[0].accountKey,
         params:  provider.params(facts),
         blocked: !gate.allowed || undefined,
@@ -140,15 +145,15 @@ module.exports = async function handler(req, res) {
     // ⚠️ מפתח התור נגזר מ-kind + מזהי ההזמנות הממוינים, ולכן לחיצה כפולה
     // מייצרת אותו מפתח ולא הודעה שנייה. ר' _wa-outbox.js.
     const q = await lgWaEnqueue(db, {
-      kind: 'dispatched', to, clientName, orderNums,
+      kind: 'dispatched', to, clientName, orderNums, sketchNames,
       orderIds: liveIds, queuedBy: auth.phone,
       // תיעוד בלבד — ר' lgWaEnqueue
       phoneSource: targets[0].source, accountKey: targets[0].accountKey,
     });
 
     res.status(200).json({
-      ok: true, queued: q.queued, outboxKey: q.key,
-      provider: provider.name, to, clientName, orderNums,
+      ok: true, queued: q.queued, outboxKey: q.key, configured: provider.configured,
+      provider: provider.name, to, clientName, orderNums, sketchNames,
       phoneSource: targets[0].source, accountKey: targets[0].accountKey,
       reason: q.queued ? null : q.reason,
       skipped: loaded.filter(x => x.skip).map(x => ({ orderId: x.id, reason: x.skip })),

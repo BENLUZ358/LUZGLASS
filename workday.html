@@ -647,8 +647,14 @@ async function _waSendBulk(orderIds){
 function _waReport(data){
   const t = data.tally || {};
   if(data.dryRun){
+    // ⚠️ "WhatsApp אינו מוגדר בסביבה הזו" הוא **מצב, לא תקלה**, ואין סיבה
+    // שהמזכירה תראה אותו בכל פעולה. מי שצריך לדעת ימצא בקונסולה.
+    if(!data.configured){
+      console.info('[WhatsApp] לא מוגדר בסביבה הזו — לא נשלח כלום', data.reason||'');
+      return;
+    }
     const n = (t.preview||0);
-    showToast(`📱 ${n} הודעות מוכנות — וואטסאפ עדיין לא מחובר, לא נשלח כלום`);
+    showToast(`📱 ${n} הודעות מוכנות — ${data.reason || 'לא נשלח כלום'}`);
     return;
   }
   // ── ספק שמקצב לאט מחזיר "queued" ולא "sent" ──
@@ -2324,7 +2330,12 @@ async function _waDispatch(orderIds, clientName){
     if(!res.ok){ showToast('⚠️ הודעת ההובלה נכשלה: ' + (data.error||res.status)); return; }
 
     if(data.preview){
-      showToast('📱 הודעת ההובלה מוכנה — ' + (data.reason || 'לא נשלחה'));
+      // אותו כלל כמו ב-_waReport: לא מוגדר → שקט. נחסם → נראה.
+      if(!data.configured){
+        console.info('[WhatsApp] לא מוגדר בסביבה הזו — הודעת ההובלה לא נשלחה', data.reason||'');
+        return;
+      }
+      showToast('📱 הודעת ההובלה לא נשלחה — ' + (data.reason || 'חסומה'));
       return;
     }
     if(!data.queued){ showToast('📱 הודעת ההובלה ' + (data.reason || 'לא נכנסה לתור')); return; }
