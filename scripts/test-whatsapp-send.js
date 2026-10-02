@@ -20,6 +20,11 @@ const vm   = require('vm');
 
 const ROOT = path.join(__dirname, '..');
 const SRC  = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-send.js'), 'utf8');
+// toWaNumber ו-resolvePhone עברו ל-_wa-recipient.js, והספק ל-_wa-provider.js.
+// ⚠️ הם עברו כדי שלא ייווצר להם עותק שני כש-whatsapp-dispatch.js נוסף לידם —
+// זו התקלה החוזרת של הפרויקט הזה. הטענות עצמן לא השתנו, רק המקום.
+const REC  = fs.readFileSync(path.join(ROOT, 'api', '_wa-recipient.js'), 'utf8');
+const PRV  = fs.readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8');
 
 let failed = 0;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
@@ -28,7 +33,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 /* ── the number format Meta demands ────────────────────────────────────── */
 {
-  const fn = SRC.match(/function toWaNumber[\s\S]*?\n}/);
+  const fn = REC.match(/function toWaNumber[\s\S]*?\n}/);
   if (!fn) { console.error('FAIL  could not extract toWaNumber'); process.exit(1); }
   const ctx = { console };
   vm.createContext(ctx);
@@ -66,10 +71,13 @@ check('the browser sends order ids only',
 check('the phone is resolved server-side',
       /await resolvePhone\(db, order\)/.test(SRC), true);
 check('through the same chain as the card lookup',
-      /hashavshevetAccounts\/'/.test(SRC), true);
+      /hashavshevetAccounts\/'/.test(REC), true);
 
 /* bulk safety */
-check('a burst is paced rather than fired at once', /await sleep\(GAP_MS\)/.test(SRC), true);
+// ⚠️ הקצב הוא מאפיין של הספק ולא קבוע בקובץ: Meta ו-GREEN API רחוקות זו
+// מזו בשלושה סדרי גודל. אצל Meta הערך נשאר 250 בדיוק כפי שהיה.
+check('a burst is paced rather than fired at once', /await sleep\(provider\.gapMs\)/.test(SRC), true);
+check('and meta keeps the 250ms it always had', /gapMs:\s+250/.test(PRV), true);
 check('and capped per run', /orderIds\.length > MAX_PER_RUN/.test(SRC), true);
 
 /* ── it must be harmless before Meta is connected ──────────────────────── */
@@ -79,9 +87,9 @@ check('and capped per run', /orderIds\.length > MAX_PER_RUN/.test(SRC), true);
 check('missing Meta config falls back to preview',
       /if \(dryRun \|\| !configured\b[^)]*\)/.test(SRC), true);
 check('and a non-production environment falls back to preview too',
-      /if \(dryRun \|\| !configured \|\| !env\.allowed\)/.test(SRC), true);
+      /if \(dryRun \|\| !configured \|\| !gate\.allowed\)/.test(SRC), true);
 check('configured means all three variables',
-      /const configured = !!\(PHONE_ID && TOKEN && TEMPLATE\)/.test(SRC), true);
+      /configured: !!\(PHONE_ID && TOKEN && TEMPLATE\)/.test(PRV), true);
 
 /* ── the caller ────────────────────────────────────────────────────────── */
 {

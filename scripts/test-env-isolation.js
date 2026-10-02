@@ -92,18 +92,35 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
 
 /* ── כל endpoint שפונה החוצה מתייעץ עם השומר ────────────────────────── */
 {
+  /* ⚠️ היה כאן חריג אחד ומפורש: api/whatsapp-test.js, כלי בדיקה עם שומר
+     משלו. הקובץ נמחק (02/10/2026) והחריג ירד איתו — **אין היום אף endpoint
+     שפונה החוצה בלי lgExternal**, וזו טענה חזקה יותר ממה שהיה כאן קודם. */
+  const OWN_GUARD = {};
+
   const files = fs.readdirSync(path.join(ROOT, 'api')).filter(f => f.endsWith('.js'));
   const missing = [];
   for (const f of files) {
     const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
     const callsOut = /await fetch\(/.test(src);
-    const guarded  = /lgExternal\(\)/.test(src);
+    const guard    = OWN_GUARD[f] || 'lgExternal';
+    const guarded  = new RegExp(guard + '\\(').test(src);
     if (callsOut && !guarded) missing.push(f);
   }
-  check('every endpoint that calls out consults the guard', missing, []);
+  check('every endpoint that calls out consults a guard', missing, []);
+
+  /* ואין יותר אף חריג */
+  const exempt = files.filter(f => {
+    const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
+    return /await fetch\(/.test(src) && !/lgExternal\(/.test(src);
+  });
+  check('and nothing at all is exempt from the global block', exempt, []);
 
   /* והשומר נבדק לפני ה-fetch, לא אחריו */
-  for (const f of ['hashavshevet-order.js', 'hashavshevet-invoice.js', 'whatsapp-send.js',
+  /* ⚠️ whatsapp-send.js אינו ברשימה הזו יותר, והסיבה חשובה: ה-fetch עבר
+     ל-api/_wa-provider.js, ואיתו גם ההתייעצות עם lgExternal. החסימה לא
+     נחלשה — היא נבדקת עכשיו בהרצה אמיתית ולא בביטוי רגולרי, בבלוק שמיד
+     אחרי הלולאה. */
+  for (const f of ['hashavshevet-order.js', 'hashavshevet-invoice.js',
                    'hashavshevet-items.js', 'hashavshevet-accounts.js', 'hashavshevet-getpdf.js']) {
     const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
     check(f.padEnd(28) + ' checks before it fetches',
@@ -123,11 +140,47 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
     check(f.padEnd(28) + ' still records the attempt',
           /orders\/'? ?\+ ?orderId|update\(/.test(src), true);
   }
-  const wa = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-send.js'), 'utf8');
+  const wa  = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-send.js'), 'utf8');
+  const prv = fs.readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8');
+
   check('whatsapp adds the block to the existing preview gate',
-        /if \(dryRun \|\| !configured \|\| !env\.allowed\)/.test(wa), true);
+        /if \(dryRun \|\| !configured \|\| !gate\.allowed\)/.test(wa), true);
   check('and reports it as blocked, not as a silent dry run',
-        /blocked: !env\.allowed/.test(wa), true);
+        /blocked: !gate\.allowed/.test(wa), true);
+  /* ⚠️ השער נבדק לפני כל שליחה, והשליחה עצמה יושבת בספק. בלי בדיקת הקיום
+     ההשוואה חסרת ערך: -1 קטן מכל דבר. */
+  /* ⚠️ השער מקבל עכשיו את מה ש-resolvePhone החזיר — מפתח הכרטיס והטלפון —
+     כי ההרשאה נשענת על המפתח ולא על המספר. הסדר לא השתנה: שער, ואז שליחה. */
+  check('whatsapp-send.js consults the gate before it hands off to the provider',
+        wa.includes('provider.gate({ phone: target.phone, accountKey: target.accountKey })') &&
+        wa.includes('await provider.send(facts)') &&
+        wa.indexOf('provider.gate({') < wa.indexOf('await provider.send(facts)'), true);
+  check('and the meta gate is still lgExternal itself',
+        /gate\(_ctx\) \{ const e = lgExternal\(\);/.test(prv), true);
+
+  /* ── ובהרצה, לא בקריאה: החסימה עצמה ──
+     זו הטענה שבאמת חשובה, ולכן היא נבדקת על ידי הרצת הקוד מול שתי סביבות
+     מדומות במקום חיפוש מחרוזת. */
+  const asEnv = (vars, fn) => {
+    const saved = { ...process.env };
+    Object.keys(vars).forEach(k => { if (vars[k] === undefined) delete process.env[k]; else process.env[k] = vars[k]; });
+    ['api/_env.js', 'api/_wa-provider.js', 'api/_wa-recipient.js']
+      .forEach(m => { delete require.cache[require.resolve(path.join(ROOT, m))]; });
+    try { return fn(require(path.join(ROOT, 'api', '_wa-provider.js'))); }
+    finally { process.env = saved; }
+  };
+  const key = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_key: 'k' });
+  const META = { WA_PHONE_NUMBER_ID: '1', WA_ACCESS_TOKEN: 't', WA_TEMPLATE_NAME: 'n',
+                 WA_PROVIDER: undefined, LG_ENV: undefined };
+
+  asEnv({ ...META, FIREBASE_SERVICE_ACCOUNT: key('lussglass') }, m =>
+    check('running on production, whatsapp is allowed out', m.lgWaProvider().gate({}).allowed, true));
+  asEnv({ ...META, FIREBASE_SERVICE_ACCOUNT: key('luz-glass-test') }, m =>
+    check('running on TEST, it is blocked — no message reaches a real customer',
+          m.lgWaProvider().gate({}).allowed, false));
+  asEnv({ ...META, FIREBASE_SERVICE_ACCOUNT: key('') }, m =>
+    check('and an unrecognised project is blocked by default',
+          m.lgWaProvider().gate({}).allowed, false));
 
   for (const f of ['hashavshevet-items.js', 'hashavshevet-accounts.js', 'hashavshevet-getpdf.js']) {
     const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
