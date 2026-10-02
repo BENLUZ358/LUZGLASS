@@ -92,11 +92,10 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
 
 /* ── כל endpoint שפונה החוצה מתייעץ עם השומר ────────────────────────── */
 {
-  /* ⚠️ חריג יחיד ומפורש: api/whatsapp-test.js הוא כלי בדיקה של GREEN API,
-     ויש לו שומר משלו — lgGreenApiTest — שנעילותיו הפוכות: הוא חסום דווקא
-     בייצור. הוא נרשם כאן בשם ולא מוחרג לפי דפוס, כדי ש-endpoint חדש שישכח
-     את lgExternal עדיין ייפול. */
-  const OWN_GUARD = { 'whatsapp-test.js': 'lgGreenApiTest' };
+  /* ⚠️ היה כאן חריג אחד ומפורש: api/whatsapp-test.js, כלי בדיקה עם שומר
+     משלו. הקובץ נמחק (02/10/2026) והחריג ירד איתו — **אין היום אף endpoint
+     שפונה החוצה בלי lgExternal**, וזו טענה חזקה יותר ממה שהיה כאן קודם. */
+  const OWN_GUARD = {};
 
   const files = fs.readdirSync(path.join(ROOT, 'api')).filter(f => f.endsWith('.js'));
   const missing = [];
@@ -109,13 +108,12 @@ const sa = id => JSON.stringify({ project_id: id, client_email: 'x@y', private_k
   }
   check('every endpoint that calls out consults a guard', missing, []);
 
-  /* והחריג חייב להישאר חריג: רק הוא רשאי לא לעבור ב-lgExternal */
+  /* ואין יותר אף חריג */
   const exempt = files.filter(f => {
     const src = fs.readFileSync(path.join(ROOT, 'api', f), 'utf8');
     return /await fetch\(/.test(src) && !/lgExternal\(/.test(src);
   });
-  check('and only the GREEN API test tool is exempt from the global block',
-        exempt, ['whatsapp-test.js']);
+  check('and nothing at all is exempt from the global block', exempt, []);
 
   /* והשומר נבדק לפני ה-fetch, לא אחריו */
   /* ⚠️ whatsapp-send.js אינו ברשימה הזו יותר, והסיבה חשובה: ה-fetch עבר

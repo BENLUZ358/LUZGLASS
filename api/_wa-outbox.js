@@ -63,7 +63,11 @@ function lgWaMsgKey(kind, orderIds) {
 //  מכניס לתור. מחזיר { key, queued, reason }.
 //  ⚠️ לא דורס רשומה שנשלחה ולא כזו שממתינה — אחרת לחיצה כפולה הייתה
 //  מאפסת את ה-attempts ומחזירה לתור הודעה שכבר יצאה.
-async function lgWaEnqueue(db, { kind, to, clientName, orderNums, orderIds, queuedBy }) {
+//  ⚠️ phoneSource ו-accountKey הם תיעוד, לא לוגיקה. הם אינם משפיעים על
+//  מי מקבל את ההודעה — resolvePhone כבר הכריע — אלא עונים על השאלה
+//  **דרך מה** נמצא המספר. בחקירת L9005 בדיוק המידע הזה היה חסר.
+async function lgWaEnqueue(db, { kind, to, clientName, orderNums, orderIds, queuedBy,
+                                 phoneSource, accountKey }) {
   const key = lgWaMsgKey(kind, orderIds);
   const now = Date.now();
 
@@ -74,6 +78,8 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, orderIds, queu
       kind:      String(kind),
       to:        String(to),
       clientName: String(clientName || ''),
+      phoneSource: String(phoneSource || ''),
+      accountKey:  accountKey == null ? '' : String(accountKey),
       orderNums: (orderNums || []).map(String),
       orderIds:  [...new Set((orderIds || []).map(String))].sort(),
       state:     'pending',

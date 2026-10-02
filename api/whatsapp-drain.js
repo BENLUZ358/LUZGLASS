@@ -123,6 +123,11 @@ module.exports = async function handler(req, res) {
         attemptedAt: Date.now(),
         sentBy:      entry.queuedBy || auth.phone,
         to:          entry.to,
+        // ⚠️ דרך מה נמצא המספר. במסלול הישיר של Meta השדות האלה נכתבו
+        // תמיד; ב-drain הם חסרו, ולכן אי אפשר היה לענות בדיעבד על
+        // "למה ההודעה יצאה דווקא למספר הזה".
+        phoneSource: entry.phoneSource || null,
+        accountKey:  entry.accountKey  || null,
         provider:    provider.name,
         kind:        entry.kind,
         orderNums:   entry.orderNums,

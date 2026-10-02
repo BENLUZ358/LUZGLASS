@@ -157,6 +157,8 @@ module.exports = async function handler(req, res) {
           kind: 'ready', to: target.phone,
           clientName: facts.clientName, orderNums,
           orderIds: [orderId], queuedBy: auth.phone,
+          // תיעוד בלבד — ר' lgWaEnqueue
+          phoneSource: target.source, accountKey: target.accountKey,
         });
         results.push({
           orderId, status: q.queued ? 'queued' : 'skipped',

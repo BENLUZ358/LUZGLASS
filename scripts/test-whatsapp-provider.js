@@ -267,6 +267,66 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
         ob.lgWaMsgKey('ready', ['a']) === ob.lgWaMsgKey('dispatched', ['a']), false);
 }
 
+/* ── תיעוד מקור המספר ───────────────────────────────────────────────── */
+//
+//  ⚠️ תיעוד, לא לוגיקה. השדות האלה אינם קובעים למי נשלח — resolvePhone
+//  כבר הכריע — אלא עונים על "דרך מה נמצא המספר". בחקירת L9005 בדיוק
+//  המידע הזה היה חסר מהחותמת, ולכן אי אפשר היה לענות בדיעבד.
+(async () => {
+  const db = fakeDb({});
+  const q = await ob.lgWaEnqueue(db, {
+    kind: 'ready', to: '0501234567', clientName: 'דני',
+    orderNums: ['L1'], orderIds: ['o1'], queuedBy: 'admin',
+    phoneSource: 'hashavshevet', accountKey: 'TEST-WA',
+  });
+  const e = db._data.waOutbox[q.key];
+  check('the queue records how the number was found', e.phoneSource, 'hashavshevet');
+  check('and which account card it came from',        e.accountKey, 'TEST-WA');
+
+  /* נפילה לטלפון שעל ההזמנה — גם היא חייבת להירשם */
+  const db2 = fakeDb({});
+  const q2 = await ob.lgWaEnqueue(db2, {
+    kind: 'ready', to: '0509999999', clientName: 'ל', orderNums: ['L2'],
+    orderIds: ['o2'], queuedBy: 'a', phoneSource: 'order', accountKey: null,
+  });
+  check('a fallback to the order phone is recorded as such',
+        db2._data.waOutbox[q2.key].phoneSource, 'order');
+  /* ⚠️ null הופך למחרוזת ריקה ולא נעלם — פיירבייס משמיט undefined בשקט,
+     וחסר שדה אינו מבדיל בין "אין כרטיס" לבין "לא נרשם" */
+  check('and a missing account key is empty, not absent',
+        db2._data.waOutbox[q2.key].accountKey, '');
+
+  /* ⚠️ והחשוב: הם לא נגעו בשליחה עצמה */
+  const PROV = fs.readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8');
+  check('the provider never reads them — they are documentation only',
+        /phoneSource|accountKey/.test(PROV), false);
+  const REC = fs.readFileSync(path.join(ROOT, 'api', '_wa-recipient.js'), 'utf8');
+  check('and resolvePhone itself was not touched',
+        /return \{ phone: norm\(acc\.phone\), source: 'hashavshevet', accountKey: String\(key\) \};/.test(REC), true);
+
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  check('the stamp on the order carries them through',
+        /phoneSource: entry\.phoneSource/.test(DRAIN) && /accountKey:\s+entry\.accountKey/.test(DRAIN), true);
+})();
+
+/* ── הכלי הזמני אינו קיים יותר ──────────────────────────────────────── */
+{
+  check('api/whatsapp-test.js is gone',
+        fs.existsSync(path.join(ROOT, 'api', 'whatsapp-test.js')), false);
+  /* ⚠️ אבל השער שלו נשאר ועבר תפקיד: הוא היום השער של ספק green */
+  const ENV = fs.readFileSync(path.join(ROOT, 'api', '_env.js'), 'utf8');
+  check('but lgGreenApiTest stayed — it guards the real path now',
+        /function lgGreenApiTest/.test(ENV), true);
+  /* ⚠️ על קוד חי בלבד. ההפניה ההיסטורית בהערה של _env.js מסבירה מאיפה
+     הנעילות הגיעו, והיא שווה יותר מההקפדה על היעדר המחרוזת. זו הפעם
+     השלישית היום שביטוי "אין X" תפס תיעוד נכון. */
+  const live = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+  const files = fs.readdirSync(path.join(ROOT, 'api'));
+  check('and no live code references the removed tool',
+        files.filter(f => live(fs.readFileSync(path.join(ROOT, 'api', f), 'utf8'))
+                            .includes('whatsapp-test')), []);
+}
+
 /* ── לחיצה כפולה ── */
 (async () => {
   const db = fakeDb({});

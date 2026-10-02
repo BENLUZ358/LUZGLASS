@@ -2,9 +2,10 @@
 /**
  * ארבע נעילות הבטיחות של כלי הבדיקה של GREEN API.
  *
- * ⚠️ הכלי הזה אינו ארכיטקטורה. השליחה ללקוחות רצה דרך api/whatsapp-send.js
- * מול Meta Cloud API, והיא לא נגעה. api/whatsapp-test.js קיים כדי להוכיח
- * דבר אחד: ש-TEST מסוגל לשלוח הודעה אחת דרך GREEN API.
+ * ⚠️ הנעילות נולדו ככלי בדיקה זמני (api/whatsapp-test.js), אבל הן **כבר
+ * לא** כאלה: lgGreenApiTest הוא היום השער של ספק green ב-_wa-provider.js,
+ * והוא מה שמונע מ-TEST לשלוח לכל מספר שאינו GREENAPI_TEST_TO. הכלי הזמני
+ * נמחק ב-02/10/2026; הנעילות נשארו וחשובות מתמיד.
  *
  * הקובץ הזה מריץ את הקוד עצמו מול סביבות מדומות — לא בודק טקסט — ומוכיח
  * חמש טענות שבן דרש במפורש:
@@ -107,68 +108,26 @@ const READY = {
           Object.keys(g).sort(), ['allowed', 'reason', 'to']);
   });
 
-  const SRC = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-test.js'), 'utf8');
-  /* ה-URL הוא סוד בפני עצמו — הוא מכיל את הטוקן */
-  check('the endpoint never logs the url',      /console\.(log|error)\([^)]*\burl\b/.test(SRC), false);
-  check('and never returns it',                 /res\.status\([^)]*\)\.json\([^}]*\burl\b/.test(SRC), false);
-  /* חילוץ מדויק של כל גוף json({...}) — חלון של N תווים היה חוצה את סוף
-     הקריאה ותופס את const token שאחריה, וזה היה כישלון של הבדיקה ולא
-     ממצא בקוד */
-  const jsonBodies = [];
-  for (let i = SRC.indexOf('.json({'); i > -1; i = SRC.indexOf('.json({', i + 1)) {
-    let depth = 0, j = i + 6;
-    for (; j < SRC.length; j++) {
-      if (SRC[j] === '{') depth++;
-      else if (SRC[j] === '}') { depth--; if (!depth) break; }
-    }
-    jsonBodies.push(SRC.slice(i, j + 1));
-  }
-  check('every response body was found', jsonBodies.length > 0, true);
+  /*  ⚠️ api/whatsapp-test.js נמחק (02/10/2026). הוא היה כלי זמני שהוכיח
+      ש-TEST מסוגל לשלוח דרך GREEN API, והמסלול האמיתי החליף אותו: השליחה
+      עוברת ב-_wa-provider.js דרך תור ו-drain.
 
-  /* ⚠️ נלמד בדרך הקשה, 2026-10-01. ההנחה הייתה ש"גוף התשובה של GREEN API
-     אינו מכיל את הטוקן", וההנחה הייתה שגויה: בשגיאה הם מחזירים שדה path
-     עם ה-URL המלא, ובו הטוקן. השליחה הראשונה הדליפה אותו, והוא הוחלף.
-     מכאן: הגוף הגולמי לא מוחזר, ומה שכן מוחזר עובר redact. */
-  check('the raw GREEN API body is never returned',
-        jsonBodies.filter(b => /\braw\b/.test(b) && !/redact\(/.test(b)), []);
-  check('a redactor strips the token from anything that leaves',
-        /const redact = s => String\(s == null \? '' : s\)\.split\(token\)\.join\('\*\*\*'\)/.test(SRC), true);
-  check('and the failure reason goes through it',
-        /reason:\s+ok \? null : redact\(/.test(SRC), true);
-  /* path הוא השדה שהחזיק את ה-URL — אסור שיוחזר בשום צורה */
-  check('the path field is never echoed back',
-        jsonBodies.filter(b => /\bpath\b/.test(b)), []);
-  check('the token is never put in a response',
-        jsonBodies.filter(b => /\btoken\b/i.test(b)), []);
-  check('nor the instance id',
-        jsonBodies.filter(b => /idInstance/.test(b)), []);
-  /* e.message של fetch עלול להכיל את ה-URL, ועם זה את הטוקן */
-  check('a network error reports its type, not its message',
-        /name: e && e\.name/.test(SRC) && !/message: e\.message/.test(SRC), true);
-  check('what is logged is the instance id and the status only',
-        /console\.log\('whatsapp-test: '[\s\S]{0,120}?\{ idInstance, to: gate\.to, httpStatus/.test(SRC), true);
-}
-
-/* ── שליחה קבוצתית אינה אפשרית ─────────────────────────────────────── */
-{
-  const SRC = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-test.js'), 'utf8');
-  /* מבנית ולא בבדיקה: אין לולאה בקובץ בכלל */
-  check('the endpoint contains no loop at all',
-        /\bfor\s*\(|\.forEach\(|\.map\(|while\s*\(/.test(SRC), false);
-  check('a list in the body is refused outright',
-        /Array\.isArray\(body\.to\) \|\| Array\.isArray\(body\.orderIds\) \|\| Array\.isArray\(body\.text\)/.test(SRC), true);
-  check('one fetch, not many', (SRC.match(/await fetch\(/g) || []).length, 1);
-  check('the text is capped', /text\.length > MAX_TEXT/.test(SRC), true);
+      מה שנבדק כאן על הקובץ ההוא — שהגוף הגולמי לא מוחזר, ש-redact עובד,
+      שאין לולאה — עבר ל-scripts/test-greenapi-errors.js, ושם הוא נבדק
+      **בהרצה מול fetch מדומה** ולא בחיפוש מחרוזות. */
 }
 
 /* ── הבידוד מהתשתית הקיימת ─────────────────────────────────────────── */
 {
-  const SRC  = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-test.js'), 'utf8');
   const SEND = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-send.js'), 'utf8');
-  /* הכלי לא נוגע בהזמנות — אין דרך שישלח למישהו בגלל נתון בהזמנה */
-  check('it never reads or writes orders', /orders\//.test(SRC), false);
-  check('it never opens a database at all', /getDatabase|firebase-admin/.test(SRC), false);
-  check('it still requires an authenticated admin', /await verifyAdmin\(req\)/.test(SRC), true);
+  const fs2  = fs;
+  /* ⚠️ הכלי הזמני אינו קיים יותר — ואסור שיחזור בשקט */
+  check('the temporary GREEN API test endpoint is gone',
+        fs2.existsSync(path.join(ROOT, 'api', 'whatsapp-test.js')), false);
+  /* אבל lgGreenApiTest נשאר, והוא כבר לא כלי בדיקה אלא השער של ספק green */
+  const PROV = fs2.readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8');
+  check('and its four locks now guard the real path',
+        /lgGreenApiTest\(localPhone\)/.test(PROV), true);
   /* ⚠️ הטענה הזו השתנתה, ובכוונה. היא הייתה "whatsapp-send אינו מזכיר
      GREEN API", ועכשיו הוא פונה לשכבת ספק שאחד הספקים בה **הוא** GREEN API.
      לכן נועלים את הטענה החזקה יותר במקומה: **הייצור אינו יכול להגיע ל-GREEN

@@ -142,6 +142,8 @@ module.exports = async function handler(req, res) {
     const q = await lgWaEnqueue(db, {
       kind: 'dispatched', to, clientName, orderNums,
       orderIds: liveIds, queuedBy: auth.phone,
+      // תיעוד בלבד — ר' lgWaEnqueue
+      phoneSource: targets[0].source, accountKey: targets[0].accountKey,
     });
 
     res.status(200).json({
