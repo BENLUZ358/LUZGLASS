@@ -31,8 +31,17 @@ const bodyOf = (name, src) =>
 {
   for (const [label, src] of [['admin.html', ADMIN], ['workday.html', WD]]) {
     // קריאה ל-updateOrder שאינה ממתינה, אינה מחזירה, ואין אחריה catch/then
-    const unguarded = (src.match(/(?<!await )(?<!\. )\bupdateOrder\([^;]*;/g) || [])
-      .filter(c => !/catch|await|then|return/.test(c));
+    // ⚠️ החלון נמתח לתחילת השורה ולא מתחיל ב-updateOrder עצמו. בלי זה
+    // כתיבה עטופה ב-await Promise.allSettled(...map(id => updateOrder(...)))
+    // נראתה חשופה — ה-await יושב לפני העטיפה, מחוץ להתאמה — והבדיקה צעקה
+    // על קוד שמטפל בכישלון כראוי.
+    const unguarded = [];
+    const re = /\bupdateOrder\([^;]*;/g;
+    let hit;
+    while ((hit = re.exec(src)) !== null) {
+      const stmt = src.slice(src.lastIndexOf('\n', hit.index) + 1, hit.index + hit[0].length);
+      if (!/catch|await|then|return/.test(stmt)) unguarded.push(hit[0]);
+    }
     check(label.padEnd(14) + ' has no write that fails silently', unguarded, []);
   }
 }
@@ -80,10 +89,13 @@ const bodyOf = (name, src) =>
 {
   /* היה כאן forEach בלי await: אם שלוש מתוך חמש נכשלו, ההודעה דיווחה על
      כולן ושלוש הזמנות נשארו "בחוץ" בלי שאיש ידע */
+  /* ⚠️ המטפל יצא מתוך onclick="..." ל-addEventListener, אחרי שהתברר
+     שהערה עם מרכאות כפולות חתכה אותו ב-570 תווים והכפתור לא עבד כלל.
+     ר' scripts/test-inline-handlers.js. הטענות כאן לא השתנו, רק המקום. */
   check('the arrival marking waits for every write',
-        /Promise\.allSettled\(orders\.map\(id=>updateOrder\(id,\{chisumArrived:true\}\)\)\)/.test(WD), true);
+        /await Promise\.allSettled\(ids\.map\(id => updateOrder\(id, \{ chisumArrived: true \}\)\)\)/.test(WD), true);
   check('it counts what actually failed',
-        /rs\.filter\(r=>r\.status==='rejected'\)/.test(WD), true);
+        /rs\.filter\(r => r\.status === 'rejected'\)/.test(WD), true);
   check('and says how many of how many were saved',
         /נשמרו[\s\S]{0,40}?נכשלו, נסה שוב/.test(WD), true);
   check('the old fire-and-forget loop is gone',

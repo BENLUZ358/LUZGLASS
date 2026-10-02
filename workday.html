@@ -2540,31 +2540,43 @@ function markChisumReportArrived(reportId, reportNum){
         ניתן לסמן נשברים לאחר מכן.
       </div>
       <div style="display:flex;gap:10px;">
-        <button onclick="(function(){
-          const orders=[${reportOrders.map(o=>`'${o.id}'`).join(',')}];
-          const _ov=this.closest('[style*=fixed]');
-          // היה כאן forEach בלי await: אם שלוש מתוך חמש נכשלו, ההודעה
-          // דיווחה על כולן ושלוש הזמנות נשארו "בחוץ" בלי שאיש ידע.
-          Promise.allSettled(orders.map(id=>updateOrder(id,{chisumArrived:true})))
-            .then(rs=>{
-              const bad=rs.filter(r=>r.status==='rejected');
-              bad.forEach(r=>console.error('markReport:',r.reason));
-              showToast(bad.length
-                ? (orders.length-bad.length)+' מתוך '+orders.length+' נשמרו — '+bad.length+' נכשלו, נסה שוב'
-                : '✓ דוח ${lgJsStr(reportNum)} — ${reportOrders.length} הזמנות הגיעו מהמפעל');
-              if(_ov) _ov.remove();
-            });
-        }).call(this)"
+        <button id="chisumArrivedOk"
           style="flex:2;padding:12px;background:var(--chisum);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border:none;cursor:pointer;border-radius:6px;">
           ✓ כן, קיבלתי
         </button>
-        <button onclick="this.closest('[style*=fixed]').remove()"
+        <button id="chisumArrivedCancel"
           style="flex:1;padding:12px;background:#f0ede8;color:#555;font-family:Heebo,sans-serif;font-size:13px;font-weight:600;border:1px solid rgba(0,0,0,0.1);cursor:pointer;border-radius:6px;">
           ביטול
         </button>
       </div>
     </div>`;
   document.body.appendChild(ov);
+
+  const ids = reportOrders.map(o => String(o.id));
+  ov.querySelector('#chisumArrivedOk')
+    .addEventListener('click', () => _confirmChisumReportArrived(ids, reportNum, ov));
+  ov.querySelector('#chisumArrivedCancel')
+    .addEventListener('click', () => ov.remove());
+}
+
+//  ⚠️ המטפל הזה ישב בתוך onclick="..." עם הערה שמכילה מרכאות כפולות
+//  ("בחוץ"). ב-HTML ה-attribute נגמר במרכאה הראשונה, ולכן הדפדפן חתך 570
+//  תווים — את כל Promise.allSettled ואת _ov.remove() — והכפתור הפסיק
+//  לעבוד לגמרי. הדיאלוג נראה תקין והקוד נראה תקין; רק הלחיצה לא עשתה כלום.
+//
+//  התיקון אינו הסרת המרכאות אלא הוצאת הקוד מה-attribute: מטפל שיושב
+//  במחרוזת HTML שביר מעצם היותו שם, ובעברית מרכאות כפולות הן דבר שבשגרה.
+//
+//  ומה שהיה כאן לפני כן ונשאר נכון: forEach בלי await דיווח "הכל נשמר" גם
+//  כששלוש מתוך חמש נכשלו, ושלוש הזמנות נשארו בחוץ בלי שאיש ידע.
+async function _confirmChisumReportArrived(ids, reportNum, ov){
+  const rs  = await Promise.allSettled(ids.map(id => updateOrder(id, { chisumArrived: true })));
+  const bad = rs.filter(r => r.status === 'rejected');
+  bad.forEach(r => console.error('markReport:', r.reason));
+  showToast(bad.length
+    ? (ids.length - bad.length) + ' מתוך ' + ids.length + ' נשמרו — ' + bad.length + ' נכשלו, נסה שוב'
+    : '✓ דוח ' + reportNum + ' — ' + ids.length + ' הזמנות הגיעו מהמפעל');
+  if(ov) ov.remove();
 }
 
 // האם ההזמנה סיימה את המפעל, ואם לא — מה בדיוק חסר.
