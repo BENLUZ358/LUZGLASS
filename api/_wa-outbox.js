@@ -66,8 +66,8 @@ function lgWaMsgKey(kind, orderIds) {
 //  ⚠️ phoneSource ו-accountKey הם תיעוד, לא לוגיקה. הם אינם משפיעים על
 //  מי מקבל את ההודעה — resolvePhone כבר הכריע — אלא עונים על השאלה
 //  **דרך מה** נמצא המספר. בחקירת L9005 בדיוק המידע הזה היה חסר.
-async function lgWaEnqueue(db, { kind, to, clientName, orderNums, orderIds, queuedBy,
-                                 phoneSource, accountKey }) {
+async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, orderIds,
+                                 queuedBy, phoneSource, accountKey }) {
   const key = lgWaMsgKey(kind, orderIds);
   const now = Date.now();
 
@@ -81,6 +81,10 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, orderIds, queu
       phoneSource: String(phoneSource || ''),
       accountKey:  accountKey == null ? '' : String(accountKey),
       orderNums: (orderNums || []).map(String),
+      // ⚠️ מערך מקביל ל-orderNums, באותו סדר. תוספת בלבד: orderNums אינו
+      // משנה צורה, ו-lgWaMsgKey מגבב orderIds — ולכן ה-idempotency,
+      // התפיסה וה-retry אינם מושפעים כלל.
+      sketchNames: (orderNums || []).map((_, i) => String((sketchNames || [])[i] || '')),
       orderIds:  [...new Set((orderIds || []).map(String))].sort(),
       state:     'pending',
       attempts:  (cur && cur.attempts) || 0,

@@ -68,19 +68,28 @@ const num = (v, dflt) => {
 //  ומספרי הזמנה אחרים. זה יצא לטובה ולא בכוונה.
 const BUSINESS = 'לוז זגגות ומראות האחים בע"מ';
 
-function renderText({ kind, clientName, orderNums }) {
+const PORTAL_LINE = 'לפרטים נוספים ניתן להיכנס למשתמש שלך בלוז גלאס ולצפות בפרטי ההזמנה.';
+
+function renderText({ kind, clientName, orderNums, sketchNames }) {
   const who  = String(clientName || 'לקוח');
   const nums = (orderNums || []).filter(Boolean);
-  const list = nums.join(', ');
+
+  //  מספר ההזמנה הוא המזהה שלנו, שם הסקיצה הוא זה שהלקוח מכיר.
+  //  ⚠️ בלי שם — רק המספר, בלי מקף תלוי באוויר.
+  const label = i => {
+    const s = String((sketchNames || [])[i] || '').trim();
+    return s ? nums[i] + ' — ' + s : nums[i];
+  };
+  const wrap = body => `שלום ${who},\n\n${body}\n\n${PORTAL_LINE}\n\n${BUSINESS}`;
 
   if (kind === 'dispatched') {
     return nums.length > 1
-      ? `שלום ${who},\nההובלה יצאה אליך עם ההזמנות: ${list}.\n${BUSINESS}`
-      : `שלום ${who},\nההובלה יצאה אליך עם הזמנה ${list}.\n${BUSINESS}`;
+      ? wrap('ההובלה יצאה אליך עם ההזמנות:\n' + nums.map((_, i) => '• ' + label(i)).join('\n'))
+      : wrap('ההובלה יצאה אליך עם הזמנה ' + label(0) + '.');
   }
   return nums.length > 1
-    ? `שלום ${who},\nההזמנות ${list} מוכנות לאיסוף.\n${BUSINESS}`
-    : `שלום ${who},\nהזמנה ${list} מוכנה לאיסוף.\n${BUSINESS}`;
+    ? wrap('ההזמנות ' + nums.map((_, i) => label(i)).join(', ') + ' מוכנות לאיסוף.')
+    : wrap('ההזמנה ' + label(0) + ' מוכנה לאיסוף.');
 }
 
 /* ═══ Meta Cloud API — מסלול הייצור. לא משתנה ═══════════════════════ */
@@ -203,10 +212,11 @@ function greenProvider() {
       return { allowed: e.allowed, reason: e.reason };
     },
 
-    params({ kind, clientName, orderNums }) { return [renderText({ kind, clientName, orderNums })]; },
+    params(facts) { return [renderText(facts || {})]; },
 
-    async send({ to, kind, clientName, orderNums }) {
-      const text   = renderText({ kind, clientName, orderNums });
+    async send(facts) {
+      const { to }  = facts || {};
+      const text    = renderText(facts || {});
       const chatId = toWaNumber(to) + '@c.us';
 
       // ⚠️ נלמד בדרך הקשה, 2026-10-01: GREEN API מחזירה את ה-URL המלא

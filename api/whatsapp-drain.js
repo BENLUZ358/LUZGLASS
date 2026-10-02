@@ -138,10 +138,11 @@ module.exports = async function handler(req, res) {
       }
 
       const out = await provider.send({
-        to:         live.phone,
-        kind:       entry.kind,
-        clientName: entry.clientName,
-        orderNums:  entry.orderNums,
+        to:          live.phone,
+        kind:        entry.kind,
+        clientName:  entry.clientName,
+        orderNums:   entry.orderNums,
+        sketchNames: entry.sketchNames || [],
       });
 
       await lgWaComplete(db, key, out);
@@ -169,6 +170,7 @@ module.exports = async function handler(req, res) {
         provider:    provider.name,
         kind:        entry.kind,
         orderNums:   entry.orderNums,
+        sketchNames: entry.sketchNames || null,
         params:      out.params || null,
         httpStatus:  out.httpStatus,
         httpOk:      out.ok,

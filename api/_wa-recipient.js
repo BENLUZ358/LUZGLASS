@@ -62,4 +62,19 @@ async function resolvePhone(db, order) {
   return { phone: own, source: own ? 'order' : 'none', accountKey: null };
 }
 
-module.exports = { resolvePhone, toWaNumber, norm };
+//  ─── שם הסקיצה ──────────────────────────────────────────────────────
+//
+//  ⚠️ זה המזהה ש**הלקוח** מכיר. מספר ההזמנה הוא שלנו; השם הזה הוא מה
+//  שהוא הקליד בתור הסקיצות, ומה שהפורטל מציג לו (portal.html:542).
+//
+//  שרשרת ה-fallback אינה המצאה — היא זו שכבר קיימת ב-lgNormalizeOrder
+//  (firebase-db.js:728) ומופיעה בתור הסקיצות, בכרטיס ההזמנה ובתחנת
+//  הבדיקה. מוגדרת כאן פעם אחת כדי שלא ייווצר עותק נוסף בצד השרת.
+//
+//  ריק הוא תשובה לגיטימית: יש הזמנות בלי שם, וההודעה נשלחת בלעדיו.
+function orderSketchName(order) {
+  const o = order || {};
+  return String(o.sketchName || o.type || o.desc || '').trim();
+}
+
+module.exports = { resolvePhone, toWaNumber, norm, orderSketchName };
