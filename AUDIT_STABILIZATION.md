@@ -280,7 +280,7 @@ parseFloat(cp[pid] || gp[pid] || 0)
 
 ---
 
-## 🔵 14 · "סיים הובלה" מ-admin אינו שולח הודעת WhatsApp
+## ✅ 14 · "סיים הובלה" מ-admin אינו שולח הודעת WhatsApp
 
 **איפה:** `admin.html:630` — `collectAndNotify`
 
@@ -293,7 +293,24 @@ parseFloat(cp[pid] || gp[pid] || 0)
 שונים**, כי `lgNextStage` מחזיר `'collected'` גם מ-`done` וגם מ-`delivery`:
 
 | מ-stage | מה קרה | הודעה? |
-|---|---|---|
+|
+**נסגר 04/10/2026 — בחסימה, לא בחיבור.**
+
+חיבור WhatsApp ל-admin היה שולח הודעה לכל הזמנה בנפרד, ו-kind='dispatched'
+אין לו שומר פר-הזמנה (יש רק ל-ready) — כך שהזמנה שכבר נשלחה בקבוצה
+מ-workday הייתה מקבלת הודעה שנייה.
+
+לכן המעבר **delivery → collected** נחסם ב-admin ומפנה למסך ההובלות.
+done → collected ממשיך לעבוד — שם הלקוח כבר קיבל "מוכן לאיסוף".
+
+⚠️ והיו **שתי** נקודות חנק, לא אחת: כפתור "קדם" (advance) ובחירת סטטוס
+ידנית (saveMod). שומר שמכסה רק אחת מהן היה ניתן לעקיפה בשתי לחיצות.
+שתיהן קוראות ל-_lgBlockDeliveryFinish.
+
+ר' scripts/test-delivery-finish-guard.js.
+
+---
+---|---|
 | `delivery` → `collected` | ההובלה הסתיימה — אותו אירוע כמו ב-workday | כן |
 | `done` → `collected` | הלקוח בא ואסף — כבר קיבל "מוכן לאיסוף" ב-`done` | **לא** |
 
