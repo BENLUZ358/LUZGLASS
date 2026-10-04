@@ -551,8 +551,7 @@ function _subscribePortalOrders(clientPhone) {
         date:       o.date      || '',
         status:     o.status    || lgStageToStatus(o.stage || ''),
         stage:      o.stage     || '',
-        sketch:     o.sketch    || null,
-        hasSketch:  !!(o.hasSketch || o.sketch),
+        ...lgSketchFields(o),   // התמונה עצמה רק דרך השכבה — ר' firebase-db
         items:      o.items     || [],
         panels:     o.panels    || [],
         pickedDate: o.pickedDate|| '',
@@ -803,7 +802,7 @@ function orderCard(o, extra){
     // ריק ב-src, ו-data-sketch-for ממלא אותו אחרי שהכרטיס נכנס ל-DOM.
     // כך התמונה נטענת רק כשנפתחו הפרטים, וכשהשדה הישן ייעלם מ-orders
     // המסך הזה כבר לא יצטרך להשתנות.
-    if(o.hasSketch || o.sketch)
+    if(lgHasSketch(o))
       exp+='<img class="sk-full" data-sketch-for="'+lgEsc(String(o.id))+'" alt="סקיצת ההזמנה — לחיצה מגדילה" data-id="'+lgEsc(String(o.id))+'" onclick="openSk(this)">';
     else exp+='<div class="sketch-ph">&#128208; הסקיצה תופיע לאחר עיבוד</div>';
     exp+="</div>";
@@ -830,7 +829,7 @@ function orderCard(o, extra){
     '<div class="oc-status-bar">'+
       '<span class="sbadge '+cfg.cls+'">'+cfg.label+"</span>"+
       '<button type="button" class="oc-toggle" data-id="'+o.id+'" aria-expanded="'+(isExp?'true':'false')+'" onclick="toggleExp(this.dataset.id)">'+
-        (isExp?"▲ סגור":"▾ פרטים")+((o.hasSketch||o.sketch)&&!isExp?' <span class="oc-has-sk">🖼</span>':'')+
+        (isExp?"▲ סגור":"▾ פרטים")+(lgHasSketch(o)&&!isExp?' <span class="oc-has-sk">🖼</span>':'')+
       '</button><span class="oc-date">'+lgEsc(o.date)+"</span>"+
     "</div>"+exp+(extra||'')+"</div>";
 }
@@ -843,14 +842,17 @@ function openSk(idOrEl){
   const id = typeof idOrEl === 'string' ? idOrEl : (idOrEl?.dataset?.id || idOrEl?.dataset?.oid);
   const o=ORDERS.find(x=>String(x.id)===String(id));
   if(!o)return;
-  const skSrc = o.sketch || makeAutoSketch(o);
-  if(!skSrc && !o.hasSketch)return;
+  // סקיצה אמיתית — רק דרך השכבה. הסקיצה המחוללת היא ל"אין תמונה" בלבד:
+  // לפני כן היא הוצגה לרגע גם להזמנה שהתמונה שלה עוד בדרך מהצומת.
+  const real = lgHasSketch(o);
+  const skSrc = real ? null : makeAutoSketch(o);
+  if(!real && !skSrc)return;
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;';
   ov.innerHTML='<img alt="סקיצת ההזמנה בתצוגה מלאה" style="max-width:96vw;max-height:85vh;object-fit:contain;border-radius:4px;"><button onclick="this.parentElement.remove()" style="min-height:44px;padding:10px 28px;background:#fff;border:none;cursor:pointer;font-family:Heebo,sans-serif;font-size:16px;font-weight:700;border-radius:4px;">סגור</button>';
   const full=ov.querySelector('img');
   if(skSrc) full.src=skSrc;
-  if(o.hasSketch) lgSketchIntoImg(full, o);
+  if(real) lgSketchIntoImg(full, o);
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   document.body.appendChild(ov);
 }
