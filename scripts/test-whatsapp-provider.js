@@ -794,6 +794,51 @@ const seedSent = (db, n, t0) => {
         await ob.lgWaPending(db2), [f2.key]);
 })();
 
+(async () => {
+  /* רגרסיה: failed עם ניסיונות שנותרו עדיין נאסף, גם מאחורי backlog;
+     failed שמוצה, expired ו-sent — לא */
+  const t0 = Date.now() - 3600 * 1000;
+  const db = fakeDb({});
+  seedSent(db, 70, t0);
+  Object.assign(db._data.waOutbox, {
+    retry1:  { state: 'failed',  attempts: 1, createdAt: t0 + 100 },
+    retry2:  { state: 'failed',  attempts: 2, createdAt: t0 + 101 },
+    spent:   { state: 'failed',  attempts: 3, createdAt: t0 + 102 },
+    expired: { state: 'expired', attempts: 1, createdAt: t0 + 103 },
+    newer:   { state: 'pending', attempts: 0, createdAt: t0 + 300 },
+    older:   { state: 'pending', attempts: 0, createdAt: t0 + 200 },
+  });
+  check('backlog: retryable failed entries are still picked up, oldest first',
+        await ob.lgWaPending(db, 60), ['retry1', 'retry2', 'older', 'newer']);
+  check('backlog: the limit applies after filtering, keeping the oldest',
+        await ob.lgWaPending(db, 2), ['retry1', 'retry2']);
+
+  /* ⚠️ התיקון לא מוחק כלום: ה-guard "כבר נשלחה" נשען על הרשומות הישנות */
+  check('backlog: no sent entry was deleted by reading the queue',
+        Object.values(db._data.waOutbox).filter(v => v.state === 'sent').length, 70);
+  const again = await ob.lgWaEnqueue(db, { kind: 'ready', to: '0501234567', clientName: 'ל',
+                                           orderNums: ['Lx'], orderIds: ['x'], queuedBy: 'a' });
+  const dupKey = again.key;
+  db._data.waOutbox[dupKey].state = 'sent';
+  const dup = await ob.lgWaEnqueue(db, { kind: 'ready', to: '0501234567', clientName: 'ל',
+                                         orderNums: ['Lx'], orderIds: ['x'], queuedBy: 'a' });
+  check('backlog: duplicate protection still refuses an already-sent group',
+        [dup.queued, dup.reason], [false, 'כבר נשלחה']);
+})();
+
+/* מבנה: השאילתה מסננת לפי state לפני החיתוך — לא "createdAt ואז סינון" */
+{
+  const SRC = fs.readFileSync(path.join(ROOT, 'api', '_wa-outbox.js'), 'utf8');
+  const strip = t => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+  const pend = strip(SRC.slice(SRC.indexOf('async function lgWaPending'), SRC.indexOf('module.exports')));
+  check('lgWaPending queries by state', /orderByChild\('state'\)/.test(pend), true);
+  check('lgWaPending never cuts by createdAt before filtering',
+        /orderByChild\('createdAt'\)\s*\.limitToFirst/.test(pend), false);
+  const RULES = JSON.parse(fs.readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8'));
+  check('waOutbox is indexed on state',
+        (RULES.rules.waOutbox['.indexOn'] || []).includes('state'), true);
+}
+
 /* ═══ 5ב · הלקח של הטרנזקציה ═══════════════════════════════════════ */
 //
 //  ⚠️ זה הבאג שהחזיק את L9005 בתור שעה שלמה (02/10/2026):
