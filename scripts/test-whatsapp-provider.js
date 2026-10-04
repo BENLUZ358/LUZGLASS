@@ -502,22 +502,46 @@ function fakeDb(initial) {
     for (let i = 0; i < ks.length - 1; i++) { if (o[ks[i]] == null) o[ks[i]] = {}; o = o[ks[i]]; }
     if (v === null) delete o[ks[ks.length - 1]]; else o[ks[ks.length - 1]] = v;
   };
-  const snapOf = v => ({
+  const snapOf = (v, order) => ({
     val: () => (v === undefined ? null : v),
     exists: () => v !== undefined,
     forEach(cb) {
-      // מסודר לפי createdAt, כמו orderByChild בפועל
-      Object.keys(v || {})
-        .sort((a, b) => ((v[a] || {}).createdAt || 0) - ((v[b] || {}).createdAt || 0))
+      // מסודר לפי createdAt כברירת מחדל, או לפי סדר השאילתה כשיש כזו
+      (order || Object.keys(v || {})
+        .sort((a, b) => ((v[a] || {}).createdAt || 0) - ((v[b] || {}).createdAt || 0)))
         .forEach(k => cb({ key: k, val: () => v[k] }));
     },
   });
+  //  ⚠️ שאילתה אמיתית, לא קישוט. הכפיל הקודם החזיר את self מ-limitToFirst
+  //  והחזיר את **כל** הילדים — ולכן אף בדיקה לא ראתה מה קורה כשהתור
+  //  ארוך מה-limit. בדיוק שם הסתתר הבאג של lgWaPending (2026-10-04).
+  //  סמנטיקה כמו RTDB: orderByChild ממיין לפי ערך הילד ואז לפי המפתח,
+  //  equalTo מסנן, limitToFirst חותך אחרי הסינון.
+  function runQuery(v, q) {
+    if (v == null || typeof v !== 'object' || !q.by) return snapOf(v);
+    const cv = k => (v[k] || {})[q.by];
+    const rank = x => x == null ? 0 : typeof x === 'boolean' ? 1 : typeof x === 'number' ? 2 : 3;
+    const cmp = (a, b) => {
+      const x = cv(a), y = cv(b);
+      if (rank(x) !== rank(y)) return rank(x) - rank(y);
+      if (x !== y) return x < y ? -1 : 1;
+      return a < b ? -1 : a > b ? 1 : 0;
+    };
+    let keys = Object.keys(v).sort(cmp);
+    if ('eq' in q) keys = keys.filter(k => cv(k) === q.eq);
+    if (q.limit != null) keys = keys.slice(0, q.limit);
+    const out = {}; keys.forEach(k => { out[k] = v[k]; });
+    return snapOf(keys.length ? out : undefined, keys);
+  }
   return {
     _data: data,
     ref(p) {
+      const q = {};
       const self = {
-        orderByChild: () => self, limitToFirst: () => self,
-        once: async () => snapOf(get(p)),
+        orderByChild: c => { q.by = c; return self; },
+        equalTo:      x => { q.eq = x; return self; },
+        limitToFirst: n => { q.limit = n; return self; },
+        once: async () => runQuery(get(p), q),
         set:  async v => put(p, v),
         update: async v => put(p, { ...(get(p) || {}), ...v }),
         //  ⚠️ פיירבייס קוראת לפונקציה **פעמיים**: תחילה עם הערך שבמטמון
@@ -738,6 +762,36 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
   check('a day-old message is not sent', c.claimed, false);
   check('it is closed as expired',       db._data.waOutbox[q.key].state, 'expired');
   check('and never retried',             await ob.lgWaPending(db, 10), []);
+})();
+
+/* ═══ 5א · תור ארוך מה-limit (באג 2026-10-04) ═════════════════════════ */
+//
+//  ⚠️ רשומות sent לא נמחקות לעולם — ה-guard של lgWaEnqueue ("כבר נשלחה")
+//  נשען עליהן. ה-drain קורא lgWaPending(db, 60). אם השאילתה לוקחת את 60
+//  הרשומות **הוותיקות** ורק אחר כך מסננת, אז מרגע שיש 60 רשומות סופיות
+//  שום הודעה חדשה לא נאספת — והשליחה נעצרת בשקט, בלי שגיאה.
+const seedSent = (db, n, t0) => {
+  db._data.waOutbox = db._data.waOutbox || {};
+  for (let i = 0; i < n; i++)
+    db._data.waOutbox['old' + String(i).padStart(3, '0')] =
+      { kind: 'ready', state: 'sent', attempts: 1, createdAt: t0 + i, sentAt: t0 + i };
+};
+(async () => {
+  /* השחזור: 60 sent ישנות + הודעה חדשה אחת, בדיוק כמו ה-drain קורא */
+  const db = fakeDb({});
+  seedSent(db, 60, Date.now() - 3600 * 1000);
+  const fresh = await ob.lgWaEnqueue(db, { kind: 'ready', to: '0501234567', clientName: 'ל',
+                                           orderNums: ['L77'], orderIds: ['o77'], queuedBy: 'a' });
+  check('backlog: a new message behind 60 sent entries is still picked up',
+        await ob.lgWaPending(db, 60), [fresh.key]);
+
+  /* ברירת המחדל (50) — 51 sent מספיקות כדי להעלים אותה */
+  const db2 = fakeDb({});
+  seedSent(db2, 51, Date.now() - 3600 * 1000);
+  const f2 = await ob.lgWaEnqueue(db2, { kind: 'dispatched', to: '0501234567', clientName: 'ל',
+                                         orderNums: ['L78'], orderIds: ['o78'], queuedBy: 'a' });
+  check('backlog: also with the default limit and a dispatched message',
+        await ob.lgWaPending(db2), [f2.key]);
 })();
 
 /* ═══ 5ב · הלקח של הטרנזקציה ═══════════════════════════════════════ */
