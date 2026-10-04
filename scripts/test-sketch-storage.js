@@ -21,10 +21,12 @@
  * Stages 1 and 2 buy nothing on their own. They exist so that stage 4, the only
  * irreversible one, is boring when it arrives.
  *
- * Stage 2 is NOT finished. The admin sketch queue reads through the new loader;
- * the check station, drafter, portal and order-view still read order.sketch
- * directly, and the queue's own list thumbnails show every sketch at once.
- * Stage 4 cannot happen until each of those is either wired or made lazy.
+ * Stage 2 is finished as of 2026-10-04: every Firebase-backed screen reads the
+ * image only through the layer (lgHasSketch / lgLoadSketch / lgSketchIntoImg /
+ * lgReplaceSketch), the queue thumbnails load lazily, and
+ * scripts/test-sketch-api-guard.js fails the build on any new direct read.
+ * order-view.html works on localStorage only and is out of scope.
+ * Stages 3–4 (migrate, drop the old field) are a separate, approved-on-its-own step.
  *
  * Run: node scripts/test-sketch-storage.js
  */
@@ -61,15 +63,25 @@ for (const fn of ['saveOrder', 'saveSubmission']) {
         /hasSketch:\s+!!data\.sketch,/.test(body), true);
 }
 
-/* המזהה נקרא _id מאז שהעורך הוצא מ-sqCurrent. הכלל לא השתנה: שתי הכתיבות,
-   הישנה והחדשה, יוצאות מאותה פונקציה ועל אותו מזהה */
-check('the sketch editor writes the old field',
-      /updateOrder\(\w+, \{ sketch: newSrc, hasSketch: true \}\)/.test(ADMIN), true);
-check('and the new node too',
-      /lgSaveSketch\(\w+, newSrc\)/.test(ADMIN), true);
-check('and both on the same id, not two different ones',
-      (ADMIN.match(/updateOrder\((\w+), \{ sketch: newSrc/) || [])[1] ===
-      (ADMIN.match(/lgSaveSketch\((\w+), newSrc\)/)  || [])[1], true);
+/* 2026-10-04: העורך כבר לא כותב פעמיים בעצמו. שתי הכתיבות העצמאיות (שלא
+   חיכו זו לזו, וכישלון של אחת השאיר עותקים שונים) הוחלפו ב-lgReplaceSketch —
+   update אחד, אטומי, על כל הנתיבים. */
+check('the sketch editor saves through lgReplaceSketch',
+      /lgReplaceSketch\(_sqOrder\(sqCurrent\), newSrc\)/.test(ADMIN), true);
+{
+  const body = bodyOf(DB, 'lgReplaceSketch');
+  const code = body.replace(/\/\/[^\n]*/g, '');
+  check('lgReplaceSketch is ONE atomic multi-path update', (code.match(/_lgDb\.ref\(\)\.update\(upd\)/g) || []).length, 1);
+  check('and no other database write inside it',
+        /_lgDb\.ref\([^)]+\)\.(set|update|push|remove)\(|updateOrder\(|lgSaveSketch\(/.test(code), false);
+  check('it always writes the node', /upd\['sketches\/' \+ id\] = src;/.test(code), true);
+  check('and the marker on the order', /upd\['orders\/' \+ id \+ '\/hasSketch'\] = true;/.test(code), true);
+  /* ⚠️ הלב של ההחלטה: סקיצה בלי עותק בתוך ההזמנה (WhatsApp) לא מקבלת אחד */
+  check('the old field is written ONLY when the order already has one',
+        /if \(_lgInlineSketch\(order\)\) upd\['orders\/' \+ id \+ '\/sketch'\] = src;/.test(code), true);
+  check('a failed write restores the cache instead of showing an unsaved edit',
+        /catch \(e\) \{[\s\S]*?_lgSketchCache\.(delete|set)\(id[\s\S]*?throw e;/.test(code), true);
+}
 
 /* the writer list itself — a new one must be caught here, not in production */
 {
@@ -83,10 +95,15 @@ check('and both on the same id, not two different ones',
        הבדיקה שנועדה לתפוס כותב חדש לא תפסה את הכותב השני שכבר היה.
        עכשיו נחשב כתיבה כל ערך שהוא ביטוי חדש — לא '' ולא null, **ולא**
        העתקה של o.sketch, שהיא קריאה לצורך תצוגה ולא כתיבה. */
-    for (const m of src.matchAll(/\bsketch:\s+(?!''|""|null\b|false\b|0\b)(?!\w+\.sketch\b)[A-Za-z_$]/g)) writers.push(f);
+    /* _lgInlineSketch( — lgSketchFields בונה אובייקט-תצוגה, לא כותב */
+    for (const m of src.matchAll(/\bsketch:\s+(?!''|""|null\b|false\b|0\b)(?!\w+\.sketch\b)(?!_lgInlineSketch\()[A-Za-z_$]/g)) writers.push(f);
+    /* כתיבה רב-נתיבית לעותק הישן — מותרת רק בתוך lgReplaceSketch */
+    for (const m of src.matchAll(/\['orders\/' \+ \w+ \+ '\/sketch'\]\s*=/g)) writers.push(f + ':multipath');
   }
   check('the known writers are the only ones', [...new Set(writers)].sort(),
-        ['admin.html', 'upload.html']);
+        ['firebase-db.js:multipath', 'upload.html']);
+  check('and the multi-path one is lgReplaceSketch itself',
+        /\['orders\/' \+ id \+ '\/sketch'\]\s*=/.test(bodyOf(DB, 'lgReplaceSketch')), true);
 }
 
 /* ── a failed new-node write must not cost the old one ─────────────────── */
@@ -151,17 +168,21 @@ check('and both on the same id, not two different ones',
   check('a late answer for a different order is discarded',
         /if \(!src \|\| imgEl\.dataset\.lgFor !== want\) return;/.test(into), true);
   check('the sketch queue goes through it',
-        /lgSketchIntoImg\(img, o\);/.test(read('admin.html')), true);
+        /lgSketchIntoImg\(img, _sqOrder\(o\)\);/.test(read('admin.html')), true);
   /* the marker, not the image, decides whether there is one to show */
   check('and asks the marker rather than the payload',
-        /if\(o\.hasSketch \|\| o\.sketch\)\{/.test(read('admin.html')), true);
+        /if\(lgHasSketch\(o\)\)\{/.test(read('admin.html')), true);
 }
 
 /* ── the marker travels to every screen ────────────────────────────────── */
 check('the normaliser carries the marker', /hasSketch:\s+!!\(o\.hasSketch \|\| o\.sketch\)/.test(DB), true);
-for (const f of ['drafter.html', 'check-station.html', 'admin.html', 'portal.html']) {
-  check(`${f} carries the marker`, /hasSketch:\s+!!\(o\.hasSketch/.test(read(f)), true);
+/* מסכים שבונים אובייקט משלהם מקבלים את הסימן מהשכבה — לא מחשבים אותו בעצמם */
+for (const f of ['drafter.html', 'check-station.html', 'portal.html']) {
+  check(`${f} takes the marker from the layer`, /\.\.\.lgSketchFields\(o\)/.test(read(f)), true);
 }
+check('admin.html takes the marker from the layer', /hasSketch:\s+lgHasSketch\(o\)/.test(read('admin.html')), true);
+check('lgHasSketch reads the marker first, the payload only as fallback',
+      /order\.hasSketch \|\| _lgInlineSketch\(order\)/.test(bodyOf(DB, 'lgHasSketch')), true);
 
 /* ── the rules, which Vercel does not deploy ───────────────────────────── */
 {

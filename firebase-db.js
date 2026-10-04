@@ -453,14 +453,90 @@ function lgSketchSource(mode) {
   try { return localStorage.getItem('lgSketchSource') || 'old'; } catch (e) { return 'old'; }
 }
 
+// ─── שכבת הסקיצה — הדרך היחידה של מסך לגעת בתמונה ────────────────────────
+//
+//  ⚠️ מסכים לא קוראים o.sketch ולא files.f0.data. לעולם. הם שואלים רק
+//  שתי שאלות: "יש סקיצה?" (lgHasSketch) ו"תן לי אותה" (lgLoadSketch /
+//  lgSketchIntoImg), וכותבים דרך lgReplaceSketch. רק הפונקציות כאן יודעות
+//  איפה התמונה יושבת פיזית — ולכן מעבר עתידי (למשל Firebase Storage) הוא
+//  שינוי כאן בלבד. scripts/test-sketch-api-guard.js אוכף את זה.
+//
+//  ה-src שחוזר הוא אטום: היום data URL, מחר אולי כתובת https. אסור למסך
+//  לפרש אותו (base64, אורך, MIME) — רק להציב אותו ב-<img> או בקישור.
+//
+//  סקיצת WhatsApp (שלב 2 ואילך) נשמרת ב-sketches/<id> בלבד, וברשומת ההזמנה
+//  רק hasSketch:true. הזמנות פורטל ממשיכות בכתיבה כפולה עד החלטה נפרדת.
+
+// העותק הישן בתוך רשומת ההזמנה. המקום היחיד שמכיר את שמות השדות האלה.
+function _lgInlineSketch(order) {
+  if (!order) return null;
+  return order.sketch || (order.files && order.files.f0 && order.files.f0.data) || null;
+}
+
+// "יש להזמנה סקיצה?" — בלי להוריד אותה.
+function lgHasSketch(order) {
+  return !!(order && (order.hasSketch || _lgInlineSketch(order)));
+}
+
+// לבניית אובייקט-תצוגה מהזמנה: מעביר את מה שהשכבה צריכה כדי לטעון את
+// התמונה, בלי שהמסך יגע בשמות השדות. כשהעותק הישן ייעלם — מחזיר null שם,
+// והטוען נופל לצומת. המסך לא משתנה.
+function lgSketchFields(order) {
+  return { sketch: _lgInlineSketch(order), hasSketch: lgHasSketch(order) };
+}
+
 // המקור היחיד לתמונת סקיצה בכל המסכים. מחזיר Promise תמיד, כדי שהקוראים
 // לא יצטרכו להשתנות שוב כשהשדה הישן ייעלם.
 async function lgLoadSketch(order) {
   if (!order) return null;
-  const inline = order.sketch || (order.files && order.files.f0 && order.files.f0.data) || null;
+  const inline = _lgInlineSketch(order);
   if (lgSketchSource() === 'old' && inline) return inline;
   const fromNode = await lgGetSketch(order.id);
   return fromNode || inline;
+}
+
+// החלפת התמונה (הדגשה / עריכה). כתיבה **אטומית אחת** לכל הנתיבים: לפני
+// כן אלה היו שתי כתיבות עצמאיות שלא חיכו זו לזו, וכישלון של אחת השאיר שני
+// עותקים שונים. הזמנה שיש לה עותק ישן (פורטל) — שני העותקים, כמו היום.
+// הזמנה בלעדיו (WhatsApp) — הצומת בלבד; לא נוצר עותק בתוך orders.
+async function lgReplaceSketch(order, src) {
+  if (!order || !order.id || !src) throw new Error('lgReplaceSketch: חסרים נתונים');
+  const id = String(order.id), now = Date.now();
+  const upd = {};
+  upd['sketches/' + id] = src;
+  upd['orders/' + id + '/hasSketch'] = true;
+  upd['orders/' + id + '/updatedAt'] = now;
+  if (_lgInlineSketch(order)) upd['orders/' + id + '/sketch'] = src;
+  // המטמון מתעדכן לפני הכתיבה, כדי שהמסך יציג את העריכה מיד — כמו קודם.
+  // נכשלה? חוזרים לתמונה שהייתה, ולא משאירים על המסך עריכה שלא נשמרה.
+  const prev = _lgSketchCache.has(id) ? _lgSketchCache.get(id) : undefined;
+  _lgSketchCache.set(id, src);
+  try {
+    await _lgDb.ref().update(upd);
+  } catch (e) {
+    if (prev === undefined) _lgSketchCache.delete(id); else _lgSketchCache.set(id, prev);
+    throw e;
+  }
+  return true;
+}
+
+// ממלא <img data-sketch-for="<id>"> בתוך root. עם lazy:true — רק כשהתמונה
+// מתקרבת למסך (IntersectionObserver), כדי שרשימה של מאה סקיצות לא תוריד
+// מאה תמונות. findOrder(id) מחזיר את ההזמנה מהרשימה שהמסך כבר מחזיק.
+function lgHydrateSketchImgs(root, findOrder, opts) {
+  if (!root || !findOrder) return;
+  const fill = el => {
+    const id = el.getAttribute('data-sketch-for');
+    if (!id || el.dataset.lgFor === id) return;
+    const o = findOrder(id);
+    if (o) lgSketchIntoImg(el, o, () => el.classList.add('is-loaded'));
+  };
+  const imgs = root.querySelectorAll('img[data-sketch-for]');
+  if (!(opts && opts.lazy) || typeof IntersectionObserver === 'undefined') { imgs.forEach(fill); return; }
+  const io = new IntersectionObserver(entries => entries.forEach(e => {
+    if (e.isIntersecting) { io.unobserve(e.target); fill(e.target); }
+  }), { rootMargin: '200px' });
+  imgs.forEach(el => { if (el.dataset.lgFor !== el.getAttribute('data-sketch-for')) io.observe(el); });
 }
 
 // מציב סקיצה ב-<img>. מה שכבר בזיכרון מוצג מיד, ומה שמגיע מהצומת מחליף
@@ -468,7 +544,7 @@ async function lgLoadSketch(order) {
 // התשובה המאחרת נזרקת ולא דורסת את מה שהוא מסתכל עליו עכשיו.
 function lgSketchIntoImg(imgEl, order, onSrc) {
   if (!imgEl || !order) return;
-  const inline = order.sketch || (order.files && order.files.f0 && order.files.f0.data) || null;
+  const inline = _lgInlineSketch(order);
   const done = src => { imgEl.src = src; if (onSrc) onSrc(src); };
   if (inline && lgSketchSource() === 'old') { imgEl.dataset.lgFor = String(order.id); done(inline); return; }
   if (inline) done(inline);

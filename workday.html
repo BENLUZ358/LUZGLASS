@@ -899,7 +899,7 @@ async function load(){
 // ── SKETCH POPUP ──
 function showSketchPopup(orderId){
   const o = allOrders.find(x=>String(x.id)===String(orderId));
-  if(!o||!o.sketch) return;
+  if(!o||!lgHasSketch(o)) return;
   let modal = document.getElementById('sketchPopupModal');
   if(!modal){
     modal = document.createElement('div');
@@ -914,7 +914,9 @@ function showSketchPopup(orderId){
     document.body.appendChild(modal);
   }
   document.getElementById('spTitle').textContent = o.orderClient+' — '+o.orderNum;
-  document.getElementById('spImg').src = o.sketch;
+  const spImg = document.getElementById('spImg');
+  spImg.removeAttribute('src');            // לא להראות לרגע את הסקיצה של ההזמנה הקודמת
+  lgSketchIntoImg(spImg, o);
   modal.style.display = 'flex';
 }
 
@@ -1197,7 +1199,7 @@ function orderCardHTML(o){
         <button onclick="addWholeOrder('${ordKey}')" style="padding:5px 10px;background:rgba(184,146,42,0.15);color:var(--gold-text);border:1px solid var(--gold);font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">+ הוסף הזמנה שלמה</button>
         <button onclick="toggleOrderExpand('${ordKey}')" style="padding:5px 8px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;color:var(--muted)">${isOrderOpen?'▲':'▾ ראה פריטים'}</button>
       </div>
-      ${isOrderOpen && o.sketch ? `<button onclick="showSketchPopup('${ordKey}')" style="display:block;margin:8px 14px;padding:6px 14px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">🖼 ראה סקיצה</button>` : ''}
+      ${isOrderOpen && lgHasSketch(o) ? `<button onclick="showSketchPopup('${ordKey}')" style="display:block;margin:8px 14px;padding:6px 14px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">🖼 ראה סקיצה</button>` : ''}
     </div>`;
 
   if(!hasItems) return orderHeader;
@@ -1727,7 +1729,7 @@ function renderWorkActive(){
               <span>${it.w||'?'}×${it.h||'?'} מ"מ</span>
               <span style="color:${it.chisum?'#8e44ad':'#2980b9'}">${it.chisum?'מחוסם':'מלוטש'}</span>
             </div>`).join('')}
-          ${o.sketch?`<button onclick="showSketchPopup('${o.id}')" style="margin-top:12px;padding:8px 18px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🖼 פתח סקיצה</button>`:''}
+          ${lgHasSketch(o)?`<button onclick="showSketchPopup('${o.id}')" style="margin-top:12px;padding:8px 18px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🖼 פתח סקיצה</button>`:''}
         </div>` : ''}
       </div>`;
     }).join('');
@@ -2089,7 +2091,7 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
       <span style="font-size:12px;font-weight:700;color:var(--gold-text);letter-spacing:0.05em;flex:1">
         ${lgEsc(o.sketchName||o.type||'סקיצה')}${o.orderNum?' · '+lgEsc(o.orderNum):''}
       </span>
-      ${o.sketch?`<button onclick="showSketchPopup('${o.id}')"
+      ${lgHasSketch(o)?`<button onclick="showSketchPopup('${o.id}')"
         style="padding:3px 9px;background:var(--text);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">
         🖼 ראה סקיצה</button>`:''}
     </div>
@@ -2175,7 +2177,7 @@ function _stageTabHTML(cfg, cn, cOrds){
       ? its.map(it=>`<div class="stv-item">${cfg.bullet} ${lgEsc(it.name||'')} ${it.w||''}×${it.h||''} מ"מ</div>`).join('')
       : `<div class="stv-item" style="color:#888">אין פריטים</div>`;
     // בלי src. הוא נכתב רק כשפותחים — ר' _hydrateStageSketches.
-    const sk = (o.hasSketch || o.sketch)
+    const sk = lgHasSketch(o)
       ? `<img class="stv-sk" data-sketch-for="${lgEsc(String(o.id))}"
               alt="סקיצה — ${lgEsc(o.orderClient||'הזמנה')} ${lgEsc(o.orderNum||'')}"
               onclick="if(this.src)_openSketchFull(this.src)">`
@@ -2516,7 +2518,7 @@ function renderTriplexTab(){
         <span style="font-size:12px;font-weight:700;color:#0e7490">${cnt} פריטים</span>
       </div>`).join('');
 
-    const sketchRows = orders.filter(o => o.sketch).map(o =>
+    const sketchRows = orders.filter(o => lgHasSketch(o)).map(o =>
       `<div style="padding:6px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(0,0,0,0.04);">
         <span style="flex:1;font-size:12px;color:var(--muted)">${lgEsc(o.orderClient||'')} · ${lgEsc(o.orderNum||'')}</span>
         <button onclick="showSketchPopup('${lgJsStr(String(o.id))}')"

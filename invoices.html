@@ -564,7 +564,7 @@ function renderVerify() {
     _shownSketchFor = String(o.id);
     const img = $('skImg');
     img.onload = () => { img.hidden = false; $('skEmpty').hidden = true; $('skFull').hidden = false; };
-    if (o.hasSketch) lgSketchIntoImg(img, o);
+    if (lgHasSketch(o)) lgSketchIntoImg(img, o);
     else $('skEmpty').querySelector('.empty-state-msg').textContent = 'אין סקיצה להזמנה הזו';
   }
 
