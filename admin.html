@@ -599,6 +599,53 @@ async function markDoneAndNotify(orderId, target){
 //
 // ההודעה אחרי ההעברה אינה קישוט: בלעדיה נראה כאילו ההזמנה "נעלמה", ואי
 // אפשר לדעת שהיא ממתינה למזכירה.
+// ══════════════════════════════════════════════════
+//  סיום הובלה אינו נעשה מכאן
+// ══════════════════════════════════════════════════
+//
+//  ⚠️ הודעת "ההובלה יצאה" נשלחת ממסך ההובלות ביום עבודה, ושם בלבד.
+//  שם ההזמנות מקובצות לפי לקוח, והוא מקבל **הודעה אחת** עם כל מספרי
+//  ההזמנות שבאותה משאית.
+//
+//  קידום delivery → collected מכאן היה מעביר את ההזמנה לנאסף **בלי שום
+//  הודעה** — הלקוח לא היה יודע שההובלה יצאה אליו. וחיבור WhatsApp למסך
+//  הזה אינו פתרון: כאן מקדמים הזמנה אחת בכל פעם, ולקוח עם שלוש הזמנות
+//  באותה הובלה היה מקבל שלוש הודעות. ר' ממצא 14 ב-AUDIT_STABILIZATION.
+//
+//  ⚠️ חוסם **רק** את המעבר הזה. done → collected הוא "הלקוח בא ואסף",
+//  והוא כבר קיבל "מוכן לאיסוף" — אין מה לשלוח שוב.
+//
+//  שתי נקודות קוראות לכאן, כי יש שני מסלולים לנאסף: כפתור "קדם"
+//  (advance) ובחירת סטטוס ידנית (saveMod). שומר שמכסה אחד מהם אינו שומר.
+function _lgBlockDeliveryFinish(o, newStage){
+  if(!o || newStage !== 'collected' || (o.stage||'') !== 'delivery') return false;
+  showDeliveryFinishBlocked(o);
+  return true;
+}
+
+function showDeliveryFinishBlocked(order){
+  const ov = document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:700;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
+  // ⚠️ בלי onclick בתוך ה-HTML. הטקסט מכיל מרכאות, וב-attribute הן
+  // חותכות את המטפל — ר' scripts/test-inline-handlers.js.
+  ov.innerHTML=`
+    <div style="background:#fff;border-radius:12px;max-width:380px;width:100%;padding:26px 24px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="font-size:26px;text-align:center;margin-bottom:12px;">🚚</div>
+      <div style="font-size:16px;font-weight:900;color:#1a1714;margin-bottom:8px;text-align:center;">סיום הובלה נעשה ממסך ההובלות</div>
+      <div style="font-size:12px;color:#8a8278;margin-bottom:6px;text-align:center;">${lgEsc(order.orderClient||'')} · ${lgEsc(order.orderNum||'')}</div>
+      <div style="font-size:13px;color:#5a544c;margin-bottom:22px;text-align:center;line-height:1.6;">
+        הזמנה זו נמצאת בהובלה. כדי לסיים את ההובלה ולשלוח ללקוח הודעה יחד עם שאר ההזמנות שלו, יש לבצע "סיים הובלה" דרך יום עבודה ← הובלות.
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button id="dfbGo" style="padding:13px;background:#2980b9;color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">🚚 עבור למסך ההובלות</button>
+        <button id="dfbClose" style="padding:9px;background:none;border:none;color:#aaa;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">סגור</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#dfbGo').addEventListener('click', () => { window.location.href = 'workday.html'; });
+  ov.querySelector('#dfbClose').addEventListener('click', () => ov.remove());
+}
+
 function showCollectedPrompt(order){
   const ov = document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:16px;';
@@ -683,6 +730,8 @@ async function advance(id) {
 
   if (newStage === 'done')     { showInvoicePrompt(o, 'done');     return; }
   if (newStage === 'delivery') { showInvoicePrompt(o, 'delivery'); return; }
+  // ⚠️ delivery → collected נחסם. ר' _lgBlockDeliveryFinish.
+  if (_lgBlockDeliveryFinish(o, newStage)) return;
   if (newStage === 'collected'){ showCollectedPrompt(o);           return; }
 
   await updateStage(String(id), newStage);
@@ -712,6 +761,9 @@ async function saveMod() {
   }
 
   const newStage = statusToStage(newStatus) || '';
+  // ⚠️ המסלול השני לנאסף: בחירת "נאסף" מרשימת הסטטוסים. בלי הבדיקה כאן
+  // החסימה בכפתור "קדם" הייתה עקיפה בשתי לחיצות.
+  if (_lgBlockDeliveryFinish(o, newStage)) return;
   const lockStages = ['done', 'delivery', 'collected'];
   if(lockStages.includes(newStage)){
     _lgWarnUnpriced(await lgLockAndAdvance(id, o, globalPrices, clientPrices, newStage));
