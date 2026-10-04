@@ -215,15 +215,23 @@ async function lgWaReserveSlot(db, gapMs, maxWaitMs) {
 
 //  מה ממתין לשליחה. מחזיר מפתחות בלבד, ובסדר הכניסה.
 //  limit קטן בכוונה: ה-drain מוגבל ממילא, ואין טעם לקרוא תור שלם.
+//
+//  ⚠️ השאילתה היא לפי state, לא לפי createdAt. רשומות sent / expired
+//  נשארות לנצח (ה-guard "כבר נשלחה" ב-lgWaEnqueue נשען עליהן), ולכן
+//  "60 הוותיקות ואז סינון" החזיר תור ריק מרגע שהצטברו 60 סופיות —
+//  והשליחה נעצרה בשקט (2026-10-04). הסינון חייב לקרות לפני החיתוך.
 async function lgWaPending(db, limit) {
-  const snap = await db.ref(OUTBOX).orderByChild('createdAt').limitToFirst(limit || 50).once('value');
-  const out  = [];
-  snap.forEach(ch => {
+  const byState = s => db.ref(OUTBOX).orderByChild('state').equalTo(s).once('value');
+  const [pending, failed] = await Promise.all([byState('pending'), byState('failed')]);
+  const rows = [];
+  const take = snap => snap.forEach(ch => {
     const v = ch.val() || {};
     const retryable = v.state === 'pending' || (v.state === 'failed' && (v.attempts || 0) < MAX_ATTEMPTS);
-    if (retryable) out.push(ch.key);
+    if (retryable) rows.push({ key: ch.key, at: v.createdAt || 0 });
   });
-  return out;
+  take(pending); take(failed);
+  rows.sort((a, b) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return rows.slice(0, limit || 50).map(r => r.key);
 }
 
 module.exports = {
