@@ -392,6 +392,75 @@ const GREEN_ENV = {
         (DISP.match(/configured: provider\.configured/g) || []).length, 2);
 }
 
+/* ═══ 3ו · קיבוץ "מוכן לאיסוף" לפי לקוח ════════════════════════════ */
+//
+//  ⚠️ עד 02/10/2026 כל הזמנה שחזרה מחיסום הפיקה הודעה משלה. לקוח ששלוש
+//  הזמנות שלו חזרו באותה לחיצה קיבל שלוש הודעות ברצף. הקיבוץ אינו מנגנון
+//  חדש — הוא אותו whatsapp-dispatch שכבר הוכח בייצור על L1071.
+{
+  const m0 = require(path.join(ROOT, 'api', '_wa-provider.js'));
+  const R  = (nums, sk) => m0.renderText({ kind:'ready', clientName:'המקום לאמבט',
+                                           orderNums:nums, sketchNames:sk });
+
+  /* ── 1 / 2 / 3 הזמנות של אותו לקוח ── */
+  const one = R(['L1080'], ['מקלחון הורים']);
+  check('one order keeps the singular wording',
+        /ההזמנה L1080 — מקלחון הורים מוכנה לאיסוף\./.test(one), true);
+  /* ⚠️ ושורת הסיום ביחיד — היא נוסחה כך כשכל הודעה נשאה הזמנה אחת */
+  check('and the closing line stays singular', /בפרטי ההזמנה\./.test(one), true);
+
+  const two = R(['L1080','L1081'], ['מקלחון הורים','מקלחון ילדים']);
+  check('two orders switch to a list',
+        /ההזמנות הבאות מוכנות לאיסוף:\n• L1080 — מקלחון הורים\n• L1081 — מקלחון ילדים/.test(two), true);
+  check('and the closing line follows the count', /בפרטי ההזמנות\./.test(two), true);
+
+  const three = R(['L1080','L1081','L1082'], ['מקלחון הורים','מקלחון ילדים','מראה']);
+  check('three orders, one message',
+        /ההזמנות הבאות מוכנות לאיסוף:\n• L1080 — מקלחון הורים\n• L1081 — מקלחון ילדים\n• L1082 — מראה/.test(three), true);
+  /* ⚠️ זו הטענה העסקית: **הודעה אחת**, לא שלוש */
+  check('and it greets the client exactly once', (three.match(/שלום/g)||[]).length, 1);
+  check('no comma-joined run-on sentence', /L1080, L1081/.test(three), false);
+
+  /* חסר שם סקיצה באחת מהן */
+  const mixed = R(['L1080','L1081'], ['מקלחון הורים','']);
+  check('an order with no sketch name keeps its line clean',
+        /• L1080 — מקלחון הורים\n• L1081$/m.test(mixed), true);
+  check('and carries no dangling dash', (mixed.match(/—/g)||[]).length, 1);
+}
+
+/* ═══ 3ז · הקיבוץ עצמו — לקוח אחד, הודעה אחת ═══════════════════════ */
+{
+  const WD   = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
+  const DISP = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-dispatch.js'), 'utf8');
+
+  /* שלוש נקודות הטריגר עברו לקיבוץ, ואף אחת לא נשארה מאחור */
+  check('every ready trigger now goes through the grouping',
+        (WD.match(/_waSendReadyGrouped\(/g) || []).length, 4);   // הגדרה + 3 קריאות
+  check('and none still calls the per-order sender',
+        /setTimeout\(\(\) => _waSendBulk\(/.test(WD), false);
+
+  const grp = (WD.match(/async function _waSendReadyGrouped[\s\S]*?\n}/) || [''])[0];
+  check('it groups by client name',        /const c = \(o && o\.orderClient\) \|\| '—';/.test(grp), true);
+  check('and calls the proven endpoint',   /'\/api\/whatsapp-dispatch'/.test(grp), true);
+  check('with kind=ready',                 /kind:'ready'/.test(grp), true);
+  /* ⚠️ קריאה אחת לכל לקוח — לא אחת לכל הזמנה */
+  check('once per client, not once per order',
+        /for\(const \[client, group\] of byClient\)/.test(grp), true);
+  check('a mixed-phone refusal is surfaced per client',
+        /res\.status === 409/.test(grp), true);
+  check('and an unconfigured environment stays silent',
+        /if\(!data\.configured\) notConfigured = true;/.test(grp), true);
+
+  /* ⚠️ חד-פעמיות פר-הזמנה — זה מה שמונע שהזמנה תיכנס לקבוצה שנייה */
+  check('ready skips an order that was already notified',
+        /kind === 'ready' && order\.whatsapp && order\.whatsapp\.sentAt && !force/.test(DISP), true);
+  /* ולהובלה אין שדה כזה — היא אירוע, לא מצב */
+  check('while dispatched has no such per-order state',
+        /kind === 'dispatched' && order\.whatsapp/.test(DISP), false);
+  check('dispatched stays the default when kind is absent',
+        /body\.kind === 'ready' \? 'ready' : 'dispatched'/.test(DISP), true);
+}
+
 /* ═══ 4 · הטוקן אינו דולף ═══════════════════════════════════════════ */
 {
   const SRC = fs.readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8');
@@ -832,6 +901,44 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
   const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
   check('the drain passes the sketch names to the provider',
         /sketchNames: entry\.sketchNames \|\| \[\]/.test(DRAIN), true);
+})();
+
+/* ═══ 3ח · שני לקוחות באותה פעולה ═══════════════════════════════════ */
+(async () => {
+  /*  הפעולה: חמש הזמנות חזרו מחיסום — שלוש של לקוח א', שתיים של לקוח ב'.
+      הדפדפן מקבץ לפי orderClient; כאן נבדקת התוצאה. */
+  const A = ['a1','a2','a3'], B = ['b1','b2'];
+  const db = fakeDb({});
+
+  const qA = await ob.lgWaEnqueue(db, { kind:'ready', to:'0501111111', clientName:'לקוח א',
+    orderNums:['L1','L2','L3'], sketchNames:['x','y','z'], orderIds:A, queuedBy:'u' });
+  const qB = await ob.lgWaEnqueue(db, { kind:'ready', to:'0502222222', clientName:'לקוח ב',
+    orderNums:['L4','L5'], sketchNames:['p','q'], orderIds:B, queuedBy:'u' });
+
+  check('each client gets exactly one record', Object.keys(db._data.waOutbox).length, 2);
+  check('and the two records are distinct',    qA.key === qB.key, false);
+  check('client A carries all three of their orders', db._data.waOutbox[qA.key].orderNums, ['L1','L2','L3']);
+  check('client B carries only their own two',        db._data.waOutbox[qB.key].orderNums, ['L4','L5']);
+
+  /* ⚠️ המפתח נגזר מהקבוצה. אותה פעולה שוב — אותו מפתח, בלי הודעה שנייה */
+  check('the group key is deterministic', qA.key, ob.lgWaMsgKey('ready', ['a3','a1','a2']));
+  const again = await ob.lgWaEnqueue(db, { kind:'ready', to:'0501111111', clientName:'לקוח א',
+    orderNums:['L1','L2','L3'], sketchNames:['x','y','z'], orderIds:A, queuedBy:'u' });
+  check('re-running the same action is refused', [again.queued, again.reason], [false, 'כבר בתור']);
+  check('and creates no extra record', Object.keys(db._data.waOutbox).length, 2);
+
+  /* ⚠️ וקבוצה של הזמנה בודדת אינה אותה הודעה כמו הקבוצה שהכילה אותה —
+     בדיוק בגלל זה נדרש גם הדילוג הפר-הזמנה ב-whatsapp-dispatch */
+  check('a sub-group is a different key', ob.lgWaMsgKey('ready', ['a1']) === qA.key, false);
+
+  /* ready ו-dispatched על אותן הזמנות הם שתי הודעות שונות, ובצדק */
+  check('ready and dispatched never collide',
+        ob.lgWaMsgKey('ready', A) === ob.lgWaMsgKey('dispatched', A), false);
+
+  /* החותמת נכתבת לשדה הנכון לפי הסוג */
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  check('ready stamps orders/<id>/whatsapp, dispatched its own field',
+        /const field = entry\.kind === 'dispatched' \? 'whatsappDispatch' : 'whatsapp';/.test(DRAIN), true);
 })();
 
 /* ═══ 5ז · ה-re-resolve חוסם בפועל, לא רק במבנה ════════════════════ */

@@ -97,7 +97,13 @@ check('configured means all three variables',
   check('workday no longer opens a window per order',
         /setTimeout\(\(\) => \{\s*\{ const _u = _waLink/.test(workday), false);
   check('completed orders are collected', /_waPending\.push\(sid\)/.test(workday), true);
-  check('and sent in one call', /_waSendBulk\(_waPending\)/.test(workday), true);
+  /* ⚠️ הטענה התחזקה (02/10/2026): פעם זו הייתה קריאה אחת לשרת עם כל
+     ההזמנות, והשרת הפיק הודעה לכל אחת. עכשיו הן מקובצות לפי לקוח ו**כל
+     לקוח מקבל הודעה אחת** — ר' _waSendReadyGrouped. */
+  check('and sent grouped, one message per client',
+        /_waSendReadyGrouped\(_waPending\)/.test(workday), true);
+  check('through the endpoint that already proved grouping in production',
+        /kind:.ready., orderIds: group/.test(workday), true);
   check('failures are surfaced, not swallowed', /_waFailureBanner\(failed\)/.test(workday), true);
 
   /* the auth helpers moved to the shared file so the two pages cannot drift */

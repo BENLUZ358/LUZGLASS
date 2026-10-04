@@ -623,6 +623,11 @@ function _waTarget(o){
 //
 // אוסף את כל ההזמנות שנסגרו וקורא פעם אחת, ולא קריאה להזמנה. השרת מקצב
 // בעצמו, ומדלג על מה שכבר נשלח ועל הזמנות פיקטיביות.
+//
+// ⚠️⚠️ אינו מחובר יותר (02/10/2026). שלוש נקודות הקריאה עברו ל-
+// _waSendReadyGrouped, שמקבץ לפי לקוח ושולח הודעה אחת. הפונקציה הזו
+// ו-_waReport נשארו כי api/whatsapp-send.js הוא עדיין המסלול הפר-הזמנה
+// של Meta. **אם אתה קורא את זה ומחפש מי שולח "מוכן לאיסוף" — זה לא כאן.**
 // רשת הביטחון של התור רצה פעם אחת בטעינה — ר' listenAllOrders
 let _waKicked = false;
 
@@ -2264,7 +2269,7 @@ async function completeGraphic(orderId){
   if(!o) return;
   const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
   if(nextSt === 'done'){
-    setTimeout(() => _waSendBulk([String(o.id)]), 1200);
+    setTimeout(() => _waSendReadyGrouped([String(o.id)]), 1200);
   }
   if(nextSt === 'done' || nextSt === 'delivery'){
     _lgWarnUnpriced(await lgLockAndAdvance(String(orderId), o, _wdGlobalPrices, _wdClientPrices, nextSt));
@@ -2307,6 +2312,64 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
       // קצרה כדי שהכתיבות ייקלטו לפני שהשרת קורא את ההזמנות.
       setTimeout(() => _waDispatch(orderIds, clientName), 1200);
     });
+}
+
+// ── "מוכן לאיסוף" — הודעה אחת ללקוח, לא אחת לכל הזמנה ──
+//
+//  ⚠️ עד 02/10/2026 כל הזמנה שחזרה מחיסום הפיקה הודעה משלה. לקוח ששלוש
+//  הזמנות שלו חזרו באותה לחיצה קיבל שלוש הודעות ברצף.
+//
+//  הקיבוץ כאן אינו מנגנון חדש: הוא קורא לאותו whatsapp-dispatch שכבר
+//  מקבץ הובלות — אותו פתרון נמען בשרת, אותו סירוב על טלפונים שונים,
+//  אותו מפתח דטרמיניסטי על הקבוצה. ההבדל היחיד הוא kind.
+//
+//  ⚠️ מקובץ **לפי הפעולה הנוכחית בלבד**: נכנסות רק ההזמנות שהגיעו ל-done
+//  עכשיו. הזמנה ישנה של אותו לקוח שכבר יושבת ב-done אינה נגררת פנימה.
+async function _waSendReadyGrouped(orderIds){
+  const ids = [...new Set((orderIds||[]).map(String))];
+  if(!ids.length) return;
+
+  // קיבוץ לפי שם הלקוח — בדיוק כמו מסך ההובלות. השרת פותר את הנמען
+  // בעצמו ומסרב אם קבוצה מובילה לשני מספרים, ולכן השם כאן אינו מזהה.
+  const byClient = new Map();
+  ids.forEach(id => {
+    const o = allOrders.find(x => String(x.id) === id);
+    const c = (o && o.orderClient) || '—';
+    if(!byClient.has(c)) byClient.set(c, []);
+    byClient.get(c).push(id);
+  });
+
+  let queued = 0, notConfigured = false;
+  for(const [client, group] of byClient){
+    try {
+      const res  = await _lgAuthPost('/api/whatsapp-dispatch',
+                                     { kind:'ready', orderIds: group, dryRun:false });
+      const data = await res.json();
+
+      if(res.status === 409){
+        // ממצא בנתונים ולא תקלה טכנית — שני כרטיסים עם אותו שם
+        showToast('⚠️ ' + client + ' — ההזמנות מובילות למספרים שונים, לא נשלחה הודעה');
+        continue;
+      }
+      if(!res.ok){ showToast('⚠️ הודעה ל' + client + ' נכשלה: ' + (data.error||res.status)); continue; }
+      if(data.preview){
+        if(!data.configured) notConfigured = true;
+        else showToast('📱 ' + client + ' — ' + (data.reason || 'לא נשלחה'));
+        continue;
+      }
+      if(data.queued) queued++;
+    } catch(e){
+      console.error('whatsapp ready group:', e);
+      showToast('⚠️ לא הצלחתי להגיע לשרת השליחה');
+    }
+  }
+
+  // אותו כלל כמו בשאר המסלולים: לא מוגדר → קונסולה בלבד
+  if(notConfigured) console.info('[WhatsApp] לא מוגדר בסביבה הזו — לא נשלח כלום');
+  if(queued){
+    showToast('📤 ' + queued + ' הודעות נכנסו לתור — יוצאות בהדרגה');
+    _waDrainWithProgress();
+  }
 }
 
 // ── "ההובלה יצאה" — הודעה אחת ללקוח עם כל ההזמנות שבהובלה ──
@@ -2891,7 +2954,7 @@ function confirmResetChisum(){
 
   // אחרי שהשלבים נכתבו — שליחה אחת מרוכזת מהשרת. השהיה קצרה כדי שהכתיבות
   // יספיקו להיקלט, אחרת השרת קורא הזמנה שעדיין לא סומנה done.
-  if(_waPending.length) setTimeout(() => _waSendBulk(_waPending), 1200);
+  if(_waPending.length) setTimeout(() => _waSendReadyGrouped(_waPending), 1200);
 
   LG_TRACK.chisum.echo  = {};
   LG_TRACK.triplex.echo = {};
@@ -3252,7 +3315,7 @@ function confirmFinish(){
   const _waReady = cutReady
     .filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'done')
     .map(o => String(o.id));
-  if(_waReady.length) setTimeout(() => _waSendBulk(_waReady), 1200);
+  if(_waReady.length) setTimeout(() => _waSendReadyGrouped(_waReady), 1200);
 
   // עדכן statuses
   allOrders.forEach(o => {
