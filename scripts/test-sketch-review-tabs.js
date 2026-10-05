@@ -124,12 +124,16 @@ check('motion is dropped for anyone who asked for that',
   const code = fn.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
   check('saving no longer depends on the id prefix',
         /startsWith\(['"]ord_['"]\)/.test(code), false);
-  check('the order is updated', /updateOrder\(/.test(fn), true);
-  check('and the sketch node is written too', /lgSaveSketch\(/.test(fn), true);
-  /* the list keeps its own copy; without this the thumbnail stays stale and
-     the next sqShowDetail re-reads the pre-edit image from it */
-  check('the queue list gets the new image as well',
-        /sqItems\.find[\s\S]{0,160}?\.sketch\s*=\s*newSrc/.test(fn), true);
+  /* 2026-10-04: שתי כתיבות עצמאיות (updateOrder + lgSaveSketch) הוחלפו
+     בכתיבה אטומית אחת דרך השכבה. הסדר וההיקף נבדקים ב-test-sketch-storage. */
+  check('the sketch is saved through the shared layer', /lgReplaceSketch\(/.test(code), true);
+  check('not as two independent writes any more',
+        /updateOrder\(/.test(code) || /lgSaveSketch\(/.test(code), false);
+  /* הרשימה כבר לא מחזיקה עותק של התמונה, ולכן אין מה שיתיישן: הרינדור הבא
+     טוען דרך השכבה, שהמטמון שלה כבר מחזיק את התמונה החדשה. */
+  check('the queue list no longer keeps its own copy of the image',
+        /\.sketch\s*=\s*newSrc/.test(code), false);
+  check('it only learns that there is a sketch now', /_it\.hasSketch\s*=\s*true/.test(code), true);
   /* a failed write must not look like a success */
   check('a failed save is surfaced, not swallowed',
         /catch\s*\(/.test(fn), true);

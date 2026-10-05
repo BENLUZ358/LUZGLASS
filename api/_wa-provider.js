@@ -99,6 +99,39 @@ function renderText({ kind, clientName, orderNums, sketchNames }) {
     : wrap('ההזמנה ' + label(0) + ' מוכנה לאיסוף.');
 }
 
+//  ─── סיווג כשל ──────────────────────────────────────────────────────
+//
+//  ⚠️ GREEN API מחזירה **400 גם על ניתוק וגם על בקשה שגויה**. הקוד לבדו
+//  אינו מבדיל, ולכן הטקסט בגוף הוא המבדיל היחיד.
+//
+//  ⚠️⚠️ וחשוב מזה: כשהמכשיר מנותק, GREEN API לרוב **אינה מחזירה שגיאה
+//  בכלל** — היא מכניסה את ההודעה לתור שלה ל-24 שעות ומוסרת אותה אחרי
+//  החיבור מחדש. כלומר סיווג-לפי-שגיאה הוא **רשת ביטחון, לא מנגנון**:
+//  אפשר שלא נראה שום כשל ועדיין נרשום "נשלח" על הודעה שלא נמסרה.
+//  המנגנון האמיתי הוא getState() לפני השליחה — ר' שם.
+//  (ההמלצה הרשמית שלהם: "stop requesting sending methods to the API".)
+const FAIL = {
+  DISCONNECTED: 'disconnected',  // המכשיר אינו מקושר — ממתינים לחיבור
+  QUOTA:        'quota',         // 466 — המכסה נוצלה
+  RATE:         'rate',          // 429 — יותר מדי בקשות
+  RECIPIENT:    'recipient',     // מספר שאינו תקין או אינו ב-WhatsApp
+  NETWORK:      'network',       // לא הגענו אליהם בכלל
+  OTHER:        'other',
+};
+
+//  מקבל קוד HTTP והודעה שכבר עברה redact. לעולם לא רואה טוקן.
+function classifyFailure(httpStatus, message) {
+  const m = String(message || '').toLowerCase();
+  if (httpStatus === 466) return FAIL.QUOTA;
+  if (httpStatus === 429) return FAIL.RATE;
+  // ⚠️ הניסוחים שלהם: "instance is starting or not authorized",
+  // "instance account not authorized". שניהם 400.
+  if (/not authorized|notauthorized|scan the qr|qr code/.test(m)) return FAIL.DISCONNECTED;
+  if (/chatid|not exist|wa number|recipient|phone/.test(m))       return FAIL.RECIPIENT;
+  if (httpStatus === 0) return FAIL.NETWORK;
+  return FAIL.OTHER;
+}
+
 /* ═══ Meta Cloud API — מסלול הייצור. לא משתנה ═══════════════════════ */
 
 function metaProvider() {
@@ -126,6 +159,10 @@ function metaProvider() {
     // ⚠️ ctx מתעלם: אצל Meta ההחלטה אינה תלויה בנמען, והיא לא השתנתה.
     gate(_ctx) { const e = lgExternal(); return { allowed: e.allowed, reason: e.reason }; },
     ready()    { const e = lgExternal(); return { allowed: e.allowed, reason: e.reason }; },
+    //  ⚠️ ל-Meta אין מכשיר מקושר שיכול להתנתק — הערוץ רשמי ועובד מול
+    //  שרת. הוא מדווח "מחובר" תמיד, כדי שה-drain לא יחסום אותו בטעות.
+    checksState: false,
+    async getState() { return { ok: true, state: 'authorized', reason: '' }; },
 
     // התבנית מקבלת שני משתנים: שם הלקוח ומספר ההזמנה. עבור kind='ready'
     // עם הזמנה אחת זו **אותה מחרוזת בדיוק** שנשלחה עד היום.
@@ -163,11 +200,13 @@ function metaProvider() {
       // ⚠️ 200 אינו "הלקוח קיבל" — הוא "Meta קיבלה ממני". מסירה אמיתית
       // מגיעה ב-webhook נפרד.
       const ok = httpStatus >= 200 && httpStatus < 300;
+      const reason = ok ? null : (parsed && parsed.error && parsed.error.message) || String(text).slice(0, 300);
       return {
         ok, httpStatus, params,
+        failureKind: ok ? null : classifyFailure(httpStatus, reason),
         messageId: (parsed && parsed.messages && parsed.messages[0] && parsed.messages[0].id) || null,
         detail:    String(text).slice(0, 2000),
-        reason:    ok ? null : (parsed && parsed.error && parsed.error.message) || String(text).slice(0, 300),
+        reason,
       };
     },
   };
@@ -219,6 +258,39 @@ function greenProvider() {
       return { allowed: e.allowed, reason: e.reason };
     },
 
+    //  ⚠️ **זה המנגנון, לא הגיבוי.**
+    //
+    //  כשהמכשיר מנותק GREEN API לרוב אינה מחזירה שגיאה — היא מכניסה את
+    //  ההודעה לתור שלה ל-24 שעות. אם נשלח בכל זאת, נקבל idMessage ונרשום
+    //  "נשלח" על הודעה שהלקוח לא קיבל, ואולי לא יקבל לעולם. לכן שואלים
+    //  **לפני** ששולחים. זו גם ההמלצה הרשמית שלהם.
+    //
+    //  המצבים: authorized · notAuthorized · blocked · starting · sleepMode
+    //  · suspended. רק authorized מתיר שליחה — כל השאר אומר להמתין.
+    //
+    //  ⚠️ לא מחזיר טוקן ולא מזהה מופע, כמו כל דבר אחר שיוצא מכאן.
+    checksState: true,
+    async getState() {
+      const redact = s => String(s == null ? '' : s).split(token).join('***');
+      const url = 'https://api.green-api.com/waInstance' + idInstance +
+                  '/getStateInstance/' + token;
+      try {
+        const r = await fetch(url, { method: 'GET' });
+        const raw = await r.text();
+        let parsed = null;
+        try { parsed = JSON.parse(raw); } catch (_) { /* לא JSON */ }
+        if (r.status < 200 || r.status >= 300) {
+          return { ok: false, state: 'unknown',
+                   reason: redact((parsed && (parsed.message || parsed.error)) || ('HTTP ' + r.status)).slice(0, 200) };
+        }
+        const state = String((parsed && parsed.stateInstance) || '').trim() || 'unknown';
+        return { ok: true, state, reason: '' };
+      } catch (e) {
+        // ⚠️ e.message של fetch עלול להכיל את ה-URL, ובו הטוקן
+        return { ok: false, state: 'unknown', reason: 'שגיאת רשת (' + (e && e.name) + ')' };
+      }
+    },
+
     params(facts) { return [renderText(facts || {})]; },
 
     async send(facts) {
@@ -248,12 +320,15 @@ function greenProvider() {
       } catch (e) {
         // ⚠️ e.message של fetch עלול להכיל את ה-URL, ועם זה את הטוקן.
         return { ok: false, httpStatus: 0, messageId: null, params: [text],
+                 failureKind: FAIL.NETWORK,
                  detail: 'network', reason: 'שגיאת רשת מול GREEN API (' + (e && e.name) + ')' };
       }
 
       const ok = httpStatus >= 200 && httpStatus < 300 && !!(parsed && parsed.idMessage);
+      const why = redact((parsed && (parsed.message || parsed.error)) || '').slice(0, 300);
       return {
         ok, httpStatus,
+        failureKind: ok ? null : classifyFailure(httpStatus, why),
         params:    [text],
         messageId: (parsed && parsed.idMessage) || null,
         // ⚠️ לא הגוף הגולמי — הוא מכיל path ובו הטוקן. רק מה שמסביר כישלון.
@@ -273,4 +348,4 @@ function lgWaProvider() {
   return want === 'green' ? greenProvider() : metaProvider();
 }
 
-module.exports = { lgWaProvider, renderText };
+module.exports = { lgWaProvider, renderText, classifyFailure, FAIL };

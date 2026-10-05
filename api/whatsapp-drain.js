@@ -23,7 +23,7 @@
 const { verifyAdmin }   = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
-const { lgWaClaim, lgWaComplete, lgWaPending, lgWaReserveSlot } = require('./_wa-outbox');
+const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot } = require('./_wa-outbox');
 const { resolvePhone } = require('./_wa-recipient');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
@@ -37,6 +37,28 @@ const BUDGET_MS = 45 * 1000;
 //  כמה מותר להמתין לחלון שליחה. חייב להיות קטן מספיק כדי להישאר בתקציב,
 //  וגדול מספיק כדי שדילוג על חלון לא יהפוך לשגרה. gap אחד ועוד מרווח.
 const SLOT_MAX_WAIT_MS = 15 * 1000;
+
+//  מצב החיבור, כדי שמסך יוכל להראות אותו בלי לשאול את GREEN API בעצמו.
+//  ⚠️ waMeta כבר קיים בחוקים — קריאה לאדמין, כתיבה חסומה. אין שינוי rules.
+const WA_STATE = 'waMeta/whatsapp';
+
+//  'authorized' הוא היחיד שמתיר שליחה. כל השאר אומר להמתין — notAuthorized
+//  (המכשיר נותק), blocked (המספר נחסם), starting, sleepMode, suspended.
+const isLive = st => st === 'authorized';
+
+async function recordState(db, { state, reason, pending }) {
+  try {
+    await db.ref(WA_STATE).update({
+      state:     String(state || 'unknown'),
+      reason:    String(reason || ''),
+      pending:   Number(pending) || 0,
+      checkedAt: Date.now(),
+    });
+  } catch (e) {
+    // רישום מצב אינו שליחה — כישלון כאן לא עוצר דבר
+    console.warn('whatsapp-drain: recordState', e && e.name);
+  }
+}
 
 function _db() {
   const app = getApps().length ? getApps()[0] : initializeApp({
@@ -61,9 +83,50 @@ module.exports = async function handler(req, res) {
   const provider = lgWaProvider();
   const started  = Date.now();
 
+  const body      = (req.body && typeof req.body === 'object') ? req.body : {};
+  //  בדיקת מצב בלבד, בלי לגעת בתור — כדי שמסך יוכל לרענן אינדיקציה
+  //  בבטחה. אותו endpoint, בלי לפתוח אחד חדש בשביל שורה אחת.
+  const checkOnly = body.checkOnly === true;
+
   try {
     const db      = _db();
     const keys    = await lgWaPending(db, 60);
+
+    // ── מצב המכשיר, לפני שנוגעים בתור ──
+    //
+    //  ⚠️ זה המנגנון ולא הגיבוי. כשהמכשיר מנותק GREEN API לרוב **אינה
+    //  מחזירה שגיאה** — היא מכניסה את ההודעה לתור שלה ל-24 שעות. אם
+    //  נשלח בכל זאת נקבל idMessage ונרשום "נשלח" על הודעה שלא נמסרה.
+    //  לכן שואלים לפני, וזו גם ההמלצה הרשמית של GREEN API.
+    //
+    //  שאלה אחת לכל הפעלה, לא לכל הודעה.
+    let state = 'authorized', stateReason = '';
+    if (provider.checksState && provider.configured && (keys.length || checkOnly)) {
+      const st = await provider.getState();
+      state = st.state; stateReason = st.reason || '';
+      await recordState(db, { state, reason: stateReason, pending: keys.length });
+
+      if (!isLive(state)) {
+        //  ⚠️ לא תופסים, לא שולחים, לא סופרים ניסיון. ההודעות נשארות
+        //  pending ויצאו כשהחיבור יחזור — דרך אותו drain ואותו קצב.
+        res.status(200).json({
+          ok: true, provider: provider.name, state, stateReason,
+          disconnected: true, processed: 0, remaining: keys.length,
+          tally: keys.length ? { waiting: keys.length } : {}, results: [],
+          elapsedMs: Date.now() - started,
+        });
+        return;
+      }
+    }
+
+    if (checkOnly) {
+      res.status(200).json({
+        ok: true, provider: provider.name, state, stateReason,
+        checkOnly: true, processed: 0, remaining: keys.length,
+        tally: {}, results: [], elapsedMs: Date.now() - started,
+      });
+      return;
+    }
     const results = [];
     let processed = 0;
 
@@ -145,6 +208,18 @@ module.exports = async function handler(req, res) {
         sketchNames: entry.sketchNames || [],
       });
 
+      //  ⚠️ ניתוק שהתחיל באמצע הסבב. הרשומה חוזרת לתור **בלי לספור
+      //  ניסיון**, והסבב נעצר — אין טעם לנסות את שאר ההודעות מול מכשיר
+      //  שאינו מחובר, וכל ניסיון כזה שורף חלון שליחה של 10 שניות.
+      if (!out.ok && out.failureKind === 'disconnected') {
+        await lgWaRelease(db, key, out.reason || 'WhatsApp מנותק');
+        await recordState(db, { state: 'notAuthorized', reason: out.reason || '',
+                                pending: (await lgWaPending(db, 60)).length });
+        results.push({ key, status: 'waiting', reason: 'WhatsApp מנותק — ההודעה ממתינה' });
+        state = 'notAuthorized';
+        break;
+      }
+
       await lgWaComplete(db, key, out);
       processed++;
 
@@ -200,8 +275,14 @@ module.exports = async function handler(req, res) {
     const remaining = (await lgWaPending(db, 60)).length;
     const tally = results.reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {});
 
+    //  מה שנמדד בפועל — כולל כמה ממתינות — כדי שהמסך יראה תמונה עדכנית
+    if (provider.checksState && provider.configured) {
+      await recordState(db, { state, reason: stateReason, pending: remaining });
+    }
+
     res.status(200).json({
-      ok: true, provider: provider.name, gapMs: provider.gapMs,
+      ok: true, provider: provider.name, gapMs: provider.gapMs, state,
+      disconnected: !isLive(state) || undefined,
       processed, remaining, tally, results,
       elapsedMs: Date.now() - started,
     });

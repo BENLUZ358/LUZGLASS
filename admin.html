@@ -366,6 +366,8 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     </div>
   </div>
 
+  <div id="waStatusBar" style="display:none"></div>
+
   <div class="stats" id="stats"></div>
 
   <div class="filters">
@@ -748,7 +750,7 @@ async function saveMod() {
   const newStatus = document.getElementById('mst').value;
 
   // בדיקה 1: אין סקיצה — לא ניתן לעבור מ"ממתין לאישור"
-  if (o.status === 'ממתין לאישור' && !o.sketch && newStatus !== 'ממתין לאישור') {
+  if (o.status === 'ממתין לאישור' && !lgHasSketch(o) && newStatus !== 'ממתין לאישור') {
     alert('לא ניתן להעביר סטטוס לפני שיש סקיצה להזמנה');
     return;
   }
@@ -814,16 +816,18 @@ function openMod(id) {
       <div class="msec-t">סטטוס</div>
       <select id="mst" class="msel"></select>
     </div>
-    ${o.sketch ? `
+    ${lgHasSketch(o) ? `
     <div class="msec">
       <div class="msec-t">סקיצה</div>
-      <img src="${lgEsc(o.sketch)}" alt="סקיצת ההזמנה" class="mimg"/>
+      <img data-sketch-for="${lgEsc(String(o.id))}" alt="סקיצת ההזמנה" class="mimg"/>
     </div>` : ''}
     <div class="msec">
       <div class="msec-t">פריטים</div>
       <div id="itemsPreview"></div>
     </div>
   `;
+
+  _hydrateSketchImgs(document.getElementById('mbody'));
 
   // מלא את תצוגת הפריטים
   const items = o.items || [];
@@ -1212,7 +1216,7 @@ function card(o) {
       <span class="c-price">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</span>
     </div>
     <div class="c-acts" onclick="event.stopPropagation()">
-      ${o.sketch ? `<button class="cb-btn" onclick="previewSketch('${o.id}')">🖼️ סקיצה</button>` : ''}
+      ${lgHasSketch(o) ? `<button class="cb-btn" onclick="previewSketch('${o.id}')">🖼️ סקיצה</button>` : ''}
     </div>
   </div>`;
 }
@@ -1381,13 +1385,14 @@ function openWorkday(){
 
 function previewSketch(id){
   const o=orders.find(x=>String(x.id)===String(id)||x._sqId===String(id));
-  if(!o||!o.sketch) return;
+  if(!o||!lgHasSketch(o)) return;
   const ov=document.createElement('div');
   ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
-  ov.innerHTML=`<img src="${lgEsc(o.sketch)}" alt="סקיצת ההזמנה בתצוגה מלאה" style="max-width:95vw;max-height:85vh;object-fit:contain;border-radius:4px;">
+  ov.innerHTML=`<img data-sketch-for="${lgEsc(String(o.id))}" alt="סקיצת ההזמנה בתצוגה מלאה" style="max-width:95vw;max-height:85vh;object-fit:contain;border-radius:4px;">
     <button onclick="this.closest('div').remove()" style="padding:8px 20px;background:#fff;border:none;cursor:pointer;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;border-radius:4px;">סגור</button>`;
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   document.body.appendChild(ov);
+  lgSketchIntoImg(ov.querySelector('img'), o);
 }
 
 
@@ -1970,7 +1975,7 @@ function _renderBillClient(el){
     const total = lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0;
     const items = (o.items||[]).map(it =>
       '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + (it.w||'') + '×' + (it.h||'') + ' מ"מ</div>').join('');
-    const sk = (o.hasSketch || o.sketch)
+    const sk = lgHasSketch(o)
       ? '<img class="bill-sk" data-sketch-for="' + lgEsc(String(o.id)) + '"' +
         ' alt="סקיצה — ' + lgEsc(o.orderNum||'') + '" onclick="if(this.src)previewSketchSrc(this.src)">'
       : '';
@@ -2012,18 +2017,19 @@ function _billUpdateTotal(ords){
   if(el) el.textContent = `נבחרו ${chosen.length} מתוך ${ords.length} · ₪${total.toLocaleString()}`;
 }
 
+// ממלא <img data-sketch-for> מתוך ההזמנות שהמסך כבר מחזיק. lazy — רק מה
+// שמתקרב למסך (לרשימות ארוכות, כמו תור הסקיצות).
+function _hydrateSketchImgs(root, lazy){
+  lgHydrateSketchImgs(root, id => orders.find(x => String(x.id) === String(id)), { lazy: !!lazy });
+}
+
 // סקיצות נטענות רק בפתיחת שורה — ר' אותו דפוס ב-workday.html
 function _hydrateBillSketches(root){
-  root.querySelectorAll('img[data-sketch-for]').forEach(el => {
-    const id = el.getAttribute('data-sketch-for');
-    if(el.dataset.lgFor === id) return;
-    const o = orders.find(x => String(x.id) === String(id));
-    if(o) lgSketchIntoImg(el, o, () => el.classList.add('is-loaded'));
-  });
+  _hydrateSketchImgs(root);
 }
 
 // תצוגה מלאה של סקיצה מתוך מסך החיוב. previewSketch הקיים מקבל מזהה הזמנה
-// וקורא את o.sketch; כאן התמונה כבר נטענה ל-img, אז מוצג המקור שלו.
+// וטוען דרך השכבה; כאן התמונה כבר נטענה ל-img, אז מוצג המקור שלו.
 function previewSketchSrc(src){
   if(!src) return;
   const ov = document.createElement('div');
@@ -2118,10 +2124,68 @@ function renderPickupBoard(){
 
 
 // שער הרשאה אמיתי — רק אחרי שFirebase מאשר משתמש admin מחובר בפועל מתחילים לטעון נתונים
+// ══════════════════════════════════════════════════
+//  מצב WhatsApp — אינדיקציה בלבד
+// ══════════════════════════════════════════════════
+//
+//  ⚠️ המכשיר מקושר כ-Linked Device ויכול להתנתק. כשזה קורה הפעולות
+//  העסקיות ממשיכות כרגיל וההודעות ממתינות ב-waOutbox — אבל בלי שורה
+//  כזו אף אחד לא יודע שהן ממתינות, ולקוחות פשוט לא מקבלים הודעות.
+//
+//  לא בונים כאן מסך ניהול. החיבור מחדש נעשה ב-GREEN API Console.
+const _WA_LABEL = {
+  authorized:    { t: 'מחובר',   c: '#27ae60', bg: 'rgba(39,174,96,0.10)'  },
+  notAuthorized: { t: 'מנותק',   c: '#c0392b', bg: 'rgba(192,57,43,0.10)'  },
+  blocked:       { t: 'חסום',    c: '#c0392b', bg: 'rgba(192,57,43,0.10)'  },
+  suspended:     { t: 'מוגבל',   c: '#b8922a', bg: 'rgba(184,146,42,0.12)' },
+  sleepMode:     { t: 'הטלפון כבוי', c: '#b8922a', bg: 'rgba(184,146,42,0.12)' },
+  starting:      { t: 'מתחיל',   c: '#b8922a', bg: 'rgba(184,146,42,0.12)' },
+};
+
+function renderWaStatus(st){
+  const bar = document.getElementById('waStatusBar');
+  if(!bar) return;
+  const meta = _WA_LABEL[st.state] || { t: 'לא ידוע', c: '#8a8278', bg: 'rgba(0,0,0,0.04)' };
+  const live = st.state === 'authorized';
+  const waiting = Number(st.pending) || 0;
+
+  // מחובר ואין ממתינות — אין מה לומר. שורה שמופיעה תמיד נעשית רעש.
+  if(live && !waiting){ bar.style.display = 'none'; return; }
+
+  const when = st.checkedAt
+    ? new Date(st.checkedAt).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})
+    : '';
+  const msg = !live && waiting
+    ? '⚠️ WhatsApp מנותק — ' + waiting + ' הודעות ממתינות לשליחה. יש לחבר מחדש את המכשיר.'
+    : !live
+      ? '⚠️ WhatsApp ' + meta.t + ' — הודעות חדשות ימתינו עד לחיבור מחדש.'
+      : '📤 ' + waiting + ' הודעות ממתינות בתור.';
+
+  bar.style.display = '';
+  bar.style.cssText = 'display:block;margin:10px 24px 0;padding:11px 15px;border-radius:7px;'+
+    'background:'+meta.bg+';border:1px solid '+meta.c+'33;font-family:Heebo,sans-serif;'+
+    'direction:rtl;display:flex;align-items:center;gap:12px;';
+  bar.innerHTML =
+    '<span style="font-size:13px;font-weight:800;color:'+meta.c+'">'+lgEsc(msg)+'</span>'+
+    '<span style="flex:1"></span>'+
+    '<span style="font-size:12px;color:var(--muted)">WhatsApp: '+lgEsc(meta.t)+
+      (when ? ' · נבדק '+lgEsc(when) : '')+'</span>'+
+    '<button id="waRecheck" style="padding:5px 10px;background:rgba(0,0,0,0.05);border:1px solid var(--border);'+
+      'font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">בדוק שוב</button>';
+  // ⚠️ addEventListener ולא onclick — ר' scripts/test-inline-handlers.js
+  const btn = document.getElementById('waRecheck');
+  if(btn) btn.addEventListener('click', async () => {
+    btn.textContent = 'בודק...'; btn.disabled = true;
+    renderWaStatus(await lgWaCheckState().then(r => ({ ...r, checkedAt: Date.now() })));
+  });
+}
+
 lgRequireAuthAsync('admin').then(session => {
   if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
   initUserDisplay();
   load(); // renderAll() נקרא על-ידי listenAllOrders כשהנתונים מגיעים מ-Firebase
+  // מה שה-drain האחרון מדד. בלי קריאה ל-GREEN API — רק קריאת צומת.
+  lgWaStatus().then(renderWaStatus).catch(()=>{});
 });
 
 // כשהטאב חוזר לפורגראונד אחרי שהיה נסתר — כפה re-subscribe למנע sync gaps
@@ -2871,11 +2935,21 @@ function sqSetMode(mode){
   if(sqCurrent) sqUpdateBtns(sqCurrent.id);
 }
 
-function sqDownload(){
-  if(!sqCurrent || !sqCurrent.sketch) return;
+// ההזמנה המלאה מאחורי פריט בתור. הפריט עצמו לא מחזיק את התמונה — רק
+// השכבה ב-firebase-db יודעת איפה היא, וממנה היא נטענת.
+function _sqOrder(it){
+  if(!it) return null;
+  return orders.find(o => String(o.id) === String(it.id)) || it;
+}
+
+async function sqDownload(){
+  if(!sqCurrent || !lgHasSketch(sqCurrent)) return;
+  const name = sqCurrent.sketchName || 'sketch';
+  const src = await lgLoadSketch(_sqOrder(sqCurrent));
+  if(!src) { showToast('הסקיצה לא נטענה — נסה שוב'); return; }
   const a = document.createElement('a');
-  a.href = sqCurrent.sketch;
-  a.download = (sqCurrent.sketchName || 'sketch') + '.png';
+  a.href = src;
+  a.download = name + '.png';
   a.click();
 }
 
@@ -2908,8 +2982,7 @@ function buildSQItems(){
       date:         o.date || '',
       panels:       o.panels || [],
       notes:        o.notes || '',
-      sketch:       o.sketch || null,
-      hasSketch:    !!(o.hasSketch || o.sketch),
+      hasSketch:    lgHasSketch(o),
       files:        o.files || [],
       items:        o.items || [],
       type:         o.type  || '',
@@ -2987,8 +3060,9 @@ function sqRender(){
     const [tagClass,tagLabel]=sqStageTag(item.id);
     const isDone=['opty','done'].includes(sqStageMap[item.id]||'');
     const isActive=sqCurrent&&sqCurrent.id===item.id;
-    const thumb=item.sketch
-      ?`<div class="sq-thumb"><img src="${lgEsc(item.sketch)}" alt="תצוגה מקדימה של הסקיצה" loading="lazy"></div>`
+    // בלי src. ממולא רק כשהפריט מתקרב למסך — ר' _hydrateSketchImgs(…, true)
+    const thumb=lgHasSketch(item)
+      ?`<div class="sq-thumb"><img data-sketch-for="${lgEsc(String(item.id))}" alt="תצוגה מקדימה של הסקיצה"></div>`
       :`<div class="sq-thumb">${item.source==='upload'?'📎':'📐'}</div>`;
     return `<div class="sq-item ${isDone?'sq-done':''} ${isActive?'sq-active':''}" onclick="sqSelect('${item.id}')">
       ${thumb}
@@ -3003,6 +3077,7 @@ function sqRender(){
       </div>
     </div>`;
   }).join('');
+  _hydrateSketchImgs(el, true);
 }
 
 function sqSelect(id){
@@ -3043,10 +3118,10 @@ function sqShowDetail(){
 
   const img=document.getElementById('sqImg');
   const noimg=document.getElementById('sqNoImg');
-  if(o.hasSketch || o.sketch){
+  if(lgHasSketch(o)){
     // דרך lgSketchIntoImg ולא השמה ישירה: היום זה זהה, ואחרי שהשדה הישן
     // ייעלם מ-orders המסך הזה כבר לא יצטרך להשתנות. ר' שלב 2 ב-firebase-db.
-    lgSketchIntoImg(img, o);
+    lgSketchIntoImg(img, _sqOrder(o));
     img.style.display='block';noimg.style.display='none';
   } else if(o.type==='measure' && o.items && o.items.length){
     const svg=makeMeasureListSVG(o);
@@ -3172,10 +3247,13 @@ function sqUpdateBtns(id){
   // edit button — show whenever the image is visible (sketch OR measure SVG)
   const editBtn=document.getElementById('sqEditBtn');
   const sqImg=document.getElementById('sqImg');
-  const hasVisibleImg = sqImg && sqImg.style.display!=='none' && sqImg.src;
+  // סקיצה שנטענת מהצומת מגיעה אחרי הציור הזה, ולכן src ריק עדיין אינו
+  // "אין תמונה" — lgHasSketch קובע. בלי זה הזמנת WhatsApp לא הייתה ניתנת לעריכה.
+  const hasVisibleImg = sqImg && sqImg.style.display!=='none' &&
+                        (sqImg.src || (sqCurrent && lgHasSketch(sqCurrent)));
   if(editBtn) editBtn.style.display=hasVisibleImg?'flex':'none';
   // check-station _editedSketch is intentionally NOT reflected here:
-  // sketch queue always shows the canonical order.sketch from Firebase
+  // sketch queue always shows the canonical sketch from Firebase
 }
 
 function sqSetStage(stage){
@@ -3766,11 +3844,14 @@ let etHistory=[];  // array of ImageData snapshots
 let etCtx=null, etCanvas=null;
 let etBgImg=null, etBgW=0, etBgH=0;
 
-function sqOpenEditor(){
+async function sqOpenEditor(){
   if(!sqCurrent) return;
+  const cur = sqCurrent;
   // use saved sketch if available, otherwise fall back to whatever the view is showing
   const viewImg = document.getElementById('sqImg');
-  const bgSrc = sqCurrent.sketch || (viewImg && viewImg.style.display!=='none' ? viewImg.src : '');
+  const saved = lgHasSketch(cur) ? await lgLoadSketch(_sqOrder(cur)) : null;
+  if(sqCurrent !== cur) return;   // עבר לפריט אחר בזמן הטעינה
+  const bgSrc = saved || (viewImg && viewImg.style.display!=='none' ? viewImg.src : '');
   if(!bgSrc) return;
   document.getElementById('sqEdTitle').textContent='✏️ ' + sqCurrent.client + ' — ' + (sqCurrent.sketchName||'');
   document.getElementById('sqEditor').style.display='flex';
@@ -3939,12 +4020,10 @@ function sqSaveEdit(){
     q -= 0.1;
   } while(newSrc.length > MAX_B64 && q > 0.3);
 
-  // update in-memory object immediately
-  sqCurrent.sketch = newSrc;
-  // וגם ברשימה — היא מחזיקה עותק משלה, וב-sqShowDetail הבא הוא היה
-  // מחזיר את התמונה מלפני העריכה.
+  // הרשימה מסמנת שיש סקיצה; התמונה עצמה לא יושבת בפריט — ר' _sqOrder
   const _it = sqItems.find(i => i.id === sqCurrent.id);
-  if(_it){ _it.sketch = newSrc; _it.hasSketch = true; }
+  if(_it) _it.hasSketch = true;
+  sqCurrent.hasSketch = true;
 
   // persist permanently to Firebase as the canonical sketch
   //
@@ -3953,11 +4032,11 @@ function sqSaveEdit(){
   // בדיוק על ההזמנות שעליהן מדגישים — הציור נכתב לאובייקט בזיכרון ולשום
   // מקום אחר, והרינדור הבא החזיר את התמונה המקורית. כל מזהה ב-sqItems הוא
   // הזמנה אמיתית מ-orders, ולכן אין מה לסנן.
-  const _id = sqCurrent.id;
-  updateOrder(_id, { sketch: newSrc, hasSketch: true })
-    .catch(e => { console.error('sqSaveEdit:', e); showToast('✗ שמירת הסקיצה נכשלה'); });
-  // שלב 1 — כתיבה כפולה גם לצומת הנפרד. השדה הישן נשמר למעלה כרגיל
-  lgSaveSketch(_id, newSrc);
+  //
+  // כתיבה אחת אטומית לשני העותקים (או לצומת בלבד, להזמנת WhatsApp). לפני
+  // כן אלה היו שתי כתיבות עצמאיות, וכישלון של אחת השאיר עותקים שונים.
+  lgReplaceSketch(_sqOrder(sqCurrent), newSrc)
+    .catch(e => { console.error('sqSaveEdit:', e); showToast('✗ שמירת הסקיצה נכשלה'); sqShowDetail(); sqRender(); });
 
   sqCloseEditor();
   // refresh detail view with new image

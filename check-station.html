@@ -483,8 +483,7 @@ function mapFirebaseOrder(o){
     glassFullName:o.glassFullName||o.glass||'',
     finish:       o.finish||'',
     source:       o.source||'sketch',
-    sketch:       o.sketch||(o.files&&o.files.f0&&o.files.f0.data)||null,
-    hasSketch:    !!(o.hasSketch||o.sketch||(o.files&&o.files.f0&&o.files.f0.data)),
+    ...lgSketchFields(o),   // התמונה עצמה רק דרך השכבה — ר' firebase-db
     // ציור בדיקה זמני — מגיע מ-checkEdits Firebase (נתיב נפרד, לא נוגע ב-orders)
     // fallback: localStorage אם Firebase עדיין לא נטען
     _editedSketch: window._csCheckEdits[String(o.id)] ||
@@ -736,7 +735,7 @@ function renderList(){
         </div>
       </div>
       <div class="oc-name">${lgEsc(o.sketchName||o.type||'—')}</div>
-      <div class="oc-meta">${lgEsc(o.orderNum||'—')}${o.sketch?' · 🖼 יש סקיצה':''}</div>
+      <div class="oc-meta">${lgEsc(o.orderNum||'—')}${lgHasSketch(o)?' · 🖼 יש סקיצה':''}</div>
       <div class="oc-tags">
         <span class="oc-tag tg">${lgEsc(o.glassFullName||o.glass||'')}</span>
         <span class="oc-tag tc">🔥 חיסום · ${total} פריטים</span>
@@ -887,12 +886,20 @@ function renderSketch(){
   const liveEdited = (window._csCheckEdits||{})[String(cur.id)] || cur._editedSketch || null;
   if(liveEdited && liveEdited !== cur._editedSketch) cur._editedSketch = liveEdited;
   const readOnly=curReadOnly;
-  if(liveEdited){
-    // edited sketch עם fallback ל-original אם נפגמה
-    _showSketchImg(el, liveEdited, cur.sketch, readOnly);
-  } else if(cur.sketch){
-    // original sketch בלבד
-    _showSketchImg(el, cur.sketch, null, readOnly);
+  if(liveEdited || lgHasSketch(cur)){
+    // המקור נטען דרך השכבה. הזמנה עם עותק בזיכרון — מיד (microtask), כמו
+    // קודם; הזמנת WhatsApp — מהצומת. אם המשתמש עבר הזמנה בינתיים, נזרק.
+    const o=cur, want=String(cur.id);
+    lgLoadSketch(o).then(orig=>{
+      if(!cur || String(cur.id)!==want) return;
+      if(liveEdited) _showSketchImg(el, liveEdited, orig, readOnly);   // עריכה, עם fallback למקור
+      else if(orig)  _showSketchImg(el, orig, null, readOnly);         // המקור בלבד
+      else { el.innerHTML=buildSVG(o, readOnly); if(!readOnly) _attachSVGTouchHandlers(el); }
+    }).catch(()=>{
+      if(!cur || String(cur.id)!==want) return;
+      if(liveEdited) _showSketchImg(el, liveEdited, null, readOnly);
+      else { el.innerHTML=buildSVG(o, readOnly); if(!readOnly) _attachSVGTouchHandlers(el); }
+    });
   } else {
     // אין תמונה — הצג SVG
     el.innerHTML=buildSVG(cur, readOnly);
@@ -1284,16 +1291,22 @@ function openEditor(){
   const liveEdited=(window._csCheckEdits||{})[String(cur.id)]||cur._editedSketch||null;
   if(liveEdited) cur._editedSketch=liveEdited;
 
+  // המקור נטען דרך השכבה — מהזיכרון להזמנה עם עותק, מהצומת להזמנת WhatsApp.
+  const want=String(cur.id);
+  const _withOrig = lgHasSketch(cur) ? lgLoadSketch(cur).catch(()=>null) : Promise.resolve(null);
+  _withOrig.then(orig=>{
+  if(!cur || String(cur.id)!==want || !document.getElementById('csEd').classList.contains('open')) return;
+
   function _tryLoadBg(src, isFallback){
     bg.onload=()=>{ requestAnimationFrame(()=>{edResize();edSnap();}); };
     bg.onerror=()=>{
       console.warn('[CS] editor bg failed to load, isFallback='+isFallback+' src.length='+(src&&src.length));
-      if(!isFallback && cur.sketch && src!==cur.sketch){
+      if(!isFallback && orig && src!==orig){
         // הסקיצה הערוכה פגומה — נקה מ-Firebase ונסה original
         firebase.database().ref('checkEdits/'+cur.id).remove().catch(()=>{});
         delete (window._csCheckEdits||{})[String(cur.id)];
         cur._editedSketch=null;
-        _tryLoadBg(cur.sketch, true);
+        _tryLoadBg(orig, true);
       } else {
         // גם original נכשל — fallback ל-SVG
         bg.onerror=null;
@@ -1310,8 +1323,8 @@ function openEditor(){
     }
   }
 
-  if(liveEdited||cur.sketch){
-    _tryLoadBg(liveEdited||cur.sketch, false);
+  if(liveEdited||orig){
+    _tryLoadBg(liveEdited||orig, false);
   } else {
     // אין תמונה כלל — SVG
     bg.onerror=null;
@@ -1319,6 +1332,7 @@ function openEditor(){
     bg.onload=()=>{ requestAnimationFrame(()=>{edResize();edSnap();}); };
     bg.style.display='block';bg.src=svgSrc;
   }
+  });
   edTool('draw');edBindEv();
 }
 function closeEditor(){document.getElementById('csEd').classList.remove('open');edDrw=false;}

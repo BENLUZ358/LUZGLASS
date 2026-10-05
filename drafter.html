@@ -297,8 +297,7 @@ function load(){
         phone:         o.phone||'',
         status:        o.status||'',
         source:        o.source||'sketch',
-        sketch:        o.sketch||(o.files&&o.files.f0&&o.files.f0.data)||null,
-        hasSketch:     !!(o.hasSketch||o.sketch||(o.files&&o.files.f0&&o.files.f0.data)),
+        ...lgSketchFields(o),   // התמונה עצמה רק דרך השכבה — ר' firebase-db
         _editedSketch: o._editedSketch||null,
         date:          o.date||'',
         items:         o.items||[],
@@ -367,7 +366,7 @@ function showOrder(o){
   canvas.querySelectorAll('img.sketch-img').forEach(el=>el.remove());
   // הפסק טעינה של תמונות ישנות
   canvas.querySelectorAll('img').forEach(el=>{ el.src=''; });
-  if(o.hasSketch||o.sketch||o._editedSketch){
+  if(lgHasSketch(o)||o._editedSketch){
     const img=document.createElement('img');
     img.className='sketch-img';
     img.style.cssText='max-width:100%;max-height:100%;object-fit:contain;display:block;';
@@ -533,7 +532,7 @@ function openEditor(){
   edCtx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
   const bg=document.getElementById('edBg');
   if(curOrder._editedSketch){ bg.style.display='block'; bg.src=curOrder._editedSketch; }
-  else if(curOrder.hasSketch||curOrder.sketch){ bg.style.display='block'; lgSketchIntoImg(bg, curOrder); }
+  else if(lgHasSketch(curOrder)){ bg.style.display='block'; lgSketchIntoImg(bg, curOrder); }
   else {
     const svg=buildAutoSVG(curOrder);
     if(svg){bg.style.display='block';bg.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);}
