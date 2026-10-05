@@ -366,6 +366,8 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     </div>
   </div>
 
+  <div id="waStatusBar" style="display:none"></div>
+
   <div class="stats" id="stats"></div>
 
   <div class="filters">
@@ -2122,10 +2124,68 @@ function renderPickupBoard(){
 
 
 // שער הרשאה אמיתי — רק אחרי שFirebase מאשר משתמש admin מחובר בפועל מתחילים לטעון נתונים
+// ══════════════════════════════════════════════════
+//  מצב WhatsApp — אינדיקציה בלבד
+// ══════════════════════════════════════════════════
+//
+//  ⚠️ המכשיר מקושר כ-Linked Device ויכול להתנתק. כשזה קורה הפעולות
+//  העסקיות ממשיכות כרגיל וההודעות ממתינות ב-waOutbox — אבל בלי שורה
+//  כזו אף אחד לא יודע שהן ממתינות, ולקוחות פשוט לא מקבלים הודעות.
+//
+//  לא בונים כאן מסך ניהול. החיבור מחדש נעשה ב-GREEN API Console.
+const _WA_LABEL = {
+  authorized:    { t: 'מחובר',   c: '#27ae60', bg: 'rgba(39,174,96,0.10)'  },
+  notAuthorized: { t: 'מנותק',   c: '#c0392b', bg: 'rgba(192,57,43,0.10)'  },
+  blocked:       { t: 'חסום',    c: '#c0392b', bg: 'rgba(192,57,43,0.10)'  },
+  suspended:     { t: 'מוגבל',   c: '#b8922a', bg: 'rgba(184,146,42,0.12)' },
+  sleepMode:     { t: 'הטלפון כבוי', c: '#b8922a', bg: 'rgba(184,146,42,0.12)' },
+  starting:      { t: 'מתחיל',   c: '#b8922a', bg: 'rgba(184,146,42,0.12)' },
+};
+
+function renderWaStatus(st){
+  const bar = document.getElementById('waStatusBar');
+  if(!bar) return;
+  const meta = _WA_LABEL[st.state] || { t: 'לא ידוע', c: '#8a8278', bg: 'rgba(0,0,0,0.04)' };
+  const live = st.state === 'authorized';
+  const waiting = Number(st.pending) || 0;
+
+  // מחובר ואין ממתינות — אין מה לומר. שורה שמופיעה תמיד נעשית רעש.
+  if(live && !waiting){ bar.style.display = 'none'; return; }
+
+  const when = st.checkedAt
+    ? new Date(st.checkedAt).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})
+    : '';
+  const msg = !live && waiting
+    ? '⚠️ WhatsApp מנותק — ' + waiting + ' הודעות ממתינות לשליחה. יש לחבר מחדש את המכשיר.'
+    : !live
+      ? '⚠️ WhatsApp ' + meta.t + ' — הודעות חדשות ימתינו עד לחיבור מחדש.'
+      : '📤 ' + waiting + ' הודעות ממתינות בתור.';
+
+  bar.style.display = '';
+  bar.style.cssText = 'display:block;margin:10px 24px 0;padding:11px 15px;border-radius:7px;'+
+    'background:'+meta.bg+';border:1px solid '+meta.c+'33;font-family:Heebo,sans-serif;'+
+    'direction:rtl;display:flex;align-items:center;gap:12px;';
+  bar.innerHTML =
+    '<span style="font-size:13px;font-weight:800;color:'+meta.c+'">'+lgEsc(msg)+'</span>'+
+    '<span style="flex:1"></span>'+
+    '<span style="font-size:12px;color:var(--muted)">WhatsApp: '+lgEsc(meta.t)+
+      (when ? ' · נבדק '+lgEsc(when) : '')+'</span>'+
+    '<button id="waRecheck" style="padding:5px 10px;background:rgba(0,0,0,0.05);border:1px solid var(--border);'+
+      'font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">בדוק שוב</button>';
+  // ⚠️ addEventListener ולא onclick — ר' scripts/test-inline-handlers.js
+  const btn = document.getElementById('waRecheck');
+  if(btn) btn.addEventListener('click', async () => {
+    btn.textContent = 'בודק...'; btn.disabled = true;
+    renderWaStatus(await lgWaCheckState().then(r => ({ ...r, checkedAt: Date.now() })));
+  });
+}
+
 lgRequireAuthAsync('admin').then(session => {
   if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
   initUserDisplay();
   load(); // renderAll() נקרא על-ידי listenAllOrders כשהנתונים מגיעים מ-Firebase
+  // מה שה-drain האחרון מדד. בלי קריאה ל-GREEN API — רק קריאת צומת.
+  lgWaStatus().then(renderWaStatus).catch(()=>{});
 });
 
 // כשהטאב חוזר לפורגראונד אחרי שהיה נסתר — כפה re-subscribe למנע sync gaps

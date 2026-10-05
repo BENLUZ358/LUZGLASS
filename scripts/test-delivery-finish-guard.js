@@ -106,9 +106,20 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 /* ── מה שלא נגע ─────────────────────────────────────────────────────── */
 {
-  /* ⚠️ Admin נשאר בלי שום מסלול WhatsApp — זו כל הנקודה */
+  /* ⚠️ Admin נשאר בלי מסלול **שליחה** — זו כל הנקודה. מאז 05/10 יש בו
+     אינדיקציית מצב (lgWaStatus / lgWaCheckState), והיא קריאה בלבד:
+     הראשונה קוראת צומת, השנייה שואלת את GREEN API על המצב מבלי לגעת
+     בתור. אף אחת מהן אינה יכולה להוציא הודעה. */
   const live = ADMIN.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
-  check('admin still has no WhatsApp path at all', /whatsapp/i.test(live), false);
+  check('admin never enqueues or sends',
+        /whatsapp-dispatch|whatsapp-send|lgWaEnqueue|_waSendReadyGrouped|_waDispatch/.test(live), false);
+  check('and its only WhatsApp calls are read-only status',
+        (live.match(/lgWa[A-Z][A-Za-z]*\(/g) || []).sort().filter((v,i,a)=>a.indexOf(v)===i),
+        ['lgWaCheckState(', 'lgWaStatus(']);
+  /* ⚠️ checkOnly חייב להישאר — בלעדיו הכפתור "בדוק שוב" היה מרוקן את התור */
+  const FB = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+  check('the recheck asks for a status only, never a drain',
+        /_lgAuthPost\('\/api\/whatsapp-drain', \{ checkOnly: true \}\)/.test(FB), true);
 
   /* תחנת החשבוניות היא העברה אדמיניסטרטיבית, ולא נגעה */
   const inv = (ADMIN.match(/async function invSend\(\)[\s\S]*?\n\}/) || [''])[0];

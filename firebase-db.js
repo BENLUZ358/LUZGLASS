@@ -2076,6 +2076,40 @@ async function _lgAuthPost(url, payload){
 //  ⚠️ ואם הטאב נסגר באמצע, שום הודעה לא אובדת: היא ממתינה בתור ויוצאת
 //  בקריאה הבאה. התפיסה בשרת היא טרנזקציה, ולכן שני טאבים שמריצים את זה
 //  יחד אינם יכולים לשלוח את אותה הודעה פעמיים.
+// ─── מצב החיבור של WhatsApp ─────────────────────────────────────────
+//
+//  ⚠️ המכשיר מקושר ל-WhatsApp כ-Linked Device, והוא יכול להתנתק. כשזה
+//  קורה GREEN API לרוב **אינה מחזירה שגיאה** — היא מכניסה את ההודעה
+//  לתור שלה ל-24 שעות. לכן ה-drain שואל אותה לפני ששולח, וכותב את מה
+//  שקיבל ל-waMeta/whatsapp. כאן רק קוראים אותו.
+//
+//  מצבים: authorized · notAuthorized · blocked · starting · sleepMode ·
+//  suspended · unknown. רק הראשון אומר שההודעות יוצאות.
+async function lgWaStatus(){
+  try {
+    const snap = await _lgDb.ref('waMeta/whatsapp').once('value');
+    const v = snap.val() || {};
+    return { state: v.state || 'unknown', pending: v.pending || 0,
+             checkedAt: v.checkedAt || 0, reason: v.reason || '' };
+  } catch(e){
+    console.warn('lgWaStatus:', e && e.message);
+    return { state: 'unknown', pending: 0, checkedAt: 0, reason: '' };
+  }
+}
+
+// שואל את GREEN API עכשיו, בלי לגעת בתור ובלי לשלוח דבר.
+async function lgWaCheckState(){
+  try {
+    const res = await _lgAuthPost('/api/whatsapp-drain', { checkOnly: true });
+    if(!res.ok) return { state: 'unknown', pending: 0 };
+    const d = await res.json();
+    return { state: d.state || 'unknown', pending: d.remaining || 0 };
+  } catch(e){
+    console.warn('lgWaCheckState:', e && e.message);
+    return { state: 'unknown', pending: 0 };
+  }
+}
+
 let _lgDraining = false;
 
 async function lgWaDrain(onProgress){

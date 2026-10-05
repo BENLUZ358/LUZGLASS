@@ -213,6 +213,39 @@ async function lgWaReserveSlot(db, gapMs, maxWaitMs) {
   return { ok: true, waitMs: Math.max(0, slotAt - Date.now()), slotAt };
 }
 
+//  מחזיר הודעה לתור **בלי לספור ניסיון**.
+//
+//  ⚠️ זה ההבדל בין "נכשלה" לבין "לא היה למי לשלוח".
+//
+//  כשהמכשיר מנותק אין שום טעם לספור ניסיון: לא ההודעה שגויה ולא הנמען.
+//  lgWaComplete היה מעלה attempts, ושלושה סבבים היו שורפים את המכסה
+//  בתוך חצי דקה — ואז lgWaClaim מסרב לנצח ו**ההודעה לא תישלח גם אחרי
+//  שהחיבור יחזור**. בדיוק מה שקרה ב-466, שם נדרש איפוס ידני של attempts
+//  כדי להחיות את L1071.
+//
+//  לכן: ניקוי התפיסה, החזרת attempts לערך שלפני התפיסה, וחזרה ל-pending.
+//  הרשומה ממתינה ללא הגבלה עד ל-MAX_AGE_MS.
+//
+//  ⚠️ לעולם לא נוגע ברשומה ששוגרה. 'sent' הוא סופי.
+async function lgWaRelease(db, key, reason) {
+  const now = Date.now();
+  const r = await db.ref(OUTBOX + '/' + key).transaction(cur => {
+    // ⚠️ null-first — ר' ההערה המלאה ב-lgWaClaim
+    if (cur === null)         return null;
+    if (cur.state === 'sent') return;   // abort — הלקוח קיבל
+    return {
+      ...cur,
+      state:     'pending',
+      claimedAt: null,
+      claimedBy: null,
+      attempts:  Math.max(0, (cur.attempts || 0) - 1),
+      lastError: String(reason || 'ממתין לחיבור WhatsApp').slice(0, 300),
+      updatedAt: now,
+    };
+  });
+  return r.committed;
+}
+
 //  מה ממתין לשליחה. מחזיר מפתחות בלבד, ובסדר הכניסה.
 //  limit קטן בכוונה: ה-drain מוגבל ממילא, ואין טעם לקרוא תור שלם.
 //
@@ -235,6 +268,6 @@ async function lgWaPending(db, limit) {
 }
 
 module.exports = {
-  lgWaMsgKey, lgWaEnqueue, lgWaClaim, lgWaComplete, lgWaPending, lgWaReserveSlot,
+  lgWaMsgKey, lgWaEnqueue, lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot,
   OUTBOX, SLOT, CLAIM_TTL_MS, MAX_ATTEMPTS, MAX_AGE_MS, SLOT_MAX_FUTURE_MS,
 };
