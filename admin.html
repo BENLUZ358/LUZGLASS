@@ -2151,14 +2151,24 @@ function renderWaStatus(st){
 
   // מחובר ואין ממתינות — אין מה לומר. שורה שמופיעה תמיד נעשית רעש.
   if(live && !waiting){ bar.style.display = 'none'; return; }
+  // ⚠️ ועוד לא נמדד כלום — גם זה שקט. waMeta/whatsapp נכתב רק אחרי
+  // ה-drain הראשון, ועד אז state='unknown'. בלי התנאי הזה כל טעינה של
+  // admin בסביבה בריאה הייתה פותחת ב-"⚠️ WhatsApp לא ידוע" — אזעקת שווא
+  // שמלמדת את המזכירה להתעלם מהשורה בדיוק כשהיא כן תהיה חשובה.
+  if(!st.checkedAt && !waiting){ bar.style.display = 'none'; return; }
 
   const when = st.checkedAt
     ? new Date(st.checkedAt).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})
     : '';
+  // ⚠️ הניסוח נגזר מהמצב ולא קבוע. "מנותק" על state=unknown הוא טענה
+  // שלא בדקנו — ולא ידוע פירושו שאולי הכול תקין ופשוט עוד לא שאלנו.
+  // ⚠️ רק כשהקישור באמת נשבר. "הטלפון כבוי" או "חסום" אינם נפתרים
+  // בחיבור מחדש, והוראה שגויה שולחת את המזכירה לסרוק QR לחינם.
+  const fix = st.state === 'notAuthorized' ? ' יש לחבר מחדש את המכשיר.' : '';
   const msg = !live && waiting
-    ? '⚠️ WhatsApp מנותק — ' + waiting + ' הודעות ממתינות לשליחה. יש לחבר מחדש את המכשיר.'
+    ? '⚠️ WhatsApp ' + meta.t + ' — ' + waiting + ' הודעות ממתינות לשליחה.' + fix
     : !live
-      ? '⚠️ WhatsApp ' + meta.t + ' — הודעות חדשות ימתינו עד לחיבור מחדש.'
+      ? '⚠️ WhatsApp ' + meta.t + ' — הודעות חדשות ימתינו עד שהחיבור יחזור.' + fix
       : '📤 ' + waiting + ' הודעות ממתינות בתור.';
 
   bar.style.display = '';

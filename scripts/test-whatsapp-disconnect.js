@@ -24,13 +24,26 @@
  */
 const fs   = require('fs');
 const path = require('path');
+const vm   = require('vm');
 const { fakeDb } = require(path.join(__dirname, '_fake-db.js'));
 
 const ROOT = path.join(__dirname, '..');
 let failed = 0;
+
+/*  ⚠️ לא console.log.
+ *
+ *  withFetch משתיק את הקונסולה כדי לתפוס דליפות של token, והוא נקרא
+ *  בתוך פונקציה **אסינכרונית**. ב-await הראשון שלה השליטה חוזרת לקוד
+ *  הסינכרוני שאחריה — וכל שורות ה-ok וה-FAIL של אותם קטעים נבלעו למערך
+ *  הלוג במקום להגיע למסך. בדיקות רצו ועברו בשקט, ו-FAIL היה נעלם באותה
+ *  דרך: המספר בסוף היה מתעדכן, אבל שם הבדיקה שנשברה לא.
+ *
+ *  הפלט נכתב ישירות ל-stdout, שאינו מושתק.
+ */
+const say = (w => t => w(t + '\n'))(process.stdout.write.bind(process.stdout));
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
-  ? console.log('ok    ' + name)
-  : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
+  ? say('ok    ' + name)
+  : (failed++, say(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
 
 const TOKEN    = 'SECRET-TOKEN-abc123xyz';
 const INSTANCE = '1101900001';
@@ -257,20 +270,86 @@ const ERR   = (code, msg) => async () => ({ status: code, text: async () => JSON
 
   check('admin can read the status',        /async function lgWaStatus\(\)/.test(FB), true);
   check('and can re-check it on demand',    /async function lgWaCheckState\(\)/.test(FB), true);
-  check('the warning names the real cause', /WhatsApp מנותק — /.test(A), true);
-  check('and says how many are waiting',    /הודעות ממתינות לשליחה/.test(A), true);
-  check('and what to do about it',          /יש לחבר מחדש את המכשיר/.test(A), true);
-  check('three states are labelled',
-        ['authorized', 'notAuthorized', 'blocked'].every(s => A.includes(s + ':')), true);
-  /* ⚠️ שורה שמופיעה תמיד נעשית רעש ואיש לא קורא אותה */
+  /* ⚠️ checkOnly — הכפתור שואל על המצב, הוא אינו מרוקן את התור */
+  check('the recheck asks for a status only',
+        /_lgAuthPost\('\/api\/whatsapp-drain', \{ checkOnly: true \}\)/.test(FB), true);
+
+  /* ── השורה עצמה, מורצת ──────────────────────────────────────────────
+   *
+   * ⚠️ בדיקת מחרוזת על admin.html הייתה עוברת גם על ניסוח שמשקר, וכך
+   * באמת קרה: הטקסט "WhatsApp מנותק" היה מקודד בקבוע, והוצג גם על
+   * state='unknown' — מצב שפירושו "עוד לא שאלנו", לא "המכשיר מנותק".
+   * לכן השורה מורצת כאן ונקרא בדיוק מה שהמזכירה רואה.
+   */
+  const LABEL = (A.match(/const _WA_LABEL = \{[\s\S]*?\n\};/) || [''])[0];
+  const BANNER = (A.match(/function renderWaStatus\(st\)\{[\s\S]*?\n\}/) || [''])[0];
+  check('the status line was found in admin.html', LABEL.length > 0 && BANNER.length > 0, true);
+
+  const bar = { style: { display: '', cssText: '' }, innerHTML: '', addEventListener(){} };
+  const btn = { style: {}, textContent: '', disabled: false, addEventListener(){} };
+  const ctx = {
+    document: { getElementById: id => id === 'waStatusBar' ? bar : btn },
+    lgEsc: v => String(v),
+    lgWaCheckState: async () => ({ state: 'authorized', pending: 0 }),
+  };
+  vm.createContext(ctx);
+  vm.runInContext(LABEL + '\n' + BANNER, ctx);
+
+  /* מה שהמזכירה רואה: null = השורה מוסתרת */
+  const seen = st => {
+    bar.innerHTML = ''; bar.style.display = '';
+    ctx.renderWaStatus(st);
+    return bar.innerHTML ? bar.innerHTML.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : null;
+  };
+  const says = (st, ...words) => { const t = seen(st); return t === null ? 'HIDDEN' : words.map(w => t.includes(w)); };
+
+  /* ⚠️ שורה שמופיעה תמיד נעשית רעש ואיש לא קורא אותה כשהיא כן חשובה */
   check('a healthy, empty queue shows nothing',
-        /if\(live && !waiting\)\{ bar\.style\.display = 'none'; return; \}/.test(A), true);
+        seen({ state: 'authorized', pending: 0, checkedAt: Date.now() }), null);
+  /* ⚠️ ובפרודקשן waMeta/whatsapp נכתב רק אחרי ה-drain הראשון, ועד אז
+     state='unknown' — ובלי התנאי הזה כל טעינה פתחה ב-"⚠️ לא ידוע" */
+  check('and neither does an unmeasured one',
+        seen({ state: 'unknown', pending: 0, checkedAt: 0 }), null);
+
+  /* ⚠️ הכשל שהבדיקה הזו נוספה בשבילו: לא-נמדד אינו מנותק */
+  check('an unmeasured state with messages waiting does not claim a disconnect',
+        says({ state: 'unknown', pending: 2, checkedAt: 0 }, 'מנותק'), [false]);
+  check('it says what it does know, and how many are waiting',
+        says({ state: 'unknown', pending: 2, checkedAt: 0 }, 'לא ידוע', '2 הודעות ממתינות'), [true, true]);
+  /* ⚠️ ולא שולחת לסרוק QR על מצב שחיבור מחדש אינו פותר */
+  check('and does not send anyone to re-link the device',
+        says({ state: 'unknown', pending: 2, checkedAt: 0 }, 'יש לחבר מחדש'), [false]);
+
+  /* ניתוק אמיתי — כאן ההוראה נכונה */
+  check('a real disconnect with messages waiting says all three things',
+        says({ state: 'notAuthorized', pending: 2, checkedAt: Date.now() },
+             'מנותק', '2 הודעות ממתינות', 'יש לחבר מחדש את המכשיר'), [true, true, true]);
+  check('and says it even with nothing waiting yet',
+        says({ state: 'notAuthorized', pending: 0, checkedAt: Date.now() },
+             'מנותק', 'יש לחבר מחדש את המכשיר'), [true, true]);
+
+  /* ⚠️ טלפון כבוי וחשבון חסום אינם נפתרים בחיבור מחדש */
+  check('a sleeping phone is named, without the wrong instruction',
+        says({ state: 'sleepMode', pending: 1, checkedAt: Date.now() },
+             'הטלפון כבוי', 'יש לחבר מחדש'), [true, false]);
+  check('and so is a blocked account',
+        says({ state: 'blocked', pending: 0, checkedAt: Date.now() }, 'חסום', 'יש לחבר מחדש'), [true, false]);
+
+  /* מחובר אבל יש תור — זה לא אזהרה */
+  check('a live queue is reported, not warned about',
+        says({ state: 'authorized', pending: 3, checkedAt: Date.now() }, '📤', '3 הודעות ממתינות', '⚠️'),
+        [true, true, false]);
+
+  /* הזמן האחרון שבו נמדד — כדי שיהיה אפשר לדעת אם המידע טרי */
+  check('a measured state shows when it was checked',
+        says({ state: 'notAuthorized', pending: 1, checkedAt: Date.now() }, 'נבדק'), [true]);
+
   /* ⚠️ onclick היה נחתך על מרכאות — ר' test-inline-handlers.js */
   check('the recheck button is wired with addEventListener',
         /btn\.addEventListener\('click'/.test(A), true);
 }
 
 process.on('exit', () => {
-  if (failed) { console.error(`\n${failed} check(s) failed.`); process.exitCode = 1; }
-  else console.log('\nAll WhatsApp disconnect checks passed.');
+  if (failed) { say(`\n${failed} check(s) failed.`); process.exitCode = 1; }
+  else say('\nAll WhatsApp disconnect checks passed.');
 });
