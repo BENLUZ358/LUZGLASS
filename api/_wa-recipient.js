@@ -77,4 +77,47 @@ function orderSketchName(order) {
   return String(o.sketchName || o.type || o.desc || '').trim();
 }
 
-module.exports = { resolvePhone, toWaNumber, norm, orderSketchName };
+// ─── הכיוון ההפוך: מי שלח את ההודעה ─────────────────────────────────
+//
+//  אפיון WhatsApp-inbound §2.6. resolvePhone עונה "לאיזה מספר שולחים
+//  להזמנה הזו"; כאן השאלה היא "של איזה לקוח המספר ששלח לנו".
+//
+//  ⚠️ לא מנחשים. התאמה רק אם היא חד-משמעית: טלפון התחברות מדויק, או
+//  כרטיס חשבשבת **יחיד** עם אותן ספרות. מספר משותף לשני כרטיסים (שותפים,
+//  משרד ומחסן) נשאר "לא מזוהה" ומשויך ביד — סקיצה שנחתה אצל הלקוח הלא
+//  נכון מופיעה בפורטל שלו, וזה גרוע יותר מסקיצה בלי שיוך.
+
+const digits = p => String(p || '').replace(/\D/g, '');
+
+//  972501234567@c.us → 0501234567. קבוצה / lid / כל דבר אחר → ''.
+function waChatToLocal(chatId) {
+  const m = /^(\d+)@c\.us$/.exec(String(chatId || ''));
+  if (!m) return '';
+  return m[1].startsWith('972') ? '0' + m[1].slice(3) : m[1];
+}
+
+//  מחזיר { matched, via, phone, loginPhone, customerId, name }.
+//  phone = מספר השולח, בפורמט מקומי. loginPhone = מפתח users כשנמצא שם.
+async function lgClientFromWaSender(db, chatId) {
+  const phone = waChatToLocal(chatId);
+  const none = { matched: false, via: 'none', phone, loginPhone: '', customerId: '', name: '' };
+  if (!phone) return none;
+
+  const u = (await db.ref('users/' + phone).once('value')).val();
+  if (u) {
+    return { matched: true, via: 'users', phone, loginPhone: phone,
+             customerId: String(u.customerId || ''),
+             // אותו כלל כמו lgClientDisplayName בדפדפן
+             name: String((u.businessName || '').trim() || u.name || '') };
+  }
+
+  const all = (await db.ref('hashavshevetAccounts').once('value')).val() || {};
+  const want = digits(phone);
+  const hits = Object.entries(all).filter(([, a]) => a && digits(a.phone) === want);
+  if (hits.length !== 1) return none;
+  const [key, acc] = hits[0];
+  return { matched: true, via: 'hashavshevet', phone, loginPhone: '',
+           customerId: String(acc.key || key), name: String(acc.name || '') };
+}
+
+module.exports = { resolvePhone, toWaNumber, norm, orderSketchName, waChatToLocal, lgClientFromWaSender };
