@@ -202,5 +202,25 @@ function lgGreenApiGate(ctx) {
   return { allowed: true, reason: '', accountKey: key };
 }
 
+// ─── WhatsApp נכנס · מי מורשה לשלוח לנו סקיצה ─────────────────────
+//
+//  אפיון inbound §2.1 סעיף 4. בזמן ה-rollout רק שולחים ברשימה נקלטים;
+//  כל השאר מקבלים 200 בלי רשומה וממשיכים לטיפול ידני ב-WhatsApp כמו היום.
+//
+//      GREENAPI_INBOUND_ALLOWED = luz-glass-test:0501234567
+//
+//  חתומה על הפרויקט מאותה סיבה כמו GREENAPI_ALLOWED_ACCOUNTS: העתקת
+//  משתני הייצור ל-TEST לא תגרום ל-TEST לקלוט סקיצות של לקוחות אמיתיים.
+//  ריקה, פגומה או של פרויקט אחר → אף אחד. משווים ספרות בלבד.
+function lgWaInboundAllowed(phone) {
+  const list = _lgParseAllowlist(process.env.GREENAPI_INBOUND_ALLOWED);
+  if (!list.keys.length) return { allowed: false, reason: 'לא הוגדרה רשימת שולחים (GREENAPI_INBOUND_ALLOWED)' };
+  const pid = _projectId();
+  if (!pid || list.project !== pid) return { allowed: false, reason: 'רשימת השולחים מונפקת לפרויקט אחר' };
+  const want = _digits(phone);
+  if (!want || !list.keys.some(k => _digits(k) === want)) return { allowed: false, reason: 'השולח אינו ברשימה' };
+  return { allowed: true, reason: '' };
+}
+
 module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl,
-                   lgGreenApiGate, lgGreenApiEnvReady, LG_LIVE_PROJECT };
+                   lgGreenApiGate, lgGreenApiEnvReady, lgWaInboundAllowed, LG_LIVE_PROJECT };
