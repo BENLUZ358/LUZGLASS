@@ -850,6 +850,24 @@ function lgNormalizeOrder(o) {
     // הסקיצות אישר אותה, ונקרא רק בתור הסקיצות ובפורטל. stage לא מושפע.
     sketchSeenAt:  o.sketchSeenAt || 0,
     source:        o.source       || 'sketch',
+    // סקיצה שהגיעה ב-WhatsApp (source:'whatsapp') — אפיון 2026-10-04 §4.
+    // נכתבים רק בשרת, ונקראים בתור: פילטר לקוח, "לא מזוהה", ו"טופל וטרם
+    // נשלח עדכון". waPage/waPages — עמוד מתוך PDF; בתמונה 1/1.
+    waMessageId:   o.waMessageId  || '',
+    waPage:        Number(o.waPage)  || 0,
+    waPages:       Number(o.waPages) || 0,
+    waSender:      o.waSender     || '',
+    waReceivedAt:  Number(o.waReceivedAt) || 0,
+    waUnassigned:  !!o.waUnassigned,
+    // הקבלה של "שלח עדכון ללקוח". sentAt נכתב רק אחרי הצלחה אמיתית, ולכן
+    // ניסיון שנכשל מגיע כאן עם sentAt:0 — עדיין ממתין לעדכון.
+    sketchAck:     (o.sketchAck && typeof o.sketchAck === 'object') ? {
+      sentAt:      Number(o.sketchAck.sentAt)      || 0,
+      outboxKey:   o.sketchAck.outboxKey   || '',
+      attemptedAt: Number(o.sketchAck.attemptedAt) || 0,
+      httpStatus:  Number(o.sketchAck.httpStatus)  || 0,
+      waMessageId: o.sketchAck.waMessageId || '',
+    } : null,
     urgent:        o.urgent       || false,
     sketch:        o.sketch       || null,
     // סימן בלבד — מאפשר למסך לדעת שיש סקיצה בלי להוריד אותה
