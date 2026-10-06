@@ -320,7 +320,6 @@
     <a class="unav-a" href="check-station.html"><span class="ic" data-icon="search"></span>תחנת בדיקה</a>
     <a class="unav-a active" href="workday.html"><span class="ic" data-icon="factory"></span>יום עבודה</a>
   </nav>
-  <div class="unav-bot"><a href="#" onclick="unavResetAll()"><span data-icon="refresh"></span> אפס הכל</a></div>
 </div>
 <div class="unav-overlay" id="unavOverlay" onclick="unavClose()"></div>
 <div class="main" id="wdMain">
@@ -332,7 +331,6 @@
       <div class="date-badge" id="dateBadge"></div>
     </div>
     <div class="topbar-right">
-      <button class="btn btn-outline" onclick="resetDay()"><span data-icon="refresh"></span> אפס יום</button>
       <button class="btn btn-gold" id="addBtn" onclick="addSelected()" style="display:none">+ הוסף לעבודה</button>
     </div>
   </div>
@@ -3415,28 +3413,8 @@ function cleanPhone(phone){
 // ═══════════════════════════════════════
 //  RESET
 // ═══════════════════════════════════════
-function resetDay(){
-  if(!confirm('לאפס את יום העבודה? ההזמנות יחזרו לרשימה.')) return;
-  // נקה workdayStatus מ-Firebase לכל הזמנה שהייתה ביום — אחרת handleWorkdayStart ידלג עליהן
-  const toReset = [...new Set([
-    ...workDay.inWork.map(String),
-    ...workDay.inChisum.map(String)
-  ])];
-  toReset.forEach(id => {
-    updateOrder(id, {workdayStatus:'', readyStatus:'', inspectionStatus:'', temperingStatus:''})
-      .catch(e => console.error('resetDay updateOrder:', e));
-    // נקה גם את סימוני תחנת הבדיקה — אחרת הזמנה שתחזור לתחנה מגיעה עם כל
-    // הסימונים דלוקים ונחשבת "נבדקה" בלי שאף אחד הסתכל עליה.
-    firebase.database().ref('workday/checkState/' + id).remove()
-      .catch(e => console.error('resetDay checkState:', e));
-  });
-  workDay = {date:today(), selected:[], inWork:[], inChisum:[], itemsSel:{}};
-  saveWorkDay();
-  selectedIds.clear();
-  setTab('build');
-  renderAll();
-  showToast('יום העבודה אופס');
-}
+// כפתור איפוס היום הוסר (בן, 06/10) — נבנה לבדיקות, ובפרודקשן מחק סטטוסים של
+// כל הזמנות היום ואת סימוני תחנת הבדיקה בלחיצה אחת. ר' scripts/test-no-reset.js
 
 // ═══════════════════════════════════════
 //  TOAST
@@ -3500,7 +3478,6 @@ document.getElementById('finishBtn').disabled = workDay.inWork.length === 0;
 
 function unavOpen(){document.getElementById('unavSidebar').classList.add('mobile-open');document.getElementById('unavOverlay').classList.add('open');}
 function unavClose(){document.getElementById('unavSidebar').classList.remove('mobile-open');document.getElementById('unavOverlay').classList.remove('open');}
-function unavResetAll(){if(typeof resetAllOrders==='function'){resetAllOrders();return;}if(typeof resetDay==='function'){resetDay();return;}if(confirm('לאפס?')){localStorage.clear();location.reload();}}
 
 // ═══════════════════════════════════════
 //  DRAFT PREVIEW — שכבת ביניים זמנית
