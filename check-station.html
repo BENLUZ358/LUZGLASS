@@ -1420,7 +1420,6 @@ lgRequireAuthAsync('admin').then(session => {
 // מוגנות כדי שחיבור כפתור אליהן בעתיד לא יפיל את הדף.
 function unavOpen(){document.getElementById('unavSidebar')?.classList.add('mobile-open');document.getElementById('unavOverlay')?.classList.add('open');}
 function unavClose(){document.getElementById('unavSidebar')?.classList.remove('mobile-open');document.getElementById('unavOverlay')?.classList.remove('open');}
-function unavResetAll(){if(confirm('לאפס את המצב?')){localStorage.clear();location.reload();}}
 </script>
 
 </body>
