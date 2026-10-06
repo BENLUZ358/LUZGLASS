@@ -2637,10 +2637,10 @@ document.addEventListener('visibilitychange', () => {
    "סינון" פותח את ארבע הרשימות כשורה שלישית — אותם אלמנטים, בלי להעביר
    אותם ובלי לוגיקה חדשה. הדסקטופ לא משתנה. */
 #sqFilterBtn{display:none;}
-/* אייפד (≤1100): השורה הטבעית רחבה ~1080px ולכן גלשה גם באייפד לרוחב וגם
+/* אייפד (≤1200, נקודת השבירה של lg-ui.css): השורה הטבעית רחבה ~1080px ולכן גלשה גם באייפד לרוחב וגם
    לאורך — הטאבים, החיפוש וכפתור הסגירה יצאו מהמסך. כאן היא נשברת לשתי
    שורות, ופאנל הקליטות מכסה את כל התור (יש לו סגירה משלו). */
-@media(max-width:1100px){
+@media(max-width:1200px){
   #sqTopBar{height:auto;min-height:50px;flex-wrap:wrap;row-gap:8px;padding-top:8px;padding-bottom:8px;}
   #waInPanel{top:0;}
 }
