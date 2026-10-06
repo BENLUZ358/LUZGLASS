@@ -212,7 +212,6 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 /* ── אייפון ── */
 @media(max-width:600px){
   /* topbar: הסתר חיפוש ו-toggle — נשאר: המבורגר + כותרת + כפתור חדש */
-  .search-wrap{display:none;}
   .view-toggle{display:none;}
   .topbar{height:52px;padding:0 12px;}
   .topbar-title{font-size:14px;}
@@ -313,6 +312,19 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   #modalAdvBtn{order:3;flex:1 1 100%;}
   #modalTestBtn{order:4;}
   #ov .mf-del{order:5;margin-left:0 !important;}
+}
+
+/* ─ כרטיסי קיצור בראש האדמין (06/10) — תור סקיצות / שרטט ─ */
+.stat-link{display:block;text-align:inherit;font:inherit;color:inherit;text-decoration:none;cursor:pointer;width:100%;}
+.stat-link:hover{border-color:var(--gold-text);}
+.stat-link:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.stat-link .l::after{content:" ←";color:var(--gold-text);}
+/* ─ חיפוש באדמין בטלפון (06/10) — היה מוסתר בלי חלופה. שורה משלו מתחת לכותרת ─ */
+@media(max-width:600px){
+  .topbar{height:auto;min-height:52px;flex-wrap:wrap;row-gap:8px;padding-top:6px;padding-bottom:8px;}
+  .topbar-right{display:contents;}
+  .search-wrap{order:10;flex:1 1 100%;min-height:44px;}
+  #srch{font-size:16px;flex:1;min-width:0;}
 }
 
 /* ─ טבלת ההזמנות בטלפון: כרטיס לכל הזמנה ─
@@ -1403,15 +1415,18 @@ function renderAll(){
 
 function renderStats(){
   const f=filtered();
-  const tot=f.reduce((s,o)=>s+(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0),0);
   const inP=f.filter(o=>['ירד לביצוע','נשלח לחיסום','חזר מחיסום','בגרפיקה','ממתין להובלה'].includes(o.status)).length;
-  const rdy=f.filter(o=>o.status==='מוכן לאיסוף').length;
+  // תור סקיצות ושרטט (בן, 06/10) — במקום כרטיסי הסכום ומוכן-לאיסוף.
+  // על כל ההזמנות ולא על המסונן: אלה קיצורי דרך, לא סיכום של הסינון.
+  const inQ=orders.filter(o=>!o.stage).length;
+  const unseen=orders.filter(o=>!o.stage && !o.sketchSeenAt).length;
+  const atD=orders.filter(o=>o.status==='אצל שרטט').length;
   const urg=f.filter(o=>o.urgent).length;
   document.getElementById('stats').innerHTML=`
-    <div class="stat"><div class="n">${f.length}</div><div class="l">הזמנות</div></div>
+    <div class="stat"><div class="n">${f.length}</div><div class="l">הזמנות</div>${urg?`<div class="d" style="color:#c0392b">🔴 ${urg} דחופות</div>`:''}</div>
     <div class="stat"><div class="n">${inP}</div><div class="l">בייצור</div></div>
-    <div class="stat"><div class="n">${rdy}</div><div class="l">מוכנות לאיסוף</div>${rdy?'<div class="d" style="color:var(--gold-text)">⚡ ממתינות</div>':''}</div>
-    <div class="stat"><div class="n">₪${tot.toLocaleString()}</div><div class="l">שווי כולל</div>${urg?`<div class="d" style="color:#c0392b">🔴 ${urg} דחופות</div>`:''}</div>`;
+    <button type="button" class="stat stat-link" onclick="openSketchQueue()"><div class="n">${inQ}</div><div class="l">תור סקיצות</div>${unseen?`<div class="d" style="color:var(--gold-text)">${unseen} עוד לא נראו</div>`:''}</button>
+    <a class="stat stat-link" href="drafter.html"><div class="n">${atD}</div><div class="l">שרטט</div></a>`;
 }
 
 function renderKanban(){
