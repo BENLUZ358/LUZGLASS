@@ -2293,7 +2293,7 @@ document.addEventListener('visibilitychange', () => {
   gap:8px;padding:0 14px;
   border-bottom:1px solid rgba(255,255,255,0.07);
 }
-#sqTopBar .sq-logo{font-size:13px;font-weight:900;color:#f0ede8;white-space:nowrap;}
+#sqTopBar .sq-logo{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:900;color:#f0ede8;white-space:nowrap;}
 #sqTopBar .sq-logo span{color:var(--gold);}
 .sq-mode-wrap{display:flex;gap:2px;background:rgba(255,255,255,0.07);border-radius:5px;padding:3px;}
 .sq-mode-btn{padding:4px 12px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:3px;transition:all 0.15s;white-space:nowrap;}
@@ -2351,6 +2351,7 @@ document.addEventListener('visibilitychange', () => {
 .sq-tag{font-size:12px;padding:1px 5px;border-radius:3px;font-weight:700;}
 .sq-tag-sketch{background:rgba(41,128,185,0.25);color:#5dade2;}
 .sq-tag-upload{background:rgba(142,68,173,0.25);color:#bb8fce;}
+.sq-tag-wa{background:rgba(37,211,102,0.18);color:#5fe08f;}
 .sq-tag-pending{background:rgba(184,146,42,0.25);color:#d4ac0d;}
 .sq-tag-drafter{background:rgba(192,57,43,0.25);color:#ec7063;}
 .sq-tag-chash{background:rgba(39,174,96,0.25);color:#58d68d;}
@@ -2629,7 +2630,42 @@ document.addEventListener('visibilitychange', () => {
 #waInView{position:absolute;inset:0;background:rgba(10,9,8,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;}
 #waInView[hidden]{display:none;}
 #waInView img{max-width:100%;max-height:80%;object-fit:contain;background:#fff;border-radius:4px;}
-@media(max-width:600px){ #waInPanel{top:46px;} .wain-sub{display:none;} }
+@media(max-width:600px){ .wain-sub{display:none;} }
+
+/* ─ תור הסקיצות בטלפון (≤600) — שתי שורות במקום שורה אחת שגולשת ─
+   שורה 1: חיפוש · סינון · קליטות · סגירה. שורה 2: "עוד לא נראה | נראה".
+   "סינון" פותח את ארבע הרשימות כשורה שלישית — אותם אלמנטים, בלי להעביר
+   אותם ובלי לוגיקה חדשה. הדסקטופ לא משתנה. */
+#sqFilterBtn{display:none;}
+/* אייפד (≤1100): השורה הטבעית רחבה ~1080px ולכן גלשה גם באייפד לרוחב וגם
+   לאורך — הטאבים, החיפוש וכפתור הסגירה יצאו מהמסך. כאן היא נשברת לשתי
+   שורות, ופאנל הקליטות מכסה את כל התור (יש לו סגירה משלו). */
+@media(max-width:1100px){
+  #sqTopBar{height:auto;min-height:50px;flex-wrap:wrap;row-gap:8px;padding-top:8px;padding-bottom:8px;}
+  #waInPanel{top:0;}
+}
+@media(max-width:600px){
+  #sqTopBar{height:auto;flex-wrap:wrap;row-gap:8px;padding:8px 10px;}
+  #sqTopBar .sq-logo,.sq-mode-wrap,#sqCounter{display:none;}
+  #sqSearchInput{order:1;flex:1 1 0;width:auto;min-width:0;min-height:44px;font-size:16px;}
+  #sqFilterBtn{order:2;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;
+    background:transparent;border:1px solid rgba(247,244,239,0.18);border-radius:6px;cursor:pointer;
+    font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:rgba(247,244,239,0.8);}
+  #sqFilterN{min-width:18px;padding:0 5px;border-radius:9px;background:#b8922a;color:#1a1714;font-size:12px;}
+  #sqFilterN[hidden]{display:none;}
+  #waInBtn{order:3;display:inline-flex;align-items:center;gap:6px;padding:0 10px;}
+  #sqCloseBtn{order:4;width:44px;height:44px;}
+  .sq-seen-tabs{order:5;flex:1 1 100%;display:flex;gap:8px;}
+  .sq-seen-tab{flex:1;}
+  #sqTopBar.sq-filters-open .sq-filter-sel{display:block;order:6;flex:1 1 calc(50% - 4px);min-width:0;min-height:44px;font-size:16px;}
+  #sqTopBar.sq-filters-open #sqFilterBtn{border-color:#b8922a;color:#f7f4ef;}
+  /* פאנל הקליטות על כל המסך — שורת הכותרת שלו כבר כוללת סגירה */
+  #waInPanel{top:0;}
+  .wain-head{flex-wrap:nowrap;gap:8px;padding:8px 10px;}
+  .wain-head b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #waInToggle{padding:0 10px;font-size:12px;white-space:nowrap;}
+}
+#waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
 </style>
 
 <div id="sqOverlay">
@@ -2638,7 +2674,7 @@ document.addEventListener('visibilitychange', () => {
 
     <!-- TOP BAR -->
     <div id="sqTopBar">
-      <div class="sq-logo" style="display:flex;align-items:center;gap:7px"><span data-icon="ruler"></span>תור <span>סקיצות</span></div>
+      <div class="sq-logo"><span data-icon="ruler"></span>תור <span>סקיצות</span></div>
       <div class="sq-mode-wrap">
         <button class="sq-mode-btn" id="sqModeAdmin" onclick="sqSetMode('admin')" style="background:#b8922a;color:#1a1714;">אדמין</button>
         <!-- טאב שרטט הוסר -->
@@ -2651,28 +2687,32 @@ document.addEventListener('visibilitychange', () => {
                 onclick="sqSetSeenTab('seen')">נראה <span id="sqTabSeenN">0</span></button>
       </div>
       <!-- קליטות WhatsApp — wa-inbound-panel.js -->
-      <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp">📥 קליטות
+      <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp"><span data-icon="inbox"></span>קליטות
         <span id="waInBadgeA" class="wain-badge wain-badge-a" hidden></span>
         <span id="waInBadgeP" class="wain-badge" hidden></span></button>
-      <select id="sqFSource" class="sq-filter-sel" onchange="sqRender()">
+      <!-- בטלפון בלבד: הרשימות למטה מוסתרות, והכפתור פותח אותן כשורה נוספת -->
+      <button id="sqFilterBtn" type="button" onclick="sqToggleFilters()" aria-expanded="false" aria-controls="sqTopBar">
+        <span data-icon="list"></span>סינון<span id="sqFilterN" hidden></span></button>
+      <select id="sqFSource" class="sq-filter-sel" onchange="sqRender()" aria-label="מקור">
         <option value="">כל המקורות</option>
         <option value="sketch">מערכת</option>
         <option value="upload">העלאות</option>
+        <option value="whatsapp">WhatsApp</option>
       </select>
-      <select id="sqFStatus" class="sq-filter-sel" onchange="sqRender()">
+      <select id="sqFStatus" class="sq-filter-sel" onchange="sqRender()" aria-label="סטטוס">
         <option value="">הכל</option>
         <option value="pending">ממתין</option>
         <option value="drafter">שרטט</option>
         <option value="optyway">OptyWay</option>
         <option value="done">הועבר ✓</option>
       </select>
-      <select id="sqFGlass" class="sq-filter-sel" onchange="sqRender()">
+      <select id="sqFGlass" class="sq-filter-sel" onchange="sqRender()" aria-label="סוג זכוכית">
         <option value="">כל הזכוכיות</option>
       </select>
-      <select id="sqFClient" class="sq-filter-sel" onchange="sqRender()">
+      <select id="sqFClient" class="sq-filter-sel" onchange="sqRender()" aria-label="לקוח">
         <option value="">כל הלקוחות</option>
       </select>
-      <input id="sqSearchInput" placeholder="🔍 חיפוש..." oninput="sqRender()">
+      <input id="sqSearchInput" type="search" placeholder="חיפוש…" aria-label="חיפוש בתור" oninput="sqRender()">
       <button id="sqCloseBtn" onclick="closeSQ()" aria-label="סגור"><span data-icon="x"></span></button>
     </div>
 
@@ -3101,7 +3141,22 @@ function sqStageTag(id){
   return map[s]||['sq-tag-pending','⏳ ממתין'];
 }
 
+// בטלפון הרשימות מוסתרות עד שפותחים "סינון". המונה אומר כמה פעילים —
+// אחרת רשימה מסוננת נראית כמו תור שבאמת ריק.
+function sqToggleFilters(force){
+  const bar=document.getElementById('sqTopBar'), btn=document.getElementById('sqFilterBtn');
+  const open=bar.classList.toggle('sq-filters-open', force);
+  if(btn) btn.setAttribute('aria-expanded', open?'true':'false');
+}
+function sqUpdateFilterBadge(){
+  const n=['sqFSource','sqFStatus','sqFGlass','sqFClient']
+    .filter(id=>(document.getElementById(id)||{}).value).length;
+  const b=document.getElementById('sqFilterN');
+  if(b){ b.textContent=n; b.hidden=!n; }
+}
+
 function sqRender(){
+  sqUpdateFilterBadge();
   lgFillFilterSelect(document.getElementById('sqFGlass'),
     lgGlassTypesInOrders(sqItems, skuCatalogMap), 'כל הזכוכיות');
   lgFillFilterSelect(document.getElementById('sqFClient'),
@@ -3139,7 +3194,7 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':'מערכת'}</span>
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
         </div>
