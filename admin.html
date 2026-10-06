@@ -530,6 +530,9 @@ function load() {
     skuCatalogMap = {};
     list.forEach(e => { if (e && e.code) skuCatalogMap[e.code] = e; });
     _lgRenderIwCodeList();
+    // סינון הזכוכית בתור נבנה מהקטלוג — אם התור כבר פתוח, למלא אותו עכשיו
+    const sq = document.getElementById('sqOverlay');
+    if (sq && sq.style.display === 'flex') sqRender();
     const ov = document.getElementById('pricingOv');
     if (ov && ov.classList.contains('open')) renderPricing();
   });
@@ -2864,6 +2867,9 @@ function sqSetSeenTab(tab){
   sqCurrent = null; sqCurrentIdx = -1;
   sqShowDetail();
   sqRender();
+  // ⚠️ בטלפון הרשימה מוסתרת כשסקיצה פתוחה. בלי זה מעבר טאב ניקה את הבחירה
+  // ונשאר על "בחר סקיצה" — בלי רשימה ובלי דרך חזרה (בן, 06/10).
+  sqShowList();
 }
 
 // מסמן שעברו על הסקיצה. כותב שדה אחד ותו לא.
@@ -3148,6 +3154,12 @@ function sqToggleFilters(force){
   const open=bar.classList.toggle('sq-filters-open', force);
   if(btn) btn.setAttribute('aria-expanded', open?'true':'false');
 }
+// חיפוש או סינון מתוך סקיצה פתוחה (בטלפון) — מחזירים לרשימה, שם רואים
+// את התוצאה. בדסקטופ שני הפאנלים גלויים ממילא, וזה לא משנה דבר.
+['input','change'].forEach(ev => document.addEventListener(ev, e => {
+  const t = e.target;
+  if (t && t.closest && t.closest('#sqTopBar') && t.matches('select, input')) sqShowList();
+}));
 function sqUpdateFilterBadge(){
   const n=['sqFSource','sqFStatus','sqFGlass','sqFClient']
     .filter(id=>(document.getElementById(id)||{}).value).length;
@@ -3157,8 +3169,8 @@ function sqUpdateFilterBadge(){
 
 function sqRender(){
   sqUpdateFilterBadge();
-  lgFillFilterSelect(document.getElementById('sqFGlass'),
-    lgGlassTypesInOrders(sqItems, skuCatalogMap), 'כל הזכוכיות');
+  // כל סוגי הזכוכית מקטלוג המק"טים, לא רק מה שבתור (בן, 06/10)
+  lgFillFilterSelect(document.getElementById('sqFGlass'), lgGlassTypesWithCatalog(sqItems, skuCatalogMap), 'כל הזכוכיות');
   lgFillFilterSelect(document.getElementById('sqFClient'),
     lgClientsInOrders(sqItems.map(i => ({ orderClient: i.orderClient || i.client }))), 'כל הלקוחות');
   const list=sqFiltered();

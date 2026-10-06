@@ -27,6 +27,7 @@ const SRC  = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
 const parts = [
   SRC.match(/function lgGlassLabelOf[\s\S]*?\n}/),
   SRC.match(/function lgGlassTypesInOrders[\s\S]*?\n}/),
+  SRC.match(/function lgGlassTypesWithCatalog[\s\S]*?\n}/),
   SRC.match(/function lgOrderHasGlass[\s\S]*?\n}/),
   SRC.match(/function lgClientsInOrders[\s\S]*?\n}/),
   SRC.match(/function lgFillFilterSelect[\s\S]*?\n}/),
@@ -35,7 +36,7 @@ if (parts.some(p => !p)) { console.error('FAIL  could not extract the filter hel
 const ctx = { console };
 vm.createContext(ctx);
 vm.runInContext(parts.map(p => p[0]).join('\n'), ctx);
-const { lgGlassLabelOf, lgGlassTypesInOrders, lgOrderHasGlass,
+const { lgGlassLabelOf, lgGlassTypesInOrders, lgGlassTypesWithCatalog, lgOrderHasGlass,
         lgClientsInOrders, lgFillFilterSelect } = ctx;
 
 let failed = 0;
@@ -135,6 +136,34 @@ for (const page of ['admin.html', 'workday.html', 'check-station.html']) {
   const html = fs.readFileSync(path.join(ROOT, page), 'utf8');
   const hardcoded = (html.match(/<option[^>]*>\s*\d+\s*מ["'׳״]{1,2}מ/g) || []).length;
   check(`${page} has no hardcoded glass options`, hardcoded, 0);
+}
+
+/* ── סינון זכוכית בתור הסקיצות: כל סוגי הזכוכית מהקטלוג (בן, 06/10) ──
+   הרשימה הקודמת נבנתה רק מהזמנות התור, ולכן בתור עם סקיצה אחת הוצע
+   "8 שקוף" ותו לא. בתור הסקיצות רוב ההזמנות עוד בלי פריטים — הסינון צריך
+   להציע את כל הסוגים שהמפעל עובד איתם, מקטלוג המק"טים (חשבשבת). */
+{
+  const cat = {
+    '8SMH': { code: '8SMH', glass: 'שקוף', mm: 8 },
+    '6SMH': { code: '6SMH', glass: 'שקוף', mm: 6 },
+    '8HMH': { code: '8HMH', glass: 'חלבי', mm: 8 },
+    '8SMH2':{ code: '8SMH2', glass: 'שקוף', mm: 8 },
+    'SRV':  { code: 'SRV', name: 'הובלה' },
+  };
+  const orders = [{ items: [{ sku: '8SMH' }, { sku: '8SMH' }] }, { items: [{ glass: 'מראה', mm: 4 }] }];
+  const r = JSON.parse(JSON.stringify(lgGlassTypesWithCatalog(orders, cat)));
+  check('every glass type in the catalog is offered, once, thinnest first',
+        r.map(x => x.label), ['4 מראה', '6 שקוף', '8 חלבי', '8 שקוף']);
+  check('types present in the queue carry their count', r.find(x => x.label === '8 שקוף').count, 2);
+  check('types not in the queue are offered without a "(0)"', r.find(x => x.label === '6 שקוף').count, undefined);
+  check('a type found only on an order item is still offered', r.some(x => x.label === '4 מראה'), true);
+  // בלי קטלוג, פריט שיש לו רק מק"ט אינו ניתן לפענוח — נשאר מה שעל הפריט
+  check('an empty catalog falls back to what the queue items carry',
+        JSON.parse(JSON.stringify(lgGlassTypesWithCatalog(orders, {}))).map(x => x.label), ['4 מראה']);
+
+  const ADMIN = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+  check('the sketch queue fills its glass filter from the catalog',
+        /getElementById\('sqFGlass'\),\s*lgGlassTypesWithCatalog\(sqItems, skuCatalogMap\)/.test(ADMIN), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
