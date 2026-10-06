@@ -87,6 +87,14 @@ function renderText({ kind, clientName, orderNums, sketchNames }) {
   const wrap = body => `שלום ${who},\n\n${body}\n\n${portalLine(nums.length)}\n\n${BUSINESS}`;
   const bullets = () => nums.map((_, i) => '• ' + label(i)).join('\n');
 
+  //  "הסקיצות טופלו" — הנוסח של בן (2026-10-06, אפיון §16). מספרים בלבד,
+  //  בשורה: זה אישור קבלה, לא רשימת עבודה. ⚠️ חייב להיות לפני ברירת המחדל
+  //  למטה — אחרת סוג לא מוכר נופל ל"מוכן לאיסוף".
+  if (kind === 'sketches-handled') {
+    return nums.length > 1
+      ? wrap('ההזמנות: ' + nums.join(', ') + ' עברו סינון ראשוני, מתחילים לעבוד עליהן.')
+      : wrap('ההזמנה ' + nums[0] + ' עברה סינון ראשוני, מתחילים לעבוד עליה.');
+  }
   if (kind === 'dispatched') {
     return nums.length > 1
       ? wrap('ההובלה יצאה אליך עם ההזמנות:\n' + bullets())

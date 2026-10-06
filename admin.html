@@ -2726,7 +2726,23 @@ document.addEventListener('visibilitychange', () => {
   .wain-head b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #waInToggle{padding:0 10px;font-size:12px;white-space:nowrap;}
 }
-#waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
+#waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
+/* ─ שלב 6: עדכון "הסקיצות טופלו" ─ */
+#sqAckPending{background:rgba(37,211,102,0.08);border-bottom:1px solid rgba(37,211,102,0.25);padding:6px 10px;}
+#sqAckPending[hidden]{display:none;}
+.sqack-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;font-size:12px;color:#f0ede8;}
+.sqack-send{min-height:36px;padding:0 12px;background:#25d366;color:#0b2e17;border:0;border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.sqack-na{font-size:12px;color:#f3c74f;white-space:nowrap;}
+#sqAckAsk{position:absolute;inset:0;z-index:60;background:rgba(10,9,8,0.6);display:flex;align-items:center;justify-content:center;padding:16px;}
+#sqAckAsk[hidden]{display:none;}
+.sqack-box{background:#f7f4ef;color:#1a1714;max-width:420px;width:100%;border-radius:8px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,0.4);font-family:Heebo,sans-serif;}
+#sqAckAskT{font-size:15px;font-weight:700;line-height:1.5;margin-bottom:14px;}
+.sqack-acts{display:flex;gap:8px;flex-wrap:wrap;}
+.sqack-acts button{flex:1 1 140px;min-height:44px;border-radius:6px;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;}
+.sqack-yes{background:#b8922a;color:#1a1714;border:0;}
+.sqack-no{background:transparent;color:#1a1714;border:1px solid rgba(0,0,0,0.25);}
+@media (pointer:coarse){ .sqack-send{min-height:44px;} }
+
 
 /* ─ בורר מק"טים (sku-picker.js) ─ רשימה מתחת לשדה הקוד; 44px לשורה */
 .iw-input-row{position:relative;}
@@ -2828,11 +2844,24 @@ document.addEventListener('visibilitychange', () => {
       </div>
     </div>
 
+    <!-- שלב 6: "יש עוד סקיצות של הלקוח — לטפל עכשיו?" _sqAckAsk -->
+    <div id="sqAckAsk" hidden role="dialog" aria-modal="true" aria-labelledby="sqAckAskT">
+      <div class="sqack-box">
+        <div id="sqAckAskT"></div>
+        <div class="sqack-acts">
+          <button type="button" id="sqAckYes" class="sqack-yes">כן, נטפל עכשיו</button>
+          <button type="button" id="sqAckNo" class="sqack-no">לא, שלח עכשיו</button>
+        </div>
+      </div>
+    </div>
+
     <!-- BODY -->
     <div id="sqBody">
 
       <!-- LIST -->
       <div id="sqListPanel">
+        <!-- שלב 6: טופלו וממתינים לעדכון ללקוח — רשת ביטחון. _sqRenderAckPending -->
+        <div id="sqAckPending" hidden></div>
         <div id="sqList"></div>
       </div>
 
@@ -2983,12 +3012,106 @@ function sqMarkSeen(){
   var it = sqItems.find(function(i){ return i.id === id; });
   if(it) it.sketchSeenAt = now;
   updateOrder(id, { sketchSeenAt: now })
-    .then(()  => showToast('✓ הסקיצה טופלה'))
+    // הסימון נשמר → רק אז עדכון ללקוח (שלב 6). "טופל" עצמו לא תלוי בו.
+    .then(()  => { showToast('✓ הסקיצה טופלה'); _sqAfterSeen(id, now); })
     .catch(e  => { console.error('sqMarkSeen:', e); showToast('הסימון לא נשמר — נסה שוב'); });
   // הבאה בתור, כמו אחרי כל פעולה אחרת במסך הזה
   sqCurrent = null; sqCurrentIdx = -1;
   sqShowDetail();
   sqRender();
+}
+
+// ── "הסקיצות טופלו" ללקוח — שלב 6 (אפיון §16, החלטות בן 06/10) ──
+//
+//  "טופל" על סקיצת WhatsApp שולח עדכון. אם לאותו לקוח יש עוד סקיצות
+//  WhatsApp בתור — שואלים קודם: לטפל בהן עכשיו (והודעה אחת על הכל), או
+//  לשלוח עכשיו. השליחה עצמה היא תור ההודעות הקיים: dispatch → outbox →
+//  lgWaDrain. השרת מסנן כל הזמנה לבד (_wa-sketch-ack.js), ולכן לחיצה
+//  כפולה או "שלח עכשיו" אחרי שליחה לא שולחים אותה הזמנה פעמיים.
+//
+//  ⚠️ Admin שולח רק את הסוג הזה. "ההובלה יצאה" — רק מיום עבודה.
+//  test-delivery-finish-guard ו-test-wa-sketch-ack אוכפים.
+
+// מה כבר נשלח מהלשונית הזו — עד שה-drain חותם sketchAck, כדי שהשורה
+// "ממתינים לעדכון" לא תציע לשלוח שוב את מה שכבר יצא.
+const _sqAckSent = new Set();
+
+function _sqAfterSeen(id, now){
+  const o = orders.find(x => String(x.id) === String(id));
+  if(!o || o.source !== 'whatsapp' || o.isTest) return;          // D3
+  const key  = lgSketchAckClientKey(o);
+  // ייתכן שהמאזין עוד לא החזיר את הסימון — מחילים אותו מקומית
+  const view = orders.map(x => String(x.id) === String(id) ? Object.assign({}, x, { sketchSeenAt: now }) : x);
+  const more = lgSketchAckUnseen(view, key, id);
+  if(more.length) _sqAckAsk(o, more, key, view);
+  else _sqAckSend(key, view);
+}
+
+function _sqAckAsk(o, more, key, view){
+  const box = document.getElementById('sqAckAsk');
+  if(!box){ _sqAckSend(key, view); return; }
+  // "ללקוח <שם>" ולא ל+שם — "להמקום לאמבט" לא עברית
+  document.getElementById('sqAckAskT').textContent =
+    'ללקוח ' + (o.orderClient || '') + ' יש עוד ' +
+    (more.length === 1 ? 'סקיצת WhatsApp אחת בתור. לטפל בה' : more.length + ' סקיצות WhatsApp בתור. לטפל בהן') +
+    ' עכשיו כדי שיישלח עדכון אחד על הכל?';
+  box.hidden = false;
+  const yes = document.getElementById('sqAckYes'), no = document.getElementById('sqAckNo');
+  yes.onclick = () => { box.hidden = true; _sqAckGoTo(more[0].id); };
+  no.onclick  = () => { box.hidden = true; _sqAckSend(key, view); };
+  yes.focus();
+}
+
+// לסקיצה הבאה של אותו לקוח. אם סינון / חיפוש מסתירים אותה — מנקים אותם.
+function _sqAckGoTo(id){
+  if(sqSeenTab !== 'unseen') sqSetSeenTab('unseen');
+  if(!sqFiltered().some(i => String(i.id) === String(id))){
+    ['sqFSource','sqFStatus','sqFGlass','sqFClient'].forEach(f => { const e = document.getElementById(f); if(e) e.value = ''; });
+    const s = document.getElementById('sqSearchInput'); if(s) s.value = '';
+  }
+  sqSelect(id);
+}
+
+async function _sqAckSend(key, view){
+  const g = lgSketchAckPending(view || orders).find(x => x.key === key);
+  if(!g) return;
+  const ids = g.ids.filter(i => !_sqAckSent.has(i));
+  if(!ids.length) return;
+  if(g.unassigned){ showToast('הלקוח לא משויך לכרטיס — העדכון לא נשלח'); _sqRenderAckPending(); return; }
+  try {
+    const res = await _lgAuthPost('/api/whatsapp-dispatch', { kind: 'sketches-handled', orderIds: ids, dryRun: false });
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok){ showToast('העדכון לא נשלח: ' + (d.error || ('HTTP ' + res.status))); return; }
+    if(d.queued){
+      ids.forEach(i => _sqAckSent.add(i));
+      showToast('📨 נשלח עדכון ללקוח: ' + (d.clientName || g.clientName));
+      lgWaDrain().catch(() => {});
+    } else if(d.blocked || d.reason){
+      showToast('העדכון לא נשלח: ' + (d.reason || 'נחסם'));
+    }
+  } catch(e){
+    console.error('_sqAckSend:', e);
+    showToast('העדכון לא נשלח — נסה שוב משורת "ממתינים לעדכון"');
+  } finally {
+    _sqRenderAckPending();
+  }
+}
+
+// רשת הביטחון: לקוחות שטופלו להם סקיצות ועוד לא נשלח עדכון.
+function _sqRenderAckPending(){
+  const el = document.getElementById('sqAckPending');
+  if(!el) return;
+  const groups = lgSketchAckPending(orders)
+    .map(g => Object.assign({}, g, { ids: g.ids.filter(i => !_sqAckSent.has(i)) }))
+    .filter(g => g.ids.length);
+  el.hidden = !groups.length;
+  el.innerHTML = groups.map(g =>
+    `<div class="sqack-row"><span><b>${lgEsc(g.clientName)}</b> · ${g.ids.length === 1 ? 'סקיצה אחת טופלה וממתינה' : g.ids.length + ' טופלו וממתינים'} לעדכון</span>` +
+    (g.unassigned
+      ? `<span class="sqack-na">לא משויך — אין למי לשלוח</span>`
+      : `<button type="button" class="sqack-send" data-key="${lgEsc(g.key)}">שלח עכשיו</button>`) +
+    `</div>`).join('');
+  el.querySelectorAll('.sqack-send').forEach(b => b.onclick = () => _sqAckSend(b.dataset.key));
 }
 
 // ── MEASURE ORDER LIST SVG ──
@@ -3270,6 +3393,7 @@ function sqUpdateFilterBadge(){
 
 function sqRender(){
   sqUpdateFilterBadge();
+  _sqRenderAckPending();
   // כל סוגי הזכוכית מקטלוג המק"טים, לא רק מה שבתור (בן, 06/10)
   lgFillFilterSelect(document.getElementById('sqFGlass'), lgGlassTypesWithCatalog(sqItems, skuCatalogMap), 'כל הזכוכיות');
   lgFillFilterSelect(document.getElementById('sqFClient'),
@@ -3343,6 +3467,10 @@ function sqShowDetail(){
   if(!sqCurrent){
     document.getElementById('sqDetailEmpty').style.display='flex';
     document.getElementById('sqDetailScroll').style.display='none';
+    // ⚠️ בטלפון אין "פאנל ריק" שימושי — בלי סקיצה פתוחה מציגים את הרשימה.
+    // אחרת "טופל" (ומעבר טאב, ומחיקה) השאירו את "בחר סקיצה" בלי דרך חזרה.
+    // בדסקטופ שני הפאנלים גלויים ממילא.
+    sqShowList();
     return;
   }
   document.getElementById('sqDetailEmpty').style.display='none';

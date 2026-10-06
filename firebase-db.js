@@ -259,6 +259,38 @@ function lgGlassTypesWithCatalog(orders, skuCatalogMap) {
     });
 }
 
+// ─── "הסקיצות טופלו" — שלב 6 (אפיון §16) ────────────────────────────
+//  הקיבוץ לפי לקוח: כרטיס חשבשבת אם יש, אחרת טלפון, אחרת שם. אותו סדר
+//  עדיפות כמו resolvePhone בשרת, כדי שקבוצה כאן לא תתפרק שם ל-409.
+function lgSketchAckClientKey(o) {
+  if (o && o.customerId) return 'c:' + o.customerId;
+  const p = String((o && (o.clientPhone || o.phone)) || '').replace(/\D/g, '');
+  if (p) return 'p:' + p;
+  return 'n:' + String((o && o.orderClient) || '');
+}
+
+// טופלו וטרם עודכנו — לכל לקוח. רק WhatsApp (D3). stage לא משנה: סקיצה
+// שכבר נפתחה ממנה הזמנה עדיין ממתינה לעדכון. unassigned = אין כרטיס לקוח,
+// ולכן אין למי לשלוח (נעילה 3 בשער) — מוצג, לא נשלח.
+function lgSketchAckPending(orders) {
+  const groups = {};
+  (orders || []).forEach(o => {
+    if (!o || o.source !== 'whatsapp' || !o.sketchSeenAt || o.isTest) return;
+    if (o.sketchAck && o.sketchAck.sentAt) return;
+    const key = lgSketchAckClientKey(o);
+    const g = groups[key] || (groups[key] = { key, clientName: o.orderClient || '—', ids: [], unassigned: false });
+    g.ids.push(String(o.id));
+    if (!o.customerId) g.unassigned = true;
+  });
+  return Object.values(groups);
+}
+
+// סקיצות WhatsApp של אותו לקוח שעוד בתור ולא סומנו — "יש עוד".
+function lgSketchAckUnseen(orders, key, excludeId) {
+  return (orders || []).filter(o => o && o.source === 'whatsapp' && !(o.stage) && !o.sketchSeenAt &&
+    !o.isTest && String(o.id) !== String(excludeId) && lgSketchAckClientKey(o) === key);
+}
+
 // האם בהזמנה יש ולו פריט אחד מסוג הזכוכית שנבחר.
 // הזמנה נשארת ברשימה גם אם רוב פריטיה מסוג אחר — הצמצום למה שנבחר נעשה
 // בתצוגה של הפריטים עצמם, לא בהסתרת ההזמנה.

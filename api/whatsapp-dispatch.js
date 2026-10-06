@@ -40,6 +40,7 @@ const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaEnqueue }   = require('./_wa-outbox');
 const { resolvePhone, orderSketchName } = require('./_wa-recipient');
+const { lgSketchAckSkip, lgSketchAckActiveIds } = require('./_wa-sketch-ack');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -69,7 +70,11 @@ module.exports = async function handler(req, res) {
   const dryRun   = body.dryRun !== false;
   const force    = body.force === true;
   //  'dispatched' נשאר ברירת המחדל — קוד ישן שאינו מוסר kind לא משנה התנהגות
-  const kind     = body.kind === 'ready' ? 'ready' : 'dispatched';
+  //  'sketches-handled' — שלב 6, "הסקיצות טופלו" (אפיון §16). נשלח מתור
+  //  הסקיצות באדמין; כל סוג אחר מהאדמין נחסם שם (test-delivery-finish-guard).
+  const kind     = body.kind === 'ready' ? 'ready'
+                 : body.kind === 'sketches-handled' ? 'sketches-handled'
+                 : 'dispatched';
 
   if (!orderIds.length)             { res.status(400).json({ error: 'orderIds חסר' }); return; }
   if (orderIds.length > MAX_ORDERS) { res.status(400).json({ error: `יותר מדי הזמנות (מקסימום ${MAX_ORDERS})` }); return; }
@@ -81,6 +86,10 @@ module.exports = async function handler(req, res) {
 
   try {
     const db = _db();
+
+    // ⚠️ שלב 6: הזמנה שכבר בהודעת "טופלו" שבדרך / שנשלחה לא נכללת שוב —
+    // המפתח של התור מגן רק מהודעה זהה, לא מתת-קבוצה. ר' _wa-sketch-ack.js
+    const ackActive = kind === 'sketches-handled' ? await lgSketchAckActiveIds(db) : null;
 
     const loaded = [];
     for (const id of orderIds) {
@@ -94,6 +103,10 @@ module.exports = async function handler(req, res) {
       //  "מוכן לאיסוף" הייתה נכנסת שוב לקבוצה אחרת ומקבלת הודעה שנייה —
       //  המפתח הדטרמיניסטי שומר על קבוצה זהה, לא על הזמנה בודדת.
       //  ב-dispatched אין שדה כזה: הובלה היא אירוע, לא מצב של ההזמנה.
+      if (kind === 'sketches-handled') {
+        const why = lgSketchAckSkip(order, id, ackActive);
+        if (why) { loaded.push({ id, skip: why }); continue; }
+      }
       if (kind === 'ready' && order.whatsapp && order.whatsapp.sentAt && !force) {
         loaded.push({ id, skip: 'כבר נשלחה הודעת מוכן לאיסוף' }); continue;
       }
@@ -138,7 +151,12 @@ module.exports = async function handler(req, res) {
     const liveIds    = live.map(x => x.id);
     const facts      = { to, kind, clientName, orderNums, sketchNames };
 
-    const gate = provider.gate({ phone: to, accountKey: targets[0].accountKey });
+    let gate = provider.gate({ phone: to, accountKey: targets[0].accountKey });
+    //  התבנית של Meta מכירה רק "מוכן לאיסוף" — הסוג החדש יוצא רק ב-GREEN API,
+    //  שם הטקסט מרונדר כאן (renderText). אחרת הלקוח היה מקבל הודעה שגויה.
+    if (kind === 'sketches-handled' && provider.name !== 'green' && gate.allowed) {
+      gate = { allowed: false, reason: 'עדכון "הסקיצות טופלו" נשלח רק דרך GREEN API' };
+    }
 
     if (dryRun || !provider.configured || !gate.allowed) {
       res.status(200).json({
