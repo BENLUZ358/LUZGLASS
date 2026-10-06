@@ -212,7 +212,6 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 /* ── אייפון ── */
 @media(max-width:600px){
   /* topbar: הסתר חיפוש ו-toggle — נשאר: המבורגר + כותרת + כפתור חדש */
-  .search-wrap{display:none;}
   .view-toggle{display:none;}
   .topbar{height:52px;padding:0 12px;}
   .topbar-title{font-size:14px;}
@@ -313,6 +312,19 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   #modalAdvBtn{order:3;flex:1 1 100%;}
   #modalTestBtn{order:4;}
   #ov .mf-del{order:5;margin-left:0 !important;}
+}
+
+/* ─ כרטיסי קיצור בראש האדמין (06/10) — תור סקיצות / שרטט ─ */
+.stat-link{display:block;text-align:inherit;font:inherit;color:inherit;text-decoration:none;cursor:pointer;width:100%;}
+.stat-link:hover{border-color:var(--gold-text);}
+.stat-link:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.stat-link .l::after{content:" ←";color:var(--gold-text);}
+/* ─ חיפוש באדמין בטלפון (06/10) — היה מוסתר בלי חלופה. שורה משלו מתחת לכותרת ─ */
+@media(max-width:600px){
+  .topbar{height:auto;min-height:52px;flex-wrap:wrap;row-gap:8px;padding-top:6px;padding-bottom:8px;}
+  .topbar-right{display:contents;}
+  .search-wrap{order:10;flex:1 1 100%;min-height:44px;}
+  #srch{font-size:16px;flex:1;min-width:0;}
 }
 
 /* ─ טבלת ההזמנות בטלפון: כרטיס לכל הזמנה ─
@@ -897,7 +909,7 @@ function openMod(id) {
   document.getElementById('itemsPreview').innerHTML = `
     ${previewItems.map(i => `
       <div style="font-size:12px;margin-bottom:4px">
-        ${lgEsc(i.name || '')} ${i.w || ''}${i.w ? '×' : ''}${i.h || ''} ${i.w ? 'מ"מ' : ''}
+        ${lgEsc(i.name || '')} ${i.w ? lgDimsText(i.w, i.h) : ''} ${i.w ? 'מ"מ' : ''}
       </div>
     `).join('')}
     ${items.length > 3 ? `
@@ -982,7 +994,7 @@ function showAllItems(){
   document.getElementById('itemsPreview').innerHTML = items.map(i => `
     <div style="font-size:12px;margin-bottom:5px;padding:5px 8px;background:var(--bg2);border-radius:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <span style="font-weight:600">${lgEsc(i.name||'')}</span>
-      ${i.w?`<span style="color:var(--muted)">${i.w}×${i.h} מ"מ</span>`:''}
+      ${i.w?`<span style="color:var(--muted)">${lgDimsText(i.w, i.h)} מ"מ</span>`:''}
       ${i.chisum?'<span style="font-size:12px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
       ${i.graphic?'<span style="font-size:12px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
     </div>`).join('');
@@ -1403,15 +1415,18 @@ function renderAll(){
 
 function renderStats(){
   const f=filtered();
-  const tot=f.reduce((s,o)=>s+(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0),0);
   const inP=f.filter(o=>['ירד לביצוע','נשלח לחיסום','חזר מחיסום','בגרפיקה','ממתין להובלה'].includes(o.status)).length;
-  const rdy=f.filter(o=>o.status==='מוכן לאיסוף').length;
+  // תור סקיצות ושרטט (בן, 06/10) — במקום כרטיסי הסכום ומוכן-לאיסוף.
+  // על כל ההזמנות ולא על המסונן: אלה קיצורי דרך, לא סיכום של הסינון.
+  const inQ=orders.filter(o=>!o.stage).length;
+  const unseen=orders.filter(o=>!o.stage && !o.sketchSeenAt).length;
+  const atD=orders.filter(o=>o.status==='אצל שרטט').length;
   const urg=f.filter(o=>o.urgent).length;
   document.getElementById('stats').innerHTML=`
-    <div class="stat"><div class="n">${f.length}</div><div class="l">הזמנות</div></div>
+    <div class="stat"><div class="n">${f.length}</div><div class="l">הזמנות</div>${urg?`<div class="d" style="color:#c0392b">🔴 ${urg} דחופות</div>`:''}</div>
     <div class="stat"><div class="n">${inP}</div><div class="l">בייצור</div></div>
-    <div class="stat"><div class="n">${rdy}</div><div class="l">מוכנות לאיסוף</div>${rdy?'<div class="d" style="color:var(--gold-text)">⚡ ממתינות</div>':''}</div>
-    <div class="stat"><div class="n">₪${tot.toLocaleString()}</div><div class="l">שווי כולל</div>${urg?`<div class="d" style="color:#c0392b">🔴 ${urg} דחופות</div>`:''}</div>`;
+    <button type="button" class="stat stat-link" onclick="openSketchQueue()"><div class="n">${inQ}</div><div class="l">תור סקיצות</div>${unseen?`<div class="d" style="color:var(--gold-text)">${unseen} עוד לא נראו</div>`:''}</button>
+    <a class="stat stat-link" href="drafter.html"><div class="n">${atD}</div><div class="l">שרטט</div></a>`;
 }
 
 function renderKanban(){
@@ -2036,7 +2051,7 @@ function _renderBillClient(el){
   document.getElementById('billRows').innerHTML = ords.map(o => {
     const total = lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0;
     const items = (o.items||[]).map(it =>
-      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + (it.w||'') + '×' + (it.h||'') + ' מ"מ</div>').join('');
+      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + lgDimsText(it.w, it.h) + ' מ"מ</div>').join('');
     const sk = lgHasSketch(o)
       ? '<img class="bill-sk" data-sketch-for="' + lgEsc(String(o.id)) + '"' +
         ' alt="סקיצה — ' + lgEsc(o.orderNum||'') + '" onclick="if(this.src)previewSketchSrc(this.src)">'
@@ -2172,7 +2187,7 @@ function renderPickupBoard(){
             </div>
             ${p.items&&p.items.length?`
               <div class="pi-items">
-                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w||''}${i.w?'×':''}${i.h||''} מ"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
+                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w ? lgDimsText(i.w, i.h) : ''} מ"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
               </div>`:''}
           </div>
           <div>
@@ -3208,7 +3223,7 @@ function makeDemoSketch(title,client,glass,dims,color){
       panels+=`<circle cx="${x+panW}" cy="${oy+panH-35}" r="3.5" fill="${color}" opacity="0.6"/>`;
     }
     // dimension text
-    panels+=`<text x="${x+panW/2}" y="${oy+panH/2-5}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="10" font-weight="700" fill="${color}">${w}×${h}</text>`;
+    panels+=`<text x="${x+panW/2}" y="${oy+panH/2-5}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="10" font-weight="700" fill="${color}">${lgDimsText(w, h)}</text>`;
     panels+=`<text x="${x+panW/2}" y="${oy+panH/2+9}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="8" fill="rgba(0,0,0,0.3)">${label}</text>`;
     // top dim line
     panels+=`<line x1="${x}" y1="${oy-7}" x2="${x+panW}" y2="${oy-7}" stroke="${color}" stroke-width="0.8" opacity="0.4"/>`;

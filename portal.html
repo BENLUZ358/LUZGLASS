@@ -713,7 +713,7 @@ function makeMeasureListSVG(o){
     const nm=(it.name||it.glass||'').replace(/ ?\d+מ"מ/,'');
     return `<rect x="0" y="${y}" width="${W}" height="${ROW}" fill="${bg}"/>
     <text x="${PAD}" y="${y+17}" font-family="Heebo,Arial" font-size="10" font-weight="700" fill="#1a1714">${nm}</text>
-    <text x="${W/2}" y="${y+17}" text-anchor="middle" font-family="Heebo,Arial" font-size="11" fill="#333" font-weight="600">${it.w||0}×${it.h||0}</text>
+    <text x="${W/2}" y="${y+17}" text-anchor="middle" font-family="Heebo,Arial" font-size="11" fill="#333" font-weight="600">${lgDimsText(it.w, it.h, '0')}</text>
     <text x="${W-PAD}" y="${y+17}" text-anchor="end" font-family="Heebo,Arial" font-size="9" fill="${pc}" font-weight="700">${pl}</text>`;
   }).join('');
   const num=o.num||o.orderNum||'';
@@ -754,7 +754,7 @@ function makeAutoSketch(o){
     // label
     panels+=`<text x="${cx+pw/2}" y="${py+ph/2+4}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="9" fill="${stroke}" font-weight="700">${it.name||''}</text>`;
     // dim
-    panels+=`<text x="${cx+pw/2}" y="${py-4}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="8" fill="#888">${it.w||''}×${it.h||''}</text>`;
+    panels+=`<text x="${cx+pw/2}" y="${py-4}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="8" fill="#888">${lgDimsText(it.w, it.h)}</text>`;
     // process tag
     const isMir=(it.name||'').includes('מראה');const tag=it.chisum&&!isMir?'🔥 חיסום':'✂️ ליטוש';
     panels+=`<text x="${cx+pw/2}" y="${py+ph-6}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="7" fill="${it.chisum?'#8e44ad':'#2a5a8a'}">${tag}</text>`;
