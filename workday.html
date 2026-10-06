@@ -175,6 +175,8 @@
   .stv-sk{width:100%;max-height:110px;min-height:60px;object-fit:contain;display:block;
           border:1px solid rgba(0,0,0,0.08);border-radius:4px;background:var(--bg2);
           margin-bottom:7px;cursor:zoom-in;opacity:0;transition:opacity 200ms ease;}
+  .stv-nosk{font-size:12px;color:var(--muted);padding:8px 10px;margin-bottom:7px;
+            border:1px dashed var(--border);border-radius:4px;text-align:center;}
   .stv-sk.is-loaded{opacity:1;}
 
   .stv-act{width:100%;min-height:44px;padding:10px;color:#fff;font-family:Heebo,sans-serif;
@@ -2194,7 +2196,8 @@ function _stageTabHTML(cfg, cn, cOrds){
       ? `<img class="stv-sk" data-sketch-for="${lgEsc(String(o.id))}"
               alt="סקיצה — ${lgEsc(o.orderClient||'הזמנה')} ${lgEsc(o.orderNum||'')}"
               onclick="if(this.src)_openSketchFull(this.src)">`
-      : '';
+      // בלי סקיצה — אומרים את זה, אחרת המקום הריק נראה כמו תקלה (06/10)
+      : `<div class="stv-nosk">אין סקיצה להזמנה</div>`;
     const act = cfg.stage==='graphic'
       ? (()=>{ const ns=lgNextStage(o,_isDeliveryClient(o.orderClient,o.phone));
                return `<button class="stv-act" style="background:${ns==='delivery'?'#2980b9':'#27ae60'}"
