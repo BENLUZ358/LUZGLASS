@@ -113,9 +113,15 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
   const live = ADMIN.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
   check('admin never enqueues or sends',
         /whatsapp-dispatch|whatsapp-send|lgWaEnqueue|_waSendReadyGrouped|_waDispatch/.test(live), false);
+  /* lgWaIn* — פאנל הקליטות הנכנסות (06/10). הוא לא שולח ללקוח דבר: פותח
+     וסוגר פאנל, ופעולותיו עוברות ב-/api/wa-inbound-drain. מוחרג כאן בשמו,
+     ובנפרד נבדק שהקובץ שלו לא נוגע במסלול השליחה. */
   check('and its only WhatsApp calls are read-only status',
-        (live.match(/lgWa[A-Z][A-Za-z]*\(/g) || []).sort().filter((v,i,a)=>a.indexOf(v)===i),
+        (live.match(/lgWa(?!In)[A-Z][A-Za-z]*\(/g) || []).sort().filter((v,i,a)=>a.indexOf(v)===i),
         ['lgWaCheckState(', 'lgWaStatus(']);
+  const PANEL = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
+  check('the inbound panel it loads cannot send either',
+        /whatsapp-dispatch|whatsapp-send|whatsapp-drain|lgWaEnqueue|lgWaDrain/.test(PANEL), false);
   /* ⚠️ checkOnly חייב להישאר — בלעדיו הכפתור "בדוק שוב" היה מרוקן את התור */
   const FB = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
   check('the recheck asks for a status only, never a drain',

@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/whatsapp-drain.js": { "maxDuration": 60 },
-    "api/wa-inbound.js":     { "maxDuration": 60 }
+    "api/wa-inbound.js":     { "maxDuration": 60 },
+    "api/wa-inbound-drain.js": { "maxDuration": 60 }
   },
   "headers": [
     {
