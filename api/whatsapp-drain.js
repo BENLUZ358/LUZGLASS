@@ -23,7 +23,7 @@
 const { verifyAdmin }   = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
-const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot } = require('./_wa-outbox');
+const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot, lgWaStampField } = require('./_wa-outbox');
 const { resolvePhone } = require('./_wa-recipient');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
@@ -228,7 +228,8 @@ module.exports = async function handler(req, res) {
       //  kind='ready' נכתב ל-orders/<id>/whatsapp באותו מבנה כמו תמיד, כדי
       //  שהמסך וגם הדילוג "כבר נשלחה" ב-whatsapp-send ימשיכו לעבוד.
       //  kind='dispatched' נכתב בנפרד — זו הודעה אחת לכמה הזמנות.
-      const field = entry.kind === 'dispatched' ? 'whatsappDispatch' : 'whatsapp';
+      //  sketches-handled נכתב ל-sketchAck (שלב 6). ר' lgWaStampField.
+      const field = lgWaStampField(entry.kind);
       const stamp = {
         outboxKey:   key,
         sentAt:      out.ok ? Date.now() : null,

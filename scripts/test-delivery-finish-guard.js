@@ -111,14 +111,25 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
      הראשונה קוראת צומת, השנייה שואלת את GREEN API על המצב מבלי לגעת
      בתור. אף אחת מהן אינה יכולה להוציא הודעה. */
   const live = ADMIN.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
-  check('admin never enqueues or sends',
-        /whatsapp-dispatch|whatsapp-send|lgWaEnqueue|_waSendReadyGrouped|_waDispatch/.test(live), false);
+  /* ⚠️ צומצם ב-06/10 בהחלטת בן (שלב 6, אפיון §16): תור הסקיצות שולח
+     "הסקיצות טופלו" — והסוג הזה בלבד. "ההובלה יצאה" ו"מוכן לאיסוף" עדיין
+     לא יוצאים מ-Admin: אין whatsapp-send, אין קיבוץ הובלה, ואין קריאה ל-
+     dispatch עם סוג אחר. test-wa-sketch-ack בודק שיש קריאה אחת בדיוק. */
+  check('admin never sends ready / dispatched',
+        /whatsapp-send|lgWaEnqueue|_waSendReadyGrouped|_waDispatch/.test(live), false);
+  const dispatchCalls = [...live.matchAll(/whatsapp-dispatch'\s*,\s*\{([^}]*)\}/g)].map(m => m[1]);
+  check('every admin dispatch call is "sketches handled"',
+        dispatchCalls.length > 0 && dispatchCalls.every(c => /kind:\s*'sketches-handled'/.test(c)), true);
+  check('and no other mention of dispatch slips through',
+        (live.match(/whatsapp-dispatch/g) || []).length, dispatchCalls.length);
   /* lgWaIn* — פאנל הקליטות הנכנסות (06/10). הוא לא שולח ללקוח דבר: פותח
      וסוגר פאנל, ופעולותיו עוברות ב-/api/wa-inbound-drain. מוחרג כאן בשמו,
-     ובנפרד נבדק שהקובץ שלו לא נוגע במסלול השליחה. */
-  check('and its only WhatsApp calls are read-only status',
+     ובנפרד נבדק שהקובץ שלו לא נוגע במסלול השליחה.
+     lgWaDrain — שלב 6: אחרי "טופלו" מרוקנים את התור, אחרת ההודעה הייתה
+     מחכה עד שמישהו יפתח יום עבודה (ה-drain רץ רק משם). */
+  check('and its only WhatsApp calls are status and the queue drain',
         (live.match(/lgWa(?!In)[A-Z][A-Za-z]*\(/g) || []).sort().filter((v,i,a)=>a.indexOf(v)===i),
-        ['lgWaCheckState(', 'lgWaStatus(']);
+        ['lgWaCheckState(', 'lgWaDrain(', 'lgWaStatus(']);
   const PANEL = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
   check('the inbound panel it loads cannot send either',
         /whatsapp-dispatch|whatsapp-send|whatsapp-drain|lgWaEnqueue|lgWaDrain/.test(PANEL), false);

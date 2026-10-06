@@ -457,8 +457,9 @@ const GREEN_ENV = {
   /* ולהובלה אין שדה כזה — היא אירוע, לא מצב */
   check('while dispatched has no such per-order state',
         /kind === 'dispatched' && order\.whatsapp/.test(DISP), false);
+  /* 06/10: נוסף sketches-handled (שלב 6). כל ערך אחר — כולל חסר — עדיין dispatched */
   check('dispatched stays the default when kind is absent',
-        /body\.kind === 'ready' \? 'ready' : 'dispatched'/.test(DISP), true);
+        /const kind\s*=\s*body\.kind === 'ready' \? 'ready'\s*:\s*body\.kind === 'sketches-handled' \? 'sketches-handled'\s*:\s*'dispatched';/.test(DISP), true);
 }
 
 /* ═══ 4 · הטוקן אינו דולף ═══════════════════════════════════════════ */
@@ -965,8 +966,11 @@ const seedSent = (db, n, t0) => {
 
   /* החותמת נכתבת לשדה הנכון לפי הסוג */
   const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  /* 06/10: הטרנרי הוחלף במפה (lgWaStampField) כשנוסף sketches-handled —
+     ההתנהגות של ready ו-dispatched נבדקת כאן ישירות, לא לפי נוסח השורה */
   check('ready stamps orders/<id>/whatsapp, dispatched its own field',
-        /const field = entry\.kind === 'dispatched' \? 'whatsappDispatch' : 'whatsapp';/.test(DRAIN), true);
+        [ob.lgWaStampField('ready'), ob.lgWaStampField('dispatched')], ['whatsapp', 'whatsappDispatch']);
+  check('and the drain stamps through that map', /const field = lgWaStampField\(entry\.kind\);/.test(DRAIN), true);
 })();
 
 /* ═══ 5ז · ה-re-resolve חוסם בפועל, לא רק במבנה ════════════════════ */
