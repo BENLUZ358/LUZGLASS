@@ -358,6 +358,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
   <script src="wa-inbound-panel.js"></script>
+  <script src="sku-picker.js"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -2727,6 +2728,19 @@ document.addEventListener('visibilitychange', () => {
 }
 #waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
 
+/* ─ בורר מק"טים (sku-picker.js) ─ רשימה מתחת לשדה הקוד; 44px לשורה */
+.iw-input-row{position:relative;}
+#iwSkuList{position:absolute;z-index:40;background:#fff;border:1px solid rgba(0,0,0,0.15);
+  box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:264px;overflow-y:auto;border-radius:4px;}
+#iwSkuList[hidden]{display:none;}
+.sku-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;
+  padding:0 12px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.05);font-size:14px;color:#1a1714;}
+.sku-opt.on,.sku-opt:hover{background:rgba(184,146,42,0.12);}
+.sku-n{font-weight:600;}
+.sku-c{font-size:12px;color:#8a7a5a;font-family:monospace;white-space:nowrap;}
+.sku-empty{padding:12px;font-size:13px;color:#888;}
+
+
 /* ─ שורת ההזנה בתור הסקיצות (קוד · רוחב × גובה × כמות · הוסף) ─
    שורה אחת ברוחב ~600px. בטלפון הגובה, הכמות ו"הוסף" נחתכו מחוץ למסך.
    ≤900 (טלפון ואייפד לאורך, שם פאנל הסקיצה צר): הקוד ברוחב מלא, מתחתיו
@@ -2878,9 +2892,13 @@ document.addEventListener('visibilitychange', () => {
               <span>פריטים <span id="sqItemCount" style="background:#b8922a;color:var(--on-gold);border-radius:8px;padding:1px 7px;font-size:12px;margin-right:4px">0</span></span>
             </div>
             <div class="iw-input-row">
-              <input class="iw-code" id="iwCode" placeholder="קוד (8SMH, 6CM...)" maxlength="8" list="iwCodeList"
-                aria-label="קוד מק״ט" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
-                oninput="iwPreview(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();iwAdd();}">
+              <!-- בורר מק"טים (sku-picker.js): קוד או עברית — "8 שקוף חיסום". בלי
+                   maxlength, כי משפט בעברית ארוך מ-8; בלי datalist, כי הוא התחרה ברשימה. -->
+              <input class="iw-code" id="iwCode" placeholder="קוד או עברית (8 שקוף חיסום)"
+                role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="iwSkuList"
+                aria-label="קוד מק״ט או תיאור בעברית" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+                oninput="iwPreview(this.value)" onkeydown="if(window.lgSkuPickerKey&&lgSkuPickerKey(event))return;if(event.key==='Enter'){event.preventDefault();event.stopPropagation();iwAdd();}">
+              <div id="iwSkuList" role="listbox" aria-label="מק״טים מתאימים" hidden></div>
               <datalist id="iwCodeList"></datalist>
               <span class="iw-preview" id="iwPreview">—</span>
               <input class="iw-dim" id="iwW" placeholder="800" type="text" inputmode="decimal" aria-label="רוחב"
@@ -4374,6 +4392,8 @@ function iwPreview(code){
   const el = document.getElementById('iwPreview');
   if(!el) return;
   if(r){ el.textContent=r.label; el.style.color='#b8922a'; }
+  // עברית — חיפוש בבורר, לא קוד שגוי
+  else if(/[א-ת]/.test(code||'')){ el.textContent='בחר מהרשימה'; el.style.color='#999'; }
   else { el.textContent=code?'?':'—'; el.style.color='#ccc'; }
 }
 
@@ -4542,6 +4562,8 @@ function iwAdd(){
       if(scroll) scroll.scrollTop = scroll.scrollHeight;
     }
   }, 50);
+  // נכנס ל"אחרונים" של בורר המק"טים — רק מה שבאמת נוסף
+  if(typeof lgSkuRecentPush==='function') lgSkuRecentPush(r.sku || code);
   // נקה שדות
   document.getElementById('iwCode').value='';
   document.getElementById('iwW').value='';
