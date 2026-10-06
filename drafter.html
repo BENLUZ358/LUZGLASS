@@ -125,6 +125,14 @@ html,body{height:100%;overflow:hidden;}
    התפריט הראשי כבר התקפל ב-900, תפריט המשתמש נשאר סרגל קבוע, וסרגל
    הפתיחה שלו הוסתר — ולא הייתה שום דרך לפתוח אותו. נקודות השבירה של
    המערכת הן 600 / 900 / 1200, וזו אחת מהן. */
+/* ─ שרטט במסך צר: כותרת אחת עם לוגו, וקישור חזרה שאפשר ללחוץ ─
+   ≤900 יש שתי שורות: התפריט (לוגו + המבורגר) ומעליה שורת השרטט, שגם בה
+   לוגו. "← אדמין" היה 18px — כמעט בלתי לחיץ. */
+@media(max-width:900px){
+  .topbar .logo{display:none;}
+  .back-link{display:inline-flex;align-items:center;min-height:44px;padding:0 10px;margin-inline-start:-10px;font-size:13px;}
+}
+
 @media(max-width:900px){
   .unav-topbar{display:flex;}
 
