@@ -39,7 +39,7 @@ const { verifyAdmin }   = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaEnqueue }   = require('./_wa-outbox');
-const { resolvePhone, orderSketchName } = require('./_wa-recipient');
+const { resolveRecipient, orderSketchName } = require('./_wa-recipient');
 const { lgSketchAckSkip, lgSketchAckActiveIds } = require('./_wa-sketch-ack');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
@@ -122,7 +122,8 @@ module.exports = async function handler(req, res) {
 
     // ── הנמען. פר-הזמנה, ואז דורשים שכולן מסכימות ──
     const targets = [];
-    for (const x of live) targets.push({ id: x.id, ...(await resolvePhone(db, x.order)) });
+    // "הסקיצות טופלו" מקבוצה → לקבוצה; כל השאר בדיוק כמו קודם (resolvePhone)
+    for (const x of live) targets.push({ id: x.id, ...(await resolveRecipient(db, x.order, kind)) });
 
     const noPhone = targets.filter(t => !t.phone);
     if (noPhone.length) {

@@ -25,7 +25,7 @@
 
 const crypto = require('crypto');
 const { sniffImage, stripJpegMeta } = require('./_wa-image');
-const { waChatToLocal, lgClientFromWaSender } = require('./_wa-recipient');
+const { waChatToLocal, lgClientFromWaSender, lgClientFromWaGroup } = require('./_wa-recipient');
 
 const INBOX = 'waInbound';
 
@@ -59,9 +59,13 @@ function lgWaInboundParse(body) {
   const b = body || {};
   if (b.typeWebhook !== 'incomingMessageReceived') return ignore('type');
   if (!b.idMessage) return ignore('no id');
-  const chatId = String((b.senderData || {}).chatId || '');
-  const sender = waChatToLocal(chatId);
-  if (!sender) return ignore('not a private chat');
+  const sd = b.senderData || {};
+  const chatId = String(sd.chatId || '');
+  // קבוצה (בן, 06/10): הקבוצה היא שמזהה את הלקוח, לא מי שכתב בה. החבר
+  // נשמר לתיעוד בלבד — וגם אם הוא lid מוסתר, ההודעה עדיין נקלטת.
+  const groupId = /^\d+(-\d+)?@g\.us$/.test(chatId) ? chatId : '';
+  const sender = groupId ? waChatToLocal(String(sd.sender || '')) : waChatToLocal(chatId);
+  if (!groupId && !sender) return ignore('not a private chat or group');
 
   const md = b.messageData || {};
   const f  = md.fileMessageData || {};
@@ -85,6 +89,8 @@ function lgWaInboundParse(body) {
     mimeType:    mime,
     downloadUrl: String(f.downloadUrl || ''),
     timestamp:   (Number(b.timestamp) || 0) * 1000,
+    // רק בקבוצה — רשומה פרטית נשארת בדיוק בצורה שהייתה
+    ...(groupId ? { groupId, groupName: String(sd.chatName || '').slice(0, 120) } : {}),
   } };
 }
 
@@ -230,7 +236,10 @@ async function lgWaInboundProcess(db, key, opts) {
     if (!mime) throw new Permanent('הקובץ שהתקבל אינו תמונה');
     const bytes = mime === 'image/jpeg' ? stripJpegMeta(raw) : raw;
 
-    const who = await lgClientFromWaSender(db, entry.chatId);
+    // קבוצה מקושרת מזהה את הלקוח; אחרת — לפי מספר השולח, כמו קודם
+    const who = entry.groupId
+      ? await lgClientFromWaGroup(db, entry.groupId, entry.sender)
+      : await lgClientFromWaSender(db, entry.chatId);
     const refNum = await _refNum(db, key, entry);
 
     const id = 'wa_' + key + '_1';
@@ -252,7 +261,8 @@ async function lgWaInboundProcess(db, key, opts) {
       paymentStatus: 'unpaid',
       source: 'whatsapp',
       waMessageId: entry.idMessage, waPage: 1, waPages: 1,
-      waSender: who.phone, waReceivedAt: entry.timestamp || now,
+      // בקבוצה — מי מבין החברים שלח; בפרטי — השולח עצמו
+      waSender: entry.groupId ? (entry.sender || '') : who.phone, waReceivedAt: entry.timestamp || now,
       date: when.toLocaleDateString('he-IL', tz),
       time: when.toLocaleTimeString('he-IL', { ...tz, hour: '2-digit', minute: '2-digit' }),
       createdAt: now, updatedAt: now,
@@ -260,6 +270,8 @@ async function lgWaInboundProcess(db, key, opts) {
     order.customerId = who.customerId || '';
     if (who.matched && who.name) order.businessName = who.name;
     if (!who.matched) order.waUnassigned = true;
+    // העדכון "הסקיצות טופלו" יוצא לקבוצה — ר' resolveRecipient
+    if (entry.groupId) { order.waGroup = entry.groupId; order.waGroupName = entry.groupName || ''; }
 
     if (!await _stillMine(db, key, c.entry.claimToken, now)) return { ok: false, reason: 'lost-claim', orderIds: [] };
 

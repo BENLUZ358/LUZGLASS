@@ -149,8 +149,64 @@ if (typeof document !== 'undefined') (function () {
 
   const $ = id => document.getElementById(id);
 
+  // ─── קבוצות WhatsApp (בן, 06/10) ──────────────────────────────────
+  //  כל קבוצה שמספר העסק חבר בה ושלחה תמונה מופיעה כאן (רק שמה נשמר).
+  //  "קשר ללקוח" → כל תמונה בה נכנסת לתור על הלקוח, והעדכון יוצא לקבוצה.
+  //  הכתיבה דרך /api/wa-inbound-drain (link-group) — לא ישירות.
+  let groupsSeen = {}, groupsLinked = {};
+
+  function groupsBox() {
+    let box = $('waInGroups');
+    if (!box) {
+      const list = $('waInList'); if (!list) return null;
+      box = document.createElement('div'); box.id = 'waInGroups';
+      list.parentNode.insertBefore(box, list);
+    }
+    return box;
+  }
+
+  function accountOptions() {
+    const m = (typeof hashavshevetAccountsMap !== 'undefined' && hashavshevetAccountsMap) || {};
+    return Object.values(m).filter(a => a && a.key)
+      .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'he'))
+      .map(a => `<option value="${_waInEsc((a.name || '') + ' · ' + a.key)}"></option>`).join('');
+  }
+
+  function renderGroups() {
+    const box = groupsBox(); if (!box) return;
+    const keys = Object.keys(groupsSeen);
+    if (!keys.length) { box.innerHTML = ''; return; }
+    keys.sort((a, b) => (!!groupsLinked[a]) - (!!groupsLinked[b]) || (groupsSeen[b].lastAt || 0) - (groupsSeen[a].lastAt || 0));
+    box.innerHTML = `<div class="wain-gtitle">קבוצות WhatsApp</div>` + keys.map(k => {
+      const g = groupsSeen[k], l = groupsLinked[k];
+      return `<div class="wain-row ${l ? 'wain-ok' : 'wain-warn'}" data-gkey="${_waInEsc(k)}">
+        <div class="wain-l1"><span class="wain-chip">${l ? 'מקושרת' : 'קבוצה חדשה'}</span>
+          <span class="wain-client">${_waInEsc(g.name || 'קבוצה ללא שם')}</span>
+          <span class="wain-when">${_waInEsc(_waInWhen(g.lastAt))}</span></div>
+        ${l ? `<div class="wain-reason">לקוח: <b>${_waInEsc(l.customerName || l.customerId)}</b> — כל תמונה בקבוצה נכנסת לתור, והעדכון "הסקיצות טופלו" יוצא לקבוצה.</div>
+               <div class="wain-acts"><button class="wain-btn" data-gact="unlink">נתק</button></div>`
+            : `<div class="wain-reason">${g.count || 1} תמונות נשלחו מהקבוצה ולא נקלטו. קשר אותה ללקוח, והתמונות הבאות ייכנסו לתור.</div>
+               <div class="wain-acts"><input class="wain-acc" list="waInAccList" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לקבוצה">
+                 <button class="wain-btn wain-primary" data-gact="link">קשר ללקוח</button></div>`}
+      </div>`;
+    }).join('') + `<datalist id="waInAccList">${accountOptions()}</datalist>`;
+  }
+
+  async function groupAct(key, action, input) {
+    let customerId = '';
+    if (action === 'link') {
+      const v = String((input && input.value) || '');
+      customerId = (v.split('·').pop() || '').trim();
+      if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
+    } else if (!confirm('לנתק את הקבוצה? תמונות חדשות ממנה לא ייכנסו לתור.')) return;
+    const r = await post({ action: action === 'link' ? 'link-group' : 'unlink-group', key, customerId });
+    if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
+  }
+
   function badge() {
     const c = lgWaInCounts(rows);
+    // קבוצה חדשה שלא קושרה — גם היא דורשת טיפול
+    c.attention += Object.keys(groupsSeen).filter(k => !groupsLinked[k]).length;
     const a = $('waInBadgeA'), p = $('waInBadgeP');
     if (a) { a.textContent = '⚠ ' + c.attention; a.hidden = !c.attention; }
     if (p) { p.textContent = '⏳ ' + c.inProgress; p.hidden = !c.inProgress; }
@@ -158,6 +214,7 @@ if (typeof document !== 'undefined') (function () {
 
   function render() {
     badge();
+    renderGroups();
     const list = $('waInList'); if (!list) return;
     const shown = rows.filter(x => showAll || x.needsAttention || x.inProgress);
     list.innerHTML = shown.length ? shown.map(lgWaInRowHtml).join('')
@@ -221,6 +278,13 @@ if (typeof document !== 'undefined') (function () {
   window.lgWaInClose = function () { const p = $('waInPanel'); if (p) p.hidden = true; };
 
   function wire() {
+    // קבוצות — הכפתורים נוצרים מחדש בכל רינדור, ולכן האזנה על הפאנל כולו
+    const panel = $('waInPanel');
+    if (panel) panel.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-gact]'); if (!b) return;
+      const row = b.closest('[data-gkey]'); if (!row) return;
+      groupAct(row.dataset.gkey, b.dataset.gact, row.querySelector('.wain-acc'));
+    });
     const list = $('waInList');
     if (list) list.addEventListener('click', ev => {
       const b = ev.target.closest('button[data-act]'); if (!b) return;
@@ -237,6 +301,10 @@ if (typeof document !== 'undefined') (function () {
       if (!user) return;
       _lgDb.ref('waInbound').orderByChild('createdAt').limitToLast(200)
         .on('value', onSnap, e => console.warn('waInbound listen:', e && e.message));
+      _lgDb.ref('waMeta/groupsSeen').on('value', sn => { groupsSeen = sn.val() || {}; render(); },
+        e => console.warn('groupsSeen listen:', e && e.message));
+      _lgDb.ref('waGroups').on('value', sn => { groupsLinked = sn.val() || {}; render(); },
+        e => console.warn('waGroups listen:', e && e.message));
       // כל 2 דקות כל עוד הדף פתוח — ורק אם באמת יש מה לעבד
       if (!timer) timer = setInterval(() => { if (rows.some(x => x.inProgress)) drain(); }, 2 * 60 * 1000);
     });

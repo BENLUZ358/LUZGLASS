@@ -263,6 +263,8 @@ function lgGlassTypesWithCatalog(orders, skuCatalogMap) {
 //  הקיבוץ לפי לקוח: כרטיס חשבשבת אם יש, אחרת טלפון, אחרת שם. אותו סדר
 //  עדיפות כמו resolvePhone בשרת, כדי שקבוצה כאן לא תתפרק שם ל-409.
 function lgSketchAckClientKey(o) {
+  // קבוצה קודמת — לשם יוצאת ההודעה, ולכן היא קבוצת השליחה (resolveRecipient)
+  if (o && o.waGroup) return 'g:' + o.waGroup;
   if (o && o.customerId) return 'c:' + o.customerId;
   const p = String((o && (o.clientPhone || o.phone)) || '').replace(/\D/g, '');
   if (p) return 'p:' + p;
@@ -913,6 +915,9 @@ function lgNormalizeOrder(o) {
     waSender:      o.waSender     || '',
     waReceivedAt:  Number(o.waReceivedAt) || 0,
     waUnassigned:  !!o.waUnassigned,
+    // קבוצת WhatsApp שממנה הגיעה הסקיצה — לשם יוצא "הסקיצות טופלו" (06/10)
+    waGroup:       o.waGroup      || '',
+    waGroupName:   o.waGroupName  || '',
     // הקבלה של "שלח עדכון ללקוח". sentAt נכתב רק אחרי הצלחה אמיתית, ולכן
     // ניסיון שנכשל מגיע כאן עם sentAt:0 — עדיין ממתין לעדכון.
     sketchAck:     (o.sketchAck && typeof o.sketchAck === 'object') ? {

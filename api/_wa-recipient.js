@@ -122,4 +122,43 @@ async function lgClientFromWaSender(db, chatId) {
            customerId: String(acc.key || key), name: String(acc.name || '') };
 }
 
-module.exports = { resolvePhone, toWaNumber, norm, orderSketchName, waChatToLocal, lgClientFromWaSender };
+// ─── קבוצות WhatsApp (בן, 06/10) ─────────────────────────────────────
+//
+//  לקוח ששולח מקבוצה עם כמה מספרים: הקבוצה מקושרת ללקוח אחד ב-waGroups
+//  (רק דרך endpoint אדמיני), וכל תמונה בה נרשמת עליו — לא משנה מי כתב.
+//  אותו ניקוי מפתח כמו lgWaInboundKey (לא מיובא משם — _wa-inbound תלוי בנו).
+const _groupKey = id => String(id || '').replace(/[.#$[\]/]/g, '_');
+
+async function lgClientFromWaGroup(db, groupId, memberPhone) {
+  const link = (await db.ref('waGroups/' + _groupKey(groupId)).once('value')).val();
+  if (!link || !link.customerId) {
+    return { matched: false, via: 'group-unlinked', phone: memberPhone || '', loginPhone: '', customerId: '', name: '' };
+  }
+  const customerId = String(link.customerId);
+  // משתמש הפורטל של הלקוח — כדי שהסקיצה תופיע אצלו (D2)
+  const users = (await db.ref('users').once('value')).val() || {};
+  const login = Object.keys(users).find(k => users[k] && String(users[k].customerId || '') === customerId) || '';
+  const card  = (await db.ref('hashavshevetAccounts/' + customerId).once('value')).val() || {};
+  return {
+    matched: true, via: 'group',
+    phone: login || norm(card.phone) || memberPhone || '',
+    loginPhone: login, customerId,
+    name: String(link.customerName || card.name || (users[login] && (users[login].businessName || users[login].name)) || ''),
+  };
+}
+
+//  לאן יוצאת הודעה להזמנה. "הסקיצות טופלו" על הזמנה שהגיעה מקבוצה מקושרת
+//  → לקבוצה עצמה (בן, 06/10). כל סוג אחר — "מוכן לאיסוף", "ההובלה יצאה" —
+//  וכל הזמנה פרטית → resolvePhone, בדיוק כמו קודם. לא שונה בלי החלטה.
+//  קבוצה שנותקה מאז → אין נמען.
+//  ⚠️ accountKey מגיע מהקישור, ולכן השער (רשימת הלקוחות המורשים) חל גם כאן.
+async function resolveRecipient(db, order, kind) {
+  const g = order && order.waGroup;
+  if (!g || kind !== 'sketches-handled') return resolvePhone(db, order);
+  const link = (await db.ref('waGroups/' + _groupKey(g)).once('value')).val();
+  if (!link || !link.customerId) return { phone: '', source: 'group-unlinked', accountKey: null };
+  return { phone: String(g), source: 'group', accountKey: String(link.customerId) };
+}
+
+module.exports = { resolvePhone, resolveRecipient, toWaNumber, norm, orderSketchName, waChatToLocal,
+                   lgClientFromWaSender, lgClientFromWaGroup };

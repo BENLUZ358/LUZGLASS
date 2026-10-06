@@ -570,11 +570,15 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
 {
   const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
 
+  /* 06/10: resolveRecipient — "הסקיצות טופלו" מקבוצה מקושרת יוצא לקבוצה; כל
+     השאר עובר ל-resolvePhone בדיוק כמו קודם (test-wa-groups 3a/3c). */
   check('the drain re-resolves the card from the order before sending',
-        /const live = await resolvePhone\(db, order\);/.test(DRAIN), true);
-  /* ⚠️ הסדר הוא העיקר: הפתרון מחדש **לפני** השער, והשער לפני השליחה */
+        /const live = await resolveRecipient\(db, order, entry\.kind\);/.test(DRAIN), true);
+  /* ⚠️ הסדר הוא העיקר: הפתרון מחדש **לפני** השער, והשער לפני השליחה.
+     ⚠️ indexOf של מחרוזת שלא קיימת הוא -1 — והבדיקה הייתה עוברת בשקט. */
+  const iResolve = DRAIN.indexOf('await resolveRecipient(db, order, entry.kind)');
   check('and it does so before the gate, which is before the send',
-        DRAIN.indexOf('await resolvePhone(db, order)') < DRAIN.indexOf('provider.gate(') &&
+        iResolve > -1 && iResolve < DRAIN.indexOf('provider.gate(') &&
         DRAIN.indexOf('provider.gate(') < DRAIN.indexOf('await provider.send('), true);
   check('the gate is asked with the live result, not the stored one',
         /provider\.gate\(\{ phone: live\.phone, accountKey: live\.accountKey \}\)/.test(DRAIN), true);
@@ -1069,7 +1073,7 @@ const seedSent = (db, n, t0) => {
   check('dispatch refuses a group that resolves to different phones',
         /phones\.length > 1/.test(DISP) && /409/.test(DISP), true);
   check('and it resolves the phone server-side, per order',
-        /await resolvePhone\(db, x\.order\)/.test(DISP), true);
+        /await resolveRecipient\(db, x\.order, kind\)/.test(DISP), true);
 }
 
 /* ═══ 7 · התקציב מתחת לתקרת הפונקציה ═══════════════════════════════ */
