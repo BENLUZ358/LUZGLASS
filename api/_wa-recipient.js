@@ -114,6 +114,8 @@ async function lgClientFromWaSender(db, chatId) {
   const all = (await db.ref('hashavshevetAccounts').once('value')).val() || {};
   const want = digits(phone);
   const hits = Object.entries(all).filter(([, a]) => a && digits(a.phone) === want);
+  // שני כרטיסים ומעלה — לא מנחשים, אבל אומרים למה (הפאנל מציג את זה)
+  if (hits.length > 1) return { ...none, via: 'ambiguous', candidates: hits.length };
   if (hits.length !== 1) return none;
   const [key, acc] = hits[0];
   return { matched: true, via: 'hashavshevet', phone, loginPhone: '',

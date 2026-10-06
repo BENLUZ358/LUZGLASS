@@ -271,7 +271,7 @@ const markers = b => {
     check('E5 the log says done and points at the order', [done.state, done.orderIds, done.refNum],
           ['done', [id], 'L1042']);
     check('E5 the signed download link is not kept', 'downloadUrl' in done, false);
-    check('E5 the match is recorded', done.clientMatch, { via: 'users', customerId: '14201' });
+    check('E5 the match is recorded, with the name the panel shows', done.clientMatch, { via: 'users', customerId: '14201', name: 'המקום לאמבט' });
 
     const again = await inb.lgWaInboundProcess(db, 'BAE5F4886F6F2D05', { fetchImpl: okFetch(PHOTO), now: NOW + 200, by: 't' });
     check('E6 processing a finished message again does nothing', [again.ok, again.reason], [false, 'done']);

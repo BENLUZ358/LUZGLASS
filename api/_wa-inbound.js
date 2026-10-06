@@ -23,6 +23,7 @@
 //     hasSketch:true — שכבת הסקיצה בדפדפן יודעת לטעון משם.
 // ═══════════════════════════════════════════════════════════════════
 
+const crypto = require('crypto');
 const { sniffImage, stripJpegMeta } = require('./_wa-image');
 const { waChatToLocal, lgClientFromWaSender } = require('./_wa-recipient');
 
@@ -111,6 +112,7 @@ async function lgWaInboundRecord(db, entry, now) {
 //  מחזיר { claimed, entry, reason }. אותו דפוס כמו lgWaClaim.
 async function lgWaInboundClaim(db, key, by, now) {
   const t = now || Date.now();
+  const token = crypto.randomBytes(8).toString('hex');
   const r = await db.ref(INBOX + '/' + key).transaction(cur => {
     if (cur === null) return null;                                  // null-first
     if (!['received', 'failed', 'processing'].includes(cur.state)) return;   // סופי
@@ -123,8 +125,9 @@ async function lgWaInboundClaim(db, key, by, now) {
       return { ...cur, state: 'dead', claimedAt: null, updatedAt: t,
                reason: 'עברו 24 שעות — הקובץ כבר לא זמין להורדה' };
     }
+    // claimToken — מזהה **התפיסה הזו**, לא של התהליך. ר' _stillMine.
     return { ...cur, state: 'processing', claimedAt: t, claimedBy: String(by || ''),
-             attempts: (cur.attempts || 0) + 1, updatedAt: t };
+             claimToken: token, attempts: (cur.attempts || 0) + 1, updatedAt: t };
   });
   if (!r.committed) { const cur = r.snapshot.val() || {}; return { claimed: false, entry: cur, reason: cur.state || 'לא נתפסה' }; }
   const entry = r.snapshot.val();
@@ -135,6 +138,27 @@ async function lgWaInboundClaim(db, key, by, now) {
 
 // ─── הורדה ──────────────────────────────────────────────────────────
 class Permanent extends Error {}
+
+//  ⚠️ "התפיסה עדיין שלי?" — נבדק בטרנזקציה ממש לפני כל כתיבה.
+//
+//  CLAIM_TTL_MS (2 דק') ארוך מ-maxDuration (60 שניות), ולכן בפועל מעבד
+//  לא אמור לחיות אחרי שהתפיסה שלו פגה. אבל "לא אמור" אינו ערובה: מעבד
+//  שנתקע, תפיסה שפגה, ומעבד שני שסיים — ואז הראשון מתעורר וכותב. מזהה
+//  ההזמנה דטרמיניסטי ולכן לא תיווצר **הזמנה שנייה**, אבל הכתיבה המאוחרת
+//  הייתה דורסת את ההזמנה הקיימת — כולל sketchSeenAt של מי שכבר עבר עליה —
+//  או הופכת done ל-failed. כאן זה נעצר.
+//
+//  touch: מה לכתוב ברשומה אם היא עדיין שלי (null = רק לבדוק ולרענן).
+async function _stillMine(db, key, token, now, touch) {
+  const r = await db.ref(INBOX + '/' + key).transaction(cur => {
+    if (cur === null) return null;                                   // null-first
+    if (cur.state !== 'processing' || cur.claimToken !== token) return;   // abort — לא שלי
+    const next = { ...cur, claimedAt: now, updatedAt: now, ...(touch || {}) };
+    for (const k of Object.keys(next)) if (next[k] === null) delete next[k];
+    return next;
+  });
+  return !!(r.committed && r.snapshot.val());
+}
 
 //  ⚠️ ב-GREEN API הטוקן בתוך ה-URL. כל הודעת שגיאה עוברת כאן לפני שהיא
 //  נשמרת, וה-URL עצמו לעולם לא נרשם.
@@ -194,7 +218,7 @@ async function lgWaInboundProcess(db, key, opts) {
   const fetchImpl = o.fetchImpl || fetch;
 
   const c = await lgWaInboundClaim(db, key, o.by, now);
-  if (!c.claimed) return { ok: false, reason: c.reason, orderIds: [] };
+  if (!c.claimed) return { ok: false, reason: c.reason, orderIds: [], claimed: false };
   const entry = c.entry;
   const base = INBOX + '/' + key + '/';
 
@@ -237,6 +261,8 @@ async function lgWaInboundProcess(db, key, opts) {
     if (who.matched && who.name) order.businessName = who.name;
     if (!who.matched) order.waUnassigned = true;
 
+    if (!await _stillMine(db, key, c.entry.claimToken, now)) return { ok: false, reason: 'lost-claim', orderIds: [] };
+
     // ⚠️ הכל או כלום — עדכון רב-נתיבי אחד
     const upd = {};
     upd['orders/' + id] = order;
@@ -244,11 +270,13 @@ async function lgWaInboundProcess(db, key, opts) {
     upd[base + 'state'] = 'done';
     upd[base + 'orderIds'] = [id];
     upd[base + 'refNum'] = refNum;
-    upd[base + 'clientMatch'] = { via: who.via, customerId: who.customerId || '' };
+    upd[base + 'clientMatch'] = { via: who.via, customerId: who.customerId || '', name: who.name || '',
+                                  ...(who.candidates ? { candidates: who.candidates } : {}) };
     upd[base + 'sizeBytes'] = bytes.length;
     upd[base + 'oversize'] = bytes.length > WA_IMAGE_FLAG_BYTES() ? true : null;
     upd[base + 'downloadUrl'] = null;
     upd[base + 'claimedAt'] = null;
+    upd[base + 'claimToken'] = null;
     upd[base + 'lastError'] = null;
     upd[base + 'doneAt'] = now;
     upd[base + 'updatedAt'] = now;
@@ -257,19 +285,117 @@ async function lgWaInboundProcess(db, key, opts) {
   } catch (e) {
     const permanent = e instanceof Permanent;
     const msg = _redact((e && e.message) || 'עיבוד נכשל').slice(0, 300);
-    const upd = {};
-    upd[base + 'state'] = permanent ? 'rejected' : 'failed';
-    upd[base + 'claimedAt'] = null;
-    upd[base + 'lastError'] = msg;
-    upd[base + 'updatedAt'] = now;
-    if (permanent) { upd[base + 'reason'] = msg; upd[base + 'downloadUrl'] = null; }
-    try { await db.ref().update(upd); }
+    const touch = { state: permanent ? 'rejected' : 'failed', claimedAt: null, claimToken: null, lastError: msg };
+    if (permanent) { touch.reason = msg; touch.downloadUrl = null; }
+    // הניסיון האחרון — נעצר כאן, ולא נשאר "failed" שאף אחד לא ייקח שוב
+    else if ((c.entry.attempts || 0) >= MAX_ATTEMPTS) {
+      touch.state = 'dead'; touch.reason = MAX_ATTEMPTS + ' ניסיונות נכשלו — ' + msg;
+    }
+    let mine = false;
+    try { mine = await _stillMine(db, key, c.entry.claimToken, now, touch); }
     catch (e2) { console.warn('wa-inbound: could not record failure', e2 && e2.name); }
+    // לא שלי עוד — מישהו אחר כבר סיים או נכשל בעצמו. לא דורסים את מה שכתב.
+    if (!mine) return { ok: false, reason: 'lost-claim', orderIds: [] };
     return { ok: false, reason: msg, orderIds: [] };
   }
 }
 
+// ─── מה ממתין לעיבוד ────────────────────────────────────────────────
+//  received, failed שעוד יש לו ניסיונות, ו-processing שהתפיסה שלו פגה
+//  (מעבד שמת באמצע). לפי state ולא לפי createdAt — אותו לקח כמו
+//  lgWaPending: רשומות סופיות נשארות לנצח, וחיתוך לפני סינון היה מחזיר
+//  תור ריק. includeExhausted: גם failed שנגמרו לו הניסיונות, כדי שהתפיסה
+//  תסמן אותו dead במקום שיישאר תלוי.
+async function lgWaInboundPending(db, limit, now, opts) {
+  const t = now || Date.now();
+  const all = !!(opts && opts.includeExhausted);
+  const byState = st => db.ref(INBOX).orderByChild('state').equalTo(st).once('value');
+  const snaps = await Promise.all(['received', 'failed', 'processing'].map(byState));
+  const rows = [];
+  snaps.forEach(sn => sn.forEach(ch => {
+    const v = ch.val() || {};
+    const ok = v.state === 'received'
+      || (v.state === 'failed' && (all || (v.attempts || 0) < MAX_ATTEMPTS))
+      || (v.state === 'processing' && (!v.claimedAt || t - v.claimedAt >= CLAIM_TTL_MS));
+    if (ok) rows.push({ key: ch.key, at: v.createdAt || 0 });
+  }));
+  rows.sort((a, b) => a.at - b.at || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return rows.slice(0, limit || 20).map(r => r.key);
+}
+
+// ─── פעולות אדמין: "נסה שוב" ו"טופל ידנית" ──────────────────────────
+//
+//  שתיהן טרנזקציה על **אותה רשומה**. אין כאן יצירה של שום דבר: "נסה שוב"
+//  מחזיר את הרשומה ל-received ומאפס ניסיונות, והעיבוד עצמו עובר דרך
+//  lgWaInboundProcess — אותה תפיסה כמו ה-webhook. ולכן retry לעולם לא
+//  יוצר הזמנה כשכבר יש (done נדחה), ושתי לחיצות מקבילות מתנגשות בטרנזקציה.
+
+const _NOTE_MAX = 300;
+const _fresh = (cur, t) => cur.state === 'processing' && cur.claimedAt && (t - cur.claimedAt) < CLAIM_TTL_MS;
+const _audit = (cur, t, entry) => ({
+  ...(cur.audit || {}),
+  [t + '_' + entry.action + '_' + crypto.randomBytes(3).toString('hex')]: { at: t, ...entry },
+});
+const _dropNulls = o => { for (const k of Object.keys(o)) if (o[k] === null) delete o[k]; return o; };
+
+//  למה אי אפשר לנסות שוב. '' = אפשר.
+function _retryBlock(cur, t) {
+  if (!cur) return { code: 'missing', message: 'הקליטה לא נמצאה' };
+  if (cur.state === 'done') return { code: 'done', message: 'כבר נוצרה הזמנה ' + (cur.refNum || '') + ' מהקליטה הזו — לא נוצרת הזמנה נוספת' };
+  if (cur.state === 'closed') return { code: 'closed', message: 'הקליטה סומנה כטופלה ידנית' };
+  if (cur.state === 'rejected') return { code: 'rejected', message: 'לא יעזור לנסות שוב: ' + (cur.reason || 'הקובץ נדחה') };
+  if (cur.state === 'received') return { code: 'queued', message: 'כבר ממתינה לעיבוד' };
+  if (_fresh(cur, t)) return { code: 'processing', message: 'בעיבוד ממש עכשיו' };
+  if (t - (cur.createdAt || t) > MAX_AGE_MS) return { code: 'expired', message: 'עברו 24 שעות — GREEN API כבר לא מחזיקה את הקובץ. לבקש מהלקוח לשלוח שוב.' };
+  return null;
+}
+
+async function lgWaInboundRetry(db, key, by, now) {
+  const t = now || Date.now();
+  const r = await db.ref(INBOX + '/' + key).transaction(cur => {
+    if (cur === null) return null;                                  // null-first
+    if (_retryBlock(cur, t)) return;                                // abort
+    return _dropNulls({
+      ...cur, state: 'received', attempts: 0, claimedAt: null, claimToken: null, reason: null,
+      retryCount: (cur.retryCount || 0) + 1, retriedAt: t, retriedBy: String(by || ''), updatedAt: t,
+      audit: _audit(cur, t, { action: 'retry', by: String(by || ''), from: cur.state, to: 'received' }),
+    });
+  });
+  const cur = r.snapshot.val();
+  if (!r.committed || !cur) return { ok: false, ...(_retryBlock(cur, t) || { code: 'busy', message: 'לא נתפסה' }) };
+  return { ok: true, code: '', message: '' };
+}
+
+async function lgWaInboundClose(db, key, by, note, now) {
+  const t = now || Date.now();
+  const who = String(by || ''), why = String(note || '').trim().slice(0, _NOTE_MAX);
+  const block = cur => {
+    if (!cur) return { code: 'missing', message: 'הקליטה לא נמצאה' };
+    if (cur.state === 'closed' || (cur.state === 'done' && cur.handled)) return { code: 'closed', message: 'כבר סומנה כטופלה' };
+    if (_fresh(cur, t)) return { code: 'processing', message: 'בעיבוד ממש עכשיו — לנסות שוב בעוד דקה' };
+    return null;
+  };
+  const r = await db.ref(INBOX + '/' + key).transaction(cur => {
+    if (cur === null) return null;
+    if (block(cur)) return;
+    // הזמנה כבר נוצרה (למשל לקוח לא מזוהה) — סימון בלבד; done נשאר done
+    if (cur.state === 'done') {
+      return { ...cur, handled: { at: t, by: who, note: why }, updatedAt: t,
+               audit: _audit(cur, t, { action: 'close', by: who, from: 'done', to: 'done', note: why }) };
+    }
+    return _dropNulls({
+      ...cur, state: 'closed', closedFrom: cur.state, closedBy: who, closedAt: t, closedNote: why,
+      claimedAt: null, claimToken: null, updatedAt: t,
+      audit: _audit(cur, t, { action: 'close', by: who, from: cur.state, to: 'closed', note: why }),
+    });
+  });
+  const cur = r.snapshot.val();
+  if (!r.committed || !cur) return { ok: false, ...(block(cur) || { code: 'busy', message: 'לא נתפסה' }) };
+  return { ok: true, code: '', message: '' };
+}
+
 module.exports = {
   lgWaInboundKey, lgWaInboundParse, lgWaInboundRecord, lgWaInboundClaim, lgWaInboundProcess,
+  lgWaInboundPending, lgWaInboundRetry, lgWaInboundClose,
   INBOX, CLAIM_TTL_MS, MAX_ATTEMPTS, MAX_AGE_MS, WA_IMAGE_MAX_BYTES, WA_IMAGE_FLAG_BYTES, PDF_REASON,
 };

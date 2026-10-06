@@ -300,6 +300,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   <script src="firebase-db.js?v=20260601"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
+  <script src="wa-inbound-panel.js"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -2590,6 +2591,45 @@ document.addEventListener('visibilitychange', () => {
   .iw-item > input{width:64px !important;min-height:40px;font-size:15px;}
   .iw-item-del{min-width:40px;min-height:40px;font-size:16px;}
 }
+
+/* ─ קליטות WhatsApp (wa-inbound-panel.js) ─ */
+#waInBtn{min-height:44px;padding:0 12px;background:transparent;border:1px solid rgba(247,244,239,0.18);border-radius:6px;
+  cursor:pointer;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:rgba(247,244,239,0.8);white-space:nowrap;}
+#waInBtn:hover{border-color:rgba(184,146,42,0.5);color:#f7f4ef;}
+#waInBtn:focus-visible,.wain-btn:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.wain-badge{display:inline-block;margin-right:4px;padding:0 6px;border-radius:9px;background:rgba(255,255,255,0.14);font-size:12px;}
+.wain-badge-a{background:#c0392b;color:#fff;}
+.wain-badge[hidden]{display:none;}
+#waInPanel{position:absolute;top:50px;left:0;right:0;bottom:0;z-index:5;background:#1e1b18;color:#f0ede8;
+  display:flex;flex-direction:column;font-family:Heebo,sans-serif;}
+#waInPanel[hidden]{display:none;}
+.wain-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.wain-head b{font-size:15px;}
+.wain-sub{flex:1;font-size:12px;color:rgba(247,244,239,0.5);}
+#waInList{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:8px;}
+.wain-row{border:1px solid rgba(255,255,255,0.09);border-right:4px solid #8a8a8a;border-radius:6px;padding:10px 12px;background:rgba(255,255,255,0.03);}
+.wain-bad{border-right-color:#c0392b;} .wain-warn{border-right-color:#d4a017;} .wain-wait{border-right-color:#3498db;}
+.wain-ok{border-right-color:#27ae60;} .wain-closed{border-right-color:#6b6b6b;opacity:0.8;}
+.wain-l1,.wain-l2{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;}
+.wain-l2{margin-top:4px;color:rgba(247,244,239,0.65);font-size:12px;}
+.wain-chip{font-weight:800;}
+.wain-bad .wain-chip{color:#ff8a7a;} .wain-warn .wain-chip{color:#f3c74f;} .wain-ok .wain-chip{color:#6fdc9a;} .wain-wait .wain-chip{color:#8cc8f0;}
+.wain-when{color:rgba(247,244,239,0.55);}
+.wain-client{font-weight:700;}
+.wain-reason{margin-top:6px;font-size:13px;line-height:1.5;color:#f7f4ef;}
+.wain-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.wain-acts:empty{display:none;}
+.wain-btn{min-height:44px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:1px solid rgba(247,244,239,0.22);border-radius:6px;cursor:pointer;
+  font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:#f0ede8;text-decoration:none;}
+.wain-btn:hover{border-color:rgba(184,146,42,0.6);}
+.wain-btn:disabled{opacity:0.45;cursor:default;}
+.wain-primary{background:#b8922a;border-color:#b8922a;color:#1a1714;}
+.wain-empty{padding:30px 0;text-align:center;color:rgba(247,244,239,0.55);}
+#waInView{position:absolute;inset:0;background:rgba(10,9,8,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;}
+#waInView[hidden]{display:none;}
+#waInView img{max-width:100%;max-height:80%;object-fit:contain;background:#fff;border-radius:4px;}
+@media(max-width:600px){ #waInPanel{top:46px;} .wain-sub{display:none;} }
 </style>
 
 <div id="sqOverlay">
@@ -2610,6 +2650,10 @@ document.addEventListener('visibilitychange', () => {
         <button class="sq-seen-tab" id="sqTabSeen" role="tab" aria-selected="false"
                 onclick="sqSetSeenTab('seen')">נראה <span id="sqTabSeenN">0</span></button>
       </div>
+      <!-- קליטות WhatsApp — wa-inbound-panel.js -->
+      <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp">📥 קליטות
+        <span id="waInBadgeA" class="wain-badge wain-badge-a" hidden></span>
+        <span id="waInBadgeP" class="wain-badge" hidden></span></button>
       <select id="sqFSource" class="sq-filter-sel" onchange="sqRender()">
         <option value="">כל המקורות</option>
         <option value="sketch">מערכת</option>
@@ -2630,6 +2674,21 @@ document.addEventListener('visibilitychange', () => {
       </select>
       <input id="sqSearchInput" placeholder="🔍 חיפוש..." oninput="sqRender()">
       <button id="sqCloseBtn" onclick="closeSQ()" aria-label="סגור"><span data-icon="x"></span></button>
+    </div>
+
+    <!-- קליטות WhatsApp — מעל רשימת הסקיצות. הנתונים והפעולות ב-wa-inbound-panel.js -->
+    <div id="waInPanel" hidden role="dialog" aria-label="קליטות WhatsApp">
+      <div class="wain-head">
+        <b>קליטות WhatsApp</b>
+        <span class="wain-sub">הודעות נכנסות שלא הפכו להזמנה תקינה, או שצריכות עין</span>
+        <button id="waInToggle" type="button" class="wain-btn">הצג הכל</button>
+        <button type="button" class="wain-btn" onclick="lgWaInClose()" aria-label="סגור קליטות">✕</button>
+      </div>
+      <div id="waInList"></div>
+      <div id="waInView" hidden>
+        <img id="waInViewImg" alt="סקיצה מהקליטה">
+        <button id="waInViewClose" type="button" class="wain-btn">סגור</button>
+      </div>
     </div>
 
     <!-- BODY -->
