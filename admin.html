@@ -314,6 +314,25 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   #ov .mf-del{order:5;margin-left:0 !important;}
 }
 
+/* ─ חלון "פרטי הזמנה" (בן, 06/10) — תקציר בשתי עמודות, פריטים בפורמט אחד ─ */
+.msum{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:18px;padding:14px;background:var(--bg);border:1px solid var(--border);}
+.msum-num{font-family:"Playfair Display",serif;font-size:22px;font-weight:900;color:var(--text);align-self:center;}
+.msum-st-wrap{justify-self:end;align-self:center;}
+.msum-st{display:inline-block;padding:4px 10px;color:#fff;font-size:12px;font-weight:800;border-radius:3px;}
+.msum .mf .v{font-size:14px;}
+.msum-tel{color:var(--gold-text);font-weight:700;text-decoration:none;}
+.mit{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:9px 10px;margin-bottom:6px;background:var(--bg2);border-radius:4px;font-size:13px;}
+.mit-n{font-weight:700;flex:1 1 auto;min-width:0;}
+.mit-d{color:var(--muted);white-space:nowrap;}
+.mit-t{font-size:12px;font-weight:700;padding:1px 7px;border-radius:3px;white-space:nowrap;}
+.mit-chis{background:rgba(142,68,173,0.12);color:#8e44ad;}
+.mit-lit{background:rgba(41,128,185,0.12);color:#2471a3;}
+.mit-gr{background:rgba(39,174,96,0.12);color:#1e8449;}
+.mit-empty{font-size:13px;color:var(--muted);}
+label.msec-t{display:block;}
+.msel-wrap{position:relative;}
+.msel-wrap::after{content:"";position:absolute;left:14px;top:50%;width:8px;height:8px;margin-top:-6px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);pointer-events:none;}
+.msel-wrap .msel{min-height:44px;padding-left:34px;font-size:15px;}
 /* ─ כרטיסי קיצור בראש האדמין (06/10) — תור סקיצות / שרטט ─ */
 .stat-link{display:block;text-align:inherit;font:inherit;color:inherit;text-decoration:none;cursor:pointer;width:100%;}
 .stat-link:hover{border-color:var(--gold-text);}
@@ -873,22 +892,24 @@ function openMod(id) {
   eid = o.id;
   document.getElementById('mtitle').textContent = (o.orderClient||'') + ' — ' + (o.sketchName||o.type||'');
 
-  // מלא mbody
-  const itemsCount = (o.items && o.items.length) ? o.items.length : 0;
+  // מלא mbody — סדר (בן, 06/10): תקציר → פריטים → סקיצה → שינוי סטטוס.
+  // קודם: עמודה אחת של שדות, סטטוס, סקיצה, ורק בסוף הפריטים.
+  const items = o.items || [];
+  const st    = ST.find(x => x.id === o.status) || ST[0];
+  const tel   = String(o.phone || '').replace(/[^\d+]/g, '');
   document.getElementById('mbody').innerHTML = `
-    <div class="msec">
-      <div class="msec-t">פרטי הזמנה</div>
-      <div class="mgrid">
-        <div class="mf"><label>לקוח</label><div class="v">${lgEsc(o.orderClient || '')}</div></div>
-        <div class="mf"><label>טלפון</label><div class="v">${lgEsc(o.phone || '')}</div></div>
-        <div class="mf"><label>מספר הזמנה</label><div class="v">${lgEsc(o.orderNum || '')}</div></div>
-        <div class="mf"><label>תאריך</label><div class="v">${lgEsc(o.date || '')}</div></div>
-        <div class="mf"><label>מס' פריטים</label><div class="v">${itemsCount}</div></div>
-      </div>
+    <div class="msum">
+      <div class="msum-num">${lgEsc(o.orderNum || '—')}</div>
+      <div class="msum-st-wrap"><span class="msum-st" style="background:${st.c}">${lgEsc(o.status || '')}</span></div>
+      <div class="mf"><label>לקוח</label><div class="v">${lgEsc(o.orderClient || '—')}</div></div>
+      <div class="mf"><label>טלפון</label><div class="v">${tel
+        ? `<a class="msum-tel" href="tel:${lgEsc(tel)}" dir="ltr">${lgEsc(o.phone)}</a>` : '—'}</div></div>
+      <div class="mf"><label>תאריך</label><div class="v">${lgEsc(o.date || '—')}</div></div>
+      <div class="mf"><label>פריטים</label><div class="v">${items.length}${o.area ? ' · ' + lgEsc(String(o.area)) + ' מ״ר' : ''}</div></div>
     </div>
     <div class="msec">
-      <div class="msec-t">סטטוס</div>
-      <select id="mst" class="msel"></select>
+      <div class="msec-t">פריטים</div>
+      <div id="itemsPreview">${_modItemsHtml(items)}</div>
     </div>
     ${lgHasSketch(o) ? `
     <div class="msec">
@@ -896,27 +917,12 @@ function openMod(id) {
       <img data-sketch-for="${lgEsc(String(o.id))}" alt="סקיצת ההזמנה" class="mimg"/>
     </div>` : ''}
     <div class="msec">
-      <div class="msec-t">פריטים</div>
-      <div id="itemsPreview"></div>
+      <label class="msec-t" for="mst">שנה סטטוס</label>
+      <div class="msel-wrap"><select id="mst" class="msel"></select></div>
     </div>
   `;
 
   _hydrateSketchImgs(document.getElementById('mbody'));
-
-  // מלא את תצוגת הפריטים
-  const items = o.items || [];
-  const previewItems = items.slice(0, 3);
-  document.getElementById('itemsPreview').innerHTML = `
-    ${previewItems.map(i => `
-      <div style="font-size:12px;margin-bottom:4px">
-        ${lgEsc(i.name || '')} ${i.w ? lgDimsText(i.w, i.h) : ''} ${i.w ? 'מ"מ' : ''}
-      </div>
-    `).join('')}
-    ${items.length > 3 ? `
-      <button onclick="showAllItems()" style="margin-top:8px;padding:6px 10px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer;font-size:12px;">ראה עוד (${items.length})</button>
-    ` : ''}
-    ${items.length === 0 ? '<div style="font-size:12px;color:#999">אין פריטים</div>' : ''}
-  `;
 
   // מלא את שדות המודאל
   const sel = document.getElementById('mst');
@@ -985,20 +991,32 @@ function openMod(id) {
 
   const modEl = document.getElementById('ov');
   if (modEl) modEl.classList.add('open');
+  // מחוות "חזור" באייפון סוגרת את החלון ולא יוצאת מהדף (ר' popstate למטה)
+  if (!(history.state && history.state.lgModal === 'ov')) history.pushState({ lgModal: 'ov' }, '');
 }
 
-function showAllItems(){
-  const o = orders.find(x => x.id === eid);
-  if(!o) return;
-  const items = o.items || [];
-  document.getElementById('itemsPreview').innerHTML = items.map(i => `
-    <div style="font-size:12px;margin-bottom:5px;padding:5px 8px;background:var(--bg2);border-radius:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-      <span style="font-weight:600">${lgEsc(i.name||'')}</span>
-      ${i.w?`<span style="color:var(--muted)">${lgDimsText(i.w, i.h)} מ"מ</span>`:''}
-      ${i.chisum?'<span style="font-size:12px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
-      ${i.graphic?'<span style="font-size:12px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
+// הפריטים בחלון — פורמט אחד לכולם. קודם 3 הראשונים היו שורות פשוטות
+// ו"ראה עוד" צייר את כולם מחדש בפורמט אחר — זה מה שנראה כ"משתנה".
+function _modItemsHtml(items){
+  if(!items || !items.length) return '<div class="mit-empty">אין פריטים</div>';
+  return items.map(i => `
+    <div class="mit">
+      <span class="mit-n">${lgEsc(i.name||'פריט')}</span>
+      ${i.w ? `<span class="mit-d">${lgDimsText(i.w, i.h)} מ"מ</span>` : ''}
+      ${i.chisum ? '<span class="mit-t mit-chis">חיסום</span>' : i.litush ? '<span class="mit-t mit-lit">ליטוש</span>' : ''}
+      ${i.graphic ? '<span class="mit-t mit-gr">גרפיקה</span>' : ''}
     </div>`).join('');
 }
+function showAllItems(){
+  const o = orders.find(x => x.id === eid);
+  if(o) document.getElementById('itemsPreview').innerHTML = _modItemsHtml(o.items || []);
+}
+
+// "חזור" (מחווה / כפתור הדפדפן) כשהחלון פתוח — סוגר אותו במקום לצאת מהדף
+window.addEventListener('popstate', () => {
+  const modEl = document.getElementById('ov');
+  if (modEl && modEl.classList.contains('open')) { modEl.classList.remove('open'); eid = null; }
+});
 
 // מבצע את ה"קדם" מהמודאל — סוגר אותו ומפעיל את advance עם הפרומפט הנכון
 function doModalAdvance(){
@@ -1013,6 +1031,8 @@ function closeMod(e) {
   const modEl = document.getElementById('ov');
   if (modEl) modEl.classList.remove('open');
   eid = null;
+  // הרשומה שנדחפה בפתיחה — מחזירים אותה, כדי ש"חזור" הבא יעבוד כרגיל
+  if (history.state && history.state.lgModal === 'ov') history.back();
 }
 
 function setUrg(v) {
@@ -2746,22 +2766,22 @@ document.addEventListener('visibilitychange', () => {
   .wain-head b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #waInToggle{padding:0 10px;font-size:12px;white-space:nowrap;}
 }
-#waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
-/* ─ שלב 6: עדכון "הסקיצות טופלו" ─ */
-#sqAckPending{background:rgba(37,211,102,0.08);border-bottom:1px solid rgba(37,211,102,0.25);padding:6px 10px;}
-#sqAckPending[hidden]{display:none;}
-.sqack-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;font-size:12px;color:#f0ede8;}
-.sqack-send{min-height:36px;padding:0 12px;background:#25d366;color:#0b2e17;border:0;border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;}
-.sqack-na{font-size:12px;color:#f3c74f;white-space:nowrap;}
-#sqAckAsk{position:absolute;inset:0;z-index:60;background:rgba(10,9,8,0.6);display:flex;align-items:center;justify-content:center;padding:16px;}
-#sqAckAsk[hidden]{display:none;}
-.sqack-box{background:#f7f4ef;color:#1a1714;max-width:420px;width:100%;border-radius:8px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,0.4);font-family:Heebo,sans-serif;}
-#sqAckAskT{font-size:15px;font-weight:700;line-height:1.5;margin-bottom:14px;}
-.sqack-acts{display:flex;gap:8px;flex-wrap:wrap;}
-.sqack-acts button{flex:1 1 140px;min-height:44px;border-radius:6px;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;}
-.sqack-yes{background:#b8922a;color:#1a1714;border:0;}
-.sqack-no{background:transparent;color:#1a1714;border:1px solid rgba(0,0,0,0.25);}
-@media (pointer:coarse){ .sqack-send{min-height:44px;} }
+#waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
+/* ─ שלב 6: עדכון "הסקיצות טופלו" ─ */
+#sqAckPending{background:rgba(37,211,102,0.08);border-bottom:1px solid rgba(37,211,102,0.25);padding:6px 10px;}
+#sqAckPending[hidden]{display:none;}
+.sqack-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;font-size:12px;color:#f0ede8;}
+.sqack-send{min-height:36px;padding:0 12px;background:#25d366;color:#0b2e17;border:0;border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.sqack-na{font-size:12px;color:#f3c74f;white-space:nowrap;}
+#sqAckAsk{position:absolute;inset:0;z-index:60;background:rgba(10,9,8,0.6);display:flex;align-items:center;justify-content:center;padding:16px;}
+#sqAckAsk[hidden]{display:none;}
+.sqack-box{background:#f7f4ef;color:#1a1714;max-width:420px;width:100%;border-radius:8px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,0.4);font-family:Heebo,sans-serif;}
+#sqAckAskT{font-size:15px;font-weight:700;line-height:1.5;margin-bottom:14px;}
+.sqack-acts{display:flex;gap:8px;flex-wrap:wrap;}
+.sqack-acts button{flex:1 1 140px;min-height:44px;border-radius:6px;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;}
+.sqack-yes{background:#b8922a;color:#1a1714;border:0;}
+.sqack-no{background:transparent;color:#1a1714;border:1px solid rgba(0,0,0,0.25);}
+@media (pointer:coarse){ .sqack-send{min-height:44px;} }
 
 
 /* ─ בורר מק"טים (sku-picker.js) ─ רשימה מתחת לשדה הקוד; 44px לשורה */
