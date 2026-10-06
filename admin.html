@@ -2669,6 +2669,29 @@ document.addEventListener('visibilitychange', () => {
   #waInToggle{padding:0 10px;font-size:12px;white-space:nowrap;}
 }
 #waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
+
+/* ─ שורת ההזנה בתור הסקיצות (קוד · רוחב × גובה × כמות · הוסף) ─
+   שורה אחת ברוחב ~600px. בטלפון הגובה, הכמות ו"הוסף" נחתכו מחוץ למסך.
+   ≤900 (טלפון ואייפד לאורך, שם פאנל הסקיצה צר): הקוד ברוחב מלא, מתחתיו
+   שם המק"ט, ואז רוחב × גובה × כמות, ההמרה למ"מ, ו"הוסף" ברוחב מלא.
+   אותם אלמנטים ואותם מטפלים — רק order. הדסקטופ לא משתנה. */
+@media(max-width:900px){
+  .iw-input-row{flex-wrap:wrap;row-gap:8px;column-gap:6px;align-items:center;}
+  .iw-input-row #iwCode{order:1;flex:1 1 100%;min-height:44px;font-size:16px;}
+  .iw-input-row #iwPreview{order:2;flex:1 1 100%;font-size:13px;}
+  .iw-input-row #iwW{order:3;}
+  .iw-input-row .iw-x{order:4;}
+  .iw-input-row #iwH{order:5;}
+  .iw-input-row .iw-x2{order:6;}
+  .iw-input-row #iwQty{order:7;}
+  .iw-input-row .iw-unit{order:8;}
+  /* 25% ולא 0 — אחרת ההמרה למ"מ (45%) נכנסה לאותה שורה ומחצה את השדות ל-36px */
+  .iw-input-row #iwW,.iw-input-row #iwH{flex:1 1 25%;width:auto;min-width:0;min-height:44px;font-size:16px;}
+  .iw-input-row #iwQty{flex:0 0 64px;width:64px !important;min-height:44px;font-size:16px;}
+  .iw-input-row #iwWPrev{order:9;flex:1 1 45%;min-height:0;}
+  .iw-input-row #iwHPrev{order:10;flex:1 1 45%;min-height:0;}
+  .iw-input-row .iw-add{order:11;flex:1 1 100%;min-height:44px;font-size:15px;}
+}
 </style>
 
 <div id="sqOverlay">
@@ -2799,22 +2822,23 @@ document.addEventListener('visibilitychange', () => {
             </div>
             <div class="iw-input-row">
               <input class="iw-code" id="iwCode" placeholder="קוד (8SMH, 6CM...)" maxlength="8" list="iwCodeList"
+                aria-label="קוד מק״ט" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
                 oninput="iwPreview(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();iwAdd();}">
               <datalist id="iwCodeList"></datalist>
               <span class="iw-preview" id="iwPreview">—</span>
-              <input class="iw-dim" id="iwW" placeholder="800" type="text"
+              <input class="iw-dim" id="iwW" placeholder="800" type="text" inputmode="decimal" aria-label="רוחב"
                 oninput="iwDimPrev('iwW','iwWPrev')" onkeydown="event.stopPropagation();">
               <span id="iwWPrev" style="font-size:12px;color:var(--gold-text);min-width:50px;font-weight:600;line-height:1.2;"></span>
-              <span style="font-size:12px;color:#aaa">×</span>
-              <input class="iw-dim" id="iwH" placeholder="2000" type="text"
+              <span class="iw-x" style="font-size:12px;color:#aaa">×</span>
+              <input class="iw-dim" id="iwH" placeholder="2000" type="text" inputmode="decimal" aria-label="גובה"
                 oninput="iwDimPrev('iwH','iwHPrev')"
                 onkeydown="event.stopPropagation();">
               <span id="iwHPrev" style="font-size:12px;color:var(--gold-text);min-width:50px;font-weight:600;line-height:1.2;"></span>
-              <span style="font-size:12px;color:#aaa">×</span>
-              <input class="iw-dim" id="iwQty" type="number" value="1" min="1" max="500"
-                style="width:44px;" title="כמות יחידות"
+              <span class="iw-x iw-x2" style="font-size:12px;color:#aaa">×</span>
+              <input class="iw-dim" id="iwQty" type="number" inputmode="numeric" value="1" min="1" max="500"
+                style="width:44px;" title="כמות יחידות" aria-label="כמות"
                 onkeydown="if(event.key==='Tab'&&!event.shiftKey){event.preventDefault();event.stopPropagation();iwAdd();}else{event.stopPropagation();}">
-              <span style="font-size:12px;color:#aaa">יח׳</span>
+              <span class="iw-unit" style="font-size:12px;color:#aaa">יח׳</span>
               <button class="iw-add" onclick="iwAdd()">+ הוסף</button>
             </div>
             <div class="iw-list" id="iwList"></div>
@@ -3037,6 +3061,8 @@ function sqShowList(){
   document.getElementById('sqDetailPanel')?.classList.add('sq-hidden');
 }
 function sqShowDetailPanel(){
+  // שורת הסינון לא נשארת פתוחה מעל סקיצה — בטלפון היא לקחה חצי מסך
+  sqToggleFilters(false);
   document.getElementById('sqListPanel')?.classList.add('sq-hidden');
   document.getElementById('sqDetailPanel')?.classList.remove('sq-hidden');
 }
@@ -4368,16 +4394,16 @@ function iwRender(){
       <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${gi}">
         <div class="iw-item-name">${lgEsc(it.name||it.label||'פריט')}</div>
         ${qty>1?`<span class="iw-qty">×${qty}</span>`:''}
-        <input type="text" value="${it.w ? lgMmToMeterStr(it.w) : ''}"
+        <input type="text" inputmode="decimal" aria-label="רוחב" value="${it.w ? lgMmToMeterStr(it.w) : ''}"
           style="${dimStyle}"
           onchange="iwEditGroupDim(${idxJson},'w',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
         <span style="font-size:12px;color:#aaa">×</span>
-        <input type="text" value="${it.h ? lgMmToMeterStr(it.h) : ''}"
+        <input type="text" inputmode="decimal" aria-label="גובה" value="${it.h ? lgMmToMeterStr(it.h) : ''}"
           style="${dimStyle}"
           onchange="iwEditGroupDim(${idxJson},'h',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
-        <span style="font-size:12px;color:#aaa">מ"מ</span>
+        <span style="font-size:12px;color:#aaa">מ׳</span>
         <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
         ${delBtns}
       </div>`;
