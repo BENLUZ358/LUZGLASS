@@ -193,9 +193,14 @@ function lgGreenApiGate(ctx) {
 
   // נעילה 6 — פעילה רק כשהוגדרה. ב-TEST היא מצמצמת למספר אחד; בייצור
   // היא אינה מוגדרת, כי שם צריך לשלוח לכל לקוח מאושר.
-  const only = _digits(process.env.GREENAPI_ONLY_TO);
-  if (only && _digits(ctx && ctx.phone) !== only) {
-    return { allowed: false, reason: 'הנמען אינו המספר המורשה בסביבה הזו' };
+  //  06/10: רשימה מופרדת בפסיקים, ויכולה להכיל קבוצה (…@g.us) — נמען של
+  //  "הסקיצות טופלו" מקבוצה מקושרת. קבוצה מושווית במלואה, טלפון לפי ספרות.
+  //  ערך יחיד, כמו שהיה, מתנהג בדיוק כמו קודם.
+  const onlyList = String(process.env.GREENAPI_ONLY_TO || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (onlyList.length) {
+    const to = String((ctx && ctx.phone) || '');
+    const hit = onlyList.some(o => o.includes('@') ? o === to : (!to.includes('@') && _digits(o) === _digits(to)));
+    if (!hit) return { allowed: false, reason: 'הנמען אינו המספר המורשה בסביבה הזו' };
   }
 
   // accountKey בלבד. בלי idInstance ובלי token — ר' ההערה למעלה.

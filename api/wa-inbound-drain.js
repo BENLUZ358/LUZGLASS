@@ -58,6 +58,39 @@ async function handleAdmin(body, deps) {
                 : { ok: false, code: 'failed', message: p.reason };
   }
 
+  // ─── קבוצות (בן, 06/10): קישור קבוצת WhatsApp ללקוח ───────────────────
+  //  רק קבוצה שכבר נראתה (waMeta/groupsSeen — נכתב ב-webhook) ורק לכרטיס
+  //  חשבשבת קיים. הקישור הוא ההרשאה של הקבוצה, ולכן נכתב רק מכאן.
+  if (action === 'link-group' || action === 'unlink-group') {
+    if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה קבוצה לא תקין' };
+    const db = deps.db, t = deps.now || Date.now(), by = String(deps.by || '');
+    const seen = (await db.ref('waMeta/groupsSeen/' + b.key).once('value')).val();
+    if (!seen || !seen.chatId) return { ok: false, code: 'unknown-group', message: 'הקבוצה עוד לא שלחה תמונה — אין מה לקשר' };
+
+    if (action === 'unlink-group') {
+      const cur = (await db.ref('waGroups/' + b.key).once('value')).val();
+      if (!cur) return { ok: false, code: 'not-linked', message: 'הקבוצה לא מקושרת' };
+      const upd = {};
+      upd['waGroups/' + b.key] = null;
+      upd['waMeta/groupsSeen/' + b.key + '/unlinked'] = { at: t, by, customerId: String(cur.customerId || '') };
+      await db.ref().update(upd);
+      return { ok: true, code: '', message: '' };
+    }
+
+    const cid = String(b.customerId || '').trim();
+    const acc = cid && _keyOk(cid) ? (await db.ref('hashavshevetAccounts/' + cid).once('value')).val() : null;
+    if (!acc) return { ok: false, code: 'unknown-customer', message: 'כרטיס הלקוח לא נמצא' };
+    await db.ref('waGroups/' + b.key).transaction(cur => {
+      const prev = cur || {};
+      return {
+        chatId: seen.chatId, name: seen.name || '', customerId: cid, customerName: String(acc.name || ''),
+        linkedAt: t, linkedBy: by,
+        audit: { ...(prev.audit || {}), [t + '_link']: { at: t, by, action: 'link', customerId: cid, from: prev.customerId || '' } },
+      };
+    });
+    return { ok: true, code: '', message: '' };
+  }
+
   return { ok: false, code: 'bad-action', message: 'פעולה לא מוכרת' };
 }
 

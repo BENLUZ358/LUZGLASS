@@ -183,7 +183,10 @@ const markers = b => {
   check('C2 text is ignored', P(hook({ messageData: { typeMessage: 'textMessage' } })).action, 'ignore');
   check('C2 our own outgoing messages are ignored', P(hook({ typeWebhook: 'outgoingMessageReceived' })).action, 'ignore');
   check('C2 status webhooks are ignored', P(hook({ typeWebhook: 'stateInstanceChanged' })).action, 'ignore');
-  check('C2 a group is ignored', P(hook({ senderData: { chatId: '120363@g.us' } })).action, 'ignore');
+  /* 06/10 (בן): קבוצות נקלטות — אבל רק קבוצה שקושרה ללקוח. הסינון כאן
+     מזהה אותה כקבוצה; ההחלטה מה לרשום יושבת ב-webhook. ר' test-wa-groups.js */
+  check('C2 a group is recognised as a group, not a private sender',
+        [P(hook({ senderData: { chatId: '120363@g.us' } })).entry.groupId], ['120363@g.us']);
   check('C2 a lid chat is ignored', P(hook({ senderData: { chatId: '123@lid' } })).action, 'ignore');
   check('C2 a message without an id is ignored', P(hook({ idMessage: '' })).action, 'ignore');
   check('C2 a video is ignored', P(hook({ messageData: { typeMessage: 'videoMessage', fileMessageData: {} } })).action, 'ignore');

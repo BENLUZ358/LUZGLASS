@@ -21,7 +21,7 @@
 
 const crypto = require('crypto');
 const { lgWaInboundAllowed } = require('./_env');
-const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess } = require('./_wa-inbound');
+const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey } = require('./_wa-inbound');
 
 //  השוואה בזמן קבוע. גיבוב קודם, כדי שגם האורך לא ידלוף.
 function _tokenOk(header) {
@@ -47,7 +47,26 @@ async function handleInbound(req, deps) {
 
   const p = lgWaInboundParse(body);
   if (p.action !== 'record') return { status: 200, body: { ok: true, ignored: p.reason } };
-  if (!lgWaInboundAllowed(p.entry.sender).allowed) return { status: 200, body: { ok: true, ignored: 'sender' } };
+  if (p.entry.groupId) {
+    // קבוצה: הקישור ללקוח הוא ההרשאה (waGroups, נכתב רק מ-endpoint אדמיני).
+    // לא מקושרת → נשמר שם הקבוצה בלבד — בלי תמונה, קישור או כיתוב — כדי
+    // שאפשר יהיה לקשר אותה מהפאנל. ההודעה עצמה לא נקלטת.
+    const gk = lgWaInboundKey(p.entry.groupId);
+    let link = null;
+    try { link = (await deps.db.ref('waGroups/' + gk).once('value')).val(); }
+    catch (e) { console.error('wa-inbound: group lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
+    if (!link) {
+      try {
+        await deps.db.ref('waMeta/groupsSeen/' + gk).transaction(cur => ({
+          chatId: p.entry.groupId, name: p.entry.groupName || (cur && cur.name) || '',
+          count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now(),
+        }));
+      } catch (e) { console.warn('wa-inbound: groupsSeen', e && e.name); }
+      return { status: 200, body: { ok: true, ignored: 'group not linked' } };
+    }
+  } else if (!lgWaInboundAllowed(p.entry.sender).allowed) {
+    return { status: 200, body: { ok: true, ignored: 'sender' } };
+  }
 
   let rec;
   try {
