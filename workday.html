@@ -233,6 +233,15 @@
   .ai-input:focus{border-color:var(--gold-text);}
   .ai-select{padding:7px 9px;background:var(--surface);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;-webkit-appearance:none;border-radius:0;width:100%;cursor:pointer;}
 
+  /* ─ טאבים במסך צר: כל השישה גלויים ─
+     שורה אחת של ~900px, בלי גלילה, בתוך .main שחותך (overflow-x:hidden):
+     בטלפון טריפלקס, גרפיקה והובלות לא היו נגישים בכלל. 3 עמודות × 2 שורות. */
+  @media(max-width:900px){
+    .phase-tabs{display:grid;grid-template-columns:repeat(3,1fr);padding:0;}
+    .phase-tab{position:relative;flex-direction:column;justify-content:center;gap:2px;min-height:56px;
+               padding:6px 4px;text-align:center;line-height:1.2;font-size:12px;}
+    .phase-tab .cnt{position:absolute;top:4px;inset-inline-start:4px;padding:0 5px;line-height:16px;}
+  }
   /* ═══ רספונסיביות — 600 / 900 / 1200 כמו בשאר המערכת ═══ */
   @media(max-width:900px){
     .sidebar{display:none;}
@@ -241,7 +250,6 @@
     .content{padding:14px;}
     .topbar{padding:0 14px;}
     .summary-bar{padding:12px 14px;flex-wrap:wrap;gap:8px;}
-    .phase-tabs{padding:0 14px;}
   }
   @media(max-width:600px){
     .work-cols{grid-template-columns:1fr;}
@@ -330,28 +338,28 @@
   </div>
 
   <!-- PHASE TABS -->
-  <div class="phase-tabs">
-    <div class="phase-tab active" id="tab-build" onclick="setTab('build')">
+  <div class="phase-tabs" role="tablist" aria-label="שלבי יום העבודה">
+    <div class="phase-tab active" id="tab-build" role="tab" tabindex="0" aria-selected="true" onclick="setTab('build')">
       <span data-icon="hammer"></span> בנה יום עבודה
       <span class="cnt" id="cnt-build" style="background:var(--bg2);color:var(--muted)">0</span>
     </div>
-    <div class="phase-tab" id="tab-work" onclick="setTab('work')">
+    <div class="phase-tab" id="tab-work" role="tab" tabindex="0" aria-selected="false" onclick="setTab('work')">
       <span>▶️</span> יום עבודה פעיל
       <span class="cnt" id="cnt-work" style="background:var(--gold)">0</span>
     </div>
-    <div class="phase-tab" id="tab-chisum" onclick="setTab('chisum')">
+    <div class="phase-tab" id="tab-chisum" role="tab" tabindex="0" aria-selected="false" onclick="setTab('chisum')">
       <span data-icon="flame"></span> חיסום
       <span class="cnt" id="cnt-chisum" style="background:var(--chisum)">0</span>
     </div>
-    <div class="phase-tab" id="tab-triplex" onclick="setTab('triplex')">
+    <div class="phase-tab" id="tab-triplex" role="tab" tabindex="0" aria-selected="false" onclick="setTab('triplex')">
       <span data-icon="layers"></span> טריפלקס
       <span class="cnt" id="cnt-triplex" style="background:#0e7490">0</span>
     </div>
-    <div class="phase-tab" id="tab-graphic" onclick="setTab('graphic')">
+    <div class="phase-tab" id="tab-graphic" role="tab" tabindex="0" aria-selected="false" onclick="setTab('graphic')">
       <span data-icon="image"></span> גרפיקה
       <span class="cnt" id="cnt-graphic" style="background:#27ae60">0</span>
     </div>
-    <div class="phase-tab" id="tab-delivery" onclick="setTab('delivery')">
+    <div class="phase-tab" id="tab-delivery" role="tab" tabindex="0" aria-selected="false" onclick="setTab('delivery')">
       <span data-icon="truck"></span> הובלות
       <span class="cnt" id="cnt-delivery" style="background:#2980b9">0</span>
     </div>
@@ -940,13 +948,20 @@ function saveWorkDay(){
 // ═══════════════════════════════════════
 //  TABS
 // ═══════════════════════════════════════
+// הטאבים הם div — Enter / רווח פותחים אותם כמו לחיצה
+document.addEventListener('keydown', e => {
+  const t = e.target;
+  if ((e.key === 'Enter' || e.key === ' ') && t && t.matches && t.matches('.phase-tabs [role="tab"]')) {
+    e.preventDefault(); t.click();
+  }
+});
 function setTab(tab){
   currentTab = tab;
   ['build','work','chisum','triplex','graphic','delivery'].forEach(t=>{
     const vEl = document.getElementById('view-'+t);
     const tEl = document.getElementById('tab-'+t);
     if(vEl) vEl.style.display = t===tab?'block':'none';
-    if(tEl) tEl.classList.toggle('active', t===tab);
+    if(tEl){ tEl.classList.toggle('active', t===tab); tEl.setAttribute('aria-selected', t===tab ? 'true' : 'false'); }
   });
   const fb = document.getElementById('filterBar');
   if(fb) fb.style.display = tab==='build'?'flex':'none';
