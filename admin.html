@@ -293,6 +293,28 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
               border:1px solid rgba(184,146,42,0.35);border-radius:6px;padding:10px 12px;margin-bottom:8px;}
 @media (prefers-reduced-motion:reduce){ .bill-sk{transition:none;opacity:1;} }
 
+/* ─ כפתורי חלונות בטלפון: גלישה לשורות, בלי שבירה באמצע מילה ─
+   בחלון "פרטי הזמנה" חמישה כפתורים נדחסו לשורה אחת — "ביטול" נשבר לאות
+   בשורה. ≤600 כל .mfoot גולש, וכל כפתור שומר על המילה שלו ועל 44px.
+   בחלון ההזמנה (#ov): שמור·ביטול / קדם לשלב (מלא) / פיקטיבית·מחק. */
+@media(max-width:600px){
+  /* החלון בגובה המסך: כותרת · גוף נגלל · כפתורים תמיד גלויים. קודם הגוף היה
+     מוגבל לנוסחה קבועה (100dvh-160) שהניחה שורת כפתורים אחת — ושלוש שורות
+     ירדו מתחת לקצה המסך. */
+  .overlay{padding:0;}
+  .modal{display:flex;flex-direction:column;max-height:100vh;max-height:100dvh;}
+  .modal > .mbody{flex:1 1 auto;min-height:0;max-height:none;}
+  .mhdr,.mfoot{flex-shrink:0;}
+  .mfoot{padding-bottom:max(12px, env(safe-area-inset-bottom));}
+  .mfoot{flex-wrap:wrap;padding:12px 14px;}
+  .mfoot > button{white-space:nowrap;min-height:44px;flex:1 1 auto;}
+  #ov .btn-save{order:1;flex:1 1 55%;}
+  #ov .btn-cancel{order:2;}
+  #modalAdvBtn{order:3;flex:1 1 100%;}
+  #modalTestBtn{order:4;}
+  #ov .mf-del{order:5;margin-left:0 !important;}
+}
+
 /* ─ טבלת ההזמנות בטלפון: כרטיס לכל הזמנה ─
    735px של טבלה במסך של 390 — שם הסקיצה נשבר מילה בשורה, והמחיר, הסטטוס
    ו"פרטים" ישבו מחוץ למסך. אותם תאים ואותם מטפלים; רק הפריסה משתנה:
@@ -444,7 +466,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <div class="mhdr"><h2 id="mtitle">פרטי הזמנה</h2><button class="mcl" onclick="closeMod()" aria-label="סגור"><span data-icon="x"></span></button></div>
     <div class="mbody" id="mbody"></div>
     <div class="mfoot">
-      <button onclick="deleteOrderById(eid)" style="margin-left:auto;padding:10px 16px;background:transparent;color:#c0392b;border:1px solid rgba(192,57,43,0.3);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onmouseover="this.style.background='rgba(192,57,43,0.08)'" onmouseout="this.style.background='transparent'">🗑 מחק הזמנה</button>
+      <button class="mf-del" onclick="deleteOrderById(eid)" style="margin-left:auto;padding:10px 16px;background:transparent;color:#c0392b;border:1px solid rgba(192,57,43,0.3);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onmouseover="this.style.background='rgba(192,57,43,0.08)'" onmouseout="this.style.background='transparent'">🗑 מחק הזמנה</button>
       <!-- סימון כפיקטיבית אחרי שההזמנה כבר יצאה מתור הסקיצות. הכפתור שם
            הוא חד-כיווני ורק בכניסה; זה המקום היחיד לסמן הזמנה שכבר בתהליך. -->
       <button id="modalTestBtn" style="display:none;padding:10px 16px;background:transparent;color:var(--gold-text);border:1px solid rgba(184,146,42,0.4);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onclick="markOrderTest()">🧪 סמן כפיקטיבית</button>
