@@ -223,6 +223,7 @@ summary:focus-visible,
   button,
   a[role="button"],
   .btn,
+  .unav-a,          /* פריטי התפריט הצדדי — <a href> בלי onclick, ולכן חמקו (06/10) */
   [onclick]{
     min-height:var(--touch-min);
   }
