@@ -237,6 +237,28 @@ function lgGlassTypesInOrders(orders, skuCatalogMap, itemFilter) {
     });
 }
 
+// כל סוגי הזכוכית שהמפעל עובד איתם — מקטלוג המק"טים (חשבשבת) — ועוד כל
+// סוג שמופיע על פריט בהזמנות ולא בקטלוג. סוג שנמצא בהזמנות נושא את
+// הספירה שלו; סוג שאין ממנו כרגע — בלי "(0)".
+// בתור הסקיצות רוב ההזמנות עוד בלי פריטים, ולכן הרשימה מההזמנות לבדה
+// הציעה סוג אחד או שניים בלבד (בן, 06/10). שאר המסכים נשארים על
+// lgGlassTypesInOrders, שמציע רק מה שיחזיר תוצאה.
+function lgGlassTypesWithCatalog(orders, skuCatalogMap) {
+  const counts = {};
+  lgGlassTypesInOrders(orders, skuCatalogMap).forEach(t => { counts[t.label] = t.count; });
+  const labels = new Set(Object.keys(counts));
+  Object.values(skuCatalogMap || {}).forEach(e => {
+    if (e && e.glass && e.mm) labels.add(e.mm + ' ' + e.glass);
+  });
+  return [...labels]
+    .map(label => (counts[label] ? { label, count: counts[label] } : { label }))
+    .sort((a, b) => {
+      const am = parseInt(a.label, 10), bm = parseInt(b.label, 10);
+      if (am !== bm) return am - bm;
+      return a.label.localeCompare(b.label, 'he');
+    });
+}
+
 // האם בהזמנה יש ולו פריט אחד מסוג הזכוכית שנבחר.
 // הזמנה נשארת ברשימה גם אם רוב פריטיה מסוג אחר — הצמצום למה שנבחר נעשה
 // בתצוגה של הפריטים עצמם, לא בהסתרת ההזמנה.
