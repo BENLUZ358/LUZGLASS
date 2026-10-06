@@ -366,7 +366,7 @@ function showOrder(o){
   const items=o.items||o.panels||[];
   document.getElementById('smItems').innerHTML=items.slice(0,4).map(it=>`
     <span style="font-size:12px;background:rgba(184,146,42,0.15);color:var(--gold-text);padding:2px 8px;border-radius:3px;font-weight:600">
-      ${lgEsc(it.name||it.label||it.type||'פריט')} ${it.w?it.w+'×'+it.h:''}
+      ${lgEsc(it.name||it.label||it.type||'פריט')} ${it.w ? lgDimsText(it.w, it.h) : ''}
     </span>`).join('');
   // Show sketch image
   const canvas=document.getElementById('sketchCanvas');
@@ -462,7 +462,7 @@ function buildAutoSVG(o){
     const stroke=it.chisum?'#8e44ad':'#2a5a8a';
     panels+=`<rect x="${cx2}" y="${py}" width="${pw}" height="${ph}" fill="${col}" stroke="${stroke}" stroke-width="2" rx="1"/>`;
     panels+=`<text x="${cx2+pw/2}" y="${py+ph/2+5}" text-anchor="middle" font-family="Heebo,Arial" font-size="11" fill="${stroke}" font-weight="700">${it.name||it.label||''}</text>`;
-    panels+=`<text x="${cx2+pw/2}" y="${py-6}" text-anchor="middle" font-family="Heebo,Arial" font-size="10" fill="#888">${it.w||''}×${it.h||''}</text>`;
+    panels+=`<text x="${cx2+pw/2}" y="${py-6}" text-anchor="middle" font-family="Heebo,Arial" font-size="10" fill="#888">${lgDimsText(it.w, it.h)}</text>`;
     cx2+=pw+GAP;
   });
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H+PAD+40}" style="background:#fff">

@@ -512,7 +512,8 @@ function renderVerify() {
     // המידה שהייתה לפני התיקון נשארת מתחת לשורה: מי שמתקן בחשבשבת צריך לדעת
     // איזו מידה הולכת ל"בטל יתרה לאספקה" ואיזו נכנסת במקומה
     const was = it.editedFrom
-      ? `<div class="edit-was">היה ${esc(it.editedFrom)}${it.editedBy ? ' · ' + esc(it.editedBy) : ''}</div>` : '';
+      // editedFrom נשמר כ"220×550" — בעברית הוא היה מוצג הפוך. ר' lgDimsText
+      ? `<div class="edit-was">היה ${esc(String(it.editedFrom).replace(/^(\d+)×(\d+)$/, (_, w, h) => lgDimsText(w, h)))}${it.editedBy ? ' · ' + esc(it.editedBy) : ''}</div>` : '';
     if (i === editIdx) {
       return `<div class="item item-editing">
         <span class="item-n">${esc(n)}</span>
@@ -653,7 +654,7 @@ function openFull() {
   $('fullImg').src = $('skImg').src;
   $('fullTitle').textContent = o.orderNum || '';
   $('fullStrip').innerHTML = o.items.map((it, i) =>
-    `<span>${esc(it.hsLine || i + 1)}) ${Math.round(+it.w || 0)}×${Math.round(+it.h || 0)}</span>`).join('');
+    `<span>${esc(it.hsLine || i + 1)}) ${lgDimsText(Math.round(+it.w || 0), Math.round(+it.h || 0), '0')}</span>`).join('');
   $('full').classList.add('open'); $('fullClose').focus();
 }
 $('fullClose').onclick = () => $('full').classList.remove('open');

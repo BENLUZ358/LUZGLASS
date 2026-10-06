@@ -897,7 +897,7 @@ function openMod(id) {
   document.getElementById('itemsPreview').innerHTML = `
     ${previewItems.map(i => `
       <div style="font-size:12px;margin-bottom:4px">
-        ${lgEsc(i.name || '')} ${i.w || ''}${i.w ? '×' : ''}${i.h || ''} ${i.w ? 'מ"מ' : ''}
+        ${lgEsc(i.name || '')} ${i.w ? lgDimsText(i.w, i.h) : ''} ${i.w ? 'מ"מ' : ''}
       </div>
     `).join('')}
     ${items.length > 3 ? `
@@ -982,7 +982,7 @@ function showAllItems(){
   document.getElementById('itemsPreview').innerHTML = items.map(i => `
     <div style="font-size:12px;margin-bottom:5px;padding:5px 8px;background:var(--bg2);border-radius:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <span style="font-weight:600">${lgEsc(i.name||'')}</span>
-      ${i.w?`<span style="color:var(--muted)">${i.w}×${i.h} מ"מ</span>`:''}
+      ${i.w?`<span style="color:var(--muted)">${lgDimsText(i.w, i.h)} מ"מ</span>`:''}
       ${i.chisum?'<span style="font-size:12px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
       ${i.graphic?'<span style="font-size:12px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
     </div>`).join('');
@@ -2036,7 +2036,7 @@ function _renderBillClient(el){
   document.getElementById('billRows').innerHTML = ords.map(o => {
     const total = lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0;
     const items = (o.items||[]).map(it =>
-      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + (it.w||'') + '×' + (it.h||'') + ' מ"מ</div>').join('');
+      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + lgDimsText(it.w, it.h) + ' מ"מ</div>').join('');
     const sk = lgHasSketch(o)
       ? '<img class="bill-sk" data-sketch-for="' + lgEsc(String(o.id)) + '"' +
         ' alt="סקיצה — ' + lgEsc(o.orderNum||'') + '" onclick="if(this.src)previewSketchSrc(this.src)">'
@@ -2172,7 +2172,7 @@ function renderPickupBoard(){
             </div>
             ${p.items&&p.items.length?`
               <div class="pi-items">
-                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w||''}${i.w?'×':''}${i.h||''} מ"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
+                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w ? lgDimsText(i.w, i.h) : ''} מ"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
               </div>`:''}
           </div>
           <div>
@@ -3208,7 +3208,7 @@ function makeDemoSketch(title,client,glass,dims,color){
       panels+=`<circle cx="${x+panW}" cy="${oy+panH-35}" r="3.5" fill="${color}" opacity="0.6"/>`;
     }
     // dimension text
-    panels+=`<text x="${x+panW/2}" y="${oy+panH/2-5}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="10" font-weight="700" fill="${color}">${w}×${h}</text>`;
+    panels+=`<text x="${x+panW/2}" y="${oy+panH/2-5}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="10" font-weight="700" fill="${color}">${lgDimsText(w, h)}</text>`;
     panels+=`<text x="${x+panW/2}" y="${oy+panH/2+9}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="8" fill="rgba(0,0,0,0.3)">${label}</text>`;
     // top dim line
     panels+=`<line x1="${x}" y1="${oy-7}" x2="${x+panW}" y2="${oy-7}" stroke="${color}" stroke-width="0.8" opacity="0.4"/>`;
