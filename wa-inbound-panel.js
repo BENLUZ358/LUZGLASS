@@ -104,7 +104,9 @@ function lgWaInRow(key, r, now) {
     key, state: st, statusLabel, tone, reason, needsAttention, client,
     at: r.timestamp || r.createdAt || 0, atText: _waInWhen(r.timestamp || r.createdAt),
     sender: _waInPhone(r.sender), kindLabel, fileName: r.fileName || '', caption: r.caption || '',
-    attempts: r.attempts || 0, attemptsText: r.attempts ? r.attempts + ' / ' + WA_IN_MAX_ATTEMPTS : '',
+    // ניסיונות — רק כשמשהו השתבש. על קליטה שהצליחה "1 / 3" הוא רעש (07/10)
+    attempts: r.attempts || 0,
+    attemptsText: r.attempts && ['failed', 'dead', 'processing'].includes(st) ? r.attempts + ' / ' + WA_IN_MAX_ATTEMPTS : '',
     orderNum: st === 'done' ? (r.refNum || '') : '', orderId: orderIds[0] || '',
     canRetry: (st === 'failed' || st === 'dead') && young,
     canClose: st !== 'closed' && !fresh && !(st === 'done' && (!needsAttention || r.handled)),
@@ -165,15 +167,31 @@ if (typeof document !== 'undefined') (function () {
     return box;
   }
 
-  function accountOptions() {
+  // בחירת לקוח לקבוצה — רשימה גלויה מתחת לשדה (07/10). רשימת ההצעות המובנית של הדפדפן ב-iOS
+  // מציג הצעות רק מעל המקלדת ורק כשיש התאמה, ונראה כמו שדה שלא עושה כלום.
+  function accountMatches(q) {
     const m = (typeof hashavshevetAccountsMap !== 'undefined' && hashavshevetAccountsMap) || {};
+    const t = String(q || '').trim().toLowerCase();
     return Object.values(m).filter(a => a && a.key)
+      .filter(a => !t || String(a.name || '').toLowerCase().includes(t) || String(a.key).toLowerCase().includes(t))
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'he'))
-      .map(a => `<option value="${_waInEsc((a.name || '') + ' · ' + a.key)}"></option>`).join('');
+      .slice(0, 8);
+  }
+  function renderAccList(input) {
+    const list = input && input.parentNode.parentNode.querySelector('.wain-acc-list');
+    if (!list) return;
+    const hits = accountMatches(input.value);
+    list.hidden = false;
+    list.innerHTML = hits.length
+      ? hits.map(a => `<button type="button" class="wain-acc-opt" data-acc="${_waInEsc(a.key)}" data-name="${_waInEsc(a.name || '')}">
+           <span>${_waInEsc(a.name || '')}</span><span class="wain-acc-key" dir="ltr">${_waInEsc(a.key)}</span></button>`).join('')
+      : `<div class="wain-acc-none">לא נמצא כרטיס בשם הזה. נסה חלק מהשם או את מפתח הלקוח בחשבשבת.</div>`;
   }
 
   function renderGroups() {
     const box = groupsBox(); if (!box) return;
+    // מקלידים שם לקוח — רענון חי (הודעה נכנסת) לא מוחק את מה שהוקלד
+    if (box.contains(document.activeElement) && document.activeElement.classList.contains('wain-acc')) return;
     const keys = Object.keys(groupsSeen);
     if (!keys.length) { box.innerHTML = ''; return; }
     keys.sort((a, b) => (!!groupsLinked[a]) - (!!groupsLinked[b]) || (groupsSeen[b].lastAt || 0) - (groupsSeen[a].lastAt || 0));
@@ -186,17 +204,19 @@ if (typeof document !== 'undefined') (function () {
         ${l ? `<div class="wain-reason">לקוח: <b>${_waInEsc(l.customerName || l.customerId)}</b> — כל תמונה בקבוצה נכנסת לתור, והעדכון "הסקיצות טופלו" יוצא לקבוצה.</div>
                <div class="wain-acts"><button class="wain-btn" data-gact="unlink">נתק</button></div>`
             : `<div class="wain-reason">${g.count || 1} תמונות נשלחו מהקבוצה ולא נקלטו. קשר אותה ללקוח, והתמונות הבאות ייכנסו לתור.</div>
-               <div class="wain-acts"><input class="wain-acc" list="waInAccList" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לקבוצה">
-                 <button class="wain-btn wain-primary" data-gact="link">קשר ללקוח</button></div>`}
+               <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לקבוצה" autocomplete="off">
+                 <button class="wain-btn wain-primary" data-gact="link">קשר ללקוח</button></div>
+               <div class="wain-acc-list" hidden></div>`}
       </div>`;
-    }).join('') + `<datalist id="waInAccList">${accountOptions()}</datalist>`;
+    }).join('');
   }
 
   async function groupAct(key, action, input) {
     let customerId = '';
     if (action === 'link') {
+      // נבחר מהרשימה → data-acc; אחרת מה שהוקלד (מפתח, או "שם · מפתח")
       const v = String((input && input.value) || '');
-      customerId = (v.split('·').pop() || '').trim();
+      customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
       if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
     } else if (!confirm('לנתק את הקבוצה? תמונות חדשות ממנה לא ייכנסו לתור.')) return;
     const r = await post({ action: action === 'link' ? 'link-group' : 'unlink-group', key, customerId });
@@ -280,6 +300,24 @@ if (typeof document !== 'undefined') (function () {
   function wire() {
     // קבוצות — הכפתורים נוצרים מחדש בכל רינדור, ולכן האזנה על הפאנל כולו
     const panel = $('waInPanel');
+    if (panel) {
+      ['input', 'focusin'].forEach(evn => panel.addEventListener(evn, ev => {
+        const inp = ev.target.closest && ev.target.closest('.wain-acc'); if (!inp) return;
+        if (evn === 'input') delete inp.dataset.acc;          // הקלדה מבטלת בחירה קודמת
+        // נגיעה בשדה שכבר נבחר בו לקוח — לא לפתוח רשימה (היא הייתה מחפשת את
+        // "שם · מפתח" כולו ומציגה "לא נמצא"). שדה ריק — כל הכרטיסים.
+        else if (inp.dataset.acc) return;
+        renderAccList(inp);
+      }));
+      panel.addEventListener('click', ev => {
+        const opt = ev.target.closest('.wain-acc-opt'); if (!opt) return;
+        const row = opt.closest('[data-gkey]'); const inp = row && row.querySelector('.wain-acc');
+        if (!inp) return;
+        inp.value = opt.dataset.name + ' · ' + opt.dataset.acc;
+        inp.dataset.acc = opt.dataset.acc;
+        opt.parentNode.hidden = true;
+      });
+    }
     if (panel) panel.addEventListener('click', ev => {
       const b = ev.target.closest('button[data-gact]'); if (!b) return;
       const row = b.closest('[data-gkey]'); if (!row) return;

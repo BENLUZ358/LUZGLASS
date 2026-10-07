@@ -281,6 +281,12 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('L4 a clean intake shows the client and needs nothing', [r.client, r.statusLabel, r.needsAttention], ['המקום לאמבט', 'נקלט', false]);
   }
   {
+    /* 07/10: "ניסיונות 1 / 3" על קליטה שהצליחה — רעש. רק כשיש תקלה. */
+    const done = row('D2', { state: 'done', attempts: 1, kind: 'image', sender: '0501234567', createdAt: NOW, refNum: 'L1', orderIds: ['x'], clientMatch: { via: 'users', name: 'x' } });
+    const fail = row('F2', { state: 'failed', attempts: 2, kind: 'image', sender: '0501234567', createdAt: NOW, lastError: 'x' });
+    check('L4b attempts are shown only when something went wrong', [done.attemptsText, fail.attemptsText], ['', '2 / 3']);
+  }
+  {
     const r = row('E', { state: 'closed', closedFrom: 'dead', closedBy: '0520000000', closedAt: NOW, closedNote: 'ביקשתי שוב', createdAt: NOW, kind: 'image', sender: '0501234567' });
     check('L5 a closed row says who closed it and why', [r.statusLabel, /ביקשתי שוב/.test(r.reason), /052-0000000/.test(r.reason), r.needsAttention, r.canClose],
           ['טופל ידנית', true, true, false, false]);
