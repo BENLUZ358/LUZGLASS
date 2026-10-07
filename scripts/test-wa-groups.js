@@ -157,6 +157,12 @@ const req = body => ({ method: 'POST', headers: { authorization: 'Bearer hs' }, 
         /resolveRecipient\(db, x\.order, kind\)/.test(D) && /resolveRecipient\(db, order, entry\.kind\)/.test(DR), true);
   const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
   check('5e the intake panel lists groups to link', /link-group/.test(P) && /waMeta\/groupsSeen/.test(P), true);
+  /* 07/10 (בן באייפון): "לא נותן אופציה לבחור לקוח". datalist ב-iOS מציג
+     הצעות רק מעל המקלדת ורק כשיש התאמה — ונראה כמו שדה שלא עושה כלום. */
+  check('5f the customer is chosen from a visible list, not a datalist', /datalist/.test(P), false);
+  check('5f the list sits under the field', /wain-acc-list/.test(P), true);
+  check('5f no match says so, instead of silence', /לא נמצא כרטיס/.test(P), true);
+  check('5f typing is not wiped by a live refresh', /activeElement/.test(P), true);
 }
 
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
