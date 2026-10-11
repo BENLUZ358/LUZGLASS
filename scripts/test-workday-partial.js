@@ -271,6 +271,12 @@ const addable   = (w, id) => w.ctx._wdUnavailIdxs
   check('the normaliser keeps wdPartial',  /\n\s+wdPartial:\s+!!o\.wdPartial/.test(DB), true);
 }
 
+/* ── 10ג. המונה על הטאב "בנה יום עבודה" סופר רק מה שנשאר ─────────────── */
+{
+  const uc = grab(WD, 'updateCounts', true);
+  check('the build-tab counter uses the same availability rule', /_wdBuildable\(o\)/.test(uc) && /_wdUnavailIdxs\(o\)/.test(uc), true);
+}
+
 /* ── 11. תחנת החשבוניות — המידה בהודעה לא מתהפכת ──────────────────────── */
 {
   const save = (INV.match(/async function saveEdit\(\)[\s\S]*?\n\}/) || [''])[0];

@@ -3055,9 +3055,8 @@ function updateCounts(){
   // ספירה לפי stage (לא status) — תואמת ל-getFiltered()
   const avail = allOrders.filter(o => {
     const sid = String(o.id);
-    const stage = o.stage || '';
-    if(stage !== 'opty' && stage !== 'workday') return false;
-    if(workDay.inChisum.map(String).includes(sid)) return false;
+    // אותו כלל כמו getFiltered — כולל הזמנה חלקית שהחיסום שלה כבר בתחנה
+    if(!_wdBuildable(o)) return false;
     if(workDay.inWork.includes(sid)){
       const _sr = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
       const _si = Array.isArray(_sr) ? _sr.map(Number) : Object.values(_sr).map(Number);
@@ -3067,7 +3066,11 @@ function updateCounts(){
   });
   // cnt-build: ספירת פריטים (לא הזמנות) — כל הפריטים של הזמנות זמינות
   let buildItemCount = 0;
-  avail.forEach(o => { buildItemCount += (o.items||[]).length; });
+  // בלי מה שכבר ביום העבודה או שכבר נחתך ביום קודם (הזמנה חלקית)
+  avail.forEach(o => {
+    const n = (o.items||[]).length, un = _wdUnavailIdxs(o);
+    buildItemCount += Math.max(0, n - [...un].filter(i => i < n).length);
+  });
   document.getElementById('cnt-build').textContent = buildItemCount;
 
   // cnt-work: ספירת פריטים פעילים (ליטוש בלבד) ביום עבודה
