@@ -57,7 +57,7 @@ const bodyOf = name =>
 
   /* פריט שכבר ביום העבודה לא חוזר לטיוטה — אותו סינון כמו availIdx בשורה */
   check('items already in the work day are filtered out first',
-        /_avail = _oi\.map\(\(_,i\)=>i\)\.filter\(i => !_selIdxs\.includes\(i\)\)/.test(fn), true);
+        /_avail = _oi\.map\(\(_,i\)=>i\)\.filter\(i => !_unavail\.has\(i\)\)/.test(fn) && /_wdUnavailIdxs\(o\)/.test(fn), true);
   check('and when nothing is left it says so instead of doing nothing',
         /כבר ביום העבודה או בטיוטה/.test(fn), true);
 }
@@ -73,8 +73,12 @@ const bodyOf = name =>
   const fn = bodyOf('getFiltered');
   check('the list counts what is in the draft, not only what is in the work day',
         /draftItems\.forEach\(d => \{ if\(String\(d\.orderId\) === sid\) taken\.add/.test(fn), true);
+  // itemsSel, ומה שכבר טופל ביום עבודה קודם (הזמנה חלקית) — דרך _wdUnavailIdxs
+  const un = bodyOf('_wdUnavailIdxs');
   check('and it counts itemsSel too, so both routes hide the order',
-        /workDay\.itemsSel && workDay\.itemsSel\[sid\]/.test(fn), true);
+        /const taken = _wdUnavailIdxs\(o\)/.test(fn) && /workDay\.itemsSel && workDay\.itemsSel\[sid\]/.test(un), true);
+  check('and what an earlier work day already finished',
+        /lgWorkdayLeft\(o\)\.done/.test(un), true);
   check('an order with nothing left to add is hidden',
         /if\(totalItems && taken\.size >= totalItems\) return false;/.test(fn), true);
   /* באג 18 — הזמנה ללא פריטים חייבת להישאר, אחרת אי אפשר להוסיף לה ידנית */

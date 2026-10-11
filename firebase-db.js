@@ -387,6 +387,41 @@ function lgSplitFactoryItems(items) {
   return { chisum, triplex };
 }
 
+// ─── מה יום העבודה עוד לא עשה בהזמנה ──────────────────────────────────
+//  הבחירה ביום העבודה היא לפי פריט ("+ הוסף"), אבל השלב הוא של ההזמנה
+//  כולה. בלי זיכרון של מה כבר נעשה, "סיים יום עבודה" על חלק מהזמנה קידם
+//  את כולה — פריטי ליטוש שלא נחתכו "הושלמו", והלקוח קיבל "מוכן לאיסוף";
+//  ופריט חיסום שלא ירד שלח אותה ישר ל-chisum, עוקף את תחנת הבדיקה.
+//
+//  orders/<id>/wdDoneIdxs = {idx:true} — מה שיום העבודה סיים או מסר:
+//    ליטוש  — כשנלחץ "סיים יום עבודה" על הפריט
+//    חיסום  — כשההזמנה נכנסת לתחנת הבדיקה. התחנה שולחת את *כל* פריטי
+//             החיסום של הסקיצה (lgSplitFactoryItems), ולכן כולם נמסרים יחד.
+//  extraDone — מה שמסתיים ברגע זה ועוד לא נכתב.
+//  מחזיר את האינדקסים שנשארו: polish (ליטוש/חיתוך) ו-factory (חיסום).
+//  ⚠️ הזמנה בלי השדה כלל (לפני התיקון) — tracked:false. הקוראים שמחליטים
+//  על עיכוב אחרי יום העבודה מתעלמים ממנה, כדי לא לעצור הזמנות ישנות.
+function lgWorkdayLeft(order, extraDone) {
+  const raw   = order && order.items;
+  const items = Array.isArray(raw) ? raw : (raw && typeof raw === 'object') ? Object.values(raw) : [];
+  const tracked = !!(order && order.wdDoneIdxs);
+  const done  = new Set(lgArrivedIdxs(order && order.wdDoneIdxs));
+  (extraDone || []).forEach(i => done.add(Number(i)));
+  const polish = [], factory = [];
+  items.forEach((it, i) => {
+    if (!it || done.has(i)) return;
+    (it.chisum ? factory : polish).push(i);
+  });
+  return { polish, factory, tracked, done: [...done].sort((a, b) => a - b) };
+}
+
+// {idx:true} לכתיבה. Firebase הופך מערך דליל ל-null-ים; אובייקט נשמר כמו שהוא.
+function lgIdxsObj(idxs) {
+  const o = {};
+  (idxs || []).forEach(i => { o[Number(i)] = true; });
+  return Object.keys(o).length ? o : null;
+}
+
 // ─── חישוב השלב הבא — לוגיקה דינמית לפי פריטים + לקוח הובלות ──────
 //  שני מקורות לזיהוי לקוח הובלות (OR — מספיק שאחד מהם נכון):
 //    1. order.deliveryClient = true  (denormalized על ההזמנה)
@@ -1019,6 +1054,11 @@ function lgNormalizeOrder(o) {
     // פאנלים שנסגרו ב"סיום בדיקה" — ירדו מהרשימה ולא חוזרים אליה
     chisumClosedIdxs:   o.chisumClosedIdxs   ?? null,
     triplexClosedIdxs:  o.triplexClosedIdxs  ?? null,
+    // מה שיום העבודה כבר סיים או מסר — גולמי, lgWorkdayLeft מפענח.
+    // בלעדיו כאן, הזמנה חלקית הייתה נשכחת בכל טעינה ומתקדמת כולה שוב.
+    wdDoneIdxs:         o.wdDoneIdxs         ?? null,
+    // הזמנה חלקית שמחכה ב"בנה יום עבודה" עם הפריטים שנותרו
+    wdPartial:          !!o.wdPartial,
     // הזמנת בדיקה — רצה בכל התהליך הרגיל אבל לא נפתחת בחשבשבת. חייב לעבור
     // כאן, אחרת אף מסך לא יוכל לסמן אותה ככזו והיא תיראה כמו הזמנה אמיתית.
     isTest:         !!o.isTest,

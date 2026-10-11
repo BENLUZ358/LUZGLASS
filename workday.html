@@ -870,6 +870,9 @@ async function load(){
     // הוסף הזמנות שב-Firebase כ-workday — אל תוסיף הזמנות שכבר בתחנת הבדיקה
     fbWorkIds.forEach(id => {
       if(workDay.inChisum.map(String).includes(String(id))) return;
+      // הזמנה חלקית מחכה ב"בנה יום עבודה" — היא לא בעבודה עד שיוסיפו אותה
+      const _po = allOrders.find(x => String(x.id) === String(id));
+      if(_po && _po.wdPartial) return;
       if(!workDay.inWork.includes(id)) workDay.inWork.push(id);
     });
     // הסר מ-inWork הזמנות שעברו שלב (done/graphic/delivery/collected)
@@ -1017,6 +1020,30 @@ function getMachine(o){
   return MACHINE_B.some(x => g.includes(x) || (o.glass||'').includes(x)) ? 'B' : 'A';
 }
 
+// הזמנה שמופיעה ב"בנה יום עבודה": שלב opty/workday שעוד לא בתחנת הבדיקה,
+// או הזמנה חלקית (wdPartial) — גם כשהחיסום שלה כבר בתחנה או במפעל, כי
+// הליטוש שנשאר נעשה כאן.
+function _wdBuildable(o){
+  const sid = String(o.id), stage = o.stage || '';
+  const atFactory = workDay.inChisum.map(String).includes(sid) || stage === 'chisum';
+  if(atFactory) return !!o.wdPartial;
+  return stage === 'opty' || stage === 'workday';
+}
+
+// הפריטים שאי אפשר להוסיף שוב: כבר ביום העבודה (itemsSel), כבר טופלו
+// (wdDoneIdxs), ופריטי חיסום של הזמנה שהחיסום שלה כבר נמסר לתחנה.
+function _wdUnavailIdxs(o){
+  const sid = String(o.id);
+  const _sel = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
+  const s = new Set((Array.isArray(_sel) ? _sel : Object.values(_sel)).map(Number));
+  lgWorkdayLeft(o).done.forEach(i => s.add(i));
+  if(workDay.inChisum.map(String).includes(sid) || (o.stage||'') === 'chisum'){
+    (Array.isArray(o.items) ? o.items : Object.values(o.items || {}))
+      .forEach((it, i) => { if(it && it.chisum) s.add(i); });
+  }
+  return s;
+}
+
 function getFiltered(){
   const glass  = document.getElementById('fGlass')?.value || '';
   const type   = document.getElementById('fType')?.value  || '';
@@ -1026,9 +1053,7 @@ function getFiltered(){
     // stage מגיע ישירות מ-Firebase (o.stage) — מקור האמת
     const sid = String(o.id);
     const stage = o.stage || '';
-    if(stage !== 'opty' && stage !== 'workday') return false;
-    // אל תציג אם כבר ב-inChisum
-    if(workDay.inChisum.includes(sid)) return false;
+    if(!_wdBuildable(o)) return false;
     // הזמנה שאין בה יותר מה להוסיף יורדת מהרשימה. "אין מה להוסיף" = כל
     // פריטיה כבר ביום העבודה (itemsSel) או בטיוטה (draftItems) — בדיוק שני
     // המקורות ש-availIdx מסנן לפיהם בשורת הפריט, אחרת הכותרת נשארת בלי
@@ -1038,8 +1063,7 @@ function getFiltered(){
     // ש"הוסף הזמנה שלמה" עובר דרך הטיוטה, הזמנה שכולה בטיוטה אינה ב-inWork
     // ו-itemsSel שלה ריק — ולכן היא נשארה ברשימה כשורה ריקה.
     const totalItems = (o.items||[]).length;
-    const _sel = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
-    const taken = new Set((Array.isArray(_sel) ? _sel : Object.values(_sel)).map(Number));
+    const taken = _wdUnavailIdxs(o);
     draftItems.forEach(d => { if(String(d.orderId) === sid) taken.add(Number(d.itemIdx)); });
     // הזמנה ללא פריטים כלל נשארת מוצגת (באג 18) — אחרת אי אפשר להוסיף לה
     // פריטים ידנית, והיא פשוט נעלמת מהמערכת.
@@ -1080,10 +1104,8 @@ function selectAllFiltered(){
       if(glassFilter && !glassMatches(item, glassFilter)) return;
       // דלג על פריטים שכבר בטיוטה
       if(draftItems.some(d => d.orderId === sid && d.itemIdx === i)) return;
-      // דלג על פריטים שכבר ב-itemsSel
-      const _sr = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
-      const _si = Array.isArray(_sr) ? _sr.map(Number) : Object.values(_sr).map(Number);
-      if(_si.includes(i)) return;
+      // דלג על פריטים שכבר ב-itemsSel, או שכבר טופלו (_wdUnavailIdxs)
+      if(_wdUnavailIdxs(o).has(i)) return;
 
       const itemType = item.chisum ? 'חיסום' : (item.litush ? 'ליטוש' : 'חיתוך');
       draftItems.push({
@@ -1107,7 +1129,7 @@ function selectAllFiltered(){
 
 // שני מנועי הסינון של "בנה יום עבודה", נבנים מההזמנות שזמינות בשלב הזה.
 function buildWorkdayFilters(){
-  const pool = allOrders.filter(o => ['opty','workday'].includes(o.stage||''));
+  const pool = allOrders.filter(_wdBuildable);
   lgFillFilterSelect(document.getElementById('fGlass'),
     lgGlassTypesInOrders(pool, skuCatalogMap), 'כל הזכוכיות');
   lgFillFilterSelect(document.getElementById('fClient'),
@@ -1223,8 +1245,9 @@ function orderCardHTML(o){
   if(buildViewMode === 'orders') return orderHeader;
 
   // ── מצב "פריטים" — קיבוץ לפי quantityGroupId ──
-  const _selRaw = (workDay.itemsSel && workDay.itemsSel[ordKey]) || [];
-  const _selIdxs = Array.isArray(_selRaw) ? _selRaw.map(Number) : Object.values(_selRaw).map(Number);
+  // כולל מה שכבר טופל — פריט שנחתך אתמול לא חוזר לרשימה (_wdUnavailIdxs)
+  const _unavail = _wdUnavailIdxs(o);
+  const _selIdxs = [..._unavail];
 
   // בנה קבוצות תצוגה עם אינדקסים גולמיים
   const _dispGroups = [];
@@ -1493,9 +1516,9 @@ function addWholeOrder(orderId){
   // פריט שכבר ביום העבודה לא חוזר לטיוטה — אותו סינון בדיוק שהכפתור בכל
   // שורה עושה (availIdx). בלעדיו "הוסף הזמנה שלמה" על הזמנה שחלקה כבר נבחרה
   // היה מוסיף את אותו פריט פעם שנייה.
-  const _sel = (workDay.itemsSel && workDay.itemsSel[sid]) || [];
-  const _selIdxs = (Array.isArray(_sel) ? _sel : Object.values(_sel)).map(Number);
-  const _avail = _oi.map((_,i)=>i).filter(i => !_selIdxs.includes(i));
+  // וגם פריט שכבר טופל ביום עבודה קודם, בהזמנה חלקית (_wdUnavailIdxs)
+  const _unavail = _wdUnavailIdxs(o);
+  const _avail = _oi.map((_,i)=>i).filter(i => !_unavail.has(i));
   if(!_avail.length){
     showToast('כל הפריטים של ההזמנה כבר ביום העבודה או בטיוטה');
     return;
@@ -2834,7 +2857,7 @@ function resetChisumList(){
   const chisumOrds = _ordersUnderCheck();
   if(!chisumOrds.length){ showToast('אין הזמנות בבדיקה'); return; }
 
-  const doneOrds = [], partialOrds = [], waitingTriplex = [], unchangedOrds = [];
+  const doneOrds = [], partialOrds = [], waitingTriplex = [], unchangedOrds = [], waitPolish = [];
 
   chisumOrds.forEach(o => {
     const st = _factoryDoneState(o);
@@ -2846,7 +2869,8 @@ function resetChisumList(){
 
     // allArrivedNow ולא sessionArrived — הסימונים נשמרים ל-Firebase מיד,
     // אז אחרי רענון הם קיימים ב-existingArrived והסשן ריק.
-    if(st.done)                            doneOrds.push(o);
+    if(st.done && _waitsForPolish(o))      waitPolish.push(o);
+    else if(st.done)                       doneOrds.push(o);
     else if(!st.chisumMissing && st.triplexMissing) waitingTriplex.push(o);
     else if(st.marked)                     partialOrds.push(o);
     else                                   unchangedOrds.push(o);
@@ -2898,10 +2922,15 @@ function resetChisumList(){
           ${waitingTriplex.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')} — <strong style="color:#0e7490">${o._st.triplexMissing} פאנלי טריפלקס עדיין לא סומנו</strong></div>`).join('')}
           <div style="font-size:12px;color:#8a8278;margin-top:5px;">סמן אותם בטאב טריפלקס, ואז הן יעברו הלאה.</div>
         </div>`:''}
+        ${waitPolish.length?`<div style="padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.2);border-radius:6px;">
+          <div style="font-size:12px;font-weight:700;color:var(--gold-text);margin-bottom:6px;">⏸ ${waitPolish.length} סקיצות — כל המפעל חזר, אבל נשארו בהן פריטי ליטוש שעוד לא נחתכו</div>
+          ${waitPolish.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')} — <strong style="color:var(--gold-text)">${lgWorkdayLeft(o).polish.length} פריטי ליטוש ב"בנה יום עבודה"</strong></div>`).join('')}
+          <div style="font-size:12px;color:#8a8278;margin-top:5px;">הן נשארות כאן. אחרי שהליטוש יסתיים, לחץ שוב "סיום בדיקה" והן יעברו הלאה.</div>
+        </div>`:''}
         ${unchangedOrds.length?`<div style="padding:10px 14px;background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);border-radius:6px;">
           <div style="font-size:12px;font-weight:700;color:#8a8278;margin-bottom:6px;">⏳ ${unchangedOrds.length} סקיצות — לא סומנו, אין שינוי</div>
         </div>`:''}
-        ${!doneOrds.length&&!partialOrds.length?`<div style="padding:12px;text-align:center;color:#8a8278;font-size:13px;">לא סומנו פריטים בסשן זה</div>`:''}
+        ${!doneOrds.length&&!partialOrds.length&&!waitPolish.length?`<div style="padding:12px;text-align:center;color:#8a8278;font-size:13px;">לא סומנו פריטים בסשן זה</div>`:''}
         <div style="display:flex;gap:8px;margin-top:4px;">
           <button onclick="confirmResetChisum()" style="flex:2;padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
             ✓ אשר סיום בדיקה
@@ -2928,6 +2957,7 @@ function confirmResetChisum(){
   let doneCount     = 0;
   let partialCount  = 0;
   let msgCount      = 0;
+  let polishCount   = 0;
   const _waPending  = [];   // הזמנות שעוברות ל-done — הודעה אחת מרוכזת
 
   chisumOrds.forEach(o => {
@@ -2941,6 +2971,10 @@ function confirmResetChisum(){
     // שאומר "כל הפריטים סומנו" ושום דבר שמקדם אותו. נבדק על הסך המלא.
     const everHadFactoryItems = _chisumIdxsOf(o).length || LG_TRACK.triplex.idxsOf(o).length;
     if(!everHadFactoryItems) return;
+
+    // כל המפעל חזר, אבל ליטוש של אותה סקיצה עוד לא נחתך — לא מתקדמת ולא
+    // שולחת "מוכן לאיסוף". הסימונים נשארים, ולחיצה אחרי הליטוש מקדמת.
+    if(st.done && _waitsForPolish(o)){ polishCount++; return; }
 
     if(st.done){
       doneCount++;
@@ -2979,7 +3013,8 @@ function confirmResetChisum(){
   if(doneCount > 0) saveWorkDay(); // שמור ניקוי inChisum
   const msg  = doneCount   ? `✓ ${doneCount} סקיצות הושלמו` : '';
   const msg2 = partialCount ? ` · ${partialCount} עם פריטים חסרים` : '';
-  showToast((msg || '✓ בדיקה הושלמה') + msg2);
+  const msg3 = polishCount ? ` · ${polishCount} ממתינות לליטוש` : '';
+  showToast((msg || '✓ בדיקה הושלמה') + msg2 + msg3);
   renderAll();
   } finally {
     // שחרור מושהה — הכתיבות למעלה אסינכרוניות, וצריך לתת ל-listener להחזיר
@@ -3112,8 +3147,43 @@ function _getFinishDayGroups(){
   return { cutReady, cutPending, chisumOrds, mixed };
 }
 
+// פריטי הליטוש שבעבודה היום — אלה ש"סיים יום עבודה" מסיים
+function _todayPolishIdxs(o){
+  const raw = (workDay.itemsSel || {})[String(o.id)] || [];
+  const its = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+  return (Array.isArray(raw) ? raw : Object.values(raw)).map(Number).filter(i => its[i] && !its[i].chisum);
+}
+
+// מה "סיים יום עבודה" יעשה בכל הזמנה. אותו חישוב לחלון ולאישור.
+//   ready          — כל פריטי ההזמנה טופלו → עוברת לשלב הבא
+//   partial        — נשארו פריטים שלא ירדו לעבודה → נשארת, והפריטים
+//                    שנותרו חוזרים ל"בנה יום עבודה". שום הודעה, שום שלב.
+//   pendingPartial — החיסום כבר בתחנה/במפעל ונשאר ליטוש → כנ"ל
+// לפני התיקון כל cutReady קודמה כולה: הזמנה שירד ממנה פריט אחד "הושלמה",
+// והלקוח קיבל "מוכן לאיסוף" על פריטים שאיש לא חתך.
+function _finishPlan(){
+  const g = _getFinishDayGroups();
+  const ready = [], partial = [], pendingPartial = [];
+  g.cutReady.forEach(o => {
+    const left = lgWorkdayLeft(o, _todayPolishIdxs(o));
+    (left.polish.length || left.factory.length ? partial : ready).push(o);
+  });
+  g.cutPending.forEach(o => {
+    if(lgWorkdayLeft(o, _todayPolishIdxs(o)).polish.length) pendingPartial.push(o);
+  });
+  return { ...g, ready, partial, pendingPartial };
+}
+
+// ממתינה לליטוש: הוחל המעקב (wdDoneIdxs) ונשארו פריטי ליטוש שלא בוצעו.
+// הזמנה כזו לא יוצאת מהחיסום גם כשכל המפעל חזר — היא תצא בלחיצה הבאה על
+// "סיום בדיקה", אחרי שהליטוש שלה יסתיים.
+function _waitsForPolish(o){
+  const left = lgWorkdayLeft(o);
+  return left.tracked && left.polish.length > 0;
+}
+
 function finishDay(){
-  const { cutReady, cutPending, chisumOrds, mixed } = _getFinishDayGroups();
+  const { ready: cutReady, partial, pendingPartial, cutPending, chisumOrds, mixed } = _finishPlan();
   // חלק cutReady לפי השלב הבא
   const cutReadyDone    = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'done');
   const cutReadyGraph   = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'graphic');
@@ -3136,6 +3206,11 @@ function finishDay(){
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
           <span style="color:#2980b9;font-weight:700">🚚 ${cutReadyDeliv.length}</span>
           לקוח הובלות — עובר לטאב הובלות
+        </div>` : ''}
+        ${partial.length + pendingPartial.length ? `
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span style="color:var(--gold-text);font-weight:700">⏸ ${partial.length + pendingPartial.length}</span>
+          הזמנה חלקית — נשארו פריטים שלא ירדו לעבודה. היא לא מתקדמת, והפריטים שנותרו חוזרים ל"בנה יום עבודה" (אין הודעה)
         </div>` : ''}
         ${cutPending.length ? `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px">
@@ -3181,6 +3256,21 @@ function handleWorkdayStart(){
     const o = allOrders.find(x => x.id === ordId);
     if(!o) return;
     const _sid = String(ordId);
+    // הזמנה חלקית שהחיסום שלה כבר בתחנת הבדיקה או במפעל, וחוזרת עכשיו
+    // בשביל הליטוש שנשאר. רק הליטוש נכנס לעבודה — השלב, תחנת הבדיקה
+    // ושדות הסטטוס לא נוגעים: החזרתם ל-workday הייתה מחזירה הזמנה מהמפעל.
+    const _atFactory = workDay.inChisum.map(String).includes(_sid) || (o.stage||'') === 'chisum';
+    if(o.wdPartial){
+      o.wdPartial = false;
+      updateOrder(_sid, { wdPartial: null }).catch(e => console.error('wdPartial clear:', e));
+      if(_atFactory){
+        const _its = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+        const _sr  = (workDay.itemsSel || {})[_sid] || [];
+        workDay.itemsSel[_sid] = (Array.isArray(_sr) ? _sr : Object.values(_sr)).map(Number)
+          .filter(i => _its[i] && !_its[i].chisum);
+        return;
+      }
+    }
     if(o.workdayStatus === 'active'){
       // אם הזמנה "active" אבל לא בתחנת בדיקה ולא יש לה פריטים ב-itemsSel — ייתכן שאופס היום — עבד מחדש
       const alreadyHandled = workDay.inChisum.map(String).includes(_sid);
@@ -3251,6 +3341,20 @@ function handleWorkdayStart(){
     if(hasChisum && !workDay.inChisum.map(String).includes(_sid)){
       workDay.inChisum.push(_sid);
       _newToChisum++;   // מה שההעברה הזו הוסיפה, ר' ההערה ליד ההודעה
+    }
+
+    // מה שיום העבודה מסר עכשיו. כשההזמנה נכנסת לתחנת הבדיקה, *כל* פריטי
+    // החיסום שלה נמסרים — התחנה שולחת למפעל את כולם (lgSplitFactoryItems),
+    // גם את אלה שלא נבחרו. ליטוש נרשם רק ב"סיים יום עבודה".
+    if(hasChisum){
+      const _chIdx = _oItems.map((it, i) => (it && it.chisum) ? i : -1).filter(i => i >= 0);
+      const _left  = lgWorkdayLeft(o, _chIdx);
+      o.wdDoneIdxs = lgIdxsObj(_left.done);
+      const _patch = { wdDoneIdxs: o.wdDoneIdxs };
+      // שום ליטוש לא ירד היום, אבל יש ליטוש שנשאר — ההזמנה יוצאת מיום העבודה
+      // ל"בנה יום עבודה" ומחכה שם עם הפריטים שנותרו, גם כשהיא בתחנה.
+      if(!workDay.itemsSel[_sid].length && _left.polish.length){ o.wdPartial = true; _patch.wdPartial = true; }
+      updateOrder(_sid, _patch).catch(e => console.error('wdDoneIdxs:', e));
     }
   });
 
@@ -3325,7 +3429,25 @@ function confirmFinish(){
   if(_confirmingFinish) return;
   _confirmingFinish = true;
   try {
-  const { cutReady, cutPending, chisumOrds, mixed } = _getFinishDayGroups();
+  const { ready: cutReady, partial, pendingPartial, cutPending, chisumOrds, mixed } = _finishPlan();
+  const inWorkNow = allOrders.filter(o => workDay.inWork.map(String).includes(String(o.id)));
+
+  // מה שהסתיים היום נרשם על ההזמנה עצמה — לכל הזמנה ביום העבודה, לא רק
+  // לחלקיות: זה מה שמאפשר לדעת מחר מה עוד לא נחתך.
+  const _partialIds = new Set([...partial, ...pendingPartial].map(o => String(o.id)));
+  inWorkNow.forEach(o => {
+    const sid  = String(o.id);
+    const left = lgWorkdayLeft(o, _todayPolishIdxs(o));
+    o.wdDoneIdxs = lgIdxsObj(left.done);
+    const patch = { wdDoneIdxs: o.wdDoneIdxs };
+    if(_partialIds.has(sid)){
+      // הפריטים שנותרו חוזרים לרשימה. הבחירה של היום נמחקת, אחרת ה-listener
+      // היה מחזיר את ההזמנה ליום העבודה הפעיל עם הפריטים שכבר נחתכו.
+      o.wdPartial = true; patch.wdPartial = true;
+      if(workDay.itemsSel) delete workDay.itemsSel[sid];
+    }
+    updateOrder(sid, patch).catch(e => console.error('wdDoneIdxs:', e));
+  });
 
   // שלח הודעה רק להזמנות שעוברות ישירות ל-done (לא גרפיקה, לא הובלה).
   // זה הרגע עם הכי הרבה הודעות ביום — פעם אחת נפתח כאן חלון וואטסאפ לכל
@@ -3364,9 +3486,16 @@ function confirmFinish(){
   saveWorkDay();
 
   closeFinish();
+  const _nPart = partial.length + pendingPartial.length;
+  const _partTxt = _nPart ? ` · ${_nPart} חלקיות חזרו ל"בנה יום עבודה"` : '';
+  // ליטוש אחרון של הזמנה שכל המפעל שלה כבר חזר — היא מחכה רק ללחיצה על
+  // "סיום בדיקה" בטאב חיסום. אומרים את זה, כדי שלא תישכח שם.
+  const _readyCheck = cutPending.filter(o => !_partialIds.has(String(o.id))
+    && _ordersUnderCheck().some(x => String(x.id) === String(o.id)) && _factoryDoneState(o).done).length;
+  const _chkTxt = _readyCheck ? ` · ${_readyCheck} מוכנות ל"סיום בדיקה" בטאב חיסום` : '';
   const msg = cutReady.length
-    ? `✓ ${cutReady.length} הזמנות הושלמו${cutPending.length ? ` · ${cutPending.length} ממתינות לחיסום` : ''}`
-    : `✓ יום עבודה הסתיים${cutPending.length ? ` · ${cutPending.length} ממתינות לחיסום` : ''}`;
+    ? `✓ ${cutReady.length} הזמנות הושלמו${cutPending.length ? ` · ${cutPending.length} ממתינות לחיסום` : ''}${_partTxt}${_chkTxt}`
+    : `✓ יום עבודה הסתיים${cutPending.length ? ` · ${cutPending.length} ממתינות לחיסום` : ''}${_partTxt}${_chkTxt}`;
   showToast(msg);
   setTab('work');
   } finally {
@@ -3658,6 +3787,7 @@ function clearDraft(){
   draftItems = [];
   updateDraftBadge();
   closeDraftPreview();
+  renderAll(); // הפריטים חוזרים לרשימה — כמו ב-removeFromDraft
 }
 
 // "הורד לעבודה" מתוך הטיוטה — מכין את הפריטים ואז מפעיל handleWorkdayStart
