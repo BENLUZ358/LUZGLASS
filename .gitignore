@@ -19,3 +19,6 @@ en.txt
 .claude/
 # תצוגות מקדימות שנוצרות מסקריפט — נבנות מחדש בכל הרצה
 scratch/
+
+# סרטוני ההדרכה המוכנים — קבצים כבדים, נבנים מחדש מ-tools/training-video
+docs/training-videos/output/

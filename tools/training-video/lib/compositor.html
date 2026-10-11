@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8"><title>compositor</title>
+<style>
+@font-face{font-family:Heebo;src:url(/tools/training-video/assets/Heebo.ttf) format('truetype');font-weight:100 900;}
+:root{--gold:#b8922a;--gold-l:#d9b45a;--ink:#1a1714;--paper:#f7f4ef;--blue:#2477c9;--orange:#d9822b;--green:#2e8b57;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:#141210;font-family:Heebo,sans-serif;}
+#stage{position:absolute;inset:0;overflow:hidden;background:#141210}
+#cam{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+#cam img{position:absolute;left:0;top:0;display:block}
+#imgB{opacity:0}
+#spot{position:absolute;border-radius:12px;box-shadow:0 0 0 6000px rgba(10,8,6,.5);opacity:0;pointer-events:none}
+.ring{position:absolute;border-radius:12px;border:3px solid var(--gold);box-shadow:0 0 0 3px rgba(184,146,42,.25),0 0 22px rgba(184,146,42,.55);opacity:0}
+#cursor{position:absolute;width:34px;height:34px;transform-origin:0 0;opacity:0;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}
+#ripple{position:absolute;border-radius:50%;border:4px solid var(--gold);opacity:0;transform:translate(-50%,-50%)}
+#dialog{position:absolute;background:#fff;border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.35),0 0 0 1px rgba(0,0,0,.12);opacity:0;
+  font-family:Heebo,sans-serif;direction:rtl;padding:22px 26px 18px;}
+#dialog .dh{font-size:15px;color:#555;margin-bottom:10px}
+#dialog .dm{font-size:17px;color:#111;line-height:1.5;white-space:pre-wrap}
+#dialog .db{display:flex;gap:10px;justify-content:flex-start;margin-top:18px;direction:ltr}
+#dialog .db span{padding:8px 22px;border-radius:18px;font-size:15px;font-weight:600}
+#dialog .ok{background:#1a73e8;color:#fff}
+#dialog .no{border:1px solid #c9c9c9;color:#1a73e8}
+/* screen-space */
+#caption{position:absolute;left:150px;right:150px;bottom:44px;background:rgba(24,21,18,.92);color:#fff;border-radius:18px;
+  padding:22px 36px 24px;font-size:34px;line-height:1.42;font-weight:500;text-align:center;opacity:0;
+  box-shadow:0 10px 40px rgba(0,0,0,.35);border-top:4px solid var(--gold)}
+#caption.top{bottom:auto;top:96px}
+#caption.small{font-size:30px}
+#chip{position:absolute;left:50%;transform:translateX(-50%);bottom:208px;padding:10px 24px;border-radius:999px;font-size:26px;font-weight:700;
+  color:#fff;opacity:0;white-space:nowrap;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+#chip.top{bottom:auto;top:250px}
+#chip.you{background:var(--gold)} #chip.system{background:var(--blue)} #chip.warn{background:var(--orange)} #chip.ok{background:var(--green)}
+#chapter{position:absolute;top:26px;right:30px;background:rgba(24,21,18,.9);color:#fff;border-radius:999px;padding:10px 24px 10px 20px;
+  font-size:24px;font-weight:700;display:flex;gap:12px;align-items:center;opacity:0;border:2px solid var(--gold)}
+#chapter b{color:var(--gold-l);font-weight:800}
+#logo{position:absolute;top:30px;left:34px;font-size:22px;font-weight:900;letter-spacing:.14em;color:rgba(255,255,255,.85);
+  background:rgba(24,21,18,.75);padding:8px 16px;border-radius:10px;direction:ltr}
+#logo i{color:var(--gold-l);font-style:normal}
+#progress{position:absolute;top:0;left:0;right:0;height:84px;background:rgba(24,21,18,.95);display:flex;align-items:center;
+  justify-content:center;gap:10px;opacity:0;border-bottom:3px solid var(--gold);direction:rtl;padding:0 30px}
+#progress .st{font-size:22px;font-weight:700;color:#8d857a;padding:8px 16px;border-radius:10px;white-space:nowrap}
+#progress .st.cur{background:var(--gold);color:#1a1714}
+#progress .st.done{color:#e9e2d6}
+#progress .st.done::before{content:'✓ ';color:var(--gold-l)}
+#progress .st.skip{text-decoration:line-through;color:#5c5650}
+#progress .ar{color:#5c5650;font-size:22px}
+body.prog #chapter{top:104px} body.prog #caption.top{top:190px}
+/* cards */
+#card{position:absolute;inset:0;opacity:0;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 70% 20%,#2b2620 0%,#161310 60%,#0f0d0b 100%);color:#fff;direction:rtl}
+#card .in{width:1500px}
+#card .kick{font-size:30px;color:var(--gold-l);font-weight:700;letter-spacing:.06em;margin-bottom:16px}
+#card h1{font-size:92px;font-weight:900;line-height:1.08;margin-bottom:22px}
+#card h2{font-size:64px;font-weight:800;line-height:1.15;margin-bottom:26px}
+#card .sub{font-size:36px;color:#d8d0c3;line-height:1.5;margin-bottom:34px}
+#card ul{list-style:none;display:flex;flex-direction:column;gap:18px}
+#card li{font-size:38px;line-height:1.4;padding-right:58px;position:relative;color:#f2ede4}
+#card li::before{content:attr(data-n);position:absolute;right:0;top:4px;width:42px;height:42px;border-radius:50%;background:var(--gold);
+  color:#1a1714;font-size:24px;font-weight:900;display:flex;align-items:center;justify-content:center}
+#card .rule{height:4px;width:160px;background:var(--gold);margin:6px 0 34px}
+#card .flow{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-top:34px;font-size:32px;font-weight:700}
+#card .flow span{background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.18);padding:10px 22px;border-radius:12px}
+#card .flow span.hot{background:var(--gold);color:#1a1714;border-color:var(--gold)}
+#card .flow i{color:var(--gold-l);font-style:normal}
+#card .box{border-radius:20px;padding:30px 38px;margin-top:10px;font-size:34px;line-height:1.5}
+#card .box.warn{background:rgba(217,130,43,.14);border:2px solid var(--orange)}
+#card .box.info{background:rgba(36,119,201,.14);border:2px solid var(--blue)}
+#card .box.ok{background:rgba(46,139,87,.14);border:2px solid var(--green)}
+#card .box b{color:#fff}
+#card .tbl{display:grid;grid-template-columns:auto 1fr;gap:14px 28px;font-size:34px;line-height:1.35;margin-top:8px}
+#card .tbl .k{color:var(--gold-l);font-weight:800;white-space:nowrap}
+#card.panel{background:rgba(12,10,8,.82)}
+#card.panel .in{background:#1d1915;border:2px solid var(--gold);border-radius:28px;padding:56px 64px;width:1480px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+</style></head><body>
+<div id="stage">
+  <div id="cam">
+    <img id="imgA"><img id="imgB">
+    <div id="spot"></div>
+    <div id="rings"></div>
+    <div id="dialog"><div class="dh">בדף luzglass.vercel.app נכתב:</div><div class="dm"></div><div class="db"><span class="ok">אישור</span><span class="no">ביטול</span></div></div>
+    <div id="ripple"></div>
+    <svg id="cursor" viewBox="0 0 24 24"><path d="M4 2 L4 19 L8.6 14.8 L11.6 21.6 L14.6 20.3 L11.7 13.6 L18 13.6 Z" fill="#fff" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>
+  </div>
+  <div id="progress"></div>
+  <div id="chapter"><span id="chapN"></span><b id="chapT"></b></div>
+  <div id="logo">LUZ<i>GLASS</i></div>
+  <div id="chip"></div>
+  <div id="caption"></div>
+  <div id="card"><div class="in" id="cardIn"></div></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let VW = 1600, VH = 900;
+const cache = new Map();          // file → loaded Image (decoded)
+async function img(file) {
+  if (cache.has(file)) return cache.get(file);
+  const im = new Image(); im.src = file; await im.decode();
+  cache.set(file, im);
+  if (cache.size > 8) cache.delete(cache.keys().next().value);
+  return im;
+}
+window.setup = (vw, vh) => { VW = vw; VH = vh; ['imgA', 'imgB'].forEach(i => { $(i).style.width = vw + 'px'; $(i).style.height = vh + 'px'; });
+  $('cam').style.width = vw + 'px'; $('cam').style.height = vh + 'px'; $('dialog').style.width = '560px'; };
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// inline **bold**
+const rich = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b style="color:#f3d38a">$1</b>');
+let lastCard = '', lastProg = '';
+function cardHTML(c) {
+  const li = (c.bullets || []).map((b, i) => `<li data-n="${i + 1}">${rich(b)}</li>`).join('');
+  const flow = c.flow ? `<div class="flow">${c.flow.map((f, i) => (i ? '<i>←</i>' : '') + `<span class="${f.hot ? 'hot' : ''}">${esc(f.t || f)}</span>`).join('')}</div>` : '';
+  const tbl = c.table ? `<div class="tbl">${c.table.map(([k, v]) => `<div class="k">${esc(k)}</div><div>${rich(v)}</div>`).join('')}</div>` : '';
+  const box = c.box ? `<div class="box ${c.box.kind || 'info'}">${rich(c.box.text)}</div>` : '';
+  if (c.kind === 'title') return `<div class="kick">${esc(c.kicker || 'הדרכת עובדים · LuzGlass')}</div><h1>${esc(c.title)}</h1><div class="rule"></div>
+    ${c.sub ? `<div class="sub">${rich(c.sub)}</div>` : ''}${li ? `<div class="kick" style="margin-top:6px">מה נלמד</div><ul>${li}</ul>` : ''}`;
+  if (c.kind === 'chapter') return `<div class="kick">${esc(c.kicker || '')}</div><h1>${esc(c.title)}</h1><div class="rule"></div>${c.sub ? `<div class="sub">${rich(c.sub)}</div>` : ''}`;
+  return `${c.kicker ? `<div class="kick">${esc(c.kicker)}</div>` : ''}${c.title ? `<h2>${rich(c.title)}</h2>` : ''}${c.sub ? `<div class="sub">${rich(c.sub)}</div>` : ''}${li ? `<ul>${li}</ul>` : ''}${tbl}${box}${flow}`;
+}
+function progHTML(p) {
+  return p.stations.map((s, i) => (i ? '<span class="ar">‹</span>' : '') +
+    `<span class="st ${i === p.cur ? 'cur' : ''} ${(p.done || []).includes(i) ? 'done' : ''} ${(p.skip || []).includes(i) ? 'skip' : ''}">${esc(s)}</span>`).join('');
+}
+// one frame
+window.render = async (S) => {
+  if (S.a) { const a = await img(S.a); if ($('imgA').src !== a.src) $('imgA').src = a.src; }
+  if (S.b) { const b = await img(S.b); if ($('imgB').src !== b.src) $('imgB').src = b.src; }
+  $('imgB').style.opacity = S.b ? S.mix : 0;
+  const k = 1920 / S.cam.w;
+  $('cam').style.transform = `translate(${-S.cam.x * k}px,${-S.cam.y * k}px) scale(${k})`;
+  // spotlight + rings (page coords; strokes kept constant on screen)
+  const pad = 8 / Math.min(k, 1.6) + 4;
+  if (S.spot && S.spot.a > 0) { const r = S.spot.r; Object.assign($('spot').style, { left: (r.x - pad) + 'px', top: (r.y - pad) + 'px', width: (r.w + 2 * pad) + 'px', height: (r.h + 2 * pad) + 'px', opacity: S.spot.a }); }
+  else $('spot').style.opacity = 0;
+  $('rings').innerHTML = (S.rings || []).filter(r => r.a > 0).map(({ r, a }) =>
+    `<div class="ring" style="left:${r.x - pad}px;top:${r.y - pad}px;width:${r.w + 2 * pad}px;height:${r.h + 2 * pad}px;opacity:${a};border-width:${3.5 / k}px;border-radius:${12 / k + 4}px;box-shadow:0 0 0 ${3 / k}px rgba(184,146,42,.25),0 0 ${22 / k}px rgba(184,146,42,.6)"></div>`).join('');
+  // dialog (top-centre of the page, as the browser draws it)
+  if (S.dialog && S.dialog.a > 0) {
+    const d = $('dialog'); d.style.opacity = S.dialog.a; d.style.left = (VW / 2 - 280) + 'px'; d.style.top = '18px';
+    d.style.transform = `scale(${Math.max(1, 1.25 / k)})`; d.style.transformOrigin = '50% 0';
+    d.querySelector('.dm').textContent = S.dialog.msg;
+  } else $('dialog').style.opacity = 0;
+  // cursor + ripple
+  const c = S.cursor || { a: 0 };
+  Object.assign($('cursor').style, { left: c.x + 'px', top: c.y + 'px', opacity: c.a, transform: `scale(${(c.down ? 0.86 : 1) / k * 1.15})` });
+  if (S.ripple && S.ripple.p < 1) { const p = S.ripple.p, s = (22 + p * 70) / k;
+    Object.assign($('ripple').style, { left: S.ripple.x + 'px', top: S.ripple.y + 'px', width: 2 * s + 'px', height: 2 * s + 'px', opacity: 1 - p, borderWidth: (4 / k) + 'px' }); }
+  else $('ripple').style.opacity = 0;
+  // progress bar
+  if (S.progress) { const h = JSON.stringify(S.progress); if (h !== lastProg) { $('progress').innerHTML = progHTML(S.progress); lastProg = h; } }
+  $('progress').style.opacity = S.progress ? 1 : 0;
+  document.body.classList.toggle('prog', !!S.progress);
+  // chapter, chip, caption
+  $('chapter').style.opacity = S.chapter ? S.chapter.a : 0;
+  if (S.chapter) { $('chapT').textContent = S.chapter.t; $('chapN').textContent = S.chapter.n || ''; }
+  const cap = $('caption');
+  if (S.caption && S.caption.a > 0) {
+    if (cap.dataset.t !== S.caption.t) { cap.innerHTML = rich(S.caption.t); cap.dataset.t = S.caption.t; }
+    cap.classList.toggle('top', S.caption.pos === 'top'); cap.classList.toggle('small', S.caption.t.length > 120);
+    cap.style.opacity = S.caption.a;
+  } else cap.style.opacity = 0;
+  const chip = $('chip');
+  if (S.chip && S.chip.a > 0) { chip.className = S.chip.kind + (S.caption && S.caption.pos === 'top' ? ' top' : ''); chip.textContent = S.chip.t; chip.style.opacity = S.chip.a; }
+  else chip.style.opacity = 0;
+  // card
+  if (S.card && S.card.a > 0) { const h = JSON.stringify(S.card.c); if (h !== lastCard) { $('cardIn').innerHTML = cardHTML(S.card.c); lastCard = h; }
+    $('card').className = S.card.c.panel ? 'panel' : ''; $('card').style.opacity = S.card.a; }
+  else $('card').style.opacity = 0;
+  $('logo').style.opacity = S.card && S.card.a > 0.5 ? 0 : 1;
+  return true;
+};
+</script></body></html>

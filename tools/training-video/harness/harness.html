@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>training harness</title></head><body>
+<script>
+// Training-video harness — LOCAL ONLY. Loads a real LuzGlass page (?p=invoices.html) on an in-memory Firebase.
+// The data comes from /__seed.json, which the recorder answers (request interception) with the current state —
+// so the "database" carries over from page to page within one video. Nothing here can reach a real database:
+// the Firebase SDK <script> tags are stripped, and the recorder aborts any request that leaves localhost.
+const P = new URLSearchParams(location.search).get('p') || 'admin.html';
+Promise.all([
+  fetch('/__seed.json?cb=' + Date.now()).then(r => r.json()),
+  fetch('/' + P + '?cb=' + Date.now()).then(r => r.text()),
+]).then(([seed, html]) => {
+  html = html.replace(/<script src="https:\/\/www\.gstatic\.com\/firebasejs\/[^"]+"><\/script>/g, '');
+  html = html.replace(/<script src="([^":]+?\.js)(\?[^"]*)?"><\/script>/g, (m, f) => '<script src="' + f + '?cb=' + Date.now() + '"></' + 'script>');
+  html = html.replace(/href="([^":]+?\.css)(\?[^"]*)?"/g, (m, f) => 'href="' + f + '?cb=' + Date.now() + '"');
+  const boot = '<base href="/"><script>window.__LG_SEED=' + JSON.stringify(seed).replace(/</g, '\\u003c') + ';</' + 'script>'
+    + '<script src="/tools/training-video/harness/fake-firebase.js?cb=' + Date.now() + '"></' + 'script>'
+    // the red TEST badge marks the TEST database; this is neither, and it must not appear in a training video
+    + '<style>#lgEnvBadge{display:none!important}</style>';
+  html = html.replace('<head>', '<head>' + boot);
+  document.open(); document.write(html); document.close();
+});
+</script></body></html>
