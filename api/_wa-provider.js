@@ -68,6 +68,17 @@ const num = (v, dflt) => {
 //  ומספרי הזמנה אחרים. זה יצא לטובה ולא בכוונה.
 const BUSINESS = 'לוז זגגות ומראות האחים בע"מ';
 
+//  chatId של GREEN API. קבוצה (נמען של "הסקיצות טופלו" מקבוצה מקושרת —
+//  resolveRecipient) עוברת כמו שהיא, אבל רק בצורה התקנית; כל דבר אחר
+//  שנגמר ב-@g.us נדחה. טלפון → 972…@c.us, כמו תמיד.
+const _GROUP_ID = /^\d+(-\d+)?@g\.us$/;
+function lgWaChatId(to) {
+  const t = String(to || '');
+  if (t.includes('@')) return _GROUP_ID.test(t) ? t : '';
+  const n = toWaNumber(t);
+  return n ? n + '@c.us' : '';
+}
+
 const portalLine = n => 'לפרטים נוספים ניתן להיכנס למשתמש שלך בלוז גלאס ולצפות ב' +
                          (n > 1 ? 'פרטי ההזמנות.' : 'פרטי ההזמנה.');
 
@@ -87,6 +98,14 @@ function renderText({ kind, clientName, orderNums, sketchNames }) {
   const wrap = body => `שלום ${who},\n\n${body}\n\n${portalLine(nums.length)}\n\n${BUSINESS}`;
   const bullets = () => nums.map((_, i) => '• ' + label(i)).join('\n');
 
+  //  "הסקיצות טופלו" — הנוסח של בן (2026-10-06, אפיון §16). מספרים בלבד,
+  //  בשורה: זה אישור קבלה, לא רשימת עבודה. ⚠️ חייב להיות לפני ברירת המחדל
+  //  למטה — אחרת סוג לא מוכר נופל ל"מוכן לאיסוף".
+  if (kind === 'sketches-handled') {
+    return nums.length > 1
+      ? wrap('ההזמנות: ' + nums.join(', ') + ' עברו סינון ראשוני, מתחילים לעבוד עליהן.')
+      : wrap('ההזמנה ' + nums[0] + ' עברה סינון ראשוני, מתחילים לעבוד עליה.');
+  }
   if (kind === 'dispatched') {
     return nums.length > 1
       ? wrap('ההובלה יצאה אליך עם ההזמנות:\n' + bullets())
@@ -296,7 +315,8 @@ function greenProvider() {
     async send(facts) {
       const { to }  = facts || {};
       const text    = renderText(facts || {});
-      const chatId = toWaNumber(to) + '@c.us';
+      const chatId = lgWaChatId(to);
+      if (!chatId) return { ok: false, reason: 'נמען לא תקין', failureKind: FAIL.RECIPIENT };
 
       // ⚠️ נלמד בדרך הקשה, 2026-10-01: GREEN API מחזירה את ה-URL המלא
       // בתוך גוף השגיאה (שדה path), ובו הטוקן. ההנחה שהגוף נקי הייתה
@@ -348,4 +368,4 @@ function lgWaProvider() {
   return want === 'green' ? greenProvider() : metaProvider();
 }
 
-module.exports = { lgWaProvider, renderText, classifyFailure, FAIL };
+module.exports = { lgWaProvider, renderText, classifyFailure, FAIL, lgWaChatId };

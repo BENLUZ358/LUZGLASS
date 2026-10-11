@@ -212,7 +212,6 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 /* ── אייפון ── */
 @media(max-width:600px){
   /* topbar: הסתר חיפוש ו-toggle — נשאר: המבורגר + כותרת + כפתור חדש */
-  .search-wrap{display:none;}
   .view-toggle{display:none;}
   .topbar{height:52px;padding:0 12px;}
   .topbar-title{font-size:14px;}
@@ -292,6 +291,95 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .bill-nophone{font-size:12px;line-height:1.5;color:#8a5b00;background:rgba(184,146,42,0.12);
               border:1px solid rgba(184,146,42,0.35);border-radius:6px;padding:10px 12px;margin-bottom:8px;}
 @media (prefers-reduced-motion:reduce){ .bill-sk{transition:none;opacity:1;} }
+
+/* ─ כפתורי חלונות בטלפון: גלישה לשורות, בלי שבירה באמצע מילה ─
+   בחלון "פרטי הזמנה" חמישה כפתורים נדחסו לשורה אחת — "ביטול" נשבר לאות
+   בשורה. ≤600 כל .mfoot גולש, וכל כפתור שומר על המילה שלו ועל 44px.
+   בחלון ההזמנה (#ov): שמור·ביטול / קדם לשלב (מלא) / פיקטיבית·מחק. */
+@media(max-width:600px){
+  /* החלון בגובה המסך: כותרת · גוף נגלל · כפתורים תמיד גלויים. קודם הגוף היה
+     מוגבל לנוסחה קבועה (100dvh-160) שהניחה שורת כפתורים אחת — ושלוש שורות
+     ירדו מתחת לקצה המסך. */
+  .overlay{padding:0;}
+  .modal{display:flex;flex-direction:column;max-height:100vh;max-height:100dvh;}
+  .modal > .mbody{flex:1 1 auto;min-height:0;max-height:none;}
+  .mhdr,.mfoot{flex-shrink:0;}
+  .mfoot{padding-bottom:max(12px, env(safe-area-inset-bottom));}
+  .mfoot{flex-wrap:wrap;padding:12px 14px;}
+  .mfoot > button{white-space:nowrap;min-height:44px;flex:1 1 auto;}
+  #ov .btn-save{order:1;flex:1 1 55%;}
+  #ov .btn-cancel{order:2;}
+  #modalAdvBtn{order:3;flex:1 1 100%;}
+  #modalTestBtn{order:4;}
+  #ov .mf-del{order:5;margin-left:0 !important;}
+}
+
+/* ─ חלון "פרטי הזמנה" (בן, 06/10) — תקציר בשתי עמודות, פריטים בפורמט אחד ─ */
+.msum{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;margin-bottom:18px;padding:14px;background:var(--bg);border:1px solid var(--border);}
+.msum-num{font-family:"Playfair Display",serif;font-size:22px;font-weight:900;color:var(--text);align-self:center;}
+.msum-st-wrap{justify-self:end;align-self:center;}
+.msum-st{display:inline-block;padding:4px 10px;color:#fff;font-size:12px;font-weight:800;border-radius:3px;}
+.msum .mf .v{font-size:14px;}
+.msum-tel{color:var(--gold-text);font-weight:700;text-decoration:none;}
+.mit{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:9px 10px;margin-bottom:6px;background:var(--bg2);border-radius:4px;font-size:13px;}
+.mit-n{font-weight:700;flex:1 1 auto;min-width:0;}
+.mit-d{color:var(--muted);white-space:nowrap;}
+.mit-t{font-size:12px;font-weight:700;padding:1px 7px;border-radius:3px;white-space:nowrap;}
+.mit-chis{background:rgba(142,68,173,0.12);color:#8e44ad;}
+.mit-lit{background:rgba(41,128,185,0.12);color:#2471a3;}
+.mit-gr{background:rgba(39,174,96,0.12);color:#1e8449;}
+.mit-empty{font-size:13px;color:var(--muted);}
+label.msec-t{display:block;}
+.msel-wrap{position:relative;}
+.msel-wrap::after{content:"";position:absolute;left:14px;top:50%;width:8px;height:8px;margin-top:-6px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);pointer-events:none;}
+.msel-wrap .msel{min-height:44px;padding-left:34px;font-size:15px;}
+/* ─ כרטיסי קיצור בראש האדמין (06/10) — תור סקיצות / שרטט ─ */
+.stat-link{display:block;text-align:inherit;font:inherit;color:inherit;text-decoration:none;cursor:pointer;width:100%;}
+.stat-link:hover{border-color:var(--gold-text);}
+.stat-link:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.stat-link .l::after{content:" ←";color:var(--gold-text);}
+/* ─ חיפוש באדמין בטלפון (06/10) — היה מוסתר בלי חלופה. שורה משלו מתחת לכותרת ─ */
+@media(max-width:600px){
+  .topbar{height:auto;min-height:52px;flex-wrap:wrap;row-gap:8px;padding-top:6px;padding-bottom:8px;}
+  .topbar-right{display:contents;}
+  .search-wrap{order:10;flex:1 1 100%;min-height:44px;}
+  #srch{font-size:16px;flex:1;min-width:0;}
+}
+
+/* ─ טבלת ההזמנות בטלפון: כרטיס לכל הזמנה ─
+   735px של טבלה במסך של 390 — שם הסקיצה נשבר מילה בשורה, והמחיר, הסטטוס
+   ו"פרטים" ישבו מחוץ למסך. אותם תאים ואותם מטפלים; רק הפריסה משתנה:
+     לקוח ............... סטטוס
+     הזמנה · סקיצה ...... מחיר
+     סוג מקלחון
+     זכוכית · פרזול · שטח
+     תאריך .............. פרטים
+   ה-flex-basis של 55% הוא מה שמכריח מעבר שורה אחרי כל זוג. */
+@media(max-width:600px){
+  .table-wrap{overflow:visible;background:transparent;border:0;}
+  .ot thead{display:none;}
+  .ot,.ot tbody{display:block;}
+  .ot tr{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:12px 14px;margin-bottom:8px;
+         background:var(--surface);border:1px solid var(--border);}
+  .ot td{display:block;padding:0;border:0;}
+  .ot tr:hover td{background:transparent;}
+  .ot td:empty{display:none;}
+  /* .ot td גובר על class בודד — לכן td.ot-sel */
+  .ot td.ot-sel{display:none;}
+  .ot td.ot-sel:has(input){display:block;order:0;}
+  .ot .tag:empty{display:none;}
+  .ot-client{order:1;flex:1 1 55%;min-width:0;font-size:15px;}
+  .ot-status{order:2;margin-inline-start:auto;}
+  .ot-num{order:3;flex:1 1 55%;min-width:0;}
+  .ot-price{order:4;margin-inline-start:auto;font-size:15px;}
+  .ot-type{order:5;flex:1 1 100%;}
+  .ot-glass{order:6;}
+  .ot-finish{order:7;}
+  .ot-area{order:8;}
+  .ot-date{order:9;flex:1 1 55%;}
+  .ot-act{order:10;margin-inline-start:auto;}
+  .ot-act .cb-btn{min-height:44px;min-width:88px;padding:0 16px !important;font-size:13px;}
+}
 </style>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -300,6 +388,8 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
   <script src="firebase-db.js?v=20260601"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
+  <script src="wa-inbound-panel.js"></script>
+  <script src="sku-picker.js"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -408,7 +498,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
     <div class="mhdr"><h2 id="mtitle">פרטי הזמנה</h2><button class="mcl" onclick="closeMod()" aria-label="סגור"><span data-icon="x"></span></button></div>
     <div class="mbody" id="mbody"></div>
     <div class="mfoot">
-      <button onclick="deleteOrderById(eid)" style="margin-left:auto;padding:10px 16px;background:transparent;color:#c0392b;border:1px solid rgba(192,57,43,0.3);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onmouseover="this.style.background='rgba(192,57,43,0.08)'" onmouseout="this.style.background='transparent'">🗑 מחק הזמנה</button>
+      <button class="mf-del" onclick="deleteOrderById(eid)" style="margin-left:auto;padding:10px 16px;background:transparent;color:#c0392b;border:1px solid rgba(192,57,43,0.3);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onmouseover="this.style.background='rgba(192,57,43,0.08)'" onmouseout="this.style.background='transparent'">🗑 מחק הזמנה</button>
       <!-- סימון כפיקטיבית אחרי שההזמנה כבר יצאה מתור הסקיצות. הכפתור שם
            הוא חד-כיווני ורק בכניסה; זה המקום היחיד לסמן הזמנה שכבר בתהליך. -->
       <button id="modalTestBtn" style="display:none;padding:10px 16px;background:transparent;color:var(--gold-text);border:1px solid rgba(184,146,42,0.4);font-family:Heebo,sans-serif;font-size:13px;font-weight:600;cursor:pointer;" onclick="markOrderTest()">🧪 סמן כפיקטיבית</button>
@@ -529,6 +619,9 @@ function load() {
     skuCatalogMap = {};
     list.forEach(e => { if (e && e.code) skuCatalogMap[e.code] = e; });
     _lgRenderIwCodeList();
+    // סינון הזכוכית בתור נבנה מהקטלוג — אם התור כבר פתוח, למלא אותו עכשיו
+    const sq = document.getElementById('sqOverlay');
+    if (sq && sq.style.display === 'flex') sqRender();
     const ov = document.getElementById('pricingOv');
     if (ov && ov.classList.contains('open')) renderPricing();
   });
@@ -799,22 +892,24 @@ function openMod(id) {
   eid = o.id;
   document.getElementById('mtitle').textContent = (o.orderClient||'') + ' — ' + (o.sketchName||o.type||'');
 
-  // מלא mbody
-  const itemsCount = (o.items && o.items.length) ? o.items.length : 0;
+  // מלא mbody — סדר (בן, 06/10): תקציר → פריטים → סקיצה → שינוי סטטוס.
+  // קודם: עמודה אחת של שדות, סטטוס, סקיצה, ורק בסוף הפריטים.
+  const items = o.items || [];
+  const st    = ST.find(x => x.id === o.status) || ST[0];
+  const tel   = String(o.phone || '').replace(/[^\d+]/g, '');
   document.getElementById('mbody').innerHTML = `
-    <div class="msec">
-      <div class="msec-t">פרטי הזמנה</div>
-      <div class="mgrid">
-        <div class="mf"><label>לקוח</label><div class="v">${lgEsc(o.orderClient || '')}</div></div>
-        <div class="mf"><label>טלפון</label><div class="v">${lgEsc(o.phone || '')}</div></div>
-        <div class="mf"><label>מספר הזמנה</label><div class="v">${lgEsc(o.orderNum || '')}</div></div>
-        <div class="mf"><label>תאריך</label><div class="v">${lgEsc(o.date || '')}</div></div>
-        <div class="mf"><label>מס' פריטים</label><div class="v">${itemsCount}</div></div>
-      </div>
+    <div class="msum">
+      <div class="msum-num">${lgEsc(o.orderNum || '—')}</div>
+      <div class="msum-st-wrap"><span class="msum-st" style="background:${st.c}">${lgEsc(o.status || '')}</span></div>
+      <div class="mf"><label>לקוח</label><div class="v">${lgEsc(o.orderClient || '—')}</div></div>
+      <div class="mf"><label>טלפון</label><div class="v">${tel
+        ? `<a class="msum-tel" href="tel:${lgEsc(tel)}" dir="ltr">${lgEsc(o.phone)}</a>` : '—'}</div></div>
+      <div class="mf"><label>תאריך</label><div class="v">${lgEsc(o.date || '—')}</div></div>
+      <div class="mf"><label>פריטים</label><div class="v">${items.length}${o.area ? ' · ' + lgEsc(String(o.area)) + ' מ״ר' : ''}</div></div>
     </div>
     <div class="msec">
-      <div class="msec-t">סטטוס</div>
-      <select id="mst" class="msel"></select>
+      <div class="msec-t">פריטים</div>
+      <div id="itemsPreview">${_modItemsHtml(items)}</div>
     </div>
     ${lgHasSketch(o) ? `
     <div class="msec">
@@ -822,27 +917,12 @@ function openMod(id) {
       <img data-sketch-for="${lgEsc(String(o.id))}" alt="סקיצת ההזמנה" class="mimg"/>
     </div>` : ''}
     <div class="msec">
-      <div class="msec-t">פריטים</div>
-      <div id="itemsPreview"></div>
+      <label class="msec-t" for="mst">שנה סטטוס</label>
+      <div class="msel-wrap"><select id="mst" class="msel"></select></div>
     </div>
   `;
 
   _hydrateSketchImgs(document.getElementById('mbody'));
-
-  // מלא את תצוגת הפריטים
-  const items = o.items || [];
-  const previewItems = items.slice(0, 3);
-  document.getElementById('itemsPreview').innerHTML = `
-    ${previewItems.map(i => `
-      <div style="font-size:12px;margin-bottom:4px">
-        ${lgEsc(i.name || '')} ${i.w || ''}${i.w ? '×' : ''}${i.h || ''} ${i.w ? 'מ"מ' : ''}
-      </div>
-    `).join('')}
-    ${items.length > 3 ? `
-      <button onclick="showAllItems()" style="margin-top:8px;padding:6px 10px;border:1px solid #ccc;background:#f5f5f5;cursor:pointer;font-size:12px;">ראה עוד (${items.length})</button>
-    ` : ''}
-    ${items.length === 0 ? '<div style="font-size:12px;color:#999">אין פריטים</div>' : ''}
-  `;
 
   // מלא את שדות המודאל
   const sel = document.getElementById('mst');
@@ -911,20 +991,32 @@ function openMod(id) {
 
   const modEl = document.getElementById('ov');
   if (modEl) modEl.classList.add('open');
+  // מחוות "חזור" באייפון סוגרת את החלון ולא יוצאת מהדף (ר' popstate למטה)
+  if (!(history.state && history.state.lgModal === 'ov')) history.pushState({ lgModal: 'ov' }, '');
 }
 
-function showAllItems(){
-  const o = orders.find(x => x.id === eid);
-  if(!o) return;
-  const items = o.items || [];
-  document.getElementById('itemsPreview').innerHTML = items.map(i => `
-    <div style="font-size:12px;margin-bottom:5px;padding:5px 8px;background:var(--bg2);border-radius:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-      <span style="font-weight:600">${lgEsc(i.name||'')}</span>
-      ${i.w?`<span style="color:var(--muted)">${i.w}×${i.h} מ"מ</span>`:''}
-      ${i.chisum?'<span style="font-size:12px;background:rgba(142,68,173,0.12);color:#8e44ad;padding:1px 5px;border-radius:2px">חיסום</span>':''}
-      ${i.graphic?'<span style="font-size:12px;background:rgba(39,174,96,0.12);color:#27ae60;padding:1px 5px;border-radius:2px">גרפיקה</span>':''}
+// הפריטים בחלון — פורמט אחד לכולם. קודם 3 הראשונים היו שורות פשוטות
+// ו"ראה עוד" צייר את כולם מחדש בפורמט אחר — זה מה שנראה כ"משתנה".
+function _modItemsHtml(items){
+  if(!items || !items.length) return '<div class="mit-empty">אין פריטים</div>';
+  return items.map(i => `
+    <div class="mit">
+      <span class="mit-n">${lgEsc(i.name||'פריט')}</span>
+      ${i.w ? `<span class="mit-d">${lgDimsText(i.w, i.h)} מ"מ</span>` : ''}
+      ${i.chisum ? '<span class="mit-t mit-chis">חיסום</span>' : i.litush ? '<span class="mit-t mit-lit">ליטוש</span>' : ''}
+      ${i.graphic ? '<span class="mit-t mit-gr">גרפיקה</span>' : ''}
     </div>`).join('');
 }
+function showAllItems(){
+  const o = orders.find(x => x.id === eid);
+  if(o) document.getElementById('itemsPreview').innerHTML = _modItemsHtml(o.items || []);
+}
+
+// "חזור" (מחווה / כפתור הדפדפן) כשהחלון פתוח — סוגר אותו במקום לצאת מהדף
+window.addEventListener('popstate', () => {
+  const modEl = document.getElementById('ov');
+  if (modEl && modEl.classList.contains('open')) { modEl.classList.remove('open'); eid = null; }
+});
 
 // מבצע את ה"קדם" מהמודאל — סוגר אותו ומפעיל את advance עם הפרומפט הנכון
 function doModalAdvance(){
@@ -939,6 +1031,8 @@ function closeMod(e) {
   const modEl = document.getElementById('ov');
   if (modEl) modEl.classList.remove('open');
   eid = null;
+  // הרשומה שנדחפה בפתיחה — מחזירים אותה, כדי ש"חזור" הבא יעבוד כרגיל
+  if (history.state && history.state.lgModal === 'ov') history.back();
 }
 
 function setUrg(v) {
@@ -1341,15 +1435,18 @@ function renderAll(){
 
 function renderStats(){
   const f=filtered();
-  const tot=f.reduce((s,o)=>s+(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0),0);
   const inP=f.filter(o=>['ירד לביצוע','נשלח לחיסום','חזר מחיסום','בגרפיקה','ממתין להובלה'].includes(o.status)).length;
-  const rdy=f.filter(o=>o.status==='מוכן לאיסוף').length;
+  // תור סקיצות ושרטט (בן, 06/10) — במקום כרטיסי הסכום ומוכן-לאיסוף.
+  // על כל ההזמנות ולא על המסונן: אלה קיצורי דרך, לא סיכום של הסינון.
+  const inQ=orders.filter(o=>!o.stage).length;
+  const unseen=orders.filter(o=>!o.stage && !o.sketchSeenAt).length;
+  const atD=orders.filter(o=>o.status==='אצל שרטט').length;
   const urg=f.filter(o=>o.urgent).length;
   document.getElementById('stats').innerHTML=`
-    <div class="stat"><div class="n">${f.length}</div><div class="l">הזמנות</div></div>
+    <div class="stat"><div class="n">${f.length}</div><div class="l">הזמנות</div>${urg?`<div class="d" style="color:#c0392b">🔴 ${urg} דחופות</div>`:''}</div>
     <div class="stat"><div class="n">${inP}</div><div class="l">בייצור</div></div>
-    <div class="stat"><div class="n">${rdy}</div><div class="l">מוכנות לאיסוף</div>${rdy?'<div class="d" style="color:var(--gold-text)">⚡ ממתינות</div>':''}</div>
-    <div class="stat"><div class="n">₪${tot.toLocaleString()}</div><div class="l">שווי כולל</div>${urg?`<div class="d" style="color:#c0392b">🔴 ${urg} דחופות</div>`:''}</div>`;
+    <button type="button" class="stat stat-link" onclick="openSketchQueue()"><div class="n">${inQ}</div><div class="l">תור סקיצות</div>${unseen?`<div class="d" style="color:var(--gold-text)">${unseen} עוד לא נראו</div>`:''}</button>
+    <a class="stat stat-link" href="drafter.html"><div class="n">${atD}</div><div class="l">שרטט</div></a>`;
 }
 
 function renderKanban(){
@@ -1405,23 +1502,23 @@ function renderTable(){
     const pickable = sf === 'מוכן לאיסוף' && o.status === 'מוכן לאיסוף';
     const picked   = invSel.has(o.id);
     return `<tr${picked?' style="background:rgba(184,146,42,0.07)"':''}>
-      <td style="color:var(--muted);font-size:12px">${
+      <td class="ot-sel" style="color:var(--muted);font-size:12px">${
         pickable
           ? `<input type="checkbox" ${picked?'checked':''} aria-label="בחר לחשבונית"
                style="width:16px;height:16px;accent-color:#b8922a;cursor:pointer"
                onchange="invToggle('${o.id}','${lgJsStr(o.orderClient||'')}',event)">`
           : (i+1)
       }</td>
-      <td><strong>${lgEsc(o.orderClient||'—')}</strong>${o.isTest?' <span class="tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}</td>
-      <td style="font-size:12px;color:var(--muted)">${lgEsc(o.orderNum||'—')}<br><span style="font-size:12px">${lgEsc(o.sketchName||'')}</span></td>
-      <td style="font-size:12px">${lgEsc(o.type)}</td>
-      <td><span class="tag tg">${lgEsc(o.glass)}</span></td>
-      <td><span class="tag tf">${lgEsc(o.finish)}</span></td>
-      <td style="font-size:12px">${o.area} מ״ר</td>
-      <td style="font-weight:700;color:var(--gold-text)">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</td>
-      <td><span class="badge" style="background:${s.c}">${lgEsc(o.status)}</span></td>
-      <td style="font-size:12px;color:var(--muted)">${lgEsc(o.date||'')}</td>
-      <td><button class="cb-btn" style="padding:5px 8px" onclick="openMod('${o.id}')">פרטים</button></td>
+      <td class="ot-client"><strong>${lgEsc(o.orderClient||'—')}</strong>${o.isTest?' <span class="tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}</td>
+      <td class="ot-num" style="font-size:12px;color:var(--muted)">${lgEsc(o.orderNum||'—')}<br><span style="font-size:12px">${lgEsc(o.sketchName||'')}</span></td>
+      <td class="ot-type" style="font-size:12px">${lgEsc(o.type)}</td>
+      <td class="ot-glass"><span class="tag tg">${lgEsc(o.glass)}</span></td>
+      <td class="ot-finish"><span class="tag tf">${lgEsc(o.finish)}</span></td>
+      <td class="ot-area" style="font-size:12px">${o.area ? o.area + ' מ״ר' : ''}</td>
+      <td class="ot-price" style="font-weight:700;color:var(--gold-text)">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</td>
+      <td class="ot-status"><span class="badge" style="background:${s.c}">${lgEsc(o.status)}</span></td>
+      <td class="ot-date" style="font-size:12px;color:var(--muted)">${lgEsc(o.date||'')}</td>
+      <td class="ot-act"><button class="cb-btn" style="padding:5px 8px" onclick="openMod('${o.id}')">פרטים</button></td>
     </tr>`;
   }).join('');
 }
@@ -1974,7 +2071,7 @@ function _renderBillClient(el){
   document.getElementById('billRows').innerHTML = ords.map(o => {
     const total = lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0;
     const items = (o.items||[]).map(it =>
-      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + (it.w||'') + '×' + (it.h||'') + ' מ"מ</div>').join('');
+      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + lgDimsText(it.w, it.h) + ' מ"מ</div>').join('');
     const sk = lgHasSketch(o)
       ? '<img class="bill-sk" data-sketch-for="' + lgEsc(String(o.id)) + '"' +
         ' alt="סקיצה — ' + lgEsc(o.orderNum||'') + '" onclick="if(this.src)previewSketchSrc(this.src)">'
@@ -2110,7 +2207,7 @@ function renderPickupBoard(){
             </div>
             ${p.items&&p.items.length?`
               <div class="pi-items">
-                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w||''}${i.w?'×':''}${i.h||''} מ"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
+                ${p.items.map(i=>`<div class="pi-item-row">${lgEsc(i.name||'')} ${i.w ? lgDimsText(i.w, i.h) : ''} מ"מ ${i.chisum?'— מחוסם':i.litush?'— מלוטש':''}</div>`).join('')}
               </div>`:''}
           </div>
           <div>
@@ -2292,7 +2389,7 @@ document.addEventListener('visibilitychange', () => {
   gap:8px;padding:0 14px;
   border-bottom:1px solid rgba(255,255,255,0.07);
 }
-#sqTopBar .sq-logo{font-size:13px;font-weight:900;color:#f0ede8;white-space:nowrap;}
+#sqTopBar .sq-logo{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:900;color:#f0ede8;white-space:nowrap;}
 #sqTopBar .sq-logo span{color:var(--gold);}
 .sq-mode-wrap{display:flex;gap:2px;background:rgba(255,255,255,0.07);border-radius:5px;padding:3px;}
 .sq-mode-btn{padding:4px 12px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:3px;transition:all 0.15s;white-space:nowrap;}
@@ -2350,6 +2447,7 @@ document.addEventListener('visibilitychange', () => {
 .sq-tag{font-size:12px;padding:1px 5px;border-radius:3px;font-weight:700;}
 .sq-tag-sketch{background:rgba(41,128,185,0.25);color:#5dade2;}
 .sq-tag-upload{background:rgba(142,68,173,0.25);color:#bb8fce;}
+.sq-tag-wa{background:rgba(37,211,102,0.18);color:#5fe08f;}
 .sq-tag-pending{background:rgba(184,146,42,0.25);color:#d4ac0d;}
 .sq-tag-drafter{background:rgba(192,57,43,0.25);color:#ec7063;}
 .sq-tag-chash{background:rgba(39,174,96,0.25);color:#58d68d;}
@@ -2590,6 +2688,143 @@ document.addEventListener('visibilitychange', () => {
   .iw-item > input{width:64px !important;min-height:40px;font-size:15px;}
   .iw-item-del{min-width:40px;min-height:40px;font-size:16px;}
 }
+
+/* ─ קליטות WhatsApp (wa-inbound-panel.js) ─ */
+#waInBtn{min-height:44px;padding:0 12px;background:transparent;border:1px solid rgba(247,244,239,0.18);border-radius:6px;
+  cursor:pointer;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:rgba(247,244,239,0.8);white-space:nowrap;}
+#waInBtn:hover{border-color:rgba(184,146,42,0.5);color:#f7f4ef;}
+#waInBtn:focus-visible,.wain-btn:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
+.wain-badge{display:inline-block;margin-right:4px;padding:0 6px;border-radius:9px;background:rgba(255,255,255,0.14);font-size:12px;}
+.wain-badge-a{background:#c0392b;color:#fff;}
+.wain-badge[hidden]{display:none;}
+#waInPanel{position:absolute;top:50px;left:0;right:0;bottom:0;z-index:5;background:#1e1b18;color:#f0ede8;
+  display:flex;flex-direction:column;font-family:Heebo,sans-serif;}
+#waInPanel[hidden]{display:none;}
+.wain-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.wain-head b{font-size:15px;}
+.wain-sub{flex:1;font-size:12px;color:rgba(247,244,239,0.5);}
+#waInList{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:8px;}
+.wain-row{border:1px solid rgba(255,255,255,0.09);border-right:4px solid #8a8a8a;border-radius:6px;padding:10px 12px;background:rgba(255,255,255,0.03);}
+.wain-bad{border-right-color:#c0392b;} .wain-warn{border-right-color:#d4a017;} .wain-wait{border-right-color:#3498db;}
+.wain-ok{border-right-color:#27ae60;} .wain-closed{border-right-color:#6b6b6b;opacity:0.8;}
+.wain-l1,.wain-l2{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:13px;}
+.wain-l2{margin-top:4px;color:rgba(247,244,239,0.65);font-size:12px;}
+.wain-chip{font-weight:800;}
+.wain-bad .wain-chip{color:#ff8a7a;} .wain-warn .wain-chip{color:#f3c74f;} .wain-ok .wain-chip{color:#6fdc9a;} .wain-wait .wain-chip{color:#8cc8f0;}
+.wain-when{color:rgba(247,244,239,0.55);}
+.wain-client{font-weight:700;}
+.wain-reason{margin-top:6px;font-size:13px;line-height:1.5;color:#f7f4ef;}
+.wain-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.wain-acts:empty{display:none;}
+.wain-btn{min-height:44px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;
+  background:transparent;border:1px solid rgba(247,244,239,0.22);border-radius:6px;cursor:pointer;
+  font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:#f0ede8;text-decoration:none;}
+.wain-btn:hover{border-color:rgba(184,146,42,0.6);}
+.wain-btn:disabled{opacity:0.45;cursor:default;}
+.wain-primary{background:#b8922a;border-color:#b8922a;color:#1a1714;}
+.wain-empty{padding:30px 0;text-align:center;color:rgba(247,244,239,0.55);}
+/* קבוצות WhatsApp (06/10) — מעל רשימת הקליטות, נגללות בעצמן אם יש הרבה */
+#waInGroups{padding:10px 14px 0;display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow-y:auto;}
+#waInGroups:empty{display:none;}
+.wain-gtitle{font-size:12px;font-weight:800;letter-spacing:0.12em;color:var(--gold-text);}
+.wain-acc-list{display:flex;flex-direction:column;margin-top:6px;border:1px solid rgba(247,244,239,0.18);border-radius:6px;overflow:hidden;}
+.wain-acc-list[hidden]{display:none;}
+.wain-acc-opt{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;padding:0 12px;background:rgba(255,255,255,0.04);border:0;border-bottom:1px solid rgba(255,255,255,0.06);color:#f0ede8;font-family:Heebo,sans-serif;font-size:14px;text-align:right;cursor:pointer;}
+.wain-acc-opt:hover,.wain-acc-opt:focus-visible{background:rgba(184,146,42,0.18);}
+.wain-acc-key{font-size:12px;color:rgba(247,244,239,0.55);font-family:monospace;}
+.wain-acc-none{padding:10px 12px;font-size:13px;color:#f3c74f;}
+.wain-acc{flex:1 1 180px;min-height:44px;padding:0 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(247,244,239,0.22);border-radius:6px;color:#f0ede8;font-family:Heebo,sans-serif;font-size:16px;}
+#waInView{position:absolute;inset:0;background:rgba(10,9,8,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;}
+#waInView[hidden]{display:none;}
+#waInView img{max-width:100%;max-height:80%;object-fit:contain;background:#fff;border-radius:4px;}
+@media(max-width:600px){ .wain-sub{display:none;} }
+
+/* ─ תור הסקיצות בטלפון (≤600) — שתי שורות במקום שורה אחת שגולשת ─
+   שורה 1: חיפוש · סינון · קליטות · סגירה. שורה 2: "עוד לא נראה | נראה".
+   "סינון" פותח את ארבע הרשימות כשורה שלישית — אותם אלמנטים, בלי להעביר
+   אותם ובלי לוגיקה חדשה. הדסקטופ לא משתנה. */
+#sqFilterBtn{display:none;}
+/* אייפד (≤1200, נקודת השבירה של lg-ui.css): השורה הטבעית רחבה ~1080px ולכן גלשה גם באייפד לרוחב וגם
+   לאורך — הטאבים, החיפוש וכפתור הסגירה יצאו מהמסך. כאן היא נשברת לשתי
+   שורות, ופאנל הקליטות מכסה את כל התור (יש לו סגירה משלו). */
+@media(max-width:1200px){
+  #sqTopBar{height:auto;min-height:50px;flex-wrap:wrap;row-gap:8px;padding-top:8px;padding-bottom:8px;}
+  #waInPanel{top:0;}
+}
+@media(max-width:600px){
+  #sqTopBar{height:auto;flex-wrap:wrap;row-gap:8px;padding:8px 10px;}
+  #sqTopBar .sq-logo,.sq-mode-wrap,#sqCounter{display:none;}
+  #sqSearchInput{order:1;flex:1 1 0;width:auto;min-width:0;min-height:44px;font-size:16px;}
+  #sqFilterBtn{order:2;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;
+    background:transparent;border:1px solid rgba(247,244,239,0.18);border-radius:6px;cursor:pointer;
+    font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:rgba(247,244,239,0.8);}
+  #sqFilterN{min-width:18px;padding:0 5px;border-radius:9px;background:#b8922a;color:#1a1714;font-size:12px;}
+  #sqFilterN[hidden]{display:none;}
+  #waInBtn{order:3;display:inline-flex;align-items:center;gap:6px;padding:0 10px;}
+  #sqCloseBtn{order:4;width:44px;height:44px;}
+  .sq-seen-tabs{order:5;flex:1 1 100%;display:flex;gap:8px;}
+  .sq-seen-tab{flex:1;}
+  #sqTopBar.sq-filters-open .sq-filter-sel{display:block;order:6;flex:1 1 calc(50% - 4px);min-width:0;min-height:44px;font-size:16px;}
+  #sqTopBar.sq-filters-open #sqFilterBtn{border-color:#b8922a;color:#f7f4ef;}
+  /* פאנל הקליטות על כל המסך — שורת הכותרת שלו כבר כוללת סגירה */
+  #waInPanel{top:0;}
+  .wain-head{flex-wrap:nowrap;gap:8px;padding:8px 10px;}
+  .wain-head b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #waInToggle{padding:0 10px;font-size:12px;white-space:nowrap;}
+}
+#waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
+/* ─ שלב 6: עדכון "הסקיצות טופלו" ─ */
+#sqAckPending{background:rgba(37,211,102,0.08);border-bottom:1px solid rgba(37,211,102,0.25);padding:6px 10px;}
+#sqAckPending[hidden]{display:none;}
+.sqack-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;font-size:12px;color:#f0ede8;}
+.sqack-send{min-height:36px;padding:0 12px;background:#25d366;color:#0b2e17;border:0;border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;}
+.sqack-na{font-size:12px;color:#f3c74f;white-space:nowrap;}
+#sqAckAsk{position:absolute;inset:0;z-index:60;background:rgba(10,9,8,0.6);display:flex;align-items:center;justify-content:center;padding:16px;}
+#sqAckAsk[hidden]{display:none;}
+.sqack-box{background:#f7f4ef;color:#1a1714;max-width:420px;width:100%;border-radius:8px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,0.4);font-family:Heebo,sans-serif;}
+#sqAckAskT{font-size:15px;font-weight:700;line-height:1.5;margin-bottom:14px;}
+.sqack-acts{display:flex;gap:8px;flex-wrap:wrap;}
+.sqack-acts button{flex:1 1 140px;min-height:44px;border-radius:6px;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;}
+.sqack-yes{background:#b8922a;color:#1a1714;border:0;}
+.sqack-no{background:transparent;color:#1a1714;border:1px solid rgba(0,0,0,0.25);}
+@media (pointer:coarse){ .sqack-send{min-height:44px;} }
+
+
+/* ─ בורר מק"טים (sku-picker.js) ─ רשימה מתחת לשדה הקוד; 44px לשורה */
+.iw-input-row{position:relative;}
+#iwSkuList{position:absolute;z-index:40;background:#fff;border:1px solid rgba(0,0,0,0.15);
+  box-shadow:0 8px 24px rgba(0,0,0,0.15);max-height:264px;overflow-y:auto;border-radius:4px;}
+#iwSkuList[hidden]{display:none;}
+.sku-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;
+  padding:0 12px;cursor:pointer;border-bottom:1px solid rgba(0,0,0,0.05);font-size:14px;color:#1a1714;}
+.sku-opt.on,.sku-opt:hover{background:rgba(184,146,42,0.12);}
+.sku-n{font-weight:600;}
+.sku-c{font-size:12px;color:#8a7a5a;font-family:monospace;white-space:nowrap;}
+.sku-empty{padding:12px;font-size:13px;color:#888;}
+
+
+/* ─ שורת ההזנה בתור הסקיצות (קוד · רוחב × גובה × כמות · הוסף) ─
+   שורה אחת ברוחב ~600px. בטלפון הגובה, הכמות ו"הוסף" נחתכו מחוץ למסך.
+   ≤900 (טלפון ואייפד לאורך, שם פאנל הסקיצה צר): הקוד ברוחב מלא, מתחתיו
+   שם המק"ט, ואז רוחב × גובה × כמות, ההמרה למ"מ, ו"הוסף" ברוחב מלא.
+   אותם אלמנטים ואותם מטפלים — רק order. הדסקטופ לא משתנה. */
+@media(max-width:900px){
+  .iw-input-row{flex-wrap:wrap;row-gap:8px;column-gap:6px;align-items:center;}
+  .iw-input-row #iwCode{order:1;flex:1 1 100%;min-height:44px;font-size:16px;}
+  .iw-input-row #iwPreview{order:2;flex:1 1 100%;font-size:13px;}
+  .iw-input-row #iwW{order:3;}
+  .iw-input-row .iw-x{order:4;}
+  .iw-input-row #iwH{order:5;}
+  .iw-input-row .iw-x2{order:6;}
+  .iw-input-row #iwQty{order:7;}
+  .iw-input-row .iw-unit{order:8;}
+  /* 25% ולא 0 — אחרת ההמרה למ"מ (45%) נכנסה לאותה שורה ומחצה את השדות ל-36px */
+  .iw-input-row #iwW,.iw-input-row #iwH{flex:1 1 25%;width:auto;min-width:0;min-height:44px;font-size:16px;}
+  .iw-input-row #iwQty{flex:0 0 64px;width:64px !important;min-height:44px;font-size:16px;}
+  .iw-input-row #iwWPrev{order:9;flex:1 1 45%;min-height:0;}
+  .iw-input-row #iwHPrev{order:10;flex:1 1 45%;min-height:0;}
+  .iw-input-row .iw-add{order:11;flex:1 1 100%;min-height:44px;font-size:15px;}
+}
 </style>
 
 <div id="sqOverlay">
@@ -2598,7 +2833,7 @@ document.addEventListener('visibilitychange', () => {
 
     <!-- TOP BAR -->
     <div id="sqTopBar">
-      <div class="sq-logo" style="display:flex;align-items:center;gap:7px"><span data-icon="ruler"></span>תור <span>סקיצות</span></div>
+      <div class="sq-logo"><span data-icon="ruler"></span>תור <span>סקיצות</span></div>
       <div class="sq-mode-wrap">
         <button class="sq-mode-btn" id="sqModeAdmin" onclick="sqSetMode('admin')" style="background:#b8922a;color:#1a1714;">אדמין</button>
         <!-- טאב שרטט הוסר -->
@@ -2610,26 +2845,60 @@ document.addEventListener('visibilitychange', () => {
         <button class="sq-seen-tab" id="sqTabSeen" role="tab" aria-selected="false"
                 onclick="sqSetSeenTab('seen')">נראה <span id="sqTabSeenN">0</span></button>
       </div>
-      <select id="sqFSource" class="sq-filter-sel" onchange="sqRender()">
+      <!-- קליטות WhatsApp — wa-inbound-panel.js -->
+      <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp"><span data-icon="inbox"></span>קליטות
+        <span id="waInBadgeA" class="wain-badge wain-badge-a" hidden></span>
+        <span id="waInBadgeP" class="wain-badge" hidden></span></button>
+      <!-- בטלפון בלבד: הרשימות למטה מוסתרות, והכפתור פותח אותן כשורה נוספת -->
+      <button id="sqFilterBtn" type="button" onclick="sqToggleFilters()" aria-expanded="false" aria-controls="sqTopBar">
+        <span data-icon="list"></span>סינון<span id="sqFilterN" hidden></span></button>
+      <select id="sqFSource" class="sq-filter-sel" onchange="sqRender()" aria-label="מקור">
         <option value="">כל המקורות</option>
         <option value="sketch">מערכת</option>
         <option value="upload">העלאות</option>
+        <option value="whatsapp">WhatsApp</option>
       </select>
-      <select id="sqFStatus" class="sq-filter-sel" onchange="sqRender()">
+      <select id="sqFStatus" class="sq-filter-sel" onchange="sqRender()" aria-label="סטטוס">
         <option value="">הכל</option>
         <option value="pending">ממתין</option>
         <option value="drafter">שרטט</option>
         <option value="optyway">OptyWay</option>
         <option value="done">הועבר ✓</option>
       </select>
-      <select id="sqFGlass" class="sq-filter-sel" onchange="sqRender()">
+      <select id="sqFGlass" class="sq-filter-sel" onchange="sqRender()" aria-label="סוג זכוכית">
         <option value="">כל הזכוכיות</option>
       </select>
-      <select id="sqFClient" class="sq-filter-sel" onchange="sqRender()">
+      <select id="sqFClient" class="sq-filter-sel" onchange="sqRender()" aria-label="לקוח">
         <option value="">כל הלקוחות</option>
       </select>
-      <input id="sqSearchInput" placeholder="🔍 חיפוש..." oninput="sqRender()">
+      <input id="sqSearchInput" type="search" placeholder="חיפוש…" aria-label="חיפוש בתור" oninput="sqRender()">
       <button id="sqCloseBtn" onclick="closeSQ()" aria-label="סגור"><span data-icon="x"></span></button>
+    </div>
+
+    <!-- קליטות WhatsApp — מעל רשימת הסקיצות. הנתונים והפעולות ב-wa-inbound-panel.js -->
+    <div id="waInPanel" hidden role="dialog" aria-label="קליטות WhatsApp">
+      <div class="wain-head">
+        <b>קליטות WhatsApp</b>
+        <span class="wain-sub">הודעות נכנסות שלא הפכו להזמנה תקינה, או שצריכות עין</span>
+        <button id="waInToggle" type="button" class="wain-btn">הצג הכל</button>
+        <button type="button" class="wain-btn" onclick="lgWaInClose()" aria-label="סגור קליטות">✕</button>
+      </div>
+      <div id="waInList"></div>
+      <div id="waInView" hidden>
+        <img id="waInViewImg" alt="סקיצה מהקליטה">
+        <button id="waInViewClose" type="button" class="wain-btn">סגור</button>
+      </div>
+    </div>
+
+    <!-- שלב 6: "יש עוד סקיצות של הלקוח — לטפל עכשיו?" _sqAckAsk -->
+    <div id="sqAckAsk" hidden role="dialog" aria-modal="true" aria-labelledby="sqAckAskT">
+      <div class="sqack-box">
+        <div id="sqAckAskT"></div>
+        <div class="sqack-acts">
+          <button type="button" id="sqAckYes" class="sqack-yes">כן, נטפל עכשיו</button>
+          <button type="button" id="sqAckNo" class="sqack-no">לא, שלח עכשיו</button>
+        </div>
+      </div>
     </div>
 
     <!-- BODY -->
@@ -2637,6 +2906,8 @@ document.addEventListener('visibilitychange', () => {
 
       <!-- LIST -->
       <div id="sqListPanel">
+        <!-- שלב 6: טופלו וממתינים לעדכון ללקוח — רשת ביטחון. _sqRenderAckPending -->
+        <div id="sqAckPending" hidden></div>
         <div id="sqList"></div>
       </div>
 
@@ -2696,23 +2967,28 @@ document.addEventListener('visibilitychange', () => {
               <span>פריטים <span id="sqItemCount" style="background:#b8922a;color:var(--on-gold);border-radius:8px;padding:1px 7px;font-size:12px;margin-right:4px">0</span></span>
             </div>
             <div class="iw-input-row">
-              <input class="iw-code" id="iwCode" placeholder="קוד (8SMH, 6CM...)" maxlength="8" list="iwCodeList"
-                oninput="iwPreview(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();iwAdd();}">
+              <!-- בורר מק"טים (sku-picker.js): קוד או עברית — "8 שקוף חיסום". בלי
+                   maxlength, כי משפט בעברית ארוך מ-8; בלי datalist, כי הוא התחרה ברשימה. -->
+              <input class="iw-code" id="iwCode" placeholder="קוד או עברית (8 שקוף חיסום)"
+                role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="iwSkuList"
+                aria-label="קוד מק״ט או תיאור בעברית" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+                oninput="iwPreview(this.value)" onkeydown="if(window.lgSkuPickerKey&&lgSkuPickerKey(event))return;if(event.key==='Enter'){event.preventDefault();event.stopPropagation();iwAdd();}">
+              <div id="iwSkuList" role="listbox" aria-label="מק״טים מתאימים" hidden></div>
               <datalist id="iwCodeList"></datalist>
               <span class="iw-preview" id="iwPreview">—</span>
-              <input class="iw-dim" id="iwW" placeholder="800" type="text"
+              <input class="iw-dim" id="iwW" placeholder="800" type="text" inputmode="decimal" aria-label="רוחב"
                 oninput="iwDimPrev('iwW','iwWPrev')" onkeydown="event.stopPropagation();">
               <span id="iwWPrev" style="font-size:12px;color:var(--gold-text);min-width:50px;font-weight:600;line-height:1.2;"></span>
-              <span style="font-size:12px;color:#aaa">×</span>
-              <input class="iw-dim" id="iwH" placeholder="2000" type="text"
+              <span class="iw-x" style="font-size:12px;color:#aaa">×</span>
+              <input class="iw-dim" id="iwH" placeholder="2000" type="text" inputmode="decimal" aria-label="גובה"
                 oninput="iwDimPrev('iwH','iwHPrev')"
                 onkeydown="event.stopPropagation();">
               <span id="iwHPrev" style="font-size:12px;color:var(--gold-text);min-width:50px;font-weight:600;line-height:1.2;"></span>
-              <span style="font-size:12px;color:#aaa">×</span>
-              <input class="iw-dim" id="iwQty" type="number" value="1" min="1" max="500"
-                style="width:44px;" title="כמות יחידות"
+              <span class="iw-x iw-x2" style="font-size:12px;color:#aaa">×</span>
+              <input class="iw-dim" id="iwQty" type="number" inputmode="numeric" value="1" min="1" max="500"
+                style="width:44px;" title="כמות יחידות" aria-label="כמות"
                 onkeydown="if(event.key==='Tab'&&!event.shiftKey){event.preventDefault();event.stopPropagation();iwAdd();}else{event.stopPropagation();}">
-              <span style="font-size:12px;color:#aaa">יח׳</span>
+              <span class="iw-unit" style="font-size:12px;color:#aaa">יח׳</span>
               <button class="iw-add" onclick="iwAdd()">+ הוסף</button>
             </div>
             <div class="iw-list" id="iwList"></div>
@@ -2765,6 +3041,9 @@ function sqSetSeenTab(tab){
   sqCurrent = null; sqCurrentIdx = -1;
   sqShowDetail();
   sqRender();
+  // ⚠️ בטלפון הרשימה מוסתרת כשסקיצה פתוחה. בלי זה מעבר טאב ניקה את הבחירה
+  // ונשאר על "בחר סקיצה" — בלי רשימה ובלי דרך חזרה (בן, 06/10).
+  sqShowList();
 }
 
 // מסמן שעברו על הסקיצה. כותב שדה אחד ותו לא.
@@ -2779,12 +3058,106 @@ function sqMarkSeen(){
   var it = sqItems.find(function(i){ return i.id === id; });
   if(it) it.sketchSeenAt = now;
   updateOrder(id, { sketchSeenAt: now })
-    .then(()  => showToast('✓ הסקיצה טופלה'))
+    // הסימון נשמר → רק אז עדכון ללקוח (שלב 6). "טופל" עצמו לא תלוי בו.
+    .then(()  => { showToast('✓ הסקיצה טופלה'); _sqAfterSeen(id, now); })
     .catch(e  => { console.error('sqMarkSeen:', e); showToast('הסימון לא נשמר — נסה שוב'); });
   // הבאה בתור, כמו אחרי כל פעולה אחרת במסך הזה
   sqCurrent = null; sqCurrentIdx = -1;
   sqShowDetail();
   sqRender();
+}
+
+// ── "הסקיצות טופלו" ללקוח — שלב 6 (אפיון §16, החלטות בן 06/10) ──
+//
+//  "טופל" על סקיצת WhatsApp שולח עדכון. אם לאותו לקוח יש עוד סקיצות
+//  WhatsApp בתור — שואלים קודם: לטפל בהן עכשיו (והודעה אחת על הכל), או
+//  לשלוח עכשיו. השליחה עצמה היא תור ההודעות הקיים: dispatch → outbox →
+//  lgWaDrain. השרת מסנן כל הזמנה לבד (_wa-sketch-ack.js), ולכן לחיצה
+//  כפולה או "שלח עכשיו" אחרי שליחה לא שולחים אותה הזמנה פעמיים.
+//
+//  ⚠️ Admin שולח רק את הסוג הזה. "ההובלה יצאה" — רק מיום עבודה.
+//  test-delivery-finish-guard ו-test-wa-sketch-ack אוכפים.
+
+// מה כבר נשלח מהלשונית הזו — עד שה-drain חותם sketchAck, כדי שהשורה
+// "ממתינים לעדכון" לא תציע לשלוח שוב את מה שכבר יצא.
+const _sqAckSent = new Set();
+
+function _sqAfterSeen(id, now){
+  const o = orders.find(x => String(x.id) === String(id));
+  if(!o || o.source !== 'whatsapp' || o.isTest) return;          // D3
+  const key  = lgSketchAckClientKey(o);
+  // ייתכן שהמאזין עוד לא החזיר את הסימון — מחילים אותו מקומית
+  const view = orders.map(x => String(x.id) === String(id) ? Object.assign({}, x, { sketchSeenAt: now }) : x);
+  const more = lgSketchAckUnseen(view, key, id);
+  if(more.length) _sqAckAsk(o, more, key, view);
+  else _sqAckSend(key, view);
+}
+
+function _sqAckAsk(o, more, key, view){
+  const box = document.getElementById('sqAckAsk');
+  if(!box){ _sqAckSend(key, view); return; }
+  // "ללקוח <שם>" ולא ל+שם — "להמקום לאמבט" לא עברית
+  document.getElementById('sqAckAskT').textContent =
+    'ללקוח ' + (o.orderClient || '') + ' יש עוד ' +
+    (more.length === 1 ? 'סקיצת WhatsApp אחת בתור. לטפל בה' : more.length + ' סקיצות WhatsApp בתור. לטפל בהן') +
+    ' עכשיו כדי שיישלח עדכון אחד על הכל?';
+  box.hidden = false;
+  const yes = document.getElementById('sqAckYes'), no = document.getElementById('sqAckNo');
+  yes.onclick = () => { box.hidden = true; _sqAckGoTo(more[0].id); };
+  no.onclick  = () => { box.hidden = true; _sqAckSend(key, view); };
+  yes.focus();
+}
+
+// לסקיצה הבאה של אותו לקוח. אם סינון / חיפוש מסתירים אותה — מנקים אותם.
+function _sqAckGoTo(id){
+  if(sqSeenTab !== 'unseen') sqSetSeenTab('unseen');
+  if(!sqFiltered().some(i => String(i.id) === String(id))){
+    ['sqFSource','sqFStatus','sqFGlass','sqFClient'].forEach(f => { const e = document.getElementById(f); if(e) e.value = ''; });
+    const s = document.getElementById('sqSearchInput'); if(s) s.value = '';
+  }
+  sqSelect(id);
+}
+
+async function _sqAckSend(key, view){
+  const g = lgSketchAckPending(view || orders).find(x => x.key === key);
+  if(!g) return;
+  const ids = g.ids.filter(i => !_sqAckSent.has(i));
+  if(!ids.length) return;
+  if(g.unassigned){ showToast('הלקוח לא משויך לכרטיס — העדכון לא נשלח'); _sqRenderAckPending(); return; }
+  try {
+    const res = await _lgAuthPost('/api/whatsapp-dispatch', { kind: 'sketches-handled', orderIds: ids, dryRun: false });
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok){ showToast('העדכון לא נשלח: ' + (d.error || ('HTTP ' + res.status))); return; }
+    if(d.queued){
+      ids.forEach(i => _sqAckSent.add(i));
+      showToast('📨 נשלח עדכון ללקוח: ' + (d.clientName || g.clientName));
+      lgWaDrain().catch(() => {});
+    } else if(d.blocked || d.reason){
+      showToast('העדכון לא נשלח: ' + (d.reason || 'נחסם'));
+    }
+  } catch(e){
+    console.error('_sqAckSend:', e);
+    showToast('העדכון לא נשלח — נסה שוב משורת "ממתינים לעדכון"');
+  } finally {
+    _sqRenderAckPending();
+  }
+}
+
+// רשת הביטחון: לקוחות שטופלו להם סקיצות ועוד לא נשלח עדכון.
+function _sqRenderAckPending(){
+  const el = document.getElementById('sqAckPending');
+  if(!el) return;
+  const groups = lgSketchAckPending(orders)
+    .map(g => Object.assign({}, g, { ids: g.ids.filter(i => !_sqAckSent.has(i)) }))
+    .filter(g => g.ids.length);
+  el.hidden = !groups.length;
+  el.innerHTML = groups.map(g =>
+    `<div class="sqack-row"><span><b>${lgEsc(g.clientName)}</b> · ${g.ids.length === 1 ? 'סקיצה אחת טופלה וממתינה' : g.ids.length + ' טופלו וממתינים'} לעדכון</span>` +
+    (g.unassigned
+      ? `<span class="sqack-na">לא משויך — אין למי לשלוח</span>`
+      : `<button type="button" class="sqack-send" data-key="${lgEsc(g.key)}">שלח עכשיו</button>`) +
+    `</div>`).join('');
+  el.querySelectorAll('.sqack-send').forEach(b => b.onclick = () => _sqAckSend(b.dataset.key));
 }
 
 // ── MEASURE ORDER LIST SVG ──
@@ -2876,7 +3249,7 @@ function makeDemoSketch(title,client,glass,dims,color){
       panels+=`<circle cx="${x+panW}" cy="${oy+panH-35}" r="3.5" fill="${color}" opacity="0.6"/>`;
     }
     // dimension text
-    panels+=`<text x="${x+panW/2}" y="${oy+panH/2-5}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="10" font-weight="700" fill="${color}">${w}×${h}</text>`;
+    panels+=`<text x="${x+panW/2}" y="${oy+panH/2-5}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="10" font-weight="700" fill="${color}">${lgDimsText(w, h)}</text>`;
     panels+=`<text x="${x+panW/2}" y="${oy+panH/2+9}" text-anchor="middle" font-family="Heebo,Arial,sans-serif" font-size="8" fill="rgba(0,0,0,0.3)">${label}</text>`;
     // top dim line
     panels+=`<line x1="${x}" y1="${oy-7}" x2="${x+panW}" y2="${oy-7}" stroke="${color}" stroke-width="0.8" opacity="0.4"/>`;
@@ -2932,6 +3305,8 @@ function sqShowList(){
   document.getElementById('sqDetailPanel')?.classList.add('sq-hidden');
 }
 function sqShowDetailPanel(){
+  // שורת הסינון לא נשארת פתוחה מעל סקיצה — בטלפון היא לקחה חצי מסך
+  sqToggleFilters(false);
   document.getElementById('sqListPanel')?.classList.add('sq-hidden');
   document.getElementById('sqDetailPanel')?.classList.remove('sq-hidden');
 }
@@ -3042,9 +3417,31 @@ function sqStageTag(id){
   return map[s]||['sq-tag-pending','⏳ ממתין'];
 }
 
+// בטלפון הרשימות מוסתרות עד שפותחים "סינון". המונה אומר כמה פעילים —
+// אחרת רשימה מסוננת נראית כמו תור שבאמת ריק.
+function sqToggleFilters(force){
+  const bar=document.getElementById('sqTopBar'), btn=document.getElementById('sqFilterBtn');
+  const open=bar.classList.toggle('sq-filters-open', force);
+  if(btn) btn.setAttribute('aria-expanded', open?'true':'false');
+}
+// חיפוש או סינון מתוך סקיצה פתוחה (בטלפון) — מחזירים לרשימה, שם רואים
+// את התוצאה. בדסקטופ שני הפאנלים גלויים ממילא, וזה לא משנה דבר.
+['input','change'].forEach(ev => document.addEventListener(ev, e => {
+  const t = e.target;
+  if (t && t.closest && t.closest('#sqTopBar') && t.matches('select, input')) sqShowList();
+}));
+function sqUpdateFilterBadge(){
+  const n=['sqFSource','sqFStatus','sqFGlass','sqFClient']
+    .filter(id=>(document.getElementById(id)||{}).value).length;
+  const b=document.getElementById('sqFilterN');
+  if(b){ b.textContent=n; b.hidden=!n; }
+}
+
 function sqRender(){
-  lgFillFilterSelect(document.getElementById('sqFGlass'),
-    lgGlassTypesInOrders(sqItems, skuCatalogMap), 'כל הזכוכיות');
+  sqUpdateFilterBadge();
+  _sqRenderAckPending();
+  // כל סוגי הזכוכית מקטלוג המק"טים, לא רק מה שבתור (בן, 06/10)
+  lgFillFilterSelect(document.getElementById('sqFGlass'), lgGlassTypesWithCatalog(sqItems, skuCatalogMap), 'כל הזכוכיות');
   lgFillFilterSelect(document.getElementById('sqFClient'),
     lgClientsInOrders(sqItems.map(i => ({ orderClient: i.orderClient || i.client }))), 'כל הלקוחות');
   const list=sqFiltered();
@@ -3080,7 +3477,7 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':'מערכת'}</span>
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
         </div>
@@ -3116,6 +3513,10 @@ function sqShowDetail(){
   if(!sqCurrent){
     document.getElementById('sqDetailEmpty').style.display='flex';
     document.getElementById('sqDetailScroll').style.display='none';
+    // ⚠️ בטלפון אין "פאנל ריק" שימושי — בלי סקיצה פתוחה מציגים את הרשימה.
+    // אחרת "טופל" (ומעבר טאב, ומחיקה) השאירו את "בחר סקיצה" בלי דרך חזרה.
+    // בדסקטופ שני הפאנלים גלויים ממילא.
+    sqShowList();
     return;
   }
   document.getElementById('sqDetailEmpty').style.display='none';
@@ -4165,6 +4566,8 @@ function iwPreview(code){
   const el = document.getElementById('iwPreview');
   if(!el) return;
   if(r){ el.textContent=r.label; el.style.color='#b8922a'; }
+  // עברית — חיפוש בבורר, לא קוד שגוי
+  else if(/[א-ת]/.test(code||'')){ el.textContent='בחר מהרשימה'; el.style.color='#999'; }
   else { el.textContent=code?'?':'—'; el.style.color='#ccc'; }
 }
 
@@ -4242,16 +4645,16 @@ function iwRender(){
       <div class="iw-item ${it.chisum?'chisum':'litush'}" id="iwrow_${gi}">
         <div class="iw-item-name">${lgEsc(it.name||it.label||'פריט')}</div>
         ${qty>1?`<span class="iw-qty">×${qty}</span>`:''}
-        <input type="text" value="${it.w ? lgMmToMeterStr(it.w) : ''}"
+        <input type="text" inputmode="decimal" aria-label="רוחב" value="${it.w ? lgMmToMeterStr(it.w) : ''}"
           style="${dimStyle}"
           onchange="iwEditGroupDim(${idxJson},'w',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
         <span style="font-size:12px;color:#aaa">×</span>
-        <input type="text" value="${it.h ? lgMmToMeterStr(it.h) : ''}"
+        <input type="text" inputmode="decimal" aria-label="גובה" value="${it.h ? lgMmToMeterStr(it.h) : ''}"
           style="${dimStyle}"
           onchange="iwEditGroupDim(${idxJson},'h',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
-        <span style="font-size:12px;color:#aaa">מ"מ</span>
+        <span style="font-size:12px;color:#aaa">מ׳</span>
         <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
         ${delBtns}
       </div>`;
@@ -4333,6 +4736,8 @@ function iwAdd(){
       if(scroll) scroll.scrollTop = scroll.scrollHeight;
     }
   }, 50);
+  // נכנס ל"אחרונים" של בורר המק"טים — רק מה שבאמת נוסף
+  if(typeof lgSkuRecentPush==='function') lgSkuRecentPush(r.sku || code);
   // נקה שדות
   document.getElementById('iwCode').value='';
   document.getElementById('iwW').value='';

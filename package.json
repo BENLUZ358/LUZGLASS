@@ -3,6 +3,7 @@
   "private": true,
   "description": "Vercel serverless functions dependencies (api/) — the site itself is static HTML/JS, no build step.",
   "dependencies": {
+    "@vercel/functions": "^3.9.11",
     "firebase-admin": "^12.7.0"
   },
   "devDependencies": {

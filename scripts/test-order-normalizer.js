@@ -192,5 +192,44 @@ check('the scan actually found fields to check', Object.keys(written).length > 1
   check('and every one of them survives normalisation', missing, []);
 }
 
+/* ── סקיצה שהגיעה ב-WhatsApp ──────────────────────────────────────────
+ *
+ * אפיון 2026-10-04-whatsapp-sketch-intake-design.md §4. השדות נכתבים
+ * בשרת (api/_wa-inbound.js) ונקראים בתור הסקיצות: הפילטר לפי לקוח,
+ * "לא מזוהה", ו"טופל וטרם נשלח עדכון". שדה שלא עובר כאן נמחק בשקט
+ * בדרך לכל מסך — אותה מלכודת כמו triplexReportId ו-pickedDate.
+ */
+{
+  const WA_FIELDS = ['waMessageId', 'waPage', 'waPages', 'waSender',
+                     'waReceivedAt', 'waUnassigned', 'sketchAck'];
+  for (const f of WA_FIELDS) check(`the whitelist carries ${f}`, whitelist.has(f), true);
+
+  const o = lgNormalizeOrder({
+    id: 'wa_ABC_1', stage: '', source: 'whatsapp',
+    waMessageId: 'ABC', waPage: 2, waPages: 3, waSender: '0501234567',
+    waReceivedAt: 1759600000000, waUnassigned: true,
+    sketchAck: { sentAt: 1759700000000, outboxKey: 'k1', attemptedAt: 1759699990000,
+                 httpStatus: 200, waMessageId: 'OUT1' },
+  });
+  check('a WhatsApp sketch keeps its source', o.source, 'whatsapp');
+  check('and every WhatsApp field arrives intact',
+        [o.waMessageId, o.waPage, o.waPages, o.waSender, o.waReceivedAt, o.waUnassigned],
+        ['ABC', 2, 3, '0501234567', 1759600000000, true]);
+  check('the customer-update receipt arrives intact', o.sketchAck,
+        { sentAt: 1759700000000, outboxKey: 'k1', attemptedAt: 1759699990000,
+          httpStatus: 200, waMessageId: 'OUT1' });
+
+  /* "ממתין לעדכון" נשען על ¬sketchAck.sentAt — ניסיון שנכשל לא נחשב נשלח */
+  const tried = lgNormalizeOrder({ id: 'wa_X_1', sketchAck: { attemptedAt: 5, httpStatus: 500 } });
+  check('a failed attempt is not a sent update', tried.sketchAck.sentAt, 0);
+
+  const plain = lgNormalizeOrder({ id: 'L1' });
+  check('an ordinary order has no receipt — null, not an empty object', plain.sketchAck, null);
+  check('and is never marked unassigned', plain.waUnassigned, false);
+  check('and keeps the portal source default', plain.source, 'sketch');
+  check('a receipt that is not an object is dropped',
+        lgNormalizeOrder({ id: 'L1', sketchAck: 'yes' }).sketchAck, null);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll order-normaliser checks passed.');

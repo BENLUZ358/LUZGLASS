@@ -60,6 +60,10 @@ const MUST_BLOCK = {
   sketchSeenAt:        'is the review sub-stage, owned by the queue',
   invoiceCheck:        'marks the items as verified against the sketch, ahead of invoicing',
   invoiceDone:         'marks the order as invoiced, so it leaves the invoice station',
+  /* WhatsApp intake — spec 2026-10-04 §5 */
+  sketchAck:           'says the customer was already told the sketch was handled',
+  waUnassigned:        'puts the order in the manual-assignment list',
+  waMessageId:         'ties the order to an inbound WhatsApp message it never came from',
 };
 for (const [field, why] of Object.entries(MUST_BLOCK)) {
   check(`a client cannot set ${field} — it ${why}`,
@@ -118,6 +122,25 @@ check('nor create one under someone else\'s phone',
   const v = (RULES.rules.meta.invoiceCounter || {})['.validate'];
   check('the invoice counter cannot be walked backwards',
         typeof v === 'string' && /newData\.val\(\) > data\.val\(\)/.test(v), true);
+}
+
+/* ── waInbound: the inbound WhatsApp log (spec 2026-10-04 §5) ─────────── */
+/*
+ * Holds the sender's phone, captions and — until processing finishes — a
+ * signed downloadUrl. Admin-read only, and nobody writes it from a browser:
+ * the webhook and the drain write through the Admin SDK, and "retry" /
+ * "handled manually" go through an admin endpoint. Same shape as waOutbox.
+ */
+{
+  const wi = RULES.rules.waInbound;
+  check('waInbound has its own rule', !!wi, true);
+  if (wi) {
+    check('no browser can write waInbound', wi['.write'], false);
+    check('only an admin can read it — the same check waOutbox uses',
+          wi['.read'], RULES.rules.waOutbox['.read']);
+    check('it is indexed for the drain and the intake panel',
+          [...(wi['.indexOn'] || [])].sort(), ['createdAt', 'state']);
+  }
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

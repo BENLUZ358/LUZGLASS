@@ -267,7 +267,15 @@ async function lgWaPending(db, limit) {
   return rows.slice(0, limit || 50).map(r => r.key);
 }
 
+//  לאיזה שדה בהזמנה נכתבת החותמת אחרי שליחה.
+//  ⚠️ היה טרנרי של שניים (dispatched → whatsappDispatch, כל השאר → whatsapp).
+//  סוג שלישי היה דורס את whatsapp — כלומר את "מוכן לאיסוף" — ומשבש את
+//  הדילוג "כבר נשלחה הודעת מוכן לאיסוף".
+const _LG_WA_STAMP = { dispatched: 'whatsappDispatch', 'sketches-handled': 'sketchAck' };
+function lgWaStampField(kind) { return _LG_WA_STAMP[kind] || 'whatsapp'; }
+
 module.exports = {
+  lgWaStampField,
   lgWaMsgKey, lgWaEnqueue, lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot,
   OUTBOX, SLOT, CLAIM_TTL_MS, MAX_ATTEMPTS, MAX_AGE_MS, SLOT_MAX_FUTURE_MS,
 };

@@ -237,6 +237,76 @@ function lgGlassTypesInOrders(orders, skuCatalogMap, itemFilter) {
     });
 }
 
+// כל סוגי הזכוכית שהמפעל עובד איתם — מקטלוג המק"טים (חשבשבת) — ועוד כל
+// סוג שמופיע על פריט בהזמנות ולא בקטלוג. סוג שנמצא בהזמנות נושא את
+// הספירה שלו; סוג שאין ממנו כרגע — בלי "(0)".
+// בתור הסקיצות רוב ההזמנות עוד בלי פריטים, ולכן הרשימה מההזמנות לבדה
+// הציעה סוג אחד או שניים בלבד (בן, 06/10). שאר המסכים נשארים על
+// lgGlassTypesInOrders, שמציע רק מה שיחזיר תוצאה.
+function lgGlassTypesWithCatalog(orders, skuCatalogMap) {
+  const counts = {};
+  lgGlassTypesInOrders(orders, skuCatalogMap).forEach(t => { counts[t.label] = t.count; });
+  const labels = new Set(Object.keys(counts));
+  Object.values(skuCatalogMap || {}).forEach(e => {
+    if (e && e.glass && e.mm) labels.add(e.mm + ' ' + e.glass);
+  });
+  return [...labels]
+    .map(label => (counts[label] ? { label, count: counts[label] } : { label }))
+    .sort((a, b) => {
+      const am = parseInt(a.label, 10), bm = parseInt(b.label, 10);
+      if (am !== bm) return am - bm;
+      return a.label.localeCompare(b.label, 'he');
+    });
+}
+
+// ─── מידות: רוחב×גובה, תמיד בסדר הזה ───────────────────────────────
+//  ⚠️ בשורה עם עברית הדפדפן הופך את סדר המספרים: "220×550" מוצג
+//  "550×220" (ה-× בין שני מספרים בהקשר RTL מקבל כיוון ימין-לשמאל). עד
+//  06/10 כל המסכים הראו כך גובה×רוחב. LRI…PDI מבודדים את הזוג משמאל
+//  לימין — עובד ב-HTML, בתא טבלה, ב-SVG ובטקסט רגיל. המוסכמה במפעל:
+//  רוחב × גובה (בן). כל מסך כותב מידות רק דרך כאן — test-dims-bidi.
+//  missing: מה להציג כשצד חסר ('?' ביום עבודה, ריק בשאר).
+function lgDimsText(w, h, missing) {
+  const m = missing == null ? '' : String(missing);
+  // 0 / ריק = חסר — כמו ה-||'?' שהיה בכל המסכים
+  const side = v => v ? String(v) : m;
+  return String.fromCharCode(0x2066) + side(w) + '×' + side(h) + String.fromCharCode(0x2069);
+}
+
+// ─── "הסקיצות טופלו" — שלב 6 (אפיון §16) ────────────────────────────
+//  הקיבוץ לפי לקוח: כרטיס חשבשבת אם יש, אחרת טלפון, אחרת שם. אותו סדר
+//  עדיפות כמו resolvePhone בשרת, כדי שקבוצה כאן לא תתפרק שם ל-409.
+function lgSketchAckClientKey(o) {
+  // קבוצה קודמת — לשם יוצאת ההודעה, ולכן היא קבוצת השליחה (resolveRecipient)
+  if (o && o.waGroup) return 'g:' + o.waGroup;
+  if (o && o.customerId) return 'c:' + o.customerId;
+  const p = String((o && (o.clientPhone || o.phone)) || '').replace(/\D/g, '');
+  if (p) return 'p:' + p;
+  return 'n:' + String((o && o.orderClient) || '');
+}
+
+// טופלו וטרם עודכנו — לכל לקוח. רק WhatsApp (D3). stage לא משנה: סקיצה
+// שכבר נפתחה ממנה הזמנה עדיין ממתינה לעדכון. unassigned = אין כרטיס לקוח,
+// ולכן אין למי לשלוח (נעילה 3 בשער) — מוצג, לא נשלח.
+function lgSketchAckPending(orders) {
+  const groups = {};
+  (orders || []).forEach(o => {
+    if (!o || o.source !== 'whatsapp' || !o.sketchSeenAt || o.isTest) return;
+    if (o.sketchAck && o.sketchAck.sentAt) return;
+    const key = lgSketchAckClientKey(o);
+    const g = groups[key] || (groups[key] = { key, clientName: o.orderClient || '—', ids: [], unassigned: false });
+    g.ids.push(String(o.id));
+    if (!o.customerId) g.unassigned = true;
+  });
+  return Object.values(groups);
+}
+
+// סקיצות WhatsApp של אותו לקוח שעוד בתור ולא סומנו — "יש עוד".
+function lgSketchAckUnseen(orders, key, excludeId) {
+  return (orders || []).filter(o => o && o.source === 'whatsapp' && !(o.stage) && !o.sketchSeenAt &&
+    !o.isTest && String(o.id) !== String(excludeId) && lgSketchAckClientKey(o) === key);
+}
+
 // האם בהזמנה יש ולו פריט אחד מסוג הזכוכית שנבחר.
 // הזמנה נשארת ברשימה גם אם רוב פריטיה מסוג אחר — הצמצום למה שנבחר נעשה
 // בתצוגה של הפריטים עצמם, לא בהסתרת ההזמנה.
@@ -850,6 +920,27 @@ function lgNormalizeOrder(o) {
     // הסקיצות אישר אותה, ונקרא רק בתור הסקיצות ובפורטל. stage לא מושפע.
     sketchSeenAt:  o.sketchSeenAt || 0,
     source:        o.source       || 'sketch',
+    // סקיצה שהגיעה ב-WhatsApp (source:'whatsapp') — אפיון 2026-10-04 §4.
+    // נכתבים רק בשרת, ונקראים בתור: פילטר לקוח, "לא מזוהה", ו"טופל וטרם
+    // נשלח עדכון". waPage/waPages — עמוד מתוך PDF; בתמונה 1/1.
+    waMessageId:   o.waMessageId  || '',
+    waPage:        Number(o.waPage)  || 0,
+    waPages:       Number(o.waPages) || 0,
+    waSender:      o.waSender     || '',
+    waReceivedAt:  Number(o.waReceivedAt) || 0,
+    waUnassigned:  !!o.waUnassigned,
+    // קבוצת WhatsApp שממנה הגיעה הסקיצה — לשם יוצא "הסקיצות טופלו" (06/10)
+    waGroup:       o.waGroup      || '',
+    waGroupName:   o.waGroupName  || '',
+    // הקבלה של "שלח עדכון ללקוח". sentAt נכתב רק אחרי הצלחה אמיתית, ולכן
+    // ניסיון שנכשל מגיע כאן עם sentAt:0 — עדיין ממתין לעדכון.
+    sketchAck:     (o.sketchAck && typeof o.sketchAck === 'object') ? {
+      sentAt:      Number(o.sketchAck.sentAt)      || 0,
+      outboxKey:   o.sketchAck.outboxKey   || '',
+      attemptedAt: Number(o.sketchAck.attemptedAt) || 0,
+      httpStatus:  Number(o.sketchAck.httpStatus)  || 0,
+      waMessageId: o.sketchAck.waMessageId || '',
+    } : null,
     urgent:        o.urgent       || false,
     sketch:        o.sketch       || null,
     // סימן בלבד — מאפשר למסך לדעת שיש סקיצה בלי להוריד אותה

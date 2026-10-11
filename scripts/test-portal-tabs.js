@@ -69,8 +69,9 @@ check('there is a collected tab', /id="tab-collected"/.test(PORTAL), true);
 check('and a view to go with it', /id="view-collected"/.test(PORTAL), true);
 check('and setTab knows about it',
       /const PORTAL_TABS = \[[^\]]*'collected'/.test(PORTAL), true);
+/* 06/10: האייקון והשם בתוך span משלהם (רשת הטאבים בטלפון) — השם עצמו לא השתנה */
 check('the orders tab is renamed to say it holds active work',
-      /id="tab-orders"[^>]*>[^<]*הזמנות פעילות/.test(PORTAL), true);
+      /id="tab-orders"[^>]*>(?:<span[^>]*>[^<]*<\/span>)?<span class="tab-lbl">הזמנות פעילות<\/span>/.test(PORTAL), true);
 
 /* the actual defect: collected orders were rendered inside the orders view */
 {

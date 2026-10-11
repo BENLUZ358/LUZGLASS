@@ -193,14 +193,39 @@ function lgGreenApiGate(ctx) {
 
   // נעילה 6 — פעילה רק כשהוגדרה. ב-TEST היא מצמצמת למספר אחד; בייצור
   // היא אינה מוגדרת, כי שם צריך לשלוח לכל לקוח מאושר.
-  const only = _digits(process.env.GREENAPI_ONLY_TO);
-  if (only && _digits(ctx && ctx.phone) !== only) {
-    return { allowed: false, reason: 'הנמען אינו המספר המורשה בסביבה הזו' };
+  //  06/10: רשימה מופרדת בפסיקים, ויכולה להכיל קבוצה (…@g.us) — נמען של
+  //  "הסקיצות טופלו" מקבוצה מקושרת. קבוצה מושווית במלואה, טלפון לפי ספרות.
+  //  ערך יחיד, כמו שהיה, מתנהג בדיוק כמו קודם.
+  const onlyList = String(process.env.GREENAPI_ONLY_TO || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (onlyList.length) {
+    const to = String((ctx && ctx.phone) || '');
+    const hit = onlyList.some(o => o.includes('@') ? o === to : (!to.includes('@') && _digits(o) === _digits(to)));
+    if (!hit) return { allowed: false, reason: 'הנמען אינו המספר המורשה בסביבה הזו' };
   }
 
   // accountKey בלבד. בלי idInstance ובלי token — ר' ההערה למעלה.
   return { allowed: true, reason: '', accountKey: key };
 }
 
+// ─── WhatsApp נכנס · מי מורשה לשלוח לנו סקיצה ─────────────────────
+//
+//  אפיון inbound §2.1 סעיף 4. בזמן ה-rollout רק שולחים ברשימה נקלטים;
+//  כל השאר מקבלים 200 בלי רשומה וממשיכים לטיפול ידני ב-WhatsApp כמו היום.
+//
+//      GREENAPI_INBOUND_ALLOWED = luz-glass-test:0501234567
+//
+//  חתומה על הפרויקט מאותה סיבה כמו GREENAPI_ALLOWED_ACCOUNTS: העתקת
+//  משתני הייצור ל-TEST לא תגרום ל-TEST לקלוט סקיצות של לקוחות אמיתיים.
+//  ריקה, פגומה או של פרויקט אחר → אף אחד. משווים ספרות בלבד.
+function lgWaInboundAllowed(phone) {
+  const list = _lgParseAllowlist(process.env.GREENAPI_INBOUND_ALLOWED);
+  if (!list.keys.length) return { allowed: false, reason: 'לא הוגדרה רשימת שולחים (GREENAPI_INBOUND_ALLOWED)' };
+  const pid = _projectId();
+  if (!pid || list.project !== pid) return { allowed: false, reason: 'רשימת השולחים מונפקת לפרויקט אחר' };
+  const want = _digits(phone);
+  if (!want || !list.keys.some(k => _digits(k) === want)) return { allowed: false, reason: 'השולח אינו ברשימה' };
+  return { allowed: true, reason: '' };
+}
+
 module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl,
-                   lgGreenApiGate, lgGreenApiEnvReady, LG_LIVE_PROJECT };
+                   lgGreenApiGate, lgGreenApiEnvReady, lgWaInboundAllowed, LG_LIVE_PROJECT };

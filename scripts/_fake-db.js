@@ -58,7 +58,16 @@ function fakeDb(initial) {
         limitToFirst: n => { q.limit = n; return self; },
         once: async () => runQuery(get(p), q),
         set:  async v => put(p, v),
-        update: async v => put(p, { ...(get(p) || {}), ...v }),
+        //  כמו RTDB: מפתח עם '/' הוא נתיב, והעדכון רב-נתיבי ואטומי. null
+        //  מוחק. ref() בלי נתיב הוא השורש — כך נכתבת הזמנה + סקיצה יחד.
+        update: async v => {
+          const base = keys(p || '').join('/');
+          if (!base || Object.keys(v).some(k => k.includes('/'))) {
+            for (const [k, x] of Object.entries(v)) put((base ? base + '/' : '') + k, x);
+            return;
+          }
+          put(p, { ...(get(p) || {}), ...v });
+        },
         //  ⚠️ פיירבייס קוראת לפונקציה **פעמיים**: תחילה עם הערך שבמטמון
         //  המקומי — שהוא null — ורק אחר כך עם הערך מהשרת. פונקציה שמחזירה
         //  undefined בקריאה הראשונה מבטלת את הטרנזקציה כולה, ופיירבייס
