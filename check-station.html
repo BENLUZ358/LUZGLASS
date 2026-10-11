@@ -135,6 +135,10 @@ html,body{height:100%;overflow:hidden;}
 .ed-txtbar input{flex:1;padding:6px 9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#f0ede8;font-family:Heebo,sans-serif;font-size:14px;border-radius:4px;outline:none;}
 .ed-canvas{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#111;touch-action:none;}
 #edBg{position:absolute;max-width:100%;max-height:100%;object-fit:contain;user-select:none;pointer-events:none;}
+/* בסקיצה המצוירת (buildSVG) הלחיצה והנגיעה נקלטות רק על מלבן הזכוכית (rect[data-idx]).
+   השם, המידה ותווית "🔥 חיסום" יושבים מעליו — ונגיעה במרכז הזכוכית נבלעה בהם ולא סימנה
+   כלום; רק השוליים הריקים עבדו. כל מה שאינו מלבן זכוכית שקוף ללחיצה. */
+#skWrap svg text, #skWrap svg rect:not([data-idx]){pointer-events:none;}
 #edCvs{position:absolute;touch-action:none;}
 .eact{padding:6px 13px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;}
 .esave{background:var(--green);color:#fff;}.ecancel{background:transparent;color:rgba(247,244,239,0.4);border:1px solid rgba(255,255,255,0.1);}
