@@ -1,14 +1,13 @@
 // סרטון 06 — תחנת חשבוניות. התסריט: docs/training-videos/scripts/06-invoices.md
 // בן, 12/10: שוטף 30 = חשבונית מרוכזת בסוף כל חודש קלנדרי; יומיים = אפשר חשבונית אחת על כמה הזמנות של אותו לקוח;
 // תיקון מידה בחשבשבת = "בטל יתרה לאספקה" בשורה המקורית + שורה חדשה, לפני הפקת החשבונית.
-import { CLOCK, DAY, CLIENTS, users, item, sketch, order, itemsHash, SKUS } from '../lib/seedlib.js';
+import { CLOCK, DAY, CLIENTS, users, item, sketch, order, itemsHash, SKUS, PRICES, locked } from '../lib/seedlib.js';
 
 export const meta = { id: '06', file: '06 - תחנת חשבוניות', title: 'תחנת חשבוניות', viewport: { w: 1600, h: 900 } };
 
 const hs = num => ({ hashavshevet: { reference: num.replace(/\D/g, ''), httpOk: true, sentAt: CLOCK - 5 * DAY } });
 const collected = (id, num, client, sketchName, items, extra = {}) => order(id, num, client, {
-  stage: 'collected', status: 'נאסף', sketchName, items, hasSketch: true, pricesLockedAt: CLOCK - DAY,
-  lockedItems: items.map(i => ({ ...i, pricePerM2: 420 })), totalFinal: 1000, ...hs(num), ...extra });
+  stage: 'collected', status: 'נאסף', sketchName, items, hasSketch: true, ...locked(items, CLOCK - DAY), ...hs(num), ...extra });
 const verified = items => ({ invoiceCheck: { verifiedAt: CLOCK - 18 * 3600e3, verifiedBy: 'נועה', itemsHash: itemsHash(items), note: '' } });
 
 export function seed() {
@@ -16,8 +15,8 @@ export function seed() {
     v9301: [item('8SMH', 885, 1985, { hsLine: 1 }), item('8SMH', 600, 1985, { hsLine: 2 }), item('8HMH', 885, 300, { hsLine: 3 })],
     v9302: [item('8SMH', 1200, 1950, { hsLine: 1 }), item('8SMH', 400, 1950, { hsLine: 2 })],
     v9303: [item('10SMH', 1250, 655, { hsLine: 1 }), item('10SMH', 1250, 655, { hsLine: 2 }), item('8SMH', 550, 1885, { hsLine: 3 })],
-    v9304: [item('M4', 1200, 800, { hsLine: 1 })],
-    v9101: [item('8SMH', 885, 1985, { hsLine: 1 }), item('8SMH', 600, 1985, { hsLine: 2 }), item('M4', 700, 900, { hsLine: 3 })],
+    v9304: [item('4MIRM', 1200, 800, { hsLine: 1 })],
+    v9101: [item('8SMH', 885, 1985, { hsLine: 1 }), item('8SMH', 600, 1985, { hsLine: 2 }), item('4MIRM', 700, 900, { hsLine: 3 })],
     v9201: [item('8SMH', 900, 2000, { hsLine: 1 }), item('8SMH', 500, 2000, { hsLine: 2 })],
     v9290: [item('6SMH', 700, 1200, { hsLine: 1 })],
     v9291: [item('10SMH', 900, 2100, { hsLine: 1 })],

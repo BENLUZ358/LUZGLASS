@@ -1,6 +1,6 @@
 // סרטון 04 — תחנת הגרפיקה (גרפיקה וחלבי). התסריט: docs/training-videos/scripts/04-05-graphic-delivery.md
 // workday.html, הטאב "גרפיקה". מנוע התצוגה: LG_STAGE_VIEW.graphic + completeGraphic (workday.html).
-import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS } from '../lib/seedlib.js';
+import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS, PRICES, locked } from '../lib/seedlib.js';
 
 export const meta = { id: '04', file: '04 - גרפיקה', title: 'תחנת הגרפיקה', viewport: { w: 1180, h: 820 } };
 
@@ -12,7 +12,7 @@ const gItem = (sku, w, h, extra = {}) => ({ sku, name: G_NAMES[sku], glassFullNa
 export function seed() {
   const G = CLIENTS.galil.name, S = CLIENTS.sharon.name;
   const I = {
-    g9101: [gItem('8SGM', 800, 1900), gItem('8SGM', 600, 1900), item('8SL', 400, 1900)],   // the 3rd is plain glass
+    g9101: [gItem('8SGM', 800, 1900), gItem('8SGM', 600, 1900), item('8SM', 400, 1900)],   // the 3rd is plain glass
     g9102: [gItem('10SGMH', 900, 2000)],
     g9103: [item('8HMH', 700, 1800, { chalavi: true })],
   };
@@ -29,7 +29,7 @@ export function seed() {
   };
   return { __clock: CLOCK, __session: '0500000000',
     db: { users: users({ worker: 'נועה' }), orders, sketches, skuCatalog: SKUS,
-          prices: { global: { '8SGM': 420, '10SGMH': 560, '8HMH': 380, '8SL': 300 } },
+          prices: { global: PRICES },
           workday: { date: '12.10.2026', selected: [], inWork: [], inChisum: [] }, meta: { orderCounter: 9400 } } };
 }
 

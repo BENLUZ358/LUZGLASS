@@ -2,7 +2,7 @@
 // חלק א: check-station.html (בדיקה ושליחה בדוח). חלק ב: workday.html, טאב חיסום (קבלת הדוח וסימון מה שחזר).
 // המקרה שבן שאל עליו במפורש: לא כל הזכוכיות חזרו מהחיסום — מוצג במלואו, לפי confirmResetChisum (workday.html).
 // גם: d30b9e9 — הזמנה שכל המפעל שלה חזר אבל פריט ליטוש שלה עוד לא נחתך (wdDoneIdxs) נשארת בחיסום.
-import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS } from '../lib/seedlib.js';
+import { CLOCK, DAY, CLIENTS, users, item, sketch, handSketch, order, SKUS, PRICES, locked } from '../lib/seedlib.js';
 
 export const meta = { id: '03', file: '03 - תחנת בדיקה וחיסום', title: 'תחנת בדיקה וחיסום', viewport: { w: 1180, h: 820 } };
 
@@ -17,7 +17,7 @@ function report42() {
       item('10SMH', 400, 1200), item('10SMH', 450, 1200), item('10SMH', 500, 1200), item('10SMH', 550, 1200)] }),
     // the factory part went with the station; the polish item (idx 2) was not cut yet — tracked by wdDoneIdxs (d30b9e9)
     ord_9107: order('ord_9107', 'L9107', 'sharon', { ...sent, sketchName: 'מקלחון ומדף', wdDoneIdxs: { 0: true, 1: true }, items: [
-      item('8SMH', 700, 1950), item('8SMH', 300, 1950), item('8SL', 600, 250)] }),
+      item('8SMH', 700, 1950), item('8SMH', 300, 1950), item('8SM', 600, 250)] }),
   };
 }
 
@@ -30,14 +30,15 @@ export function seed() {
       item('8SMH', 800, 2000, { quantityGroupId: 'q9102', groupIndex: 1 }), item('8SMH', 800, 2000, { quantityGroupId: 'q9102', groupIndex: 2 })]),
     ord_9105: inStation('ord_9105', 'L9105', 'david', 'דלת כניסה', [item('10SMH', 500, 1500), item('10SMH', 500, 1500, { graphic: true })]),
     // has a sketch image — the image is not tappable; checked through "פריטים"
-    ord_9108: inStation('ord_9108', 'L9108', 'david', 'ויטרינה', [item('10SMH', 1000, 2000), item('10SMH', 1000, 2000)], { hasSketch: true }),
+    ord_9108: inStation('ord_9108', 'L9108', 'david', 'ויטרינה', [item('10SMH', 1000, 2000), item('10SMH', 1000, 2000)], { hasSketch: true, source: 'whatsapp' }),
   };
-  const sketches = { ord_9108: sketch({ title: 'ויטרינה', client: D, num: 'L9108', panes: [{ w: 1000, h: 2000, n: 1 }, { w: 1000, h: 2000, n: 2 }] }) };
+  // a client's own drawing, sent by WhatsApp — an image: nothing on it can be tapped
+  const sketches = { ord_9108: handSketch({ title: 'ויטרינה לחנות', panes: [{ w: 1000, h: 2000 }, { w: 1000, h: 2000 }], note: '10 מ"מ מחוסם · 2 יח׳' }) };
   const hashavshevetAccounts = {};
   Object.values(CLIENTS).forEach((c, i) => { const k = String(14300 + i); hashavshevetAccounts[k] = { key: k, name: c.name, phone: c.phone }; });
   return { __clock: CLOCK, __session: '0500000000', db: {
     users: users({ worker: 'יוסי' }), orders, sketches, skuCatalog: SKUS, hashavshevetAccounts,
-    prices: { global: { '10SMH': 390, '8SMH': 320, '8SL': 260 } },
+    prices: { global: PRICES },
     workday: { date: '12.10.2026', inChisum: { 0: 'ord_9101', 1: 'ord_9102', 2: 'ord_9105', 3: 'ord_9108' },
       checkState: { ord_9102: { 0: true, 1: true }, ord_9105: { 0: true, 1: true } } },
     meta: { chisumCounter: 40, orderCounter: 9200 },
@@ -69,10 +70,16 @@ export async function script(r) {
     text: 'כל כרטיס הוא **הזמנה אחת**: הלקוח, מספר ההזמנה, וכמה פריטי חיסום יש בה. הפס מראה כמה כבר נבדקו.' });
   await r.show({ focus: '#filtersBar', mark: '#filtersBar', text: 'למעלה: חיפוש, וסינון לפי סוג זכוכית או לפי לקוח.', hold: 3.5 });
 
-  // ── ג. הדגמה מלאה
-  r.chapter('בדיקת הזמנה');
-  await r.click({ target: card('זגגות הגליל'), focus: '#listView', text: 'מתחילים בהזמנה של **זגגות הגליל**. לוחצים על הכרטיס.',
-    after: 'נפתחת הסקיצה. כל **מלבן סגול** הוא זכוכית אחת שנוסעת לחיסום, עם המידות שלה.', afterFocus: '#skWrap', afterMark: '#skWrap svg' });
+  // ── ג. הדגמה מלאה — שני סוגי הסקיצות
+  r.chapter('שני סוגי סקיצות');
+  r.card({ title: 'בתחנה יש **שני סוגים** של סקיצה — ושתי דרכים לסמן', table: [
+    ['סקיצה **שהמערכת ציירה**', 'הזמנה בלי תמונה — המערכת מציירת **מלבן לכל זכוכית** מהפריטים. **לוחצים על המלבן**.'],
+    ['סקיצה **שהועלתה**', 'צילום או ציור של הלקוח (העלאה או וואטסאפ). על תמונה אי אפשר ללחוץ — **מסמנים ברשימת "📋 פריטים"**.'],
+  ], box: { kind: 'info', text: 'רשימת **"📋 פריטים"** עובדת בשני הסוגים. בשניהם הסימון נשמר לבד.' } });
+  r.chapter('סקיצה שהמערכת ציירה');
+  await r.click({ target: card('זגגות הגליל'), focus: '#listView', text: 'מתחילים בהזמנה של **זגגות הגליל** — הזמנה **בלי תמונה**. לוחצים על הכרטיס.',
+    after: 'המערכת **ציירה את הסקיצה לבד** מהפריטים: כל **מלבן סגול** הוא זכוכית אחת שנוסעת לחיסום, עם המידות שלה.', afterFocus: '#skWrap', afterMark: '#skWrap svg',
+    afterChip: { kind: 'system', t: '⚙ המערכת ציירה את הסקיצה' } });
   await r.show({ focus: ['.topbar', '#skWrap'], mark: ['#progWrap', '#iCnt'], text: 'למעלה ולמטה יש מונה: **0 מתוך 3** נבדקו.', hold: 3.5 });
   await r.click({ target: 'rect[data-idx="0"]', focus: '#skWrap',
     text: 'מרימים את הזכוכית, מודדים ומשווים לסקיצה. היא תקינה? **לוחצים על המלבן שלה**.',
@@ -92,16 +99,34 @@ export async function script(r) {
     sub: 'גם את אלה שלא לחצת עליהן. יש כפתור כזה גם בסרגל התחתון של הסקיצה.',
     box: { kind: 'warn', text: 'לוחצים "סיים סקיצה" **רק אחרי** שבדקת כל זכוכית ביד.' } });
 
+  r.chapter('סקיצה שהועלתה');
+  await r.click({ target: card('ויטרינה'), focus: '#listView',
+    text: 'עכשיו הזמנה שהגיעה **עם סקיצה של הלקוח** — L9108, ויטרינה. בכרטיס כתוב **"🖼 יש סקיצה"**.', hold: 4,
+    after: 'זו **התמונה ששלח הלקוח**, כמו שהיא. אין בה מלבנים — **על התמונה אי אפשר ללחוץ**.', afterFocus: '#skWrap', afterMark: '#skWrap',
+    afterChip: { kind: 'warn', t: '⚠ תמונה — לא לוחצים עליה' } });
+  await r.click({ target: 'button[aria-label="הגדל"]', focus: '#btmbar', text: 'צריך לקרוא מידה קטנה? **"+"** מגדיל, **"−"** מקטין, **"↺"** מחזיר.', hold: 3.4,
+    after: 'הסקיצה גדלה. אפשר גם לגרור אותה ולצבוט באצבעות.', afterFocus: '#skArea' });
+  await r.click({ target: 'button[aria-label="איפוס תצוגה"]', focus: '#btmbar', text: '"↺" — חזרה לגודל רגיל.', hold: 2 });
+  await r.click({ target: '#btnSheet', focus: '.topbar', text: 'כדי לסמן — לוחצים **"📋 פריטים"** למעלה.',
+    after: 'נפתחת רשימה של **כל פריטי החיסום** בהזמנה, עם המידות.', afterFocus: '#sheet', afterMark: '#shBody' });
+  await r.click({ target: { sel: '#shBody .si', nth: 0 }, focus: '#sheet', text: 'מרימים את הזכוכית, משווים למידה **בתמונה** — ולוחצים על השורה שלה.',
+    after: '✓ — הזכוכית סומנה, והמונה למעלה עלה. **בדיוק כמו המלבנים.**', afterMark: [{ sel: '#shBody .si', nth: 0 }, '#progWrap'], afterFocus: ['.topbar', '#sheet'] });
+  await r.click({ target: { sel: '#shBody .si', nth: 1 }, focus: '#sheet', text: 'והשנייה.', hold: 2,
+    after: 'שתיהן סומנו. **"כל הפריטים נבדקו!"**', afterMark: '#progWrap', afterFocus: '.topbar' });
+  await r.exec(() => { const b = document.querySelector('#sheet'); if (b && b.classList.contains('open')) closeSheet(); });
+  await r.click({ target: { sel: '#banner .ban-btn', text: 'סיים סקיצה' }, focus: '#banner', text: 'סוגרים את הרשימה, ו**"סיים סקיצה"** — כמו בכל הזמנה.', hold: 3,
+    after: 'גם L9108 עברה ל"הושלמו".', afterMark: [toast, '#tabsBar'], afterFocus: null });
+
   r.chapter('שליחה לחיסום');
   await r.click({ target: '#tabDone', focus: '#tabsBar', text: 'עוברים לטאב **"✅ הושלמו"**.',
-    after: 'כאן כל מה שנבדק — **3 הזמנות** — ובראש הרשימה כפתור סגול.', afterFocus: '#listView', afterMark: 'button[onclick="sendAllToFactory()"]' });
+    after: 'כאן כל מה שנבדק — **4 הזמנות** — ובראש הרשימה כפתור סגול.', afterFocus: '#listView', afterMark: 'button[onclick="sendAllToFactory()"]' });
   await r.click({ target: 'button[onclick="sendAllToFactory()"]', focus: '#listView',
-    text: 'את הכפתור הזה לוחצים **פעם אחת, בסוף היום**, כשהזכוכיות יוצאות למפעל: **"🔥 סיים יום — שלח 3 הזמנות לחיסום והוצא דוח"**.',
-    after: '"✓ חיסום 41 — 3 הזמנות נשלחו למפעל". ההזמנות עברו לבד לשלב **חיסום**, והרשימה ב"הושלמו" התרוקנה.',
+    text: 'את הכפתור הזה לוחצים **פעם אחת, בסוף היום**, כשהזכוכיות יוצאות למפעל: **"🔥 סיים יום — שלח 4 הזמנות לחיסום והוצא דוח"**.',
+    after: '"✓ חיסום 41 — 4 הזמנות נשלחו למפעל". ההזמנות עברו לבד לשלב **חיסום**, והרשימה ב"הושלמו" התרוקנה.',
     afterMark: [toast], afterFocus: null, afterChip: { kind: 'system', t: '⚙ ההזמנות עברו לחיסום לבד' }, hold: 6 });
   await r.showPrinted({ text: 'במקביל נפתח **חלון הדפסה** עם הדוח. המערכת נתנה לו **מספר: 41**. מדפיסים — והדף נוסע עם הזכוכיות למפעל.',
     chip: { kind: 'system', t: '⚙ מספר הדוח ניתן לבד' } });
-  await r.showPrinted({ text: 'בדוח: כל זכוכית — סוג, מידות, לקוח והזמנה. **7 פריטים, 3 הזמנות.** את המספר 41 נחפש כשהדוח יחזור.', who: null });
+  await r.showPrinted({ text: 'בדוח: כל זכוכית — סוג, מידות, לקוח והזמנה. **9 פריטים, 4 הזמנות.** את המספר 41 נחפש כשהדוח יחזור.', who: null });
   await r.click({ target: '#tabActive', focus: '#tabsBar', text: 'ומה שעוד לא נבדק?',
     after: 'נשאר בטאב **"לבדיקה"**. הוא לא נשלח, ויחכה לבדיקה ולדוח הבא.', afterMark: '#listView', afterFocus: '#listView' });
 
@@ -111,7 +136,7 @@ export async function script(r) {
   r.chapter('קבלת דוח חיסום');
   await r.open('workday.html', { wait: '#tab-chisum' });
   await r.click({ target: '#tab-chisum', focus: '.phase-tabs', text: 'ביום העבודה לוחצים על הטאב **"חיסום"**.',
-    after: 'יש כאן כרטיס לכל דוח שנמצא במפעל: **"📦 דוח 41 — 7 פריטים"**, נשלח למפעל, 3 הזמנות.', afterFocus: '#chisumOrders', afterMark: '#chisumOrders > div:nth-child(2)' });
+    after: 'יש כאן כרטיס לכל דוח שנמצא במפעל: **"📦 דוח 41 — 9 פריטים"**, נשלח למפעל, 4 הזמנות.', afterFocus: '#chisumOrders', afterMark: '#chisumOrders > div:nth-child(2)' });
   await r.click({ target: { sel: '#chisumOrders button', text: 'קיבלתי את הדוח' }, focus: '#chisumOrders',
     text: 'קודם בודקים שהמספר **זהה** למספר שעל הדף שחזר. ואז לוחצים **"📦 קיבלתי את הדוח"**.',
     after: 'המערכת שואלת שוב — כדי שלא תסמן דוח אחר.', afterFocus: { sel: 'div[style*="fixed"] > div', text: 'קיבלת את דוח' }, afterMark: '#chisumArrivedOk' });
@@ -143,10 +168,10 @@ export async function script(r) {
   await r.show({ focus: dlg, mark: [{ sel: 'div[style*="fixed"] div[style*="border-radius:6px"]', text: 'גרפיקה' }, { sel: 'div[style*="fixed"] div[style*="border-radius:6px"]', text: 'הובלות' }],
     text: 'הזמנה עם גרפיקה עוברת **לגרפיקה**, ולקוח הובלות — **להובלות**. להן עוד לא נשלחת הודעה.', hold: 6 });
   await r.click({ target: 'button[onclick="confirmResetChisum()"]', focus: dlg, text: 'לוחצים **"✓ אשר סיום בדיקה"**.',
-    after: '"✓ 3 סקיצות הושלמו". כל הזמנה עברה **לבד** לשלב הבא שלה, והרשימה התרוקנה.',
+    after: '"✓ 4 סקיצות הושלמו". כל הזמנה עברה **לבד** לשלב הבא שלה, והרשימה התרוקנה.',
     afterMark: [wtoast, '#chisumOrders'], afterFocus: null, afterChip: { kind: 'system', t: '⚙ המערכת העבירה לבד' } });
   await r.sleep(1400);   // the page sends the "ready" message 1.2 s after the confirm
-  await r.show({ wide: true, mark: wtoast, who: 'system', text: 'ולזגגות הגליל, שמוכנה לאיסוף, יצאה **הודעה** — לבד.', hold: 3.5 });
+  await r.show({ wide: true, mark: wtoast, who: 'system', text: 'ולהזמנות שמוכנות לאיסוף יצאה **הודעה ללקוח** — לבד.', hold: 3.5 });
 
   // ── ד. כשמשהו לא רגיל
   r.chapter('כשלא הכול חזר');
@@ -197,19 +222,12 @@ export async function script(r) {
     sub: 'בחלון "קיבלת את הדוח" כתוב שאפשר לסמן נשברים — אבל אין כפתור כזה. **לא מסמנים אותה**: מבחינת המערכת היא חסרה, וההזמנה נשארת בחיסום.',
     box: { kind: 'warn', text: 'מדווחים למנהל.' } });
 
-  r.card({ panel: true, kicker: 'הזמנה עם תמונת סקיצה', title: 'על התמונה אי אפשר ללחוץ — **בודקים ברשימת "פריטים"**' });
-  await r.open('check-station.html', { wait: '.order-card' });
-  await r.click({ target: card('ויטרינה'), focus: '#listView', text: 'L9108 הגיעה עם **תמונת סקיצה** (🖼 יש סקיצה).', hold: 3,
-    after: 'רואים את התמונה של הלקוח — אבל אין בה מלבנים ללחוץ עליהם.', afterFocus: '#skWrap', afterMark: '#skWrap' });
-  await r.click({ target: '#btnSheet', focus: '.topbar', text: 'לוחצים **"פריטים"** למעלה.',
-    after: 'נפתחת רשימה: **"🔥 פריטי חיסום — לחץ לסימון בדיקה"**.', afterFocus: '#sheet', afterMark: '#shBody' });
-  await r.click({ target: { sel: '#shBody .si', nth: 0 }, focus: '#sheet', text: 'כאן מסמנים כל זכוכית שנבדקה — **בדיוק כמו המלבנים**.',
-    after: '✓ — והמונה למעלה עלה.', afterMark: [{ sel: '#shBody .si', nth: 0 }, '#progWrap'], afterFocus: ['.topbar', '#sheet'] });
 
   // ── ה. סיכום
   r.chapter('סיכום');
   r.card({ title: 'סיכום · תחנת בדיקה וחיסום', bullets: [
-    'בודקים **כל זכוכית** ולוחצים עליה · "סיים סקיצה" רק אחרי שהכול נבדק',
+    'סקיצה **שהמערכת ציירה** — לוחצים על המלבן · סקיצה **שהועלתה** — מסמנים ב**"📋 פריטים"**',
+    '"סיים סקיצה" רק **אחרי** שכל זכוכית נבדקה',
     'בסוף היום: **"סיים יום — שלח לחיסום"** · הדוח המודפס נוסע עם הזכוכיות',
     'כשחוזר: **"קיבלתי את הדוח"** (בודקים את המספר) · מסמנים **רק מה שעל העגלה**',
     '"סיום בדיקה" · מה שחסר **נשאר בחיסום, באותו דוח**, בלי הודעה ללקוח',

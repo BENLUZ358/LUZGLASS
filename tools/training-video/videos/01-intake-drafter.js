@@ -1,10 +1,9 @@
 // סרטון 01 — קליטת הזמנה ושרטט. התסריט: docs/training-videos/scripts/01-intake-drafter.md
 // בלי קריינות: הטקסט על המסך הוא ההסבר. הקוד ב־test קובע כשהתסריט סותר אותו (ר' הדוח).
-import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS } from '../lib/seedlib.js';
+import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS, PRICES, locked } from '../lib/seedlib.js';
 
 export const meta = { id: '01', file: '01 - קליטת הזמנה ושרטט', title: 'קליטת הזמנה ושרטט', viewport: { w: 1600, h: 900 } };
 
-const PRICES = { '8SMH': 310, '10SMH': 360, '6SMH': 260, '8HMH': 340, '8SL': 290, '6SL': 240, 'M4': 220 };
 
 export function seed() {
   const G = CLIENTS.galil, S = CLIENTS.sharon, D = CLIENTS.david;
@@ -16,26 +15,25 @@ export function seed() {
   const noSku = { name: '8 מ"מ שקוף מחוסם', glassFullName: '8 מ"מ שקוף מחוסם', glass: 'שקוף', mm: 8, w: 900, h: 2100, qty: 1, chisum: true, litush: false };
 
   const orders = {
-    sub_9101_0: order('sub_9101_0', 'L9101', 'galil', { ...today('08:10', 150), hasSketch: true, sketchName: '', customerId: '14300',
-      notes: 'דלת נפתחת ימינה, ידית עגולה' }),
+    sub_9101_0: order('sub_9101_0', 'L9101', 'galil', { ...today('08:10', 150), hasSketch: true, sketchName: '', customerId: '14300' }),
     sub_9102_0: order('sub_9102_0', 'L9102', 'david', { ...today('08:25', 135), hasSketch: true, sketchName: '' }),
     sub_9103_0: order('sub_9103_0', 'L9103', 'david', { ...today('08:40', 120), type: 'measure', sketchName: 'מראה לאמבטיה',
-      items: [item('M4', 600, 800)] }),
+      items: [item('4MIRM', 600, 800)] }),
     wa_9104_1: order('wa_9104_1', 'L9104', 'sharon', { ...today('08:55', 105), ...wa, hasSketch: true, sketchName: '', customerId: '14301' }),
     wa_9105_1: order('wa_9105_1', 'L9105', 'sharon', { ...today('08:56', 104), ...wa, hasSketch: true, sketchName: '', customerId: '14301' }),
     wa_9106_1: order('wa_9106_1', 'L9106', UNKNOWN, { ...today('09:05', 95), ...wa, waUnassigned: true, hasSketch: true,
-      sketchName: 'ויטרינה', sketchSeenAt: CLOCK - 80 * 60e3, items: [item('8SL', 1200, 900)] }),
+      sketchName: 'ויטרינה', sketchSeenAt: CLOCK - 80 * 60e3, items: [item('8SMH', 1200, 900)] }),
     sub_9107_0: order('sub_9107_0', 'L9107', 'david', { ...today('09:20', 80), hasSketch: true, sketchName: 'מחיצת מקלחת',
       sketchSeenAt: CLOCK - 70 * 60e3, items: [item('10SMH', 900, 1950), item('10SMH', 400, 1950)] }),
     sub_9108_0: order('sub_9108_0', 'L9108', 'david', { ...today('09:40', 60), hasSketch: true, sketchName: 'דלת זכוכית למשרד',
       sketchSeenAt: CLOCK - 50 * 60e3, items: [noSku, item('8SMH', 400, 2100)] }),
     // כבר אצל השרטט / אחריו
     ord_9095: order('ord_9095', 'L9095', 'david', { date: '11.10.2026', stage: 'chash', status: 'אצל שרטט', hasSketch: true,
-      sketchName: 'חלון ראווה', sketchSeenAt: CLOCK - DAY, items: [item('8SL', 1500, 1100)] }),
+      sketchName: 'חלון ראווה', sketchSeenAt: CLOCK - DAY, items: [item('8SMH', 1500, 1100)] }),
     ord_9096: order('ord_9096', 'L9096', 'sharon', { date: '11.10.2026', stage: 'chash', status: 'אצל שרטט', hasSketch: true,
       sketchName: 'מקלחון ניקוי', sketchSeenAt: CLOCK - DAY, items: [item('8SMH', 700, 1900), item('8SMH', 500, 1900)] }),
     ord_9090: order('ord_9090', 'L9090', 'david', { date: '11.10.2026', stage: 'opty', status: 'מחכה ל-OptyWay', hasSketch: true,
-      sketchName: 'מראה כניסה', sketchSeenAt: CLOCK - DAY, items: [item('M4', 800, 1600)] }),
+      sketchName: 'מראה כניסה', sketchSeenAt: CLOCK - DAY, items: [item('4MIRM', 800, 1600)] }),
   };
   const sk = (title, client, num, panes) => sketch({ title, client, num, panes });
   const sketches = {
@@ -154,7 +152,7 @@ export async function script(r) {
   await r.click({ target: row('L9101'), focus: '#sqListPanel', text: 'ופותחים שוב את ההזמנה של זגגות הגליל.',
     after: 'בלשונית "נראה" מופיע **מסך העבודה המלא**: שטח, סכום, ואזור **"פריטים"**.', afterFocus: '#sqDetailPanel', afterMark: ['#sqInfoGrid', '#sqItemsWrap'] });
   await r.show({ focus: '#sqDetailPanel', mark: '#sqNotesWrap',
-    text: 'למטה, ב**"הערות"**, מופיע מה שהלקוח כתב: "דלת נפתחת ימינה, ידית עגולה".', hold: 4 });
+    text: 'למטה יש שדה **"הערות"** — הערה לשרטט. נחזור אליו רגע לפני השליחה.', hold: 3.6 });
   await r.type({ target: '#iwCode', value: '8 שקוף חיסום', focus: '#sqItemsWrap',
     text: 'בשדה הקוד כותבים **בעברית** — למשל "8 שקוף חיסום" — או את הקוד עצמו.' });
   await r.click({ target: { sel: '#iwSkuList .sku-opt', text: '8SMH' }, focus: '#sqItemsWrap',
@@ -185,6 +183,10 @@ export async function script(r) {
     text: 'סוג המסמך: **הזמנת סוכן** (31). האסמכתא היא מספר ההזמנה, 9101.' });
   await r.click({ target: { sel: hb + ' button', text: 'ביטול' }, focus: hb, text: 'הכול נכון. סוגרים ב**"ביטול"**.', hold: 2.4 });
   await r.exec(hsAnswer, 'sub_9101_0', false);
+  await r.type({ target: '#sqNotes', value: 'דלת נפתחת ימינה, ידית עגולה', focus: '#sqNotesWrap',
+    text: 'יש משהו שהשרטט חייב לדעת? כותבים אותו ב**"הערות"** — לפני השליחה.' });
+  await r.show({ focus: '#sqNotesWrap', mark: '#sqNotes', who: 'system',
+    text: 'ההערה **נשמרת לבד על ההזמנה** — ו**קופצת לשרטט מיד** כשהוא פותח אותה. אין צורך להתקשר אליו.' });
   await r.click({ target: '#sqBtnChash', focus: '#sqActions', chip: { kind: 'warn', t: '⚠ אין חלון אישור' },
     text: 'לוחצים **"📋 הועבר לחשבשבת"**. אין חלון אישור — ולכן בודקים **לפני**.',
     after: 'המערכת **פתחה לבד הזמנת סוכן בחשבשבת**, והעבירה את ההזמנה לשרטט ("אצל שרטט"). בהודעה הירוקה — מספר האסמכתא.',
@@ -197,7 +199,7 @@ export async function script(r) {
   await r.open('drafter.html', { wait: '#sbList .sb-item' });
   // L9101 is first in the queue and carries the client's note — the drafter opens it with the note on top
   await r.show({ focus: '#drNotePopup > div', mark: '#drNotePopup > div', who: 'system',
-    text: 'זו **"תחנת שרטט"**. ההזמנה הראשונה בתור נפתחת לבד — ואם הלקוח כתב **הערה**, היא קופצת מיד: **"💬 הערה על ההזמנה"**.' });
+    text: 'זו **"תחנת שרטט"**. ההזמנה הראשונה בתור נפתחת לבד — וההערה שכתבנו בתור הסקיצות **קופצת מיד**: **"💬 הערה על ההזמנה"**.' });
   await r.click({ target: '#drNotePopup button', focus: '#drNotePopup > div', text: 'קוראים את ההערה ולוחצים **"הבנתי"**.',
     after: 'מאחורי ההערה — הסקיצה של **זגגות הגליל**, ולמעלה הפריטים שהוכנסו בתור.', afterFocus: '.sketch-area', afterMark: ['#sketchMeta'] });
   await r.show({ focus: '.sidebar', mark: '.sidebar',

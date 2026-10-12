@@ -4,7 +4,7 @@
 //  - בלי פסי "מכונה א׳/ב׳": אף זרימה שיוצרת הזמנות לא כותבת glassFullName ברמת ההזמנה (שאלה 3 בתסריט),
 //    ולכן בפועל הרשימה שטוחה. הזרע משקף את זה ולא ממציא קיבוץ.
 //  - "ואטסאפ לא יצא" מוצג דרך תשובת שרת "מנותק" של /api/whatsapp-drain (המבנה מ-api/whatsapp-drain.js).
-import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS } from '../lib/seedlib.js';
+import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS, PRICES, locked } from '../lib/seedlib.js';
 
 export const meta = { id: '02', file: '02 - יום עבודה', title: 'יום עבודה', viewport: { w: 1180, h: 820 } };
 
@@ -26,13 +26,13 @@ const opty = (n, client, sketchName, items, extra = {}) => order('ord_' + n, 'L'
   stage: 'opty', status: 'מחכה ל-OptyWay', sketchName, items, hasSketch: true, createdAt: CLOCK - 2 * DAY, ...extra });
 
 const I = {
-  9101: [...pair('8SMH', 885, 1985, 'q9101a'), it('M4', 600, 800)],
-  9102: pair('8SL', 885, 1950, 'q9102a'),
-  9103: [it('8SL', 700, 1900), it('8HL', 700, 1900)],
-  9104: pair('8SL', 900, 2000, 'q9104a'),
-  9105: [it('M4', 600, 900)],
+  9101: [...pair('8SMH', 885, 1985, 'q9101a'), it('4MIRM', 600, 800)],
+  9102: pair('8SM', 885, 1950, 'q9102a'),
+  9103: [it('8SM', 700, 1900), it('8HL', 700, 1900)],
+  9104: pair('8SM', 900, 2000, 'q9104a'),
+  9105: [it('4MIRM', 600, 900)],
   9106: [it('10SMH', 800, 2000)],
-  9107: [it('6SL', 1200, 1500), it('6SL', 900, 1500), it('6SL', 600, 1500)],
+  9107: [it('6SM', 1200, 1500), it('6SM', 900, 1500), it('6SM', 600, 1500)],
 };
 const NAMES = { 9101: 'מקלחון ניש + מראה', 9102: 'מקלחון פינתי', 9103: 'מחיצה חלבית', 9104: 'מחיצת מקלחון ישרה',
   9105: 'מראה לאמבטיה', 9106: 'דלת מקלחון 10 מ"מ', 9107: 'ויטרינה 3 חלקים' };
@@ -45,7 +45,7 @@ const mk = n => opty(n, WHO[n], NAMES[n], I[n], n === 9102 ? { deliveryClient: f
 export function seed() {
   const orders = {}, sketches = {};
   [9101, 9102, 9103, 9104, 9105].forEach(n => { orders['ord_' + n] = mk(n); sketches['ord_' + n] = SK(n); });
-  const prices = { global: { '8SMH': 300, '8SL': 250, '8HL': 320, '10SMH': 380, '6SL': 200, 'M4': 220, '6SMH': 260, '10SL': 330 } };
+  const prices = { global: PRICES };
   return {
     __clock: CLOCK, __session: '0500000000',
     // the server queues the "ready" message; the drain finds nothing more to do (the normal, connected case)

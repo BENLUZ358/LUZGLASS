@@ -1,7 +1,7 @@
 // סרטון 05 — הובלות ואיסוף. התסריט: docs/training-videos/scripts/04-05-graphic-delivery.md
 // workday.html הטאב "הובלות" (showClientDeliveryPrompt → finalizeDelivery → _waDispatch),
 // admin.html חלון ההזמנה ("📦 סיים והעבר לנאסף" → showCollectedPrompt / _lgBlockDeliveryFinish), ניהול משתמשים.
-import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS } from '../lib/seedlib.js';
+import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS, PRICES, locked } from '../lib/seedlib.js';
 
 export const meta = { id: '05', file: '05 - הובלות ואיסוף', title: 'הובלות ואיסוף', viewport: { w: 1600, h: 900 } };
 
@@ -9,7 +9,7 @@ export const meta = { id: '05', file: '05 - הובלות ואיסוף', title: '
 const CARMEL = { phone: '0500000105', name: 'זכוכית הכרמל', delivery: true };
 const G_NAME = '10מ"מ שקוף גרפיקה מחוסם';
 const gItem = (w, h) => ({ sku: '10SGMH', name: G_NAME, glassFullName: G_NAME, glass: 'שקוף', mm: 10, w, h, qty: 1, graphic: true, chisum: true });
-const locked = (items, total) => ({ pricesLockedAt: CLOCK - DAY, totalFinal: total, lockedItems: items.map(i => ({ ...i, pricePerM2: 420 })) });
+// locked(items, at): the price fields, computed from the real price list (seedlib PRICES)
 
 export function seed() {
   const I = {
@@ -24,11 +24,11 @@ export function seed() {
   const inDelivery = { stage: 'delivery', status: 'ממתין להובלה', date: '11.10.2026', hasSketch: true };
   const ready = { stage: 'done', status: 'מוכן לאיסוף', date: '11.10.2026', hasSketch: true };
   const orders = {
-    d9102: order('d9102', 'L9102', 'sharon', { ...inDelivery, sketchName: 'דלת מקלחון', items: I.d9102, ...locked(I.d9102, 1060) }),
-    d9104: order('d9104', 'L9104', 'sharon', { ...inDelivery, sketchName: 'מקלחון חזית', items: I.d9104, ...locked(I.d9104, 980) }),
-    d9301: order('d9301', 'L9301', CARMEL, { ...inDelivery, sketchName: 'ויטרינה', items: I.d9301, ...locked(I.d9301, 1180) }),
-    r9101: order('r9101', 'L9101', 'galil', { ...ready, sketchName: 'מקלחון', items: I.r9101, ...locked(I.r9101, 1240) }),
-    b9201: order('b9201', 'L9201', 'david', { ...ready, sketchName: 'חלון', items: I.b9201, ...locked(I.b9201, 410) }),
+    d9102: order('d9102', 'L9102', 'sharon', { ...inDelivery, sketchName: 'דלת מקלחון', items: I.d9102, ...locked(I.d9102, CLOCK - DAY) }),
+    d9104: order('d9104', 'L9104', 'sharon', { ...inDelivery, sketchName: 'מקלחון חזית', items: I.d9104, ...locked(I.d9104, CLOCK - DAY) }),
+    d9301: order('d9301', 'L9301', CARMEL, { ...inDelivery, sketchName: 'ויטרינה', items: I.d9301, ...locked(I.d9301, CLOCK - DAY) }),
+    r9101: order('r9101', 'L9101', 'galil', { ...ready, sketchName: 'מקלחון', items: I.r9101, ...locked(I.r9101, CLOCK - DAY) }),
+    b9201: order('b9201', 'L9201', 'david', { ...ready, sketchName: 'חלון', items: I.b9201, ...locked(I.b9201, CLOCK - DAY) }),
   };
   const sketches = {
     d9102: sk('דלת מקלחון', CLIENTS.sharon, 'L9102', I.d9102),
@@ -43,7 +43,7 @@ export function seed() {
     // the success path: the server accepts the message into the send queue (docs/training-videos/00-STANDARDS.md §6)
     __api: { 'whatsapp-dispatch': { ok: true, queued: true, orderNums: ['L9102', 'L9104'] } },
     db: { users: u, orders, sketches, skuCatalog: SKUS,
-          prices: { global: { '10SGMH': 560, '8SMH': 420, '10SMH': 480, '6SMH': 300 } },
+          prices: { global: PRICES },
           workday: { date: '12.10.2026', selected: [], inWork: [], inChisum: [] }, meta: { orderCounter: 9400 } } };
 }
 

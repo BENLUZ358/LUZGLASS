@@ -1,7 +1,7 @@
 // סרטון 00 — הדרך של הזמנה במפעל. התסריט: docs/training-videos/scripts/00-overview.md
 // הזמנה אחת (L9101 · זגגות הגליל: 2 זכוכיות 8 מ"מ שקוף מחוסם + מראה מלוטשת) עוברת את כל התחנות, על הדפים
 // האמיתיים. המצב עובר מדף לדף; הלחיצות האמיתיות הן שמקדמות אותה. הסרטון מראה את התמונה הגדולה, לא כל לחיצה.
-import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS } from '../lib/seedlib.js';
+import { CLOCK, DAY, CLIENTS, users, item, sketch, order, SKUS, PRICES, locked } from '../lib/seedlib.js';
 
 export const meta = { id: '00', file: '00 - הדרך של הזמנה במפעל', title: 'הדרך של הזמנה במפעל', viewport: { w: 1600, h: 900 } };
 
@@ -10,10 +10,10 @@ const GRAPHIC = 4;
 
 export function seed() {
   const I = {
-    o9101: [item('8SMH', 885, 1985), item('8SMH', 600, 1985), item('M4', 700, 900)],
+    o9101: [item('8SMH', 885, 1985), item('8SMH', 600, 1985), item('4MIRM', 700, 900)],
     o9102: [item('8SMH', 900, 2000), item('8SMH', 500, 2000)],
     o9103: [item('10SMH', 1250, 655)],
-    o9104: [item('6SL', 600, 400)],
+    o9104: [item('6SM', 600, 400)],
   };
   const P = items => items.map((i, n) => ({ w: i.w, h: i.h, n: n + 1, mirror: i.glass === 'מראה' }));
   const sketches = {
@@ -37,7 +37,7 @@ export function seed() {
     __clock: CLOCK, __session: '0500000000',
     __api: { 'hashavshevet-order': { ok: true, reference: '10915' }, 'whatsapp-dispatch': { ok: true, queued: true, clientName: CLIENTS.galil.name } },
     db: { users: users({ worker: 'נועה' }), orders, sketches, skuCatalog: SKUS,
-          prices: { global: { '8SMH': 420, '10SMH': 520, '6SL': 260, 'M4': 380 } },
+          prices: { global: PRICES },
           // the client cards from Hashavshevet — where the "ready" WhatsApp number comes from (customerId = 14300 + i, seedlib)
           hashavshevetAccounts: Object.fromEntries(Object.values(CLIENTS).map((c, i) => [String(14300 + i), { key: String(14300 + i), name: c.name, phone: c.phone, active: true }])),
           workday: {}, meta: { orderCounter: 9200, chisumCounter: 214 } },
@@ -71,6 +71,8 @@ export async function script(r) {
   // "נראה" → the order again, where the items are entered: unseen here, taught in video 01
   await r.exec(() => { document.getElementById('sqTabSeen').click(); });
   await r.exec(() => { [...document.querySelectorAll('.sq-item')].find(e => /L9101/.test(e.textContent)).click(); });
+  await r.type({ target: '#sqNotes', value: 'דלת נפתחת ימינה, ידית עגולה', focus: '#sqNotesWrap',
+    text: 'הערה לשרטט? כותבים אותה ב**"הערות"** — והיא **קופצת לשרטט מיד**.' });
   await r.click({ target: '#sqBtnChash', focus: '#sqActions',
     text: 'הפריטים מוכנים? לוחצים **"📋 הועבר לחשבשבת"**.',
     after: 'המערכת **פותחת לבד הזמנת סוכן בחשבשבת**, וההזמנה יוצאת מהתור וממשיכה **לשרטט**.',
@@ -82,8 +84,10 @@ export async function script(r) {
   // ── 2. שרטט
   prog(1, [0]);
   await r.open('drafter.html', { wait: '.sb-item' });
+  await r.click({ target: '#drNotePopup button', focus: '#drNotePopup > div', who: 'system',
+    text: 'אצל **השרטט** ההערה מתור הסקיצות **קופצת מיד** כשההזמנה נפתחת. קורא, ולוחץ **"הבנתי"**.', hold: 4.6 });
   await r.click({ target: '.btn-finish', focus: ['#sketchCanvas', '#btmBar'],
-    text: 'אצל **השרטט** ההזמנות מחכות בתור. הוא מכין את הסקיצה לחיתוך, ולוחץ **"✓ סיים סקיצה — שלח ל-OptyWay"**.', hold: 5,
+    text: 'השרטט מכין את הסקיצה לחיתוך, ולוחץ **"✓ סיים סקיצה — שלח ל-OptyWay"**.', hold: 4,
     after: 'ההזמנה עברה ל**OptyWay**, תוכנת החיתוך. מעכשיו היא מוכנה לרצפה. הסקיצה הבאה נטענת לבד.',
     afterMark: '#doneBanner', afterFocus: '#sketchCanvas', settle: 500, afterChip: { kind: 'system', t: '⚙ מחכה ל-OptyWay' } });
 
@@ -106,6 +110,9 @@ export async function script(r) {
   await r.open('check-station.html', { wait: { sel: '.order-card', text: 'זגגות הגליל' } });
   await r.click({ target: { sel: '.order-card', text: 'זגגות הגליל' },
     text: 'בתחנת **הבדיקה** בודקים כל זכוכית מחוסמת **לפני** שהיא יוצאת למפעל החיסום.', hold: 4.4,
+    settle: 900, afterFocus: '#notePopup .np-ok', afterMark: '#npText', after: 'וגם כאן — **ההערה מתור הסקיצות קופצת**: "הערה חשובה!". היא נוסעת עם ההזמנה לכל תחנה.',
+    afterChip: { kind: 'system', t: '⚙ ההערה עוברת עם ההזמנה' } });
+  await r.click({ target: '#notePopup .np-ok', text: 'קוראים, ולוחצים **"הבנתי ✓"**.', hold: 2.4,
     afterFocus: '#sketchView', afterMark: '#skArea', after: 'L9101: שתי זכוכיות לחיסום. המראה כבר לוטשה ברצפה.' });
   await r.exec(() => { document.getElementById('finishBtn').click(); });
   await r.exec(() => { document.getElementById('tabDone').click(); });
