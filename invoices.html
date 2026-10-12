@@ -614,8 +614,11 @@ async function saveEdit() {
     if (!r.changed) { toast('המידה לא השתנתה'); renderVerify(); return; }
     // הווי שסומן על השורה הזו היה על המידה הישנה — הוא כבר לא אומר כלום
     if (ticks[o.id]) delete ticks[o.id][String(idx)];
-    toast(wasVerified ? 'המידה תוקנה ל-' + r.to + ' — ההזמנה חזרה לאימות'
-                      : 'המידה תוקנה ל-' + r.to);
+    // r.to הוא "585×1885" גולמי. בתוך משפט עברי הדפדפן היה מציג אותו הפוך
+    // (1885×585) — בדיוק הטעות שלמענה התחנה קיימת. lgDimsText מבודד אותו.
+    const to = String(r.to).replace(/^(\d+)×(\d+)$/, (_, w, h) => lgDimsText(w, h));
+    toast(wasVerified ? 'המידה תוקנה ל-' + to + ' — ההזמנה חזרה לאימות'
+                      : 'המידה תוקנה ל-' + to);
   } catch (err) {
     toast(err.message || 'השמירה נכשלה', true);
     if (btn) { btn.disabled = false; btn.innerHTML = '<span data-icon="check"></span>'; }

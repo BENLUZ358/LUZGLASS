@@ -301,11 +301,19 @@ function lgUploadBatchClear(){
 // "נשמר" פירושו שקראנו את זה בחזרה. set() שחזר אינו הוכחה שההזמנה שם.
 // שדה בודד ולא ההזמנה כולה: הזמנה נושאת סקיצת base64, והורדתה לאימות
 // הייתה עולה מאות קילובייטים על כל קובץ.
-async function verifySaved(id){
+async function verifySaved(id, wantSketch){
   const snap = await _lgWithTimeout(
     firebase.database().ref('orders/' + id + '/id').once('value'),
     15000, 'אימות שמירה');
-  return snap.exists() && snap.val() === id;
+  if (!(snap.exists() && snap.val() === id)) return false;
+  // ⚠️ מאז 11/10 התמונה חיה ב-sketches/<id> בלבד, ולא בתוך ההזמנה. אימות
+  //  שבודק רק את ההזמנה היה מכריז "נשמר" גם כשהתמונה לא הגיעה — והלקוח
+  //  היה הולך הביתה בטוח ששלח סקיצה. בודקים שהצומת קיים, בלי להוריד אותו.
+  if (!wantSketch) return true;
+  const sk = await _lgWithTimeout(
+    firebase.database().ref('sketches/' + id).once('value'),
+    15000, 'אימות התמונה');
+  return sk.exists();
 }
 
 async function submitUpload() {
@@ -373,7 +381,7 @@ async function submitUpload() {
           time:        timeStr
         }), SAVE_TIMEOUT_MS, 'שמירת סקיצה');
 
-        if(!await verifySaved(id)) throw new Error('ההזמנה לא נמצאה אחרי השמירה');
+        if(!await verifySaved(id, !!images[i].data)) throw new Error('ההזמנה או התמונה לא נמצאו אחרי השמירה');
       } catch(e) {
         console.error('[upload] save failed', id, e);
         failures.push({ n: i + 1, name: fileName, msg: e.message });

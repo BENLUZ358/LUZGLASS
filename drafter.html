@@ -311,6 +311,9 @@ function load(){
         items:         o.items||[],
         panels:        o.panels||[],
         urgent:        o.urgent||false,
+        // הערת הלקוח. בלי השדה כאן showOrder בודק o.notes על אובייקט שאין בו
+        // notes, וחלון "💬 הערה על ההזמנה" לא נפתח אף פעם — ההערה לא הגיעה לשרטט.
+        notes:         o.notes||'',
       }));
     // Sort: urgent first
     queue.sort((a,b)=>(b.urgent?1:0)-(a.urgent?1:0));

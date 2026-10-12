@@ -387,6 +387,41 @@ function lgSplitFactoryItems(items) {
   return { chisum, triplex };
 }
 
+// ─── מה יום העבודה עוד לא עשה בהזמנה ──────────────────────────────────
+//  הבחירה ביום העבודה היא לפי פריט ("+ הוסף"), אבל השלב הוא של ההזמנה
+//  כולה. בלי זיכרון של מה כבר נעשה, "סיים יום עבודה" על חלק מהזמנה קידם
+//  את כולה — פריטי ליטוש שלא נחתכו "הושלמו", והלקוח קיבל "מוכן לאיסוף";
+//  ופריט חיסום שלא ירד שלח אותה ישר ל-chisum, עוקף את תחנת הבדיקה.
+//
+//  orders/<id>/wdDoneIdxs = {idx:true} — מה שיום העבודה סיים או מסר:
+//    ליטוש  — כשנלחץ "סיים יום עבודה" על הפריט
+//    חיסום  — כשההזמנה נכנסת לתחנת הבדיקה. התחנה שולחת את *כל* פריטי
+//             החיסום של הסקיצה (lgSplitFactoryItems), ולכן כולם נמסרים יחד.
+//  extraDone — מה שמסתיים ברגע זה ועוד לא נכתב.
+//  מחזיר את האינדקסים שנשארו: polish (ליטוש/חיתוך) ו-factory (חיסום).
+//  ⚠️ הזמנה בלי השדה כלל (לפני התיקון) — tracked:false. הקוראים שמחליטים
+//  על עיכוב אחרי יום העבודה מתעלמים ממנה, כדי לא לעצור הזמנות ישנות.
+function lgWorkdayLeft(order, extraDone) {
+  const raw   = order && order.items;
+  const items = Array.isArray(raw) ? raw : (raw && typeof raw === 'object') ? Object.values(raw) : [];
+  const tracked = !!(order && order.wdDoneIdxs);
+  const done  = new Set(lgArrivedIdxs(order && order.wdDoneIdxs));
+  (extraDone || []).forEach(i => done.add(Number(i)));
+  const polish = [], factory = [];
+  items.forEach((it, i) => {
+    if (!it || done.has(i)) return;
+    (it.chisum ? factory : polish).push(i);
+  });
+  return { polish, factory, tracked, done: [...done].sort((a, b) => a - b) };
+}
+
+// {idx:true} לכתיבה. Firebase הופך מערך דליל ל-null-ים; אובייקט נשמר כמו שהוא.
+function lgIdxsObj(idxs) {
+  const o = {};
+  (idxs || []).forEach(i => { o[Number(i)] = true; });
+  return Object.keys(o).length ? o : null;
+}
+
 // ─── חישוב השלב הבא — לוגיקה דינמית לפי פריטים + לקוח הובלות ──────
 //  שני מקורות לזיהוי לקוח הובלות (OR — מספיק שאחד מהם נכון):
 //    1. order.deliveryClient = true  (denormalized על ההזמנה)
@@ -458,14 +493,22 @@ async function _lgLookupClientMeta(phone) {
 //  היעד: התמונה בצומת נפרד, וברשומה נשאר סימן בלבד. הרשימה יורדת ל-45KB
 //  והתמונה נטענת רק כשפותחים אותה.
 //
-//  המעבר בארבעה שלבים, כדי שבשום רגע לא יהיה נתון שקיים במקום אחד בלבד:
-//    1. כתיבה כפולה — לכאן ולשדה הישן.        ← אנחנו כאן
-//    2. קריאה מהחדש עם נפילה לישן.
-//    3. העברת הקיים, עם ריצה יבשה.
-//    4. מחיקת השדה הישן — ורק אז הרווח בפועל.
+//  המעבר תוכנן בארבעה שלבים, כדי שבשום רגע לא יהיה נתון שקיים במקום אחד
+//  בלבד:
+//    1. כתיבה כפולה — לכאן ולשדה הישן.                        ✓ 04/10
+//    2. קריאה מהחדש עם נפילה לישן, דרך שכבת הסקיצה.           ✓ 04/10
+//    3. העברת הקיים, עם ריצה יבשה.                            — לא נדרש
+//    4. הפסקת הכתיבה הכפולה — ורק אז הרווח בפועל.             ✓ 11/10
 //
-//  שים לב: שלבים 1–2 אינם מזרזים כלום בעצמם. החיסכון מגיע רק כשהשדה הישן
-//  עוזב את orders. הם קיימים כדי ששלב 4 יהיה בטוח.
+//  ⚠️ שלב 3 לא בוצע **ולא היה צריך להתבצע**: ב-11/10/2026 נמחקו כל
+//  ההזמנות בייצור לקראת הפיילוט (בהחלטת בן — כולן כבר טופלו), ולכן לא
+//  נשארה ולו הזמנה אחת שצריך להעביר. זה היה החלון הזול ביותר שיהיה אי
+//  פעם לסגור את הכפילות, ולכן נסגרה אז ולא אחר כך.
+//
+//  מכאן: saveSubmission כותב את התמונה ל-sketches/<id> **בלבד**, ורשומת
+//  ההזמנה נושאת hasSketch:true ותו לא. הנפילה לשדה הישן ב-_lgInlineSketch
+//  נשארת בכוונה — בטסט יש עדיין הזמנות ישנות עם עותק מוטבע, והקוד חייב
+//  להמשיך להציג אותן.
 async function lgSaveSketch(orderId, dataUrl) {
   if (!orderId || !dataUrl) return false;
   try {
@@ -520,7 +563,7 @@ function lgSketchSource(mode) {
     _lgSketchCache.clear();
     console.log('[firebase-db] מקור הסקיצות:', mode, '— רענן את הדף');
   }
-  try { return localStorage.getItem('lgSketchSource') || 'old'; } catch (e) { return 'old'; }
+  try { return localStorage.getItem('lgSketchSource') || 'new'; } catch (e) { return 'new'; }
 }
 
 // ─── שכבת הסקיצה — הדרך היחידה של מסך לגעת בתמונה ────────────────────────
@@ -643,9 +686,19 @@ async function saveOrder(data) {
     createdAt:     data.createdAt     || Date.now(),
     updatedAt:     Date.now()
   });
+  // ⚠️ אותו כלל כמו ב-saveSubmission: התמונה ל-sketches/<id> בלבד.
+  //  לפונקציה הזו אין היום אף קורא, והיא מיושרת דווקא בגלל זה — כותב
+  //  רדום שמחזיר את הכתיבה הכפולה ביום שמישהו יקרא לו הוא בדיוק הסוג
+  //  של הפתעה שהמיגרציה הזו באה לסגור.
+  const sketchSrc = record.sketch || null;
+  delete record.sketch;
+
   await _lgDb.ref('orders/' + id).set(record);
-  // שלב 1 — כתיבה כפולה. השדה הישן נשמר כרגיל למעלה; זו תוספת בלבד.
-  if (record.sketch) await lgSaveSketch(id, record.sketch);
+
+  if (sketchSrc) {
+    const ok = await lgSaveSketch(id, sketchSrc);
+    if (!ok) throw new Error('התמונה לא נשמרה — נסה שוב');
+  }
   return id;
 }
 
@@ -682,9 +735,24 @@ async function saveSubmission(data) {
     files:         Object.keys(filesObj).length ? filesObj : undefined,
   });
 
+  // ⚠️ התמונה **אינה** נכנסת לרשומת ההזמנה. היא יושבת ב-sketches/<id>
+  //  בלבד, ולכן listenAllOrders — שמוריד את כל עץ ההזמנות בכל פתיחה של
+  //  admin / יום עבודה / תחנת בדיקה / שרטט / חשבוניות — אינו גורר אותה.
+  //  זה כל ההבדל בין רשימה של 45KB לרשימה שגדלה בלי גבול.
+  const sketchSrc = record.sketch || null;
+  delete record.sketch;
+
   await _lgDb.ref('orders/' + id).set(record);
-  if (record.sketch) await lgSaveSketch(id, record.sketch);
-  console.log('[firebase-db] saveSubmission saved:', id, 'hasSketch:', !!record.sketch, 'sketchLen:', record.sketch ? record.sketch.length : 0);
+
+  if (sketchSrc) {
+    // ⚠️ מכאן ואילך כישלון בכתיבת התמונה הוא כישלון של ההעלאה כולה.
+    //  קודם היה עותק מוטבע שהציל; עכשיו אין. הזמנה עם hasSketch:true בלי
+    //  תמונה היא הדבר הגרוע ביותר — הלקוח בטוח ששלח, והמפעל רואה ריק.
+    //  upload.html תופס את החריגה, מדווח על הקובץ הזה בלבד, וניסיון חוזר
+    //  דורס את אותו מזהה בלי לשכפל.
+    const ok = await lgSaveSketch(id, sketchSrc);
+    if (!ok) throw new Error('התמונה לא נשמרה — נסה שוב');
+  }
   return id;
 }
 
@@ -986,6 +1054,11 @@ function lgNormalizeOrder(o) {
     // פאנלים שנסגרו ב"סיום בדיקה" — ירדו מהרשימה ולא חוזרים אליה
     chisumClosedIdxs:   o.chisumClosedIdxs   ?? null,
     triplexClosedIdxs:  o.triplexClosedIdxs  ?? null,
+    // מה שיום העבודה כבר סיים או מסר — גולמי, lgWorkdayLeft מפענח.
+    // בלעדיו כאן, הזמנה חלקית הייתה נשכחת בכל טעינה ומתקדמת כולה שוב.
+    wdDoneIdxs:         o.wdDoneIdxs         ?? null,
+    // הזמנה חלקית שמחכה ב"בנה יום עבודה" עם הפריטים שנותרו
+    wdPartial:          !!o.wdPartial,
     // הזמנת בדיקה — רצה בכל התהליך הרגיל אבל לא נפתחת בחשבשבת. חייב לעבור
     // כאן, אחרת אף מסך לא יוכל לסמן אותה ככזו והיא תיראה כמו הזמנה אמיתית.
     isTest:         !!o.isTest,

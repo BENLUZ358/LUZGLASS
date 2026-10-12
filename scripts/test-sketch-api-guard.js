@@ -188,6 +188,67 @@ const tick = () => new Promise(r => setImmediate(r));
     check('the one that scrolled into view is loaded, the other is not', [els[0].src, els[1].src], ['', 'data:wa2']);
   }
 
+  /* ═══ חלק ג' · הכתיבה — התמונה לא חוזרת לתוך orders ═══════════════
+   *
+   *  ⚠️ זה הצד שהיה חסר. חלק א' אוכף שאיש לא **קורא** את התמונה ישירות,
+   *  אבל saveSubmission המשיך **לכתוב** אותה לתוך רשומת ההזמנה — ולכן
+   *  listenAllOrders גרר את כל הסקיצות בכל פתיחה של כל מסך.
+   *
+   *  מ-11/10/2026 היא נכתבת ל-sketches/<id> בלבד.
+   */
+  {
+    const mk = db => {
+      const store = {};
+      const ctx = {
+        console, Promise, Map, Date, String, Number, Object, JSON, Error,
+        _lgDb: db,
+        localStorage: { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; } },
+        _lgLookupClientMeta: async () => ({}),
+        LG_STAGE_TO_STATUS: { '': 'ממתין לאישור' },
+      };
+      vm.createContext(ctx);
+      vm.runInContext(['const _lgSketchCache = new Map();',
+        fn('_lgClean'), fn('_lgNormalizePhone'), fn('lgStageToStatus'),
+        fn('lgSaveSketch'), fn('saveSubmission')].join('\n'), ctx);
+      return ctx;
+    };
+
+    const db = makeDb({});
+    const id = await mk(db).saveSubmission({ id: 'u1', phone: '050-1234567', orderClient: 'דני',
+                                             sketch: 'data:image/jpeg;base64,AAAA' });
+    check('the upload is saved', id, 'u1');
+    /* ⚠️ הטענה המרכזית של כל השינוי */
+    check('the image is NOT inside the order record', db.data.orders.u1.sketch, undefined);
+    check('and it IS in the sketches node', db.data.sketches.u1, 'data:image/jpeg;base64,AAAA');
+    check('the order only carries the flag', db.data.orders.u1.hasSketch, true);
+
+    /* ⚠️ אין יותר עותק מוטבע שיציל — ולכן כישלון חייב להישמע */
+    const db2 = makeDb({});
+    const plain = db2.ref.bind(db2);
+    db2.ref = p2 => { const r = plain(p2);
+      if (String(p2).indexOf('sketches/') === 0) r.set = async () => { throw new Error('offline'); };
+      return r; };
+    let threw = '';
+    try { await mk(db2).saveSubmission({ id: 'u2', phone: '0501234567', sketch: 'data:x' }); }
+    catch (e) { threw = e.message; }
+    check('a failed image write fails the whole upload, loudly', threw, 'התמונה לא נשמרה — נסה שוב');
+    check('and no half-saved image is left behind', db2.data.sketches, undefined);
+
+    /* הזמנה בלי תמונה ממשיכה לעבוד בדיוק כמו קודם */
+    const db3 = makeDb({});
+    await mk(db3).saveSubmission({ id: 'u3', phone: '0501234567' });
+    check('an upload with no image still saves', db3.data.orders.u3.id, 'u3');
+    check('and writes nothing to the sketches node', db3.data.sketches, undefined);
+
+    /* ⚠️ הקריאה מהצומת היא ברירת המחדל עכשיו, לא בחירה ידנית.
+       localStorage ריק לגמרי — בדיוק כמו דפדפן שנפתח בפעם הראשונה. */
+    const fresh = { console, Map, localStorage: { getItem: () => null, setItem: () => {} } };
+    vm.createContext(fresh);
+    vm.runInContext('const _lgSketchCache = new Map();\n' + fn('lgSketchSource'), fresh);
+    check('reading from the node is the default on a fresh browser',
+          fresh.lgSketchSource(), 'new');
+  }
+
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll sketch-API guard checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });

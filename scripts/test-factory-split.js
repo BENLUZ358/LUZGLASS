@@ -366,8 +366,10 @@ check('there is a single definition of what is under check',
       /function _ordersUnderCheck\(\)/.test(workday), true);
 check('it accepts either report having come back',
       /!!o\.chisumArrived \|\| !!o\.triplexArrived/.test(workday), true);
-check('the dialog and the confirm both use it',
-      (workday.match(/_ordersUnderCheck\(\)/g) || []).length, 3);
+for (const fn of ['resetChisumList', 'confirmResetChisum']) {
+  const body = (workday.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
+  check(fn + ' uses it', /_ordersUnderCheck\(\)/.test(body), true);
+}
 check('neither selects on chisumArrived alone any more',
       /allOrders\.filter\(o => \(o\.stage\|\|''\) === 'chisum' && !!o\.chisumArrived\);/.test(workday), false);
 

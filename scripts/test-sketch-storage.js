@@ -45,18 +45,29 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
   ? console.log('ok    ' + name)
   : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
 
-/* ── every writer writes both places ───────────────────────────────────── */
-/* There are exactly three. Anything that appears here later and writes only
-   one of them leaves a sketch that stage 4 would delete without a copy. */
+/* ── every writer writes the node, and ONLY the node ───────────────────── */
+/*
+ * ⚠️ הכלל התהפך ב-11/10/2026. עד אז כל כותב היה חייב לכתוב **לשני**
+ * המקומות, כדי ששלב 4 יוכל למחוק את הישן בלי לאבד דבר. שלב 4 הגיע: כל
+ * ההזמנות בייצור נמחקו לקראת הפיילוט, לא נשאר מה להעביר, והכתיבה הכפולה
+ * נפסקה. מעכשיו כותב שמכניס תמונה לתוך רשומת ההזמנה הוא רגרסיה — הוא
+ * מחזיר את ה-4.6MB שיורדים בכל פתיחת מסך דרך listenAllOrders.
+ */
 const bodyOf = (src, name) =>
   (src.match(new RegExp('(async )?function ' + name + '\\([\\s\\S]*?\\n}')) || [''])[0];
 
 for (const fn of ['saveOrder', 'saveSubmission']) {
   const body = bodyOf(DB, fn);
-  check(`${fn} still writes the old field`,
+  check(`${fn} writes the order record`,
         /_lgDb\.ref\('orders\/' \+ id\)\.set\(record\)/.test(body), true);
-  check(`${fn} also writes the new node`,
-        /if \(record\.sketch\) await lgSaveSketch\(id, record\.sketch\)/.test(body), true);
+  /* ⚠️ הלב: התמונה מוצאת מהרשומה לפני שהיא נכתבת */
+  check(`${fn} strips the image out of the order record`,
+        /delete record\.sketch;/.test(body), true);
+  check(`${fn} writes the image to the node only`,
+        /await lgSaveSketch\(id, sketchSrc\)/.test(body), true);
+  /* ⚠️ ואין יותר רשת ביטחון: כישלון חייב להישמע, אחרת hasSketch:true בלי תמונה */
+  check(`${fn} fails loudly when the image does not land`,
+        /if \(!ok\) throw new Error\(/.test(body), true);
   /* the marker rides in the record's own write — see the rules check below for
      why a client cannot afford a second write to orders/<id> */
   check(`${fn} marks the order in the same write`,
@@ -108,9 +119,10 @@ check('the sketch editor saves through lgReplaceSketch',
 
 /* ── a failed new-node write must not cost the old one ─────────────────── */
 {
-  /* Order matters: the old field is written first and unconditionally. If the
-     new node is unreachable — rules not deployed, quota, offline — the sketch
-     is still saved exactly where it has always been saved. */
+  /* ⚠️ ההיגיון התהפך כאן גם הוא. כשהייתה כתיבה כפולה, כישלון בצומת החדש
+     לא עלה כלום — התמונה כבר ישבה בתוך ההזמנה. עכשיו הצומת הוא המקום
+     היחיד, ולכן lgSaveSketch ממשיך לבלוע ולהחזיר false (הוא שכבה נמוכה
+     ואינו יודע את ההקשר), **והקורא** הופך את ה-false לחריגה. */
   const body = bodyOf(DB, 'lgSaveSketch');
   /* החלון היה 140 תווים ונסגר כשנוספה הערה בעברית בתוך ה-catch. הכלל הוא
      שהכישלון נבלע ומוחזר false — לא כמה תווים יש בדרך */
@@ -145,7 +157,7 @@ check('the sketch editor saves through lgReplaceSketch',
  */
 {
   const body = bodyOf(DB, 'lgSketchSource');
-  check('the source defaults to the old field', /localStorage\.getItem\('lgSketchSource'\) \|\| 'old'/.test(body), true);
+  check('the source defaults to the new node', /localStorage\.getItem\('lgSketchSource'\) \|\| 'new'/.test(body), true);
   check('the choice survives a refresh', /localStorage\.setItem\('lgSketchSource', mode\)/.test(body), true);
   check('and switching clears the cache', /_lgSketchCache\.clear\(\);/.test(body), true);
   check('only the two known modes are accepted',
