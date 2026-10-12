@@ -195,11 +195,13 @@ export async function script(r) {
   // ── תחנת שרטט
   r.chapter('תחנת שרטט');
   await r.open('drafter.html', { wait: '#sbList .sb-item' });
-  await r.show({ wide: true, text: 'זו **"תחנת שרטט"**. נכנסים אליה מהכרטיס "שרטט" במסך הראשי.', hold: 3.4 });
+  // L9101 is first in the queue and carries the client's note — the drafter opens it with the note on top
+  await r.show({ focus: '#drNotePopup > div', mark: '#drNotePopup > div', who: 'system',
+    text: 'זו **"תחנת שרטט"**. ההזמנה הראשונה בתור נפתחת לבד — ואם הלקוח כתב **הערה**, היא קופצת מיד: **"💬 הערה על ההזמנה"**.' });
+  await r.click({ target: '#drNotePopup button', focus: '#drNotePopup > div', text: 'קוראים את ההערה ולוחצים **"הבנתי"**.',
+    after: 'מאחורי ההערה — הסקיצה של **זגגות הגליל**, ולמעלה הפריטים שהוכנסו בתור.', afterFocus: '.sketch-area', afterMark: ['#sketchMeta'] });
   await r.show({ focus: '.sidebar', mark: '.sidebar',
-    text: 'מימין — **"סקיצות בתור"**: כל ההזמנות שנשלחו לחשבשבת ומחכות לשרטט. L9101 כבר כאן.' });
-  await r.click({ target: { sel: '#sbList .sb-item', text: 'L9101' }, focus: '.sidebar', text: 'בוחרים את **זגגות הגליל**.',
-    after: 'הסקיצה נפתחת בגדול, ולמעלה — הפריטים שהוכנסו בתור.', afterFocus: '.sketch-area', afterMark: ['#sketchMeta'] });
+    text: 'מימין — **"סקיצות בתור"**: כל ההזמנות שנשלחו לחשבשבת ומחכות לשרטט. לוחצים על הזמנה כדי לפתוח אותה.' });
   await r.show({ focus: '.sketch-area', mark: '.btn-edit',
     text: 'ב**"✏️ עריכה"** אפשר לצייר ולכתוב על הסקיצה. הסימון נשמר ומוצג בתחנת השרטט.' });
   await r.click({ target: '.btn-finish', focus: '.sketch-area',

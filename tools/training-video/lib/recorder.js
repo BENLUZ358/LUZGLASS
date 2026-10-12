@@ -84,6 +84,23 @@ export async function record(video, outDir) {
     if (required) throw new Error('element not found: ' + JSON.stringify(t));
     return null;
   }
+  // the row/card a control sits in: the nearest ancestor clearly wider than it but still a single line or card.
+  // The camera frames this when the requested focus is too big to zoom on — a checkbox alone says nothing.
+  async function contextOf(target) {
+    const h = await handle(target, false);
+    if (!h) return null;
+    return h.evaluate(el => {
+      const t = el.getBoundingClientRect();
+      let e = el;
+      while (e.parentElement && e.parentElement !== document.body) {
+        e = e.parentElement;
+        const r = e.getBoundingClientRect();
+        if (r.height > Math.max(170, t.height * 3)) break;
+        if (r.width >= Math.max(t.width * 3, 260)) return { x: r.x, y: r.y, w: r.width, h: r.height };
+      }
+      return null;
+    });
+  }
   const union = rs => {
     rs = rs.filter(Boolean); if (!rs.length) return null;
     const x = Math.min(...rs.map(r => r.x)), y = Math.min(...rs.map(r => r.y));
@@ -125,6 +142,7 @@ export async function record(video, outDir) {
                   settle = 650, noClick = false, dialogAnswerText = 'אישור' }) {
       const tr = await rectOf(target);
       const fr = union([...(await rects(focus)), tr]);
+      const ctx = await contextOf(target);
       const before = await snap();
       const d0 = await dialogsNow();
       if (!noClick) {
@@ -136,13 +154,14 @@ export async function record(video, outDir) {
       const afterStill = await snap('after');
       let ar = await rects(afterMark, { required: false });
       const afr = afterFocus ? union(await rects(afterFocus, { required: false })) : null;
-      beats.push({ type: 'click', still: before, after: afterStill, focus: fr, target: tr, text, who, chip,
+      beats.push({ type: 'click', still: before, after: afterStill, focus: fr, target: tr, context: ctx, text, who, chip,
                    dialogs: dlg, dialogAnswerText, afterText: after, afterMarks: ar, afterFocus: afr, afterChip, hold, afterHold });
     },
     // type into a field, one key at a time (a still every key)
     async type({ target, value, focus, text, who = 'you', clear = true, settle = 300 }) {
       const tr = await rectOf(target);
       const fr = union([...(await rects(focus)), tr]);
+      const ctx = await contextOf(target);
       const h = await handle(target);
       const first = await snap();
       await h.click();
@@ -151,7 +170,7 @@ export async function record(video, outDir) {
       for (const ch of String(value)) { await page.keyboard.type(ch); await sleep(40); frames.push(await snap('k')); }
       await sleep(settle);
       const done = await snap('typed');
-      beats.push({ type: 'typing', still: first, frames, after: done, focus: fr, target: tr, text, who });
+      beats.push({ type: 'typing', still: first, frames, after: done, focus: fr, target: tr, context: ctx, text, who });
     },
     // a still of whatever a print window received (the chisum report)
     async showPrinted({ text, focus, who = 'system', chip }) {

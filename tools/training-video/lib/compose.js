@@ -164,7 +164,10 @@ export function buildFrames(beatsDoc, urlOf) {
       continue;
     }
     // screen beats
-    const focusCam = b.focus ? camOf(b.focus, b.type === 'view' ? b.marks : [b.target]) : { ...WIDE };
+    // a control is always framed with its row (b.context); a focus too big to zoom on falls back to that row
+    const ctxR = b.type !== 'view' && b.context ? unionR([b.context, b.target]) : null;
+    const want = b.focus && ctxR ? unionR([b.focus, ctxR]) : b.focus;
+    const focusCam = want ? camOf(want, b.type === 'view' ? b.marks : [ctxR || b.target]) : { ...WIDE };
     if (b.type === 'view') {
       fadeOutUi(0.25);
       if (b.still !== A) toStill(b.still, 0.3);   // same page, same layout: cross-fade where we are, then fly
