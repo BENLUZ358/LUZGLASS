@@ -23,7 +23,7 @@ export function seed() {
   };
   const orders = {
     // the hero: just arrived, the office has not looked at it yet
-    ord_9101: order('ord_9101', 'L9101', 'galil', { stage: '', status: 'ממתין לאישור', source: 'upload', sketchName: 'מקלחון ומראה',
+    ord_9101: order('ord_9101', 'L9101', 'galil', { stage: '', status: 'ממתין לאישור', source: 'whatsapp', waPage: 1, waPages: 1, customerId: '14300', sketchName: 'מקלחון ומראה',
       items: I.o9101, hasSketch: true, date: '12.10.2026', time: '08:05', createdAt: CLOCK - 3 * 3600e3 }),
     // background traffic, so the screens are not empty
     ord_9102: order('ord_9102', 'L9102', 'sharon', { stage: '', status: 'ממתין לאישור', source: 'upload', sketchName: 'מקלחון נישה',
@@ -35,7 +35,7 @@ export function seed() {
   };
   return {
     __clock: CLOCK, __session: '0500000000',
-    __api: { 'hashavshevet-order': { ok: true, reference: '10915' } },
+    __api: { 'hashavshevet-order': { ok: true, reference: '10915' }, 'whatsapp-dispatch': { ok: true, queued: true, clientName: CLIENTS.galil.name } },
     db: { users: users({ worker: 'נועה' }), orders, sketches, skuCatalog: SKUS,
           prices: { global: { '8SMH': 420, '10SMH': 520, '6SL': 260, 'M4': 380 } },
           // the client cards from Hashavshevet — where the "ready" WhatsApp number comes from (customerId = 14300 + i, seedlib)
@@ -48,10 +48,10 @@ export async function script(r) {
   const prog = (cur, done) => r.progress({ stations: ST, cur, done, skip: cur > GRAPHIC || cur === null ? [GRAPHIC] : [] });
 
   // ── פתיחה
-  r.card({ kind: 'title', title: 'הדרך של הזמנה במפעל', sub: 'מהקליטה ועד החשבונית · לכל עובד חדש',
+  r.card({ kind: 'title', dur: 3.6, title: 'הדרך של הזמנה במפעל', sub: 'מהקליטה ועד החשבונית · לכל עובד חדש',
     bullets: ['נעקוב אחרי **הזמנה אחת** בכל התחנות', 'בכל תחנה **מישהו אחר** אחראי', 'בסוף כל תחנה **המערכת** אומרת לאן ההזמנה ממשיכה'] });
   r.progress({ stations: ST, cur: -1, done: [], skip: [] });
-  r.card({ title: 'הזמנת הדוגמה: **L9101 · זגגות הגליל**', table: [
+  r.card({ dur: 5.5, title: 'הזמנת הדוגמה: **L9101 · זגגות הגליל**', table: [
     ['2 זכוכיות', '8 מ"מ שקוף **מחוסם** — נוסעות למפעל החיסום'],
     ['1 מראה', '4 מ"מ **מלוטשת** — נחתכת ומלוטשת אצלנו'],
     ['הלקוח', 'לקוח רגיל, **אוסף בעצמו**'],
@@ -62,10 +62,13 @@ export async function script(r) {
   await r.open('admin.html', { wait: '.stat-link' });
   await r.exec(() => { [...document.querySelectorAll('.stat-link')].find(e => /תור סקיצות/.test(e.textContent)).click(); });
   await r.click({ target: { sel: '.sq-item', text: 'L9101' }, focus: '#sqListPanel',
-    text: 'הכול מתחיל כשלקוח שולח הזמנה — מהאתר, או בסקיצה בוואטסאפ. היא נוחתת ב**"תור סקיצות"**.', hold: 5,
-    after: 'המשרד מסתכל על **הסקיצה** של הלקוח, ומקליד את **הפריטים**: זכוכית, מידה, כמות.', afterFocus: '#sqDetailPanel', afterMark: '#sqImgWrap' });
-  // "טופלה" → tab "נראה" → the order again (where the items are entered): unseen here, taught in video 01
-  await r.exec(() => { document.getElementById('sqBtnSeen').click(); });
+    text: 'הכול מתחיל כשלקוח שולח הזמנה — מהאתר, או **סקיצה בוואטסאפ**. היא נוחתת ב**"תור סקיצות"**.', hold: 4.6,
+    after: 'המשרד מסתכל על **הסקיצה** של הלקוח: מה הוא רוצה, ובאילו מידות.', afterFocus: '#sqDetailPanel', afterMark: '#sqImgWrap' });
+  await r.click({ target: '#sqBtnSeen', focus: '#sqDetailPanel', settle: 1200,
+    text: 'עברו על הסקיצה? לוחצים **"✓ סקיצה טופלה"**.', hold: 3,
+    after: 'הסקיצה מסומנת כטופלה — **והלקוח מקבל לבד הודעת וואטסאפ** שהסקיצה שלו התקבלה וטופלה.',
+    afterMark: '#_lgToast', afterFocus: '#_lgToast', afterChip: { kind: 'system', t: '⚙ נשלח עדכון בוואטסאפ ללקוח' } });
+  // "נראה" → the order again, where the items are entered: unseen here, taught in video 01
   await r.exec(() => { document.getElementById('sqTabSeen').click(); });
   await r.exec(() => { [...document.querySelectorAll('.sq-item')].find(e => /L9101/.test(e.textContent)).click(); });
   await r.click({ target: '#sqBtnChash', focus: '#sqActions',
@@ -121,7 +124,14 @@ export async function script(r) {
     text: 'למחרת הזכוכיות חוזרות. בטאב **"חיסום"** מסמנים מה הגיע, ולוחצים **"✓ סיום בדיקה ואיפוס רשימה"**.', hold: 4.6,
     after: 'L9101 הושלמה — ותצא הודעה ללקוח. משהו עוד לא חזר? הוא **נשאר בחיסום ומחכה**.',
     afterFocus: { sel: 'button', text: 'אשר סיום בדיקה' }, afterMark: { sel: 'div', text: 'סקיצות הושלמו' } });
-  await r.exec(() => { [...document.querySelectorAll('button')].find(b => /אשר סיום בדיקה/.test(b.textContent)).click(); });
+  await r.click({ target: { sel: 'button', text: 'אשר סיום בדיקה' }, text: 'מאשרים: **"✓ אשר סיום בדיקה"**.', hold: 2.4, settle: 2400,
+    after: 'L9101 **מוכנה לאיסוף** — **והמערכת שולחת לבד ללקוח הודעת וואטסאפ** שההזמנה מוכנה.',
+    afterMark: '#toast', afterFocus: '#toast', afterChip: { kind: 'system', t: '⚙ הודעת וואטסאפ ללקוח' } });
+  r.card({ title: 'מתי הלקוח מקבל **וואטסאפ**? — המערכת שולחת לבד', table: [
+    ['סקיצה מוואטסאפ טופלה', '"✓ סקיצה טופלה" בתור הסקיצות'],
+    ['ההזמנה **מוכנה לאיסוף**', 'בסוף יום עבודה, בחזרה מחיסום, או בסיום גרפיקה'],
+    ['**ההובלה יצאה**', '"🚚 סיים הובלה" — הודעה אחת לכל לקוח'],
+  ], box: { kind: 'info', text: 'אין צורך לשלוח ידנית. אם הודעה לא נשלחה — המסך מציג אזהרה, ומעדכנים את המנהל.' } });
 
   // ── 5. גרפיקה — דילוג
   prog(GRAPHIC, [0, 1, 2, 3]);

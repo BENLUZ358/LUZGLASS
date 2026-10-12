@@ -45,7 +45,7 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:#141210;font-fam
 #progress .st.done::before{content:'✓ ';color:var(--gold-l)}
 #progress .st.skip{text-decoration:line-through;color:#5c5650}
 #progress .ar{color:#5c5650;font-size:22px}
-body.prog #chapter{top:104px} body.prog #caption.top{top:190px}
+body.prog #chapter{top:104px} body.prog #caption.top{top:190px} body.prog #chip.top{top:330px}
 /* cards */
 #card{position:absolute;inset:0;opacity:0;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(ellipse at 70% 20%,#2b2620 0%,#161310 60%,#0f0d0b 100%);color:#fff;direction:rtl}
@@ -109,7 +109,7 @@ let lastCard = '', lastProg = '';
 function cardHTML(c) {
   const li = (c.bullets || []).map((b, i) => `<li data-n="${i + 1}">${rich(b)}</li>`).join('');
   const flow = c.flow ? `<div class="flow">${c.flow.map((f, i) => (i ? '<i>←</i>' : '') + `<span class="${f.hot ? 'hot' : ''}">${esc(f.t || f)}</span>`).join('')}</div>` : '';
-  const tbl = c.table ? `<div class="tbl">${c.table.map(([k, v]) => `<div class="k">${esc(k)}</div><div>${rich(v)}</div>`).join('')}</div>` : '';
+  const tbl = c.table ? `<div class="tbl">${c.table.map(([k, v]) => `<div class="k">${rich(k)}</div><div>${rich(v)}</div>`).join('')}</div>` : '';
   const box = c.box ? `<div class="box ${c.box.kind || 'info'}">${rich(c.box.text)}</div>` : '';
   if (c.kind === 'title') return `<div class="kick">${esc(c.kicker || 'הדרכת עובדים · LuzGlass')}</div><h1>${esc(c.title)}</h1><div class="rule"></div>
     ${c.sub ? `<div class="sub">${rich(c.sub)}</div>` : ''}${li ? `<div class="kick" style="margin-top:6px">מה נלמד</div><ul>${li}</ul>` : ''}`;
