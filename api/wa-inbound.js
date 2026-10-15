@@ -23,13 +23,17 @@ const crypto = require('crypto');
 const { lgWaInboundAllowed } = require('./_env');
 const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey } = require('./_wa-inbound');
 
+//  הסוד עצמו, בלי "Bearer" ובלי רווחים. 15/10: בייצור כל webhook חזר 401 —
+//  הסוד ב-Vercel ובשדה של GREEN API הוקלדו ידנית בטלפון, ו-"Bearer " או רווח
+//  בצד אחד הספיקו כדי שאף הודעה לא תיכנס. משווים את הסוד, לא את העטיפה.
+function _bare(s) { return String(s || '').trim().replace(/^bearer\s+/i, '').trim(); }
+
 //  השוואה בזמן קבוע. גיבוב קודם, כדי שגם האורך לא ידלוף.
 function _tokenOk(header) {
-  const want = String(process.env.GREENAPI_WEBHOOK_TOKEN || '');
-  if (!want) return false;
-  const got = String(header || '');
+  const want = _bare(process.env.GREENAPI_WEBHOOK_TOKEN);
+  if (!want || /^bearer$/i.test(want)) return false;
   const h = s => crypto.createHash('sha256').update(s).digest();
-  return crypto.timingSafeEqual(h(got), h('Bearer ' + want));
+  return crypto.timingSafeEqual(h(_bare(header)), h(want));
 }
 
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
