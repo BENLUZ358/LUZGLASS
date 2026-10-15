@@ -484,6 +484,23 @@ const markers = b => {
     check('F7 with no token configured nothing gets in — not even an empty bearer', r.status, 401);
     if (prev !== undefined) process.env.GREENAPI_WEBHOOK_TOKEN = prev;
   }
+  {
+    // 15/10: בייצור כל webhook חזר 401. הסוד הוגדר ב-Vercel בצורה אחרת מזו
+    // ש-GREEN API שולחת — עם "Bearer " בתוכו, עם רווח, או בלי Bearer בכותרת.
+    // אותו סוד בכל צורה נכנס; סוד אחר — לעולם לא.
+    const withEnv = async (token, auth) => {
+      const keep = process.env.GREENAPI_WEBHOOK_TOKEN;
+      ENV.GREENAPI_WEBHOOK_TOKEN = token;
+      try { return (await call(req(hook(), auth), { db: seed(), waitUntil: () => {} })).status; }
+      finally { ENV.GREENAPI_WEBHOOK_TOKEN = 'hook-secret'; if (keep !== undefined) process.env.GREENAPI_WEBHOOK_TOKEN = keep; }
+    };
+    check('F10 a secret stored with "Bearer " in it still matches', await withEnv('Bearer hook-secret', 'Bearer hook-secret'), 200);
+    check('F10 a secret stored with spaces/newline still matches', await withEnv(' hook-secret\n', 'Bearer hook-secret'), 200);
+    check('F10 a header without the Bearer word still matches', await withEnv('hook-secret', 'hook-secret'), 200);
+    check('F10 bearer is case-insensitive', await withEnv('hook-secret', 'bearer hook-secret'), 200);
+    check('F10 a different secret is still refused', await withEnv('Bearer hook-secret', 'Bearer hook-secreT'), 401);
+    check('F10 a secret that is only "Bearer" lets nothing in', await withEnv('Bearer ', 'Bearer '), 401);
+  }
 
   const SRC = fs.readFileSync(path.join(ROOT, 'api', 'wa-inbound.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-inbound.js'), 'utf8');
   check('F8 neither the token nor the download link is ever logged',
