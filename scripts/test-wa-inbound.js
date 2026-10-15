@@ -500,6 +500,16 @@ const markers = b => {
     check('F10 bearer is case-insensitive', await withEnv('hook-secret', 'bearer hook-secret'), 200);
     check('F10 a different secret is still refused', await withEnv('Bearer hook-secret', 'Bearer hook-secreT'), 401);
     check('F10 a secret that is only "Bearer" lets nothing in', await withEnv('Bearer ', 'Bearer '), 401);
+    // 15/10 בלילה: גם אחרי F10 — 401. הסוד הודבק בטלפון בדף בעברית, והאייפון
+    // מכניס סימני כיוון בלתי נראים (U+200E/U+200F) ורווח צר-אפס. הם לא \s.
+    check('F11 an invisible direction mark in the stored secret still matches',
+          await withEnv('‏hook-secret‎', 'Bearer hook-secret'), 200);
+    check('F11 an invisible mark in the header still matches',
+          await withEnv('hook-secret', 'Bearer ‎hook-secret​'), 200);
+    check('F11 a non-breaking space still matches', await withEnv(' hook-secret', 'Bearer hook-secret'), 200);
+    check('F11 invisible marks do not turn a wrong secret into a right one',
+          await withEnv('hook-secret', 'Bearer hook‎secrex'), 401);
+    check('F11 a secret made only of invisible marks lets nothing in', await withEnv('‎‏', 'Bearer ‎'), 401);
   }
 
   const SRC = fs.readFileSync(path.join(ROOT, 'api', 'wa-inbound.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-inbound.js'), 'utf8');
