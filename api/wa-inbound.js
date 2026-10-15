@@ -26,14 +26,26 @@ const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey 
 //  הסוד עצמו, בלי "Bearer" ובלי רווחים. 15/10: בייצור כל webhook חזר 401 —
 //  הסוד ב-Vercel ובשדה של GREEN API הוקלדו ידנית בטלפון, ו-"Bearer " או רווח
 //  בצד אחד הספיקו כדי שאף הודעה לא תיכנס. משווים את הסוד, לא את העטיפה.
-function _bare(s) { return String(s || '').trim().replace(/^bearer\s+/i, '').trim(); }
+//  ובאותו לילה, גם אחרי זה — 401: הסוד הודבק בטלפון בדף בעברית, והאייפון
+//  הכניס סימני כיוון בלתי נראים (U+200E/U+200F). הסוד הוא ASCII גלוי בלבד,
+//  אז כל תו אחר — רווח, סימן כיוון, רווח צר-אפס — אינו חלק ממנו.
+function _bare(s) {
+  return String(s || '').replace(/[^\x21-\x7E]+/g, ' ').trim()
+    .replace(/^bearer\s+/i, '').replace(/\s+/g, '');
+}
 
 //  השוואה בזמן קבוע. גיבוב קודם, כדי שגם האורך לא ידלוף.
 function _tokenOk(header) {
   const want = _bare(process.env.GREENAPI_WEBHOOK_TOKEN);
   if (!want || /^bearer$/i.test(want)) return false;
+  const got = _bare(header);
   const h = s => crypto.createHash('sha256').update(s).digest();
-  return crypto.timingSafeEqual(h(_bare(header)), h(want));
+  const ok = crypto.timingSafeEqual(h(got), h(want));
+  //  כשנדחה — רק אורכים וסימן לתווים נסתרים, לעולם לא הסוד עצמו. בלי זה
+  //  ביומן של Vercel רואים 401 ולא יודעים איזה צד שונה.
+  if (!ok) console.warn('wa-inbound: rejected', { gotLen: got.length, wantLen: want.length,
+    hidden: /[^\x20-\x7E]/.test(String(header || '') + String(process.env.GREENAPI_WEBHOOK_TOKEN || '')) });
+  return ok;
 }
 
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
