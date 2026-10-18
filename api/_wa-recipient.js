@@ -147,14 +147,17 @@ async function lgClientFromWaGroup(db, groupId, memberPhone) {
   };
 }
 
-//  לאן יוצאת הודעה להזמנה. "הסקיצות טופלו" על הזמנה שהגיעה מקבוצה מקושרת
-//  → לקבוצה עצמה (בן, 06/10). כל סוג אחר — "מוכן לאיסוף", "ההובלה יצאה" —
-//  וכל הזמנה פרטית → resolvePhone, בדיוק כמו קודם. לא שונה בלי החלטה.
-//  קבוצה שנותקה מאז → אין נמען.
+//  לאן יוצאת הודעה להזמנה. הזמנה שהגיעה מקבוצה מקושרת → **כל** ההודעות
+//  לקבוצה עצמה: "הסקיצות טופלו" (בן, 06/10), וגם "מוכן לאיסוף" ו"ההובלה
+//  יצאה" (בן, 18/10: "אני מעדיף שייצא בקבוצה שממנו נשלחה"). הזמנה פרטית
+//  או מהפורטל → resolvePhone, בדיוק כמו קודם. קבוצה שנותקה מאז → אין נמען.
 //  ⚠️ accountKey מגיע מהקישור, ולכן השער (רשימת הלקוחות המורשים) חל גם כאן.
+//  ⚠️ הודעה אחת על הזמנה מקבוצה + הזמנה מהפורטל של אותו לקוח מובילה לשני
+//  נמענים, ו-whatsapp-dispatch מסרב (409). כרגע עובדים רק מוואטסאפ; ההחלטה
+//  (לפצל או הכול לקבוצה) נדחתה עד שהפורטל יחזור לשימוש.
 async function resolveRecipient(db, order, kind) {
   const g = order && order.waGroup;
-  if (!g || kind !== 'sketches-handled') return resolvePhone(db, order);
+  if (!g) return resolvePhone(db, order);
   const link = (await db.ref('waGroups/' + _groupKey(g)).once('value')).val();
   if (!link || !link.customerId) return { phone: '', source: 'group-unlinked', accountKey: null };
   return { phone: String(g), source: 'group', accountKey: String(link.customerId) };
