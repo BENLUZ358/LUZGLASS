@@ -58,18 +58,6 @@ html,body{height:100%;overflow:hidden;}
 .sketch-placeholder p{font-size:14px;}
 
 /* EDITOR OVERLAY */
-.ed-overlay{position:absolute;inset:0;display:none;flex-direction:column;}
-.ed-overlay.open{display:flex;}
-.ed-toolbar{flex-shrink:0;background:rgba(0,0,0,0.85);padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.ed-btn{padding:6px 12px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#f7f4ef;font-family:'Heebo',sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;}
-.ed-btn.on{background:rgba(184,146,42,0.4);border-color:var(--gold-text);}
-.ed-btn:hover{background:rgba(255,255,255,0.18);}
-.ed-col{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:inline-block;}
-.ed-col.on{border-color:#fff;}
-.ed-canvas-wrap{flex:1;position:relative;overflow:hidden;}
-.ed-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;}
-.ed-cvs{position:absolute;inset:0;width:100%;height:100%;}
-.ed-close{margin-right:auto;padding:6px 14px;background:rgba(255,0,0,0.3);border:1px solid rgba(255,0,0,0.4);color:#fff;font-family:'Heebo',sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:4px;}
 
 /* BOTTOM BAR */
 .btm-bar{flex-shrink:0;padding:10px 14px;background:rgba(0,0,0,0.6);display:flex;align-items:center;gap:8px;}
@@ -160,6 +148,7 @@ html,body{height:100%;overflow:hidden;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <script src="lg-sketch-editor.js?v=20261019"></script>
   <!-- ערכת האייקונים המשותפת. הדף היה היחיד שלא טען אותה, ולכן תפריט
        המשתמש שלו — אותו תפריט בדיוק כמו בשאר הדפים — הוצג באמוג'י. -->
   <script src="lg-icons.js?v=20260807"></script>
@@ -228,30 +217,8 @@ html,body{height:100%;overflow:hidden;}
         <p>בחר סקיצה מהרשימה</p>
       </div>
 
-      <!-- EDITOR OVERLAY -->
-      <div class="ed-overlay" id="edOverlay">
-        <div class="ed-toolbar">
-          <button class="ed-btn on" id="ebDraw" onclick="edTool('draw')">✏️ ציור</button>
-          <button class="ed-btn" id="ebText" onclick="edTool('text')">T טקסט</button>
-          <button class="ed-btn" id="ebErase" onclick="edTool('erase')">⌫ מחק</button>
-          <span style="width:1px;height:20px;background:rgba(255,255,255,0.15);margin:0 4px"></span>
-          <span class="ed-col on" style="background:#f0ede8" onclick="edColor('#f0ede8',this)"></span>
-          <span class="ed-col" style="background:#e74c3c" onclick="edColor('#e74c3c',this)"></span>
-          <span class="ed-col" style="background:#3498db" onclick="edColor('#3498db',this)"></span>
-          <span class="ed-col" style="background:#27ae60" onclick="edColor('#27ae60',this)"></span>
-          <span class="ed-col" style="background:#f39c12" onclick="edColor('#f39c12',this)"></span>
-          <span style="width:1px;height:20px;background:rgba(255,255,255,0.15);margin:0 4px"></span>
-          <input id="edSize" type="range" min="2" max="20" value="3" style="width:60px">
-          <input id="edTxtIn" placeholder="טקסט..." style="display:none;padding:4px 8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:Heebo,sans-serif;font-size:12px;width:100px;border-radius:3px">
-          <button class="ed-btn" onclick="edUndo()">↩ בטל</button>
-          <button class="ed-btn" onclick="edSave()">💾 שמור</button>
-          <button class="ed-close" onclick="closeEditor()">✕ סגור</button>
-        </div>
-        <div class="ed-canvas-wrap" id="edCanvasWrap">
-          <img id="edBg" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none">
-          <canvas id="edCvs" style="position:absolute;inset:0;width:100%;height:100%;"></canvas>
-        </div>
-      </div>
+      <!-- העורך עצמו הוא lg-sketch-editor.js; זה רק עוגן לתמונות הסקיצה -->
+      <span id="skImgAnchor" hidden></span>
 
       <!-- DONE BANNER -->
       <div class="done-banner" id="doneBanner">
@@ -281,7 +248,6 @@ html,body{height:100%;overflow:hidden;}
 <script>
 
 let queue=[], curIdx=0, curOrder=null;
-let edTl='draw', edCl='#f0ede8', edDrw=false, edHist=[], edCvs, edCtx, edBgW=0, edBgH=0;
 // מונע מה-Firebase listener לנווט בזמן שבאנר "הסתיים" מוצג
 let _showingDoneBanner = false;
 
@@ -381,7 +347,7 @@ function showOrder(o){
     const img=document.createElement('img');
     img.className='sketch-img';
     img.style.cssText='max-width:100%;max-height:100%;object-fit:contain;display:block;';
-    canvas.insertBefore(img, document.getElementById('edOverlay'));
+    canvas.insertBefore(img, document.getElementById('skImgAnchor'));
     // ציור מקומי גובר על הסקיצה עצמה. אחרת דרך lgSketchIntoImg, שמציג את
     // מה שכבר בזיכרון ומחליף במה שמגיע מהצומת — ר' שלב 2 ב-firebase-db.
     if(o._editedSketch) img.src=o._editedSketch;
@@ -394,7 +360,7 @@ function showOrder(o){
       img.className='sketch-img';
       img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
       img.style.cssText='max-width:100%;max-height:100%;object-fit:contain;display:block;';
-      canvas.insertBefore(img, document.getElementById('edOverlay'));
+      canvas.insertBefore(img, document.getElementById('skImgAnchor'));
     } else {
       document.getElementById('sketchPlaceholder').style.display='flex';
       document.getElementById('sketchPlaceholder').querySelector('p').textContent='אין סקיצה לטעינה';
@@ -528,76 +494,35 @@ function finishSketch(){
   },1600);
 }
 
-// ═══ EDITOR ═══
-function openEditor(){
+// ═══ EDITOR ═══ — עורך הסקיצות המשותף (lg-sketch-editor.js, 19/10/2026).
+// סימוני השרטט **פרטיים לתחנה** (_editedSketch) — לא נכתבים לסקיצה של הלקוח.
+async function openEditor(){
   if(!curOrder) return;
-  document.getElementById('edOverlay').classList.add('open');
-  edCvs=document.getElementById('edCvs');
-  edCtx=edCvs.getContext('2d');
-  edHist=[];
-  const wrap=document.getElementById('edCanvasWrap');
-  edBgW=wrap.clientWidth; edBgH=wrap.clientHeight;
-  edCvs.width=edBgW*(window.devicePixelRatio||1);
-  edCvs.height=edBgH*(window.devicePixelRatio||1);
-  edCvs.style.width=edBgW+'px'; edCvs.style.height=edBgH+'px';
-  edCtx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
-  const bg=document.getElementById('edBg');
-  if(curOrder._editedSketch){ bg.style.display='block'; bg.src=curOrder._editedSketch; }
-  else if(lgHasSketch(curOrder)){ bg.style.display='block'; lgSketchIntoImg(bg, curOrder); }
-  else {
-    const svg=buildAutoSVG(curOrder);
-    if(svg){bg.style.display='block';bg.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);}
-  }
-  edSnap(); bindEdEvents();
-  edTool('draw');
+  const o = curOrder;
+  let base = o._editedSketch || (lgHasSketch(o) ? await lgLoadSketch(o).catch(()=>null) : null);
+  if(!base){ const svg=buildAutoSVG(o); if(svg) base='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg); }
+  if(!base || curOrder !== o) return;
+  lgSketchEditor.open({
+    title: (o.orderClient||'') + (o.sketchName ? ' — ' + o.sketchName : ''),
+    baseSrc: base,
+    layer: null,
+    output: { mime: 'image/png', fromNatural: true, minW: 600 },   // כמו שהשרטט שמר תמיד: max(טבעי, 600)
+    onSave: ({ mergedSrc }) => edSave(mergedSrc),
+  });
 }
-function closeEditor(){document.getElementById('edOverlay').classList.remove('open');}
 
-function edTool(t){
-  edTl=t;
-  ['Draw','Text','Erase'].forEach(n=>{document.getElementById('eb'+n)?.classList.toggle('on',t.toLowerCase()===n.toLowerCase());});
-  document.getElementById('edTxtIn').style.display=t==='text'?'block':'none';
-  edCvs.style.cursor=t==='erase'?'cell':t==='text'?'text':'crosshair';
-}
-function edColor(col,el){edCl=col;document.querySelectorAll('.ed-col').forEach(e=>e.classList.remove('on'));el.classList.add('on');}
-function edSnap(){const img=new Image();img.onload=()=>edHist.push(img.src);img.src=edCvs.toDataURL();}
-function edUndo(){if(edHist.length>1){edHist.pop();const img=new Image();img.onload=()=>{edCtx.clearRect(0,0,edBgW,edBgH);edCtx.drawImage(img,0,0,edBgW,edBgH);};img.src=edHist[edHist.length-1];}}
-
-function edPos(e){const r=edCvs.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
-function bindEdEvents(){
-  const c=edCvs;
-  const nc=c.cloneNode(true);c.parentNode.replaceChild(nc,c);edCvs=nc;edCtx=nc.getContext('2d');
-  edCtx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);
-  if(edHist.length){const img=new Image();img.onload=()=>edCtx.drawImage(img,0,0,edBgW,edBgH);img.src=edHist[edHist.length-1];}
-  nc.addEventListener('mousedown',edStart);nc.addEventListener('mousemove',edMove);nc.addEventListener('mouseup',edEnd);
-  nc.addEventListener('touchstart',edStart,{passive:false});nc.addEventListener('touchmove',edMove,{passive:false});nc.addEventListener('touchend',edEnd,{passive:false});
-}
-function edStart(e){e.preventDefault();const{x,y}=edPos(e);if(edTl==='text'){const txt=document.getElementById('edTxtIn').value.trim();if(!txt)return;edCtx.font='bold 16px Heebo,Arial';edCtx.fillStyle=edCl;edCtx.textAlign='right';edCtx.fillText(txt,x,y);edSnap();return;}edDrw=true;edCtx.beginPath();edCtx.moveTo(x,y);}
-function edMove(e){e.preventDefault();if(!edDrw)return;const{x,y}=edPos(e);const sz=parseInt(document.getElementById('edSize').value)||3;if(edTl==='erase'){edCtx.clearRect(x-sz*2,y-sz*2,sz*4,sz*4);}else{edCtx.strokeStyle=edCl;edCtx.lineWidth=sz;edCtx.lineCap='round';edCtx.lineJoin='round';edCtx.lineTo(x,y);edCtx.stroke();edCtx.beginPath();edCtx.moveTo(x,y);}}
-function edEnd(){if(!edDrw)return;edDrw=false;edSnap();}
-
-function edSave(){
+function edSave(newSrc){
   if(!curOrder) return;
-  const bg=document.getElementById('edBg');
-  const merge=document.createElement('canvas');
-  const W=Math.max(bg.naturalWidth||edBgW,600),H=Math.round(W*((bg.naturalHeight||edBgH)/(bg.naturalWidth||edBgW)));
-  merge.width=W;merge.height=H;
-  const mx=merge.getContext('2d');
-  mx.imageSmoothingEnabled=true;mx.imageSmoothingQuality='high';
-  if(bg.naturalWidth) mx.drawImage(bg,0,0,W,H);
-  mx.save();mx.scale(W/edBgW,H/edBgH);mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();
-  const newSrc=merge.toDataURL('image/png',1.0);
   curOrder._editedSketch=newSrc;
   // Save to Firebase
   updateOrder(curOrder.id,{_editedSketch:newSrc}).catch(e=>console.error('edSave:',e));
   // Update displayed image
   document.querySelectorAll('#sketchCanvas img.sketch-img').forEach(el=>el.src=newSrc);
-  closeEditor();
 }
 
 // ═══ KEYBOARD ═══
 document.addEventListener('keydown',e=>{
-  if(document.getElementById('edOverlay').classList.contains('open')) return;
+  if(document.querySelector('.lg-se')) return;   // העורך פתוח — המקלדת שלו
   if(e.key==='ArrowLeft'||e.key==='ArrowDown') navSketch(+1);
   if(e.key==='ArrowRight'||e.key==='ArrowUp') navSketch(-1);
   if(e.key==='Enter'){
