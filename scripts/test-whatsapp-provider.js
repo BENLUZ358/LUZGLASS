@@ -302,45 +302,44 @@ const GREEN_ENV = {
     m0.renderText({ kind, clientName: who || 'דני', orderNums: nums, sketchNames: sketches });
   const m0 = require(path.join(ROOT, 'api', '_wa-provider.js'));
 
-  /* ── ready ── */
+  /* ── ready ── (בן, 19/10: בלי מספרי ההזמנה שלנו — כמה סקיצות, ושמות רק כשנרשמו; בלי שורת הפורטל) */
   const ready1 = R('ready', ['L1234'], ['מקלחון']);
-  check('ready names the order and the sketch', /ההזמנה L1234 — מקלחון מוכנה לאיסוף\./.test(ready1), true);
+  check('ready counts the sketch and lists its name', /סקיצה אחת מוכנה לאיסוף\.\n• מקלחון/.test(ready1), true);
+  check('and never shows our order number', /L1234/.test(ready1), false);
   check('and greets the client',                /^שלום דני,\n\n/.test(ready1), true);
-  check('and points at the portal',
-        /לפרטים נוספים ניתן להיכנס למשתמש שלך בלוז גלאס ולצפות בפרטי ההזמנה\./.test(ready1), true);
+  check('and no longer points at the portal',   /לפרטים נוספים/.test(ready1), false);
   check('and signs off',                        /לוז זגגות ומראות האחים בע"מ$/.test(ready1), true);
 
-  /* ⚠️ בלי שם — רק המספר, **בלי מקף תלוי באוויר** */
+  /* ⚠️ בלי שם — בלי רשימה בכלל, ובלי מקף או נקודה תלויים באוויר */
   const ready0 = R('ready', ['L1234'], ['']);
-  check('without a sketch name the order still goes out',
-        /ההזמנה L1234 מוכנה לאיסוף\./.test(ready0), true);
+  check('without a sketch name the message still goes out',
+        /סקיצה אחת מוכנה לאיסוף\./.test(ready0), true);
+  check('and no empty bullet is left behind', /•/.test(ready0), false);
   check('and no dangling dash is left behind', /—/.test(ready0), false);
   for (const empty of [null, undefined, '   ', []]) {
     const t = m0.renderText({ kind: 'ready', clientName: 'דני', orderNums: ['L1'],
                               sketchNames: Array.isArray(empty) ? empty : [empty] });
-    check('an empty sketch name (' + JSON.stringify(empty) + ') leaves no dash', /—/.test(t), false);
+    check('an empty sketch name (' + JSON.stringify(empty) + ') leaves no bullet', /•|—/.test(t), false);
   }
 
   /* ── dispatched ── */
   const one = R('dispatched', ['L1234'], ['מקלחון']);
   check('a single delivery reads naturally',
-        /ההובלה יצאה אליך עם הזמנה L1234 — מקלחון\./.test(one), true);
+        /ההובלה יצאה אליך עם סקיצה אחת\.\n• מקלחון/.test(one), true);
 
   const two = R('dispatched', ['L1234', 'L1235'], ['מקלחון', 'מראה']);
-  check('a grouped delivery lists every order on its own line',
-        /ההובלה יצאה אליך עם ההזמנות:\n• L1234 — מקלחון\n• L1235 — מראה/.test(two), true);
+  check('a grouped delivery counts and lists every named sketch on its own line',
+        /ההובלה יצאה אליך עם 2 סקיצות\.\n• מקלחון\n• מראה/.test(two), true);
+  check('and shows no order number', /L123/.test(two), false);
   /* ⚠️ הודעה אחת, לא אחת לכל הזמנה — זה הכלל שבן קבע */
   check('and it is still one message, not one per order',
         (two.match(/שלום/g) || []).length, 1);
-  check('each order keeps its own sketch name',
-        two.includes('L1234 — מקלחון') && two.includes('L1235 — מראה'), true);
 
-  /* ⚠️ המקרה המעורב: לאחת יש שם ולשנייה אין */
+  /* ⚠️ המקרה המעורב: לאחת יש שם ולשנייה אין — הספירה סופרת את שתיהן, הרשימה רק את מה שנרשם */
   const mixed = R('dispatched', ['L1234', 'L1235'], ['מקלחון', '']);
-  check('a group where one order has no name keeps the other intact',
-        /• L1234 — מקלחון\n• L1235\n/.test(mixed + '\n'), true);
-  check('and the nameless one carries no dash',
-        (mixed.match(/—/g) || []).length, 1);
+  check('a group where one sketch has no name: counted, but only the named one is listed',
+        /2 סקיצות\.\n• מקלחון\n\n/.test(mixed), true);
+  check('and the nameless one adds no empty line or dash', [(mixed.match(/•/g) || []).length, /—/.test(mixed)], [1, false]);
 
   /* ── שם הסקיצה: שרשרת ה-fallback, הגדרה אחת ── */
   const { orderSketchName } = require(path.join(ROOT, 'api', '_wa-recipient.js'));
@@ -402,30 +401,27 @@ const GREEN_ENV = {
   const R  = (nums, sk) => m0.renderText({ kind:'ready', clientName:'המקום לאמבט',
                                            orderNums:nums, sketchNames:sk });
 
-  /* ── 1 / 2 / 3 הזמנות של אותו לקוח ── */
+  /* ── 1 / 2 / 3 סקיצות של אותו לקוח (בן, 19/10: ספירה ושמות, בלי מספרי ההזמנה שלנו) ── */
   const one = R(['L1080'], ['מקלחון הורים']);
-  check('one order keeps the singular wording',
-        /ההזמנה L1080 — מקלחון הורים מוכנה לאיסוף\./.test(one), true);
-  /* ⚠️ ושורת הסיום ביחיד — היא נוסחה כך כשכל הודעה נשאה הזמנה אחת */
-  check('and the closing line stays singular', /בפרטי ההזמנה\./.test(one), true);
+  check('one sketch keeps the singular wording',
+        /סקיצה אחת מוכנה לאיסוף\.\n• מקלחון הורים/.test(one), true);
 
   const two = R(['L1080','L1081'], ['מקלחון הורים','מקלחון ילדים']);
-  check('two orders switch to a list',
-        /ההזמנות הבאות מוכנות לאיסוף:\n• L1080 — מקלחון הורים\n• L1081 — מקלחון ילדים/.test(two), true);
-  check('and the closing line follows the count', /בפרטי ההזמנות\./.test(two), true);
+  check('two sketches: counted, then a list',
+        /2 סקיצות מוכנות לאיסוף\.\n• מקלחון הורים\n• מקלחון ילדים/.test(two), true);
 
   const three = R(['L1080','L1081','L1082'], ['מקלחון הורים','מקלחון ילדים','מראה']);
-  check('three orders, one message',
-        /ההזמנות הבאות מוכנות לאיסוף:\n• L1080 — מקלחון הורים\n• L1081 — מקלחון ילדים\n• L1082 — מראה/.test(three), true);
+  check('three sketches, one message',
+        /3 סקיצות מוכנות לאיסוף\.\n• מקלחון הורים\n• מקלחון ילדים\n• מראה/.test(three), true);
   /* ⚠️ זו הטענה העסקית: **הודעה אחת**, לא שלוש */
   check('and it greets the client exactly once', (three.match(/שלום/g)||[]).length, 1);
-  check('no comma-joined run-on sentence', /L1080, L1081/.test(three), false);
+  check('and no order number of ours appears', /L108/.test(one + two + three), false);
 
-  /* חסר שם סקיצה באחת מהן */
+  /* חסר שם סקיצה באחת מהן — נספרת, לא נרשמת */
   const mixed = R(['L1080','L1081'], ['מקלחון הורים','']);
-  check('an order with no sketch name keeps its line clean',
-        /• L1080 — מקלחון הורים\n• L1081$/m.test(mixed), true);
-  check('and carries no dangling dash', (mixed.match(/—/g)||[]).length, 1);
+  check('a sketch with no name is counted but not listed',
+        /2 סקיצות מוכנות לאיסוף\.\n• מקלחון הורים\n\n/.test(mixed), true);
+  check('and carries no dangling dash or empty bullet', [(mixed.match(/•/g)||[]).length, /—/.test(mixed)], [1, false]);
 }
 
 /* ═══ 3ז · הקיבוץ עצמו — לקוח אחד, הודעה אחת ═══════════════════════ */
