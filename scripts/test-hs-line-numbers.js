@@ -31,7 +31,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 const ctx = {};
 vm.createContext(ctx);
 for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_LINE_TEXT_MAX = \d+;/, /function lineText[\s\S]*?\n}/,
-                  /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines \};\n}/]) {
+                  /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines, unpriced \};\n}/]) {
   const m = SRC.match(re);
   if (!m) { console.error('FAIL  could not find ' + re); process.exit(1); }
   vm.runInContext(m[0].replace(/^const /, 'var '), ctx);
@@ -59,22 +59,29 @@ const build = items => ctx.buildLines({ orderClient: 'x', items }, '14201', '106
     { sku: '8SMH', w: 800,  h: 550  },
     { sku: '',     w: 600,  h: 2000 },   // no SKU — skipped
     { sku: '8HMH', w: 1250, h: 655  },
-    { sku: 'NOPRICE', w: 500, h: 500 },  // no price — skipped
+    { sku: 'NOPRICE', w: 500, h: 500 },  // no price — sent at 0 and flagged (Ben, 19/10)
     { sku: '8SMH', w: 700,  h: 1900 },
   ];
-  const { lines, skipped, hsLines, preview } = build(items);
+  const { lines, skipped, hsLines, preview, unpriced } = build(items);
 
-  check('four lines, two skipped', [lines.length, skipped.length], [4, 2]);
-  check('the lines are numbered 1..4 with no gap',
+  check('five lines, one skipped', [lines.length, skipped.length], [5, 1]);
+  check('the lines are numbered 1..5 with no gap',
         lines.map(l => l.SM_Extratext1),
-        ['1) 550x1885', '2) 800x550', '3) 1250x655', '4) 700x1900']);
+        ['1) 550x1885', '2) 800x550', '3) 1250x655', '4) 500x500', '5) 700x1900']);
   /* the heart of it: item index 3 is line 3, not line 4 */
   check('each item maps to the line that carries it', hsLines,
-        { 0: 1, 1: 2, 2: null, 3: 3, 4: null, 5: 4 });
-  check('a skipped item is cleared, not left with a stale number',
-        [hsLines[2], hsLines[4]], [null, null]);
+        { 0: 1, 1: 2, 2: null, 3: 3, 4: 4, 5: 5 });
+  check('a skipped item is cleared, not left with a stale number', hsLines[2], null);
   check('the preview shows the same numbers the document gets',
-        preview.map(p => p.hsLine), [1, 2, 3, 4]);
+        preview.map(p => p.hsLine), [1, 2, 3, 4, 5]);
+
+  /* Ben, 19/10: no price → the line goes out at 0, and it is named in the warning */
+  check('the unpriced item goes out at price 0', [lines[3].itemkey, lines[3].price], ['NOPRICE', '0.000']);
+  check('with its real quantity', lines[3].Quantity, '0.250');
+  check('and it is listed as unpriced, with its line number',
+        JSON.parse(JSON.stringify(unpriced)), [{ name: 'פריט 5', sku: 'NOPRICE', hsLine: 4 }]);
+  check('priced items are not listed', unpriced.length, 1);
+  check('the preview marks it too', preview[3].unpriced, true);
 
   /* the other direction: from a line in Hashavshevet back to our item */
   const back = n => Object.keys(hsLines).find(k => hsLines[k] === n);
