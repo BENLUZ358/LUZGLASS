@@ -1262,7 +1262,7 @@ function openEditor(){
       baseSrc: base,
       layer: null,
       // כמו שהתחנה שמרה תמיד: 1200–1400 רוחב, JPEG עד 6.5MB
-      output: { mime:'image/jpeg', minW:1200, maxW:1400, maxB64:6_500_000 },
+      output: { mime:'image/jpeg', minW:1200, maxW:1400, maxB64:6_500_000, q0:0.82 },
       onSave: ({ mergedSrc }) => edSave(mergedSrc),
     });
   });

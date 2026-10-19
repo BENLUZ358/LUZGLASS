@@ -90,5 +90,24 @@ check('a new text appears only from "＋ כתב"', /＋ כתב/.test(SRC), true)
 check('the wheel zooms on a computer', /'wheel'/.test(SRC), true);
 check('the editor is opened through one function', /lgSketchEditor\s*=\s*\{\s*open/.test(SRC.replace(/\s+/g, ' ')), true);
 
+/* ── final review, 19/10 ── */
+check('a hidden text sheet is really hidden (display:flex would beat [hidden])', /\.lg-se-sheet\[hidden\]\s*\{\s*display:\s*none/.test(SRC), true);
+check('the keyboard opens inside the tap — no timer around focus (iOS)', /setTimeout\(\(\)\s*=>\s*\{\s*input\.focus/.test(SRC), false);
+check('double-tap asks the model whether it was a still tap', /model\.lastTap\(\)/.test(SRC), true);
+check('＋ כתב closes the open text first', /addText\(\)\s*\{\s*if \(!model\) return;\s*closeSheet\(\);/.test(SRC), true);
+check('בטל closes the open text first', /undo\(\)\s*\{\s*closeSheet\(\);/.test(SRC), true);
+check('the ✎ button cannot open two editors', /if \(document\.querySelector\('\.lg-se'\)\) return/.test(SRC), true);
+{
+  /* the drafter keeps its old size: max(natural, 600) — not the 1200 work surface */
+  const m = ctx.lgSketchModel({ w: 1200, h: 900 });
+  ctx.lgSketchMerge({ naturalWidth: 200, naturalHeight: 150 }, m, { mime: 'image/png', fromNatural: true, minW: 600 }, fakeCanvasFactory({ png: 5 }));
+  check('fromNatural: saved at max(natural, minW), like the drafter always did', fakeCanvasFactory.last.width, 600);
+  const qs = [];
+  const f = fakeCanvasFactory({ jpeg: 10 });
+  ctx.lgSketchMerge({ naturalWidth: 1000, naturalHeight: 750 }, m, { mime: 'image/jpeg', q0: 0.82, maxB64: 1e9 },
+    (W, H) => { const c = f(W, H); const t = c.toDataURL; c.toDataURL = (mime, q) => { qs.push(q); return t(mime, q); }; return c; });
+  check('a page keeps its starting JPEG quality (station: 0.82)', qs[0], 0.82);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll sketch editor UI checks passed.');

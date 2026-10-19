@@ -39,6 +39,10 @@
     const undoStack = [];
     const pts = new Map();
     let g = null;              // the gesture in progress
+    // מה שהשתנה בלי להיכנס למחסנית הביטול (תיקון כתב, נעילה) — כדי ש"לצאת בלי לשמור?" ישאל
+    const edited = new Set();
+    // לחיצה כפולה נספרת רק מאצבע אחת שלא זזה (לא סוף של צביטה, לא גרירה)
+    let tap = null, lastTap = null;
     const push = a => { undoStack.push(a); if (undoStack.length > 100) undoStack.shift(); };
 
     m.defaultTextSize = () => Math.max(18, Math.round(w * 0.035));
@@ -60,16 +64,24 @@
     // ── כתב ──
     const find = id => m.texts.find(t => t.id === id) || null;
     m.addText = at => {
+      const cur = find(m.sel);
+      if (cur && !cur.txt.trim()) m.commitText(cur.id);   // ＋ כתב פעמיים בלי להקליד — לא משאיר כתב שקוף
       const t = { id: nextId++, x: r1(at.x), y: r1(at.y), txt: '', size: m.defaultTextSize(), color: m.color, locked: false };
       m.texts.push(t); m.sel = t.id; push({ type: 'add', t });
       return t;
     };
-    m.setText = (id, txt) => { const t = find(id); if (t) t.txt = String(txt); };
-    m.setSize = (id, size) => { const t = find(id); if (t) t.size = Math.max(8, Math.round(size)); };
-    m.setColor = (id, color) => { const t = find(id); if (t) t.color = color; };
+    m.setText = (id, txt) => { const t = find(id); if (t && t.txt !== String(txt)) { t.txt = String(txt); edited.add(id); } };
+    m.setSize = (id, size) => { const t = find(id); if (t) { t.size = Math.max(8, Math.round(size)); edited.add(id); } };
+    m.setColor = (id, color) => { const t = find(id); if (t && t.color !== color) { t.color = color; edited.add(id); } };
     m.commitText = id => {
       const t = find(id);
-      if (t && !t.txt.trim()) { m.texts = m.texts.filter(x => x !== t); if (m.sel === id) m.sel = null; return false; }
+      if (t && !t.txt.trim()) {
+        // כתב ריק נעלם בלי להשאיר עקבות: לא במחסנית הביטול, ולא כ"שינוי"
+        m.texts = m.texts.filter(x => x !== t); if (m.sel === id) m.sel = null;
+        for (let i = undoStack.length - 1; i >= 0; i--) if (undoStack[i].t === t) undoStack.splice(i, 1);
+        edited.delete(id);
+        return false;
+      }
       return !!t;
     };
     m.removeText = id => {
@@ -77,8 +89,8 @@
       push({ type: 'del', t, at: m.texts.indexOf(t) });
       m.texts = m.texts.filter(x => x !== t); if (m.sel === id) m.sel = null;
     };
-    m.toggleLock = id => { const t = find(id); if (t) t.locked = !t.locked; };
-    m.lockAll = () => m.texts.forEach(t => { t.locked = true; });
+    m.toggleLock = id => { const t = find(id); if (t) { t.locked = !t.locked; edited.add(id); } };
+    m.lockAll = () => m.texts.forEach(t => { if (!t.locked) { t.locked = true; edited.add(t.id); } });
     // התיבה סביב הכתב — מעוגן במרכז
     m.textBox = (t, measure) => {
       const tw = measure(t), pad = t.size * 0.3;
@@ -124,6 +136,8 @@
     // ── מגע: שתי אצבעות = הגדלה והזזה, תמיד. אצבע אחת — לפי מה שמתחתיה והכלי. ──
     m.pointerDown = (id, sx, sy, measure) => {
       pts.set(id, { x: sx, y: sy });
+      if (pts.size === 1) tap = { x: sx, y: sy, id: null };
+      else tap = null;                                   // שתי אצבעות — זו לא לחיצה
       if (pts.size === 2) {
         if (g && g.type === 'draw') m.strokes.pop();               // אצבע שנייה מבטלת קו שהתחיל
         if (g && g.type === 'drag') { g.t.x = g.from.x; g.t.y = g.from.y; }
@@ -136,6 +150,7 @@
       const sel = find(m.sel);
       if (sel && measure && m.hitLockHandle(sel, p.x, p.y, measure)) { m.toggleLock(sel.id); g = { type: 'none' }; return; }
       const t = measure ? m.hitText(p.x, p.y, measure) : null;
+      if (tap) tap.id = t ? t.id : null;
       if (t) {
         m.sel = t.id;
         g = t.locked ? { type: 'pan', x0: sx, y0: sy, v0: Object.assign({}, m.view) }
@@ -155,6 +170,7 @@
     m.pointerMove = (id, sx, sy) => {
       if (!pts.has(id)) return;
       pts.set(id, { x: sx, y: sy });
+      if (tap && Math.hypot(sx - tap.x, sy - tap.y) > 8) tap = null;   // זזה — זו לא לחיצה
       if (!g) return;
       if (g.type === 'pinch') {
         if (pts.size < 2) return;
@@ -172,6 +188,7 @@
     };
     m.pointerUp = id => {
       pts.delete(id);
+      if (!pts.size) { lastTap = tap ? tap.id : null; tap = null; }
       if (!g) return;
       if (g.type === 'pinch') { if (pts.size < 2) g = pts.size ? { type: 'none' } : null; return; }
       if (pts.size) return;
@@ -180,7 +197,14 @@
         push({ type: 'move', t: g.t, from: g.from, to: { x: g.t.x, y: g.t.y } });
       g = null;
     };
-    m.pointerCancel = id => m.pointerUp(id);
+    // המערכת לקחה את המגע (iPad): קו באמצע לא נשמר
+    m.pointerCancel = id => {
+      if (g && g.type === 'draw') { m.strokes.pop(); g = null; }
+      tap = null;
+      m.pointerUp(id);
+      lastTap = null;
+    };
+    m.lastTap = () => lastTap;
     m.busy = () => !!g;
 
     m.undo = () => {
@@ -194,7 +218,7 @@
       return true;
     };
     m.canUndo = () => undoStack.length > 0;
-    m.dirty = () => undoStack.length > 0;
+    m.dirty = () => undoStack.length > 0 || edited.size > 0;
 
     // ── שכבה: כדי לערוך שוב מחר ──
     m.toLayer = sig => ({
@@ -261,7 +285,9 @@
   //  output: {mime, minW?, maxW?, maxB64?} — כל דף שומר בגודל ובפורמט שהוא שומר היום.
   function lgSketchMerge(img, model, output, makeCanvas) {
     const o = output || {};
-    let W = model.w;                      // משטח העבודה — לפחות 1200, לעולם לא קטן מהתמונה
+    // ברירת המחדל: משטח העבודה (לפחות 1200). fromNatural: מהתמונה עצמה — השרטט שומר
+    // max(טבעי, 600) כמו תמיד, כי _editedSketch יושב בתוך orders ונטען בכל מסך.
+    let W = o.fromNatural ? (img.naturalWidth || model.w) : model.w;
     if (o.minW) W = Math.max(W, o.minW);
     if (o.maxW) W = Math.min(W, o.maxW);
     W = Math.round(W);
@@ -273,7 +299,7 @@
     c.save(); c.scale(k, k); model.draw(c, img, null, { clean: true }); c.restore();
     if (o.mime === 'image/png') return cv.toDataURL('image/png');
     const max = o.maxB64 || 6.5 * 1024 * 1024;
-    let q = 0.92, out = cv.toDataURL('image/jpeg', q);
+    let q = o.q0 || 0.92, out = cv.toDataURL('image/jpeg', q);
     while (out.length > max && q > 0.3) { q = Math.round((q - 0.1) * 100) / 100; out = cv.toDataURL('image/jpeg', q); }
     return out;
   }
@@ -299,6 +325,7 @@
 .lg-se-sep{flex:0 0 1px;background:#2a2f37;margin:6px 2px}
 .lg-se-sheet{position:absolute;inset-inline:0;bottom:0;z-index:2;background:#1f2329;border-top:1px solid #2a2f37;padding:10px 12px;
   display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lg-se-sheet[hidden]{display:none}
 .lg-se-sheet input{flex:1 1 200px;min-width:0;min-height:52px;font:700 20px ${FONT};border-radius:12px;border:2px solid #2f8cff;
   background:#fbf9f5;color:#1a1714;padding:0 14px;-webkit-user-select:text;user-select:text}
 .lg-se-sheet button{min-height:52px;min-width:52px;border-radius:12px;border:1px solid #2a2f37;background:#2a2f37;color:#eef0f3;font:700 16px ${FONT};padding:0 12px;cursor:pointer}
@@ -332,6 +359,7 @@
 
   //  opts: {title, baseSrc, layer, output, onSave({mergedSrc, layer, baseSrc}), onClose}
   function open(opts) {
+    if (document.querySelector('.lg-se')) return null;   // ✎ פעמיים בזמן טעינה — עורך אחד בלבד
     if (!document.getElementById('lgSeCss')) {
       const st = el('style', { id: 'lgSeCss' }); st.textContent = CSS; document.head.appendChild(st);
     }
@@ -423,7 +451,8 @@
     function openSheet(t) {
       sheet.hidden = false; input.value = t.txt;
       sheet.querySelectorAll('.lg-se-sw').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.color === t.color)));
-      setTimeout(() => { input.focus(); input.select(); }, 30);
+      // בתוך הלחיצה עצמה — iPad פותח מקלדת רק למיקוד שקורה בתוך מגע של המשתמש
+      input.focus(); input.select();
     }
     function closeSheet() {
       if (sheet.hidden) return;
@@ -448,8 +477,9 @@
     const up = e => {
       if (!model) return;
       model.pointerUp(e.pointerId); render();
-      // לחיצה כפולה על כתב — עריכה
-      const p = model.toSketch(e.offsetX, e.offsetY), t = model.hitText(p.x, p.y, measure), now = Date.now();
+      // לחיצה כפולה על כתב — עריכה. רק לחיצה של אצבע אחת שלא זזה (המודל יודע).
+      const id = model.lastTap(), now = Date.now();
+      const t = id != null ? model.texts.find(x => x.id === id) : null;
       if (t && lastTap.id === t.id && now - lastTap.t < 350) { model.sel = t.id; openSheet(t); lastTap = { t: 0, id: null }; render(); }
       else lastTap = { t: now, id: t ? t.id : null };
     };
@@ -470,6 +500,7 @@
     const act = {
       addText() {
         if (!model) return;
+        closeSheet();
         const r = stage.getBoundingClientRect();
         const t = model.addText(model.toSketch(r.width / 2, r.height * 0.42));   // במרכז מה שרואים
         openSheet(t); render(); hint('מקלידים · סיום · ואז גוררים למקום');
@@ -478,7 +509,7 @@
       delText() { const t = current(); if (t) { model.removeText(t.id); } sheet.hidden = true; input.blur(); render(); toast('הכתב נמחק'); },
       bigger() { const t = current(); if (t) { model.setSize(t.id, t.size * 1.2); render(); } },
       smaller() { const t = current(); if (t) { model.setSize(t.id, t.size / 1.2); render(); } },
-      undo() { if (model && model.undo()) { sheet.hidden = true; render(); } },
+      undo() { closeSheet(); if (model && model.undo()) render(); },
       fit() { if (model) { const r = stage.getBoundingClientRect(); model.fit(r.width, r.height); render(); } },
       lockAll() { if (model) { closeSheet(); model.lockAll(); render(); toast('כל הכתבים ננעלו'); } },
       cancel() { if (model && model.dirty()) ask(); else close(); },

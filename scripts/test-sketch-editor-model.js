@@ -155,5 +155,48 @@ check('defaults scale with image width (large photo)', make({ w: 4000, h: 3000 }
   check('new ids after a restore never collide', back.texts.filter(x => x.id === t2.id).length, 1);
 }
 
+/* ── final review, 19/10 ─────────────────────────────────────────────── */
+{
+  /* ＋ כתב twice with nothing typed must not leave an invisible text behind */
+  const m = make({ w: 1400, h: 1000 }); m.fit(1024, 768);
+  m.addText({ x: 100, y: 100 });
+  m.addText({ x: 200, y: 200 });
+  check('a second ＋ כתב drops the empty first one', m.texts.length, 1);
+}
+{
+  /* "leave without saving?" must notice every change, and only changes */
+  const lay = () => ({ v: 1, w: 1400, h: 1000, sig: 's', strokes: [],
+    texts: [{ id: 1, x: 700, y: 500, txt: '1200', size: 40, color: '#d62828', locked: false }] });
+  const m = make({ w: 1400, h: 1000, layer: lay() });
+  check('an untouched layer is not dirty', m.dirty(), false);
+  m.setText(1, '1250');
+  check('editing a saved text is dirty', m.dirty(), true);
+  const k = make({ w: 1400, h: 1000 }); k.fit(1024, 768);
+  const t = k.addText({ x: 10, y: 10 }); k.commitText(t.id);
+  check('an empty text that was dropped leaves nothing to save', k.dirty(), false);
+  check('and nothing to undo', k.canUndo(), false);
+  const l = make({ w: 1400, h: 1000, layer: lay() });
+  l.toggleLock(1);
+  check('locking a text is dirty', l.dirty(), true);
+}
+{
+  /* only a still, one-finger tap counts toward a double-tap */
+  const m = make({ w: 1400, h: 1000 }); m.fit(1024, 768);
+  const t = m.addText({ x: 700, y: 500 }); m.setText(t.id, '1503'); m.commitText(t.id);
+  const s = m.toScreen(700, 500);
+  m.pointerDown(1, s.x, s.y, measure); m.pointerUp(1);
+  check('a still tap on a text is a tap on it', m.lastTap(), t.id);
+  m.pointerDown(1, s.x, s.y, measure); m.pointerDown(2, s.x + 40, s.y, measure); m.pointerUp(1); m.pointerUp(2);
+  check('fingers lifting after a pinch are not a tap', m.lastTap(), null);
+  m.pointerDown(1, s.x, s.y, measure); m.pointerMove(1, s.x + 30, s.y); m.pointerUp(1);
+  check('a drag is not a tap', m.lastTap(), null);
+}
+{
+  /* iPad cancels a touch when the system takes it over: a half line is not kept */
+  const m = make({ w: 1400, h: 1000 }); m.fit(1024, 768); m.tool = 'pen';
+  m.pointerDown(1, 200, 200, measure); m.pointerMove(1, 260, 240); m.pointerCancel(1);
+  check('a cancelled stroke is discarded', m.strokes.length, 0);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll sketch editor model checks passed.');

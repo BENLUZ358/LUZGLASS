@@ -506,7 +506,7 @@ async function openEditor(){
     title: (o.orderClient||'') + (o.sketchName ? ' — ' + o.sketchName : ''),
     baseSrc: base,
     layer: null,
-    output: { mime: 'image/png' },          // כמו שהשרטט שמר תמיד
+    output: { mime: 'image/png', fromNatural: true, minW: 600 },   // כמו שהשרטט שמר תמיד: max(טבעי, 600)
     onSave: ({ mergedSrc }) => edSave(mergedSrc),
   });
 }
