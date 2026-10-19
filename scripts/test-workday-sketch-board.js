@@ -52,7 +52,7 @@ function makeCtx(orders, opts) {
     bodyOf(DB, 'lgGlassLabelOf'), bodyOf(DB, 'lgIdxsObj'), bodyOf(DB, 'lgArrivedIdxs'), bodyOf(DB, 'lgWorkdayLeft'),
     bodyOf(WD, 'glassMatches'), bodyOf(WD, '_wdBuildable'), bodyOf(WD, '_wdUnavailIdxs'),
     constOf(WD, 'WD_OPTY_DEFAULTS'),
-    bodyOf(WD, 'wdOptyNamesFrom'), bodyOf(WD, 'wdOptyName'), bodyOf(WD, 'wdBoardCompare'),
+    bodyOf(WD, 'wdOptyNamesFrom'), bodyOf(WD, 'wdOptyName'), bodyOf(WD, 'wdGlassOf'), bodyOf(WD, 'wdBoardCompare'),
     bodyOf(WD, 'wdBoardAvail'), bodyOf(WD, 'wdBoardPending'), bodyOf(WD, 'wdBoardOrders'), bodyOf(WD, 'wdBoardGlassTypes'), bodyOf(WD, 'wdBoardLeft'),
   ].join('\n'), ctx);
   return ctx;
@@ -101,7 +101,7 @@ const ids = list => list.map(o => o.id);
   check('8 שקוף: only the 8mm pieces', JSON.parse(JSON.stringify(ctx.wdBoardAvail(mixed, '8 שקוף'))), [0, 2]);
   check('what is left is named with its count', ctx.wdBoardLeft(mixed, '8 שקוף'), '6 שקוף ×2');
   check('glass types on the board, with piece counts, thinnest first',
-    JSON.parse(JSON.stringify(ctx.wdBoardGlassTypes())), [{ label: '6 שקוף', count: 2 }, { label: '8 שקוף', count: 2 }]);
+    JSON.parse(JSON.stringify(ctx.wdBoardGlassTypes())), [{ label: '6 שקוף', count: 2, left: 2 }, { label: '8 שקוף', count: 2, left: 2 }]);
 
   const drafted = makeCtx([mixed], { draft: [{ orderId: 'x', itemIdx: 0 }, { orderId: 'x', itemIdx: 2 }] });
   /* הסקיצה נשארת בתור של ה-8 (מסומנת 'בטיוטה') — כך המיקום והמספור זהים לאופטי ווי,
@@ -192,6 +192,31 @@ const ids = list => list.map(o => o.id);
   check('"הורד בכל זאת" goes ahead', run(true), { sent: 2, warned: null });
   check('the draft window has the warning box', /id="draftIncomplete"/.test(WD), true);
   check('the board lists unfinished sketches in the draft', /לא הושלמו/.test(bodyOf(WD, 'renderSketchBoard')), true);
+}
+
+/* ── final review fixes ── */
+{
+  /* 1. a piece with no recognisable glass has its own queue — otherwise the sketch could
+        never be completed and "לא הושלמו" would nag forever with nowhere to go */
+  const x = ord('x', 'א.מ.מראות', 1, [it('שקוף', 8), { w: 300, h: 400 }]);
+  const ctx = makeCtx([x], { draft: [{ orderId: 'x', itemIdx: 0 }] });
+  vm.runInContext(bodyOf(WD, 'wdDraftIncomplete'), ctx);
+  check('an unknown-glass piece gets its own chip', ctx.wdBoardGlassTypes().some(t => t.label === 'סוג לא ידוע'), true);
+  check('…and can be added from the board', JSON.parse(JSON.stringify(ctx.wdBoardAvail(x, 'סוג לא ידוע'))), [1]);
+  check('…and is named in what is missing', JSON.parse(JSON.stringify(ctx.wdDraftIncomplete())), [{ id: 'x', missing: 'סוג לא ידוע ×1' }]);
+
+  /* 2. a queue keeps its chip after its last sketch is drafted (same ruling as the sketch itself) */
+  const y = ord('y', 'א.מ.מראות', 1, [it('שקוף', 8), it('שקוף', 6)]);
+  const d = makeCtx([y], { draft: [{ orderId: 'y', itemIdx: 0 }] });
+  const t8 = JSON.parse(JSON.stringify(d.wdBoardGlassTypes())).find(t => t.label === '8 שקוף');
+  check('a fully drafted queue keeps its chip, with nothing left in it', t8, { label: '8 שקוף', count: 1, left: 0 });
+
+  /* 3. the names editor is not rebuilt under Ben's fingers */
+  check('the board does not redraw over an open names editor', /wdBoardNamesOpen\s*&&\s*!wdBoardRedraw/.test(bodyOf(WD, 'renderSketchBoard')), true);
+
+  /* 4. strings inside onclick="…('…')" go through lgJsStr, not lgEsc (firebase-db.js: lgJsStr) */
+  const ui = ['renderSketchBoard', 'wdBoardDraftHtml', 'wdShowIncomplete'].map(n => bodyOf(WD, n)).join('\n');
+  check('no lgEsc inside an onclick argument on the board', /onclick="[^"]*\(\s*'\$\{lgEsc\(/.test(ui) || /,'\$\{lgEsc\(/.test(ui), false);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
