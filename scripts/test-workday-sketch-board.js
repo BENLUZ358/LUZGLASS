@@ -156,5 +156,43 @@ const ids = list => list.map(o => o.id);
   check('and are saved there', /ref\('meta\/optyNames'\)\.set\(/.test(bodyOf(WD, 'wdSaveOptyNames')), true);
 }
 
+/* ── "בחיים לא משאירים סקיצה חלקית" (בן, 19/10) ──
+   כל החתיכות של סקיצה יורדות באותו יום, בכל עובי ועיבוד. מי שסיים את התור של
+   ה-8 ושכח את ה-6 — עוצרים אותו לפני "הורד לעבודה" ואומרים מה חסר. */
+{
+  const x = ord('x', 'נאור חזקיה', 1, [it('שקוף', 8), it('שקוף', 6), it('שקוף', 6), it('שקוף', 10)]);
+  const y = ord('y', 'א.מ.מראות', 2, [it('שקוף', 8)]);
+  const draft = [{ orderId: 'x', itemIdx: 0 }, { orderId: 'y', itemIdx: 0 }];
+  const ctx = makeCtx([x, y], { draft });
+  vm.runInContext(bodyOf(WD, 'wdDraftIncomplete'), ctx);
+  check('a sketch with only its 8mm in the draft is incomplete, and says what is missing',
+    JSON.parse(JSON.stringify(ctx.wdDraftIncomplete())), [{ id: 'x', missing: '6 שקוף ×2, 10 שקוף ×1' }]);
+
+  const full = makeCtx([x], { draft: [0, 1, 2, 3].map(i => ({ orderId: 'x', itemIdx: i })) });
+  vm.runInContext(bodyOf(WD, 'wdDraftIncomplete'), full);
+  check('a whole sketch in the draft is complete', full.wdDraftIncomplete().length, 0);
+
+  const sentBefore = makeCtx([Object.assign({}, x, { stage: 'workday' })], { draft: [{ orderId: 'x', itemIdx: 3 }], itemsSel: { x: [0, 1, 2] } });
+  vm.runInContext(bodyOf(WD, 'wdDraftIncomplete'), sentBefore);
+  check('pieces already sent count as done', sentBefore.wdDraftIncomplete().length, 0);
+
+  // הורד לעבודה עוצר כשיש סקיצה חלקית, וממשיך רק ב"הורד בכל זאת"
+  const run = (force) => {
+    const c = makeCtx([x, y], { draft: draft.slice() });
+    const sent = []; let warned = null;
+    Object.assign(c, {
+      addSingleItem: (id, i) => sent.push([id, i]), handleWorkdayStart: () => {}, updateDraftBadge: () => {},
+      closeDraftPreview: () => {}, showToast: () => {}, wdShowIncomplete: inc => { warned = inc; },
+    });
+    vm.runInContext(bodyOf(WD, 'wdDraftIncomplete') + '\n' + bodyOf(WD, 'commitDraftToWork'), c);
+    c.commitDraftToWork(force);
+    return { sent: sent.length, warned: warned && warned.length };
+  };
+  check('"הורד לעבודה" stops on a partial sketch and shows what is missing', run(), { sent: 0, warned: 1 });
+  check('"הורד בכל זאת" goes ahead', run(true), { sent: 2, warned: null });
+  check('the draft window has the warning box', /id="draftIncomplete"/.test(WD), true);
+  check('the board lists unfinished sketches in the draft', /לא הושלמו/.test(bodyOf(WD, 'renderSketchBoard')), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll sketch-board checks passed.');

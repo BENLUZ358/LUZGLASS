@@ -325,6 +325,9 @@
   .wdb-side h3{margin:0;font-size:15px;font-weight:800}
   .wdb-dg{font-size:13px;font-weight:800;color:var(--gold-text);margin-top:6px}
   .wdb-dr{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 4px 4px 10px;padding-inline-start:10px;background:var(--bg2);border-radius:10px;font-size:13px}
+  .wdb-inc{display:flex;flex-direction:column;gap:6px;background:#fdf3e1;border:1px solid #e3b25a;border-radius:10px;padding:10px;margin-top:10px}
+  .wdb-inc-h{font-size:13px;font-weight:800;color:#7a4b06}
+  .wdb-inc-row{min-height:44px;text-align:start;padding:6px 10px;border-radius:8px;border:1px solid #e3b25a;background:#fff;color:#5b3a07;font:600 13px Heebo,sans-serif;cursor:pointer}
   .wdb-dempty,.wdb-empty{color:var(--muted);font-size:14px}
   .wdb-empty{padding:30px 12px;text-align:center}
   .wdb-names{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
@@ -1284,6 +1287,45 @@ function wdBoardLeft(o, glass){
   return Object.keys(count).map(l => l + ' ×' + count[l]).join(', ');
 }
 
+// "בחיים לא משאירים סקיצה חלקית" (בן, 19/10): כל החתיכות של סקיצה יורדות
+// באותו יום. סקיצה שרק חלק ממנה בטיוטה — ומה חסר בה.
+function wdDraftIncomplete(){
+  const ids = [...new Set(draftItems.map(d => String(d.orderId)))];
+  return ids.map(id => {
+    const o = allOrders.find(x => String(x.id) === id);
+    if(!o) return null;
+    const missing = wdBoardLeft(o, null);
+    return missing ? { id, missing } : null;
+  }).filter(Boolean);
+}
+
+// מעבר מהאזהרה לסקיצה החסרה — בתור של העובי הראשון שחסר בה
+function wdBoardJump(id){
+  const o = allOrders.find(x => String(x.id) === String(id));
+  if(!o) return;
+  const t = wdBoardGlassTypes().find(t => wdBoardAvail(o, t.label).length);
+  if(t){
+    wdBoardGlass = t.label;
+    wdBoardIdx = Math.max(0, wdBoardOrders(t.label, wdOptyNames).findIndex(x => String(x.id) === String(id)));
+  }
+  if(typeof closeDraftPreview === 'function') closeDraftPreview();
+  setTab('build');
+  setBuildView('sketches');
+}
+
+function wdShowIncomplete(inc){
+  const box = document.getElementById('draftIncomplete');
+  if(!box) return;
+  box.innerHTML = `<div class="wdb-inc-h">${inc.length === 1 ? 'סקיצה אחת לא הושלמה' : inc.length + ' סקיצות לא הושלמו'} — סקיצה יורדת שלמה</div>` +
+    inc.map(r => {
+      const o = allOrders.find(x => String(x.id) === r.id) || {};
+      return `<button type="button" class="wdb-inc-row" onclick="wdBoardJump('${lgEsc(r.id)}')">${lgEsc(wdOptyName(o.orderClient, wdOptyNames))} · <span dir="ltr">${lgEsc(o.orderNum || '')}</span> · חסר: ${lgEsc(r.missing)}</button>`;
+    }).join('') +
+    `<div class="wdb-actions"><button type="button" class="wdb-btn" onclick="wdBoardJump('${lgEsc(inc[0].id)}')">חזור להשלים</button>
+      <button type="button" class="wdb-btn" onclick="commitDraftToWork(true)">הורד בכל זאת</button></div>`;
+  box.style.display = 'flex';
+}
+
 // ── לוח בדיקת סקיצות — המסך ──
 let wdBoardGlass = '', wdBoardIdx = 0, wdOptyNames = WD_OPTY_DEFAULTS.slice(), wdBoardNamesOpen = false;
 
@@ -1442,6 +1484,10 @@ function renderSketchBoard(el){
     </div>
     <aside class="wdb-side" aria-label="הטיוטה">
       <h3>הטיוטה · ${draftItems.length} זכוכיות</h3>
+      ${(() => { const inc = wdDraftIncomplete(); return inc.length ? `<div class="wdb-inc"><div class="wdb-inc-h">לא הושלמו — חסר בהן עוד</div>${inc.map(r => {
+          const o = allOrders.find(x => String(x.id) === r.id) || {};
+          return `<button type="button" class="wdb-inc-row" onclick="wdBoardJump('${lgEsc(r.id)}')">${lgEsc(wdOptyName(o.orderClient, wdOptyNames))} · <span dir="ltr">${lgEsc(o.orderNum || '')}</span> · חסר: ${lgEsc(r.missing)}</button>`;
+        }).join('')}</div>` : ''; })()}
       ${wdBoardDraftHtml()}
       ${draftItems.length ? '<button type="button" class="wdb-btn wdb-add" onclick="openDraftPreview()"><span data-icon="check"></span> הורד לעבודה</button>' : ''}
     </aside>
@@ -4063,6 +4109,8 @@ function restoreDraft(){
 
 // פתח modal טיוטה
 function openDraftPreview(){
+  const _inc = document.getElementById('draftIncomplete');
+  if(_inc){ _inc.style.display = 'none'; _inc.innerHTML = ''; }
   const ov = document.getElementById('draftOverlay');
   if(!ov) return;
   renderDraftModal();
@@ -4127,8 +4175,13 @@ function clearDraft(){
 }
 
 // "הורד לעבודה" מתוך הטיוטה — מכין את הפריטים ואז מפעיל handleWorkdayStart
-function commitDraftToWork(){
+function commitDraftToWork(force){
   if(!draftItems.length){ showToast('הטיוטה ריקה'); return; }
+  // סקיצה לא יורדת חלקית (בן, 19/10) — עוצרים ואומרים מה חסר; "הורד בכל זאת" עוקף
+  if(!force){
+    const inc = wdDraftIncomplete();
+    if(inc.length){ wdShowIncomplete(inc); return; }
+  }
   draftItems.forEach(d => {
     addSingleItem(d.orderId, d.itemIdx);
   });
@@ -4151,6 +4204,7 @@ function commitDraftToWork(){
     </div>
     <div id="draftList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
     <div id="draftSummary" style="background:#f7f4ef;border-radius:6px;padding:12px 14px;font-size:13px;"></div>
+    <div id="draftIncomplete" class="wdb-inc" role="alert" style="display:none"></div>
     <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
       <button onclick="clearDraft()" style="padding:10px 16px;border:1px solid #ccc;background:#fff;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;border-radius:4px;">
         🗑️ נקה טיוטה
