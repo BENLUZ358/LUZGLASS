@@ -289,6 +289,55 @@
   .unav-sidebar{position:fixed;top:0;right:0;height:100vh;height:100dvh;transform:translateX(100%);transition:transform 0.25s;z-index:95;}
   .unav-topbar{display:flex;}
 }
+  /* ── לוח בדיקת סקיצות (בן, 19/10): סקיצה אחת בכל פעם, בסדר של אופטי ווי.
+     כפתור ראשי אחד (ירוק), 44px לפחות, באייפד לרוחב הטיוטה בצד. ── */
+  .wdb{display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
+  .wdb-main{display:flex;flex-direction:column;gap:12px;min-width:0}
+  .wdb-chips{display:flex;gap:8px;flex-wrap:wrap}
+  .wdb-chip{min-height:44px;padding:0 16px;border-radius:999px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:700 15px Heebo,sans-serif;cursor:pointer;display:flex;align-items:center;gap:6px}
+  .wdb-chip small{font-size:12px;font-weight:600;color:var(--muted)}
+  .wdb-chip[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:var(--on-gold)}
+  .wdb-chip[aria-pressed="true"] small{color:var(--on-gold)}
+  .wdb-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+  .wdb-meta b{color:var(--text);font-variant-numeric:tabular-nums}
+  .wdb-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px}
+  .wdb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .wdb-opty{font-size:22px;font-weight:900;line-height:1.2}
+  .wdb-sys{font-size:13px;color:var(--muted);margin-top:2px}
+  .wdb-num{font-weight:800;color:var(--gold-text);background:rgba(184,146,42,.14);padding:4px 10px;border-radius:8px;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .wdb-img{display:block;width:100%;max-height:70vh;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:10px;cursor:zoom-in}
+  .wdb-noimg{padding:40px 12px;text-align:center;color:var(--muted);background:var(--bg2);border-radius:10px}
+  .wdb-items{display:flex;flex-direction:column;gap:6px}
+  .wdb-it{display:flex;justify-content:space-between;gap:8px;padding:8px 12px;border-radius:10px;font-size:14px;font-variant-numeric:tabular-nums}
+  .wdb-it.cur{background:rgba(33,97,140,.10);color:var(--blue);font-weight:700}
+  .wdb-it.oth{color:var(--muted);border:1px dashed var(--border)}
+  .wdb-it .tag{font-size:12px;font-weight:800}
+  .wdb-left{font-size:14px;font-weight:700;color:var(--gold-text)}
+  .wdb-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .wdb-btn{min-height:44px;flex:1;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:10px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font:700 14px Heebo,sans-serif;cursor:pointer;padding:0 14px;white-space:nowrap}
+  .wdb-btn:active,.wdb-chip:active{transform:scale(.97)}
+  .wdb-btn:focus-visible,.wdb-chip:focus-visible,.wdb-in:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+  .wdb-add{flex:2;background:var(--green);border-color:var(--green);color:#fff;font-size:16px;min-height:52px}
+  .wdb-add[aria-disabled="true"]{background:var(--surface);border-color:var(--green);color:var(--green)}
+  .wdb-meta .wdb-btn{flex:0 0 auto}
+  .wdb-rm{flex:0 0 auto;min-width:44px;background:transparent;color:var(--muted)}
+  .wdb-side{display:none}
+  .wdb-side h3{margin:0;font-size:15px;font-weight:800}
+  .wdb-dg{font-size:13px;font-weight:800;color:var(--gold-text);margin-top:6px}
+  .wdb-dr{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 4px 4px 10px;padding-inline-start:10px;background:var(--bg2);border-radius:10px;font-size:13px}
+  .wdb-dempty,.wdb-empty{color:var(--muted);font-size:14px}
+  .wdb-empty{padding:30px 12px;text-align:center}
+  .wdb-names{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
+  .wdb-names-h{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:14px}
+  .wdb-names-h span{color:var(--muted);font-size:12px}
+  .wdb-nrow{display:flex;gap:6px}
+  .wdb-in{flex:1;min-width:0;min-height:44px;padding:0 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font:500 15px Heebo,sans-serif}
+  @media (min-width:900px){
+    .wdb{grid-template-columns:minmax(0,1fr) 300px;align-items:start}
+    .wdb-side{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;position:sticky;top:12px}
+    .wdb-meta .wdb-draftbtn{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){.wdb-btn:active,.wdb-chip:active{transform:none}}
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -411,6 +460,10 @@
             <button id="bvOrders" onclick="setBuildView('orders')"
               style="padding:5px 12px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">
               הזמנות
+            </button>
+            <button id="bvSketches" onclick="setBuildView('sketches')"
+              style="padding:5px 12px;border:1px solid var(--border);background:var(--bg2);color:var(--text);font-family:Heebo,sans-serif;font-size:12px;cursor:pointer">
+              סקיצות
             </button>
           </div>
         </div>
@@ -844,6 +897,11 @@ async function load(){
     skuCatalogMap = {};
     list.forEach(e => { if (e && e.code) skuCatalogMap[e.code] = e; });
   });
+  // שמות הלקוחות באופטי ווי — לסדר בלוח הסקיצות בלבד
+  firebase.database().ref('meta/optyNames').on('value', snap => {
+    wdOptyNames = wdOptyNamesFrom(snap.val());
+    if(buildViewMode === 'sketches') renderAvailable();
+  }, err => console.warn('[workday] optyNames:', err));
   // כרטיסי הלקוח מחשבשבת — מהם נלקח המספר שאליו יוצאת ההודעה ללקוח.
   // הדף לא טען אותם כלל, ולכן ההודעה יצאה תמיד לטלפון שהועתק להזמנה.
   listenHashavshevetAccounts(list => {
@@ -1176,11 +1234,20 @@ function wdBoardAvail(o, glass){
   return out;
 }
 
+// יש בסקיצה זכוכית מהסוג הזה שעוד לא ירדה לעבודה (בטיוטה — עדיין בתור).
+function wdBoardPending(o, glass){
+  const taken = _wdUnavailIdxs(o);
+  const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+  return items.some((it, i) => it && !taken.has(i) && glassMatches(it, glass));
+}
+
 // התור של סוג זכוכית אחד, בסדר של אופטי ווי. סינון הלקוח הקיים חל גם כאן.
+// סקיצה שנוספה לטיוטה נשארת במקומה (מסומנת) — כמו באופטי ווי, שבו כלום לא
+// נעלם עד working, והמספור 'סקיצה 3 מתוך 12' נשאר זהה.
 function wdBoardOrders(glass, names){
   const client = document.getElementById('fClient')?.value || '';
   return allOrders
-    .filter(o => _wdBuildable(o) && (!client || (o.orderClient || '') === client) && wdBoardAvail(o, glass).length)
+    .filter(o => _wdBuildable(o) && (!client || (o.orderClient || '') === client) && wdBoardPending(o, glass))
     .sort((a, b) => wdBoardCompare(a, b, names));
 }
 
@@ -1217,6 +1284,176 @@ function wdBoardLeft(o, glass){
   return Object.keys(count).map(l => l + ' ×' + count[l]).join(', ');
 }
 
+// ── לוח בדיקת סקיצות — המסך ──
+let wdBoardGlass = '', wdBoardIdx = 0, wdOptyNames = WD_OPTY_DEFAULTS.slice(), wdBoardNamesOpen = false;
+
+function wdSaveOptyNames(list){
+  return firebase.database().ref('meta/optyNames').set(list);
+}
+
+function wdBoardGo(d){
+  const n = wdBoardOrders(wdBoardGlass, wdOptyNames).length;
+  wdBoardIdx = Math.max(0, Math.min(n - 1, wdBoardIdx + d));
+  renderAvailable();
+}
+
+function wdBoardSetGlass(label){
+  wdBoardGlass = label; wdBoardIdx = 0;
+  renderAvailable();
+}
+
+// "הוסף סקיצה": כל הזכוכיות מהסוג המסונן בסקיצה הזו, בבת אחת, ומעבר לבאה.
+// בן: "לא פריט פריט — סקיצה סקיצה".
+function wdBoardAddSketch(){
+  const list = wdBoardOrders(wdBoardGlass, wdOptyNames);
+  const o = list[wdBoardIdx];
+  if(!o) return;
+  const idxs = wdBoardAvail(o, wdBoardGlass);
+  if(!idxs.length) return;
+  if(wdBoardIdx < list.length - 1) wdBoardIdx++;
+  addGroupToDraft(String(o.id), idxs);
+}
+
+// "הוצא" בטיוטה שבצד: הזכוכיות מהסוג הזה של ההזמנה הזו.
+function wdBoardRemove(orderId, glass){
+  const o = allOrders.find(x => String(x.id) === String(orderId));
+  const items = o ? (Array.isArray(o.items) ? o.items : Object.values(o.items || {})) : [];
+  for(let k = draftItems.length - 1; k >= 0; k--){
+    const d = draftItems[k];
+    if(String(d.orderId) !== String(orderId)) continue;
+    const label = lgGlassLabelOf(items[Number(d.itemIdx)] || {}, skuCatalogMap) || 'סוג לא ידוע';
+    if(label === glass) draftItems.splice(k, 1);
+  }
+  updateDraftBadge();
+  renderAll();
+}
+
+function wdBoardDraftHtml(){
+  if(!draftItems.length) return '<div class="wdb-dempty">עוד לא נכנס כלום. כל סקיצה שתוסיף תופיע כאן, לפי סוג זכוכית.</div>';
+  const groups = {};   // glass → orderId → count
+  draftItems.forEach(d => {
+    const o = allOrders.find(x => String(x.id) === String(d.orderId));
+    const items = o ? (Array.isArray(o.items) ? o.items : Object.values(o.items || {})) : [];
+    const label = lgGlassLabelOf(items[Number(d.itemIdx)] || {}, skuCatalogMap) || 'סוג לא ידוע';
+    groups[label] = groups[label] || {};
+    groups[label][d.orderId] = (groups[label][d.orderId] || 0) + 1;
+  });
+  return Object.keys(groups).map(g => `<div class="wdb-dg">${lgEsc(g)}</div>` +
+    Object.keys(groups[g]).map(id => {
+      const o = allOrders.find(x => String(x.id) === String(id)) || {};
+      return `<div class="wdb-dr"><span>${lgEsc(wdOptyName(o.orderClient, wdOptyNames))} · <span dir="ltr">${lgEsc(o.orderNum || '')}</span> · ${groups[g][id] === 1 ? 'זכוכית אחת' : groups[g][id] + ' זכוכיות'}</span>
+        <button type="button" class="wdb-btn wdb-rm" onclick="wdBoardRemove('${lgEsc(String(id))}','${lgEsc(g)}')">הוצא</button></div>`;
+    }).join('')).join('');
+}
+
+function wdBoardNamesHtml(){
+  const clients = [...new Set(allOrders.map(o => o.orderClient).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  const rows = wdOptyNames.length ? wdOptyNames : [{ client: '', opty: '' }];
+  return `<div class="wdb-names">
+    <div class="wdb-names-h"><b>שמות באופטי ווי</b><span>משמש רק לסדר בלוח הזה</span></div>
+    <datalist id="wdbClients">${clients.map(c => `<option value="${lgEsc(c)}">`).join('')}</datalist>
+    <div id="wdbNameRows">${rows.map(r => wdBoardNameRow(r)).join('')}</div>
+    <div class="wdb-actions">
+      <button type="button" class="wdb-btn" onclick="document.getElementById('wdbNameRows').insertAdjacentHTML('beforeend', wdBoardNameRow({client:'',opty:''}))"><span data-icon="plus"></span> הוסף לקוח</button>
+      <button type="button" class="wdb-btn wdb-save" onclick="wdBoardSaveNames()"><span data-icon="check"></span> שמור</button>
+    </div>
+  </div>`;
+}
+
+function wdBoardNameRow(r){
+  return `<div class="wdb-nrow">
+    <input class="wdb-in" list="wdbClients" aria-label="הלקוח במערכת" placeholder="הלקוח במערכת" value="${lgEsc(r.client)}">
+    <input class="wdb-in" aria-label="השם באופטי ווי" placeholder="השם באופטי ווי" value="${lgEsc(r.opty)}">
+    <button type="button" class="wdb-btn wdb-rm" aria-label="מחק שורה" onclick="this.parentNode.remove()"><span data-icon="trash"></span></button>
+  </div>`;
+}
+
+function wdBoardSaveNames(){
+  const list = wdOptyNamesFrom([...document.querySelectorAll('#wdbNameRows .wdb-nrow')].map(row => {
+    const ins = row.querySelectorAll('input');
+    return { client: ins[0].value, opty: ins[1].value };
+  }));
+  wdSaveOptyNames(list)
+    .then(() => { wdOptyNames = list; wdBoardNamesOpen = false; renderAvailable(); showToast('השמות נשמרו'); })
+    .catch(e => { console.error('optyNames save:', e); showToast('השמירה נכשלה — נסה שוב'); });
+}
+
+function renderSketchBoard(el){
+  const types = wdBoardGlassTypes();
+  const namesBtn = `<button type="button" class="wdb-btn wdb-namesbtn" onclick="wdBoardNamesOpen=!wdBoardNamesOpen;renderAvailable()" aria-expanded="${wdBoardNamesOpen}"><span data-icon="pencil"></span> שמות באופטי ווי</button>`;
+  const names = wdBoardNamesOpen ? wdBoardNamesHtml() : '';
+  if(!types.length){
+    el.innerHTML = `<div class="wdb-main">${namesBtn}${names}<div class="wdb-empty">אין סקיצות ממתינות לבדיקה</div></div>`;
+    return;
+  }
+  // ברירת מחדל: הסוג עם הכי הרבה זכוכיות ממתינות
+  if(!types.some(t => t.label === wdBoardGlass)) wdBoardGlass = types.slice().sort((a, b) => b.count - a.count)[0].label;
+  const list = wdBoardOrders(wdBoardGlass, wdOptyNames);
+  wdBoardIdx = Math.max(0, Math.min(wdBoardIdx, list.length - 1));
+  const o = list[wdBoardIdx];
+
+  const chips = types.map(t => `<button type="button" class="wdb-chip" aria-pressed="${t.label === wdBoardGlass}" onclick="wdBoardSetGlass('${lgEsc(t.label)}')">${lgEsc(t.label)}<small>${t.count}</small></button>`).join('');
+  const draftBtn = `<button type="button" class="wdb-btn wdb-draftbtn" onclick="openDraftPreview()"><span data-icon="clipboard"></span> טיוטה · ${draftItems.length}</button>`;
+
+  let card;
+  if(!o){
+    card = `<div class="wdb-empty">אין סקיצות של הלקוח שנבחר ב-${lgEsc(wdBoardGlass)}</div>`;
+  } else {
+    const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+    const taken = _wdUnavailIdxs(o);
+    const inDraft = new Set(draftItems.filter(d => String(d.orderId) === String(o.id)).map(d => Number(d.itemIdx)));
+    const avail = wdBoardAvail(o, wdBoardGlass);
+    const left = wdBoardLeft(o, wdBoardGlass);
+    const name = String(o.sketchName || '').trim();
+    card = `<div class="wdb-card">
+      <div class="wdb-head">
+        <div><div class="wdb-opty">${lgEsc(wdOptyName(o.orderClient, wdOptyNames))}</div>
+          <div class="wdb-sys">במערכת: ${lgEsc(o.orderClient || '—')} · ${name ? lgEsc(name) : 'ללא שם לסקיצה'}</div></div>
+        <span class="wdb-num" dir="ltr">${lgEsc(o.orderNum || '—')}</span>
+      </div>
+      ${lgHasSketch(o)
+        ? `<img id="wdbImg" class="wdb-img" alt="סקיצת ההזמנה" onclick="showSketchPopup('${lgEsc(String(o.id))}')">`
+        : '<div class="wdb-noimg">אין סקיצה להזמנה הזו</div>'}
+      <div class="wdb-items">${items.map((it, i) => {
+        if(!it) return '';
+        const label = lgGlassLabelOf(it, skuCatalogMap) || 'סוג לא ידוע';
+        const tag = taken.has(i) ? 'ירד לעבודה' : inDraft.has(i) ? 'בטיוטה' : '';
+        return `<div class="wdb-it ${glassMatches(it, wdBoardGlass) ? 'cur' : 'oth'}"><span>${lgEsc(label)}${tag ? ` <span class="tag">· ${tag}</span>` : ''}</span><span dir="ltr">${lgEsc(it.w || '')} × ${lgEsc(it.h || '')}</span></div>`;
+      }).join('')}</div>
+      ${left ? `<div class="wdb-left">נשארות ומחכות: ${lgEsc(left)}</div>` : ''}
+    </div>`;
+    var addBtn = avail.length
+      ? `<button type="button" class="wdb-btn wdb-add" onclick="wdBoardAddSketch()"><span data-icon="plus"></span> הוסף סקיצה</button>`
+      : `<button type="button" class="wdb-btn wdb-add" aria-disabled="true" onclick="wdBoardGo(1)"><span data-icon="check"></span> הסקיצה בטיוטה</button>`;
+  }
+
+  el.innerHTML = `<div class="wdb">
+    <div class="wdb-main">
+      <div class="wdb-chips" role="group" aria-label="סוג זכוכית">${chips}</div>
+      <div class="wdb-meta"><span>סקיצה <b>${list.length ? wdBoardIdx + 1 : 0}</b> מתוך <b>${list.length}</b> · בסדר של אופטי ווי</span>
+        <span class="wdb-actions">${draftBtn}${namesBtn}</span></div>
+      ${names}
+      ${card}
+      ${o ? `<div class="wdb-actions">
+        <button type="button" class="wdb-btn" onclick="wdBoardGo(-1)"><span data-icon="arrow-right"></span> הקודם</button>
+        ${addBtn}
+        <button type="button" class="wdb-btn" onclick="wdBoardGo(1)">הבא <span data-icon="arrow-left"></span></button>
+      </div>` : ''}
+    </div>
+    <aside class="wdb-side" aria-label="הטיוטה">
+      <h3>הטיוטה · ${draftItems.length} זכוכיות</h3>
+      ${wdBoardDraftHtml()}
+      ${draftItems.length ? '<button type="button" class="wdb-btn wdb-add" onclick="openDraftPreview()"><span data-icon="check"></span> הורד לעבודה</button>' : ''}
+    </aside>
+  </div>`;
+
+  // התמונה של הסקיצה הנוכחית בלבד; את הבאה טוענים מראש כדי שהדפדוף יהיה מיידי
+  const img = document.getElementById('wdbImg');
+  if(img && o) lgSketchIntoImg(img, o);
+  const next = list[wdBoardIdx + 1];
+  if(next && lgHasSketch(next)) lgLoadSketch(next).catch(() => {});
+}
+
 // שני מנועי הסינון של "בנה יום עבודה", נבנים מההזמנות שזמינות בשלב הזה.
 function buildWorkdayFilters(){
   const pool = allOrders.filter(_wdBuildable);
@@ -1229,6 +1466,7 @@ function buildWorkdayFilters(){
 function renderAvailable(){
   buildWorkdayFilters();
   const el = document.getElementById('availableOrders');
+  if(buildViewMode === 'sketches') return renderSketchBoard(el);
   const filtered = getFiltered();
   // השתמש ב-stage (כמו getFiltered) — לא בשדה status שיכול להיות ישן
   const total = allOrders.filter(o=>
@@ -1389,6 +1627,9 @@ function setBuildView(mode){
   document.getElementById('bvItems').style.color       = mode==='items'  ? '#fff'        : 'var(--text)';
   document.getElementById('bvOrders').style.background = mode==='orders' ? 'var(--gold)' : 'var(--bg2)';
   document.getElementById('bvOrders').style.color      = mode==='orders' ? '#fff'        : 'var(--text)';
+  const bvS = document.getElementById('bvSketches');
+  if(bvS){ bvS.style.background = mode==='sketches' ? 'var(--gold)' : 'var(--bg2)';
+           bvS.style.color      = mode==='sketches' ? '#fff'        : 'var(--text)'; }
   renderAvailable();
 }
 
@@ -1709,7 +1950,7 @@ function glassMatches(item, filter){
   if(!filter) return true;
   return lgGlassLabelOf(item, skuCatalogMap) === filter;
 }
-let buildViewMode = 'items'; // 'items' | 'orders'
+let buildViewMode = 'items'; // 'items' | 'orders' | 'sketches' (לוח בדיקת סקיצות)
 
 function setWorkView(mode){
   workViewMode = mode;

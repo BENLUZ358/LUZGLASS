@@ -53,7 +53,7 @@ function makeCtx(orders, opts) {
     bodyOf(WD, 'glassMatches'), bodyOf(WD, '_wdBuildable'), bodyOf(WD, '_wdUnavailIdxs'),
     constOf(WD, 'WD_OPTY_DEFAULTS'),
     bodyOf(WD, 'wdOptyNamesFrom'), bodyOf(WD, 'wdOptyName'), bodyOf(WD, 'wdBoardCompare'),
-    bodyOf(WD, 'wdBoardAvail'), bodyOf(WD, 'wdBoardOrders'), bodyOf(WD, 'wdBoardGlassTypes'), bodyOf(WD, 'wdBoardLeft'),
+    bodyOf(WD, 'wdBoardAvail'), bodyOf(WD, 'wdBoardPending'), bodyOf(WD, 'wdBoardOrders'), bodyOf(WD, 'wdBoardGlassTypes'), bodyOf(WD, 'wdBoardLeft'),
   ].join('\n'), ctx);
   return ctx;
 }
@@ -104,7 +104,10 @@ const ids = list => list.map(o => o.id);
     JSON.parse(JSON.stringify(ctx.wdBoardGlassTypes())), [{ label: '6 שקוף', count: 2 }, { label: '8 שקוף', count: 2 }]);
 
   const drafted = makeCtx([mixed], { draft: [{ orderId: 'x', itemIdx: 0 }, { orderId: 'x', itemIdx: 2 }] });
-  check('after the 8mm are in the draft, the sketch leaves the 8 שקוף queue', drafted.wdBoardOrders('8 שקוף', []).length, 0);
+  /* הסקיצה נשארת בתור של ה-8 (מסומנת 'בטיוטה') — כך המיקום והמספור זהים לאופטי ווי,
+     שבו כלום לא נעלם עד working, ואפשר לחזור אליה. רק מה שכבר ירד לעבודה יוצא. */
+  check('after the 8mm are in the draft, the sketch keeps its place in the 8 שקוף queue', ids(drafted.wdBoardOrders('8 שקוף', [])), ['x']);
+  check('…with nothing left to add there', drafted.wdBoardAvail(mixed, '8 שקוף').length, 0);
   check('…and stays in the 6 שקוף queue', ids(drafted.wdBoardOrders('6 שקוף', [])), ['x']);
   check('…and nothing is "left" beside the 6', drafted.wdBoardLeft(mixed, '6 שקוף'), '');
 
@@ -115,6 +118,42 @@ const ids = list => list.map(o => o.id);
 {
   const ctx = makeCtx([ord('e', 'לקוח', 1, [])]);
   check('an order with no items is not on the board', ctx.wdBoardOrders('8 שקוף', []).length, 0);
+}
+
+/* ── "הוסף סקיצה": the filtered glass of this sketch, once, then the next one ── */
+{
+  const a = ord('a', 'א.מ.מראות', 1, [it('שקוף', 8), it('שקוף', 6), it('שקוף', 8)]);
+  const b = ord('b', 'א.מ.מראות', 2, [it('שקוף', 8)]);
+  const ctx = makeCtx([a, b]);
+  const calls = [];
+  ctx.addGroupToDraft = (id, idxs) => { calls.push([id, idxs]); idxs.forEach(i => ctx.draftItems.push({ orderId: id, itemIdx: i })); };
+  ctx.renderAvailable = () => {};
+  vm.runInContext('var wdBoardGlass = "8 שקוף", wdBoardIdx = 0, wdOptyNames = WD_OPTY_DEFAULTS.slice();\n' + bodyOf(WD, 'wdBoardAddSketch'), ctx);
+  ctx.wdBoardAddSketch();
+  check('adds only the 8mm pieces of the sketch, in one go', JSON.parse(JSON.stringify(calls)), [['a', [0, 2]]]);
+  check('and moves on to the next sketch', vm.runInContext('wdBoardIdx', ctx), 1);
+  vm.runInContext('wdBoardIdx = 0', ctx);
+  ctx.wdBoardAddSketch();
+  check('a sketch already in the draft is not added twice', calls.length, 1);
+}
+
+/* ── the screen ── */
+{
+  const board = bodyOf(WD, 'renderSketchBoard');
+  check('a "סקיצות" view next to פריטים / הזמנות', /id="bvSketches"[^>]*onclick="setBuildView\('sketches'\)"/.test(WD), true);
+  check('the build list hands over to the board in that view',
+    /buildViewMode\s*===\s*'sketches'[\s\S]{0,60}renderSketchBoard\(/.test(bodyOf(WD, 'renderAvailable')), true);
+  check('the main button adds the sketch', /onclick="wdBoardAddSketch\(\)"[^>]*>[\s\S]{0,80}הוסף סקיצה/.test(board), true);
+  check('previous / next', /wdBoardGo\(-1\)/.test(board) && /wdBoardGo\(1\)/.test(board), true);
+  check('the sketch image is loaded through lgSketchIntoImg', /lgSketchIntoImg\(/.test(WD.slice(WD.indexOf('function renderSketchBoard('))), true);
+  check('the OptyWay name leads, the system name under it', /wdOptyName\(/.test(board) && /במערכת:/.test(board), true);
+  check('what is left of the sketch is shown', /נשארות ומחכות/.test(board), true);
+  check('the draft opens the existing draft (same "הורד לעבודה")', /openDraftPreview\(\)/.test(board), true);
+  check('iPad landscape (900+, portrait is 820–834): the draft sits beside the sketch', /@media\s*\(min-width:\s*900px\)\s*\{[\s\S]{0,200}\.wdb-side\s*\{[^}]*display:\s*flex/.test(WD), true);
+  check('board buttons are 44px', /\.wdb-btn\s*\{[^}]*min-height:\s*44px/.test(WD), true);
+  check('no emoji used as icons on the board', /[\u{1F300}-\u{1FAFF}✅❌]/u.test(board), false);
+  check('OptyWay names load from meta/optyNames', /ref\('meta\/optyNames'\)[\s\S]{0,200}wdOptyNamesFrom\(/.test(WD), true);
+  check('and are saved there', /ref\('meta\/optyNames'\)\.set\(/.test(bodyOf(WD, 'wdSaveOptyNames')), true);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

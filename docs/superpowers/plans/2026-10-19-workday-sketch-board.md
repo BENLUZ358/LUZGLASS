@@ -16,7 +16,7 @@
 - Glass match is the existing exact `glassMatches(item, label)` / `lgGlassLabelOf`.
 - "הוסף סקיצה" adds every item of the filtered glass in that order that is not in `_wdUnavailIdxs(o)` and not already in `draftItems` — never another glass type, never twice.
 - Names stored at `meta/optyNames` as an array of `{client, opty}`; defaults when the node is empty: נאור חזקיה→א.א.פנדה, המקום לאמבט→BathPlace, א.מ.מראות→מאור.
-- UI: 44px targets, no emoji icons (lg-icons `data-icon`), one green primary, breakpoints 600/900/1200, draft side panel at min-width 1100px.
+- UI: 44px targets, no emoji icons (lg-icons `data-icon`), one green primary, breakpoints 600/900/1200, draft side panel at min-width 900px (repo breakpoint rule).
 - No change to "הורד לעבודה", partial-send logic, stations, or rules.
 
 ## Review Focus
