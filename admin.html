@@ -882,6 +882,24 @@ async function deleteOrderById(id) {
 // ══════════════════════════════════════════════════
 //  openMod — פתח מודאל עריכה (stage בלבד — דשבורד צפייה)
 // ══════════════════════════════════════════════════
+// שם הסקיצה מהדשבורד, בכל שלב (בן, 19/10/2026: "שכחתי לקבוע שם בתור והעברתי לשרטט").
+// אותו שדה בדיוק ש-sqSaveName כותב בתור — sketchName על ההזמנה — ולכן הוא עובר לכל
+// המערכת: החיפוש בדשבורד, השרטט, יום העבודה, הודעות הוואטסאפ ו"שם פריט" בחשבשבת.
+// ⚠️ הזמנה שכבר נפתחה בחשבשבת לא מתעדכנת שם (imovein יוצר בלבד) — רק שליחה חדשה.
+function modSaveSketchName(id, value){
+  const o = orders.find(x => x.id === String(id));
+  if(!o) return;
+  const v = String(value || '').trim();
+  if(v === String(o.sketchName || '').trim()) return;   // יציאה מהשדה בלי שינוי אינה שמירה
+  o.sketchName = v;                                     // החיפוש מוצא אותה מיד, לפני ש-Firebase עונה
+  const t = document.getElementById('mtitle');
+  if(t && eid === o.id) t.textContent = (o.orderClient||'') + ' — ' + (v || o.type || '');
+  updateOrder(o.id, { sketchName: v })
+    .then(() => showToast(v ? '✓ שם הסקיצה נשמר' : '✓ שם הסקיצה נמחק'))
+    .catch(e => { console.error('modSaveSketchName:', e); alert('שם הסקיצה לא נשמר: ' + e.message); });
+  renderAll();
+}
+
 function openMod(id) {
   // סגור תור סקיצות אם פתוח — מונע ש-overlay המודאל יישאר מאחוריו (z-index)
   const sqEl = document.getElementById('sqOverlay');
@@ -902,6 +920,10 @@ function openMod(id) {
       <div class="msum-num">${lgEsc(o.orderNum || '—')}</div>
       <div class="msum-st-wrap"><span class="msum-st" style="background:${st.c}">${lgEsc(o.status || '')}</span></div>
       <div class="mf"><label>לקוח</label><div class="v">${lgEsc(o.orderClient || '—')}</div></div>
+      <div class="mf" style="grid-column:1/-1"><label for="mSketchName">שם הסקיצה</label>
+        <input id="mSketchName" class="msel" value="${lgEsc(o.sketchName || '')}" placeholder="ללא שם — הקלד שם"
+               autocomplete="off" onchange="modSaveSketchName('${lgEsc(String(o.id))}', this.value)"
+               onkeydown="if(event.key==='Enter')this.blur()"></div>
       <div class="mf"><label>טלפון</label><div class="v">${tel
         ? `<a class="msum-tel" href="tel:${lgEsc(tel)}" dir="ltr">${lgEsc(o.phone)}</a>` : '—'}</div></div>
       <div class="mf"><label>תאריך</label><div class="v">${lgEsc(o.date || '—')}</div></div>
