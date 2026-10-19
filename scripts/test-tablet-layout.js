@@ -81,12 +81,15 @@ const IPAD = [
         !/class="unav-topbar"/.test(s),
         'if one is added, .app must subtract its height as drafter does');
 
-  check('the back button is enlarged below 900',
-        /@media\(max-width:900px\)\{[\s\S]*?#btnBack\{[\s\S]*?font-size:14px/.test(s));
-  check('and given a fill so it reads as the way out',
-        /#btnBack\{[\s\S]*?background:var\(--gold\)/.test(s));
-  check('and pushed clear of the other controls',
-        /#btnBack\{[\s\S]*?margin-inline-end:auto/.test(s));
+  /* 19/10/2026 (בן, אייפון): הבלוק הזהב היה הדבר הכי בולט במסך והתחרה ב"סיים
+     סקיצה", ו-✕ לידו יצא מכל התחנה. עכשיו: חץ + "רשימה", 44 פיקסלים, בהתחלה
+     (הקצה הימני ב-RTL), וה-✕ מוסתר בתוך סקיצה — ראו test-cs-sketch-view.js. */
+  check('the back button is a 44px target at every width',
+        /\.tb-btn\{[^}]*min-height:44px/.test(s));
+  check('and reads as the way out: an arrow and a word',
+        /id="btnBack"[^>]*><span data-icon="arrow-right"><\/span> רשימה/.test(s));
+  check('and sits first in the bar, clear of the other controls',
+        /\.tb-back\{[^}]*order:-1/.test(s));
   check('the logo yields the width rather than the title being crushed',
         /@media\(max-width:900px\)\{[\s\S]*?\.tb-logo\{display:none/.test(s));
 
