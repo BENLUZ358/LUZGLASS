@@ -246,6 +246,297 @@
     return m;
   }
 
+  // ─── טביעה: האם הסקיצה שנשמרת היום היא עדיין זו שהעורך שמר? ─────────────
+  //  אורך + FNV-1a על כל תו 97. זול, ומספיק כדי לזהות שהלקוח שלח תמונה אחרת.
+  function lgSketchSig(src) {
+    const s = String(src || '');
+    if (!s) return '';
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i += 97) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+    return s.length + ':' + h.toString(16);
+  }
+
+  // ─── מיזוג: התמונה שנשמרת היא מה שהיה על המסך ─────────────────────────────
+  //  output: {mime, minW?, maxW?, maxB64?} — כל דף שומר בגודל ובפורמט שהוא שומר היום.
+  function lgSketchMerge(img, model, output, makeCanvas) {
+    const o = output || {};
+    let W = img.naturalWidth || model.w;
+    if (o.minW) W = Math.max(W, o.minW);
+    if (o.maxW) W = Math.min(W, o.maxW);
+    W = Math.round(W);
+    const k = W / model.w, H = Math.round(model.h * k);
+    const cv = makeCanvas ? makeCanvas(W, H)
+      : Object.assign(document.createElement('canvas'), { width: W, height: H });
+    const c = cv.getContext('2d');
+    c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+    c.save(); c.scale(k, k); model.draw(c, img, null, { clean: true }); c.restore();
+    if (o.mime === 'image/png') return cv.toDataURL('image/png');
+    const max = o.maxB64 || 6.5 * 1024 * 1024;
+    let q = 0.92, out = cv.toDataURL('image/jpeg', q);
+    while (out.length > max && q > 0.3) { q = Math.round((q - 0.1) * 100) / 100; out = cv.toDataURL('image/jpeg', q); }
+    return out;
+  }
+
+  // ─── המסך ─────────────────────────────────────────────────────────────
+  const CSS = `
+.lg-se{position:fixed;inset:0;z-index:100000;display:flex;flex-direction:column;background:#16181c;color:#eef0f3;
+  font-family:${FONT};direction:rtl;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.lg-se-top{display:flex;align-items:center;gap:10px;padding:8px 12px;padding-top:calc(8px + env(safe-area-inset-top,0px));background:#1f2329}
+.lg-se-title{flex:1;min-width:0;font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lg-se-stage{position:relative;flex:1;min-height:0;overflow:hidden;touch-action:none}
+.lg-se-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.lg-se-hint{position:absolute;inset-inline:12px;top:10px;display:flex;justify-content:center;pointer-events:none}
+.lg-se-hint span{background:rgba(22,24,28,.88);border:1px solid #2a2f37;padding:7px 14px;border-radius:999px;font-size:14px;font-weight:600}
+.lg-se-rail{display:flex;gap:8px;padding:8px 10px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));background:#1f2329;overflow-x:auto}
+.lg-se-btn{flex:0 0 auto;min-width:64px;min-height:56px;padding:4px 12px;border-radius:12px;border:1px solid #2a2f37;background:#2a2f37;color:#eef0f3;
+  font:600 14px/1.15 ${FONT};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer}
+.lg-se-btn b{font-size:20px;line-height:1}
+.lg-se-btn[aria-pressed="true"]{background:#b8922a;border-color:#b8922a;color:#1b1608}
+.lg-se-btn.add{background:#2f8cff;border-color:#2f8cff;color:#fff}
+.lg-se-btn.save{background:#b8922a;border-color:#b8922a;color:#1b1608}
+.lg-se-btn:disabled{opacity:.45}
+.lg-se-sep{flex:0 0 1px;background:#2a2f37;margin:6px 2px}
+.lg-se-sheet{position:absolute;inset-inline:0;bottom:0;z-index:2;background:#1f2329;border-top:1px solid #2a2f37;padding:10px 12px;
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lg-se-sheet input{flex:1 1 200px;min-width:0;min-height:52px;font:700 20px ${FONT};border-radius:12px;border:2px solid #2f8cff;
+  background:#fbf9f5;color:#1a1714;padding:0 14px;-webkit-user-select:text;user-select:text}
+.lg-se-sheet button{min-height:52px;min-width:52px;border-radius:12px;border:1px solid #2a2f37;background:#2a2f37;color:#eef0f3;font:700 16px ${FONT};padding:0 12px;cursor:pointer}
+.lg-se-sheet .done{background:#b8922a;border-color:#b8922a;color:#1b1608}
+.lg-se-sheet .del{color:#ff8a7a}
+.lg-se-sw{width:44px!important;min-width:44px!important;height:44px;min-height:44px!important;padding:0!important;border-radius:50%!important;border:3px solid transparent!important}
+.lg-se-sw[aria-pressed="true"]{border-color:#eef0f3!important}
+.lg-se-ask{position:absolute;inset:0;z-index:3;background:rgba(10,11,13,.6);display:flex;align-items:center;justify-content:center;padding:16px}
+.lg-se-ask div{background:#1f2329;border:1px solid #2a2f37;border-radius:16px;padding:18px;max-width:360px;display:flex;flex-direction:column;gap:12px}
+.lg-se-ask p{margin:0;font-size:17px;font-weight:700}
+.lg-se-ask .row{flex-direction:row;padding:0;border:0;display:flex;gap:8px}
+.lg-se-toast{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);background:#fbf9f5;color:#1a1714;font-weight:700;
+  padding:9px 16px;border-radius:12px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;z-index:4}
+.lg-se-toast.on{opacity:1}
+.lg-se :focus-visible{outline:3px solid #2f8cff;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.lg-se-toast{transition:none}}`;
+
+  const HINTS = {
+    move: 'אצבע אחת מזיזה · שתי אצבעות מגדילות',
+    pen: 'עט · שתי אצבעות עדיין מגדילות ומזיזות',
+    marker: 'מרקר שקוף · מדגיש בלי להסתיר',
+    erase: 'נוגעים בקו כדי למחוק אותו',
+  };
+
+  function el(tag, attrs, html) {
+    const e = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(k => e.setAttribute(k, attrs[k]));
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+
+  //  opts: {title, baseSrc, layer, output, onSave({mergedSrc, layer, baseSrc}), onClose}
+  function open(opts) {
+    if (!document.getElementById('lgSeCss')) {
+      const st = el('style', { id: 'lgSeCss' }); st.textContent = CSS; document.head.appendChild(st);
+    }
+    const ov = el('div', { class: 'lg-se', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'עריכת סקיצה' });
+    ov.innerHTML = `
+      <div class="lg-se-top">
+        <div class="lg-se-title"></div>
+        <button type="button" class="lg-se-btn" data-act="cancel"><b>✕</b>ביטול</button>
+        <button type="button" class="lg-se-btn save" data-act="save"><b>✓</b>שמור</button>
+      </div>
+      <div class="lg-se-stage">
+        <canvas></canvas>
+        <div class="lg-se-hint"><span>טוען…</span></div>
+        <div class="lg-se-sheet" hidden>
+          <input type="text" inputmode="text" enterkeyhint="done" autocomplete="off" maxlength="60" placeholder="מה לכתוב? למשל 1200" aria-label="הכתב">
+          <button type="button" data-act="smaller" aria-label="הקטן כתב">A−</button>
+          <button type="button" data-act="bigger" aria-label="הגדל כתב">A+</button>
+          <button type="button" class="lg-se-sw" data-color="#d62828" style="background:#d62828" aria-label="אדום" aria-pressed="true"></button>
+          <button type="button" class="lg-se-sw" data-color="#1d4ed8" style="background:#1d4ed8" aria-label="כחול" aria-pressed="false"></button>
+          <button type="button" class="lg-se-sw" data-color="#111111" style="background:#111111" aria-label="שחור" aria-pressed="false"></button>
+          <button type="button" class="del" data-act="delText">מחק</button>
+          <button type="button" class="done" data-act="doneText">סיום ⌄</button>
+        </div>
+        <div class="lg-se-toast"></div>
+      </div>
+      <div class="lg-se-rail">
+        <button type="button" class="lg-se-btn add" data-act="addText"><b>＋</b>＋ כתב</button>
+        <span class="lg-se-sep"></span>
+        <button type="button" class="lg-se-btn" data-tool="move" aria-pressed="true"><b>✋</b>הזזה</button>
+        <button type="button" class="lg-se-btn" data-tool="pen" aria-pressed="false"><b>✎</b>עט</button>
+        <button type="button" class="lg-se-btn" data-tool="marker" aria-pressed="false"><b>▬</b>מרקר</button>
+        <button type="button" class="lg-se-btn" data-tool="erase" aria-pressed="false"><b>⌫</b>מחק קו</button>
+        <span class="lg-se-sep"></span>
+        <button type="button" class="lg-se-btn" data-act="undo"><b>↶</b>בטל</button>
+        <button type="button" class="lg-se-btn" data-act="fit"><b>⤢</b>התאם</button>
+        <button type="button" class="lg-se-btn" data-act="lockAll"><b>🔒</b>נעל הכל</button>
+      </div>`;
+    ov.querySelector('[data-act="addText"]').innerHTML = '<b>＋</b>כתב';   // the label reads "＋ כתב" as one control
+    ov.querySelector('.lg-se-title').textContent = opts.title || 'עריכת סקיצה';
+    document.body.appendChild(ov);
+
+    const stage = ov.querySelector('.lg-se-stage'), cv = ov.querySelector('canvas'), cx = cv.getContext('2d');
+    const sheet = ov.querySelector('.lg-se-sheet'), input = sheet.querySelector('input');
+    const hintEl = ov.querySelector('.lg-se-hint span'), toastEl = ov.querySelector('.lg-se-toast');
+    let model = null, img = null, closed = false, saving = false, lastTap = { t: 0, id: null };
+    const hint = s => { hintEl.textContent = s; };
+    let tt; const toast = s => { toastEl.textContent = s; toastEl.classList.add('on'); clearTimeout(tt); tt = setTimeout(() => toastEl.classList.remove('on'), 1700); };
+    const measure = t => { cx.save(); cx.font = '800 ' + t.size + 'px ' + FONT; const w = cx.measureText(t.txt || ' ').width; cx.restore(); return w; };
+
+    function size() {
+      const r = stage.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+      cv.width = Math.max(1, Math.round(r.width * d)); cv.height = Math.max(1, Math.round(r.height * d));
+      return r;
+    }
+    function render() {
+      if (!model) return;
+      const d = window.devicePixelRatio || 1;
+      cx.setTransform(d, 0, 0, d, 0, 0);
+      cx.clearRect(0, 0, cv.width, cv.height);
+      cx.save(); cx.translate(model.view.x, model.view.y); cx.scale(model.view.s, model.view.s);
+      cx.shadowColor = 'rgba(0,0,0,.45)'; cx.shadowBlur = 20 / model.view.s;
+      cx.drawImage(img, 0, 0, model.w, model.h); cx.shadowBlur = 0;
+      model.draw(cx, null, measure);
+      cx.restore();
+      ov.querySelector('[data-act="undo"]').disabled = !model.canUndo();
+    }
+    // מקלדת שנפתחת, סיבוב, שינוי חלון: רק המשטח מתכייל. האובייקטים ביחידות הסקיצה — לא זזים עליה.
+    const ro = new ResizeObserver(() => { size(); render(); });
+    ro.observe(stage);
+    const onVV = () => { size(); render(); };
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', onVV);
+
+    img = new Image();
+    img.onload = () => {
+      const lay = opts.layer && opts.layer.w === img.naturalWidth && opts.layer.h === img.naturalHeight ? opts.layer : null;
+      model = lgSketchModel({ w: img.naturalWidth, h: img.naturalHeight, layer: lay });
+      const r = size(); model.fit(r.width, r.height); render();
+      hint(lay && lay.texts && lay.texts.length ? 'הכתב מהפעם הקודמת עדיין זז · לחיצה כפולה לעריכה' : '＋ כתב להוספת מידה · שתי אצבעות להגדלה');
+    };
+    img.onerror = () => { hint('לא הצלחתי לטעון את הסקיצה'); };
+    img.src = opts.baseSrc;
+
+    // ── כתב ──
+    const current = () => model && model.texts.find(t => t.id === model.sel);
+    function openSheet(t) {
+      sheet.hidden = false; input.value = t.txt;
+      sheet.querySelectorAll('.lg-se-sw').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.color === t.color)));
+      setTimeout(() => { input.focus(); input.select(); }, 30);
+    }
+    function closeSheet() {
+      if (sheet.hidden) return;
+      const t = current();
+      input.blur(); sheet.hidden = true;
+      if (t && !model.commitText(t.id)) { render(); return; }
+      if (t) hint('גוררים את הכתב למקום · לחיצה על ✥ נועלת');
+      render();
+    }
+    input.addEventListener('input', () => { const t = current(); if (t) { model.setText(t.id, input.value); render(); } });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); closeSheet(); } e.stopPropagation(); });
+
+    // ── מגע ──
+    cv.addEventListener('pointerdown', e => {
+      if (!model) return;
+      if (!sheet.hidden) closeSheet();                      // נגיעה בסקיצה סוגרת את המקלדת
+      cv.setPointerCapture(e.pointerId);
+      model.pointerDown(e.pointerId, e.offsetX, e.offsetY, measure);
+      render();
+    });
+    cv.addEventListener('pointermove', e => { if (model) { model.pointerMove(e.pointerId, e.offsetX, e.offsetY); if (model.busy()) render(); } });
+    const up = e => {
+      if (!model) return;
+      model.pointerUp(e.pointerId); render();
+      // לחיצה כפולה על כתב — עריכה
+      const p = model.toSketch(e.offsetX, e.offsetY), t = model.hitText(p.x, p.y, measure), now = Date.now();
+      if (t && lastTap.id === t.id && now - lastTap.t < 350) { model.sel = t.id; openSheet(t); lastTap = { t: 0, id: null }; render(); }
+      else lastTap = { t: now, id: t ? t.id : null };
+    };
+    cv.addEventListener('pointerup', up);
+    cv.addEventListener('pointercancel', e => { if (model) { model.pointerCancel(e.pointerId); render(); } });
+    cv.addEventListener('wheel', e => {                       // מחשב: גלגלת מגדילה סביב העכבר
+      if (!model) return; e.preventDefault();
+      model.zoomAt(Math.exp(-e.deltaY * 0.0015), e.offsetX, e.offsetY); render();
+    }, { passive: false });
+
+    // ── כפתורים ──
+    function setTool(t) {
+      model && (model.tool = t);
+      ov.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
+      hint(HINTS[t]);
+    }
+    ov.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
+    const act = {
+      addText() {
+        if (!model) return;
+        const r = stage.getBoundingClientRect();
+        const t = model.addText(model.toSketch(r.width / 2, r.height * 0.42));   // במרכז מה שרואים
+        openSheet(t); render(); hint('מקלידים · סיום · ואז גוררים למקום');
+      },
+      doneText: closeSheet,
+      delText() { const t = current(); if (t) { model.removeText(t.id); } sheet.hidden = true; input.blur(); render(); toast('הכתב נמחק'); },
+      bigger() { const t = current(); if (t) { model.setSize(t.id, t.size * 1.2); render(); } },
+      smaller() { const t = current(); if (t) { model.setSize(t.id, t.size / 1.2); render(); } },
+      undo() { if (model && model.undo()) { sheet.hidden = true; render(); } },
+      fit() { if (model) { const r = stage.getBoundingClientRect(); model.fit(r.width, r.height); render(); } },
+      lockAll() { if (model) { closeSheet(); model.lockAll(); render(); toast('כל הכתבים ננעלו'); } },
+      cancel() { if (model && model.dirty()) ask(); else close(); },
+      save,
+    };
+    ov.addEventListener('click', e => {
+      const b = e.target.closest('[data-act]'); if (b && act[b.dataset.act]) act[b.dataset.act]();
+      const sw = e.target.closest('.lg-se-sw');
+      if (sw) {
+        model && (model.color = sw.dataset.color);
+        sheet.querySelectorAll('.lg-se-sw').forEach(x => x.setAttribute('aria-pressed', String(x === sw)));
+        const t = current(); if (t) { model.setColor(t.id, sw.dataset.color); render(); }
+      }
+    });
+    const onKey = e => {
+      if (e.key !== 'Escape') return;
+      if (ov.querySelector('.lg-se-ask')) { ov.querySelector('.lg-se-ask').remove(); return; }
+      if (!sheet.hidden) closeSheet(); else act.cancel();
+    };
+    document.addEventListener('keydown', onKey);
+
+    function ask() {
+      const a = el('div', { class: 'lg-se-ask' }, `<div><p>לצאת בלי לשמור את השינויים?</p>
+        <div class="row"><button type="button" class="lg-se-btn" data-ask="stay">להישאר</button>
+        <button type="button" class="lg-se-btn" data-ask="leave">לצאת בלי לשמור</button></div></div>`);
+      a.addEventListener('click', e => {
+        const b = e.target.closest('[data-ask]'); if (!b) return;
+        a.remove(); if (b.dataset.ask === 'leave') close();
+      });
+      stage.appendChild(a);
+    }
+
+    async function save() {
+      if (!model || saving) return;
+      closeSheet();
+      saving = true; const btn = ov.querySelector('[data-act="save"]'); btn.disabled = true;
+      try {
+        const mergedSrc = lgSketchMerge(img, model, opts.output);
+        const layer = model.toLayer(lgSketchSig(mergedSrc));
+        await opts.onSave({ mergedSrc, layer, baseSrc: opts.baseSrc });
+        close();
+      } catch (e) {
+        console.error('lgSketchEditor save:', e);
+        toast('השמירה נכשלה — נסה שוב');
+        saving = false; btn.disabled = false;
+      }
+    }
+    function close() {
+      if (closed) return; closed = true;
+      ro.disconnect();
+      if (window.visualViewport) window.visualViewport.removeEventListener('resize', onVV);
+      document.removeEventListener('keydown', onKey);
+      ov.remove();
+      if (opts.onClose) opts.onClose();
+    }
+    return { close };
+  }
+
+  const lgSketchEditor = { open };
+
   root.lgSketchModel = lgSketchModel;
-  if (typeof module !== 'undefined' && module.exports) module.exports = { lgSketchModel };
+  root.lgSketchSig = lgSketchSig;
+  root.lgSketchMerge = lgSketchMerge;
+  root.lgSketchEditor = lgSketchEditor;
+  if (typeof module !== 'undefined' && module.exports) module.exports = { lgSketchModel, lgSketchSig, lgSketchMerge, lgSketchEditor };
 })(typeof window !== 'undefined' ? window : this);
