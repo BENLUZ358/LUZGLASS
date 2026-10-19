@@ -25,7 +25,7 @@ const ROOT  = path.join(__dirname, '..');
 const PAGES = ['workday.html', 'check-station.html', 'admin.html', 'portal.html',
                'drafter.html', 'upload.html', 'new-order.html', 'login.html',
                'mekhlahon.html'];
-const SHARED = ['firebase-db.js', 'lg-icons.js'];
+const SHARED = ['firebase-db.js', 'lg-icons.js', 'lg-sketch-editor.js'];
 
 /* Anything the browser, Firebase or our own shared scripts provide. */
 const GLOBALS = new Set([

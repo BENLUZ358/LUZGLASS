@@ -386,6 +386,7 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <script src="lg-sketch-editor.js?v=20261019"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
   <script src="wa-inbound-panel.js"></script>
@@ -4167,338 +4168,62 @@ function sqUpdateField(field, value){
 }
 </script>
 
-<!-- ══════════════════════════════════════════════════════
-     SKETCH EDITOR OVERLAY
-══════════════════════════════════════════════════════ -->
-<style>
-#sqEditor{
-  display:none;position:fixed;inset:0;z-index:600;
-  font-family:'Heebo',sans-serif;direction:rtl;
-  background:#1a1714;flex-direction:column;
-}
-#sqEditorTop{
-  flex-shrink:0;height:52px;background:#242424;
-  border-bottom:1px solid rgba(255,255,255,0.07);
-  display:flex;align-items:center;gap:8px;padding:0 14px;
-}
-#sqEditorTop .et-title{font-size:13px;font-weight:700;color:#f0ede8;flex:1;}
-/* TOOLBAR */
-#sqEdToolbar{
-  flex-shrink:0;background:#1e1b18;
-  border-bottom:1px solid rgba(255,255,255,0.07);
-  padding:8px 12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
-}
-.et-btn{
-  padding:6px 12px;border-radius:5px;font-family:Heebo,sans-serif;
-  font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,0.1);
-  cursor:pointer;background:rgba(255,255,255,0.07);color:rgba(247,244,239,0.7);
-  transition:all 0.15s;white-space:nowrap;
-}
-.et-btn:hover{background:rgba(255,255,255,0.12);color:#f0ede8;}
-.et-btn.et-active{background:#b8922a;color:#1a1714;border-color:var(--gold-text);}
-.et-sep{width:1px;height:28px;background:rgba(255,255,255,0.08);flex-shrink:0;}
-.et-color{width:28px;height:28px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);cursor:pointer;flex-shrink:0;transition:transform 0.15s;}
-.et-color:hover{transform:scale(1.15);}
-.et-color.et-active{border-color:#f0ede8;transform:scale(1.1);}
-.et-size-wrap{display:flex;align-items:center;gap:5px;}
-.et-size-wrap label{font-size:12px;color:rgba(247,244,239,0.4);}
-.et-size-wrap input{width:44px;padding:4px 6px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#f0ede8;font-family:Heebo,sans-serif;font-size:12px;border-radius:4px;outline:none;}
-/* text input bar */
-#sqEdTextBar{
-  flex-shrink:0;background:#1e1b18;border-bottom:1px solid rgba(255,255,255,0.07);
-  padding:7px 12px;display:none;align-items:center;gap:8px;
-}
-#sqEdTextInput{
-  flex:1;padding:7px 11px;background:rgba(255,255,255,0.07);
-  border:1px solid rgba(255,255,255,0.1);color:#f0ede8;
-  font-family:Heebo,sans-serif;font-size:14px;border-radius:5px;outline:none;
-}
-#sqEdTextInput::placeholder{color:rgba(247,244,239,0.3);}
-/* canvas area */
-#sqEdCanvasWrap{
-  flex:1;position:relative;overflow:hidden;
-  display:flex;align-items:center;justify-content:center;
-  cursor:crosshair;touch-action:none;
-}
-#sqEdBg{position:absolute;max-width:100%;max-height:100%;object-fit:contain;user-select:none;pointer-events:none;}
-#sqEdCanvas{position:absolute;touch-action:none;}
-/* save btn */
-.et-save-btn{padding:8px 20px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:13px;font-weight:900;border:none;cursor:pointer;border-radius:5px;}
-.et-cancel-btn{padding:8px 16px;background:transparent;color:rgba(247,244,239,0.4);font-family:Heebo,sans-serif;font-size:13px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;border-radius:5px;}
-</style>
-
-<div id="sqEditor" style="display:none;flex-direction:column;">
-
-  <!-- TOP -->
-  <div id="sqEditorTop">
-    <div class="et-title" id="sqEdTitle">✏️ עריכת סקיצה</div>
-    <button class="et-cancel-btn" onclick="sqCloseEditor()">ביטול</button>
-    <button class="et-save-btn" onclick="sqSaveEdit()">שמור ✓</button>
-  </div>
-
-  <!-- TOOLBAR -->
-  <div id="sqEdToolbar">
-    <!-- tools -->
-    <button class="et-btn et-active" id="etToolDraw" onclick="etSetTool('draw')"><span data-icon="pencil"></span> ציור</button>
-    <button class="et-btn" id="etToolText" onclick="etSetTool('text')">T כתב</button>
-    <button class="et-btn" id="etToolErase" onclick="etSetTool('erase')"><span data-icon="eraser"></span> מחק</button>
-    <button class="et-btn" onclick="etUndo()"><span data-icon="refresh"></span> בטל</button>
-    <button class="et-btn" onclick="etClear()"><span data-icon="trash"></span> נקה הכל</button>
-    <div class="et-sep"></div>
-    <!-- colors -->
-    <div class="et-color et-active" style="background:#e74c3c;" onclick="etSetColor('#e74c3c',this)" title="אדום"></div>
-    <div class="et-color" style="background:#2980b9;" onclick="etSetColor('#2980b9',this)" title="כחול"></div>
-    <div class="et-color" style="background:#27ae60;" onclick="etSetColor('#27ae60',this)" title="ירוק"></div>
-    <div class="et-color" style="background:#f39c12;" onclick="etSetColor('#f39c12',this)" title="כתום"></div>
-    <div class="et-color" style="background:#1a1714;" onclick="etSetColor('#1a1714',this)" title="שחור"></div>
-    <div class="et-color" style="background:#fff;border:1px solid #555;" onclick="etSetColor('#ffffff',this)" title="לבן"></div>
-    <div class="et-sep"></div>
-    <!-- size -->
-    <div class="et-size-wrap">
-      <label>עובי</label>
-      <input type="range" id="etSize" min="1" max="30" value="4" style="width:70px;cursor:pointer;" oninput="etSizeVal=parseInt(this.value);document.getElementById('etSizeNum').textContent=etSizeVal">
-      <span id="etSizeNum" style="font-size:12px;color:rgba(247,244,239,0.5);width:16px;">4</span>
-    </div>
-    <div class="et-size-wrap" id="etFontSizeWrap" style="display:none;">
-      <label>גודל טקסט</label>
-      <input type="range" id="etFontSize" min="10" max="80" value="24" style="width:70px;cursor:pointer;" oninput="etFontSizeVal=parseInt(this.value);document.getElementById('etFontNum').textContent=etFontSizeVal">
-      <span id="etFontNum" style="font-size:12px;color:rgba(247,244,239,0.5);width:24px;">24</span>
-    </div>
-  </div>
-
-  <!-- TEXT INPUT BAR -->
-  <div id="sqEdTextBar">
-    <span style="font-size:12px;color:rgba(247,244,239,0.4);white-space:nowrap;">לחץ על הסקיצה להוסיף טקסט:</span>
-    <input type="text" id="sqEdTextInput" placeholder="רשום כאן..." maxlength="40">
-    <button class="et-btn" onclick="document.getElementById('sqEdTextInput').focus()">מוכן →</button>
-  </div>
-
-  <!-- CANVAS -->
-  <div id="sqEdCanvasWrap">
-    <img id="sqEdBg" src="" alt="">
-    <canvas id="sqEdCanvas"></canvas>
-  </div>
-</div>
-
 <script>
 // ══════════════════════════════════════
-//  SKETCH EDITOR
+//  SKETCH EDITOR — עורך הסקיצות המשותף (lg-sketch-editor.js)
 // ══════════════════════════════════════
-let etTool='draw', etColor='#e74c3c', etSizeVal=4, etFontSizeVal=24;
-let etDrawing=false, etLastX=0, etLastY=0;
-let etHistory=[];  // array of ImageData snapshots
-let etCtx=null, etCanvas=null;
-let etBgImg=null, etBgW=0, etBgH=0;
+// בן, 19/10/2026: הכתב נחת מעל הזכוכית, כל נגיעה כתבה אותו מחדש, ואי אפשר היה
+// לגלול או להגדיל. העורך הישן (et*) הוחלף בעורך אחד לכל המערכת, שבו כתב הוא
+// פתק שגוררים ונועלים. כאן — רק מה ששייך לתור: מה פותחים ולאן שומרים.
+// אפיון: docs/superpowers/specs/2026-10-19-sketch-editor-design.md
+
+// על מה עורכים: על המקור עם השכבה הניתנת להזזה — **רק** אם הסקיצה הנוכחית היא עדיין
+// זו שהעורך שמר (sig). אחרת (הלקוח שלח מחדש, נערכה בעורך הישן) — על התמונה הנוכחית,
+// והמקור מתחדש בשמירה הבאה, כדי שמקור ישן לעולם לא ידרוס סקיצה חדשה.
+function sqEditorSource(currentSrc, saved){
+  const lay = saved && saved.layer;
+  if(lay && saved.base && lay.sig && lay.sig === lgSketchSig(currentSrc))
+    return { base: saved.base, layer: lay, writeBase: false };
+  return { base: currentSrc, layer: null, writeBase: true };
+}
 
 async function sqOpenEditor(){
   if(!sqCurrent) return;
   const cur = sqCurrent;
-  // use saved sketch if available, otherwise fall back to whatever the view is showing
   const viewImg = document.getElementById('sqImg');
   const saved = lgHasSketch(cur) ? await lgLoadSketch(_sqOrder(cur)) : null;
   if(sqCurrent !== cur) return;   // עבר לפריט אחר בזמן הטעינה
-  const bgSrc = saved || (viewImg && viewImg.style.display!=='none' ? viewImg.src : '');
-  if(!bgSrc) return;
-  document.getElementById('sqEdTitle').textContent='✏️ ' + sqCurrent.client + ' — ' + (sqCurrent.sketchName||'');
-  document.getElementById('sqEditor').style.display='flex';
-  document.getElementById('sqEdBg').src=bgSrc;
-
-  etCanvas=document.getElementById('sqEdCanvas');
-  etCtx=etCanvas.getContext('2d');
-  etHistory=[];
-
-  document.getElementById('sqEdBg').onload=function(){
-    etResizeCanvas();
-    etHistory=[];
-    etSnapshot();
-  };
-  if(document.getElementById('sqEdBg').complete) {
-    etResizeCanvas(); etHistory=[]; etSnapshot();
-  }
-  etSetTool('draw');
-  setupEditorEvents();
-}
-
-function etResizeCanvas(){
-  const bg=document.getElementById('sqEdBg');
-  const wrap=document.getElementById('sqEdCanvasWrap');
-  // match canvas to displayed image size
-  const rect=bg.getBoundingClientRect();
-  etBgW=rect.width; etBgH=rect.height;
-  etCanvas.width=rect.width*window.devicePixelRatio;
-  etCanvas.height=rect.height*window.devicePixelRatio;
-  etCanvas.style.width=rect.width+'px';
-  etCanvas.style.height=rect.height+'px';
-  etCanvas.style.left=rect.left-wrap.getBoundingClientRect().left+'px';
-  etCanvas.style.top=rect.top-wrap.getBoundingClientRect().top+'px';
-  etCtx.scale(window.devicePixelRatio,window.devicePixelRatio);
-}
-
-function etSnapshot(){
-  if(etCtx&&etCanvas.width>0)
-    etHistory.push(etCtx.getImageData(0,0,etCanvas.width,etCanvas.height));
-  if(etHistory.length>40) etHistory.shift();
-}
-
-function etUndo(){
-  if(etHistory.length<=1) return;
-  etHistory.pop();
-  etCtx.putImageData(etHistory[etHistory.length-1],0,0);
-}
-
-function etClear(){
-  etCtx.clearRect(0,0,etCanvas.width/window.devicePixelRatio,etCanvas.height/window.devicePixelRatio);
-  etHistory=[];
-  etSnapshot();
-}
-
-function etSetTool(t){
-  etTool=t;
-  ['draw','text','erase'].forEach(id=>{
-    const b=document.getElementById('etTool'+id.charAt(0).toUpperCase()+id.slice(1));
-    if(b) b.classList.toggle('et-active',id===t);
+  const current = saved || (viewImg && viewImg.style.display!=='none' ? viewImg.src : '');
+  if(!current) return;
+  const layer = saved ? await lgLoadSketchLayer(cur.id).catch(() => null) : null;
+  if(sqCurrent !== cur) return;
+  const src = sqEditorSource(current, layer);
+  lgSketchEditor.open({
+    title: (cur.client || '') + ' — ' + (cur.sketchName || 'סקיצה'),
+    baseSrc: src.base,
+    layer: src.layer,
+    // כמו שהתור שמר תמיד: לפחות 1200 רוחב, JPEG עד 6.5MB
+    output: { mime: 'image/jpeg', minW: 1200, maxB64: 6.5 * 1024 * 1024 },
+    onSave: ({ mergedSrc, layer }) => sqSaveEdit(mergedSrc, { layer, base: src.writeBase ? src.base : undefined }),
   });
-  // show/hide helpers
-  document.getElementById('sqEdTextBar').style.display=t==='text'?'flex':'none';
-  document.getElementById('etFontSizeWrap').style.display=t==='text'?'flex':'none';
-  document.getElementById('sqEdCanvasWrap').style.cursor=
-    t==='erase'?'cell':t==='text'?'text':'crosshair';
 }
 
-function etSetColor(col,el){
-  etColor=col;
-  document.querySelectorAll('.et-color').forEach(e=>e.classList.remove('et-active'));
-  el.classList.add('et-active');
-}
-
-function etGetPos(e){
-  const r=etCanvas.getBoundingClientRect();
-  const src=e.touches?e.touches[0]:e;
-  return {x:src.clientX-r.left, y:src.clientY-r.top};
-}
-
-function setupEditorEvents(){
-  const c=etCanvas;
-  // remove old listeners by cloning
-  const nc=c.cloneNode(true);
-  c.parentNode.replaceChild(nc,c);
-  etCanvas=nc;
-  etCtx=nc.getContext('2d');
-  etCtx.scale(window.devicePixelRatio,window.devicePixelRatio);
-
-  function onStart(e){
-    e.preventDefault();
-    const {x,y}=etGetPos(e);
-    if(etTool==='text'){
-      const txt=document.getElementById('sqEdTextInput').value.trim();
-      if(!txt) return;
-      etCtx.font=`bold ${etFontSizeVal}px Heebo,Arial,sans-serif`;
-      etCtx.fillStyle=etColor;
-      etCtx.textAlign='right';
-      etCtx.fillText(txt,x,y);
-      etSnapshot();
-      return;
-    }
-    etDrawing=true; etLastX=x; etLastY=y;
-    etCtx.beginPath(); etCtx.moveTo(x,y);
-  }
-  function onMove(e){
-    e.preventDefault();
-    if(!etDrawing) return;
-    const {x,y}=etGetPos(e);
-    if(etTool==='erase'){
-      const sz=etSizeVal*3;
-      etCtx.clearRect(x-sz/2,y-sz/2,sz,sz);
-    } else {
-      etCtx.globalCompositeOperation='source-over';
-      etCtx.strokeStyle=etColor;
-      etCtx.lineWidth=etSizeVal;
-      etCtx.lineCap='round';
-      etCtx.lineJoin='round';
-      etCtx.lineTo(x,y);
-      etCtx.stroke();
-      etCtx.beginPath(); etCtx.moveTo(x,y);
-    }
-    etLastX=x; etLastY=y;
-  }
-  function onEnd(e){
-    if(!etDrawing) return;
-    etDrawing=false;
-    etSnapshot();
-  }
-  nc.addEventListener('mousedown',onStart);
-  nc.addEventListener('mousemove',onMove);
-  nc.addEventListener('mouseup',onEnd);
-  nc.addEventListener('touchstart',onStart,{passive:false});
-  nc.addEventListener('touchmove',onMove,{passive:false});
-  nc.addEventListener('touchend',onEnd,{passive:false});
-}
-
-function sqSaveEdit(){
-  // merge bg + drawing onto one canvas
-  const bg=document.getElementById('sqEdBg');
-  const merge=document.createElement('canvas');
-  // high resolution output
-  const HI=3;
-  const baseW=Math.max(bg.naturalWidth||0, etBgW*HI, 1200);
-  const baseH=bg.naturalWidth
-    ? Math.round(baseW*(bg.naturalHeight/bg.naturalWidth))
-    : Math.round(baseW*(etBgH/etBgW));
-  merge.width=baseW; merge.height=baseH;
-  const mx=merge.getContext('2d');
-  mx.imageSmoothingEnabled=true; mx.imageSmoothingQuality='high';
-
-  // draw bg
-  mx.drawImage(bg,0,0,merge.width,merge.height);
-
-  // draw annotations scaled
-  const scaleX=merge.width/etBgW;
-  const scaleY=merge.height/etBgH;
-  mx.save(); mx.scale(scaleX,scaleY);
-  mx.drawImage(etCanvas,0,0,etBgW,etBgH);
-  mx.restore();
-
-  // compress to JPEG — progressive quality until under 6.5 MB base64
-  const MAX_B64 = 6.5 * 1024 * 1024;
-  let newSrc, q = 0.92;
-  do {
-    newSrc = merge.toDataURL('image/jpeg', q);
-    q -= 0.1;
-  } while(newSrc.length > MAX_B64 && q > 0.3);
-
+// שמירה — כתיבה אטומית אחת: הסקיצה הממוזגת (מה שכל מסך אחר מציג), השכבה, ובפעם
+// הראשונה המקור. נכשלה → העורך נשאר פתוח ואומר זאת.
+async function sqSaveEdit(newSrc, extra){
   // הרשימה מסמנת שיש סקיצה; התמונה עצמה לא יושבת בפריט — ר' _sqOrder
   const _it = sqItems.find(i => i.id === sqCurrent.id);
   if(_it) _it.hasSketch = true;
   sqCurrent.hasSketch = true;
-
-  // persist permanently to Firebase as the canonical sketch
-  //
-  // כאן היה `if(sqCurrent.id.startsWith('ord_'))`. הזמנה שהלקוח מעלה
-  // דרך הפורטל נשמרת כ-sub_<ms> (ר' saveSubmission), ולכן התנאי היה שקרי
-  // בדיוק על ההזמנות שעליהן מדגישים — הציור נכתב לאובייקט בזיכרון ולשום
-  // מקום אחר, והרינדור הבא החזיר את התמונה המקורית. כל מזהה ב-sqItems הוא
-  // הזמנה אמיתית מ-orders, ולכן אין מה לסנן.
-  //
-  // כתיבה אחת אטומית לשני העותקים (או לצומת בלבד, להזמנת WhatsApp). לפני
-  // כן אלה היו שתי כתיבות עצמאיות, וכישלון של אחת השאיר עותקים שונים.
-  lgReplaceSketch(_sqOrder(sqCurrent), newSrc)
-    .catch(e => { console.error('sqSaveEdit:', e); showToast('✗ שמירת הסקיצה נכשלה'); sqShowDetail(); sqRender(); });
-
-  sqCloseEditor();
-  // refresh detail view with new image
+  try {
+    await lgReplaceSketch(_sqOrder(sqCurrent), newSrc, { layer: extra && extra.layer, base: extra && extra.base });
+  } catch(e) {
+    console.error('sqSaveEdit:', e); showToast('✗ שמירת הסקיצה נכשלה');
+    throw e;
+  }
   sqShowDetail();
   sqRender();
 }
-
-function sqCloseEditor(){
-  document.getElementById('sqEditor').style.display='none';
-  etDrawing=false;
-}
-
-// resize canvas when window resizes
-window.addEventListener('resize',()=>{
-  if(document.getElementById('sqEditor').style.display!=='none') etResizeCanvas();
-});
 </script>
 
 <script>

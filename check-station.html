@@ -117,32 +117,10 @@ html,body{height:100%;overflow:hidden;}
 .cb-item{padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 .cb-foot{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px;}
 /* EDITOR */
-#csEd{display:none;position:fixed;inset:0;z-index:500;background:#1a1714;flex-direction:column;direction:rtl;}
-#csEd.open{display:flex;}
-.ed-top{flex-shrink:0;height:48px;background:#242424;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;gap:7px;padding:0 13px;}
-.ed-ttl{font-size:12px;font-weight:700;color:#f0ede8;flex:1;}
-.ed-tools{flex-shrink:0;background:#1e1b18;border-bottom:1px solid rgba(255,255,255,0.07);padding:7px 12px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;}
-.eb{padding:5px 10px;border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,0.1);cursor:pointer;background:rgba(255,255,255,0.07);color:rgba(247,244,239,0.7);}
-.eb.on{background:var(--gold);color:#1a1714;border-color:var(--gold);}
-.esep{width:1px;height:22px;background:rgba(255,255,255,0.08);flex-shrink:0;}
-.ecol{width:24px;height:24px;border-radius:50%;cursor:pointer;flex-shrink:0;border:2px solid rgba(255,255,255,0.15);}
-.ecol.on{border-color:#fff;transform:scale(1.1);}
-.erw{display:flex;align-items:center;gap:4px;}
-.erw label{font-size:12px;color:rgba(247,244,239,0.35);white-space:nowrap;}
-.erw input[type=range]{width:60px;cursor:pointer;}
-.erw span{font-size:12px;color:rgba(247,244,239,0.4);min-width:16px;}
-.ed-txtbar{flex-shrink:0;background:#1e1b18;border-bottom:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:none;align-items:center;gap:7px;}
-.ed-txtbar input{flex:1;padding:6px 9px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#f0ede8;font-family:Heebo,sans-serif;font-size:14px;border-radius:4px;outline:none;}
-.ed-canvas{flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#111;touch-action:none;}
-#edBg{position:absolute;max-width:100%;max-height:100%;object-fit:contain;user-select:none;pointer-events:none;}
 /* בסקיצה המצוירת (buildSVG) הלחיצה והנגיעה נקלטות רק על מלבן הזכוכית (rect[data-idx]).
    השם, המידה ותווית "🔥 חיסום" יושבים מעליו — ונגיעה במרכז הזכוכית נבלעה בהם ולא סימנה
    כלום; רק השוליים הריקים עבדו. כל מה שאינו מלבן זכוכית שקוף ללחיצה. */
 #skWrap svg text, #skWrap svg rect:not([data-idx]){pointer-events:none;}
-#edCvs{position:absolute;touch-action:none;}
-.eact{padding:6px 13px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;}
-.esave{background:var(--green);color:#fff;}.ecancel{background:transparent;color:rgba(247,244,239,0.4);border:1px solid rgba(255,255,255,0.1);}
-.eundo,.eclear{background:rgba(255,255,255,0.07);color:rgba(247,244,239,0.7);border:1px solid rgba(255,255,255,0.1);}
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 20px;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;z-index:600;box-shadow:0 4px 20px rgba(0,0,0,0.4);pointer-events:none;}
 
 /* ═══ UNIFIED NAV ═══ */
@@ -242,6 +220,7 @@ html,body{height:100%;overflow:hidden;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <script src="lg-sketch-editor.js?v=20261019"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20260807"></script>
 </head>
@@ -371,33 +350,7 @@ html,body{height:100%;overflow:hidden;}
 </div>
 
 
-<!-- EDITOR -->
-<div id="csEd">
-  <div class="ed-top">
-    <div class="ed-ttl" id="edTitle">✏️ עריכה</div>
-    <button aria-label="בטל פעולה" class="eact eundo" onclick="edUndo()">↩</button>
-    <button class="eact eclear" onclick="edClear()" aria-label="נקה"><span data-icon="trash"></span></button>
-    <button class="eact ecancel" onclick="closeEditor()">ביטול</button>
-    <button class="eact esave" onclick="edSave()">שמור ✓</button>
-  </div>
-  <div class="ed-tools">
-    <button class="eb on" id="ebDraw" onclick="edTool('draw')"><span data-icon="pencil"></span> ציור</button>
-    <button class="eb" id="ebText" onclick="edTool('text')">T כתב</button>
-    <button class="eb" id="ebErase" onclick="edTool('erase')"><span data-icon="eraser"></span> מחק</button>
-    <div class="esep"></div>
-    <div class="ecol on" style="background:#e74c3c" onclick="edColor('#e74c3c',this)"></div>
-    <div class="ecol" style="background:#2980b9" onclick="edColor('#2980b9',this)"></div>
-    <div class="ecol" style="background:#27ae60" onclick="edColor('#27ae60',this)"></div>
-    <div class="ecol" style="background:#f39c12" onclick="edColor('#f39c12',this)"></div>
-    <div class="ecol" style="background:#8e44ad" onclick="edColor('#8e44ad',this)"></div>
-    <div class="ecol" style="background:#fff" onclick="edColor('#fff',this)"></div>
-    <div class="esep"></div>
-    <div class="erw"><label>עובי</label><input type="range" id="edSzR" min="1" max="28" value="5" oninput="edSz=+this.value;document.getElementById('edSzN').textContent=edSz"><span id="edSzN">5</span></div>
-    <div class="erw" id="edFtW" style="display:none"><label>גודל</label><input type="range" id="edFtR" min="10" max="72" value="26" oninput="edFt=+this.value;document.getElementById('edFtN').textContent=edFt"><span id="edFtN">26</span></div>
-  </div>
-  <div class="ed-txtbar" id="edTxtBar"><span style="font-size:12px;color:rgba(247,244,239,0.35);white-space:nowrap">לחץ בסקיצה:</span><input type="text" id="edTxtIn" placeholder="רשום כאן..." maxlength="40"></div>
-  <div class="ed-canvas" id="edWrap"><img id="edBg" src="" alt=""><canvas id="edCvs"></canvas></div>
-</div>
+
 
 <script>
 const safeStorage = {
@@ -1281,100 +1234,42 @@ function setupPan(){
   a.ontouchend=()=>{pan=false;pinch=false;};
 }
 
-// EDITOR
-let edTl='draw',edCl='#e74c3c',edSz=5,edFt=26,edDrw=false,edHist=[],edCtx=null,edCvs=null,edBgW=0,edBgH=0;
+// EDITOR — עורך הסקיצות המשותף (lg-sketch-editor.js, 19/10/2026).
+// סימוני בדיקה הם **זמניים**: נשמרים ב-checkEdits/<id> ונמחקים כשההזמנה ממשיכה,
+// ולכן אין כאן שכבה לעריכה מחר, ולעולם לא נכתבים לסקיצה של הלקוח.
+function _csLoads(src){ return new Promise(r=>{ const i=new Image(); i.onload=()=>r(i.naturalWidth>0||/^data:image\/svg/.test(src)); i.onerror=()=>r(false); i.src=src; }); }
 function openEditor(){
   if(!cur)return;
-  document.getElementById('csEd').classList.add('open');
-  document.getElementById('edTitle').textContent='✏️ '+cur.orderClient;
-  edCvs=document.getElementById('edCvs');edCtx=edCvs.getContext('2d');edHist=[];
-  const bg=document.getElementById('edBg');
-  // נקה handlers ישנים + src — מונע שימוש ב-state ישן מ-order קודם
-  bg.onload=null;bg.onerror=null;bg.src='';
-
   const liveEdited=(window._csCheckEdits||{})[String(cur.id)]||cur._editedSketch||null;
   if(liveEdited) cur._editedSketch=liveEdited;
-
-  // המקור נטען דרך השכבה — מהזיכרון להזמנה עם עותק, מהצומת להזמנת WhatsApp.
   const want=String(cur.id);
+  // המקור נטען דרך השכבה — מהזיכרון להזמנה עם עותק, מהצומת להזמנת WhatsApp.
   const _withOrig = lgHasSketch(cur) ? lgLoadSketch(cur).catch(()=>null) : Promise.resolve(null);
-  _withOrig.then(orig=>{
-  if(!cur || String(cur.id)!==want || !document.getElementById('csEd').classList.contains('open')) return;
-
-  function _tryLoadBg(src, isFallback){
-    bg.onload=()=>{ requestAnimationFrame(()=>{edResize();edSnap();}); };
-    bg.onerror=()=>{
-      console.warn('[CS] editor bg failed to load, isFallback='+isFallback+' src.length='+(src&&src.length));
-      if(!isFallback && orig && src!==orig){
-        // הסקיצה הערוכה פגומה — נקה מ-Firebase ונסה original
-        firebase.database().ref('checkEdits/'+cur.id).remove().catch(()=>{});
-        delete (window._csCheckEdits||{})[String(cur.id)];
-        cur._editedSketch=null;
-        _tryLoadBg(orig, true);
-      } else {
-        // גם original נכשל — fallback ל-SVG
-        bg.onerror=null;
-        const svgSrc='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildSVG(cur,false));
-        bg.onload=()=>{ requestAnimationFrame(()=>{edResize();edSnap();}); };
-        bg.src=svgSrc;
-      }
-    };
-    bg.style.display='block';
-    bg.src=src;
-    // תמונה כבר cache-ד — onload לא יירה, trigger ידני
-    if(bg.complete&&bg.naturalWidth>0){
-      requestAnimationFrame(()=>{edResize();edSnap();});
+  _withOrig.then(async orig=>{
+    if(!cur || String(cur.id)!==want) return;
+    let base = liveEdited || orig;
+    // סימון בדיקה פגום — מנקים אותו ועוברים למקור (כמו קודם)
+    if(base && base===liveEdited && !(await _csLoads(base))){
+      console.warn('[CS] editor bg failed to load — falling back to the original');
+      firebase.database().ref('checkEdits/'+cur.id).remove().catch(()=>{});
+      delete (window._csCheckEdits||{})[String(cur.id)];
+      cur._editedSketch=null; base = orig;
     }
-  }
-
-  if(liveEdited||orig){
-    _tryLoadBg(liveEdited||orig, false);
-  } else {
-    // אין תמונה כלל — SVG
-    bg.onerror=null;
-    const svgSrc='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildSVG(cur,false));
-    bg.onload=()=>{ requestAnimationFrame(()=>{edResize();edSnap();}); };
-    bg.style.display='block';bg.src=svgSrc;
-  }
+    if(!base || !(await _csLoads(base))) base='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(buildSVG(cur,false));
+    if(!cur || String(cur.id)!==want) return;
+    lgSketchEditor.open({
+      title: cur.orderClient||'עריכה',
+      baseSrc: base,
+      layer: null,
+      // כמו שהתחנה שמרה תמיד: 1200–1400 רוחב, JPEG עד 6.5MB
+      output: { mime:'image/jpeg', minW:1200, maxW:1400, maxB64:6_500_000, q0:0.82 },
+      onSave: ({ mergedSrc }) => edSave(mergedSrc),
+    });
   });
-  edTool('draw');edBindEv();
 }
-function closeEditor(){document.getElementById('csEd').classList.remove('open');edDrw=false;}
-function edResize(){const bg=document.getElementById('edBg'),wrap=document.getElementById('edWrap'),dpr=window.devicePixelRatio||1,wr=wrap.getBoundingClientRect();let bw,bh;if(bg.naturalWidth){const r=bg.naturalWidth/bg.naturalHeight;bh=Math.min(wr.height,bg.naturalHeight);bw=bh*r;if(bw>wr.width){bw=wr.width;bh=bw/r;}}else{bw=wr.width;bh=wr.height;}edBgW=bw;edBgH=bh;edCvs.width=bw*dpr;edCvs.height=bh*dpr;edCvs.style.width=bw+'px';edCvs.style.height=bh+'px';edCvs.style.left=(wr.width-bw)/2+'px';edCvs.style.top=(wr.height-bh)/2+'px';edCtx.scale(dpr,dpr);}
-function edSnap(){if(edCvs.width>0)edHist.push(edCtx.getImageData(0,0,edCvs.width,edCvs.height));if(edHist.length>50)edHist.shift();}
-function edUndo(){if(edHist.length<=1)return;edHist.pop();edCtx.putImageData(edHist[edHist.length-1],0,0);}
-function edClear(){edCtx.clearRect(0,0,edBgW,edBgH);edHist=[];edSnap();}
-function edTool(t){edTl=t;['Draw','Text','Erase'].forEach(n=>{const b=document.getElementById('eb'+n);if(b)b.classList.toggle('on',t.toLowerCase()===n.toLowerCase());});document.getElementById('edTxtBar').style.display=t==='text'?'flex':'none';document.getElementById('edFtW').style.display=t==='text'?'flex':'none';document.getElementById('edWrap').style.cursor=t==='erase'?'cell':t==='text'?'text':'crosshair';}
-function edColor(col,el){edCl=col;document.querySelectorAll('.ecol').forEach(e=>e.classList.remove('on'));el.classList.add('on');}
-function edPos(e){const r=edCvs.getBoundingClientRect(),s=e.touches?e.touches[0]:e;return{x:s.clientX-r.left,y:s.clientY-r.top};}
-function edBindEv(){const old=edCvs,nc=old.cloneNode(true);old.parentNode.replaceChild(nc,old);edCvs=nc;edCtx=nc.getContext('2d');edCtx.scale(window.devicePixelRatio||1,window.devicePixelRatio||1);nc.addEventListener('mousedown',edStart);nc.addEventListener('mousemove',edMove);nc.addEventListener('mouseup',edEnd);nc.addEventListener('touchstart',edStart,{passive:false});nc.addEventListener('touchmove',edMove,{passive:false});nc.addEventListener('touchend',edEnd,{passive:false});}
-function edStart(e){e.preventDefault();const{x,y}=edPos(e);if(edTl==='text'){const txt=document.getElementById('edTxtIn').value.trim();if(!txt)return;edCtx.font=`bold ${edFt}px Heebo,Arial,sans-serif`;edCtx.fillStyle=edCl;edCtx.textAlign='right';edCtx.fillText(txt,x,y);edSnap();return;}edDrw=true;edCtx.beginPath();edCtx.moveTo(x,y);}
-function edMove(e){e.preventDefault();if(!edDrw)return;const{x,y}=edPos(e);if(edTl==='erase'){edCtx.clearRect(x-edSz*2,y-edSz*2,edSz*4,edSz*4);}else{edCtx.strokeStyle=edCl;edCtx.lineWidth=edSz;edCtx.lineCap='round';edCtx.lineJoin='round';edCtx.lineTo(x,y);edCtx.stroke();edCtx.beginPath();edCtx.moveTo(x,y);}}
-function edEnd(){if(!edDrw)return;edDrw=false;edSnap();}
-async function edSave(){
-  const bg=document.getElementById('edBg'),merge=document.createElement('canvas');
-  const bw=bg.naturalWidth||edBgW,bh=bg.naturalHeight||edBgH;
-  // מגביל רוחב ל-1400px — מונע JPEG >5MB שיוביל לכישלון Firebase (גבול 10MB/node)
-  const W=Math.min(Math.max(bw,1200),1400),H=Math.round(W*(bh/Math.max(bw,1)));
-  merge.width=W;merge.height=H;
-  const mx=merge.getContext('2d');
-  mx.imageSmoothingEnabled=true;mx.imageSmoothingQuality='high';
-  if(bg.naturalWidth) mx.drawImage(bg,0,0,W,H);
-  mx.save();mx.scale(W/Math.max(edBgW,1),H/Math.max(edBgH,1));mx.drawImage(edCvs,0,0,edBgW,edBgH);mx.restore();
-
-  // דחוס ל-JPEG עם quality מדורג — מבטיח <5MB (≈6.7MB base64) לשמירה בטוחה ב-Firebase
-  let quality=0.82, newSrc=merge.toDataURL('image/jpeg',quality);
-  while(newSrc.length>6_500_000 && quality>0.3){
-    quality=Math.round((quality-0.15)*100)/100;
-    newSrc=merge.toDataURL('image/jpeg',quality);
-  }
-  if(newSrc.length>6_500_000){
-    toast('⚠️ תמונה גדולה מדי לשמירה');
-    closeEditor();
-    return;
-  }
-
-  if(!cur){ closeEditor(); return; }
+async function edSave(newSrc){
+  if(newSrc.length>6_500_000){ toast('⚠️ תמונה גדולה מדי לשמירה'); return; }
+  if(!cur) return;
 
   const savedId = cur.id;
   cur._editedSketch=newSrc;
@@ -1385,7 +1280,6 @@ async function edSave(){
     safeStorage.setItem('lgCSEdits',JSON.stringify(s));
   }catch(e){}
   renderSketch();
-  closeEditor();
 
   // רק עכשיו — הכתיבה בפועל ל-Firebase. ממתינים לה כדי לדעת אם היא באמת הצליחה,
   // ולא מציגים "סומן ✓" מזויף אם היא נכשלה (העריכה נשארת שמורה מקומית בכל מקרה).
@@ -1408,7 +1302,6 @@ function _clearCSEditsForOrders(ids){
     safeStorage.setItem('lgCSEdits',JSON.stringify(s));
   }catch(e){}
 }
-window.addEventListener('resize',()=>{if(document.getElementById('csEd').classList.contains('open'))edResize();});
 
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
 

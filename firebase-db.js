@@ -612,11 +612,18 @@ async function lgLoadSketch(order) {
 // כן אלה היו שתי כתיבות עצמאיות שלא חיכו זו לזו, וכישלון של אחת השאיר שני
 // עותקים שונים. הזמנה שיש לה עותק ישן (פורטל) — שני העותקים, כמו היום.
 // הזמנה בלעדיו (WhatsApp) — הצומת בלבד; לא נוצר עותק בתוך orders.
-async function lgReplaceSketch(order, src) {
+//
+// extra (עורך הסקיצות, 19/10/2026): {layer, base} — כדי שאפשר יהיה לערוך מחר את מה
+// שנכתב היום. **באותה כתיבה אטומית**: שכבה שנשמרה בלי הסקיצה שהיא מתארת (או להפך)
+// הייתה פותחת מחר עריכה על תמונה אחרת. base נכתב רק כשמבקשים (פעם ראשונה, או
+// כשהסקיצה הוחלפה מאז) — לעולם לא נדרס סתם. ר' docs/superpowers/specs/2026-10-19-sketch-editor-design.md §4.4.
+async function lgReplaceSketch(order, src, extra) {
   if (!order || !order.id || !src) throw new Error('lgReplaceSketch: חסרים נתונים');
   const id = String(order.id), now = Date.now();
   const upd = {};
   upd['sketches/' + id] = src;
+  if (extra && extra.layer) upd['sketches/' + id + '__layer'] = JSON.stringify(extra.layer);
+  if (extra && extra.base) upd['sketches/' + id + '__base'] = extra.base;
   upd['orders/' + id + '/hasSketch'] = true;
   upd['orders/' + id + '/updatedAt'] = now;
   if (_lgInlineSketch(order)) upd['orders/' + id + '/sketch'] = src;
@@ -631,6 +638,20 @@ async function lgReplaceSketch(order, src) {
     throw e;
   }
   return true;
+}
+
+// השכבה הניתנת לעריכה של סקיצה שנערכה בעורך החדש: המקור + הכתבים והקווים.
+// אין, או שבורה → {base:null, layer:null} — והעורך פותח על התמונה הנוכחית.
+async function lgLoadSketchLayer(orderId) {
+  const id = String(orderId || '');
+  if (!id) return { base: null, layer: null };
+  const [b, l] = await Promise.all([
+    _lgDb.ref('sketches/' + id + '__base').once('value'),
+    _lgDb.ref('sketches/' + id + '__layer').once('value'),
+  ]);
+  let layer = null;
+  try { layer = l.val() ? JSON.parse(l.val()) : null; } catch (e) { layer = null; }
+  return { base: b.val() || null, layer: layer && layer.v === 1 ? layer : null };
 }
 
 // ממלא <img data-sketch-for="<id>"> בתוך root. עם lazy:true — רק כשהתמונה
