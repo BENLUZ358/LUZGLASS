@@ -19,10 +19,21 @@ html,body{height:100%;overflow:hidden;}
 .app{display:flex;flex-direction:column;height:100vh;height:100dvh;}
 .topbar{flex-shrink:0;height:52px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;display:flex;align-items:center;gap:7px;z-index:20;}
 .tb-logo{font-size:15px;font-weight:900;white-space:nowrap;}.tb-logo span{color:var(--gold);}
-.tb-title{font-size:13px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.tb-btn{padding:6px 10px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;display:flex;align-items:center;gap:4px;}
-.tb-out{background:transparent;color:var(--muted);border:1px solid var(--border);}
+.tb-title{font-size:15px;font-weight:800;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* כפתורי הסרגלים — סדר חשיבות אחד לכל המסך (סקיל העיצוב, 19/10):
+   ירוק = הפעולה שהמסך קיים בשבילה (סיים סקיצה), אחד בלבד.
+   tb-sec = פעולה משנית (ערוך, פריטים) — מסגרת בהירה וטקסט מלא.
+   tb-back = ניווט — שקט, חץ + מילה, לא בלוק זהב שמתחרה בירוק.
+   tb-out = יציאה מהתחנה — רק ברשימה. כולם 44 פיקסלים לפחות, עם משוב לחיצה. */
+.tb-btn{min-height:44px;padding:8px 14px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;border:1px solid transparent;cursor:pointer;border-radius:10px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;line-height:1;transition:opacity .12s,transform .12s,background-color .12s;-webkit-tap-highlight-color:transparent;}
+.tb-btn:active{opacity:.75;transform:scale(.97);}
+.tb-btn:focus-visible,.zbtn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.tb-btn [data-icon] svg{width:18px;height:18px;}
+.tb-out{background:transparent;color:var(--muted);border-color:var(--border);}
+.tb-sec{background:var(--bg2);color:var(--text);border-color:var(--border);}
+.tb-back{background:transparent;color:var(--text);border-color:var(--border);padding-inline:10px 14px;order:-1;} /* חזרה בהתחלה — בעברית זה הקצה הימני */
 .tb-green{background:var(--green);color:#fff;}
+@media (prefers-reduced-motion:reduce){.tb-btn{transition:none;}.tb-btn:active{transform:none;}}
 .tb-purple{background:var(--purple);color:#fff;}
 /* FILTERS */
 .filters{flex-shrink:0;background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;gap:6px;flex-wrap:wrap;}
@@ -74,18 +85,20 @@ html,body{height:100%;overflow:hidden;}
 @media (prefers-reduced-motion:reduce){.order-card,.oc-fill{transition:none;}}
 /* SKETCH VIEW */
 .sketch-view{flex:1;display:none;flex-direction:column;overflow:hidden;}
-.sketch-hdr{flex-shrink:0;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);}
+.sketch-hdr{flex-shrink:0;padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
+/* שם הלקוח כבר בסרגל העליון; כאן מספר הזמנה, שם הסקיצה וזכוכית */
+.sketch-hdr .sh-client{display:none;}
 .sh-client{font-size:14px;font-weight:900;color:var(--gold);}
-.sh-meta{font-size:12px;color:var(--muted);margin-top:1px;}
+.sh-meta{display:flex;flex-direction:column;gap:8px;min-width:0;}
 .sh-note{font-size:12px;color:var(--gold);background:rgba(201,168,76,0.08);padding:3px 8px;border-right:2px solid var(--gold);margin-top:4px;}
 .sketch-area{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#0d0d0d;position:relative;min-height:0;touch-action:none;}
 .sketch-wrap{width:100%;height:100%;display:flex;align-items:center;justify-content:center;transform-origin:center center;}
 .sketch-wrap svg,.sketch-wrap img{width:100%;height:100%;object-fit:contain;display:block;}
 .btmbar{flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-.zbtn{width:34px;height:34px;border-radius:4px;background:var(--bg2);border:1px solid var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.zbtn{width:44px;height:44px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .sp{flex:1;}
-.icnt{font-size:12px;color:var(--muted);}.icnt strong{color:var(--gold);}
-.prog-wrap{display:flex;align-items:center;gap:6px;}
+.icnt{font-size:13px;font-weight:700;color:var(--muted);padding:8px 12px;border-radius:999px;background:var(--bg2);border:1px solid var(--border);white-space:nowrap;font-variant-numeric:tabular-nums;}.icnt strong{color:var(--gold);}
+.prog-wrap{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:var(--bg2);border:1px solid var(--border);}
 .prog-text{font-size:12px;font-weight:700;color:var(--gold);}
 .prog-bar{width:55px;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;}
 .prog-fill{height:100%;background:var(--green);border-radius:3px;transition:width 0.3s;}
@@ -163,7 +176,6 @@ html,body{height:100%;overflow:hidden;}
 @media(max-width:1200px){
   /* כפתורים גדולים יותר למגע */
   .zbtn{width:44px;height:44px;font-size:20px;}
-  .tb-btn{min-height:44px;padding:10px 16px;font-size:13px;}
 }
 /* 900 ולא 768. אייפד לאורך הוא 810–834 רוחב, כלומר נפל בין הכיסאות:
    התפריט הראשי כבר התקפל ב-900, תפריט המשתמש נשאר סרגל קבוע, וסרגל
@@ -172,21 +184,11 @@ html,body{height:100%;overflow:hidden;}
 @media(max-width:900px){
   .app{height:100vh;height:100dvh;}
 
-  /* ── כפתור החזרה לרשימה ────────────────────────────────────────────
-     12px עם ריפוד 6px הוא מטרת מגע קטנה מדי, והוא ישב בין שני כפתורים
-     נוספים בקצה השורה — באייפד צריך לכוון אליו. הוא מקבל כאן משקל
-     שמתאים לתפקיד: זו דרך היציאה היחידה ממסך הסקיצה.
-     lg-ui.css כבר נותן min-height:44px במסכי מגע; מה שחסר הוא רוחב,
-     ניגודיות והפרדה משאר הכפתורים. */
-  #btnBack{
-    background:var(--gold);
-    color:var(--on-gold);
-    border-color:var(--gold);
-    font-size:14px;
-    font-weight:900;
-    padding:10px 16px;
-    margin-inline-end:auto;   /* דוחף אותו לקצה, הרחק מ"פריטים" ומ-✕ */
-  }
+  /* כפתור החזרה: היה כאן בלוק זהב — הדבר הכי בולט במסך, מתחרה ב"סיים
+     סקיצה". עכשיו חץ + "רשימה" שקט, 44 פיקסלים, בקצה הימני (ההתחלה ב-RTL),
+     רחוק מ"פריטים". ה-✕ שישב לידו כבר לא מוצג בתוך סקיצה. */
+  /* בטלפון ובאייפד לאורך המונה בתחתית ("0/6 חיסום") — לא פעמיים */
+  #progWrap{display:none!important;}
   /* הכותרת מוותרת על מקום לטובתו במקום להידחס יחד איתו */
   .tb-title{font-size:12px;}
   .tb-logo{display:none;}
@@ -201,7 +203,10 @@ html,body{height:100%;overflow:hidden;}
   /* מרווח מהכפתורים הקבועים */
   .sketch-area{padding-bottom:72px;}
   /* כפתור "סיים סקיצה" — רחב ובולט */
-  #finishBtn{flex:1;font-size:15px;padding:12px 16px;justify-content:center;}
+  #finishBtn{flex:1;font-size:15px;min-height:48px;}
+  .btmbar .tb-sec{min-height:48px;}
+  /* המרווח הריק תופס את הרוחב ש"סיים סקיצה" צריך כשכפתורי הזום מוסתרים */
+  .btmbar .sp{display:none;}
   /* הסתר כפתורי zoom על אייפד — ניתן לזום עם אצבעות */
   .zbtn-zoom{display:none;}
 }
@@ -258,9 +263,9 @@ html,body{height:100%;overflow:hidden;}
     <span class="prog-text" id="progText">0/0</span>
     <div class="prog-bar"><div class="prog-fill" id="progFill" style="width:0%"></div></div>
   </div>
-  <button class="tb-btn tb-out" id="btnBack" onclick="goBack()" style="display:none">← רשימה</button>
-  <button class="tb-btn tb-out" id="btnSheet" onclick="toggleSheet()" style="display:none"><span data-icon="clipboard"></span> פריטים</button>
-  <a href="admin.html" class="tb-btn tb-out" id="csExitBtn" style="text-decoration:none;font-size:18px;font-weight:900;padding:6px 12px;line-height:1;" title="יציאה מתחנת הבדיקה">✕</a>
+  <button class="tb-btn tb-back" id="btnBack" onclick="goBack()" style="display:none" aria-label="חזרה לרשימה"><span data-icon="arrow-right"></span> רשימה</button>
+  <button class="tb-btn tb-sec" id="btnSheet" onclick="toggleSheet()" style="display:none"><span data-icon="clipboard"></span> פריטים</button>
+  <a href="admin.html" class="tb-btn tb-out" id="csExitBtn" aria-label="יציאה מתחנת הבדיקה"><span data-icon="logout"></span> יציאה</a>
 </div>
 
 <!-- FILTERS - always visible -->
@@ -320,10 +325,10 @@ html,body{height:100%;overflow:hidden;}
   <div class="btmbar" id="btmbar">
     <button aria-label="הגדל" class="zbtn zbtn-zoom" onclick="doZoom(0.25)">+</button>
     <button aria-label="הקטן" class="zbtn zbtn-zoom" onclick="doZoom(-0.25)">−</button>
-    <button aria-label="איפוס תצוגה" class="zbtn zbtn-zoom" onclick="resetZoom()">↺</button>
+    <button aria-label="איפוס תצוגה" class="zbtn zbtn-zoom" onclick="resetZoom()"><span data-icon="refresh"></span></button>
     <div class="sp"></div>
     <div class="icnt" id="iCnt"></div>
-    <button class="tb-btn tb-out" onclick="openEditor()"><span data-icon="pencil"></span> ערוך</button>
+    <button class="tb-btn tb-sec" onclick="openEditor()"><span data-icon="pencil"></span> ערוך</button>
     <button class="tb-btn tb-green" id="finishBtn" onclick="finishSketch()" style="display:flex"><span data-icon="check"></span> סיים סקיצה</button>
   </div>
 </div>
@@ -676,6 +681,25 @@ function csGlassSummary(o){
 }
 
 // שורה אחת ברשימה. לקוח → מספר הזמנה + שם הסקיצה → זכוכית → התקדמות (בן, 19/10/2026).
+// תגיות הזכוכית — אותה צורה בשורה ברשימה ובכותרת הסקיצה
+function csGlassChipsHtml(o){
+  const glass=csGlassSummary(o);
+  return glass.length
+    ? glass.map(g=>`<span class="oc-chip">${lgEsc(g.label)}${g.count>1?`<b>×${g.count}</b>`:''}</span>`).join('')
+    : '<span class="oc-chip oc-chip-empty">סוג זכוכית לא הוקלד</span>';
+}
+
+// כותרת מסך הסקיצה: מספר הזמנה, שם הסקיצה וסוגי הזכוכית.
+// שם הלקוח לא חוזר כאן — הוא כבר בסרגל העליון.
+function csSketchMetaHtml(o){
+  const name=String((o&&o.sketchName)||'').trim();
+  return `<div class="oc-id">
+      <span class="oc-num" dir="ltr">${lgEsc((o&&o.orderNum)||'—')}</span>
+      ${name?`<span class="oc-name">${lgEsc(name)}</span>`:'<span class="oc-name oc-noname">ללא שם לסקיצה</span>'}
+    </div>
+    <div class="oc-glass">${csGlassChipsHtml(o)}</div>`;
+}
+
 function csOrderRowHtml(o){
   const idxs=chisumIdxs(o),total=idxs.length||1;
   const checked=idxs.filter(i=>cs[o.id]?.[i]).length;
@@ -684,10 +708,7 @@ function csOrderRowHtml(o){
   const badgeCls=done?'b-done':fresh?'b-new':'b-prog';
   const badgeTxt=done?'הושלם':fresh?'ממתין':`${checked}/${total}`;
   const cardCls=done?'done-card':checked>0?'partial-card':'';
-  const glass=csGlassSummary(o);
-  const chips=glass.length
-    ? glass.map(g=>`<span class="oc-chip">${lgEsc(g.label)}${g.count>1?`<b>×${g.count}</b>`:''}</span>`).join('')
-    : '<span class="oc-chip oc-chip-empty">סוג זכוכית לא הוקלד</span>';
+  const chips=csGlassChipsHtml(o);
   const name=String(o.sketchName||'').trim();
   const id=lgEsc(String(o.id));
   return `<div class="order-card ${cardCls}" role="button" tabindex="0" onclick="selectOrder('${id}')"
@@ -753,6 +774,7 @@ function showList(){
   document.getElementById('tabsBar').style.display='flex';
   document.getElementById('btnBack').style.display='none';
   document.getElementById('btnSheet').style.display='none';
+  document.getElementById('csExitBtn').style.display='';
   document.getElementById('progWrap').style.display='none';
   document.getElementById('tbTitle').textContent='תחנת בדיקה';
   // החיפוש נמחק בכל חזרה לרשימה. מחפשים סקיצה אחת, נכנסים אליה, ובחזרה
@@ -786,6 +808,8 @@ function showSketch(){
   _csShow('filtersBar', 'none');
   _csShow('tabsBar',    'none');
   _csShow('btnBack',    'flex');
+  // בתוך סקיצה יש דרך יציאה אחת — חזרה לרשימה. היציאה מהתחנה רק מהרשימה.
+  _csShow('csExitBtn',  'none');
   // סרגל עבודה עליון — מוסתר בהושלמו
   _csShow('btnSheet', curReadOnly ? 'none' : 'flex');
   _csShow('progWrap', curReadOnly ? 'none' : 'flex');
@@ -823,7 +847,7 @@ function selectOrder(id){ id = String(id);
   _csWatchEdits(id);
   document.getElementById('tbTitle').textContent=cur.orderClient;
   document.getElementById('shClient').textContent=cur.orderClient;
-  document.getElementById('shMeta').textContent=[cur.orderNum,cur.sketchName,cur.glassFullName].filter(Boolean).join(' · ');
+  document.getElementById('shMeta').innerHTML=csSketchMetaHtml(cur);
   showSketch(); // showSketch מגדיר curReadOnly לפי activeTab הנוכחי
   renderSketch();
   updateProg();

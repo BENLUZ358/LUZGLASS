@@ -36,7 +36,7 @@ vm.runInContext([
   'var csSkuCatalogMap = { "8HMH": { glass: "חלבי", mm: 8 } }; var cs = {}; var notes = {};',
   'function lgHasSketch(o){ return !!o.hasSketch; }',
   bodyOf(CS, 'csItemsOf'), bodyOf(CS, 'csGlassOf'), bodyOf(CS, 'chisumIdxs'),
-  bodyOf(CS, 'csGlassSummary'), bodyOf(CS, 'csOrderRowHtml'),
+  bodyOf(CS, 'csGlassSummary'), bodyOf(CS, 'csGlassChipsHtml'), bodyOf(CS, 'csOrderRowHtml'),
 ].join('\n'), ctx);
 
 const it = (glass, mm, extra) => Object.assign({ glass, mm, w: 600, h: 1500, chisum: true }, extra || {});
