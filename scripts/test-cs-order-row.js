@@ -76,6 +76,9 @@ const text = html => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   check('the note button has a label for screen readers', /aria-label="הוסף הערה"/.test(row), true);
   check('the note button is a 44px target', /\.oc-note-btn\s*\{[^}]*min-width:\s*44px[^}]*min-height:\s*44px/.test(CS), true);
   check('iPad and wider: the list is two columns', /@media\s*\(min-width:\s*900px\)\s*\{[^}]*#listView\.oc-grid[^}]*grid-template-columns:\s*repeat\(2/.test(CS), true);
+  /* בן, 19/10, אייפון: הכרטיסים נמחצו לשורה אחת. ברשימה של טלפון (עמודת flex עם גלילה)
+     הדפדפן מכווץ ילדים כדי שייכנסו — כרטיס חייב לא להתכווץ. */
+  check('a card never shrinks in the phone list', /\.order-card\s*\{[^}]*flex-shrink:\s*0/.test(CS), true);
   check('renderList builds rows from the one function', /list\.map\(o\s*=>\s*csOrderRowHtml\(o\)\)/.test(bodyOf(CS, 'renderList')), true);
 }
 
