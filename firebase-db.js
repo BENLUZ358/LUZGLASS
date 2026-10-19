@@ -461,7 +461,11 @@ function lgNextStage(order, isDelivery) {
 async function updateStage(id, stage) {
   if (!id || id === 'null' || id === 'undefined') throw new Error('updateStage: id לא תקין — ' + id);
   const status = lgStageToStatus(stage);
-  await _lgDb.ref('orders/' + id).update({ stage, status, updatedAt: Date.now() });
+  const patch = { stage, status, updatedAt: Date.now() };
+  // הרגע שההזמנה נכנסה ל-OptyWay (השרטט סיים) — לוח הסקיצות ביום העבודה
+  // מסדר לפיו את הסקיצות של כל לקוח, כמו באופטי ווי (בן, 19/10).
+  if (stage === 'opty') patch.optyAt = patch.updatedAt;
+  await _lgDb.ref('orders/' + id).update(patch);
   return { id, stage, status };
 }
 
@@ -1089,6 +1093,7 @@ function lgNormalizeOrder(o) {
     // אם ההגדרה של הלקוח תשתנה מאוחר יותר.
     monthlyBilling: !!o.monthlyBilling,
     createdAt:     o.createdAt    || 0,
+    optyAt:        o.optyAt       || 0,
     updatedAt:     o.updatedAt    || 0,
     // שדות "נעילת מחיר" ולקוח — היו נמחקים בשקט כאן, ולכן הנעילה מעולם לא
     // באמת עבדה (lgLockAndAdvance בודק !order.totalFinal על אובייקט שעבר
