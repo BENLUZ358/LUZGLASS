@@ -1127,6 +1127,96 @@ function selectAllFiltered(){
   showToast(`✓ ${added} פריטים נוספו לטיוטה`);
 }
 
+// ═══════════════════════════════════════
+//  לוח בדיקת סקיצות — סדר ותור (בן, 19/10/2026)
+//  docs/superpowers/specs/2026-10-19-workday-sketch-board-design.md
+// ═══════════════════════════════════════
+// בן בודק סקיצה-סקיצה מול OptyWay, מסונן לסוג זכוכית אחד ובאותו סדר שאופטי ווי
+// מראה. הסדר שם הוא לפי *השם שלו באופטי ווי* — שונה לפעמים מהשם במערכת —
+// ולכן יש טבלת התאמה. היא משמשת לסדר ולתצוגה בלוח בלבד; שום מקום אחר לא משתנה.
+
+// נשמר ב-meta/optyNames. רשימה ולא מפתחות — שמות לקוחות מכילים נקודות.
+const WD_OPTY_DEFAULTS = [
+  { client: 'נאור חזקיה',  opty: 'א.א.פנדה' },
+  { client: 'המקום לאמבט', opty: 'BathPlace' },
+  { client: 'א.מ.מראות',   opty: 'מאור' },
+];
+
+function wdOptyNamesFrom(val){
+  if (val == null) return WD_OPTY_DEFAULTS.slice();
+  const rows = Array.isArray(val) ? val : Object.values(val);
+  return rows
+    .filter(r => r && String(r.client || '').trim() && String(r.opty || '').trim())
+    .map(r => ({ client: String(r.client).trim(), opty: String(r.opty).trim() }));
+}
+
+function wdOptyName(client, names){
+  const row = (names || []).find(r => r.client === client);
+  return row ? row.opty : (client || '');
+}
+
+// אנגלית (וספרות) קודם, אחר כך עברית — ובתוך לקוח, מה שנכנס לאופטי ווי ראשון.
+function wdBoardCompare(a, b, names){
+  const A = wdOptyName(a.orderClient, names), B = wdOptyName(b.orderClient, names);
+  const la = /^[A-Za-z0-9]/.test(A), lb = /^[A-Za-z0-9]/.test(B);
+  if (la !== lb) return la ? -1 : 1;
+  const byName = A.localeCompare(B, la ? 'en' : 'he', { sensitivity: 'base' });
+  if (byName) return byName;
+  return (Number(a.optyAt || a.createdAt) || 0) - (Number(b.optyAt || b.createdAt) || 0);
+}
+
+// הפריטים מהסוג הזה שעוד אפשר להוסיף: לא ביום העבודה, לא טופלו, לא בטיוטה.
+function wdBoardAvail(o, glass){
+  const sid = String(o.id);
+  const taken = _wdUnavailIdxs(o);
+  draftItems.forEach(d => { if (String(d.orderId) === sid) taken.add(Number(d.itemIdx)); });
+  const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+  const out = [];
+  items.forEach((it, i) => { if (it && !taken.has(i) && glassMatches(it, glass)) out.push(i); });
+  return out;
+}
+
+// התור של סוג זכוכית אחד, בסדר של אופטי ווי. סינון הלקוח הקיים חל גם כאן.
+function wdBoardOrders(glass, names){
+  const client = document.getElementById('fClient')?.value || '';
+  return allOrders
+    .filter(o => _wdBuildable(o) && (!client || (o.orderClient || '') === client) && wdBoardAvail(o, glass).length)
+    .sort((a, b) => wdBoardCompare(a, b, names));
+}
+
+// סוגי הזכוכית שיש להם עוד מה לבדוק, לפי עובי (כפתורים קבועים במקומם).
+function wdBoardGlassTypes(){
+  const count = {};
+  allOrders.filter(_wdBuildable).forEach(o => {
+    const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+    const sid = String(o.id);
+    const taken = _wdUnavailIdxs(o);
+    draftItems.forEach(d => { if (String(d.orderId) === sid) taken.add(Number(d.itemIdx)); });
+    items.forEach((it, i) => {
+      if (!it || taken.has(i)) return;
+      const label = lgGlassLabelOf(it, skuCatalogMap);
+      if (label) count[label] = (count[label] || 0) + 1;
+    });
+  });
+  return Object.keys(count).map(label => ({ label, count: count[label] }))
+    .sort((a, b) => (parseFloat(a.label) || 0) - (parseFloat(b.label) || 0) || a.label.localeCompare(b.label, 'he'));
+}
+
+// מה עוד מחכה בסקיצה הזו מסוגים אחרים — "6 שקוף ×2". זה מה שהדף בצד עשה.
+function wdBoardLeft(o, glass){
+  const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+  const sid = String(o.id);
+  const taken = _wdUnavailIdxs(o);
+  draftItems.forEach(d => { if (String(d.orderId) === sid) taken.add(Number(d.itemIdx)); });
+  const count = {};
+  items.forEach((it, i) => {
+    if (!it || taken.has(i)) return;
+    const label = lgGlassLabelOf(it, skuCatalogMap) || 'סוג לא ידוע';
+    if (label !== glass) count[label] = (count[label] || 0) + 1;
+  });
+  return Object.keys(count).map(l => l + ' ×' + count[l]).join(', ');
+}
+
 // שני מנועי הסינון של "בנה יום עבודה", נבנים מההזמנות שזמינות בשלב הזה.
 function buildWorkdayFilters(){
   const pool = allOrders.filter(_wdBuildable);
