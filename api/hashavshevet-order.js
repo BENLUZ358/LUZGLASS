@@ -146,6 +146,9 @@ function lineText(n, w, h, seq, total) {
 function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices) {
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
+  // שם הסקיצה, כפי שנרשם בתור. בן, 19/10/2026: בחשבשבת "שם פריט" נושא אותו ליד
+  // הזכוכית ("8 מ"מ שקוף מחוסם לימור") — כך מזהים בהזמנה לאיזו עבודה כל שורה שייכת.
+  const sketchName = String(order.sketchName || '').trim();
   const lines = [];
   const preview = [];
   const skipped = [];
@@ -212,10 +215,20 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
       Agent:      String(agent),
       SM_Extratext1: text,
     };
+    // ‏itemname — "שם פריט" בחשבשבת. **רק כשיש שם לסקיצה**: בלעדיו השורה נשארת
+    // בדיוק כפי שהייתה, וחשבשבת ממשיכים לתת לה את שם הפריט שלהם. ⚠️ שדה שלא
+    // נוסה מול חשבשבת עד 19/10 — הניסיון הראשון נעשה על הזמנה אמיתית אחת מול בן.
+    // בסוף, אחרי SM_Extratext1: החתימה מחושבת על המחרוזת שנשלחת, ולכן רק תוספת
+    // בסוף אינה שוברת את סדר המפתחות.
+    if (sketchName) {
+      const glass = String(item.glassFullName || item.name || '').trim();
+      line.itemname = (glass ? glass + ' — ' + sketchName : sketchName).slice(0, LG_LINE_TEXT_MAX);
+    }
     lines.push(line);
     hsLines[key] = n;
 
-    preview.push({ name, sku, qty: qty.toFixed(3), ppm2, hsLine: n, text, ...(ppm2 ? {} : { unpriced: true }) });
+    preview.push({ name, sku, qty: qty.toFixed(3), ppm2, hsLine: n, text, ...(ppm2 ? {} : { unpriced: true }),
+                   ...(line.itemname ? { itemname: line.itemname } : {}) });
   });
 
   return { lines, preview, skipped, hsLines, unpriced };

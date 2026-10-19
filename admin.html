@@ -3900,7 +3900,7 @@ function _sqHbRender(id, data, ok){
   // המחיר נשלח (ר' הזמנה 1058). "על השורה" הוא SM_Extratext1 — המספר והמידה
   // בדיוק כפי שיופיעו בחשבשבת, ומולם משווים את הסקיצה.
   const rows = (data.preview||[]).map(l =>
-    `<tr><td dir="ltr" style="font-weight:700;white-space:nowrap">${lgEsc(l.text||'')}</td><td>${lgEsc(l.sku)}</td><td style="color:var(--muted)">${lgEsc(l.name||'')}</td><td>${lgEsc(l.qty)}</td>
+    `<tr><td dir="ltr" style="font-weight:700;white-space:nowrap">${lgEsc(l.text||'')}</td><td>${lgEsc(l.sku)}</td><td style="color:var(--muted)">${lgEsc(l.itemname||l.name||'')}</td><td>${lgEsc(l.qty)}</td>
          <td>${l.ppm2 ? '₪'+Number(l.ppm2).toFixed(2) : '<span style="color:var(--gold-text);font-weight:700">⚠️ ₪0 — אין מחיר</span>'}</td></tr>`).join('');
   // בן, 19/10: פריט בלי מחיר נשלח ב-0 ולא נחסם — אבל אומרים את זה לפני השליחה
   const unpricedNote = data.unpriced?.length
