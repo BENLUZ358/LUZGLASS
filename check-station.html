@@ -35,7 +35,8 @@ html,body{height:100%;overflow:hidden;}
    סדר הקריאה: לקוח → מספר הזמנה + שם הסקיצה → סוגי הזכוכית → התקדמות.
    סטטוס בצורה ולא רק בצבע (תגית + פס בצד). בלי אימוג'י כאייקונים (lg-icons). */
 .order-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px 12px;cursor:pointer;
-  transition:background 0.15s,border-color 0.15s;position:relative;display:flex;flex-direction:column;gap:8px;min-width:0;}
+  transition:background 0.15s,border-color 0.15s;position:relative;display:flex;flex-direction:column;gap:8px;min-width:0;
+  flex-shrink:0;  /* ברשימת הטלפון (עמודת flex) הדפדפן מכווץ ילדים — הכרטיס נמחץ לשורה אחת (בן, אייפון 19/10) */}
 .order-card:active{background:var(--bg2);}
 .order-card:focus-visible{outline:3px solid var(--gold);outline-offset:2px;}
 .order-card.done-card{border-right:4px solid var(--green);}
