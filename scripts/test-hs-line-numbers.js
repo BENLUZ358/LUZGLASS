@@ -171,6 +171,35 @@ const build = items => ctx.buildLines({ orderClient: 'x', items }, '14201', '106
         ['1) 550x1885 (1/2)', '2) 500x1885', '3) 550x1885 (2/2)']);
 }
 
+/* ── the sketch name in "שם פריט" (Ben, 19/10/2026: "8 מ"מ שקוף מחוסם לימור" —
+   every line of an order carries the sketch's name next to the glass) ──── */
+{
+  const withName = (sketchName, items) =>
+    ctx.buildLines({ orderClient: 'x', sketchName, items }, '14201', '1064', '31', '1', PRICES, {});
+  const { lines, preview } = withName('מקלחת הורים', [
+    { sku: '8SMH', name: '8 מ"מ שקוף מחוסם', w: 550, h: 1885 },
+    { sku: '8HMH', glassFullName: '8 מ"מ חלבי מחוסם', name: 'חלבי', w: 600, h: 600 },
+  ]);
+  check('every line carries the glass, then the sketch name',
+        lines.map(l => l.itemname), ['8 מ"מ שקוף מחוסם — מקלחת הורים', '8 מ"מ חלבי מחוסם — מקלחת הורים']);
+  /* the signature is over the string sent: a new key is safe only at the very end */
+  check('it is the last key on the line', Object.keys(lines[0]).slice(-2), ['SM_Extratext1', 'itemname']);
+  check('the preview shows what the document will say', preview.map(p => p.itemname),
+        ['8 מ"מ שקוף מחוסם — מקלחת הורים', '8 מ"מ חלבי מחוסם — מקלחת הורים']);
+
+  /* no name → the line is exactly what it was: Hashavshevet keeps naming it itself */
+  for (const none of [undefined, '', '   ']) {
+    const { lines: plain } = withName(none, [{ sku: '8SMH', name: '8 מ"מ שקוף מחוסם', w: 550, h: 1885 }]);
+    check('no sketch name (' + JSON.stringify(none) + ') sends no itemname at all', 'itemname' in plain[0], false);
+  }
+
+  const long = withName('ש'.repeat(80), [{ sku: '8SMH', name: '8 מ"מ שקוף מחוסם', w: 550, h: 1885 }]);
+  check('a long name is cut to the field, never past 50 characters', long.lines[0].itemname.length, 50);
+  const noGlass = withName('מקלחת', [{ sku: '8SMH', w: 550, h: 1885 }]);
+  check('a line with no glass name still carries the sketch name, without a dangling dash',
+        noGlass.lines[0].itemname, 'מקלחת');
+}
+
 /* ── the probe is gone ─────────────────────────────────────────────────── */
 check('no probe flag left in the handler', /probe/i.test(SRC), false);
 
