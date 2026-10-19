@@ -27,14 +27,22 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 // ═══ A. הנוסח ════════════════════════════════════════════════════════
 {
   const { renderText } = require(path.join(ROOT, 'api', '_wa-provider.js'));
+  // בן, 19/10: "14 סקיצות אושרו" — כמה סקיצות, שמות רק כשנרשמו, בלי מספרי ההזמנה שלנו ובלי שורת הפורטל
   const many = renderText({ kind: 'sketches-handled', clientName: 'המקום לאמבט', orderNums: ['L9012', 'L9013', 'L9014'] });
-  check('A1 several: Ben\'s sentence, numbers in a row',
-        many.includes('ההזמנות: L9012, L9013, L9014 עברו סינון ראשוני, מתחילים לעבוד עליהן.'), true);
+  check('A1 several: the count, Ben\'s sentence',
+        many.includes('3 סקיצות אושרו, מתחילים לעבוד עליהן.'), true);
+  check('A1 and none of our order numbers', /L901/.test(many), false);
   check('A1 opens with the client name', many.startsWith('שלום המקום לאמבט,'), true);
-  check('A1 and signs like every other message', many.includes('לוז זגגות ומראות האחים בע"מ'), true);
+  check('A1 and signs like every other message', many.endsWith('לוז זגגות ומראות האחים בע"מ'), true);
+  check('A1 no portal line', /לפרטים נוספים/.test(many), false);
   const one = renderText({ kind: 'sketches-handled', clientName: 'X', orderNums: ['L9012'] });
-  check('A2 one: singular', one.includes('ההזמנה L9012 עברה סינון ראשוני, מתחילים לעבוד עליה.'), true);
+  check('A2 one: singular', one.includes('סקיצה אחת אושרה, מתחילים לעבוד עליה.'), true);
   check('A3 never falls through to "ready for pickup"', /מוכנ/.test(many + one), false);
+  const named = renderText({ kind: 'sketches-handled', clientName: 'X', orderNums: ['L1', 'L2', 'L3'],
+                             sketchNames: ['מקלחת הורים', '', 'מראה סלון'] });
+  check('A4 the names that were given are listed, the rest only counted',
+        named.includes('3 סקיצות אושרו, מתחילים לעבוד עליהן.\n• מקלחת הורים\n• מראה סלון\n\n'), true);
+  check('A4 no list at all when no sketch was named', /•/.test(many), false);
 }
 
 // ═══ B. איפה נרשמת החותמת ════════════════════════════════════════════
