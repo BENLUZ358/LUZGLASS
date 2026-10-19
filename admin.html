@@ -3872,11 +3872,19 @@ function _sqHbRender(id, data, ok){
            ${data.skipped.map(s=>`<div style="font-size:12px;color:var(--muted);padding:2px 0">${lgEsc(s.name)}${s.sku?' ('+lgEsc(s.sku)+')':''} — ${lgEsc(s.reason)}</div>`).join('')}
          </div>`
       : '';
+    // שורות שנשלחו ב-0 כי אין מחיר למק"ט (בן, 19/10) — נשלחו, אבל חייבות תיקון מחיר בחשבונית
+    const unp = data.unpriced?.length
+      ? `<div style="margin-bottom:12px;padding:10px 12px;background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.45);border-radius:6px">
+           <div style="font-size:13px;font-weight:700;color:var(--gold-text);margin-bottom:4px">⚠️ ${data.unpriced.length === 1 ? 'פריט אחד נשלח' : data.unpriced.length + ' פריטים נשלחו'} במחיר 0 — אין מחיר למק"ט</div>
+           ${data.unpriced.map(u=>`<div style="font-size:12px;color:var(--muted);padding:2px 0">שורה ${lgEsc(String(u.hsLine))} · ${lgEsc(u.name)} (${lgEsc(u.sku)})</div>`).join('')}
+           <div style="font-size:12px;color:var(--muted);margin-top:4px">לתקן את המחיר בחשבשבת לפני הפקת החשבונית.</div>
+         </div>`
+      : '';
     ov.innerHTML =
       `<div class="modal" style="max-width:640px">
-         <div class="mhdr"><h2>${data.simulated ? '🧪 הורץ כפיקטיבי' : data.skipped?.length ? 'נשלח — אבל חסרים פריטים' : 'נשלח — כדאי לבדוק'}</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
+         <div class="mhdr"><h2>${data.simulated ? '🧪 הורץ כפיקטיבי' : data.skipped?.length ? 'נשלח — אבל חסרים פריטים' : data.unpriced?.length ? 'נשלח — יש פריטים בלי מחיר' : 'נשלח — כדאי לבדוק'}</h2><button class="mcl" onclick="_sqHbClose()" aria-label="סגור"><span data-icon="x"></span></button></div>
          <div class="mbody">
-           ${warn}${sk}
+           ${warn}${sk}${unp}
            <div style="font-size:14px;font-weight:700;margin-bottom:6px">אסמכתא ${lgEsc(data.reference)} · חשבון ${lgEsc(data.accountKey)} · ${data.lineCount} שורות</div>
            ${data.simulated
              ? '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">הבקשה נבנתה ונבדקה במלואה ונרשמה על ההזמנה, בדיוק כמו בשליחה אמיתית — אבל לא יצאה לחשבשבת. אין מה לחפש שם.</div>'
@@ -3893,7 +3901,11 @@ function _sqHbRender(id, data, ok){
   // בדיוק כפי שיופיעו בחשבשבת, ומולם משווים את הסקיצה.
   const rows = (data.preview||[]).map(l =>
     `<tr><td dir="ltr" style="font-weight:700;white-space:nowrap">${lgEsc(l.text||'')}</td><td>${lgEsc(l.sku)}</td><td style="color:var(--muted)">${lgEsc(l.name||'')}</td><td>${lgEsc(l.qty)}</td>
-         <td>${l.ppm2 ? '₪'+Number(l.ppm2).toFixed(2) : '<span style="color:var(--muted)">מחשבשבת</span>'}</td></tr>`).join('');
+         <td>${l.ppm2 ? '₪'+Number(l.ppm2).toFixed(2) : '<span style="color:var(--gold-text);font-weight:700">⚠️ ₪0 — אין מחיר</span>'}</td></tr>`).join('');
+  // בן, 19/10: פריט בלי מחיר נשלח ב-0 ולא נחסם — אבל אומרים את זה לפני השליחה
+  const unpricedNote = data.unpriced?.length
+    ? `<div style="margin-top:12px;padding:10px 12px;background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.45);border-radius:6px;font-size:12px;font-weight:700;color:var(--gold-text)">⚠️ ${data.unpriced.length === 1 ? 'פריט אחד יישלח' : data.unpriced.length + ' פריטים יישלחו'} במחיר 0 — אין מחיר למק"ט. את המחיר מתקנים בחשבשבת לפני החשבונית.</div>`
+    : '';
   const skipped = data.skipped?.length
     ? `<div class="sec-title" style="margin-top:14px">לא ייכללו (${data.skipped.length})</div>` +
       data.skipped.map(s => `<div style="font-size:12px;color:var(--red);padding:3px 0">${lgEsc(s.name)} — ${lgEsc(s.reason)}</div>`).join('')
@@ -3920,7 +3932,7 @@ function _sqHbRender(id, data, ok){
          <div style="font-size:var(--fs-xs);color:var(--muted);margin-top:8px">
            "על השורה" נכתב בשדה הנוסף של כל שורה בחשבשבת: מספר השורה ורוחב×גובה.
          </div>
-         ${skipped}
+         ${unpricedNote}${skipped}
        </div>
        <div class="mfoot" style="flex-direction:column;align-items:stretch;gap:8px">
          <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
@@ -3979,7 +3991,8 @@ async function sqSendHashavshevet(id, force){
   // כישלון, פריט שדולג (המסמך נפתח בלי משהו שהיה אמור להיות בו), ותשובה
   // שנראית לשרת חריגה. את השלישי מחליט השרת, כי מי שמזין הזמנות לא אמור
   // לקרוא תשובות של חשבשבת ולשפוט אותן.
-  const clean = res.ok && data.ok && !(data.skipped && data.skipped.length) && !data.warn;
+  // ופריט שנשלח ב-0 כי אין לו מחיר (בן, 19/10) — נשלח, אבל לא "נקי": צריך לראות אותו
+  const clean = res.ok && data.ok && !(data.skipped && data.skipped.length) && !(data.unpriced && data.unpriced.length) && !data.warn;
   if(clean){
     _sqHbClose();
     sqShowChashConfirm(id, data);

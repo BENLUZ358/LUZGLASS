@@ -75,8 +75,8 @@ const bodyOf = (name, src = ADMIN) =>
   check('a clean send closes rather than renders',
         /if\(clean\)\{\s*_sqHbClose\(\);\s*sqShowChashConfirm\(id, data\);/.test(send), true);
   /* the three conditions, spelled out — a skipped item is not a clean send */
-  check('"clean" means ok, ok, nothing skipped, and nothing flagged',
-        /const clean = res\.ok && data\.ok && !\(data\.skipped && data\.skipped\.length\) && !data\.warn;/.test(send), true);
+  check('"clean" means ok, ok, nothing skipped, nothing at price 0, and nothing flagged',
+        /const clean = res\.ok && data\.ok && !\(data\.skipped && data\.skipped\.length\) && !\(data\.unpriced && data\.unpriced\.length\) && !data\.warn;/.test(send), true);
   check('anything else opens the modal',
         /_sqHbOpen\(\);\s*_sqHbRender\(id, data, res\.ok\);/.test(send), true);
   check('the modal is built only when needed, not up front',
