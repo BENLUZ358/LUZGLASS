@@ -62,6 +62,38 @@ check('and asks for the saved layer', /lgLoadSketchLayer\(/.test(bodyOf(ADMIN, '
   check('lgLoadSketchLayer lives in firebase-db.js', /async function lgLoadSketchLayer\(/.test(DB), true);
 }
 
+/* ═══ the check station: temporary inspection marks, saved where they always were ═══ */
+{
+  const CS = read('check-station.html');
+  check('the station loads the shared editor', /<script src="lg-sketch-editor\.js[^"]*"><\/script>/.test(CS), true);
+  check('its old editor is gone',
+        [/function edStart\(/, /function edResize\(/, /fillText\(txt/, /id="edCvs"/].map(re => re.test(CS)), [false, false, false, false]);
+  const open = bodyOf(CS, 'openEditor');
+  check('openEditor opens the shared editor', /lgSketchEditor\.open\(/.test(open), true);
+  check('with no layer — the marks are temporary', /layer:\s*null/.test(open), true);
+  check('keeping its 1400 cap', /maxW:\s*1400/.test(open), true);
+  const save = bodyOf(CS, 'edSave');
+  check('it still saves to checkEdits/<id>', /ref\('checkEdits\/'\+savedId\)\.set\(newSrc\)/.test(save), true);
+  check('and never into the customer\'s sketch', /lgReplaceSketch\(/.test(CS), false);
+}
+
+/* ═══ the drafter: private marks, saved where they always were ═══ */
+{
+  const DR = read('drafter.html');
+  check('the drafter loads the shared editor', /<script src="lg-sketch-editor\.js[^"]*"><\/script>/.test(DR), true);
+  check('its old editor is gone',
+        [/function edStart\(/, /fillText\(txt/, /id="edCvs"/].map(re => re.test(DR)), [false, false, false]);
+  check('openEditor opens the shared editor', /lgSketchEditor\.open\(/.test(bodyOf(DR, 'openEditor')), true);
+  check('it keeps PNG', /mime:\s*'image\/png'/.test(bodyOf(DR, 'openEditor')), true);
+  const save = bodyOf(DR, 'edSave');
+  check('it still saves to _editedSketch', /updateOrder\(curOrder\.id,\{_editedSketch:newSrc\}\)/.test(save), true);
+  check('and never into the customer\'s sketch', /lgReplaceSketch\(/.test(DR), false);
+}
+
+/* a sketch with no size of its own (the drafter's generated SVG) still opens */
+check('the editor works on at least 1200 wide, whatever size the image reports',
+      /WORK_MIN_W = 1200/.test(ED) && /Math\.max\(nat, WORK_MIN_W\)/.test(ED), true);
+
 /* lgReplaceSketch / lgLoadSketchLayer against a fake database */
 (async () => {
   const data = {};

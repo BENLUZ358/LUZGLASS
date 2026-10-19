@@ -18,6 +18,7 @@
   'use strict';
 
   const FONT = '"Heebo",system-ui,-apple-system,"Segoe UI",Arial,sans-serif';
+  const WORK_MIN_W = 1200;
   const MIN_S = 0.05, MAX_S = 20;
   const r1 = v => Math.round(v * 10) / 10;
 
@@ -260,7 +261,7 @@
   //  output: {mime, minW?, maxW?, maxB64?} — כל דף שומר בגודל ובפורמט שהוא שומר היום.
   function lgSketchMerge(img, model, output, makeCanvas) {
     const o = output || {};
-    let W = img.naturalWidth || model.w;
+    let W = model.w;                      // משטח העבודה — לפחות 1200, לעולם לא קטן מהתמונה
     if (o.minW) W = Math.max(W, o.minW);
     if (o.maxW) W = Math.min(W, o.maxW);
     W = Math.round(W);
@@ -405,8 +406,12 @@
 
     img = new Image();
     img.onload = () => {
-      const lay = opts.layer && opts.layer.w === img.naturalWidth && opts.layer.h === img.naturalHeight ? opts.layer : null;
-      model = lgSketchModel({ w: img.naturalWidth, h: img.naturalHeight, layer: lay });
+      // משטח עבודה ברוחב 1200 לפחות. SVG בלי מידות (השרטוט שהשרטט מייצר כשאין תמונה)
+      // מדווח 200×150 או 0, ותמונה קטנה הייתה נשמרת קטנה. התמונה מצוירת מוגדלת — היחס נשמר.
+      const nat = img.naturalWidth || 0;
+      const W = Math.max(nat, WORK_MIN_W), H = nat && img.naturalHeight ? Math.round(W * img.naturalHeight / nat) : Math.round(W * 0.75);
+      const lay = opts.layer && opts.layer.w === W && opts.layer.h === H ? opts.layer : null;
+      model = lgSketchModel({ w: W, h: H, layer: lay });
       const r = size(); model.fit(r.width, r.height); render();
       hint(lay && lay.texts && lay.texts.length ? 'הכתב מהפעם הקודמת עדיין זז · לחיצה כפולה לעריכה' : '＋ כתב להוספת מידה · שתי אצבעות להגדלה');
     };
