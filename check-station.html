@@ -31,35 +31,46 @@ html,body{height:100%;overflow:hidden;}
 /* LIST */
 .list-view{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
 .list-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:12px;padding:40px;text-align:center;}
-.order-card{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 14px 12px 14px;cursor:pointer;transition:background 0.12s;position:relative;}
+/* ═══ שורת הזמנה (בן, 19/10/2026, אייפד: "בלי שום פרטים") ═══
+   סדר הקריאה: לקוח → מספר הזמנה + שם הסקיצה → סוגי הזכוכית → התקדמות.
+   סטטוס בצורה ולא רק בצבע (תגית + פס בצד). בלי אימוג'י כאייקונים (lg-icons). */
+.order-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px 12px;cursor:pointer;
+  transition:background 0.15s,border-color 0.15s;position:relative;display:flex;flex-direction:column;gap:8px;min-width:0;}
 .order-card:active{background:var(--bg2);}
+.order-card:focus-visible{outline:3px solid var(--gold);outline-offset:2px;}
 .order-card.done-card{border-right:4px solid var(--green);}
 .order-card.partial-card{border-right:4px solid var(--gold);}
-.oc-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
-.oc-client{font-size:15px;font-weight:900;}
-.oc-badge{font-size:12px;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap;}
-.b-new{background:rgba(136,136,136,0.15);color:var(--muted);}
+.oc-top{display:flex;align-items:center;gap:10px;}
+.oc-client{flex:1;min-width:0;font-size:17px;font-weight:900;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.oc-badge{font-size:13px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;}
+.b-new{background:rgba(136,136,136,0.18);color:#c9c4bf;}
 .b-done{background:rgba(39,174,96,0.2);color:var(--green);}
 .b-prog{background:rgba(201,168,76,0.2);color:var(--gold);}
-/* שם הסקיצה. קודם הוא ישב מוקטן בתוך שורת המטא יחד עם מספר ההזמנה,
-   מתחת לתצוגה מקדימה שנחתכה ב-object-fit:cover — סקיצה גבוהה או רחבה
-   הראתה פרוסה מהאמצע, ולכן "חלק לא נראו טוב". התמונה ירדה מהרשימה
-   ונפתחת בלחיצה, ושם הסקיצה תפס את מקומה כמזהה של השורה. */
-.oc-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;
-         overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.oc-meta{font-size:12px;color:var(--muted);margin-bottom:7px;}
-.oc-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;}
-.oc-tag{font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;}
-.tg{background:rgba(41,128,185,0.15);color:#5dade2;}
-.tc{background:rgba(142,68,173,0.15);color:#a569bd;}
-.tm{background:rgba(255,255,255,0.06);color:var(--muted);}
-.oc-prog{display:flex;align-items:center;gap:8px;}
-.oc-bar{flex:1;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;}
-.oc-fill{height:100%;border-radius:2px;transition:width 0.3s;}
-.oc-cnt{font-size:12px;font-weight:700;white-space:nowrap;}
-.oc-note{font-size:12px;color:var(--gold);background:rgba(201,168,76,0.08);padding:4px 8px;border-right:2px solid var(--gold);margin-top:6px;border-radius:0 3px 3px 0;}
-.note-btn-inline{background:rgba(201,168,76,0.15);border:none;color:var(--gold);font-size:13px;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1;}
-.note-btn-inline:hover{background:rgba(201,168,76,0.3);}
+.oc-note-btn{min-width:44px;min-height:44px;margin:-8px -6px -8px 0;display:flex;align-items:center;justify-content:center;
+  background:transparent;border:none;border-radius:10px;color:var(--muted);cursor:pointer;}
+.oc-note-btn:hover,.oc-note-btn:focus-visible{background:rgba(201,168,76,0.15);color:var(--gold);}
+.oc-note-btn [data-icon]{width:20px;height:20px;}
+.oc-id{display:flex;align-items:baseline;gap:10px;min-width:0;}
+.oc-num{flex:0 0 auto;font-size:14px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums;letter-spacing:0.02em;
+  background:rgba(201,168,76,0.12);padding:2px 8px;border-radius:6px;}
+.oc-name{flex:1;min-width:0;font-size:15px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.oc-name.oc-noname{color:var(--muted);font-weight:500;font-style:italic;}
+.oc-glass{display:flex;gap:6px;flex-wrap:wrap;}
+.oc-chip{font-size:13px;font-weight:700;padding:3px 10px;border-radius:999px;background:rgba(93,173,226,0.14);color:#7cc0ec;white-space:nowrap;}
+.oc-chip b{font-weight:800;margin-inline-start:4px;color:var(--text);}
+.oc-chip.oc-chip-empty{background:rgba(255,255,255,0.06);color:var(--muted);font-weight:500;}
+.oc-prog{display:flex;align-items:center;gap:10px;}
+.oc-bar{flex:1;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;}
+.oc-fill{height:100%;border-radius:3px;transition:width 0.3s;}
+.oc-cnt{font-size:13px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.oc-note{font-size:13px;color:var(--gold);background:rgba(201,168,76,0.08);padding:6px 10px;border-right:3px solid var(--gold);border-radius:0 6px 6px 0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#listView.oc-grid{gap:10px;padding:12px;}
+.oc-wide{grid-column:1/-1;}
+@media (min-width:900px){
+  #listView.oc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;}
+}
+@media (prefers-reduced-motion:reduce){.order-card,.oc-fill{transition:none;}}
 /* SKETCH VIEW */
 .sketch-view{flex:1;display:none;flex-direction:column;overflow:hidden;}
 .sketch-hdr{flex-shrink:0;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);}
@@ -656,6 +667,48 @@ function getFiltered(){
   return list;
 }
 
+// סוגי הזכוכית של ההזמנה — **מהפריטים** (חיסום בלבד), בקיבוץ עם כמות.
+// קודם נלקח מההזמנה עצמה (o.glassFullName), שלא קיים בהזמנות שהוקלדו בתור — ולכן תמיד היה ריק.
+function csGlassSummary(o){
+  return lgGlassTypesInOrders([o], csSkuCatalogMap, it => !!(it && it.chisum))
+    .sort((x, y) => y.count - x.count);   // הנפוץ קודם
+}
+
+// שורה אחת ברשימה. לקוח → מספר הזמנה + שם הסקיצה → זכוכית → התקדמות (בן, 19/10/2026).
+function csOrderRowHtml(o){
+  const idxs=chisumIdxs(o),total=idxs.length||1;
+  const checked=idxs.filter(i=>cs[o.id]?.[i]).length;
+  const pct=Math.round(checked/total*100),done=pct===100,fresh=checked===0;
+  const note=notes[o.id]||'';
+  const badgeCls=done?'b-done':fresh?'b-new':'b-prog';
+  const badgeTxt=done?'הושלם':fresh?'ממתין':`${checked}/${total}`;
+  const cardCls=done?'done-card':checked>0?'partial-card':'';
+  const glass=csGlassSummary(o);
+  const chips=glass.length
+    ? glass.map(g=>`<span class="oc-chip">${lgEsc(g.label)}${g.count>1?`<b>×${g.count}</b>`:''}</span>`).join('')
+    : '<span class="oc-chip oc-chip-empty">סוג זכוכית לא הוקלד</span>';
+  const name=String(o.sketchName||'').trim();
+  const id=lgEsc(String(o.id));
+  return `<div class="order-card ${cardCls}" role="button" tabindex="0" onclick="selectOrder('${id}')"
+      onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectOrder('${id}')}">
+      <div class="oc-top">
+        <div class="oc-client">${lgEsc(o.orderClient||'—')}</div>
+        <span class="oc-badge ${badgeCls}">${badgeTxt}</span>
+        <button type="button" class="oc-note-btn" aria-label="הוסף הערה" onclick="event.stopPropagation();openQN('${id}')"><span data-icon="pencil"></span></button>
+      </div>
+      <div class="oc-id">
+        <span class="oc-num" dir="ltr">${lgEsc(o.orderNum||'—')}</span>
+        ${name?`<span class="oc-name">${lgEsc(name)}</span>`:'<span class="oc-name oc-noname">ללא שם לסקיצה</span>'}
+      </div>
+      <div class="oc-glass">${chips}</div>
+      <div class="oc-prog">
+        <div class="oc-bar"><div class="oc-fill" style="width:${pct}%;background:${done?'var(--green)':'var(--gold)'}"></div></div>
+        <span class="oc-cnt" style="color:${done?'var(--green)':'var(--muted)'}">${checked}/${total} פריטים</span>
+      </div>
+      ${note?`<div class="oc-note">${lgEsc(note.slice(0,80))}${note.length>80?'…':''}</div>`:''}
+    </div>`;
+}
+
 function renderList(){
   const list=getFiltered();
   const el=document.getElementById('listView');
@@ -666,45 +719,18 @@ function renderList(){
       : doneCount>0
         ? `<div class="list-empty"><div style="font-size:44px">🎉</div><p style="font-size:14px;font-weight:700">כל הסקיצות הושלמו!</p><p style="font-size:12px;color:var(--muted)">עבור לטאב "הושלמו" כדי לשלוח דוח לחיסום</p></div>`
         : `<div class="list-empty"><div style="font-size:44px">🔍</div><p style="font-size:14px">אין הזמנות לבדיקה</p></div>`;
+    el.classList.remove('oc-grid');
     el.innerHTML = emptyMsg;
     return;
   }
   // כפתור "שלח לחיסום" בטאב הושלמו
-  const sendBtn = activeTab==='done' ? `<div style="padding:12px 14px;background:rgba(142,68,173,0.1);border-bottom:2px solid var(--purple);">
+  const sendBtn = activeTab==='done' ? `<div class="oc-wide" style="padding:12px 14px;background:rgba(142,68,173,0.1);border-bottom:2px solid var(--purple);">
     <button onclick="sendAllToFactory()" style="width:100%;padding:13px;background:var(--purple);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
       🔥 סיים יום — שלח ${list.length} הזמנות לחיסום והוצא דוח
     </button>
   </div>` : '';
-  el.innerHTML = sendBtn + list.map(o=>{
-    const idxs=chisumIdxs(o),total=idxs.length||1;
-    const checked=idxs.filter(i=>cs[o.id]?.[i]).length;
-    const pct=Math.round(checked/total*100),done=pct===100,fresh=checked===0;
-    const note=notes[o.id]||'';
-    const badgeCls=done?'b-done':fresh?'b-new':'b-prog';
-    const badgeTxt=done?'✓ הושלם':fresh?'ממתין':`${checked}/${total}`;
-    const cardCls=done?'done-card':checked>0?'partial-card':'';
-    return `<div class="order-card ${cardCls}" onclick="selectOrder('${o.id}')">
-      <div class="oc-top">
-        <div class="oc-client">${lgEsc(o.orderClient)}</div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <button aria-label="הוסף הערה" class="note-btn-inline" onclick="event.stopPropagation();openQN('${o.id}')">📝</button>
-          <span class="oc-badge ${badgeCls}">${badgeTxt}</span>
-        </div>
-      </div>
-      <div class="oc-name">${lgEsc(o.sketchName||o.type||'—')}</div>
-      <div class="oc-meta">${lgEsc(o.orderNum||'—')}${lgHasSketch(o)?' · 🖼 יש סקיצה':''}</div>
-      <div class="oc-tags">
-        <span class="oc-tag tg">${lgEsc(o.glassFullName||o.glass||'')}</span>
-        <span class="oc-tag tc">🔥 חיסום · ${total} פריטים</span>
-        ${o.source==='upload'?'<span class="oc-tag tm">📎 העלאה</span>':''}
-      </div>
-      <div class="oc-prog">
-        <div class="oc-bar"><div class="oc-fill" style="width:${pct}%;background:${done?'var(--green)':'var(--gold)'}"></div></div>
-        <span class="oc-cnt" style="color:${done?'var(--green)':'var(--muted)'}">${checked}/${total} פריטים</span>
-      </div>
-      ${note?`<div class="oc-note">📌 ${lgEsc(note.slice(0,60))}${note.length>60?'...':''}</div>`:''}
-    </div>`;
-  }).join('');
+  el.classList.add('oc-grid');
+  el.innerHTML = sendBtn + list.map(o => csOrderRowHtml(o)).join('');
 
   // התג והרשימה נגזרים מאותו orders, ולכן חייבים להיחשב באותו רגע.
   // updateTabCounts נקראה רק משני מקומות — מהליסנר של Firebase ומטיימר
@@ -720,7 +746,7 @@ function showList(){
   // מנתק את המאזין לציור הבדיקה. כאן ולא ב-goBack, כי גם "סיים סקיצה"
   // חוזר לרשימה — וכל מסלול אחר שיתווסף יעבור מכאן גם הוא.
   _csWatchEdits(null);
-  document.getElementById('listView').style.display='flex';
+  document.getElementById('listView').style.display='';   // ה-CSS קובע: רשימה, או שתי עמודות באייפד
   document.getElementById('sketchView').style.display='none';
   document.getElementById('filtersBar').style.display='flex';
   document.getElementById('tabsBar').style.display='flex';
