@@ -146,9 +146,13 @@ function lineText(n, w, h, seq, total) {
 function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices) {
   const cp    = (clientPrices || {})[order.orderClient || ''] || {};
   const gp    = globalPrices || {};
+  // שם הסקיצה, כפי שנרשם בתור. בן, 19/10/2026: בחשבשבת "שם פריט" נושא אותו ליד
+  // הזכוכית ("8 מ"מ שקוף מחוסם לימור") — כך מזהים בהזמנה לאיזו עבודה כל שורה שייכת.
+  const sketchName = String(order.sketchName || '').trim();
   const lines = [];
   const preview = [];
   const skipped = [];
+  const unpriced = [];
   const hsLines = {};
 
   const entries = Array.isArray(order.items) ? order.items.map((it, k) => [String(k), it])
@@ -171,10 +175,11 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     // מחירון הלקוח קודם, ואחריו הגלובלי — אותו סדר בדיוק שבו lgCalcOrderTotal
     // מחשב את הסכום שעל המסך, כדי שהמסמך בחשבשבת והמסך לא יגידו שני דברים.
     const ppm2 = parseFloat(cp[sku] || gp[sku] || 0);
-    // בלי מחיר עדיף לדלג ולהגיד את זה מאשר לשלוח שורה ב-0. שורת אפס נראית
-    // במסמך כמו פריט שניתן בחינם, ואיש לא בודק אותה; פריט חסר מופיע בחלון
-    // ואי אפשר להתעלם ממנו.
-    if (!ppm2) { skipped.push({ name, sku, reason: 'אין מחיר למק"ט הזה — לא במחירון הלקוח ולא בגלובלי' }); return; }
+    // בלי מחיר — השורה **נשלחת ב-0**, ומסומנת (בן, 19/10/2026: "אפשר לעלות
+    // אותו עם מחיר 0 אבל עם אזהרה שאין מחיר למק"ט, כי בחשבונית מתקנים מחיר;
+    // עכשיו זה תוקע אותי"). קודם היא דולגה, כי שורת אפס נראית כמו מתנה;
+    // את זה שומרת עכשיו האזהרה — כל שורה כזו נמנית בשמה בחלון, ואי אפשר
+    // להתעלם ממנה (sqSendHashavshevet לא סוגר את החלון כשיש unpriced).
 
     ok.push({ key, item, name, sku, qty, ppm2 });
   });
@@ -189,6 +194,7 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
   const groupSeen = Object.create(null);
 
   ok.forEach(({ key, item, name, sku, qty, ppm2 }) => {
+    if (!ppm2) unpriced.push({ name, sku, hsLine: lines.length + 1 });
     // המספר נקבע כאן, אחרי כל הדילוגים — ר' lineText למעלה.
     const n     = lines.length + 1;
     const g     = item.quantityGroupId;
@@ -209,13 +215,23 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
       Agent:      String(agent),
       SM_Extratext1: text,
     };
+    // ‏itemname — "שם פריט" בחשבשבת. **רק כשיש שם לסקיצה**: בלעדיו השורה נשארת
+    // בדיוק כפי שהייתה, וחשבשבת ממשיכים לתת לה את שם הפריט שלהם. ⚠️ שדה שלא
+    // נוסה מול חשבשבת עד 19/10 — הניסיון הראשון נעשה על הזמנה אמיתית אחת מול בן.
+    // בסוף, אחרי SM_Extratext1: החתימה מחושבת על המחרוזת שנשלחת, ולכן רק תוספת
+    // בסוף אינה שוברת את סדר המפתחות.
+    if (sketchName) {
+      const glass = String(item.glassFullName || item.name || '').trim();
+      line.itemname = (glass ? glass + ' — ' + sketchName : sketchName).slice(0, LG_LINE_TEXT_MAX);
+    }
     lines.push(line);
     hsLines[key] = n;
 
-    preview.push({ name, sku, qty: qty.toFixed(3), ppm2, hsLine: n, text });
+    preview.push({ name, sku, qty: qty.toFixed(3), ppm2, hsLine: n, text, ...(ppm2 ? {} : { unpriced: true }),
+                   ...(line.itemname ? { itemname: line.itemname } : {}) });
   });
 
-  return { lines, preview, skipped, hsLines };
+  return { lines, preview, skipped, hsLines, unpriced };
 }
 
 module.exports = async function handler(req, res) {
@@ -314,7 +330,7 @@ module.exports = async function handler(req, res) {
     // prices.clients, לא prices.client — הצומת הוא ברבים. הטעות הזו הפכה את
     // מחירון הלקוח ל-undefined, וכל מחיר נפל לגלובלי: 190 במקום 171 ל"המקום
     // לאמבט". היא לא הזיקה כל עוד המחיר לא נשלח בכלל.
-    const { lines, preview, skipped, hsLines } = buildLines(order, accountKey, ref.reference,
+    const { lines, preview, skipped, hsLines, unpriced } = buildLines(order, accountKey, ref.reference,
       documentId, agent, prices.global, clientPricesByName(prices));
 
     if (!lines.length) {
@@ -340,7 +356,7 @@ module.exports = async function handler(req, res) {
         ok: true, dryRun: true, isTest,
         reference: ref.reference, accountKey,
         documentId, documentName: DOCUMENT_TYPES[documentId] || '?', agent,
-        lineCount: lines.length, lines, preview, skipped,
+        lineCount: lines.length, lines, preview, skipped, unpriced,
         // המעטפת, לאבחון. בלי signature ובלי station — אלה סודות.
         // חייב שם משלו: קודם הוא נקרא preview גם הוא, דרס את מערך התצוגה,
         // ואז .map נפל על אובייקט.
@@ -406,6 +422,8 @@ module.exports = async function handler(req, res) {
       response:   text.slice(0, 4000),
       requestSample: lines[0] || null,   // שורה אחת, לאימות שמות השדות
       skipped:    skipped.length ? skipped : null,
+      // שורות שנשלחו ב-0 כי אין מחיר למק"ט (בן, 19/10) — לתיקון בחשבונית
+      unpriced:   unpriced.length ? unpriced : null,
       // בלי זה אי אפשר יהיה להבדיל אחר כך בין הזמנה שנפתחה בחשבשבת לבין
       // הזמנת בדיקה שרק נראתה כך. נשמר על ההזמנה, לא רק בתשובה לדפדפן.
       simulated:  isTest || null,
@@ -460,7 +478,7 @@ module.exports = async function handler(req, res) {
       ok: true, dryRun: false,
       simulated: isTest,
       reference: ref.reference, accountKey,
-      lineCount: lines.length, skipped,
+      lineCount: lines.length, skipped, unpriced,
       warn,
       response: parsed || text.slice(0, 4000),
     });

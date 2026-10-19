@@ -50,7 +50,7 @@ const ctx = { module: {}, exports: {} };
 vm.createContext(ctx);
 for (const re of [/function areaM2[\s\S]*?\n}/, /function clientPricesByName[\s\S]*?\n}/,
                   /const LG_LINE_TEXT_MAX = \d+;/, /function lineText[\s\S]*?\n}/,
-                  /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines \};\n}/]) {
+                  /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines, unpriced \};\n}/]) {
   const m = SRC.match(re);
   if (!m) { console.error('FAIL  could not find ' + re); process.exit(1); }
   vm.runInContext(m[0].replace(/^const /, 'var '), ctx);
@@ -116,13 +116,15 @@ const build = (order, prices) => ctx.buildLines(
 }
 
 /* ── no price anywhere ─────────────────────────────────────────────────── */
-/* A zero line reads in the document like an item given away, and nobody
-   audits it. A missing item shows up in the modal and cannot be ignored. */
+/* Ben, 19/10/2026: send it at 0 with a warning — the price is fixed in the
+   invoice; skipping it stopped the order. The warning names the line, so the
+   zero cannot pass unnoticed (it was the reason for skipping before). */
 {
-  const { lines, skipped } = build(ORDER_1058, { global: {}, clients: {}, clientKeys: {} });
-  check('nothing is sent at zero', lines.length, 0);
-  check('the item is skipped instead', skipped.length, 1);
-  check('and the reason says why', /אין מחיר למק"ט/.test(skipped[0].reason), true);
+  const { lines, skipped, unpriced } = build(ORDER_1058, { global: {}, clients: {}, clientKeys: {} });
+  check('the item is sent', lines.length, 1);
+  check('at zero', lines[0].price, '0.000');
+  check('nothing is skipped', skipped.length, 0);
+  check('and it is named in the warning', [unpriced.length, unpriced[0].sku, unpriced[0].hsLine], [1, lines[0].itemkey, 1]);
 }
 
 /* ── the two area formulas must not drift apart ────────────────────────── */

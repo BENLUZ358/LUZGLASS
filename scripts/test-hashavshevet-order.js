@@ -89,14 +89,16 @@ check('a non-positive agent is refused up front',
       /Number\(agent\)\s*>\s*0/.test(SRC),
       'rule 2: אסמכתא, סוכן, מחסנים ומספר עותקים must be positive and non-zero');
 
-/* ── 3. an unpriced item is skipped, not billed at zero ────────────────── */
-/* Also the reverse of what this file once asserted, and for the same reason:
-   the fallback was "send it and let them price it", which produces a zero
-   line. A zero line reads in the document like an item given away and nobody
-   audits it; a missing item is listed in the modal and cannot be ignored. */
-check('an item with no price anywhere is skipped',
-      /skipped\.push\([^)]*אין מחיר/.test(SRC),
-      'sending it unpriced puts a ₪0 line in an accounting document');
+/* ── 3. an unpriced item goes out at zero, and is flagged ──────────────── */
+/* Ben, 19/10/2026: "if there is no price, send it at 0 with a warning — the
+   price is fixed in the invoice; today a SKU with no price stops me". The
+   earlier rule (skip it, a zero line reads like a gift) is reversed by his
+   decision; what it guarded against is kept by the warning, which names every
+   such line so nobody can miss it. Behaviour in test-hs-line-numbers.js. */
+check('an item with no price anywhere is not skipped',
+      !/skipped\.push\([^)]*אין מחיר/.test(SRC), 'Ben: send it at 0, with a warning');
+check('it is flagged as unpriced instead',
+      /unpriced\.push\(/.test(SRC), 'every zero line must be named in the warning');
 check('and the client list is preferred over the global one',
       /const ppm2 = parseFloat\(cp\[sku\] \|\| gp\[sku\] \|\| 0\);/.test(SRC),
       'the global price overcharges every client who has a list of their own');
