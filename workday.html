@@ -1418,8 +1418,10 @@ function markStageWorkday(sid){
 // השלב זז, וברענון ההזמנה חוזרת לשלב הקודם בלי שאיש הבין למה.
 function markStageValue(sid, stage){
   // עדכן stage ב-Firebase (מקור האמת היחיד)
-  const ordKey = sid.startsWith('ord_')||sid.startsWith('sub_') ? sid : 'ord_'+sid;
-  updateStage(ordKey, stage)
+  // המזהה הוא המפתח של ההזמנה, כמו בכל שמירה אחרת בדף (updateOrder(sid)).
+  // קודם כל מזהה שלא התחיל ב-ord_/sub_ קיבל 'ord_' מקדימה — הזמנות וואטסאפ
+  // (wa_…) נכתבו לרשומה ריקה שלא קיימת ונשארו "מחכה ל-OptyWay" (בן, 19/10).
+  updateStage(String(sid), stage)
     .catch(e => { console.error('markStageValue:', e); showToast('שינוי השלב לא נשמר — רענן ונסה שוב'); });
 }
 
