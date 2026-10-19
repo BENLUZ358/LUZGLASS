@@ -77,8 +77,9 @@ for (const fn of ['saveOrder', 'saveSubmission']) {
 /* 2026-10-04: העורך כבר לא כותב פעמיים בעצמו. שתי הכתיבות העצמאיות (שלא
    חיכו זו לזו, וכישלון של אחת השאיר עותקים שונים) הוחלפו ב-lgReplaceSketch —
    update אחד, אטומי, על כל הנתיבים. */
+/* 19/10: ועם השכבה הניתנת לעריכה (layer/base) — באותה כתיבה. ר' test-sketch-editor-pages. */
 check('the sketch editor saves through lgReplaceSketch',
-      /lgReplaceSketch\(_sqOrder\(sqCurrent\), newSrc\)/.test(ADMIN), true);
+      /lgReplaceSketch\(_sqOrder\(sqCurrent\), newSrc(, \{[^)]*\})?\)/.test(ADMIN), true);
 {
   const body = bodyOf(DB, 'lgReplaceSketch');
   const code = body.replace(/\/\/[^\n]*/g, '');
