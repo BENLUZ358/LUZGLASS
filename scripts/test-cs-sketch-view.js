@@ -76,7 +76,11 @@ const tag = id => (CS.match(new RegExp('<[a-z]+[^>]*id="' + id + '"[^>]*>[\\s\\S
 /* ── bottom bar: one primary, one secondary, 44px, logic untouched ── */
 {
   const btm = (CS.match(/<div class="btmbar" id="btmbar">[\s\S]*?\n  <\/div>/) || [''])[0];
-  check('ערוך is the secondary button', /class="tb-btn tb-sec"[^>]*onclick="openEditor\(\)"/.test(btm), true);
+  /* בן, 20/10: "סיים סקיצה" נלחץ בטעות בלחץ העבודה — הוא כבר לא הכפתור הבולט.
+     ערוך הוא הפעולה הראשית; סיים סקיצה שקט, בקצה השני, ושואל לפני. */
+  check('ערוך is the main button', /class="tb-btn tb-primary"[^>]*onclick="openEditor\(\)"/.test(btm), true);
+  check('סיים סקיצה is a quiet outline button, not the green block', /class="tb-btn tb-finish"[^>]*id="finishBtn"/.test(btm) && !/id="finishBtn"[^>]*tb-green|tb-green[^>]*id="finishBtn"/.test(btm), true);
+  check('…and does not stretch across the bar', /#finishBtn\s*\{[^}]*flex:\s*1/.test(CS), false);
   check('סיים סקיצה still finishes', /id="finishBtn"[^>]*onclick="finishSketch\(\)"/.test(btm), true);
   check('zoom buttons still zoom', /doZoom\(0\.25\)[\s\S]*doZoom\(-0\.25\)[\s\S]*resetZoom\(\)/.test(btm), true);
   check('the reset button is an icon, not a typed ↺', /↺/.test(btm), false);
