@@ -33,6 +33,10 @@ html,body{height:100%;overflow:hidden;}
 .tb-sec{background:var(--bg2);color:var(--text);border-color:var(--border);}
 .tb-back{background:transparent;color:var(--text);border-color:var(--border);padding-inline:10px 14px;order:-1;} /* חזרה בהתחלה — בעברית זה הקצה הימני */
 .tb-green{background:var(--green);color:#fff;}
+/* ערוך — הפעולה הראשית במסך הסקיצה. "סיים סקיצה" — שקט: מסגרת בלבד, בקצה השני,
+   ושואל לפני (בן, 20/10: נלחץ בטעות בלחץ העבודה). */
+.tb-primary{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.tb-finish{background:transparent;color:var(--green);border-color:var(--green);}
 @media (prefers-reduced-motion:reduce){.tb-btn{transition:none;}.tb-btn:active{transform:none;}}
 .tb-purple{background:var(--purple);color:#fff;}
 /* FILTERS */
@@ -203,7 +207,8 @@ html,body{height:100%;overflow:hidden;}
   /* מרווח מהכפתורים הקבועים */
   .sketch-area{padding-bottom:72px;}
   /* כפתור "סיים סקיצה" — רחב ובולט */
-  #finishBtn{flex:1;font-size:15px;min-height:48px;}
+  .btmbar .tb-primary{flex:1;font-size:15px;min-height:48px;}
+  #finishBtn{min-height:48px;}
   .btmbar .tb-sec{min-height:48px;}
   /* המרווח הריק תופס את הרוחב ש"סיים סקיצה" צריך כשכפתורי הזום מוסתרים */
   .btmbar .sp{display:none;}
@@ -309,6 +314,7 @@ html,body{height:100%;overflow:hidden;}
   <!-- מוצג רק בטאב "הושלמו" — מחליף את סרגל הכלים הפעיל -->
   <div id="doneBadge" style="display:none;background:var(--green);color:#fff;padding:8px 16px;font-size:12px;font-weight:700;font-family:Heebo,sans-serif;text-align:center;direction:rtl;letter-spacing:0.02em;">
     ✅ הסקיצה הושלמה ונבדקה — ממתינה לשליחה לחיסום
+    <button type="button" onclick="csReopenSketch()" aria-label="ערוך — להחזיר את הסקיצה לבדיקה" style="margin-inline-start:12px;min-height:44px;padding:0 16px;border-radius:10px;border:1px solid #fff;background:#fff;color:var(--green);font:800 14px Heebo,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><span data-icon="pencil"></span> ערוך</button>
   </div>
   <div class="sketch-area" id="skArea">
     <div class="sketch-wrap" id="skWrap"></div>
@@ -327,9 +333,9 @@ html,body{height:100%;overflow:hidden;}
     <button aria-label="הקטן" class="zbtn zbtn-zoom" onclick="doZoom(-0.25)">−</button>
     <button aria-label="איפוס תצוגה" class="zbtn zbtn-zoom" onclick="resetZoom()"><span data-icon="refresh"></span></button>
     <div class="sp"></div>
+    <button class="tb-btn tb-finish" id="finishBtn" onclick="finishSketch()" style="display:flex"><span data-icon="check"></span> סיים סקיצה</button>
     <div class="icnt" id="iCnt"></div>
-    <button class="tb-btn tb-sec" onclick="openEditor()"><span data-icon="pencil"></span> ערוך</button>
-    <button class="tb-btn tb-green" id="finishBtn" onclick="finishSketch()" style="display:flex"><span data-icon="check"></span> סיים סקיצה</button>
+    <button class="tb-btn tb-primary" onclick="openEditor()"><span data-icon="pencil"></span> ערוך</button>
   </div>
 </div>
 
@@ -1001,6 +1007,10 @@ function hideBanner(){document.getElementById('banner').style.display='none';}
 let _finishingSketch = false; // מונע לחיצה כפולה — משוחרר תמיד ב-finally, לא נשאר תקוע
 async function finishSketch(){
   if(!cur || _finishingSketch) return;
+  // לחיצה אחת סימנה את כל החתיכות והעבירה ל"הושלמו" — ובטעות (בן, 20/10, סקיצה 3499).
+  const _n = chisumIdxs(cur).length;
+  const _name = [cur.orderNum, cur.sketchName].filter(Boolean).join(' · ');
+  if(!confirm('לסיים את הסקיצה ' + _name + '?\n' + _n + ' חתיכות יסומנו כנבדקו והסקיצה תעבור ל"הושלמו".')) return;
   _finishingSketch = true;
   const btn = document.getElementById('finishBtn');
   if(btn) btn.disabled = true;
@@ -1023,6 +1033,28 @@ async function finishSketch(){
     _finishingSketch = false;
     if(btn) btn.disabled = false;
   }
+}
+
+// "החזר לבדיקה" — מטאב "הושלמו", לפני השליחה לחיסום. מוחק רק את הסימונים
+// של הסקיצה הזו; היא חוזרת ל"לבדיקה" נקייה. עד עכשיו לא הייתה דרך חזרה בכלל.
+async function csReopenSketch(){
+  if(!cur) return;
+  const _name = [cur.orderNum, cur.sketchName].filter(Boolean).join(' · ');
+  if(!confirm('להחזיר את הסקיצה ' + _name + ' לבדיקה?\nהסימונים יימחקו והיא תחזור ל"לבדיקה".')) return;
+  const id = cur.id;
+  const prev = cs[id];
+  delete cs[id];
+  try {
+    await saveCS();
+  } catch(e) {
+    cs[id] = prev;   // השמירה נכשלה — המסך נשאר כמו שהיה
+    toast('⚠️ השמירה נכשלה — בדוק חיבור אינטרנט ונסה שוב');
+    return;
+  }
+  curReadOnly = false;
+  setTab('active');
+  selectOrder(id);    // נשארים על אותה סקיצה, עכשיו לעריכה ולבדיקה
+  toast('הסקיצה חזרה לבדיקה');
 }
 
 // מספר רץ לדוחות חיסום — transaction אטומי, אותו דפוס כמו lgNextOrderNum
@@ -1096,7 +1128,8 @@ async function sendAllToFactory(){
     // חותמת נפרדת לכל תהליך. הזמנה מעורבת מקבלת את שתיהן, ומסומנת כחוזרת
     // רק כששני הדגלים דולקים — אחרת לחיצה על "קיבלתי" בחיסום הייתה מסמנת
     // גם את הטריפלקס שעדיין במפעל.
-    const patch = { stage: 'chisum' };
+    // status נכתב יחד עם stage, כמו ב-updateStage — אחרת הסטטוס השמור נשאר ישן
+    const patch = { stage: 'chisum', status: lgStageToStatus('chisum') };
     if(split.chisum.length){
       patch.chisumArrived   = false;
       patch.chisumReportId  = reportId;
@@ -1331,6 +1364,7 @@ async function edSave(newSrc){
     safeStorage.setItem('lgCSEdits',JSON.stringify(s));
   }catch(e){}
   renderSketch();
+  goBack();   // "שמור" מחזיר ישר לרשימת ההזמנות (בן, 20/10) — לא נשארים ליד "סיים סקיצה"
 
   // רק עכשיו — הכתיבה בפועל ל-Firebase. ממתינים לה כדי לדעת אם היא באמת הצליחה,
   // ולא מציגים "סומן ✓" מזויף אם היא נכשלה (העריכה נשארת שמורה מקומית בכל מקרה).
