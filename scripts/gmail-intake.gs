@@ -73,8 +73,8 @@ function emLabelFor(state) {
 //    400 — המייל עצמו פגום: סופי, LG/נכשל.
 //    401/403 — ⚠️ הגדרות, לא המייל (טוקן שגוי או שהוחלף, EMAIL_INBOUND_TOKEN /
 //      EMAIL_INBOUND_ADDRESS חסרים בשרת). אם זה היה סופי, כל מייל בתיבה היה
-//      מקבל LG/נכשל עד שמישהו שם לב. לכן — לנסות שוב (emGiveUp עדיין עוצר
-//      אחרי 20 ניסיונות / 60 שעות), ולעצור את הריצה: כל מייל אחר ייכשל באותו אופן.
+//      מקבל LG/נכשל עד שמישהו שם לב. לכן — לעצור את הריצה ולנסות בדקה הבאה,
+//      **בלי** לספור ניסיון (emRun לא קורא ל-emRetry): המייל מחכה עד שמתקנים.
 //    200 not-allowed — השולח לא ברשימה בשרת: "טופל" **בלי תווית**. ⚠️ בשלב
 //      הבדיקה מיילים של לקוחות אמיתיים לא נוגעים בהם (אפיון §3.6).
 //    500 / רשת (0) / state לא סופי — שוב בריצה הבאה.
@@ -262,15 +262,16 @@ function emRun() {
       var it = queue[q], mid = it.info.id;
       try {
         var res = emProcess(it.msg, cfg, me);
-        var stop = !!res.stop;
-        if (!res.handled) res = emRetry(it, st, props);
-        if (res.handled) emFinish(it, res, props);
         // ⚠️ 401/403 = הגדרות (TOKEN, או EMAIL_INBOUND_TOKEN / EMAIL_INBOUND_ADDRESS
         // בשרת) — כל מייל אחר ייכשל באותו אופן. רישום אחד, ועוצרים עד הריצה הבאה.
-        if (stop) {
+        // ⚠️ ובלי emRetry: זו לא בעיה של המייל. ספירה כאן הייתה מסמנת LG/נכשל
+        // אחרי ~20 דקות של הגדרה שגויה — מייל אחרי מייל.
+        if (res.stop) {
           Logger.log('השרת סירב להרשאה (401/403) — עוצרים את הריצה. לבדוק TOKEN ואת ההגדרות בשרת');
           break;
         }
+        if (!res.handled) res = emRetry(it, st, props);
+        if (res.handled) emFinish(it, res, props);
       } catch (e) {
         // ⚠️ שם השגיאה בלבד — ההודעה עלולה לכלול תוכן
         Logger.log('מייל ' + mid + ': חריגה ' + (e && e.name));
