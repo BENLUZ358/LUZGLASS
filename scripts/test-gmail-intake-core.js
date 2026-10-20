@@ -23,8 +23,8 @@ const gsPath = path.join(__dirname, 'gmail-intake.gs');
 const core = fs.readFileSync(corePath, 'utf8');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(core + '\nthis.f={emPlanChunks,emShouldTake,emLabelFor,emDecide};', ctx);
-const { emPlanChunks, emShouldTake, emLabelFor, emDecide } = ctx.f;
+vm.runInContext(core + '\nthis.f={emPlanChunks,emShouldTake,emLabelFor,emDecide,emGiveUp};', ctx);
+const { emPlanChunks, emShouldTake, emLabelFor, emDecide, emGiveUp } = ctx.f;
 
 // A
 check('chunks 0', emPlanChunks(0, 3000000), 1);
@@ -67,6 +67,12 @@ check('decide 200 no body', emDecide(200, null), { label: null, handled: false }
 for (const c of [400, 401, 403]) check('decide ' + c, emDecide(c, null), { label: 'LG/נכשל', handled: true });
 check('decide 500', emDecide(500, null), { label: null, handled: false });
 check('decide network 0', emDecide(0, null), { label: null, handled: false });
+
+// C3 emGiveUp
+check('giveup 19 young', emGiveUp(19, 1000), false);
+check('giveup 20', emGiveUp(20, 1000), true);
+check('giveup old', emGiveUp(1, 61 * 3600 * 1000), true);
+check('giveup 60h exactly', emGiveUp(1, 60 * 3600 * 1000), false);
 
 // D
 const gs = fs.existsSync(gsPath) ? fs.readFileSync(gsPath, 'utf8') : '';

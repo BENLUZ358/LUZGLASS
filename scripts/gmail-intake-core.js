@@ -53,4 +53,9 @@ function emDecide(httpCode, body) {
   }
   return { label: null, handled: false };
 }
+//  האם להפסיק לנסות מייל. retries = מספר הניסיונות עד כה (כולל הנוכחי),
+//  ageMs = גיל המייל. 20 ניסיונות או 60 שעות (לפני שנופל מחלון 3 הימים).
+function emGiveUp(retries, ageMs) {
+  return Number(retries) >= 20 || Number(ageMs) > 60 * 3600 * 1000;
+}
 // ── core end ──

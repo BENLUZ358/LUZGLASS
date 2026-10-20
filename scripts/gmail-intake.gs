@@ -74,14 +74,17 @@ function emDecide(httpCode, body) {
   }
   return { label: null, handled: false };
 }
+//  האם להפסיק לנסות מייל. retries = מספר הניסיונות עד כה (כולל הנוכחי),
+//  ageMs = גיל המייל. 20 ניסיונות או 60 שעות (לפני שנופל מחלון 3 הימים).
+function emGiveUp(retries, ageMs) {
+  return Number(retries) >= 20 || Number(ageMs) > 60 * 3600 * 1000;
+}
 // ── core end ──
 
 // ─── הגדרות ───────────────────────────────────────────────────────
 var EM_MAX_COMMITS = 10;              // מיילים לכל היותר בריצה (שלא נוסו קודם)
 var EM_MAX_MS = 4.5 * 60 * 1000;      // עוצרים לפני מגבלת 6 דקות של Google
 var EM_KEEP_MS = 4 * 24 * 3600 * 1000;
-var EM_MAX_RETRIES = 20;              // אחרי כך המייל נכשל סופית
-var EM_MAX_AGE_MS = 60 * 3600 * 1000; // ובכל מקרה לפני שנופל מחלון 3 הימים
 var EM_MAX_PARTS = 20, EM_MAX_CHUNKS = 10;   // גבולות השרת
 
 function emCfg() {
@@ -90,8 +93,8 @@ function emCfg() {
   return p;
 }
 
-//  ⚠️ נכס לכל מייל: h_<id> = זמן הטיפול, r_<id> = מספר ניסיונות חוזרים.
-//  מחזיר {handled:{id:ts}, retries:{id:n}} וגוזם h_ ישנים (4 ימים).
+//  ⚠️ נכס לכל מייל: h_<id> = זמן הטיפול, r_<id> = JSON {n, at} (ניסיונות חוזרים
+//  ומתי האחרון). מחזיר {handled:{id:ts}, retries:{id:n}} וגוזם h_ ו-r_ ישנים (4 ימים).
 function emLoadState() {
   var props = PropertiesService.getScriptProperties();
   var all = props.getProperties();
@@ -102,7 +105,10 @@ function emLoadState() {
       if (Number(all[k]) < cut) props.deleteProperty(k);
       else handled[k.slice(2)] = Number(all[k]);
     } else if (k.indexOf('r_') === 0) {
-      retries[k.slice(2)] = Number(all[k]) || 0;
+      var r = {};
+      try { r = JSON.parse(all[k]) || {}; } catch (e) {}
+      if (!(Number(r.at) >= cut)) props.deleteProperty(k);
+      else retries[k.slice(2)] = Number(r.n) || 0;
     }
   });
   return { handled: handled, retries: retries };
@@ -180,6 +186,27 @@ function emProcess(msg, cfg, me) {
   return d2;
 }
 
+//  ניסיון שלא הסתיים: סופרים, ואם הגענו לתקרה — נכשל סופית.
+//  מחזיר {label, handled}; handled=false = נשאר לריצה הבאה.
+function emRetry(it, st, props) {
+  var mid = it.info.id;
+  var n = (st.retries[mid] || 0) + 1;
+  st.retries[mid] = n;
+  if (emGiveUp(n, Date.now() - it.info.date)) {
+    Logger.log('מייל ' + mid + ': נכשל אחרי ' + n + ' ניסיונות');
+    return emDecide(400, null);
+  }
+  props.setProperty('r_' + mid, JSON.stringify({ n: n, at: Date.now() }));
+  return { label: null, handled: false };
+}
+
+//  מייל סופי: תווית, סימון "טופל", ניקוי מונה.
+function emFinish(it, res, props) {
+  if (res.label) emLabel(it.thread, res.label);
+  props.setProperty('h_' + it.info.id, String(Date.now()));
+  props.deleteProperty('r_' + it.info.id);
+}
+
 //  נקודת הכניסה — זה מה שהטריגר מפעיל כל דקה.
 function emRun() {
   var lock = LockService.getScriptLock();
@@ -217,22 +244,18 @@ function emRun() {
       var it = queue[q], mid = it.info.id;
       try {
         var res = emProcess(it.msg, cfg, me);
-        if (!res.handled) {
-          var n = (st.retries[mid] || 0) + 1;
-          if (n >= EM_MAX_RETRIES || Date.now() - it.info.date > EM_MAX_AGE_MS) {
-            Logger.log('מייל ' + mid + ': נכשל אחרי ' + n + ' ניסיונות');
-            res = emDecide(400, null);
-          } else {
-            props.setProperty('r_' + mid, String(n));
-            continue;
-          }
-        }
-        if (res.label) emLabel(it.thread, res.label);
-        props.setProperty('h_' + mid, String(Date.now()));
-        props.deleteProperty('r_' + mid);
+        if (!res.handled) res = emRetry(it, st, props);
+        if (res.handled) emFinish(it, res, props);
       } catch (e) {
         // ⚠️ שם השגיאה בלבד — ההודעה עלולה לכלול תוכן
         Logger.log('מייל ' + mid + ': חריגה ' + (e && e.name));
+        // ⚠️ חריגה נספרת כניסיון — אחרת המייל נשאר "חדש" לנצח וחוסם את המכסה
+        try {
+          var res2 = emRetry(it, st, props);
+          if (res2.handled) emFinish(it, res2, props);
+        } catch (e2) {
+          Logger.log('מייל ' + mid + ': גם הספירה נכשלה ' + (e2 && e2.name));
+        }
       }
     }
   } finally {
