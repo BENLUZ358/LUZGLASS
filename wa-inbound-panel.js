@@ -1,13 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════
-//  wa-inbound-panel.js — פאנל "קליטות WhatsApp" בתור הסקיצות (admin.html).
+//  wa-inbound-panel.js — פאנל "קליטות WhatsApp ומייל" בתור הסקיצות (admin.html).
 //
 //  מה רואים: כל הודעה נכנסת שלא הפכה להזמנה תקינה — וגם כאלה שהפכו
 //  להזמנה אבל צריכות עין (לקוח לא זוהה, כמה כרטיסים, תמונה גדולה).
 //
-//  ⚠️ הדף הזה **לא כותב** ל-waInbound. אף פעם. "נסה שוב" ו"טופל ידנית"
-//  עוברים דרך /api/wa-inbound-drain, שם הם טרנזקציה על אותה רשומה עם
-//  audit. גם העיבוד כשהאדמין פתוח עובר שם, דרך אותה תפיסה כמו ה-webhook.
-//  scripts/test-wa-inbound-panel.js אוכף את זה.
+//  שני ערוצים ברשימה אחת (20/10): waInbound (WhatsApp) ו-emailInbound
+//  (תיבת Orderluz, api/_email-inbound.js). כל שורה יודעת מאיזה ערוץ היא
+//  (row.channel), והפעולות שלה נשלחות עם channel:'email' כשצריך.
+//
+//  ⚠️ הדף הזה **לא כותב** ל-waInbound ולא ל-emailInbound. אף פעם. "נסה
+//  שוב" ו"טופל ידנית" עוברים דרך /api/wa-inbound-drain, שם הם טרנזקציה על
+//  אותה רשומה עם audit. גם העיבוד כשהאדמין פתוח עובר שם, דרך אותה תפיסה
+//  כמו ה-webhook. scripts/test-wa-inbound-panel.js אוכף את זה.
 //
 //  ⚠️ התמונה נטענת רק דרך שכבת הסקיצה (lgSketchIntoImg).
 //
@@ -26,6 +30,12 @@ function _waInEsc(s) {
 function _waInPhone(p) {
   const d = String(p || '').replace(/\D/g, '');
   return d.length === 10 ? d.slice(0, 3) + '-' + d.slice(3) : d;
+}
+//  "דני <Dani@X.co.il>" → "dani@x.co.il" — כמו lgEmailAddr בשרת
+function _waInAddr(from) {
+  const s = String(from || '');
+  const m = s.match(/<([^<>]+)>/);
+  return (m ? m[1] : s).trim().toLowerCase();
 }
 function _waInWhen(ms) {
   if (!ms) return '';
@@ -49,28 +59,46 @@ const _WA_IN_STATUS = {
   rejected:   ['לא נקלט',       'bad'],
   closed:     ['טופל ידנית',    'closed'],
   done:       ['נקלט',          'ok'],
+  ignored:    ['לא סקיצה — דולג', 'closed'],   // מייל בלי קובץ סקיצה — קיים רק במייל
 };
 
-//  רשומה מ-waInbound → כל מה שהפאנל מציג ומאפשר.
-function lgWaInRow(key, r, now) {
+//  גוף הבקשה לפעולה. WhatsApp — בלי channel, בדיוק כמו לפני המייל.
+function lgWaInActBody(channel, action, key, note) {
+  const b = channel === 'email' ? { channel: 'email', action, key } : { action, key };
+  if (note !== undefined) b.note = note;
+  return b;
+}
+
+//  רשומה מ-waInbound (או מ-emailInbound, channel:'email') → כל מה שהפאנל
+//  מציג ומאפשר.
+//  ⚠️ במייל אין כלל 24 שעות: הבייטים שמורים אצלנו ב-emailParts, ו"נסה שוב"
+//  עובד גם אחרי שבוע. ב-WhatsApp הקובץ אצל GREEN API ונעלם אחרי יום.
+function lgWaInRow(key, r, now, channel) {
   r = r || {};
+  const isEm = channel === 'email';
   const t = now || Date.now();
   const st = r.state || 'received';
   const cm = r.clientMatch || {};
   const fresh = st === 'processing' && r.claimedAt && (t - r.claimedAt) < WA_IN_CLAIM_TTL_MS;
-  const young = (t - (r.createdAt || t)) <= WA_IN_MAX_AGE_MS;
+  const young = isEm || (t - (r.createdAt || t)) <= WA_IN_MAX_AGE_MS;
+  // "תקלת רשת ב-GREEN API" נכון רק ל-WhatsApp. במייל — השגיאה כמו שהיא.
+  const human = isEm ? (s => String(s || '')) : _waInHuman;
+  const who = isEm ? _waInAddr(r.from) : _waInPhone(r.sender);
 
   let [statusLabel, tone] = _WA_IN_STATUS[st] || [st, 'wait'];
   let reason = '', needsAttention = false, client = '—';
 
   if (st === 'done') {
-    if (cm.via === 'users' || cm.via === 'hashavshevet') client = cm.name || _waInPhone(r.sender);
+    if (cm.via === 'users' || cm.via === 'hashavshevet' || cm.via === 'email') client = cm.name || who;
     else client = 'לא שויך';
+    // במייל — איפה משייכים: הכפתור בתור הסקיצות (sq-assign.js)
+    const where = isEm ? ' בתור הסקיצות, בכפתור "שייך ללקוח".' : '.';
     if (cm.via === 'ambiguous') {
-      reason = 'המספר מופיע ב-' + (cm.candidates || 'כמה') + ' כרטיסי לקוח — לא שויך אוטומטית. צריך לשייך ביד.';
+      reason = (isEm ? 'הכתובת מופיעה ב-' : 'המספר מופיע ב-') + (cm.candidates || 'כמה')
+        + ' כרטיסי לקוח — לא שויך אוטומטית. צריך לשייך ביד' + where;
       needsAttention = true; statusLabel = 'נקלט — לא שויך'; tone = 'warn';
     } else if (cm.via === 'none') {
-      reason = 'המספר לא נמצא אצל אף לקוח — צריך לשייך ביד.';
+      reason = (isEm ? 'הכתובת לא נמצאה אצל אף לקוח' : 'המספר לא נמצא אצל אף לקוח') + ' — צריך לשייך ביד' + where;
       needsAttention = true; statusLabel = 'נקלט — לא שויך'; tone = 'warn';
     }
     if (r.oversize) {
@@ -82,34 +110,48 @@ function lgWaInRow(key, r, now) {
       reason = 'סומן כטופל' + (r.handled.note ? ': ' + r.handled.note : '') + ' · ' + _waInPhone(r.handled.by) + ' · ' + _waInWhen(r.handled.at);
     }
   } else if (st === 'failed') {
-    reason = _waInHuman(r.lastError) || 'העיבוד נכשל'; needsAttention = true;
+    reason = human(r.lastError) || 'העיבוד נכשל'; needsAttention = true;
   } else if (st === 'dead' || st === 'rejected') {
-    reason = _waInHuman(r.reason || r.lastError) || 'לא ידוע'; needsAttention = true;
+    reason = human(r.reason || r.lastError) || 'לא ידוע'; needsAttention = true;
+  } else if (st === 'ignored') {
+    reason = String(r.reason || '');
   } else if (st === 'closed') {
     reason = (r.closedNote ? r.closedNote + ' · ' : '') + _waInPhone(r.closedBy) + ' · ' + _waInWhen(r.closedAt);
   } else if (st === 'processing' && !fresh) {
     reason = 'העיבוד נקטע באמצע — ייאסף שוב אוטומטית';
   }
 
-  const kindLabel = r.kind === 'text' ? 'הודעת טקסט' : r.kind === 'pdf' ? 'PDF'
+  // מייל — קבצים שלא נקלטו (docx, xlsx...) נרשמים ב-skipped. שבן יראה מה נשאר בחוץ.
+  const skipped = isEm && Array.isArray(r.skipped) ? r.skipped.filter(Boolean) : [];
+  if (skipped.length) reason = (reason ? reason + ' ' : '') + 'לא נקלטו: ' + skipped.join(', ') + '.';
+
+  const parts = isEm ? (Array.isArray(r.parts) ? r.parts : Object.values(r.parts || {})).filter(Boolean) : [];
+  const kindLabel = isEm
+    ? (parts.length === 1 ? 'מייל · קובץ אחד' : parts.length ? 'מייל · ' + parts.length + ' קבצים' : 'מייל בלי קבצים')
+    : r.kind === 'text' ? 'הודעת טקסט' : r.kind === 'pdf' ? 'PDF'
     : r.kind === 'image' ? (r.typeMessage === 'documentMessage' ? 'תמונה (כמסמך)' : 'תמונה') : 'קובץ';
 
   const orderIds = Array.isArray(r.orderIds) ? r.orderIds : (r.orderIds ? Object.values(r.orderIds) : []);
   let view = null;
   if (st === 'done' && orderIds[0]) view = { type: 'sketch', orderId: String(orderIds[0]) };
+  else if (isEm) view = null;                    // המייל עצמו — בתיבת Orderluz
   else if (/^https:\/\//i.test(r.downloadUrl || '')) view = { type: 'link', url: r.downloadUrl };
   else if (r.sender) view = { type: 'chat', url: 'https://wa.me/972' + String(r.sender).replace(/\D/g, '').replace(/^0/, '') };
 
+  const at = (isEm ? r.receivedAt : r.timestamp) || r.createdAt || 0;
   return {
-    key, state: st, statusLabel, tone, reason, needsAttention, client,
-    at: r.timestamp || r.createdAt || 0, atText: _waInWhen(r.timestamp || r.createdAt),
-    sender: _waInPhone(r.sender), kindLabel, fileName: r.fileName || '', caption: r.caption || '',
+    key, channel: isEm ? 'email' : 'whatsapp',
+    state: st, statusLabel, tone, reason, needsAttention, client,
+    at, atText: _waInWhen(at),
+    sender: who, kindLabel,
+    fileName: isEm ? parts.map(p => String(p.name || '')).filter(Boolean).join(', ') : (r.fileName || ''),
+    caption: isEm ? String(r.subject || '') : (r.caption || ''),
     // ניסיונות — רק כשמשהו השתבש. על קליטה שהצליחה "1 / 3" הוא רעש (07/10)
     attempts: r.attempts || 0,
     attemptsText: r.attempts && ['failed', 'dead', 'processing'].includes(st) ? r.attempts + ' / ' + WA_IN_MAX_ATTEMPTS : '',
     orderNum: st === 'done' ? (r.refNum || '') : '', orderId: orderIds[0] || '',
     canRetry: (st === 'failed' || st === 'dead') && young,
-    canClose: st !== 'closed' && !fresh && !(st === 'done' && (!needsAttention || r.handled)),
+    canClose: st !== 'closed' && st !== 'ignored' && !fresh && !(st === 'done' && (!needsAttention || r.handled)),
     inProgress: st === 'received' || st === 'processing',
     view,
   };
@@ -122,13 +164,15 @@ function lgWaInCounts(rows) {
 
 function lgWaInRowHtml(x) {
   const e = _waInEsc;
+  const ch = ` data-ch="${e(x.channel || 'whatsapp')}"`;
   const viewBtn = !x.view ? ''
-    : x.view.type === 'sketch' ? `<button class="wain-btn" data-act="view" data-key="${e(x.key)}" data-order="${e(x.view.orderId)}">צפה בסקיצה</button>`
+    : x.view.type === 'sketch' ? `<button class="wain-btn" data-act="view" data-key="${e(x.key)}"${ch} data-order="${e(x.view.orderId)}">צפה בסקיצה</button>`
     : x.view.type === 'link'   ? `<a class="wain-btn" href="${e(x.view.url)}" target="_blank" rel="noopener noreferrer">פתח קובץ מקורי</a>`
     :                            `<a class="wain-btn" href="${e(x.view.url)}" target="_blank" rel="noopener noreferrer">פתח צ'אט ב-WhatsApp</a>`;
-  return `<div class="wain-row wain-${e(x.tone)}" data-key="${e(x.key)}">
+  return `<div class="wain-row wain-${e(x.tone)}" data-key="${e(x.key)}"${ch}>
   <div class="wain-l1"><span class="wain-chip">${e(x.statusLabel)}</span>
     <span class="wain-when">${e(x.atText)}</span>
+    ${x.channel === 'email' ? '<span class="wain-chan">מייל</span>' : ''}
     <span class="wain-from" dir="ltr">${e(x.sender)}</span>
     <span class="wain-client">${e(x.client)}</span></div>
   <div class="wain-l2"><span>${e(x.kindLabel)}${x.fileName ? ' · <bdi>' + e(x.fileName) + '</bdi>' : ''}</span>
@@ -137,8 +181,8 @@ function lgWaInRowHtml(x) {
     ${x.attemptsText ? `<span>ניסיונות ${e(x.attemptsText)}</span>` : ''}</div>
   ${x.reason ? `<div class="wain-reason">${e(x.reason)}</div>` : ''}
   <div class="wain-acts">
-    ${x.canRetry ? `<button class="wain-btn wain-primary" data-act="retry" data-key="${e(x.key)}">נסה שוב</button>` : ''}
-    ${x.canClose ? `<button class="wain-btn" data-act="close" data-key="${e(x.key)}">טופל ידנית</button>` : ''}
+    ${x.canRetry ? `<button class="wain-btn wain-primary" data-act="retry" data-key="${e(x.key)}"${ch}>נסה שוב</button>` : ''}
+    ${x.canClose ? `<button class="wain-btn" data-act="close" data-key="${e(x.key)}"${ch}>טופל ידנית</button>` : ''}
     ${viewBtn}
   </div>
 </div>`;
@@ -147,7 +191,9 @@ function lgWaInRowHtml(x) {
 // ═══ דפדפן ═══════════════════════════════════════════════════════════
 //  מכאן והלאה רק בדפדפן. ב-Node (בדיקות) אין document, ולכן לא רץ כלום.
 if (typeof document !== 'undefined') (function () {
-  let rows = [], showAll = false, draining = false, timer = null, busyKey = '';
+  // שורות לכל ערוץ בנפרד — כל מאזין מחליף רק את שלו; rows = שניהם יחד
+  let rows = [], byCh = { whatsapp: [], email: [] }, showAll = false, timer = null, busyKey = '';
+  const draining = { whatsapp: false, email: false };
 
   const $ = id => document.getElementById(id);
 
@@ -238,16 +284,17 @@ if (typeof document !== 'undefined') (function () {
     const list = $('waInList'); if (!list) return;
     const shown = rows.filter(x => showAll || x.needsAttention || x.inProgress);
     list.innerHTML = shown.length ? shown.map(lgWaInRowHtml).join('')
-      : `<div class="wain-empty">${showAll ? 'אין עדיין קליטות WhatsApp.' : 'אין קליטות שדורשות טיפול ✓'}</div>`;
+      : `<div class="wain-empty">${showAll ? 'אין עדיין קליטות.' : 'אין קליטות שדורשות טיפול ✓'}</div>`;
     const t = $('waInToggle'); if (t) t.textContent = showAll ? 'רק מה שדורש טיפול' : 'הצג הכל';
   }
 
-  function onSnap(snap) {
+  const onSnap = ch => snap => {
     const v = snap.val() || {}, now = Date.now();
-    rows = Object.keys(v).map(k => lgWaInRow(k, v[k], now)).sort((a, b) => b.at - a.at);
+    byCh[ch] = Object.keys(v).map(k => lgWaInRow(k, v[k], now, ch));
+    rows = byCh.whatsapp.concat(byCh.email).sort((a, b) => b.at - a.at);
     render();
-    if (rows.some(x => x.inProgress)) drain();   // רשת ביטחון — רק כשיש מה לעשות
-  }
+    if (byCh[ch].some(x => x.inProgress)) drain(ch);   // רשת ביטחון — רק כשיש מה לעשות
+  };
 
   async function post(body) {
     const res = await _lgAuthPost('/api/wa-inbound-drain', body);
@@ -257,15 +304,15 @@ if (typeof document !== 'undefined') (function () {
   }
 
   //  single-flight בתוך הלשונית. בין לשוניות — הטרנזקציה בשרת.
-  async function drain() {
-    if (draining) return;
-    draining = true;
-    try { await post({ action: 'drain' }); }
-    catch (e) { console.warn('wa-inbound drain:', e && e.message); }
-    finally { draining = false; }
+  async function drain(ch) {
+    if (draining[ch]) return;
+    draining[ch] = true;
+    try { await post(ch === 'email' ? { channel: 'email', action: 'drain' } : { action: 'drain' }); }
+    catch (e) { console.warn(ch + '-inbound drain:', e && e.message); }
+    finally { draining[ch] = false; }
   }
 
-  async function act(action, key) {
+  async function act(action, key, ch) {
     if (busyKey) return;
     let note = '';
     if (action === 'close') {
@@ -273,9 +320,10 @@ if (typeof document !== 'undefined') (function () {
       if (note === null) return;                      // ביטול
     }
     busyKey = key;
-    document.querySelectorAll('#waInList [data-key="' + CSS.escape(key) + '"] .wain-btn').forEach(b => { b.disabled = true; });
+    document.querySelectorAll('#waInList [data-key="' + CSS.escape(key) + '"][data-ch="' + CSS.escape(ch) + '"] .wain-btn')
+      .forEach(b => { b.disabled = true; });
     try {
-      const r = await post({ action, key, note });
+      const r = await post(lgWaInActBody(ch, action, key, note));
       if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
     } catch (e) {
       alert('הפעולה לא בוצעה: ' + (e && e.message));
@@ -327,7 +375,7 @@ if (typeof document !== 'undefined') (function () {
     if (list) list.addEventListener('click', ev => {
       const b = ev.target.closest('button[data-act]'); if (!b) return;
       if (b.dataset.act === 'view') view(b.dataset.order);
-      else act(b.dataset.act, b.dataset.key);
+      else act(b.dataset.act, b.dataset.key, b.dataset.ch || 'whatsapp');
     });
     const t = $('waInToggle'); if (t) t.addEventListener('click', () => { showAll = !showAll; render(); });
     const vc = $('waInViewClose'); if (vc) vc.addEventListener('click', () => { $('waInView').hidden = true; });
@@ -338,13 +386,18 @@ if (typeof document !== 'undefined') (function () {
     firebase.auth().onAuthStateChanged(user => {
       if (!user) return;
       _lgDb.ref('waInbound').orderByChild('createdAt').limitToLast(200)
-        .on('value', onSnap, e => console.warn('waInbound listen:', e && e.message));
+        .on('value', onSnap('whatsapp'), e => console.warn('waInbound listen:', e && e.message));
+      // מייל (20/10) — אותו פאנל. emailParts (הבייטים) לא נקראים מכאן אף פעם.
+      _lgDb.ref('emailInbound').orderByChild('createdAt').limitToLast(200)
+        .on('value', onSnap('email'), e => console.warn('emailInbound listen:', e && e.message));
       _lgDb.ref('waMeta/groupsSeen').on('value', sn => { groupsSeen = sn.val() || {}; render(); },
         e => console.warn('groupsSeen listen:', e && e.message));
       _lgDb.ref('waGroups').on('value', sn => { groupsLinked = sn.val() || {}; render(); },
         e => console.warn('waGroups listen:', e && e.message));
       // כל 2 דקות כל עוד הדף פתוח — ורק אם באמת יש מה לעבד
-      if (!timer) timer = setInterval(() => { if (rows.some(x => x.inProgress)) drain(); }, 2 * 60 * 1000);
+      if (!timer) timer = setInterval(() => {
+        ['whatsapp', 'email'].forEach(ch => { if (byCh[ch].some(x => x.inProgress)) drain(ch); });
+      }, 2 * 60 * 1000);
     });
   }
 

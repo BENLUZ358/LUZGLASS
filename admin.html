@@ -390,6 +390,7 @@ label.msec-t{display:block;}
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
   <script src="wa-inbound-panel.js"></script>
+  <script src="sq-assign.js"></script>
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
 </head>
@@ -2505,6 +2506,8 @@ document.addEventListener('visibilitychange', () => {
 .sq-tag-sketch{background:rgba(41,128,185,0.25);color:#5dade2;}
 .sq-tag-upload{background:rgba(142,68,173,0.25);color:#bb8fce;}
 .sq-tag-wa{background:rgba(37,211,102,0.18);color:#5fe08f;}
+.sq-tag-email{background:rgba(233,30,99,0.18);color:#f48fb1;}
+.sq-tag-unassigned{background:rgba(212,160,23,0.2);color:#f3c74f;}
 .sq-tag-pending{background:rgba(184,146,42,0.25);color:#d4ac0d;}
 .sq-tag-drafter{background:rgba(192,57,43,0.25);color:#ec7063;}
 .sq-tag-chash{background:rgba(39,174,96,0.25);color:#58d68d;}
@@ -2604,6 +2607,24 @@ document.addEventListener('visibilitychange', () => {
   outline:none;direction:rtl;transition:border-color 160ms ease,box-shadow 160ms ease;
 }
 #sqNameInput::placeholder{font-weight:500;color:#bbb;}
+/* "שייך ללקוח" — הזמנה ממייל/וואטסאפ שהלקוח שלה לא זוהה (sq-assign.js).
+   44px לכל מה שנוגעים בו, כמו בתחנת הבדיקה. */
+#sqAssignWrap{margin:0 14px 12px;padding:10px 12px;border:1px solid rgba(212,160,23,0.45);border-right:4px solid #d4a017;border-radius:6px;background:#fffaf0;}
+#sqAssignWrap[hidden]{display:none;}
+.sqa-msg{font-size:13px;line-height:1.5;color:#1a1714;margin-bottom:8px;}
+.sqa-from{direction:ltr;unicode-bidi:isolate;font-weight:700;}
+.sqa-btn{min-height:44px;padding:0 16px;border-radius:6px;border:2px solid #b8922a;background:#b8922a;color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;}
+.sqa-btn:disabled{opacity:0.45;cursor:default;}
+.sqa-quiet{background:transparent;color:#5a5248;border-color:rgba(0,0,0,0.15);}
+.sqa-btn:focus-visible,.sqa-opt:focus-visible,#sqAssignQ:focus-visible{outline:2px solid #b8922a;outline-offset:2px;}
+.sqa-row{display:flex;gap:8px;flex-wrap:wrap;}
+#sqAssignQ{flex:1 1 180px;min-width:0;min-height:44px;box-sizing:border-box;padding:0 10px;border:1px solid rgba(0,0,0,0.2);border-radius:6px;background:#fff;font-family:Heebo,sans-serif;font-size:16px;color:#1a1714;}
+.sqa-list{display:flex;flex-direction:column;margin-top:8px;border:1px solid rgba(0,0,0,0.12);border-radius:6px;overflow:hidden;max-height:50vh;overflow-y:auto;background:#fff;}
+.sqa-opt{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;padding:0 12px;background:#fff;border:0;border-bottom:1px solid rgba(0,0,0,0.06);color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;text-align:right;cursor:pointer;}
+.sqa-opt:hover{background:rgba(184,146,42,0.12);}
+.sqa-opt:disabled{opacity:0.45;cursor:default;}
+.sqa-key{font-size:12px;color:#8a8278;font-family:monospace;font-weight:500;}
+.sqa-none{padding:10px 12px;font-size:13px;color:#8a5a00;}
 
 /* ── תת-שלב הבדיקה ─────────────────────────────────────────────────
    הטאבים חותכים את אותה רשימה. מצב הבדיקה מסתיר את מסך העבודה במקום
@@ -2746,7 +2767,7 @@ document.addEventListener('visibilitychange', () => {
   .iw-item-del{min-width:40px;min-height:40px;font-size:16px;}
 }
 
-/* ─ קליטות WhatsApp (wa-inbound-panel.js) ─ */
+/* ─ קליטות WhatsApp ומייל (wa-inbound-panel.js) ─ */
 #waInBtn{min-height:44px;padding:0 12px;background:transparent;border:1px solid rgba(247,244,239,0.18);border-radius:6px;
   cursor:pointer;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:rgba(247,244,239,0.8);white-space:nowrap;}
 #waInBtn:hover{border-color:rgba(184,146,42,0.5);color:#f7f4ef;}
@@ -2754,7 +2775,7 @@ document.addEventListener('visibilitychange', () => {
 .wain-badge{display:inline-block;margin-right:4px;padding:0 6px;border-radius:9px;background:rgba(255,255,255,0.14);font-size:12px;}
 .wain-badge-a{background:#c0392b;color:#fff;}
 .wain-badge[hidden]{display:none;}
-#waInPanel{position:absolute;top:50px;left:0;right:0;bottom:0;z-index:5;background:#1e1b18;color:#f0ede8;
+#waInPanel{position:absolute;top:50px;left:0;right:0;bottom:0;z-index:6;background:#1e1b18;color:#f0ede8;
   display:flex;flex-direction:column;font-family:Heebo,sans-serif;}
 #waInPanel[hidden]{display:none;}
 .wain-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.08);}
@@ -2770,6 +2791,7 @@ document.addEventListener('visibilitychange', () => {
 .wain-bad .wain-chip{color:#ff8a7a;} .wain-warn .wain-chip{color:#f3c74f;} .wain-ok .wain-chip{color:#6fdc9a;} .wain-wait .wain-chip{color:#8cc8f0;}
 .wain-when{color:rgba(247,244,239,0.55);}
 .wain-client{font-weight:700;}
+.wain-chan{font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(233,30,99,0.18);color:#f48fb1;}
 .wain-reason{margin-top:6px;font-size:13px;line-height:1.5;color:#f7f4ef;}
 .wain-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
 .wain-acts:empty{display:none;}
@@ -2902,8 +2924,8 @@ document.addEventListener('visibilitychange', () => {
         <button class="sq-seen-tab" id="sqTabSeen" role="tab" aria-selected="false"
                 onclick="sqSetSeenTab('seen')">נראה <span id="sqTabSeenN">0</span></button>
       </div>
-      <!-- קליטות WhatsApp — wa-inbound-panel.js -->
-      <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp"><span data-icon="inbox"></span>קליטות
+      <!-- קליטות WhatsApp ומייל — wa-inbound-panel.js -->
+      <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp ומייל"><span data-icon="inbox"></span>קליטות
         <span id="waInBadgeA" class="wain-badge wain-badge-a" hidden></span>
         <span id="waInBadgeP" class="wain-badge" hidden></span></button>
       <!-- בטלפון בלבד: הרשימות למטה מוסתרות, והכפתור פותח אותן כשורה נוספת -->
@@ -2914,6 +2936,7 @@ document.addEventListener('visibilitychange', () => {
         <option value="sketch">מערכת</option>
         <option value="upload">העלאות</option>
         <option value="whatsapp">WhatsApp</option>
+        <option value="email">מייל</option>
       </select>
       <select id="sqFStatus" class="sq-filter-sel" onchange="sqRender()" aria-label="סטטוס">
         <option value="">הכל</option>
@@ -2932,11 +2955,11 @@ document.addEventListener('visibilitychange', () => {
       <button id="sqCloseBtn" onclick="closeSQ()" aria-label="סגור"><span data-icon="x"></span></button>
     </div>
 
-    <!-- קליטות WhatsApp — מעל רשימת הסקיצות. הנתונים והפעולות ב-wa-inbound-panel.js -->
-    <div id="waInPanel" hidden role="dialog" aria-label="קליטות WhatsApp">
+    <!-- קליטות WhatsApp ומייל — מעל רשימת הסקיצות. הנתונים והפעולות ב-wa-inbound-panel.js -->
+    <div id="waInPanel" hidden role="dialog" aria-label="קליטות WhatsApp ומייל">
       <div class="wain-head">
-        <b>קליטות WhatsApp</b>
-        <span class="wain-sub">הודעות נכנסות שלא הפכו להזמנה תקינה, או שצריכות עין</span>
+        <b>קליטות WhatsApp ומייל</b>
+        <span class="wain-sub">הודעות ומיילים נכנסים שלא הפכו להזמנה תקינה, או שצריכים עין</span>
         <button id="waInToggle" type="button" class="wain-btn">הצג הכל</button>
         <button type="button" class="wain-btn" onclick="lgWaInClose()" aria-label="סגור קליטות">✕</button>
       </div>
@@ -3001,6 +3024,8 @@ document.addEventListener('visibilitychange', () => {
                    onchange="sqSaveName(this.value)"
                    onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}else{event.stopPropagation();}">
           </div>
+          <!-- "שייך ללקוח" — רק כשהלקוח לא זוהה (מייל/וואטסאפ). ממולא ע"י sq-assign.js -->
+          <div id="sqAssignWrap" hidden></div>
           <!-- check-station status badge -->
           <div id="sqCheckBadge" style="display:none;margin:0 14px 10px;padding:8px 12px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.2);border-radius:6px;font-size:12px;color:#27ae60;font-weight:700;"></div>
           <!-- actions -->
@@ -3431,6 +3456,10 @@ function buildSQItems(){
       isTest:       !!o.isTest,
       waDuplicateOf: o.waDuplicateOf || '',
       sketchSeenAt: o.sketchSeenAt || 0,
+      // לקוח לא זוהה — "שייך ללקוח" (sq-assign.js) מציג כפתור בסקיצה
+      waUnassigned:    !!o.waUnassigned,
+      emailUnassigned: !!o.emailUnassigned,
+      emailFrom:       o.emailFrom || '',
     });
   });
 }
@@ -3535,8 +3564,9 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':item.source==='email'?'מייל':'מערכת'}</span>
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
+          ${item.waUnassigned||item.emailUnassigned?'<span class="sq-tag sq-tag-unassigned">לא שויך</span>':''}
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
           ${item.waDuplicateOf?`<span class="sq-tag" title="אותו מספר הזמנה כבר קיים אצל הלקוח" style="background:rgba(192,57,43,0.18);color:#e57361">כפולה? ${lgEsc(item.waDuplicateOf)}</span>`:''}
         </div>
@@ -3603,6 +3633,8 @@ function sqShowDetail(){
 
   const nameEl=document.getElementById('sqNameInput');
   if(nameEl){ nameEl.value=o.sketchName||''; sqMarkNameState(); }
+  // לקוח לא זוהה → כפתור "שייך ללקוח" (sq-assign.js)
+  if(typeof sqAssignShow==='function') sqAssignShow(o);
 
   sqUpdateBtns(o.id);
 
