@@ -2387,7 +2387,7 @@ async function syncHashavshevetAccount(key, businessFields) {
   const k = String(key || '').trim();
   if (!k) return;
   const safe = {};
-  ['name', 'phone', 'hashavshevetCode', 'active'].forEach(f => { if (businessFields && businessFields[f] !== undefined) safe[f] = businessFields[f]; });
+  ['name', 'phone', 'email', 'hashavshevetCode', 'active'].forEach(f => { if (businessFields && businessFields[f] !== undefined) safe[f] = businessFields[f]; });
   safe.source = 'hashavshevet';
   const snap     = await _lgDb.ref('hashavshevetAccounts/' + k).once('value');
   const existing = snap.val() || {};

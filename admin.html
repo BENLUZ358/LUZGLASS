@@ -1839,7 +1839,7 @@ async function syncAccountsFromHashavshevetNow(){
       const batch = data.accounts.slice(i,i+BATCH);
       await Promise.all(batch.map(async acc=>{
         try{
-          await syncHashavshevetAccount(acc.key, { name: acc.name, phone: acc.phone, hashavshevetCode: acc.key, active: true });
+          await syncHashavshevetAccount(acc.key, { name: acc.name, phone: acc.phone, email: acc.email, hashavshevetCode: acc.key, active: true });
           created++;
         }catch(e){ console.error('syncAccountsFromHashavshevetNow account failed:', acc.key, e); }
       }));
