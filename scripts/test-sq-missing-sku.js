@@ -53,6 +53,20 @@ const bodyOf = (src, name) => {
   check('a cut-only catalog SKU (no processing) can be picked', [t.sku, t.name, t.chisum, t.litush, t.skuMissing], ['6TSH', 'טריפלקס 3+3 שקוף חתוך', false, false, undefined]);
 }
 
+/* final review: a SKU from the old IW_CODES list (no _fromCatalog) must still be written —
+   otherwise the mark is cleared, both guards pass, and Hashavshevet skips the row silently */
+{
+  const ctx = vm.createContext({
+    sqCurrentItems: [{ name: 'x', w: 100, h: 100, skuMissing: true }],
+    iwResolve: c => c === '5MIRM' ? { glass: 'מראה', mm: 5, proc: 'litush', label: '5 מ"מ מראה מלוטש' } : null,
+    skuCatalogMap: {}, iwSave: () => {}, iwRender: () => {}, showToast: () => {},
+  });
+  vm.runInContext(bodyOf(ADMIN, 'iwSetGroupSku'), ctx);
+  ctx.iwSetGroupSku([0], '5MIRM');
+  check('a SKU picked from the old list is still written on the row', [ctx.sqCurrentItems[0].sku, ctx.sqCurrentItems[0].skuMissing], ['5MIRM', undefined]);
+}
+check('the inbound panel names a text message', /kind === 'text'[^\n]*הודעת טקסט/.test(fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8')), true);
+
 /* the send guard — in the dashboard, before anything moves, and on the server */
 {
   const send = bodyOf(ADMIN, 'sqSendHashavshevet');

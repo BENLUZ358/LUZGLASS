@@ -112,5 +112,12 @@ check('a real message is an order', lgWaTextIsOrder(PHR26037), true);
   check('a SKU missing from the catalog is still set (priced by SKU), named by the heading', [noCat[0].sku, noCat[0].name], ['5MIRM', 'מראה']);
 }
 
+/* final review 20/10: with direction="rtl", text-anchor "end" is the LEFT edge — every line ran off the
+   right side and the picture came out blank. The lines start at the right margin: anchor "start". */
+{
+  const body = decodeURIComponent(lgWaTextSvg('PHR#1\nמראה\n100/50 ס"מ — כמות: 1', {}).replace(/^data:image\/svg\+xml;charset=utf-8,/, ''));
+  check('right-to-left text is anchored at its start (the right margin), not "end"', /direction="rtl"[^>]*text-anchor="start"/.test(body) && !/text-anchor="end"/.test(body), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll WhatsApp text-order checks passed.');

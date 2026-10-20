@@ -4448,7 +4448,10 @@ function iwSetGroupSku(indices, code){
     if(!it) return;
     Object.assign(it, { name: r.label, glass: r.glass, mm: r.mm,
       chisum: r.proc === 'chisum', litush: r.proc === 'litush', graphic: !!r.graphic });
-    if(r._fromCatalog){ it.sku = r.sku; it.chalavi = !!r.chalavi; it.triplex = !!r.triplex; }
+    // המק"ט נכתב תמיד — גם כשהגיע מהרשימה הישנה (IW_CODES): אחרת הסימון נמחק, שני השומרים
+    // עוברים, וחשבשבת משמיטים את השורה בשקט
+    it.sku = r.sku || c;
+    if(r._fromCatalog){ it.chalavi = !!r.chalavi; it.triplex = !!r.triplex; }
     delete it.skuMissing;
   });
   iwSave();

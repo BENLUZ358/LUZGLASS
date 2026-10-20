@@ -44,6 +44,13 @@ const seed = () => fakeDb({
     check('images are unchanged', img.entry.kind, 'image');
   }
 
+  {
+    const q = inb.lgWaInboundParse(payload('T6', { typeMessage: 'quotedMessage', extendedTextMessageData: { text: MSG, stanzaId: 'x' } }));
+    check('a reply (quotedMessage) carrying an order is read from its own text', q.entry && q.entry.kind, 'text');
+    const q2 = inb.lgWaInboundParse(payload('T7', { typeMessage: 'quotedMessage', extendedTextMessageData: { text: 'לגבי PHR#26037 — מתי?' }, quotedMessage: { textMessage: MSG } }));
+    check('a reply that only quotes an order is ignored', q2.reason, 'not a sketch');
+  }
+
   /* process */
   {
     const db = seed();
@@ -71,6 +78,18 @@ const seed = () => fakeDb({
     const o2 = db._data.orders[res2.orderIds[0]];
     check('a second message with the same order number → a new order marked "duplicate?"', [res2.ok, o2.waDuplicateOf], [true, o.orderNum]);
     check('…and the first order is untouched', db._data.orders[id].waDuplicateOf, undefined);
+  }
+
+  /* the duplicate check is scoped to the client (indexed clientPhone), never all orders */
+  {
+    const db = seed();
+    db._data.orders = { other: { id: 'other', orderNum: 'L1', sketchName: 'PHR#26037', clientPhone: '0559999999' } };
+    const p = inb.lgWaInboundParse(payload('TX9', textMd(MSG)));
+    const r = await inb.lgWaInboundRecord(db, p.entry, NOW);
+    const res = await inb.lgWaInboundProcess(db, r.key, { now: NOW + 10, by: 't' });
+    check('the same order number at ANOTHER client is not a duplicate', db._data.orders[res.orderIds[0]].waDuplicateOf, undefined);
+    const SRC = require('fs').readFileSync(path.join(__dirname, '..', 'api', '_wa-inbound.js'), 'utf8');
+    check('the duplicate lookup uses the indexed clientPhone, not sketchName', /orderByChild\('clientPhone'\)/.test(SRC) && !/orderByChild\('sketchName'\)/.test(SRC), true);
   }
 
   /* the webhook starts processing a text order right away, like an image */

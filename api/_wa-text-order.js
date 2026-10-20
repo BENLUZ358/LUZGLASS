@@ -111,7 +111,7 @@ function lgWaTextSvg(text, meta) {
   }).join('');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">` +
     `<rect width="${W}" height="${H}" fill="#ffffff"/>` +
-    `<g direction="rtl" text-anchor="end" font-family="Heebo, Arial, sans-serif">` +
+    `<g direction="rtl" text-anchor="start" font-family="Heebo, Arial, sans-serif">` +
     `<text x="${W - PAD}" y="70" font-size="30" fill="#886c1f">${_esc('הודעת וואטסאפ' + (head ? ' · ' + head : ''))}</text>` +
     `<line x1="${PAD}" y1="95" x2="${W - PAD}" y2="95" stroke="#d9d2c3" stroke-width="2"/>` +
     rows + `</g></svg>`;

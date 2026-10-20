@@ -302,8 +302,9 @@ async function lgWaInboundProcess(db, key, opts) {
       order.fileName = ''; order.files = { f0: { name: 'הודעת וואטסאפ', type: mime } };
       // אותו מספר הזמנה כבר אצל אותו לקוח — מסמנים "כפולה?", לא מוחקים ולא מחליפים
       if (order.sketchName) {
-        const same = (await db.ref('orders').orderByChild('sketchName').equalTo(order.sketchName).once('value')).val() || {};
-        const prev = Object.values(same).find(x => x && x.id && x.id !== id && x.clientPhone === order.clientPhone);
+        // לפי clientPhone (יש עליו אינדקס) — רק ההזמנות של הלקוח הזה, לא כל ההזמנות
+        const mine = (await db.ref('orders').orderByChild('clientPhone').equalTo(order.clientPhone).once('value')).val() || {};
+        const prev = Object.values(mine).find(x => x && x.id && x.id !== id && x.sketchName === order.sketchName);
         if (prev) order.waDuplicateOf = prev.orderNum || prev.id;
       }
       sketchData = lgWaTextSvg(entry.text, { client: name, when: order.date + ' ' + order.time });
