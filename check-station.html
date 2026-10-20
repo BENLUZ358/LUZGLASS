@@ -33,6 +33,10 @@ html,body{height:100%;overflow:hidden;}
 .tb-sec{background:var(--bg2);color:var(--text);border-color:var(--border);}
 .tb-back{background:transparent;color:var(--text);border-color:var(--border);padding-inline:10px 14px;order:-1;} /* חזרה בהתחלה — בעברית זה הקצה הימני */
 .tb-green{background:var(--green);color:#fff;}
+/* ערוך — הפעולה הראשית במסך הסקיצה. "סיים סקיצה" — שקט: מסגרת בלבד, בקצה השני,
+   ושואל לפני (בן, 20/10: נלחץ בטעות בלחץ העבודה). */
+.tb-primary{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.tb-finish{background:transparent;color:var(--green);border-color:var(--green);}
 @media (prefers-reduced-motion:reduce){.tb-btn{transition:none;}.tb-btn:active{transform:none;}}
 .tb-purple{background:var(--purple);color:#fff;}
 /* FILTERS */
@@ -203,7 +207,8 @@ html,body{height:100%;overflow:hidden;}
   /* מרווח מהכפתורים הקבועים */
   .sketch-area{padding-bottom:72px;}
   /* כפתור "סיים סקיצה" — רחב ובולט */
-  #finishBtn{flex:1;font-size:15px;min-height:48px;}
+  .btmbar .tb-primary{flex:1;font-size:15px;min-height:48px;}
+  #finishBtn{min-height:48px;}
   .btmbar .tb-sec{min-height:48px;}
   /* המרווח הריק תופס את הרוחב ש"סיים סקיצה" צריך כשכפתורי הזום מוסתרים */
   .btmbar .sp{display:none;}
@@ -309,7 +314,7 @@ html,body{height:100%;overflow:hidden;}
   <!-- מוצג רק בטאב "הושלמו" — מחליף את סרגל הכלים הפעיל -->
   <div id="doneBadge" style="display:none;background:var(--green);color:#fff;padding:8px 16px;font-size:12px;font-weight:700;font-family:Heebo,sans-serif;text-align:center;direction:rtl;letter-spacing:0.02em;">
     ✅ הסקיצה הושלמה ונבדקה — ממתינה לשליחה לחיסום
-    <button type="button" onclick="csReopenSketch()" style="margin-inline-start:12px;min-height:44px;padding:0 14px;border-radius:10px;border:1px solid #fff;background:transparent;color:#fff;font:700 13px Heebo,sans-serif;cursor:pointer">החזר לבדיקה</button>
+    <button type="button" onclick="csReopenSketch()" aria-label="ערוך — להחזיר את הסקיצה לבדיקה" style="margin-inline-start:12px;min-height:44px;padding:0 16px;border-radius:10px;border:1px solid #fff;background:#fff;color:var(--green);font:800 14px Heebo,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px;vertical-align:middle"><span data-icon="pencil"></span> ערוך</button>
   </div>
   <div class="sketch-area" id="skArea">
     <div class="sketch-wrap" id="skWrap"></div>
@@ -328,9 +333,9 @@ html,body{height:100%;overflow:hidden;}
     <button aria-label="הקטן" class="zbtn zbtn-zoom" onclick="doZoom(-0.25)">−</button>
     <button aria-label="איפוס תצוגה" class="zbtn zbtn-zoom" onclick="resetZoom()"><span data-icon="refresh"></span></button>
     <div class="sp"></div>
+    <button class="tb-btn tb-finish" id="finishBtn" onclick="finishSketch()" style="display:flex"><span data-icon="check"></span> סיים סקיצה</button>
     <div class="icnt" id="iCnt"></div>
-    <button class="tb-btn tb-sec" onclick="openEditor()"><span data-icon="pencil"></span> ערוך</button>
-    <button class="tb-btn tb-green" id="finishBtn" onclick="finishSketch()" style="display:flex"><span data-icon="check"></span> סיים סקיצה</button>
+    <button class="tb-btn tb-primary" onclick="openEditor()"><span data-icon="pencil"></span> ערוך</button>
   </div>
 </div>
 
@@ -1034,6 +1039,8 @@ async function finishSketch(){
 // של הסקיצה הזו; היא חוזרת ל"לבדיקה" נקייה. עד עכשיו לא הייתה דרך חזרה בכלל.
 async function csReopenSketch(){
   if(!cur) return;
+  const _name = [cur.orderNum, cur.sketchName].filter(Boolean).join(' · ');
+  if(!confirm('להחזיר את הסקיצה ' + _name + ' לבדיקה?\nהסימונים יימחקו והיא תחזור ל"לבדיקה".')) return;
   const id = cur.id;
   const prev = cs[id];
   delete cs[id];
@@ -1044,10 +1051,9 @@ async function csReopenSketch(){
     toast('⚠️ השמירה נכשלה — בדוק חיבור אינטרנט ונסה שוב');
     return;
   }
-  cur = null;
   curReadOnly = false;
   setTab('active');
-  showList();
+  selectOrder(id);    // נשארים על אותה סקיצה, עכשיו לעריכה ולבדיקה
   toast('הסקיצה חזרה לבדיקה');
 }
 
@@ -1358,6 +1364,7 @@ async function edSave(newSrc){
     safeStorage.setItem('lgCSEdits',JSON.stringify(s));
   }catch(e){}
   renderSketch();
+  goBack();   // "שמור" מחזיר ישר לרשימת ההזמנות (בן, 20/10) — לא נשארים ליד "סיים סקיצה"
 
   // רק עכשיו — הכתיבה בפועל ל-Firebase. ממתינים לה כדי לדעת אם היא באמת הצליחה,
   // ולא מציגים "סומן ✓" מזויף אם היא נכשלה (העריכה נשארת שמורה מקומית בכל מקרה).

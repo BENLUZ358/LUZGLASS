@@ -35,7 +35,7 @@ function station(answer) {
     document: { getElementById: () => null },
     confirm: msg => { calls.asked = msg; return answer; },
     saveCS: async () => { calls.saved++; }, hideBanner: () => {}, showList: () => {}, toast: () => {},
-    setTab: t => { calls.tab = t; },
+    setTab: t => { calls.tab = t; }, selectOrder: id => { calls.opened = id; }, goBack: () => { calls.back = (calls.back || 0) + 1; },
   });
   vm.runInContext(['var _finishingSketch = false;', bodyOf(CS, 'chisumIdxs'), 'async ' + bodyOf(CS, 'finishSketch'), 'async ' + bodyOf(CS, 'csReopenSketch')].join('\n'), ctx);
   return { ctx, calls };
@@ -58,9 +58,16 @@ function station(answer) {
     vm.runInContext('cs.o1 = {0:true,1:true}; curReadOnly = true;', ctx);
     await ctx.csReopenSketch();
     check('"החזר לבדיקה" removes only this sketch\'s marks', JSON.parse(JSON.stringify(ctx.cs)), { o2: { 0: true } });
-    check('…saves, and goes back to "לבדיקה"', [calls.saved, calls.tab], [1, 'active']);
+    check('…saves, and reopens the same sketch under "לבדיקה", ready to edit', [calls.saved, calls.tab, calls.opened], [1, 'active', 'o1']);
   }
-  check('the "הושלמו" view offers "החזר לבדיקה"', /id="doneBadge"[\s\S]{0,600}onclick="csReopenSketch\(\)"[^>]*>החזר לבדיקה/.test(CS), true);
+  {
+    const { ctx, calls } = station(false);
+    vm.runInContext('cs.o1 = {0:true,1:true}; curReadOnly = true;', ctx);
+    await ctx.csReopenSketch();
+    check('"ערוך" in הושלמו asks first; a "no" changes nothing', [calls.saved, JSON.stringify(ctx.cs.o1)], [0, '{"0":true,"1":true}']);
+  }
+  check('the "הושלמו" view offers "החזר לבדיקה"', /id="doneBadge"[\s\S]{0,600}onclick="csReopenSketch\(\)"[^>]*>[\s\S]{0,60}ערוך/.test(CS), true);
+  check('"שמור" in the editor goes straight back to the list of orders (בן, 20/10)', /renderSketch\(\);\s*\n\s*goBack\(\);/.test(bodyOf(CS, 'edSave')), true);
   check('sending to tempering writes the status with the stage',
     /const patch = \{ stage: 'chisum', status: lgStageToStatus\('chisum'\)/.test(bodyOf(CS, 'sendAllToFactory')), true);
 
