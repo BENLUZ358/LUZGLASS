@@ -64,6 +64,11 @@ const MUST_BLOCK = {
   sketchAck:           'says the customer was already told the sketch was handled',
   waUnassigned:        'puts the order in the manual-assignment list',
   waMessageId:         'ties the order to an inbound WhatsApp message it never came from',
+  /* email intake — spec 2026-10-20 §3.2 */
+  emailUnassigned:     'puts the order in the manual-assignment list',
+  emailMessageId:      'ties the order to an inbound mail it never came from',
+  emailThreadId:       'chooses the mail thread the "handled" reply goes out on',
+  emailFrom:           'is the address the queue shows as the sender of the mail',
 };
 for (const [field, why] of Object.entries(MUST_BLOCK)) {
   check(`a client cannot set ${field} — it ${why}`,
@@ -140,6 +145,31 @@ check('nor create one under someone else\'s phone',
           wi['.read'], RULES.rules.waOutbox['.read']);
     check('it is indexed for the drain and the intake panel',
           [...(wi['.indexOn'] || [])].sort(), ['createdAt', 'state']);
+  }
+}
+
+/* ── emailInbound / emailParts: the inbound mail log (spec 2026-10-20 §3.2) ─ */
+/*
+ * emailInbound holds the sender's address and subject — admin-read only.
+ * emailParts holds the raw uploaded attachment bytes until processing ends;
+ * no page needs them, so nobody reads them from a browser at all. Both are
+ * written only by the route and the drain, through the Admin SDK.
+ */
+{
+  const ei = RULES.rules.emailInbound;
+  check('emailInbound has its own rule', !!ei, true);
+  if (ei) {
+    check('no browser can write emailInbound', ei['.write'], false);
+    check('only an admin can read it — the same check waInbound uses',
+          ei['.read'], RULES.rules.waInbound['.read']);
+    check('it is indexed for the drain and the intake panel',
+          [...(ei['.indexOn'] || [])].sort(), ['createdAt', 'state']);
+  }
+  const ep = RULES.rules.emailParts;
+  check('emailParts has its own rule', !!ep, true);
+  if (ep) {
+    check('no browser can write emailParts', ep['.write'], false);
+    check('nor read it — not even an admin', ep['.read'] === undefined || ep['.read'] === false, true);
   }
 }
 

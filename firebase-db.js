@@ -1028,6 +1028,16 @@ function lgNormalizeOrder(o) {
     // קבוצת WhatsApp שממנה הגיעה הסקיצה — לשם יוצא "הסקיצות טופלו" (06/10)
     waGroup:       o.waGroup      || '',
     waGroupName:   o.waGroupName  || '',
+    // סקיצה שהגיעה במייל (source:'email') — אפיון 2026-10-20 §3.2. אותם
+    // שדות כמו wa* למעלה, נכתבים רק בשרת (api/_email-inbound.js).
+    // emailThreadId — השרשרת שאליה תצא התשובה "טופל".
+    emailMessageId:  o.emailMessageId  || '',
+    emailThreadId:   o.emailThreadId   || '',
+    emailFrom:       o.emailFrom       || '',
+    emailReceivedAt: Number(o.emailReceivedAt) || 0,
+    emailPage:       Number(o.emailPage)  || 0,
+    emailPages:      Number(o.emailPages) || 0,
+    emailUnassigned: !!o.emailUnassigned,
     // הקבלה של "שלח עדכון ללקוח". sentAt נכתב רק אחרי הצלחה אמיתית, ולכן
     // ניסיון שנכשל מגיע כאן עם sentAt:0 — עדיין ממתין לעדכון.
     sketchAck:     (o.sketchAck && typeof o.sketchAck === 'object') ? {
@@ -2387,7 +2397,7 @@ async function syncHashavshevetAccount(key, businessFields) {
   const k = String(key || '').trim();
   if (!k) return;
   const safe = {};
-  ['name', 'phone', 'hashavshevetCode', 'active'].forEach(f => { if (businessFields && businessFields[f] !== undefined) safe[f] = businessFields[f]; });
+  ['name', 'phone', 'email', 'hashavshevetCode', 'active'].forEach(f => { if (businessFields && businessFields[f] !== undefined) safe[f] = businessFields[f]; });
   safe.source = 'hashavshevet';
   const snap     = await _lgDb.ref('hashavshevetAccounts/' + k).once('value');
   const existing = snap.val() || {};
