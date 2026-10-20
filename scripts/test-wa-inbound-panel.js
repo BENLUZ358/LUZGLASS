@@ -271,7 +271,7 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
                          clientMatch: { via: 'ambiguous', customerId: '', name: '', candidates: 2 } });
     check('L3 an ambiguous sender shows the order and the reason it was not assigned',
           [r.orderNum, r.client, r.needsAttention, r.reason],
-          ['L1050', 'לא שויך', true, 'המספר מופיע ב-2 כרטיסי לקוח — לא שויך אוטומטית. צריך לשייך ביד.']);
+          ['L1050', 'לא שויך', true, 'המספר מופיע ב-2 כרטיסי לקוח — לא שויך אוטומטית. צריך לשייך ביד בתור הסקיצות, בכפתור "שייך ללקוח".']);
     check('L3 the sketch itself can be viewed', r.view, { type: 'sketch', orderId: 'wa_C_1' });
     check('L3 an order that exists cannot be retried', r.canRetry, false);
   }
@@ -360,6 +360,44 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('N5 an email with no sketch is quiet — no attention, no retry', [ign.statusLabel, ign.needsAttention, ign.canRetry], ['לא סקיצה — דולג', false, false]);
     const fl = er('m7', { state: 'failed', from: 'x@y.com', createdAt: NOW, attempts: 1, lastError: 'fetch failed' });
     check('N5 an email error is not blamed on GREEN API', fl.reason, 'fetch failed');
+  }
+
+// ═══ O. שויך ביד מאז — השורה מפסיקה לדרוש טיפול (קריאה בלבד) ════════
+  {
+    const orders = [
+      { id: 'wa_O_1', customerId: '14201', orderClient: 'המקום לאמבט', waUnassigned: false },
+      { id: 'em_O_1', customerId: '509', orderClient: 'אגן ברזל', emailUnassigned: false },
+      { id: 'em_O_2', customerId: '509', orderClient: 'אגן ברזל' },
+      { id: 'wa_P_1', customerId: '', orderClient: 'לא מזוהה · 053-3334444', waUnassigned: true },
+      { id: 'em_P_1', customerId: '', orderClient: 'לא מזוהה · x@y.com', emailUnassigned: true },
+      { id: 'em_Q_1', customerId: '509', orderClient: 'אגן ברזל' },
+      { id: 'em_Q_2', customerId: '', orderClient: 'לא מזוהה · x@y.com', emailUnassigned: true },
+    ];
+    const look = ctx.lgWaInAssignedFrom(orders);
+    const wa = (k, ids, via) => ctx.lgWaInRow(k, { state: 'done', kind: 'image', sender: '0533334444', createdAt: NOW, refNum: 'L1',
+      orderIds: ids, clientMatch: { via, customerId: '', name: '', candidates: 2 } }, NOW + 60000, 'whatsapp', look);
+    const em = (k, ids, via) => ctx.lgWaInRow(k, { state: 'done', from: 'x@y.com', createdAt: NOW, refNum: 'L2',
+      orderIds: ids, clientMatch: { via, customerId: '', name: '' } }, NOW + 60000, 'email', look);
+
+    const a = wa('O', ['wa_O_1'], 'ambiguous');
+    check('O1 WhatsApp, assigned by hand since: resolved, no attention, the client shown',
+          [a.needsAttention, a.tone, a.statusLabel, a.client, a.reason, a.canClose], [false, 'ok', 'נקלט — שויך ידנית', 'המקום לאמבט', '', false]);
+    const b = em('O', ['em_O_1', 'em_O_2'], 'none');
+    check('O2 email, every order assigned: resolved', [b.needsAttention, b.tone, b.statusLabel, b.client], [false, 'ok', 'נקלט — שויך ידנית', 'אגן ברזל']);
+
+    const c = wa('P', ['wa_P_1'], 'none');
+    check('O3 WhatsApp still unassigned: still needs a person', [c.needsAttention, c.statusLabel], [true, 'נקלט — לא שויך']);
+    const d = em('P', ['em_P_1'], 'ambiguous');
+    check('O4 email still unassigned: still needs a person', [d.needsAttention, d.statusLabel], [true, 'נקלט — לא שויך']);
+    const e = em('Q', ['em_Q_1', 'em_Q_2'], 'none');
+    check('O5 email with one of two orders still unassigned: still needs a person', e.needsAttention, true);
+    const f = em('R', ['em_gone_1'], 'none');
+    check('O6 an order that no longer exists does not count as assigned', f.needsAttention, true);
+    const g = ctx.lgWaInRow('O', { state: 'done', from: 'x@y.com', createdAt: NOW, orderIds: ['em_O_1'],
+      clientMatch: { via: 'none' } }, NOW + 60000, 'email');
+    check('O7 without the lookup nothing changes', g.needsAttention, true);
+    check('O8 the badge stops counting the resolved rows',
+          ctx.lgWaInCounts([a, b, c, d]).attention, 2);
   }
 
 // ═══ M. גבולות ═══════════════════════════════════════════════════════

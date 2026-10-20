@@ -1435,6 +1435,8 @@ function renderAll(){
     buildSQItems();
     sqRender();
   }
+  // קליטה ששויכה ביד ("שייך ללקוח") מפסיקה לדרוש טיפול — הפאנל מחושב שוב מההזמנות
+  if(typeof lgWaInRefresh === 'function') lgWaInRefresh();
 
   // keep sketch queue in sync — same approach as kanban cards (always from live orders[])
   if(sqCurrent && document.getElementById('sqOverlay')?.style.display!=='none'){

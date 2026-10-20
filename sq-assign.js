@@ -85,7 +85,7 @@ if (typeof document !== 'undefined') (function () {
     box.querySelector('.sqa-row').outerHTML = `<div class="sqa-row">
         <input id="sqAssignQ" type="search" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="חיפוש כרטיס לקוח" autocomplete="off">
         <button type="button" class="sqa-btn sqa-quiet" data-sqa="cancel">ביטול</button></div>
-      <div class="sqa-list" role="list"></div>`;
+      <div class="sqa-list"></div>`;
     const q = $('sqAssignQ');
     renderList('');
     q.focus();
@@ -95,7 +95,7 @@ if (typeof document !== 'undefined') (function () {
     const list = document.querySelector('#sqAssignWrap .sqa-list'); if (!list) return;
     const hits = sqAssignSearch(accounts(), q);
     list.innerHTML = hits.length
-      ? hits.map(a => `<button type="button" class="sqa-opt" role="listitem" data-acc="${lgEsc(a.key)}">
+      ? hits.map(a => `<button type="button" class="sqa-opt" data-acc="${lgEsc(a.key)}">
            <span>${lgEsc(a.name || a.key)}</span><span class="sqa-key" dir="ltr">${lgEsc(a.key)}</span></button>`).join('')
       : `<div class="sqa-none">${Object.keys(accounts()).length
           ? 'לא נמצא כרטיס כזה. נסה חלק מהשם או את המפתח בחשבשבת.'
@@ -114,16 +114,23 @@ if (typeof document !== 'undefined') (function () {
     try {
       // ⚠️ users נקרא טרי ולא מהמטמון של הדף — מפתח = טלפון, כמו בשרת
       const users = (await _lgDb.ref('users').once('value')).val() || {};
-      await lgAssignOrderToAccount(o.id, acc, sqAssignLoginPhone(users, acc.key));
-      // המאזין יביא את ההזמנה המעודכנת; עד אז — מה שעל המסך
-      [o, (typeof sqItems !== 'undefined' ? sqItems : []).find(i => i.id === o.id)].forEach(x => {
+      const phone = sqAssignLoginPhone(users, acc.key);
+      await lgAssignOrderToAccount(o.id, acc, phone);
+      // המאזין יביא את ההזמנה המעודכנת; עד אז — מה שעל המסך (כולל orders,
+      // שממנו פאנל הקליטות יודע שהקליטה כבר לא דורשת טיפול)
+      const same = i => i && String(i.id) === String(o.id);
+      [o, (typeof sqItems !== 'undefined' ? sqItems : []).find(same),
+          (typeof orders !== 'undefined' && Array.isArray(orders) ? orders : []).find(same)].forEach(x => {
         if (!x) return;
-        x.client = x.orderClient = acc.name;
+        x.customerId = acc.key;
+        x.client = x.orderClient = x.businessName = acc.name;
         x.waUnassigned = x.emailUnassigned = false;
+        if (phone) x.phone = x.clientPhone = phone;
       });
       const h = $('sqDClient'); if (h && cur === o) h.textContent = acc.name;
       if (cur === o) window.sqAssignShow(o);
       if (typeof sqRender === 'function') sqRender();
+      if (typeof lgWaInRefresh === 'function') lgWaInRefresh();
       if (typeof showToast === 'function') showToast('שויך ל-' + acc.name);
     } catch (e) {
       alert('השיוך לא נשמר: ' + (e && e.message));

@@ -73,7 +73,12 @@ function lgWaInActBody(channel, action, key, note) {
 //  מציג ומאפשר.
 //  ⚠️ במייל אין כלל 24 שעות: הבייטים שמורים אצלנו ב-emailParts, ו"נסה שוב"
 //  עובד גם אחרי שבוע. ב-WhatsApp הקובץ אצל GREEN API ונעלם אחרי יום.
-function lgWaInRow(key, r, now, channel) {
+//
+//  assigned (לא חובה) — חיפוש טהור: orderIds → {done, client}. done = כל
+//  ההזמנות של הקליטה כבר שויכו ביד ("שייך ללקוח", sq-assign.js). ואז
+//  השורה לא דורשת טיפול — בלי לכתוב כלום לרשומת הקליטה.
+const _WA_IN_UNMATCHED = ['none', 'ambiguous', 'group-unlinked'];
+function lgWaInRow(key, r, now, channel, assigned) {
   r = r || {};
   const isEm = channel === 'email';
   const t = now || Date.now();
@@ -87,12 +92,13 @@ function lgWaInRow(key, r, now, channel) {
 
   let [statusLabel, tone] = _WA_IN_STATUS[st] || [st, 'wait'];
   let reason = '', needsAttention = false, client = '—';
+  const orderIds = Array.isArray(r.orderIds) ? r.orderIds : (r.orderIds ? Object.values(r.orderIds) : []);
 
   if (st === 'done') {
     if (cm.via === 'users' || cm.via === 'hashavshevet' || cm.via === 'email') client = cm.name || who;
     else client = 'לא שויך';
-    // במייל — איפה משייכים: הכפתור בתור הסקיצות (sq-assign.js)
-    const where = isEm ? ' בתור הסקיצות, בכפתור "שייך ללקוח".' : '.';
+    // איפה משייכים: הכפתור בתור הסקיצות (sq-assign.js) — לשני הערוצים
+    const where = ' בתור הסקיצות, בכפתור "שייך ללקוח".';
     if (cm.via === 'ambiguous') {
       reason = (isEm ? 'הכתובת מופיעה ב-' : 'המספר מופיע ב-') + (cm.candidates || 'כמה')
         + ' כרטיסי לקוח — לא שויך אוטומטית. צריך לשייך ביד' + where;
@@ -100,6 +106,13 @@ function lgWaInRow(key, r, now, channel) {
     } else if (cm.via === 'none') {
       reason = (isEm ? 'הכתובת לא נמצאה אצל אף לקוח' : 'המספר לא נמצא אצל אף לקוח') + ' — צריך לשייך ביד' + where;
       needsAttention = true; statusLabel = 'נקלט — לא שויך'; tone = 'warn';
+    }
+    // שויך ביד מאז — ההזמנות הן המקור, לא clientMatch (שנשאר כמו שנקלט)
+    const a = _WA_IN_UNMATCHED.includes(cm.via) && orderIds.length && typeof assigned === 'function'
+      ? assigned(orderIds) : null;
+    if (a && a.done) {
+      needsAttention = false; tone = 'ok'; reason = '';
+      statusLabel = 'נקלט — שויך ידנית'; client = a.client || client;
     }
     if (r.oversize) {
       reason = (reason ? reason + ' ' : '') + 'תמונה גדולה (' + Math.round((r.sizeBytes || 0) / 1024) + 'KB) — כדאי לוודא שהיא תקינה.';
@@ -131,7 +144,6 @@ function lgWaInRow(key, r, now, channel) {
     : r.kind === 'text' ? 'הודעת טקסט' : r.kind === 'pdf' ? 'PDF'
     : r.kind === 'image' ? (r.typeMessage === 'documentMessage' ? 'תמונה (כמסמך)' : 'תמונה') : 'קובץ';
 
-  const orderIds = Array.isArray(r.orderIds) ? r.orderIds : (r.orderIds ? Object.values(r.orderIds) : []);
   let view = null;
   if (st === 'done' && orderIds[0]) view = { type: 'sketch', orderId: String(orderIds[0]) };
   else if (isEm) view = null;                    // המייל עצמו — בתיבת Orderluz
@@ -154,6 +166,18 @@ function lgWaInRow(key, r, now, channel) {
     canClose: st !== 'closed' && st !== 'ignored' && !fresh && !(st === 'done' && (!needsAttention || r.handled)),
     inProgress: st === 'received' || st === 'processing',
     view,
+  };
+}
+
+//  החיפוש של assigned מתוך רשימת ההזמנות (orders הגלובלי ב-admin.html).
+//  done רק כשכל הזמנה קיימת, יש לה customerId ואף סימון "לא שויך".
+function lgWaInAssignedFrom(orders) {
+  const byId = {};
+  (Array.isArray(orders) ? orders : Object.values(orders || {})).forEach(o => { if (o && o.id != null) byId[String(o.id)] = o; });
+  return ids => {
+    const os = (ids || []).map(id => byId[String(id)]);
+    const done = os.length > 0 && os.every(o => o && o.customerId && !o.waUnassigned && !o.emailUnassigned);
+    return { done, client: done ? String(os[0].orderClient || '') : '' };
   };
 }
 
@@ -288,13 +312,27 @@ if (typeof document !== 'undefined') (function () {
     const t = $('waInToggle'); if (t) t.textContent = showAll ? 'רק מה שדורש טיפול' : 'הצג הכל';
   }
 
-  const onSnap = ch => snap => {
-    const v = snap.val() || {}, now = Date.now();
-    byCh[ch] = Object.keys(v).map(k => lgWaInRow(k, v[k], now, ch));
+  //  הרשומות הגולמיות נשמרות, כדי לחשב שוב כשההזמנות משתנות (שיוך ידני)
+  const raw = { whatsapp: {}, email: {} };
+  function rebuild() {
+    const now = Date.now();
+    // orders — הגלובלי של admin.html (listenAllOrders). קריאה בלבד.
+    const assigned = lgWaInAssignedFrom(typeof orders !== 'undefined' ? orders : []);
+    ['whatsapp', 'email'].forEach(ch => {
+      byCh[ch] = Object.keys(raw[ch]).map(k => lgWaInRow(k, raw[ch][k], now, ch, assigned));
+    });
     rows = byCh.whatsapp.concat(byCh.email).sort((a, b) => b.at - a.at);
+  }
+
+  const onSnap = ch => snap => {
+    raw[ch] = snap.val() || {};
+    rebuild();
     render();
     if (byCh[ch].some(x => x.inProgress)) drain(ch);   // רשת ביטחון — רק כשיש מה לעשות
   };
+
+  //  נקרא מ-renderAll ב-admin.html בכל שינוי בהזמנות, ומ-sq-assign.js אחרי שיוך
+  window.lgWaInRefresh = function () { rebuild(); render(); };
 
   async function post(body) {
     const res = await _lgAuthPost('/api/wa-inbound-drain', body);
@@ -342,7 +380,7 @@ if (typeof document !== 'undefined') (function () {
     lgSketchIntoImg(img, { id: orderId, hasSketch: true });
   }
 
-  window.lgWaInOpen = function () { const p = $('waInPanel'); if (p) { p.hidden = false; render(); } };
+  window.lgWaInOpen = function () { const p = $('waInPanel'); if (p) { p.hidden = false; rebuild(); render(); } };
   window.lgWaInClose = function () { const p = $('waInPanel'); if (p) p.hidden = true; };
 
   function wire() {

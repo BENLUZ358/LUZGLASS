@@ -83,6 +83,12 @@ const plain = v => JSON.parse(JSON.stringify(v));
   try { await ctx.lgAssignOrderToAccount('x', { key: '', name: '' }, ''); } catch (e) { threw = e.message; }
   check('D4 no card → refused, nothing written', [!!threw, calls.length], [true, 2]);
 
+  // ─── מה שעל המסך אחרי שיוך (סקירה 1) ──────────────────────────────
+  check('D5 the picker buttons are plain buttons (no list/listitem roles)', /role="list(item)?"/.test(SRC), false);
+  check('D5 the on-screen update sets customerId and the login phone too',
+        /x\.customerId = acc\.key/.test(SRC) && /x\.phone = x\.clientPhone = phone/.test(SRC), true);
+  check('D5 and refreshes the intake panel', /lgWaInRefresh\(\)/.test(SRC), true);
+
   // ─── admin.html ────────────────────────────────────────────────────
   const A = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
   check('E1 admin.html loads sq-assign.js', /<script src="sq-assign\.js"><\/script>/.test(A), true);
@@ -94,6 +100,7 @@ const plain = v => JSON.parse(JSON.stringify(v));
   check('E3 the sketch view has a place for the assign button', /id="sqAssignWrap"/.test(A), true);
   check('E3 and the detail view fills it', /sqAssignShow\(/.test(A), true);
   check('E4 the source filter has email', /<option value="email">מייל<\/option>/.test(A), true);
+  check('E5 every orders change recomputes the intake panel', /function renderAll\(\)[\s\S]*?lgWaInRefresh\(\)/.test(A), true);
 
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll assign-to-customer checks passed.');
