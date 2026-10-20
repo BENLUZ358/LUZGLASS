@@ -3017,9 +3017,17 @@ function markTriplexReportArrived(reportId, reportNum){
   renderTriplexTab();
 }
 
+// הזמנה שבלשונית החיסום: במפעל (chisum), חוץ מהזמנה שכל הזכוכית שלה נסעה לטריפלקס —
+// יש לה דוח טריפלקס ואין לה דוח חיסום. היא הופיעה כאן כ"דוח ישן — 0 פריטים" (בן, 20/10,
+// L1088); מקומה בלשונית הטריפלקס. הזמנה בלי שום דוח (ישנה באמת) נשארת ב"דוח ישן".
+function wdInChisumTab(o){
+  if((o.stage||'') !== 'chisum') return false;
+  return !!o.chisumReportId || !o.triplexReportId;
+}
+
 function renderChisumTab(){
   const el = document.getElementById('chisumOrders');
-  const all = allOrders.filter(o => (o.stage||'') === 'chisum');
+  const all = allOrders.filter(wdInChisumTab);
   if(!all.length){
     el.innerHTML = `<div class="empty"><div class="empty-icon">🔥</div><p>אין הזמנות בחיסום כרגע</p></div>`;
     const rsb = document.getElementById('resetChisumBtn');
