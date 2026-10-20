@@ -23,8 +23,8 @@ const gsPath = path.join(__dirname, 'gmail-intake.gs');
 const core = fs.readFileSync(corePath, 'utf8');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(core + '\nthis.f={emPlanChunks,emShouldTake,emLabelFor};', ctx);
-const { emPlanChunks, emShouldTake, emLabelFor } = ctx.f;
+vm.runInContext(core + '\nthis.f={emPlanChunks,emShouldTake,emLabelFor,emDecide};', ctx);
+const { emPlanChunks, emShouldTake, emLabelFor, emDecide } = ctx.f;
 
 // A
 check('chunks 0', emPlanChunks(0, 3000000), 1);
@@ -54,6 +54,19 @@ check('rejected', emLabelFor('rejected'), 'LG/נכשל');
 check('dead', emLabelFor('dead'), 'LG/נכשל');
 check('http-final', emLabelFor('http-final'), 'LG/נכשל');
 for (const s of ['failed', 'received', 'processing', 'missing', undefined]) check('retry ' + s, emLabelFor(s), null);
+
+check('own mail skipped', emShouldTake({ id: 'a', from: '"LG" <Orderluz@gmail.com>', date: t }, { ME: 'orderluz@gmail.com' }, {}), false);
+check('other mail with ME set', emShouldTake({ id: 'a', from: 'x@y.com', date: t }, { ME: 'orderluz@gmail.com' }, {}), true);
+
+// C2 emDecide
+check('decide 200 done', emDecide(200, { state: 'done' }), { label: 'LG/נקלט', handled: true });
+check('decide 200 ignored', emDecide(200, { state: 'ignored' }), { label: 'LG/נקלט', handled: true });
+check('decide 200 rejected', emDecide(200, { state: 'rejected' }), { label: 'LG/נכשל', handled: true });
+check('decide 200 failed', emDecide(200, { state: 'failed' }), { label: null, handled: false });
+check('decide 200 no body', emDecide(200, null), { label: null, handled: false });
+for (const c of [400, 401, 403]) check('decide ' + c, emDecide(c, null), { label: 'LG/נכשל', handled: true });
+check('decide 500', emDecide(500, null), { label: null, handled: false });
+check('decide network 0', emDecide(0, null), { label: null, handled: false });
 
 // D
 const gs = fs.existsSync(gsPath) ? fs.readFileSync(gsPath, 'utf8') : '';
