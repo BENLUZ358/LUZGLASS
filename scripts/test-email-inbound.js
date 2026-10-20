@@ -116,8 +116,9 @@ const NOW = 1760950005000;
     check('B1 exactly two orders in the queue', Object.keys(db._data.orders), ['em_K_1', 'em_K_2']);
 
     const o1 = db._data.orders.em_K_1, o2 = db._data.orders.em_K_2;
-    check('B2 same number on both, in idx order', [o1.refNum, o1.orderNum, o2.refNum, o1.fileName, o2.fileName],
-          ['L1042', 'L1042', 'L1042', 'מטבח.jpg', 'אמבטיה.png']);
+    check('B2 one number with -1..n, like a portal batch, in idx order',
+          [o1.refNum, o1.orderNum, o2.refNum, o2.orderNum, o1.fileName, o2.fileName],
+          ['L1042-1', 'L1042-1', 'L1042-2', 'L1042-2', 'מטבח.jpg', 'אמבטיה.png']);
     check('B2 page n of total', [o1.emailPage, o1.emailPages, o2.emailPage, o2.emailPages], [1, 2, 2, 2]);
     check('B2 marked as email, with the thread to answer in',
           [o1.source, o1.emailMessageId, o1.emailThreadId, o1.emailFrom, o1.emailReceivedAt],
@@ -147,6 +148,12 @@ const NOW = 1760950005000;
     check('C1 committing the same email again answers done, with the same number', again,
           { state: 'done', refNum: 'L1042', orderIds: ['em_K_1', 'em_K_2'] });
     check('C1 still two orders, counter unchanged', [Object.keys(db._data.orders).length, db._data.meta.orderCounter], [2, 1042]);
+
+    // הסקריפט שלח שוב והעלה חתיכות מחדש — אף אחד לא יקרא אותן
+    await stage(db, K, [{ idx: 0, name: 'מטבח.jpg', mime: 'image/jpeg', buf: JPEG_COM }]);
+    check('C2 re-staged chunks are there before the commit', !!db._data.emailParts.K, true);
+    check('C2 a re-sent email still answers done', (await em.lgEmailCommit(db, meta(K, parts), { now: NOW + 70000 })).state, 'done');
+    check('C2 and its re-staged chunks are dropped', db._data.emailParts.K, undefined);
   }
 
 // ═══ D. חתיכה חסרה ══════════════════════════════════════════════════
@@ -163,6 +170,7 @@ const NOW = 1760950005000;
     check('D2 once the chunk arrives, the same email completes', r2, { state: 'done', refNum: 'L1043', orderIds: ['em_D_1'] });
     check('D2 the image is whole', db._data.sketches.em_D_1, 'data:image/png;base64,' + PNG.toString('base64'));
     check('D2 on the second attempt', db._data.emailInbound.D.attempts, 2);
+    check('D2 a single image keeps the bare number', [db._data.orders.em_D_1.refNum, db._data.orders.em_D_1.orderNum], ['L1043', 'L1043']);
   }
 
 // ═══ E. מה נקלט ═════════════════════════════════════════════════════
@@ -272,8 +280,41 @@ const NOW = 1760950005000;
     const z = db._data.emailInbound.Z;
     check('G3 closed with who, why and an audit line', [z.state, z.closedFrom, z.closedBy, z.closedNote, Object.keys(z.audit).length],
           ['closed', 'failed', 'admin', 'טופל בטלפון', 1]);
+    check('G3 closing drops the staged chunks', db._data.emailParts.Z, undefined);
     check('G3 committing again answers closed', (await em.lgEmailCommit(db, meta('Z', parts), { now: NOW + 6 })).state, 'closed');
     check('G3 and it is no longer pending', (await em.lgEmailInboundPending(db, 20, NOW + 7)).includes('Z'), false);
+  }
+
+// ═══ I. אין כתיבה בודדת ענקית (RTDB: 16MB לכתיבה) ═════════════════
+  {
+    const raw = seed();
+    const writes = [];
+    // עוטף את הכפיל ורושם כל set / update: נתיב, אילו מפתחות, וכמה בייטים
+    const rec = {
+      _data: raw._data,
+      ref(p) {
+        const r = raw.ref(p);
+        return { ...r,
+          orderByChild: r.orderByChild, equalTo: r.equalTo, limitToFirst: r.limitToFirst, once: r.once,
+          transaction: r.transaction,
+          set: async v => { writes.push({ op: 'set', paths: [String(p || '')], bytes: JSON.stringify(v).length }); return r.set(v); },
+          update: async v => { writes.push({ op: 'update', paths: Object.keys(v).map(k => (p ? p + '/' : '') + k), bytes: JSON.stringify(v).length }); return r.update(v); },
+        };
+      },
+    };
+    const files = [0, 1, 2].map(i => ({ idx: i, name: i + '.png', mime: 'image/png', buf: Buffer.concat([PNG, Buffer.alloc(300000, i)]) }));
+    const parts = await stage(rec, 'I', files);
+    writes.length = 0;
+    const r = await em.lgEmailCommit(rec, meta('I', parts), { now: NOW, by: 't' });
+    check('I1 three images complete', [r.state, r.orderIds.length], ['done', 3]);
+    const sk = w => w.paths.filter(x => x.startsWith('sketches/')).length;
+    check('I1 no single write carries more than one sketch', writes.every(w => sk(w) <= 1), true);
+    check('I1 each sketch is its own write', writes.filter(w => sk(w) === 1).length, 3);
+    const withOrders = writes.filter(w => w.paths.some(x => x.startsWith('orders/')));
+    check('I2 all the orders go in one update — still all or nothing', withOrders.map(w => [w.op, w.paths.filter(x => x.startsWith('orders/')).length]), [['update', 3]]);
+    check('I2 that update also closes the record and drops the chunks',
+          ['emailInbound/I/state', 'emailParts/I'].every(x => withOrders[0].paths.includes(x)), true);
+    check('I2 and it carries no image bytes', withOrders[0].bytes < 20000, true);
   }
 
 // ═══ H. רשימת השולחים המורשים ══════════════════════════════════════

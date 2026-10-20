@@ -26,9 +26,16 @@
 //
 //  ─── שלושה כללים (כמו WhatsApp) ───────────────────────────────────
 //
-//  1. **הכל או כלום, לכל המייל.** כל ההזמנות, כל הסקיצות, state:'done'
-//     ומחיקת החתיכות — עדכון רב-נתיבי אחד. קובץ אחד פגום → אף הזמנה.
+//  1. **הכל או כלום, לכל המייל.** כל ההזמנות, state:'done' ומחיקת החתיכות
+//     — עדכון רב-נתיבי אחד. קובץ אחד פגום → אף הזמנה.
+//     ⚠️ הסקיצות עצמן נכתבות **לפני** העדכון, כל אחת בכתיבה משלה: RTDB
+//     מגבילה כתיבה בודדת ל-16MB, ושלוש תמונות של 5MB ב-base64 הן ~20MB —
+//     בעדכון אחד המייל היה נכשל, נכשל, ומת עם שגיאה סתומה. סקיצה בלי הזמנה
+//     לא מופיעה בשום מקום (התור קורא הזמנות), המזהה דטרמיניסטי ולכן ניסיון
+//     חוזר דורס את אותו נתיב, וכל כתיבה עוברת בדיקת "התפיסה עדיין שלי".
 //  2. **מספר הזמנה אחד למייל**, נשמר ברשומה לפני הכתיבה (lgInboxRefNum).
+//     כל הזמנה מקבלת אותו מספר עם סיומת -1..n כשיש יותר מתמונה אחת — כמו
+//     אצווה מהפורטל (upload.html). ברשומה נשמר המספר בלי סיומת.
 //  3. **הסקיצה ב-sketches/ בלבד**; בהזמנה hasSketch:true.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -183,11 +190,13 @@ async function lgEmailInboundProcess(db, key, opts) {
 
     const upd = {};
     const orderIds = [];
+    const sketches = [];
     files.forEach((f, i) => {
       const n = i + 1;
       const id = 'em_' + key + '_' + n;
+      const num = refNum + (total > 1 ? '-' + n : '');
       const order = {
-        id, refNum, orderNum: refNum,
+        id, refNum: num, orderNum: num,
         orderClient: name, client: name,
         phone, clientPhone: phone,
         sketchName: '',                              // E6 — המייל לא נותן שם לסקיצה
@@ -209,13 +218,18 @@ async function lgEmailInboundProcess(db, key, opts) {
       if (who.matched && who.name) order.businessName = who.name;
       if (!who.matched) order.emailUnassigned = true;
       upd['orders/' + id] = order;
-      upd['sketches/' + id] = 'data:' + f.mime + ';base64,' + f.bytes.toString('base64');
+      sketches.push([id, 'data:' + f.mime + ';base64,' + f.bytes.toString('base64')]);
       orderIds.push(id);
     });
 
+    // ⚠️ סקיצה לכתיבה — ר' כלל 1 בראש הקובץ (16MB לכתיבה)
+    for (const [id, data] of sketches) {
+      if (!await lgInboxStillMine(db, EM_INBOX, key, token, now)) return _answer(await _read(db, key));
+      await db.ref('sketches/' + id).set(data);
+    }
     if (!await lgInboxStillMine(db, EM_INBOX, key, token, now)) return _answer(await _read(db, key));
 
-    // ⚠️ הכל או כלום — עדכון רב-נתיבי אחד, כולל מחיקת החתיכות
+    // ⚠️ הכל או כלום — ההזמנות, הרשומה ומחיקת החתיכות בעדכון רב-נתיבי אחד
     upd[base + 'state'] = 'done';
     upd[base + 'orderIds'] = orderIds;
     upd[base + 'refNum'] = refNum;
@@ -248,9 +262,15 @@ async function lgEmailInboundProcess(db, key, opts) {
     // לא שלי עוד — מישהו אחר כבר סיים או נכשל בעצמו. לא דורסים את מה שכתב.
     if (!mine) return _answer(await _read(db, key));
     // rejected / ignored — אין ממנו retry, ולכן אין סיבה לשמור את הבייטים
-    if (final) await db.ref(EM_PARTS + '/' + key).set(null);
+    if (final) await _dropParts(db, key);
     return { state: touch.state, reason: touch.state === 'failed' ? msg : touch.reason };
   }
+}
+
+//  ניקוי בלבד — כישלון כאן לא משנה את התשובה
+async function _dropParts(db, key) {
+  try { await db.ref(EM_PARTS + '/' + key).set(null); }
+  catch (e) { console.warn('email-inbound: could not drop staged parts', e && e.name); }
 }
 
 const _read = async (db, key) => (await db.ref(EM_INBOX + '/' + key).once('value')).val();
@@ -283,7 +303,12 @@ async function lgEmailCommit(db, meta, opts) {
   });
   if (!r.committed) {
     const cur = r.snapshot.val();
-    if (cur && FINAL.includes(cur.state)) return _answer(cur);
+    if (cur && FINAL.includes(cur.state)) {
+      // מייל שנשלח שוב אחרי מצב סופי — הסקריפט כבר העלה חתיכות מחדש, ואף
+      // אחד לא יקרא אותן. dead נשאר: "נסה שוב" צריך אותן.
+      if (cur.state !== 'dead') await _dropParts(db, key);
+      return _answer(cur);
+    }
   }
   return lgEmailInboundProcess(db, key, opts);
 }
@@ -369,6 +394,8 @@ async function lgEmailInboundClose(db, key, by, note, now) {
   });
   const cur = r.snapshot.val();
   if (!r.committed || !cur) return { ok: false, ...(block(cur) || { code: 'busy', message: 'לא נתפסה' }) };
+  // נסגר ביד — אין ממנו retry, והחתיכות השמורות רק תופסות מקום
+  await _dropParts(db, key);
   return { ok: true, code: '', message: '' };
 }
 
