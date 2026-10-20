@@ -9,7 +9,8 @@
  *   A. הסוד — אותה בדיקה כמו ה-webhook של WhatsApp (_hook-token.js), כולל
  *      סימני כיוון בלתי נראים שהאייפון מכניס (15/10). סוד לא נכון → 401.
  *   B. `to` חייב להיות כתובת התיבה של הסביבה — אחרת 403.
- *   C. שולח שאינו ברשימה → 200 ignored, ושום דבר לא נרשם (גם לא החתיכות).
+ *   C. שולח שאינו ברשימה → 200 not-allowed (לא ignored — הסקריפט לא מתייג
+ *      אותו), ושום דבר לא נרשם (גם לא החתיכות).
  *   D. part + commit → done, עם מספר הזמנה. קלט פגום → 400 לפני שנוגעים
  *      בבסיס. כשל כתיבה → 500, כדי שהסקריפט ינסה שוב.
  *   E. wa-inbound-drain עם channel:'email' — drain / retry / close על התור
@@ -104,12 +105,24 @@ const commit = (messageId, x) => ({
     const db = seed();
     await call(req(part('M3')), { db });
     const r = await call(req(commit('M3', { from: 'stranger@spam.com' })), { db });
-    check('C1 a sender not on the list gets 200 ignored/sender', [r.status, r.body],
-          [200, { ok: true, state: 'ignored', reason: 'sender' }]);
+    check('C1 a sender not on the list gets 200 not-allowed', [r.status, r.body],
+          [200, { ok: true, state: 'not-allowed' }]);
     check('C1 and no record is written', db._data.emailInbound, undefined);
     check('C1 nor are its uploaded parts kept', (db._data.emailParts || {}).M3, undefined);
     check('C2 an empty allowlist lets nobody in',
-          (await call(req(commit('M3b')), { db }, { EMAIL_INBOUND_ALLOWED: '' })).body.state, 'ignored');
+          (await call(req(commit('M3b')), { db }, { EMAIL_INBOUND_ALLOWED: '' })).body.state, 'not-allowed');
+  }
+
+// ═══ C3. יומן הדחייה אומר איזה endpoint ═════════════════════════════
+  {
+    const warns = [], keep = console.warn;
+    console.warn = (...a) => warns.push(a.map(String).join(' '));
+    try { await call(req(part('M3c'), 'Bearer nope'), { db: seed() }); }
+    finally { console.warn = keep; }
+    check('C3 a refused token is logged as email-inbound', warns.some(w => /email-inbound/.test(w)), true);
+    check('C3 …and never with the secret', warns.some(w => /mail-secret|nope/.test(w)), false);
+    const WA = fs.readFileSync(path.join(ROOT, 'api', 'wa-inbound.js'), 'utf8');
+    check('C3 the WhatsApp webhook labels its own rejections', /lgHookTokenOk\([^)]*'wa-inbound'\)/.test(WA), true);
   }
 
 // ═══ D. part + commit ═══════════════════════════════════════════════
@@ -193,6 +206,16 @@ const commit = (messageId, x) => ({
     check('E5 an unknown channel is refused', ch.code, 'bad-channel');
     const bk = await drain.handleAdmin({ action: 'retry', channel: 'email', key: 'a/b' }, { db, by: '0500000000' });
     check('E6 an email key with characters Firebase rejects is refused', bk.code, 'bad-key');
+
+    // ⚠️ מצב שאינו סופי לא יוצא לדף באנגלית ("processing") — משפט בעברית
+    const em = drain._emResult;
+    check('E7 processing → plain Hebrew', em({ state: 'processing' }), { ok: false, claimed: false, reason: 'בעיבוד ממש עכשיו — לנסות שוב בעוד דקה', orderIds: undefined });
+    check('E7 …even when a stale reason is on the record', em({ state: 'processing', reason: 'x' }).reason, 'בעיבוד ממש עכשיו — לנסות שוב בעוד דקה');
+    check('E7 received / missing → Hebrew', [em({ state: 'received' }).reason, em({ state: 'missing' }).reason],
+          ['ממתין לעיבוד', 'הקליטה לא נמצאה']);
+    check('E7 failed without a reason → Hebrew', em({ state: 'failed' }).reason, 'העיבוד נכשל');
+    check('E7 a real reason is kept', em({ state: 'rejected', reason: 'PDF' }), { ok: false, claimed: true, reason: 'PDF', orderIds: undefined });
+    check('E7 done', em({ state: 'done', orderIds: ['a'] }), { ok: true, claimed: true, reason: '', orderIds: ['a'] });
   }
   {
     // בלי channel — WhatsApp, כמו היום: רשומת מייל ממתינה לא נוגעת

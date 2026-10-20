@@ -31,7 +31,7 @@ const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey 
 async function handleInbound(req, deps) {
   if (req.method !== 'POST') return { status: 405, body: { error: 'method not allowed' } };
   const headers = req.headers || {};
-  if (!lgHookTokenOk(headers.authorization || headers.Authorization, process.env.GREENAPI_WEBHOOK_TOKEN)) return { status: 401, body: { error: 'unauthorized' } };
+  if (!lgHookTokenOk(headers.authorization || headers.Authorization, process.env.GREENAPI_WEBHOOK_TOKEN, 'wa-inbound')) return { status: 401, body: { error: 'unauthorized' } };
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = null; } }

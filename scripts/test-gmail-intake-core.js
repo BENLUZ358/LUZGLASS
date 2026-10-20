@@ -23,8 +23,8 @@ const gsPath = path.join(__dirname, 'gmail-intake.gs');
 const core = fs.readFileSync(corePath, 'utf8');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(core + '\nthis.f={emPlanChunks,emShouldTake,emLabelFor,emDecide,emGiveUp};', ctx);
-const { emPlanChunks, emShouldTake, emLabelFor, emDecide, emGiveUp } = ctx.f;
+vm.runInContext(core + '\nthis.f={emPlanChunks,emAddr,emShouldTake,emLabelFor,emDecide,emGiveUp};', ctx);
+const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp } = ctx.f;
 
 // A
 check('chunks 0', emPlanChunks(0, 3000000), 1);
@@ -44,6 +44,11 @@ const al = { START_AT: '', ALLOWED_SENDERS: 'Cust@Mail.com, other@x.com' };
 check('allowed, name form', emShouldTake({ id: 'a', from: '"Dan" <cust@mail.COM>', date: t }, al, {}), true);
 check('allowed, bare', emShouldTake({ id: 'a', from: 'OTHER@x.com', date: t }, al, {}), true);
 check('not allowed', emShouldTake({ id: 'a', from: 'evil@x.com', date: t }, al, {}), false);
+// ⚠️ אותו כלל כמו lgEmailAddr בשרת ו-_waInAddr בפאנל: הקבוצה **האחרונה** ב-<...>
+const spoof = '"boss@client.com <boss@client.com>" <attacker@evil.com>';
+check('addr takes the last <...> (display-name spoof)', emAddr(spoof), 'attacker@evil.com');
+check('addr bare', emAddr(' Bob@Y.IO '), 'bob@y.io');
+check('spoofed display name is not on the list', emShouldTake({ id: 'a', from: spoof, date: t }, { ALLOWED_SENDERS: 'boss@client.com' }, {}), false);
 check('empty list = everyone', emShouldTake({ id: 'a', from: 'evil@x.com', date: t }, { ALLOWED_SENDERS: '' }, {}), true);
 
 // C
@@ -53,6 +58,7 @@ check('closed', emLabelFor('closed'), 'LG/נקלט');
 check('rejected', emLabelFor('rejected'), 'LG/נכשל');
 check('dead', emLabelFor('dead'), 'LG/נכשל');
 check('http-final', emLabelFor('http-final'), 'LG/נכשל');
+check('not-allowed has no label', emLabelFor('not-allowed'), null);
 for (const s of ['failed', 'received', 'processing', 'missing', undefined]) check('retry ' + s, emLabelFor(s), null);
 
 check('own mail skipped', emShouldTake({ id: 'a', from: '"LG" <Orderluz@gmail.com>', date: t }, { ME: 'orderluz@gmail.com' }, {}), false);
@@ -64,7 +70,11 @@ check('decide 200 ignored', emDecide(200, { state: 'ignored' }), { label: 'LG/נ
 check('decide 200 rejected', emDecide(200, { state: 'rejected' }), { label: 'LG/נכשל', handled: true });
 check('decide 200 failed', emDecide(200, { state: 'failed' }), { label: null, handled: false });
 check('decide 200 no body', emDecide(200, null), { label: null, handled: false });
-for (const c of [400, 401, 403]) check('decide ' + c, emDecide(c, null), { label: 'LG/נכשל', handled: true });
+// ⚠️ שולח שהשרת לא מכיר: מסומן "טופל" ובלי תווית — מייל של לקוח אמיתי לא נוגעים בו (§3.6)
+check('decide 200 not-allowed', emDecide(200, { state: 'not-allowed' }), { label: null, handled: true });
+check('decide 400', emDecide(400, null), { label: 'LG/נכשל', handled: true });
+// ⚠️ 401/403 = הגדרות (טוקן, כתובת), לא המייל — לא סופי, ועוצרים את כל הריצה
+for (const c of [401, 403]) check('decide ' + c, emDecide(c, null), { label: null, handled: false, stop: true });
 check('decide 500', emDecide(500, null), { label: null, handled: false });
 check('decide network 0', emDecide(0, null), { label: null, handled: false });
 

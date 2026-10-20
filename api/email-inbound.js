@@ -9,8 +9,12 @@
 //    2. קלט פגום → 400 לפני שנוגעים בבסיס. ⚠️ messageId ריק היה הופך את
 //       הנתיב ל-emailInbound/ — כל התיבה (lgEmailCommit זורק על זה).
 //    3. commit: `to` חייב להכיל את EMAIL_INBOUND_ADDRESS. אחרת 403.
-//    4. commit: שולח שאינו ב-EMAIL_INBOUND_ALLOWED → 200 ignored/sender,
-//       בלי רשומה. החתיכות שכבר עלו נמחקות — אף אחד לא יקרא אותן.
+//    4. commit: שולח שאינו ב-EMAIL_INBOUND_ALLOWED → 200 not-allowed, בלי
+//       רשומה. החתיכות שכבר עלו נמחקות — אף אחד לא יקרא אותן.
+//       ⚠️ state נפרד ולא ignored: על ignored הסקריפט מדביק LG/נקלט, ואז
+//       רשימה חסרה או שגויה הייתה מתייגת כל מייל "נקלט" בלי שנקלט, ובשלב
+//       הבדיקה גם מיילים של לקוחות אמיתיים (אפיון §3.6: לא נוגעים בהם).
+//       על not-allowed הסקריפט מסמן "טופל" בלי תווית.
 //    5. כשל כתיבה → 500, והסקריפט מנסה שוב בריצה הבאה.
 //
 //  גוף הבקשה — אחד משניים:
@@ -52,7 +56,7 @@ const _bad = code => ({ status: 400, body: { ok: false, code } });
 async function handleEmailInbound(req, deps) {
   if (req.method !== 'POST') return { status: 405, body: { error: 'method not allowed' } };
   const headers = req.headers || {};
-  if (!lgHookTokenOk(headers.authorization || headers.Authorization, process.env.EMAIL_INBOUND_TOKEN)) {
+  if (!lgHookTokenOk(headers.authorization || headers.Authorization, process.env.EMAIL_INBOUND_TOKEN, 'email-inbound')) {
     return { status: 401, body: { error: 'unauthorized' } };
   }
 
@@ -84,7 +88,7 @@ async function handleEmailInbound(req, deps) {
       const rec = (await deps.db.ref(EM_INBOX + '/' + key).once('value')).val();
       if (!rec) await deps.db.ref(EM_PARTS + '/' + key).set(null);
     } catch (e) { console.warn('email-inbound: could not drop parts of an ignored sender', e && e.name); }
-    return { status: 200, body: { ok: true, state: 'ignored', reason: 'sender' } };
+    return { status: 200, body: { ok: true, state: 'not-allowed' } };
   }
 
   let r;

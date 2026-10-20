@@ -6,9 +6,11 @@
 //  סוד, ושני עותקים של הבדיקה היו בדיוק המקום שבו תיקון אחד נשכח בשני
 //  (ר' 15/10 למטה: שני תיקונים בלילה אחד).
 //
-//    lgHookTokenOk(header, secret) → boolean
+//    lgHookTokenOk(header, secret, label?) → boolean
 //
-//  header = כותרת Authorization כפי שהגיעה; secret = הסוד מ-Vercel.
+//  header = כותרת Authorization כפי שהגיעה; secret = הסוד מ-Vercel;
+//  label = שם ה-endpoint ביומן הדחייה ('wa-inbound' / 'email-inbound') —
+//  שני endpoints כותבים לאותו יומן, ו-401 בלי שם לא אומר איזה סוד שגוי.
 //  לא הוגדר סוד (או שהוא רק "Bearer") → אף אחד לא נכנס.
 //  לעולם לא נרשמים ללוג: הסוד או הכותרת.
 // ═══════════════════════════════════════════════════════════════════
@@ -27,7 +29,7 @@ function _bare(s) {
 }
 
 //  השוואה בזמן קבוע. גיבוב קודם, כדי שגם האורך לא ידלוף.
-function lgHookTokenOk(header, secret) {
+function lgHookTokenOk(header, secret, label) {
   const want = _bare(secret);
   if (!want || /^bearer$/i.test(want)) return false;
   const got = _bare(header);
@@ -35,7 +37,7 @@ function lgHookTokenOk(header, secret) {
   const ok = crypto.timingSafeEqual(h(got), h(want));
   //  כשנדחה — רק אורכים וסימן לתווים נסתרים, לעולם לא הסוד עצמו. בלי זה
   //  ביומן של Vercel רואים 401 ולא יודעים איזה צד שונה.
-  if (!ok) console.warn('hook-token: rejected', { gotLen: got.length, wantLen: want.length,
+  if (!ok) console.warn((label ? label + ' ' : '') + 'hook-token: rejected', { gotLen: got.length, wantLen: want.length,
     hidden: /[^\x20-\x7E]/.test(String(header || '') + String(secret || '')) });
   return ok;
 }
