@@ -1022,6 +1022,9 @@ function lgNormalizeOrder(o) {
     waSender:      o.waSender     || '',
     waReceivedAt:  Number(o.waReceivedAt) || 0,
     waUnassigned:  !!o.waUnassigned,
+    // הזמנת טקסט מוואטסאפ (בן, 20/10) — "כפולה?" כשמספר ההזמנה של הלקוח כבר קיים
+    waText:        !!o.waText,
+    waDuplicateOf: o.waDuplicateOf || '',
     // קבוצת WhatsApp שממנה הגיעה הסקיצה — לשם יוצא "הסקיצות טופלו" (06/10)
     waGroup:       o.waGroup      || '',
     waGroupName:   o.waGroupName  || '',

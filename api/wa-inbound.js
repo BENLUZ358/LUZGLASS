@@ -92,7 +92,7 @@ async function handleInbound(req, deps) {
     return { status: 500, body: { error: 'record failed' } };
   }
 
-  if (rec.created && p.entry.kind === 'image') {
+  if (rec.created && (p.entry.kind === 'image' || p.entry.kind === 'text')) {
     deps.waitUntil(
       lgWaInboundProcess(deps.db, rec.key, { by: 'webhook', fetchImpl: deps.fetchImpl, now: deps.now })
         .catch(e => console.error('wa-inbound: process crashed', e && e.name)));

@@ -3429,6 +3429,7 @@ function buildSQItems(){
       items:        o.items || [],
       type:         o.type  || '',
       isTest:       !!o.isTest,
+      waDuplicateOf: o.waDuplicateOf || '',
       sketchSeenAt: o.sketchSeenAt || 0,
     });
   });
@@ -3537,6 +3538,7 @@ function sqRender(){
           <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':'מערכת'}</span>
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
+          ${item.waDuplicateOf?`<span class="sq-tag" title="אותו מספר הזמנה כבר קיים אצל הלקוח" style="background:rgba(192,57,43,0.18);color:#e57361">כפולה? ${lgEsc(item.waDuplicateOf)}</span>`:''}
         </div>
       </div>
     </div>`;
@@ -4016,6 +4018,10 @@ function _sqHbRender(id, data, ok){
 // כל שליחה; עכשיו לחיצה שנייה על הכפתור הירוק הייתה פותחת מסמך שני
 // בחשבשבת. בלעדיו השרת עונה 409 ואנחנו מציגים מה כבר נשלח.
 async function sqSendHashavshevet(id, force){
+  // שורה בלי מק"ט (מהודעת טקסט) — חשבשבת היו משמיטים אותה בשקט מהמסמך. עוצרים לפני הכל.
+  const _its = (sqCurrent && sqCurrent.id === id) ? sqCurrentItems : ((orders.find(o => o.id === id) || {}).items || []);
+  const _missing = (Array.isArray(_its) ? _its : Object.values(_its)).filter(it => it && it.skuMissing && !it.sku).length;
+  if(_missing){ showToast('יש ' + _missing + ' שורות בלי מק"ט — בחר מק"ט בשורה המסומנת לפני השליחה'); return; }
   // השלב נקבע כאן ולא אצל הקורא, כי יש שני קוראים: הכפתור הירוק ו"פתח
   // הזמנה בחשבשבת" שבתוך חלון התצוגה המקדימה. כשזה ישב רק בכפתור הירוק,
   // שליחה מתוך החלון הייתה פותחת מסמך בחשבשבת ומשאירה את ההזמנה בתור —
@@ -4449,11 +4455,41 @@ function iwRender(){
           onchange="iwEditGroupDim(${idxJson},'h',this.value)" onclick="event.stopPropagation()"
           onkeydown="event.stopPropagation()">
         <span style="font-size:12px;color:#aaa">מ׳</span>
-        <span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>
+        ${it.skuMissing && !it.sku
+          ? `<select aria-label="בחר מק״ט" onclick="event.stopPropagation()" onchange="if(this.value)iwSetGroupSku(${idxJson},this.value)"
+               style="min-height:36px;padding:2px 6px;border:2px solid #c0392b;border-radius:6px;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;color:#a93226;background:#fff">
+               <option value="">בחר מק״ט</option>${LG_WA_FIXED_SKUS.map(c => `<option value="${c}">${c}</option>`).join('')}</select>`
+          : `<span class="iw-item-proc ${it.chisum?'iw-proc-chis':'iw-proc-lit'}">${it.chisum?'חיסום':'ליטוש'}${it.graphic?' 🖼':''}</span>`}
         ${delBtns}
       </div>`;
   }).join('');
   sqRefreshMetrics();
+}
+
+// המק"טים הקבועים של אגן ברזל (בן, 20/10) — מוצעים לשורה שהגיעה מהודעת טקסט בלי מק"ט
+const LG_WA_FIXED_SKUS = ['5MIRM', '5MIRAM', '5MIRBM', '8MM', '6TSH', '6TSM'];
+
+// בחירת מק"ט לשורה (כל הקבוצה) — אותם שדות ש-iwAdd כותב, המידות נשארות
+function iwSetGroupSku(indices, code){
+  const c = String(code || '').toUpperCase();
+  // מק"ט חתוך בלבד (6TSH) אין לו proc בקטלוג, ו-iwResolve מחזיר עליו null — לוקחים מהכרטיס עצמו
+  const e = (typeof skuCatalogMap === 'object' && skuCatalogMap[c]) || null;
+  const r = iwResolve(c) || (e ? { label: e.name, glass: e.glass, mm: e.mm, proc: e.proc || '', graphic: !!e.graphic,
+    chalavi: !!e.chalavi, triplex: !!e.triplex, sku: c, _fromCatalog: true } : null);
+  if(!r){ showToast('מק"ט לא נמצא בקטלוג'); return; }
+  indices.forEach(i => {
+    const it = sqCurrentItems[i];
+    if(!it) return;
+    Object.assign(it, { name: r.label, glass: r.glass, mm: r.mm,
+      chisum: r.proc === 'chisum', litush: r.proc === 'litush', graphic: !!r.graphic });
+    // המק"ט נכתב תמיד — גם כשהגיע מהרשימה הישנה (IW_CODES): אחרת הסימון נמחק, שני השומרים
+    // עוברים, וחשבשבת משמיטים את השורה בשקט
+    it.sku = r.sku || c;
+    if(r._fromCatalog){ it.chalavi = !!r.chalavi; it.triplex = !!r.triplex; }
+    delete it.skuMissing;
+  });
+  iwSave();
+  iwRender();
 }
 
 function iwEditGroupDim(indices, field, val){

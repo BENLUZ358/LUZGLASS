@@ -318,6 +318,14 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    // ── שורה בלי מק"ט (הודעת טקסט, בן 20/10) — לא נשמטת בשקט: עוצרים ──
+    const _its = Array.isArray(order.items) ? order.items : Object.values(order.items || {});
+    const _missingSku = _its.filter(it => it && it.skuMissing && !it.sku).length;
+    if (_missingSku) {
+      res.status(422).json({ error: `יש ${_missingSku} שורות בלי מק"ט — בחר מק"ט בתור הסקיצות לפני השליחה`, code: 'missing-sku' });
+      return;
+    }
+
     // ── שורות ──
     const prices = pricesSnap.val() || {};
     const documentId = DOCUMENT_TYPES[String(body.documentId)] ? String(body.documentId) : DEFAULT_DOCUMENT_ID;
