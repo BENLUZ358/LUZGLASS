@@ -43,6 +43,8 @@ const crypto = require('crypto');
 const { sniffImage, stripJpegMeta } = require('./_wa-image');
 const { lgEmailAddr, lgClientFromEmail } = require('./_email-recipient');
 const { lgInboxStillMine, lgInboxRefNum, lgInboxAudit, lgInboxDropNulls } = require('./_inbox-common');
+// ⚠️ אותו סף "תמונה גדולה — לבדוק" כמו WhatsApp, מאותו משתנה סביבה — לא עותק שני
+const { WA_IMAGE_FLAG_BYTES } = require('./_wa-inbound');
 
 const EM_INBOX = 'emailInbound';
 const EM_PARTS = 'emailParts';
@@ -170,12 +172,17 @@ async function lgEmailInboundProcess(db, key, opts) {
     if (big) throw new Final('הקובץ ' + (big.name || '') + ' גדול מדי (' + Math.round(big.size / 1048576) + 'MB)');
 
     const staged = (await db.ref(EM_PARTS + '/' + key).once('value')).val() || {};
-    const files = images.map(p => {
+    // ⚠️ "תמונה" ש-sniffImage לא מזהה (HEIC מהאייפון, GIF, TIFF, או בייטים שאינם
+    // תמונה) מדולגת ונרשמת ב-skipped, כמו docx — ולא מפילה את כל המייל (R9).
+    // תמונה טובה לצידה עדיין הופכת להזמנה, ובן רואה בפאנל מה נשאר בחוץ.
+    const files = [];
+    for (const p of images) {
       const raw = _bytesOf(staged, p);
       const mime = sniffImage(raw);
-      if (!mime) throw new Final('הקובץ ' + (p.name || '') + ' אינו תמונה');
-      return { name: String(p.name || ''), mime, bytes: mime === 'image/jpeg' ? stripJpegMeta(raw) : raw };
-    });
+      if (!mime) { skipped.push(String(p.name || '')); continue; }
+      files.push({ name: String(p.name || ''), mime, bytes: mime === 'image/jpeg' ? stripJpegMeta(raw) : raw });
+    }
+    if (!files.length) throw new Final(EM_NO_SKETCH, 'ignored');
 
     const who = await lgClientFromEmail(db, entry.from);
     const refNum = await lgInboxRefNum(db, EM_INBOX, key, entry);
@@ -237,6 +244,9 @@ async function lgEmailInboundProcess(db, key, opts) {
                                   ...(who.candidates ? { candidates: who.candidates } : {}) };
     upd[base + 'skipped'] = skipped.length ? skipped : null;
     upd[base + 'sizeBytes'] = files.reduce((s, f) => s + f.bytes.length, 0);
+    // כמו WhatsApp: תמונה מעל הסף נשמרת כמו שהיא ומסומנת לבדיקה בפאנל.
+    // לפי התמונה הגדולה (לא הסכום) — הסף הוא לתמונה אחת.
+    upd[base + 'oversize'] = files.some(f => f.bytes.length > WA_IMAGE_FLAG_BYTES()) ? true : null;
     upd[base + 'claimedAt'] = null;
     upd[base + 'claimToken'] = null;
     upd[base + 'lastError'] = null;

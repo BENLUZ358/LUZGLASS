@@ -360,6 +360,12 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('N5 an email with no sketch is quiet — no attention, no retry', [ign.statusLabel, ign.needsAttention, ign.canRetry], ['לא סקיצה — דולג', false, false]);
     const fl = er('m7', { state: 'failed', from: 'x@y.com', createdAt: NOW, attempts: 1, lastError: 'fetch failed' });
     check('N5 an email error is not blamed on GREEN API', fl.reason, 'fetch failed');
+    // ⚠️ אותו כלל כמו lgEmailAddr בשרת: הקבוצה האחרונה ב-<...>
+    check('N6 the shown address is the real one, not a <...> inside the display name',
+          ctx._waInAddr('"boss@client.com <boss@client.com>" <attacker@evil.com>'), 'attacker@evil.com');
+    const big = er('m8', { state: 'done', from: 'x@y.com', createdAt: NOW, refNum: 'L2003', orderIds: ['em_m8_1'],
+                           clientMatch: { via: 'email', customerId: '14201', name: 'המקום לאמבט' }, oversize: true, sizeBytes: 1200000 });
+    check('N7 an oversized email image is flagged like WhatsApp', [big.needsAttention, /גדולה/.test(big.reason), big.tone], [true, true, 'warn']);
   }
 
 // ═══ O. שויך ביד מאז — השורה מפסיקה לדרוש טיפול (קריאה בלבד) ════════

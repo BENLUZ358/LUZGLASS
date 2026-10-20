@@ -32,10 +32,12 @@ function _waInPhone(p) {
   return d.length === 10 ? d.slice(0, 3) + '-' + d.slice(3) : d;
 }
 //  "דני <Dani@X.co.il>" → "dani@x.co.il" — כמו lgEmailAddr בשרת
+//  ⚠️ הקבוצה **האחרונה** ב-<...>, כמו בשרת ובסקריפט: שם תצוגה יכול להכיל
+//  <...> משלו, והפאנל היה מציג את הכתובת המזויפת במקום השולח האמיתי.
 function _waInAddr(from) {
   const s = String(from || '');
-  const m = s.match(/<([^<>]+)>/);
-  return (m ? m[1] : s).trim().toLowerCase();
+  const all = s.match(/<[^<>]+>/g);
+  return (all ? all[all.length - 1].slice(1, -1) : s).trim().toLowerCase();
 }
 function _waInWhen(ms) {
   if (!ms) return '';

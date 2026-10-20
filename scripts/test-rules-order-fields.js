@@ -68,6 +68,7 @@ const MUST_BLOCK = {
   emailUnassigned:     'puts the order in the manual-assignment list',
   emailMessageId:      'ties the order to an inbound mail it never came from',
   emailThreadId:       'chooses the mail thread the "handled" reply goes out on',
+  emailFrom:           'is the address the queue shows as the sender of the mail',
 };
 for (const [field, why] of Object.entries(MUST_BLOCK)) {
   check(`a client cannot set ${field} — it ${why}`,

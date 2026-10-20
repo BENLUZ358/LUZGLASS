@@ -15,7 +15,9 @@
  *   D. commit לפני שכל החתיכות הגיעו → failed, לא חצי הזמנה; העלאה מלאה
  *      אחר כך מצליחה (Review Focus 2).
  *   E. מה נקלט: PDF נדחה (חלק 2), docx לבד → ignored (Review Focus 5),
- *      docx לצד תמונה → מדולג ונרשם, קובץ שאינו תמונה / גדול מדי → נדחה.
+ *      docx לצד תמונה → מדולג ונרשם; "תמונה" שלא מזוהה (HEIC, GIF, בייטים
+ *      שאינם תמונה) → מדולגת ונרשמת כמו docx (R9); גדול מדי → נדחה.
+ *      תמונה גדולה → oversize, כמו WhatsApp.
  *   F. שולח לא מזוהה, שלושה ניסיונות → dead, תפיסה של מישהו אחר.
  *   G. "נסה שוב" / "טופל ידנית" / מה ממתין — אותו חוזה כמו WhatsApp.
  *   H. רשימת השולחים המורשים — חתומה על הפרויקט.
@@ -214,8 +216,32 @@ const NOW = 1760950005000;
       { idx: 1, name: 'fake.jpg', mime: 'image/jpeg', buf: NOT_IMAGE },
     ]);
     const r = await em.lgEmailCommit(db, meta('F', parts), { now: NOW, by: 't' });
-    check('E5 a "jpg" whose bytes are not an image rejects the email', r.state, 'rejected');
-    check('E5 all or nothing — not even the good image', ordersOf('F'), []);
+    check('E5 a "jpg" whose bytes are not an image is skipped, not fatal (R9)', [r.state, r.orderIds], ['done', ['em_F_1']]);
+    check('E5 the good image becomes the order', db._data.orders.em_F_1.fileName, 'a.jpg');
+    check('E5 the unreadable file is named on the record', db._data.emailInbound.F.skipped, ['fake.jpg']);
+  }
+  {
+    // HEIC מהאייפון — sniffImage לא קורא אותו. לבד במייל → ignored, והשם גלוי
+    const HEIC = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic', 'binary'), Buffer.alloc(40, 3)]);
+    const parts = await stage(db, 'H', [{ idx: 0, name: 'IMG_1.HEIC', mime: 'image/heic', buf: HEIC }]);
+    const r = await em.lgEmailCommit(db, meta('H', parts), { now: NOW, by: 't' });
+    check('E5b only an unreadable image → ignored, no order', [r.state, ordersOf('H')], ['ignored', []]);
+    check('E5b …with the file name visible', [db._data.emailInbound.H.state, db._data.emailInbound.H.skipped], ['ignored', ['IMG_1.HEIC']]);
+    check('E5b nothing staged is left', db._data.emailParts.H, undefined);
+  }
+  {
+    // oversize — אותו סף כמו WhatsApp (WA_IMAGE_FLAG_BYTES, ברירת מחדל 800KB)
+    const p1 = await stage(db, 'O1', [{ idx: 0, name: 'a.jpg', mime: 'image/jpeg', buf: JPEG }]);
+    await em.lgEmailCommit(db, meta('O1', p1), { now: NOW, by: 't' });
+    check('E7 a small image is not flagged', db._data.emailInbound.O1.oversize, undefined);
+    const keep = process.env.WA_IMAGE_FLAG_BYTES;
+    process.env.WA_IMAGE_FLAG_BYTES = String(PNG.length + 1);
+    try {
+      const p2 = await stage(db, 'O2', [{ idx: 0, name: 'a.png', mime: 'image/png', buf: PNG },
+                                        { idx: 1, name: 'b.jpg', mime: 'image/jpeg', buf: JPEG }]);
+      await em.lgEmailCommit(db, meta('O2', p2), { now: NOW, by: 't' });
+    } finally { if (keep === undefined) delete process.env.WA_IMAGE_FLAG_BYTES; else process.env.WA_IMAGE_FLAG_BYTES = keep; }
+    check('E7 an image over the WhatsApp threshold flags the record', db._data.emailInbound.O2.oversize, true);
   }
   {
     const BIG = Buffer.concat([JPEG, Buffer.alloc(em.EM_PART_MAX_BYTES, 0)]);

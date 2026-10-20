@@ -36,12 +36,20 @@ const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && 
 //  ⚠️ lgEmailInboundProcess מחזיר { state, reason? } ולא { ok, claimed } —
 //  מתורגם כאן לצורה של WhatsApp, כדי שהדף לא יצטרך לדעת מאיזה ערוץ הגיע.
 //  לא נתפס = מצב שאינו סופי ואינו failed (מישהו אחר מעבד, או ממתין).
-const _emProcess = async (db, key, opts) => {
-  const r = await lgEmailInboundProcess(db, key, opts);
-  const ok = r.state === 'done';
-  return { ok, claimed: !['processing', 'received', 'missing'].includes(r.state),
-           reason: ok ? '' : (r.reason || r.state), orderIds: r.orderIds };
+//  ⚠️ הסיבה מגיעה לבן כמו שהיא ("נסה שוב" מציג אותה) — מצב לא סופי מתורגם
+//  למשפט בעברית ולא יוצא כ-"processing". סיבה ישנה על רשומה כזו לא רלוונטית.
+const _EM_WAIT = {
+  processing: 'בעיבוד ממש עכשיו — לנסות שוב בעוד דקה',
+  received:   'ממתין לעיבוד',
+  missing:    'הקליטה לא נמצאה',
 };
+const _emResult = r => {
+  const ok = r.state === 'done';
+  const wait = Object.prototype.hasOwnProperty.call(_EM_WAIT, r.state) ? _EM_WAIT[r.state] : '';
+  return { ok, claimed: !wait,
+           reason: ok ? '' : (wait || r.reason || 'העיבוד נכשל'), orderIds: r.orderIds };
+};
+const _emProcess = async (db, key, opts) => _emResult(await lgEmailInboundProcess(db, key, opts));
 
 //  הפונקציות של כל ערוץ — אותו חוזה בדיוק
 const CHANNELS = {
@@ -145,3 +153,4 @@ module.exports = async function handler(req, res) {
   }
 };
 module.exports.handleAdmin = handleAdmin;
+module.exports._emResult = _emResult;   // לבדיקות
