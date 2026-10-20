@@ -391,6 +391,7 @@ label.msec-t{display:block;}
   <script src="lg-icons.js?v=20260806"></script>
   <script src="wa-inbound-panel.js"></script>
   <script src="sku-picker.js"></script>
+  <script src="lg-health.js?v=20261020"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -452,6 +453,7 @@ label.msec-t{display:block;}
         <button class="vt" id="vtK" onclick="setView('kanban',this)"><span data-icon="kanban"></span> לוח</button>
         <button class="vt active" id="vtT" onclick="setView('table',this)"><span data-icon="list"></span> טבלה</button>
       </div>
+      <button type="button" onclick="lgRunHealthCheck()" title="בודק את הנתונים ומראה דברים שתקועים או חסרים — רק קורא, לא משנה כלום" style="display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:6px 12px;background:none;border:1px solid var(--gold);color:var(--gold-text);font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:4px;white-space:nowrap;"><span data-icon="check-circle"></span>בדיקת תקינות</button>
       <span id="topbarUserName" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
       <button onclick="lgLogout()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="יציאה"><span data-icon="logout"></span>יציאה</button>
     </div>
@@ -1751,6 +1753,38 @@ function deleteSkuCatalogEntry(code){
 
 // חיבור API אמיתי — קורא ל-/api/hashavshevet-items (סוד ונתוני חתימה נשארים בשרת, אף פעם לא בדפדפן).
 // מריץ בבת-אחת (batches) כדי לא להציף את Firebase בקריאה סדרתית של מאות רשומות.
+// ── בדיקת תקינות (בן, 20/10/2026) ──
+// טוען פעם אחת (once) את מה שהבדיקה צריכה ומציג את lgHealthCheck (lg-health.js).
+// רק קורא — שום כתיבה. sketches/checkEdits לא נטענים: הם תמונות, כבדים, ולא נחוצים כאן.
+async function lgRunHealthCheck(){
+  const ov = document.getElementById('lgHealthOv') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'lgHealthOv' }));
+  ov.setAttribute('style', 'position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:16px;direction:rtl');
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  const box = '<div role="dialog" aria-label="בדיקת תקינות" style="background:var(--surface,#fff);color:var(--text);width:100%;max-width:640px;max-height:85vh;overflow:auto;border-radius:12px;padding:18px 18px 14px;font-family:Heebo,sans-serif">';
+  ov.innerHTML = box + '<b>בודק…</b></div>';
+  try {
+    const db = firebase.database();
+    const get = p => db.ref(p).once('value').then(x => x.val()).catch(() => null);
+    const [orders, workday, waInbound, waOutbox, prices] = await Promise.all(['orders', 'workday', 'waInbound', 'waOutbox', 'prices/global'].map(get));
+    const r = lgHealthCheck({ orders, workday, waInbound, waOutbox, prices }, Date.now());
+    const SEV = { high: ['דחוף', '#a93226'], mid: ['כדאי לבדוק', '#b9770e'], low: ['לא מזיק', '#756e66'] };
+    ov.innerHTML = box +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><b style="font-size:17px">בדיקת תקינות</b>' +
+      '<button type="button" aria-label="סגור" onclick="document.getElementById(\'lgHealthOv\').remove()" style="min-width:44px;min-height:44px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button></div>' +
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">' + lgEsc(r.summary) + '</div>' +
+      (r.problems.length
+        ? r.problems.map(p => '<div style="border:1px solid var(--border);border-inline-start:4px solid ' + SEV[p.sev][1] + ';border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px">' +
+            '<div style="font-size:12px;font-weight:800;color:' + SEV[p.sev][1] + '">' + SEV[p.sev][0] + ' · ' + p.count + '</div>' +
+            '<div style="font-weight:700;margin:2px 0 4px">' + lgEsc(p.title) + '</div>' +
+            '<div style="font-size:13px;color:var(--muted);line-height:1.6">' + p.items.map(lgEsc).join('<br>') + (p.count > p.items.length ? '<br>…ועוד ' + (p.count - p.items.length) : '') + '</div></div>').join('')
+        : '<div style="padding:12px;border-radius:8px;background:rgba(30,132,73,0.1);color:#1e8449;font-weight:700;margin-bottom:8px">✓ לא נמצאו בעיות</div>') +
+      '<details style="margin-top:6px;font-size:13px;color:var(--muted)"><summary style="cursor:pointer">מה נבדק ותקין (' + r.ok.length + ')</summary>' + r.ok.map(x => '✓ ' + lgEsc(x)).join('<br>') + '</details></div>';
+  } catch (e) {
+    console.error('lgRunHealthCheck:', e);
+    ov.innerHTML = box + '<b>הבדיקה נכשלה</b><div style="margin-top:6px;font-size:13px">בדוק חיבור אינטרנט ונסה שוב.</div></div>';
+  }
+}
+
 let _hbSyncing = false;
 async function syncFromHashavshevetNow(){
   if(_hbSyncing) return;
