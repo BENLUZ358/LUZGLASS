@@ -19,41 +19,19 @@
 //  אפיון: docs/superpowers/specs/2026-10-04-whatsapp-sketch-intake-design.md §2.1
 // ═══════════════════════════════════════════════════════════════════
 
-const crypto = require('crypto');
 const { lgWaInboundAllowed } = require('./_env');
+const { lgHookTokenOk } = require('./_hook-token');
 const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey } = require('./_wa-inbound');
 
-//  הסוד עצמו, בלי "Bearer" ובלי רווחים. 15/10: בייצור כל webhook חזר 401 —
-//  הסוד ב-Vercel ובשדה של GREEN API הוקלדו ידנית בטלפון, ו-"Bearer " או רווח
-//  בצד אחד הספיקו כדי שאף הודעה לא תיכנס. משווים את הסוד, לא את העטיפה.
-//  ובאותו לילה, גם אחרי זה — 401: הסוד הודבק בטלפון בדף בעברית, והאייפון
-//  הכניס סימני כיוון בלתי נראים (U+200E/U+200F). הסוד הוא ASCII גלוי בלבד,
-//  אז כל תו אחר — רווח, סימן כיוון, רווח צר-אפס — אינו חלק ממנו.
-function _bare(s) {
-  return String(s || '').replace(/[^\x21-\x7E]+/g, ' ').trim()
-    .replace(/^bearer\s+/i, '').replace(/\s+/g, '');
-}
-
-//  השוואה בזמן קבוע. גיבוב קודם, כדי שגם האורך לא ידלוף.
-function _tokenOk(header) {
-  const want = _bare(process.env.GREENAPI_WEBHOOK_TOKEN);
-  if (!want || /^bearer$/i.test(want)) return false;
-  const got = _bare(header);
-  const h = s => crypto.createHash('sha256').update(s).digest();
-  const ok = crypto.timingSafeEqual(h(got), h(want));
-  //  כשנדחה — רק אורכים וסימן לתווים נסתרים, לעולם לא הסוד עצמו. בלי זה
-  //  ביומן של Vercel רואים 401 ולא יודעים איזה צד שונה.
-  if (!ok) console.warn('wa-inbound: rejected', { gotLen: got.length, wantLen: want.length,
-    hidden: /[^\x20-\x7E]/.test(String(header || '') + String(process.env.GREENAPI_WEBHOOK_TOKEN || '')) });
-  return ok;
-}
+//  הסוד נבדק ב-_hook-token.js — משותף עם email-inbound. שם גם ההסבר למה
+//  "Bearer ", רווחים וסימני כיוון בלתי נראים לא נחשבים חלק מהסוד (15/10).
 
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
 //  deps: { db, waitUntil, fetchImpl?, now? }. מחזיר { status, body }.
 async function handleInbound(req, deps) {
   if (req.method !== 'POST') return { status: 405, body: { error: 'method not allowed' } };
   const headers = req.headers || {};
-  if (!_tokenOk(headers.authorization || headers.Authorization)) return { status: 401, body: { error: 'unauthorized' } };
+  if (!lgHookTokenOk(headers.authorization || headers.Authorization, process.env.GREENAPI_WEBHOOK_TOKEN)) return { status: 401, body: { error: 'unauthorized' } };
 
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = null; } }
