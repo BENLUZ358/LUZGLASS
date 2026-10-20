@@ -127,6 +127,8 @@ function clientPricesByName(prices) {
 //  אם חתיכה אחת מתוך החמש דולגה — אין לה מחיר, למשל — יש 4 שורות, ו-"2/5"
 //  היה מכריז במסמך על חתיכה חמישית שאיננה בו.
 const LG_LINE_TEXT_MAX = 50;
+// "שם פריט" (itemname) — כבוי עד שייבדק מול חשבשבת. ר' ההערה ב-buildLines.
+const LG_HS_SEND_ITEMNAME = false;
 function lineText(n, w, h, seq, total) {
   const mm = v => String(Math.round(Number(v) || 0));
   const qty = total > 1 ? ' (' + seq + '/' + total + ')' : '';
@@ -220,7 +222,11 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     // נוסה מול חשבשבת עד 19/10 — הניסיון הראשון נעשה על הזמנה אמיתית אחת מול בן.
     // בסוף, אחרי SM_Extratext1: החתימה מחושבת על המחרוזת שנשלחת, ולכן רק תוספת
     // בסוף אינה שוברת את סדר המפתחות.
-    if (sketchName) {
+    //
+    // ⛔ כבוי (בן, 20/10/2026): בהזמנה L1079 חשבשבת הציגו "—" כ"ק" והעברית התהפכה.
+    // עד שנבדוק על הזמנה אחת איך חשבשבת מקבלים טקסט — לא שולחים, והשורה חוזרת
+    // להיות בדיוק מה שהייתה (שם הפריט מכרטיס המק"ט בחשבשבת).
+    if (LG_HS_SEND_ITEMNAME && sketchName) {
       const glass = String(item.glassFullName || item.name || '').trim();
       line.itemname = (glass ? glass + ' — ' + sketchName : sketchName).slice(0, LG_LINE_TEXT_MAX);
     }
