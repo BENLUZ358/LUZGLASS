@@ -26,6 +26,7 @@
 const crypto = require('crypto');
 const { sniffImage, stripJpegMeta } = require('./_wa-image');
 const { waChatToLocal, lgClientFromWaSender, lgClientFromWaGroup } = require('./_wa-recipient');
+const { lgWaTextIsOrder, lgWaTextParse, lgWaTextItems, lgWaTextSvg } = require('./_wa-text-order');
 
 const INBOX = 'waInbound';
 
@@ -76,6 +77,15 @@ function lgWaInboundParse(body) {
     if (mime.startsWith('image/')) kind = 'image';                 // נשלחה "כמסמך"
     else if (mime === 'application/pdf' || /\.pdf$/i.test(f.fileName || '')) kind = 'pdf';
   }
+  // הזמנת מראות בהודעת טקסט (בן, 20/10 — אגן ברזל): רק בצ'אט פרטי, ורק כשיש בה מספר
+  // הזמנה וגם שורת מידה. כל טקסט אחר — כמו היום, לא נקרא. ר' _wa-text-order.js.
+  let text = '';
+  if (!kind && !groupId) {
+    const t = md.typeMessage === 'textMessage' ? (md.textMessageData || {}).textMessage
+      : (md.typeMessage === 'extendedTextMessage' || md.typeMessage === 'quotedMessage') ? (md.extendedTextMessageData || {}).text
+      : '';
+    if (t && lgWaTextIsOrder(t)) { kind = 'text'; text = String(t).slice(0, 4000); }
+  }
   if (!kind) return ignore('not a sketch');
 
   return { action: 'record', reason: '', entry: {
@@ -89,6 +99,7 @@ function lgWaInboundParse(body) {
     mimeType:    mime,
     downloadUrl: String(f.downloadUrl || ''),
     timestamp:   (Number(b.timestamp) || 0) * 1000,
+    ...(kind === 'text' ? { text } : {}),
     // רק בקבוצה — רשומה פרטית נשארת בדיוק בצורה שהייתה
     ...(groupId ? { groupId, groupName: String(sd.chatName || '').slice(0, 120) } : {}),
   } };
@@ -229,12 +240,17 @@ async function lgWaInboundProcess(db, key, opts) {
   const base = INBOX + '/' + key + '/';
 
   try {
-    if (entry.kind !== 'image') throw new Permanent(entry.kind === 'pdf' ? PDF_REASON : 'סוג קובץ לא נתמך');
+    if (entry.kind !== 'image' && entry.kind !== 'text') throw new Permanent(entry.kind === 'pdf' ? PDF_REASON : 'סוג קובץ לא נתמך');
 
-    const raw  = await _download(entry, fetchImpl);
-    const mime = sniffImage(raw);
-    if (!mime) throw new Permanent('הקובץ שהתקבל אינו תמונה');
-    const bytes = mime === 'image/jpeg' ? stripJpegMeta(raw) : raw;
+    // טקסט: אין מה להוריד — הפריטים מההודעה, והסקיצה היא תמונה של ההודעה (נבנית למטה)
+    const isText = entry.kind === 'text';
+    let mime = 'image/svg+xml', bytes = null;
+    if (!isText) {
+      const raw = await _download(entry, fetchImpl);
+      mime = sniffImage(raw);
+      if (!mime) throw new Permanent('הקובץ שהתקבל אינו תמונה');
+      bytes = mime === 'image/jpeg' ? stripJpegMeta(raw) : raw;
+    }
 
     // קבוצה מקושרת מזהה את הלקוח; אחרת — לפי מספר השולח, כמו קודם
     const who = entry.groupId
@@ -273,19 +289,42 @@ async function lgWaInboundProcess(db, key, opts) {
     // העדכון "הסקיצות טופלו" יוצא לקבוצה — ר' resolveRecipient
     if (entry.groupId) { order.waGroup = entry.groupId; order.waGroupName = entry.groupName || ''; }
 
+    let sketchData;
+    if (isText) {
+      // מספר ההזמנה של הלקוח = שם הסקיצה; הפריטים מוזנים; "סקיצה" = תמונת ההודעה
+      const parsed = lgWaTextParse(entry.text);
+      const skus = [...new Set(parsed.groups.map(g => g.sku).filter(Boolean))];
+      const cat = {};
+      await Promise.all(skus.map(async s => { cat[s] = (await db.ref('skuCatalog/' + s).once('value')).val(); }));
+      order.sketchName = parsed.orderRef || '';
+      order.items = lgWaTextItems(parsed, cat);
+      order.waText = true;
+      order.fileName = ''; order.files = { f0: { name: 'הודעת וואטסאפ', type: mime } };
+      // אותו מספר הזמנה כבר אצל אותו לקוח — מסמנים "כפולה?", לא מוחקים ולא מחליפים
+      if (order.sketchName) {
+        // לפי clientPhone (יש עליו אינדקס) — רק ההזמנות של הלקוח הזה, לא כל ההזמנות
+        const mine = (await db.ref('orders').orderByChild('clientPhone').equalTo(order.clientPhone).once('value')).val() || {};
+        const prev = Object.values(mine).find(x => x && x.id && x.id !== id && x.sketchName === order.sketchName);
+        if (prev) order.waDuplicateOf = prev.orderNum || prev.id;
+      }
+      sketchData = lgWaTextSvg(entry.text, { client: name, when: order.date + ' ' + order.time });
+    } else {
+      sketchData = 'data:' + mime + ';base64,' + bytes.toString('base64');
+    }
+
     if (!await _stillMine(db, key, c.entry.claimToken, now)) return { ok: false, reason: 'lost-claim', orderIds: [] };
 
     // ⚠️ הכל או כלום — עדכון רב-נתיבי אחד
     const upd = {};
     upd['orders/' + id] = order;
-    upd['sketches/' + id] = 'data:' + mime + ';base64,' + bytes.toString('base64');
+    upd['sketches/' + id] = sketchData;
     upd[base + 'state'] = 'done';
     upd[base + 'orderIds'] = [id];
     upd[base + 'refNum'] = refNum;
     upd[base + 'clientMatch'] = { via: who.via, customerId: who.customerId || '', name: who.name || '',
                                   ...(who.candidates ? { candidates: who.candidates } : {}) };
-    upd[base + 'sizeBytes'] = bytes.length;
-    upd[base + 'oversize'] = bytes.length > WA_IMAGE_FLAG_BYTES() ? true : null;
+    upd[base + 'sizeBytes'] = isText ? sketchData.length : bytes.length;
+    upd[base + 'oversize'] = !isText && bytes.length > WA_IMAGE_FLAG_BYTES() ? true : null;
     upd[base + 'downloadUrl'] = null;
     upd[base + 'claimedAt'] = null;
     upd[base + 'claimToken'] = null;

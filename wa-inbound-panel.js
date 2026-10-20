@@ -91,7 +91,7 @@ function lgWaInRow(key, r, now) {
     reason = 'העיבוד נקטע באמצע — ייאסף שוב אוטומטית';
   }
 
-  const kindLabel = r.kind === 'pdf' ? 'PDF'
+  const kindLabel = r.kind === 'text' ? 'הודעת טקסט' : r.kind === 'pdf' ? 'PDF'
     : r.kind === 'image' ? (r.typeMessage === 'documentMessage' ? 'תמונה (כמסמך)' : 'תמונה') : 'קובץ';
 
   const orderIds = Array.isArray(r.orderIds) ? r.orderIds : (r.orderIds ? Object.values(r.orderIds) : []);
