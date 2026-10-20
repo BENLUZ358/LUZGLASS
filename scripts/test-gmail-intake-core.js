@@ -1,0 +1,66 @@
+#!/usr/bin/env node
+/**
+ * סקריפט Gmail — החלקים הטהורים (scripts/gmail-intake-core.js).
+ *   A. emPlanChunks — גבולות 0 / 1 / בדיוק חתיכה / חתיכה ובייט.
+ *   B. emShouldTake — START_AT, handled, שרשור ישן, רשימת שולחים.
+ *   C. emLabelFor — טבלת המצבים, כולל כשל HTTP.
+ *   D. ההעתק ב-.gs זהה בייט-לבייט למקור.
+ * Run: node scripts/test-gmail-intake-core.js
+ */
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+let fails = 0;
+const check = (name, actual, expected) => {
+  const ok = JSON.stringify(actual) === JSON.stringify(expected);
+  if (!ok) { fails++; console.log('FAIL', name, JSON.stringify(actual), '!=', JSON.stringify(expected)); }
+  else console.log('ok  ', name);
+};
+
+const corePath = path.join(__dirname, 'gmail-intake-core.js');
+const gsPath = path.join(__dirname, 'gmail-intake.gs');
+const core = fs.readFileSync(corePath, 'utf8');
+const ctx = {};
+vm.createContext(ctx);
+vm.runInContext(core + '\nthis.f={emPlanChunks,emShouldTake,emLabelFor};', ctx);
+const { emPlanChunks, emShouldTake, emLabelFor } = ctx.f;
+
+// A
+check('chunks 0', emPlanChunks(0, 3000000), 1);
+check('chunks 1', emPlanChunks(1, 3000000), 1);
+check('chunks exact', emPlanChunks(3000000, 3000000), 1);
+check('chunks +1', emPlanChunks(3000001, 3000000), 2);
+check('chunks default size', emPlanChunks(6000001), 3);
+
+// B
+const cfg = { START_AT: '2026-10-20T00:00:00Z', ALLOWED_SENDERS: '' };
+const t = Date.parse('2026-10-21T00:00:00Z');
+check('new message', emShouldTake({ id: 'a', from: 'x@y.com', date: t }, cfg, {}), true);
+check('before START_AT', emShouldTake({ id: 'a', from: 'x@y.com', date: Date.parse('2026-10-19T00:00:00Z') }, cfg, {}), false);
+check('already handled', emShouldTake({ id: 'a', from: 'x@y.com', date: t }, cfg, { a: 1 }), false);
+check('other id in handled (old thread reply)', emShouldTake({ id: 'b', from: 'x@y.com', date: t }, cfg, { a: 1 }), true);
+const al = { START_AT: '', ALLOWED_SENDERS: 'Cust@Mail.com, other@x.com' };
+check('allowed, name form', emShouldTake({ id: 'a', from: '"Dan" <cust@mail.COM>', date: t }, al, {}), true);
+check('allowed, bare', emShouldTake({ id: 'a', from: 'OTHER@x.com', date: t }, al, {}), true);
+check('not allowed', emShouldTake({ id: 'a', from: 'evil@x.com', date: t }, al, {}), false);
+check('empty list = everyone', emShouldTake({ id: 'a', from: 'evil@x.com', date: t }, { ALLOWED_SENDERS: '' }, {}), true);
+
+// C
+check('done', emLabelFor('done'), 'LG/נקלט');
+check('ignored', emLabelFor('ignored'), 'LG/נקלט');
+check('closed', emLabelFor('closed'), 'LG/נקלט');
+check('rejected', emLabelFor('rejected'), 'LG/נכשל');
+check('dead', emLabelFor('dead'), 'LG/נכשל');
+check('http-final', emLabelFor('http-final'), 'LG/נכשל');
+for (const s of ['failed', 'received', 'processing', 'missing', undefined]) check('retry ' + s, emLabelFor(s), null);
+
+// D
+const gs = fs.existsSync(gsPath) ? fs.readFileSync(gsPath, 'utf8') : '';
+const S = '// ── core start ──', E = '// ── core end ──';
+const i = gs.indexOf(S), j = gs.indexOf(E);
+check('gs has core block', i >= 0 && j > i, true);
+check('gs core identical to source', gs.slice(i, j + E.length) + '\n', core);
+
+if (fails) { console.log(fails + ' failed'); process.exit(1); }
+console.log('all passed');
