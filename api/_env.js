@@ -227,5 +227,30 @@ function lgWaInboundAllowed(phone) {
   return { allowed: true, reason: '' };
 }
 
+// ─── מייל נכנס · מי מורשה לשלוח לנו סקיצה ─────────────────────────
+//
+//  אפיון מייל §3.6. אותו דפוס בדיוק כמו lgWaInboundAllowed, אבל המפתח הוא
+//  כתובת ולא טלפון, ויש ערך אחד נוסף: '*' = כל שולח (הייצור, אחרי המעבר).
+//
+//      EMAIL_INBOUND_ALLOWED = luz-glass-test:ben@x.com,dana@y.co.il
+//      EMAIL_INBOUND_ALLOWED = lussglass:*
+//
+//  ⚠️ גם '*' חתום על הפרויקט: 'lussglass:*' שהועתק ל-TEST לא פותח שם כלום.
+//  ריקה, פגומה או של פרויקט אחר → אף אחד. כתובות מושוות אחרי lgEmailAddr
+//  (אותיות קטנות, '"שם" <כתובת>' → כתובת).
+function lgEmailInboundAllowed(addr) {
+  const list = _lgParseAllowlist(process.env.EMAIL_INBOUND_ALLOWED);
+  if (!list.keys.length) return { allowed: false, reason: 'לא הוגדרה רשימת שולחים (EMAIL_INBOUND_ALLOWED)' };
+  const pid = _projectId();
+  if (!pid || list.project !== pid) return { allowed: false, reason: 'רשימת השולחים מונפקת לפרויקט אחר' };
+  if (list.keys.includes('*')) return { allowed: true, reason: '' };
+  // require כאן ולא למעלה: _env נטען כמעט בכל endpoint, ורק זה צריך את זה
+  const { lgEmailAddr } = require('./_email-recipient');
+  const want = lgEmailAddr(addr);
+  if (!want || !list.keys.some(k => lgEmailAddr(k) === want)) return { allowed: false, reason: 'השולח אינו ברשימה' };
+  return { allowed: true, reason: '' };
+}
+
 module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl,
-                   lgGreenApiGate, lgGreenApiEnvReady, lgWaInboundAllowed, LG_LIVE_PROJECT };
+                   lgGreenApiGate, lgGreenApiEnvReady, lgWaInboundAllowed, lgEmailInboundAllowed,
+                   LG_LIVE_PROJECT };
