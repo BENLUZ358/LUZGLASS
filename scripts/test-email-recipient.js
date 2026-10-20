@@ -31,6 +31,13 @@ const db = () => fakeDb({
   check('A3 garbage → empty', em.lgEmailAddr('not an address'), '');
   check('A4 empty / null → empty', [em.lgEmailAddr(''), em.lgEmailAddr(null)], ['', '']);
 
+  const spoof = '"boss@client.com <boss@client.com>" <attacker@evil.com>';
+  check('A5 <...> inside the display name does not win over the real address',
+        em.lgEmailAddr(spoof), 'attacker@evil.com');
+  const rs = await em.lgClientFromEmail(fakeDb({ hashavshevetAccounts: { B: { key: 'B', name: 'בוס', email: 'boss@client.com' } } }), spoof);
+  check('A6 spoofed display name never matches the other customer card',
+        { m: rs.matched, via: rs.via, id: rs.customerId }, { m: false, via: 'none', id: '' });
+
   const r1 = await em.lgClientFromEmail(db(), 'Someone <OTHER@x.co.il>');
   check('B1 second address on a multi-address card matches',
         { m: r1.matched, via: r1.via, id: r1.customerId, login: r1.loginPhone, name: r1.name, email: r1.email },

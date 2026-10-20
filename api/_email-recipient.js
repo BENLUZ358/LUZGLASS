@@ -19,7 +19,11 @@ const { norm } = require('./_wa-recipient.js');
 //  '"Dana" <Dana@X.com>' → 'dana@x.com'. כל דבר שאינו כתובת → ''.
 function lgEmailAddr(raw) {
   const s = String(raw || '');
-  const m = /<([^<>]*)>/.exec(s);
+  // ⚠️ הקבוצה **האחרונה** ב-<...>: שם התצוגה בגרשיים יכול להכיל <...> משלו
+  //  ('"boss@client.com <boss@client.com>" <attacker@evil.com>'), והכתובת
+  //  האמיתית תמיד אחרונה. הראשונה הייתה משייכת סקיצה ללקוח אחר.
+  const groups = [...s.matchAll(/<([^<>]*)>/g)];
+  const m = groups.length ? groups[groups.length - 1] : null;
   const a = (m ? m[1] : s).trim().toLowerCase();
   return /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(a) ? a : '';
 }
