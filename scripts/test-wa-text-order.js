@@ -7,7 +7,7 @@
  * Spec: docs/superpowers/specs/2026-10-20-wa-text-mirror-orders-design.md
  * Run:  node scripts/test-wa-text-order.js
  */
-const { lgWaTextParse, lgWaTextIsOrder, lgWaTextSvg } = require('../api/_wa-text-order.js');
+const { lgWaTextParse, lgWaTextIsOrder, lgWaTextSvg, lgWaTextItems } = require('../api/_wa-text-order.js');
 let failed = 0;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
   ? console.log('ok    ' + name)
@@ -92,6 +92,24 @@ check('a real message is an order', lgWaTextIsOrder(PHR26037), true);
   check('the client and the time are on top', /אגן ברזל/.test(body) && /20\.10\.2026 16:52/.test(body), true);
   const h = s => Number((decodeURIComponent(s).match(/height="(\d+)"/) || [])[1]);
   check('a longer message makes a taller picture', h(lgWaTextSvg(PHR26037, {})) > h(lgWaTextSvg('PHR#1\nמראה\n100/50 ס"מ — כמות: 1', {})), true);
+}
+
+/* items for the sketch queue — the same shape iwAdd builds (lgMakeQuantityGroup) */
+{
+  const CAT = {
+    '5MIRM':  { code: '5MIRM',  name: "5 מ''מ מראה מלוטש", glass: 'מראה', mm: 5, proc: 'litush' },
+    '5MIRAM': { code: '5MIRAM', name: "5 מ''מ מראה אפורה מלוטש", glass: 'מראה אפורה', mm: 5, proc: 'litush' },
+  };
+  const items = lgWaTextItems(lgWaTextParse('X#1\nמראה\n100/50 ס"מ — כמות: 2\nמראה שחורה\n90/40 ס"מ — כמות: 1\nזכוכית חלבית\n30/30 ס"מ — כמות: 1'), CAT);
+  check('quantity 2 → two items (one per piece), like the queue', items.filter(x => x.sku === '5MIRM').length, 2);
+  check('…sharing one quantity group, numbered 1..2', items.slice(0, 2).map(x => [x.originalQuantity, x.groupIndex, x.quantityGroupId === items[0].quantityGroupId]), [[2, 1, true], [2, 2, true]]);
+  check('the item carries the catalog name, glass, mm, sizes and processing', (({ sku, name, glass, mm, w, h, litush, chisum }) => ({ sku, name, glass, mm, w, h, litush, chisum }))(items[0]),
+        { sku: '5MIRM', name: "5 מ''מ מראה מלוטש", glass: 'מראה', mm: 5, w: 1000, h: 500, litush: true, chisum: false });
+  check('a different line is its own group', items[2].quantityGroupId !== items[0].quantityGroupId, true);
+  const missing = items[3];
+  check('an unknown heading: the item has no SKU, keeps the heading as its name, and is marked', [missing.sku, missing.name, missing.skuMissing, missing.w], [undefined, 'זכוכית חלבית', true, 300]);
+  const noCat = lgWaTextItems(lgWaTextParse('X#1\nמראה\n100/50 ס"מ — כמות: 1'), {});
+  check('a SKU missing from the catalog is still set (priced by SKU), named by the heading', [noCat[0].sku, noCat[0].name], ['5MIRM', 'מראה']);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

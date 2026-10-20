@@ -76,6 +76,25 @@ function lgWaTextIsOrder(text) {
   return !!p.orderRef && p.groups.some(g => g.lines.length);
 }
 
+// פריטים לתור הסקיצות — אותו מבנה ש-iwAdd בונה (lgMakeQuantityGroup): כמות N = N פריטים
+// בקבוצת כמות אחת. השם/סוג/עובי/עיבוד — מכרטיס המק"ט בקטלוג (skuCatalog/<SKU>).
+// מק"ט שלא בקטלוג נשאר (התמחור הוא לפי מק"ט), והשם הוא הכותרת. בלי מק"ט — skuMissing.
+function lgWaTextItems(parsed, catalog) {
+  const cat = catalog || {};
+  const out = [];
+  (parsed && parsed.groups || []).forEach((g, gi) => g.lines.forEach((l, li) => {
+    const e = g.sku ? cat[g.sku] : null;
+    const base = g.sku
+      ? { sku: g.sku, name: (e && e.name) || g.heading, glass: (e && e.glass) || '', mm: (e && e.mm) || '',
+          w: l.w, h: l.h, chisum: !!e && e.proc === 'chisum', litush: !!e && e.proc === 'litush', graphic: !!(e && e.graphic),
+          chalavi: !!(e && e.chalavi), triplex: !!(e && e.triplex) }
+      : { name: g.heading, glass: '', mm: '', w: l.w, h: l.h, chisum: false, litush: false, graphic: false, skuMissing: true };
+    const gid = 'grp_wa_' + gi + '_' + li;
+    for (let i = 1; i <= l.qty; i++) out.push({ ...base, quantityGroupId: gid, originalQuantity: l.qty, groupIndex: i });
+  }));
+  return out;
+}
+
 const _esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // "צילום" של ההודעה — במקום סקיצה, כדי שבתחנת הבדיקה ובמפעל יראו בדיוק מה הלקוח כתב.
@@ -99,4 +118,4 @@ function lgWaTextSvg(text, meta) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
-module.exports = { lgWaTextParse, lgWaTextIsOrder, lgWaTextSvg, LG_WA_TEXT_SKU_RULES };
+module.exports = { lgWaTextParse, lgWaTextIsOrder, lgWaTextSvg, lgWaTextItems, LG_WA_TEXT_SKU_RULES };
