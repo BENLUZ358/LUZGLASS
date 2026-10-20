@@ -89,7 +89,10 @@ const gs = fs.existsSync(gsPath) ? fs.readFileSync(gsPath, 'utf8') : '';
 const S = '// ── core start ──', E = '// ── core end ──';
 const i = gs.indexOf(S), j = gs.indexOf(E);
 check('gs has core block', i >= 0 && j > i, true);
-check('gs core identical to source', gs.slice(i, j + E.length) + '\n', core);
+//  ⚠️ סופי שורה מנורמלים: ב-Windows git (autocrlf) כותב CRLF, ולכן ה-'\n' שאחרי
+//  סמן הסוף שונה בין checkouts. התוכן הוא מה שחייב להיות זהה.
+const lf = t => t.replace(/\r\n/g, '\n');
+check('gs core identical to source', lf(gs.slice(i, j + E.length)) + '\n', lf(core).replace(/\n*$/, '\n'));
 
 if (fails) { console.log(fails + ' failed'); process.exit(1); }
 console.log('all passed');
