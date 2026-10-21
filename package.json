@@ -3,8 +3,10 @@
   "private": true,
   "description": "Vercel serverless functions dependencies (api/) — the site itself is static HTML/JS, no build step.",
   "dependencies": {
+    "@napi-rs/canvas": "0.1.65",
     "@vercel/functions": "^3.9.11",
-    "firebase-admin": "^12.7.0"
+    "firebase-admin": "^12.7.0",
+    "pdfjs-dist": "4.10.38"
   },
   "devDependencies": {
     "acorn": "^8.18.0",
