@@ -23,7 +23,7 @@ const PDF_TARGET_W = 1600;   // רוחב הדף בפיקסלים
 const PDF_JPEG_Q   = 80;     // איכות JPEG
 const PDF_MAX_PAGES = 30;    // יותר מזה — לא נקלט
 
-const REASON_PASSWORD = 'ה-PDF מוגן בסיסמה';
+const REASON_PASSWORD = 'ה-PDF מוגן בסיסמה — לבקש מהלקוח לשלוח בלי סיסמה';
 const REASON_CORRUPT  = 'קובץ ה-PDF פגום ולא נפתח';
 
 class PdfError extends Error {
@@ -34,10 +34,14 @@ class PdfError extends Error {
   }
 }
 
-// שגיאת pdfjs → סיבה בעברית. כל מה שאינו סיסמה נחשב קובץ פגום.
+// שגיאת pdfjs → סיבה בעברית. רק שגיאות של הקובץ עצמו ממופות; כל דבר אחר
+// (זיכרון, רשת, באג) מחזיר null — והקורא מתייחס אליו כתקלה זמנית לניסיון חוזר.
+const FILE_ERRORS = ['InvalidPDFException', 'MissingPDFException', 'UnknownErrorException', 'FormatError'];
 function _reasonFor(err) {
-  if (err && err.name === 'PasswordException') return REASON_PASSWORD;
-  return REASON_CORRUPT;
+  const name = err && err.name;
+  if (name === 'PasswordException') return REASON_PASSWORD;
+  if (FILE_ERRORS.includes(name)) return REASON_CORRUPT;
+  return null;
 }
 
 // מפעל קנבס מינימלי ש-pdfjs משתמש בו לתמונות מוטמעות ולמסכות
@@ -53,7 +57,12 @@ class CanvasFactory {
 let _pdfjsP = null;
 function _pdfjs() {
   if (!_pdfjsP) {
-    _pdfjsP = import('pdfjs-dist/legacy/build/pdf.mjs').catch(e => { _pdfjsP = null; throw e; });
+    // ⚠️ טעינת ה-worker במפורש: כך Vercel מזהה את הקובץ ב-bundle, ו-pdfjs
+    //    לא מנסה import() דינמי של נתיב שלא נארז.
+    _pdfjsP = (async () => {
+      globalThis.pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
+      return import('pdfjs-dist/legacy/build/pdf.mjs');
+    })().catch(e => { _pdfjsP = null; throw e; });
   }
   return _pdfjsP;
 }
@@ -67,26 +76,31 @@ async function lgPdfToJpegs(buf, opts) {
   const pdfjs = await _pdfjs();
   const pdfjsDir = path.dirname(require.resolve('pdfjs-dist/package.json'));
 
+  const task = pdfjs.getDocument({
+    data: new Uint8Array(buf),
+    CanvasFactory,
+    isEvalSupported: false,
+    useSystemFonts: false,
+    standardFontDataUrl: path.join(pdfjsDir, 'standard_fonts') + path.sep,
+    cMapUrl: path.join(pdfjsDir, 'cmaps') + path.sep,
+    cMapPacked: true,
+    stopAtErrors: true,   // עמוד פגום זורק שגיאה — הכל או כלום, אף פעם סקיצה חלקית
+    verbosity: 0,
+  });
   let doc;
   try {
-    doc = await pdfjs.getDocument({
-      data: new Uint8Array(buf),
-      CanvasFactory,
-      isEvalSupported: false,
-      useSystemFonts: false,
-      standardFontDataUrl: path.join(pdfjsDir, 'standard_fonts') + path.sep,
-      cMapUrl: path.join(pdfjsDir, 'cmaps') + path.sep,
-      cMapPacked: true,
-      verbosity: 0,
-    }).promise;
+    doc = await task.promise;
   } catch (e) {
-    throw new PdfError(_reasonFor(e));
+    await task.destroy().catch(() => {});
+    const reason = _reasonFor(e);
+    if (!reason) throw e;
+    throw new PdfError(reason);
   }
 
   try {
     if (!doc.numPages) throw new PdfError('ב-PDF אין עמודים');
     if (doc.numPages > maxPages) {
-      throw new PdfError(`ב-PDF יש ${doc.numPages} עמודים — מותר עד ${maxPages}`);
+      throw new PdfError(`ב-PDF יש ${doc.numPages} עמודים — יותר מ-${maxPages}, לטפל ידנית`);
     }
 
     const out = [];
@@ -105,6 +119,7 @@ async function lgPdfToJpegs(buf, opts) {
         out.push({ bytes, w: canvas.width, h: canvas.height });
         canvas.width = 0; canvas.height = 0;   // שחרור הזיכרון לפני העמוד הבא
       } catch (e) {
+        console.warn('pdf-pages: page', n, e && e.name, e && String(e.message).slice(0, 200));
         throw new PdfError(`עמוד ${n} ב-PDF לא נפתח`);
       } finally {
         if (page) page.cleanup();
@@ -112,7 +127,7 @@ async function lgPdfToJpegs(buf, opts) {
     }
     return out;
   } finally {
-    await doc.destroy();
+    await doc.destroy().catch(() => {});
   }
 }
 

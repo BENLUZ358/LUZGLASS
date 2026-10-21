@@ -41,7 +41,7 @@ const CORRUPT = 'קובץ ה-PDF פגום ולא נפתח';
   let err = null;
   try { await pp.lgPdfToJpegs(fixture, { maxPages: 2 }); } catch (e) { err = e; }
   check('maxPages: PdfError', err instanceof pp.PdfError, true);
-  check('maxPages: הסיבה כוללת 3 ו-2', !!err && err.reason.includes('3') && err.reason.includes('2'), true);
+  check('maxPages: סיבה מדויקת', err && err.reason, 'ב-PDF יש 3 עמודים — יותר מ-2, לטפל ידנית');
 
   err = null;
   try { await pp.lgPdfToJpegs(fixture.subarray(0, 2048)); } catch (e) { err = e; }
@@ -53,11 +53,15 @@ const CORRUPT = 'קובץ ה-PDF פגום ולא נפתח';
   check('לא PDF: PdfError', err instanceof pp.PdfError, true);
   check('לא PDF: סיבה', err && err.reason, CORRUPT);
 
-  check('סיסמה: מיפוי', pp._reasonFor({ name: 'PasswordException' }).includes('סיסמה'), true);
-  check('שגיאה אחרת: פגום', pp._reasonFor({ name: 'InvalidPDFException' }), CORRUPT);
+  check('סיסמה: מיפוי', pp._reasonFor({ name: 'PasswordException' }), 'ה-PDF מוגן בסיסמה — לבקש מהלקוח לשלוח בלי סיסמה');
+  for (const n of ['InvalidPDFException', 'MissingPDFException', 'UnknownErrorException', 'FormatError']) {
+    check('שגיאת קובץ: ' + n, pp._reasonFor({ name: n }), CORRUPT);
+  }
+  check('שגיאה שאינה של הקובץ: null', pp._reasonFor(new Error('out of memory')), null);
+  check('לא שגיאה: null', pp._reasonFor(null), null);
 
   const vj = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
-  const glob = 'node_modules/pdfjs-dist/{standard_fonts,cmaps}/**';
+  const glob = 'node_modules/pdfjs-dist/{standard_fonts,cmaps}/**,node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs';
   for (const f of ['api/email-inbound.js', 'api/wa-inbound-drain.js']) {
     check(`vercel.json includeFiles: ${f}`, vj.functions[f] && vj.functions[f].includeFiles, glob);
     check(`vercel.json maxDuration נשמר: ${f}`, vj.functions[f] && vj.functions[f].maxDuration, 60);
