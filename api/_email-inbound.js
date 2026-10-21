@@ -47,7 +47,6 @@ const { lgEmailAddr, lgClientFromEmail } = require('./_email-recipient');
 const { lgInboxStillMine, lgInboxRefNum, lgInboxAudit, lgInboxDropNulls } = require('./_inbox-common');
 // ⚠️ אותו סף "תמונה גדולה — לבדוק" כמו WhatsApp, מאותו משתנה סביבה — לא עותק שני
 const { WA_IMAGE_FLAG_BYTES } = require('./_wa-inbound');
-const { lgPdfToJpegs, PdfError } = require('./_pdf-pages');
 
 const EM_INBOX = 'emailInbound';
 const EM_PARTS = 'emailParts';
@@ -64,6 +63,11 @@ const EM_MAX_CHUNKS = 10;
 // תקרה לכל המייל, אחרי ש-PDF נפרש לעמודים (אפיון §3.3). מעבר לזה זה לא
 // "כמה סקיצות" אלא קטלוג — בן מטפל ביד, ולא 41 שורות בתור.
 const EM_MAX_SKETCHES = 40;
+const _tooMany = n => 'במייל יש ' + n + ' סקיצות — יותר מ-' + EM_MAX_SKETCHES + ', לטפל ידנית';
+// תקציב לרינדור כל הקבצים — מתחת ל-maxDuration של 60 שניות ב-Vercel, עם מקום
+// לכתיבות שאחריו. נבדק לפני כל קובץ, לא באמצע אחד.
+const EM_RENDER_BUDGET_MS = 40000;
+const EM_SLOW = 'עיבוד הקבצים במייל לקח יותר מדי זמן — לטפל ידנית';
 const EM_NO_SKETCH = 'אין קובץ סקיצה במייל';
 const EM_MISSING = 'חסרים חלקים מהקובץ';
 
@@ -176,21 +180,34 @@ async function lgEmailInboundProcess(db, key, opts) {
     if (big) throw new Final('הקובץ ' + (big.name || '') + ' גדול מדי (' + Math.round(big.size / 1048576) + 'MB)');
 
     const staged = (await db.ref(EM_PARTS + '/' + key).once('value')).val() || {};
-    const pdfToJpegs = o.pdfToJpegs || lgPdfToJpegs;   // נקודת החלפה לבדיקות
     // ⚠️ "תמונה" ש-sniffImage לא מזהה (HEIC מהאייפון, GIF, TIFF, או בייטים שאינם
     // תמונה) מדולגת ונרשמת ב-skipped, כמו docx — ולא מפילה את כל המייל (R9).
     // תמונה טובה לצידה עדיין הופכת להזמנה, ובן רואה בפאנל מה נשאר בחוץ.
     // ⚠️ PDF הפוך: קובץ פגום / מוגן בסיסמה / יותר מדי עמודים (PdfError) דוחה את
     // **כל** המייל — לא מדלגים עליו בשקט, כי זה כמעט תמיד הסקיצה העיקרית.
     // כל שגיאה אחרת ברינדור (זיכרון, באג) נזרקת כמו שהיא → failed וניסיון חוזר.
+    // ⚠️ נכשלים מהר וברור: הרינדור רץ בתוך בקשה של 60 שניות. בלי תקציב זמן
+    // ובלי "כמה מקום נשאר", מייל ענק היה נהרג באמצע — ומת בלי סיבה שבן מבין.
+    const clock = o.clock || Date.now;
+    const t0 = clock();
     const files = [];
     for (const p of sketchParts) {
+      if (clock() - t0 > EM_RENDER_BUDGET_MS) throw new Final(EM_SLOW);
       const raw = _bytesOf(staged, p);
       const name = String(p.name || '');
       if (_kind(p) === 'pdf') {
+        // ⚠️ נטען רק כשיש PDF — כך drain של WhatsApp לא טוען את @napi-rs/canvas
+        const pdf = require('./_pdf-pages');
+        const pdfToJpegs = o.pdfToJpegs || pdf.lgPdfToJpegs;   // נקודת החלפה לבדיקות
+        const room = Math.max(0, EM_MAX_SKETCHES - files.length);
         let pages;
-        try { pages = await pdfToJpegs(raw); }
-        catch (e) { if (e instanceof PdfError) throw new Final(e.reason); throw e; }
+        try { pages = await pdfToJpegs(raw, { maxPages: Math.min(pdf.PDF_MAX_PAGES, room) }); }
+        catch (e) {
+          if (!(e && e.name === 'PdfError')) throw e;
+          // נפרצה התקרה של המייל (המקום שנשאר), לא כלל 30 העמודים של ה-PDF עצמו
+          if (e.numPages > room && e.numPages <= pdf.PDF_MAX_PAGES) throw new Final(_tooMany(files.length + e.numPages));
+          throw new Final(e.reason);
+        }
         pages.forEach((pg, i) => files.push({
           name: name + ' · עמוד ' + (i + 1) + '/' + pages.length,
           fileName: name, mime: 'image/jpeg', bytes: pg.bytes,
@@ -201,9 +218,7 @@ async function lgEmailInboundProcess(db, key, opts) {
       if (!mime) { skipped.push(name); continue; }
       files.push({ name, mime, bytes: mime === 'image/jpeg' ? stripJpegMeta(raw) : raw });
     }
-    if (files.length > EM_MAX_SKETCHES) {
-      throw new Final('במייל יש ' + files.length + ' סקיצות — יותר מ-' + EM_MAX_SKETCHES + ', לטפל ידנית');
-    }
+    if (files.length > EM_MAX_SKETCHES) throw new Final(_tooMany(files.length));
     if (!files.length) throw new Final(EM_NO_SKETCH, 'ignored');
 
     const who = await lgClientFromEmail(db, entry.from);
@@ -434,5 +449,5 @@ async function lgEmailInboundClose(db, key, by, note, now) {
 module.exports = {
   lgEmailInboundKey, lgEmailPutChunk, lgEmailCommit, lgEmailInboundProcess,
   lgEmailInboundPending, lgEmailInboundRetry, lgEmailInboundClose,
-  EM_INBOX, EM_PARTS, EM_MAX_ATTEMPTS, EM_PART_MAX_BYTES, EM_MAX_SKETCHES,
+  EM_INBOX, EM_PARTS, EM_MAX_ATTEMPTS, EM_PART_MAX_BYTES, EM_MAX_SKETCHES, EM_RENDER_BUDGET_MS,
 };

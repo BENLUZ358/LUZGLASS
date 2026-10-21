@@ -39,6 +39,9 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 const env = require(path.join(ROOT, 'api', '_env.js'));
 const em  = require(path.join(ROOT, 'api', '_email-inbound.js'));
+// ⚠️ נבדק מיד, לפני ששום PDF עובד: drain של WhatsApp טוען את המודול הזה, ואסור
+// שיגרור איתו את @napi-rs/canvas
+const pdfLoadedAtRequire = Object.keys(require.cache).some(k => /[\\/]_pdf-pages\.js$/.test(k));
 
 // ─── קבצים סינתטיים ────────────────────────────────────────────────
 //  לא צריך שיהיו ניתנים לפענוח — רק שהבייטים הראשונים יזוהו כתמונה.
@@ -125,6 +128,8 @@ const sketchWrites = w => w.paths.filter(x => x.startsWith('sketches/')).length;
     check('A4 the constants', [em.EM_INBOX, em.EM_PARTS, em.EM_MAX_ATTEMPTS, em.EM_PART_MAX_BYTES, em.EM_MAX_SKETCHES],
           ['emailInbound', 'emailParts', 3, 10 * 1024 * 1024, 40]);
     check('A4 the old "PDF not supported" reason is gone', 'EM_PDF_REASON' in em, false);
+    check('A5 requiring the module does not load the PDF renderer', pdfLoadedAtRequire, false);
+    check('A5 the render budget leaves room under the 60s function limit', em.EM_RENDER_BUDGET_MS, 40000);
   }
 
 // ═══ B. שתי תמונות, לקוח מזוהה ══════════════════════════════════════
@@ -416,6 +421,48 @@ const sketchWrites = w => w.paths.filter(x => x.startsWith('sketches/')).length;
     check('J4 the staged bytes are kept for the retry', !!(dbj._data.emailParts || {}).K, true);
     const r2 = await em.lgEmailInboundProcess(dbj, 'K', { now: NOW + 1000, by: 'drain' });
     check('J4 the retry renders it for real', [r2.state, (r2.orderIds || []).length], ['done', 3]);
+  }
+  {
+    // כפיל שמכבד את maxPages כמו הרינדור האמיתי — לפי תוכן הקובץ: 'A' / 'B' / 'C'
+    const sizes = { A: 30, B: 20, C: 3, D: 35 };
+    const calls = [];
+    const spy = async (buf, opts) => {
+      const which = buf.toString(), n = sizes[which];
+      calls.push([which, opts && opts.maxPages]);
+      if (n > opts.maxPages) {
+        throw Object.assign(new Error('x'), { name: 'PdfError', reason: 'ב-PDF יש ' + n + ' עמודים — יותר מ-' + opts.maxPages + ', לטפל ידנית',
+                                              numPages: n, maxPages: opts.maxPages });
+      }
+      return Array.from({ length: n }, () => ({ bytes: JPEG, w: 1, h: 1 }));
+    };
+    const pdfs = names => names.map((x, i) => ({ idx: i, name: x + '.pdf', mime: 'application/pdf', buf: Buffer.from(x) }));
+
+    const dbj = seed();
+    const r = await em.lgEmailCommit(dbj, meta('K', await stage(dbj, 'K', pdfs(['A', 'B', 'C']))), { now: NOW, by: 't', pdfToJpegs: spy });
+    check('J6 two PDFs past 40 → rejected with the 40 reason, counting both', r,
+          { state: 'rejected', reason: 'במייל יש 50 סקיצות — יותר מ-40, לטפל ידנית' });
+    check('J6 the renderer is told how much room is left, and the third PDF is never rendered',
+          calls, [['A', 30], ['B', 10]]);
+    check('J6 nothing written', [Object.keys(dbj._data.orders || {}), Object.keys(dbj._data.sketches || {})], [[], []]);
+
+    // PDF של 35 עמודים לבד — זה כלל ה-30 של ה-PDF, לא תקרת המייל
+    const dbk = seed();
+    const r2 = await em.lgEmailCommit(dbk, meta('K', await stage(dbk, 'K', pdfs(['D']))), { now: NOW, by: 't', pdfToJpegs: spy });
+    check('J6 a 35-page PDF alone keeps its own 30-page reason', r2.reason, 'ב-PDF יש 35 עמודים — יותר מ-30, לטפל ידנית');
+  }
+  {
+    // תקציב זמן: כל רינדור "לוקח" 41 שניות בשעון מזויף — הקובץ השני לא מתחיל
+    let t = 0;
+    const calls = [];
+    const slow = async () => { calls.push(t); t += 41000; return [{ bytes: JPEG, w: 1, h: 1 }]; };
+    const dbj = seed();
+    const parts = await stage(dbj, 'K', [{ idx: 0, name: 'a.pdf', mime: 'application/pdf', buf: Buffer.from('a') },
+                                         { idx: 1, name: 'b.pdf', mime: 'application/pdf', buf: Buffer.from('b') }]);
+    const r = await em.lgEmailCommit(dbj, meta('K', parts), { now: NOW, by: 't', pdfToJpegs: slow, clock: () => t });
+    check('J7 over the render budget → rejected, plainly', r,
+          { state: 'rejected', reason: 'עיבוד הקבצים במייל לקח יותר מדי זמן — לטפל ידנית' });
+    check('J7 the second file was never started', calls.length, 1);
+    check('J7 nothing written', Object.keys(dbj._data.orders || {}), []);
   }
   {
     // תקרת הגודל המוצהר חלה גם על PDF — לפני שקוראים מהבסיס

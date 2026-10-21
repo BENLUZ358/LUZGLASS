@@ -27,10 +27,12 @@ const REASON_PASSWORD = 'ה-PDF מוגן בסיסמה — לבקש מהלקוח 
 const REASON_CORRUPT  = 'קובץ ה-PDF פגום ולא נפתח';
 
 class PdfError extends Error {
-  constructor(reason) {
+  //  extra — פרטים לקורא, למשל { numPages, maxPages } כשיש יותר מדי עמודים
+  constructor(reason, extra) {
     super(reason);
     this.name = 'PdfError';
     this.reason = reason;
+    if (extra) Object.assign(this, extra);
   }
 }
 
@@ -69,7 +71,8 @@ function _pdfjs() {
 
 async function lgPdfToJpegs(buf, opts) {
   const o = opts || {};
-  const maxPages = o.maxPages || PDF_MAX_PAGES;
+  // ⚠️ 0 הוא ערך תקין (הקורא: "לא נשאר מקום") — לא || שהיה הופך אותו ל-30
+  const maxPages = o.maxPages != null ? o.maxPages : PDF_MAX_PAGES;
   const targetW  = o.targetW  || PDF_TARGET_W;
   const quality  = o.quality  || PDF_JPEG_Q;
 
@@ -100,7 +103,9 @@ async function lgPdfToJpegs(buf, opts) {
   try {
     if (!doc.numPages) throw new PdfError('ב-PDF אין עמודים');
     if (doc.numPages > maxPages) {
-      throw new PdfError(`ב-PDF יש ${doc.numPages} עמודים — יותר מ-${maxPages}, לטפל ידנית`);
+      // numPages / maxPages — כדי שהקורא ידע איזו תקרה נפרצה (שלו או של ה-PDF)
+      throw new PdfError(`ב-PDF יש ${doc.numPages} עמודים — יותר מ-${maxPages}, לטפל ידנית`,
+                         { numPages: doc.numPages, maxPages });
     }
 
     const out = [];
@@ -119,6 +124,9 @@ async function lgPdfToJpegs(buf, opts) {
         out.push({ bytes, w: canvas.width, h: canvas.height });
         canvas.width = 0; canvas.height = 0;   // שחרור הזיכרון לפני העמוד הבא
       } catch (e) {
+        // ⚠️ רק שגיאה של הקובץ עצמו הופכת לדחייה. זיכרון / באג בקנבס — נזרקים
+        //    כמו שהם, והקורא מתייחס אליהם כתקלה זמנית (ניסיון חוזר).
+        if (!_reasonFor(e)) throw e;
         console.warn('pdf-pages: page', n, e && e.name, e && String(e.message).slice(0, 200));
         throw new PdfError(`עמוד ${n} ב-PDF לא נפתח`);
       } finally {
