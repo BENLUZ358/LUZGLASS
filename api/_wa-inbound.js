@@ -27,6 +27,7 @@ const crypto = require('crypto');
 const { sniffImage, stripJpegMeta } = require('./_wa-image');
 const { waChatToLocal, lgClientFromWaSender, lgClientFromWaGroup } = require('./_wa-recipient');
 const { lgWaTextIsOrder, lgWaTextParse, lgWaTextItems, lgWaTextSvg } = require('./_wa-text-order');
+const { lgInboxStillMine, lgInboxRefNum, lgInboxAudit, lgInboxDropNulls } = require('./_inbox-common');
 
 const INBOX = 'waInbound';
 
@@ -156,26 +157,8 @@ async function lgWaInboundClaim(db, key, by, now) {
 // ─── הורדה ──────────────────────────────────────────────────────────
 class Permanent extends Error {}
 
-//  ⚠️ "התפיסה עדיין שלי?" — נבדק בטרנזקציה ממש לפני כל כתיבה.
-//
-//  CLAIM_TTL_MS (2 דק') ארוך מ-maxDuration (60 שניות), ולכן בפועל מעבד
-//  לא אמור לחיות אחרי שהתפיסה שלו פגה. אבל "לא אמור" אינו ערובה: מעבד
-//  שנתקע, תפיסה שפגה, ומעבד שני שסיים — ואז הראשון מתעורר וכותב. מזהה
-//  ההזמנה דטרמיניסטי ולכן לא תיווצר **הזמנה שנייה**, אבל הכתיבה המאוחרת
-//  הייתה דורסת את ההזמנה הקיימת — כולל sketchSeenAt של מי שכבר עבר עליה —
-//  או הופכת done ל-failed. כאן זה נעצר.
-//
-//  touch: מה לכתוב ברשומה אם היא עדיין שלי (null = רק לבדוק ולרענן).
-async function _stillMine(db, key, token, now, touch) {
-  const r = await db.ref(INBOX + '/' + key).transaction(cur => {
-    if (cur === null) return null;                                   // null-first
-    if (cur.state !== 'processing' || cur.claimToken !== token) return;   // abort — לא שלי
-    const next = { ...cur, claimedAt: now, updatedAt: now, ...(touch || {}) };
-    for (const k of Object.keys(next)) if (next[k] === null) delete next[k];
-    return next;
-  });
-  return !!(r.committed && r.snapshot.val());
-}
+//  ⚠️ "התפיסה עדיין שלי?" — ההסבר המלא ב-_inbox-common.js.
+const _stillMine = (db, key, token, now, touch) => lgInboxStillMine(db, INBOX, key, token, now, touch);
 
 //  ⚠️ ב-GREEN API הטוקן בתוך ה-URL. כל הודעת שגיאה עוברת כאן לפני שהיא
 //  נשמרת, וה-URL עצמו לעולם לא נרשם.
@@ -215,15 +198,8 @@ async function _download(entry, fetchImpl) {
 }
 
 // ─── מספר הזמנה — פעם אחת להודעה ────────────────────────────────────
-async function _refNum(db, key, entry) {
-  if (entry.refNum) return entry.refNum;
-  // אותה נוסחה בדיוק כמו lgNextOrderNum בדפדפן
-  const c = await db.ref('meta/orderCounter').transaction(cur => Math.max(cur || 0, 999) + 1);
-  const mine = 'L' + c.snapshot.val();
-  const r = await db.ref(INBOX + '/' + key + '/refNum').transaction(cur => (cur === null ? mine : undefined));
-  // מישהו קדם לנו — המספר שלו גובר, ושלנו מתבזבז (נדיר, ועדיף על כפילות)
-  return r.committed ? mine : r.snapshot.val();
-}
+//  ר' lgInboxRefNum ב-_inbox-common.js
+const _refNum = (db, key, entry) => lgInboxRefNum(db, INBOX, key, entry);
 
 const _fmtLocal = p => (p.length === 10 ? p.slice(0, 3) + '-' + p.slice(3) : p);
 
@@ -383,11 +359,8 @@ async function lgWaInboundPending(db, limit, now, opts) {
 
 const _NOTE_MAX = 300;
 const _fresh = (cur, t) => cur.state === 'processing' && cur.claimedAt && (t - cur.claimedAt) < CLAIM_TTL_MS;
-const _audit = (cur, t, entry) => ({
-  ...(cur.audit || {}),
-  [t + '_' + entry.action + '_' + crypto.randomBytes(3).toString('hex')]: { at: t, ...entry },
-});
-const _dropNulls = o => { for (const k of Object.keys(o)) if (o[k] === null) delete o[k]; return o; };
+const _audit = lgInboxAudit;
+const _dropNulls = lgInboxDropNulls;
 
 //  למה אי אפשר לנסות שוב. '' = אפשר.
 function _retryBlock(cur, t) {

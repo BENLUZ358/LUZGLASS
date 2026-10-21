@@ -512,7 +512,9 @@ const markers = b => {
     check('F11 a secret made only of invisible marks lets nothing in', await withEnv('‎‏', 'Bearer ‎'), 401);
   }
 
-  const SRC = fs.readFileSync(path.join(ROOT, 'api', 'wa-inbound.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-inbound.js'), 'utf8');
+  // בדיקת הסוד עברה ל-_hook-token.js (20/10, משותפת עם email-inbound)
+  const SRC = ['wa-inbound.js', '_wa-inbound.js', '_hook-token.js']
+    .map(f => fs.readFileSync(path.join(ROOT, 'api', f), 'utf8')).join('\n');
   check('F8 neither the token nor the download link is ever logged',
         /console\.[a-z]+\([^)]*(downloadUrl|GREENAPI_TOKEN|GREENAPI_WEBHOOK_TOKEN|authorization)/i.test(SRC), false);
   check('F8 the token is compared in constant time', /timingSafeEqual/.test(SRC), true);

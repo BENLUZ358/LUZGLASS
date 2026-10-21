@@ -271,7 +271,7 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
                          clientMatch: { via: 'ambiguous', customerId: '', name: '', candidates: 2 } });
     check('L3 an ambiguous sender shows the order and the reason it was not assigned',
           [r.orderNum, r.client, r.needsAttention, r.reason],
-          ['L1050', 'לא שויך', true, 'המספר מופיע ב-2 כרטיסי לקוח — לא שויך אוטומטית. צריך לשייך ביד.']);
+          ['L1050', 'לא שויך', true, 'המספר מופיע ב-2 כרטיסי לקוח — לא שויך אוטומטית. צריך לשייך ביד בתור הסקיצות, בכפתור "שייך ללקוח".']);
     check('L3 the sketch itself can be viewed', r.view, { type: 'sketch', orderId: 'wa_C_1' });
     check('L3 an order that exists cannot be retried', r.canRetry, false);
   }
@@ -320,15 +320,105 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
           JSON.parse(JSON.stringify(ctx.lgWaInCounts(rows))), { attention: 2, inProgress: 2 });
   }
 
+// ═══ N. קליטות מייל (20/10) — אותו פאנל, ערוץ שני ═══════════════════
+  {
+    const er = (k, r) => ctx.lgWaInRow(k, r, NOW + 60000, 'email');
+    const r = er('m1', { state: 'rejected', from: 'דני כהן <Dani@Example.co.il>', subject: 'מקלחון לבית',
+                         createdAt: NOW, receivedAt: NOW - 1000, parts: [{ idx: 0, name: 'מקלחון.pdf', mime: 'application/pdf' }],
+                         reason: 'PDF עדיין לא נתמך במייל — לטפל ידנית' });
+    check('N1 a rejected email row shows the sender address, not a phone', r.sender, 'dani@example.co.il');
+    check('N1 …with the reason, plain', [r.statusLabel, r.reason, r.needsAttention], ['לא נקלט', 'PDF עדיין לא נתמך במייל — לטפל ידנית', true]);
+    check('N1 …the subject and the file name', [r.caption, r.fileName, r.kindLabel], ['מקלחון לבית', 'מקלחון.pdf', 'מייל · קובץ אחד']);
+    check('N1 …and it is an email row', r.channel, 'email');
+    const html = ctx.lgWaInRowHtml(r);
+    check('N1 the HTML shows the address', html.includes('dani@example.co.il'), true);
+
+    const f = er('m2', { state: 'dead', from: 'a@b.co', createdAt: NOW - 30 * 86400000, attempts: 3, reason: '3 ניסיונות נכשלו — חסרים חלקים מהקובץ' });
+    check('N2 a dead email can be retried even after a month — the bytes are ours', f.canRetry, true);
+    check('N2 the retry button carries the channel', /data-act="retry"[^>]*data-ch="email"|data-ch="email"[^>]*data-act="retry"/.test(ctx.lgWaInRowHtml(f)), true);
+    check('N2 retry posts {channel:\'email\', action:\'retry\', key}',
+          JSON.parse(JSON.stringify(ctx.lgWaInActBody('email', 'retry', 'm2'))), { channel: 'email', action: 'retry', key: 'm2' });
+    check('N2 a WhatsApp action posts no channel, as before',
+          JSON.parse(JSON.stringify(ctx.lgWaInActBody('whatsapp', 'close', 'w1', 'x'))), { action: 'close', key: 'w1', note: 'x' });
+    check('N2 a WhatsApp row is still a WhatsApp row', row('W', { state: 'failed', createdAt: NOW, sender: '0501234567' }).channel, 'whatsapp');
+
+    const u = er('m3', { state: 'done', from: 'x@y.com', createdAt: NOW, refNum: 'L2000', orderIds: ['em_m3_1', 'em_m3_2'],
+                         clientMatch: { via: 'none', customerId: '', name: '' }, skipped: ['הצעה.docx'] });
+    check('N3 an unknown sender: the order exists and needs assigning', [u.orderNum, u.client, u.needsAttention, u.statusLabel],
+          ['L2000', 'לא שויך', true, 'נקלט — לא שויך']);
+    check('N3 the reason talks about an address and points to "שייך ללקוח"', /הכתובת/.test(u.reason) && /שייך ללקוח/.test(u.reason), true);
+    check('N3 skipped files are named', /הצעה\.docx/.test(u.reason), true);
+    check('N3 the sketch can be viewed', u.view, { type: 'sketch', orderId: 'em_m3_1' });
+
+    const ok = er('m4', { state: 'done', from: 'x@y.com', createdAt: NOW, refNum: 'L2001', orderIds: ['em_m4_1'],
+                          clientMatch: { via: 'email', customerId: '14201', name: 'המקום לאמבט' } });
+    check('N4 a matched sender shows the client and needs nothing', [ok.client, ok.needsAttention], ['המקום לאמבט', false]);
+    const amb = er('m5', { state: 'done', from: 'x@y.com', createdAt: NOW, refNum: 'L2002', orderIds: ['em_m5_1'],
+                           clientMatch: { via: 'ambiguous', customerId: '', name: '', candidates: 3 } });
+    check('N4 an address on 3 cards is not guessed', [amb.needsAttention, /3 כרטיסי לקוח/.test(amb.reason)], [true, true]);
+    const ign = er('m6', { state: 'ignored', from: 'x@y.com', createdAt: NOW, reason: 'אין קובץ סקיצה במייל' });
+    check('N5 an email with no sketch is quiet — no attention, no retry', [ign.statusLabel, ign.needsAttention, ign.canRetry], ['לא סקיצה — דולג', false, false]);
+    const fl = er('m7', { state: 'failed', from: 'x@y.com', createdAt: NOW, attempts: 1, lastError: 'fetch failed' });
+    check('N5 an email error is not blamed on GREEN API', fl.reason, 'fetch failed');
+    // ⚠️ אותו כלל כמו lgEmailAddr בשרת: הקבוצה האחרונה ב-<...>
+    check('N6 the shown address is the real one, not a <...> inside the display name',
+          ctx._waInAddr('"boss@client.com <boss@client.com>" <attacker@evil.com>'), 'attacker@evil.com');
+    const big = er('m8', { state: 'done', from: 'x@y.com', createdAt: NOW, refNum: 'L2003', orderIds: ['em_m8_1'],
+                           clientMatch: { via: 'email', customerId: '14201', name: 'המקום לאמבט' }, oversize: true, sizeBytes: 1200000 });
+    check('N7 an oversized email image is flagged like WhatsApp', [big.needsAttention, /גדולה/.test(big.reason), big.tone], [true, true, 'warn']);
+  }
+
+// ═══ O. שויך ביד מאז — השורה מפסיקה לדרוש טיפול (קריאה בלבד) ════════
+  {
+    const orders = [
+      { id: 'wa_O_1', customerId: '14201', orderClient: 'המקום לאמבט', waUnassigned: false },
+      { id: 'em_O_1', customerId: '509', orderClient: 'אגן ברזל', emailUnassigned: false },
+      { id: 'em_O_2', customerId: '509', orderClient: 'אגן ברזל' },
+      { id: 'wa_P_1', customerId: '', orderClient: 'לא מזוהה · 053-3334444', waUnassigned: true },
+      { id: 'em_P_1', customerId: '', orderClient: 'לא מזוהה · x@y.com', emailUnassigned: true },
+      { id: 'em_Q_1', customerId: '509', orderClient: 'אגן ברזל' },
+      { id: 'em_Q_2', customerId: '', orderClient: 'לא מזוהה · x@y.com', emailUnassigned: true },
+    ];
+    const look = ctx.lgWaInAssignedFrom(orders);
+    const wa = (k, ids, via) => ctx.lgWaInRow(k, { state: 'done', kind: 'image', sender: '0533334444', createdAt: NOW, refNum: 'L1',
+      orderIds: ids, clientMatch: { via, customerId: '', name: '', candidates: 2 } }, NOW + 60000, 'whatsapp', look);
+    const em = (k, ids, via) => ctx.lgWaInRow(k, { state: 'done', from: 'x@y.com', createdAt: NOW, refNum: 'L2',
+      orderIds: ids, clientMatch: { via, customerId: '', name: '' } }, NOW + 60000, 'email', look);
+
+    const a = wa('O', ['wa_O_1'], 'ambiguous');
+    check('O1 WhatsApp, assigned by hand since: resolved, no attention, the client shown',
+          [a.needsAttention, a.tone, a.statusLabel, a.client, a.reason, a.canClose], [false, 'ok', 'נקלט — שויך ידנית', 'המקום לאמבט', '', false]);
+    const b = em('O', ['em_O_1', 'em_O_2'], 'none');
+    check('O2 email, every order assigned: resolved', [b.needsAttention, b.tone, b.statusLabel, b.client], [false, 'ok', 'נקלט — שויך ידנית', 'אגן ברזל']);
+
+    const c = wa('P', ['wa_P_1'], 'none');
+    check('O3 WhatsApp still unassigned: still needs a person', [c.needsAttention, c.statusLabel], [true, 'נקלט — לא שויך']);
+    const d = em('P', ['em_P_1'], 'ambiguous');
+    check('O4 email still unassigned: still needs a person', [d.needsAttention, d.statusLabel], [true, 'נקלט — לא שויך']);
+    const e = em('Q', ['em_Q_1', 'em_Q_2'], 'none');
+    check('O5 email with one of two orders still unassigned: still needs a person', e.needsAttention, true);
+    const f = em('R', ['em_gone_1'], 'none');
+    check('O6 an order that no longer exists does not count as assigned', f.needsAttention, true);
+    const g = ctx.lgWaInRow('O', { state: 'done', from: 'x@y.com', createdAt: NOW, orderIds: ['em_O_1'],
+      clientMatch: { via: 'none' } }, NOW + 60000, 'email');
+    check('O7 without the lookup nothing changes', g.needsAttention, true);
+    check('O8 the badge stops counting the resolved rows',
+          ctx.lgWaInCounts([a, b, c, d]).attention, 2);
+  }
+
 // ═══ M. גבולות ═══════════════════════════════════════════════════════
   {
     const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
     check('M1 the panel never writes waInbound directly — only through the admin endpoint',
           /ref\(\s*['"`]waInbound[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P), false);
+    check('M1 nor emailInbound / emailParts',
+          /ref\(\s*['"`]email(Inbound|Parts)[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P), false);
+    check('M1 the panel listens to emailInbound', /ref\(\s*['"`]emailInbound['"`]\s*\)/.test(P), true);
     check('M1 and loads the sketch only through the sketch layer', /\.sketch\b|files\.f0/.test(P), false);
     const A = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
     check('M2 admin.html loads the panel', /<script src="wa-inbound-panel\.js"><\/script>/.test(A), true);
     check('M2 and the queue has the intake button', /id="waInBtn"/.test(A), true);
+    check('M2 the panel heading names both channels', /<b>קליטות WhatsApp ומייל<\/b>/.test(A), true);
     const VJ = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
     check('M3 the admin endpoint has room to process a few images', ((VJ.functions || {})['api/wa-inbound-drain.js'] || {}).maxDuration >= 30, true);
     const fns = fs.readdirSync(path.join(ROOT, 'api')).filter(f => f.endsWith('.js') && !f.startsWith('_'));

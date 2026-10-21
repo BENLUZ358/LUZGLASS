@@ -390,7 +390,9 @@ label.msec-t{display:block;}
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
   <script src="wa-inbound-panel.js"></script>
+  <script src="sq-assign.js"></script>
   <script src="sku-picker.js"></script>
+  <script src="lg-health.js?v=20261020"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -452,6 +454,7 @@ label.msec-t{display:block;}
         <button class="vt" id="vtK" onclick="setView('kanban',this)"><span data-icon="kanban"></span> לוח</button>
         <button class="vt active" id="vtT" onclick="setView('table',this)"><span data-icon="list"></span> טבלה</button>
       </div>
+      <button type="button" onclick="lgRunHealthCheck()" title="בודק את הנתונים ומראה דברים שתקועים או חסרים — רק קורא, לא משנה כלום" style="display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:6px 12px;background:none;border:1px solid var(--gold);color:var(--gold-text);font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:4px;white-space:nowrap;"><span data-icon="check-circle"></span>בדיקת תקינות</button>
       <span id="topbarUserName" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
       <button onclick="lgLogout()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="יציאה"><span data-icon="logout"></span>יציאה</button>
     </div>
@@ -1432,6 +1435,8 @@ function renderAll(){
     buildSQItems();
     sqRender();
   }
+  // קליטה ששויכה ביד ("שייך ללקוח") מפסיקה לדרוש טיפול — הפאנל מחושב שוב מההזמנות
+  if(typeof lgWaInRefresh === 'function') lgWaInRefresh();
 
   // keep sketch queue in sync — same approach as kanban cards (always from live orders[])
   if(sqCurrent && document.getElementById('sqOverlay')?.style.display!=='none'){
@@ -1751,6 +1756,38 @@ function deleteSkuCatalogEntry(code){
 
 // חיבור API אמיתי — קורא ל-/api/hashavshevet-items (סוד ונתוני חתימה נשארים בשרת, אף פעם לא בדפדפן).
 // מריץ בבת-אחת (batches) כדי לא להציף את Firebase בקריאה סדרתית של מאות רשומות.
+// ── בדיקת תקינות (בן, 20/10/2026) ──
+// טוען פעם אחת (once) את מה שהבדיקה צריכה ומציג את lgHealthCheck (lg-health.js).
+// רק קורא — שום כתיבה. sketches/checkEdits לא נטענים: הם תמונות, כבדים, ולא נחוצים כאן.
+async function lgRunHealthCheck(){
+  const ov = document.getElementById('lgHealthOv') || document.body.appendChild(Object.assign(document.createElement('div'), { id: 'lgHealthOv' }));
+  ov.setAttribute('style', 'position:fixed;inset:0;z-index:950;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:16px;direction:rtl');
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  const box = '<div role="dialog" aria-label="בדיקת תקינות" style="background:var(--surface,#fff);color:var(--text);width:100%;max-width:640px;max-height:85vh;overflow:auto;border-radius:12px;padding:18px 18px 14px;font-family:Heebo,sans-serif">';
+  ov.innerHTML = box + '<b>בודק…</b></div>';
+  try {
+    const db = firebase.database();
+    const get = p => db.ref(p).once('value').then(x => x.val()).catch(() => null);
+    const [orders, workday, waInbound, waOutbox, prices] = await Promise.all(['orders', 'workday', 'waInbound', 'waOutbox', 'prices/global'].map(get));
+    const r = lgHealthCheck({ orders, workday, waInbound, waOutbox, prices }, Date.now());
+    const SEV = { high: ['דחוף', '#a93226'], mid: ['כדאי לבדוק', '#b9770e'], low: ['לא מזיק', '#756e66'] };
+    ov.innerHTML = box +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><b style="font-size:17px">בדיקת תקינות</b>' +
+      '<button type="button" aria-label="סגור" onclick="document.getElementById(\'lgHealthOv\').remove()" style="min-width:44px;min-height:44px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button></div>' +
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">' + lgEsc(r.summary) + '</div>' +
+      (r.problems.length
+        ? r.problems.map(p => '<div style="border:1px solid var(--border);border-inline-start:4px solid ' + SEV[p.sev][1] + ';border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px">' +
+            '<div style="font-size:12px;font-weight:800;color:' + SEV[p.sev][1] + '">' + SEV[p.sev][0] + ' · ' + p.count + '</div>' +
+            '<div style="font-weight:700;margin:2px 0 4px">' + lgEsc(p.title) + '</div>' +
+            '<div style="font-size:13px;color:var(--muted);line-height:1.6">' + p.items.map(lgEsc).join('<br>') + (p.count > p.items.length ? '<br>…ועוד ' + (p.count - p.items.length) : '') + '</div></div>').join('')
+        : '<div style="padding:12px;border-radius:8px;background:rgba(30,132,73,0.1);color:#1e8449;font-weight:700;margin-bottom:8px">✓ לא נמצאו בעיות</div>') +
+      '<details style="margin-top:6px;font-size:13px;color:var(--muted)"><summary style="cursor:pointer">מה נבדק ותקין (' + r.ok.length + ')</summary>' + r.ok.map(x => '✓ ' + lgEsc(x)).join('<br>') + '</details></div>';
+  } catch (e) {
+    console.error('lgRunHealthCheck:', e);
+    ov.innerHTML = box + '<b>הבדיקה נכשלה</b><div style="margin-top:6px;font-size:13px">בדוק חיבור אינטרנט ונסה שוב.</div></div>';
+  }
+}
+
 let _hbSyncing = false;
 async function syncFromHashavshevetNow(){
   if(_hbSyncing) return;
@@ -1805,7 +1842,7 @@ async function syncAccountsFromHashavshevetNow(){
       const batch = data.accounts.slice(i,i+BATCH);
       await Promise.all(batch.map(async acc=>{
         try{
-          await syncHashavshevetAccount(acc.key, { name: acc.name, phone: acc.phone, hashavshevetCode: acc.key, active: true });
+          await syncHashavshevetAccount(acc.key, { name: acc.name, phone: acc.phone, email: acc.email, hashavshevetCode: acc.key, active: true });
           created++;
         }catch(e){ console.error('syncAccountsFromHashavshevetNow account failed:', acc.key, e); }
       }));
@@ -2471,6 +2508,8 @@ document.addEventListener('visibilitychange', () => {
 .sq-tag-sketch{background:rgba(41,128,185,0.25);color:#5dade2;}
 .sq-tag-upload{background:rgba(142,68,173,0.25);color:#bb8fce;}
 .sq-tag-wa{background:rgba(37,211,102,0.18);color:#5fe08f;}
+.sq-tag-email{background:rgba(233,30,99,0.18);color:#f48fb1;}
+.sq-tag-unassigned{background:rgba(212,160,23,0.2);color:#f3c74f;}
 .sq-tag-pending{background:rgba(184,146,42,0.25);color:#d4ac0d;}
 .sq-tag-drafter{background:rgba(192,57,43,0.25);color:#ec7063;}
 .sq-tag-chash{background:rgba(39,174,96,0.25);color:#58d68d;}
@@ -2570,6 +2609,24 @@ document.addEventListener('visibilitychange', () => {
   outline:none;direction:rtl;transition:border-color 160ms ease,box-shadow 160ms ease;
 }
 #sqNameInput::placeholder{font-weight:500;color:#bbb;}
+/* "שייך ללקוח" — הזמנה ממייל/וואטסאפ שהלקוח שלה לא זוהה (sq-assign.js).
+   44px לכל מה שנוגעים בו, כמו בתחנת הבדיקה. */
+#sqAssignWrap{margin:0 14px 12px;padding:10px 12px;border:1px solid rgba(212,160,23,0.45);border-right:4px solid #d4a017;border-radius:6px;background:#fffaf0;}
+#sqAssignWrap[hidden]{display:none;}
+.sqa-msg{font-size:13px;line-height:1.5;color:#1a1714;margin-bottom:8px;}
+.sqa-from{direction:ltr;unicode-bidi:isolate;font-weight:700;}
+.sqa-btn{min-height:44px;padding:0 16px;border-radius:6px;border:2px solid #b8922a;background:#b8922a;color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;}
+.sqa-btn:disabled{opacity:0.45;cursor:default;}
+.sqa-quiet{background:transparent;color:#5a5248;border-color:rgba(0,0,0,0.15);}
+.sqa-btn:focus-visible,.sqa-opt:focus-visible,#sqAssignQ:focus-visible{outline:2px solid #b8922a;outline-offset:2px;}
+.sqa-row{display:flex;gap:8px;flex-wrap:wrap;}
+#sqAssignQ{flex:1 1 180px;min-width:0;min-height:44px;box-sizing:border-box;padding:0 10px;border:1px solid rgba(0,0,0,0.2);border-radius:6px;background:#fff;font-family:Heebo,sans-serif;font-size:16px;color:#1a1714;}
+.sqa-list{display:flex;flex-direction:column;margin-top:8px;border:1px solid rgba(0,0,0,0.12);border-radius:6px;overflow:hidden;max-height:50vh;overflow-y:auto;background:#fff;}
+.sqa-opt{display:flex;justify-content:space-between;align-items:center;gap:10px;min-height:44px;padding:0 12px;background:#fff;border:0;border-bottom:1px solid rgba(0,0,0,0.06);color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;text-align:right;cursor:pointer;}
+.sqa-opt:hover{background:rgba(184,146,42,0.12);}
+.sqa-opt:disabled{opacity:0.45;cursor:default;}
+.sqa-key{font-size:12px;color:#8a8278;font-family:monospace;font-weight:500;}
+.sqa-none{padding:10px 12px;font-size:13px;color:#8a5a00;}
 
 /* ── תת-שלב הבדיקה ─────────────────────────────────────────────────
    הטאבים חותכים את אותה רשימה. מצב הבדיקה מסתיר את מסך העבודה במקום
@@ -2712,7 +2769,7 @@ document.addEventListener('visibilitychange', () => {
   .iw-item-del{min-width:40px;min-height:40px;font-size:16px;}
 }
 
-/* ─ קליטות WhatsApp (wa-inbound-panel.js) ─ */
+/* ─ קליטות WhatsApp ומייל (wa-inbound-panel.js) ─ */
 #waInBtn{min-height:44px;padding:0 12px;background:transparent;border:1px solid rgba(247,244,239,0.18);border-radius:6px;
   cursor:pointer;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;color:rgba(247,244,239,0.8);white-space:nowrap;}
 #waInBtn:hover{border-color:rgba(184,146,42,0.5);color:#f7f4ef;}
@@ -2720,7 +2777,7 @@ document.addEventListener('visibilitychange', () => {
 .wain-badge{display:inline-block;margin-right:4px;padding:0 6px;border-radius:9px;background:rgba(255,255,255,0.14);font-size:12px;}
 .wain-badge-a{background:#c0392b;color:#fff;}
 .wain-badge[hidden]{display:none;}
-#waInPanel{position:absolute;top:50px;left:0;right:0;bottom:0;z-index:5;background:#1e1b18;color:#f0ede8;
+#waInPanel{position:absolute;top:50px;left:0;right:0;bottom:0;z-index:6;background:#1e1b18;color:#f0ede8;
   display:flex;flex-direction:column;font-family:Heebo,sans-serif;}
 #waInPanel[hidden]{display:none;}
 .wain-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.08);}
@@ -2736,6 +2793,7 @@ document.addEventListener('visibilitychange', () => {
 .wain-bad .wain-chip{color:#ff8a7a;} .wain-warn .wain-chip{color:#f3c74f;} .wain-ok .wain-chip{color:#6fdc9a;} .wain-wait .wain-chip{color:#8cc8f0;}
 .wain-when{color:rgba(247,244,239,0.55);}
 .wain-client{font-weight:700;}
+.wain-chan{font-size:12px;font-weight:700;padding:1px 6px;border-radius:3px;background:rgba(233,30,99,0.18);color:#f48fb1;}
 .wain-reason{margin-top:6px;font-size:13px;line-height:1.5;color:#f7f4ef;}
 .wain-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
 .wain-acts:empty{display:none;}
@@ -2868,8 +2926,8 @@ document.addEventListener('visibilitychange', () => {
         <button class="sq-seen-tab" id="sqTabSeen" role="tab" aria-selected="false"
                 onclick="sqSetSeenTab('seen')">נראה <span id="sqTabSeenN">0</span></button>
       </div>
-      <!-- קליטות WhatsApp — wa-inbound-panel.js -->
-      <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp"><span data-icon="inbox"></span>קליטות
+      <!-- קליטות WhatsApp ומייל — wa-inbound-panel.js -->
+      <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp ומייל"><span data-icon="inbox"></span>קליטות
         <span id="waInBadgeA" class="wain-badge wain-badge-a" hidden></span>
         <span id="waInBadgeP" class="wain-badge" hidden></span></button>
       <!-- בטלפון בלבד: הרשימות למטה מוסתרות, והכפתור פותח אותן כשורה נוספת -->
@@ -2880,6 +2938,7 @@ document.addEventListener('visibilitychange', () => {
         <option value="sketch">מערכת</option>
         <option value="upload">העלאות</option>
         <option value="whatsapp">WhatsApp</option>
+        <option value="email">מייל</option>
       </select>
       <select id="sqFStatus" class="sq-filter-sel" onchange="sqRender()" aria-label="סטטוס">
         <option value="">הכל</option>
@@ -2898,11 +2957,11 @@ document.addEventListener('visibilitychange', () => {
       <button id="sqCloseBtn" onclick="closeSQ()" aria-label="סגור"><span data-icon="x"></span></button>
     </div>
 
-    <!-- קליטות WhatsApp — מעל רשימת הסקיצות. הנתונים והפעולות ב-wa-inbound-panel.js -->
-    <div id="waInPanel" hidden role="dialog" aria-label="קליטות WhatsApp">
+    <!-- קליטות WhatsApp ומייל — מעל רשימת הסקיצות. הנתונים והפעולות ב-wa-inbound-panel.js -->
+    <div id="waInPanel" hidden role="dialog" aria-label="קליטות WhatsApp ומייל">
       <div class="wain-head">
-        <b>קליטות WhatsApp</b>
-        <span class="wain-sub">הודעות נכנסות שלא הפכו להזמנה תקינה, או שצריכות עין</span>
+        <b>קליטות WhatsApp ומייל</b>
+        <span class="wain-sub">הודעות ומיילים נכנסים שלא הפכו להזמנה תקינה, או שצריכים עין</span>
         <button id="waInToggle" type="button" class="wain-btn">הצג הכל</button>
         <button type="button" class="wain-btn" onclick="lgWaInClose()" aria-label="סגור קליטות">✕</button>
       </div>
@@ -2967,6 +3026,8 @@ document.addEventListener('visibilitychange', () => {
                    onchange="sqSaveName(this.value)"
                    onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}else{event.stopPropagation();}">
           </div>
+          <!-- "שייך ללקוח" — רק כשהלקוח לא זוהה (מייל/וואטסאפ). ממולא ע"י sq-assign.js -->
+          <div id="sqAssignWrap" hidden></div>
           <!-- check-station status badge -->
           <div id="sqCheckBadge" style="display:none;margin:0 14px 10px;padding:8px 12px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.2);border-radius:6px;font-size:12px;color:#27ae60;font-weight:700;"></div>
           <!-- actions -->
@@ -3397,6 +3458,10 @@ function buildSQItems(){
       isTest:       !!o.isTest,
       waDuplicateOf: o.waDuplicateOf || '',
       sketchSeenAt: o.sketchSeenAt || 0,
+      // לקוח לא זוהה — "שייך ללקוח" (sq-assign.js) מציג כפתור בסקיצה
+      waUnassigned:    !!o.waUnassigned,
+      emailUnassigned: !!o.emailUnassigned,
+      emailFrom:       o.emailFrom || '',
     });
   });
 }
@@ -3501,8 +3566,9 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':item.source==='email'?'מייל':'מערכת'}</span>
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
+          ${item.waUnassigned||item.emailUnassigned?'<span class="sq-tag sq-tag-unassigned">לא שויך</span>':''}
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
           ${item.waDuplicateOf?`<span class="sq-tag" title="אותו מספר הזמנה כבר קיים אצל הלקוח" style="background:rgba(192,57,43,0.18);color:#e57361">כפולה? ${lgEsc(item.waDuplicateOf)}</span>`:''}
         </div>
@@ -3569,6 +3635,8 @@ function sqShowDetail(){
 
   const nameEl=document.getElementById('sqNameInput');
   if(nameEl){ nameEl.value=o.sketchName||''; sqMarkNameState(); }
+  // לקוח לא זוהה → כפתור "שייך ללקוח" (sq-assign.js)
+  if(typeof sqAssignShow==='function') sqAssignShow(o);
 
   sqUpdateBtns(o.id);
 

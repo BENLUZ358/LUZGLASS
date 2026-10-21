@@ -231,5 +231,30 @@ check('the scan actually found fields to check', Object.keys(written).length > 1
         lgNormalizeOrder({ id: 'L1', sketchAck: 'yes' }).sketchAck, null);
 }
 
+/* ── סקיצה שהגיעה במייל ───────────────────────────────────────────────
+ *
+ * אפיון 2026-10-20-email-sketch-intake-design.md §3.2. אותם שדות כמו
+ * WhatsApp, עם email* במקום wa*. נכתבים ב-api/_email-inbound.js.
+ */
+{
+  const EM_FIELDS = ['emailMessageId', 'emailThreadId', 'emailFrom', 'emailReceivedAt',
+                     'emailPage', 'emailPages', 'emailUnassigned'];
+  for (const f of EM_FIELDS) check(`the whitelist carries ${f}`, whitelist.has(f), true);
+
+  const o = lgNormalizeOrder({
+    id: 'em_M1_2', stage: '', source: 'email',
+    emailMessageId: '<M1@mail>', emailThreadId: 'T1', emailFrom: 'dana@client.co.il',
+    emailReceivedAt: 1760950000000, emailPage: 2, emailPages: 3, emailUnassigned: true,
+  });
+  check('an email sketch keeps its source', o.source, 'email');
+  check('and every email field arrives intact',
+        EM_FIELDS.map(f => o[f]),
+        ['<M1@mail>', 'T1', 'dana@client.co.il', 1760950000000, 2, 3, true]);
+
+  const plain = lgNormalizeOrder({ id: 'L1' });
+  check('an ordinary order gets the email defaults — empty, 0, false',
+        EM_FIELDS.map(f => plain[f]), ['', '', '', 0, 0, 0, false]);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll order-normaliser checks passed.');

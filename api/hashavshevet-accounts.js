@@ -18,6 +18,21 @@ const { lgExternal, lgBlockExternal } = require('./_env');
 
 const ENDPOINT = 'https://ws.wizground.com/api';
 
+// ═══ דוא"ל מכרטיס הלקוח ═══
+// ⚠️ שם העמודה האמיתי בדוח "כרטיסי לקוח" לא ידוע עד שבן מוסיף אותה ב-WizGround,
+//    לכן לא מקודדים שם אחד — לוקחים את העמודה הראשונה שכותרתה דומה ל"דואר"/"מייל"/e-mail
+//    ושיש בה ערך. הערך נשמר גולמי: בחשבשבת אפשר להקליד כמה כתובות בשדה אחד
+//    ('a@x.com; b@y.com'), והפיצול נעשה בצד הקורא, לא כאן.
+function lgPickAccountEmail(row) {
+  if (!row || typeof row !== 'object') return '';
+  for (const col of Object.keys(row)) {
+    if (!/דואר|מייל|e-?mail/i.test(col)) continue;
+    const v = String(row[col] == null ? '' : row[col]).trim();
+    if (v) return v;
+  }
+  return '';
+}
+
 // טווח הפרמטרים המקורי של הדוח (מגיע מייצוא WizGround) — לא סוד, רק מגדיר
 // טווח "מהכל עד הכל" (ח.פ/טלפון/טלפון נייד) כדי שהדוח יחזיר את כל הלקוחות.
 const PARAMS_DATA = [
@@ -97,6 +112,7 @@ module.exports = async function handler(req, res) {
         key:   String(r['מפתח חשבון'] || '').trim(),
         name:  String(r['שם חשבון'] || '').trim(),
         phone: String(r['טלפון נייד'] || r['טלפון'] || r['טלפון 1'] || r['טלפון 2'] || '').trim(),
+        email: lgPickAccountEmail(r),
       }))
       .filter(a => a.key);
 
@@ -106,3 +122,6 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: 'internal error' });
   }
 };
+
+// לבדיקות (scripts/test-hashavshevet-accounts-email.js) — בלי רשת ובלי סביבה
+module.exports.lgPickAccountEmail = lgPickAccountEmail;
