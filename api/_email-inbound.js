@@ -65,7 +65,9 @@ const EM_MAX_CHUNKS = 10;
 const EM_MAX_SKETCHES = 40;
 const _tooMany = n => 'במייל יש ' + n + ' סקיצות — יותר מ-' + EM_MAX_SKETCHES + ', לטפל ידנית';
 // תקציב לרינדור כל הקבצים — מתחת ל-maxDuration של 60 שניות ב-Vercel, עם מקום
-// לכתיבות שאחריו. נבדק לפני כל קובץ, לא באמצע אחד.
+// לכתיבות שאחריו. נבדק לפני כל קובץ ולפני כל עמוד של PDF.
+// ⚠️ זה רק ברירת המחדל לדדליין. ה-drain מעביר opts.deadline משלו (תחילת ה-drain
+// + 40 שניות) — אחרת כל מייל מקבל 40 שניות חדשות והתקציבים נערמים מעבר ל-60.
 const EM_RENDER_BUDGET_MS = 40000;
 const EM_SLOW = 'עיבוד הקבצים במייל לקח יותר מדי זמן — לטפל ידנית';
 const EM_NO_SKETCH = 'אין קובץ סקיצה במייל';
@@ -189,10 +191,10 @@ async function lgEmailInboundProcess(db, key, opts) {
     // ⚠️ נכשלים מהר וברור: הרינדור רץ בתוך בקשה של 60 שניות. בלי תקציב זמן
     // ובלי "כמה מקום נשאר", מייל ענק היה נהרג באמצע — ומת בלי סיבה שבן מבין.
     const clock = o.clock || Date.now;
-    const t0 = clock();
+    const deadline = o.deadline != null ? o.deadline : clock() + EM_RENDER_BUDGET_MS;
     const files = [];
     for (const p of sketchParts) {
-      if (clock() - t0 > EM_RENDER_BUDGET_MS) throw new Final(EM_SLOW);
+      if (clock() > deadline) throw new Final(EM_SLOW);
       const raw = _bytesOf(staged, p);
       const name = String(p.name || '');
       if (_kind(p) === 'pdf') {
@@ -201,11 +203,15 @@ async function lgEmailInboundProcess(db, key, opts) {
         const pdfToJpegs = o.pdfToJpegs || pdf.lgPdfToJpegs;   // נקודת החלפה לבדיקות
         const room = Math.max(0, EM_MAX_SKETCHES - files.length);
         let pages;
-        try { pages = await pdfToJpegs(raw, { maxPages: Math.min(pdf.PDF_MAX_PAGES, room) }); }
+        try { pages = await pdfToJpegs(raw, { maxPages: Math.min(pdf.PDF_MAX_PAGES, room), deadline, clock }); }
         catch (e) {
           if (!(e && e.name === 'PdfError')) throw e;
+          if (e.timedOut) throw new Final(EM_SLOW);   // הדדליין עבר באמצע ה-PDF
+          // ⚠️ PDF מעל 30 עמודים — תמיד כלל ה-30, גם כשנשאר פחות מקום במייל
+          //    (אחרת הסיבה הייתה נוקבת במקום שנשאר, למשל "יותר מ-25")
+          if (e.numPages > pdf.PDF_MAX_PAGES) throw new Final('ב-PDF יש ' + e.numPages + ' עמודים — יותר מ-' + pdf.PDF_MAX_PAGES + ', לטפל ידנית');
           // נפרצה התקרה של המייל (המקום שנשאר), לא כלל 30 העמודים של ה-PDF עצמו
-          if (e.numPages > room && e.numPages <= pdf.PDF_MAX_PAGES) throw new Final(_tooMany(files.length + e.numPages));
+          if (e.numPages > room) throw new Final(_tooMany(files.length + e.numPages));
           throw new Final(e.reason);
         }
         pages.forEach((pg, i) => files.push({

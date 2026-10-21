@@ -13,6 +13,10 @@
  *  ⚠️ standardFontDataUrl / cMapUrl חייבים להסתיים ב-path.sep, ושתי
  *     התיקיות חייבות להיכלל בפונקציה ב-vercel.json (includeFiles).
  *
+ *  ⚠️ opts.deadline — רגע מוחלט (ms, לפי opts.clock) שאחריו לא מתחילים עמוד
+ *     נוסף. הקורא מעביר את הדדליין של כל הבקשה (לא תקציב חדש לכל קובץ),
+ *     אחרת תקציבים נערמים ופונקציית Vercel נהרגת באמצע. נבדק לפני כל עמוד.
+ *
  *  שגיאה למשתמש: PdfError.reason — עברית פשוטה, מוצגת לבן.
  * ══════════════════════════════════════════════════════════════════
  */
@@ -25,6 +29,7 @@ const PDF_MAX_PAGES = 30;    // יותר מזה — לא נקלט
 
 const REASON_PASSWORD = 'ה-PDF מוגן בסיסמה — לבקש מהלקוח לשלוח בלי סיסמה';
 const REASON_CORRUPT  = 'קובץ ה-PDF פגום ולא נפתח';
+const REASON_SLOW     = 'עיבוד ה-PDF לקח יותר מדי זמן — לטפל ידנית';
 
 class PdfError extends Error {
   //  extra — פרטים לקורא, למשל { numPages, maxPages } כשיש יותר מדי עמודים
@@ -75,16 +80,20 @@ async function lgPdfToJpegs(buf, opts) {
   const maxPages = o.maxPages != null ? o.maxPages : PDF_MAX_PAGES;
   const targetW  = o.targetW  || PDF_TARGET_W;
   const quality  = o.quality  || PDF_JPEG_Q;
+  const clock    = o.clock || Date.now;
+  const deadline = o.deadline != null ? o.deadline : Infinity;
 
   const pdfjs = await _pdfjs();
   const pdfjsDir = path.dirname(require.resolve('pdfjs-dist/package.json'));
+  // ⚠️ _fontDir — לבדיקות בלבד: תיקיית גופנים שגויה מוכיחה שהטקסט באמת מצויר
+  const fontDir = o._fontDir || path.join(pdfjsDir, 'standard_fonts') + path.sep;
 
   const task = pdfjs.getDocument({
     data: new Uint8Array(buf),
     CanvasFactory,
     isEvalSupported: false,
     useSystemFonts: false,
-    standardFontDataUrl: path.join(pdfjsDir, 'standard_fonts') + path.sep,
+    standardFontDataUrl: fontDir,
     cMapUrl: path.join(pdfjsDir, 'cmaps') + path.sep,
     cMapPacked: true,
     stopAtErrors: true,   // עמוד פגום זורק שגיאה — הכל או כלום, אף פעם סקיצה חלקית
@@ -110,6 +119,8 @@ async function lgPdfToJpegs(buf, opts) {
 
     const out = [];
     for (let n = 1; n <= doc.numPages; n++) {
+      // timedOut — הקורא הופך את זה לסיבה של כל המייל, לא של ה-PDF
+      if (clock() > deadline) throw new PdfError(REASON_SLOW, { timedOut: true });
       let page;
       try {
         page = await doc.getPage(n);

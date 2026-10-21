@@ -9,7 +9,11 @@
  *   - קריסה שאינה של הקובץ בציור עמוד → נזרקת כמו שהיא (תקלה זמנית)
  *   - קובץ חתוך / בייטים שאינם PDF → "פגום ולא נפתח"
  *   - מיפוי סיסמה (חיבור בדיקה _reasonFor)
- *   - vercel.json כולל את includeFiles (גופנים ו-cmaps) בשתי הפונקציות
+ *   - הטקסט באמת מצויר: עם תיקיית גופנים שגויה הטקסט נעלם — ואצלנו לא
+ *   - דדליין: עבר באמצע ה-PDF → PdfError עם timedOut, העמוד הבא לא מתחיל
+ *   - vercel.json: ה-glob של includeFiles **מוערך** (fs.globSync) ותופס
+ *     גופנים, cmaps ו-worker בשתי הפונקציות. ⚠️ Vercel לא מפצל בפסיקים —
+ *     מחרוזת עם פסיק תופסת 0 קבצים, והטקסט בשרטוטים נעלם בשקט.
  *
  * Run: node scripts/test-pdf-pages.js
  */
@@ -83,10 +87,59 @@ const CORRUPT = 'קובץ ה-PDF פגום ולא נפתח';
   check('שגיאה שאינה של הקובץ: null', pp._reasonFor(new Error('out of memory')), null);
   check('לא שגיאה: null', pp._reasonFor(null), null);
 
+  // ── הטקסט מצויר ─────────────────────────────────────────────────
+  //  מרנדרים את עמוד 1 פעמיים: רגיל, ועם תיקיית גופנים שגויה (opts._fontDir).
+  //  בלי הגופנים pdfjs מדלג על כל תו (אזהרה בלבד, בלי שגיאה) — הקווים נשארים
+  //  והטקסט נעלם. זה בדיוק מה שקורה ב-Vercel כש-includeFiles לא תופס כלום.
+  //  ⚠️ משווים פיקסל-פיקסל ולא גודל JPEG או סך הדיו: הקווים הם רוב הדיו
+  //     בעמוד, אז ההפרש בסך הכל קטן (~27%) ותלוי בדחיסה. פיקסלים שכהים רק
+  //     בגרסה עם הגופנים = הטקסט עצמו (~6000), והכיוון ההפוך ≈ 0.
+  {
+    const { loadImage, createCanvas } = require('@napi-rs/canvas');
+    const pixels = async bytes => {
+      const img = await loadImage(bytes);
+      const c = createCanvas(img.width, img.height), ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      return ctx.getImageData(0, 0, img.width, img.height).data;
+    };
+    const dark = (d, i) => d[i] + d[i + 1] + d[i + 2] < 3 * 128;
+    const [noFonts] = await pp.lgPdfToJpegs(fixture, { _fontDir: path.join(ROOT, 'no-such-font-dir') + path.sep });
+    const a = await pixels(pages[0].bytes), b = await pixels(noFonts.bytes);
+    let onlyWith = 0, onlyWithout = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      if (dark(a, i) && !dark(b, i)) onlyWith++;
+      if (dark(b, i) && !dark(a, i)) onlyWithout++;
+    }
+    console.log(`      עמוד 1: פיקסלים כהים רק עם הגופנים ${onlyWith}, רק בלעדיהם ${onlyWithout}`);
+    check('טקסט מצויר: אלפי פיקסלים של טקסט שנעלמים בלי הגופנים', onlyWith >= 2000, true);
+    check('טקסט מצויר: בלי הגופנים לא נוסף שום דבר (רק נעלם)', onlyWithout <= 50, true);
+  }
+
+  // ── דדליין ──────────────────────────────────────────────────────
+  {
+    let t = 0;
+    err = null;
+    let got = null;
+    // השעון "מתקדם" 10 שניות בכל קריאה: לפני עמוד 1 = 10, לפני עמוד 2 = 20 > 15
+    try { got = await pp.lgPdfToJpegs(fixture, { deadline: 15, clock: () => (t += 10) }); } catch (e) { err = e; }
+    check('דדליין באמצע: PdfError', [got && got.length, err && err.name], [null, 'PdfError']);
+    check('דדליין באמצע: מסומן timedOut', err && err.timedOut, true);
+    check('דדליין באמצע: נבדק לפני עמוד 1 ועמוד 2 בלבד (השלישי לא התחיל)', t, 20);
+
+    const ok = await pp.lgPdfToJpegs(fixture, { deadline: 1e15 });
+    check('דדליין רחוק: כל העמודים', ok.length, 3);
+  }
+
+  // ── vercel.json: ה-glob מוערך, לא מושווה כמחרוזת ───────────────
   const vj = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
-  const glob = 'node_modules/pdfjs-dist/{standard_fonts,cmaps}/**,node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs';
+  const isFile = p => { try { return fs.statSync(path.join(ROOT, p)).isFile(); } catch (_) { return false; } };
   for (const f of ['api/email-inbound.js', 'api/wa-inbound-drain.js']) {
-    check(`vercel.json includeFiles: ${f}`, vj.functions[f] && vj.functions[f].includeFiles, glob);
+    const pat = vj.functions[f] && vj.functions[f].includeFiles;
+    const hits = typeof pat === 'string' ? fs.globSync(pat, { cwd: ROOT }).map(p => p.split(path.sep).join('/')).filter(isFile) : [];
+    const under = d => hits.filter(p => p.startsWith('node_modules/pdfjs-dist/' + d + '/')).length;
+    check(`includeFiles תופס גופנים: ${f}`, under('standard_fonts') >= 1, true);
+    check(`includeFiles תופס cmaps: ${f}`, under('cmaps') >= 1, true);
+    check(`includeFiles תופס את ה-worker: ${f}`, hits.includes('node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'), true);
     check(`vercel.json maxDuration נשמר: ${f}`, vj.functions[f] && vj.functions[f].maxDuration, 60);
   }
 

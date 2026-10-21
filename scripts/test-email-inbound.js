@@ -21,7 +21,8 @@
  *   F. שולח לא מזוהה, שלושה ניסיונות → dead, תפיסה של מישהו אחר.
  *   G. "נסה שוב" / "טופל ידנית" / מה ממתין — אותו חוזה כמו WhatsApp.
  *   J. PDF → הזמנה לכל עמוד, לפי סדר הקבצים; יותר מ-40 סקיצות → נדחה;
- *      קריסת רינדור → זמנית (failed, ניסיון חוזר).
+ *      קריסת רינדור → זמנית (failed, ניסיון חוזר); דדליין מוחלט שעובר
+ *      באמצע PDF → נדחה בלי כתיבות (J8).
  *   H. רשימת השולחים המורשים — חתומה על הפרויקט.
  *
  * Run: node scripts/test-email-inbound.js
@@ -449,6 +450,17 @@ const sketchWrites = w => w.paths.filter(x => x.startsWith('sketches/')).length;
     const dbk = seed();
     const r2 = await em.lgEmailCommit(dbk, meta('K', await stage(dbk, 'K', pdfs(['D']))), { now: NOW, by: 't', pdfToJpegs: spy });
     check('J6 a 35-page PDF alone keeps its own 30-page reason', r2.reason, 'ב-PDF יש 35 עמודים — יותר מ-30, לטפל ידנית');
+
+    // 15 תמונות + PDF של 35 עמודים: נשאר מקום ל-25, אבל ה-PDF עצמו מעל 30 —
+    // הסיבה נוקבת ב-30 (כלל ה-PDF), לא ב-25 (המקום שנשאר) שהיה מבלבל את בן
+    const dbm = seed();
+    calls.length = 0;
+    const imgs = Array.from({ length: 15 }, (_, i) => ({ idx: i, name: 'i' + i + '.jpg', mime: 'image/jpeg', buf: JPEG }));
+    const pm = await stage(dbm, 'K', imgs.concat([{ idx: 15, name: 'D.pdf', mime: 'application/pdf', buf: Buffer.from('D') }]));
+    const r3 = await em.lgEmailCommit(dbm, meta('K', pm), { now: NOW, by: 't', pdfToJpegs: spy });
+    check('J6 15 images + a 35-page PDF: the renderer had room for 25', calls, [['D', 25]]);
+    check('J6 15 images + a 35-page PDF: the reason names 30, not 25', r3,
+          { state: 'rejected', reason: 'ב-PDF יש 35 עמודים — יותר מ-30, לטפל ידנית' });
   }
   {
     // תקציב זמן: כל רינדור "לוקח" 41 שניות בשעון מזויף — הקובץ השני לא מתחיל
@@ -463,6 +475,28 @@ const sketchWrites = w => w.paths.filter(x => x.startsWith('sketches/')).length;
           { state: 'rejected', reason: 'עיבוד הקבצים במייל לקח יותר מדי זמן — לטפל ידנית' });
     check('J7 the second file was never started', calls.length, 1);
     check('J7 nothing written', Object.keys(dbj._data.orders || {}), []);
+  }
+  {
+    // דדליין מוחלט באמצע PDF: הרינדור האמיתי, ושעון שמתקדם 10 שניות בכל
+    // קריאה. הדדליין (25) עובר לפני עמוד 2 של ה-PDF — לא "40 שניות לקובץ"
+    let t = 0;
+    const clock = () => (t += 10);
+    const dbj = seed();
+    const parts = await stage(dbj, 'K', [{ idx: 0, name: 'a.pdf', mime: 'application/pdf', buf: PDF3 }]);
+    const r = await em.lgEmailCommit(dbj, meta('K', parts), { now: NOW, by: 't', clock, deadline: 25 });
+    check('J8 the deadline passes mid-PDF → rejected, plainly', r,
+          { state: 'rejected', reason: 'עיבוד הקבצים במייל לקח יותר מדי זמן — לטפל ידנית' });
+    check('J8 the clock was read before the file and before pages 1 and 2 only', t, 30);
+    check('J8 nothing written', [Object.keys(dbj._data.orders || {}), Object.keys(dbj._data.sketches || {})], [[], []]);
+    check('J8 no order number burned', dbj._data.meta.orderCounter, 1041);
+
+    // בלי opts.deadline — ברירת המחדל היא 40 שניות מתחילת העיבוד, והיא מגיעה לרינדור
+    const seen = [];
+    const spy = async (buf, o) => { seen.push(o.deadline); return [{ bytes: JPEG, w: 1, h: 1 }]; };
+    const dbk = seed();
+    const pk = await stage(dbk, 'K', [{ idx: 0, name: 'a.pdf', mime: 'application/pdf', buf: Buffer.from('a') }]);
+    await em.lgEmailCommit(dbk, meta('K', pk), { now: NOW, by: 't', pdfToJpegs: spy, clock: () => 1000 });
+    check('J8 default deadline = start + 40s, handed to the renderer', seen, [1000 + em.EM_RENDER_BUDGET_MS]);
   }
   {
     // תקרת הגודל המוצהר חלה גם על PDF — לפני שקוראים מהבסיס
