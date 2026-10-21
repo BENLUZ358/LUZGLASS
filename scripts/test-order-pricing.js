@@ -49,7 +49,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 const ctx = { module: {}, exports: {} };
 vm.createContext(ctx);
 for (const re of [/function areaM2[\s\S]*?\n}/, /function clientPricesByName[\s\S]*?\n}/,
-                  /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /function lineText[\s\S]*?\n}/,
+                  /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /const LG_HS_ITEMNAME_TRIAL_IDS = \[[^\]]*\];/, /function lineText[\s\S]*?\n}/,
                   /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines, unpriced \};\n}/]) {
   const m = SRC.match(re);
   if (!m) { console.error('FAIL  could not find ' + re); process.exit(1); }
