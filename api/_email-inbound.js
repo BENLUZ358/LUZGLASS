@@ -36,6 +36,8 @@
 //  2. **מספר הזמנה אחד למייל**, נשמר ברשומה לפני הכתיבה (lgInboxRefNum).
 //     כל הזמנה מקבלת אותו מספר עם סיומת -1..n כשיש יותר מתמונה אחת — כמו
 //     אצווה מהפורטל (upload.html). ברשומה נשמר המספר בלי סיומת.
+//     PDF נפרש לעמודים (_pdf-pages.js) — כל עמוד הזמנה, במקום של ה-PDF
+//     בסדר הקבצים. עד EM_MAX_SKETCHES לכל המייל.
 //  3. **הסקיצה ב-sketches/ בלבד**; בהזמנה hasSketch:true.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -45,6 +47,7 @@ const { lgEmailAddr, lgClientFromEmail } = require('./_email-recipient');
 const { lgInboxStillMine, lgInboxRefNum, lgInboxAudit, lgInboxDropNulls } = require('./_inbox-common');
 // ⚠️ אותו סף "תמונה גדולה — לבדוק" כמו WhatsApp, מאותו משתנה סביבה — לא עותק שני
 const { WA_IMAGE_FLAG_BYTES } = require('./_wa-inbound');
+const { lgPdfToJpegs, PdfError } = require('./_pdf-pages');
 
 const EM_INBOX = 'emailInbound';
 const EM_PARTS = 'emailParts';
@@ -58,8 +61,9 @@ const EM_PART_MAX_BYTES = 10 * 1024 * 1024;
 const EM_MAX_PARTS = 20;
 const EM_MAX_CHUNKS = 10;
 
-// חלק 2 מחליף את זה ברינדור עמודים (אפיון §3.3)
-const EM_PDF_REASON = 'PDF עדיין לא נתמך במייל — לטפל ידנית';
+// תקרה לכל המייל, אחרי ש-PDF נפרש לעמודים (אפיון §3.3). מעבר לזה זה לא
+// "כמה סקיצות" אלא קטלוג — בן מטפל ביד, ולא 41 שורות בתור.
+const EM_MAX_SKETCHES = 40;
 const EM_NO_SKETCH = 'אין קובץ סקיצה במייל';
 const EM_MISSING = 'חסרים חלקים מהקובץ';
 
@@ -161,26 +165,44 @@ async function lgEmailInboundProcess(db, key, opts) {
   try {
     const parts = (Array.isArray(entry.parts) ? entry.parts : Object.values(entry.parts || {}))
       .filter(Boolean).slice().sort((a, b) => a.idx - b.idx);
-    const images = parts.filter(p => _kind(p) === 'image');
+    // תמונות ו-PDF יחד, לפי סדר הקבצים במייל — הסדר הוא סדר ההזמנות (-1..n)
+    const sketchParts = parts.filter(p => _kind(p) === 'image' || _kind(p) === 'pdf');
     // קבצים אחרים (docx, xlsx, zip) לא נקלטים — אבל השם נרשם, כדי שבן יראה
     skipped = parts.filter(p => _kind(p) === 'other').map(p => String(p.name || ''));
-    if (!images.length && !parts.some(p => _kind(p) === 'pdf')) throw new Final(EM_NO_SKETCH, 'ignored');
-    if (parts.some(p => _kind(p) === 'pdf')) throw new Final(EM_PDF_REASON);
+    if (!sketchParts.length) throw new Final(EM_NO_SKETCH, 'ignored');
 
     // תקרה לפי מה שהוצהר — לפני שקוראים 10MB+ מהבסיס
-    const big = images.find(p => Number(p.size) > EM_PART_MAX_BYTES);
+    const big = sketchParts.find(p => Number(p.size) > EM_PART_MAX_BYTES);
     if (big) throw new Final('הקובץ ' + (big.name || '') + ' גדול מדי (' + Math.round(big.size / 1048576) + 'MB)');
 
     const staged = (await db.ref(EM_PARTS + '/' + key).once('value')).val() || {};
+    const pdfToJpegs = o.pdfToJpegs || lgPdfToJpegs;   // נקודת החלפה לבדיקות
     // ⚠️ "תמונה" ש-sniffImage לא מזהה (HEIC מהאייפון, GIF, TIFF, או בייטים שאינם
     // תמונה) מדולגת ונרשמת ב-skipped, כמו docx — ולא מפילה את כל המייל (R9).
     // תמונה טובה לצידה עדיין הופכת להזמנה, ובן רואה בפאנל מה נשאר בחוץ.
+    // ⚠️ PDF הפוך: קובץ פגום / מוגן בסיסמה / יותר מדי עמודים (PdfError) דוחה את
+    // **כל** המייל — לא מדלגים עליו בשקט, כי זה כמעט תמיד הסקיצה העיקרית.
+    // כל שגיאה אחרת ברינדור (זיכרון, באג) נזרקת כמו שהיא → failed וניסיון חוזר.
     const files = [];
-    for (const p of images) {
+    for (const p of sketchParts) {
       const raw = _bytesOf(staged, p);
+      const name = String(p.name || '');
+      if (_kind(p) === 'pdf') {
+        let pages;
+        try { pages = await pdfToJpegs(raw); }
+        catch (e) { if (e instanceof PdfError) throw new Final(e.reason); throw e; }
+        pages.forEach((pg, i) => files.push({
+          name: name + ' · עמוד ' + (i + 1) + '/' + pages.length,
+          fileName: name, mime: 'image/jpeg', bytes: pg.bytes,
+        }));
+        continue;
+      }
       const mime = sniffImage(raw);
-      if (!mime) { skipped.push(String(p.name || '')); continue; }
-      files.push({ name: String(p.name || ''), mime, bytes: mime === 'image/jpeg' ? stripJpegMeta(raw) : raw });
+      if (!mime) { skipped.push(name); continue; }
+      files.push({ name, mime, bytes: mime === 'image/jpeg' ? stripJpegMeta(raw) : raw });
+    }
+    if (files.length > EM_MAX_SKETCHES) {
+      throw new Final('במייל יש ' + files.length + ' סקיצות — יותר מ-' + EM_MAX_SKETCHES + ', לטפל ידנית');
     }
     if (!files.length) throw new Final(EM_NO_SKETCH, 'ignored');
 
@@ -208,7 +230,7 @@ async function lgEmailInboundProcess(db, key, opts) {
         phone, clientPhone: phone,
         sketchName: '',                              // E6 — המייל לא נותן שם לסקיצה
         notes: '', read: false,
-        fileName: f.name,
+        fileName: f.fileName || f.name,             // לעמוד PDF — שם ה-PDF עצמו
         files: { f0: { name: f.name, type: f.mime } },
         hasSketch: true,
         stage: '', status: 'ממתין לאישור',
@@ -412,5 +434,5 @@ async function lgEmailInboundClose(db, key, by, note, now) {
 module.exports = {
   lgEmailInboundKey, lgEmailPutChunk, lgEmailCommit, lgEmailInboundProcess,
   lgEmailInboundPending, lgEmailInboundRetry, lgEmailInboundClose,
-  EM_INBOX, EM_PARTS, EM_MAX_ATTEMPTS, EM_PART_MAX_BYTES, EM_PDF_REASON,
+  EM_INBOX, EM_PARTS, EM_MAX_ATTEMPTS, EM_PART_MAX_BYTES, EM_MAX_SKETCHES,
 };
