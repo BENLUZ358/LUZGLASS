@@ -325,9 +325,9 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     const er = (k, r) => ctx.lgWaInRow(k, r, NOW + 60000, 'email');
     const r = er('m1', { state: 'rejected', from: 'דני כהן <Dani@Example.co.il>', subject: 'מקלחון לבית',
                          createdAt: NOW, receivedAt: NOW - 1000, parts: [{ idx: 0, name: 'מקלחון.pdf', mime: 'application/pdf' }],
-                         reason: 'PDF עדיין לא נתמך במייל — לטפל ידנית' });
+                         reason: 'קובץ ה-PDF פגום ולא נפתח' });
     check('N1 a rejected email row shows the sender address, not a phone', r.sender, 'dani@example.co.il');
-    check('N1 …with the reason, plain', [r.statusLabel, r.reason, r.needsAttention], ['לא נקלט', 'PDF עדיין לא נתמך במייל — לטפל ידנית', true]);
+    check('N1 …with the reason, plain', [r.statusLabel, r.reason, r.needsAttention], ['לא נקלט', 'קובץ ה-PDF פגום ולא נפתח', true]);
     check('N1 …the subject and the file name', [r.caption, r.fileName, r.kindLabel], ['מקלחון לבית', 'מקלחון.pdf', 'מייל · קובץ אחד']);
     check('N1 …and it is an email row', r.channel, 'email');
     const html = ctx.lgWaInRowHtml(r);

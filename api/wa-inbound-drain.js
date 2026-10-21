@@ -73,11 +73,14 @@ async function handleAdmin(body, deps) {
 
   if (action === 'drain') {
     const started = Date.now();
+    // ⚠️ דדליין מוחלט לכל ה-drain: מייל שמרנדר PDF בודק אותו לפני כל קובץ ועמוד,
+    //    ולא פותח 40 שניות חדשות משלו (שהיו נערמות מעבר ל-maxDuration של 60)
+    const deadline = started + BUDGET_MS;
     const keys = await ch.pending(deps.db, BATCH, deps.now, { includeExhausted: true });
     const results = [];
     for (const key of keys) {
-      if (Date.now() - started > BUDGET_MS) break;
-      const r = await ch.process(deps.db, key, opts);
+      if (Date.now() > deadline) break;
+      const r = await ch.process(deps.db, key, { ...opts, deadline });
       results.push({ key, ok: r.ok, claimed: r.claimed !== false, reason: r.ok ? '' : r.reason });
     }
     const remaining = (await ch.pending(deps.db, BATCH + 1, deps.now)).length;
@@ -154,3 +157,4 @@ module.exports = async function handler(req, res) {
 };
 module.exports.handleAdmin = handleAdmin;
 module.exports._emResult = _emResult;   // לבדיקות
+module.exports._CHANNELS = CHANNELS;    // לבדיקות — להחליף process בכפיל

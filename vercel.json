@@ -2,8 +2,8 @@
   "functions": {
     "api/whatsapp-drain.js": { "maxDuration": 60 },
     "api/wa-inbound.js":     { "maxDuration": 60 },
-    "api/wa-inbound-drain.js": { "maxDuration": 60 },
-    "api/email-inbound.js":  { "maxDuration": 60 }
+    "api/wa-inbound-drain.js": { "maxDuration": 60, "includeFiles": "node_modules/pdfjs-dist/{standard_fonts/**,cmaps/**,legacy/build/pdf.worker.mjs}" },
+    "api/email-inbound.js":  { "maxDuration": 60, "includeFiles": "node_modules/pdfjs-dist/{standard_fonts/**,cmaps/**,legacy/build/pdf.worker.mjs}" }
   },
   "headers": [
     {

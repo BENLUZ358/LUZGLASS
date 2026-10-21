@@ -192,7 +192,26 @@ const commit = (messageId, x) => ({
     const d = await drain.handleAdmin({ action: 'drain', channel: 'email' }, { db, by: '0500000000', now: NOW + 1 });
     check('E1 an email drain processes the email queue', [d.ok, d.processed, st()], [true, 1, 'done']);
     check('E1 and makes the order', !!db._data.orders.em_M8_1, true);
-
+  }
+  {
+    // ⚠️ ה-drain מעביר דדליין מוחלט אחד (תחילת ה-drain + 40 שניות) לכל מייל —
+    //    לא תקציב חדש לכל מייל, שהיה נערם מעבר ל-maxDuration של 60
+    const db = seed();
+    await call(req(commit('M8')), { db, now: NOW });
+    await call(req(part('M8')), { db, now: NOW });
+    const ch = drain._CHANNELS.email, real = ch.process, seen = [];
+    ch.process = async (d, key, o) => { seen.push(o); return { ok: true, claimed: true }; };
+    const before = Date.now();
+    try { await drain.handleAdmin({ action: 'drain', channel: 'email' }, { db, by: '0500000000', now: NOW + 1 }); }
+    finally { ch.process = real; }
+    const after = Date.now();
+    const dl = seen[0] && seen[0].deadline;
+    check('E1b the drain hands each email its own deadline', [seen.length, typeof dl], [1, 'number']);
+    check('E1b the deadline is the drain start + 40s', dl >= before + 40000 && dl <= after + 40000, true);
+    check('E1b the usual opts still go along', seen[0] && seen[0].by, 'admin:0500000000');
+  }
+  {
+    const db = seed();
     await call(req(commit('M9')), { db, now: NOW });
     const rt = await drain.handleAdmin({ action: 'retry', channel: 'email', key: 'M9' }, { db, by: '0500000000', now: NOW + 1 });
     check('E2 retry on an email key goes through the email functions', [rt.ok, db._data.emailInbound.M9.retryCount], [false, 1]);

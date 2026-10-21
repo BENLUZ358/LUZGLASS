@@ -14,16 +14,20 @@
  *      (Review Focus 1).
  *   D. commit לפני שכל החתיכות הגיעו → failed, לא חצי הזמנה; העלאה מלאה
  *      אחר כך מצליחה (Review Focus 2).
- *   E. מה נקלט: PDF נדחה (חלק 2), docx לבד → ignored (Review Focus 5),
+ *   E. מה נקלט: PDF פגום לצד תמונה → כל המייל נדחה, docx לבד → ignored (Review Focus 5),
  *      docx לצד תמונה → מדולג ונרשם; "תמונה" שלא מזוהה (HEIC, GIF, בייטים
  *      שאינם תמונה) → מדולגת ונרשמת כמו docx (R9); גדול מדי → נדחה.
  *      תמונה גדולה → oversize, כמו WhatsApp.
  *   F. שולח לא מזוהה, שלושה ניסיונות → dead, תפיסה של מישהו אחר.
  *   G. "נסה שוב" / "טופל ידנית" / מה ממתין — אותו חוזה כמו WhatsApp.
+ *   J. PDF → הזמנה לכל עמוד, לפי סדר הקבצים; יותר מ-40 סקיצות → נדחה;
+ *      קריסת רינדור → זמנית (failed, ניסיון חוזר); דדליין מוחלט שעובר
+ *      באמצע PDF → נדחה בלי כתיבות (J8).
  *   H. רשימת השולחים המורשים — חתומה על הפרויקט.
  *
  * Run: node scripts/test-email-inbound.js
  */
+const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -36,6 +40,9 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 const env = require(path.join(ROOT, 'api', '_env.js'));
 const em  = require(path.join(ROOT, 'api', '_email-inbound.js'));
+// ⚠️ נבדק מיד, לפני ששום PDF עובד: drain של WhatsApp טוען את המודול הזה, ואסור
+// שיגרור איתו את @napi-rs/canvas
+const pdfLoadedAtRequire = Object.keys(require.cache).some(k => /[\\/]_pdf-pages\.js$/.test(k));
 
 // ─── קבצים סינתטיים ────────────────────────────────────────────────
 //  לא צריך שיהיו ניתנים לפענוח — רק שהבייטים הראשונים יזוהו כתמונה.
@@ -84,6 +91,25 @@ const seed = () => fakeDb({
 });
 const NOW = 1760950005000;
 
+//  עוטף את הכפיל ורושם כל set / update: נתיב, אילו מפתחות, וכמה בייטים
+function recorder(raw) {
+  const writes = [];
+  const db = {
+    _data: raw._data,
+    ref(p) {
+      const r = raw.ref(p);
+      return { ...r,
+        orderByChild: r.orderByChild, equalTo: r.equalTo, limitToFirst: r.limitToFirst, once: r.once,
+        transaction: r.transaction,
+        set: async v => { writes.push({ op: 'set', paths: [String(p || '')], bytes: JSON.stringify(v).length }); return r.set(v); },
+        update: async v => { writes.push({ op: 'update', paths: Object.keys(v).map(k => (p ? p + '/' : '') + k), bytes: JSON.stringify(v).length }); return r.update(v); },
+      };
+    },
+  };
+  return { db, writes };
+}
+const sketchWrites = w => w.paths.filter(x => x.startsWith('sketches/')).length;
+
 (async () => {
 // ═══ A. חתיכות ═══════════════════════════════════════════════════════
   {
@@ -100,8 +126,11 @@ const NOW = 1760950005000;
     check('A3 refusals carry a code', typeof (await put({ idx: 20 })).code, 'string');
     check('A4 a message id with characters Firebase rejects gets a safe key',
           em.lgEmailInboundKey('<abc.1$#[x]/y@mail>'), '<abc_1___x__y@mail>');
-    check('A4 the constants', [em.EM_INBOX, em.EM_PARTS, em.EM_MAX_ATTEMPTS, em.EM_PART_MAX_BYTES, em.EM_PDF_REASON],
-          ['emailInbound', 'emailParts', 3, 10 * 1024 * 1024, 'PDF עדיין לא נתמך במייל — לטפל ידנית']);
+    check('A4 the constants', [em.EM_INBOX, em.EM_PARTS, em.EM_MAX_ATTEMPTS, em.EM_PART_MAX_BYTES, em.EM_MAX_SKETCHES],
+          ['emailInbound', 'emailParts', 3, 10 * 1024 * 1024, 40]);
+    check('A4 the old "PDF not supported" reason is gone', 'EM_PDF_REASON' in em, false);
+    check('A5 requiring the module does not load the PDF renderer', pdfLoadedAtRequire, false);
+    check('A5 the render budget leaves room under the 60s function limit', em.EM_RENDER_BUDGET_MS, 40000);
   }
 
 // ═══ B. שתי תמונות, לקוח מזוהה ══════════════════════════════════════
@@ -178,17 +207,20 @@ const NOW = 1760950005000;
 // ═══ E. מה נקלט ═════════════════════════════════════════════════════
   const ordersOf = k => Object.keys(db._data.orders).filter(x => x.startsWith('em_' + k + '_'));
   {
+    // PDF פגום לצד תמונה טובה — הכל או כלום: אף הזמנה, גם לא מהתמונה
     const parts = await stage(db, 'P', [
-      { idx: 0, name: 'תכנית.pdf', mime: 'application/pdf', buf: Buffer.from('%PDF-1.7 x') },
-      { idx: 1, name: 'a.jpg', mime: 'image/jpeg', buf: JPEG },
+      { idx: 0, name: 'a.jpg', mime: 'image/jpeg', buf: JPEG },
+      { idx: 1, name: 'תכנית.pdf', mime: 'application/pdf', buf: Buffer.from('%PDF-1.7 x') },
     ]);
     const r = await em.lgEmailCommit(db, meta('P', parts), { now: NOW, by: 't' });
-    check('E1 a PDF beside an image rejects the whole email (part 2 will render it)', r, { state: 'rejected', reason: em.EM_PDF_REASON });
-    check('E1 zero orders', ordersOf('P'), []);
+    check('E1 a corrupt PDF beside a good image rejects the whole email', r, { state: 'rejected', reason: 'קובץ ה-PDF פגום ולא נפתח' });
+    check('E1 zero orders, and no sketch written',
+          [ordersOf('P'), Object.keys(db._data.sketches).filter(x => x.startsWith('em_P_'))], [[], []]);
     check('E1 the staged bytes are dropped — a rejected email is never retried', db._data.emailParts.P, undefined);
-    check('E1 a PDF known only by its name counts too',
-          (await em.lgEmailCommit(db, meta('P2', [{ idx: 0, name: 'X.PDF', mime: 'application/octet-stream', size: 5, chunks: 1 }]), { now: NOW })).state,
-          'rejected');
+    // PDF שמזוהה רק לפי השם — עובר דרך הרינדור כמו כל PDF
+    const named = await stage(db, 'P2', [{ idx: 0, name: 'X.PDF', mime: 'application/octet-stream', buf: Buffer.from('not a pdf') }]);
+    check('E1 a PDF known only by its name is rendered too (and this one is corrupt)',
+          (await em.lgEmailCommit(db, meta('P2', named), { now: NOW })).reason, 'קובץ ה-PDF פגום ולא נפתח');
   }
   {
     const parts = await stage(db, 'W', [{ idx: 0, name: 'הצעה.docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buf: Buffer.from('PK..') }]);
@@ -313,27 +345,13 @@ const NOW = 1760950005000;
 
 // ═══ I. אין כתיבה בודדת ענקית (RTDB: 16MB לכתיבה) ═════════════════
   {
-    const raw = seed();
-    const writes = [];
-    // עוטף את הכפיל ורושם כל set / update: נתיב, אילו מפתחות, וכמה בייטים
-    const rec = {
-      _data: raw._data,
-      ref(p) {
-        const r = raw.ref(p);
-        return { ...r,
-          orderByChild: r.orderByChild, equalTo: r.equalTo, limitToFirst: r.limitToFirst, once: r.once,
-          transaction: r.transaction,
-          set: async v => { writes.push({ op: 'set', paths: [String(p || '')], bytes: JSON.stringify(v).length }); return r.set(v); },
-          update: async v => { writes.push({ op: 'update', paths: Object.keys(v).map(k => (p ? p + '/' : '') + k), bytes: JSON.stringify(v).length }); return r.update(v); },
-        };
-      },
-    };
+    const { db: rec, writes } = recorder(seed());
     const files = [0, 1, 2].map(i => ({ idx: i, name: i + '.png', mime: 'image/png', buf: Buffer.concat([PNG, Buffer.alloc(300000, i)]) }));
     const parts = await stage(rec, 'I', files);
     writes.length = 0;
     const r = await em.lgEmailCommit(rec, meta('I', parts), { now: NOW, by: 't' });
     check('I1 three images complete', [r.state, r.orderIds.length], ['done', 3]);
-    const sk = w => w.paths.filter(x => x.startsWith('sketches/')).length;
+    const sk = sketchWrites;
     check('I1 no single write carries more than one sketch', writes.every(w => sk(w) <= 1), true);
     check('I1 each sketch is its own write', writes.filter(w => sk(w) === 1).length, 3);
     const withOrders = writes.filter(w => w.paths.some(x => x.startsWith('orders/')));
@@ -341,6 +359,151 @@ const NOW = 1760950005000;
     check('I2 that update also closes the record and drops the chunks',
           ['emailInbound/I/state', 'emailParts/I'].every(x => withOrders[0].paths.includes(x)), true);
     check('I2 and it carries no image bytes', withOrders[0].bytes < 20000, true);
+  }
+
+// ═══ J. PDF → הזמנה לכל עמוד (חלק 2, אפיון §3.3) ══════════════════
+  const PDF3 = fs.readFileSync(path.join(__dirname, 'fixtures', 'pdf', 'synthetic-3p.pdf'));
+  const isJpegUrl = s => typeof s === 'string' && s.startsWith('data:image/jpeg;base64,')
+    && Buffer.from(s.split(',')[1], 'base64').subarray(0, 2).equals(Buffer.from([0xFF, 0xD8]));
+  {
+    const { db: rec, writes } = recorder(seed());
+    const parts = await stage(rec, 'K', [{ idx: 0, name: 'תכנית.pdf', mime: 'application/pdf', buf: PDF3, chunks: 2 }]);
+    writes.length = 0;
+    const r = await em.lgEmailCommit(rec, meta('K', parts), { now: NOW, by: 't' });
+    check('J1 a 3-page PDF → done, three orders', r, { state: 'done', refNum: 'L1042', orderIds: ['em_K_1', 'em_K_2', 'em_K_3'] });
+    const os = [1, 2, 3].map(n => (rec._data.orders || {})['em_K_' + n] || {});
+    check('J1 numbered -1..-3', os.map(o => o.refNum), ['L1042-1', 'L1042-2', 'L1042-3']);
+    check('J1 each page named "<pdf> · עמוד k/N", as a JPEG',
+          os.map(o => [o.files && o.files.f0.name, o.files && o.files.f0.type, o.fileName]),
+          [1, 2, 3].map(n => ['תכנית.pdf · עמוד ' + n + '/3', 'image/jpeg', 'תכנית.pdf']));
+    check('J1 page n of 3', os.map(o => [o.emailPage, o.emailPages]), [[1, 3], [2, 3], [3, 3]]);
+    check('J1 each sketch is a JPEG data URL', [1, 2, 3].map(n => isJpegUrl((rec._data.sketches || {})['em_K_' + n])), [true, true, true]);
+    check('J1 no single write carries more than one sketch', writes.every(w => sketchWrites(w) <= 1), true);
+    check('J1 each page is its own write', writes.filter(w => sketchWrites(w) === 1).length, 3);
+    check('J1 the staged chunks are gone', rec._data.emailParts && rec._data.emailParts.K, undefined);
+  }
+  {
+    const dbj = seed();
+    const parts = await stage(dbj, 'K', [
+      { idx: 1, name: 'תכנית.pdf', mime: 'application/pdf', buf: PDF3 },
+      { idx: 0, name: 'מטבח.jpg', mime: 'image/jpeg', buf: JPEG },
+    ]);
+    const r = await em.lgEmailCommit(dbj, meta('K', parts), { now: NOW, by: 't' });
+    check('J2 an image + a 3-page PDF → four orders', [r.state, (r.orderIds || []).length], ['done', 4]);
+    const os = [1, 2, 3, 4].map(n => (dbj._data.orders || {})['em_K_' + n] || {});
+    check('J2 attachment order: the image first, then the PDF pages',
+          os.map(o => o.files && o.files.f0.name),
+          ['מטבח.jpg', 'תכנית.pdf · עמוד 1/3', 'תכנית.pdf · עמוד 2/3', 'תכנית.pdf · עמוד 3/3']);
+    check('J2 the position is in the whole email', os.map(o => [o.emailPage, o.emailPages]), [[1, 4], [2, 4], [3, 4], [4, 4]]);
+    check('J2 the image is the image', (dbj._data.sketches || {}).em_K_1, 'data:image/jpeg;base64,' + JPEG.toString('base64'));
+  }
+  {
+    // 41 סקיצות — מעבר לתקרה. הרינדור מוחלף בכפיל (opts.pdfToJpegs) — 41 JPEG קטנים
+    const dbj = seed();
+    const parts = await stage(dbj, 'K', [{ idx: 0, name: 'ענק.pdf', mime: 'application/pdf', buf: Buffer.from('%PDF-1.7 stub') }]);
+    const pages = n => async () => Array.from({ length: n }, () => ({ bytes: JPEG, w: 1, h: 1 }));
+    const r = await em.lgEmailCommit(dbj, meta('K', parts), { now: NOW, by: 't', pdfToJpegs: pages(41) });
+    check('J3 41 sketches → rejected, with the reason', r, { state: 'rejected', reason: 'במייל יש 41 סקיצות — יותר מ-40, לטפל ידנית' });
+    check('J3 nothing written', [Object.keys(dbj._data.orders || {}), Object.keys(dbj._data.sketches || {})], [[], []]);
+    check('J3 no order number burned', dbj._data.meta.orderCounter, 1041);
+
+    const dbk = seed();
+    const p40 = await stage(dbk, 'K', [{ idx: 0, name: 'ענק.pdf', mime: 'application/pdf', buf: Buffer.from('%PDF-1.7 stub') }]);
+    const r40 = await em.lgEmailCommit(dbk, meta('K', p40), { now: NOW, by: 't', pdfToJpegs: pages(40) });
+    check('J3 exactly 40 sketches is fine', [r40.state, (r40.orderIds || []).length], ['done', 40]);
+  }
+  {
+    // תקלה שאינה של הקובץ (זיכרון, באג) — זמנית: failed, החתיכות נשמרות לניסיון חוזר
+    const dbj = seed();
+    const parts = await stage(dbj, 'K', [{ idx: 0, name: 'a.pdf', mime: 'application/pdf', buf: PDF3 }]);
+    const boom = async () => { throw new Error('out of memory'); };
+    const r = await em.lgEmailCommit(dbj, meta('K', parts), { now: NOW, by: 't', pdfToJpegs: boom });
+    check('J4 a render crash is transient', r, { state: 'failed', reason: 'out of memory' });
+    check('J4 the staged bytes are kept for the retry', !!(dbj._data.emailParts || {}).K, true);
+    const r2 = await em.lgEmailInboundProcess(dbj, 'K', { now: NOW + 1000, by: 'drain' });
+    check('J4 the retry renders it for real', [r2.state, (r2.orderIds || []).length], ['done', 3]);
+  }
+  {
+    // כפיל שמכבד את maxPages כמו הרינדור האמיתי — לפי תוכן הקובץ: 'A' / 'B' / 'C'
+    const sizes = { A: 30, B: 20, C: 3, D: 35 };
+    const calls = [];
+    const spy = async (buf, opts) => {
+      const which = buf.toString(), n = sizes[which];
+      calls.push([which, opts && opts.maxPages]);
+      if (n > opts.maxPages) {
+        throw Object.assign(new Error('x'), { name: 'PdfError', reason: 'ב-PDF יש ' + n + ' עמודים — יותר מ-' + opts.maxPages + ', לטפל ידנית',
+                                              numPages: n, maxPages: opts.maxPages });
+      }
+      return Array.from({ length: n }, () => ({ bytes: JPEG, w: 1, h: 1 }));
+    };
+    const pdfs = names => names.map((x, i) => ({ idx: i, name: x + '.pdf', mime: 'application/pdf', buf: Buffer.from(x) }));
+
+    const dbj = seed();
+    const r = await em.lgEmailCommit(dbj, meta('K', await stage(dbj, 'K', pdfs(['A', 'B', 'C']))), { now: NOW, by: 't', pdfToJpegs: spy });
+    check('J6 two PDFs past 40 → rejected with the 40 reason, counting both', r,
+          { state: 'rejected', reason: 'במייל יש 50 סקיצות — יותר מ-40, לטפל ידנית' });
+    check('J6 the renderer is told how much room is left, and the third PDF is never rendered',
+          calls, [['A', 30], ['B', 10]]);
+    check('J6 nothing written', [Object.keys(dbj._data.orders || {}), Object.keys(dbj._data.sketches || {})], [[], []]);
+
+    // PDF של 35 עמודים לבד — זה כלל ה-30 של ה-PDF, לא תקרת המייל
+    const dbk = seed();
+    const r2 = await em.lgEmailCommit(dbk, meta('K', await stage(dbk, 'K', pdfs(['D']))), { now: NOW, by: 't', pdfToJpegs: spy });
+    check('J6 a 35-page PDF alone keeps its own 30-page reason', r2.reason, 'ב-PDF יש 35 עמודים — יותר מ-30, לטפל ידנית');
+
+    // 15 תמונות + PDF של 35 עמודים: נשאר מקום ל-25, אבל ה-PDF עצמו מעל 30 —
+    // הסיבה נוקבת ב-30 (כלל ה-PDF), לא ב-25 (המקום שנשאר) שהיה מבלבל את בן
+    const dbm = seed();
+    calls.length = 0;
+    const imgs = Array.from({ length: 15 }, (_, i) => ({ idx: i, name: 'i' + i + '.jpg', mime: 'image/jpeg', buf: JPEG }));
+    const pm = await stage(dbm, 'K', imgs.concat([{ idx: 15, name: 'D.pdf', mime: 'application/pdf', buf: Buffer.from('D') }]));
+    const r3 = await em.lgEmailCommit(dbm, meta('K', pm), { now: NOW, by: 't', pdfToJpegs: spy });
+    check('J6 15 images + a 35-page PDF: the renderer had room for 25', calls, [['D', 25]]);
+    check('J6 15 images + a 35-page PDF: the reason names 30, not 25', r3,
+          { state: 'rejected', reason: 'ב-PDF יש 35 עמודים — יותר מ-30, לטפל ידנית' });
+  }
+  {
+    // תקציב זמן: כל רינדור "לוקח" 41 שניות בשעון מזויף — הקובץ השני לא מתחיל
+    let t = 0;
+    const calls = [];
+    const slow = async () => { calls.push(t); t += 41000; return [{ bytes: JPEG, w: 1, h: 1 }]; };
+    const dbj = seed();
+    const parts = await stage(dbj, 'K', [{ idx: 0, name: 'a.pdf', mime: 'application/pdf', buf: Buffer.from('a') },
+                                         { idx: 1, name: 'b.pdf', mime: 'application/pdf', buf: Buffer.from('b') }]);
+    const r = await em.lgEmailCommit(dbj, meta('K', parts), { now: NOW, by: 't', pdfToJpegs: slow, clock: () => t });
+    check('J7 over the render budget → rejected, plainly', r,
+          { state: 'rejected', reason: 'עיבוד הקבצים במייל לקח יותר מדי זמן — לטפל ידנית' });
+    check('J7 the second file was never started', calls.length, 1);
+    check('J7 nothing written', Object.keys(dbj._data.orders || {}), []);
+  }
+  {
+    // דדליין מוחלט באמצע PDF: הרינדור האמיתי, ושעון שמתקדם 10 שניות בכל
+    // קריאה. הדדליין (25) עובר לפני עמוד 2 של ה-PDF — לא "40 שניות לקובץ"
+    let t = 0;
+    const clock = () => (t += 10);
+    const dbj = seed();
+    const parts = await stage(dbj, 'K', [{ idx: 0, name: 'a.pdf', mime: 'application/pdf', buf: PDF3 }]);
+    const r = await em.lgEmailCommit(dbj, meta('K', parts), { now: NOW, by: 't', clock, deadline: 25 });
+    check('J8 the deadline passes mid-PDF → rejected, plainly', r,
+          { state: 'rejected', reason: 'עיבוד הקבצים במייל לקח יותר מדי זמן — לטפל ידנית' });
+    check('J8 the clock was read before the file and before pages 1 and 2 only', t, 30);
+    check('J8 nothing written', [Object.keys(dbj._data.orders || {}), Object.keys(dbj._data.sketches || {})], [[], []]);
+    check('J8 no order number burned', dbj._data.meta.orderCounter, 1041);
+
+    // בלי opts.deadline — ברירת המחדל היא 40 שניות מתחילת העיבוד, והיא מגיעה לרינדור
+    const seen = [];
+    const spy = async (buf, o) => { seen.push(o.deadline); return [{ bytes: JPEG, w: 1, h: 1 }]; };
+    const dbk = seed();
+    const pk = await stage(dbk, 'K', [{ idx: 0, name: 'a.pdf', mime: 'application/pdf', buf: Buffer.from('a') }]);
+    await em.lgEmailCommit(dbk, meta('K', pk), { now: NOW, by: 't', pdfToJpegs: spy, clock: () => 1000 });
+    check('J8 default deadline = start + 40s, handed to the renderer', seen, [1000 + em.EM_RENDER_BUDGET_MS]);
+  }
+  {
+    // תקרת הגודל המוצהר חלה גם על PDF — לפני שקוראים מהבסיס
+    const dbj = seed();
+    const big = [{ idx: 0, name: 'big.pdf', mime: 'application/pdf', size: em.EM_PART_MAX_BYTES + 1, chunks: 1 }];
+    const r = await em.lgEmailCommit(dbj, meta('K', big), { now: NOW, by: 't' });
+    check('J5 a declared-oversize PDF is rejected', [r.state, r.reason], ['rejected', 'הקובץ big.pdf גדול מדי (10MB)']);
   }
 
 // ═══ H. רשימת השולחים המורשים ══════════════════════════════════════
