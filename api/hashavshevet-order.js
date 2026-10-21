@@ -127,11 +127,8 @@ function clientPricesByName(prices) {
 //  אם חתיכה אחת מתוך החמש דולגה — אין לה מחיר, למשל — יש 4 שורות, ו-"2/5"
 //  היה מכריז במסמך על חתיכה חמישית שאיננה בו.
 const LG_LINE_TEXT_MAX = 50;
-// "שם פריט" (itemname) — כבוי עד שייבדק מול חשבשבת. ר' ההערה ב-buildLines.
-const LG_HS_SEND_ITEMNAME = false;
-// ניסיון על הזמנה אחת בלבד (בן, 20–21/10): L1098 — זכוכית + רווח + שם הסקיצה, בלי קו מפריד.
-// בן בודק את "שם פריט" בחשבשבת; רק אם יוצא נכון — מפעילים לכולן ומוחקים את הרשימה הזו.
-const LG_HS_ITEMNAME_TRIAL_IDS = ['wa_2AB11F26270A6EAC4EB6_1'];
+// "שם פריט" (itemname) — זכוכית + רווח + שם הסקיצה. נבדק מול חשבשבת על L1098 (21/10). ר' buildLines.
+const LG_HS_SEND_ITEMNAME = true;
 function lineText(n, w, h, seq, total) {
   const mm = v => String(Math.round(Number(v) || 0));
   const qty = total > 1 ? ' (' + seq + '/' + total + ')' : '';
@@ -226,15 +223,15 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     // בסוף, אחרי SM_Extratext1: החתימה מחושבת על המחרוזת שנשלחת, ולכן רק תוספת
     // בסוף אינה שוברת את סדר המפתחות.
     //
-    // ⛔ כבוי (בן, 20/10/2026): בהזמנה L1079 חשבשבת הציגו "—" כ"ק" והעברית התהפכה.
-    // עד שנבדוק על הזמנה אחת איך חשבשבת מקבלים טקסט — לא שולחים, והשורה חוזרת
-    // להיות בדיוק מה שהייתה (שם הפריט מכרטיס המק"ט בחשבשבת).
+    // 20/10: "זכוכית — שם" הגיע לחשבשבת משובש: "—" הפך ל"ק" (קידוד עברית ישן) והעברית
+    // התהפכה (L1079). 21/10: בלי הקו, על L1098 — "8 מ"מ שקוף מחוסם 3515" יצא נכון.
+    // לכן: זכוכית + רווח + שם הסקיצה, ותווים שחשבשבת לא מציגים (—, –, ״, ׳) מוחלפים
+    // ברגילים — גם כשהם בתוך שם הסקיצה ("שירה — התבור 6").
     if (LG_HS_SEND_ITEMNAME && sketchName) {
-      const glass = String(item.glassFullName || item.name || '').trim();
-      line.itemname = (glass ? glass + ' — ' + sketchName : sketchName).slice(0, LG_LINE_TEXT_MAX);
-    } else if (sketchName && LG_HS_ITEMNAME_TRIAL_IDS.includes(String(order.id))) {
-      const glass = String(item.glassFullName || item.name || '').trim();
-      line.itemname = (glass ? glass + ' ' + sketchName : sketchName).slice(0, LG_LINE_TEXT_MAX);
+      const plain = s => String(s || '').replace(/[—–]/g, ' ').replace(/״/g, '"').replace(/׳/g, "'").replace(/\s+/g, ' ').trim();
+      const glass = plain(item.glassFullName || item.name || '');
+      const name  = plain(sketchName);
+      if (name) line.itemname = (glass ? glass + ' ' + name : name).slice(0, LG_LINE_TEXT_MAX);
     }
     lines.push(line);
     hsLines[key] = n;
