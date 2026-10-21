@@ -30,7 +30,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 const ctx = {};
 vm.createContext(ctx);
-for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /function lineText[\s\S]*?\n}/,
+for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /const LG_HS_ITEMNAME_TRIAL_IDS = \[[^\]]*\];/, /function lineText[\s\S]*?\n}/,
                   /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines, unpriced \};\n}/]) {
   const m = SRC.match(re);
   if (!m) { console.error('FAIL  could not find ' + re); process.exit(1); }
@@ -185,6 +185,22 @@ const build = items => ctx.buildLines({ orderClient: 'x', items }, '14201', '106
     check('…and the line keys are exactly the old ones', Object.keys(lines[0]),
           ['accountKey', 'documentid', 'Reference', 'itemkey', 'Quantity', 'price', 'Agent', 'SM_Extratext1']);
   }
+}
+
+/* ── ניסיון על הזמנה אחת: L1098 (בן, 20–21/10/2026) ──────────────────────
+   רק להזמנה הזו נשלח "שם פריט" — בלי הקו המפריד שהפך ל"ק": זכוכית + רווח + שם הסקיצה,
+   כמו שבן כותב ידנית ("8 מ"מ שקוף מחוסם לימור"). בן בודק בחשבשבת לפני שמפעילים לכולן. */
+{
+  const L1098 = 'wa_2AB11F26270A6EAC4EB6_1';
+  const run = (id, sketchName) => ctx.buildLines({ id, orderClient: 'x', sketchName,
+    items: [{ sku: '8SMH', name: '8 מ"מ שקוף מחוסם', w: 550, h: 1885 }] }, '14201', '1064', '31', '1', PRICES, {});
+  const { lines, preview } = run(L1098, '3502');
+  check('L1098: the line carries glass + space + sketch name, no dash', lines[0].itemname, '8 מ"מ שקוף מחוסם 3502');
+  check('L1098: no dash of any kind in it', /[—–-]/.test(lines[0].itemname), false);
+  check('L1098: it is the last key on the line', Object.keys(lines[0]).slice(-2), ['SM_Extratext1', 'itemname']);
+  check('L1098: the preview shows it', preview[0].itemname, '8 מ"מ שקוף מחוסם 3502');
+  check('L1098 without a sketch name: nothing sent', 'itemname' in run(L1098, '').lines[0], false);
+  check('any other order: still no itemname', 'itemname' in run('wa_OTHER_1', '3502').lines[0], false);
 }
 
 /* ── the probe is gone ─────────────────────────────────────────────────── */

@@ -129,6 +129,9 @@ function clientPricesByName(prices) {
 const LG_LINE_TEXT_MAX = 50;
 // "שם פריט" (itemname) — כבוי עד שייבדק מול חשבשבת. ר' ההערה ב-buildLines.
 const LG_HS_SEND_ITEMNAME = false;
+// ניסיון על הזמנה אחת בלבד (בן, 20–21/10): L1098 — זכוכית + רווח + שם הסקיצה, בלי קו מפריד.
+// בן בודק את "שם פריט" בחשבשבת; רק אם יוצא נכון — מפעילים לכולן ומוחקים את הרשימה הזו.
+const LG_HS_ITEMNAME_TRIAL_IDS = ['wa_2AB11F26270A6EAC4EB6_1'];
 function lineText(n, w, h, seq, total) {
   const mm = v => String(Math.round(Number(v) || 0));
   const qty = total > 1 ? ' (' + seq + '/' + total + ')' : '';
@@ -229,6 +232,9 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     if (LG_HS_SEND_ITEMNAME && sketchName) {
       const glass = String(item.glassFullName || item.name || '').trim();
       line.itemname = (glass ? glass + ' — ' + sketchName : sketchName).slice(0, LG_LINE_TEXT_MAX);
+    } else if (sketchName && LG_HS_ITEMNAME_TRIAL_IDS.includes(String(order.id))) {
+      const glass = String(item.glassFullName || item.name || '').trim();
+      line.itemname = (glass ? glass + ' ' + sketchName : sketchName).slice(0, LG_LINE_TEXT_MAX);
     }
     lines.push(line);
     hsLines[key] = n;
