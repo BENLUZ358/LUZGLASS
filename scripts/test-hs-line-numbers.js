@@ -30,7 +30,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 const ctx = {};
 vm.createContext(ctx);
-for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /const LG_HS_ITEMNAME_TRIAL_IDS = \[[^\]]*\];/, /function lineText[\s\S]*?\n}/,
+for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /function lineText[\s\S]*?\n}/,
                   /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines, unpriced \};\n}/]) {
   const m = SRC.match(re);
   if (!m) { console.error('FAIL  could not find ' + re); process.exit(1); }
@@ -171,36 +171,27 @@ const build = items => ctx.buildLines({ orderClient: 'x', items }, '14201', '106
         ['1) 550x1885 (1/2)', '2) 500x1885', '3) 550x1885 (2/2)']);
 }
 
-/* ── "שם פריט" לא נשלח (בן, 20/10/2026) ──────────────────────────────────
-   ניסינו לשלוח "8 מ"מ שקוף מחוסם — 3502". בחשבשבת הקו "—" הפך ל"ק" והעברית התהפכה
-   (הזמנה L1079). עד שנבדוק איך חשבשבת מקבלים טקסט — לא שולחים itemname בכלל, והשורה
-   חוזרת להיות בדיוק מה שהייתה: חשבשבת נותנים לה את שם הפריט מכרטיס המק"ט שלהם. */
+/* ── "שם פריט" = זכוכית + רווח + שם הסקיצה (בן, 21/10/2026) ──────────────────
+   20/10: "8 מ"מ שקוף מחוסם — 3502" הגיע לחשבשבת משובש — הקו "—" הפך ל"ק" והעברית התהפכה.
+   21/10: ניסיון על L1098 בלי קו: "8 מ"מ שקוף מחוסם 3515" — יצא נכון (צילום של בן, "מצוין").
+   עכשיו לכל הזמנה עם שם סקיצה. תווים שחשבשבת לא יודעים להציג (—, –, ״, ׳) מוחלפים. */
 {
-  const withName = (sketchName, items) =>
-    ctx.buildLines({ orderClient: 'x', sketchName, items }, '14201', '1064', '31', '1', PRICES, {});
-  for (const name of ['3502', 'מקלחת הורים', undefined, '']) {
-    const { lines, preview } = withName(name, [{ sku: '8SMH', name: '8 מ"מ שקוף מחוסם', w: 550, h: 1885 }]);
-    check('sketch name ' + JSON.stringify(name) + ': no itemname on the line', 'itemname' in lines[0], false);
-    check('…nor in the preview', 'itemname' in preview[0], false);
-    check('…and the line keys are exactly the old ones', Object.keys(lines[0]),
-          ['accountKey', 'documentid', 'Reference', 'itemkey', 'Quantity', 'price', 'Agent', 'SM_Extratext1']);
+  const run = (sketchName, items) => ctx.buildLines({ id: 'wa_X_1', orderClient: 'x', sketchName,
+    items: items || [{ sku: '8SMH', name: '8 מ"מ שקוף מחוסם', w: 550, h: 1885 }] }, '14201', '1064', '31', '1', PRICES, {});
+  const { lines, preview } = run('3515');
+  check('every order: glass + space + sketch name', lines[0].itemname, '8 מ"מ שקוף מחוסם 3515');
+  check('it is the last key on the line', Object.keys(lines[0]).slice(-2), ['SM_Extratext1', 'itemname']);
+  check('the preview shows it', preview[0].itemname, '8 מ"מ שקוף מחוסם 3515');
+  check('a dash inside the sketch name is not sent (it became "ק")', run('שירה — התבור 6').lines[0].itemname, '8 מ"מ שקוף מחוסם שירה התבור 6');
+  check('en dash, gershayim and geresh are made plain', run('ב–ג ״א״ ד׳').lines[0].itemname, '8 מ"מ שקוף מחוסם ב ג "א" ד\'');
+  check('no dash of any kind ever leaves', /[—–]/.test(run('א — ב – ג').lines[0].itemname), false);
+  for (const none of [undefined, '', '   ']) {
+    const { lines: plain } = run(none);
+    check('no sketch name (' + JSON.stringify(none) + ') sends no itemname — Hashavshevet names it', 'itemname' in plain[0], false);
   }
-}
-
-/* ── ניסיון על הזמנה אחת: L1098 (בן, 20–21/10/2026) ──────────────────────
-   רק להזמנה הזו נשלח "שם פריט" — בלי הקו המפריד שהפך ל"ק": זכוכית + רווח + שם הסקיצה,
-   כמו שבן כותב ידנית ("8 מ"מ שקוף מחוסם לימור"). בן בודק בחשבשבת לפני שמפעילים לכולן. */
-{
-  const L1098 = 'wa_2AB11F26270A6EAC4EB6_1';
-  const run = (id, sketchName) => ctx.buildLines({ id, orderClient: 'x', sketchName,
-    items: [{ sku: '8SMH', name: '8 מ"מ שקוף מחוסם', w: 550, h: 1885 }] }, '14201', '1064', '31', '1', PRICES, {});
-  const { lines, preview } = run(L1098, '3502');
-  check('L1098: the line carries glass + space + sketch name, no dash', lines[0].itemname, '8 מ"מ שקוף מחוסם 3502');
-  check('L1098: no dash of any kind in it', /[—–-]/.test(lines[0].itemname), false);
-  check('L1098: it is the last key on the line', Object.keys(lines[0]).slice(-2), ['SM_Extratext1', 'itemname']);
-  check('L1098: the preview shows it', preview[0].itemname, '8 מ"מ שקוף מחוסם 3502');
-  check('L1098 without a sketch name: nothing sent', 'itemname' in run(L1098, '').lines[0], false);
-  check('any other order: still no itemname', 'itemname' in run('wa_OTHER_1', '3502').lines[0], false);
+  check('a long name is cut to the field, never past 50 characters', run('ש'.repeat(80)).lines[0].itemname.length, 50);
+  check('a line with no glass name carries the sketch name alone', run('מקלחת', [{ sku: '8SMH', w: 550, h: 1885 }]).lines[0].itemname, 'מקלחת');
+  check('no trial list left in the handler', /TRIAL_IDS/.test(SRC), false);
 }
 
 /* ── the probe is gone ─────────────────────────────────────────────────── */
