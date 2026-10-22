@@ -86,5 +86,10 @@ async function call(handler,body,method='POST'){let status=200,value;await handl
  assert.equal((await call(handler,{orderId:'o1'},'GET')).value.draft.approved,undefined); // latest reread is unapproved
  assert.ok(db.data.orders.o1.sketchReaderApprovals[runId],'correction history retained');
 
+ db.data.sketchReader.o1.latest.version='obsolete-version';
+ db.data.sketchReader.o1.latest.reading={warnings:['old form rejection']};
+ const obsolete=(await call(handler,{orderId:'o1'},'GET')).value.draft;
+ assert.deepEqual(obsolete.reading.rows,[]);
+ assert.equal(obsolete.needsReread,true);
  console.log('sketch-reader API workflow: PASS');
 })().catch(e=>{console.error(e);process.exitCode=1;});

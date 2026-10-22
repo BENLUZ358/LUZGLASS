@@ -134,7 +134,7 @@
    const data=await res.json();if(!res.ok)throw new Error(data.error||'טעינת הטיוטה נכשלה');
    if(active!==a)return;
    a.draft=data.draft;a.rows=structuredClone(data.draft?.reading?.rows||[]);await checkSource(a);a.busy=false;
-   if(!a.draft&&data.enabled&&a.readOnOpen){await read(false);return;}
+   if(data.enabled&&a.readOnOpen&&(!a.draft||a.draft.needsReread)){await read(false);return;}
    render();
    if(a.draft&&!a.sourceMatches)error('התמונה אינה תואמת לטיוטה השמורה. אפשר לקרוא מחדש, או לרענן את הדף אם הסקיצה נערכה.');
    if(!data.enabled&&!data.draft)error('קריאת סקיצות עדיין לא הופעלה בסביבה הזו. אפשר להמשיך להזין פריטים ידנית.');
