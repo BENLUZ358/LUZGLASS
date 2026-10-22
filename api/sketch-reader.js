@@ -10,7 +10,7 @@ function defaultDb(){
  return require('firebase-admin/database').getDatabase(app);
 }
 const publicDraft=run=>run&&run.status==='ready'?{
- runId:run.runId,reading:run.reading,createdAt:run.createdAt,version:run.version,
+ runId:run.runId,reading:{rows:run.reading?.rows||[],warnings:run.reading?.warnings||[]},createdAt:run.createdAt,version:run.version,
  model:run.model,sourceHash:run.sourceHash,usage:run.usage||null,costEstimateUsd:run.costEstimateUsd??null,elapsedMs:run.elapsedMs??null,existingItemCount:run.existingItemCount||0
 }:null;
 function createHandler(deps={}){

@@ -42,6 +42,7 @@
    (reading?'<p class="sr-metrics">'+(Number.isFinite(draft.elapsedMs)?'זמן קריאה: '+(draft.elapsedMs/1000).toFixed(1)+' שניות. ':'')+(Number.isFinite(draft.costEstimateUsd)?'עלות משוערת: '+draft.costEstimateUsd.toFixed(4)+' דולר, לפני מסים.':'')+'</p>':'')+
    '<div class="sr-layout"><div class="sr-image">'+(a.image?'<img src="'+esc(a.image)+'" alt="הסקיצה המקורית להשוואה">':'')+'</div><div class="sr-edit">'+
    (reading?'<div class="sr-warnings">'+(reading.warnings||[]).map(w=>'<p>דורש בדיקה: '+esc(w)+'</p>').join('')+'</div>'+
+    (a.rows.length?'':'<p class="sr-warning">לא זוהו פריטים בתמונה. בדוק את ההערות; אפשר לקרוא מחדש או להוסיף חלקים ידנית.</p>')+
     '<p>כל המידות כאן במ״מ. בדוק סוג זכוכית, מידות מרביות וכמות מול הסקיצה.</p>'+
     '<div class="sr-rows">'+a.rows.map((r,i)=>'<fieldset class="sr-row"><legend>'+esc(r.label||'חלק '+(i+1))+'</legend>'+
      '<p class="sr-evidence">'+esc(r.evidence)+'</p>'+
@@ -132,7 +133,9 @@
    const res=await bounded(()=>_lgAuthFetch('/api/sketch-reader?orderId='+encodeURIComponent(a.orderId)));
    const data=await res.json();if(!res.ok)throw new Error(data.error||'טעינת הטיוטה נכשלה');
    if(active!==a)return;
-   a.draft=data.draft;a.rows=structuredClone(data.draft?.reading?.rows||[]);await checkSource(a);a.busy=false;render();
+   a.draft=data.draft;a.rows=structuredClone(data.draft?.reading?.rows||[]);await checkSource(a);a.busy=false;
+   if(!a.draft&&data.enabled&&a.readOnOpen){await read(false);return;}
+   render();
    if(a.draft&&!a.sourceMatches)error('התמונה אינה תואמת לטיוטה השמורה. אפשר לקרוא מחדש, או לרענן את הדף אם הסקיצה נערכה.');
    if(!data.enabled&&!data.draft)error('קריאת סקיצות עדיין לא הופעלה בסביבה הזו. אפשר להמשיך להזין פריטים ידנית.');
   }catch(e){if(active===a){a.busy=false;render();error(e.message);}}

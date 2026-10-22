@@ -393,7 +393,7 @@ label.msec-t{display:block;}
   <script src="sq-assign.js"></script>
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
-  <script src="sketch-reader-ui.js?v=20261022"></script>
+  <script src="sketch-reader-ui.js?v=20261023a"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -3421,6 +3421,7 @@ async function sqReadSketch(){
   if(!image || sqCurrent?.id !== selected.id) return;
   window.lgSketchReader.open({
     orderId: selected.id,
+    readOnOpen: true,
     title: [selected.client, selected.orderNum, selected.sketchName].filter(Boolean).join(' · '),
     image,
     onApproved: data => {
