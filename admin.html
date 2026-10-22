@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
 <script>
@@ -25,7 +25,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 
 <!-- בסיס העיצוב המשותף. הטוקנים, הסקאלות ומצבי המערכת מגיעים מכאן —
      אין להגדיר :root בדף הזה. ראה docs/superpowers/specs/. -->
-<link rel="stylesheet" href="lg-ui.css?v=20260806">
+<link rel="stylesheet" href="lg-ui.css?v=20260806"><link rel="stylesheet" href="sketch-reader.css?v=20261022">
 
 <style>
   /* טוקנים, reset ו-body מוגדרים ב-lg-ui.css */
@@ -393,6 +393,7 @@ label.msec-t{display:block;}
   <script src="sq-assign.js"></script>
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
+  <script src="sketch-reader-ui.js?v=20261022"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -3032,7 +3033,7 @@ document.addEventListener('visibilitychange', () => {
           <div id="sqCheckBadge" style="display:none;margin:0 14px 10px;padding:8px 12px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.2);border-radius:6px;font-size:12px;color:#27ae60;font-weight:700;"></div>
           <!-- actions -->
           <div id="sqActions">
-            <button id="sqBtnSeen" class="sq-action-btn" onclick="sqMarkSeen()">✓ סקיצה טופלה</button>
+            <button id="sqBtnRead" class="sq-action-btn sq-action-quiet" onclick="sqReadSketch()" aria-label="קרא סקיצה והכן טיוטת פריטים"><span data-icon="search"></span> קרא סקיצה</button><button id="sqBtnSeen" class="sq-action-btn" onclick="sqMarkSeen()">✓ סקיצה טופלה</button>
             <button id="sqBtnDrafter" class="sq-action-btn" onclick="sqSetStage('drafter')" style="display:none;">✏️ שלח לשרטט</button>
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
             <button id="sqBtnPreview" class="sq-action-btn sq-action-quiet" onclick="sqPreviewChash()" title="מראה בדיוק מה ייכנס למסמך — מק\"טים, מידות, כמויות ומחירים — בלי לשלוח כלום"><span data-icon="search"></span> הצג מה יישלח</button>
@@ -3411,6 +3412,27 @@ function _sqOrder(it){
   return orders.find(o => String(o.id) === String(it.id)) || it;
 }
 
+async function sqReadSketch(){
+  const selected = sqCurrent;
+  if(!selected || !lgHasSketch(selected)) { showToast('אין תמונת סקיצה לקריאה'); return; }
+  let image;
+  try { image = await lgLoadSketch(_sqOrder(selected)); }
+  catch(e) { showToast('טעינת הסקיצה נכשלה'); return; }
+  if(!image || sqCurrent?.id !== selected.id) return;
+  window.lgSketchReader.open({
+    orderId: selected.id,
+    title: [selected.client, selected.orderNum, selected.sketchName].filter(Boolean).join(' · '),
+    image,
+    onApproved: data => {
+      const order = orders.find(o => o.id === selected.id);
+      if(order) { order.items = data.items; order.sketchReaderApproval = data.approval; }
+      const row = sqItems.find(o => o.id === selected.id);
+      if(row) row.items = data.items;
+      if(sqCurrent?.id === selected.id) { sqCurrent.items = data.items; iwLoad(sqCurrent); }
+      showToast('הפריטים אושרו ונשמרו בהזמנה');
+    }
+  });
+}
 async function sqDownload(){
   if(!sqCurrent || !lgHasSketch(sqCurrent)) return;
   const name = sqCurrent.sketchName || 'sketch';

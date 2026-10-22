@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const ui=fs.readFileSync('sketch-reader-ui.js','utf8');
+new vm.Script(ui);
+assert.ok(ui.includes('acknowledged: true'));
+assert.ok(ui.includes('מ״מ'));
+assert.ok(ui.includes('aria-label'));
+assert.ok(!ui.includes('iwSave('),'draft typing must not save live items');
+assert.ok(!ui.includes('hashavshevet-order'),'reader must never submit accounting documents');
+assert.ok(ui.includes('requestId'));
+assert.ok(ui.includes('onApproved'));
+const page=fs.readFileSync('admin.html','utf8');
+assert.ok(page.includes('sketch-reader-ui.js'));
+assert.ok(page.includes('sketch-reader.css'));
+assert.ok(page.includes('sqReadSketch()'));
+const css=fs.readFileSync('sketch-reader.css','utf8');
+assert.ok(css.includes('44px'));
+console.log('sketch-reader UI integration: PASS');
