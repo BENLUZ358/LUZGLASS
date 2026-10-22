@@ -124,7 +124,11 @@ function createHandler(deps={}){
   }catch(e){
    if(started&&runRef) {
     try { const saved=(await runRef.once('value')).val(); if(saved?.status==='ready') return res.status(200).json({ok:true,draft:publicDraft(saved),cached:true}); } catch(_) {}
-    try{await runRef.set({status:'failed',failedAt:(deps.now||Date.now)(),error:'הקריאה לא הושלמה'});}catch(_){}
+    try{
+     const recovery=await runRef.transaction(saved=>saved?.status==='ready'?undefined:{...(saved||{}),status:'failed',failedAt:(deps.now||Date.now)(),error:'הקריאה לא הושלמה'});
+     const saved=recovery.snapshot.val();
+     if(saved?.status==='ready') return res.status(200).json({ok:true,draft:publicDraft(saved),cached:true});
+    }catch(_){}
    }
    // Never leak provider response, keys, or source images into logs/client errors.
    return res.status(e.status||502).json({error:e.status?e.message:'קריאת הסקיצה נכשלה; ההזמנה לא שונתה. אפשר להמשיך ידנית'});
