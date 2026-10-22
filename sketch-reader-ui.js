@@ -30,6 +30,16 @@
   if(!res.ok)throw new Error(data.error||'הפעולה נכשלה');
   return data;
  }
+ function skuPicker(key,sku,entries){
+  const entry=entries.find(([id])=>id===sku);
+  return '<div class="sr-picker"><label>חיפוש מק״ט או שם זכוכית<input type="search" data-sku-search="'+key+'" aria-label="חיפוש מק״ט '+(key==='all'?'לכל הפריטים':'לחלק '+(Number(key)+1))+'" placeholder="הקלד מק״ט או שם…" autocomplete="off"></label><p class="sr-selected" data-selected="'+key+'">'+esc(entry?entry[0]+' · '+entry[1].name:'טרם נבחר מק״ט')+'</p><div class="sr-results" data-results="'+key+'" hidden></div></div>';
+ }
+ function searchSkus(input){
+  const key=input.dataset.skuSearch,box=host.querySelector('[data-results="'+key+'"]'),q=input.value.trim().toLocaleLowerCase();
+  const matches=Object.entries(catalog()).filter(([sku,e])=>e&&e.active!==false&&e.name&&e.glass&&e.mm&&(!q||(sku+' '+e.name).toLocaleLowerCase().includes(q)));
+  box.hidden=false;
+  box.innerHTML=matches.slice(0,40).map(([sku,e])=>'<button type="button" data-sr="pick-sku" data-picker="'+key+'" data-sku="'+esc(sku)+'">'+esc(sku+' · '+e.name)+'</button>').join('')+(matches.length>40?'<p>הקלד עוד כדי לצמצם את התוצאות.</p>':'')+(!matches.length?'<p>לא נמצאו מק״טים. נסה מספר או שם אחר.</p>':'');
+ }
  function render(){
   if(!host||!active)return;
   const a=active,draft=a.draft,reading=draft?.reading;
@@ -40,15 +50,14 @@
    '<div class="sr-body"><div class="sr-error" role="alert" tabindex="-1" hidden></div>'+
    '<p class="sr-status" role="status">'+(a.busy?'קורא את הסקיצה… אפשר להמתין כאן.':reading?(draft.approved?'הטיוטה הזו כבר אושרה. לקריאה נוספת לחץ קרא מחדש.':'טיוטה לבדיקה — הפריטים בהזמנה עדיין לא השתנו.'):'הקריאה תציע פריטים מהתמונה. בדוק ותקן לפני אישור.')+'</p>'+
    (reading?'<p class="sr-metrics">'+(Number.isFinite(draft.elapsedMs)?'זמן קריאה: '+(draft.elapsedMs/1000).toFixed(1)+' שניות. ':'')+(Number.isFinite(draft.costEstimateUsd)?'עלות משוערת: '+draft.costEstimateUsd.toFixed(4)+' דולר, לפני מסים.':'')+'</p>':'')+
-   '<div class="sr-layout"><div class="sr-image">'+(a.image?'<img src="'+esc(a.image)+'" alt="הסקיצה המקורית להשוואה">':'')+'</div><div class="sr-edit">'+
+   '<div class="sr-layout"><div class="sr-image"><button type="button" data-sr="zoom" aria-expanded="false">הגדל סקיצה</button>'+(a.image?'<img src="'+esc(a.image)+'" alt="הסקיצה המקורית להשוואה">':'')+'</div><div class="sr-edit">'+
    (reading?'<div class="sr-warnings">'+(reading.warnings||[]).map(w=>'<p>דורש בדיקה: '+esc(w)+'</p>').join('')+'</div>'+
     (a.rows.length?'':'<p class="sr-warning">לא זוהו פריטים בתמונה. בדוק את ההערות; אפשר לקרוא מחדש או להוסיף חלקים ידנית.</p>')+
     '<p>כל המידות כאן במ״מ. בדוק סוג זכוכית, מידות מרביות וכמות מול הסקיצה.</p>'+
-    '<div class="sr-rows">'+a.rows.map((r,i)=>'<fieldset class="sr-row"><legend>'+esc(r.label||'חלק '+(i+1))+'</legend>'+
+    '<div class="sr-bulk"><h3>מק״ט משותף לכל הפריטים</h3><p>בחר מק״ט ולחץ להחלה. אפשר לשנות אחר כך בכל חלק בנפרד.</p>'+skuPicker('all',a.bulkSku,entries)+'<button type="button" data-sr="apply-sku" '+(!a.bulkSku?'disabled':'')+'>החל על כל '+a.rows.length+' הפריטים</button><p class="sr-bulk-status" role="status"></p></div><h3>פריטים לבדיקה ('+a.rows.length+')</h3><div class="sr-rows">'+a.rows.map((r,i)=>'<fieldset class="sr-row"><legend>'+esc(r.label||'חלק '+(i+1))+'</legend>'+
      '<p class="sr-evidence">'+esc(r.evidence)+'</p>'+
      (r.warnings||[]).map(w=>'<p class="sr-warning">דורש בדיקה: '+esc(w)+'</p>').join('')+
-     '<label>מק״ט וסוג זכוכית<select data-row="'+i+'" data-field="sku" aria-label="מק״ט לחלק '+(i+1)+'"><option value="">בחר מק״ט</option>'+
-     entries.map(([sku,e])=>'<option value="'+esc(sku)+'" '+(sku===r.sku?'selected':'')+'>'+esc(sku+' · '+e.name)+'</option>').join('')+'</select></label>'+
+     skuPicker(String(i),r.sku,entries)+
      '<div class="sr-dims">'+[['widthMm','רוחב במ״מ'],['heightMm','גובה במ״מ'],['quantity','כמות']].map(([f,label])=>
       '<label>'+label+'<input type="number" inputmode="'+(f==='quantity'?'numeric':'decimal')+'" min="0.1" step="'+(f==='quantity'?'1':'0.1')+'" data-row="'+i+'" data-field="'+f+'" aria-label="'+label+' לחלק '+(i+1)+'" value="'+esc(r[f]??'')+'"></label>').join('')+'</div>'+
      '<button type="button" data-sr="remove" data-index="'+i+'">הסר חלק זה</button></fieldset>').join('')+'</div>'+
@@ -99,6 +108,7 @@
   host=document.createElement('div');host.className='sr-overlay';
   document.body.appendChild(host);render();
   host.addEventListener('input',e=>{
+   if(e.target.dataset.skuSearch!==undefined){if(!active?.busy)searchSkus(e.target);return;}
    const field=e.target.dataset.field;
    if(!field||active?.busy)return;
    const row=active.rows[Number(e.target.dataset.row)];if(!row)return;
@@ -107,9 +117,28 @@
    const ack=host.querySelector('#sr-ack');if(ack)ack.checked=false;
    e.target.removeAttribute('aria-invalid');
   });
+  host.addEventListener('focusin',e=>{if(e.target.dataset.skuSearch!==undefined&&!active?.busy)searchSkus(e.target);});
   host.addEventListener('click',e=>{
    const button=e.target.closest('[data-sr]');if(!button||active?.busy)return;
    switch(button.dataset.sr){
+    case 'zoom':{
+     const image=host.querySelector('.sr-image'),expanded=image.classList.toggle('sr-image-expanded');
+     button.textContent=expanded?'חזור לפריטים':'הגדל סקיצה';button.setAttribute('aria-expanded',String(expanded));break;
+    }
+    case 'pick-sku':{
+     const key=button.dataset.picker,sku=button.dataset.sku;
+     if(key==='all'){active.bulkSku=sku;host.querySelector('[data-sr="apply-sku"]').disabled=false;}
+     else{active.rows[Number(key)].sku=sku;active.dirty=true;const ack=host.querySelector('#sr-ack');if(ack)ack.checked=false;}
+     host.querySelector('[data-selected="'+key+'"]').textContent=sku+' · '+catalog()[sku].name;
+     host.querySelector('[data-results="'+key+'"]').hidden=true;
+     const input=host.querySelector('[data-sku-search="'+key+'"]');input.value='';input.focus();host.querySelector('[data-results="'+key+'"]').hidden=true;break;
+    }
+    case 'apply-sku':{
+     if(!active.bulkSku)break;
+     if(active.rows.some(r=>r.sku&&r.sku!==active.bulkSku)&&!confirm('להחליף את המק״ט בכל הפריטים, כולל פריטים שבהם כבר נבחר מק״ט אחר?'))break;
+     active.rows.forEach(r=>{r.sku=active.bulkSku;});active.dirty=true;render();
+     host.querySelector('.sr-bulk-status').textContent='המק״ט הוחל על כל הפריטים. ניתן לשנות בכל חלק בנפרד.';break;
+    }
     case 'close':close();break;
     case 'read':read(false);break;
     case 'reread':read(true);break;
