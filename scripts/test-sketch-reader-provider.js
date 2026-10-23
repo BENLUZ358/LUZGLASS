@@ -22,6 +22,14 @@ const {readImage}=require('../api/_sketch-reader');
   assert.ok(body.instructions.includes('לעולם אל תעתיק'));
   return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(raw)}]}]})};
  }});
+ await readImage({...args,glassHints:[{notation:'קליר 8',product:{sku:'S',glass:'קליר',mm:8,proc:'chisum'}}],glassConflicts:['מיוחד'],fetcher:async(_url,req)=>{
+  const body=JSON.parse(req.body),content=body.input[0].content;
+  assert.equal(content.filter(c=>c.type==='input_image').length,1,'text glossary adds no reference image');
+  assert.ok(content.some(c=>c.type==='input_text'&&c.text.includes('קליר 8')&&c.text.includes('glassConflicts')));
+  assert.ok(body.instructions.includes('אין סוג ברירת מחדל ללקוח'));
+  assert.equal(content.at(-1).image_url,args.image);
+  return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(raw)}]}]})};
+ }});
  for(const response of [
   {ok:false},
   {ok:true,json:async()=>({status:'incomplete',output:[]})},

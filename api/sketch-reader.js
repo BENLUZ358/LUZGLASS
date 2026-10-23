@@ -12,7 +12,7 @@ function defaultDb(){
 }
 const publicDraft=run=>run&&run.status==='ready'?{
  runId:run.runId,needsReread:run.version!==rules.VERSION&&!(run.reading?.rows||[]).length,reading:{rows:run.reading?.rows||[],warnings:run.reading?.warnings||[]},createdAt:run.createdAt,version:run.version,
- learningCount:(run.learningExamples||[]).length,model:run.model,sourceHash:run.sourceHash,usage:run.usage||null,costEstimateUsd:run.costEstimateUsd??null,elapsedMs:run.elapsedMs??null,existingItemCount:run.existingItemCount||0
+ learningCount:(run.learningExamples||[]).length,glassHintCount:run.glassHintCount||0,glassConflictCount:run.glassConflictCount||0,model:run.model,sourceHash:run.sourceHash,usage:run.usage||null,costEstimateUsd:run.costEstimateUsd??null,elapsedMs:run.elapsedMs??null,existingItemCount:run.existingItemCount||0
 }:null;
 function createHandler(deps={}){
  return async function handler(req,res){
@@ -33,6 +33,8 @@ function createHandler(deps={}){
    if(req.method==='GET'){
     const latest=await read(base+'/latest');
     const scopeNow=await learning.resolveScope(db,order);
+    const profileContext=env.SKETCH_READER_LEARNING_ENABLED==='true'?await learning.loadContext(db,{orderId:null,order,scope:scopeNow,sourceHash:null,catalog:await read('skuCatalog')||{},includeExample:false}):{glassHints:[],glassConflicts:[]};
+    const learningProfile={identified:!!scopeNow,name:String(order.orderClient||order.client||'').slice(0,100),glassHints:profileContext.glassHints,glassConflicts:profileContext.glassConflicts};
     const draft=publicDraft(latest);
     if(draft&&order.sketchReaderApproval?.runId===draft.runId) {
      draft.reading={...draft.reading,rows:order.sketchReaderApproval.correctedRows};
@@ -40,7 +42,7 @@ function createHandler(deps={}){
      draft.learningAllowed=order.sketchReaderApproval.learningAllowed===true;
      draft.learningEligible=!!scopeNow&&order.sketchReaderApproval.learningScope===scopeNow;
     }
-    return res.status(200).json({ok:true,draft,learningEligible:!!scopeNow,learningEnabled:env.SKETCH_READER_LEARNING_ENABLED==='true',enabled:env.SKETCH_READER_ENABLED==='true'&&!!env.OPENAI_API_KEY&&!!env.SKETCH_READER_MODEL});
+    return res.status(200).json({ok:true,draft,learningProfile,learningEligible:!!scopeNow,learningEnabled:env.SKETCH_READER_LEARNING_ENABLED==='true',enabled:env.SKETCH_READER_ENABLED==='true'&&!!env.OPENAI_API_KEY&&!!env.SKETCH_READER_MODEL});
    }
    if(input.action==='learning'){
     if(!validRun(input.runId)||typeof input.allowed!=='boolean')throw error(400,'בחירת דוגמה לא תקינה');
@@ -65,7 +67,7 @@ function createHandler(deps={}){
     const catalog=await read('skuCatalog')||{};
     if(run.catalogHash!==rules.digest(catalog)) throw error(409,'קטלוג המק״טים השתנה מאז הקריאה; יש לקרוא מחדש');
     let items;
-    try{items=rules.approvedItems(input.rows,catalog);}catch(e){throw error(400,e.message);}
+    try{learning.validateNotations(input.rows);items=rules.approvedItems(input.rows,catalog);}catch(e){throw error(400,e.message);}
     const rowsDigest=rules.digest(input.rows);
     // A retry is a no-op. A changed retry must not silently overwrite the earlier approval.
     if(order.sketchReaderApproval?.runId===input.runId){
@@ -78,7 +80,7 @@ function createHandler(deps={}){
     if(rules.digest(image)!==run.sourceHash) throw error(409,'הסקיצה השתנתה מאז הפענוח; יש לקרוא אותה מחדש');
     const approvedAt=now(),learningScope=await learning.resolveScope(db,order);
     // The corrected rows and original reading are persisted atomically WITH the live items.
-    const approval={runId:input.runId,version:run.version,sourceHash:run.sourceHash,model:run.model,
+    const approval={runId:input.runId,version:run.version,sourceHash:run.sourceHash,model:run.model,catalogHash:run.catalogHash,
      original:run.reading,correctedRows:JSON.parse(JSON.stringify(input.rows)),rowsDigest,
      approvedAt,approvedBy:auth.phone,learningAllowed:input.learnFromApproval===true&&!!learningScope,
      learningScope};
@@ -108,11 +110,11 @@ function createHandler(deps={}){
    const sourceHash=rules.digest(image),baseFingerprint=rules.orderFingerprint(order);
    const catalog=await read('skuCatalog')||{},catalogHash=rules.digest(catalog);
    const verifiedScope=env.SKETCH_READER_LEARNING_ENABLED==='true'?await learning.resolveScope(db,order):null;
-   let examples=[];
+   let context={examples:[],glassHints:[],glassConflicts:[],glassSources:[]};
    if(env.SKETCH_READER_LEARNING_ENABLED==='true'){
-    try{examples=await learning.load(db,{orderId:id,order,sourceHash,catalog,scope:verifiedScope});}catch(_){throw error(503,'טעינת הדוגמאות לא הצליחה; נסה שוב לפני קריאה בתשלום');}
+    try{context=await learning.loadContext(db,{orderId:id,order,sourceHash,catalog,scope:verifiedScope});}catch(_){throw error(503,'טעינת הדוגמאות לא הצליחה; נסה שוב לפני קריאה בתשלום');}
    }
-   const learningHash=learning.fingerprint(examples);
+   const examples=context.examples,learningHash=learning.fingerprint(context);
    const matches=run=>run?.status==='ready'&&run.sourceHash===sourceHash&&run.baseFingerprint===baseFingerprint&&run.catalogHash===catalogHash&&run.model===env.SKETCH_READER_MODEL&&run.version===rules.VERSION&&run.learningHash===learningHash;
    const latest=await read(base+'/latest');
    if(!input.force&&matches(latest))
@@ -139,17 +141,17 @@ function createHandler(deps={}){
    runRef=db.ref(base+'/runs/'+runId);
    await runRef.set({runId,status:'reading',createdAt:startedAt,createdBy:auth.phone,sourceHash,baseFingerprint,version:rules.VERSION,model:env.SKETCH_READER_MODEL});
    started=true;
-   if(examples.length){
+   if(examples.length||context.glassSources.length){
     const currentOrder=await read('orders/'+id);
     const currentScope=await learning.resolveScope(db,currentOrder);
-    const fresh=currentScope===verifiedScope?await learning.load(db,{orderId:id,order:currentOrder,sourceHash,catalog,scope:currentScope}):[];
+    const fresh=currentScope===verifiedScope?await learning.loadContext(db,{orderId:id,order:currentOrder,sourceHash,catalog,scope:currentScope}):{examples:[],glassHints:[],glassConflicts:[],glassSources:[]};
     if(learning.fingerprint(fresh)!==learningHash)throw error(409,'הדוגמה או שיוך הלקוח השתנו. נסה לקרוא שוב');
    }
-   const result=await (deps.readImage||rules.readImage)({image,catalog,model:env.SKETCH_READER_MODEL,key:env.OPENAI_API_KEY,examples});
+   const result=await (deps.readImage||rules.readImage)({image,catalog,model:env.SKETCH_READER_MODEL,key:env.OPENAI_API_KEY,examples,glassHints:context.glassHints,glassConflicts:context.glassConflicts});
    // Validate even injected providers. Keep raw image once in immutable run, never in orders.
    const reading=rules.normalizeReading(result.reading,catalog);
    const run={runId,status:'ready',createdAt:startedAt,createdBy:auth.phone,sourceHash,baseFingerprint,
-    version:rules.VERSION,model:env.SKETCH_READER_MODEL,learningHash,learningExamples:examples.map(({orderId,runId,sourceHash,rowsDigest})=>({orderId,runId,sourceHash,rowsDigest})),reading,usage:result.usage||null,costEstimateUsd:rules.estimateCostUsd(env.SKETCH_READER_MODEL,result.usage),
+    version:rules.VERSION,model:env.SKETCH_READER_MODEL,learningHash,glassHintCount:context.glassHints.length,glassConflictCount:context.glassConflicts.length,glassSources:context.glassSources,learningExamples:examples.map(({orderId,runId,sourceHash,rowsDigest})=>({orderId,runId,sourceHash,rowsDigest})),reading,usage:result.usage||null,costEstimateUsd:rules.estimateCostUsd(env.SKETCH_READER_MODEL,result.usage),
     existingItemCount:Array.isArray(order.items)?order.items.length:0,catalogHash,
     finishedAt:now(),elapsedMs:Math.max(0,now()-startedAt)};
    await db.ref(base).update({['runs/'+runId]:{...run,sourceImage:image},latest:run});

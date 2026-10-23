@@ -1,6 +1,6 @@
 'use strict';
 const rules=require('./_sketch-reader');
-const VERSION='approved-examples-v1';
+const VERSION='customer-glass-profile-v2';
 const scope=key=>typeof key==='string'&&key?rules.digest(key):null;
 async function resolveScope(db,o){
  if(!o||o.waUnassigned||o.emailUnassigned)return null;
@@ -44,19 +44,54 @@ async function publish(db,orderId,a){
  if(!a.learningScope)return false;
  try{await db.ref(indexPath(orderId,a)).set(a.learningAllowed?{orderId,runId:a.runId,approvedAt:a.approvedAt}:null);return true;}catch(_){return false;}
 }
-async function load(db,target){
- const key=target.scope;if(!key)return [];
+
+function validateNotations(rows){
+ for(const r of rows){if(r.glassNotation!==undefined&&(typeof r.glassNotation!=='string'||r.glassNotation.length>80))throw new Error('הכיתוב לזיהוי סוג הזכוכית צריך להיות טקסט עד 80 תווים');}
+}
+const notation=value=>String(value||'').normalize('NFKC').trim().replace(/\s+/g,' ');
+function glassProfile(sources,catalog){
+ const products=new Map(rules.catalogForModel(catalog).map(e=>[e.sku,e])),groups=new Map();
+ for(const source of sources){
+  for(const row of source.rows){
+   const token=notation(row.glassNotation);if(!token||!products.has(row.sku))continue;
+   const key=token.toLocaleLowerCase();if(!groups.has(key))groups.set(key,{notation:token,skus:new Map()});
+   const group=groups.get(key);if(!group.skus.has(row.sku))group.skus.set(row.sku,new Set());
+   group.skus.get(row.sku).add(source.sourceHash||source.orderId);
+  }
+ }
+ const glassHints=[],glassConflicts=[];
+ for(const group of groups.values()){
+  if(group.skus.size!==1){glassConflicts.push(group.notation);continue;}
+  const [sku,ids]=[...group.skus][0];glassHints.push({notation:group.notation,product:products.get(sku),approvedExamples:ids.size});
+ }
+ return {glassHints:glassHints.slice(0,12),glassConflicts:glassConflicts.slice(0,12)};
+}
+async function loadContext(db,target){
+ const empty={examples:[],glassHints:[],glassConflicts:[],glassSources:[]};
+ const key=target.scope;if(!key)return empty;
  const snap=await db.ref('sketchReaderLearning/'+key).orderByKey().limitToLast(20).once('value');
- const candidates=Object.values(snap.val()||{}).sort((a,b)=>b.approvedAt-a.approvedAt);
+ const candidates=Object.values(snap.val()||{}).filter(v=>v&&typeof v==='object').sort((a,b)=>b.approvedAt-a.approvedAt),examples=[],sources=[];
  for(const ref of candidates){
   if(!/^[A-Za-z0-9_-]{1,100}$/.test(ref.orderId)||!/^[A-Za-z0-9_-]{8,80}$/.test(ref.runId)||ref.orderId===target.orderId)continue;
   const order=(await db.ref('orders/'+ref.orderId).once('value')).val(),approval=order?.sketchReaderApprovals?.[ref.runId];
-  if(!approval?.learningAllowed)continue;
-  const run=(await db.ref('sketchReader/'+ref.orderId+'/runs/'+ref.runId).once('value')).val();
-  const candidateScope=await resolveScope(db,order);
-  const out=example({orderId:ref.orderId,order,scope:candidateScope,approval,run},target);if(out)return [out];
+  if(!approval?.learningAllowed||!approval.approvedBy||approval.learningScope!==key||approval.sourceHash===target.sourceHash)continue;
+  const candidateScope=await resolveScope(db,order);if(candidateScope!==key)continue;
+  if(approval.catalogHash===rules.digest(target.catalog)&&Array.isArray(approval.correctedRows)&&approval.correctedRows.length<=100&&rules.digest(approval.correctedRows)===approval.rowsDigest){
+   try{
+    validateNotations(approval.correctedRows);rules.approvedItems(approval.correctedRows,target.catalog);
+    if(approval.correctedRows.some(r=>notation(r.glassNotation)))sources.push({orderId:ref.orderId,runId:ref.runId,sourceHash:approval.sourceHash,rowsDigest:approval.rowsDigest,rows:approval.correctedRows});
+   }catch(_){}
+  }
+  if(target.includeExample!==false&&!examples.length&&Array.isArray(approval.correctedRows)&&rules.digest(fields(approval.original?.rows||[]))!==rules.digest(fields(approval.correctedRows))){
+   const run=(await db.ref('sketchReader/'+ref.orderId+'/runs/'+ref.runId).once('value')).val();
+   const out=example({orderId:ref.orderId,order,scope:candidateScope,approval,run},target);if(out)examples.push(out);
+  }
  }
- return [];
+ return {examples,...glassProfile(sources,target.catalog),glassSources:sources.map(({orderId,runId,sourceHash,rowsDigest})=>({orderId,runId,sourceHash,rowsDigest}))};
 }
-const fingerprint=examples=>rules.digest({version:VERSION,examples:examples.map(({orderId,runId,sourceHash,rowsDigest})=>({orderId,runId,sourceHash,rowsDigest}))});
-module.exports={VERSION,scope,resolveScope,fields,example,publish,load,fingerprint};
+async function load(db,target){return (await loadContext(db,target)).examples;}
+const fingerprint=context=>{
+ const {examples=[],glassHints=[],glassConflicts=[],glassSources=[]}=Array.isArray(context)?{examples:context}:context;
+ return rules.digest({version:VERSION,examples:examples.map(({orderId,runId,sourceHash,rowsDigest})=>({orderId,runId,sourceHash,rowsDigest})),glassHints,glassConflicts,glassSources});
+};
+module.exports={VERSION,scope,resolveScope,fields,example,publish,load,loadContext,fingerprint,glassProfile,validateNotations};

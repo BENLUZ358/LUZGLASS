@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),learning=require('../api/_sketch-learning');
+const catalog={A:{name:'קליר 8 מחוסם',glass:'קליר',mm:8,proc:'chisum'},B:{name:'מראה 5 מלוטש',glass:'מראה',mm:5,proc:'litush'}};
+const hints=learning.glassProfile([{orderId:'one',runId:'run_111111',sourceHash:'s1',rowsDigest:'d1',rows:[{glassNotation:'  קליר   8 מחוסם ',sku:'A'}]}],catalog);
+assert.equal(hints.glassHints[0].notation,'קליר 8 מחוסם');assert.equal(hints.glassHints[0].product.mm,8);assert.equal(hints.glassHints[0].product.proc,'chisum');
+const conflict=learning.glassProfile([{orderId:'one',sourceHash:'s1',rows:[{glassNotation:'מיוחד',sku:'A'}]},{orderId:'two',sourceHash:'s2',rows:[{glassNotation:'מיוחד',sku:'B'}]}],catalog);
+assert.equal(conflict.glassHints.length,0);assert.deepEqual(conflict.glassConflicts,['מיוחד']);
+assert.equal(learning.glassProfile([{rows:[{sku:'A'}]}],catalog).glassHints.length,0,'frequently used SKU without visible notation is not a learned default');
+assert.throws(()=>learning.validateNotations([{glassNotation:{fake:1}}]));assert.throws(()=>learning.validateNotations([{glassNotation:'x'.repeat(81)}]));
+console.log('customer glass profile: notation, catalog attributes, conflicts, no implicit defaults PASS');

@@ -45,6 +45,11 @@
   viewer.remove();host.querySelector('.sr-panel').inert=false;
   host.querySelector('[data-sr="zoom"]')?.focus();return true;
  }
+ function profileHtml(a){
+  if(!a.learningEnabled||!a.learningProfile?.identified)return '';
+  const p=a.learningProfile,hints=p.glassHints||[],conflicts=p.glassConflicts||[];
+  return '<aside class="sr-profile"><strong>פרופיל הלמידה של '+esc(p.name||'הלקוח שהעלה את הסקיצה')+'</strong><p>הקריאה יכולה להיעזר באישורים של לקוח זה בלבד.</p>'+(hints.length||conflicts.length?'<details><summary>זיהויי סוג זכוכית שמורים ('+hints.length+')</summary><ul>'+hints.map(h=>'<li>'+esc(h.notation)+' ← '+esc(h.product.name)+' ('+esc(h.product.sku)+')</li>').join('')+'</ul>'+(conflicts.length?'<p>דורש בדיקה: '+conflicts.map(esc).join(', ')+'</p>':'')+'</details>':'<p>עדיין אין כיתובי זכוכית מאושרים בפרופיל. ניתן להוסיף בכל חלק למטה.</p>')+'</aside>';
+ }
  function render(){
   if(!host||!active)return;
   const a=active,draft=a.draft,reading=draft?.reading;
@@ -56,6 +61,8 @@
    '<p class="sr-status" role="status">'+(a.busy?'קורא את הסקיצה… אפשר להמתין כאן.':reading?(draft.approved?'הטיוטה הזו כבר אושרה. לקריאה נוספת לחץ קרא מחדש.':'טיוטה לבדיקה — הפריטים בהזמנה עדיין לא השתנו.'):'הקריאה תציע פריטים מהתמונה. בדוק ותקן לפני אישור.')+'</p>'+
    (reading?'<p class="sr-metrics">'+(Number.isFinite(draft.elapsedMs)?'זמן קריאה: '+(draft.elapsedMs/1000).toFixed(1)+' שניות. ':'')+(Number.isFinite(draft.costEstimateUsd)?'עלות משוערת: '+draft.costEstimateUsd.toFixed(4)+' דולר, לפני מסים.':'')+'</p>':'')+
    (reading&&draft.learningCount?'<p class="sr-learning-status">הקריאה נעזרה בדוגמה מאושרת קודמת מאותו לקוח.</p>':'')+
+   (reading&&draft.glassHintCount?'<p class="sr-learning-status">זיהוי הזכוכית נעזר ב־'+draft.glassHintCount+' סימונים מאושרים של הלקוח.</p>':'')+
+   profileHtml(a)+
    '<div class="sr-layout"><div class="sr-image"><button type="button" data-sr="zoom" aria-expanded="false">הגדל סקיצה</button>'+(a.image?'<img src="'+esc(a.image)+'" alt="הסקיצה המקורית להשוואה">':'')+'</div><div class="sr-edit">'+
    (reading?((reading.warnings||[]).length?'<p class="sr-warning">דורש בדיקה</p>':'')+
     (a.rows.length?'':'<p class="sr-warning">לא זוהו פריטים בתמונה. בדוק את ההערות; אפשר לקרוא מחדש או להוסיף חלקים ידנית.</p>')+
@@ -64,6 +71,7 @@
      '<p class="sr-evidence">'+esc(r.evidence)+'</p>'+
      ((r.warnings||[]).length?'<p class="sr-warning">דורש בדיקה</p>':'')+
      skuPicker(String(i),r.sku,entries)+
+     (a.learningEnabled?'<label class="sr-glass-notation">הכיתוב בסקיצה לסוג הזכוכית (אופציונלי)<input type="text" maxlength="80" data-row="'+i+'" data-field="glassNotation" aria-label="כיתוב סוג הזכוכית לחלק '+(i+1)+'" placeholder="העתק רק את הכיתוב שהלקוח כתב" value="'+esc(r.glassNotation||'')+'"><small>קישור הכיתוב למק״ט שבחרת יישמר לפרופיל הלקוח רק באישור.</small></label>':'')+
      '<div class="sr-dims">'+[['widthMm','רוחב במ״מ'],['heightMm','גובה במ״מ'],['quantity','כמות']].map(([f,label])=>
       '<label>'+label+'<input type="number" inputmode="'+(f==='quantity'?'numeric':'decimal')+'" min="0.1" step="'+(f==='quantity'?'1':'0.1')+'" data-row="'+i+'" data-field="'+f+'" aria-label="'+label+' לחלק '+(i+1)+'" value="'+esc(r[f]??'')+'"></label>').join('')+'</div>'+
      '<button type="button" data-sr="remove" data-index="'+i+'">הסר חלק זה</button></fieldset>').join('')+'</div>'+
@@ -131,7 +139,7 @@
    if(!field||active?.busy)return;
    const row=active.rows[Number(e.target.dataset.row)];if(!row)return;
    active.dirty=true;
-   row[field]=field==='sku'?(e.target.value||null):(e.target.value===''?null:Number(e.target.value));
+   row[field]=field==='glassNotation'?e.target.value:field==='sku'?(e.target.value||null):(e.target.value===''?null:Number(e.target.value));
    const ack=host.querySelector('#sr-ack');if(ack)ack.checked=false;
    e.target.removeAttribute('aria-invalid');
   });
@@ -185,7 +193,7 @@
    const res=await bounded(()=>_lgAuthFetch('/api/sketch-reader?orderId='+encodeURIComponent(a.orderId)));
    const data=await res.json();if(!res.ok)throw new Error(data.error||'טעינת הטיוטה נכשלה');
    if(active!==a)return;
-   a.learningEnabled=data.learningEnabled===true;a.learningEligible=data.learningEligible===true;a.draft=data.draft;a.rows=structuredClone(data.draft?.reading?.rows||[]);await checkSource(a);a.busy=false;
+   a.learningProfile=data.learningProfile||null;a.learningEnabled=data.learningEnabled===true;a.learningEligible=data.learningEligible===true;a.draft=data.draft;a.rows=structuredClone(data.draft?.reading?.rows||[]);await checkSource(a);a.busy=false;
    if(data.enabled&&a.readOnOpen&&(!a.draft||a.draft.needsReread)){await read(false);return;}
    render();
    if(a.draft&&!a.sourceMatches)error('התמונה אינה תואמת לטיוטה השמורה. אפשר לקרוא מחדש, או לרענן את הדף אם הסקיצה נערכה.');
