@@ -51,12 +51,12 @@
    '<p class="sr-status" role="status">'+(a.busy?'קורא את הסקיצה… אפשר להמתין כאן.':reading?(draft.approved?'הטיוטה הזו כבר אושרה. לקריאה נוספת לחץ קרא מחדש.':'טיוטה לבדיקה — הפריטים בהזמנה עדיין לא השתנו.'):'הקריאה תציע פריטים מהתמונה. בדוק ותקן לפני אישור.')+'</p>'+
    (reading?'<p class="sr-metrics">'+(Number.isFinite(draft.elapsedMs)?'זמן קריאה: '+(draft.elapsedMs/1000).toFixed(1)+' שניות. ':'')+(Number.isFinite(draft.costEstimateUsd)?'עלות משוערת: '+draft.costEstimateUsd.toFixed(4)+' דולר, לפני מסים.':'')+'</p>':'')+
    '<div class="sr-layout"><div class="sr-image"><button type="button" data-sr="zoom" aria-expanded="false">הגדל סקיצה</button>'+(a.image?'<img src="'+esc(a.image)+'" alt="הסקיצה המקורית להשוואה">':'')+'</div><div class="sr-edit">'+
-   (reading?'<div class="sr-warnings">'+(reading.warnings||[]).map(w=>'<p>דורש בדיקה: '+esc(w)+'</p>').join('')+'</div>'+
+   (reading?((reading.warnings||[]).length?'<p class="sr-warning">דורש בדיקה</p>':'')+
     (a.rows.length?'':'<p class="sr-warning">לא זוהו פריטים בתמונה. בדוק את ההערות; אפשר לקרוא מחדש או להוסיף חלקים ידנית.</p>')+
     '<p>כל המידות כאן במ״מ. בדוק סוג זכוכית, מידות מרביות וכמות מול הסקיצה.</p>'+
     '<div class="sr-bulk"><h3>מק״ט משותף לכל הפריטים</h3><p>בחר מק״ט ולחץ להחלה. אפשר לשנות אחר כך בכל חלק בנפרד.</p>'+skuPicker('all',a.bulkSku,entries)+'<button type="button" data-sr="apply-sku" '+(!a.bulkSku?'disabled':'')+'>החל על כל '+a.rows.length+' הפריטים</button><p class="sr-bulk-status" role="status"></p></div><h3>פריטים לבדיקה ('+a.rows.length+')</h3><div class="sr-rows">'+a.rows.map((r,i)=>'<fieldset class="sr-row"><legend>'+esc(r.label||'חלק '+(i+1))+'</legend>'+
      '<p class="sr-evidence">'+esc(r.evidence)+'</p>'+
-     (r.warnings||[]).map(w=>'<p class="sr-warning">דורש בדיקה: '+esc(w)+'</p>').join('')+
+     ((r.warnings||[]).length?'<p class="sr-warning">דורש בדיקה</p>':'')+
      skuPicker(String(i),r.sku,entries)+
      '<div class="sr-dims">'+[['widthMm','רוחב במ״מ'],['heightMm','גובה במ״מ'],['quantity','כמות']].map(([f,label])=>
       '<label>'+label+'<input type="number" inputmode="'+(f==='quantity'?'numeric':'decimal')+'" min="0.1" step="'+(f==='quantity'?'1':'0.1')+'" data-row="'+i+'" data-field="'+f+'" aria-label="'+label+' לחלק '+(i+1)+'" value="'+esc(r[f]??'')+'"></label>').join('')+'</div>'+
