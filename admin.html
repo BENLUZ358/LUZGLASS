@@ -25,7 +25,7 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 
 <!-- בסיס העיצוב המשותף. הטוקנים, הסקאלות ומצבי המערכת מגיעים מכאן —
      אין להגדיר :root בדף הזה. ראה docs/superpowers/specs/. -->
-<link rel="stylesheet" href="lg-ui.css?v=20260806"><link rel="stylesheet" href="sketch-reader.css?v=20261023g">
+<link rel="stylesheet" href="lg-ui.css?v=20260806"><link rel="stylesheet" href="sketch-reader.css?v=20261023h">
 
 <style>
   /* טוקנים, reset ו-body מוגדרים ב-lg-ui.css */
@@ -390,10 +390,10 @@ label.msec-t{display:block;}
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
   <script src="wa-inbound-panel.js"></script>
-  <script src="sq-assign.js"></script>
+  <script src="sq-assign.js?v=20261023h"></script>
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
-  <script src="sketch-reader-ui.js?v=20261023g"></script>
+  <script src="sketch-reader-ui.js?v=20261023h"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -3463,6 +3463,8 @@ function buildSQItems(){
       id:           o.id,
       source:       o.source || 'sketch',
       client:       o.orderClient || '—',
+      customerId:   o.customerId || '',
+      clientPhone:  o.clientPhone || '',
       orderClient:  o.orderClient || '',   // needed by lgCalcOrderTotal for client price lookup
       orderNum:     o.orderNum || '',
       sketchName:   o.sketchName || o.type || '',

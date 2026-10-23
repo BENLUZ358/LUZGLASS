@@ -36,6 +36,10 @@ function createHandler(deps={}){
     const profileContext=env.SKETCH_READER_LEARNING_ENABLED==='true'?await learning.loadContext(db,{orderId:null,order,scope:scopeNow,sourceHash:null,catalog:await read('skuCatalog')||{},includeExample:false}):{glassHints:[],glassConflicts:[]};
     const learningProfile={identified:!!scopeNow,name:String(order.orderClient||order.client||'').slice(0,100),glassHints:profileContext.glassHints,glassConflicts:profileContext.glassConflicts};
     const draft=publicDraft(latest);
+    if(draft&&order.isTest&&order.sketchReaderApproval?.runId!==draft.runId){
+     const assignment=order.learningClientAssignmentId?await read('sketchReaderClientAssignments/'+id+'/'+order.learningClientAssignmentId):null;
+     if(assignment?.assignedBy&&assignment.customerId===order.customerId&&assignment.clientPhone===String(order.clientPhone||'')&&assignment.assignedAt>=latest.createdAt&&latest.baseFingerprint!==rules.orderFingerprint(order))draft.needsReread=true;
+    }
     if(draft&&order.sketchReaderApproval?.runId===draft.runId) {
      draft.reading={...draft.reading,rows:order.sketchReaderApproval.correctedRows};
      draft.approved=true;
@@ -43,6 +47,25 @@ function createHandler(deps={}){
      draft.learningEligible=!!scopeNow&&order.sketchReaderApproval.learningScope===scopeNow;
     }
     return res.status(200).json({ok:true,draft,learningProfile,learningEligible:!!scopeNow,learningEnabled:env.SKETCH_READER_LEARNING_ENABLED==='true',enabled:env.SKETCH_READER_ENABLED==='true'&&!!env.OPENAI_API_KEY&&!!env.SKETCH_READER_MODEL});
+   }
+   if(input.action==='assignClient'){
+    if(!order.isTest||!rules.canRead(order))throw error(409,'השיוך הזה מיועד להזמנת בדיקה שעדיין בתור');
+    if(!/^[A-Za-z0-9_-]{1,80}$/.test(input.customerId||''))throw error(400,'בחר כרטיס לקוח מהרשימה');
+    const card=await read('hashavshevetAccounts/'+input.customerId);
+    if(!card||!card.name)throw error(404,'כרטיס הלקוח לא נמצא');
+    const users=await read('users')||{};
+    const login=Object.keys(users).find(phone=>users[phone]?.role==='client'&&String(users[phone].customerId||'')===input.customerId)||'';
+    const phone=login||String(card.phone||'').replace(/\D/g,'');
+    const assignmentId=require('node:crypto').randomUUID();
+    const at=now(),fields={learningClientAssignmentId:assignmentId,customerId:input.customerId,orderClient:String(card.name),client:String(card.name),businessName:String(card.name),clientPhone:phone,phone,waUnassigned:false,emailUnassigned:false};
+    // Server-only proof of an explicit admin selection; a display name is never identity.
+    await db.ref('sketchReaderClientAssignments/'+id+'/'+assignmentId).set({customerId:input.customerId,clientPhone:phone,assignedBy:auth.phone,assignedAt:at});
+    const tx=await db.ref('orders/'+id).transaction(current=>{
+     if(!current?.isTest||!rules.canRead(current)||rules.orderFingerprint(current)!==rules.orderFingerprint(order))return;
+     return {...current,id,...fields,updatedAt:at};
+    });
+    if(!tx.committed)throw error(409,'ההזמנה השתנתה בזמן השיוך; פתח אותה מחדש ונסה שוב');
+    return res.status(200).json({ok:true,fields,learningEligible:true});
    }
    if(input.action==='learning'){
     if(!validRun(input.runId)||typeof input.allowed!=='boolean')throw error(400,'בחירת דוגמה לא תקינה');

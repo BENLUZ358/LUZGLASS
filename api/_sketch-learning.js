@@ -7,6 +7,13 @@ async function resolveScope(db,o){
  const phone=String(o.clientPhone||'').replace(/\D/g,'');
  const id=String(o.customerId||'').trim();
  if(id&&!/^[A-Za-z0-9_-]{1,80}$/.test(id))return null;
+ if(o.isTest&&id&&/^[A-Za-z0-9_-]{1,100}$/.test(o.id||'')&&/^[A-Za-z0-9_-]{8,80}$/.test(o.learningClientAssignmentId||'')){
+  const binding=(await db.ref('sketchReaderClientAssignments/'+o.id+'/'+o.learningClientAssignmentId).once('value')).val();
+  if(binding?.assignedBy&&binding.customerId===id&&binding.clientPhone===String(o.clientPhone||'')){
+   const card=(await db.ref('hashavshevetAccounts/'+id).once('value')).val();
+   if(card)return scope('id:'+id);
+  }
+ }
  if(phone&&/^[0-9]{8,15}$/.test(phone)){
   const user=(await db.ref('users/'+phone).once('value')).val();
   if(user&&user.role==='client'){
