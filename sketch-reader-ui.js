@@ -55,6 +55,7 @@
    '<div class="sr-body"><div class="sr-error" role="alert" tabindex="-1" hidden></div>'+
    '<p class="sr-status" role="status">'+(a.busy?'קורא את הסקיצה… אפשר להמתין כאן.':reading?(draft.approved?'הטיוטה הזו כבר אושרה. לקריאה נוספת לחץ קרא מחדש.':'טיוטה לבדיקה — הפריטים בהזמנה עדיין לא השתנו.'):'הקריאה תציע פריטים מהתמונה. בדוק ותקן לפני אישור.')+'</p>'+
    (reading?'<p class="sr-metrics">'+(Number.isFinite(draft.elapsedMs)?'זמן קריאה: '+(draft.elapsedMs/1000).toFixed(1)+' שניות. ':'')+(Number.isFinite(draft.costEstimateUsd)?'עלות משוערת: '+draft.costEstimateUsd.toFixed(4)+' דולר, לפני מסים.':'')+'</p>':'')+
+   (reading&&draft.learningCount?'<p class="sr-learning-status">הקריאה נעזרה בדוגמה מאושרת קודמת מאותו לקוח.</p>':'')+
    '<div class="sr-layout"><div class="sr-image"><button type="button" data-sr="zoom" aria-expanded="false">הגדל סקיצה</button>'+(a.image?'<img src="'+esc(a.image)+'" alt="הסקיצה המקורית להשוואה">':'')+'</div><div class="sr-edit">'+
    (reading?((reading.warnings||[]).length?'<p class="sr-warning">דורש בדיקה</p>':'')+
     (a.rows.length?'':'<p class="sr-warning">לא זוהו פריטים בתמונה. בדוק את ההערות; אפשר לקרוא מחדש או להוסיף חלקים ידנית.</p>')+
@@ -67,6 +68,7 @@
       '<label>'+label+'<input type="number" inputmode="'+(f==='quantity'?'numeric':'decimal')+'" min="0.1" step="'+(f==='quantity'?'1':'0.1')+'" data-row="'+i+'" data-field="'+f+'" aria-label="'+label+' לחלק '+(i+1)+'" value="'+esc(r[f]??'')+'"></label>').join('')+'</div>'+
      '<button type="button" data-sr="remove" data-index="'+i+'">הסר חלק זה</button></fieldset>').join('')+'</div>'+
     '<button type="button" data-sr="add">הוסף חלק חסר</button>'+
+    (a.learningEnabled?(draft.approved?'<div class="sr-learning"><p>'+(draft.learningAllowed?'התיקונים מאושרים לשימוש כדוגמה לקריאות הבאות של אותו לקוח.':'התיקונים אינם משמשים כדוגמה.')+'</p><button type="button" data-sr="learning-toggle" '+(!draft.learningAllowed&&draft.learningEligible===false?'disabled':'')+'>'+(draft.learningAllowed?'הסר מהדוגמאות':'אפשר שימוש כדוגמה')+'</button><p class="sr-learning-feedback" role="status"></p></div>':!a.learningEligible?'<p class="sr-learning">כדי ללמוד מהתיקונים יש לשייך את הסקיצה ללקוח מזוהה.</p>':'<label class="sr-ack sr-learning"><input type="checkbox" id="sr-learn" '+(a.learnFromApproval?'checked':'')+'>השתמש בתיקונים שאאשר כדוגמה לקריאות הבאות של אותו לקוח. שימוש בדוגמה עשוי להוסיף לעלות הקריאה.</label>'):'')+
     '<label class="sr-ack"><input type="checkbox" id="sr-ack">בדקתי את כל החלקים והאזהרות מול הסקיצה. אישור יחליף את הפריטים הקיימים בהזמנה ('+esc(draft.existingItemCount)+' יחידות).</label>':
     '<button type="button" class="sr-primary" data-sr="read" '+(a.busy?'disabled':'')+'>קרא סקיצה</button>')+
    '</div></div></div><footer class="sr-foot"><button type="button" data-sr="close" '+(a.busy?'disabled':'')+'>חזור בלי לשנות</button>'+
@@ -100,19 +102,30 @@
   }
   a.busy=true;render();
   try{
-   const data=await api({action:'approve',orderId:a.orderId,runId:a.draft.runId,rows:a.rows,acknowledged: true});
+   const data=await api({action:'approve',orderId:a.orderId,runId:a.draft.runId,rows:a.rows,acknowledged: true,learnFromApproval:a.learningEnabled&&a.learningEligible&&a.learnFromApproval===true});
    if(active!==a)return;
    a.busy=false;a.dirty=false;
    const callback=a.onApproved;close();callback?.(data);
+   if(data.approval?.learningAllowed&&!data.learningSaved&&typeof showToast==='function')showToast('הפריטים אושרו. שמירת הדוגמה לא הושלמה; ניתן לפתוח את הטיוטה ולנסות שוב.');
+  }catch(e){if(active===a){a.busy=false;render();error(e.message);}}
+ }
+ async function toggleLearning(){
+  const a=active;if(!a||a.busy||!a.draft?.approved)return;
+  a.busy=true;render();
+  try{
+   const data=await api({action:'learning',orderId:a.orderId,runId:a.draft.runId,allowed:!a.draft.learningAllowed});
+   if(active!==a)return;a.draft.learningAllowed=data.learningAllowed;a.busy=false;render();
+   host.querySelector('.sr-learning-feedback').textContent=data.learningAllowed?(data.learningSaved?'נשמר לשימוש בדוגמאות.':'הבחירה נשמרה, אך הוספת הדוגמה לא הושלמה. אפשר להסיר ולהוסיף שוב.'):'הדוגמה הוסרה מקריאות עתידיות.';
   }catch(e){if(active===a){a.busy=false;render();error(e.message);}}
  }
  async function open(options){
   if(active)return;
   returnFocus=document.activeElement;
-  active={...options,rows:[],busy:true,draft:null};const a=active;
+  active={...options,rows:[],busy:true,draft:null,learnFromApproval:true,learningEnabled:false};const a=active;
   host=document.createElement('div');host.className='sr-overlay';
   document.body.appendChild(host);render();
   host.addEventListener('input',e=>{
+   if(e.target.id==='sr-learn'){active.learnFromApproval=e.target.checked;return;}
    if(e.target.dataset.skuSearch!==undefined){if(!active?.busy)searchSkus(e.target);return;}
    const field=e.target.dataset.field;
    if(!field||active?.busy)return;
@@ -152,6 +165,7 @@
     case 'read':read(false);break;
     case 'reread':read(true);break;
     case 'approve':approve();break;
+    case 'learning-toggle':toggleLearning();break;
     case 'remove':active.dirty=true;active.rows.splice(Number(button.dataset.index),1);render();break;
     case 'add':active.dirty=true;active.rows.push({label:'חלק נוסף',sku:null,widthMm:null,heightMm:null,quantity:null,evidence:'נוסף ידנית',warnings:[]});render();break;
    }
@@ -171,7 +185,7 @@
    const res=await bounded(()=>_lgAuthFetch('/api/sketch-reader?orderId='+encodeURIComponent(a.orderId)));
    const data=await res.json();if(!res.ok)throw new Error(data.error||'טעינת הטיוטה נכשלה');
    if(active!==a)return;
-   a.draft=data.draft;a.rows=structuredClone(data.draft?.reading?.rows||[]);await checkSource(a);a.busy=false;
+   a.learningEnabled=data.learningEnabled===true;a.learningEligible=data.learningEligible===true;a.draft=data.draft;a.rows=structuredClone(data.draft?.reading?.rows||[]);await checkSource(a);a.busy=false;
    if(data.enabled&&a.readOnOpen&&(!a.draft||a.draft.needsReread)){await read(false);return;}
    render();
    if(a.draft&&!a.sourceMatches)error('התמונה אינה תואמת לטיוטה השמורה. אפשר לקרוא מחדש, או לרענן את הדף אם הסקיצה נערכה.');

@@ -14,6 +14,14 @@ const {readImage}=require('../api/_sketch-reader');
  assert.equal(sent.input[0].content[1].type,'input_image');
  assert.equal(out.reading.rows[0].widthMm,null);
  assert.equal(out.reading.rows[0].quantity,null);
+ await readImage({...args,examples:[{image:'data:image/png;base64,iVBORw0KGgoAAA==',original:[{widthMm:450}],rows:[{widthMm:500}]}],fetcher:async(_url,req)=>{
+  const body=JSON.parse(req.body),content=body.input[0].content;
+  assert.equal(content.filter(c=>c.type==='input_image').length,2);
+  assert.equal(content.at(-1).image_url,args.image,'target image must be last and distinguished from reference');
+  assert.ok(content.some(c=>c.type==='input_text'&&c.text.includes('corrected')));
+  assert.ok(body.instructions.includes('לעולם אל תעתיק'));
+  return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(raw)}]}]})};
+ }});
  for(const response of [
   {ok:false},
   {ok:true,json:async()=>({status:'incomplete',output:[]})},
