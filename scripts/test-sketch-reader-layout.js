@@ -7,5 +7,12 @@ await page.locator('[data-sku-search="all"]').fill('שקוף');await page.locato
 await page.locator('[data-sku-search="1"]').fill('S2');await page.locator('[data-picker="1"][data-sku="S2"]').click();assert.match(await page.locator('[data-selected="0"]').innerText(),/S1/);assert.match(await page.locator('[data-selected="1"]').innerText(),/S2/);
 await page.locator('[data-sku-search="0"]').fill('missing');assert.match(await page.locator('[data-results="0"]').innerText(),/לא נמצאו/);
 const imageBox=await page.locator('.sr-image').boundingBox(),rowsBox=await page.locator('.sr-rows').boundingBox();assert.ok(imageBox.y+imageBox.height<=rowsBox.y);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-await page.locator('[data-sr="zoom"]').click();assert.equal(await page.locator('[data-sr="zoom"]').getAttribute('aria-expanded'),'true');await page.locator('[data-sr="zoom"]').click();await page.locator('.sr-body').evaluate(el=>el.scrollTop=0);await page.screenshot({path:require('node:path').join(require('node:os').tmpdir(),'luzglass-reader-layout.png')});
+await page.locator('[data-sr="zoom"]').click();
+const viewer=page.locator('.sr-viewer'),back=viewer.locator('[data-sr="zoom-close"]');
+await back.waitFor({state:'visible'});
+await viewer.locator('.sr-viewer-scroll').evaluate(el=>{el.scrollTop=900;el.scrollLeft=-500;});
+const bounds=await back.boundingBox();assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=393&&bounds.y+bounds.height<=852,'return control must stay inside viewport after panning');
+await back.click();assert.equal(await viewer.count(),0);
+await page.locator('[data-sr="zoom"]').click();await page.keyboard.press('Escape');assert.equal(await page.locator('.sr-viewer').count(),0);assert.equal(await page.locator('.sr-panel').count(),1,'Escape exits enlargement without closing the draft');
+assert.match(await page.locator('[data-selected="1"]').innerText(),/S2/);await page.locator('.sr-body').evaluate(el=>el.scrollTop=0);await page.screenshot({path:require('node:path').join(require('node:os').tmpdir(),'luzglass-reader-layout.png')});
 await browser.close();console.log('WebKit mobile: bulk selection, individual override, search, empty results, image order, enlargement PASS');})().catch(e=>{console.error(e);process.exitCode=1});

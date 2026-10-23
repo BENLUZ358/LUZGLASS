@@ -40,6 +40,11 @@
   box.hidden=false;
   box.innerHTML=matches.slice(0,40).map(([sku,e])=>'<button type="button" data-sr="pick-sku" data-picker="'+key+'" data-sku="'+esc(sku)+'">'+esc(sku+' · '+e.name)+'</button>').join('')+(matches.length>40?'<p>הקלד עוד כדי לצמצם את התוצאות.</p>':'')+(!matches.length?'<p>לא נמצאו מק״טים. נסה מספר או שם אחר.</p>':'');
  }
+ function closeZoom(){
+  const viewer=host?.querySelector('.sr-viewer');if(!viewer)return false;
+  viewer.remove();host.querySelector('.sr-panel').inert=false;
+  host.querySelector('[data-sr="zoom"]')?.focus();return true;
+ }
  function render(){
   if(!host||!active)return;
   const a=active,draft=a.draft,reading=draft?.reading;
@@ -122,9 +127,13 @@
    const button=e.target.closest('[data-sr]');if(!button||active?.busy)return;
    switch(button.dataset.sr){
     case 'zoom':{
-     const image=host.querySelector('.sr-image'),expanded=image.classList.toggle('sr-image-expanded');
-     button.textContent=expanded?'חזור לפריטים':'הגדל סקיצה';button.setAttribute('aria-expanded',String(expanded));break;
+     if(host.querySelector('.sr-viewer'))break;
+     const viewer=document.createElement('div');viewer.className='sr-viewer';
+     viewer.innerHTML='<div class="sr-viewer-toolbar"><button type="button" data-sr="zoom-close">חזור לפריטים</button><span>אפשר לגלול את התמונה ולהגדיל בתנועת אצבעות</span></div><div class="sr-viewer-scroll"><img src="'+esc(active.image)+'" alt="הסקיצה בהגדלה"></div>';
+     host.querySelector('.sr-panel').inert=true;
+     host.appendChild(viewer);viewer.querySelector('button').focus();break;
     }
+    case 'zoom-close':closeZoom();break;
     case 'pick-sku':{
      const key=button.dataset.picker,sku=button.dataset.sku;
      if(key==='all'){active.bulkSku=sku;host.querySelector('[data-sr="apply-sku"]').disabled=false;}
@@ -149,9 +158,9 @@
   });
   host.addEventListener('keydown',e=>{
    e.stopPropagation();
-   if(e.key==='Escape'){e.preventDefault();close();}
+   if(e.key==='Escape'){e.preventDefault();if(!closeZoom())close();}
    if(e.key==='Tab'){
-    const els=[...host.querySelectorAll('button:not([disabled]),input,select,[tabindex="0"]')];
+    const els=[...(host.querySelector('.sr-viewer')||host).querySelectorAll('button:not([disabled]),input,select,[tabindex="0"]')];
     const first=els[0],last=els.at(-1);
     if(e.shiftKey&&(document.activeElement===first||document.activeElement===host.querySelector('[role="dialog"]'))){e.preventDefault();last?.focus();}
     else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}
