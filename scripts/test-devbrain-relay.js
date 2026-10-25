@@ -15,6 +15,57 @@ async function fixture() { const deps = { db: fakeDb(), env: { ...env }, now: 10
 let passed = 0;
 async function test(name, fn) { await fn(); passed++; console.log('ok ' + name); }
 (async () => {
+  await test('public relay URL rewrites to existing function within twelve-function budget', async () => {
+    const fs = require('node:fs'), path = require('node:path');
+    const root = path.join(__dirname, '..');
+    const deployed = fs.readdirSync(path.join(root, 'api')).filter(name => name.endsWith('.js') && !name.startsWith('_'));
+    assert.ok(deployed.length <= 12, `serverless function count ${deployed.length} exceeds 12`);
+    assert.ok(!deployed.includes('devbrain-relay.js'));
+    assert.ok(fs.existsSync(path.join(root, 'api/_devbrain-route.js')));
+    const settings = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'));
+    assert.ok(settings.rewrites.some(r => r.source === '/api/devbrain-relay' && r.destination === '/api/wa-inbound?devbrain=relay'));
+    assert.equal(settings.functions['api/wa-inbound.js'].maxDuration, 60);
+    assert.ok(settings.headers.length > 0);
+  });
+  await test('Vercel facade dispatches exact query only; relay auth is independent and lazy', async () => {
+    const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
+    const localRequire = require('node:module').createRequire(path.join(__dirname, '../api/wa-inbound.js'));
+    let dbInitializations = 0;
+    const module = { exports: {} };
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../api/wa-inbound.js'), 'utf8'), {
+      module, process, Buffer, console,
+      require(name) {
+        if (name === 'firebase-admin/app') return { getApps: () => [], cert: x => x, initializeApp() { dbInitializations++; return {}; } };
+        if (name === 'firebase-admin/database') return { getDatabase: () => fakeDb() };
+        if (name === '@vercel/functions') return { waitUntil() {} };
+        return localRequire(name);
+      },
+    });
+    const call = async req => {
+      let status, body; const headers = {};
+      const res = { setHeader(k, v) { headers[k.toLowerCase()] = v; }, status(s) { status = s; return this; }, json(b) { body = b; } };
+      await module.exports(req, res); return { status, body, headers };
+    };
+    const saved = { ...process.env };
+    try {
+      Object.assign(process.env, env, { DEV_BRAIN_RELAY_ENABLED: '', GREENAPI_WEBHOOK_TOKEN: 'green-only-token' });
+      const base = { method: 'POST', query: { devbrain: 'relay' }, headers: {}, body: { action: 'claim', workerId: 'worker-123' } };
+      assert.equal((await call(base)).status, 503); assert.equal(dbInitializations, 0);
+      process.env.DEV_BRAIN_RELAY_ENABLED = 'true';
+      for (const headers of [{}, { authorization: 'Bearer green-only-token' }]) {
+        const r = await call({ ...base, headers }); assert.equal(r.status, 401); assert.equal(r.headers['cache-control'], 'no-store');
+      }
+      assert.equal(dbInitializations, 0);
+      const wrongProject = request(base.body); wrongProject.headers['x-devbrain-project'] = 'lussglass';
+      assert.equal((await call({ ...wrongProject, query: { devbrain: 'relay' } })).status, 403); assert.equal(dbInitializations, 0);
+      // Neither body nor headers nor a non-exact query selects the relay or bypasses GREEN auth.
+      for (const query of [undefined, {}, { devbrain: ['relay'] }, { devbrain: 'Relay' }]) {
+        const r = await call({ ...request({ ...base.body, devbrain: 'relay' }), query, headers: { ...request({}).headers, 'x-devbrain': 'relay' } });
+        assert.equal(r.status, 401); assert.equal(r.body.error, 'unauthorized');
+      }
+      assert.equal(dbInitializations, 4); // Original no-query wrapper still initializes its own customer database.
+    } finally { for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k]; Object.assign(process.env, saved); }
+  });
   await test('successful ACK receipt matches parent contract for every decision and retry', async () => {
     for (const decision of ['customer', 'development', 'review']) {
       const deps = await fixture(); deps.customer = async () => ({ status: 200, body: { recorded: true } });
@@ -56,7 +107,7 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     try {
       const headers = {}; let status;
       const res = { setHeader(k, v) { headers[k.toLowerCase()] = v; }, status(s) { status = s; return this; }, json() {} };
-      await require('../api/devbrain-relay')({ method: 'POST' }, res);
+      await require('../api/_devbrain-route')({ method: 'POST' }, res);
       assert.equal(status, 503); assert.equal(headers['cache-control'], 'no-store');
     } finally { if (saved === undefined) delete process.env.DEV_BRAIN_RELAY_ENABLED; else process.env.DEV_BRAIN_RELAY_ENABLED = saved; }
   });

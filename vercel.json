@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/api/devbrain-relay", "destination": "/api/wa-inbound?devbrain=relay" }
+  ],
   "functions": {
     "api/whatsapp-drain.js": { "maxDuration": 60 },
     "api/wa-inbound.js":     { "maxDuration": 60 },

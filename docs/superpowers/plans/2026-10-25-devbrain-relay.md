@@ -13,7 +13,7 @@
 - [x] Confirm isolated worktree HEAD equals main at 98ada106; inspect relevant source and fake database. No AGENTS.md found in relevant worktree/ancestor locations.
 - [x] Write/run initial failing test before source implementation (missing relay module assertion).
 - [x] Implement api/_devbrain-relay.js capture, canonical identity, bounded claims, lease fencing, frozen durable handoff and idempotent ACK.
-- [x] Implement api/devbrain-relay.js with lazy server-only database initialization and scope check.
+- [x] Implement api/_devbrain-route.js (renamed from api/devbrain-relay.js) with lazy server-only database initialization and scope check.
 - [x] Modify api/wa-inbound.js only to intercept after auth and reuse extracted post-auth customer logic.
 - [x] Add only denied devBrainRelay namespace with availableAt index in database.rules.json.
 - [x] Expand scripts/test-devbrain-relay.js with offline protocol, race, failure and original customer integration coverage.
@@ -31,3 +31,18 @@ There is no root npm test script. Targeted existing scripts are used for relevan
 - [x] Failed or unexpected callbacks retain frozen handoff_pending and return500. Parent local inbox displays manual customer receipt with mark-handled only; customer decision cannot become development.
 
 Review regression initial red: successful ACK state was undefined instead of done. Expanded offline coverage includes real original-parser and allowlist manual receipts.
+
+
+## Existing function budget adaptation
+
+Baseline supplied by parent: feat/devbrain-relay-test at dfedf47; previous relay files committed by parent, untracked .vercel left untouched.
+
+- [x] Observe initial regression red: serverless function count 13 exceeds 12.
+- [x] git mv api/devbrain-relay.js api/_devbrain-route.js; no additional serverless endpoint file.
+- [x] Add only the public relay rewrite to vercel.json, preserving existing settings.
+- [x] Exact req.query.devbrain === 'relay' dispatch before original GREEN Vercel wrapper; preserve separate relay token/project authentication and lazy database.
+- [x] Update helper import tests and add offline facade/auth and static function-count coverage.
+- [x] Preserve public relay URL and pure handleRelay for parent client/fake-HTTP integration.
+- [ ] Parent review; no commit or redeploy. Do not stage .vercel.
+
+Source function count is 12: stated Hobby cost limit resolved without upgrade. Existing GREEN URL without query is unchanged. Header/body selectors cannot bypass either route's authentication.
