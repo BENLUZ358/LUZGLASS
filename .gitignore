@@ -22,3 +22,6 @@ scratch/
 
 # סרטוני ההדרכה המוכנים — קבצים כבדים, נבנים מחדש מ-tools/training-video
 docs/training-videos/output/
+
+# Local Vercel project link and build cache
+.vercel/
