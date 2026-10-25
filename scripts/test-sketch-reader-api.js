@@ -7,7 +7,8 @@ function fakeDb(initial){
  function put(path,v){const keys=path.split('/');let p=data;for(const k of keys.slice(0,-1))p=p[k]??={};p[keys.at(-1)]=structuredClone(v);}
  const snap=v=>({val:()=>structuredClone(v)});
  return {data,ref(path){return {async once(){return snap(get(path));},async set(v){put(path,v);}, async update(patch){for(const [k,v] of Object.entries(patch))put(path+'/'+k,v);},
- async transaction(fn){const v=fn(structuredClone(get(path)));if(v===undefined)return {committed:false,snapshot:snap(get(path))};put(path,v);return {committed:true,snapshot:snap(v)};}};}};
+ async transaction(fn){// Real Firebase first runs the handler with null (no local cache), then retries with server data.
+const real=get(path);let v=fn(null);if(v!==undefined&&real!==null)v=fn(structuredClone(real));if(v===undefined)return {committed:false,snapshot:snap(get(path))};put(path,v);return {committed:true,snapshot:snap(v)};}};}};
 }
 const image='data:image/png;base64,iVBORw0KGgo=';
 const catalog={'8SMH':{name:'שקוף 8 מחוסם',glass:'שקוף',mm:8,proc:'chisum'}};

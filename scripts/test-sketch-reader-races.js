@@ -12,7 +12,8 @@ const db={ref(p){return{
  async once(){if(recoveryReadFails&&p.includes('/runs/')){recoveryReadFails=false;throw Error('recovery read unavailable');}if(staleOnce&&p==='sketchReader/o/latest'){staleOnce=false;return snapshot(null);}return snapshot(get(p));},
  async set(v){if(p==='sketchReader/o/latest')throw Error('pointer write failed');put(p,v);},
  async update(patch){atomicWrites++;for(const [k,v]of Object.entries(patch))put(p+'/'+k,v);if(publicationAckLost){publicationAckLost=false;recoveryReadFails=true;throw Error('lost write acknowledgement');}},
- async transaction(fn){const next=fn(structuredClone(get(p)));if(next===undefined)return{committed:false,snapshot:snapshot(get(p))};put(p,next);return{committed:true,snapshot:snapshot(next)};}
+ async transaction(fn){// Real Firebase first runs the handler with null (no local cache), then retries with server data.
+const real=get(p);let next=fn(null);if(next!==undefined&&real!==null)next=fn(structuredClone(real));if(next===undefined)return{committed:false,snapshot:snapshot(get(p))};put(p,next);return{committed:true,snapshot:snapshot(next)};}
 };}};
 const env={SKETCH_READER_ENABLED:'true',OPENAI_API_KEY:'fake',SKETCH_READER_MODEL:'test',SKETCH_READER_DAILY_LIMIT:'5'};
 let providerCalls=0;

@@ -61,10 +61,11 @@ function createHandler(deps={}){
     // Server-only proof of an explicit admin selection; a display name is never identity.
     await db.ref('sketchReaderClientAssignments/'+id+'/'+assignmentId).set({customerId:input.customerId,clientPhone:phone,assignedBy:auth.phone,assignedAt:at});
     const tx=await db.ref('orders/'+id).transaction(current=>{
+     if(current===null)return null; // Firebase calls first with null before it has server data; abort here would never retry.
      if(!current?.isTest||!rules.canRead(current)||rules.orderFingerprint(current)!==rules.orderFingerprint(order))return;
      return {...current,id,...fields,updatedAt:at};
     });
-    if(!tx.committed)throw error(409,'ההזמנה השתנתה בזמן השיוך; פתח אותה מחדש ונסה שוב');
+    if(!tx.committed||!tx.snapshot.val())throw error(409,'ההזמנה השתנתה בזמן השיוך; פתח אותה מחדש ונסה שוב');
     return res.status(200).json({ok:true,fields,learningEligible:true});
    }
    if(input.action==='learning'){
@@ -72,12 +73,13 @@ function createHandler(deps={}){
     const stamp=now(),verifiedScope=await learning.resolveScope(db,order);
     if(input.allowed&&!verifiedScope)throw error(409,'יש לשייך את הסקיצה ללקוח מזוהה לפני שימוש כדוגמה');
     const tx=await db.ref('orders/'+id).transaction(current=>{
+     if(current===null)return null;
      const a=current?.sketchReaderApprovals?.[input.runId];
      if(!a||!a.approvedBy||rules.orderFingerprint(current)!==rules.orderFingerprint(order)||(input.allowed&&a.learningScope!==verifiedScope))return;
      const updated={...a,learningAllowed:input.allowed,learningScope:a.learningScope||null,learningUpdatedAt:stamp,learningUpdatedBy:auth.phone};
      return {...current,sketchReaderApprovals:{...current.sketchReaderApprovals,[input.runId]:updated},...(current.sketchReaderApproval?.runId===input.runId?{sketchReaderApproval:updated}:{})};
     });
-    if(!tx.committed)throw error(404,'לא נמצא אישור לשמירה כדוגמה');
+    if(!tx.committed||!tx.snapshot.val())throw error(404,'לא נמצא אישור לשמירה כדוגמה');
     const approval=tx.snapshot.val().sketchReaderApprovals[input.runId];
     const learningSaved=await learning.publish(db,id,approval);
     return res.status(200).json({ok:true,learningAllowed:approval.learningAllowed,learningSaved});
@@ -108,10 +110,11 @@ function createHandler(deps={}){
      approvedAt,approvedBy:auth.phone,learningAllowed:input.learnFromApproval===true&&!!learningScope,
      learningScope};
     const tx=await db.ref('orders/'+id).transaction(current=>{
+     if(current===null)return null;
      if(!current||!rules.canRead(current)||rules.orderFingerprint(current)!==run.baseFingerprint) return;
      return {...current,items,sketchReaderApproval:approval,sketchReaderApprovals:{...(current.sketchReaderApprovals||{}),[input.runId]:approval},updatedAt:approvedAt};
     });
-    if(!tx.committed) {
+    if(!tx.committed||!tx.snapshot.val()) {
      const current=tx.snapshot.val();
      if(current?.sketchReaderApproval?.runId===input.runId&&current.sketchReaderApproval.rowsDigest===rowsDigest)
       return res.status(200).json({ok:true,items:current.items,approval:current.sketchReaderApproval,alreadyApproved:true,learningSaved:await learning.publish(db,id,current.sketchReaderApproval)});
@@ -192,7 +195,7 @@ function createHandler(deps={}){
    return res.status(e.status||502).json({error:e.status?e.message:'קריאת הסקיצה נכשלה; ההזמנה לא שונתה. אפשר להמשיך ידנית'});
   }finally{
    if(ownedLock) {
-    try{await ownedLock.ref.transaction(lock=>lock?.runId===ownedLock.runId?null:undefined);}catch(_){}
+    try{await ownedLock.ref.transaction(lock=>lock===null||lock.runId===ownedLock.runId?null:undefined);}catch(_){}
    }
   }
  };
