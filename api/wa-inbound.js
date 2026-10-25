@@ -39,6 +39,13 @@ async function handleInbound(req, deps) {
   const mine = String(process.env.GREENAPI_ID_INSTANCE || '');
   if (!mine || inst !== mine) return { status: 403, body: { error: 'wrong instance' } };
 
+  const captured = await require('./_devbrain-relay').maybeCaptureOwner(body, { ...deps, rawBodyBytes: typeof req.body === 'string' ? Buffer.byteLength(req.body) : undefined });
+  if (captured) return captured;
+  return handleCustomerInbound(body, deps);
+}
+
+// Internal replay entry: the caller supplies only the stored, validated relay event.
+async function handleCustomerInbound(body, deps) {
   const p = lgWaInboundParse(body);
   if (p.action !== 'record') return { status: 200, body: { ok: true, ignored: p.reason } };
   if (p.entry.groupId) {
@@ -103,3 +110,5 @@ module.exports = async function handler(req, res) {
   }
 };
 module.exports.handleInbound = handleInbound;
+
+module.exports.handleCustomerInbound = handleCustomerInbound;
