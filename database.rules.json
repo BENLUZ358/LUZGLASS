@@ -3,6 +3,12 @@
     ".read": false,
     ".write": false,
 
+    "devBrainRelay": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["availableAt"]
+    },
+
     "users": {
       ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
       ".write": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
