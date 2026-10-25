@@ -67,6 +67,8 @@ const plain = v => JSON.parse(JSON.stringify(v));
   check('C1 shown for an unassigned WhatsApp order', ctx.sqAssignNeeded({ waUnassigned: true }), true);
   check('C1 not shown for an ordinary order', ctx.sqAssignNeeded({ source: 'email', customerId: '14201' }), false);
 
+  check('C2 test sketch imports offer real client assignment', ctx.sqAssignNeeded({isTest:true,source:'sketch'}),true);
+  check('C2 test assignment can be changed', ctx.sqAssignNeeded({isTest:true,customerId:'14201'}),true);
   // ─── השיוך ─────────────────────────────────────────────────────────
   await ctx.lgAssignOrderToAccount('em_k_1', { key: '14201', name: 'המקום לאמבט' }, '0501234567');
   check('D1 assigning writes exactly the agreed fields', plain(calls[0]), ['em_k_1', {
@@ -91,7 +93,7 @@ const plain = v => JSON.parse(JSON.stringify(v));
 
   // ─── admin.html ────────────────────────────────────────────────────
   const A = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
-  check('E1 admin.html loads sq-assign.js', /<script src="sq-assign\.js"><\/script>/.test(A), true);
+  check('E1 admin.html loads sq-assign.js', /<script src="sq-assign\.js(?:\?v=[^"<>]+)?"><\/script>/.test(A), true);
   const tagLine = (A.match(/<span class="sq-tag \$\{[^\n]*sq-tag-upload[^\n]*/) || [''])[0];
   check('E2 the queue tag says "מייל" for source:\'email\'', /source==='email'\?'sq-tag-email'/.test(tagLine) && /source==='email'\?'מייל'/.test(tagLine), true);
   check('E2 with its own colour', /\.sq-tag-email\{background:[^}]+;color:[^}]+;\}/.test(A), true);

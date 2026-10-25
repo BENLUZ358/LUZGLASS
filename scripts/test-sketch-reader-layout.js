@@ -1,0 +1,18 @@
+const {webkit}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const fs=require('fs'),assert=require('node:assert/strict');
+(async()=>{const browser=await webkit.launch({headless:true});const page=await browser.newPage({viewport:{width:393,height:852},isMobile:true,hasTouch:true});
+await page.route('https://reader.test/**',r=>r.fulfill({contentType:'text/html',body:'<html><meta name="viewport" content="width=device-width,initial-scale=1"><style>'+fs.readFileSync('sketch-reader.css','utf8')+'</style><body></body></html>'}));await page.goto('https://reader.test/');
+await page.evaluate(async()=>{window.skuCatalogMap={S1:{name:'שקוף 8 ממ',glass:true,mm:8},S2:{name:'מראה 5 ממ',glass:true,mm:5}};const image='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="700" height="900"><rect width="700" height="900" fill="white"/><rect x="100" y="100" width="200" height="600" fill="none" stroke="black"/></svg>');window.testImage=image;const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(image))),b=>b.toString(16).padStart(2,'0')).join('');window._lgAuthFetch=async()=>({ok:true,json:async()=>({enabled:true,draft:{runId:'r',sourceHash:hash,existingItemCount:0,reading:{rows:[1,2].map(i=>({label:'חלק '+i,widthMm:500,heightMm:1900,quantity:1,sku:null})),warnings:[]}}})});window.confirm=()=>true;});await page.addScriptTag({content:fs.readFileSync('sketch-reader-ui.js','utf8')});await page.evaluate(()=>lgSketchReader.open({orderId:'o',image:testImage}));
+await page.locator('[data-sku-search="all"]').fill('שקוף');await page.locator('[data-picker="all"][data-sku="S1"]').click();await page.locator('[data-sr="apply-sku"]').click();assert.match(await page.locator('[data-selected="0"]').innerText(),/S1/);assert.match(await page.locator('[data-selected="1"]').innerText(),/S1/);
+await page.locator('[data-sku-search="1"]').fill('S2');await page.locator('[data-picker="1"][data-sku="S2"]').click();assert.match(await page.locator('[data-selected="0"]').innerText(),/S1/);assert.match(await page.locator('[data-selected="1"]').innerText(),/S2/);
+await page.locator('[data-sku-search="0"]').fill('missing');assert.match(await page.locator('[data-results="0"]').innerText(),/לא נמצאו/);
+const imageBox=await page.locator('.sr-image').boundingBox(),rowsBox=await page.locator('.sr-rows').boundingBox();assert.ok(imageBox.y+imageBox.height<=rowsBox.y);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+await page.locator('[data-sr="zoom"]').click();
+const viewer=page.locator('.sr-viewer'),back=viewer.locator('[data-sr="zoom-close"]');
+await back.waitFor({state:'visible'});
+await viewer.locator('.sr-viewer-scroll').evaluate(el=>{el.scrollTop=900;el.scrollLeft=-500;});
+const bounds=await back.boundingBox();assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=393&&bounds.y+bounds.height<=852,'return control must stay inside viewport after panning');
+await back.click();assert.equal(await viewer.count(),0);
+await page.locator('[data-sr="zoom"]').click();await page.keyboard.press('Escape');assert.equal(await page.locator('.sr-viewer').count(),0);assert.equal(await page.locator('.sr-panel').count(),1,'Escape exits enlargement without closing the draft');
+assert.match(await page.locator('[data-selected="1"]').innerText(),/S2/);await page.locator('.sr-body').evaluate(el=>el.scrollTop=0);await page.screenshot({path:require('node:path').join(require('node:os').tmpdir(),'luzglass-reader-layout.png')});
+await browser.close();console.log('WebKit mobile: bulk selection, individual override, search, empty results, image order, enlargement PASS');})().catch(e=>{console.error(e);process.exitCode=1});

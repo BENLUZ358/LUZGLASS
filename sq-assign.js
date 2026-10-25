@@ -45,7 +45,7 @@ function sqAssignLoginPhone(users, key) {
 
 //  מתי מציגים את הכפתור
 function sqAssignNeeded(o) {
-  return !!(o && (o.waUnassigned || o.emailUnassigned));
+  return !!(o && (o.waUnassigned || o.emailUnassigned || o.isTest));
 }
 
 //  השיוך עצמו — דרך updateOrder בלבד (firebase-db.js).
@@ -76,8 +76,7 @@ if (typeof document !== 'undefined') (function () {
     const from = o.emailUnassigned && o.emailFrom
       ? ' — נשלחה מ-<span class="sqa-from">' + lgEsc(o.emailFrom) + '</span>' : '';
     box.hidden = false;
-    box.innerHTML = `<div class="sqa-msg">הלקוח של הסקיצה הזו לא זוהה${from}. בחר את כרטיס הלקוח שלה בחשבשבת.</div>
-      <div class="sqa-row"><button type="button" class="sqa-btn" data-sqa="open">שייך ללקוח</button></div>`;
+    box.innerHTML = '<div class="sqa-msg">'+(o.isTest?(o.customerId?'משויך לכרטיס '+lgEsc(o.customerId)+' — '+lgEsc(o.orderClient||o.client||'')+'. אפשר לשנות את השיוך.':'שם הבדיקה אינו שיוך ללקוח. בחר כרטיס לקוח כדי להפעיל את פרופיל הלמידה שלו.'):'הלקוח של הסקיצה הזו לא זוהה'+from+'. בחר את כרטיס הלקוח שלה בחשבשבת.')+'</div><div class="sqa-row"><button type="button" class="sqa-btn" data-sqa="open">'+(o.customerId?'שנה לקוח':'שייך ללקוח')+'</button></div>';
   };
 
   function openPicker() {
@@ -106,16 +105,23 @@ if (typeof document !== 'undefined') (function () {
     if (busy || !cur) return;
     const a = accounts()[key];
     if (!a) { alert('כרטיס הלקוח לא נמצא'); return; }
-    const acc = { key: String(a.key), name: String(a.name || a.key) };
+    let acc = { key: String(a.key), name: String(a.name || a.key) };
     if (!confirm('לשייך את הסקיצה ל"' + acc.name + '" (' + acc.key + ')?')) return;
     const o = cur;
     busy = true;
     document.querySelectorAll('#sqAssignWrap button').forEach(b => { b.disabled = true; });
     try {
       // ⚠️ users נקרא טרי ולא מהמטמון של הדף — מפתח = טלפון, כמו בשרת
-      const users = (await _lgDb.ref('users').once('value')).val() || {};
-      const phone = sqAssignLoginPhone(users, acc.key);
-      await lgAssignOrderToAccount(o.id, acc, phone);
+      let phone='';
+      if(o.isTest){
+        const response=await _lgAuthPost('/api/sketch-reader',{action:'assignClient',orderId:o.id,customerId:acc.key});
+        const data=await response.json();if(!response.ok)throw new Error(data.error||'השיוך לא נשמר');
+        phone=data.fields.clientPhone;acc={key:data.fields.customerId,name:data.fields.orderClient};
+      }else{
+        const users = (await _lgDb.ref('users').once('value')).val() || {};
+        phone = sqAssignLoginPhone(users, acc.key);
+        await lgAssignOrderToAccount(o.id, acc, phone);
+      }
       // המאזין יביא את ההזמנה המעודכנת; עד אז — מה שעל המסך (כולל orders,
       // שממנו פאנל הקליטות יודע שהקליטה כבר לא דורשת טיפול)
       const same = i => i && String(i.id) === String(o.id);
@@ -125,7 +131,7 @@ if (typeof document !== 'undefined') (function () {
         x.customerId = acc.key;
         x.client = x.orderClient = x.businessName = acc.name;
         x.waUnassigned = x.emailUnassigned = false;
-        if (phone) x.phone = x.clientPhone = phone;
+        if (phone || o.isTest) x.phone = x.clientPhone = phone;
       });
       const h = $('sqDClient'); if (h && cur === o) h.textContent = acc.name;
       if (cur === o) window.sqAssignShow(o);

@@ -1,0 +1,51 @@
+'use strict';
+const assert=require('node:assert/strict'),{createHandler}=require('../api/sketch-reader'),learning=require('../api/_sketch-learning');
+function fakeDb(initial){const data=structuredClone(initial);let failPublish=false,onPublishRun=null;
+const get=p=>p.split('/').reduce((o,k)=>o?.[k],data)??null;
+function put(p,v){const keys=p.split('/');let o=data;for(const k of keys.slice(0,-1))o=o[k]??={};o[keys.at(-1)]=structuredClone(v);}
+const snap=v=>({val:()=>structuredClone(v)});
+return {data,set onPublishRun(v){onPublishRun=v;},set failPublish(v){failPublish=v;},ref(path){let limit;return {orderByKey(){return this;},limitToLast(n){limit=n;return this;},async once(){let v=get(path);if(limit&&v)v=Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).slice(-limit));return snap(v);},async set(v){if(onPublishRun&&path.startsWith('sketchReader/')&&v?.status==='reading')onPublishRun();if(failPublish&&path.startsWith('sketchReaderLearning/'))throw Error('index offline');put(path,v);},async update(patch){for(const[k,v]of Object.entries(patch))put(path+'/'+k,v);},async transaction(fn){const value=fn(structuredClone(get(path)));if(value===undefined)return{committed:false,snapshot:snap(get(path))};put(path,value);return{committed:true,snapshot:snap(value)};}};}};}
+const image=n=>'data:image/png;base64,iVBORw0KGgo'+n+'=';
+const catalog={S:{name:'clear',glass:'clear',mm:8}},row={label:'part',sku:'S',widthMm:450,heightMm:1900,quantity:1,evidence:'45',warnings:[]};
+async function call(h,body,method='POST'){let status=200,value;await h({method,body,query:body},{setHeader(){},status(n){status=n;return this;},json(v){value=v;}});return{status,value};}
+(async()=>{const orders={},sketches={};for(let n=1;n<=6;n++){orders['o'+n]={stage:'',orderClient:n===3?'other':'same',clientPhone:n===3?'0500000002':'0500000001',customerId:n===3?'b':'a',hasSketch:true};sketches['o'+n]=image(n);}
+const db=fakeDb({orders,sketches,skuCatalog:catalog,users:{'0500000001':{role:'client',customerId:'a'},'0500000002':{role:'client',customerId:'b'}}}),args=[];
+const env={SKETCH_READER_ENABLED:'true',SKETCH_READER_LEARNING_ENABLED:'true',SKETCH_READER_MODEL:'fake',OPENAI_API_KEY:'fake',SKETCH_READER_DAILY_LIMIT:'30'};
+const h=createHandler({db,env,now:()=>100000,verifyAdmin:async()=>({ok:true,phone:'admin'}),readImage:async a=>{args.push(a);return{reading:{rows:[row],warnings:[]}};}});
+const read=(id,requestId,force=false)=>call(h,{action:'read',orderId:id,requestId,force});
+assert.equal((await read('o1','request_111')).status,200);assert.equal(args.at(-1).examples.length,0);
+const corrected=[{...row,widthMm:500,glassNotation:"קליר 8"}];db.failPublish=true;
+const approval={action:'approve',orderId:'o1',runId:'request_111',rows:corrected,acknowledged:true,learnFromApproval:true};
+let res=await call(h,approval);assert.equal(res.status,200);assert.equal(res.value.learningSaved,false);assert.equal(db.data.orders.o1.items[0].w,500,'index outage must not undo approval');
+db.failPublish=false;res=await call(h,approval);assert.equal(res.value.learningSaved,true);assert.equal(res.value.alreadyApproved,true);
+assert.equal((await read('o2','request_222')).status,200);assert.equal(args.at(-1).examples.length,1);assert.equal(args.at(-1).examples[0].rows[0].widthMm,500);assert.equal(args.at(-1).examples[0].original[0].widthMm,450);
+assert.equal(args.at(-1).glassHints[0].notation,'קליר 8');assert.equal(args.at(-1).glassHints[0].product.mm,8);
+const ownProfile=(await call(h,{orderId:'o1'},'GET')).value.learningProfile;assert.equal(ownProfile.identified,true);assert.equal(ownProfile.glassHints.length,1);
+const count=args.length;await read('o2','request_cache');assert.equal(args.length,count,'same example and target stay cached');
+assert.equal((await call(h,{orderId:'o2'},'GET')).value.draft.learningCount,1);
+await read('o3','request_333');assert.equal(args.at(-1).examples.length,0,'another client receives no example');assert.equal(args.at(-1).glassHints.length,0,'glass mappings do not cross customers');
+db.data.sketches.o4=db.data.sketches.o1;await read('o4','request_444');assert.equal(args.at(-1).examples.length,0,'same image is not a learning test');
+res=await call(h,{action:'learning',orderId:'o1',runId:'request_111',allowed:false});assert.equal(res.status,200);assert.equal(res.value.learningAllowed,false);
+await read('o5','request_555');assert.equal(args.at(-1).examples.length,0,'revoked approval is excluded');assert.equal(args.at(-1).glassHints.length,0);
+assert.equal((await call(h,{orderId:'o1'},'GET')).value.draft.learningAllowed,false);
+res=await call(h,{action:'learning',orderId:'o1',runId:'request_111',allowed:true});assert.equal(res.value.learningAllowed,true);
+const scopeA=await learning.resolveScope(db,db.data.orders.o1);
+assert.equal(await learning.resolveScope(db,{customerId:'a',orderClient:'same'}),null,'customer id or display name alone is not verified identity');
+assert.equal(await learning.resolveScope(db,{customerId:'a',clientPhone:'0500000002'}),null,'forged/mismatched customer id is rejected');
+assert.equal(await learning.resolveScope(db,{orderClient:'same'}),null,'duplicate display names never select examples');
+const oldName=db.data.skuCatalog.S.name;db.data.skuCatalog.S.name='another glass';
+assert.equal((await learning.load(db,{orderId:'new',order:db.data.orders.o2,scope:scopeA,sourceHash:'different',catalog:db.data.skuCatalog})).length,0,'changed SKU definitions cannot reuse old corrections');db.data.skuCatalog.S.name=oldName;
+const dispatched=args.length;db.onPublishRun=()=>{db.data.orders.o1.sketchReaderApprovals.request_111.learningAllowed=false;};
+assert.equal((await read('o6','request_race')).status,409,'revocation during awaited pre-dispatch operations aborts the read');
+assert.equal(args.length,dispatched,'no paid provider call after revocation');db.onPublishRun=null;
+await call(h,{action:'learning',orderId:'o1',runId:'request_111',allowed:true});
+db.data.orders.o1.clientPhone='0500000002';db.data.orders.o1.customerId='b';await read('o6','request_666');assert.equal(args.at(-1).examples.length,0,'reassigned customer cannot transfer the example');
+assert.equal((await call(h,{action:'learning',orderId:'o1',runId:'missing_111',allowed:false})).status,404);
+assert.equal((await call(h,{action:'learning',orderId:'o1',runId:'request_111',allowed:'true'})).status,400);
+const noConsent=await call(h,{action:'approve',orderId:'o2',runId:'request_222',rows:corrected,acknowledged:true});assert.equal(noConsent.status,200);assert.equal(noConsent.value.approval.learningAllowed,false);
+const glassOnly=await call(h,{action:'approve',orderId:'o5',runId:'request_555',rows:[{...row,glassNotation:'קליר 8'}],acknowledged:true,learnFromApproval:true});assert.equal(glassOnly.status,200);
+await read('o6','request_glass_only',true);assert.equal(args.at(-1).examples.length,0,'notation-only approval needs no extra reference image');assert.equal(args.at(-1).glassHints.length,1);
+assert.equal((await call(h,{orderId:'o6'},'GET')).value.draft.glassHintCount,1);
+const beforeGlossaryRace=args.length;db.onPublishRun=()=>{db.data.orders.o5.sketchReaderApprovals.request_555.learningAllowed=false;};assert.equal((await read('o6','request_glass_race',true)).status,409);assert.equal(args.length,beforeGlossaryRace);db.onPublishRun=null;
+console.log('sketch learning API: consent, correction reuse, cache, isolation, revocation, retry recovery PASS');
+})().catch(e=>{console.error(e);process.exitCode=1;});
