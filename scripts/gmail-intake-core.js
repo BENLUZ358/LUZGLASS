@@ -71,4 +71,38 @@ function emDecide(httpCode, body) {
 function emGiveUp(retries, ageMs) {
   return Number(retries) >= 20 || Number(ageMs) > 60 * 3600 * 1000;
 }
+//  ── תשובות ללקוח (outbox) ──────────────────────────────────────────
+//  תכנית השליחה. items: מה שהשרת החזיר ב-claim; sentMap: כל נכסי הסקריפט.
+//  ⚠️ שליחה פעם אחת בלבד: s_<key> נקבע מיד אחרי reply ולפני done. אם done אבד
+//  וההשכרה פגה, השרת ימסור את אותו מפתח שוב — כאן מזהים שכבר נשלח (skipSend)
+//  ומאשרים בלבד. השרת לא יכול למנוע שליחה כפולה בלי זה.
+function emOutboxPlan(items, sentMap) {
+  var sent = sentMap || {};
+  return (Array.isArray(items) ? items : []).filter(function (it) {
+    return it && typeof it.key === 'string' && it.key &&
+      typeof it.thread === 'string' && typeof it.text === 'string' &&
+      typeof it.leaseToken === 'string';
+  }).map(function (it) {
+    return {
+      key: it.key, thread: it.thread, text: it.text, leaseToken: it.leaseToken,
+      skipSend: Object.prototype.hasOwnProperty.call(sent, 's_' + it.key)
+    };
+  });
+}
+//  מה עושים עם תשובת claim. 401/403 = הגדרות — עוצרים את שלב התשובות בריצה
+//  הזו (בלי לספור כלום). כל כשל אחר — אין מה לשלוח עכשיו.
+function emOutboxClaim(httpCode, body) {
+  if (httpCode === 401 || httpCode === 403) return { stop: true, items: [] };
+  if (httpCode === 200 && body && body.ok === true && Array.isArray(body.items)) {
+    return { stop: false, items: body.items };
+  }
+  return { stop: false, items: [] };
+}
+//  אילו נכסי s_ למחוק: ישנים מ-keepMs, או עם ערך לא תקין.
+function emSentToPrune(all, now, keepMs) {
+  var cut = now - keepMs;
+  return Object.keys(all || {}).filter(function (k) {
+    return k.indexOf('s_') === 0 && !(Number(all[k]) >= cut);
+  });
+}
 // ── core end ──

@@ -93,6 +93,40 @@ function emDecide(httpCode, body) {
 function emGiveUp(retries, ageMs) {
   return Number(retries) >= 20 || Number(ageMs) > 60 * 3600 * 1000;
 }
+//  ── תשובות ללקוח (outbox) ──────────────────────────────────────────
+//  תכנית השליחה. items: מה שהשרת החזיר ב-claim; sentMap: כל נכסי הסקריפט.
+//  ⚠️ שליחה פעם אחת בלבד: s_<key> נקבע מיד אחרי reply ולפני done. אם done אבד
+//  וההשכרה פגה, השרת ימסור את אותו מפתח שוב — כאן מזהים שכבר נשלח (skipSend)
+//  ומאשרים בלבד. השרת לא יכול למנוע שליחה כפולה בלי זה.
+function emOutboxPlan(items, sentMap) {
+  var sent = sentMap || {};
+  return (Array.isArray(items) ? items : []).filter(function (it) {
+    return it && typeof it.key === 'string' && it.key &&
+      typeof it.thread === 'string' && typeof it.text === 'string' &&
+      typeof it.leaseToken === 'string';
+  }).map(function (it) {
+    return {
+      key: it.key, thread: it.thread, text: it.text, leaseToken: it.leaseToken,
+      skipSend: Object.prototype.hasOwnProperty.call(sent, 's_' + it.key)
+    };
+  });
+}
+//  מה עושים עם תשובת claim. 401/403 = הגדרות — עוצרים את שלב התשובות בריצה
+//  הזו (בלי לספור כלום). כל כשל אחר — אין מה לשלוח עכשיו.
+function emOutboxClaim(httpCode, body) {
+  if (httpCode === 401 || httpCode === 403) return { stop: true, items: [] };
+  if (httpCode === 200 && body && body.ok === true && Array.isArray(body.items)) {
+    return { stop: false, items: body.items };
+  }
+  return { stop: false, items: [] };
+}
+//  אילו נכסי s_ למחוק: ישנים מ-keepMs, או עם ערך לא תקין.
+function emSentToPrune(all, now, keepMs) {
+  var cut = now - keepMs;
+  return Object.keys(all || {}).filter(function (k) {
+    return k.indexOf('s_') === 0 && !(Number(all[k]) >= cut);
+  });
+}
 // ── core end ──
 
 // ─── הגדרות ───────────────────────────────────────────────────────
@@ -225,6 +259,47 @@ function emFinish(it, res, props) {
   props.deleteProperty('r_' + it.info.id);
 }
 
+//  ⚠️ שולחים תשובה לשרשור ולא יותר מפעם אחת לכל key — ר' emOutboxPlan.
+//  סדר חובה: reply → s_<key> → done. שום Logger.log לא כולל טקסט או כתובות.
+function emOutbox(cfg, started) {
+  var props = PropertiesService.getScriptProperties();
+  emSentToPrune(props.getProperties(), Date.now(), EM_KEEP_MS).forEach(function (k) {
+    props.deleteProperty(k);
+  });
+  var cl = emPost(cfg, { op: 'outbox-claim' });
+  var claim = emOutboxClaim(cl.code, cl.body);
+  if (claim.stop) {
+    Logger.log('תשובות: השרת סירב להרשאה (401/403) — מדלגים בריצה הזו');
+    return;
+  }
+  var plan = emOutboxPlan(claim.items, props.getProperties());
+  for (var n = 0; n < plan.length; n++) {
+    if (Date.now() - started > EM_MAX_MS) break;
+    var it = plan[n];
+    try {
+      var ok = true;
+      if (!it.skipSend) {
+        var thread = GmailApp.getThreadById(it.thread);
+        if (!thread) {
+          ok = false;
+        } else {
+          thread.reply(it.text);
+          props.setProperty('s_' + it.key, String(Date.now()));   // ⚠️ לפני done
+        }
+      }
+      var dn = emPost(cfg, { op: 'outbox-done', key: it.key, leaseToken: it.leaseToken, ok: ok });
+      if (dn.code === 401 || dn.code === 403) {
+        Logger.log('תשובות: השרת סירב להרשאה (401/403) — עוצרים');
+        break;
+      }
+    } catch (e) {
+      // ⚠️ שם השגיאה בלבד. בלי done — ההשכרה תפוג והשרת ימסור שוב
+      // (אם כבר נשלחה, s_<key> מונע שליחה חוזרת)
+      Logger.log('תשובה ' + it.key + ': חריגה ' + (e && e.name));
+    }
+  }
+}
+
 //  נקודת הכניסה — זה מה שהטריגר מפעיל כל דקה.
 function emRun() {
   var lock = LockService.getScriptLock();
@@ -284,6 +359,7 @@ function emRun() {
         }
       }
     }
+    emOutbox(cfg, started);
   } finally {
     lock.releaseLock();
   }

@@ -23,8 +23,8 @@ const gsPath = path.join(__dirname, 'gmail-intake.gs');
 const core = fs.readFileSync(corePath, 'utf8');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(core + '\nthis.f={emPlanChunks,emAddr,emShouldTake,emLabelFor,emDecide,emGiveUp};', ctx);
-const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp } = ctx.f;
+vm.runInContext(core + '\nthis.f={emPlanChunks,emAddr,emShouldTake,emLabelFor,emDecide,emGiveUp,emOutboxPlan,emOutboxClaim,emSentToPrune};', ctx);
+const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp, emOutboxPlan, emOutboxClaim, emSentToPrune } = ctx.f;
 
 // A
 check('chunks 0', emPlanChunks(0, 3000000), 1);
@@ -83,6 +83,31 @@ check('giveup 19 young', emGiveUp(19, 1000), false);
 check('giveup 20', emGiveUp(20, 1000), true);
 check('giveup old', emGiveUp(1, 61 * 3600 * 1000), true);
 check('giveup 60h exactly', emGiveUp(1, 60 * 3600 * 1000), false);
+
+// E emOutboxPlan — ⚠️ exactly-once: מפתח שכבר סומן s_<key> לא נשלח שוב, רק מאשרים
+const items = [
+  { key: 'k1', thread: 't1', text: 'a', leaseToken: 'L1' },
+  { key: 'k2', thread: 't2', text: 'b', leaseToken: 'L2' }
+];
+check('plan: sent key is skipSend', emOutboxPlan(items, { s_k1: 123 }).map(x => [x.key, x.skipSend]), [['k1', true], ['k2', false]]);
+check('plan: nothing sent passes through', emOutboxPlan(items, {}), [
+  { key: 'k1', thread: 't1', text: 'a', leaseToken: 'L1', skipSend: false },
+  { key: 'k2', thread: 't2', text: 'b', leaseToken: 'L2', skipSend: false }]);
+check('plan: other s_ keys do not match', emOutboxPlan(items, { s_k9: 1 }).map(x => x.skipSend), [false, false]);
+check('plan: null inputs', emOutboxPlan(null, null), []);
+check('plan: malformed items dropped', emOutboxPlan([{ key: 'k', thread: 't' }, null, { key: 'k3', thread: 't3', text: 'x', leaseToken: 'L' }], {}).map(x => x.key), ['k3']);
+
+// E2 emOutboxClaim — מה עושים עם תשובת claim
+check('claim 200 items', emOutboxClaim(200, { ok: true, items: items }), { stop: false, items: items });
+check('claim 200 no items', emOutboxClaim(200, { ok: true, items: [] }), { stop: false, items: [] });
+check('claim 200 ok:false', emOutboxClaim(200, { ok: false }), { stop: false, items: [] });
+for (const c of [401, 403]) check('claim ' + c + ' stops', emOutboxClaim(c, null), { stop: true, items: [] });
+check('claim 500', emOutboxClaim(500, null), { stop: false, items: [] });
+check('claim network 0', emOutboxClaim(0, null), { stop: false, items: [] });
+
+// E3 emSentToPrune
+const now = 10 * 24 * 3600 * 1000, day = 24 * 3600 * 1000;
+check('prune old s_ only', emSentToPrune({ s_a: String(now - 5 * day), s_b: String(now - 1 * day), h_x: '1', s_c: 'junk' }, now, 4 * day).sort(), ['s_a', 's_c']);
 
 // D
 const gs = fs.existsSync(gsPath) ? fs.readFileSync(gsPath, 'utf8') : '';
