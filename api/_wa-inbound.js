@@ -27,6 +27,7 @@ const crypto = require('crypto');
 const { sniffImage, stripJpegMeta } = require('./_wa-image');
 const { waChatToLocal, lgClientFromWaSender, lgClientFromWaGroup } = require('./_wa-recipient');
 const { lgWaTextIsOrder, lgWaTextParse, lgWaTextItems, lgWaTextSvg } = require('./_wa-text-order');
+const { lgWaFreeTextIsOrder, lgWaFreeTextParse, lgWaFreeTextResolve } = require('./_wa-free-text');
 const { lgInboxStillMine, lgInboxRefNum, lgInboxAudit, lgInboxDropNulls } = require('./_inbox-common');
 
 const INBOX = 'waInbound';
@@ -80,12 +81,14 @@ function lgWaInboundParse(body) {
   }
   // הזמנת מראות בהודעת טקסט (בן, 20/10 — אגן ברזל): רק בצ'אט פרטי, ורק כשיש בה מספר
   // הזמנה וגם שורת מידה. כל טקסט אחר — כמו היום, לא נקרא. ר' _wa-text-order.js.
-  let text = '';
+  let text = '', textMode = '';
   if (!kind && !groupId) {
     const t = md.typeMessage === 'textMessage' ? (md.textMessageData || {}).textMessage
       : (md.typeMessage === 'extendedTextMessage' || md.typeMessage === 'quotedMessage') ? (md.extendedTextMessageData || {}).text
       : '';
     if (t && lgWaTextIsOrder(t)) { kind = 'text'; text = String(t).slice(0, 4000); }
+    // טקסט חופשי (בן, 26/10) — נרשם רק אם הלקוח הוגדר; זה נבדק ב-webhook, כי כאן אין גישה למסד
+    else if (t && lgWaFreeTextIsOrder(t)) { kind = 'text'; textMode = 'free'; text = String(t).slice(0, 4000); }
   }
   if (!kind) return ignore('not a sketch');
 
@@ -101,6 +104,7 @@ function lgWaInboundParse(body) {
     downloadUrl: String(f.downloadUrl || ''),
     timestamp:   (Number(b.timestamp) || 0) * 1000,
     ...(kind === 'text' ? { text } : {}),
+    ...(textMode ? { textMode } : {}),
     // רק בקבוצה — רשומה פרטית נשארת בדיוק בצורה שהייתה
     ...(groupId ? { groupId, groupName: String(sd.chatName || '').slice(0, 120) } : {}),
   } };
@@ -270,16 +274,24 @@ async function lgWaInboundProcess(db, key, opts) {
     let sketchData;
     if (isText) {
       // מספר ההזמנה של הלקוח = שם הסקיצה; הפריטים מוזנים; "סקיצה" = תמונת ההודעה
-      const parsed = lgWaTextParse(entry.text);
-      const skus = [...new Set(parsed.groups.map(g => g.sku).filter(Boolean))];
-      const cat = {};
-      await Promise.all(skus.map(async s => { cat[s] = (await db.ref('skuCatalog/' + s).once('value')).val(); }));
-      order.sketchName = parsed.orderRef || '';
+      const free = entry.textMode === 'free';
+      let parsed, cat = {};
+      if (free) {
+        // טקסט חופשי — המק"ט נבחר מכל הקטלוג החי, רק כשבדיוק אחד מתאים
+        cat = (await db.ref('skuCatalog').once('value')).val() || {};
+        parsed = lgWaFreeTextResolve(lgWaFreeTextParse(entry.text), cat);
+      } else {
+        parsed = lgWaTextParse(entry.text);
+        const skus = [...new Set(parsed.groups.map(g => g.sku).filter(Boolean))];
+        await Promise.all(skus.map(async s => { cat[s] = (await db.ref('skuCatalog/' + s).once('value')).val(); }));
+      }
+      order.sketchName = free ? 'הודעת טקסט' : (parsed.orderRef || '');
+      if (free && parsed.unparsed.length) order.notes = parsed.unparsed.map(l => 'לא פוענח: ' + l).join('\n');
       order.items = lgWaTextItems(parsed, cat);
       order.waText = true;
       order.fileName = ''; order.files = { f0: { name: 'הודעת וואטסאפ', type: mime } };
       // אותו מספר הזמנה כבר אצל אותו לקוח — מסמנים "כפולה?", לא מוחקים ולא מחליפים
-      if (order.sketchName) {
+      if (!free && order.sketchName) {
         // לפי clientPhone (יש עליו אינדקס) — רק ההזמנות של הלקוח הזה, לא כל ההזמנות
         const mine = (await db.ref('orders').orderByChild('clientPhone').equalTo(order.clientPhone).once('value')).val() || {};
         const prev = Object.values(mine).find(x => x && x.id && x.id !== id && x.sketchName === order.sketchName);

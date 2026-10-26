@@ -87,6 +87,74 @@ check('sku: inactive is never chosen',
 check('sku: two equal matches → none', ft.lgWaFreeTextSku({ kind: 'mirror', color: '', mm: 5, proc: 'מלוטש' },
       { ...CAT, X: { name: "5 מ''מ מראה מלוטש", active: true } }), null);
 
+// ═══ 9. הקליטה — רק לקוח שבן הגדיר ═══════════════════════════════════
+const hook = require(path.join(ROOT, 'api', 'wa-inbound.js'));
+const NOW = 1761490000000;
+const ENV = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify({ project_id: 'luz-glass-test' }), GREENAPI_WEBHOOK_TOKEN: 'hs',
+              GREENAPI_ID_INSTANCE: '7100', GREENAPI_INBOUND_ALLOWED: 'luz-glass-test:0501234567' };
+const withEnv = async (vars, fn) => {
+  const keep = {}; for (const k of Object.keys(vars)) { keep[k] = process.env[k]; process.env[k] = vars[k]; }
+  try { return await fn(); } finally { for (const k of Object.keys(vars)) { if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k]; } }
+};
+const textHook = (id, text, chatId) => ({ typeWebhook: 'incomingMessageReceived', instanceData: { idInstance: 7100 }, timestamp: NOW / 1000,
+  idMessage: id, senderData: { chatId: chatId || '972501234567@c.us', sender: chatId || '972501234567@c.us', chatName: 'x' },
+  messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: text } } });
+const send = async (db, body) => {
+  const later = [];
+  const r = await withEnv(ENV, () => hook.handleInbound({ method: 'POST', headers: { authorization: 'Bearer hs' }, body },
+    { db, waitUntil: p => later.push(p), now: NOW }));
+  await Promise.all(later);
+  return r;
+};
+const seed = extra => fakeDb({ meta: { orderCounter: 1200 },
+  users: { '0501234567': { name: 'מראות כהן', businessName: 'מראות כהן', customerId: '888', role: 'client' } },
+  hashavshevetAccounts: { '888': { key: '888', name: 'מראות כהן', phone: '0501234567' } },
+  skuCatalog: CAT, ...(extra || {}) });
+const ON = { waTextCustomers: { '888': { customerName: 'מראות כהן', addedAt: NOW - 1, addedBy: 'ben' } } };
+const order = (db, id) => ((db._data.orders || {})['wa_' + id + '_1']) || {};
+{
+  const db = seed(ON);
+  const r = await send(db, textHook('F1', 'תכין לי מראה 5 70 120 x2'));
+  const o = order(db, 'F1');
+  check('9a enabled customer: free text opens an order', [r.status, r.body.recorded], [200, true]);
+  check('9a with the rows filled', [(o.items || []).length, o.items && o.items[0].sku, o.items && o.items[0].w, o.items && o.items[0].h],
+        [2, '5MIRM', 700, 1200]);
+  check('9a named and marked as a text order', [o.sketchName, o.waText, o.customerId], ['הודעת טקסט', true, '888']);
+}
+{
+  const db = seed();
+  const r = await send(db, textHook('F2', 'תכין לי מראה 5 70 120 x2'));
+  check('9b customer not enabled: nothing recorded', [r.body.ignored, db._data.waInbound], ['text not enabled', undefined]);
+}
+{
+  const db = seed(ON);
+  await send(db, textHook('F3', 'מראה 5 60 80\nעוד 30 40 50'));
+  check('9c an unparsed line goes to the notes', order(db, 'F3').notes, 'לא פוענח: עוד 30 40 50');
+}
+{
+  const db = seed(ON);
+  await send(db, textHook('F4', 'זכוכית 8 שקוף 100 על 200'));
+  const it = (order(db, 'F4').items || [])[0] || {};
+  check('9d unclear sku: the order opens, the row waits for a sku', [it.skuMissing, it.w], [true, 1000]);
+}
+{
+  const db = seed(ON);
+  const r = await send(db, textHook('F5', 'מתי מוכן? 3 ימים?'));
+  check('9e plain chat from an enabled customer: nothing', [r.body.ignored, db._data.waInbound], ['not a sketch', undefined]);
+}
+{
+  const MSG = 'הזמנת מראות מרכזת מס\' PHR#26037\nמראה ללא מסגרת לפי מידה\n90/145 ס"מ — כמות: 2';
+  const db = seed();
+  const r = await send(db, textHook('F6', MSG));
+  check('9f Agan format needs no flag and is unchanged', [r.body.recorded, order(db, 'F6').sketchName], [true, 'PHR#26037']);
+}
+{
+  const G = '120363041234567890@g.us';
+  const p = require(path.join(ROOT, 'api', '_wa-inbound.js')).lgWaInboundParse({ ...textHook('F7', 'מראה 70 120'),
+    senderData: { chatId: G, sender: '972501234567@c.us', chatName: 'g' } });
+  check('9g text in a group is still not read', [p.action, p.reason], ['ignore', 'not a sketch']);
+}
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });
