@@ -112,6 +112,42 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
   check('3d but still counts, and stays ignored', [s.count, !!s.ignored], [4, true]);
 }
 
+// ═══ 4. ההודעות חוזרות למספר המקושר, והקישור פותח את השער ═════════
+{
+  const db = seed(aganLink());
+  const o = { customerId: '3150', waChat: AGAN, clientPhone: AGAN, phone: AGAN };
+  check('4a reply to the linked sender', await rcp.resolveRecipient(db, o, 'dispatched'),
+        { phone: AGAN, source: 'wa-sender', accountKey: '3150', linked: true });
+  const un = await rcp.resolveRecipient(seed(), o, 'dispatched');
+  check('4b unlinked since: falls back to the card phone, not linked',
+        un, { ...(await rcp.resolvePhone(seed(), o)), linked: false });
+  const other = await rcp.resolveRecipient(seed({ waSenders: { [AGAN]: { customerId: '14201', customerName: 'x' } } }), o, 'ready');
+  check('4c linked to a different card since: not linked', other.linked, false);
+  const portal = { customerId: '14201', phone: '0505887576' };
+  check('4d a portal order resolves as before', await rcp.resolveRecipient(db, portal, 'ready'),
+        { ...(await rcp.resolvePhone(db, portal)), linked: false });
+}
+{
+  const G = '120363041234567890@g.us';
+  const db = seed({ waGroups: { [inb.lgWaInboundKey(G)]: { chatId: G, customerId: '14201', customerName: 'x' } } });
+  check('4e a linked group is linked', (await rcp.resolveRecipient(db, { waGroup: G, customerId: '14201' }, 'ready')).linked, true);
+}
+{
+  const base = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify({ project_id: 'luz-glass-test' }), WA_PROVIDER: 'green',
+                 GREENAPI_ID_INSTANCE: '1', GREENAPI_TOKEN: 't', GREENAPI_ALLOWED_ACCOUNTS: 'luz-glass-test:14201', GREENAPI_ONLY_TO: undefined };
+  const gate = (vars, ctx) => withEnv({ ...base, ...vars }, () => env.lgGreenApiGate(ctx));
+  check('4f gate: a linked chat of a card not on the list may receive',
+        (await gate({}, { accountKey: '3150', phone: AGAN, linked: true })).allowed, true);
+  check('4f gate: the same without a link is refused, with the old reason',
+        (await gate({}, { accountKey: '3150', phone: AGAN })).reason, 'הלקוח 3150 אינו ברשימת המורשים לשליחה');
+  check('4g gate: ONLY_TO still wins over a link',
+        (await gate({ GREENAPI_ONLY_TO: '0500000000' }, { accountKey: '3150', phone: AGAN, linked: true })).allowed, false);
+  check('4h gate: a list signed for another project blocks a link',
+        (await gate({ GREENAPI_ALLOWED_ACCOUNTS: 'lussglass:14201' }, { accountKey: '3150', phone: AGAN, linked: true })).allowed, false);
+  check('4i gate: no card key at all is still refused even if linked',
+        (await gate({}, { accountKey: '', phone: AGAN, linked: true })).allowed, false);
+}
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

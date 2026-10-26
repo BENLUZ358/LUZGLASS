@@ -185,12 +185,22 @@ async function lgClientFromWaGroup(db, groupId, memberPhone) {
 //  ⚠️ הודעה אחת על הזמנה מקבוצה + הזמנה מהפורטל של אותו לקוח מובילה לשני
 //  נמענים, ו-whatsapp-dispatch מסרב (409). כרגע עובדים רק מוואטסאפ; ההחלטה
 //  (לפצל או הכול לקבוצה) נדחתה עד שהפורטל יחזור לשימוש.
+//  linked:true = הנמען הוא צ'אט שמנהל קישר (קבוצה או מספר פרטי) — השער מקבל
+//  אותו גם כשהכרטיס לא ברשימה ב-Vercel (בן, 26/10). כל השאר: linked:false.
+//  מספר פרטי שנותק או קושר לכרטיס אחר מאז → חוזרים ל-resolvePhone, כמו קודם.
 async function resolveRecipient(db, order, kind) {
   const g = order && order.waGroup;
-  if (!g) return resolvePhone(db, order);
+  if (!g) {
+    if (order && order.waChat) {
+      const sl = await lgWaSenderLink(db, order.waChat);
+      if (sl && sl.customerId === String(order.customerId || ''))
+        return { phone: sl.phone, source: 'wa-sender', accountKey: sl.customerId, linked: true };
+    }
+    return { ...(await resolvePhone(db, order)), linked: false };
+  }
   const link = (await db.ref('waGroups/' + _groupKey(g)).once('value')).val();
-  if (!link || !link.customerId) return { phone: '', source: 'group-unlinked', accountKey: null };
-  return { phone: String(g), source: 'group', accountKey: String(link.customerId) };
+  if (!link || !link.customerId) return { phone: '', source: 'group-unlinked', accountKey: null, linked: false };
+  return { phone: String(g), source: 'group', accountKey: String(link.customerId), linked: true };
 }
 
 module.exports = { resolvePhone, resolveRecipient, toWaNumber, norm, orderSketchName, waChatToLocal,

@@ -577,7 +577,7 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
         iResolve > -1 && iResolve < DRAIN.indexOf('provider.gate(') &&
         DRAIN.indexOf('provider.gate(') < DRAIN.indexOf('await provider.send('), true);
   check('the gate is asked with the live result, not the stored one',
-        /provider\.gate\(\{ phone: live\.phone, accountKey: live\.accountKey \}\)/.test(DRAIN), true);
+        /provider\.gate\(\{ phone: live\.phone, accountKey: live\.accountKey, linked: !!live\.linked \}\)/.test(DRAIN), true);
   /* ⚠️ לא רק ההרשאה — גם הנמען. הכרטיס הוא מקור האמת בשני הדברים. */
   check('and the message goes to the live phone, not the queued one',
         /to:\s+live\.phone/.test(DRAIN), true);

@@ -152,7 +152,7 @@ module.exports = async function handler(req, res) {
     const liveIds    = live.map(x => x.id);
     const facts      = { to, kind, clientName, orderNums, sketchNames };
 
-    let gate = provider.gate({ phone: to, accountKey: targets[0].accountKey });
+    let gate = provider.gate({ phone: to, accountKey: targets[0].accountKey, linked: !!targets[0].linked });
     //  התבנית של Meta מכירה רק "מוכן לאיסוף" — הסוג החדש יוצא רק ב-GREEN API,
     //  שם הטקסט מרונדר כאן (renderText). אחרת הלקוח היה מקבל הודעה שגויה.
     if (kind === 'sketches-handled' && provider.name !== 'green' && gate.allowed) {

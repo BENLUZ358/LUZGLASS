@@ -103,18 +103,18 @@ const req = body => ({ method: 'POST', headers: { authorization: 'Bearer hs' }, 
   const db = seed(linked());
   const GO = { waGroup: GROUP, customerId: '14201', clientPhone: '0502222222' };
   const g = await rcp.resolveRecipient(db, GO, 'sketches-handled');
-  check('3a "sketches handled" on a group order goes to the group', g, { phone: GROUP, source: 'group', accountKey: '14201' });
+  check('3a "sketches handled" on a group order goes to the group', g, { phone: GROUP, source: 'group', accountKey: '14201', linked: true });
   // בן, 18/10: "אני מעדיף שייצא בקבוצה שממנו נשלחה" — כל ההודעות על הזמנה מקבוצה, לא רק "הסקיצות טופלו"
   check('3a "ready for pickup" on a group order goes to the group too',
-        await rcp.resolveRecipient(db, GO, 'ready'), { phone: GROUP, source: 'group', accountKey: '14201' });
+        await rcp.resolveRecipient(db, GO, 'ready'), { phone: GROUP, source: 'group', accountKey: '14201', linked: true });
   check('3a and so does "the delivery left"',
-        await rcp.resolveRecipient(db, GO, 'dispatched'), { phone: GROUP, source: 'group', accountKey: '14201' });
+        await rcp.resolveRecipient(db, GO, 'dispatched'), { phone: GROUP, source: 'group', accountKey: '14201', linked: true });
   const unR = await rcp.resolveRecipient(fakeDb({}), { waGroup: GROUP, customerId: '14201' }, 'ready');
   check('3a a group that was unlinked gets no "ready" either — never a guess at a private number', [unR.phone, unR.source], ['', 'group-unlinked']);
   const un = await rcp.resolveRecipient(fakeDb({}), { waGroup: GROUP, customerId: '14201' }, 'sketches-handled');
   check('3b a group that was unlinked gets nothing', [un.phone, un.source], ['', 'group-unlinked']);
   const priv = await rcp.resolveRecipient(db, { customerId: '14201', phone: '0502222222' });
-  check('3c a private order resolves exactly as before', priv, await rcp.resolvePhone(db, { customerId: '14201', phone: '0502222222' }));
+  check('3c a private order resolves exactly as before', priv, { ...(await rcp.resolvePhone(db, { customerId: '14201', phone: '0502222222' })), linked: false });
 
   check('3d the GREEN API chat id for a group is the group itself', prov.lgWaChatId(GROUP), GROUP);
   check('3d and a phone still becomes 972…@c.us', prov.lgWaChatId('0502222222'), '972502222222@c.us');
