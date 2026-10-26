@@ -115,7 +115,7 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
 // ═══ 4. ההודעות חוזרות למספר המקושר, והקישור פותח את השער ═════════
 {
   const db = seed(aganLink());
-  const o = { customerId: '3150', waChat: AGAN, clientPhone: AGAN, phone: AGAN };
+  const o = { customerId: '3150', waChat: AGAN, clientPhone: AGAN, phone: AGAN, source: 'whatsapp', waMessageId: 'P3' };
   check('4a reply to the linked sender', await rcp.resolveRecipient(db, o, 'dispatched'),
         { phone: AGAN, source: 'wa-sender', accountKey: '3150', linked: true });
   const un = await rcp.resolveRecipient(seed(), o, 'dispatched');
@@ -137,7 +137,7 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
                  GREENAPI_ID_INSTANCE: '1', GREENAPI_TOKEN: 't', GREENAPI_ALLOWED_ACCOUNTS: 'luz-glass-test:14201', GREENAPI_ONLY_TO: undefined };
   const gate = (vars, ctx) => withEnv({ ...base, ...vars }, () => env.lgGreenApiGate(ctx));
   check('4f gate: a linked chat of a card not on the list may receive',
-        (await gate({}, { accountKey: '3150', phone: AGAN, linked: true })).allowed, true);
+        (await gate({ GREENAPI_ONLY_TO: AGAN }, { accountKey: '3150', phone: AGAN, linked: true })).allowed, true);
   check('4f gate: the same without a link is refused, with the old reason',
         (await gate({}, { accountKey: '3150', phone: AGAN })).reason, 'הלקוח 3150 אינו ברשימת המורשים לשליחה');
   check('4g gate: ONLY_TO still wins over a link',
@@ -179,6 +179,27 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
   const rules = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8')).rules;
   check('5i rules: waSenders is admin-read like waGroups, browser cannot write',
         [rules.waSenders && rules.waSenders['.read'], rules.waSenders && rules.waSenders['.write']], [rules.waGroups['.read'], false]);
+}
+
+// ═══ 6. סקירה סופית — שתי הגנות נוספות ═══════════════════════════════
+{
+  // לקוח פורטל לא יכול לזייף waChat ולקבל "מקושר" על הזמנה שלא הגיעה מוואטסאפ
+  const rules = require('fs').readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8');
+  check('6a rules: a client-created order cannot carry waChat', /!newData\.hasChild\('waChat'\)/.test(rules), true);
+  const db = seed(aganLink());
+  const forged = { customerId: '3150', waChat: AGAN, phone: AGAN, source: 'upload' };
+  check('6b an order without a WhatsApp message id is never "linked"', (await rcp.resolveRecipient(db, forged, 'ready')).linked, false);
+  check('6b a real WhatsApp order still is', (await rcp.resolveRecipient(db, { ...forged, source: 'whatsapp', waMessageId: 'P3' }, 'ready')).linked, true);
+}
+{
+  // TEST: קישור לבד לא מספיק — חייבת להיות נעילת ONLY_TO
+  const base = { FIREBASE_SERVICE_ACCOUNT: JSON.stringify({ project_id: 'luz-glass-test' }), WA_PROVIDER: 'green',
+                 GREENAPI_ID_INSTANCE: '1', GREENAPI_TOKEN: 't', GREENAPI_ALLOWED_ACCOUNTS: 'luz-glass-test:14201', GREENAPI_ONLY_TO: undefined };
+  const g = await withEnv(base, () => env.lgGreenApiGate({ accountKey: '3150', phone: AGAN, linked: true }));
+  check('6c TEST without ONLY_TO: a linked real customer is refused', g.allowed, false);
+  const live = { ...base, FIREBASE_SERVICE_ACCOUNT: JSON.stringify({ project_id: 'lussglass' }), GREENAPI_ALLOWED_ACCOUNTS: 'lussglass:14201' };
+  check('6d production without ONLY_TO: a linked customer is allowed',
+        (await withEnv(live, () => env.lgGreenApiGate({ accountKey: '3150', phone: AGAN, linked: true }))).allowed, true);
 }
 
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }

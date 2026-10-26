@@ -191,7 +191,8 @@ async function lgClientFromWaGroup(db, groupId, memberPhone) {
 async function resolveRecipient(db, order, kind) {
   const g = order && order.waGroup;
   if (!g) {
-    if (order && order.waChat) {
+    // waMessageId נכתב רק בשרת (הלקוח לא יכול לכתוב אותו) — הזמנה מהפורטל שזייפה waChat לא "מקושרת"
+    if (order && order.waChat && order.waMessageId) {
       const sl = await lgWaSenderLink(db, order.waChat);
       if (sl && sl.customerId === String(order.customerId || ''))
         return { phone: sl.phone, source: 'wa-sender', accountKey: sl.customerId, linked: true };

@@ -189,7 +189,11 @@ function lgGreenApiGate(ctx) {
   }
   // צ'אט שמנהל קישר מהקליטות (קבוצה / מספר פרטי) — הקישור הוא ההרשאה, כמו בקליטה.
   // רק אחרי נעילות הסביבה למעלה, ו-ONLY_TO למטה עדיין גובר (בן, 26/10).
-  if (env.keys.indexOf(key) < 0 && !(ctx && ctx.linked === true)) {
+  // בכל סביבה שאינה הייצור, קישור נחשב רק כש-ONLY_TO מוגדר: TEST מחזיק עותק של
+  // כרטיסי הלקוחות האמיתיים, וקישור שם לא יכול להיות הנעילה היחידה (סקירה, 26/10).
+  const linkOk = !!(ctx && ctx.linked === true) &&
+    (_projectId() === LG_LIVE_PROJECT || String(process.env.GREENAPI_ONLY_TO || '').trim() !== '');
+  if (env.keys.indexOf(key) < 0 && !linkOk) {
     return { allowed: false, reason: 'הלקוח ' + key + ' אינו ברשימת המורשים לשליחה' };
   }
 
