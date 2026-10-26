@@ -32,8 +32,9 @@
 
 const { lgEmailInboundAllowed } = require('./_env');
 const { lgHookTokenOk } = require('./_hook-token');
-const { lgEmailAddr } = require('./_email-recipient');
+const { lgEmailAddr, lgEmailKey, lgEmailSenderLink } = require('./_email-recipient');
 const { lgEmailInboundKey, lgEmailPutChunk, lgEmailCommit, EM_INBOX, EM_PARTS } = require('./_email-inbound');
+const { lgEmailClaim, lgEmailComplete, lgEmailOutboxKeyOk } = require('./_email-outbox');
 
 // אותם גבולות כמו ב-_email-inbound.js (20 קבצים, 10 חתיכות לקובץ)
 const _int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
@@ -51,6 +52,21 @@ function _toUs(to) {
 
 const _bad = code => ({ status: 400, body: { ok: false, code } });
 
+//  waMeta/emailSendersSeen/<key>: כתובת, מונה, זמן — בלי תוכן. listed:true = הכתובת
+//  ברשימה ב-Vercel (נקלטת כבר עכשיו); הפאנל מציג אותה עם "ברשימה" ולא סופר אותה
+//  בתג "דורש טיפול". כתובת שירדה מהרשימה מאבדת את הסימון.
+async function _noteSeen(deps, from, listed) {
+  const sk = lgEmailKey(from);
+  if (!sk) return;
+  try {
+    await deps.db.ref('waMeta/emailSendersSeen/' + sk).transaction(cur => {
+      const next = { ...(cur || {}), email: lgEmailAddr(from), count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now() };
+      if (listed) next.listed = true; else delete next.listed;
+      return next;
+    });
+  } catch (e) { console.warn('email-inbound: sendersSeen', e && e.name); }
+}
+
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
 //  deps: { db, now? }. מחזיר { status, body }.
 async function handleEmailInbound(req, deps) {
@@ -63,6 +79,19 @@ async function handleEmailInbound(req, deps) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = null; } }
   const b = (body && typeof body === 'object') ? body : {};
+  // ─── מיילים יוצאים (בן, 26/10) ─────────────────────────────────────
+  //  הסקריפט מושך מה לשלוח ומאשר. אותו טוקן; לפני בדיקת messageId כי
+  //  לפעולות האלה אין הודעה נכנסת. ר' api/_email-outbox.js.
+  if (b.op === 'outbox-claim') {
+    try { return { status: 200, body: { ok: true, items: await lgEmailClaim(deps.db, 5, deps.now) } }; }
+    catch (e) { console.error('email-inbound: outbox claim failed', e && e.name); return { status: 500, body: { error: 'claim failed' } }; }
+  }
+  if (b.op === 'outbox-done') {
+    if (!lgEmailOutboxKeyOk(b.key) || typeof b.leaseToken !== 'string' || !b.leaseToken || typeof b.ok !== 'boolean') return _bad('bad-done');
+    try { return { status: 200, body: await lgEmailComplete(deps.db, b.key, b.leaseToken, b.ok, deps.now) }; }
+    catch (e) { console.error('email-inbound: outbox done failed', e && e.name); return { status: 500, body: { error: 'done failed' } }; }
+  }
+
   if (!_idOk(b.messageId)) return _bad('bad-id');
 
   if (b.op === 'part') {
@@ -81,7 +110,22 @@ async function handleEmailInbound(req, deps) {
   if (!_toUs(b.to)) return { status: 403, body: { error: 'wrong recipient' } };
 
   const key = lgEmailInboundKey(b.messageId);
-  if (!lgEmailInboundAllowed(b.from).allowed) {
+  // כתובת שמנהל קישר מהקליטות מורשית בדיוק כמו כתובת ברשימה (בן, 26/10).
+  // לא ברשימה ולא מקושרת → נשמרת הכתובת בלבד (בלי תוכן) כדי שאפשר יהיה לקשר אותה.
+  const listed = lgEmailInboundAllowed(b.from).allowed;
+  let admitted = listed;
+  if (!admitted) {
+    try { admitted = !!(await lgEmailSenderLink(deps.db, b.from)); }
+    catch (e) { console.error('email-inbound: sender lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
+  } else {
+    //  כתובת ברשימה ב-Vercel שעוד לא קושרה נרשמת גם היא (listed:true) — אחרת
+    //  היא לא מופיעה בקליטות ו-link-sender מסרב לה, ובן לא יכול לקשר את הכתובת
+    //  שלו לבדיקה העצמית. ⚠️ לפי מיטב היכולת: כשל כאן לא עוצר את הקליטה.
+    try { if (!(await lgEmailSenderLink(deps.db, b.from))) await _noteSeen(deps, b.from, true); }
+    catch (e) { console.warn('email-inbound: listed sender note', e && e.name); }
+  }
+  if (!admitted) {
+    await _noteSeen(deps, b.from, false);
     // ⚠️ רק כשאין רשומה: מייל שכבר נקלט (למשל failed שממתין ל"נסה שוב")
     // ואחר כך הרשימה צומצמה — החתיכות שלו עדיין נחוצות.
     try {

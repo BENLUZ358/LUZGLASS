@@ -23,8 +23,9 @@ const gsPath = path.join(__dirname, 'gmail-intake.gs');
 const core = fs.readFileSync(corePath, 'utf8');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(core + '\nthis.f={emPlanChunks,emAddr,emShouldTake,emLabelFor,emDecide,emGiveUp};', ctx);
-const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp } = ctx.f;
+vm.runInContext(core + '\nthis.f={emPlanChunks,emAddr,emShouldTake,emLabelFor,emDecide,emGiveUp,emOutboxPlan,emBudgetOk,emOutboxClaim,emSentToPrune,' +
+  'emReplyOk:typeof emReplyOk==="function"?emReplyOk:function(){return "missing";}};', ctx);
+const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp, emOutboxPlan, emBudgetOk, emOutboxClaim, emSentToPrune, emReplyOk } = ctx.f;
 
 // A
 check('chunks 0', emPlanChunks(0, 3000000), 1);
@@ -83,6 +84,63 @@ check('giveup 19 young', emGiveUp(19, 1000), false);
 check('giveup 20', emGiveUp(20, 1000), true);
 check('giveup old', emGiveUp(1, 61 * 3600 * 1000), true);
 check('giveup 60h exactly', emGiveUp(1, 60 * 3600 * 1000), false);
+
+// E emOutboxPlan — ⚠️ exactly-once: מפתח שכבר סומן s_<key> לא נשלח שוב, רק מאשרים
+const items = [
+  { key: 'k1', thread: 't1', messageId: 'm1', email: 'c@x.com', text: 'a', leaseToken: 'L1' },
+  { key: 'k2', thread: 't2', messageId: 'm2', email: 'c@x.com', text: 'b', leaseToken: 'L2' }
+];
+const act = p => emOutboxPlan(items, p).map(x => [x.key, x.action]);
+check('plan: s_ -> ack', act({ s_k1: 1 }), [['k1', 'ack'], ['k2', 'send']]);
+check('plan: s_ and u_ -> ack', act({ s_k1: 1, u_k1: 1 }), [['k1', 'ack'], ['k2', 'send']]);
+check('plan: u_ without s_ -> fail (never send)', act({ u_k2: 1 }), [['k1', 'send'], ['k2', 'fail']]);
+check('plan: neither -> send', act({}), [['k1', 'send'], ['k2', 'send']]);
+check('plan: item fields preserved', emOutboxPlan(items, {})[0], { key: 'k1', thread: 't1', messageId: 'm1', email: 'c@x.com', text: 'a', leaseToken: 'L1', action: 'send' });
+//  ⚠️ בלי מזהה המייל של הלקוח ובלי הכתובת המקושרת אין למי לענות בבטחה — לא שולחים
+check('plan: item without messageId or email dropped',
+      emOutboxPlan([{ key: 'a', thread: 't', email: 'c@x.com', text: 'x', leaseToken: 'L' },
+                    { key: 'b', thread: 't', messageId: 'm', text: 'x', leaseToken: 'L' },
+                    { key: 'c', thread: 't', messageId: '', email: 'c@x.com', text: 'x', leaseToken: 'L' }], {}), []);
+
+// E5 emReplyOk — למי msg.reply באמת עונה (Reply-To אם יש, אחרת From) מול הכתובת המקושרת
+check('reply: From matches (case, display name)', emReplyOk('', '"Client" <Client@X.com>', 'client@x.com'), true);
+check('reply: Reply-To to another address -> refuse', emReplyOk('other@y.com', 'client@x.com', 'client@x.com'), false);
+check('reply: Reply-To that is the linked address -> ok', emReplyOk('Client <client@x.com>', 'boss@y.com', 'client@x.com'), true);
+check('reply: From is ourselves -> refuse', emReplyOk('', 'ordersluz@gmail.com', 'client@x.com'), false);
+check('reply: Reply-To with two addresses -> refuse', emReplyOk('client@x.com, b@y.com', 'client@x.com', 'client@x.com'), false);
+check('reply: empty linked email -> refuse', emReplyOk('', '', ''), false);
+check('reply: null inputs -> refuse', emReplyOk(null, null, null), false);
+//  ⚠️ כמה כתובות בכותרת — msg.reply היה עונה לכולן. emAddr לוקח רק את האחרונה, ולכן לא מספיק
+check('reply: two named Reply-To, linked last -> refuse', emReplyOk('"Other" <other@y.com>, "Client" <client@x.com>', 'client@x.com', 'client@x.com'), false);
+check('reply: bare + bracketed Reply-To -> refuse', emReplyOk('other@y.com, <client@x.com>', 'client@x.com', 'client@x.com'), false);
+check('reply: two addresses in From -> refuse', emReplyOk('', '"A" <a@y.com>, <client@x.com>', 'client@x.com'), false);
+check('reply: two bracketed in From -> refuse', emReplyOk('', '<a@y.com> <client@x.com>', 'client@x.com'), false);
+check('reply: display name holding an address is fine', emReplyOk('', '"boss@y.com, x" <client@x.com>', 'client@x.com'), true);
+check('plan: other keys do not match', act({ s_k9: 1, u_k9: 1 }), [['k1', 'send'], ['k2', 'send']]);
+check('plan: empty thread/text dropped', emOutboxPlan([{ key: 'a', thread: '', text: 'x', leaseToken: 'L' }, { key: 'b', thread: 't', text: '', leaseToken: 'L' }], {}), []);
+check('plan: null inputs', emOutboxPlan(null, null), []);
+check('plan: malformed items dropped', emOutboxPlan([{ key: 'k', thread: 't' }, null, { key: 'k3', thread: 't3', messageId: 'm3', email: 'c@x.com', text: 'x', leaseToken: 'L' }], {}).map(x => x.key), ['k3']);
+
+// E2 emOutboxClaim — מה עושים עם תשובת claim
+check('claim 200 items', emOutboxClaim(200, { ok: true, items: items }), { stop: false, items: items });
+check('claim 200 no items', emOutboxClaim(200, { ok: true, items: [] }), { stop: false, items: [] });
+check('claim 200 ok:false', emOutboxClaim(200, { ok: false }), { stop: false, items: [] });
+for (const c of [401, 403]) check('claim ' + c + ' stops', emOutboxClaim(c, null), { stop: true, items: [] });
+check('claim 500', emOutboxClaim(500, null), { stop: false, items: [] });
+check('claim network 0', emOutboxClaim(0, null), { stop: false, items: [] });
+
+// E3 emSentToPrune
+const now = 10 * 24 * 3600 * 1000, day = 24 * 3600 * 1000;
+check('prune old s_/u_ only', emSentToPrune({ s_a: String(now - 5 * day), s_b: String(now - 1 * day), h_x: '1', s_c: 'junk', u_d: String(now - 5 * day), u_e: String(now - day) }, now, 4 * day).sort(), ['s_a', 's_c', 'u_d']);
+
+// E4 emBudgetOk
+const M = 270000;
+check('budget intake early', emBudgetOk('intake', 100000, M), true);
+check('budget intake stops 60s early', emBudgetOk('intake', M - 59000, M), false);
+check('budget claim ok', emBudgetOk('outbox-claim', M - 31000, M), true);
+check('budget claim stops 30s early', emBudgetOk('outbox-claim', M - 29000, M), false);
+check('budget item until the end', emBudgetOk('outbox-item', M - 1, M), true);
+check('budget item over', emBudgetOk('outbox-item', M + 1, M), false);
 
 // D
 const gs = fs.existsSync(gsPath) ? fs.readFileSync(gsPath, 'utf8') : '';

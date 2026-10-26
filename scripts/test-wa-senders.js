@@ -117,15 +117,15 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
   const db = seed(aganLink());
   const o = { customerId: '3150', waChat: AGAN, clientPhone: AGAN, phone: AGAN, source: 'whatsapp', waMessageId: 'P3' };
   check('4a reply to the linked sender', await rcp.resolveRecipient(db, o, 'dispatched'),
-        { phone: AGAN, source: 'wa-sender', accountKey: '3150', linked: true });
+        { phone: AGAN, source: 'wa-sender', accountKey: '3150', linked: true, channel: 'whatsapp' });
   const un = await rcp.resolveRecipient(seed(), o, 'dispatched');
   check('4b unlinked since: falls back to the card phone, not linked',
-        un, { ...(await rcp.resolvePhone(seed(), o)), linked: false });
+        un, { ...(await rcp.resolvePhone(seed(), o)), linked: false, channel: 'whatsapp' });
   const other = await rcp.resolveRecipient(seed({ waSenders: { [AGAN]: { customerId: '14201', customerName: 'x' } } }), o, 'ready');
   check('4c linked to a different card since: not linked', other.linked, false);
   const portal = { customerId: '14201', phone: '0505887576' };
   check('4d a portal order resolves as before', await rcp.resolveRecipient(db, portal, 'ready'),
-        { ...(await rcp.resolvePhone(db, portal)), linked: false });
+        { ...(await rcp.resolvePhone(db, portal)), linked: false, channel: 'whatsapp' });
 }
 {
   const G = '120363041234567890@g.us';

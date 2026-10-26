@@ -41,24 +41,26 @@ const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaEnqueue }   = require('./_wa-outbox');
 const { resolveRecipient, orderSketchName } = require('./_wa-recipient');
 const { lgSketchAckSkip, lgSketchAckActiveIds } = require('./_wa-sketch-ack');
-const { initializeApp, cert, getApps } = require('firebase-admin/app');
-const { getDatabase } = require('firebase-admin/database');
-
-const DATABASE_URL = lgDatabaseUrl();
+const { lgEmailSendGate } = require('./_env');
+const { lgEmailEnqueue, lgEmailActiveIds } = require('./_email-outbox');
 
 // הובלה אחת של לקוח אחד. התקרה קיימת כדי שקריאה שגויה לא תגרור קריאת
 // מאות הזמנות, לא כדי להגביל הובלה אמיתית.
 const MAX_ORDERS = 40;
 
+//  firebase-admin נטען בעצלות — כך הבדיקות מריצות את הנתיב עם בסיס מדומה
+//  (deps.db). Vercel קורא ל-handler(req, res) בלי deps, ולכן בייצור זה _db().
 function _db() {
+  const { initializeApp, cert, getApps } = require('firebase-admin/app');
+  const { getDatabase } = require('firebase-admin/database');
   const app = getApps().length ? getApps()[0] : initializeApp({
     credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-    databaseURL: DATABASE_URL,
+    databaseURL: lgDatabaseUrl(),
   });
   return getDatabase(app);
 }
 
-module.exports = async function handler(req, res) {
+module.exports = async function handler(req, res, deps) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return; }
 
   const auth = await verifyAdmin(req);
@@ -85,7 +87,7 @@ module.exports = async function handler(req, res) {
   const provider = lgWaProvider();
 
   try {
-    const db = _db();
+    const db = (deps && deps.db) || _db();
 
     // ⚠️ שלב 6: הזמנה שכבר בהודעת "טופלו" שבדרך / שנשלחה לא נכללת שוב —
     // המפתח של התור מגן רק מהודעה זהה, לא מתת-קבוצה. ר' _wa-sketch-ack.js
@@ -106,9 +108,18 @@ module.exports = async function handler(req, res) {
       if (kind === 'sketches-handled') {
         const why = lgSketchAckSkip(order, id, ackActive);
         if (why) { loaded.push({ id, skip: why }); continue; }
+        //  הזמנת מייל שלא יוצאת למייל (השולח לא מקושר / נותק / כרטיס אחר) —
+        //  כמו קודם: "הסקיצות טופלו" לא יוצא עליה בוואטסאפ.
+        if (order.source === 'email' && (await resolveRecipient(db, order, kind)).channel !== 'email') {
+          loaded.push({ id, skip: 'לא סקיצת WhatsApp' }); continue;
+        }
       }
       if (kind === 'ready' && order.whatsapp && order.whatsapp.sentAt && !force) {
         loaded.push({ id, skip: 'כבר נשלחה הודעת מוכן לאיסוף' }); continue;
+      }
+      //  אותה חד-פעמיות להזמנה שקיבלה "מוכן לאיסוף" במייל (_email-outbox.js)
+      if (kind === 'ready' && order.emailNotices && order.emailNotices.ready && !force) {
+        loaded.push({ id, skip: 'כבר נשלחה הודעת מוכן לאיסוף במייל' }); continue;
       }
       loaded.push({ id, order });
     }
@@ -124,6 +135,27 @@ module.exports = async function handler(req, res) {
     const targets = [];
     // "הסקיצות טופלו" מקבוצה → לקבוצה; כל השאר בדיוק כמו קודם (resolvePhone)
     for (const x of live) targets.push({ id: x.id, ...(await resolveRecipient(db, x.order, kind)) });
+
+    // ── ערוץ מייל (בן, 26/10) ──
+    //  הזמנה מהמייל של שולח מקושר → תשובה בשרשרת שלה. ערבוב עם וואטסאפ
+    //  נחסם עם הסבר — "לפצל או לא" נשארת דחויה, כמו בקבוצות. כולן מהמייל
+    //  → הודעה אחת לכל שרשרת. כולן וואטסאפ → בדיוק כמו קודם, מתחת.
+    const byEmail = targets.filter(t => t.channel === 'email');
+    if (byEmail.length && byEmail.length !== targets.length) {
+      res.status(409).json({
+        error: 'בקבוצה יש הזמנות מהמייל ומוואטסאפ — לא נשלחה הודעה',
+        detail: targets.map(t => ({ orderId: t.id, channel: t.channel, accountKey: t.accountKey })),
+      });
+      return;
+    }
+    if (byEmail.length) {
+      const r = await _emailDispatch(db, { kind, dryRun, force, live, targets, queuedBy: auth.phone });
+      if (r.body && !r.body.error) {
+        r.body.skipped = loaded.filter(x => x.skip).map(x => ({ orderId: x.id, reason: x.skip })).concat(r.skipped || []);
+      }
+      res.status(r.status).json(r.body);
+      return;
+    }
 
     const noPhone = targets.filter(t => !t.phone);
     if (noPhone.length) {
@@ -199,3 +231,70 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: 'internal error' });
   }
 };
+
+//  כל ההזמנות מהמייל. כרטיס אחד בלבד (אחרת 409 — אותו היגיון כמו "מספרים
+//  שונים"), ואז הודעה אחת לכל שרשרת. נעילת הסביבה נבדקת לכל כתובת.
+//  ⚠️ לא נוגע ב-waOutbox ולא בספק הוואטסאפ: התור הוא waMeta/emailOutbox,
+//  והסקריפט בג'ימייל שולח משם (api/_email-outbox.js).
+async function _emailDispatch(db, { kind, dryRun, force, live, targets, queuedBy }) {
+  const cards = [...new Set(targets.map(t => String(t.accountKey || '')))];
+  if (cards.length !== 1 || !cards[0]) {
+    return { status: 409, body: {
+      error: 'ההזמנות בקבוצה שייכות לכרטיסי לקוח שונים — לא נשלחה הודעה',
+      detail: targets.map(t => ({ orderId: t.id, accountKey: t.accountKey })),
+    } };
+  }
+  const byId = new Map(live.map(x => [x.id, x.order]));
+  //  ⚠️ הזמנה שכבר בהודעת מייל מאותו סוג שבדרך / שנשלחה זה עתה לא נכללת שוב —
+  //  [X] ואז [X,Y] הם מפתחות שונים. ב"הסקיצות טופלו" זה כבר נעשה למעלה
+  //  (lgSketchAckActiveIds). ר' lgEmailActiveIds.
+  const active  = (kind !== 'sketches-handled' && !force) ? await lgEmailActiveIds(db, kind) : new Set();
+  const skipped = [];
+  const threads = new Map();
+  for (const t of targets) {
+    if (!threads.has(t.thread)) threads.set(t.thread, []);
+    threads.get(t.thread).push(t);
+  }
+  const messages = [];
+  for (const [thread, all] of threads) {
+    const ts = all.filter(t => !active.has(String(t.id)));
+    all.filter(t => active.has(String(t.id))).forEach(t => skipped.push({ orderId: t.id, reason: 'כבר בהודעה שבדרך במייל' }));
+    if (!ts.length) {
+      messages.push({ thread, orderNums: [], queued: false, reason: 'כבר בהודעה שבדרך במייל' });
+      continue;
+    }
+    const orders      = ts.map(t => byId.get(t.id));
+    const orderNums   = ts.map((t, i) => String(orders[i].orderNum || orders[i].refNum || t.id));
+    const sketchNames = orders.map(orderSketchName);
+    const clientName  = String(orders[0].orderClient || 'לקוח');
+    const emails      = [...new Set(ts.map(t => t.email))];
+    //  המייל שעליו עונים: האחרון שהלקוח שלח בשרשרת (מבין ההזמנות בהודעה).
+    //  הסקריפט בודק שוב שהוא מהכתובת המקושרת לפני שהוא עונה.
+    const newest = orders.reduce((a, o) => (Number(o.emailReceivedAt) || 0) >= (Number(a.emailReceivedAt) || 0) ? o : a, orders[0]);
+    const messageId = String(newest.emailMessageId || '');
+    const msg = { thread, orderNums, queued: false, reason: null };
+    const gate = emails.length === 1 ? lgEmailSendGate(emails[0])
+               : { allowed: false, reason: 'בשרשרת אחת יש כמה כתובות — לא נשלח' };
+    if (!gate.allowed) { msg.reason = gate.reason; msg.blocked = true; }
+    else if (dryRun)   { msg.reason = 'dryRun'; }
+    else {
+      const q = await lgEmailEnqueue(db, { kind, thread, messageId, email: emails[0], clientName, orderNums, sketchNames,
+                                           orderIds: ts.map(t => t.id), queuedBy, accountKey: cards[0] });
+      msg.queued = q.queued; msg.reason = q.queued ? null : q.reason; msg.outboxKey = q.key;
+    }
+    messages.push(msg);
+  }
+  const queued  = messages.some(m => m.queued);
+  const blocked = !queued && messages.every(m => m.blocked);
+  const first   = messages.find(m => m.reason);
+  //  preview/configured/reason — כמו בוואטסאפ, כי workday.html ו-admin.html
+  //  קוראים אותם: preview + configured → טוסט עם הסיבה; queued → הצלחה.
+  return { status: 200, body: {
+    ok: true, queued, channel: 'email', kind,
+    preview: dryRun || blocked || undefined, blocked: blocked || undefined, configured: true,
+    clientName: String((byId.get(targets[0].id) || {}).orderClient || 'לקוח'),
+    orderNums: messages.flatMap(m => m.orderNums), accountKey: cards[0],
+    reason: queued ? null : (first ? first.reason : null),
+    messages,
+  }, skipped };
+}
