@@ -257,6 +257,30 @@ function lgEmailInboundAllowed(addr) {
   return { allowed: true, reason: '' };
 }
 
+// ─── מייל יוצא · נעילת הסביבה ───────────────────────────────────────
+//
+//  אותו רעיון כמו GREENAPI_ONLY_TO, למייל. הנעילה נבדקת על הכתובת עצמה:
+//
+//    • lussglass (ולא LG_ENV=test)  → מותר (הקישור כבר נבדק בדרך לכאן).
+//    • כל פרויקט אחר               → רק כתובת שמופיעה ב-EMAIL_ONLY_TO.
+//      לא מוגדר = אתר הבדיקה לא שולח מייל לאף אחד.
+//    • EMAIL_ONLY_TO מוגדר גם בייצור → מצמצם גם שם (בדיקה עצמית של בן).
+//
+//  ⚠️ EMAIL_INBOUND_ALLOWED הוא שער לקליטה בלבד ואינו פותח כאן כלום.
+function lgEmailSendGate(email) {
+  const { lgEmailAddr } = require('./_email-recipient');
+  const to = lgEmailAddr(email);
+  if (!to) return { allowed: false, reason: 'כתובת מייל לא תקינה' };
+  const only = String(process.env.EMAIL_ONLY_TO || '').split(',').map(lgEmailAddr).filter(Boolean);
+  if (only.length) {
+    return only.includes(to) ? { allowed: true, reason: '' }
+                             : { allowed: false, reason: 'הכתובת אינה הכתובת המורשית בסביבה הזו (EMAIL_ONLY_TO)' };
+  }
+  const live = _projectId() === LG_LIVE_PROJECT && String(process.env.LG_ENV || '').trim().toLowerCase() !== 'test';
+  if (!live) return { allowed: false, reason: 'סביבת בדיקות — מייל יוצא רק לכתובת שב-EMAIL_ONLY_TO' };
+  return { allowed: true, reason: '' };
+}
+
 module.exports = { lgExternal, lgBlockExternal, lgDatabaseUrl,
-                   lgGreenApiGate, lgGreenApiEnvReady, lgWaInboundAllowed, lgEmailInboundAllowed,
+                   lgGreenApiGate, lgGreenApiEnvReady, lgWaInboundAllowed, lgEmailInboundAllowed, lgEmailSendGate,
                    LG_LIVE_PROJECT };

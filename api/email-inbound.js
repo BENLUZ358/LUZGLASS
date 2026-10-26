@@ -34,6 +34,7 @@ const { lgEmailInboundAllowed } = require('./_env');
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgEmailAddr, lgEmailKey, lgEmailSenderLink } = require('./_email-recipient');
 const { lgEmailInboundKey, lgEmailPutChunk, lgEmailCommit, EM_INBOX, EM_PARTS } = require('./_email-inbound');
+const { lgEmailClaim, lgEmailComplete, lgEmailOutboxKeyOk } = require('./_email-outbox');
 
 // אותם גבולות כמו ב-_email-inbound.js (20 קבצים, 10 חתיכות לקובץ)
 const _int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
@@ -63,6 +64,19 @@ async function handleEmailInbound(req, deps) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = null; } }
   const b = (body && typeof body === 'object') ? body : {};
+  // ─── מיילים יוצאים (בן, 26/10) ─────────────────────────────────────
+  //  הסקריפט מושך מה לשלוח ומאשר. אותו טוקן; לפני בדיקת messageId כי
+  //  לפעולות האלה אין הודעה נכנסת. ר' api/_email-outbox.js.
+  if (b.op === 'outbox-claim') {
+    try { return { status: 200, body: { ok: true, items: await lgEmailClaim(deps.db, 5, deps.now) } }; }
+    catch (e) { console.error('email-inbound: outbox claim failed', e && e.name); return { status: 500, body: { error: 'claim failed' } }; }
+  }
+  if (b.op === 'outbox-done') {
+    if (!lgEmailOutboxKeyOk(b.key) || typeof b.leaseToken !== 'string' || !b.leaseToken || typeof b.ok !== 'boolean') return _bad('bad-done');
+    try { return { status: 200, body: await lgEmailComplete(deps.db, b.key, b.leaseToken, b.ok, deps.now) }; }
+    catch (e) { console.error('email-inbound: outbox done failed', e && e.name); return { status: 500, body: { error: 'done failed' } }; }
+  }
+
   if (!_idOk(b.messageId)) return _bad('bad-id');
 
   if (b.op === 'part') {

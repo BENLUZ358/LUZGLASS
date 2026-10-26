@@ -188,7 +188,26 @@ async function lgClientFromWaGroup(db, groupId, memberPhone) {
 //  linked:true = הנמען הוא צ'אט שמנהל קישר (קבוצה או מספר פרטי) — השער מקבל
 //  אותו גם כשהכרטיס לא ברשימה ב-Vercel (בן, 26/10). כל השאר: linked:false.
 //  מספר פרטי שנותק או קושר לכרטיס אחר מאז → חוזרים ל-resolvePhone, כמו קודם.
+//
+//  ─── ערוץ מייל (בן, 26/10) ──────────────────────────────────────────
+//  הזמנה שהגיעה מהמייל, והכתובת ששלחה אותה **עדיין** מקושרת לאותו כרטיס →
+//  channel:'email', תשובה בשרשרת שלה. כל השאר (לא קושרה, רק ברשימת Vercel,
+//  נותקה, קושרה לכרטיס אחר, בן שייך ידנית) → וואטסאפ בדיוק כמו היום.
+//  ⚠️ emailMessageId / emailThreadId / emailFrom נכתבים רק בשרת (החוקים
+//  חוסמים אותם בהזמנה מהפורטל), ולכן הזמנה מזויפת לא מגיעה לערוץ המייל.
+//  כל תשובה אחרת נושאת channel:'whatsapp'.
 async function resolveRecipient(db, order, kind) {
+  if (order && order.source === 'email' && order.emailThreadId && order.emailMessageId) {
+    const { lgEmailSenderLink } = require('./_email-recipient');   // עצל — _email-recipient דורש את הקובץ הזה
+    const el = await lgEmailSenderLink(db, order.emailFrom);
+    if (el && el.email && el.customerId === String(order.customerId || ''))
+      return { channel: 'email', phone: '', email: el.email, thread: String(order.emailThreadId),
+               source: 'email-sender', accountKey: el.customerId, linked: true };
+  }
+  return { ...(await _resolveWa(db, order)), channel: 'whatsapp' };
+}
+
+async function _resolveWa(db, order) {
   const g = order && order.waGroup;
   if (!g) {
     // waMessageId נכתב רק בשרת (הלקוח לא יכול לכתוב אותו) — הזמנה מהפורטל שזייפה waChat לא "מקושרת"
