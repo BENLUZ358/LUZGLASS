@@ -20,7 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgWaInboundAllowed } = require('./_env');
-const { lgWaSenderLink, lgWaSenderKey } = require('./_wa-recipient');
+const { lgWaSenderLink, lgWaSenderKey, lgClientFromWaSender } = require('./_wa-recipient');
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey } = require('./_wa-inbound');
 
@@ -74,7 +74,8 @@ async function handleCustomerInbound(body, deps) {
     catch (e) { console.error('wa-inbound: sender lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
     if (!link) {
       const sk = lgWaSenderKey(p.entry.sender);
-      if (sk) {
+      // טקסט חופשי ממספר זר הוא בדרך כלל שיחה ("כמה עולה מראה 80 על 120") — לא מעלים בגללו את מונה הקליטות
+      if (sk && p.entry.textMode !== 'free') {
         try {
           await deps.db.ref('waMeta/sendersSeen/' + sk).transaction(cur => ({
             ...(cur || {}), phone: sk, count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now(),
@@ -83,6 +84,16 @@ async function handleCustomerInbound(body, deps) {
       }
       return { status: 200, body: { ok: true, ignored: 'sender' } };
     }
+  }
+
+  // טקסט חופשי — רק אצל לקוח שבן הגדיר (waTextCustomers, נכתב רק מה-endpoint האדמיני)
+  if (p.entry.textMode === 'free') {
+    let on = false;
+    try {
+      const who = await lgClientFromWaSender(deps.db, p.entry.chatId);
+      on = !!who.customerId && !!(await deps.db.ref('waTextCustomers/' + who.customerId).once('value')).val();
+    } catch (e) { console.error('wa-inbound: text flag lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
+    if (!on) return { status: 200, body: { ok: true, ignored: 'text not enabled' } };
   }
 
   let rec;
