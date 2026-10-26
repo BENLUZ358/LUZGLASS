@@ -264,6 +264,8 @@ async function lgWaInboundProcess(db, key, opts) {
     if (!who.matched) order.waUnassigned = true;
     // העדכון "הסקיצות טופלו" יוצא לקבוצה — ר' resolveRecipient
     if (entry.groupId) { order.waGroup = entry.groupId; order.waGroupName = entry.groupName || ''; }
+    // מספר פרטי מקושר — ההודעות על ההזמנה חוזרות אליו, כמו לקבוצה (resolveRecipient)
+    if (!entry.groupId && who.via === 'link') order.waChat = who.phone;
 
     let sketchData;
     if (isText) {

@@ -131,6 +131,43 @@ async function handleAdmin(body, deps) {
     return { ok: true, code: '', message: '' };
   }
 
+  // ─── מספרים פרטיים (בן, 26/10): אותו דבר כמו קבוצה, למספר בודד ─────────
+  //  רק מספר שכבר שלח (waMeta/sendersSeen — נכתב ב-webhook) ורק לכרטיס קיים.
+  //  הקישור הוא ההרשאה של המספר — לקליטה וגם להודעות שחוזרות אליו.
+  const SENDER_ACTS = ['link-sender', 'unlink-sender', 'ignore-sender', 'unignore-sender'];
+  if (chName === 'whatsapp' && SENDER_ACTS.includes(action)) {
+    if (typeof b.key !== 'string' || !/^0\d{7,11}$/.test(b.key)) return { ok: false, code: 'bad-key', message: 'מספר לא תקין' };
+    const db = deps.db, t = deps.now || Date.now(), by = String(deps.by || '');
+    const seenRef = 'waMeta/sendersSeen/' + b.key, linkRef = 'waSenders/' + b.key;
+    const seen = (await db.ref(seenRef).once('value')).val();
+    if (!seen) return { ok: false, code: 'unknown-sender', message: 'המספר עוד לא שלח הודעה — אין מה לקשר' };
+    const cur = (await db.ref(linkRef).once('value')).val();
+
+    if (action === 'unlink-sender') {
+      if (!cur) return { ok: false, code: 'not-linked', message: 'המספר לא מקושר' };
+      await db.ref().update({ [linkRef]: null, [seenRef + '/unlinked']: { at: t, by, customerId: String(cur.customerId || '') } });
+      return { ok: true, code: '', message: '' };
+    }
+    if (action === 'ignore-sender' || action === 'unignore-sender') {
+      if (cur) return { ok: false, code: 'linked', message: 'המספר מקושר — נתק קודם' };
+      await db.ref(seenRef + '/ignored').set(action === 'ignore-sender' ? { at: t, by } : null);
+      return { ok: true, code: '', message: '' };
+    }
+
+    const cid = String(b.customerId || '').trim();
+    const acc = cid && _keyOk(cid) ? (await db.ref('hashavshevetAccounts/' + cid).once('value')).val() : null;
+    if (!acc) return { ok: false, code: 'unknown-customer', message: 'כרטיס הלקוח לא נמצא' };
+    await db.ref(linkRef).transaction(prevRaw => {
+      const prev = prevRaw || {};
+      return {
+        phone: b.key, customerId: cid, customerName: String(acc.name || ''), linkedAt: t, linkedBy: by,
+        audit: { ...(prev.audit || {}), [t + '_link']: { at: t, by, action: 'link', customerId: cid, from: prev.customerId || '' } },
+      };
+    });
+    await db.ref(seenRef + '/ignored').set(null);
+    return { ok: true, code: '', message: '' };
+  }
+
   return { ok: false, code: 'bad-action', message: 'פעולה לא מוכרת' };
 }
 

@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgWaInboundAllowed } = require('./_env');
+const { lgWaSenderLink, lgWaSenderKey } = require('./_wa-recipient');
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey } = require('./_wa-inbound');
 
@@ -39,6 +40,13 @@ async function handleInbound(req, deps) {
   const mine = String(process.env.GREENAPI_ID_INSTANCE || '');
   if (!mine || inst !== mine) return { status: 403, body: { error: 'wrong instance' } };
 
+  const captured = await require('./_devbrain-relay').maybeCaptureOwner(body, { ...deps, rawBodyBytes: typeof req.body === 'string' ? Buffer.byteLength(req.body) : undefined });
+  if (captured) return captured;
+  return handleCustomerInbound(body, deps);
+}
+
+// Internal replay entry: the caller supplies only the stored, validated relay event.
+async function handleCustomerInbound(body, deps) {
   const p = lgWaInboundParse(body);
   if (p.action !== 'record') return { status: 200, body: { ok: true, ignored: p.reason } };
   if (p.entry.groupId) {
@@ -59,7 +67,22 @@ async function handleInbound(req, deps) {
       return { status: 200, body: { ok: true, ignored: 'group not linked' } };
     }
   } else if (!lgWaInboundAllowed(p.entry.sender).allowed) {
-    return { status: 200, body: { ok: true, ignored: 'sender' } };
+    // פרטי: מספר שמנהל קישר מהקליטות מורשה בדיוק כמו מספר ברשימה (בן, 26/10).
+    // לא מקושר → נשמר המספר בלבד (בלי תוכן) כדי שאפשר יהיה לקשר אותו.
+    let link = null;
+    try { link = await lgWaSenderLink(deps.db, p.entry.sender); }
+    catch (e) { console.error('wa-inbound: sender lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
+    if (!link) {
+      const sk = lgWaSenderKey(p.entry.sender);
+      if (sk) {
+        try {
+          await deps.db.ref('waMeta/sendersSeen/' + sk).transaction(cur => ({
+            ...(cur || {}), phone: sk, count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now(),
+          }));
+        } catch (e) { console.warn('wa-inbound: sendersSeen', e && e.name); }
+      }
+      return { status: 200, body: { ok: true, ignored: 'sender' } };
+    }
   }
 
   let rec;
@@ -92,6 +115,9 @@ function _db() {
 }
 
 module.exports = async function handler(req, res) {
+  // Rewrite selects a protected route, never an authentication bypass.
+  // Only this exact server query value selects the relay's own token/project gate.
+  if (req.query && req.query.devbrain === 'relay') return require('./_devbrain-route')(req, res);
   try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) { res.status(500).json({ error: 'server not configured' }); return; }
     const { waitUntil } = require('@vercel/functions');
@@ -103,3 +129,5 @@ module.exports = async function handler(req, res) {
   }
 };
 module.exports.handleInbound = handleInbound;
+
+module.exports.handleCustomerInbound = handleCustomerInbound;

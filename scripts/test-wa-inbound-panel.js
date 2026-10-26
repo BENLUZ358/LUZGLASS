@@ -432,6 +432,41 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('M5 an unknown action is refused', [r.ok, r.code], [false, 'bad-action']);
   }
 
+// ═══ N. מספרים פרטיים (בן, 26/10) ═════════════════════════════════════
+  {
+    const seen = {
+      '037436564':  { phone: '037436564', count: 3, lastAt: NOW },
+      '0501112222': { phone: '0501112222', count: 1, lastAt: NOW - 5000, ignored: { at: NOW, by: 'b' } },
+      '0533334444': { phone: '0533334444', count: 2, lastAt: NOW - 9000 },
+    };
+    const linked = { '0533334444': { phone: '0533334444', customerId: '1333', customerName: 'כתר מקלחונים' } };
+    const rows = ctx.lgWaInSenderRows(seen, linked, false);
+    check('N1 new numbers first, ignored hidden by default', rows.map(r => r.key), ['037436564', '0533334444']);
+    check('N1 a landline is shown the way people write it', rows[0].phoneText, '03-7436564');
+    check('N1 new number: count and no customer', [rows[0].linked, rows[0].count, rows[0].customerName], [false, 3, '']);
+    check('N1 linked number: its customer', [rows[1].linked, rows[1].customerName], [true, 'כתר מקלחונים']);
+    const all = ctx.lgWaInSenderRows(seen, linked, true);
+    check('N2 "show all" brings back the ignored number, marked', all.filter(r => r.ignored).map(r => r.key), ['0501112222']);
+    check('N3 attention counts only new, not-ignored numbers', ctx.lgWaInSendersAttention(seen, linked), 1);
+    const hNew = ctx.lgWaInSenderHtml(rows[0]);
+    check('N4 a new number offers link and ignore',
+          [/data-skey="037436564"/.test(hNew), /data-sact="link"/.test(hNew), /data-sact="ignore"/.test(hNew), /class="wain-acc"/.test(hNew), /3 הודעות נשלחו מהמספר ולא נקלטו/.test(hNew)],
+          [true, true, true, true, true]);
+    const hLinked = ctx.lgWaInSenderHtml(rows[1]);
+    check('N4 a linked number shows its customer and unlink only',
+          [/כתר מקלחונים/.test(hLinked), /data-sact="unlink"/.test(hLinked), /data-sact="link"/.test(hLinked)], [true, true, false]);
+    const hIgn = ctx.lgWaInSenderHtml(all.find(r => r.ignored));
+    check('N4 an ignored number can be un-ignored', [/מוסתר/.test(hIgn), /data-sact="unignore"/.test(hIgn)], [true, true]);
+    check('N5 names are escaped', /<script>/.test(ctx.lgWaInSenderHtml({ ...rows[1], customerName: '<script>' })), false);
+    check('N6 a linked number that never wrote still shows (link came first)',
+          ctx.lgWaInSenderRows({}, linked, false).map(r => [r.key, r.linked]), [['0533334444', true]]);
+    const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
+    check('N7 the panel listens to sendersSeen and waSenders',
+          [/ref\(\s*['"`]waMeta\/sendersSeen['"`]\s*\)/.test(P), /ref\(\s*['"`]waSenders['"`]\s*\)/.test(P)], [true, true]);
+    check('N7 and never writes them itself', /ref\(\s*['"`](waSenders|waMeta\/sendersSeen)[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P), false);
+    check('N7 actions go through the admin endpoint', /'link-sender'/.test(P) && /'unignore-sender'/.test(P), true);
+  }
+
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll WhatsApp intake-panel checks passed.');
 })().catch(e => { console.error('FAIL  crashed:', e && e.stack || e); process.exit(1); });
