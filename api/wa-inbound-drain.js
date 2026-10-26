@@ -24,6 +24,7 @@
 
 const { lgWaInboundKey, lgWaInboundPending, lgWaInboundProcess,
         lgWaInboundRetry, lgWaInboundClose } = require('./_wa-inbound');
+const { lgEmailKey } = require('./_email-recipient');
 const { lgEmailInboundKey, lgEmailInboundPending, lgEmailInboundProcess,
         lgEmailInboundRetry, lgEmailInboundClose } = require('./_email-inbound');
 
@@ -134,22 +135,39 @@ async function handleAdmin(body, deps) {
   // ─── מספרים פרטיים (בן, 26/10): אותו דבר כמו קבוצה, למספר בודד ─────────
   //  רק מספר שכבר שלח (waMeta/sendersSeen — נכתב ב-webhook) ורק לכרטיס קיים.
   //  הקישור הוא ההרשאה של המספר — לקליטה וגם להודעות שחוזרות אליו.
+  //  כתובות מייל (בן, 26/10): אותו דבר בדיוק, בנתיבים של המייל — המפתח הוא
+  //  הכתובת עם פסיק במקום נקודה, ונשמרת הכתובת המפוענחת.
   const SENDER_ACTS = ['link-sender', 'unlink-sender', 'ignore-sender', 'unignore-sender'];
-  if (chName === 'whatsapp' && SENDER_ACTS.includes(action)) {
-    if (typeof b.key !== 'string' || !/^0\d{7,11}$/.test(b.key)) return { ok: false, code: 'bad-key', message: 'מספר לא תקין' };
+  const SENDER_CFG = {
+    whatsapp: {
+      valid: k => /^0\d{7,11}$/.test(k), decode: k => k, field: 'phone',
+      seen: 'waMeta/sendersSeen/', link: 'waSenders/',
+      msg: { badKey: 'מספר לא תקין', unknown: 'המספר עוד לא שלח הודעה — אין מה לקשר',
+             notLinked: 'המספר לא מקושר', linked: 'המספר מקושר — נתק קודם' },
+    },
+    email: {
+      valid: k => lgEmailKey(k.replace(/,/g, '.')) === k, decode: k => k.replace(/,/g, '.'), field: 'email',
+      seen: 'waMeta/emailSendersSeen/', link: 'waMeta/emailSenders/',
+      msg: { badKey: 'כתובת לא תקינה', unknown: 'הכתובת עוד לא שלחה מייל — אין מה לקשר',
+             notLinked: 'הכתובת לא מקושרת', linked: 'הכתובת מקושרת — נתק קודם' },
+    },
+  };
+  if (SENDER_CFG[chName] && SENDER_ACTS.includes(action)) {
+    const cfg = SENDER_CFG[chName];
+    if (typeof b.key !== 'string' || !b.key || b.key.length > 200 || !cfg.valid(b.key)) return { ok: false, code: 'bad-key', message: cfg.msg.badKey };
     const db = deps.db, t = deps.now || Date.now(), by = String(deps.by || '');
-    const seenRef = 'waMeta/sendersSeen/' + b.key, linkRef = 'waSenders/' + b.key;
+    const seenRef = cfg.seen + b.key, linkRef = cfg.link + b.key;
     const seen = (await db.ref(seenRef).once('value')).val();
-    if (!seen) return { ok: false, code: 'unknown-sender', message: 'המספר עוד לא שלח הודעה — אין מה לקשר' };
+    if (!seen) return { ok: false, code: 'unknown-sender', message: cfg.msg.unknown };
     const cur = (await db.ref(linkRef).once('value')).val();
 
     if (action === 'unlink-sender') {
-      if (!cur) return { ok: false, code: 'not-linked', message: 'המספר לא מקושר' };
+      if (!cur) return { ok: false, code: 'not-linked', message: cfg.msg.notLinked };
       await db.ref().update({ [linkRef]: null, [seenRef + '/unlinked']: { at: t, by, customerId: String(cur.customerId || '') } });
       return { ok: true, code: '', message: '' };
     }
     if (action === 'ignore-sender' || action === 'unignore-sender') {
-      if (cur) return { ok: false, code: 'linked', message: 'המספר מקושר — נתק קודם' };
+      if (cur) return { ok: false, code: 'linked', message: cfg.msg.linked };
       await db.ref(seenRef + '/ignored').set(action === 'ignore-sender' ? { at: t, by } : null);
       return { ok: true, code: '', message: '' };
     }
@@ -160,7 +178,7 @@ async function handleAdmin(body, deps) {
     await db.ref(linkRef).transaction(prevRaw => {
       const prev = prevRaw || {};
       return {
-        phone: b.key, customerId: cid, customerName: String(acc.name || ''), linkedAt: t, linkedBy: by,
+        [cfg.field]: cfg.decode(b.key), customerId: cid, customerName: String(acc.name || ''), linkedAt: t, linkedBy: by,
         audit: { ...(prev.audit || {}), [t + '_link']: { at: t, by, action: 'link', customerId: cid, from: prev.customerId || '' } },
       };
     });

@@ -147,6 +147,38 @@ const link = (addr, customerId, customerName) => ({ waMeta: { emailSenders: {
     check('G3 via link', Object.values(db._data.emailInbound)[0].clientMatch.via, 'link');
   }
 
+  // ═══ H. קישור / ניתוק / התעלמות — רק דרך ה-endpoint האדמיני ═══════
+  {
+    const adm = require(path.join(ROOT, 'api', 'wa-inbound-drain.js'));
+    const K = 'x@y,com';
+    const db = seed({ waMeta: { emailSendersSeen: { [K]: { email: 'x@y.com', count: 2, lastAt: NOW, ignored: { at: NOW - 1, by: 'ben' } } } } });
+    const act = (body, t = NOW + 10) => adm.handleAdmin({ channel: 'email', ...body }, { db, by: '0520000000', now: t });
+    const r = await act({ action: 'link-sender', key: K, customerId: '3150' });
+    const m = (db._data.waMeta.emailSenders || {})[K];
+    check('H1 link writes the mapping with the card name', [r.ok, m && m.customerId, m && m.customerName, m && m.email], [true, '3150', 'אגן ברזל', 'x@y.com']);
+    check('H1 with who, when and an audit line', [m.linkedBy, m.linkedAt, Object.values(m.audit).map(a => [a.action, a.customerId])],
+          ['0520000000', NOW + 10, [['link', '3150']]]);
+    check('H1 and clears a previous "ignore"', db._data.waMeta.emailSendersSeen[K].ignored, undefined);
+    check('H1 nothing written to the WhatsApp paths', [db._data.waSenders, db._data.waMeta.sendersSeen], [undefined, undefined]);
+    await act({ action: 'link-sender', key: K, customerId: '14201' }, NOW + 20);
+    const m2 = db._data.waMeta.emailSenders[K];
+    check('H2 relinking keeps the history, latest wins', [m2.customerId, Object.keys(m2.audit).length, Object.values(m2.audit)[1].from], ['14201', 2, '3150']);
+    check('H3 ignore is refused while linked', (await act({ action: 'ignore-sender', key: K })).code, 'linked');
+    const u = await act({ action: 'unlink-sender', key: K }, NOW + 30);
+    check('H4 unlink removes the mapping and notes it', [u.ok, (db._data.waMeta.emailSenders || {})[K], db._data.waMeta.emailSendersSeen[K].unlinked.customerId],
+          [true, undefined, '14201']);
+    check('H4 unlinking twice: not linked', (await act({ action: 'unlink-sender', key: K })).code, 'not-linked');
+    await act({ action: 'ignore-sender', key: K }, NOW + 40);
+    check('H5 ignore marks it', db._data.waMeta.emailSendersSeen[K].ignored, { at: NOW + 40, by: '0520000000' });
+    await act({ action: 'unignore-sender', key: K });
+    check('H5 unignore clears it', db._data.waMeta.emailSendersSeen[K].ignored, undefined);
+    check('H6 an address that never wrote cannot be linked', (await act({ action: 'link-sender', key: 'z@y,com', customerId: '3150' })).code, 'unknown-sender');
+    check('H7 an unknown card cannot be linked', (await act({ action: 'link-sender', key: K, customerId: '777' })).code, 'unknown-customer');
+    check('H8 a malformed key is refused', (await act({ action: 'link-sender', key: 'a/b@y,com', customerId: '3150' })).code, 'bad-key');
+    check('H8 a key with a real dot (not encoded) is refused', (await act({ action: 'link-sender', key: 'x@y.com', customerId: '3150' })).code, 'bad-key');
+    check('H8 not an address is refused', (await act({ action: 'link-sender', key: 'nonsense', customerId: '3150' })).code, 'bad-key');
+  }
+
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll email sender checks passed.');
 })().catch(e => { console.error('FAIL  crashed:', e && e.stack || e); process.exit(1); });
