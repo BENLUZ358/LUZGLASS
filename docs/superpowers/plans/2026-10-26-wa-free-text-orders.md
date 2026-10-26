@@ -62,13 +62,13 @@
   - `ben 3`: "מראה 5 76 54 X2" → `{760,540,2}`, 5MIRM.
   - `ben 4`: "תכין לי בבקשה מראה 5 מלוטש 70 120" → `{700,1200,1}`, 5MIRM.
   - `variants`: "מראה 70x120" → pair. "מראה 70 x 120" → pair. "מראה 5 70 120 x 3" → qty 3. "מראה 70 120 2 יח'" → qty 2.
-  - `colour/proc`: "מראה ברונזה 60 80" → 5MIRBM. "מראה שחורה 60 80" → 5MIRAM. "מראה חתוכה 60 80" → hmm (חתוכה is not חתוך): "מראה חתוך 60 80" → 5MIRH.
+  - `colour/proc`: "מראה ברונזה 60 80" → 5MIRBM. "מראה שחורה 60 80" → 5MIRAM. "מראה חתוך 60 80" → 5MIRH.
   - `glass`: "זכוכית 8 שקוף מלוטש 100 על 200" → 8SM. "זכוכית 8 שקוף 100 על 200" → line parsed, sku null.
   - `multi`: "מראה 5\n60 80\n70 90 x2" → 2 lines in one group with qty 1 and 2, sku 5MIRM.
   - `not orders`: "נדבר מחר ב-10 על 2 דברים", "מתי מוכן? 3 ימים?", "מראה יפה תודה" → `lgWaFreeTextIsOrder` false.
-  - `unparsed`: "מראה 5 60 80\nוגם אחת 40" → 1 item, and `unparsed` holds "וגם אחת 40"? No: "40" alone is 1 number → not in unparsed (needs ≥ 2 numbers). Use "מראה 5 60 80\nעוד 30 40 50" → `unparsed:['עוד 30 40 50']`.
+  - `unparsed`: "מראה 5 60 80\nעוד 30 40 50" → 1 item, `unparsed:['עוד 30 40 50']`.
   - `too big`: "מראה 500 80" → not an item; `unparsed:['מראה 500 80']`.
-  - `agan format untouched`: `lgWaFreeTextIsOrder` on the Agan MSG from test-wa-text-inbound is irrelevant. Instead assert that `require('../api/_wa-text-order.js').lgWaTextParse(MSG)` output equals its value before the change (the snapshot from the existing test).
+  - `agan format untouched`: covered by running the unchanged `scripts/test-wa-text-order.js` in Step 4.
 - [ ] **Step 2: Run** `node scripts/test-wa-free-text.js`. Expected: FAIL (cannot find module).
 - [ ] **Step 3: Implement** `api/_wa-free-text.js` per the interfaces. Reuse `_norm` by exporting it from `_wa-text-order.js` (add it to its exports).
 - [ ] **Step 4: Run** `node scripts/test-wa-free-text.js && node scripts/test-wa-text-order.js`. Expected: PASS.
