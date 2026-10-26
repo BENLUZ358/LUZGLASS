@@ -15,10 +15,15 @@ const KIND = 'sketches-handled';
 //  מחזיר סיבה לדילוג, או null אם ההזמנה נכללת.
 function lgSketchAckSkip(order, id, activeIds) {
   const o = order || {};
-  if (o.source !== 'whatsapp') return 'לא סקיצת WhatsApp';           // D3
+  //  D3 — WhatsApp. ומייל (בן, 26/10): רק הזמנה שהשרת קלט מהמייל (מזהי
+  //  השרשרת נכתבים רק בשרת). איזה ערוץ — מייל או וואטסאפ — מחליט
+  //  resolveRecipient; whatsapp-dispatch מדלג על הזמנת מייל שלא יצאה למייל.
+  const fromEmail = o.source === 'email' && !!o.emailThreadId && !!o.emailMessageId;
+  if (o.source !== 'whatsapp' && !fromEmail) return 'לא סקיצת WhatsApp';
   if (!o.sketchSeenAt)         return 'עוד לא סומנה כטופלה';
   if (o.isTest)                return 'הזמנה פיקטיבית';
   if (o.sketchAck && o.sketchAck.sentAt) return 'הלקוח כבר עודכן';
+  if (o.emailNotices && o.emailNotices[KIND]) return 'הלקוח כבר עודכן';
   if (activeIds && activeIds.has(String(id))) return 'כבר בהודעה שבדרך';
   return null;
 }
@@ -27,7 +32,10 @@ function lgSketchAckSkip(order, id, activeIds) {
 //  expired / dead לא נחשבים — הלקוח לא קיבל אותם, ומותר לשלוח שוב.
 async function lgSketchAckActiveIds(db) {
   const by = s => db.ref('waOutbox').orderByChild('state').equalTo(s).once('value');
-  const snaps = await Promise.all(['pending', 'failed', 'sent'].map(by));
+  //  ותור המייל (waMeta/emailOutbox): בתור או נשלח. failed / expired /
+  //  cancelled שם סופיים — הלקוח לא קיבל, ומותר להכניס שוב.
+  const byEm = s => db.ref('waMeta/emailOutbox').orderByChild('state').equalTo(s).once('value');
+  const snaps = await Promise.all([...['pending', 'failed', 'sent'].map(by), ...['pending', 'sent'].map(byEm)]);
   const ids = new Set();
   snaps.forEach(sn => sn.forEach(ch => {
     const v = ch.val() || {};

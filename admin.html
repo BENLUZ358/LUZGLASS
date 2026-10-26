@@ -3172,9 +3172,20 @@ function sqMarkSeen(){
 // "ממתינים לעדכון" לא תציע לשלוח שוב את מה שכבר יצא.
 const _sqAckSent = new Set();
 
+// כתובות מייל מקושרות (waMeta/emailSenders) — הזמנת מייל מקבלת "הסקיצות
+// טופלו" רק כשהשולח שלה עדיין מקושר לאותו כרטיס (lgSketchAckEligible).
+let _sqEmailLinks = {}, _sqEmailLinksOn = false;
+function _sqWatchEmailLinks(){
+  if(_sqEmailLinksOn || typeof _lgDb === 'undefined') return;
+  _sqEmailLinksOn = true;
+  _lgDb.ref('waMeta/emailSenders').on('value',
+    sn => { _sqEmailLinks = sn.val() || {}; _sqRenderAckPending(); },
+    e => console.warn('emailSenders listen:', e && e.message));
+}
+
 function _sqAfterSeen(id, now){
   const o = orders.find(x => String(x.id) === String(id));
-  if(!o || o.source !== 'whatsapp' || o.isTest) return;          // D3
+  if(!o || !lgSketchAckEligible(o, _sqEmailLinks) || o.isTest) return;   // D3 + מייל מקושר
   const key  = lgSketchAckClientKey(o);
   // ייתכן שהמאזין עוד לא החזיר את הסימון — מחילים אותו מקומית
   const view = orders.map(x => String(x.id) === String(id) ? Object.assign({}, x, { sketchSeenAt: now }) : x);
@@ -3209,7 +3220,7 @@ function _sqAckGoTo(id){
 }
 
 async function _sqAckSend(key, view){
-  const g = lgSketchAckPending(view || orders).find(x => x.key === key);
+  const g = lgSketchAckPending(view || orders, _sqEmailLinks).find(x => x.key === key);
   if(!g) return;
   const ids = g.ids.filter(i => !_sqAckSent.has(i));
   if(!ids.length) return;
@@ -3237,7 +3248,8 @@ async function _sqAckSend(key, view){
 function _sqRenderAckPending(){
   const el = document.getElementById('sqAckPending');
   if(!el) return;
-  const groups = lgSketchAckPending(orders)
+  _sqWatchEmailLinks();
+  const groups = lgSketchAckPending(orders, _sqEmailLinks)
     .map(g => Object.assign({}, g, { ids: g.ids.filter(i => !_sqAckSent.has(i)) }))
     .filter(g => g.ids.length);
   el.hidden = !groups.length;

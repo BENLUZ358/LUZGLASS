@@ -94,7 +94,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
   const SRC = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
   const grab = n => (SRC.match(new RegExp('function ' + n + '[\\s\\S]*?\\n}')) || [''])[0];
   const ctx = {}; vm.createContext(ctx);
-  vm.runInContext(['lgSketchAckClientKey', 'lgSketchAckPending', 'lgSketchAckUnseen'].map(grab).join('\n'), ctx);
+  vm.runInContext(['lgEmailLinkKey', 'lgSketchAckEligible', 'lgSketchAckClientKey', 'lgSketchAckPending', 'lgSketchAckUnseen'].map(grab).join('\n'), ctx);
   const O = [
     { id: '1', source: 'whatsapp', stage: '', customerId: '14201', orderClient: 'המקום לאמבט', sketchSeenAt: 5, orderNum: 'L1' },
     { id: '2', source: 'whatsapp', stage: '', customerId: '14201', orderClient: 'המקום לאמבט', sketchSeenAt: 6, orderNum: 'L2' },

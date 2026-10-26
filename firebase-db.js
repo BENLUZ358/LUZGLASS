@@ -279,6 +279,8 @@ function lgDimsText(w, h, missing) {
 function lgSketchAckClientKey(o) {
   // קבוצה קודמת — לשם יוצאת ההודעה, ולכן היא קבוצת השליחה (resolveRecipient)
   if (o && o.waGroup) return 'g:' + o.waGroup;
+  // מייל — קבוצה נפרדת מוואטסאפ של אותו כרטיס: ערבוב בלחיצה אחת = 409 בשרת
+  if (o && o.source === 'email' && o.customerId) return 'e:' + o.customerId;
   if (o && o.customerId) return 'c:' + o.customerId;
   const p = String((o && (o.clientPhone || o.phone)) || '').replace(/\D/g, '');
   if (p) return 'p:' + p;
@@ -288,11 +290,35 @@ function lgSketchAckClientKey(o) {
 // טופלו וטרם עודכנו — לכל לקוח. רק WhatsApp (D3). stage לא משנה: סקיצה
 // שכבר נפתחה ממנה הזמנה עדיין ממתינה לעדכון. unassigned = אין כרטיס לקוח,
 // ולכן אין למי לשלוח (נעילה 3 בשער) — מוצג, לא נשלח.
-function lgSketchAckPending(orders) {
+//  מפתח כתובת מייל — **אותו כלל** כמו lgEmailKey בשרת (api/_email-recipient.js;
+//  test-email-outbox משווה ביניהם): הכתובת שב-<…> האחרון, אותיות קטנות, '.'→','.
+function lgEmailLinkKey(raw) {
+  const s = String(raw || '');
+  const groups = [...s.matchAll(/<([^<>]*)>/g)];
+  const m = groups.length ? groups[groups.length - 1] : null;
+  const a = (m ? m[1] : s).trim().toLowerCase();
+  if (!/^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(a)) return '';
+  const k = a.replace(/[.]/g, ',');
+  return ['$', '#', '[', ']', '/'].some(c => k.includes(c)) ? '' : k;
+}
+
+//  האם "הסקיצות טופלו" יוצא על ההזמנה. WhatsApp — תמיד (D3). מייל (בן, 26/10)
+//  — רק כשהשולח עדיין מקושר לאותו כרטיס (waMeta/emailSenders), כמו
+//  resolveRecipient בשרת. בלי emailLinks — מייל לא נכלל, בדיוק כמו קודם.
+function lgSketchAckEligible(o, emailLinks) {
+  if (!o) return false;
+  if (o.source === 'whatsapp') return true;
+  if (o.source !== 'email' || !o.emailThreadId || !o.emailMessageId || !emailLinks) return false;
+  const l = emailLinks[lgEmailLinkKey(o.emailFrom)];
+  return !!(l && l.customerId && String(l.customerId) === String(o.customerId || ''));
+}
+
+function lgSketchAckPending(orders, emailLinks) {
   const groups = {};
   (orders || []).forEach(o => {
-    if (!o || o.source !== 'whatsapp' || !o.sketchSeenAt || o.isTest) return;
+    if (!o || !lgSketchAckEligible(o, emailLinks) || !o.sketchSeenAt || o.isTest) return;
     if (o.sketchAck && o.sketchAck.sentAt) return;
+    if (o.emailNotices && o.emailNotices['sketches-handled']) return;
     const key = lgSketchAckClientKey(o);
     const g = groups[key] || (groups[key] = { key, clientName: o.orderClient || '—', ids: [], unassigned: false });
     g.ids.push(String(o.id));
@@ -303,7 +329,7 @@ function lgSketchAckPending(orders) {
 
 // סקיצות WhatsApp של אותו לקוח שעוד בתור ולא סומנו — "יש עוד".
 function lgSketchAckUnseen(orders, key, excludeId) {
-  return (orders || []).filter(o => o && o.source === 'whatsapp' && !(o.stage) && !o.sketchSeenAt &&
+  return (orders || []).filter(o => o && (o.source === 'whatsapp' || o.source === 'email') && !(o.stage) && !o.sketchSeenAt &&
     !o.isTest && String(o.id) !== String(excludeId) && lgSketchAckClientKey(o) === key);
 }
 

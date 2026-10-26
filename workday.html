@@ -2778,7 +2778,8 @@ async function _waSendReadyGrouped(orderIds){
 
       if(res.status === 409){
         // ממצא בנתונים ולא תקלה טכנית — שני כרטיסים עם אותו שם
-        showToast('⚠️ ' + client + ' — ההזמנות מובילות למספרים שונים, לא נשלחה הודעה');
+        //  הטקסט מהשרת — הוא יודע את הסיבה (מספרים שונים / מייל+וואטסאפ / כרטיסים)
+        showToast('⚠️ ' + client + ' — ' + (data.error || 'ההזמנות מובילות למספרים שונים, לא נשלחה הודעה'));
         continue;
       }
       if(!res.ok){ showToast('⚠️ הודעה ל' + client + ' נכשלה: ' + (data.error||res.status)); continue; }
@@ -2817,7 +2818,7 @@ async function _waDispatch(orderIds, clientName){
     if(res.status === 409){
       // ⚠️ לא תקלה טכנית אלא ממצא בנתונים: שני כרטיסים עם אותו שם. חייב
       // להיראות, אחרת הודעה אחת תצא ללקוח הלא נכון.
-      showToast('⚠️ לא נשלחה הודעה — ההזמנות של ' + clientName + ' מובילות למספרים שונים');
+      showToast('⚠️ ' + clientName + ' — ' + (data.error || 'לא נשלחה הודעה — ההזמנות מובילות למספרים שונים'));
       return;
     }
     if(!res.ok){ showToast('⚠️ הודעת ההובלה נכשלה: ' + (data.error||res.status)); return; }

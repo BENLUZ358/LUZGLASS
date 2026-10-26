@@ -276,6 +276,125 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     check('D9 the rest on the next run', (await claim(db, NOW + 200, 50)).length, 2);
   }
 
+  // ═══ D'. תיקוני סקירה 1 ═════════════════════════════════════════
+  {
+    const db = await queued();
+    const key = Object.keys(outbox(db))[0];
+    let t = NOW;
+    for (let i = 0; i < 3; i++) { const c = await claim(db, t); await ob.lgEmailComplete(db, c[0].key, c[0].leaseToken, false, t + 1); t += 10; }
+    check('R1 failed first', outbox(db)[key].state, 'failed');
+    const q = await withEnv({ ...BASE_ENV, ...TEST_TO }, () => ob.lgEmailEnqueue(db, { kind: 'ready', thread: 'T1', email: CLIENT, clientName: 'אגן ברזל',
+      orderNums: ['L1', 'L2'], sketchNames: [], orderIds: ['E1', 'E2'], queuedBy: '050', accountKey: '3150', now: t + 100 }));
+    const it = outbox(db)[key];
+    check('R1 failed -> enqueue again -> a fresh pending record',
+          [q.queued, it.state, it.attempts, it.createdAt, it.leaseToken, it.leaseUntil], [true, 'pending', 0, t + 100, null, null]);
+    check('R1 and it is claimable again', (await claim(db, t + 200)).length, 1);
+
+    const db2 = await queued();
+    const c = await claim(db2, NOW);
+    await ob.lgEmailComplete(db2, c[0].key, c[0].leaseToken, true, NOW + 1);
+    const q2 = await withEnv({ ...BASE_ENV, ...TEST_TO }, () => ob.lgEmailEnqueue(db2, { kind: 'ready', thread: 'T1', email: CLIENT, clientName: 'x',
+      orderNums: ['L1', 'L2'], sketchNames: [], orderIds: ['E1', 'E2'], queuedBy: '050', accountKey: '3150', now: NOW + 5 }));
+    check('R1 sent -> still refused', [q2.queued, q2.reason, outbox(db2)[c[0].key].state], [false, 'כבר נשלחה', 'sent']);
+
+    const db3 = await queued();
+    db3._data.waMeta.emailSenders['client@shop,co,il'] = { email: CLIENT, customerId: '14201' };
+    await claim(db3, NOW);
+    db3._data.waMeta.emailSenders['client@shop,co,il'] = { email: CLIENT, customerId: '3150' };
+    const q3 = await withEnv({ ...BASE_ENV, ...TEST_TO }, () => ob.lgEmailEnqueue(db3, { kind: 'ready', thread: 'T1', email: CLIENT, clientName: 'x',
+      orderNums: ['L1', 'L2'], sketchNames: [], orderIds: ['E1', 'E2'], queuedBy: '050', accountKey: '3150', now: NOW + 5 }));
+    check('R1 cancelled -> enqueue again -> pending', [q3.queued, Object.values(outbox(db3))[0].state], [true, 'pending']);
+  }
+  {
+    const db = await queued();
+    const c = await claim(db, NOW);
+    check('R4 done on a well-formed unknown key -> stale', await ob.lgEmailComplete(db, 'ab'.repeat(10), c[0].leaseToken, true, NOW), { ok: false, code: 'stale' });
+    check('R4 and no record was created', outbox(db)['ab'.repeat(10)], undefined);
+  }
+  {
+    const db = await queued();
+    const key = Object.keys(outbox(db))[0];
+    const c = await withEnv(BASE_ENV, () => ob.lgEmailClaim(db, 5, NOW + 25 * 3600 * 1000));   // הנעילה חוסמת
+    check('R5 a gate-blocked item older than 24h expires instead of staying pending', [c.length, outbox(db)[key].state], [0, 'expired']);
+  }
+  {
+    const db = await queued();
+    const key = Object.keys(outbox(db))[0];
+    const c = await claim(db, NOW);
+    const realRef = db.ref;
+    db.ref = p => { const r = realRef(p); if (!p) r.update = async () => { throw new Error('boom'); }; return r; };
+    const keepErr = console.error; let logged = 0; console.error = () => { logged++; };
+    let d; try { d = await ob.lgEmailComplete(db, key, c[0].leaseToken, true, NOW + 1); } finally { console.error = keepErr; db.ref = realRef; }
+    check('R6 a failed order stamp is logged, not thrown; the item is still sent', [d, logged > 0, outbox(db)[key].state], [{ ok: true }, true, 'sent']);
+  }
+
+  // ═══ F. "הסקיצות טופלו" במייל ═══════════════════════════════════
+  const seen = db => { ['E1', 'E2', 'E3', 'B1', 'W1'].forEach(id => { db._data.orders[id].sketchSeenAt = NOW - 1; }); return db; };
+  {
+    const db = seen(seed(links()));
+    const r = await disp(db, { kind: 'sketches-handled', orderIds: ['E1', 'E2', 'E3'], dryRun: false }, TEST_TO);
+    check('F1 linked email sender: sketches-handled -> one email per thread',
+          [r.statusCode, r.body.channel, r.body.queued, (r.body.messages || []).map(m => [m.thread, m.orderNums, m.queued])],
+          [200, 'email', true, [['T1', ['L1', 'L2'], true], ['T2', ['L3'], true]]]);
+    check('F1 queued as sketches-handled', Object.values(outbox(db)).map(i => i.kind), ['sketches-handled', 'sketches-handled']);
+    check('F1 nothing to WhatsApp', db._data.waOutbox, undefined);
+    const again = await disp(db, { kind: 'sketches-handled', orderIds: ['E1', 'E2', 'E3'], dryRun: false }, TEST_TO);
+    check('F2 second click -> not re-queued (already on its way)',
+          [again.statusCode, again.body.queued, (again.body.skipped || []).map(s => s.reason), Object.keys(outbox(db)).length],
+          [200, false, ['כבר בהודעה שבדרך', 'כבר בהודעה שבדרך', 'כבר בהודעה שבדרך'], 2]);
+    const sub = await disp(db, { kind: 'sketches-handled', orderIds: ['E1'], dryRun: false }, TEST_TO);
+    check('F2 nor a subset of it', [sub.body.queued, Object.keys(outbox(db)).length], [false, 2]);
+  }
+  {
+    const db = seen(seed(links()));
+    db._data.orders.E1.emailNotices = { 'sketches-handled': { sentAt: NOW, key: 'k' } };
+    const r = await disp(db, { kind: 'sketches-handled', orderIds: ['E1'], dryRun: false }, TEST_TO);
+    check('F3 an order already updated by email is skipped', [r.body.queued, (r.body.skipped || []).map(s => s.reason)], [false, ['הלקוח כבר עודכן']]);
+  }
+  {
+    const db = seen(seed());   // לא מקושר
+    const r = await disp(db, { kind: 'sketches-handled', orderIds: ['E1', 'B1'], dryRun: false }, TEST_TO);
+    check('F4 unlinked / env-only email order -> old behaviour: skipped, nothing queued anywhere',
+          [r.statusCode, r.body.queued, (r.body.skipped || []).map(s => s.reason), db._data.waOutbox, outbox(db)],
+          [200, false, ['לא סקיצת WhatsApp', 'לא סקיצת WhatsApp'], undefined, {}]);
+  }
+  {
+    const sa = require(path.join(ROOT, 'api', '_wa-sketch-ack.js'));
+    const e = { source: 'email', emailThreadId: 'T', emailMessageId: 'M', sketchSeenAt: 1 };
+    check('F5 an email order with thread + message id passes the skip filter', sa.lgSketchAckSkip(e, 'x', new Set()), null);
+    check('F5 without the server-written ids it does not', [!!sa.lgSketchAckSkip({ ...e, emailThreadId: '' }, 'x'), !!sa.lgSketchAckSkip({ ...e, emailMessageId: '' }, 'x')], [true, true]);
+    const db = fakeDb({ waMeta: { emailOutbox: {
+      a: { kind: 'sketches-handled', state: 'pending', orderIds: ['p'], createdAt: 1 },
+      b: { kind: 'sketches-handled', state: 'sent', orderIds: ['s'], createdAt: 2 },
+      c: { kind: 'sketches-handled', state: 'failed', orderIds: ['f'], createdAt: 3 },
+      d: { kind: 'sketches-handled', state: 'cancelled', orderIds: ['c'], createdAt: 4 },
+      e: { kind: 'ready', state: 'pending', orderIds: ['r'], createdAt: 5 } } } });
+    check('F6 email queue: pending/sent sketches-handled are active; failed/cancelled/other kinds free',
+          [...await sa.lgSketchAckActiveIds(db)].sort(), ['p', 's']);
+  }
+  {
+    // הדפדפן — firebase-db.js
+    const fs = require('fs'); const vm = require('vm');
+    const SRC = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8').replace(/\r\n/g, '\n');
+    const grab = n => (SRC.match(new RegExp('function ' + n + '\\b[\\s\\S]*?\\n}')) || [''])[0];
+    const ctx = {}; vm.createContext(ctx);
+    vm.runInContext(['lgEmailLinkKey', 'lgSketchAckEligible', 'lgSketchAckClientKey', 'lgSketchAckPending'].map(grab).join('\n'), ctx);
+    const erc = require(path.join(ROOT, 'api', '_email-recipient.js'));
+    const samples = ['"Dana" <Dana@Client.co.il>', '"boss@client.com <boss@client.com>" <evil@x.com>', 'a/b@y.com', 'junk', 'x@y.com', ''];
+    check('G1 the browser key is the server key', samples.map(s => ctx.lgEmailLinkKey(s)), samples.map(erc.lgEmailKey));
+    const LINKS = links().waMeta.emailSenders;
+    const O = [
+      { id: 'e1', ...eOrder('L1', 'm1', 'T1'), sketchSeenAt: 5 },
+      { id: 'e2', ...eOrder('L2', 'm2', 'T2'), sketchSeenAt: 5, emailNotices: { 'sketches-handled': { sentAt: 1 } } },
+      { id: 'b1', ...eOrder('L6', 'm6', 'T8'), emailFrom: 'ben@own.com', sketchSeenAt: 5 },
+      { id: 'w1', source: 'whatsapp', customerId: '3150', orderClient: 'אגן ברזל', sketchSeenAt: 5 },
+    ];
+    const P = l => JSON.parse(JSON.stringify(ctx.lgSketchAckPending(O, l)));
+    check('G2 linked email order is pending, in its own group apart from WhatsApp',
+          P(LINKS).map(g => [g.key, g.ids]), [['e:3150', ['e1']], ['c:3150', ['w1']]]);
+    check('G3 without the links — WhatsApp only, exactly as before', P(undefined).map(g => [g.key, g.ids]), [['c:3150', ['w1']]]);
+  }
+
   // ═══ E. הנתיב /api/email-inbound ════════════════════════════════
   {
     const db = await queued();

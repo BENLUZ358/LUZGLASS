@@ -12,8 +12,9 @@
 //
 //  ─── למה אין מייל כפול ─────────────────────────────────────────────
 //
-//    • המפתח = sha1(kind|thread|מזהים ממוינים). לחיצה כפולה = אותו מפתח,
-//      והרשומה נוצרת פעם אחת בלבד (create-once).
+//    • המפתח = sha1(kind|thread|מזהים ממוינים). לחיצה כפולה = אותו מפתח:
+//      רשומה בתור (pending) או שנשלחה (sent) לא נדרסת. failed / expired /
+//      cancelled — הלקוח לא קיבל, ולכן לחיצה חוזרת מתחילה רשומה טרייה.
 //    • תפיסה = lease של 5 דקות עם טוקן אקראי. ריצה שנייה בתוך החלון לא
 //      מקבלת את ההודעה. אישור עם טוקן ישן נדחה (stale) — כך ריצה שנתקעה
 //      לא מסמנת הודעה שריצה אחרת תפסה מאז.
@@ -57,7 +58,7 @@ async function lgEmailEnqueue(db, { kind, thread, email, clientName, orderNums, 
   const key = lgEmailMsgKey(kind, thread, orderIds);
   const at  = now || Date.now();
   const r = await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {
-    if (cur) return;   // abort — create-once: בתור, נשלחה, או נכשלה
+    if (cur && (cur.state === 'pending' || cur.state === 'sent')) return;   // abort — בתור / נשלחה
     return {
       kind: String(kind), thread: String(thread), email: String(email),
       accountKey: accountKey == null ? '' : String(accountKey),
@@ -72,14 +73,14 @@ async function lgEmailEnqueue(db, { kind, thread, email, clientName, orderNums, 
   });
   if (r.committed) return { key, queued: true, reason: '' };
   const cur = r.snapshot.val() || {};
-  return { key, queued: false, reason: cur.state === 'sent' ? 'כבר נשלחה' : cur.state === 'pending' ? 'כבר בתור' : 'כבר טופלה (' + (cur.state || '?') + ')' };
+  return { key, queued: false, reason: cur.state === 'sent' ? 'כבר נשלחה' : 'כבר בתור' };
 }
 
-async function _cancel(db, key, now, why) {
+async function _close(db, key, now, state, why) {
   await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {
     if (cur === null) return null;
     if (cur.state !== 'pending' || (cur.leaseUntil && cur.leaseUntil > now)) return;   // abort
-    return { ...cur, state: 'cancelled', leaseToken: null, leaseUntil: null, updatedAt: now, lastError: why };
+    return { ...cur, state, leaseToken: null, leaseUntil: null, updatedAt: now, lastError: why };
   });
 }
 
@@ -95,10 +96,12 @@ async function lgEmailClaim(db, limit, now) {
   for (const { key, v } of rows) {
     if (out.length >= max) break;
     if (v.leaseUntil && v.leaseUntil > at) continue;                    // באוויר אצל ריצה אחרת
+    //  ⚠️ הגיל לפני הנעילה והקישור — אחרת הודעה חסומה הייתה נשארת בתור לנצח
+    if ((at - (v.createdAt || at)) > MAX_AGE_MS) { await _close(db, key, at, 'expired', 'פג תוקף — לא נשלח'); continue; }
     if (!lgEmailSendGate(v.email).allowed) continue;                     // נעילת הסביבה — לא נוגעים
     const link = await lgEmailSenderLink(db, v.email);
     if (!link || !v.accountKey || link.customerId !== String(v.accountKey)) {
-      await _cancel(db, key, at, 'הכתובת כבר לא מקושרת לכרטיס — לא נשלח');
+      await _close(db, key, at, 'cancelled', 'הכתובת כבר לא מקושרת לכרטיס — לא נשלח');
       continue;
     }
     const token = crypto.randomBytes(16).toString('hex');
@@ -137,15 +140,19 @@ async function lgEmailComplete(db, key, leaseToken, ok, now) {
     if (cur && cur.state === 'sent' && cur.leaseToken === leaseToken && sent) return { ok: true };
     return { ok: false, code: 'stale' };
   }
-  const e = r.snapshot.val() || {};
+  const e = r.snapshot.val();
+  if (!e) return { ok: false, code: 'stale' };   // מפתח תקין שלא קיים
   if (e.state === 'sent') {
     // ⚠️ רק הזמנה שקיימת: עדכון על הזמנה שנמחקה היה מחייה שלד ריק שלה
-    const upd = {};
-    for (const id of _ids(e.orderIds)) {
-      const o = (await db.ref('orders/' + id).once('value')).val();
-      if (o) upd['orders/' + id + '/emailNotices/' + e.kind] = { sentAt: at, key };
-    }
-    if (Object.keys(upd).length) await db.ref().update(upd);
+    //  ⚠️ ההודעה כבר יצאה ונרשמה כ-sent; כשל בחותמת לא הופך אותה לכישלון
+    try {
+      const upd = {};
+      for (const id of _ids(e.orderIds)) {
+        const o = (await db.ref('orders/' + id).once('value')).val();
+        if (o) upd['orders/' + id + '/emailNotices/' + e.kind] = { sentAt: at, key };
+      }
+      if (Object.keys(upd).length) await db.ref().update(upd);
+    } catch (err) { console.error('email-outbox: order stamp failed', key, err && err.name); }
   }
   return { ok: true };
 }

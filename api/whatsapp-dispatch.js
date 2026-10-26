@@ -108,6 +108,11 @@ module.exports = async function handler(req, res, deps) {
       if (kind === 'sketches-handled') {
         const why = lgSketchAckSkip(order, id, ackActive);
         if (why) { loaded.push({ id, skip: why }); continue; }
+        //  הזמנת מייל שלא יוצאת למייל (השולח לא מקושר / נותק / כרטיס אחר) —
+        //  כמו קודם: "הסקיצות טופלו" לא יוצא עליה בוואטסאפ.
+        if (order.source === 'email' && (await resolveRecipient(db, order, kind)).channel !== 'email') {
+          loaded.push({ id, skip: 'לא סקיצת WhatsApp' }); continue;
+        }
       }
       if (kind === 'ready' && order.whatsapp && order.whatsapp.sentAt && !force) {
         loaded.push({ id, skip: 'כבר נשלחה הודעת מוכן לאיסוף' }); continue;
