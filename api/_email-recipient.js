@@ -29,7 +29,11 @@ function lgEmailAddr(raw) {
 }
 
 //  מפתח RTDB לכתובת: lgEmailAddr, ונקודה → פסיק (נקודה אסורה במפתח). ריק = לא כתובת.
-function lgEmailKey(raw) { return lgEmailAddr(raw).replace(/[.]/g, ','); }
+function lgEmailKey(raw) {
+  const k = lgEmailAddr(raw).replace(/[.]/g, ',');
+  // תו שאסור במפתח RTDB (lgEmailAddr מתיר אותם) = אין מפתח; בלי זה ה-ref זורק או מקנן
+  return ['$', '#', '[', ']', '/'].some(c => k.includes(c)) ? '' : k;
+}
 
 //  קישור מפורש שמנהל עשה מהקליטות: waMeta/emailSenders/<key>. null = אין.
 async function lgEmailSenderLink(db, raw) {

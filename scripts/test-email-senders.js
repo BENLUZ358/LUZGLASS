@@ -75,6 +75,7 @@ const link = (addr, customerId, customerName) => ({ waMeta: { emailSenders: {
   check('A1 key = lower-case address, dots as commas', rcp.lgEmailKey('"Dana" <Dana@Client.co.il>'), 'dana@client,co,il');
   check('A2 a display-name trick keys the last <...> address',
         rcp.lgEmailKey('"boss@client.com <boss@client.com>" <evil@x.com>'), 'evil@x,com');
+  check('A4 a character RTDB rejects -> empty key', ['a/b@y.com','o#x@y.com','a$b@y.com','a[b]@y.com'].map(rcp.lgEmailKey), ['','','','']);
   check('A3 not an address -> empty key', rcp.lgEmailKey('not an address'), '');
 
   // ═══ B. lgEmailSenderLink ════════════════════════════════════════
@@ -99,6 +100,14 @@ const link = (addr, customerId, customerName) => ({ waMeta: { emailSenders: {
     check('C3 nothing recorded', db._data.emailInbound, undefined);
     await send(db, 'M2', 'X@Y.com');
     check('C4 second mail -> count 2', db._data.waMeta.emailSendersSeen['x@y,com'].count, 2);
+  }
+
+  // ═══ C5. תו שאסור במפתח — לא 500, ולא נרשם
+  {
+    const db = seed();
+    const r = await send(db, 'M9', 'o#x@y.com');
+    check('C5 illegal key char -> 200 not-allowed', [r.status, r.body], [200, { ok: true, state: 'not-allowed' }]);
+    check('C5 and no sendersSeen node', (db._data.waMeta || {}).emailSendersSeen, undefined);
   }
 
   // ═══ D. מתעלמים — לא נכנסים, אבל נספרים ═════════════════════════
