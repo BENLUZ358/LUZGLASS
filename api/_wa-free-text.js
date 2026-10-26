@@ -17,17 +17,23 @@
 const { _norm } = require('./_wa-text-order');
 
 const MAX_CM = 400;                         // מעל 4 מטר — כנראה נכתב במ"מ; לא מנחשים
+const MIN_CM = 10;                          // מתחת ל-10 ס"מ — כנראה מטרים או שעה; לא מנחשים
+const MAX_QTY = 50;
 const THICK = [3, 4, 5, 6, 8, 10, 12];
 const MIRROR = /מרא(?:ה|ות)/;
 const GLASS_COLORS = ['שקוף', 'קליר', 'חלבי', 'אסיד', 'ברונזה', 'אפור'];
-const GLASS_WORD = /זכוכית|שקוף|קליר|חלבי|אסיד/;
+// מילה שלמה, עם תחילית אחת לכל היותר — "משקוף" (מסגרת דלת) אינו זכוכית
+const GLASS_WORD = /(?<![א-ת])[והבל]?(?:זכוכית|זכוכיות|שקוף|שקופה|שקופות|קליר|חלבי|חלבית|אסיד)(?![א-ת])/;
+const CUT_WORD = /(?<![א-ת])[וה]?(?:חתוך|חתוכה|חתוכות|חתוכים)(?![א-ת])/;   // לא "חתונה", לא "תחתון"
+// שאלה, מחיר, מלאי, ביטול או הזמנה קיימת — שיחה על הזמנה, לא הזמנה חדשה (סקירה, 26/10)
+const NOT_ORDER = /\?|כמה עולה|מחיר|במלאי|בוטל|לבטל|ביטול|הזמנתי|מוכנה|מוכן|מטר/;
 const NUM = /\d+(?:\.\d+)?/g;
 const UNIT_MM = /(\d+(?:\.\d+)?)\s*מ["']{0,2}מ(?![א-ת])/;   // 5 מ"מ · 5 מ'מ · 5 ממ (לא "ממש")
 
 function _desc(line) {
   const mirror = MIRROR.test(line);
   if (!mirror && !GLASS_WORD.test(line)) return null;
-  const proc = /חתוכ?ה?|חתוך/.test(line) ? 'חתוך' : /מלוטש/.test(line) ? 'מלוטש' : /מחוסם/.test(line) ? 'מחוסם' : '';
+  const proc = CUT_WORD.test(line) ? 'חתוך' : /מלוטש/.test(line) ? 'מלוטש' : /מחוסם/.test(line) ? 'מחוסם' : '';
   if (mirror) {
     const color = /ברונזה/.test(line) ? 'ברונזה' : /אפור|שחור/.test(line) ? 'אפורה' : '';
     return { kind: 'mirror', color, mm: null, proc: proc || 'מלוטש' };
@@ -47,11 +53,13 @@ function _line(raw) {
   if (um) { mm = Number(um[1]); s = s.replace(um[0], ' '); }
 
   let nums = (s.match(NUM) || []).map(Number);
-  // "X2" / "x 3" בסוף: כמות — רק אם נשארות לפניו לפחות שתי מידות (אחרת "70 x 40" הוא זוג)
-  const tail = s.match(/\s[xX×]\s*(\d{1,3})\s*$/);
-  if (tail && !u && nums.length >= 3) { qty = parseInt(tail[1], 10); nums = nums.slice(0, -1); }
+  // "X2" / "x 3" בסוף: כמות — רק אם לפניו כבר שתי מידות, בלי לספור עובי מוביל.
+  // אחרת "מראה 5 70 X 120" היה הופך ל-120 יחידות של 50×700 (סקירה, 26/10).
+  const lead = !!desc && mm == null && THICK.includes(nums[0]);
+  const tail = s.match(/[xX×]\s*(\d{1,3})\s*$/);
+  if (tail && !u && (nums.length - 1) - (lead ? 1 : 0) >= 2) { qty = parseInt(tail[1], 10); nums = nums.slice(0, -1); }
   // עובי בלי יחידה: המספר הראשון אחרי המוצר, כשנשארות אחריו עוד שתי מידות
-  if (mm == null && desc && nums.length >= 3 && THICK.includes(nums[0])) mm = nums.shift();
+  if (lead && nums.length >= 3) mm = nums.shift();
   // שורת מוצר בלי מידות: "מראה 5"
   if (mm == null && desc && nums.length === 1 && THICK.includes(nums[0])) mm = nums.shift();
 
@@ -64,6 +72,11 @@ function lgWaFreeTextParse(text) {
   const groups = [], unparsed = [];
   let cur = null;                 // הקבוצה שהשורות הבאות בלי מוצר מצטרפות אליה
   for (const l of lines) {
+    if (NOT_ORDER.test(l)) {
+      cur = null;
+      if ((l.match(NUM) || []).length >= 2) unparsed.push(l);
+      continue;
+    }
     const p = _line(l);
     if (p.desc) {
       const d = { ...p.desc, mm: p.desc.mm != null ? p.desc.mm : (p.desc.kind === 'mirror' ? 5 : null) };
@@ -72,7 +85,7 @@ function lgWaFreeTextParse(text) {
     }
     if (p.dims && cur) {
       const [w, h] = p.dims;
-      if (w > MAX_CM || h > MAX_CM) { unparsed.push(l); continue; }
+      if (w > MAX_CM || h > MAX_CM || w < MIN_CM || h < MIN_CM || p.qty > MAX_QTY) { unparsed.push(l); continue; }
       cur.lines.push({ w: Math.round(w * 10), h: Math.round(h * 10), qty: p.qty });
       continue;
     }

@@ -74,7 +74,8 @@ async function handleCustomerInbound(body, deps) {
     catch (e) { console.error('wa-inbound: sender lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
     if (!link) {
       const sk = lgWaSenderKey(p.entry.sender);
-      if (sk) {
+      // טקסט חופשי ממספר זר הוא בדרך כלל שיחה ("כמה עולה מראה 80 על 120") — לא מעלים בגללו את מונה הקליטות
+      if (sk && p.entry.textMode !== 'free') {
         try {
           await deps.db.ref('waMeta/sendersSeen/' + sk).transaction(cur => ({
             ...(cur || {}), phone: sk, count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now(),

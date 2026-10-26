@@ -87,6 +87,23 @@ check('sku: inactive is never chosen',
 check('sku: two equal matches → none', ft.lgWaFreeTextSku({ kind: 'mirror', color: '', mm: 5, proc: 'מלוטש' },
       { ...CAT, X: { name: "5 מ''מ מראה מלוטש", active: true } }), null);
 
+// ═══ 8b. סקירה סופית — קלטים שיצרו מידות או כמויות שגויות ═══════════
+check('R1 spaced X between sizes after a thickness is a pair, not a quantity',
+      [rows('מראה 5 70 X 120'), rows('מראה 5 50 x 89'), rows('מראה 5 70 × 120')],
+      [[[700, 1200, 1, '5MIRM']], [[500, 890, 1, '5MIRM']], [[700, 1200, 1, '5MIRM']]]);
+check('R1 X2 at the end is still a quantity', rows('מראה 5 76 54 X2'), [[760, 540, 2, '5MIRM']]);
+check('R2 questions, prices, stock and cancellations are not orders',
+      ['כמה עולה מראה 80 על 120?', 'יש לכם מראה 80 על 120 במלאי', 'המראה 80 על 120 שהזמנתי מוכנה', 'מראה 80 על 120 בוטל',
+       'שלום, אני יכול לבוא ב 10 30 לקחת את המראה?', 'בקשר לזכוכית שהזמנתי, 10 בבוקר 2 משטחים', 'מה המחיר של מראה 80 120'].map(ft.lgWaFreeTextIsOrder),
+      [false, false, false, false, false, false, false]);
+check('R3 metres, decimals and tiny sizes are not read as cm',
+      ['מראה 2 על 3 מטר', 'מראה 1.20 על 0.80', 'מראה 0 0', 'מראה 70 5'].map(ft.lgWaFreeTextIsOrder), [false, false, false, false]);
+check('R4 a door frame (משקוף) is not glass', ft.lgWaFreeTextIsOrder('משקוף 80 200'), false);
+check('R4 but "זכוכית שקופה" and "לזכוכית" still are', [ft.lgWaFreeTextIsOrder('זכוכית שקופה 80 200'), ft.lgWaFreeTextIsOrder('לזכוכית 8 שקוף 80 200')], [true, true]);
+check('R5 a wedding is not "cut"', rows('מראה לחתונה 70 120'), [[700, 1200, 1, '5MIRM']]);
+check('R5 "חתוכה" still is', rows('מראה חתוכה 70 120'), [[700, 1200, 1, '5MIRH']]);
+check('R7 an absurd quantity is not an item', ft.lgWaFreeTextIsOrder('מראה 70 120 x500'), false);
+
 // ═══ 9. הקליטה — רק לקוח שבן הגדיר ═══════════════════════════════════
 const hook = require(path.join(ROOT, 'api', 'wa-inbound.js'));
 const NOW = 1761490000000;
@@ -125,6 +142,13 @@ const order = (db, id) => ((db._data.orders || {})['wa_' + id + '_1']) || {};
   const db = seed();
   const r = await send(db, textHook('F2', 'תכין לי מראה 5 70 120 x2'));
   check('9b customer not enabled: nothing recorded', [r.body.ignored, db._data.waInbound], ['text not enabled', undefined]);
+}
+{
+  // R6: מספר זר שכותב "כמה עולה מראה" לא מעלה את מונה הקליטות
+  const db = seed();
+  const r = await send(db, textHook('F8', 'מראה 70 120', '972549998877@c.us'));
+  check('R6 unknown sender with free text: ignored, not added to "new numbers"',
+        [r.body.ignored, ((db._data.waMeta || {}).sendersSeen || {})['0549998877']], ['sender', undefined]);
 }
 {
   const db = seed(ON);
