@@ -86,12 +86,23 @@ function emOutboxPlan(items, props) {
   return (Array.isArray(items) ? items : []).filter(function (it) {
     return it && typeof it.key === 'string' && it.key &&
       typeof it.thread === 'string' && it.thread &&
+      typeof it.messageId === 'string' && it.messageId &&
+      typeof it.email === 'string' && it.email &&
       typeof it.text === 'string' && it.text &&
       typeof it.leaseToken === 'string';
   }).map(function (it) {
     var action = has('s_' + it.key) ? 'ack' : (has('u_' + it.key) ? 'fail' : 'send');
-    return { key: it.key, thread: it.thread, text: it.text, leaseToken: it.leaseToken, action: action };
+    return { key: it.key, thread: it.thread, messageId: it.messageId, email: it.email,
+             text: it.text, leaseToken: it.leaseToken, action: action };
   });
+}
+//  האם מותר לענות על המייל הזה. ⚠️ msg.reply עונה ל-Reply-To אם יש, אחרת ל-From —
+//  ולכן זו הכתובת שנבדקת, והיא חייבת להיות בדיוק הכתובת המקושרת. אחרת לא שולחים
+//  (מייל שיצא לכתובת לא נכונה אי אפשר להחזיר). replyTo/from: כפי שהם מ-Gmail.
+function emReplyOk(replyTo, from, linkedEmail) {
+  var want = emAddr(linkedEmail);
+  var who = emAddr(String(replyTo || '').trim() ? replyTo : from);
+  return !!want && who === want;
 }
 //  תקציב זמן. phase: 'intake' (נעצרים מוקדם כדי להשאיר מקום לתשובות),
 //  'outbox-claim' (לא מחכירים פריטים שלא נספיק לשלוח), 'outbox-item'.

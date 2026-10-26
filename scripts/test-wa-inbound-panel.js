@@ -513,6 +513,19 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('P5 addresses are escaped', /<script>/.test(ctx.lgWaInEmailHtml({ ...rows[1], emailText: '<script>@x.com' })), false);
     check('P6 a linked address that never wrote still shows (link came first)',
           ctx.lgWaInEmailRows({}, linked, false).map(r => [r.key, r.linked]), [['dana@k,com', true]]);
+    //  (סקירה סופית) כתובת ברשימה ב-Vercel שעוד לא קושרה: מופיעה עם "ברשימה" וכפתור
+    //  קישור, אבל לא נספרת ב"דורש טיפול" — היא כבר נקלטת
+    const seenL = { ...seen, 'ben@own,com': { email: 'ben@own.com', count: 2, lastAt: NOW + 1, listed: true } };
+    const rowsL = ctx.lgWaInEmailRows(seenL, linked, false);
+    const ben = rowsL.find(r => r.key === 'ben@own,com') || {};
+    check('P8 a listed address is shown, marked listed, not linked', [ben.listed, ben.linked], [true, false]);
+    check('P8 it is not counted in the attention badge', ctx.lgWaInEmailsAttention(seenL, linked), 1);
+    const hL = ctx.lgWaInEmailHtml(ben);
+    check('P8 chip "ברשימה" and a link button', [/>ברשימה</.test(hL), /data-eact="link"/.test(hL), /class="wain-acc"/.test(hL)], [true, true, true]);
+    check('P8 it does not say its mails were not taken in', /ולא נקלטו/.test(hL), false);
+    const benLinked = ctx.lgWaInEmailRows(seenL, { ...linked, 'ben@own,com': { email: 'ben@own.com', customerId: '3150', customerName: 'אגן ברזל' } }, false)
+      .find(r => r.key === 'ben@own,com');
+    check('P8 once linked it is a plain linked row', [benLinked.linked, benLinked.listed, />מקושר</.test(ctx.lgWaInEmailHtml(benLinked))], [true, false, true]);
     const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
     check('P7 the panel listens to emailSendersSeen and emailSenders',
           [/ref\(\s*['"`]waMeta\/emailSendersSeen['"`]\s*\)/.test(P), /ref\(\s*['"`]waMeta\/emailSenders['"`]\s*\)/.test(P)], [true, true]);

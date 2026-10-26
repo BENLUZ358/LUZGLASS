@@ -23,8 +23,9 @@ const gsPath = path.join(__dirname, 'gmail-intake.gs');
 const core = fs.readFileSync(corePath, 'utf8');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(core + '\nthis.f={emPlanChunks,emAddr,emShouldTake,emLabelFor,emDecide,emGiveUp,emOutboxPlan,emBudgetOk,emOutboxClaim,emSentToPrune};', ctx);
-const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp, emOutboxPlan, emBudgetOk, emOutboxClaim, emSentToPrune } = ctx.f;
+vm.runInContext(core + '\nthis.f={emPlanChunks,emAddr,emShouldTake,emLabelFor,emDecide,emGiveUp,emOutboxPlan,emBudgetOk,emOutboxClaim,emSentToPrune,' +
+  'emReplyOk:typeof emReplyOk==="function"?emReplyOk:function(){return "missing";}};', ctx);
+const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp, emOutboxPlan, emBudgetOk, emOutboxClaim, emSentToPrune, emReplyOk } = ctx.f;
 
 // A
 check('chunks 0', emPlanChunks(0, 3000000), 1);
@@ -86,19 +87,33 @@ check('giveup 60h exactly', emGiveUp(1, 60 * 3600 * 1000), false);
 
 // E emOutboxPlan — ⚠️ exactly-once: מפתח שכבר סומן s_<key> לא נשלח שוב, רק מאשרים
 const items = [
-  { key: 'k1', thread: 't1', text: 'a', leaseToken: 'L1' },
-  { key: 'k2', thread: 't2', text: 'b', leaseToken: 'L2' }
+  { key: 'k1', thread: 't1', messageId: 'm1', email: 'c@x.com', text: 'a', leaseToken: 'L1' },
+  { key: 'k2', thread: 't2', messageId: 'm2', email: 'c@x.com', text: 'b', leaseToken: 'L2' }
 ];
 const act = p => emOutboxPlan(items, p).map(x => [x.key, x.action]);
 check('plan: s_ -> ack', act({ s_k1: 1 }), [['k1', 'ack'], ['k2', 'send']]);
 check('plan: s_ and u_ -> ack', act({ s_k1: 1, u_k1: 1 }), [['k1', 'ack'], ['k2', 'send']]);
 check('plan: u_ without s_ -> fail (never send)', act({ u_k2: 1 }), [['k1', 'send'], ['k2', 'fail']]);
 check('plan: neither -> send', act({}), [['k1', 'send'], ['k2', 'send']]);
-check('plan: item fields preserved', emOutboxPlan(items, {})[0], { key: 'k1', thread: 't1', text: 'a', leaseToken: 'L1', action: 'send' });
+check('plan: item fields preserved', emOutboxPlan(items, {})[0], { key: 'k1', thread: 't1', messageId: 'm1', email: 'c@x.com', text: 'a', leaseToken: 'L1', action: 'send' });
+//  ⚠️ בלי מזהה המייל של הלקוח ובלי הכתובת המקושרת אין למי לענות בבטחה — לא שולחים
+check('plan: item without messageId or email dropped',
+      emOutboxPlan([{ key: 'a', thread: 't', email: 'c@x.com', text: 'x', leaseToken: 'L' },
+                    { key: 'b', thread: 't', messageId: 'm', text: 'x', leaseToken: 'L' },
+                    { key: 'c', thread: 't', messageId: '', email: 'c@x.com', text: 'x', leaseToken: 'L' }], {}), []);
+
+// E5 emReplyOk — למי msg.reply באמת עונה (Reply-To אם יש, אחרת From) מול הכתובת המקושרת
+check('reply: From matches (case, display name)', emReplyOk('', '"Client" <Client@X.com>', 'client@x.com'), true);
+check('reply: Reply-To to another address -> refuse', emReplyOk('other@y.com', 'client@x.com', 'client@x.com'), false);
+check('reply: Reply-To that is the linked address -> ok', emReplyOk('Client <client@x.com>', 'boss@y.com', 'client@x.com'), true);
+check('reply: From is ourselves -> refuse', emReplyOk('', 'ordersluz@gmail.com', 'client@x.com'), false);
+check('reply: Reply-To with two addresses -> refuse', emReplyOk('client@x.com, b@y.com', 'client@x.com', 'client@x.com'), false);
+check('reply: empty linked email -> refuse', emReplyOk('', '', ''), false);
+check('reply: null inputs -> refuse', emReplyOk(null, null, null), false);
 check('plan: other keys do not match', act({ s_k9: 1, u_k9: 1 }), [['k1', 'send'], ['k2', 'send']]);
 check('plan: empty thread/text dropped', emOutboxPlan([{ key: 'a', thread: '', text: 'x', leaseToken: 'L' }, { key: 'b', thread: 't', text: '', leaseToken: 'L' }], {}), []);
 check('plan: null inputs', emOutboxPlan(null, null), []);
-check('plan: malformed items dropped', emOutboxPlan([{ key: 'k', thread: 't' }, null, { key: 'k3', thread: 't3', text: 'x', leaseToken: 'L' }], {}).map(x => x.key), ['k3']);
+check('plan: malformed items dropped', emOutboxPlan([{ key: 'k', thread: 't' }, null, { key: 'k3', thread: 't3', messageId: 'm3', email: 'c@x.com', text: 'x', leaseToken: 'L' }], {}).map(x => x.key), ['k3']);
 
 // E2 emOutboxClaim — מה עושים עם תשובת claim
 check('claim 200 items', emOutboxClaim(200, { ok: true, items: items }), { stop: false, items: items });

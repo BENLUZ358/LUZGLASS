@@ -201,7 +201,7 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     const db = seed(links());
     await withEnv({ ...BASE_ENV, ...TEST_TO }, async () => {
       if (!ob.lgEmailEnqueue) return;
-      await ob.lgEmailEnqueue(db, { kind: 'ready', thread: 'T1', email: CLIENT, clientName: 'אגן ברזל',
+      await ob.lgEmailEnqueue(db, { kind: 'ready', thread: 'T1', messageId: 'm2', email: CLIENT, clientName: 'אגן ברזל',
         orderNums: ['L1', 'L2'], sketchNames: ['מקלחון L1', 'מקלחון L2'], orderIds: ['E1', 'E2'], queuedBy: '050', accountKey: '3150', now: NOW });
     });
     return db;
@@ -213,7 +213,9 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     check('D1 claim leases the item', c1.map(i => [i.thread, typeof i.leaseToken, !!i.leaseToken]), [['T1', 'string', true]]);
     check('D1 with the WhatsApp wording',
           (c1[0] || {}).text, renderText({ kind: 'ready', clientName: 'אגן ברזל', orderNums: ['L1', 'L2'], sketchNames: ['מקלחון L1', 'מקלחון L2'] }));
-    check('D1 the item carries only key, thread, text, leaseToken', Object.keys(c1[0] || {}).sort(), ['key', 'leaseToken', 'text', 'thread']);
+    check('D1 the item carries key, thread, the customer message id, the linked address, text, leaseToken',
+          Object.keys(c1[0] || {}).sort(), ['email', 'key', 'leaseToken', 'messageId', 'text', 'thread']);
+    check('D1 message id and address are the queued ones', [(c1[0] || {}).messageId, (c1[0] || {}).email], ['m2', CLIENT]);
     check('D2 second claim within the lease returns nothing', (await claim(db, NOW + LEASE - 1)).length, 0);
 
     const d = await ob.lgEmailComplete(db, c1[0].key, c1[0].leaseToken, true, NOW + 1000);
@@ -268,7 +270,7 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     const db = seed(links());
     await withEnv({ ...BASE_ENV, ...TEST_TO }, async () => {
       for (let i = 0; i < 7; i++) {
-        await ob.lgEmailEnqueue(db, { kind: 'ready', thread: 'T' + i, email: CLIENT, clientName: 'x',
+        await ob.lgEmailEnqueue(db, { kind: 'ready', thread: 'T' + i, messageId: 'm' + i, email: CLIENT, clientName: 'x',
           orderNums: ['L' + i], sketchNames: [''], orderIds: ['E1'], queuedBy: '050', accountKey: '3150', now: NOW + i });
       }
     });
@@ -283,7 +285,7 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     let t = NOW;
     for (let i = 0; i < 3; i++) { const c = await claim(db, t); await ob.lgEmailComplete(db, c[0].key, c[0].leaseToken, false, t + 1); t += 10; }
     check('R1 failed first', outbox(db)[key].state, 'failed');
-    const q = await withEnv({ ...BASE_ENV, ...TEST_TO }, () => ob.lgEmailEnqueue(db, { kind: 'ready', thread: 'T1', email: CLIENT, clientName: 'אגן ברזל',
+    const q = await withEnv({ ...BASE_ENV, ...TEST_TO }, () => ob.lgEmailEnqueue(db, { kind: 'ready', thread: 'T1', messageId: 'm2', email: CLIENT, clientName: 'אגן ברזל',
       orderNums: ['L1', 'L2'], sketchNames: [], orderIds: ['E1', 'E2'], queuedBy: '050', accountKey: '3150', now: t + 100 }));
     const it = outbox(db)[key];
     check('R1 failed -> enqueue again -> a fresh pending record',
@@ -393,6 +395,68 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     check('G2 linked email order is pending, in its own group apart from WhatsApp',
           P(LINKS).map(g => [g.key, g.ids]), [['e:3150', ['e1']], ['c:3150', ['w1']]]);
     check('G3 without the links — WhatsApp only, exactly as before', P(undefined).map(g => [g.key, g.ids]), [['c:3150', ['w1']]]);
+  }
+
+  // ═══ Z. תיקוני הסקירה הסופית ════════════════════════════════════
+  {
+    //  #1 — התור נושא את מזהה המייל של הלקוח ואת הכתובת המקושרת; הסקריפט עונה
+    //  על המייל הזה (msg.reply) ולא על השרשור, ובודק שהוא מהכתובת המקושרת
+    const db = seed(links());
+    await disp(db, { kind: 'ready', orderIds: ['E1', 'E2', 'E3'], dryRun: false }, TEST_TO);
+    const its = Object.values(outbox(db));
+    const t1 = its.find(i => i.thread === 'T1') || {}, t2 = its.find(i => i.thread === 'T2') || {};
+    check('Z1 queue item carries the customer message id and the linked address',
+          [t1.messageId, t1.email, t2.messageId, t2.email], ['m2', CLIENT, 'm3', CLIENT]);
+    const c = await claim(db, NOW + 1);
+    check('Z1 and so does every claimed item', c.map(i => [i.thread, i.messageId, i.email]).sort(), [['T1', 'm2', CLIENT], ['T2', 'm3', CLIENT]]);
+  }
+  {
+    const db = await queued();
+    const key = Object.keys(outbox(db))[0];
+    delete db._data.waMeta.emailOutbox[key].messageId;
+    check('Z2 a record without a message id is never handed out', (await claim(db, NOW)).length, 0);
+    check('Z2 it is cancelled', outbox(db)[key].state, 'cancelled');
+  }
+  for (const kind of ['ready', 'dispatched']) {
+    //  #4 — [X] ואז [X,Y] הם מפתחות שונים; X לא מקבל הודעה שנייה כל עוד הראשונה בתור / נשלחה
+    const db = seed(links());
+    const a = await disp(db, { kind, orderIds: ['E1'], dryRun: false }, TEST_TO);
+    const b = await disp(db, { kind, orderIds: ['E1', 'E2'], dryRun: false }, TEST_TO);
+    const its = Object.values(outbox(db)).filter(i => i.kind === kind);
+    check('Z3 ' + kind + ': [X] then [X,Y] -> X once, Y alone',
+          [a.body.queued, b.body.queued, its.map(i => i.orderIds).sort()], [true, true, [['E1'], ['E2']]]);
+    check('Z3 ' + kind + ': X reported as skipped', (b.body.skipped || []).map(s => [s.orderId, s.reason]), [['E1', 'כבר בהודעה שבדרך במייל']]);
+    const cc = await disp(db, { kind, orderIds: ['E1', 'E2'], dryRun: false }, TEST_TO);
+    check('Z3 ' + kind + ': and a third click queues nothing', [cc.statusCode, cc.body.queued, Object.values(outbox(db)).length], [200, false, 2]);
+  }
+  {
+    //  פריט שנכשל סופית לא חוסם — הלקוח לא קיבל
+    const db = seed(links());
+    await disp(db, { kind: 'dispatched', orderIds: ['E1'], dryRun: false }, TEST_TO);
+    const k1 = Object.keys(outbox(db))[0];
+    db._data.waMeta.emailOutbox[k1].state = 'failed';
+    const r = await disp(db, { kind: 'dispatched', orderIds: ['E1', 'E2'], dryRun: false }, TEST_TO);
+    check('Z4 a failed earlier message does not block', [r.body.queued, (r.body.skipped || []).length, Object.keys(outbox(db)).length], [true, 0, 2]);
+    //  אחר: "יצא להובלה" שנשלח לפני יותר מיממה לא חוסם הובלה חדשה (הובלה היא אירוע)
+    const db2 = seed(links());
+    await disp(db2, { kind: 'dispatched', orderIds: ['E1'], dryRun: false }, TEST_TO);
+    const k2 = Object.keys(outbox(db2))[0];
+    Object.assign(db2._data.waMeta.emailOutbox[k2], { state: 'sent', sentAt: Date.now() - 25 * 3600 * 1000 });
+    const r2 = await disp(db2, { kind: 'dispatched', orderIds: ['E1', 'E2'], dryRun: false }, TEST_TO);
+    check('Z4 a "dispatched" sent over a day ago does not block a new delivery', [r2.body.queued, (r2.body.skipped || []).length], [true, 0]);
+    //  וסוג אחר לא חוסם
+    const db3 = seed(links());
+    await disp(db3, { kind: 'ready', orderIds: ['E1'], dryRun: false }, TEST_TO);
+    const r3 = await disp(db3, { kind: 'dispatched', orderIds: ['E1'], dryRun: false }, TEST_TO);
+    check('Z4 another kind does not block', r3.body.queued, true);
+  }
+  {
+    //  #5 — אדמין: "שלח עכשיו" לקבוצת מייל אומר שההודעה בתור, לא "נשלח"
+    const fs = require('fs');
+    const A = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+    const fn = (A.match(/async function _sqAckSend\([\s\S]*?\r?\n\}/) || [''])[0];
+    check('Z5 email group -> "בתור לשליחה במייל"', /d\.channel\s*===\s*'email'/.test(fn) && fn.includes('בתור לשליחה במייל'), true);
+    check('Z5 WhatsApp wording kept', fn.includes("'📨 נשלח עדכון ללקוח: '"), true);
   }
 
   // ═══ E. הנתיב /api/email-inbound ════════════════════════════════

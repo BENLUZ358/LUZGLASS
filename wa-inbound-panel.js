@@ -267,6 +267,8 @@ function lgWaInSenderHtml(r) {
 // ─── כתובות מייל (בן, 26/10) — אותו דבר, למייל ───────────────────────────
 //  כתובת שלא ברשימה ושלחה מייל נרשמת בשרת (waMeta/emailSendersSeen: כתובת,
 //  מונה, זמן). המפתח הוא הכתובת עם פסיק במקום נקודה; מוצגת מפוענחת.
+//  listed:true = הכתובת ברשימה ב-Vercel ועוד לא קושרה: כבר נקלטת, אז היא מוצגת
+//  ("ברשימה" + קישור — כך בן מקשר את הכתובת שלו) אבל לא נספרת ב"דורש טיפול".
 function lgWaInEmailRows(seen, linked, showAll) {
   const S = seen || {}, L = linked || {};
   const keys = Array.from(new Set(Object.keys(S).concat(Object.keys(L))));
@@ -274,16 +276,17 @@ function lgWaInEmailRows(seen, linked, showAll) {
     const s = S[k] || {}, l = L[k] || null;
     return { key: k, emailText: String(s.email || (l && l.email) || k.replace(/,/g, '.')), linked: !!(l && l.customerId),
              customerName: l ? String(l.customerName || l.customerId || '') : '',
-             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, ignored: !l && !!s.ignored };
+             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0,
+             listed: !l && !!s.listed, ignored: !l && !s.listed && !!s.ignored };
   })
     .filter(r => showAll || !r.ignored)
     .sort((a, b) => (a.linked - b.linked) || (a.ignored - b.ignored) || (b.lastAt - a.lastAt));
 }
 function lgWaInEmailsAttention(seen, linked) {
-  return lgWaInEmailRows(seen, linked, false).filter(r => !r.linked).length;
+  return lgWaInEmailRows(seen, linked, false).filter(r => !r.linked && !r.listed).length;
 }
 function lgWaInEmailHtml(r) {
-  const chip = r.linked ? 'מקושר' : r.ignored ? 'מוסתר' : 'כתובת חדשה';
+  const chip = r.linked ? 'מקושר' : r.listed ? 'ברשימה' : r.ignored ? 'מוסתר' : 'כתובת חדשה';
   const head = `<div class="wain-l1"><span class="wain-chip">${chip}</span>
           <span class="wain-client" dir="ltr">${_waInEsc(r.emailText)}</span>
           <span class="wain-when">${_waInEsc(_waInWhen(r.lastAt))}</span></div>`;
@@ -291,6 +294,11 @@ function lgWaInEmailHtml(r) {
   if (r.linked) {
     body = `<div class="wain-reason">לקוח: <b>${_waInEsc(r.customerName)}</b> — כל מייל ממנה נכנס לתור, וההודעות על ההזמנות (הסקיצות טופלו / מוכן לאיסוף / יצא להובלה) חוזרות אליו במייל.</div>
           <div class="wain-acts"><button class="wain-btn" data-eact="unlink">נתק</button></div>`;
+  } else if (r.listed) {
+    body = `<div class="wain-reason">הכתובת ברשימה הקבועה — המיילים ממנה כבר נקלטים. קשר אותה ללקוח, וההודעות על ההזמנות יחזרו אליה במייל.</div>
+          <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לכתובת" autocomplete="off">
+            <button class="wain-btn wain-primary" data-eact="link">קשר ללקוח</button></div>
+          <div class="wain-acc-list" hidden></div>`;
   } else if (r.ignored) {
     body = `<div class="wain-reason">הכתובת הוסתרה. מיילים ממנה לא נקלטים.</div>
           <div class="wain-acts"><button class="wain-btn" data-eact="unignore">בטל התעלמות</button></div>`;
@@ -301,7 +309,7 @@ function lgWaInEmailHtml(r) {
             <button class="wain-btn" data-eact="ignore">התעלם</button></div>
           <div class="wain-acc-list" hidden></div>`;
   }
-  return `<div class="wain-row ${r.linked ? 'wain-ok' : r.ignored ? '' : 'wain-warn'}" data-ekey="${_waInEsc(r.key)}">
+  return `<div class="wain-row ${r.linked ? 'wain-ok' : (r.ignored || r.listed) ? '' : 'wain-warn'}" data-ekey="${_waInEsc(r.key)}">
         ${head}
         ${body}
       </div>`;

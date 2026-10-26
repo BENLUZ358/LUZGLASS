@@ -108,12 +108,23 @@ function emOutboxPlan(items, props) {
   return (Array.isArray(items) ? items : []).filter(function (it) {
     return it && typeof it.key === 'string' && it.key &&
       typeof it.thread === 'string' && it.thread &&
+      typeof it.messageId === 'string' && it.messageId &&
+      typeof it.email === 'string' && it.email &&
       typeof it.text === 'string' && it.text &&
       typeof it.leaseToken === 'string';
   }).map(function (it) {
     var action = has('s_' + it.key) ? 'ack' : (has('u_' + it.key) ? 'fail' : 'send');
-    return { key: it.key, thread: it.thread, text: it.text, leaseToken: it.leaseToken, action: action };
+    return { key: it.key, thread: it.thread, messageId: it.messageId, email: it.email,
+             text: it.text, leaseToken: it.leaseToken, action: action };
   });
+}
+//  האם מותר לענות על המייל הזה. ⚠️ msg.reply עונה ל-Reply-To אם יש, אחרת ל-From —
+//  ולכן זו הכתובת שנבדקת, והיא חייבת להיות בדיוק הכתובת המקושרת. אחרת לא שולחים
+//  (מייל שיצא לכתובת לא נכונה אי אפשר להחזיר). replyTo/from: כפי שהם מ-Gmail.
+function emReplyOk(replyTo, from, linkedEmail) {
+  var want = emAddr(linkedEmail);
+  var who = emAddr(String(replyTo || '').trim() ? replyTo : from);
+  return !!want && who === want;
 }
 //  תקציב זמן. phase: 'intake' (נעצרים מוקדם כדי להשאיר מקום לתשובות),
 //  'outbox-claim' (לא מחכירים פריטים שלא נספיק לשלוח), 'outbox-item'.
@@ -293,13 +304,19 @@ function emOutbox(cfg, started) {
     if (it.action === 'fail') Logger.log('תשובה ' + it.key + ': ניסיון קודם נקטע — לא שולחים שוב');
     if (it.action === 'send') {
       try {
-        var thread = null;
-        try { thread = GmailApp.getThreadById(it.thread); } catch (e0) { thread = null; }
-        if (!thread) {
+        //  ⚠️ עונים על המייל של הלקוח עצמו, לא על השרשור: thread.reply עונה למי
+        //  ששלח את ההודעה האחרונה בשרשור — יכול להיות ההודעה שלנו, תשובה ידנית של
+        //  בן, או צד שלישי ב-CC. ו-msg.reply עונה ל-Reply-To — לכן emReplyOk.
+        var msg = null;
+        try { msg = GmailApp.getMessageById(it.messageId); } catch (e0) { msg = null; }
+        if (!msg) {
           ok = false;
+        } else if (!emReplyOk(msg.getReplyTo(), msg.getFrom(), it.email)) {
+          ok = false;
+          Logger.log('תשובה ' + it.key + ': הכתובת במייל לא הכתובת המקושרת — לא נשלח');
         } else {
           props.setProperty('u_' + it.key, String(Date.now()));   // ⚠️ לפני reply
-          thread.reply(it.text);
+          msg.reply(it.text);
           props.setProperty('s_' + it.key, String(Date.now()));   // ⚠️ לפני done
           props.deleteProperty('u_' + it.key);
         }

@@ -204,6 +204,15 @@ async function resolveRecipient(db, order, kind) {
       return { channel: 'email', phone: '', email: el.email, thread: String(order.emailThreadId),
                source: 'email-sender', accountKey: el.customerId, linked: true };
   }
+  return resolveRecipientWa(db, order, kind);
+}
+
+//  הנמען בוואטסאפ בלבד — מה ש-resolveRecipient מחזיר להזמנה שאינה מקושרת למייל.
+//  ⚠️ whatsapp-drain משתמש בזה: הודעה שכבר בתור הוואטסאפ (נכנסה לפני שבן קישר
+//  את הכתובת) יוצאת בוואטסאפ. resolveRecipient היה מחזיר שם 'email' עם phone:''
+//  והיא הייתה נסגרת "אין מספר טלפון" — הלקוח לא היה מקבל כלום באף ערוץ.
+// eslint-disable-next-line no-unused-vars
+async function resolveRecipientWa(db, order, kind) {
   return { ...(await _resolveWa(db, order)), channel: 'whatsapp' };
 }
 
@@ -223,5 +232,5 @@ async function _resolveWa(db, order) {
   return { phone: String(g), source: 'group', accountKey: String(link.customerId), linked: true };
 }
 
-module.exports = { resolvePhone, resolveRecipient, toWaNumber, norm, orderSketchName, waChatToLocal,
+module.exports = { resolvePhone, resolveRecipient, resolveRecipientWa, toWaNumber, norm, orderSketchName, waChatToLocal,
                    lgClientFromWaSender, lgClientFromWaGroup, lgWaSenderKey, lgWaSenderLink };

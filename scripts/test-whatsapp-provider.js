@@ -569,10 +569,11 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
   /* 06/10: resolveRecipient — "הסקיצות טופלו" מקבוצה מקושרת יוצא לקבוצה; כל
      השאר עובר ל-resolvePhone בדיוק כמו קודם (test-wa-groups 3a/3c). */
   check('the drain re-resolves the card from the order before sending',
-        /const live = await resolveRecipient\(db, order, entry\.kind\);/.test(DRAIN), true);
+        //  26/10: resolveRecipientWa — אותה פתירה בדיוק, בלי ערוץ המייל (ר' test-email-drain-recipient)
+        /const live = await resolveRecipientWa\(db, order, entry\.kind\);/.test(DRAIN), true);
   /* ⚠️ הסדר הוא העיקר: הפתרון מחדש **לפני** השער, והשער לפני השליחה.
      ⚠️ indexOf של מחרוזת שלא קיימת הוא -1 — והבדיקה הייתה עוברת בשקט. */
-  const iResolve = DRAIN.indexOf('await resolveRecipient(db, order, entry.kind)');
+  const iResolve = DRAIN.indexOf('await resolveRecipientWa(db, order, entry.kind)');
   check('and it does so before the gate, which is before the send',
         iResolve > -1 && iResolve < DRAIN.indexOf('provider.gate(') &&
         DRAIN.indexOf('provider.gate(') < DRAIN.indexOf('await provider.send('), true);

@@ -53,14 +53,18 @@ function lgEmailMsgKey(kind, thread, orderIds) {
 // המפתח מגיע מהסקריפט — רק מה ש-lgEmailMsgKey מייצר עובר
 const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k);
 
-async function lgEmailEnqueue(db, { kind, thread, email, clientName, orderNums, sketchNames, orderIds,
+//  messageId = מזהה Gmail של המייל של הלקוח שהסקריפט עונה עליו (msg.reply).
+//  ⚠️ לא thread.reply: הוא עונה למי ששלח את ההודעה **האחרונה** בשרשור — ההודעה
+//  שלנו, תשובה ידנית של בן, או צד שלישי. הסקריפט גם בודק שהמייל הזה (Reply-To,
+//  אחרת From) הוא בדיוק email — הכתובת המקושרת.
+async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
                                     queuedBy, accountKey, now }) {
   const key = lgEmailMsgKey(kind, thread, orderIds);
   const at  = now || Date.now();
   const r = await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {
     if (cur && (cur.state === 'pending' || cur.state === 'sent')) return;   // abort — בתור / נשלחה
     return {
-      kind: String(kind), thread: String(thread), email: String(email),
+      kind: String(kind), thread: String(thread), messageId: String(messageId || ''), email: String(email),
       accountKey: accountKey == null ? '' : String(accountKey),
       clientName: String(clientName || ''),
       orderNums: (orderNums || []).map(String),
@@ -98,6 +102,8 @@ async function lgEmailClaim(db, limit, now) {
     if (v.leaseUntil && v.leaseUntil > at) continue;                    // באוויר אצל ריצה אחרת
     //  ⚠️ הגיל לפני הנעילה והקישור — אחרת הודעה חסומה הייתה נשארת בתור לנצח
     if ((at - (v.createdAt || at)) > MAX_AGE_MS) { await _close(db, key, at, 'expired', 'פג תוקף — לא נשלח'); continue; }
+    //  בלי מזהה המייל של הלקוח אין על מה לענות בבטחה — לא מחכירים לנצח, סוגרים
+    if (!v.messageId) { await _close(db, key, at, 'cancelled', 'אין מזהה מייל של הלקוח — לא נשלח'); continue; }
     if (!lgEmailSendGate(v.email).allowed) continue;                     // נעילת הסביבה — לא נוגעים
     const link = await lgEmailSenderLink(db, v.email);
     if (!link || !v.accountKey || link.customerId !== String(v.accountKey)) {
@@ -116,10 +122,28 @@ async function lgEmailClaim(db, limit, now) {
     });
     const e = r.committed && r.snapshot.val();
     if (!e || e.state !== 'pending' || e.leaseToken !== token) continue;
-    out.push({ key, thread: e.thread, leaseToken: token,
+    out.push({ key, thread: e.thread, messageId: String(e.messageId), email: String(e.email), leaseToken: token,
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [], sketchNames: e.sketchNames || [] }) });
   }
   return out;
+}
+
+//  הזמנות שכבר בהודעת מייל מאותו סוג שבדרך (pending) או שנשלחה ביממה האחרונה.
+//  ⚠️ המפתח מגן רק מאותה קבוצה בדיוק: [X] ואז [X,Y] הם שני מפתחות, ו-X היה מקבל
+//  שתי הודעות. כמו lgSketchAckActiveIds ל"הסקיצות טופלו".
+//  "נשלחה" — רק ביממה האחרונה: "יצא להובלה" הוא אירוע, והובלה חדשה ביום אחר
+//  צריכה הודעה חדשה. "מוכן לאיסוף" מוגן לתמיד בנפרד (orders/<id>/emailNotices).
+//  failed / expired / cancelled — הלקוח לא קיבל, ולכן לא חוסמים.
+async function lgEmailActiveIds(db, kind, now) {
+  const at = now || Date.now();
+  const all = (await db.ref(EM_OUTBOX).once('value')).val() || {};
+  const ids = new Set();
+  for (const v of Object.values(all)) {
+    if (!v || v.kind !== kind) continue;
+    const live = v.state === 'pending' || (v.state === 'sent' && (at - (v.sentAt || 0)) <= MAX_AGE_MS);
+    if (live) (v.orderIds || []).forEach(id => ids.add(String(id)));
+  }
+  return ids;
 }
 
 async function lgEmailComplete(db, key, leaseToken, ok, now) {
@@ -157,5 +181,5 @@ async function lgEmailComplete(db, key, leaseToken, ok, now) {
   return { ok: true };
 }
 
-module.exports = { lgEmailMsgKey, lgEmailOutboxKeyOk, lgEmailEnqueue, lgEmailClaim, lgEmailComplete,
+module.exports = { lgEmailMsgKey, lgEmailOutboxKeyOk, lgEmailEnqueue, lgEmailClaim, lgEmailComplete, lgEmailActiveIds,
                    EM_OUTBOX, LEASE_MS, MAX_CLAIM, MAX_ATTEMPTS, MAX_AGE_MS };

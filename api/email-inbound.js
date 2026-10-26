@@ -52,6 +52,21 @@ function _toUs(to) {
 
 const _bad = code => ({ status: 400, body: { ok: false, code } });
 
+//  waMeta/emailSendersSeen/<key>: כתובת, מונה, זמן — בלי תוכן. listed:true = הכתובת
+//  ברשימה ב-Vercel (נקלטת כבר עכשיו); הפאנל מציג אותה עם "ברשימה" ולא סופר אותה
+//  בתג "דורש טיפול". כתובת שירדה מהרשימה מאבדת את הסימון.
+async function _noteSeen(deps, from, listed) {
+  const sk = lgEmailKey(from);
+  if (!sk) return;
+  try {
+    await deps.db.ref('waMeta/emailSendersSeen/' + sk).transaction(cur => {
+      const next = { ...(cur || {}), email: lgEmailAddr(from), count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now() };
+      if (listed) next.listed = true; else delete next.listed;
+      return next;
+    });
+  } catch (e) { console.warn('email-inbound: sendersSeen', e && e.name); }
+}
+
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
 //  deps: { db, now? }. מחזיר { status, body }.
 async function handleEmailInbound(req, deps) {
@@ -97,20 +112,20 @@ async function handleEmailInbound(req, deps) {
   const key = lgEmailInboundKey(b.messageId);
   // כתובת שמנהל קישר מהקליטות מורשית בדיוק כמו כתובת ברשימה (בן, 26/10).
   // לא ברשימה ולא מקושרת → נשמרת הכתובת בלבד (בלי תוכן) כדי שאפשר יהיה לקשר אותה.
-  let admitted = lgEmailInboundAllowed(b.from).allowed;
+  const listed = lgEmailInboundAllowed(b.from).allowed;
+  let admitted = listed;
   if (!admitted) {
     try { admitted = !!(await lgEmailSenderLink(deps.db, b.from)); }
     catch (e) { console.error('email-inbound: sender lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
+  } else {
+    //  כתובת ברשימה ב-Vercel שעוד לא קושרה נרשמת גם היא (listed:true) — אחרת
+    //  היא לא מופיעה בקליטות ו-link-sender מסרב לה, ובן לא יכול לקשר את הכתובת
+    //  שלו לבדיקה העצמית. ⚠️ לפי מיטב היכולת: כשל כאן לא עוצר את הקליטה.
+    try { if (!(await lgEmailSenderLink(deps.db, b.from))) await _noteSeen(deps, b.from, true); }
+    catch (e) { console.warn('email-inbound: listed sender note', e && e.name); }
   }
   if (!admitted) {
-    const sk = lgEmailKey(b.from);
-    if (sk) {
-      try {
-        await deps.db.ref('waMeta/emailSendersSeen/' + sk).transaction(cur => ({
-          ...(cur || {}), email: lgEmailAddr(b.from), count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now(),
-        }));
-      } catch (e) { console.warn('email-inbound: sendersSeen', e && e.name); }
-    }
+    await _noteSeen(deps, b.from, false);
     // ⚠️ רק כשאין רשומה: מייל שכבר נקלט (למשל failed שממתין ל"נסה שוב")
     // ואחר כך הרשימה צומצמה — החתיכות שלו עדיין נחוצות.
     try {

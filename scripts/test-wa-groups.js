@@ -159,7 +159,7 @@ const req = body => ({ method: 'POST', headers: { authorization: 'Bearer hs' }, 
   const D = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-dispatch.js'), 'utf8');
   const DR = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
   check('5d dispatch and drain both resolve through resolveRecipient, with the kind',
-        /resolveRecipient\(db, x\.order, kind\)/.test(D) && /resolveRecipient\(db, order, entry\.kind\)/.test(DR), true);
+        /resolveRecipient\(db, x\.order, kind\)/.test(D) && /resolveRecipientWa\(db, order, entry\.kind\)/.test(DR), true);
   const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
   check('5e the intake panel lists groups to link', /link-group/.test(P) && /waMeta\/groupsSeen/.test(P), true);
   /* 07/10 (בן באייפון): "לא נותן אופציה לבחור לקוח". datalist ב-iOS מציג

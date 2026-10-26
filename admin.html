@@ -3231,8 +3231,13 @@ async function _sqAckSend(key, view){
     if(!res.ok){ showToast('העדכון לא נשלח: ' + (d.error || ('HTTP ' + res.status))); return; }
     if(d.queued){
       ids.forEach(i => _sqAckSent.add(i));
-      showToast('📨 נשלח עדכון ללקוח: ' + (d.clientName || g.clientName));
-      lgWaDrain().catch(() => {});
+      // מייל: השרת רק הכניס לתור — הסקריפט בג'ימייל שולח בדקות הקרובות
+      if(d.channel === 'email'){
+        showToast('📧 העדכון בתור לשליחה במייל ללקוח: ' + (d.clientName || g.clientName));
+      } else {
+        showToast('📨 נשלח עדכון ללקוח: ' + (d.clientName || g.clientName));
+        lgWaDrain().catch(() => {});
+      }
     } else if(d.blocked || d.reason){
       showToast('העדכון לא נשלח: ' + (d.reason || 'נחסם'));
     }

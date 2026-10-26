@@ -134,7 +134,39 @@ const link = (addr, customerId, customerName) => ({ waMeta: { emailSenders: {
     const db = seed();
     const r = await send(db, 'M5', 'Ben@Own.com');
     check('F1 env-listed recorded as today', r.body.state, 'done');
-    check('F2 and no sendersSeen entry', (db._data.waMeta || {}).emailSendersSeen, undefined);
+    //  (סקירה סופית) כתובת ברשימה ב-Vercel נרשמת עם listed:true — כדי שבן יוכל
+    //  לקשר את הכתובת שלו מהקליטות (בלי רשומה link-sender עונה unknown-sender)
+    const seen = ((db._data.waMeta || {}).emailSendersSeen || {})['ben@own,com'];
+    check('F2 env-listed, not linked -> noted as listed (address, count, time only)',
+          seen && [seen.email, seen.count, seen.lastAt, seen.listed, Object.keys(seen).sort()],
+          ['ben@own.com', 1, NOW, true, ['count', 'email', 'lastAt', 'listed']]);
+    await send(db, 'M5b', 'ben@own.com');
+    check('F2 counted again', db._data.waMeta.emailSendersSeen['ben@own,com'].count, 2);
+    check('F2 the intake itself is unchanged (2 recorded)', Object.keys(db._data.emailInbound || {}).length, 2);
+
+    const adm = require(path.join(ROOT, 'api', 'wa-inbound-drain.js'));
+    const l = await adm.handleAdmin({ channel: 'email', action: 'link-sender', key: 'ben@own,com', customerId: '3150' },
+                                    { db, by: '0520000000', now: NOW + 1 });
+    check('F3 link-sender accepts a listed address', [l.ok, (db._data.waMeta.emailSenders || {})['ben@own,com'].customerId], [true, '3150']);
+    await send(db, 'M5c', 'ben@own.com');
+    check('F3 once linked, no more "listed" noting (count unchanged)', db._data.waMeta.emailSendersSeen['ben@own,com'].count, 2);
+  }
+  {
+    //  נרשמה פעם כזרה ואז נוספה לרשימה → listed:true; ירדה מהרשימה → listed נמחק
+    const db = seed({ waMeta: { emailSendersSeen: { 'ben@own,com': { email: 'ben@own.com', count: 1, lastAt: 1 } } } });
+    await send(db, 'M7', 'ben@own.com');
+    check('F4 a seen address that is now listed gets listed:true', db._data.waMeta.emailSendersSeen['ben@own,com'].listed, true);
+    await send(db, 'M8', 'ben@own.com', { EMAIL_INBOUND_ALLOWED: 'luz-glass-test:other@own.com' });
+    check('F4 and loses it when it leaves the list', db._data.waMeta.emailSendersSeen['ben@own,com'].listed, undefined);
+  }
+  {
+    //  רישום שנכשל לא עוצר את הקליטה של כתובת ברשימה
+    const db = seed();
+    const realRef = db.ref;
+    db.ref = p => { const r = realRef(p); if (String(p).startsWith('waMeta/emailSendersSeen')) r.transaction = async () => { throw new Error('boom'); }; return r; };
+    const keepWarn = console.warn; console.warn = () => {};
+    let r; try { r = await send(db, 'M10', 'ben@own.com'); } finally { console.warn = keepWarn; db.ref = realRef; }
+    check('F5 a failed note does not stop a listed address', r.body.state, 'done');
   }
 
   // ═══ G. קישור גובר על התאמת מייל בכרטיס ═════════════════════════
