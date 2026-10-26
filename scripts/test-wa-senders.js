@@ -148,6 +148,39 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
         (await gate({}, { accountKey: '', phone: AGAN, linked: true })).allowed, false);
 }
 
+// ═══ 5. קישור / ניתוק / התעלמות — רק דרך ה-endpoint האדמיני ═════════
+{
+  const seen = () => ({ waMeta: { sendersSeen: { [AGAN]: { phone: AGAN, count: 2, lastAt: NOW, ignored: { at: NOW - 1, by: 'ben' } } } } });
+  const db = seed(seen());
+  const act = (body, t = NOW + 10) => adm.handleAdmin({ channel: 'whatsapp', ...body }, { db, by: '0520000000', now: t });
+  const r = await act({ action: 'link-sender', key: AGAN, customerId: '3150' });
+  const m = (db._data.waSenders || {})[AGAN];
+  check('5a link writes the mapping with the card name', [r.ok, m && m.customerId, m && m.customerName, m && m.phone], [true, '3150', 'אגן ברזל', AGAN]);
+  check('5a with who, when and an audit line', [m.linkedBy, m.linkedAt, Object.values(m.audit).map(a => [a.action, a.customerId])],
+        ['0520000000', NOW + 10, [['link', '3150']]]);
+  check('5a and clears a previous "ignore"', db._data.waMeta.sendersSeen[AGAN].ignored, undefined);
+  await act({ action: 'link-sender', key: AGAN, customerId: '14201' }, NOW + 20);
+  const m2 = db._data.waSenders[AGAN];
+  check('5b relinking keeps the history, latest wins', [m2.customerId, Object.keys(m2.audit).length, Object.values(m2.audit)[1].from], ['14201', 2, '3150']);
+  check('5c ignore is refused while linked', (await act({ action: 'ignore-sender', key: AGAN })).code, 'linked');
+  const u = await act({ action: 'unlink-sender', key: AGAN }, NOW + 30);
+  check('5d unlink removes the mapping and notes it', [u.ok, (db._data.waSenders || {})[AGAN], db._data.waMeta.sendersSeen[AGAN].unlinked.customerId],
+        [true, undefined, '14201']);
+  check('5d unlinking twice: not linked', (await act({ action: 'unlink-sender', key: AGAN })).code, 'not-linked');
+  await act({ action: 'ignore-sender', key: AGAN }, NOW + 40);
+  check('5e ignore marks it', db._data.waMeta.sendersSeen[AGAN].ignored, { at: NOW + 40, by: '0520000000' });
+  await act({ action: 'unignore-sender', key: AGAN });
+  check('5e unignore clears it', db._data.waMeta.sendersSeen[AGAN].ignored, undefined);
+  check('5f a number that never wrote cannot be linked', (await act({ action: 'link-sender', key: '0599999999', customerId: '3150' })).code, 'unknown-sender');
+  check('5g an unknown card cannot be linked', (await act({ action: 'link-sender', key: AGAN, customerId: '777' })).code, 'unknown-customer');
+  check('5h a malformed key is refused', (await act({ action: 'link-sender', key: '03/74', customerId: '3150' })).code, 'bad-key');
+}
+{
+  const rules = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8')).rules;
+  check('5i rules: waSenders is admin-read like waGroups, browser cannot write',
+        [rules.waSenders && rules.waSenders['.read'], rules.waSenders && rules.waSenders['.write']], [rules.waGroups['.read'], false]);
+}
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });
