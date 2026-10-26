@@ -20,6 +20,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgWaInboundAllowed } = require('./_env');
+const { lgWaSenderLink, lgWaSenderKey } = require('./_wa-recipient');
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey } = require('./_wa-inbound');
 
@@ -66,7 +67,22 @@ async function handleCustomerInbound(body, deps) {
       return { status: 200, body: { ok: true, ignored: 'group not linked' } };
     }
   } else if (!lgWaInboundAllowed(p.entry.sender).allowed) {
-    return { status: 200, body: { ok: true, ignored: 'sender' } };
+    // פרטי: מספר שמנהל קישר מהקליטות מורשה בדיוק כמו מספר ברשימה (בן, 26/10).
+    // לא מקושר → נשמר המספר בלבד (בלי תוכן) כדי שאפשר יהיה לקשר אותו.
+    let link = null;
+    try { link = await lgWaSenderLink(deps.db, p.entry.sender); }
+    catch (e) { console.error('wa-inbound: sender lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
+    if (!link) {
+      const sk = lgWaSenderKey(p.entry.sender);
+      if (sk) {
+        try {
+          await deps.db.ref('waMeta/sendersSeen/' + sk).transaction(cur => ({
+            ...(cur || {}), phone: sk, count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now(),
+          }));
+        } catch (e) { console.warn('wa-inbound: sendersSeen', e && e.name); }
+      }
+      return { status: 200, body: { ok: true, ignored: 'sender' } };
+    }
   }
 
   let rec;

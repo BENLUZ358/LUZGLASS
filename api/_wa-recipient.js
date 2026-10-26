@@ -98,10 +98,40 @@ function waChatToLocal(chatId) {
 
 //  מחזיר { matched, via, phone, loginPhone, customerId, name }.
 //  phone = מספר השולח, בפורמט מקומי. loginPhone = מפתח users כשנמצא שם.
+// ─── מספר פרטי מקושר (בן, 26/10) ─────────────────────────────────────
+//
+//  כמו קבוצה: מנהל קושר מספר לכרטיס מתוך הקליטות (waSenders, נכתב רק מ-
+//  endpoint אדמיני), והקישור הוא ההרשאה שלו — בלי לערוך רשימה ב-Vercel.
+//  המפתח הוא ספרות הטלפון בצורה המקומית: 97237436564@c.us, 03-7436564 → 037436564.
+function lgWaSenderKey(raw) {
+  const s = String(raw || '');
+  let d = digits(s.includes('@') ? waChatToLocal(s) : s);
+  if (d.startsWith('972')) d = '0' + d.slice(3);
+  return d;
+}
+
+async function lgWaSenderLink(db, phone) {
+  const key = lgWaSenderKey(phone);
+  if (!key) return null;
+  const link = (await db.ref('waSenders/' + key).once('value')).val();
+  if (!link || !link.customerId) return null;
+  return { customerId: String(link.customerId), customerName: String(link.customerName || ''), phone: key };
+}
+
 async function lgClientFromWaSender(db, chatId) {
   const phone = waChatToLocal(chatId);
   const none = { matched: false, via: 'none', phone, loginPhone: '', customerId: '', name: '' };
   if (!phone) return none;
+
+  // קישור מפורש גובר: מנהל בחר אותו בעיניים, והוא חזק מהתאמת טלפון
+  const link = await lgWaSenderLink(db, phone);
+  if (link) {
+    const users = (await db.ref('users').once('value')).val() || {};
+    const login = Object.keys(users).find(k => users[k] && users[k].role === 'client' && String(users[k].customerId || '') === link.customerId) || '';
+    const card = link.customerName ? null : (await db.ref('hashavshevetAccounts/' + link.customerId).once('value')).val();
+    return { matched: true, via: 'link', phone, loginPhone: login, customerId: link.customerId,
+             name: link.customerName || String((card && card.name) || '') };
+  }
 
   const u = (await db.ref('users/' + phone).once('value')).val();
   if (u) {
@@ -164,4 +194,4 @@ async function resolveRecipient(db, order, kind) {
 }
 
 module.exports = { resolvePhone, resolveRecipient, toWaNumber, norm, orderSketchName, waChatToLocal,
-                   lgClientFromWaSender, lgClientFromWaGroup };
+                   lgClientFromWaSender, lgClientFromWaGroup, lgWaSenderKey, lgWaSenderLink };
