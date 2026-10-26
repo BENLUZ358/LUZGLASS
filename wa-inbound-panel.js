@@ -289,7 +289,7 @@ function lgWaInEmailHtml(r) {
           <span class="wain-when">${_waInEsc(_waInWhen(r.lastAt))}</span></div>`;
   let body;
   if (r.linked) {
-    body = `<div class="wain-reason">לקוח: <b>${_waInEsc(r.customerName)}</b> — כל מייל ממנה נכנס לתור.</div>
+    body = `<div class="wain-reason">לקוח: <b>${_waInEsc(r.customerName)}</b> — כל מייל ממנה נכנס לתור, וההודעות על ההזמנות (הסקיצות טופלו / מוכן לאיסוף / יצא להובלה) חוזרות אליו במייל.</div>
           <div class="wain-acts"><button class="wain-btn" data-eact="unlink">נתק</button></div>`;
   } else if (r.ignored) {
     body = `<div class="wain-reason">הכתובת הוסתרה. מיילים ממנה לא נקלטים.</div>
@@ -461,7 +461,7 @@ if (typeof document !== 'undefined') (function () {
       const v = String((input && input.value) || '');
       customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
       if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
-    } else if (action === 'unlink' && !confirm('לנתק את הכתובת? מיילים חדשים ממנה לא ייכנסו לתור.')) return;
+    } else if (action === 'unlink' && !confirm('לנתק את הכתובת? מיילים חדשים ממנה לא ייכנסו לתור, והיא לא תקבל יותר הודעות.')) return;
     const name = { link: 'link-sender', unlink: 'unlink-sender', ignore: 'ignore-sender', unignore: 'unignore-sender' }[action];
     if (!name) return;
     const r = await post({ channel: 'email', action: name, key, customerId });
