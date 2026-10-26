@@ -94,22 +94,32 @@ function emGiveUp(retries, ageMs) {
   return Number(retries) >= 20 || Number(ageMs) > 60 * 3600 * 1000;
 }
 //  ── תשובות ללקוח (outbox) ──────────────────────────────────────────
-//  תכנית השליחה. items: מה שהשרת החזיר ב-claim; sentMap: כל נכסי הסקריפט.
-//  ⚠️ שליחה פעם אחת בלבד: s_<key> נקבע מיד אחרי reply ולפני done. אם done אבד
-//  וההשכרה פגה, השרת ימסור את אותו מפתח שוב — כאן מזהים שכבר נשלח (skipSend)
-//  ומאשרים בלבד. השרת לא יכול למנוע שליחה כפולה בלי זה.
-function emOutboxPlan(items, sentMap) {
-  var sent = sentMap || {};
+//  תכנית השליחה. items: מה שהשרת החזיר ב-claim; props: כל נכסי הסקריפט.
+//  ⚠️ שליחה פעם אחת בלבד. שלושה סימונים מקומיים לכל key:
+//    u_<key> — נקבע לפני reply (בדרך לשליחה); s_<key> — נקבע מיד אחרי reply
+//    ולפני done. פעולה לכל פריט:
+//    'ack'  — s_ קיים: כבר נשלח, מאשרים done ok:true בלי לשלוח.
+//    'fail' — u_ קיים וגם s_ חסר: ניסיון קודם נפל באמצע, לא ידוע אם יצא.
+//             done ok:false ו-**לעולם לא** שולחים שוב.
+//    'send' — אחרת.
+function emOutboxPlan(items, props) {
+  var p = props || {};
+  var has = function (k) { return Object.prototype.hasOwnProperty.call(p, k); };
   return (Array.isArray(items) ? items : []).filter(function (it) {
     return it && typeof it.key === 'string' && it.key &&
-      typeof it.thread === 'string' && typeof it.text === 'string' &&
+      typeof it.thread === 'string' && it.thread &&
+      typeof it.text === 'string' && it.text &&
       typeof it.leaseToken === 'string';
   }).map(function (it) {
-    return {
-      key: it.key, thread: it.thread, text: it.text, leaseToken: it.leaseToken,
-      skipSend: Object.prototype.hasOwnProperty.call(sent, 's_' + it.key)
-    };
+    var action = has('s_' + it.key) ? 'ack' : (has('u_' + it.key) ? 'fail' : 'send');
+    return { key: it.key, thread: it.thread, text: it.text, leaseToken: it.leaseToken, action: action };
   });
+}
+//  תקציב זמן. phase: 'intake' (נעצרים מוקדם כדי להשאיר מקום לתשובות),
+//  'outbox-claim' (לא מחכירים פריטים שלא נספיק לשלוח), 'outbox-item'.
+function emBudgetOk(phase, elapsedMs, maxMs) {
+  var reserve = phase === 'intake' ? 60000 : (phase === 'outbox-claim' ? 30000 : 0);
+  return Number(elapsedMs) <= Number(maxMs) - reserve;
 }
 //  מה עושים עם תשובת claim. 401/403 = הגדרות — עוצרים את שלב התשובות בריצה
 //  הזו (בלי לספור כלום). כל כשל אחר — אין מה לשלוח עכשיו.
@@ -120,11 +130,11 @@ function emOutboxClaim(httpCode, body) {
   }
   return { stop: false, items: [] };
 }
-//  אילו נכסי s_ למחוק: ישנים מ-keepMs, או עם ערך לא תקין.
+//  אילו נכסי s_/u_ למחוק: ישנים מ-keepMs, או עם ערך לא תקין.
 function emSentToPrune(all, now, keepMs) {
   var cut = now - keepMs;
   return Object.keys(all || {}).filter(function (k) {
-    return k.indexOf('s_') === 0 && !(Number(all[k]) >= cut);
+    return (k.indexOf('s_') === 0 || k.indexOf('u_') === 0) && !(Number(all[k]) >= cut);
   });
 }
 // ── core end ──
@@ -260,8 +270,11 @@ function emFinish(it, res, props) {
 }
 
 //  ⚠️ שולחים תשובה לשרשור ולא יותר מפעם אחת לכל key — ר' emOutboxPlan.
-//  סדר חובה: reply → s_<key> → done. שום Logger.log לא כולל טקסט או כתובות.
+//  סדר חובה: u_ → reply → s_ → מחיקת u_ → done. כל חריגה = done ok:false, אף פעם
+//  לא משאירים פריט בלי אישור (השרת לא סופר פקיעות השכרה).
+//  שום Logger.log לא כולל טקסט או כתובות.
 function emOutbox(cfg, started) {
+  if (!emBudgetOk('outbox-claim', Date.now() - started, EM_MAX_MS)) return;
   var props = PropertiesService.getScriptProperties();
   emSentToPrune(props.getProperties(), Date.now(), EM_KEEP_MS).forEach(function (k) {
     props.deleteProperty(k);
@@ -274,28 +287,31 @@ function emOutbox(cfg, started) {
   }
   var plan = emOutboxPlan(claim.items, props.getProperties());
   for (var n = 0; n < plan.length; n++) {
-    if (Date.now() - started > EM_MAX_MS) break;
+    if (!emBudgetOk('outbox-item', Date.now() - started, EM_MAX_MS)) break;
     var it = plan[n];
-    try {
-      var ok = true;
-      if (!it.skipSend) {
-        var thread = GmailApp.getThreadById(it.thread);
+    var ok = it.action !== 'fail';
+    if (it.action === 'fail') Logger.log('תשובה ' + it.key + ': ניסיון קודם נקטע — לא שולחים שוב');
+    if (it.action === 'send') {
+      try {
+        var thread = null;
+        try { thread = GmailApp.getThreadById(it.thread); } catch (e0) { thread = null; }
         if (!thread) {
           ok = false;
         } else {
+          props.setProperty('u_' + it.key, String(Date.now()));   // ⚠️ לפני reply
           thread.reply(it.text);
           props.setProperty('s_' + it.key, String(Date.now()));   // ⚠️ לפני done
+          props.deleteProperty('u_' + it.key);
         }
+      } catch (e) {
+        ok = false;   // ⚠️ שם השגיאה בלבד; u_ נשאר — אין שליחה חוזרת
+        Logger.log('תשובה ' + it.key + ': חריגה ' + (e && e.name));
       }
-      var dn = emPost(cfg, { op: 'outbox-done', key: it.key, leaseToken: it.leaseToken, ok: ok });
-      if (dn.code === 401 || dn.code === 403) {
-        Logger.log('תשובות: השרת סירב להרשאה (401/403) — עוצרים');
-        break;
-      }
-    } catch (e) {
-      // ⚠️ שם השגיאה בלבד. בלי done — ההשכרה תפוג והשרת ימסור שוב
-      // (אם כבר נשלחה, s_<key> מונע שליחה חוזרת)
-      Logger.log('תשובה ' + it.key + ': חריגה ' + (e && e.name));
+    }
+    var dn = emPost(cfg, { op: 'outbox-done', key: it.key, leaseToken: it.leaseToken, ok: ok });
+    if (dn.code === 401 || dn.code === 403) {
+      Logger.log('תשובות: השרת סירב להרשאה (401/403) — עוצרים');
+      break;
     }
   }
 }
@@ -333,7 +349,7 @@ function emRun() {
 
     var queue = fresh.concat(again);
     for (var q = 0; q < queue.length && q < EM_MAX_COMMITS; q++) {
-      if (Date.now() - started > EM_MAX_MS) break;
+      if (!emBudgetOk('intake', Date.now() - started, EM_MAX_MS)) break;
       var it = queue[q], mid = it.info.id;
       try {
         var res = emProcess(it.msg, cfg, me);
