@@ -110,6 +110,12 @@ check('reply: From is ourselves -> refuse', emReplyOk('', 'ordersluz@gmail.com',
 check('reply: Reply-To with two addresses -> refuse', emReplyOk('client@x.com, b@y.com', 'client@x.com', 'client@x.com'), false);
 check('reply: empty linked email -> refuse', emReplyOk('', '', ''), false);
 check('reply: null inputs -> refuse', emReplyOk(null, null, null), false);
+//  ⚠️ כמה כתובות בכותרת — msg.reply היה עונה לכולן. emAddr לוקח רק את האחרונה, ולכן לא מספיק
+check('reply: two named Reply-To, linked last -> refuse', emReplyOk('"Other" <other@y.com>, "Client" <client@x.com>', 'client@x.com', 'client@x.com'), false);
+check('reply: bare + bracketed Reply-To -> refuse', emReplyOk('other@y.com, <client@x.com>', 'client@x.com', 'client@x.com'), false);
+check('reply: two addresses in From -> refuse', emReplyOk('', '"A" <a@y.com>, <client@x.com>', 'client@x.com'), false);
+check('reply: two bracketed in From -> refuse', emReplyOk('', '<a@y.com> <client@x.com>', 'client@x.com'), false);
+check('reply: display name holding an address is fine', emReplyOk('', '"boss@y.com, x" <client@x.com>', 'client@x.com'), true);
 check('plan: other keys do not match', act({ s_k9: 1, u_k9: 1 }), [['k1', 'send'], ['k2', 'send']]);
 check('plan: empty thread/text dropped', emOutboxPlan([{ key: 'a', thread: '', text: 'x', leaseToken: 'L' }, { key: 'b', thread: 't', text: '', leaseToken: 'L' }], {}), []);
 check('plan: null inputs', emOutboxPlan(null, null), []);

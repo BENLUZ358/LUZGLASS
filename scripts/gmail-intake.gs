@@ -121,10 +121,15 @@ function emOutboxPlan(items, props) {
 //  האם מותר לענות על המייל הזה. ⚠️ msg.reply עונה ל-Reply-To אם יש, אחרת ל-From —
 //  ולכן זו הכתובת שנבדקת, והיא חייבת להיות בדיוק הכתובת המקושרת. אחרת לא שולחים
 //  (מייל שיצא לכתובת לא נכונה אי אפשר להחזיר). replyTo/from: כפי שהם מ-Gmail.
+//  ⚠️ כותרת עם יותר מכתובת אחת — מסרבים: msg.reply עונה לכולן, ו-emAddr (שהקליטה
+//  משתמשת בו) לוקח רק את האחרונה. שמות תצוגה בגרשיים מוסרים קודם (מותר בהם '@').
 function emReplyOk(replyTo, from, linkedEmail) {
   var want = emAddr(linkedEmail);
-  var who = emAddr(String(replyTo || '').trim() ? replyTo : from);
-  return !!want && who === want;
+  var hdr = String(String(replyTo || '').trim() ? replyTo : (from || ''));
+  var bare = hdr.replace(/"(?:[^"\\]|\\.)*"/g, '');
+  if ((bare.match(/@/g) || []).length !== 1) return false;
+  if ((bare.match(/</g) || []).length > 1 || (bare.match(/>/g) || []).length > 1) return false;
+  return !!want && emAddr(hdr) === want;
 }
 //  תקציב זמן. phase: 'intake' (נעצרים מוקדם כדי להשאיר מקום לתשובות),
 //  'outbox-claim' (לא מחכירים פריטים שלא נספיק לשלוח), 'outbox-item'.
