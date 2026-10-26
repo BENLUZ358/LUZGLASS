@@ -32,7 +32,7 @@
 
 const { lgEmailInboundAllowed } = require('./_env');
 const { lgHookTokenOk } = require('./_hook-token');
-const { lgEmailAddr } = require('./_email-recipient');
+const { lgEmailAddr, lgEmailKey, lgEmailSenderLink } = require('./_email-recipient');
 const { lgEmailInboundKey, lgEmailPutChunk, lgEmailCommit, EM_INBOX, EM_PARTS } = require('./_email-inbound');
 
 // אותם גבולות כמו ב-_email-inbound.js (20 קבצים, 10 חתיכות לקובץ)
@@ -81,7 +81,22 @@ async function handleEmailInbound(req, deps) {
   if (!_toUs(b.to)) return { status: 403, body: { error: 'wrong recipient' } };
 
   const key = lgEmailInboundKey(b.messageId);
-  if (!lgEmailInboundAllowed(b.from).allowed) {
+  // כתובת שמנהל קישר מהקליטות מורשית בדיוק כמו כתובת ברשימה (בן, 26/10).
+  // לא ברשימה ולא מקושרת → נשמרת הכתובת בלבד (בלי תוכן) כדי שאפשר יהיה לקשר אותה.
+  let admitted = lgEmailInboundAllowed(b.from).allowed;
+  if (!admitted) {
+    try { admitted = !!(await lgEmailSenderLink(deps.db, b.from)); }
+    catch (e) { console.error('email-inbound: sender lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
+  }
+  if (!admitted) {
+    const sk = lgEmailKey(b.from);
+    if (sk) {
+      try {
+        await deps.db.ref('waMeta/emailSendersSeen/' + sk).transaction(cur => ({
+          ...(cur || {}), email: lgEmailAddr(b.from), count: ((cur && cur.count) || 0) + 1, lastAt: deps.now || Date.now(),
+        }));
+      } catch (e) { console.warn('email-inbound: sendersSeen', e && e.name); }
+    }
     // ⚠️ רק כשאין רשומה: מייל שכבר נקלט (למשל failed שממתין ל"נסה שוב")
     // ואחר כך הרשימה צומצמה — החתיכות שלו עדיין נחוצות.
     try {

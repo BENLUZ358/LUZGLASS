@@ -28,12 +28,34 @@ function lgEmailAddr(raw) {
   return /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/.test(a) ? a : '';
 }
 
+//  מפתח RTDB לכתובת: lgEmailAddr, ונקודה → פסיק (נקודה אסורה במפתח). ריק = לא כתובת.
+function lgEmailKey(raw) { return lgEmailAddr(raw).replace(/[.]/g, ','); }
+
+//  קישור מפורש שמנהל עשה מהקליטות: waMeta/emailSenders/<key>. null = אין.
+async function lgEmailSenderLink(db, raw) {
+  const key = lgEmailKey(raw);
+  if (!key) return null;
+  const link = (await db.ref('waMeta/emailSenders/' + key).once('value')).val();
+  if (!link || !link.customerId) return null;
+  return { customerId: String(link.customerId), customerName: String(link.customerName || ''), email: lgEmailAddr(raw) };
+}
+
 //  מחזיר { matched, via, email, phone, loginPhone, customerId, name, candidates? }.
 //  via: 'email' | 'ambiguous' | 'none'. loginPhone = מפתח users כשנמצא שם.
 async function lgClientFromEmail(db, from) {
   const email = lgEmailAddr(from);
   const none = { matched: false, via: 'none', email, phone: '', loginPhone: '', customerId: '', name: '' };
   if (!email) return none;
+
+  // קישור מפורש גובר: מנהל בחר אותו בעיניים, והוא חזק מהתאמת מייל בכרטיס
+  const link = await lgEmailSenderLink(db, email);
+  if (link) {
+    const users = (await db.ref('users').once('value')).val() || {};
+    const login = Object.keys(users).find(k => users[k] && String(users[k].customerId || '') === link.customerId) || '';
+    const card = link.customerName ? null : (await db.ref('hashavshevetAccounts/' + link.customerId).once('value')).val();
+    return { matched: true, via: 'link', email, phone: login, loginPhone: login, customerId: link.customerId,
+             name: link.customerName || String((card && card.name) || '') };
+  }
 
   const all = (await db.ref('hashavshevetAccounts').once('value')).val() || {};
   const hits = Object.entries(all).filter(([, a]) => a && String(a.email || '')
@@ -56,4 +78,4 @@ async function lgClientFromEmail(db, from) {
   };
 }
 
-module.exports = { lgEmailAddr, lgClientFromEmail };
+module.exports = { lgEmailAddr, lgEmailKey, lgEmailSenderLink, lgClientFromEmail };
