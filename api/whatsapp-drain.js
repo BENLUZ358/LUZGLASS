@@ -183,7 +183,7 @@ module.exports = async function handler(req, res) {
       }
 
       const live = await resolveRecipient(db, order, entry.kind);
-      const gate = provider.gate({ phone: live.phone, accountKey: live.accountKey });
+      const gate = provider.gate({ phone: live.phone, accountKey: live.accountKey, linked: !!live.linked });
 
       if (!gate.allowed || !provider.configured || !live.phone) {
         const why = !live.phone          ? 'אין מספר טלפון ללקוח'

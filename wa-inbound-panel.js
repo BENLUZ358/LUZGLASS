@@ -215,6 +215,55 @@ function lgWaInRowHtml(x) {
 }
 
 // ═══ דפדפן ═══════════════════════════════════════════════════════════
+// ─── מספרים פרטיים (בן, 26/10) ─────────────────────────────────────────
+//  מספר שלא ברשימה ושלח הודעה נרשם בשרת (רק מספר, מונה וזמן). כאן הוא
+//  מוצג, ובן מקשר אותו לכרטיס — ומאז הוא עובד בכל הגלגל. פונקציות טהורות,
+//  כדי שאפשר לבדוק אותן ב-Node.
+function _waInPhoneText(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  if (d.length === 9 && d[0] === '0') return d.slice(0, 2) + '-' + d.slice(2);   // קווי: 03-7436564
+  return _waInPhone(d);
+}
+function lgWaInSenderRows(seen, linked, showAll) {
+  const S = seen || {}, L = linked || {};
+  const keys = Array.from(new Set(Object.keys(S).concat(Object.keys(L))));
+  return keys.map(k => {
+    const s = S[k] || {}, l = L[k] || null;
+    return { key: k, phoneText: _waInPhoneText(k), linked: !!(l && l.customerId),
+             customerName: l ? String(l.customerName || l.customerId || '') : '',
+             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, ignored: !l && !!s.ignored };
+  })
+    .filter(r => showAll || !r.ignored)
+    .sort((a, b) => (a.linked - b.linked) || (a.ignored - b.ignored) || (b.lastAt - a.lastAt));
+}
+function lgWaInSendersAttention(seen, linked) {
+  return lgWaInSenderRows(seen, linked, false).filter(r => !r.linked).length;
+}
+function lgWaInSenderHtml(r) {
+  const chip = r.linked ? 'מקושר' : r.ignored ? 'מוסתר' : 'מספר חדש';
+  const head = `<div class="wain-l1"><span class="wain-chip">${chip}</span>
+          <span class="wain-client" dir="ltr">${_waInEsc(r.phoneText)}</span>
+          <span class="wain-when">${_waInEsc(_waInWhen(r.lastAt))}</span></div>`;
+  let body;
+  if (r.linked) {
+    body = `<div class="wain-reason">לקוח: <b>${_waInEsc(r.customerName)}</b> — כל הודעה ממנו נכנסת לתור, וההודעות על ההזמנות חוזרות אליו.</div>
+          <div class="wain-acts"><button class="wain-btn" data-sact="unlink">נתק</button></div>`;
+  } else if (r.ignored) {
+    body = `<div class="wain-reason">המספר הוסתר. הודעות ממנו לא נקלטות.</div>
+          <div class="wain-acts"><button class="wain-btn" data-sact="unignore">בטל התעלמות</button></div>`;
+  } else {
+    body = `<div class="wain-reason">${r.count || 1} הודעות נשלחו מהמספר ולא נקלטו. קשר אותו ללקוח, וההודעות הבאות ייכנסו לתור.</div>
+          <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח למספר" autocomplete="off">
+            <button class="wain-btn wain-primary" data-sact="link">קשר ללקוח</button>
+            <button class="wain-btn" data-sact="ignore">התעלם</button></div>
+          <div class="wain-acc-list" hidden></div>`;
+  }
+  return `<div class="wain-row ${r.linked ? 'wain-ok' : r.ignored ? '' : 'wain-warn'}" data-skey="${_waInEsc(r.key)}">
+        ${head}
+        ${body}
+      </div>`;
+}
+
 //  מכאן והלאה רק בדפדפן. ב-Node (בדיקות) אין document, ולכן לא רץ כלום.
 if (typeof document !== 'undefined') (function () {
   // שורות לכל ערוץ בנפרד — כל מאזין מחליף רק את שלו; rows = שניהם יחד
@@ -295,10 +344,41 @@ if (typeof document !== 'undefined') (function () {
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
 
+  // ─── מספרים פרטיים (בן, 26/10) — כמו קבוצות, למספר בודד ──────────────
+  let sendersSeen = {}, sendersLinked = {};
+  function sendersBox() {
+    let box = $('waInSenders');
+    if (!box) {
+      const list = $('waInList'); if (!list) return null;
+      box = document.createElement('div'); box.id = 'waInSenders';
+      list.parentNode.insertBefore(box, list);
+    }
+    return box;
+  }
+  function renderSenders() {
+    const box = sendersBox(); if (!box) return;
+    if (box.contains(document.activeElement) && document.activeElement.classList.contains('wain-acc')) return;
+    const r = lgWaInSenderRows(sendersSeen, sendersLinked, showAll);
+    box.innerHTML = r.length ? `<div class="wain-gtitle">מספרים פרטיים</div>` + r.map(lgWaInSenderHtml).join('') : '';
+  }
+  async function senderAct(key, action, input) {
+    let customerId = '';
+    if (action === 'link') {
+      const v = String((input && input.value) || '');
+      customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
+      if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
+    } else if (action === 'unlink' && !confirm('לנתק את המספר? הודעות חדשות ממנו לא ייכנסו לתור.')) return;
+    const name = { link: 'link-sender', unlink: 'unlink-sender', ignore: 'ignore-sender', unignore: 'unignore-sender' }[action];
+    if (!name) return;
+    const r = await post({ action: name, key, customerId });
+    if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
+  }
+
   function badge() {
     const c = lgWaInCounts(rows);
     // קבוצה חדשה שלא קושרה — גם היא דורשת טיפול
     c.attention += Object.keys(groupsSeen).filter(k => !groupsLinked[k]).length;
+    c.attention += lgWaInSendersAttention(sendersSeen, sendersLinked);
     const a = $('waInBadgeA'), p = $('waInBadgeP');
     if (a) { a.textContent = '⚠ ' + c.attention; a.hidden = !c.attention; }
     if (p) { p.textContent = '⏳ ' + c.inProgress; p.hidden = !c.inProgress; }
@@ -307,6 +387,7 @@ if (typeof document !== 'undefined') (function () {
   function render() {
     badge();
     renderGroups();
+    renderSenders();
     const list = $('waInList'); if (!list) return;
     const shown = rows.filter(x => showAll || x.needsAttention || x.inProgress);
     list.innerHTML = shown.length ? shown.map(lgWaInRowHtml).join('')
@@ -399,7 +480,7 @@ if (typeof document !== 'undefined') (function () {
       }));
       panel.addEventListener('click', ev => {
         const opt = ev.target.closest('.wain-acc-opt'); if (!opt) return;
-        const row = opt.closest('[data-gkey]'); const inp = row && row.querySelector('.wain-acc');
+        const row = opt.closest('[data-gkey],[data-skey]'); const inp = row && row.querySelector('.wain-acc');
         if (!inp) return;
         inp.value = opt.dataset.name + ' · ' + opt.dataset.acc;
         inp.dataset.acc = opt.dataset.acc;
@@ -410,6 +491,11 @@ if (typeof document !== 'undefined') (function () {
       const b = ev.target.closest('button[data-gact]'); if (!b) return;
       const row = b.closest('[data-gkey]'); if (!row) return;
       groupAct(row.dataset.gkey, b.dataset.gact, row.querySelector('.wain-acc'));
+    });
+    if (panel) panel.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-sact]'); if (!b) return;
+      const row = b.closest('[data-skey]'); if (!row) return;
+      senderAct(row.dataset.skey, b.dataset.sact, row.querySelector('.wain-acc'));
     });
     const list = $('waInList');
     if (list) list.addEventListener('click', ev => {
@@ -434,6 +520,10 @@ if (typeof document !== 'undefined') (function () {
         e => console.warn('groupsSeen listen:', e && e.message));
       _lgDb.ref('waGroups').on('value', sn => { groupsLinked = sn.val() || {}; render(); },
         e => console.warn('waGroups listen:', e && e.message));
+      _lgDb.ref('waMeta/sendersSeen').on('value', sn => { sendersSeen = sn.val() || {}; render(); },
+        e => console.warn('sendersSeen listen:', e && e.message));
+      _lgDb.ref('waSenders').on('value', sn => { sendersLinked = sn.val() || {}; render(); },
+        e => console.warn('waSenders listen:', e && e.message));
       // כל 2 דקות כל עוד הדף פתוח — ורק אם באמת יש מה לעבד
       if (!timer) timer = setInterval(() => {
         ['whatsapp', 'email'].forEach(ch => { if (byCh[ch].some(x => x.inProgress)) drain(ch); });
