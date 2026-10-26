@@ -264,6 +264,27 @@ function lgWaInSenderHtml(r) {
       </div>`;
 }
 
+// ─── הזמנות מטקסט חופשי (בן, 26/10) ─────────────────────────────────────
+//  הלקוחות שהודעה כמו "מראה 5 70 על 120" מהם פותחת הזמנה לבד. הכתיבה דרך
+//  /api/wa-inbound-drain (text-customer-add/remove) — לא ישירות.
+function lgWaInTextCustomersHtml(map) {
+  const m = map || {};
+  const rows = Object.keys(m).sort((a, b) => String(m[a].customerName || a).localeCompare(String(m[b].customerName || b), 'he'))
+    .map(k => `<div class="wain-row wain-ok" data-tkey="${_waInEsc(k)}">
+        <div class="wain-l1"><span class="wain-client">${_waInEsc(m[k].customerName || k)}</span>
+          <span class="wain-when" dir="ltr">${_waInEsc(k)}</span></div>
+        <div class="wain-acts"><button class="wain-btn" data-tact="remove">הסר</button></div>
+      </div>`).join('');
+  return `<div class="wain-gtitle">הזמנות מטקסט חופשי</div>
+      <div class="wain-reason">לקוחות שמזמינים בהודעה כמו "מראה 5 70 על 120" — ההזמנה תיפתח לבד בתור.</div>
+      ${rows}
+      <div class="wain-row" data-tkey="">
+        <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח להזמנות מטקסט" autocomplete="off">
+          <button class="wain-btn wain-primary" data-tact="add">הוסף</button></div>
+        <div class="wain-acc-list" hidden></div>
+      </div>`;
+}
+
 //  מכאן והלאה רק בדפדפן. ב-Node (בדיקות) אין document, ולכן לא רץ כלום.
 if (typeof document !== 'undefined') (function () {
   // שורות לכל ערוץ בנפרד — כל מאזין מחליף רק את שלו; rows = שניהם יחד
@@ -374,6 +395,33 @@ if (typeof document !== 'undefined') (function () {
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
 
+  // ─── הזמנות מטקסט חופשי (בן, 26/10) ───────────────────────────────────
+  let textCustomers = {};
+  function textBox() {
+    let box = $('waInTextCustomers');
+    if (!box) {
+      const list = $('waInList'); if (!list) return null;
+      box = document.createElement('div'); box.id = 'waInTextCustomers';
+      list.parentNode.insertBefore(box, list);
+    }
+    return box;
+  }
+  function renderTextCustomers() {
+    const box = textBox(); if (!box) return;
+    if (box.contains(document.activeElement) && document.activeElement.classList.contains('wain-acc')) return;
+    box.innerHTML = lgWaInTextCustomersHtml(textCustomers);
+  }
+  async function textAct(key, action, input) {
+    let customerId = key;
+    if (action === 'add') {
+      const v = String((input && input.value) || '');
+      customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
+      if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
+    } else if (!confirm('להפסיק לפתוח הזמנות מטקסט ללקוח הזה?')) return;
+    const r = await post({ action: action === 'add' ? 'text-customer-add' : 'text-customer-remove', customerId });
+    if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
+  }
+
   function badge() {
     const c = lgWaInCounts(rows);
     // קבוצה חדשה שלא קושרה — גם היא דורשת טיפול
@@ -388,6 +436,7 @@ if (typeof document !== 'undefined') (function () {
     badge();
     renderGroups();
     renderSenders();
+    renderTextCustomers();
     const list = $('waInList'); if (!list) return;
     const shown = rows.filter(x => showAll || x.needsAttention || x.inProgress);
     list.innerHTML = shown.length ? shown.map(lgWaInRowHtml).join('')
@@ -480,7 +529,7 @@ if (typeof document !== 'undefined') (function () {
       }));
       panel.addEventListener('click', ev => {
         const opt = ev.target.closest('.wain-acc-opt'); if (!opt) return;
-        const row = opt.closest('[data-gkey],[data-skey]'); const inp = row && row.querySelector('.wain-acc');
+        const row = opt.closest('[data-gkey],[data-skey],[data-tkey]'); const inp = row && row.querySelector('.wain-acc');
         if (!inp) return;
         inp.value = opt.dataset.name + ' · ' + opt.dataset.acc;
         inp.dataset.acc = opt.dataset.acc;
@@ -496,6 +545,11 @@ if (typeof document !== 'undefined') (function () {
       const b = ev.target.closest('button[data-sact]'); if (!b) return;
       const row = b.closest('[data-skey]'); if (!row) return;
       senderAct(row.dataset.skey, b.dataset.sact, row.querySelector('.wain-acc'));
+    });
+    if (panel) panel.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-tact]'); if (!b) return;
+      const row = b.closest('[data-tkey]'); if (!row) return;
+      textAct(row.dataset.tkey, b.dataset.tact, row.querySelector('.wain-acc'));
     });
     const list = $('waInList');
     if (list) list.addEventListener('click', ev => {
@@ -524,6 +578,8 @@ if (typeof document !== 'undefined') (function () {
         e => console.warn('sendersSeen listen:', e && e.message));
       _lgDb.ref('waSenders').on('value', sn => { sendersLinked = sn.val() || {}; render(); },
         e => console.warn('waSenders listen:', e && e.message));
+      _lgDb.ref('waTextCustomers').on('value', sn => { textCustomers = sn.val() || {}; render(); },
+        e => console.warn('waTextCustomers listen:', e && e.message));
       // כל 2 דקות כל עוד הדף פתוח — ורק אם באמת יש מה לעבד
       if (!timer) timer = setInterval(() => {
         ['whatsapp', 'email'].forEach(ch => { if (byCh[ch].some(x => x.inProgress)) drain(ch); });

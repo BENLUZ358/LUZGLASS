@@ -467,6 +467,20 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('N7 actions go through the admin endpoint', /'link-sender'/.test(P) && /'unignore-sender'/.test(P), true);
   }
 
+// ═══ O. הזמנות מטקסט חופשי (בן, 26/10) ════════════════════════════════
+  {
+    const h = ctx.lgWaInTextCustomersHtml({ '888': { customerName: 'מראות <b>כהן</b>' }, '14201': { customerName: 'המקום לאמבט' } });
+    check('O1 a row per customer with a remove button', [/data-tkey="888"/.test(h), /data-tkey="14201"/.test(h), (h.match(/data-tact="remove"/g) || []).length], [true, true, 2]);
+    check('O1 names are escaped', /<b>כהן/.test(h), false);
+    check('O1 the add picker is there', [/data-tact="add"/.test(h), /class="wain-acc"/.test(h)], [true, true]);
+    const e = ctx.lgWaInTextCustomersHtml({});
+    check('O2 an empty list still explains and offers add', [/ההזמנה תיפתח לבד בתור/.test(e), /data-tact="add"/.test(e)], [true, true]);
+    const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
+    check('O3 the panel listens to waTextCustomers and never writes it',
+          [/ref\(\s*['"`]waTextCustomers['"`]\s*\)/.test(P), /ref\(\s*['"`]waTextCustomers[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P)], [true, false]);
+    check('O3 actions go through the admin endpoint', /'text-customer-add'/.test(P) && /'text-customer-remove'/.test(P), true);
+  }
+
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll WhatsApp intake-panel checks passed.');
 })().catch(e => { console.error('FAIL  crashed:', e && e.stack || e); process.exit(1); });

@@ -155,6 +155,24 @@ const order = (db, id) => ((db._data.orders || {})['wa_' + id + '_1']) || {};
   check('9g text in a group is still not read', [p.action, p.reason], ['ignore', 'not a sketch']);
 }
 
+// ═══ 10. הגדרת לקוח — רק דרך ה-endpoint האדמיני ══════════════════════
+{
+  const adm = require(path.join(ROOT, 'api', 'wa-inbound-drain.js'));
+  const db = seed();
+  const act = b => adm.handleAdmin({ channel: 'whatsapp', ...b }, { db, by: '0520000000', now: NOW + 9 });
+  const r = await act({ action: 'text-customer-add', customerId: '888' });
+  check('10a add writes the flag with the card name', [r.ok, db._data.waTextCustomers['888']],
+        [true, { customerName: 'מראות כהן', addedAt: NOW + 9, addedBy: '0520000000' }]);
+  check('10b add refuses an unknown card', (await act({ action: 'text-customer-add', customerId: '777' })).code, 'unknown-customer');
+  check('10b and a malformed key', (await act({ action: 'text-customer-add', customerId: '../x' })).code, 'unknown-customer');
+  const d = await act({ action: 'text-customer-remove', customerId: '888' });
+  check('10c remove deletes it', [d.ok, (db._data.waTextCustomers || {})['888']], [true, undefined]);
+  check('10d removing again: not enabled', (await act({ action: 'text-customer-remove', customerId: '888' })).code, 'not-enabled');
+  const rules = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8')).rules;
+  check('10e rules: admin read only, browser cannot write',
+        [rules.waTextCustomers && rules.waTextCustomers['.read'], rules.waTextCustomers && rules.waTextCustomers['.write']], [rules.waGroups['.read'], false]);
+}
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });
