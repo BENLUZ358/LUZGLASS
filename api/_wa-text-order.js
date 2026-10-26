@@ -118,4 +118,4 @@ function lgWaTextSvg(text, meta) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
-module.exports = { lgWaTextParse, lgWaTextIsOrder, lgWaTextSvg, lgWaTextItems, LG_WA_TEXT_SKU_RULES };
+module.exports = { lgWaTextParse, lgWaTextIsOrder, lgWaTextSvg, lgWaTextItems, LG_WA_TEXT_SKU_RULES, _norm };
