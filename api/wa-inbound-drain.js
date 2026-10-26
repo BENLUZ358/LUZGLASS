@@ -173,7 +173,7 @@ async function handleAdmin(body, deps) {
   if (chName === 'whatsapp' && (action === 'text-customer-add' || action === 'text-customer-remove')) {
     const db = deps.db, t = deps.now || Date.now(), by = String(deps.by || '');
     const cid = String(b.customerId || '').trim();
-    const ref = 'waTextCustomers/' + cid;
+    const ref = 'waMeta/textCustomers/' + cid;
     if (action === 'text-customer-remove') {
       if (!cid || !_keyOk(cid) || !(await db.ref(ref).once('value')).val()) return { ok: false, code: 'not-enabled', message: 'הלקוח לא מוגדר' };
       await db.ref(ref).set(null);

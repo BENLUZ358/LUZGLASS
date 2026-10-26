@@ -96,8 +96,13 @@ check('R2 questions, prices, stock and cancellations are not orders',
       ['כמה עולה מראה 80 על 120?', 'יש לכם מראה 80 על 120 במלאי', 'המראה 80 על 120 שהזמנתי מוכנה', 'מראה 80 על 120 בוטל',
        'שלום, אני יכול לבוא ב 10 30 לקחת את המראה?', 'בקשר לזכוכית שהזמנתי, 10 בבוקר 2 משטחים', 'מה המחיר של מראה 80 120'].map(ft.lgWaFreeTextIsOrder),
       [false, false, false, false, false, false, false]);
-check('R3 metres, decimals and tiny sizes are not read as cm',
-      ['מראה 2 על 3 מטר', 'מראה 1.20 על 0.80', 'מראה 0 0', 'מראה 70 5'].map(ft.lgWaFreeTextIsOrder), [false, false, false, false]);
+// בן, 26/10: "שאלות לא פותחות הזמנה — לא": בקשה בצורת שאלה היא הזמנה
+check('R2b an order phrased as a question opens', rows('תוכל להכין לי מראה 80 על 120?'), [[800, 1200, 1, '5MIRM']]);
+// בן, 26/10: "מראה 2 על 3 זה מטר" — מספרים קטנים (עד 4) או המילה מטר = מטרים
+check('R3 small numbers are metres', [rows('מראה 2 על 3'), rows('מראה 2 על 3 מטר'), rows('מראה 1.20 על 0.80'), rows('מראה 5 1.5 2')],
+      [[[2000, 3000, 1, '5MIRM']], [[2000, 3000, 1, '5MIRM']], [[1200, 800, 1, '5MIRM']], [[1500, 2000, 1, '5MIRM']]]);
+check('R3 mixed metres/cm, zero or a tiny cm size is not guessed',
+      ['מראה 1.5 80', 'מראה 0 0', 'מראה 70 5'].map(ft.lgWaFreeTextIsOrder), [false, false, false]);
 check('R4 a door frame (משקוף) is not glass', ft.lgWaFreeTextIsOrder('משקוף 80 200'), false);
 check('R4 but "זכוכית שקופה" and "לזכוכית" still are', [ft.lgWaFreeTextIsOrder('זכוכית שקופה 80 200'), ft.lgWaFreeTextIsOrder('לזכוכית 8 שקוף 80 200')], [true, true]);
 check('R5 a wedding is not "cut"', rows('מראה לחתונה 70 120'), [[700, 1200, 1, '5MIRM']]);
@@ -127,7 +132,7 @@ const seed = extra => fakeDb({ meta: { orderCounter: 1200 },
   users: { '0501234567': { name: 'מראות כהן', businessName: 'מראות כהן', customerId: '888', role: 'client' } },
   hashavshevetAccounts: { '888': { key: '888', name: 'מראות כהן', phone: '0501234567' } },
   skuCatalog: CAT, ...(extra || {}) });
-const ON = { waTextCustomers: { '888': { customerName: 'מראות כהן', addedAt: NOW - 1, addedBy: 'ben' } } };
+const ON = { waMeta: { textCustomers: { '888': { customerName: 'מראות כהן', addedAt: NOW - 1, addedBy: 'ben' } } } };
 const order = (db, id) => ((db._data.orders || {})['wa_' + id + '_1']) || {};
 {
   const db = seed(ON);
@@ -185,16 +190,16 @@ const order = (db, id) => ((db._data.orders || {})['wa_' + id + '_1']) || {};
   const db = seed();
   const act = b => adm.handleAdmin({ channel: 'whatsapp', ...b }, { db, by: '0520000000', now: NOW + 9 });
   const r = await act({ action: 'text-customer-add', customerId: '888' });
-  check('10a add writes the flag with the card name', [r.ok, db._data.waTextCustomers['888']],
+  check('10a add writes the flag with the card name', [r.ok, db._data.waMeta.textCustomers['888']],
         [true, { customerName: 'מראות כהן', addedAt: NOW + 9, addedBy: '0520000000' }]);
   check('10b add refuses an unknown card', (await act({ action: 'text-customer-add', customerId: '777' })).code, 'unknown-customer');
   check('10b and a malformed key', (await act({ action: 'text-customer-add', customerId: '../x' })).code, 'unknown-customer');
   const d = await act({ action: 'text-customer-remove', customerId: '888' });
-  check('10c remove deletes it', [d.ok, (db._data.waTextCustomers || {})['888']], [true, undefined]);
+  check('10c remove deletes it', [d.ok, ((db._data.waMeta || {}).textCustomers || {})['888']], [true, undefined]);
   check('10d removing again: not enabled', (await act({ action: 'text-customer-remove', customerId: '888' })).code, 'not-enabled');
   const rules = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8')).rules;
-  check('10e rules: admin read only, browser cannot write',
-        [rules.waTextCustomers && rules.waTextCustomers['.read'], rules.waTextCustomers && rules.waTextCustomers['.write']], [rules.waGroups['.read'], false]);
+  // בן, 26/10: "למה צריך עדכון הרשאות?" — נשמר תחת waMeta, שכבר קריא רק למנהל ונעול לכתיבה. אין צומת חדש בחוקים.
+  check('10e stored under waMeta: no new rules needed', [rules.waTextCustomers, rules.waMeta['.read'] === rules.waGroups['.read'], rules.waMeta['.write']], [undefined, true, false]);
 }
 
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
