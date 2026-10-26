@@ -86,12 +86,12 @@ async function handleCustomerInbound(body, deps) {
     }
   }
 
-  // טקסט חופשי — רק אצל לקוח שבן הגדיר (waTextCustomers, נכתב רק מה-endpoint האדמיני)
+  // טקסט חופשי — רק אצל לקוח שבן הגדיר (waMeta/textCustomers, נכתב רק מה-endpoint האדמיני)
   if (p.entry.textMode === 'free') {
     let on = false;
     try {
       const who = await lgClientFromWaSender(deps.db, p.entry.chatId);
-      on = !!who.customerId && !!(await deps.db.ref('waTextCustomers/' + who.customerId).once('value')).val();
+      on = !!who.customerId && !!(await deps.db.ref('waMeta/textCustomers/' + who.customerId).once('value')).val();
     } catch (e) { console.error('wa-inbound: text flag lookup failed', e && e.name); return { status: 500, body: { error: 'lookup failed' } }; }
     if (!on) return { status: 200, body: { ok: true, ignored: 'text not enabled' } };
   }

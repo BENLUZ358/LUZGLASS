@@ -578,8 +578,8 @@ if (typeof document !== 'undefined') (function () {
         e => console.warn('sendersSeen listen:', e && e.message));
       _lgDb.ref('waSenders').on('value', sn => { sendersLinked = sn.val() || {}; render(); },
         e => console.warn('waSenders listen:', e && e.message));
-      _lgDb.ref('waTextCustomers').on('value', sn => { textCustomers = sn.val() || {}; render(); },
-        e => console.warn('waTextCustomers listen:', e && e.message));
+      _lgDb.ref('waMeta/textCustomers').on('value', sn => { textCustomers = sn.val() || {}; render(); },
+        e => console.warn('textCustomers listen:', e && e.message));
       // כל 2 דקות כל עוד הדף פתוח — ורק אם באמת יש מה לעבד
       if (!timer) timer = setInterval(() => {
         ['whatsapp', 'email'].forEach(ch => { if (byCh[ch].some(x => x.inProgress)) drain(ch); });

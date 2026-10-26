@@ -25,8 +25,11 @@ const GLASS_COLORS = ['שקוף', 'קליר', 'חלבי', 'אסיד', 'ברונ�
 // מילה שלמה, עם תחילית אחת לכל היותר — "משקוף" (מסגרת דלת) אינו זכוכית
 const GLASS_WORD = /(?<![א-ת])[והבל]?(?:זכוכית|זכוכיות|שקוף|שקופה|שקופות|קליר|חלבי|חלבית|אסיד)(?![א-ת])/;
 const CUT_WORD = /(?<![א-ת])[וה]?(?:חתוך|חתוכה|חתוכות|חתוכים)(?![א-ת])/;   // לא "חתונה", לא "תחתון"
-// שאלה, מחיר, מלאי, ביטול או הזמנה קיימת — שיחה על הזמנה, לא הזמנה חדשה (סקירה, 26/10)
-const NOT_ORDER = /\?|כמה עולה|מחיר|במלאי|בוטל|לבטל|ביטול|הזמנתי|מוכנה|מוכן|מטר/;
+// מחיר, מלאי, ביטול, איסוף או הזמנה קיימת — שיחה על הזמנה, לא הזמנה חדשה (סקירה, 26/10).
+// סימן שאלה לבד לא חוסם: "תוכל להכין לי מראה 80 על 120?" היא הזמנה (בן, 26/10).
+const NOT_ORDER = /כמה עולה|מחיר|במלאי|בוטל|לבטל|ביטול|הזמנתי|מוכנה|מוכן|לקחת|לאסוף|איסוף/;
+// "מראה 2 על 3" = מטרים (בן, 26/10): המילה מטר, או שתי מידות עד 4
+const MAX_M = 4;
 const NUM = /\d+(?:\.\d+)?/g;
 const UNIT_MM = /(\d+(?:\.\d+)?)\s*מ["']{0,2}מ(?![א-ת])/;   // 5 מ"מ · 5 מ'מ · 5 ממ (לא "ממש")
 
@@ -85,8 +88,11 @@ function lgWaFreeTextParse(text) {
     }
     if (p.dims && cur) {
       const [w, h] = p.dims;
-      if (w > MAX_CM || h > MAX_CM || w < MIN_CM || h < MIN_CM || p.qty > MAX_QTY) { unparsed.push(l); continue; }
-      cur.lines.push({ w: Math.round(w * 10), h: Math.round(h * 10), qty: p.qty });
+      const metres = /מטר/.test(l) || (w <= MAX_M && h <= MAX_M);
+      const bad = metres ? (w <= 0 || h <= 0 || w > MAX_M || h > MAX_M) : (w > MAX_CM || h > MAX_CM || w < MIN_CM || h < MIN_CM);
+      if (bad || p.qty > MAX_QTY) { unparsed.push(l); continue; }
+      const k = metres ? 1000 : 10;
+      cur.lines.push({ w: Math.round(w * k), h: Math.round(h * k), qty: p.qty });
       continue;
     }
     if (p.count >= 2) unparsed.push(l);

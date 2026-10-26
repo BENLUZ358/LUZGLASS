@@ -476,8 +476,8 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     const e = ctx.lgWaInTextCustomersHtml({});
     check('O2 an empty list still explains and offers add', [/ההזמנה תיפתח לבד בתור/.test(e), /data-tact="add"/.test(e)], [true, true]);
     const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
-    check('O3 the panel listens to waTextCustomers and never writes it',
-          [/ref\(\s*['"`]waTextCustomers['"`]\s*\)/.test(P), /ref\(\s*['"`]waTextCustomers[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P)], [true, false]);
+    check('O3 the panel listens to waMeta/textCustomers and never writes it',
+          [/ref\(\s*['"`]waMeta\/textCustomers['"`]\s*\)/.test(P), /ref\(\s*['"`]waMeta\/textCustomers[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P)], [true, false]);
     check('O3 actions go through the admin endpoint', /'text-customer-add'/.test(P) && /'text-customer-remove'/.test(P), true);
   }
 
