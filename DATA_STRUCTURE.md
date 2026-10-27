@@ -209,3 +209,11 @@ String(id)
 `invoicePdfBlobs/<key>` — `{ original, copy }` base64. לא קריא מהדפדפן.
 
 Endpoint: `POST /api/invoice-pdf-upload` (rewrite ל-`wa-inbound?invoice=upload`), משתנה סביבה `INVOICE_UPLOAD_TOKEN`.
+
+### עדכון: שני סדרי עבודה + בקרה (DB-00004)
+
+- `state` נוסף: `printed` — ההדפסה הגיעה לפני "החשבונית הופקה". נשמרים `docNumber`, `date`, `originalHash`, `text` (עד 3000 תווים, לשיוך) והקבצים ב-`invoicePdfBlobs`. כשנרשמת חשבונית עם אותו מספר מסמך ושמות סקיצה זהים, `register` מקדם אותה ל-`ready` ומוחק את ה-`printed`.
+- `orders/<id>/invoicePdfKey` — נכתב על כל הזמנה של חשבונית `ready` (שרת בלבד; חסום ביצירה ע"י לקוח בחוקים). הפורטל קורא רק אותו, לא את `invoicePdf`.
+- Endpoint: `POST /api/invoice-ctl` (rewrite ל-`wa-inbound?invoice=ctl`), גוף `{action}`:
+  `register` (אדמין, נקרא מ-`lgMarkInvoiced`), `list` (אדמין), `pdf` (אדמין, מקור בלבד), `customerPdf` (לקוח מחובר; כל ההזמנות חייבות להיות עם `clientPhone` שלו; מקור בלבד, לא `simulated`).
+- ההעתק לעולם לא נשלח ללקוח ולא לדפדפן.

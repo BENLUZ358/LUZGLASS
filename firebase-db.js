@@ -1001,6 +1001,8 @@ function lgNormalizeOrder(o) {
     // response באורך 4000 תווים ו-requestSample, וזה נכפל בכל הזמנה בצומת
     // שכל דף מוריד במלואו. ר' scripts/test-sketch-storage.js.
     // מי שצריך את הגולמי קורא אותו נקודתית מ-orders/<id>/hashavshevetInvoice.
+    // DB-00004: קישור ל-PDF המקור של החשבונית (נכתב רק מהשרת) ומספר המסמך שנרשם בתחנה.
+    invoicePdfKey: o.invoicePdfKey || null,
     invoice:       o.hashavshevetInvoice ? {
       reference:  o.hashavshevetInvoice.reference || '',
       total:      Number(o.hashavshevetInvoice.total) || 0,
@@ -1411,7 +1413,18 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
     update[o.id + '/updatedAt']   = now;
   });
   await _lgDb.ref('orders').update(update);
-  return { docNumber: p.docNumber, count: list.length };
+  // DB-00004: רישום ל-PDF של החשבונית (api/_invoice-ctl.js). לא חוסם ולא נכשל:
+  // ההזמנות כבר סומנו, ו"נרשם" בלבד מראה אם הרישום לשרת הצליח.
+  let pdf = 'skipped';
+  if (typeof _lgAuthPost === 'function') {
+    try {
+      const res = await _lgAuthPost('/api/invoice-ctl',
+        { action: 'register', orderIds: list.map(o => o.id), docNumber: p.docNumber });
+      const j = await res.json().catch(() => null);
+      pdf = res.ok && j && j.ok ? (j.state || 'awaiting') : 'failed';
+    } catch (_) { pdf = 'failed'; }
+  }
+  return { docNumber: p.docNumber, count: list.length, pdf };
 }
 
 // ─── שוטף 30 ─────────────────────────────────────────────────────────────

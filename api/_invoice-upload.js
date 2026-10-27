@@ -64,31 +64,50 @@ async function handleUpload(req, deps) {
   const dup = (await db.ref('invoicePdf').orderByChild('originalHash').equalTo(hash).limitToFirst(1).once('value')).val();
   if (dup) {
     const k = Object.keys(dup)[0];
+    //  הודפסה אבל עדיין לא נרשמה ב"החשבונית הופקה" — הכלי ינסה שוב מאוחר יותר
+    if (dup[k].state !== 'ready') return { status: 202, body: { ok: false, code: 'printed-waiting', key: k } };
     return { status: 200, body: { ok: true, duplicate: true, key: k, docNumber: dup[k].docNumber,
       date: dup[k].date, archivePath: dup[k].archivePath, sendAfter: dup[k].sendAfter } };
   }
 
   const pend = (await db.ref('invoicePdf').orderByChild('state').equalTo('awaiting').limitToFirst(200).once('value')).val() || {};
-  const pick = M.pickPending(oText, pend);
-  if (!pick.ok) return _fail(422, pick.code);
-
-  const rec = pend[pick.key];
   const docNumber = M.extractDocNumber(oText);
   const date = M.extractDate(oText);
+  //  רשומה שנרשמה עם מספר מסמך חייבת להתאים אליו; ללא מספר (הפקה מה-API) — לפי הסקיצות בלבד
+  const cands = {};
+  Object.keys(pend).forEach(k => { if (!pend[k].docNumber || pend[k].docNumber === docNumber) cands[k] = pend[k]; });
+  const pick = M.pickPending(oText, cands);
+  if (!pick.ok) {
+    //  מצב א׳: ההדפסה קדמה ל"החשבונית הופקה". שומרים אותה; register ישייך אליה.
+    if (pick.code === 'no-match' && docNumber && date) {
+      const pk = 'p' + hash.slice(0, 18);
+      await db.ref('invoicePdf/' + pk).set({ state: 'printed', docNumber, date, originalHash: hash,
+        text: String(oText).slice(0, 3000), createdAt: now });
+      await db.ref('invoicePdfBlobs/' + pk).set({
+        original: orig.toString('base64'), copy: copy.toString('base64') });
+      return { status: 202, body: { ok: false, code: 'printed-waiting', key: pk } };
+    }
+    return _fail(422, pick.code);
+  }
+
+  const rec = pend[pick.key];
   const archivePath = S.lgInvoiceArchivePath(date, rec.client, docNumber);
   if (!docNumber || !date || !archivePath) return _fail(422, 'no-docnumber-or-date');
 
   //  כתיבה אטומית: רק אם עדיין ממתינה (שתי העלאות מקבילות)
   const tx = await db.ref('invoicePdf/' + pick.key).transaction(cur => {
-    if (!cur || cur.state !== 'awaiting') return;
+    //  הקריאה הראשונה מגיעה עם null (מטמון ריק); החזרת undefined שם מבטלת את הכול (ר' _fake-db)
+    if (cur === null) return cur;
+    if (cur.state !== 'awaiting') return;
     return { ...cur, state: 'ready', docNumber, date, archivePath, originalHash: hash,
       uploadedAt: now, sendAfter: S.lgInvoiceSendAfter(now),
       sendKey: S.lgInvoiceSendKey(cur.clientPhone || cur.client, docNumber) };
   });
-  if (!tx.committed) return _fail(409, 'already-processed');
+  if (!tx.committed || !tx.snapshot.val() || tx.snapshot.val().state !== 'ready') return _fail(409, 'already-processed');
   await db.ref('invoicePdfBlobs/' + pick.key).set({
     original: orig.toString('base64'), copy: copy.toString('base64') });
   const r = tx.snapshot.val();
+  await require('./_invoice-ctl').lgInvoiceLinkOrders(db, pick.key, r.orderIds || []);
   return { status: 200, body: { ok: true, key: pick.key, docNumber, date, archivePath, sendAfter: r.sendAfter } };
 }
 

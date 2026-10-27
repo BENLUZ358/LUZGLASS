@@ -250,6 +250,7 @@ html,body{height:100%;overflow:hidden;}
     <a class="tb-btn" id="btnHome" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
     <button class="tb-btn" id="btnBack" type="button" aria-label="חזרה"><span data-icon="arrow-right"></span><span>חזרה</span></button>
     <div class="tb-title" id="tbTitle">תחנת חשבוניות<small>בודקים פריטים מול סקיצה, ורק אז מפיקים חשבונית בחשבשבת</small></div>
+    <button class="tb-btn" id="btnArchive" type="button"><span data-icon="search"></span><span>ארכיון חשבוניות</span></button>
     <button class="tb-btn" id="btnCustomers" type="button" aria-controls="pCustomers" aria-expanded="false"><span data-icon="users"></span><span>לקוחות</span></button>
   </header>
 
@@ -715,6 +716,7 @@ function openInvoiceModal() {
       const r = await lgMarkInvoiced(sel, input.value, ORDERS);
       closeModal();
       toast(`נרשם: חשבונית ${r.docNumber} על ${nOrders(r.count)}`);
+      if (r.pdf === 'failed') toast('הרישום לארכיון ה־PDF נכשל. ההזמנות סומנו, אבל ההדפסה לא תשויך אוטומטית.', true);
     } catch (err) {
       field.classList.add('field-error'); msg.textContent = err.message;
       b.disabled = false; b.innerHTML = '<span data-icon="check"></span>החשבונית הופקה';
@@ -762,6 +764,89 @@ lgRequireAuthAsync('admin').then(async session => {
   listenAllOrders(list => { ORDERS = list; renderAll(); },
     () => { $('custList').innerHTML = `<div class="empty-state"><span data-icon="alert"></span><div class="empty-state-title">הטעינה נכשלה</div><div class="empty-state-msg">בדוק חיבור ורענן</div></div>`; });
 });
+// ═══ ארכיון חשבוניות (DB-00004) ═══════════════════════════════════════════════
+// חשבוניות שהופקו דרך מדפסת ה-PDF: לפי חודש ולקוח, חצי שנה אחורה כברירת מחדל.
+// הרשימה והקובץ באים מ-/api/invoice-ctl (אדמין בלבד). המקור בלבד נפתח כאן.
+const ARC_STATE = { ready: 'מוכן', awaiting: 'ממתין ל־PDF', printed: 'הודפסה, לא נרשמה' };
+let ARC = { rows: [], months: 6, q: '', open: null, err: '' };
+
+function arcMatch(r, q) {
+  if (!q) return true;
+  const hay = [r.client, r.docNumber, ...(r.orderNums || []), ...(r.sketchNames || [])].join(' ').toLowerCase();
+  return q.toLowerCase().split(/\s+/).every(w => hay.includes(w));
+}
+function arcRender() {
+  const body = $('arcBody'); if (!body) return;
+  if (ARC.err) { body.innerHTML = `<div class="empty-state-msg">${esc(ARC.err)}</div>`; return; }
+  const rows = ARC.rows.filter(r => arcMatch(r, ARC.q));
+  if (!rows.length) { body.innerHTML = '<div class="empty-state-msg">אין חשבוניות בטווח</div>'; return; }
+  const day = 24 * 3600 * 1000, now = Date.now();
+  const groups = {};
+  rows.forEach(r => {
+    const d = new Date(r.date ? r.date + 'T00:00:00' : r.createdAt);
+    const m = String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear();
+    ((groups[m] = groups[m] || {})[r.client || 'ללא שם'] = (groups[m][r.client || 'ללא שם'] || [])).push(r);
+  });
+  body.innerHTML = Object.keys(groups).map(m => `<h4 style="margin:12px 0 4px">${esc(m)}</h4>` +
+    Object.keys(groups[m]).map(c => `<div style="font-weight:700;margin:6px 0 2px">${esc(c)}</div>` +
+      groups[m][c].map(r => {
+        const late = r.state === 'awaiting' && now - r.createdAt > day;
+        const open = ARC.open === r.key;
+        return `<div data-arc="${esc(r.key)}" style="border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;margin:4px 0;cursor:pointer;${late ? 'border-color:var(--danger,#c0392b);' : ''}">
+          <div>חשבונית ${esc(r.docNumber || '—')} · ${esc(r.date || new Date(r.createdAt).toLocaleDateString('he-IL'))} · ${(r.orderIds || []).length} הזמנות · <b>${esc(ARC_STATE[r.state] || r.state)}</b>${late ? ' · מחכה מעל יום' : ''}${r.simulated ? ' · הרצה פיקטיבית' : ''}</div>
+          ${open ? `<div class="sub" style="margin-top:6px">הזמנות: ${esc((r.orderNums || []).join(', '))}<br>סקיצות: ${esc((r.sketchNames || []).join(', '))}<br>העתק בתיקייה השיתופית: ${esc(r.archivePath || 'עדיין לא נשמר')}</div>
+          ${r.state === 'ready' ? `<button class="btn btn-primary" type="button" data-arcpdf="${esc(r.key)}">פתח PDF (מקור)</button>` : ''}` : ''}
+        </div>`;
+      }).join('')).join('')).join('');
+}
+async function arcLoad() {
+  ARC.err = ''; $('arcBody').innerHTML = '<div class="loading">טוען…</div>';
+  try {
+    const since = new Date(); since.setMonth(since.getMonth() - ARC.months);
+    const res = await _lgAuthPost('/api/invoice-ctl', { action: 'list', sinceMs: since.getTime() });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || !j.ok) throw new Error('הטעינה נכשלה');
+    ARC.rows = j.rows;
+  } catch (e) { ARC.err = e.message || 'הטעינה נכשלה'; }
+  arcRender();
+}
+async function arcOpenPdf(key) {
+  const w = window.open('', '_blank');           // נפתח מיד, אחרת חוסם החלונות יחסום
+  try {
+    const res = await _lgAuthPost('/api/invoice-ctl', { action: 'pdf', key });
+    const j = await res.json().catch(() => null);
+    if (!res.ok || !j || !j.ok) throw new Error('הקובץ לא זמין');
+    const bin = atob(j.pdf), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+    if (w) w.location.href = url; else window.open(url, '_blank');
+  } catch (e) { if (w) w.close(); toast(e.message || 'הקובץ לא זמין', true); }
+}
+function openArchive() {
+  ARC = { rows: [], months: 6, q: '', open: null, err: '' };
+  openModal(`<div class="modal-in">
+    <h3 id="ovTitle">ארכיון חשבוניות</h3>
+    <div class="sub">חשבוניות שהופקו דרך מדפסת ה־PDF. חשבוניות ישנות מהקלסרים לא נכללות.</div>
+    <div class="modal-actions" style="margin-bottom:8px">
+      <button class="btn btn-ghost" type="button" data-arcm="1">חודש</button>
+      <button class="btn btn-ghost" type="button" data-arcm="3">3 חודשים</button>
+      <button class="btn btn-ghost" type="button" data-arcm="6">חצי שנה</button></div>
+    <label class="search"><span class="sr-only">חיפוש</span><input id="arcQ" type="search" placeholder="לקוח, מספר מסמך, מספר הזמנה או סקיצה" autocomplete="off"></label>
+    <div id="arcBody" style="max-height:55vh;overflow:auto;margin:8px 0"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" type="button" data-close>סגור</button></div></div>`);
+  $('arcQ').addEventListener('input', e => { ARC.q = e.target.value.trim(); arcRender(); });
+  $('ovBox').onclick = e => {
+    const m = e.target.closest('[data-arcm]');
+    if (m) { ARC.months = +m.dataset.arcm; arcLoad(); return; }
+    const p = e.target.closest('[data-arcpdf]');
+    if (p) { arcOpenPdf(p.dataset.arcpdf); return; }
+    const row = e.target.closest('[data-arc]');
+    if (row) { ARC.open = ARC.open === row.dataset.arc ? null : row.dataset.arc; arcRender(); }
+  };
+  arcLoad();
+}
+$('btnArchive').onclick = openArchive;
+
 matchMedia('(max-width:899px)').addEventListener('change', () => { if (!isNarrow()) openDrawer(false); renderAll(); });
 </script>
 </body>

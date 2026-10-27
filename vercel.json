@@ -1,7 +1,8 @@
 {
   "rewrites": [
     { "source": "/api/devbrain-relay", "destination": "/api/wa-inbound?devbrain=relay" },
-    { "source": "/api/invoice-pdf-upload", "destination": "/api/wa-inbound?invoice=upload" }
+    { "source": "/api/invoice-pdf-upload", "destination": "/api/wa-inbound?invoice=upload" },
+    { "source": "/api/invoice-ctl", "destination": "/api/wa-inbound?invoice=ctl" }
   ],
   "functions": {
     "api/sketch-reader.js": { "maxDuration": 60 },

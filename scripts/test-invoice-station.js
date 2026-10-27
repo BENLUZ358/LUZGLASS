@@ -163,7 +163,7 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
   /* marking invoiced: several orders, one number */
   writes.length = 0;
   const r = await ctx.lgMarkInvoiced([V1, V2], '4821', [V1, V2, P]);
-  check('two orders marked with one number', r, { docNumber: '4821', count: 2 });
+  check('two orders marked with one number', r, { docNumber: '4821', count: 2, pdf: 'skipped' });
   const u = writes[0].update;
   check('both get the same document number', [u['a/invoiceDone'].docNumber, u['b/invoiceDone'].docNumber], ['4821', '4821']);
   check('in one multi-path write, so it is all or nothing', writes.length, 1);

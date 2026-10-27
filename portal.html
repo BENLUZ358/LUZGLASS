@@ -559,6 +559,8 @@ function _subscribePortalOrders(clientPhone) {
         _rawTotal:  Number(o.total) || 0,
         _totalFinal:o.totalFinal   || 0,
         invoice:    o.invoice    || null,
+        invoicePdfKey: o.invoicePdfKey || null,
+        invoiceDone:   o.invoiceDone   || null,
         orderClient:o.orderClient || clientName,
         date:       o.date      || '',
         status:     o.status    || lgStageToStatus(o.stage || ''),
@@ -915,16 +917,49 @@ function cancelPick(id){
 // חשבונית אחת יכולה לכסות כמה הזמנות — hashavshevet-invoice.js שולח מסמך
 // אחד עם withOrders — ולכן מקבצים לפי האסמכתא במקום שורה לכל הזמנה.
 //
-// אין כאן כפתור הורדה. מסמך חשבונאי חייב לצאת מתוכנה מאושרת, ומשיכת
-// ה-PDF (plugin getPDF) עדיין לא אומתה מול מסמך אמיתי — ר'
-// api/hashavshevet-getpdf.js. כפתור שנכשל גרוע מכפתור שאינו קיים.
+// כפתור ה-PDF מופיע רק לחשבונית שהמקור שלה כבר הודפס ושויך (invoicePdfKey על
+// ההזמנות, DB-00004) — המקור בלבד, דרך /api/invoice-ctl. חשבונית בלי PDF לא
+// מקבלת כפתור: כפתור שנכשל גרוע מכפתור שאינו קיים. משיכת getPDF מחשבשבת
+// עדיין חסומה — ר' api/hashavshevet-getpdf.js.
 function renderInvoices(){
   const el = document.getElementById("invoicesList");
   if(!el) return;
 
+  // DB-00004: חשבוניות עם PDF מקור מוכן (מהדפסה). רשימה; לחיצה על שורה פותחת פרטים.
+  const byKey = {};
+  ORDERS.forEach(o=>{
+    if(!o.invoicePdfKey) return;
+    (byKey[o.invoicePdfKey] = byKey[o.invoicePdfKey] || []).push(o);
+  });
+  const pdfKeys = Object.keys(byKey).sort((a,b)=>
+    ((byKey[b][0].invoiceDone||{}).markedAt||0) - ((byKey[a][0].invoiceDone||{}).markedAt||0));
+  const pdfHtml = pdfKeys.map(function(k){
+    const os = byKey[k], d0 = os[0].invoiceDone || {};
+    const dt = d0.markedAt ? new Date(d0.markedAt).toLocaleDateString('he-IL') : '';
+    const open = _invOpen[k];
+    let det = '';
+    if(open){
+      det = '<div class="inv-date" style="margin-top:8px">'+
+        os.map(o=>'<div>הזמנה '+lgEsc(o.num||'')+(o.name?' &middot; '+lgEsc(o.name):'')+'</div>').join('')+
+        '</div>'+
+        '<button class="btn-pay" onclick="event.stopPropagation();openInvoicePdf(\''+lgEsc(k)+'\')">&#128196; פתח חשבונית (PDF)</button>'+
+        '<div class="sketch-lbl" style="margin-top:10px">סקיצות בחשבונית</div>'+
+        '<div style="display:flex;flex-wrap:wrap;gap:8px">'+
+        os.map(o=>'<div style="width:46%;min-width:120px"><img class="sk-full" data-sketch-for="'+lgEsc(String(o.id))+'" data-id="'+lgEsc(String(o.id))+'" alt="סקיצה" onclick="event.stopPropagation();openSk(this)" style="width:100%">'+
+          '<div class="inv-date">'+lgEsc(o.name||o.num||'')+'</div></div>').join('')+
+        '</div>';
+    }
+    return '<div class="inv-card" style="flex-wrap:wrap;cursor:pointer" onclick="toggleInvoice(\''+lgEsc(k)+'\')">'+
+      '<div class="inv-icon">&#129534;</div>'+
+      '<div class="inv-info"><div class="inv-num">חשבונית '+lgEsc(d0.docNumber||'')+'</div>'+
+      '<div class="inv-date">'+lgEsc(dt)+' &middot; '+os.length+' '+(os.length===1?'הזמנה':'הזמנות')+'</div></div>'+
+      '<div style="width:100%">'+det+'</div></div>';
+  }).join('');
+
   const byRef = {};
   ORDERS.forEach(o=>{
     const inv = o.invoice;
+    if(o.invoicePdfKey) return;                 // כבר מוצגת למעלה
     if(!inv || !inv.sentAt) return;
     const key = inv.reference || ('_' + inv.sentAt);
     if(!byRef[key]) byRef[key] = Object.assign({}, inv, { orders: [] });
@@ -932,7 +967,7 @@ function renderInvoices(){
   });
   const list = Object.values(byRef).sort((a,b)=>b.sentAt-a.sentAt);
 
-  if(!list.length){
+  if(!list.length && !pdfHtml){
     el.innerHTML =
       '<div class="soon-panel">' +
         '<div class="soon-ttl">אין חשבוניות עדיין</div>' +
@@ -942,7 +977,7 @@ function renderInvoices(){
     return;
   }
 
-  el.innerHTML = list.map(function(inv){
+  el.innerHTML = pdfHtml + list.map(function(inv){
     const d    = new Date(inv.sentAt);
     const date = isNaN(d) ? '' : d.toLocaleDateString('he-IL');
     const nums = inv.orders.map(o=>o.num).filter(Boolean).join(' · ');
@@ -958,6 +993,24 @@ function renderInvoices(){
       '<div class="inv-right"><div class="inv-amt">&#8362;'+(inv.total||0).toLocaleString()+'</div></div>'+
     '</div>';
   }).join('');
+  _fillOpenSketches();
+}
+
+const _invOpen = {};
+function toggleInvoice(k){ _invOpen[k] = !_invOpen[k]; renderInvoices(); }
+
+// השרת בודק שכל ההזמנות של החשבונית שייכות לטלפון של הלקוח ומחזיר את המקור בלבד.
+async function openInvoicePdf(key){
+  const w = window.open('', '_blank');           // נפתח מיד, אחרת חוסם החלונות יחסום
+  try{
+    const res = await _lgAuthPost('/api/invoice-ctl', { action: 'customerPdf', key: key });
+    const j = await res.json().catch(()=>null);
+    if(!res.ok || !j || !j.ok) throw new Error('החשבונית עדיין בהכנה');
+    const bin = atob(j.pdf), u8 = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+    if(w) w.location.href = url; else window.open(url, '_blank');
+  }catch(e){ if(w) w.close(); alert(e.message || 'החשבונית עדיין בהכנה'); }
 }
 
 // ההודעות אינן מחוברות לשום מקום. כאן ישבה שיחה מומצאת, ו-sendMsg הוסיף
