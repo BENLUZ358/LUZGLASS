@@ -481,6 +481,59 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('O3 actions go through the admin endpoint', /'text-customer-add'/.test(P) && /'text-customer-remove'/.test(P), true);
   }
 
+// ═══ P. כתובות מייל (בן, 26/10) ═══════════════════════════════════════
+  {
+    const seen = {
+      'new@client,co,il': { email: 'new@client.co.il', count: 3, lastAt: NOW },
+      'old@x,com':        { email: 'old@x.com', count: 1, lastAt: NOW - 5000, ignored: { at: NOW, by: 'b' } },
+      'dana@k,com':       { email: 'dana@k.com', count: 2, lastAt: NOW - 9000 },
+    };
+    const linked = { 'dana@k,com': { email: 'dana@k.com', customerId: '1333', customerName: 'כתר מקלחונים' } };
+    const rows = ctx.lgWaInEmailRows(seen, linked, false);
+    check('P1 new addresses first, ignored hidden by default', rows.map(r => r.key), ['new@client,co,il', 'dana@k,com']);
+    check('P1 the address is shown decoded', rows[0].emailText, 'new@client.co.il');
+    check('P1 new address: count and no customer', [rows[0].linked, rows[0].count, rows[0].customerName], [false, 3, '']);
+    check('P1 linked address: its customer', [rows[1].linked, rows[1].customerName], [true, 'כתר מקלחונים']);
+    const all = ctx.lgWaInEmailRows(seen, linked, true);
+    check('P2 "show all" brings back the ignored address, marked', all.filter(r => r.ignored).map(r => r.key), ['old@x,com']);
+    check('P3 attention counts only new, not-ignored addresses', ctx.lgWaInEmailsAttention(seen, linked), 1);
+    const hNew = ctx.lgWaInEmailHtml(rows[0]);
+    check('P4 a new address is shown ltr and offers link and ignore',
+          [/data-ekey="new@client,co,il"/.test(hNew), /dir="ltr">new@client\.co\.il</.test(hNew), /data-eact="link"/.test(hNew), /data-eact="ignore"/.test(hNew),
+           /class="wain-acc"/.test(hNew), /3 מיילים נשלחו מהכתובת ולא נקלטו/.test(hNew)],
+          [true, true, true, true, true, true]);
+    const hLinked = ctx.lgWaInEmailHtml(rows[1]);
+    check('P4 a linked address shows its customer and unlink only',
+          [/כתר מקלחונים/.test(hLinked), /data-eact="unlink"/.test(hLinked), /data-eact="link"/.test(hLinked)], [true, true, false]);
+    check('P4 a linked address says the whole wheel: replies come back by email',
+          [/חוזרות אליו במייל/.test(hLinked), hLinked.includes('הסקיצות טופלו / מוכן לאיסוף / יצא להובלה')], [true, true]);
+    const hIgn = ctx.lgWaInEmailHtml(all.find(r => r.ignored));
+    check('P4 an ignored address can be un-ignored', [/מוסתר/.test(hIgn), /data-eact="unignore"/.test(hIgn)], [true, true]);
+    check('P5 names are escaped', /<script>/.test(ctx.lgWaInEmailHtml({ ...rows[1], customerName: '<script>' })), false);
+    check('P5 addresses are escaped', /<script>/.test(ctx.lgWaInEmailHtml({ ...rows[1], emailText: '<script>@x.com' })), false);
+    check('P6 a linked address that never wrote still shows (link came first)',
+          ctx.lgWaInEmailRows({}, linked, false).map(r => [r.key, r.linked]), [['dana@k,com', true]]);
+    //  (סקירה סופית) כתובת ברשימה ב-Vercel שעוד לא קושרה: מופיעה עם "ברשימה" וכפתור
+    //  קישור, אבל לא נספרת ב"דורש טיפול" — היא כבר נקלטת
+    const seenL = { ...seen, 'ben@own,com': { email: 'ben@own.com', count: 2, lastAt: NOW + 1, listed: true } };
+    const rowsL = ctx.lgWaInEmailRows(seenL, linked, false);
+    const ben = rowsL.find(r => r.key === 'ben@own,com') || {};
+    check('P8 a listed address is shown, marked listed, not linked', [ben.listed, ben.linked], [true, false]);
+    check('P8 it is not counted in the attention badge', ctx.lgWaInEmailsAttention(seenL, linked), 1);
+    const hL = ctx.lgWaInEmailHtml(ben);
+    check('P8 chip "ברשימה" and a link button', [/>ברשימה</.test(hL), /data-eact="link"/.test(hL), /class="wain-acc"/.test(hL)], [true, true, true]);
+    check('P8 it does not say its mails were not taken in', /ולא נקלטו/.test(hL), false);
+    const benLinked = ctx.lgWaInEmailRows(seenL, { ...linked, 'ben@own,com': { email: 'ben@own.com', customerId: '3150', customerName: 'אגן ברזל' } }, false)
+      .find(r => r.key === 'ben@own,com');
+    check('P8 once linked it is a plain linked row', [benLinked.linked, benLinked.listed, />מקושר</.test(ctx.lgWaInEmailHtml(benLinked))], [true, false, true]);
+    const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
+    check('P7 the panel listens to emailSendersSeen and emailSenders',
+          [/ref\(\s*['"`]waMeta\/emailSendersSeen['"`]\s*\)/.test(P), /ref\(\s*['"`]waMeta\/emailSenders['"`]\s*\)/.test(P)], [true, true]);
+    check('P7 and never writes them itself', /ref\(\s*['"`]waMeta\/emailSenders[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P), false);
+    check('P7 actions go through the admin endpoint with channel email', /channel:\s*'email'/.test(P) && /'link-sender'/.test(P), true);
+    check('P7 the picker finds email rows too', /\[data-ekey\]/.test(P), true);
+  }
+
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll WhatsApp intake-panel checks passed.');
 })().catch(e => { console.error('FAIL  crashed:', e && e.stack || e); process.exit(1); });

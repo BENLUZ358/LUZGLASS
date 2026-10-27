@@ -71,4 +71,64 @@ function emDecide(httpCode, body) {
 function emGiveUp(retries, ageMs) {
   return Number(retries) >= 20 || Number(ageMs) > 60 * 3600 * 1000;
 }
+//  ── תשובות ללקוח (outbox) ──────────────────────────────────────────
+//  תכנית השליחה. items: מה שהשרת החזיר ב-claim; props: כל נכסי הסקריפט.
+//  ⚠️ שליחה פעם אחת בלבד. שלושה סימונים מקומיים לכל key:
+//    u_<key> — נקבע לפני reply (בדרך לשליחה); s_<key> — נקבע מיד אחרי reply
+//    ולפני done. פעולה לכל פריט:
+//    'ack'  — s_ קיים: כבר נשלח, מאשרים done ok:true בלי לשלוח.
+//    'fail' — u_ קיים וגם s_ חסר: ניסיון קודם נפל באמצע, לא ידוע אם יצא.
+//             done ok:false ו-**לעולם לא** שולחים שוב.
+//    'send' — אחרת.
+function emOutboxPlan(items, props) {
+  var p = props || {};
+  var has = function (k) { return Object.prototype.hasOwnProperty.call(p, k); };
+  return (Array.isArray(items) ? items : []).filter(function (it) {
+    return it && typeof it.key === 'string' && it.key &&
+      typeof it.thread === 'string' && it.thread &&
+      typeof it.messageId === 'string' && it.messageId &&
+      typeof it.email === 'string' && it.email &&
+      typeof it.text === 'string' && it.text &&
+      typeof it.leaseToken === 'string';
+  }).map(function (it) {
+    var action = has('s_' + it.key) ? 'ack' : (has('u_' + it.key) ? 'fail' : 'send');
+    return { key: it.key, thread: it.thread, messageId: it.messageId, email: it.email,
+             text: it.text, leaseToken: it.leaseToken, action: action };
+  });
+}
+//  האם מותר לענות על המייל הזה. ⚠️ msg.reply עונה ל-Reply-To אם יש, אחרת ל-From —
+//  ולכן זו הכתובת שנבדקת, והיא חייבת להיות בדיוק הכתובת המקושרת. אחרת לא שולחים
+//  (מייל שיצא לכתובת לא נכונה אי אפשר להחזיר). replyTo/from: כפי שהם מ-Gmail.
+//  ⚠️ כותרת עם יותר מכתובת אחת — מסרבים: msg.reply עונה לכולן, ו-emAddr (שהקליטה
+//  משתמשת בו) לוקח רק את האחרונה. שמות תצוגה בגרשיים מוסרים קודם (מותר בהם '@').
+function emReplyOk(replyTo, from, linkedEmail) {
+  var want = emAddr(linkedEmail);
+  var hdr = String(String(replyTo || '').trim() ? replyTo : (from || ''));
+  var bare = hdr.replace(/"(?:[^"\\]|\\.)*"/g, '');
+  if ((bare.match(/@/g) || []).length !== 1) return false;
+  if ((bare.match(/</g) || []).length > 1 || (bare.match(/>/g) || []).length > 1) return false;
+  return !!want && emAddr(hdr) === want;
+}
+//  תקציב זמן. phase: 'intake' (נעצרים מוקדם כדי להשאיר מקום לתשובות),
+//  'outbox-claim' (לא מחכירים פריטים שלא נספיק לשלוח), 'outbox-item'.
+function emBudgetOk(phase, elapsedMs, maxMs) {
+  var reserve = phase === 'intake' ? 60000 : (phase === 'outbox-claim' ? 30000 : 0);
+  return Number(elapsedMs) <= Number(maxMs) - reserve;
+}
+//  מה עושים עם תשובת claim. 401/403 = הגדרות — עוצרים את שלב התשובות בריצה
+//  הזו (בלי לספור כלום). כל כשל אחר — אין מה לשלוח עכשיו.
+function emOutboxClaim(httpCode, body) {
+  if (httpCode === 401 || httpCode === 403) return { stop: true, items: [] };
+  if (httpCode === 200 && body && body.ok === true && Array.isArray(body.items)) {
+    return { stop: false, items: body.items };
+  }
+  return { stop: false, items: [] };
+}
+//  אילו נכסי s_/u_ למחוק: ישנים מ-keepMs, או עם ערך לא תקין.
+function emSentToPrune(all, now, keepMs) {
+  var cut = now - keepMs;
+  return Object.keys(all || {}).filter(function (k) {
+    return (k.indexOf('s_') === 0 || k.indexOf('u_') === 0) && !(Number(all[k]) >= cut);
+  });
+}
 // ── core end ──

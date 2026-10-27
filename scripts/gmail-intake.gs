@@ -93,6 +93,66 @@ function emDecide(httpCode, body) {
 function emGiveUp(retries, ageMs) {
   return Number(retries) >= 20 || Number(ageMs) > 60 * 3600 * 1000;
 }
+//  ── תשובות ללקוח (outbox) ──────────────────────────────────────────
+//  תכנית השליחה. items: מה שהשרת החזיר ב-claim; props: כל נכסי הסקריפט.
+//  ⚠️ שליחה פעם אחת בלבד. שלושה סימונים מקומיים לכל key:
+//    u_<key> — נקבע לפני reply (בדרך לשליחה); s_<key> — נקבע מיד אחרי reply
+//    ולפני done. פעולה לכל פריט:
+//    'ack'  — s_ קיים: כבר נשלח, מאשרים done ok:true בלי לשלוח.
+//    'fail' — u_ קיים וגם s_ חסר: ניסיון קודם נפל באמצע, לא ידוע אם יצא.
+//             done ok:false ו-**לעולם לא** שולחים שוב.
+//    'send' — אחרת.
+function emOutboxPlan(items, props) {
+  var p = props || {};
+  var has = function (k) { return Object.prototype.hasOwnProperty.call(p, k); };
+  return (Array.isArray(items) ? items : []).filter(function (it) {
+    return it && typeof it.key === 'string' && it.key &&
+      typeof it.thread === 'string' && it.thread &&
+      typeof it.messageId === 'string' && it.messageId &&
+      typeof it.email === 'string' && it.email &&
+      typeof it.text === 'string' && it.text &&
+      typeof it.leaseToken === 'string';
+  }).map(function (it) {
+    var action = has('s_' + it.key) ? 'ack' : (has('u_' + it.key) ? 'fail' : 'send');
+    return { key: it.key, thread: it.thread, messageId: it.messageId, email: it.email,
+             text: it.text, leaseToken: it.leaseToken, action: action };
+  });
+}
+//  האם מותר לענות על המייל הזה. ⚠️ msg.reply עונה ל-Reply-To אם יש, אחרת ל-From —
+//  ולכן זו הכתובת שנבדקת, והיא חייבת להיות בדיוק הכתובת המקושרת. אחרת לא שולחים
+//  (מייל שיצא לכתובת לא נכונה אי אפשר להחזיר). replyTo/from: כפי שהם מ-Gmail.
+//  ⚠️ כותרת עם יותר מכתובת אחת — מסרבים: msg.reply עונה לכולן, ו-emAddr (שהקליטה
+//  משתמשת בו) לוקח רק את האחרונה. שמות תצוגה בגרשיים מוסרים קודם (מותר בהם '@').
+function emReplyOk(replyTo, from, linkedEmail) {
+  var want = emAddr(linkedEmail);
+  var hdr = String(String(replyTo || '').trim() ? replyTo : (from || ''));
+  var bare = hdr.replace(/"(?:[^"\\]|\\.)*"/g, '');
+  if ((bare.match(/@/g) || []).length !== 1) return false;
+  if ((bare.match(/</g) || []).length > 1 || (bare.match(/>/g) || []).length > 1) return false;
+  return !!want && emAddr(hdr) === want;
+}
+//  תקציב זמן. phase: 'intake' (נעצרים מוקדם כדי להשאיר מקום לתשובות),
+//  'outbox-claim' (לא מחכירים פריטים שלא נספיק לשלוח), 'outbox-item'.
+function emBudgetOk(phase, elapsedMs, maxMs) {
+  var reserve = phase === 'intake' ? 60000 : (phase === 'outbox-claim' ? 30000 : 0);
+  return Number(elapsedMs) <= Number(maxMs) - reserve;
+}
+//  מה עושים עם תשובת claim. 401/403 = הגדרות — עוצרים את שלב התשובות בריצה
+//  הזו (בלי לספור כלום). כל כשל אחר — אין מה לשלוח עכשיו.
+function emOutboxClaim(httpCode, body) {
+  if (httpCode === 401 || httpCode === 403) return { stop: true, items: [] };
+  if (httpCode === 200 && body && body.ok === true && Array.isArray(body.items)) {
+    return { stop: false, items: body.items };
+  }
+  return { stop: false, items: [] };
+}
+//  אילו נכסי s_/u_ למחוק: ישנים מ-keepMs, או עם ערך לא תקין.
+function emSentToPrune(all, now, keepMs) {
+  var cut = now - keepMs;
+  return Object.keys(all || {}).filter(function (k) {
+    return (k.indexOf('s_') === 0 || k.indexOf('u_') === 0) && !(Number(all[k]) >= cut);
+  });
+}
 // ── core end ──
 
 // ─── הגדרות ───────────────────────────────────────────────────────
@@ -225,6 +285,59 @@ function emFinish(it, res, props) {
   props.deleteProperty('r_' + it.info.id);
 }
 
+//  ⚠️ שולחים תשובה לשרשור ולא יותר מפעם אחת לכל key — ר' emOutboxPlan.
+//  סדר חובה: u_ → reply → s_ → מחיקת u_ → done. כל חריגה = done ok:false, אף פעם
+//  לא משאירים פריט בלי אישור (השרת לא סופר פקיעות השכרה).
+//  שום Logger.log לא כולל טקסט או כתובות.
+function emOutbox(cfg, started) {
+  if (!emBudgetOk('outbox-claim', Date.now() - started, EM_MAX_MS)) return;
+  var props = PropertiesService.getScriptProperties();
+  emSentToPrune(props.getProperties(), Date.now(), EM_KEEP_MS).forEach(function (k) {
+    props.deleteProperty(k);
+  });
+  var cl = emPost(cfg, { op: 'outbox-claim' });
+  var claim = emOutboxClaim(cl.code, cl.body);
+  if (claim.stop) {
+    Logger.log('תשובות: השרת סירב להרשאה (401/403) — מדלגים בריצה הזו');
+    return;
+  }
+  var plan = emOutboxPlan(claim.items, props.getProperties());
+  for (var n = 0; n < plan.length; n++) {
+    if (!emBudgetOk('outbox-item', Date.now() - started, EM_MAX_MS)) break;
+    var it = plan[n];
+    var ok = it.action !== 'fail';
+    if (it.action === 'fail') Logger.log('תשובה ' + it.key + ': ניסיון קודם נקטע — לא שולחים שוב');
+    if (it.action === 'send') {
+      try {
+        //  ⚠️ עונים על המייל של הלקוח עצמו, לא על השרשור: thread.reply עונה למי
+        //  ששלח את ההודעה האחרונה בשרשור — יכול להיות ההודעה שלנו, תשובה ידנית של
+        //  בן, או צד שלישי ב-CC. ו-msg.reply עונה ל-Reply-To — לכן emReplyOk.
+        var msg = null;
+        try { msg = GmailApp.getMessageById(it.messageId); } catch (e0) { msg = null; }
+        if (!msg) {
+          ok = false;
+        } else if (!emReplyOk(msg.getReplyTo(), msg.getFrom(), it.email)) {
+          ok = false;
+          Logger.log('תשובה ' + it.key + ': הכתובת במייל לא הכתובת המקושרת — לא נשלח');
+        } else {
+          props.setProperty('u_' + it.key, String(Date.now()));   // ⚠️ לפני reply
+          msg.reply(it.text);
+          props.setProperty('s_' + it.key, String(Date.now()));   // ⚠️ לפני done
+          props.deleteProperty('u_' + it.key);
+        }
+      } catch (e) {
+        ok = false;   // ⚠️ שם השגיאה בלבד; u_ נשאר — אין שליחה חוזרת
+        Logger.log('תשובה ' + it.key + ': חריגה ' + (e && e.name));
+      }
+    }
+    var dn = emPost(cfg, { op: 'outbox-done', key: it.key, leaseToken: it.leaseToken, ok: ok });
+    if (dn.code === 401 || dn.code === 403) {
+      Logger.log('תשובות: השרת סירב להרשאה (401/403) — עוצרים');
+      break;
+    }
+  }
+}
+
 //  נקודת הכניסה — זה מה שהטריגר מפעיל כל דקה.
 function emRun() {
   var lock = LockService.getScriptLock();
@@ -258,7 +371,7 @@ function emRun() {
 
     var queue = fresh.concat(again);
     for (var q = 0; q < queue.length && q < EM_MAX_COMMITS; q++) {
-      if (Date.now() - started > EM_MAX_MS) break;
+      if (!emBudgetOk('intake', Date.now() - started, EM_MAX_MS)) break;
       var it = queue[q], mid = it.info.id;
       try {
         var res = emProcess(it.msg, cfg, me);
@@ -284,6 +397,7 @@ function emRun() {
         }
       }
     }
+    emOutbox(cfg, started);
   } finally {
     lock.releaseLock();
   }

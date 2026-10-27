@@ -264,6 +264,57 @@ function lgWaInSenderHtml(r) {
       </div>`;
 }
 
+// ─── כתובות מייל (בן, 26/10) — אותו דבר, למייל ───────────────────────────
+//  כתובת שלא ברשימה ושלחה מייל נרשמת בשרת (waMeta/emailSendersSeen: כתובת,
+//  מונה, זמן). המפתח הוא הכתובת עם פסיק במקום נקודה; מוצגת מפוענחת.
+//  listed:true = הכתובת ברשימה ב-Vercel ועוד לא קושרה: כבר נקלטת, אז היא מוצגת
+//  ("ברשימה" + קישור — כך בן מקשר את הכתובת שלו) אבל לא נספרת ב"דורש טיפול".
+function lgWaInEmailRows(seen, linked, showAll) {
+  const S = seen || {}, L = linked || {};
+  const keys = Array.from(new Set(Object.keys(S).concat(Object.keys(L))));
+  return keys.map(k => {
+    const s = S[k] || {}, l = L[k] || null;
+    return { key: k, emailText: String(s.email || (l && l.email) || k.replace(/,/g, '.')), linked: !!(l && l.customerId),
+             customerName: l ? String(l.customerName || l.customerId || '') : '',
+             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0,
+             listed: !l && !!s.listed, ignored: !l && !s.listed && !!s.ignored };
+  })
+    .filter(r => showAll || !r.ignored)
+    .sort((a, b) => (a.linked - b.linked) || (a.ignored - b.ignored) || (b.lastAt - a.lastAt));
+}
+function lgWaInEmailsAttention(seen, linked) {
+  return lgWaInEmailRows(seen, linked, false).filter(r => !r.linked && !r.listed).length;
+}
+function lgWaInEmailHtml(r) {
+  const chip = r.linked ? 'מקושר' : r.listed ? 'ברשימה' : r.ignored ? 'מוסתר' : 'כתובת חדשה';
+  const head = `<div class="wain-l1"><span class="wain-chip">${chip}</span>
+          <span class="wain-client" dir="ltr">${_waInEsc(r.emailText)}</span>
+          <span class="wain-when">${_waInEsc(_waInWhen(r.lastAt))}</span></div>`;
+  let body;
+  if (r.linked) {
+    body = `<div class="wain-reason">לקוח: <b>${_waInEsc(r.customerName)}</b> — כל מייל ממנה נכנס לתור, וההודעות על ההזמנות (הסקיצות טופלו / מוכן לאיסוף / יצא להובלה) חוזרות אליו במייל.</div>
+          <div class="wain-acts"><button class="wain-btn" data-eact="unlink">נתק</button></div>`;
+  } else if (r.listed) {
+    body = `<div class="wain-reason">הכתובת ברשימה הקבועה — המיילים ממנה כבר נקלטים. קשר אותה ללקוח, וההודעות על ההזמנות יחזרו אליה במייל.</div>
+          <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לכתובת" autocomplete="off">
+            <button class="wain-btn wain-primary" data-eact="link">קשר ללקוח</button></div>
+          <div class="wain-acc-list" hidden></div>`;
+  } else if (r.ignored) {
+    body = `<div class="wain-reason">הכתובת הוסתרה. מיילים ממנה לא נקלטים.</div>
+          <div class="wain-acts"><button class="wain-btn" data-eact="unignore">בטל התעלמות</button></div>`;
+  } else {
+    body = `<div class="wain-reason">${r.count || 1} מיילים נשלחו מהכתובת ולא נקלטו. קשר אותה ללקוח, והמיילים הבאים ייכנסו לתור.</div>
+          <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לכתובת" autocomplete="off">
+            <button class="wain-btn wain-primary" data-eact="link">קשר ללקוח</button>
+            <button class="wain-btn" data-eact="ignore">התעלם</button></div>
+          <div class="wain-acc-list" hidden></div>`;
+  }
+  return `<div class="wain-row ${r.linked ? 'wain-ok' : (r.ignored || r.listed) ? '' : 'wain-warn'}" data-ekey="${_waInEsc(r.key)}">
+        ${head}
+        ${body}
+      </div>`;
+}
+
 // ─── הזמנות מטקסט חופשי (בן, 26/10) ─────────────────────────────────────
 //  הלקוחות שהודעה כמו "מראה 5 70 על 120" מהם פותחת הזמנה לבד. הכתיבה דרך
 //  /api/wa-inbound-drain (text-customer-add/remove) — לא ישירות.
@@ -395,6 +446,36 @@ if (typeof document !== 'undefined') (function () {
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
 
+  // ─── כתובות מייל (בן, 26/10) — כמו מספרים פרטיים, לכתובת מייל ──────────
+  let emailsSeen = {}, emailsLinked = {};
+  function emailsBox() {
+    let box = $('waInEmails');
+    if (!box) {
+      const list = $('waInList'); if (!list) return null;
+      box = document.createElement('div'); box.id = 'waInEmails';
+      list.parentNode.insertBefore(box, list);
+    }
+    return box;
+  }
+  function renderEmails() {
+    const box = emailsBox(); if (!box) return;
+    if (box.contains(document.activeElement) && document.activeElement.classList.contains('wain-acc')) return;
+    const r = lgWaInEmailRows(emailsSeen, emailsLinked, showAll);
+    box.innerHTML = r.length ? `<div class="wain-gtitle">כתובות מייל</div>` + r.map(lgWaInEmailHtml).join('') : '';
+  }
+  async function emailAct(key, action, input) {
+    let customerId = '';
+    if (action === 'link') {
+      const v = String((input && input.value) || '');
+      customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
+      if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
+    } else if (action === 'unlink' && !confirm('לנתק את הכתובת? מיילים חדשים ממנה לא ייכנסו לתור, והיא לא תקבל יותר הודעות.')) return;
+    const name = { link: 'link-sender', unlink: 'unlink-sender', ignore: 'ignore-sender', unignore: 'unignore-sender' }[action];
+    if (!name) return;
+    const r = await post({ channel: 'email', action: name, key, customerId });
+    if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
+  }
+
   // ─── הזמנות מטקסט חופשי (בן, 26/10) ───────────────────────────────────
   let textCustomers = {};
   function textBox() {
@@ -427,6 +508,7 @@ if (typeof document !== 'undefined') (function () {
     // קבוצה חדשה שלא קושרה — גם היא דורשת טיפול
     c.attention += Object.keys(groupsSeen).filter(k => !groupsLinked[k]).length;
     c.attention += lgWaInSendersAttention(sendersSeen, sendersLinked);
+    c.attention += lgWaInEmailsAttention(emailsSeen, emailsLinked);
     const a = $('waInBadgeA'), p = $('waInBadgeP');
     if (a) { a.textContent = '⚠ ' + c.attention; a.hidden = !c.attention; }
     if (p) { p.textContent = '⏳ ' + c.inProgress; p.hidden = !c.inProgress; }
@@ -436,6 +518,7 @@ if (typeof document !== 'undefined') (function () {
     badge();
     renderGroups();
     renderSenders();
+    renderEmails();
     renderTextCustomers();
     const list = $('waInList'); if (!list) return;
     const shown = rows.filter(x => showAll || x.needsAttention || x.inProgress);
@@ -529,7 +612,7 @@ if (typeof document !== 'undefined') (function () {
       }));
       panel.addEventListener('click', ev => {
         const opt = ev.target.closest('.wain-acc-opt'); if (!opt) return;
-        const row = opt.closest('[data-gkey],[data-skey],[data-tkey]'); const inp = row && row.querySelector('.wain-acc');
+        const row = opt.closest('[data-gkey],[data-skey],[data-ekey],[data-tkey]'); const inp = row && row.querySelector('.wain-acc');
         if (!inp) return;
         inp.value = opt.dataset.name + ' · ' + opt.dataset.acc;
         inp.dataset.acc = opt.dataset.acc;
@@ -545,6 +628,11 @@ if (typeof document !== 'undefined') (function () {
       const b = ev.target.closest('button[data-sact]'); if (!b) return;
       const row = b.closest('[data-skey]'); if (!row) return;
       senderAct(row.dataset.skey, b.dataset.sact, row.querySelector('.wain-acc'));
+    });
+    if (panel) panel.addEventListener('click', ev => {
+      const b = ev.target.closest('button[data-eact]'); if (!b) return;
+      const row = b.closest('[data-ekey]'); if (!row) return;
+      emailAct(row.dataset.ekey, b.dataset.eact, row.querySelector('.wain-acc'));
     });
     if (panel) panel.addEventListener('click', ev => {
       const b = ev.target.closest('button[data-tact]'); if (!b) return;
@@ -578,6 +666,10 @@ if (typeof document !== 'undefined') (function () {
         e => console.warn('sendersSeen listen:', e && e.message));
       _lgDb.ref('waSenders').on('value', sn => { sendersLinked = sn.val() || {}; render(); },
         e => console.warn('waSenders listen:', e && e.message));
+      _lgDb.ref('waMeta/emailSendersSeen').on('value', sn => { emailsSeen = sn.val() || {}; render(); },
+        e => console.warn('emailSendersSeen listen:', e && e.message));
+      _lgDb.ref('waMeta/emailSenders').on('value', sn => { emailsLinked = sn.val() || {}; render(); },
+        e => console.warn('emailSenders listen:', e && e.message));
       _lgDb.ref('waMeta/textCustomers').on('value', sn => { textCustomers = sn.val() || {}; render(); },
         e => console.warn('textCustomers listen:', e && e.message));
       // כל 2 דקות כל עוד הדף פתוח — ורק אם באמת יש מה לעבד

@@ -24,7 +24,7 @@ const { verifyAdmin }   = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot, lgWaStampField } = require('./_wa-outbox');
-const { resolveRecipient } = require('./_wa-recipient');
+const { resolveRecipientWa } = require('./_wa-recipient');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 
@@ -182,7 +182,9 @@ module.exports = async function handler(req, res) {
         continue;
       }
 
-      const live = await resolveRecipient(db, order, entry.kind);
+      //  ⚠️ וואטסאפ בלבד: ההודעה כבר בתור הוואטסאפ. אם הכתובת במייל קושרה מאז,
+      //  resolveRecipient היה עונה 'email' בלי טלפון והלקוח לא היה מקבל כלום.
+      const live = await resolveRecipientWa(db, order, entry.kind);
       const gate = provider.gate({ phone: live.phone, accountKey: live.accountKey, linked: !!live.linked });
 
       if (!gate.allowed || !provider.configured || !live.phone) {
