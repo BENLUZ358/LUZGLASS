@@ -230,6 +230,7 @@ function lgWaInSenderRows(seen, linked, showAll) {
   return keys.map(k => {
     const s = S[k] || {}, l = L[k] || null;
     return { key: k, phoneText: _waInPhoneText(k), linked: !!(l && l.customerId),
+             customerId: l ? String(l.customerId || '') : '',
              customerName: l ? String(l.customerName || l.customerId || '') : '',
              count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, ignored: !l && !!s.ignored };
   })
@@ -239,29 +240,58 @@ function lgWaInSenderRows(seen, linked, showAll) {
 function lgWaInSendersAttention(seen, linked) {
   return lgWaInSenderRows(seen, linked, false).filter(r => !r.linked).length;
 }
-function lgWaInSenderHtml(r) {
-  const chip = r.linked ? 'מקושר' : r.ignored ? 'מוסתר' : 'מספר חדש';
-  const head = `<div class="wain-l1"><span class="wain-chip">${chip}</span>
-          <span class="wain-client" dir="ltr">${_waInEsc(r.phoneText)}</span>
-          <span class="wain-when">${_waInEsc(_waInWhen(r.lastAt))}</span></div>`;
-  let body;
-  if (r.linked) {
-    body = `<div class="wain-reason">לקוח: <b>${_waInEsc(r.customerName)}</b> — כל הודעה ממנו נכנסת לתור, וההודעות על ההזמנות חוזרות אליו.</div>
-          <div class="wain-acts"><button class="wain-btn" data-sact="unlink">נתק</button></div>`;
-  } else if (r.ignored) {
-    body = `<div class="wain-reason">המספר הוסתר. הודעות ממנו לא נקלטות.</div>
-          <div class="wain-acts"><button class="wain-btn" data-sact="unignore">בטל התעלמות</button></div>`;
-  } else {
-    body = `<div class="wain-reason">${r.count || 1} הודעות נשלחו מהמספר ולא נקלטו. קשר אותו ללקוח, וההודעות הבאות ייכנסו לתור.</div>
-          <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח למספר" autocomplete="off">
-            <button class="wain-btn wain-primary" data-sact="link">קשר ללקוח</button>
-            <button class="wain-btn" data-sact="ignore">התעלם</button></div>
-          <div class="wain-acc-list" hidden></div>`;
-  }
-  return `<div class="wain-row ${r.linked ? 'wain-ok' : r.ignored ? '' : 'wain-warn'}" data-skey="${_waInEsc(r.key)}">
-        ${head}
-        ${body}
+// ─── שתי צורות לכל שולח (בן, 27/10: "שיהיה מסודר") ─────────────────────
+//  מחכה לקישור — כרטיס עם "קשר ללקוח" (פותח את בורר הלקוח על כל המסך).
+//  מקושר / מוסתר — שורה אחת: מי שולח ← לאיזה לקוח. הפעולה (נתק / בטל
+//  התעלמות) בתפריט ⋮, כדי שלא ילחצו עליה בטעות.
+//  attr — data-gkey/skey/ekey/tkey="..." (כבר מוברח). sub — HTML מוברח.
+function _waInCard(attr, icon, title, when, text, acts) {
+  return `<div class="wain-row wain-warn" ${attr}>
+        <div class="wain-l1"><span class="wain-client">${icon} <bdi dir="ltr">${_waInEsc(title)}</bdi></span>
+          <span class="wain-when">${_waInEsc(_waInWhen(when))}</span></div>
+        <div class="wain-reason">${text}</div>
+        <div class="wain-acts">${acts}</div>
       </div>`;
+}
+function _waInLine(attr, icon, title, sub, act, actLabel) {
+  return `<div class="wain-line" ${attr}>
+        <span class="wain-ic${icon === '✉' ? ' wain-ic-m' : ''}" aria-hidden="true">${icon}</span>
+        <span class="wain-who"><b><bdi dir="ltr">${_waInEsc(title)}</bdi></b><small>${sub}</small></span>
+        <button type="button" class="wain-more" aria-label="אפשרויות" aria-expanded="false">⋮</button>
+        <span class="wain-menu" hidden><button type="button" class="wain-btn" ${act}>${actLabel}</button></span>
+      </div>`;
+}
+//  textOn — הלקוח ברשימת הטקסט החופשי (סימון ✓ ליד השם)
+function _waInTo(name, kind, textOn) {
+  return '← ' + _waInEsc(name) + (kind ? ' · ' + kind : '') + (textOn ? ' · טקסט חופשי ✓' : '');
+}
+
+//  קבוצות — groupsSeen (שם, מונה, זמן) + waGroups (הקישור)
+function lgWaInGroupRows(seen, linked) {
+  const S = seen || {}, L = linked || {};
+  return Object.keys(S).map(k => {
+    const g = S[k] || {}, l = L[k] || null;
+    return { key: k, name: String(g.name || 'קבוצה ללא שם'), count: g.count || 1, lastAt: g.lastAt || 0,
+             linked: !!l, customerId: l ? String(l.customerId || '') : '',
+             customerName: l ? String(l.customerName || l.customerId || '') : '' };
+  }).sort((a, b) => (a.linked - b.linked) || (b.lastAt - a.lastAt));
+}
+function lgWaInGroupHtml(g, textOn) {
+  const attr = `data-gkey="${_waInEsc(g.key)}"`;
+  if (g.linked) return _waInLine(attr, '👥', g.name, _waInTo(g.customerName, 'קבוצה', textOn), 'data-gact="unlink"', 'נתק');
+  return _waInCard(attr, '👥', g.name, g.lastAt,
+    `${g.count} תמונות נשלחו מהקבוצה ולא נקלטו. קשר אותה ללקוח, והתמונות הבאות ייכנסו לתור.`,
+    `<button class="wain-btn wain-primary" data-gact="link">קשר ללקוח</button>`);
+}
+
+function lgWaInSenderHtml(r, textOn) {
+  const attr = `data-skey="${_waInEsc(r.key)}"`;
+  if (r.linked) return _waInLine(attr, '📱', r.phoneText, _waInTo(r.customerName, 'מספר', textOn), 'data-sact="unlink"', 'נתק');
+  if (r.ignored) return _waInLine(attr, '📱', r.phoneText, 'מוסתר — הודעות ממנו לא נקלטות', 'data-sact="unignore"', 'בטל התעלמות');
+  return _waInCard(attr, '📱', r.phoneText, r.lastAt,
+    `${r.count || 1} הודעות נשלחו מהמספר ולא נקלטו. קשר אותו ללקוח, וההודעות הבאות ייכנסו לתור.`,
+    `<button class="wain-btn wain-primary" data-sact="link">קשר ללקוח</button>
+          <button class="wain-btn" data-sact="ignore">התעלם</button>`);
 }
 
 // ─── כתובות מייל (בן, 26/10) — אותו דבר, למייל ───────────────────────────
@@ -286,33 +316,16 @@ function lgWaInEmailsAttention(seen, linked) {
   return lgWaInEmailRows(seen, linked, false).filter(r => !r.linked && !r.listed).length;
 }
 function lgWaInEmailHtml(r) {
-  const chip = r.linked ? 'מקושר' : r.listed ? 'ברשימה' : r.ignored ? 'מוסתר' : 'כתובת חדשה';
-  const head = `<div class="wain-l1"><span class="wain-chip">${chip}</span>
-          <span class="wain-client" dir="ltr">${_waInEsc(r.emailText)}</span>
-          <span class="wain-when">${_waInEsc(_waInWhen(r.lastAt))}</span></div>`;
-  let body;
-  if (r.linked) {
-    body = `<div class="wain-reason">לקוח: <b>${_waInEsc(r.customerName)}</b> — כל מייל ממנה נכנס לתור, וההודעות על ההזמנות (הסקיצות טופלו / מוכן לאיסוף / יצא להובלה) חוזרות אליו במייל.</div>
-          <div class="wain-acts"><button class="wain-btn" data-eact="unlink">נתק</button></div>`;
-  } else if (r.listed) {
-    body = `<div class="wain-reason">הכתובת ברשימה הקבועה — המיילים ממנה כבר נקלטים. קשר אותה ללקוח, וההודעות על ההזמנות יחזרו אליה במייל.</div>
-          <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לכתובת" autocomplete="off">
-            <button class="wain-btn wain-primary" data-eact="link">קשר ללקוח</button></div>
-          <div class="wain-acc-list" hidden></div>`;
-  } else if (r.ignored) {
-    body = `<div class="wain-reason">הכתובת הוסתרה. מיילים ממנה לא נקלטים.</div>
-          <div class="wain-acts"><button class="wain-btn" data-eact="unignore">בטל התעלמות</button></div>`;
-  } else {
-    body = `<div class="wain-reason">${r.count || 1} מיילים נשלחו מהכתובת ולא נקלטו. קשר אותה ללקוח, והמיילים הבאים ייכנסו לתור.</div>
-          <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לכתובת" autocomplete="off">
-            <button class="wain-btn wain-primary" data-eact="link">קשר ללקוח</button>
-            <button class="wain-btn" data-eact="ignore">התעלם</button></div>
-          <div class="wain-acc-list" hidden></div>`;
-  }
-  return `<div class="wain-row ${r.linked ? 'wain-ok' : (r.ignored || r.listed) ? '' : 'wain-warn'}" data-ekey="${_waInEsc(r.key)}">
-        ${head}
-        ${body}
-      </div>`;
+  const attr = `data-ekey="${_waInEsc(r.key)}"`;
+  if (r.linked) return _waInLine(attr, '✉', r.emailText, _waInTo(r.customerName, 'מקושר'), 'data-eact="unlink"', 'נתק');
+  if (r.ignored) return _waInLine(attr, '✉', r.emailText, 'מוסתרת — מיילים ממנה לא נקלטים', 'data-eact="unignore"', 'בטל התעלמות');
+  const link = `<button class="wain-btn wain-primary" data-eact="link">קשר ללקוח</button>`;
+  if (r.listed) return _waInCard(attr, '✉', r.emailText, r.lastAt,
+    `<span class="wain-chip">ברשימה</span> המיילים ממנה כבר נקלטים. קשר אותה ללקוח, וההודעות על ההזמנות יחזרו אליה במייל.`, link);
+  return _waInCard(attr, '✉', r.emailText, r.lastAt,
+    `${r.count || 1} מיילים נשלחו מהכתובת ולא נקלטו. קשר אותה ללקוח, והמיילים הבאים ייכנסו לתור.`,
+    link + `
+          <button class="wain-btn" data-eact="ignore">התעלם</button>`);
 }
 
 // ─── הזמנות מטקסט חופשי (בן, 26/10) ─────────────────────────────────────
@@ -321,210 +334,186 @@ function lgWaInEmailHtml(r) {
 function lgWaInTextCustomersHtml(map) {
   const m = map || {};
   const rows = Object.keys(m).sort((a, b) => String(m[a].customerName || a).localeCompare(String(m[b].customerName || b), 'he'))
-    .map(k => `<div class="wain-row wain-ok" data-tkey="${_waInEsc(k)}">
-        <div class="wain-l1"><span class="wain-client">${_waInEsc(m[k].customerName || k)}</span>
-          <span class="wain-when" dir="ltr">${_waInEsc(k)}</span></div>
-        <div class="wain-acts"><button class="wain-btn" data-tact="remove">הסר</button></div>
-      </div>`).join('');
-  return `<div class="wain-gtitle">הזמנות מטקסט חופשי</div>
-      <div class="wain-reason">לקוחות שמזמינים בהודעה כמו "מראה 5 70 על 120" — ההזמנה תיפתח לבד בתור.</div>
-      ${rows}
-      <div class="wain-row" data-tkey="">
-        <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח להזמנות מטקסט" autocomplete="off">
-          <button class="wain-btn wain-primary" data-tact="add">הוסף</button></div>
-        <div class="wain-acc-list" hidden></div>
-      </div>`;
+    .map(k => _waInLine(`data-tkey="${_waInEsc(k)}"`, '✍', m[k].customerName || k, 'מפתח ' + _waInEsc(k), 'data-tact="remove"', 'הסר')).join('');
+  return `<div class="wain-note">לקוחות שמזמינים בהודעה כמו "מראה 5 70 על 120" — ההזמנה תיפתח לבד בתור.</div>
+      ${rows ? `<div class="wain-lines">${rows}</div>` : ''}
+      <div data-tkey=""><button type="button" class="wain-addbtn" data-tact="add">＋ הוסף לקוח שמזמין בטקסט חופשי</button></div>`;
 }
 
 //  מכאן והלאה רק בדפדפן. ב-Node (בדיקות) אין document, ולכן לא רץ כלום.
 if (typeof document !== 'undefined') (function () {
   // שורות לכל ערוץ בנפרד — כל מאזין מחליף רק את שלו; rows = שניהם יחד
-  let rows = [], byCh = { whatsapp: [], email: [] }, showAll = false, timer = null, busyKey = '';
+  let rows = [], byCh = { whatsapp: [], email: [] }, timer = null, busyKey = '';
   const draining = { whatsapp: false, email: false };
+  // לשונית פתוחה, ואילו מקטעים מקופלים פתוחים — שרענון חי לא יסגור אותם
+  let tab = 'whatsapp';
+  const folds = {};
 
   const $ = id => document.getElementById(id);
 
-  // ─── קבוצות WhatsApp (בן, 06/10) ──────────────────────────────────
-  //  כל קבוצה שמספר העסק חבר בה ושלחה תמונה מופיעה כאן (רק שמה נשמר).
+  // ─── מקורות הנתונים — הכתיבה תמיד דרך /api/wa-inbound-drain, לא ישירות ───
+  //  קבוצות (06/10): כל קבוצה שמספר העסק חבר בה ושלחה תמונה (רק שמה נשמר).
   //  "קשר ללקוח" → כל תמונה בה נכנסת לתור על הלקוח, והעדכון יוצא לקבוצה.
-  //  הכתיבה דרך /api/wa-inbound-drain (link-group) — לא ישירות.
   let groupsSeen = {}, groupsLinked = {};
+  //  מספרים פרטיים וכתובות מייל (26/10) — אותו דבר, לשולח בודד
+  let sendersSeen = {}, sendersLinked = {};
+  let emailsSeen = {}, emailsLinked = {};
+  //  לקוחות שמזמינים בטקסט חופשי (26/10)
+  let textCustomers = {};
 
-  function groupsBox() {
-    let box = $('waInGroups');
-    if (!box) {
-      const list = $('waInList'); if (!list) return null;
-      box = document.createElement('div'); box.id = 'waInGroups';
-      list.parentNode.insertBefore(box, list);
-    }
-    return box;
-  }
-
-  // בחירת לקוח לקבוצה — רשימה גלויה מתחת לשדה (07/10). רשימת ההצעות המובנית של הדפדפן ב-iOS
-  // מציג הצעות רק מעל המקלדת ורק כשיש התאמה, ונראה כמו שדה שלא עושה כלום.
+  // ─── בורר הלקוח (27/10) ─────────────────────────────────────────────
+  //  נפתח רק בלחיצה על "קשר ללקוח" / "הוסף", על כל הפאנל. קודם הרשימה ישבה
+  //  מתחת לשדה בתוך הכרטיס, נפתחה לבד בפוקוס ונחתכה בתחתית הכרטיס.
+  //  רשימה גלויה ולא רשימת ההצעות של הדפדפן (07/10): ב-iOS ההצעות מופיעות רק
+  //  מעל המקלדת ורק כשיש התאמה, ונראה כמו שדה שלא עושה כלום.
+  let pick = null;   // { kind: 'g'|'s'|'e'|'t', key }
   function accountMatches(q) {
     const m = (typeof hashavshevetAccountsMap !== 'undefined' && hashavshevetAccountsMap) || {};
     const t = String(q || '').trim().toLowerCase();
     return Object.values(m).filter(a => a && a.key)
       .filter(a => !t || String(a.name || '').toLowerCase().includes(t) || String(a.key).toLowerCase().includes(t))
       .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'he'))
-      .slice(0, 8);
+      .slice(0, 30);
   }
   function renderAccList(input) {
-    const list = input && input.parentNode.parentNode.querySelector('.wain-acc-list');
-    if (!list) return;
+    const list = $('waInPickL');
+    if (!list || !input) return;
     const hits = accountMatches(input.value);
-    list.hidden = false;
     list.innerHTML = hits.length
       ? hits.map(a => `<button type="button" class="wain-acc-opt" data-acc="${_waInEsc(a.key)}" data-name="${_waInEsc(a.name || '')}">
            <span>${_waInEsc(a.name || '')}</span><span class="wain-acc-key" dir="ltr">${_waInEsc(a.key)}</span></button>`).join('')
       : `<div class="wain-acc-none">לא נמצא כרטיס בשם הזה. נסה חלק מהשם או את מפתח הלקוח בחשבשבת.</div>`;
   }
-
-  function renderGroups() {
-    const box = groupsBox(); if (!box) return;
-    // מקלידים שם לקוח — רענון חי (הודעה נכנסת) לא מוחק את מה שהוקלד
-    if (box.contains(document.activeElement) && document.activeElement.classList.contains('wain-acc')) return;
-    const keys = Object.keys(groupsSeen);
-    if (!keys.length) { box.innerHTML = ''; return; }
-    keys.sort((a, b) => (!!groupsLinked[a]) - (!!groupsLinked[b]) || (groupsSeen[b].lastAt || 0) - (groupsSeen[a].lastAt || 0));
-    box.innerHTML = `<div class="wain-gtitle">קבוצות WhatsApp</div>` + keys.map(k => {
-      const g = groupsSeen[k], l = groupsLinked[k];
-      return `<div class="wain-row ${l ? 'wain-ok' : 'wain-warn'}" data-gkey="${_waInEsc(k)}">
-        <div class="wain-l1"><span class="wain-chip">${l ? 'מקושרת' : 'קבוצה חדשה'}</span>
-          <span class="wain-client">${_waInEsc(g.name || 'קבוצה ללא שם')}</span>
-          <span class="wain-when">${_waInEsc(_waInWhen(g.lastAt))}</span></div>
-        ${l ? `<div class="wain-reason">לקוח: <b>${_waInEsc(l.customerName || l.customerId)}</b> — כל תמונה בקבוצה נכנסת לתור, והעדכון "הסקיצות טופלו" יוצא לקבוצה.</div>
-               <div class="wain-acts"><button class="wain-btn" data-gact="unlink">נתק</button></div>`
-            : `<div class="wain-reason">${g.count || 1} תמונות נשלחו מהקבוצה ולא נקלטו. קשר אותה ללקוח, והתמונות הבאות ייכנסו לתור.</div>
-               <div class="wain-acts"><input class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="לקוח לקבוצה" autocomplete="off">
-                 <button class="wain-btn wain-primary" data-gact="link">קשר ללקוח</button></div>
-               <div class="wain-acc-list" hidden></div>`}
-      </div>`;
-    }).join('');
+  const PICK_TEXT = {
+    g: ['הודעות מהקבוצה ייכנסו לתור על הלקוח, והעדכונים יישלחו לקבוצה.'],
+    s: ['הודעות מהמספר ייכנסו לתור על הלקוח, והעדכונים יישלחו אליו.'],
+    e: ['מיילים מהכתובת ייכנסו לתור על הלקוח, והעדכונים יחזרו אליה במייל.'],
+    t: ['הודעה כמו "מראה 5 70 על 120" מהלקוח תפתח הזמנה בתור.'],
+  };
+  function openPick(kind, key, who) {
+    const box = $('waInPick'), q = $('waInPickQ'); if (!box || !q) return;
+    pick = { kind, key };
+    $('waInPickT').textContent = kind === 't' ? 'איזה לקוח מזמין בטקסט חופשי?' : 'למי שייך ' + String.fromCharCode(0x2066) + who + String.fromCharCode(0x2069) + '?';
+    $('waInPickS').textContent = PICK_TEXT[kind][0];
+    q.value = '';
+    box.hidden = false;
+    renderAccList(q);
+    q.focus();
+  }
+  function closePick() { const box = $('waInPick'); if (box) box.hidden = true; pick = null; }
+  function picked(customerId) {
+    const p = pick; closePick(); if (!p || !customerId) return;
+    if (p.kind === 'g') groupAct(p.key, 'link', customerId);
+    else if (p.kind === 's') senderAct(p.key, 'link', customerId);
+    else if (p.kind === 'e') emailAct(p.key, 'link', customerId);
+    else textAct('', 'add', customerId);
   }
 
-  async function groupAct(key, action, input) {
-    let customerId = '';
-    if (action === 'link') {
-      // נבחר מהרשימה → data-acc; אחרת מה שהוקלד (מפתח, או "שם · מפתח")
-      const v = String((input && input.value) || '');
-      customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
-      if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
-    } else if (!confirm('לנתק את הקבוצה? תמונות חדשות ממנה לא ייכנסו לתור.')) return;
-    const r = await post({ action: action === 'link' ? 'link-group' : 'unlink-group', key, customerId });
+  async function groupAct(key, action, customerId) {
+    if (action === 'unlink' && !confirm('לנתק את הקבוצה? תמונות חדשות ממנה לא ייכנסו לתור.')) return;
+    const r = await post({ action: action === 'link' ? 'link-group' : 'unlink-group', key, customerId: customerId || '' });
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
-
-  // ─── מספרים פרטיים (בן, 26/10) — כמו קבוצות, למספר בודד ──────────────
-  let sendersSeen = {}, sendersLinked = {};
-  function sendersBox() {
-    let box = $('waInSenders');
-    if (!box) {
-      const list = $('waInList'); if (!list) return null;
-      box = document.createElement('div'); box.id = 'waInSenders';
-      list.parentNode.insertBefore(box, list);
-    }
-    return box;
-  }
-  function renderSenders() {
-    const box = sendersBox(); if (!box) return;
-    if (box.contains(document.activeElement) && document.activeElement.classList.contains('wain-acc')) return;
-    const r = lgWaInSenderRows(sendersSeen, sendersLinked, showAll);
-    box.innerHTML = r.length ? `<div class="wain-gtitle">מספרים פרטיים</div>` + r.map(lgWaInSenderHtml).join('') : '';
-  }
-  async function senderAct(key, action, input) {
-    let customerId = '';
-    if (action === 'link') {
-      const v = String((input && input.value) || '');
-      customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
-      if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
-    } else if (action === 'unlink' && !confirm('לנתק את המספר? הודעות חדשות ממנו לא ייכנסו לתור.')) return;
+  async function senderAct(key, action, customerId) {
+    if (action === 'unlink' && !confirm('לנתק את המספר? הודעות חדשות ממנו לא ייכנסו לתור.')) return;
     const name = { link: 'link-sender', unlink: 'unlink-sender', ignore: 'ignore-sender', unignore: 'unignore-sender' }[action];
     if (!name) return;
-    const r = await post({ action: name, key, customerId });
+    const r = await post({ action: name, key, customerId: customerId || '' });
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
-
-  // ─── כתובות מייל (בן, 26/10) — כמו מספרים פרטיים, לכתובת מייל ──────────
-  let emailsSeen = {}, emailsLinked = {};
-  function emailsBox() {
-    let box = $('waInEmails');
-    if (!box) {
-      const list = $('waInList'); if (!list) return null;
-      box = document.createElement('div'); box.id = 'waInEmails';
-      list.parentNode.insertBefore(box, list);
-    }
-    return box;
-  }
-  function renderEmails() {
-    const box = emailsBox(); if (!box) return;
-    if (box.contains(document.activeElement) && document.activeElement.classList.contains('wain-acc')) return;
-    const r = lgWaInEmailRows(emailsSeen, emailsLinked, showAll);
-    box.innerHTML = r.length ? `<div class="wain-gtitle">כתובות מייל</div>` + r.map(lgWaInEmailHtml).join('') : '';
-  }
-  async function emailAct(key, action, input) {
-    let customerId = '';
-    if (action === 'link') {
-      const v = String((input && input.value) || '');
-      customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
-      if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
-    } else if (action === 'unlink' && !confirm('לנתק את הכתובת? מיילים חדשים ממנה לא ייכנסו לתור, והיא לא תקבל יותר הודעות.')) return;
+  async function emailAct(key, action, customerId) {
+    if (action === 'unlink' && !confirm('לנתק את הכתובת? מיילים חדשים ממנה לא ייכנסו לתור, והיא לא תקבל יותר הודעות.')) return;
     const name = { link: 'link-sender', unlink: 'unlink-sender', ignore: 'ignore-sender', unignore: 'unignore-sender' }[action];
     if (!name) return;
-    const r = await post({ channel: 'email', action: name, key, customerId });
+    const r = await post({ channel: 'email', action: name, key, customerId: customerId || '' });
+    if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
+  }
+  async function textAct(key, action, customerId) {
+    if (action === 'remove' && !confirm('להפסיק לפתוח הזמנות מטקסט ללקוח הזה?')) return;
+    const r = await post({ action: action === 'add' ? 'text-customer-add' : 'text-customer-remove', customerId: action === 'add' ? customerId : key });
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
 
-  // ─── הזמנות מטקסט חופשי (בן, 26/10) ───────────────────────────────────
-  let textCustomers = {};
-  function textBox() {
-    let box = $('waInTextCustomers');
-    if (!box) {
-      const list = $('waInList'); if (!list) return null;
-      box = document.createElement('div'); box.id = 'waInTextCustomers';
-      list.parentNode.insertBefore(box, list);
-    }
-    return box;
+  // ─── ספירות — "דורש טיפול" לכל ערוץ, לתג על הכפתור ועל הלשוניות ──────
+  function attention() {
+    const wa = lgWaInCounts(byCh.whatsapp).attention
+      + lgWaInGroupRows(groupsSeen, groupsLinked).filter(g => !g.linked).length   // קבוצה שלא קושרה
+      + lgWaInSendersAttention(sendersSeen, sendersLinked);
+    const em = lgWaInCounts(byCh.email).attention + lgWaInEmailsAttention(emailsSeen, emailsLinked);
+    return { wa, em };
   }
-  function renderTextCustomers() {
-    const box = textBox(); if (!box) return;
-    if (box.contains(document.activeElement) && document.activeElement.classList.contains('wain-acc')) return;
-    box.innerHTML = lgWaInTextCustomersHtml(textCustomers);
-  }
-  async function textAct(key, action, input) {
-    let customerId = key;
-    if (action === 'add') {
-      const v = String((input && input.value) || '');
-      customerId = String((input && input.dataset.acc) || v.split('·').pop() || '').trim();
-      if (!customerId) { alert('בחר לקוח מהרשימה'); return; }
-    } else if (!confirm('להפסיק לפתוח הזמנות מטקסט ללקוח הזה?')) return;
-    const r = await post({ action: action === 'add' ? 'text-customer-add' : 'text-customer-remove', customerId });
-    if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
-  }
-
   function badge() {
-    const c = lgWaInCounts(rows);
-    // קבוצה חדשה שלא קושרה — גם היא דורשת טיפול
-    c.attention += Object.keys(groupsSeen).filter(k => !groupsLinked[k]).length;
-    c.attention += lgWaInSendersAttention(sendersSeen, sendersLinked);
-    c.attention += lgWaInEmailsAttention(emailsSeen, emailsLinked);
+    const n = attention(), c = lgWaInCounts(rows);
     const a = $('waInBadgeA'), p = $('waInBadgeP');
-    if (a) { a.textContent = '⚠ ' + c.attention; a.hidden = !c.attention; }
+    if (a) { a.textContent = '⚠ ' + (n.wa + n.em); a.hidden = !(n.wa + n.em); }
     if (p) { p.textContent = '⏳ ' + c.inProgress; p.hidden = !c.inProgress; }
+    [['waInTabWa', n.wa], ['waInTabEm', n.em]].forEach(([id, v]) => { const t = $(id); if (t) { t.textContent = v; t.hidden = !v; } });
+  }
+
+  // ─── לשונית: מחכים לקישור · מקושרים · (טקסט חופשי) · לא נקלטו · היסטוריה ──
+  function sec(title, n, body) {
+    return `<div class="wain-sec">${title}<span>${n}</span></div>${body}`;
+  }
+  function fold(id, title, n, body) {
+    return `<details class="wain-fold" data-fold="${id}"${folds[id] ? ' open' : ''}>
+        <summary>${title}<span>${n}</span></summary><div class="wain-fold-b">${body}</div></details>`;
+  }
+  function intakeRows(ch) {
+    const all = byCh[ch];
+    const now = all.filter(x => x.needsAttention || x.inProgress);
+    return {
+      problems: now.length ? now.map(lgWaInRowHtml).join('') : '',
+      problemsN: now.length,
+      history: all.length ? all.map(lgWaInRowHtml).join('') : '<div class="wain-ok-note">אין עדיין קליטות.</div>',
+      historyN: all.length,
+    };
+  }
+  function lines(html) { return html ? `<div class="wain-lines">${html}</div>` : ''; }
+
+  function waTab() {
+    const groups = lgWaInGroupRows(groupsSeen, groupsLinked);
+    const senders = lgWaInSenderRows(sendersSeen, sendersLinked, true);
+    const textOn = id => !!(id && textCustomers[id]);
+    const waiting = groups.filter(g => !g.linked).map(g => [g.lastAt, lgWaInGroupHtml(g)])
+      .concat(senders.filter(s => !s.linked && !s.ignored).map(s => [s.lastAt, lgWaInSenderHtml(s)]))
+      .sort((a, b) => b[0] - a[0]).map(x => x[1]);
+    const linkedG = groups.filter(g => g.linked), linkedS = senders.filter(s => s.linked);
+    const linked = linkedG.map(g => lgWaInGroupHtml(g, textOn(g.customerId)))
+      .concat(linkedS.map(s => lgWaInSenderHtml(s, textOn(s.customerId)))).join('');
+    const ignored = senders.filter(s => s.ignored);
+    const ir = intakeRows('whatsapp');
+    const tN = Object.keys(textCustomers).length;
+    return sec('מחכים לקישור', waiting.length, waiting.join('') || '<div class="wain-ok-note">אין קבוצות או מספרים חדשים ✓</div>')
+      + sec('מקושרים', linkedG.length + linkedS.length, lines(linked) || '<div class="wain-ok-note">עוד אין קבוצות או מספרים מקושרים.</div>')
+      + fold('wa-text', 'מזמינים בטקסט חופשי', tN, lgWaInTextCustomersHtml(textCustomers))
+      + (ir.problemsN ? sec('הודעות שלא נקלטו', ir.problemsN, ir.problems)
+                      : fold('wa-prob', 'הודעות שלא נקלטו', 'אין ✓', '<div class="wain-ok-note">כל ההודעות נקלטו ✓</div>'))
+      + (ignored.length ? fold('wa-ign', 'מספרים מוסתרים', ignored.length, lines(ignored.map(s => lgWaInSenderHtml(s)).join(''))) : '')
+      + fold('wa-hist', 'כל ההיסטוריה', ir.historyN, ir.history);
+  }
+  function emailTab() {
+    const all = lgWaInEmailRows(emailsSeen, emailsLinked, true);
+    const waiting = all.filter(r => !r.linked && !r.ignored);
+    const linked = all.filter(r => r.linked), ignored = all.filter(r => r.ignored);
+    const ir = intakeRows('email');
+    return sec('מחכים לקישור', waiting.length, waiting.map(lgWaInEmailHtml).join('') || '<div class="wain-ok-note">אין כתובות חדשות ✓</div>')
+      + sec('מקושרים', linked.length, lines(linked.map(lgWaInEmailHtml).join('')) || '<div class="wain-ok-note">עוד אין כתובות מקושרות.</div>')
+      + (ir.problemsN ? sec('מיילים שלא נקלטו', ir.problemsN, ir.problems)
+                      : fold('em-prob', 'מיילים שלא נקלטו', 'אין ✓', '<div class="wain-ok-note">כל המיילים נקלטו ✓</div>'))
+      + (ignored.length ? fold('em-ign', 'כתובות מוסתרות', ignored.length, lines(ignored.map(lgWaInEmailHtml).join(''))) : '')
+      + fold('em-hist', 'כל ההיסטוריה', ir.historyN, ir.history);
   }
 
   function render() {
     badge();
-    renderGroups();
-    renderSenders();
-    renderEmails();
-    renderTextCustomers();
     const list = $('waInList'); if (!list) return;
-    const shown = rows.filter(x => showAll || x.needsAttention || x.inProgress);
-    list.innerHTML = shown.length ? shown.map(lgWaInRowHtml).join('')
-      : `<div class="wain-empty">${showAll ? 'אין עדיין קליטות.' : 'אין קליטות שדורשות טיפול ✓'}</div>`;
-    const t = $('waInToggle'); if (t) t.textContent = showAll ? 'רק מה שדורש טיפול' : 'הצג הכל';
+    const top = list.scrollTop;
+    list.innerHTML = tab === 'email' ? emailTab() : waTab();
+    list.scrollTop = top;                             // רענון חי לא מקפיץ לראש הרשימה
+    document.querySelectorAll('#waInPanel .wain-tab').forEach(b => {
+      const on = b.dataset.tab === tab;
+      b.classList.toggle('wain-tab-on', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
   }
 
   //  הרשומות הגולמיות נשמרות, כדי לחשב שוב כשההזמנות משתנות (שיוך ידני)
@@ -595,49 +584,48 @@ if (typeof document !== 'undefined') (function () {
     lgSketchIntoImg(img, { id: orderId, hasSketch: true });
   }
 
-  window.lgWaInOpen = function () { const p = $('waInPanel'); if (p) { p.hidden = false; rebuild(); render(); } };
-  window.lgWaInClose = function () { const p = $('waInPanel'); if (p) p.hidden = true; };
+  //  נפתח על הלשונית שיש בה מה לעשות — WhatsApp קודם
+  window.lgWaInOpen = function () {
+    const p = $('waInPanel'); if (!p) return;
+    p.hidden = false; rebuild();
+    const n = attention(); if (!n.wa && n.em) tab = 'email';
+    render();
+  };
+  window.lgWaInClose = function () { const p = $('waInPanel'); if (p) p.hidden = true; closePick(); };
 
   function wire() {
-    // קבוצות — הכפתורים נוצרים מחדש בכל רינדור, ולכן האזנה על הפאנל כולו
+    // הכפתורים נוצרים מחדש בכל רינדור, ולכן האזנה על הפאנל כולו
     const panel = $('waInPanel');
-    if (panel) {
-      ['input', 'focusin'].forEach(evn => panel.addEventListener(evn, ev => {
-        const inp = ev.target.closest && ev.target.closest('.wain-acc'); if (!inp) return;
-        if (evn === 'input') delete inp.dataset.acc;          // הקלדה מבטלת בחירה קודמת
-        // נגיעה בשדה שכבר נבחר בו לקוח — לא לפתוח רשימה (היא הייתה מחפשת את
-        // "שם · מפתח" כולו ומציגה "לא נמצא"). שדה ריק — כל הכרטיסים.
-        else if (inp.dataset.acc) return;
-        renderAccList(inp);
-      }));
-      panel.addEventListener('click', ev => {
-        const opt = ev.target.closest('.wain-acc-opt'); if (!opt) return;
-        const row = opt.closest('[data-gkey],[data-skey],[data-ekey],[data-tkey]'); const inp = row && row.querySelector('.wain-acc');
-        if (!inp) return;
-        inp.value = opt.dataset.name + ' · ' + opt.dataset.acc;
-        inp.dataset.acc = opt.dataset.acc;
-        opt.parentNode.hidden = true;
-      });
-    }
-    if (panel) panel.addEventListener('click', ev => {
-      const b = ev.target.closest('button[data-gact]'); if (!b) return;
-      const row = b.closest('[data-gkey]'); if (!row) return;
-      groupAct(row.dataset.gkey, b.dataset.gact, row.querySelector('.wain-acc'));
+    if (!panel) return;
+    const q = $('waInPickQ');
+    if (q) q.addEventListener('input', () => renderAccList(q));
+    const px = $('waInPickX'); if (px) px.addEventListener('click', closePick);
+    const pb = $('waInPick');
+    if (pb) pb.addEventListener('click', ev => {
+      if (ev.target === pb) { closePick(); return; }   // נגיעה ברקע הכהה
+      const opt = ev.target.closest('.wain-acc-opt'); if (opt) picked(opt.dataset.acc);
     });
-    if (panel) panel.addEventListener('click', ev => {
-      const b = ev.target.closest('button[data-sact]'); if (!b) return;
-      const row = b.closest('[data-skey]'); if (!row) return;
-      senderAct(row.dataset.skey, b.dataset.sact, row.querySelector('.wain-acc'));
-    });
-    if (panel) panel.addEventListener('click', ev => {
-      const b = ev.target.closest('button[data-eact]'); if (!b) return;
-      const row = b.closest('[data-ekey]'); if (!row) return;
-      emailAct(row.dataset.ekey, b.dataset.eact, row.querySelector('.wain-acc'));
-    });
-    if (panel) panel.addEventListener('click', ev => {
-      const b = ev.target.closest('button[data-tact]'); if (!b) return;
-      const row = b.closest('[data-tkey]'); if (!row) return;
-      textAct(row.dataset.tkey, b.dataset.tact, row.querySelector('.wain-acc'));
+    // מקטע מקופל — זוכרים אם פתוח. toggle לא מבעבע, ולכן capture
+    panel.addEventListener('toggle', ev => {
+      const d = ev.target; if (d && d.dataset && d.dataset.fold) folds[d.dataset.fold] = d.open;
+    }, true);
+    panel.addEventListener('click', ev => {
+      const tb = ev.target.closest('.wain-tab');
+      if (tb) { tab = tb.dataset.tab; render(); $('waInList').scrollTop = 0; return; }
+      // ⋮ — פותח/סוגר את הפעולה של השורה
+      const more = ev.target.closest('.wain-more');
+      if (more) {
+        const m = more.parentNode.querySelector('.wain-menu');
+        if (m) { m.hidden = !m.hidden; more.setAttribute('aria-expanded', m.hidden ? 'false' : 'true'); }
+        return;
+      }
+      const b = ev.target.closest('button[data-gact],button[data-sact],button[data-eact],button[data-tact]'); if (!b) return;
+      const row = b.closest('[data-gkey],[data-skey],[data-ekey],[data-tkey]'); if (!row) return;
+      const who = (row.querySelector('bdi') || {}).textContent || '';
+      if (b.dataset.gact) b.dataset.gact === 'link' ? openPick('g', row.dataset.gkey, who) : groupAct(row.dataset.gkey, b.dataset.gact);
+      else if (b.dataset.sact) b.dataset.sact === 'link' ? openPick('s', row.dataset.skey, who) : senderAct(row.dataset.skey, b.dataset.sact);
+      else if (b.dataset.eact) b.dataset.eact === 'link' ? openPick('e', row.dataset.ekey, who) : emailAct(row.dataset.ekey, b.dataset.eact);
+      else b.dataset.tact === 'add' ? openPick('t', '', '') : textAct(row.dataset.tkey, b.dataset.tact);
     });
     const list = $('waInList');
     if (list) list.addEventListener('click', ev => {
@@ -645,7 +633,6 @@ if (typeof document !== 'undefined') (function () {
       if (b.dataset.act === 'view') view(b.dataset.order);
       else act(b.dataset.act, b.dataset.key, b.dataset.ch || 'whatsapp');
     });
-    const t = $('waInToggle'); if (t) t.addEventListener('click', () => { showAll = !showAll; render(); });
     const vc = $('waInViewClose'); if (vc) vc.addEventListener('click', () => { $('waInView').hidden = true; });
   }
 
