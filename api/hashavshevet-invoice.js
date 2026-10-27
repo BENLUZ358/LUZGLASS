@@ -342,6 +342,28 @@ module.exports = async function handler(req, res) {
       return;
     }
 
+    // ── DB-00004: החשבונית ממתינה ל-PDF מכלי המחשב ──
+    // המפתח דטרמיניסטי לפי ההזמנות, כך שהפקה חוזרת (force) לא יוצרת רשומה
+    // שנייה. רשומה שכבר 'ready' לא נדרסת: היא כבר שויכה ל-PDF.
+    // כשל ברישום לא מפיל את התשובה — המסמך כבר נוצר בחשבשבת.
+    try {
+      const pdfKey = crypto.createHash('sha1')
+        .update('invoicePdf|' + [...orderIds].sort().join(',')).digest('hex').slice(0, 20);
+      await db.ref('invoicePdf/' + pdfKey).transaction(cur => {
+        if (cur && cur.state !== 'awaiting') return;
+        return {
+          state: 'awaiting', reference: ref.reference, createdAt: Date.now(), createdBy: auth.phone,
+          client: clientName, clientPhone: acct.phone, simulated: isTest || null,
+          orderIds: orderIds.map(String),
+          orderNums: orders.map(o => String(o.orderNum || o.id)),
+          // שם הסקיצה — לפיו מזהים את החשבונית המודפסת (אותו שדה כמו _wa-recipient)
+          sketchNames: orders.map(o => String(o.sketchName || o.type || o.desc || '').trim()),
+        };
+      });
+    } catch (e) {
+      console.error('hashavshevet-invoice: invoicePdf register failed', e && e.name);
+    }
+
     res.status(200).json({
       ok: true, dryRun: false, simulated: isTest,
       client: clientName, accountKey, reference: ref.reference,

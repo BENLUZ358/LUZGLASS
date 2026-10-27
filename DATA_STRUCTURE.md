@@ -193,3 +193,19 @@ String(id)
 3. אין כפילויות  
 4. אין הזמנות ריקות  
 5. אין מצב שיש מונה בלי פריטים בפועל
+## invoicePdf / invoicePdfBlobs (DB-00004)
+
+`invoicePdf/<key>` — חשבונית שהופקה בחשבשבת וממתינה ל-PDF מכלי המחשב (`tools/invoice-watcher`).
+`key` = sha1 של orderIds ממוינים. כתיבה: שרת בלבד.
+
+| שדה | הערה |
+|---|---|
+| `state` | `awaiting` (נרשם ב-`hashavshevet-invoice`) → `ready` (הועלה ושויך ב-`_invoice-upload`) |
+| `orderIds`, `orderNums`, `sketchNames` | ההזמנות שנבחרו; לפי שמות הסקיצות מזהים את ה-PDF |
+| `client`, `clientPhone`, `reference`, `simulated` | |
+| `docNumber`, `date`, `archivePath`, `originalHash`, `uploadedAt` | אחרי העלאה. `archivePath` = `שנה/חודש/לקוח/תאריך_מספר.pdf` |
+| `sendAfter`, `sendKey` | סוף חלון הביטול (5 דקות) ומפתח למניעת כפילות — **טרם נצרכים: אין עדיין שליחה** |
+
+`invoicePdfBlobs/<key>` — `{ original, copy }` base64. לא קריא מהדפדפן.
+
+Endpoint: `POST /api/invoice-pdf-upload` (rewrite ל-`wa-inbound?invoice=upload`), משתנה סביבה `INVOICE_UPLOAD_TOKEN`.

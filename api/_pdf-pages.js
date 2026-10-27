@@ -150,4 +150,4 @@ async function lgPdfToJpegs(buf, opts) {
   }
 }
 
-module.exports = { PDF_TARGET_W, PDF_JPEG_Q, PDF_MAX_PAGES, PdfError, lgPdfToJpegs, _reasonFor };
+module.exports = { PDF_TARGET_W, PDF_JPEG_Q, PDF_MAX_PAGES, PdfError, lgPdfToJpegs, _reasonFor, _pdfjs };

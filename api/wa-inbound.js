@@ -129,6 +129,7 @@ module.exports = async function handler(req, res) {
   // Rewrite selects a protected route, never an authentication bypass.
   // Only this exact server query value selects the relay's own token/project gate.
   if (req.query && req.query.devbrain === 'relay') return require('./_devbrain-route')(req, res);
+  if (req.query && req.query.invoice === 'upload') return require('./_invoice-upload')(req, res);
   try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) { res.status(500).json({ error: 'server not configured' }); return; }
     const { waitUntil } = require('@vercel/functions');
