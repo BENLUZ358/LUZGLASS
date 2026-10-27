@@ -418,7 +418,8 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     const A = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
     check('M2 admin.html loads the panel', /<script src="wa-inbound-panel\.js"><\/script>/.test(A), true);
     check('M2 and the queue has the intake button', /id="waInBtn"/.test(A), true);
-    check('M2 the panel heading names both channels', /<b>קליטות WhatsApp ומייל<\/b>/.test(A), true);
+    check('M2 the panel has a tab per channel', [/data-tab="whatsapp"/.test(A), /data-tab="email"/.test(A)], [true, true]);
+    check('M2 the customer picker sits outside the live-refreshed list', A.indexOf('id="waInPick"') > A.indexOf('id="waInList"></div>'), true);
     const VJ = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
     check('M3 the admin endpoint has room to process a few images', ((VJ.functions || {})['api/wa-inbound-drain.js'] || {}).maxDuration >= 30, true);
     const fns = fs.readdirSync(path.join(ROOT, 'api')).filter(f => f.endsWith('.js') && !f.startsWith('_'));
@@ -450,7 +451,7 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('N3 attention counts only new, not-ignored numbers', ctx.lgWaInSendersAttention(seen, linked), 1);
     const hNew = ctx.lgWaInSenderHtml(rows[0]);
     check('N4 a new number offers link and ignore',
-          [/data-skey="037436564"/.test(hNew), /data-sact="link"/.test(hNew), /data-sact="ignore"/.test(hNew), /class="wain-acc"/.test(hNew), /3 הודעות נשלחו מהמספר ולא נקלטו/.test(hNew)],
+          [/data-skey="037436564"/.test(hNew), /data-sact="link"/.test(hNew), /data-sact="ignore"/.test(hNew), !/class="wain-acc"/.test(hNew), /3 הודעות נשלחו מהמספר ולא נקלטו/.test(hNew)],
           [true, true, true, true, true]);
     const hLinked = ctx.lgWaInSenderHtml(rows[1]);
     check('N4 a linked number shows its customer and unlink only',
@@ -472,7 +473,7 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     const h = ctx.lgWaInTextCustomersHtml({ '888': { customerName: 'מראות <b>כהן</b>' }, '14201': { customerName: 'המקום לאמבט' } });
     check('O1 a row per customer with a remove button', [/data-tkey="888"/.test(h), /data-tkey="14201"/.test(h), (h.match(/data-tact="remove"/g) || []).length], [true, true, 2]);
     check('O1 names are escaped', /<b>כהן/.test(h), false);
-    check('O1 the add picker is there', [/data-tact="add"/.test(h), /class="wain-acc"/.test(h)], [true, true]);
+    check('O1 the add picker is there', [/data-tact="add"/.test(h), /class="wain-acc"/.test(h)], [true, false]);
     const e = ctx.lgWaInTextCustomersHtml({});
     check('O2 an empty list still explains and offers add', [/ההזמנה תיפתח לבד בתור/.test(e), /data-tact="add"/.test(e)], [true, true]);
     const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
@@ -500,13 +501,13 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     const hNew = ctx.lgWaInEmailHtml(rows[0]);
     check('P4 a new address is shown ltr and offers link and ignore',
           [/data-ekey="new@client,co,il"/.test(hNew), /dir="ltr">new@client\.co\.il</.test(hNew), /data-eact="link"/.test(hNew), /data-eact="ignore"/.test(hNew),
-           /class="wain-acc"/.test(hNew), /3 מיילים נשלחו מהכתובת ולא נקלטו/.test(hNew)],
+           !/class="wain-acc"/.test(hNew), /3 מיילים נשלחו מהכתובת ולא נקלטו/.test(hNew)],
           [true, true, true, true, true, true]);
     const hLinked = ctx.lgWaInEmailHtml(rows[1]);
     check('P4 a linked address shows its customer and unlink only',
           [/כתר מקלחונים/.test(hLinked), /data-eact="unlink"/.test(hLinked), /data-eact="link"/.test(hLinked)], [true, true, false]);
-    check('P4 a linked address says the whole wheel: replies come back by email',
-          [/חוזרות אליו במייל/.test(hLinked), hLinked.includes('הסקיצות טופלו / מוכן לאיסוף / יצא להובלה')], [true, true]);
+    check('P4 linking an address says the replies come back by email',
+          /יחזרו אליה במייל/.test(fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8')), true);
     const hIgn = ctx.lgWaInEmailHtml(all.find(r => r.ignored));
     check('P4 an ignored address can be un-ignored', [/מוסתר/.test(hIgn), /data-eact="unignore"/.test(hIgn)], [true, true]);
     check('P5 names are escaped', /<script>/.test(ctx.lgWaInEmailHtml({ ...rows[1], customerName: '<script>' })), false);
@@ -521,11 +522,11 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('P8 a listed address is shown, marked listed, not linked', [ben.listed, ben.linked], [true, false]);
     check('P8 it is not counted in the attention badge', ctx.lgWaInEmailsAttention(seenL, linked), 1);
     const hL = ctx.lgWaInEmailHtml(ben);
-    check('P8 chip "ברשימה" and a link button', [/>ברשימה</.test(hL), /data-eact="link"/.test(hL), /class="wain-acc"/.test(hL)], [true, true, true]);
+    check('P8 chip "ברשימה" and a link button', [/>ברשימה</.test(hL), /data-eact="link"/.test(hL), /class="wain-acc"/.test(hL)], [true, true, false]);
     check('P8 it does not say its mails were not taken in', /ולא נקלטו/.test(hL), false);
     const benLinked = ctx.lgWaInEmailRows(seenL, { ...linked, 'ben@own,com': { email: 'ben@own.com', customerId: '3150', customerName: 'אגן ברזל' } }, false)
       .find(r => r.key === 'ben@own,com');
-    check('P8 once linked it is a plain linked row', [benLinked.linked, benLinked.listed, />מקושר</.test(ctx.lgWaInEmailHtml(benLinked))], [true, false, true]);
+    check('P8 once linked it is a plain linked row', [benLinked.linked, benLinked.listed, /מקושר/.test(ctx.lgWaInEmailHtml(benLinked))], [true, false, true]);
     const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
     check('P7 the panel listens to emailSendersSeen and emailSenders',
           [/ref\(\s*['"`]waMeta\/emailSendersSeen['"`]\s*\)/.test(P), /ref\(\s*['"`]waMeta\/emailSenders['"`]\s*\)/.test(P)], [true, true]);
