@@ -2806,13 +2806,6 @@ document.addEventListener('visibilitychange', () => {
 .wain-primary{background:#b8922a;border-color:#b8922a;color:#1a1714;}
 .wain-empty{padding:30px 0;text-align:center;color:rgba(247,244,239,0.55);}
 /* קבוצות WhatsApp (06/10) — מעל רשימת הקליטות, נגללות בעצמן אם יש הרבה */
-#waInGroups{padding:10px 14px 0;display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow-y:auto;}
-#waInGroups:empty{display:none;}
-#waInSenders{padding:10px 14px 0;display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow-y:auto;}
-#waInSenders:empty{display:none;}
-#waInEmails{padding:10px 14px 0;display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow-y:auto;}
-#waInEmails:empty{display:none;}
-#waInTextCustomers{padding:10px 14px 0;display:flex;flex-direction:column;gap:8px;max-height:40vh;overflow-y:auto;}
 .wain-gtitle{font-size:12px;font-weight:800;letter-spacing:0.12em;color:var(--gold-text);}
 .wain-acc-list{display:flex;flex-direction:column;margin-top:6px;border:1px solid rgba(247,244,239,0.18);border-radius:6px;overflow:hidden;}
 .wain-acc-list[hidden]{display:none;}
@@ -2824,7 +2817,52 @@ document.addEventListener('visibilitychange', () => {
 #waInView{position:absolute;inset:0;background:rgba(10,9,8,0.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:16px;}
 #waInView[hidden]{display:none;}
 #waInView img{max-width:100%;max-height:80%;object-fit:contain;background:#fff;border-radius:4px;}
-@media(max-width:600px){ .wain-sub{display:none;} }
+/* ─ קליטות (27/10): לשוניות, מקטעים, שורות מקושרים, בורר לקוח ─ */
+.wain-head b{flex:1;}
+.wain-tabs{display:flex;gap:6px;padding:6px 14px 0;border-bottom:1px solid rgba(255,255,255,0.08);}
+.wain-tab{flex:1;min-height:44px;background:transparent;border:0;border-bottom:3px solid transparent;color:rgba(247,244,239,0.55);
+  font-family:Heebo,sans-serif;font-size:15px;font-weight:800;cursor:pointer;}
+.wain-tab-on{color:#f7f4ef;border-bottom-color:#b8922a;}
+.wain-tab:focus-visible{outline:2px solid var(--gold-text);outline-offset:-2px;}
+.wain-tab-n{display:inline-block;min-width:20px;margin-right:6px;padding:0 6px;border-radius:10px;background:#c0392b;color:#fff;font-size:12px;line-height:20px;}
+.wain-tab-n[hidden]{display:none;}
+.wain-sec{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:13px;font-weight:800;color:var(--gold-text);}
+.wain-sec span{color:rgba(247,244,239,0.55);font-weight:600;}
+.wain-ok-note{font-size:13px;color:rgba(247,244,239,0.55);padding:2px 2px 4px;}
+.wain-note{font-size:13px;line-height:1.5;color:rgba(247,244,239,0.7);}
+/* רשימה גוללת — בלי זה מקטע עם overflow:hidden מתכווץ לגובה 0 */
+#waInList>*{flex-shrink:0;}
+.wain-lines{border:1px solid rgba(255,255,255,0.09);border-radius:8px;overflow:hidden;background:rgba(255,255,255,0.03);}
+.wain-line{display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-height:52px;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.07);}
+.wain-line:last-child{border-bottom:0;}
+.wain-ic{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;background:rgba(37,211,102,0.15);}
+.wain-ic-m{background:rgba(184,146,42,0.18);color:#f3c74f;}
+.wain-who{flex:1;min-width:0;}
+.wain-who b{display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wain-who small{font-size:12px;color:rgba(247,244,239,0.55);}
+.wain-more{flex:none;width:44px;height:44px;background:transparent;border:0;border-radius:6px;color:rgba(247,244,239,0.7);font-size:20px;cursor:pointer;}
+.wain-more:hover,.wain-more[aria-expanded="true"]{background:rgba(255,255,255,0.08);}
+.wain-menu{flex:1 1 100%;display:flex;justify-content:flex-end;padding-bottom:6px;}
+.wain-menu[hidden]{display:none;}
+.wain-addbtn{width:100%;min-height:44px;margin-top:2px;background:transparent;border:1px dashed rgba(184,146,42,0.6);border-radius:8px;
+  color:#f3c74f;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;}
+.wain-fold{border:1px solid rgba(255,255,255,0.09);border-radius:8px;background:rgba(255,255,255,0.03);}
+.wain-fold summary{display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 12px;cursor:pointer;
+  font-size:14px;font-weight:700;list-style:none;}
+.wain-fold summary::-webkit-details-marker{display:none;}
+.wain-fold summary::after{content:'›';margin-right:8px;color:rgba(247,244,239,0.55);transition:transform .15s;}
+.wain-fold[open] summary::after{transform:rotate(90deg);}
+.wain-fold summary span{margin-right:auto;color:rgba(247,244,239,0.55);font-weight:600;}
+.wain-fold-b{display:flex;flex-direction:column;gap:8px;padding:0 10px 10px;}
+#waInPick{position:absolute;inset:0;z-index:7;background:rgba(10,9,8,0.6);display:flex;align-items:flex-end;justify-content:center;}
+#waInPick[hidden]{display:none;}
+.wain-pick-box{width:100%;max-width:560px;max-height:85%;display:flex;flex-direction:column;gap:10px;padding:16px;
+  background:#1e1b18;border:1px solid rgba(255,255,255,0.1);border-radius:16px 16px 0 0;}
+.wain-pick-box b{font-size:16px;}
+.wain-pick-sub{font-size:13px;line-height:1.5;color:rgba(247,244,239,0.6);}
+.wain-pick-box .wain-acc{flex:none;min-height:48px;border-color:#b8922a;}
+.wain-pick-box .wain-acc-list{flex:1;min-height:0;overflow-y:auto;margin-top:0;}
+@media(min-width:601px){ #waInPick{align-items:center;} .wain-pick-box{border-radius:12px;} }
 
 /* ─ תור הסקיצות בטלפון (≤600) — שתי שורות במקום שורה אחת שגולשת ─
    שורה 1: חיפוש · סינון · קליטות · סגירה. שורה 2: "עוד לא נראה | נראה".
@@ -2857,7 +2895,6 @@ document.addEventListener('visibilitychange', () => {
   #waInPanel{top:0;}
   .wain-head{flex-wrap:nowrap;gap:8px;padding:8px 10px;}
   .wain-head b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  #waInToggle{padding:0 10px;font-size:12px;white-space:nowrap;}
 }
 #waInBtn [data-icon],#sqFilterBtn [data-icon]{margin-left:2px;}
 /* ─ שלב 6: עדכון "הסקיצות טופלו" ─ */
@@ -2966,12 +3003,25 @@ document.addEventListener('visibilitychange', () => {
     <!-- קליטות WhatsApp ומייל — מעל רשימת הסקיצות. הנתונים והפעולות ב-wa-inbound-panel.js -->
     <div id="waInPanel" hidden role="dialog" aria-label="קליטות WhatsApp ומייל">
       <div class="wain-head">
-        <b>קליטות WhatsApp ומייל</b>
-        <span class="wain-sub">הודעות ומיילים נכנסים שלא הפכו להזמנה תקינה, או שצריכים עין</span>
-        <button id="waInToggle" type="button" class="wain-btn">הצג הכל</button>
+        <b>קליטות</b>
         <button type="button" class="wain-btn" onclick="lgWaInClose()" aria-label="סגור קליטות">✕</button>
       </div>
+      <!-- לשונית לכל ערוץ (27/10): מחכים לקישור · מקושרים · לא נקלטו · היסטוריה -->
+      <div class="wain-tabs" role="tablist" aria-label="ערוץ">
+        <button type="button" class="wain-tab wain-tab-on" data-tab="whatsapp" role="tab" aria-selected="true">WhatsApp<span id="waInTabWa" class="wain-tab-n" hidden></span></button>
+        <button type="button" class="wain-tab" data-tab="email" role="tab" aria-selected="false">מייל<span id="waInTabEm" class="wain-tab-n" hidden></span></button>
+      </div>
       <div id="waInList"></div>
+      <!-- בורר לקוח — נפתח מ"קשר ללקוח" / "הוסף", מחוץ לרשימה שמתרעננת חי -->
+      <div id="waInPick" hidden role="dialog" aria-modal="true" aria-labelledby="waInPickT">
+        <div class="wain-pick-box">
+          <b id="waInPickT"></b>
+          <div id="waInPickS" class="wain-pick-sub"></div>
+          <input id="waInPickQ" class="wain-acc" placeholder="שם הלקוח או מפתח בחשבשבת" aria-label="חיפוש לקוח" autocomplete="off">
+          <div id="waInPickL" class="wain-acc-list"></div>
+          <button type="button" id="waInPickX" class="wain-btn">ביטול</button>
+        </div>
+      </div>
       <div id="waInView" hidden>
         <img id="waInViewImg" alt="סקיצה מהקליטה">
         <button id="waInViewClose" type="button" class="wain-btn">סגור</button>
