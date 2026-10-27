@@ -118,6 +118,15 @@
       ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
       ".write": false
     },
+    "invoicePdf": {
+      ".indexOn": ["state", "originalHash"],
+      ".read": "auth != null && auth.token.email != null && root.child('users').child(auth.token.email.replace('@luzglass.local','')).child('role').val() === 'admin'",
+      ".write": false
+    },
+    "invoicePdfBlobs": {
+      ".read": false,
+      ".write": false
+    },
     "emailParts": {
       ".read": false,
       ".write": false
