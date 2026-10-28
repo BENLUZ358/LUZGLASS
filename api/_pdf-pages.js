@@ -132,7 +132,16 @@ async function lgPdfToJpegs(buf, opts) {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         await page.render({ canvasContext: ctx, viewport: vp }).promise;
         const bytes = await canvas.encode('jpeg', quality);
-        out.push({ bytes, w: canvas.width, h: canvas.height });
+        // opts.withText — גם הטקסט של העמוד (הזמנת רכש ממוחשבת, _po-pdf.js).
+        // ⚠️ כשל בקריאת הטקסט לא מפיל את העמוד — הסקיצה נקלטת כמו תמיד, בלי שורות
+        let text = null;
+        if (o.withText) {
+          try {
+            text = (await page.getTextContent()).items
+              .map(i => ({ str: i.str, x: i.transform[4], y: i.transform[5] }));
+          } catch (e) { console.warn('pdf-pages: no text on page', n, e && e.name); }
+        }
+        out.push({ bytes, w: canvas.width, h: canvas.height, text });
         canvas.width = 0; canvas.height = 0;   // שחרור הזיכרון לפני העמוד הבא
       } catch (e) {
         // ⚠️ רק שגיאה של הקובץ עצמו הופכת לדחייה. זיכרון / באג בקנבס — נזרקים
@@ -150,4 +159,4 @@ async function lgPdfToJpegs(buf, opts) {
   }
 }
 
-module.exports = { PDF_TARGET_W, PDF_JPEG_Q, PDF_MAX_PAGES, PdfError, lgPdfToJpegs, _reasonFor };
+module.exports = { PDF_TARGET_W, PDF_JPEG_Q, PDF_MAX_PAGES, PdfError, lgPdfToJpegs, _reasonFor, _pdfjs };
