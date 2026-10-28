@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>LuzGlass — תיקון הזמנות</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+<style>
+/* תיקון הזמנות (DB-00007): שינויים בשורות שכבר נשלחו לחשבשבת. חשבשבת לא
+   מקבלת מאיתנו ביטול או עדכון, ולכן בסוף היום מעדכנים אותה ידנית מהרשימה
+   הזאת ומסמנים "בוצע". הלוגיקה ב-firebase-db.js (lgHsCorrectionQueue). */
+html,body{height:100%;}
+.wrap{max-width:860px;margin:0 auto;padding:var(--space-4);padding-bottom:calc(var(--space-6) + env(safe-area-inset-bottom));}
+.bar{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-4);padding-top:env(safe-area-inset-top);}
+.bar h1{flex:1;font-size:var(--fs-xl);font-weight:var(--fw-black);}
+.tb-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-width:44px;min-height:44px;padding:0 var(--space-3);
+  border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:var(--radius);font-size:var(--fs-sm);
+  font-weight:var(--fw-bold);cursor:pointer;text-decoration:none;}
+.tb-btn:hover{border-color:var(--gold);}
+.filters{display:flex;gap:var(--space-1);margin-bottom:var(--space-4);}
+.flt{flex:1;min-height:44px;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);font:inherit;
+  font-size:var(--fs-sm);font-weight:var(--fw-bold);color:var(--muted);cursor:pointer;}
+.flt[aria-selected="true"]{background:var(--gold);border-color:var(--gold);color:var(--on-gold);}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-4);margin-bottom:var(--space-3);}
+.card.is-done{opacity:.75;}
+.c-head{display:flex;align-items:baseline;gap:var(--space-3);flex-wrap:wrap;}
+.c-num{font-size:var(--fs-lg);font-weight:var(--fw-black);}
+.c-line{font-weight:var(--fw-bold);color:var(--muted);}
+.c-client{font-size:var(--fs-sm);color:var(--muted);}
+.chg{margin-top:var(--space-2);font-size:var(--fs-base);}
+.chg b{display:inline-block;direction:ltr;unicode-bidi:isolate;}
+.todo{margin-top:var(--space-3);padding:var(--space-3);background:var(--bg2);border-radius:var(--radius);font-size:var(--fs-sm);font-weight:var(--fw-bold);}
+.meta{margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--muted);}
+.hist summary{cursor:pointer;font-size:var(--fs-xs);color:var(--muted);margin-top:var(--space-2);}
+.hist div{font-size:var(--fs-xs);color:var(--muted);padding:2px 0;}
+.card .btn{margin-top:var(--space-3);min-height:48px;}
+.toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:700;background:var(--text);
+  color:var(--bg);padding:var(--space-3) var(--space-5);border-radius:var(--radius-lg);font-weight:var(--fw-bold);}
+.toast.err{background:var(--red);color:#fff;}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="firebase-db.js?v=20260928"></script>
+<script src="lg-icons.js?v=20260807"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <a class="tb-btn" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
+    <h1>תיקון הזמנות</h1>
+  </div>
+  <p class="meta" style="margin:-8px 0 var(--space-4)">שינויים בשורות שכבר נשלחו לחשבשבת. עדכן אותם שם ביד, וסמן &quot;בוצע&quot;.</p>
+  <div class="filters" role="tablist" aria-label="סינון">
+    <button class="flt" role="tab" type="button" data-f="pending" aria-selected="true">ממתינות <span id="nPending"></span></button>
+    <button class="flt" role="tab" type="button" data-f="done" aria-selected="false">טופלו</button>
+    <button class="flt" role="tab" type="button" data-f="all" aria-selected="false">הכול</button>
+  </div>
+  <div id="list"><div class="meta">טוען…</div></div>
+</div>
+<script>
+let ORDERS = [], filter = 'pending';
+const $ = id => document.getElementById(id);
+const esc = s => lgEsc(s);
+const TYPE_WORD = { dims: 'מידות', glass: 'סוג זכוכית' };
+const fmtDate = ts => !ts ? '' : new Date(Number(ts)).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' }) + ' ' +
+  new Date(Number(ts)).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+// מידות נשמרות כ"550×1885"; בתוך משפט עברי הן היו מוצגות הפוך, ולכן lgDimsText
+const showVal = (type, v) => type === 'dims'
+  ? String(v).replace(/^(\d+)×(\d+)$/, (_, w, h) => lgDimsText(w, h)) : String(v);
+function toast(msg, err) {
+  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : '');
+  t.setAttribute('role', err ? 'alert' : 'status'); t.textContent = msg; document.body.appendChild(t);
+  setTimeout(() => t.remove(), err ? 5000 : 2800);
+}
+// ההוראה לעובד: מה לעשות בחשבשבת, בנוסח הנוהל ("בטל יתרה לאספקה" + שורה חדשה באותו מספר)
+function instruction(r) {
+  const what = Object.keys(r.net).map(t => TYPE_WORD[t] || t).join(' ו');
+  return `בחשבשבת: בטל יתרה בשורה ${r.hsLine}, והוסף שורה ${r.hsLine} חדשה עם ה${what} החדשים.`;
+}
+function render() {
+  const rows = lgHsCorrectionQueue(ORDERS, filter);
+  $('nPending').textContent = lgHsCorrectionQueue(ORDERS, 'pending').length || '';
+  document.querySelectorAll('.flt').forEach(b => b.setAttribute('aria-selected', String(b.dataset.f === filter)));
+  if (!rows.length) {
+    $('list').innerHTML = `<div class="empty-state"><span data-icon="check-circle"></span><div class="empty-state-title">${filter === 'pending' ? 'אין תיקונים שממתינים' : 'אין תיקונים'}</div></div>`;
+    return;
+  }
+  $('list').innerHTML = rows.map(r => `<div class="card ${r.done ? 'is-done' : ''}">
+      <div class="c-head"><span class="c-num">${esc(r.orderNum)}</span><span class="c-line">שורה ${esc(r.hsLine)}</span><span class="c-client">${esc(r.client)}</span></div>
+      ${Object.keys(r.net).map(t => `<div class="chg">${esc(TYPE_WORD[t] || t)}: <b>${esc(showVal(t, r.net[t].from))}</b> ← <b>${esc(showVal(t, r.net[t].to))}</b></div>`).join('')}
+      ${r.done ? '' : `<div class="todo">${esc(instruction(r))}</div>`}
+      <div class="meta">שונה ע״י ${esc(r.lastBy || '—')} · ${esc(fmtDate(r.lastAt))}${r.done ? ' · טופל ע״י ' + esc(r.doneBy || '—') + ' · ' + esc(fmtDate(r.doneAt)) : ''}</div>
+      ${r.history.length > 1 ? `<details class="hist"><summary>היסטוריה (${r.history.length} שינויים)</summary>${r.history.map(c =>
+        `<div>${esc(fmtDate(c.at))} · ${esc(TYPE_WORD[c.type] || c.type)}: ${esc(showVal(c.type, c.from))} ← ${esc(showVal(c.type, c.to))} · ${esc(c.by || '')}</div>`).join('')}</details>` : ''}
+      ${r.done ? '' : `<button class="btn btn-primary" type="button" data-done="${esc(r.orderId)}" data-keys="${esc(r.keys.join(','))}"><span data-icon="check"></span>בוצע בחשבשבת</button>`}
+    </div>`).join('');
+}
+document.querySelector('.filters').addEventListener('click', e => {
+  const b = e.target.closest('.flt'); if (!b) return; filter = b.dataset.f; render();
+});
+$('list').addEventListener('click', async e => {
+  const b = e.target.closest('[data-done]'); if (!b) return;
+  b.disabled = true;
+  try { await lgMarkHsCorrectionDone(b.dataset.done, b.dataset.keys.split(',')); toast('סומן כבוצע'); }
+  catch (err) { toast(err.message || 'השמירה נכשלה', true); b.disabled = false; }
+});
+lgRequireAuthAsync('admin').then(session => {
+  if (!session) return;
+  listenAllOrders(list => { ORDERS = list; render(); },
+    () => { $('list').innerHTML = '<div class="meta">הטעינה נכשלה. בדוק חיבור ורענן.</div>'; });
+});
+</script>
+</body>
+</html>
