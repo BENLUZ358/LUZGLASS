@@ -47,6 +47,8 @@ const { lgEmailAddr, lgClientFromEmail } = require('./_email-recipient');
 const { lgInboxStillMine, lgInboxRefNum, lgInboxAudit, lgInboxDropNulls } = require('./_inbox-common');
 // ⚠️ אותו סף "תמונה גדולה — לבדוק" כמו WhatsApp, מאותו משתנה סביבה — לא עותק שני
 const { WA_IMAGE_FLAG_BYTES } = require('./_wa-inbound');
+const { lgPoParse, lgPoGroups } = require('./_po-pdf');
+const { lgWaTextItems } = require('./_wa-text-order');
 
 const EM_INBOX = 'emailInbound';
 const EM_PARTS = 'emailParts';
@@ -203,7 +205,7 @@ async function lgEmailInboundProcess(db, key, opts) {
         const pdfToJpegs = o.pdfToJpegs || pdf.lgPdfToJpegs;   // נקודת החלפה לבדיקות
         const room = Math.max(0, EM_MAX_SKETCHES - files.length);
         let pages;
-        try { pages = await pdfToJpegs(raw, { maxPages: Math.min(pdf.PDF_MAX_PAGES, room), deadline, clock }); }
+        try { pages = await pdfToJpegs(raw, { maxPages: Math.min(pdf.PDF_MAX_PAGES, room), deadline, clock, withText: true }); }
         catch (e) {
           if (!(e && e.name === 'PdfError')) throw e;
           if (e.timedOut) throw new Final(EM_SLOW);   // הדדליין עבר באמצע ה-PDF
@@ -217,6 +219,8 @@ async function lgEmailInboundProcess(db, key, opts) {
         pages.forEach((pg, i) => files.push({
           name: name + ' · עמוד ' + (i + 1) + '/' + pages.length,
           fileName: name, mime: 'image/jpeg', bytes: pg.bytes,
+          // הזמנת רכש ממוחשבת (אביבי) — השורות נקראות מהטקסט של העמוד
+          po: pg.text ? lgPoParse(pg.text) : null,
         }));
         continue;
       }
@@ -237,6 +241,12 @@ async function lgEmailInboundProcess(db, key, opts) {
     const name = who.matched ? (who.name || email) : 'לא מזוהה · ' + email;
     const phone = who.loginPhone || who.phone || '';
     const total = files.length;
+
+    // הזמנת רכש: המק"טים שלנו מהקטלוג החי — השם/סוג/עובי/עיבוד של כל פריט
+    const poGroups = files.map(f => (f.po && f.po.rows.length ? lgPoGroups(f.po) : null));
+    const cat = {};
+    const skus = [...new Set(poGroups.flat().filter(Boolean).map(g => g.sku).filter(Boolean))];
+    await Promise.all(skus.map(async s => { cat[s] = (await db.ref('skuCatalog/' + s).once('value')).val(); }));
 
     const upd = {};
     const orderIds = [];
@@ -267,10 +277,30 @@ async function lgEmailInboundProcess(db, key, opts) {
       order.customerId = who.customerId || '';
       if (who.matched && who.name) order.businessName = who.name;
       if (!who.matched) order.emailUnassigned = true;
+      // ⚠️ הזמנת רכש: מספר ההזמנה = שם הסקיצה, והשורות מוזנות. שורה בלי מק"ט מוכר
+      // נכנסת עם skuMissing — התור חוסם שליחה לחשבשבת עד שבן בוחר מק"ט.
+      if (poGroups[i]) {
+        order.sketchName = f.po.ref || '';
+        order.items = lgWaTextItems({ groups: poGroups[i] }, cat);
+        if (f.po.warnings.length) order.notes = f.po.warnings.join('\n');
+      } else if (f.po) {
+        order.notes = ['הזמנת רכש — השורות לא נקראו, להזין ידנית'].concat(f.po.warnings).join('\n');
+      }
       upd['orders/' + id] = order;
       sketches.push([id, 'data:' + f.mime + ';base64,' + f.bytes.toString('base64')]);
       orderIds.push(id);
     });
+
+    // אותו מספר הזמנת רכש כבר אצל אותו לקוח — "כפולה?", כמו בוואטסאפ. לא מוחקים ולא מחליפים
+    if (phone && poGroups.some(Boolean)) {
+      const mine = (await db.ref('orders').orderByChild('clientPhone').equalTo(phone).once('value')).val() || {};
+      orderIds.forEach(id => {
+        const o = upd['orders/' + id];
+        if (!o.sketchName || !poGroups[o.emailPage - 1]) return;
+        const prev = Object.values(mine).find(x => x && x.id && !orderIds.includes(x.id) && x.sketchName === o.sketchName);
+        if (prev) o.waDuplicateOf = prev.orderNum || prev.id;
+      });
+    }
 
     // ⚠️ סקיצה לכתיבה — ר' כלל 1 בראש הקובץ (16MB לכתיבה)
     for (const [id, data] of sketches) {

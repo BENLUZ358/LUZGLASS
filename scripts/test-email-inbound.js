@@ -506,6 +506,38 @@ const sketchWrites = w => w.paths.filter(x => x.startsWith('sketches/')).length;
     check('J5 a declared-oversize PDF is rejected', [r.state, r.reason], ['rejected', 'הקובץ big.pdf גדול מדי (10MB)']);
   }
 
+  {
+    // J9 הזמנת רכש ממוחשבת (אביבי, בן 28/10): עמוד ה-PDF נושא טקסט → השורות נכנסות להזמנה
+    const { PAGE } = require('./_po-fixture.js');
+    const dbj = seed();
+    dbj._data.skuCatalog = { '8CM': { name: '8 מ"מ קליר מלוטש', glass: 'קליר', mm: 8, proc: 'litush' } };
+    const parts = await stage(dbj, 'K', [{ idx: 0, name: 'הזמנה.pdf', mime: 'application/pdf', buf: Buffer.from('%PDF-1.7 stub') }]);
+    let asked = null;
+    const po = async (buf, opts) => { asked = opts.withText; return [{ bytes: JPEG, w: 1, h: 1, text: PAGE }]; };
+    const r = await em.lgEmailCommit(dbj, meta('K', parts), { now: NOW, by: 't', pdfToJpegs: po });
+    const o = (dbj._data.orders || {}).em_K_1 || {};
+    check('J9 the renderer is asked for the page text', asked, true);
+    check('J9 one order, named by the PO number', [r.state, o.sketchName], ['done', 'PO26H016504']);
+    check('J9 rows → 12 items with our SKU and size', [(o.items || []).length, o.items && o.items[0].sku, o.items && o.items[0].w, o.items && o.items[0].h],
+          [12, '8CM', 501, 248]);
+    check('J9 nothing to fix → no notes', o.notes, '');
+    check('J9 the page is still the sketch', !!(dbj._data.sketches || {}).em_K_1, true);
+
+    // אותו מספר הזמנה כבר אצל הלקוח → "כפולה?"
+    dbj._data.orders.L1 = { id: 'L1', orderNum: 'L1', clientPhone: o.clientPhone, sketchName: 'PO26H016504' };
+    const p2 = await stage(dbj, 'K2', [{ idx: 0, name: 'הזמנה.pdf', mime: 'application/pdf', buf: Buffer.from('%PDF-1.7 stub') }]);
+    await em.lgEmailCommit(dbj, meta('K2', p2), { now: NOW, by: 't', pdfToJpegs: po });
+    check('J9 the same PO again at the same customer → marked duplicate', (dbj._data.orders.em_K2_1 || {}).waDuplicateOf, 'L1');
+
+    // PDF רגיל (סקיצה) — בלי שורות, כמו תמיד
+    const dbk = seed();
+    const pk = await stage(dbk, 'K', [{ idx: 0, name: 'סקיצה.pdf', mime: 'application/pdf', buf: Buffer.from('%PDF-1.7 stub') }]);
+    await em.lgEmailCommit(dbk, meta('K', pk), { now: NOW, by: 't',
+      pdfToJpegs: async () => [{ bytes: JPEG, w: 1, h: 1, text: [{ str: 'מקלחון 90/190', x: 300, y: 500 }] }] });
+    const ok = (dbk._data.orders || {}).em_K_1 || {};
+    check('J9 a plain sketch PDF gets no items and no name', [ok.items, ok.sketchName], [undefined, '']);
+  }
+
 // ═══ H. רשימת השולחים המורשים ══════════════════════════════════════
   {
     const withEnv = (vars, fn) => {
