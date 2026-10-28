@@ -2463,7 +2463,7 @@ function lgCalcOrderTotal(order, globalP, clientP){
     const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
     if(!ppm2) return;
     priced++;
-    const area = lgCalcAreaM2(item.w||0, item.h||0);
+    const area = lgBillAreaM2(item, order.customerId);
     total += area * ppm2;
   });
   if(!priced) return order.total||0;
@@ -2600,6 +2600,20 @@ function lgMmToMeterStr(mm) {
 // lgCalcAreaM2(1900, 800) → 1.52    lgCalcAreaM2(885, 1200) → 1.062
 function lgCalcAreaM2(widthMm, heightMm) {
   return Math.round((widthMm || 0) * (heightMm || 0) / 1000) / 1000;
+}
+
+// מינימום חיוב במ"ר ללקוח (בן, 28/10/2026) — אביבי: מלוטש 0.20, מחוסם 0.30, לכל חתיכה.
+// לפי customerId (מפתח החשבון בחשבשבת). ⚠️ זהה ל-LG_MIN_AREA ב-api/hashavshevet-order.js —
+// כך המחיר על המסך והכמות שנשלחת לחשבשבת אומרים אותו דבר.
+const LG_MIN_AREA = {
+  // '<מפתח החשבון של אביבי>': { litush: 0.2, chisum: 0.3 },
+};
+function lgBillAreaM2(item, accountKey) {
+  const area = lgCalcAreaM2(item.w || 0, item.h || 0);
+  const rule = LG_MIN_AREA[String(accountKey || '')];
+  if (!rule || !area) return area;
+  const min = item.chisum ? rule.chisum : (item.litush ? rule.litush : 0);
+  return Math.max(area, min || 0);
 }
 
 // עיצוב מ"מ לתצוגה בכרטיסים (ללא יחידה — הקורא מוסיף " מ"מ")

@@ -48,7 +48,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 /* ── run the real functions, not a copy of them ────────────────────────── */
 const ctx = { module: {}, exports: {} };
 vm.createContext(ctx);
-for (const re of [/function areaM2[\s\S]*?\n}/, /function clientPricesByName[\s\S]*?\n}/,
+for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_MIN_AREA = \{[\s\S]*?\n\};/, /function billAreaM2[\s\S]*?\n}/, /function clientPricesByName[\s\S]*?\n}/,
                   /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /function lineText[\s\S]*?\n}/,
                   /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines, unpriced \};\n}/]) {
   const m = SRC.match(re);
