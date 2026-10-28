@@ -15,7 +15,7 @@
 const crypto = require('crypto');
 const { lgHookTokenOk } = require('./_hook-token');
 const M = require('./_invoice-match');
-const S = require('./_invoice-send');
+const C = require('./_invoice-ctl');
 
 const MAX_PDF_BYTES = 600 * 1024;   // base64 ב-RTDB: שני קבצים נשארים מתחת ל-1MB לצומת
 
@@ -60,36 +60,43 @@ async function handleUpload(req, deps) {
   const { db } = deps, now = deps.now || Date.now();
   const hash = _sha(orig);
 
-  //  העלאה חוזרת של אותו קובץ (ניסיון חוזר של הכלי) → תשובה זהה, בלי עיבוד שני
+  //  העלאה חוזרת של חשבונית שכבר שויכה (ניסיון חוזר של הכלי) → תשובה זהה
   const dup = (await db.ref('invoicePdf').orderByChild('originalHash').equalTo(hash).limitToFirst(1).once('value')).val();
   if (dup) {
     const k = Object.keys(dup)[0];
-    return { status: 200, body: { ok: true, duplicate: true, key: k, docNumber: dup[k].docNumber,
-      date: dup[k].date, archivePath: dup[k].archivePath, sendAfter: dup[k].sendAfter } };
+    if (dup[k].state === 'ready') {
+      return { status: 200, body: { ok: true, duplicate: true, key: k, docNumber: dup[k].docNumber,
+        date: dup[k].date, archivePath: dup[k].archivePath, sendAfter: dup[k].sendAfter } };
+    }
   }
 
-  const pend = (await db.ref('invoicePdf').orderByChild('state').equalTo('awaiting').limitToFirst(200).once('value')).val() || {};
-  const pick = M.pickPending(oText, pend);
-  if (!pick.ok) return _fail(422, pick.code);
-
-  const rec = pend[pick.key];
   const docNumber = M.extractDocNumber(oText);
   const date = M.extractDate(oText);
-  const archivePath = S.lgInvoiceArchivePath(date, rec.client, docNumber);
-  if (!docNumber || !date || !archivePath) return _fail(422, 'no-docnumber-or-date');
+  if (!docNumber || !date) return _fail(422, 'no-docnumber-or-date');
 
-  //  כתיבה אטומית: רק אם עדיין ממתינה (שתי העלאות מקבילות)
-  const tx = await db.ref('invoicePdf/' + pick.key).transaction(cur => {
-    if (!cur || cur.state !== 'awaiting') return;
-    return { ...cur, state: 'ready', docNumber, date, archivePath, originalHash: hash,
-      uploadedAt: now, sendAfter: S.lgInvoiceSendAfter(now),
-      sendKey: S.lgInvoiceSendKey(cur.clientPhone || cur.client, docNumber) };
-  });
-  if (!tx.committed) return _fail(409, 'already-processed');
-  await db.ref('invoicePdfBlobs/' + pick.key).set({
-    original: orig.toString('base64'), copy: copy.toString('base64') });
-  const r = tx.snapshot.val();
-  return { status: 200, body: { ok: true, key: pick.key, docNumber, date, archivePath, sendAfter: r.sendAfter } };
+  //  חשבונית שנרשמה עם מספר מסמך חייבת להתאים אליו
+  const pend0 = (await db.ref('invoicePdf').orderByChild('state').equalTo('awaiting').limitToFirst(200).once('value')).val() || {};
+  const pend = {};
+  Object.keys(pend0).forEach(k => { if (!pend0[k].docNumber || pend0[k].docNumber === docNumber) pend[k] = pend0[k]; });
+  const pick = M.pickPending(oText, pend);
+
+  const pk = 'p' + hash.slice(0, 19);   // רשומת "הודפסה" — מפתח לפי hash
+  if (!pick.ok) {
+    if (pick.code === 'ambiguous') return _fail(422, 'ambiguous');
+    //  ההדפסה הגיעה לפני "החשבונית הופקה": שומרים, והרישום ישייך אותה.
+    await db.ref('invoicePdf/' + pk).set({ state: 'printed', createdAt: now, docNumber, date,
+      originalHash: hash, text: oText.slice(0, 4000) });
+    await db.ref('invoicePdfBlobs/' + pk).set({
+      original: orig.toString('base64'), copy: copy.toString('base64') });
+    return { status: 202, body: { ok: true, state: 'printed', docNumber, date } };
+  }
+
+  const r = await C.promote(db, pick.key, { docNumber, date, hash, orig, copy }, now);
+  if (!r.ok) return _fail(409, 'already-processed');
+  await db.ref('invoicePdf/' + pk).set(null);   // ניסיון חוזר שהיה שמור כ"הודפסה"
+  await db.ref('invoicePdfBlobs/' + pk).set(null);
+  return { status: 200, body: { ok: true, key: pick.key, docNumber, date,
+    archivePath: r.rec.archivePath, sendAfter: r.rec.sendAfter } };
 }
 
 module.exports = async function handler(req, res) {

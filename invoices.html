@@ -251,6 +251,7 @@ html,body{height:100%;overflow:hidden;}
     <button class="tb-btn" id="btnBack" type="button" aria-label="חזרה"><span data-icon="arrow-right"></span><span>חזרה</span></button>
     <div class="tb-title" id="tbTitle">תחנת חשבוניות<small>בודקים פריטים מול סקיצה, ורק אז מפיקים חשבונית בחשבשבת</small></div>
     <button class="tb-btn" id="btnCustomers" type="button" aria-controls="pCustomers" aria-expanded="false"><span data-icon="users"></span><span>לקוחות</span></button>
+    <button class="tb-btn" id="btnArchive" type="button" aria-label="ארכיון חשבוניות"><span>ארכיון חשבוניות</span></button>
   </header>
 
   <main class="panes">
@@ -665,6 +666,85 @@ $('fullClose').onclick = () => $('full').classList.remove('open');
 // ═══ חלונות ═════════════════════════════════════════════════════════════════
 function openModal(html) { $('ovBox').innerHTML = html; $('ov').classList.add('open'); }
 function closeModal() { $('ov').classList.remove('open'); $('ovBox').innerHTML = ''; }
+
+// ═══ ארכיון חשבוניות (DB-00004) ═════════════════════════════════════════════
+// רשומות invoicePdf מהשרת (api/invoice-ctl), חצי שנה אחורה כברירת מחדל,
+// מקובצות לפי חודש ולקוח. "פתח PDF" פותח את המקור בלבד.
+const ARCH_STATE = { awaiting: 'ממתין ל־PDF', ready: 'מוכן', printed: 'הודפסה, ממתינה לרישום' };
+let archMonths = 6, archItems = [], archQ = '';
+
+async function archLoad() {
+  const from = new Date(); from.setMonth(from.getMonth() - archMonths);
+  const r = await _lgAuthPost('/api/invoice-ctl', { action: 'list', fromMs: from.getTime() });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j || !j.ok) throw new Error('טעינת הארכיון נכשלה');
+  archItems = j.items;
+}
+function archRows() {
+  const q = archQ.trim().toLowerCase();
+  const items = archItems.filter(x => !q || [x.client, x.docNumber, ...(x.orderNums || [])]
+    .some(v => String(v || '').toLowerCase().includes(q)));
+  if (!items.length) return '<div class="sub">אין חשבוניות בטווח</div>';
+  const groups = {};
+  items.forEach(x => {
+    const d = new Date(x.createdAt || 0);
+    const m = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    ((groups[m] = groups[m] || {})[x.client || 'לא משויך'] = groups[m][x.client || 'לא משויך'] || []).push(x);
+  });
+  const stale = Date.now() - 24 * 3600 * 1000;
+  return Object.keys(groups).sort().reverse().map(m => '<h4 style="margin:12px 0 4px">' + esc(m) + '</h4>' +
+    Object.keys(groups[m]).map(c => '<div style="font-weight:700;margin:6px 0 2px">' + esc(c) + '</div>' +
+      groups[m][c].map(x => {
+        const late = x.state === 'awaiting' && (x.createdAt || 0) < stale;
+        return '<div style="border:1px solid var(--line,#ddd);border-radius:8px;padding:8px;margin-bottom:6px">' +
+          '<div data-arch="' + esc(x.key) + '" style="cursor:pointer;display:flex;gap:8px;justify-content:space-between">' +
+          '<span>' + esc(x.date || new Date(x.createdAt).toLocaleDateString('he-IL')) + ' · חשבונית ' + esc(x.docNumber || '—') +
+          ' · ' + (x.orderIds || []).length + ' הזמנות</span>' +
+          '<span' + (late ? ' style="color:#b00020;font-weight:700"' : '') + '>' + esc(ARCH_STATE[x.state] || x.state) +
+          (late ? ' · מחכה מעל יום' : '') + '</span></div>' +
+          '<div data-detail="' + esc(x.key) + '" style="display:none;margin-top:6px;font-size:.9em">' +
+          'הזמנות: ' + esc((x.orderNums || []).join(', ')) + '<br>סקיצות: ' + esc((x.sketchNames || []).join(', ')) +
+          (x.archivePath ? '<br>העתק בתיקייה השיתופית: ' + esc(x.archivePath) : '') +
+          (x.state === 'ready' ? '<br><button class="btn btn-primary" type="button" data-pdf="' + esc(x.key) + '">פתח PDF (מקור)</button>' : '') +
+          '</div></div>';
+      }).join('')).join('')).join('');
+}
+function archPaint() {
+  $('archList').innerHTML = archRows();
+  $('archList').querySelectorAll('[data-arch]').forEach(el => el.onclick = () => {
+    const d = $('archList').querySelector('[data-detail="' + el.dataset.arch + '"]');
+    d.style.display = d.style.display === 'none' ? 'block' : 'none';
+  });
+  $('archList').querySelectorAll('[data-pdf]').forEach(b => b.onclick = async () => {
+    const w = window.open('', '_blank');
+    try {
+      const r = await _lgAuthPost('/api/invoice-ctl', { action: 'pdf', key: b.dataset.pdf });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error();
+      const bin = atob(j.pdf), u8 = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+      if (w) w.location.href = url; else window.open(url, '_blank');
+    } catch (_) { if (w) w.close(); toast('פתיחת ה־PDF נכשלה', true); }
+  });
+}
+async function openArchive() {
+  openModal('<div class="modal-in"><h3 id="ovTitle">ארכיון חשבוניות</h3>' +
+    '<div class="sub">חשבוניות שהופקו דרך המערכת. ההעתק נשמר בתיקייה השיתופית.</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
+    [[1, 'חודש'], [3, '3 חודשים'], [6, 'חצי שנה']].map(a => '<button class="btn btn-ghost" type="button" data-range="' + a[0] + '">' + a[1] + '</button>').join('') +
+    '<input id="archQ" type="search" placeholder="לקוח, מספר מסמך או הזמנה" style="flex:1;min-width:140px"></div>' +
+    '<div id="archList" style="max-height:60vh;overflow:auto">טוען…</div>' +
+    '<div class="modal-actions"><button class="btn btn-ghost" type="button" data-close>סגור</button></div></div>');
+  $('archQ').value = archQ;
+  $('archQ').oninput = e => { archQ = e.target.value; archPaint(); };
+  const load = async () => {
+    try { await archLoad(); archPaint(); } catch (e) { $('archList').textContent = e.message; }
+  };
+  $('ovBox').querySelectorAll('[data-range]').forEach(b => b.onclick = () => { archMonths = +b.dataset.range; $('archList').textContent = 'טוען…'; load(); });
+  load();
+}
+$('btnArchive').onclick = openArchive;
 $('ov').addEventListener('click', e => { if (e.target === $('ov') || e.target.closest('[data-close]')) closeModal(); });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;

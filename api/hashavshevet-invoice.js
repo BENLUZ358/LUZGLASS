@@ -352,6 +352,7 @@ module.exports = async function handler(req, res) {
       await db.ref('invoicePdf/' + pdfKey).transaction(cur => {
         if (cur && cur.state !== 'awaiting') return;
         return {
+          ...(cur || {}),
           state: 'awaiting', reference: ref.reference, createdAt: Date.now(), createdBy: auth.phone,
           client: clientName, clientPhone: acct.phone, simulated: isTest || null,
           orderIds: orderIds.map(String),

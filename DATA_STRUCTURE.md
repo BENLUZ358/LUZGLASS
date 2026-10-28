@@ -209,3 +209,10 @@ String(id)
 `invoicePdfBlobs/<key>` — `{ original, copy }` base64. לא קריא מהדפדפן.
 
 Endpoint: `POST /api/invoice-pdf-upload` (rewrite ל-`wa-inbound?invoice=upload`), משתנה סביבה `INVOICE_UPLOAD_TOKEN`.
+
+### בקרה על חשבוניות (שלב 2)
+
+- `state` נוסף: `printed` — ההדפסה הגיעה לפני "החשבונית הופקה". מפתח `p<hash>`, עם `docNumber`, `date`, `text` (טקסט המקור לשיוך). הרישום (`register`) משייך אותה לפי מספר מסמך ושמות סקיצות, וכשהיא משויכת הרשומה נמחקת.
+- `awaiting` מקבל גם `docNumber` כשנרשם דרך `register` ("החשבונית הופקה" בתחנה), ו-`createdAt` (אינדקס לרשימת הארכיון).
+- `orders/<id>/invoicePdfKey` — נכתב על ההזמנות **רק כשה-PDF מוכן ושויך**. הפורטל מציג לפיו חשבוניות; לקוח אינו יכול ליצור הזמנה עם השדה.
+- Endpoint: `POST /api/invoice-ctl` (rewrite ל-`wa-inbound?invoice=ctl`), `Authorization: Bearer <ID token>`: `register` (אדמין), `list` (אדמין), `pdf` (אדמין, או לקוח שכל ההזמנות בחשבונית שלו). מחזיר את **המקור בלבד**.

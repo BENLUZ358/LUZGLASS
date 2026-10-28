@@ -559,6 +559,9 @@ function _subscribePortalOrders(clientPhone) {
         _rawTotal:  Number(o.total) || 0,
         _totalFinal:o.totalFinal   || 0,
         invoice:    o.invoice    || null,
+        invoicePdfKey: o.invoicePdfKey || '',
+        invoiceDoc: (o.invoiceDone && o.invoiceDone.docNumber) || '',
+        invoiceAt:  (o.invoiceDone && o.invoiceDone.markedAt)  || 0,
         orderClient:o.orderClient || clientName,
         date:       o.date      || '',
         status:     o.status    || lgStageToStatus(o.stage || ''),
@@ -915,16 +918,46 @@ function cancelPick(id){
 // חשבונית אחת יכולה לכסות כמה הזמנות — hashavshevet-invoice.js שולח מסמך
 // אחד עם withOrders — ולכן מקבצים לפי האסמכתא במקום שורה לכל הזמנה.
 //
-// אין כאן כפתור הורדה. מסמך חשבונאי חייב לצאת מתוכנה מאושרת, ומשיכת
-// ה-PDF (plugin getPDF) עדיין לא אומתה מול מסמך אמיתי — ר'
-// api/hashavshevet-getpdf.js. כפתור שנכשל גרוע מכפתור שאינו קיים.
+// חשבונית שיש לה PDF מקור (מהדפסת חשבשבת, ר' api/_invoice-ctl.js) מוצגת
+// ברשימה עם כפתור פתיחה. אין כפתור לחשבונית בלי PDF מוכן — כפתור שנכשל
+// גרוע מכפתור שאינו קיים. משיכת PDF מחשבשבת עצמה (getPDF) לא אומתה.
 function renderInvoices(){
   const el = document.getElementById("invoicesList");
   if(!el) return;
 
+  // DB-00004: חשבוניות עם PDF מקור מוכן — רשימה, ולחיצה על שורה פותחת פרטים.
+  // invoicePdfKey נכתב על ההזמנות רק כשה-PDF מוכן ושויך, ולכן "בהכנה" לא מוצג.
+  const byKey = {};
+  ORDERS.forEach(o=>{
+    if(!o.invoicePdfKey) return;
+    (byKey[o.invoicePdfKey] = byKey[o.invoicePdfKey] || {key:o.invoicePdfKey, doc:o.invoiceDoc, at:o.invoiceAt, orders:[]}).orders.push(o);
+  });
+  const pdfList = Object.values(byKey).sort((a,b)=>b.at-a.at);
+  const pdfHtml = pdfList.map(function(g){
+    const d = new Date(g.at), date = isNaN(d)||!g.at ? '' : d.toLocaleDateString('he-IL');
+    const open = invExpanded.has(g.key);
+    let det = '';
+    if(open){
+      det = '<div class="inv-det" style="padding:8px 0">'+
+        '<div class="inv-date">הזמנות: '+g.orders.map(o=>lgEsc(o.num||'')).join(' · ')+'</div>'+
+        '<button type="button" class="btn-pay" onclick="openInvoicePdf(\''+lgEsc(g.key)+'\')">&#128196; פתח חשבונית (PDF)</button>'+
+        '<div class="sketch-lbl" style="margin-top:8px">סקיצות בחשבונית</div>'+
+        g.orders.map(o=>'<div style="margin-bottom:8px"><div class="inv-date">'+lgEsc(o.name||o.num||'')+'</div>'+
+          (lgHasSketch(o)?'<img class="sk-full" data-sketch-for="'+lgEsc(String(o.id))+'" alt="סקיצה" data-id="'+lgEsc(String(o.id))+'" onclick="openSk(this)">':'')+'</div>').join('')+
+      '</div>';
+    }
+    return '<div class="inv-card" style="flex-wrap:wrap">'+
+      '<div class="inv-icon">&#129534;</div>'+
+      '<div class="inv-info" style="cursor:pointer" onclick="toggleInv(\''+lgEsc(g.key)+'\')">'+
+        '<div class="inv-num">חשבונית '+lgEsc(g.doc||'')+'</div>'+
+        '<div class="inv-date">'+lgEsc(date)+' &middot; '+g.orders.length+' '+(g.orders.length===1?'הזמנה':'הזמנות')+'</div>'+
+      '</div><div class="inv-right">'+(open?'&#9650;':'&#9662;')+'</div>'+det+'</div>';
+  }).join('');
+
   const byRef = {};
   ORDERS.forEach(o=>{
     const inv = o.invoice;
+    if(o.invoicePdfKey) return;
     if(!inv || !inv.sentAt) return;
     const key = inv.reference || ('_' + inv.sentAt);
     if(!byRef[key]) byRef[key] = Object.assign({}, inv, { orders: [] });
@@ -932,7 +965,7 @@ function renderInvoices(){
   });
   const list = Object.values(byRef).sort((a,b)=>b.sentAt-a.sentAt);
 
-  if(!list.length){
+  if(!list.length && !pdfList.length){
     el.innerHTML =
       '<div class="soon-panel">' +
         '<div class="soon-ttl">אין חשבוניות עדיין</div>' +
@@ -942,7 +975,7 @@ function renderInvoices(){
     return;
   }
 
-  el.innerHTML = list.map(function(inv){
+  el.innerHTML = pdfHtml + list.map(function(inv){
     const d    = new Date(inv.sentAt);
     const date = isNaN(d) ? '' : d.toLocaleDateString('he-IL');
     const nums = inv.orders.map(o=>o.num).filter(Boolean).join(' · ');
@@ -958,6 +991,29 @@ function renderInvoices(){
       '<div class="inv-right"><div class="inv-amt">&#8362;'+(inv.total||0).toLocaleString()+'</div></div>'+
     '</div>';
   }).join('');
+  // הסקיצות נטענות רק לשורות פתוחות, כמו בכרטיסי ההזמנות
+  if(typeof lgHydrateSketchImgs === 'function')
+    lgHydrateSketchImgs(el, id => ORDERS.find(x=>String(x.id)===String(id)), { lazy: true });
+}
+
+var invExpanded = new Set();
+function toggleInv(key){ if(invExpanded.has(key)) invExpanded.delete(key); else invExpanded.add(key); renderInvoices(); }
+
+// השרת בודק שכל ההזמנות בחשבונית שייכות לטלפון של הלקוח ומחזיר את המקור בלבד.
+async function openInvoicePdf(key){
+  const w = window.open('', '_blank');
+  try{
+    const r = await _lgAuthPost('/api/invoice-ctl', { action: 'pdf', key: key });
+    const j = await r.json();
+    if(!r.ok || !j.ok) throw new Error('x');
+    const bin = atob(j.pdf), u8 = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+    if(w) w.location.href = url; else window.open(url, '_blank');
+  }catch(e){
+    if(w) w.close();
+    alert('לא הצלחנו לפתוח את החשבונית. נסה שוב או צור קשר.');
+  }
 }
 
 // ההודעות אינן מחוברות לשום מקום. כאן ישבה שיחה מומצאת, ו-sendMsg הוסיף

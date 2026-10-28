@@ -1411,6 +1411,13 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
     update[o.id + '/updatedAt']   = now;
   });
   await _lgDb.ref('orders').update(update);
+  // DB-00004: מקשר את החשבונית להדפסה (בכל סדר). best-effort — הסימון כבר נשמר,
+  // וכשל כאן לא אמור להציג למזכירה שגיאה על חשבונית שסומנה.
+  try {
+    if (typeof _lgAuthPost === 'function') {
+      await _lgAuthPost('/api/invoice-ctl', { action: 'register', orderIds: list.map(o => String(o.id)), docNumber: p.docNumber });
+    }
+  } catch (e) { console.warn('invoice-ctl register failed', e && e.message); }
   return { docNumber: p.docNumber, count: list.length };
 }
 
