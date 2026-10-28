@@ -30,7 +30,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 const ctx = {};
 vm.createContext(ctx);
-for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /function lineText[\s\S]*?\n}/,
+for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_MIN_AREA = \{[\s\S]*?\n\};/, /function billAreaM2[\s\S]*?\n}/, /const LG_LINE_TEXT_MAX = \d+;/, /const LG_HS_SEND_ITEMNAME = (?:true|false);/, /function lineText[\s\S]*?\n}/,
                   /function buildLines[\s\S]*?\n  return \{ lines, preview, skipped, hsLines, unpriced \};\n}/]) {
   const m = SRC.match(re);
   if (!m) { console.error('FAIL  could not find ' + re); process.exit(1); }

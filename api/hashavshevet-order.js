@@ -79,6 +79,21 @@ function areaM2(widthMm, heightMm) {
   return Math.round((widthMm || 0) * (heightMm || 0) / 1000) / 1000;
 }
 
+// ── מינימום חיוב במ"ר ללקוח (בן, 28/10/2026) ─────────────────────────
+//  אביבי: חתיכה מלוטשת נמכרת לפחות 0.20 מ"ר, מחוסמת לפחות 0.30 — לכל חתיכה,
+//  כך ש-2 חתיכות מלוטשות קטנות הן לפחות 0.40. לפי מפתח החשבון בחשבשבת.
+//  ⚠️ זהה ל-LG_MIN_AREA ב-firebase-db.js (המחיר על המסך) — אם אחד משתנה, גם השני.
+const LG_MIN_AREA = {
+  '450': { litush: 0.2, chisum: 0.3 },   // אביבי (כרטיס 450 בחשבשבת)
+};
+function billAreaM2(item, accountKey) {
+  const area = areaM2(item.w || 0, item.h || 0);
+  const rule = LG_MIN_AREA[String(accountKey || '')];
+  if (!rule || !area) return area;
+  const min = item.chisum ? rule.chisum : (item.litush ? rule.litush : 0);
+  return Math.max(area, min || 0);
+}
+
 // "L1000" → "1000"  ·  "2026-54321" → "202654321"
 // Reference בחשבשבת הוא מספרי עד 9 ספרות; מספרי ההזמנה שלנו אינם מספריים.
 function toReference(orderNum) {
@@ -171,7 +186,8 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     const sku  = item.sku;
     if (!sku) { skipped.push({ name, reason: 'אין מק"ט (sku) על הפריט' }); return; }
 
-    const qty = areaM2(item.w || 0, item.h || 0);
+    // השטח לחיוב — עם המינימום של הלקוח, אם יש לו (LG_MIN_AREA)
+    const qty = billAreaM2(item, accountKey);
     if (!qty) { skipped.push({ name, sku, reason: 'שטח 0 — חסרות מידות' }); return; }
 
     // מחירון הלקוח קודם, ואחריו הגלובלי — אותו סדר בדיוק שבו lgCalcOrderTotal
