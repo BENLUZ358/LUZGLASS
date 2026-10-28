@@ -70,7 +70,7 @@ const bodyOf = (name, src) =>
   /* הם מניעים את הייצור ואת החשבונית. עריכה שלא נשמרה לא תיתפס בתחנת
      החשבוניות, כי שני הצדדים יראו את אותו מידע ישן. */
   check('admin item edits report a failed save',
-        /updateOrder\(sqCurrent\.id, \{ items: sqCurrentItems \}\)[\s\S]{0,180}?showToast\('שמירת הפריטים נכשלה/.test(ADMIN), true);
+        /const fields = \{ items: sqCurrentItems \}[\s\S]{0,500}?updateOrder\(sqCurrent\.id, fields\)[\s\S]{0,180}?showToast\('שמירת הפריטים נכשלה/.test(ADMIN), true);
   check('workday item adds report a failed save',
         /updateOrder\(String\(o\.id\), \{ items: o\.items \}\)[\s\S]{0,260}?showToast\('שמירת הפריט נכשלה/.test(WD), true);
   /* ההודעה החיובית עברה ל-then — אחרת היא מוצגת גם כשהכתיבה נכשלה */
