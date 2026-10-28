@@ -2606,7 +2606,7 @@ function lgCalcAreaM2(widthMm, heightMm) {
 // לפי customerId (מפתח החשבון בחשבשבת). ⚠️ זהה ל-LG_MIN_AREA ב-api/hashavshevet-order.js —
 // כך המחיר על המסך והכמות שנשלחת לחשבשבת אומרים אותו דבר.
 const LG_MIN_AREA = {
-  // '<מפתח החשבון של אביבי>': { litush: 0.2, chisum: 0.3 },
+  '450': { litush: 0.2, chisum: 0.3 },   // אביבי (כרטיס 450 בחשבשבת)
 };
 function lgBillAreaM2(item, accountKey) {
   const area = lgCalcAreaM2(item.w || 0, item.h || 0);

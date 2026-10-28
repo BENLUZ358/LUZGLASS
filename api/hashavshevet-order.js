@@ -84,7 +84,7 @@ function areaM2(widthMm, heightMm) {
 //  כך ש-2 חתיכות מלוטשות קטנות הן לפחות 0.40. לפי מפתח החשבון בחשבשבת.
 //  ⚠️ זהה ל-LG_MIN_AREA ב-firebase-db.js (המחיר על המסך) — אם אחד משתנה, גם השני.
 const LG_MIN_AREA = {
-  // '<מפתח החשבון של אביבי>': { litush: 0.2, chisum: 0.3 },
+  '450': { litush: 0.2, chisum: 0.3 },   // אביבי (כרטיס 450 בחשבשבת)
 };
 function billAreaM2(item, accountKey) {
   const area = areaM2(item.w || 0, item.h || 0);
