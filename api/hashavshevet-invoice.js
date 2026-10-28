@@ -352,6 +352,8 @@ module.exports = async function handler(req, res) {
       await db.ref('invoicePdf/' + pdfKey).transaction(cur => {
         if (cur && cur.state !== 'awaiting') return;
         return {
+          // רישום "החשבונית הופקה" (invoice-ctl) יכול להקדים או לאחר; לא דורסים את מספר המסמך שלו
+          ...(cur && cur.docNumber ? { docNumber: cur.docNumber } : {}),
           state: 'awaiting', reference: ref.reference, createdAt: Date.now(), createdBy: auth.phone,
           client: clientName, clientPhone: acct.phone, simulated: isTest || null,
           orderIds: orderIds.map(String),

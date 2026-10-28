@@ -35,6 +35,14 @@ html,body{height:100%;overflow:hidden;}
 .tb-title{flex:1;min-width:0;font-size:var(--fs-lg);font-weight:var(--fw-black);}
 .tb-title small{display:block;font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--muted);}
 #btnBack,#btnCustomers{display:none;}
+/* ארכיון חשבוניות */
+.arc-m{margin:var(--space-3) 0 var(--space-1);font-size:var(--fs-sm);color:var(--muted);}
+.arc-c{border-bottom:1px solid var(--border);padding:var(--space-2) 0;}
+.arc-r{display:grid;grid-template-columns:90px 80px 1fr auto;gap:var(--space-2);width:100%;min-height:44px;align-items:center;
+  background:none;border:none;text-align:right;color:var(--text);cursor:pointer;font-size:var(--fs-sm);}
+.arc-r:hover{background:var(--surface);}
+.arc-late{color:var(--danger,#b00020);font-weight:var(--fw-bold);}
+.arc-det{padding:var(--space-2) var(--space-3);background:var(--surface);font-size:var(--fs-sm);display:grid;gap:var(--space-2);}
 
 /* ── שלוש העמודות ───────────────────────────────────────────────────────── */
 .panes{flex:1;min-height:0;display:grid;grid-template-columns:280px 340px minmax(0,1fr);}
@@ -250,6 +258,7 @@ html,body{height:100%;overflow:hidden;}
     <a class="tb-btn" id="btnHome" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
     <button class="tb-btn" id="btnBack" type="button" aria-label="חזרה"><span data-icon="arrow-right"></span><span>חזרה</span></button>
     <div class="tb-title" id="tbTitle">תחנת חשבוניות<small>בודקים פריטים מול סקיצה, ורק אז מפיקים חשבונית בחשבשבת</small></div>
+    <button class="tb-btn" id="btnArchive" type="button"><span>ארכיון חשבוניות</span></button>
     <button class="tb-btn" id="btnCustomers" type="button" aria-controls="pCustomers" aria-expanded="false"><span data-icon="users"></span><span>לקוחות</span></button>
   </header>
 
@@ -713,8 +722,10 @@ function openInvoiceModal() {
     const b = $('markBtn'); b.disabled = true; b.innerHTML = '<span class="spin"></span>שומר…';
     try {
       const r = await lgMarkInvoiced(sel, input.value, ORDERS);
+      const st = await lgInvoiceRegister(sel.map(o => o.id), r.docNumber);
       closeModal();
-      toast(`נרשם: חשבונית ${r.docNumber} על ${nOrders(r.count)}`);
+      toast(`נרשם: חשבונית ${r.docNumber} על ${nOrders(r.count)}` +
+        (st === 'ready' ? ' · ה־PDF נקלט' : st === 'awaiting' ? ' · ממתין להדפסה ל־PDF' : ' · לא נרשם בארכיון, בדוק'), st === null);
     } catch (err) {
       field.classList.add('field-error'); msg.textContent = err.message;
       b.disabled = false; b.innerHTML = '<span data-icon="check"></span>החשבונית הופקה';
@@ -740,6 +751,92 @@ function openRevokeModal() {
     catch (err) { $('rvField').classList.add('field-error'); $('rvMsg').textContent = err.message; b.disabled = false; }
   };
 }
+
+// ═══ ארכיון חשבוניות (DB-00004) ═════════════════════════════════════════════
+//  הנתונים מ-/api/invoice-ctl (אדמין בלבד). רשומה נוצרת ב"החשבונית הופקה";
+//  היא "מוכנה" כשההדפסה למדפסת ה-PDF נקלטה ושויכה. נפתח המקור בלבד.
+const ARC_STATE = { awaiting: 'ממתין ל־PDF', ready: 'מוכן', printed: 'הודפסה, ממתינה לרישום' };
+let ARC = { items: [], months: 6, q: '', open: null, err: '', now: 0 };
+
+function arcRows() {
+  const q = ARC.q.trim().toLowerCase();
+  const hit = v => !q || [v.client, v.docNumber, v.clientPhone, ...(v.orderNums || []), ...(v.sketchNames || [])]
+    .some(x => String(x || '').toLowerCase().includes(q));
+  const byMonth = {};
+  ARC.items.filter(hit).forEach(v => {
+    const d = new Date(v.date ? v.date + 'T12:00:00' : v.createdAt);
+    const m = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    ((byMonth[m] = byMonth[m] || {})[v.client || 'ללא שם'] = byMonth[m][v.client || 'ללא שם'] || []).push(v);
+  });
+  return byMonth;
+}
+function arcDetail(v) {
+  const sk = (v.sketchNames || []).map(esc).join(' · ') || '—';
+  return `<div class="arc-det">
+    <div>הזמנות: ${(v.orderNums || []).map(esc).join(' · ') || '—'}</div>
+    <div>סקיצות: ${sk}</div>
+    <div>העתק בתיקייה השיתופית: <bdi>${esc(v.archivePath || 'עוד לא נשמר')}</bdi></div>
+    ${v.state === 'ready' ? `<button class="btn btn-primary" type="button" data-arc-pdf="${esc(v.key)}">פתח PDF (מקור)</button>` : ''}
+  </div>`;
+}
+function arcRender() {
+  const box = $('arcBody'); if (!box) return;
+  if (ARC.err) { box.innerHTML = `<div class="empty-state"><div class="empty-state-title">${esc(ARC.err)}</div></div>`; return; }
+  const byMonth = arcRows(), months = Object.keys(byMonth).sort().reverse();
+  if (!months.length) { box.innerHTML = `<div class="empty-state"><div class="empty-state-title">אין חשבוניות בטווח</div></div>`; return; }
+  box.innerHTML = months.map(m => `<h3 class="arc-m">${esc(m)}</h3>` + Object.keys(byMonth[m]).sort().map(c =>
+    `<div class="arc-c"><b>${esc(c)}</b>` + byMonth[m][c].map(v => {
+      const late = v.state !== 'ready' && ARC.now - v.createdAt > 24 * 3600 * 1000;
+      return `<button class="arc-r" type="button" data-arc-row="${esc(v.key)}" aria-expanded="${ARC.open === v.key}">
+        <span>${esc(v.date || '')}</span><span>${esc(v.docNumber || '—')}</span><span>${nOrders((v.orderIds || []).length)}</span>
+        <span class="arc-s${late ? ' arc-late' : ''}">${esc(ARC_STATE[v.state] || v.state)}${late ? ' · מעל יום' : ''}</span></button>` +
+        (ARC.open === v.key ? arcDetail(v) : '');
+    }).join('') + `</div>`).join('')).join('');
+}
+async function arcLoad() {
+  $('arcBody').innerHTML = '<div class="loading">טוען…</div>';
+  try {
+    const r = await lgInvoiceCtl({ action: 'list', months: ARC.months });
+    if (!r.body || !r.body.ok) throw new Error();
+    ARC.items = r.body.items; ARC.now = r.body.now; ARC.err = '';
+  } catch (e) { ARC.err = 'הטעינה נכשלה, נסה שוב'; }
+  arcRender();
+}
+async function arcOpenPdf(key) {
+  const w = window.open('', '_blank');           // חייב להיפתח מיד, לפני ה-await (חוסם חלונות קופצים)
+  try {
+    const r = await lgInvoiceCtl({ action: 'pdf', key: key });
+    if (!r.body || !r.body.ok) throw new Error();
+    const bin = atob(r.body.pdf), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+    if (w) w.location = url; else location.href = url;
+  } catch (e) { if (w) w.close(); toast('לא הצלחתי לפתוח את ה־PDF', true); }
+}
+function openArchive() {
+  openModal(`<div class="modal-in" style="max-width:min(900px,96vw)">
+    <h3 id="ovTitle">ארכיון חשבוניות</h3>
+    <div class="scopes" role="group" aria-label="טווח">
+      ${[[1, 'חודש'], [3, '3 חודשים'], [6, 'חצי שנה']].map(([n, t]) =>
+        `<button class="scope" type="button" data-arc-m="${n}" aria-selected="${ARC.months === n}">${t}</button>`).join('')}
+    </div>
+    <label class="search"><span class="sr-only">חיפוש</span>
+      <input id="arcQ" type="search" placeholder="לקוח, מספר מסמך או מספר הזמנה" autocomplete="off" value="${esc(ARC.q)}"></label>
+    <div id="arcBody" style="max-height:60vh;overflow:auto"></div>
+    <div class="modal-actions"><button class="btn btn-ghost" type="button" data-close>סגור</button></div></div>`);
+  $('arcQ').addEventListener('input', e => { ARC.q = e.target.value; arcRender(); });
+  $('ovBox').onclick = e => {   // onclick (לא addEventListener): ovBox נשאר בין פתיחות
+    const m = e.target.closest('[data-arc-m]'), row = e.target.closest('[data-arc-row]'), pdf = e.target.closest('[data-arc-pdf]');
+    if (m) { ARC.months = +m.dataset.arcM; ovBoxSel(); arcLoad(); }
+    else if (pdf) arcOpenPdf(pdf.dataset.arcPdf);
+    else if (row) { ARC.open = ARC.open === row.dataset.arcRow ? null : row.dataset.arcRow; arcRender(); }
+  };
+  arcLoad();
+}
+function ovBoxSel() {
+  document.querySelectorAll('[data-arc-m]').forEach(b => b.setAttribute('aria-selected', String(+b.dataset.arcM === ARC.months)));
+}
+$('btnArchive').addEventListener('click', openArchive);
 
 // ═══ רינדור וחיבור ══════════════════════════════════════════════════════════
 function renderAll() {

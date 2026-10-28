@@ -68,6 +68,9 @@ async function processFile(cfg, file, post = require_post(cfg)) {
   catch (e) { console.error('retry later (network):', e.message); return 'retry'; }
 
   if (r.status >= 500 || r.status === 429) return 'retry';
+  //  הודפסה, אבל עוד לא נרשם "החשבונית הופקה" בתחנה. השרת שמר אותה ומשייך כשיירשם;
+  //  הקובץ נשאר ונשלח שוב (אותו hash) עד שמתקבל נתיב ארכיון.
+  if (r.status === 202 && r.body && r.body.held) { console.log('held, waiting for registration:', path.basename(file)); return 'hold'; }
   if (!r.body || !r.body.ok) {
     console.error('review:', path.basename(file), r.status, r.body && r.body.code);
     move(file, path.join(cfg.watchDir, 'review')); return 'review';
@@ -102,14 +105,18 @@ function require_post(cfg) {
 //  קובץ נחשב מוכן כשהגודל לא השתנה בין שני סבבים (המדפסת עדיין כותבת).
 async function loop(cfg) {
   const sizes = new Map();
+  const nextTry = new Map();   // 'hold' → ניסיון חוזר רק כל דקה
   for (;;) {
     for (const n of fs.readdirSync(cfg.watchDir)) {
       if (!/\.pdf$/i.test(n)) continue;
       const f = path.join(cfg.watchDir, n);
+      if ((nextTry.get(f) || 0) > Date.now()) continue;
       const sz = fs.statSync(f).size;
       if (sz > 0 && sizes.get(f) === sz) {
         const out = await processFile(cfg, f);
-        if (out !== 'retry') sizes.delete(f);
+        if (out === 'hold') nextTry.set(f, Date.now() + (cfg.holdRetryMs || 60000));
+        else nextTry.delete(f);
+        if (out !== 'retry' && out !== 'hold') sizes.delete(f);
       } else sizes.set(f, sz);
     }
     await new Promise(r => setTimeout(r, cfg.intervalMs));

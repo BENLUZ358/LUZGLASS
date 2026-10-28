@@ -44,7 +44,9 @@ function fakeDb(initial) {
     };
     let keys = Object.keys(v).sort(cmp);
     if ('eq' in q) keys = keys.filter(k => cv(k) === q.eq);
+    if ('start' in q) keys = keys.filter(k => cv(k) != null && cv(k) >= q.start);
     if (q.limit != null) keys = keys.slice(0, q.limit);
+    if (q.last != null) keys = keys.slice(-q.last);
     const out = {}; keys.forEach(k => { out[k] = v[k]; });
     return snapOf(keys.length ? out : undefined, keys);
   }
@@ -56,6 +58,8 @@ function fakeDb(initial) {
         orderByChild: c => { q.by = c; return self; },
         equalTo:      x => { q.eq = x; return self; },
         limitToFirst: n => { q.limit = n; return self; },
+        limitToLast:  n => { q.last = n; return self; },
+        startAt:      x => { q.start = x; return self; },
         once: async () => runQuery(get(p), q),
         set:  async v => put(p, v),
         //  כמו RTDB: מפתח עם '/' הוא נתיב, והעדכון רב-נתיבי ואטומי. null

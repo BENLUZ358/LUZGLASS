@@ -209,3 +209,9 @@ String(id)
 `invoicePdfBlobs/<key>` — `{ original, copy }` base64. לא קריא מהדפדפן.
 
 Endpoint: `POST /api/invoice-pdf-upload` (rewrite ל-`wa-inbound?invoice=upload`), משתנה סביבה `INVOICE_UPLOAD_TOKEN`.
+
+### עדכון: בקרת חשבוניות (DB-00004)
+- `state` מקבל גם `printed`: הדפסה שהגיעה לפני "החשבונית הופקה". נשמרים בה `docNumber`, `date`, `text` (טקסט המקור, לשיוך) ו-`originalHash`. `register` משייך אותה לרשומה `awaiting` לפי מספר מסמך + שמות הסקיצות, ואז היא נמחקת.
+- `docNumber` נכתב כבר ב-`awaiting` (מ-`register`), ו-`_invoice-upload` מתאים רק כשהמספר שבמסמך זהה.
+- אינדקסים: `state, originalHash, docNumber, clientPhone, createdAt`. הקריאה מהדפדפן לאדמין בלבד; הלקוח ניגש דרך `/api/invoice-ctl`.
+- לא נמחק שום PDF (החלטת הבעלים).

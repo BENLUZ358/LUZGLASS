@@ -161,3 +161,15 @@
 
 👉 לבדוק אם כבר קיימת פונקציה שמתאימה  
 👉 להשתמש בה במקום ליצור חדשה  
+---
+
+# 🧾 בקרת חשבוניות (DB-00004)
+
+## lgInvoiceCtl(payload) / lgInvoiceRegister(orderIds, docNumber)  — firebase-db.js
+קריאה ל-`/api/invoice-ctl` עם זהות המשתמש. `lgInvoiceRegister` נקרא מתחנת החשבוניות
+אחרי `lgMarkInvoiced`, ומשייך את ההדפסה לחשבונית (בכל סדר). לא מבטל את הסימון אם נכשל.
+
+## api/_invoice-ctl.js (דרך rewrite `/api/invoice-ctl` → `wa-inbound?invoice=ctl`)
+פעולות: `register`, `list`, `pdf` (אדמין) · `myList`, `myPdf` (לקוח, אחרי בדיקת בעלות לכל ההזמנות).
+מחזיר את המקור בלבד, לעולם לא את ההעתק.
+`finalizeReady` / `holdPrinted` משותפות עם `api/_invoice-upload.js`.

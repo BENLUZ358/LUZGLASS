@@ -431,6 +431,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <div id="view-invoices" style="display:none">
     <div style="height:14px"></div>
     <div class="sec-title">חשבוניות</div>
+    <div id="invoicesPdf"></div>
     <div id="invoicesList"></div>
     <div class="spacer"></div>
   </div>
@@ -915,10 +916,89 @@ function cancelPick(id){
 // חשבונית אחת יכולה לכסות כמה הזמנות — hashavshevet-invoice.js שולח מסמך
 // אחד עם withOrders — ולכן מקבצים לפי האסמכתא במקום שורה לכל הזמנה.
 //
-// אין כאן כפתור הורדה. מסמך חשבונאי חייב לצאת מתוכנה מאושרת, ומשיכת
-// ה-PDF (plugin getPDF) עדיין לא אומתה מול מסמך אמיתי — ר'
-// api/hashavshevet-getpdf.js. כפתור שנכשל גרוע מכפתור שאינו קיים.
+// הרשימה למטה לא נושאת PDF (חשבשבת לא מספקת — api/hashavshevet-getpdf.js).
+// חשבוניות עם מסמך מופיעות למעלה (renderPdfInvoices), מההדפסה למדפסת ה-PDF.
+// ── חשבוניות עם מסמך (DB-00004) ──
+// רשימה מהשרת (api/_invoice-ctl.js), רק חשבוניות שה־PDF שלהן מוכן ושכל הזמנותיהן
+// של הטלפון הזה. לחיצה על שורה פותחת הזמנות, כפתור PDF (המקור בלבד) והסקיצות.
+let PINV = null, PINV_OPEN = null, PINV_LOADING = false;
+const PINV_SKETCH = {};   // orderId → data URL | null
+
+async function loadPdfInvoices(){
+  if(PINV_LOADING || typeof lgInvoiceCtl !== 'function') return;
+  PINV_LOADING = true;
+  try{
+    const r = await lgInvoiceCtl({ action: 'myList' });
+    PINV = (r.body && r.body.ok) ? r.body.items : [];
+  }catch(e){ PINV = []; }
+  PINV_LOADING = false;
+  renderPdfInvoices();
+}
+async function openInvoicePdf(key){
+  const w = window.open('', '_blank');   // לפני ה־await, אחרת הדפדפן חוסם
+  try{
+    const r = await lgInvoiceCtl({ action: 'myPdf', key: key });
+    if(!r.body || !r.body.ok) throw new Error();
+    const bin = atob(r.body.pdf), u8 = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' }));
+    if(w) w.location = url; else location.href = url;
+  }catch(e){ if(w) w.close(); alert('לא הצלחנו לפתוח את החשבונית. נסו שוב או צרו קשר.'); }
+}
+async function loadInvoiceSketches(inv){
+  for(const id of inv.orderIds){
+    if(id in PINV_SKETCH) continue;
+    let v = null;
+    try{ v = await lgGetSketch(id); }catch(e){}
+    PINV_SKETCH[id] = (typeof v === 'string' && v.indexOf('data:image/') === 0) ? v : null;
+  }
+  if(PINV_OPEN === inv.key) renderPdfInvoices();
+}
+function togglePdfInvoice(key){
+  PINV_OPEN = PINV_OPEN === key ? null : key;
+  const inv = (PINV||[]).find(x=>x.key===key);
+  if(PINV_OPEN && inv) loadInvoiceSketches(inv);
+  renderPdfInvoices();
+}
+function renderPdfInvoices(){
+  const el = document.getElementById("invoicesPdf");
+  if(!el) return;
+  if(PINV === null){ loadPdfInvoices(); return; }
+  if(!PINV.length){ el.innerHTML = ''; return; }
+  el.innerHTML = PINV.map(function(inv){
+    const open = PINV_OPEN === inv.key;
+    let det = '';
+    if(open){
+      const sk = inv.orderIds.map(function(id, i){
+        const src = PINV_SKETCH[id];
+        const name = inv.sketchNames[i] || inv.orderNums[i] || '';
+        return '<div style="text-align:center;margin:6px">'+
+          (src ? '<img src="'+src+'" alt="'+lgEsc(name)+'" style="max-width:140px;max-height:140px;border:1px solid var(--border)">'
+               : '<div class="inv-date">'+(id in PINV_SKETCH ? 'אין סקיצה' : 'טוען…')+'</div>')+
+          '<div class="inv-date">'+lgEsc(name)+'</div></div>';
+      }).join('');
+      det = '<div class="inv-date" style="margin-top:8px">הזמנות: '+inv.orderNums.map(lgEsc).join(' · ')+'</div>'+
+        '<button class="btn-pay" type="button" style="margin-top:8px" data-pinv-pdf="'+lgEsc(inv.key)+'">&#128196; פתח חשבונית (PDF)</button>'+
+        '<div style="display:flex;flex-wrap:wrap;margin-top:8px">'+sk+'</div>';
+    }
+    return '<div class="inv-card" style="display:block">'+
+      '<button type="button" data-pinv-row="'+lgEsc(inv.key)+'" aria-expanded="'+open+'" '+
+        'style="all:unset;display:flex;gap:12px;align-items:center;width:100%;cursor:pointer;min-height:44px">'+
+        '<span class="inv-icon">&#129534;</span>'+
+        '<span class="inv-info"><span class="inv-num" style="display:block">חשבונית '+lgEsc(inv.docNumber)+'</span>'+
+        '<span class="inv-date" style="display:block">'+lgEsc(inv.date)+' &middot; '+inv.orderIds.length+' '+(inv.orderIds.length===1?'הזמנה':'הזמנות')+'</span></span>'+
+      '</button>'+det+'</div>';
+  }).join('');
+}
+document.addEventListener('click', function(e){
+  const row = e.target.closest && e.target.closest('[data-pinv-row]');
+  const pdf = e.target.closest && e.target.closest('[data-pinv-pdf]');
+  if(pdf) openInvoicePdf(pdf.getAttribute('data-pinv-pdf'));
+  else if(row) togglePdfInvoice(row.getAttribute('data-pinv-row'));
+});
+
 function renderInvoices(){
+  renderPdfInvoices();
   const el = document.getElementById("invoicesList");
   if(!el) return;
 

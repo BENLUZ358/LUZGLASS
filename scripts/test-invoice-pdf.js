@@ -94,10 +94,101 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal(r.status, 422); assert.equal(r.body.code, 'role-unverified');
     assert.equal(d.db._data.invoicePdf.k1.state, 'awaiting');
   });
-  await test('upload: unknown invoice refused (no pending match)', async () => {
+  await test('upload: no pending match → held (printed before registration), never ready', async () => {
     const d = mk({ db: fakeDb({ invoicePdf: { k9: { state: 'awaiting', client: 'x', sketchNames: ['חלון'] } } }) });
     const r = await handleUpload(req({ original: ORIG, copy: COPY }), d);
-    assert.equal(r.body.code, 'no-match');
+    assert.equal(r.status, 202); assert.equal(r.body.held, true);
+    assert.equal(d.db._data.invoicePdf.k9.state, 'awaiting');
+    const held = Object.values(d.db._data.invoicePdf).filter(x => x.state === 'printed');
+    assert.equal(held.length, 1); assert.equal(held[0].docNumber, '123456');
+  });
+  await test('upload: awaiting record with a different document number is not matched', async () => {
+    const d = mk(); d.db._data.invoicePdf.k1.docNumber = '999999';
+    const r = await handleUpload(req({ original: ORIG, copy: COPY }), d);
+    assert.equal(r.status, 202);
+    assert.equal(d.db._data.invoicePdf.k1.state, 'awaiting');
+  });
+
+  // ── invoice-ctl: רישום בשני הסדרים, ארכיון, פורטל ──
+  const C = require('../api/_invoice-ctl');
+  const ADMIN = 'Bearer admin', CUST = 'Bearer c1', OTHER = 'Bearer c2';
+  const WHO = { [ADMIN]: { phone: '0500000000', role: 'admin' }, [CUST]: { phone: '0501234567', role: 'client' },
+                [OTHER]: { phone: '0509999999', role: 'client' } };
+  const ctl = (d, auth, body) => C.handleCtl({ method: 'POST', headers: { authorization: auth }, body },
+    { db: d.db, now: 5000, who: async r => WHO[r.headers.authorization] || null, ...d.extra });
+  const orders = () => ({
+    a: { clientPhone: '0501234567', clientName: 'משה כהן', sketchName: 'שער ראשי', invoiceDone: { docNumber: '123456' } },
+    b: { clientPhone: '0501234567', clientName: 'משה כהן', sketchName: 'דלת מקלחת', invoiceDone: { docNumber: '123456' } } });
+  const REG = { action: 'register', orderIds: ['a', 'b'], docNumber: '123456' };
+
+  await test('print first, then register: held print is claimed, archive path returned on retry', async () => {
+    const d = mk({ db: fakeDb({ orders: orders() }) });
+    assert.equal((await handleUpload(req({ original: ORIG, copy: COPY }), d)).status, 202);
+    const r = await ctl(d, ADMIN, REG);
+    assert.deepEqual([r.status, r.body.state], [200, 'ready']);
+    const key = C.lgInvoicePdfKey(['a', 'b']);
+    assert.equal(d.db._data.invoicePdf[key].state, 'ready');
+    assert.ok(d.db._data.invoicePdfBlobs[key].original);
+    assert.equal(Object.values(d.db._data.invoicePdf).filter(x => x.state === 'printed').length, 0);
+    const again = await handleUpload(req({ original: ORIG, copy: COPY }), d);
+    assert.equal(again.status, 200); assert.equal(again.body.archivePath, '2026/10/משה כהן/2026-10-27_123456.pdf');
+  });
+  await test('register first, then print: upload matches the registered record', async () => {
+    const d = mk({ db: fakeDb({ orders: orders() }) });
+    const r = await ctl(d, ADMIN, REG);
+    assert.equal(r.body.state, 'awaiting');
+    const up = await handleUpload(req({ original: ORIG, copy: COPY }), d);
+    assert.equal(up.status, 200);
+    assert.equal(d.db._data.invoicePdf[C.lgInvoicePdfKey(['a', 'b'])].state, 'ready');
+  });
+  await test('register: order not marked with this number / mixed clients / non-admin refused', async () => {
+    const d = mk({ db: fakeDb({ orders: orders() }) });
+    assert.equal((await ctl(d, ADMIN, { ...REG, docNumber: '777777' })).body.code, 'order-not-marked');
+    d.db._data.orders.b.clientPhone = '0508888888';
+    assert.equal((await ctl(d, ADMIN, REG)).body.code, 'mixed-clients');
+    assert.equal((await ctl(d, CUST, REG)).status, 403);
+    assert.equal((await ctl(d, 'Bearer nope', REG)).status, 401);
+  });
+  await test('register is idempotent and does not touch a ready record', async () => {
+    const d = mk({ db: fakeDb({ orders: orders() }) });
+    await ctl(d, ADMIN, REG); await handleUpload(req({ original: ORIG, copy: COPY }), d);
+    const r = await ctl(d, ADMIN, REG);
+    assert.equal(r.body.state, 'ready');
+  });
+  await test('admin list: date range, no blobs; pdf returns original only', async () => {
+    const d = mk({ db: fakeDb({ orders: orders() }) });
+    await ctl(d, ADMIN, REG); await handleUpload(req({ original: ORIG, copy: COPY }), d);
+    d.db._data.invoicePdf.old = { state: 'ready', createdAt: -1e12, client: 'ישן' };
+    const l = await ctl(d, ADMIN, { action: 'list' });
+    assert.deepEqual(l.body.items.map(x => x.client), ['משה כהן']);
+    assert.ok(!JSON.stringify(l.body).includes('original'));
+    const key = l.body.items[0].key;
+    const p = await ctl(d, ADMIN, { action: 'pdf', key });
+    assert.equal(p.body.pdf, d.db._data.invoicePdfBlobs[key].original);
+    assert.ok(!JSON.stringify(p.body).includes(d.db._data.invoicePdfBlobs[key].copy));
+    assert.equal((await ctl(d, CUST, { action: 'list' })).status, 403);
+  });
+  await test('portal: owner sees and opens the original; another customer gets nothing', async () => {
+    const d = mk({ db: fakeDb({ orders: orders() }) });
+    await ctl(d, ADMIN, REG); await handleUpload(req({ original: ORIG, copy: COPY }), d);
+    const key = C.lgInvoicePdfKey(['a', 'b']);
+    const mine = await ctl(d, CUST, { action: 'myList' });
+    assert.equal(mine.body.items.length, 1); assert.deepEqual(mine.body.items[0].orderIds, ['a', 'b']);
+    assert.equal((await ctl(d, CUST, { action: 'myPdf', key })).body.pdf, d.db._data.invoicePdfBlobs[key].original);
+    assert.equal((await ctl(d, OTHER, { action: 'myList' })).body.items.length, 0);
+    assert.equal((await ctl(d, OTHER, { action: 'myPdf', key })).status, 404);
+  });
+  await test('portal: one foreign order in the invoice hides it; simulated and not-ready hidden', async () => {
+    const d = mk({ db: fakeDb({ orders: orders() }) });
+    await ctl(d, ADMIN, REG); await handleUpload(req({ original: ORIG, copy: COPY }), d);
+    const key = C.lgInvoicePdfKey(['a', 'b']);
+    d.db._data.orders.b.clientPhone = '0509999999';
+    assert.equal((await ctl(d, CUST, { action: 'myPdf', key })).status, 404);
+    d.db._data.orders.b.clientPhone = '0501234567';
+    d.db._data.invoicePdf[key].simulated = true;
+    assert.equal((await ctl(d, CUST, { action: 'myList' })).body.items.length, 0);
+    d.db._data.invoicePdf[key].simulated = null; d.db._data.invoicePdf[key].state = 'awaiting';
+    assert.equal((await ctl(d, CUST, { action: 'myPdf', key })).status, 404);
   });
   await test('watcher resolveArchive refuses traversal / absolute / backslash', () => {
     const root = path.resolve('/srv/share');

@@ -2294,6 +2294,21 @@ async function _lgAuthPost(url, payload){
   });
 }
 
+// ─── בקרת חשבוניות (DB-00004) — api/_invoice-ctl.js ─────────────────────
+//  מחזיר { status, body }. לא זורק על תשובת שגיאה מהשרת, רק על רשת.
+async function lgInvoiceCtl(payload){
+  const res = await _lgAuthPost('/api/invoice-ctl', payload);
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+// "החשבונית הופקה" נרשם גם בשרת, כדי לשייך את ההדפסה. ⚠️ נקרא אחרי lgMarkInvoiced
+// ולעולם לא מבטל אותו: המסמך כבר הופק, וכשל כאן רק משאיר אותו "ממתין".
+async function lgInvoiceRegister(orderIds, docNumber){
+  try {
+    const r = await lgInvoiceCtl({ action: 'register', orderIds: orderIds, docNumber: docNumber });
+    return r.body && r.body.ok ? r.body.state : null;
+  } catch (e) { console.warn('invoice register:', e); return null; }
+}
+
 // ─── ריקון תור ההודעות היוצאות ──────────────────────────────────────────
 //
 //  הפעולה העסקית מכניסה הודעות ל-waOutbox ומסתיימת מיד. כאן מוציאים אותן.
