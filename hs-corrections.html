@@ -64,12 +64,13 @@ html,body{height:100%;}
 let ORDERS = [], filter = 'pending';
 const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
-const TYPE_WORD = { dims: 'מידות', glass: 'סוג זכוכית' };
+const TYPE_WORD = { dims: 'מידות', glass: 'סוג זכוכית', add: 'שורה חדשה', remove: 'שורה שנמחקה' };
 const fmtDate = ts => !ts ? '' : new Date(Number(ts)).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' }) + ' ' +
   new Date(Number(ts)).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
 // מידות נשמרות כ"550×1885"; בתוך משפט עברי הן היו מוצגות הפוך, ולכן lgDimsText
-const showVal = (type, v) => type === 'dims'
-  ? String(v).replace(/^(\d+)×(\d+)$/, (_, w, h) => lgDimsText(w, h)) : String(v);
+// (גם בתוך תיאור של שורה חדשה/שנמחקה: "שקוף 8 (8SMH) 300×400")
+const dimsIn = s => String(s).replace(/(\d+)×(\d+)/g, (_, w, h) => lgDimsText(w, h));
+const showVal = (type, v) => v === '' ? '—' : dimsIn(v);
 function toast(msg, err) {
   const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : '');
   t.setAttribute('role', err ? 'alert' : 'status'); t.textContent = msg; document.body.appendChild(t);
@@ -77,6 +78,9 @@ function toast(msg, err) {
 }
 // ההוראה לעובד: מה לעשות בחשבשבת, בנוסח הנוהל ("בטל יתרה לאספקה" + שורה חדשה באותו מספר)
 function instruction(r) {
+  // שורות מתור הסקיצות (בן, 28/10): שורה שנוספה או נמחקה אחרי השליחה
+  if (r.net.add) return `בחשבשבת: הוסף להזמנה שורה חדשה — ${dimsIn(r.net.add.to)}.`;
+  if (r.net.remove) return `בחשבשבת: בטל יתרה בשורה ${r.hsLine}.`;
   const what = Object.keys(r.net).map(t => TYPE_WORD[t] || t).join(' ו');
   return `בחשבשבת: בטל יתרה בשורה ${r.hsLine}, והוסף שורה ${r.hsLine} חדשה עם ה${what} החדשים.`;
 }
@@ -89,7 +93,7 @@ function render() {
     return;
   }
   $('list').innerHTML = rows.map(r => `<div class="card ${r.done ? 'is-done' : ''}">
-      <div class="c-head"><span class="c-num">${esc(r.orderNum)}</span><span class="c-line">שורה ${esc(r.hsLine)}</span><span class="c-client">${esc(r.client)}</span></div>
+      <div class="c-head"><span class="c-num">${esc(r.orderNum)}</span><span class="c-line">${r.hsLine ? 'שורה ' + esc(r.hsLine) : 'שורה חדשה'}</span><span class="c-client">${esc(r.client)}</span></div>
       ${Object.keys(r.net).map(t => `<div class="chg">${esc(TYPE_WORD[t] || t)}: <b>${esc(showVal(t, r.net[t].from))}</b> ← <b>${esc(showVal(t, r.net[t].to))}</b></div>`).join('')}
       ${r.done ? '' : `<div class="todo">${esc(instruction(r))}</div>`}
       <div class="meta">שונה ע״י ${esc(r.lastBy || '—')} · ${esc(fmtDate(r.lastAt))}${r.done ? ' · טופל ע״י ' + esc(r.doneBy || '—') + ' · ' + esc(fmtDate(r.doneAt)) : ''}</div>

@@ -1419,6 +1419,56 @@ function lgAddHsCorrection(update, order, itemIndex, type, from, to, by) {
   return key;
 }
 
+// עריכת פריטים בתור הסקיצות (iwSave) בהזמנה שכבר נשלחה לחשבשבת — גם היא
+// נרשמת ב"תיקון הזמנות" (בן, 28/10: הזמנה שטעינו בה ותוקנה באמצע הייצור).
+// before = הפריטים לפני השמירה, after = אחריה. כל שמירה בתור היא פעולה אחת:
+// אותו אורך = מידה/מק"ט בשורה; ארוך יותר = נוספו בסוף (iwAdd); קצר יותר = נמחקו.
+// פריט בלי hsLine לא קיים בחשבשבת — כל שינוי בו הוא 'add' עם המצב העדכני.
+// מחזיר את מספר הרישומים שנכתבו ל-update.
+function lgHsCorrectionsForEdit(update, order, before, after, by) {
+  if (!lgHsWasSent(order)) return 0;
+  before = before || []; after = after || [];
+  const desc = it => (it.glassFullName || it.name || 'פריט') + (it.sku ? ' (' + it.sku + ')' : '') +
+    ' ' + Math.round(Number(it.w) || 0) + '×' + Math.round(Number(it.h) || 0);
+  const glassOf = it => (it.glassFullName || it.name || '') + (it.sku ? ' (' + it.sku + ')' : '');
+  const dimsOf  = it => Math.round(Number(it.w) || 0) + '×' + Math.round(Number(it.h) || 0);
+  const same = (a, b) => dimsOf(a) === dimsOf(b) && (a.sku || '') === (b.sku || '') && (a.name || '') === (b.name || '');
+  const was = { hsOrder: order.hsOrder, items: before };
+  const now = { hsOrder: order.hsOrder, items: after };
+  let n = 0;
+  const add = (o, i, type, from, to) => { if (lgAddHsCorrection(update, o, i, type, from, to, by)) n++; };
+
+  const compare = (i) => {
+    const b = before[i], a = after[i];
+    if (!b || !a || same(b, a)) return;
+    if (!b.hsLine) { add(now, i, 'add', '', desc(a)); return; }
+    if (dimsOf(b) !== dimsOf(a)) add(was, i, 'dims', dimsOf(b), dimsOf(a));
+    if ((b.sku || '') !== (a.sku || '') || (b.name || '') !== (a.name || '')) add(was, i, 'glass', glassOf(b), glassOf(a));
+  };
+
+  if (after.length >= before.length) {
+    for (let i = 0; i < before.length; i++) compare(i);
+    for (let i = before.length; i < after.length; i++) add(now, i, 'add', '', desc(after[i]));
+    return n;
+  }
+  // נמחקו פריטים: יישור חמדני — מה שלא מתאים לפריט הבא שנשאר, נמחק
+  let j = 0;
+  before.forEach((b, i) => {
+    if (j < after.length && same(b, after[j])) { j++; return; }
+    if (b.hsLine) { add(was, i, 'remove', desc(b), ''); return; }
+    // שורה שעוד לא נוספה בחשבשבת ונמחקה — אין מה להוסיף שם יותר
+    Object.keys(order.hsCorrections || {}).forEach(k => {
+      const c = order.hsCorrections[k];
+      if (c && !c.done && c.type === 'add' && c.itemIndex === i) {
+        update['hsCorrections/' + k + '/done'] = true;
+        update['hsCorrections/' + k + '/doneAt'] = Date.now();
+        update['hsCorrections/' + k + '/doneBy'] = 'נמחקה לפני שנוספה';
+      }
+    });
+  });
+  return n;
+}
+
 // מקבץ את התיקונים לשורה אחת לכל (הזמנה, שורה בחשבשבת): שורה ששונתה כמה
 // פעמים מוצגת פעם אחת — מה שהיה לפני התיקון הראשון ומה שיש עכשיו, ועם
 // ההיסטוריה. status: 'pending' | 'done' | 'all'.
@@ -1444,7 +1494,8 @@ function lgHsCorrectionQueue(orders, status) {
       const last = hist[hist.length - 1];
       rows.push({
         orderId: o.id, orderNum: o.orderNum || o.id, client: o.orderClient || '',
-        hsLine: last.hsLine || (last.itemIndex + 1), itemIndex: last.itemIndex,
+        // שורה חדשה (add) עוד אין לה מספר בחשבשבת
+        hsLine: last.hsLine || (net.add ? null : last.itemIndex + 1), itemIndex: last.itemIndex,
         net, history: hist, keys: hist.map(c => c.key),
         done: !!last.done, lastAt: last.at || 0, lastBy: last.by || '',
         doneAt: last.doneAt || 0, doneBy: last.doneBy || '',
