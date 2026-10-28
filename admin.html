@@ -329,6 +329,16 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .mit-lit{background:rgba(41,128,185,0.12);color:#2471a3;}
 .mit-gr{background:rgba(39,174,96,0.12);color:#1e8449;}
 .mit-empty{font-size:13px;color:var(--muted);}
+/* עריכת פריטים מחלון "פרטים" (בן, 28/10) */
+.mit-edit-btn{display:inline-flex;align-items:center;gap:4px;min-height:36px;padding:4px 12px;background:transparent;border:1px solid rgba(184,146,42,0.45);border-radius:6px;color:var(--gold-text);font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;}
+.mit-dims{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;color:var(--muted);}
+.mit-in{width:64px;min-height:36px;padding:2px 6px;border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;text-align:center;background:var(--bg);color:var(--text);}
+.mit-sku{width:92px;text-transform:uppercase;}
+.mit-u{font-size:12px;}
+.mit-del{min-width:36px;min-height:36px;background:transparent;border:1px solid rgba(192,57,43,0.3);border-radius:6px;color:#c0392b;cursor:pointer;}
+.mit-add{background:transparent;border:1px dashed var(--border);}
+.mit-hint{font-size:12px;color:var(--muted);margin-top:4px;}
+.mit-hs-banner{margin:0 0 8px;padding:8px 12px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.25);border-radius:6px;font-size:12px;font-weight:700;color:#a93226;}
 label.msec-t{display:block;}
 .msel-wrap{position:relative;}
 .msel-wrap::after{content:"";position:absolute;left:14px;top:50%;width:8px;height:8px;margin-top:-6px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);pointer-events:none;}
@@ -938,7 +948,8 @@ function openMod(id) {
       <div class="mf"><label>פריטים</label><div class="v">${items.length}${o.area ? ' · ' + lgEsc(String(o.area)) + ' מ״ר' : ''}</div></div>
     </div>
     <div class="msec">
-      <div class="msec-t">פריטים</div>
+      <div class="msec-t" style="display:flex;align-items:center;gap:8px">פריטים
+        ${_modCanEditItems(o) ? `<button type="button" id="modEditItemsBtn" class="mit-edit-btn" onclick="modEditItems()"><span data-icon="pencil"></span> ערוך פריטים</button>` : ''}</div>
       <div id="itemsPreview">${_modItemsHtml(items)}</div>
     </div>
     ${lgHasSketch(o) ? `
@@ -1036,6 +1047,116 @@ function _modItemsHtml(items){
       ${i.chisum ? '<span class="mit-t mit-chis">חיסום</span>' : i.litush ? '<span class="mit-t mit-lit">ליטוש</span>' : ''}
       ${i.graphic ? '<span class="mit-t mit-gr">גרפיקה</span>' : ''}
     </div>`).join('');
+}
+// ── עריכת פריטים מחלון "פרטים" (בן, 28/10) ─────────────────────────────
+// בכל שלב עד החשבונית — גם הזמנה שכבר בתחנת הבדיקה. כל פעולה נשמרת מיד
+// (lgSaveOrderItemsEdit), ובהזמנה שכבר בחשבשבת נרשמת ב"תיקון הזמנות".
+// מידות במטרים, כמו בתור הסקיצות (0.45 = 450 מ"מ).
+function _modCanEditItems(o){
+  return !!o && !((o.invoiceDone && o.invoiceDone.docNumber) || _lgLegacyInvoiced(o));
+}
+function _modEditHtml(o){
+  const items = o.items || [];
+  const banner = lgHsWasSent(o)
+    ? '<div class="mit-hs-banner" role="note">ההזמנה כבר בחשבשבת. כל שינוי כאן יירשם ב"תיקון הזמנות" — ויש לעדכן אותו שם ידנית.</div>' : '';
+  const rows = items.map((it, i) => `
+    <div class="mit mit-ed">
+      <span class="mit-n">${lgEsc(it.name||'פריט')}${it.sku ? ' · ' + lgEsc(it.sku) : ''}</span>
+      <span class="mit-dims">
+        <input class="mit-in" inputmode="decimal" aria-label="רוחב שורה ${i+1}" value="${it.w ? lgMmToMeterStr(it.w) : ''}" onchange="modItemDims(${i},'w',this.value)">
+        <span>×</span>
+        <input class="mit-in" inputmode="decimal" aria-label="גובה שורה ${i+1}" value="${it.h ? lgMmToMeterStr(it.h) : ''}" onchange="modItemDims(${i},'h',this.value)">
+        <span class="mit-u">מ׳</span>
+      </span>
+      <input class="mit-in mit-sku" list="iwCodeList" autocapitalize="characters" autocorrect="off" spellcheck="false"
+             aria-label="מק״ט שורה ${i+1}" placeholder="מק״ט" value="${lgEsc(it.sku||'')}" onchange="modItemSku(${i},this.value)">
+      <button type="button" class="mit-del" onclick="modItemRemove(${i})" aria-label="מחק שורה ${i+1}"><span data-icon="x"></span></button>
+    </div>`).join('');
+  return banner + (rows || '<div class="mit-empty">אין פריטים</div>') + `
+    <div class="mit mit-add">
+      <input class="mit-in mit-sku" id="modAddSku" list="iwCodeList" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="מק״ט לשורה חדשה" placeholder="מק״ט">
+      <input class="mit-in" id="modAddW" inputmode="decimal" aria-label="רוחב לשורה חדשה" placeholder="רוחב">
+      <span>×</span>
+      <input class="mit-in" id="modAddH" inputmode="decimal" aria-label="גובה לשורה חדשה" placeholder="גובה">
+      <input class="mit-in" id="modAddQty" inputmode="numeric" aria-label="כמות" value="1" style="width:44px">
+      <button type="button" class="mit-edit-btn" onclick="modItemAdd()">הוסף</button>
+    </div>
+    <div class="mit-hint">מידות במטרים (0.45 = 450 מ"מ). כל שינוי נשמר מיד.</div>`;
+}
+function modEditItems(){
+  const o = orders.find(x => x.id === eid);
+  if(!o || !_modCanEditItems(o)) return;
+  const btn = document.getElementById('modEditItemsBtn');
+  if(btn) btn.style.display = 'none';
+  document.getElementById('itemsPreview').innerHTML = _modEditHtml(o);
+}
+// אותם שדות ש-iwSetGroupSku / iwAdd כותבים; המידות נשארות
+function _modSkuFields(code){
+  const c = String(code || '').toUpperCase().trim();
+  const e = (typeof skuCatalogMap === 'object' && skuCatalogMap[c]) || null;
+  const r = iwResolve(c) || (e ? { label: e.name, glass: e.glass, mm: e.mm, proc: e.proc || '', graphic: !!e.graphic,
+    chalavi: !!e.chalavi, triplex: !!e.triplex, sku: c, _fromCatalog: true } : null);
+  if(!r) return null;
+  const f = { name: r.label, glassFullName: r.label, glass: r.glass, mm: r.mm,
+    chisum: r.proc === 'chisum', litush: r.proc === 'litush', graphic: !!r.graphic, sku: r.sku || c };
+  if(r._fromCatalog){ f.chalavi = !!r.chalavi; f.triplex = !!r.triplex; }
+  return f;
+}
+// חתיכה שנערכה יוצאת מקבוצת הכמות — כמו ב-lgEditInvoiceItem
+function _modDetach(items, it){
+  if(it.quantityGroupId && items.filter(x => x.quantityGroupId === it.quantityGroupId).length > 1){
+    delete it.quantityGroupId; delete it.originalQuantity; delete it.groupIndex;
+  }
+}
+async function _modSaveItems(o, items, okMsg){
+  try {
+    const r = await lgSaveOrderItemsEdit(o, items, { globalP: globalPrices, clientP: clientPrices });
+    o.items = items;   // התצוגה מתעדכנת מיד; Firebase יחזיר את אותו הדבר
+    showToast(okMsg + (r.logged ? ' — נרשם בתיקון הזמנות' : ''));
+  } catch(e) {
+    console.error('modSaveItems:', e);
+    showToast(e.message || 'השמירה נכשלה — נסה שוב');
+  }
+  if(eid === o.id) document.getElementById('itemsPreview').innerHTML = _modEditHtml(o);
+}
+function _modItemsCopy(o){ return (o.items || []).map(it => ({...it})); }
+function modItemDims(i, field, val){
+  const o = orders.find(x => x.id === eid); if(!o) return;
+  const r = lgParseDimensionInput(val);
+  if(!r.ok){ showToast(r.error); return; }
+  const items = _modItemsCopy(o), it = items[i]; if(!it || it[field] === r.mm) return;
+  _modDetach(items, it);
+  it[field] = r.mm;
+  _modSaveItems(o, items, '✓ המידה נשמרה');
+}
+function modItemSku(i, code){
+  const o = orders.find(x => x.id === eid); if(!o) return;
+  const f = _modSkuFields(code);
+  if(!f){ showToast('מק"ט לא נמצא בקטלוג'); return; }
+  const items = _modItemsCopy(o), it = items[i]; if(!it || it.sku === f.sku) return;
+  _modDetach(items, it);
+  Object.assign(it, f); delete it.skuMissing;
+  _modSaveItems(o, items, '✓ סוג הזכוכית הוחלף');
+}
+function modItemRemove(i){
+  const o = orders.find(x => x.id === eid); if(!o) return;
+  const items = _modItemsCopy(o), it = items[i]; if(!it) return;
+  if(!confirm('למחוק את השורה "' + (it.name || 'פריט') + '"?')) return;
+  items.splice(i, 1);
+  _modSaveItems(o, items, '✓ השורה נמחקה');
+}
+function modItemAdd(){
+  const o = orders.find(x => x.id === eid); if(!o) return;
+  const f = _modSkuFields(document.getElementById('modAddSku').value);
+  if(!f){ showToast('מק"ט לא נמצא בקטלוג'); return; }
+  const rW = lgParseDimensionInput(document.getElementById('modAddW').value);
+  const rH = lgParseDimensionInput(document.getElementById('modAddH').value);
+  if(!rW.ok){ showToast(rW.error); return; }
+  if(!rH.ok){ showToast(rH.error); return; }
+  const qty = parseInt(document.getElementById('modAddQty').value || '1', 10) || 1;
+  const items = _modItemsCopy(o);
+  items.push(...lgMakeQuantityGroup({ ...f, w: rW.mm, h: rH.mm }, qty));
+  _modSaveItems(o, items, qty > 1 ? `✓ ${qty} שורות נוספו` : '✓ השורה נוספה');
 }
 function showAllItems(){
   const o = orders.find(x => x.id === eid);

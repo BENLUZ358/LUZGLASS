@@ -1469,6 +1469,42 @@ function lgHsCorrectionsForEdit(update, order, before, after, by) {
   return n;
 }
 
+// עריכת פריטים מחלון "פרטים" באדמין — בכל שלב, עד שהופקה חשבונית (בן, 28/10:
+// הזמנה שכבר בתחנת הבדיקה, ואין לה מקום אחר לעריכה). newItems = כל הפריטים
+// אחרי פעולה אחת (מידה / זכוכית / מחיקה / הוספה), כמו iwSave בתור.
+// הזמנה נעולה מתומחרת מחדש: מחיר נעול למק"ט שכבר היה, ומחירון למק"ט חדש.
+// שליחה לחשבשבת כבר נעשתה → נרשם ב"תיקון הזמנות" באותה כתיבה.
+async function lgSaveOrderItemsEdit(order, newItems, opts) {
+  opts = opts || {};
+  const who = _lgInvoiceActor();
+  if (!order || !order.id) throw new Error('הזמנה חסרה');
+  if ((order.invoiceDone && order.invoiceDone.docNumber) || _lgLegacyInvoiced(order))
+    throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  const before = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}));
+  const items = (newItems || []).map(it => Object.assign({}, it));
+  const update = { items, updatedAt: Date.now() };
+  let newTotal = null;
+  if (order.pricesLockedAt && Array.isArray(order.lockedItems) && order.lockedItems.length) {
+    const had = new Set(before.map(it => it && it.sku).filter(Boolean));
+    const cp = ((opts.clientP || {})[order.orderClient || '']) || {};
+    const extra = [];
+    items.forEach(it => {
+      if (!it.sku || had.has(it.sku) || extra.some(x => x.sku === it.sku)) return;
+      const ppm = parseFloat(cp[it.sku] || (opts.globalP || {})[it.sku] || 0);
+      if (!ppm) throw new Error('אין מחיר למק"ט ' + it.sku + ' במחירון — אי אפשר לחשב מחדש');
+      extra.push({ sku: it.sku, pricePerM2: ppm });
+    });
+    const rp = lgRepriceLockedItems(items, order.lockedItems.concat(extra));
+    update.lockedItems = rp.lockedItems;
+    update.totalFinal  = rp.totalFinal;
+    update.totalM2     = lgCalcOrderM2({ items });
+    newTotal = rp.totalFinal;
+  }
+  const logged = lgHsCorrectionsForEdit(update, order, before, items, who.name || who.phone);
+  await _lgDb.ref('orders/' + order.id).update(update);
+  return { logged, newTotal };
+}
+
 // מקבץ את התיקונים לשורה אחת לכל (הזמנה, שורה בחשבשבת): שורה ששונתה כמה
 // פעמים מוצגת פעם אחת — מה שהיה לפני התיקון הראשון ומה שיש עכשיו, ועם
 // ההיסטוריה. status: 'pending' | 'done' | 'all'.
