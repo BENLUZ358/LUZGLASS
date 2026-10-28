@@ -130,6 +130,7 @@ module.exports = async function handler(req, res) {
   // Only this exact server query value selects the relay's own token/project gate.
   if (req.query && req.query.devbrain === 'relay') return require('./_devbrain-route')(req, res);
   if (req.query && req.query.invoice === 'upload') return require('./_invoice-upload')(req, res);
+  if (req.query && req.query.invoice === 'ctl') return require('./_invoice-ctl')(req, res);
   try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) { res.status(500).json({ error: 'server not configured' }); return; }
     const { waitUntil } = require('@vercel/functions');

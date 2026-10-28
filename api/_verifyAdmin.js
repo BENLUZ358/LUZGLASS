@@ -34,6 +34,15 @@ function _adminApp() {
 
 // מחזיר { ok:true, phone } או { ok:false, status, error } — אף פעם לא זורק.
 async function verifyAdmin(req) {
+  const u = await verifyUser(req);
+  if (!u.ok) return u;
+  if (u.role !== 'admin') return { ok: false, status: 403, error: 'not an admin' };
+  return { ok: true, phone: u.phone };
+}
+
+// כל משתמש מחובר (לא רק אדמין). מחזיר { ok:true, phone, role } — role מ-users/{phone}.
+// משתמש שאין לו רשומה ב-users נדחה (403). אף פעם לא זורק.
+async function verifyUser(req) {
   const header = req.headers['authorization'] || '';
   const m = header.match(/^Bearer (.+)$/);
   if (!m) return { ok: false, status: 401, error: 'missing Authorization header' };
@@ -53,11 +62,11 @@ async function verifyAdmin(req) {
   try {
     const snap = await getDatabase(app).ref('users/' + phone).once('value');
     const u = snap.val();
-    if (!u || u.role !== 'admin') return { ok: false, status: 403, error: 'not an admin' };
-    return { ok: true, phone };
+    if (!u) return { ok: false, status: 403, error: 'unknown user' };
+    return { ok: true, phone, role: u.role || '' };
   } catch (e) {
     return { ok: false, status: 500, error: 'role lookup failed' };
   }
 }
 
-module.exports = { verifyAdmin };
+module.exports = { verifyAdmin, verifyUser };

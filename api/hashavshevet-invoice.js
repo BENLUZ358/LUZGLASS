@@ -347,11 +347,10 @@ module.exports = async function handler(req, res) {
     // שנייה. רשומה שכבר 'ready' לא נדרסת: היא כבר שויכה ל-PDF.
     // כשל ברישום לא מפיל את התשובה — המסמך כבר נוצר בחשבשבת.
     try {
-      const pdfKey = crypto.createHash('sha1')
-        .update('invoicePdf|' + [...orderIds].sort().join(',')).digest('hex').slice(0, 20);
+      const pdfKey = require('./_invoice-send').lgInvoicePdfKey(orderIds);
       await db.ref('invoicePdf/' + pdfKey).transaction(cur => {
         if (cur && cur.state !== 'awaiting') return;
-        return {
+        const rec = {
           state: 'awaiting', reference: ref.reference, createdAt: Date.now(), createdBy: auth.phone,
           client: clientName, clientPhone: acct.phone, simulated: isTest || null,
           orderIds: orderIds.map(String),
@@ -359,6 +358,9 @@ module.exports = async function handler(req, res) {
           // שם הסקיצה — לפיו מזהים את החשבונית המודפסת (אותו שדה כמו _wa-recipient)
           sketchNames: orders.map(o => String(o.sketchName || o.type || o.desc || '').trim()),
         };
+        // מספר מסמך שכבר נרשם ידנית בתחנה לא נדרס
+        if (cur && cur.docNumber) rec.docNumber = cur.docNumber;
+        return rec;
       });
     } catch (e) {
       console.error('hashavshevet-invoice: invoicePdf register failed', e && e.name);
