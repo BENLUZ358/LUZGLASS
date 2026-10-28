@@ -41,6 +41,10 @@ bctx.lgFindPriceItem = () => null;
 check('the server and browser tables are identical',
       JSON.stringify(ctx.LG_MIN_AREA), JSON.stringify(bctx.LG_MIN_AREA));
 
+// אביבי = כרטיס 450 בחשבשבת (בן, 28/10)
+check('Avivi (450) has the rule on the server', ctx.LG_MIN_AREA['450'], { litush: 0.2, chisum: 0.3 });
+check('Avivi (450) has the rule on the screen', bctx.LG_MIN_AREA['450'], { litush: 0.2, chisum: 0.3 });
+
 // כלל לדוגמה על כרטיס בדיקה — כמו של אביבי
 ctx.LG_MIN_AREA.T1 = bctx.LG_MIN_AREA.T1 = { litush: 0.2, chisum: 0.3 };
 const LIT = { sku: '8CM', w: 300, h: 200, litush: true, chisum: false };   // 0.06 מ"ר
@@ -57,6 +61,7 @@ check('a piece with no size is still skipped', ctx.buildLines({ orderNum: 'L1', 
 
 // המחיר על המסך — אותו כלל, לפי customerId של ההזמנה
 check('screen total uses the minimum', bctx.lgCalcOrderTotal({ customerId: 'T1', items: [LIT, CHI] }, { '8CM': 100, '8CMH': 120 }, {}), Math.round(0.2 * 100 + 0.3 * 120));
+check('Avivi order (450) on the screen uses the minimum', bctx.lgCalcOrderTotal({ customerId: '450', items: [LIT] }, { '8CM': 100 }, {}), 20);
 check('screen total for another customer is the real area', bctx.lgCalcOrderTotal({ customerId: '999', items: [LIT] }, { '8CM': 100 }, {}), 6);
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
