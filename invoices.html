@@ -241,6 +241,7 @@ html,body{height:100%;overflow:hidden;}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20260928"></script>
+<script src="sku-picker.js?v=20261028"></script>
 <script src="lg-icons.js?v=20260807"></script>
 </head>
 <body data-view="customers">
@@ -250,6 +251,7 @@ html,body{height:100%;overflow:hidden;}
     <a class="tb-btn" id="btnHome" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
     <button class="tb-btn" id="btnBack" type="button" aria-label="חזרה"><span data-icon="arrow-right"></span><span>חזרה</span></button>
     <div class="tb-title" id="tbTitle">תחנת חשבוניות<small>בודקים פריטים מול סקיצה, ורק אז מפיקים חשבונית בחשבשבת</small></div>
+    <a class="tb-btn" id="btnCorr" href="hs-corrections.html"><span data-icon="clipboard"></span><span>תיקון הזמנות</span></a>
     <button class="tb-btn" id="btnCustomers" type="button" aria-controls="pCustomers" aria-expanded="false"><span data-icon="users"></span><span>לקוחות</span></button>
   </header>
 
@@ -534,6 +536,7 @@ function renderVerify() {
       <div class="item-main"><div class="item-dim">${w} × ${h}</div>
         <div class="item-sub">${sub}</div>${was}</div>
       <button class="edit" type="button" data-edit="${i}" aria-label="תקן את המידה של שורה ${esc(n)}"><span data-icon="pencil"></span></button>
+      <button class="edit" type="button" data-glass="${i}" aria-label="החלף סוג זכוכית בשורה ${esc(n)}"><span data-icon="refresh"></span></button>
       <button class="tick" type="button" data-tick="${i}" aria-pressed="${!!t[i]}" aria-label="סמן שורה ${esc(n)} כנבדקה"><span data-icon="check"></span></button>
     </div>`;
   }).join('') || `<div class="empty-state"><div class="empty-state-title">אין פריטים בהזמנה</div></div>`;
@@ -589,6 +592,8 @@ $('vBody').addEventListener('click', e => {
     const f = $('edW'); if (f) { f.focus(); f.select(); }
     return;
   }
+  const gl = e.target.closest('[data-glass]');
+  if (gl) { openGlassModal(Number(gl.dataset.glass)); return; }
   if (e.target.closest('#edCancel')) { editIdx = null; renderVerify(); return; }
   if (e.target.closest('#edSave'))   { saveEdit(); return; }
 });
@@ -722,6 +727,55 @@ function openInvoiceModal() {
   };
 }
 
+// החלפת סוג זכוכית בשורה. בוחרים מק"ט מהקטלוג, רואים מחיר ישן מול חדש,
+// ורק אז שומרים. שורה שכבר נשלחה לחשבשבת נרשמת ב"תיקון הזמנות".
+let CATALOG = {};
+async function openGlassModal(idx) {
+  const o = orderOf(selId); const it = o && o.items[idx]; if (!it) return;
+  const sent = lgHsWasSent(o);
+  let chosen = null, prices = null;
+  openModal(`<div class="modal-in">
+    <h3 id="ovTitle">החלפת סוג זכוכית · שורה ${esc(it.hsLine || idx + 1)}</h3>
+    <div class="sub">עכשיו: ${esc(it.glassFullName || it.name || '—')}${it.sku ? ' · ' + esc(it.sku) : ''}</div>
+    <div class="field"><label for="gSearch">סוג זכוכית חדש (קוד או שם)</label>
+      <input id="gSearch" autocomplete="off" placeholder="למשל: 8 שקוף חיסום"></div>
+    <div class="pick-list" id="gList"></div>
+    <div id="gCompare"></div>
+    ${sent ? '<div class="banner banner-red" style="margin:0 0 var(--space-3)"><span data-icon="alert"></span><span>ההזמנה כבר בחשבשבת. השינוי יירשם ב"תיקון הזמנות" ויש לעדכן אותו שם ידנית.</span></div>' : ''}
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="gSave" type="button" disabled>החלף</button>
+      <button class="btn btn-ghost" type="button" data-close>ביטול</button></div></div>`);
+  const optsNow = () => ({ catalog: CATALOG, globalP: prices && prices.globalP, clientP: prices && prices.clientP });
+  const preview = async () => {
+    $('gSave').disabled = true; $('gCompare').innerHTML = '';
+    if (!chosen) return;
+    try {
+      if (o.pricesLockedAt && !prices) prices = await getAllPrices();
+      const p = lgPlanSkuChange(o, idx, chosen, optsNow());
+      if (!p.changed) { $('gCompare').innerHTML = '<div class="sub">זה כבר הסוג של השורה</div>'; return; }
+      $('gCompare').innerHTML = `<div class="sub"><b>${esc(p.toName)}</b> · ${esc(p.toSku)}` +
+        (p.newTotal != null ? `<br>מחיר ההזמנה: ${esc(p.oldTotal)} ← <b>${esc(p.newTotal)}</b> ₪` : '<br>המחיר יחושב לפי המחירון') + '</div>';
+      $('gSave').disabled = false;
+    } catch (err) { $('gCompare').innerHTML = `<div class="field-error"><div class="field-msg">${esc(err.message)}</div></div>`; }
+  };
+  $('gSearch').addEventListener('input', () => {
+    chosen = null; preview();
+    $('gList').innerHTML = lgSkuSearch($('gSearch').value, CATALOG, 8).map(x =>
+      `<label class="pick"><input type="radio" name="gPick" value="${esc(x.code)}"><span>${esc(x.name)} · ${esc(x.code)}</span></label>`).join('');
+  });
+  $('gList').addEventListener('change', e => { chosen = e.target.value; preview(); });
+  setTimeout(() => $('gSearch').focus(), 50);
+  $('gSave').onclick = async () => {
+    const b = $('gSave'); b.disabled = true; b.innerHTML = '<span class="spin"></span>שומר…';
+    try {
+      const r = await lgEditInvoiceItemSku(o, idx, chosen, optsNow());
+      if (ticks[o.id]) delete ticks[o.id][String(idx)];
+      closeModal();
+      toast(r.changed ? (sent ? 'הזכוכית הוחלפה — נרשם בתיקון הזמנות' : 'הזכוכית הוחלפה') : 'לא השתנה');
+    } catch (err) { toast(err.message || 'השמירה נכשלה', true); b.disabled = false; b.textContent = 'החלף'; }
+  };
+}
+
 // ביטול אימות — בן בלבד, עם סיבה
 function openRevokeModal() {
   const o = orderOf(selId); if (!o || !lgCanRevokeInvoiceCheck(SESSION, o)) return;
@@ -759,6 +813,7 @@ lgRequireAuthAsync('admin').then(async session => {
   // הזמנות ישנות שמעולם לא קיבלו את הדגל.
   try { MONTHLY = lgMonthlyPhoneSet(await lgGetAllUsers()); }
   catch (e) { console.warn('שוטף 30 — לא נטענו רשומות הלקוחות:', e); }
+  listenSkuCatalog(list => { CATALOG = {}; list.forEach(e => { if (e && e.code) CATALOG[e.code] = e; }); });
   listenAllOrders(list => { ORDERS = list; renderAll(); },
     () => { $('custList').innerHTML = `<div class="empty-state"><span data-icon="alert"></span><div class="empty-state-title">הטעינה נכשלה</div><div class="empty-state-msg">בדוק חיבור ורענן</div></div>`; });
 });
