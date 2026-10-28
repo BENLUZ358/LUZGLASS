@@ -18,6 +18,13 @@ function lgInvoiceSendKey(clientKey, docNumber) {
     .update('invoice|' + String(clientKey) + '|' + String(docNumber)).digest('hex').slice(0, 20);
 }
 
+//  מפתח רשומת invoicePdf: דטרמיניסטי לפי קבוצת ההזמנות, כך שהפקה חוזרת
+//  או רישום ידני של אותן הזמנות מגיעים לאותה רשומה.
+function lgInvoicePdfKey(orderIds) {
+  return crypto.createHash('sha1')
+    .update('invoicePdf|' + [...orderIds].map(String).sort().join(',')).digest('hex').slice(0, 20);
+}
+
 //  שם בטוח לתיקייה/קובץ ב-Windows (גם בנתיב רשת).
 function safeName(s) {
   const t = String(s || '').replace(/[\\/:*?"<>|\u0000-\u001F]/g, ' ')
@@ -48,4 +55,4 @@ function lgInvoiceSendAfter(now, windowMs) {
   return now + (windowMs == null ? CANCEL_WINDOW_MS : windowMs);
 }
 
-module.exports = { CANCEL_WINDOW_MS, lgInvoiceSendKey, safeName, lgInvoiceArchivePath, lgInvoiceBuildPackage, lgInvoiceSendAfter };
+module.exports = { CANCEL_WINDOW_MS, lgInvoicePdfKey, lgInvoiceSendKey, safeName, lgInvoiceArchivePath, lgInvoiceBuildPackage, lgInvoiceSendAfter };

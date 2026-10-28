@@ -8,14 +8,19 @@
 //    3. כל אי-ודאות (מקור/העתק, שיוך, מספר מסמך) → 422 ולא נשמר דבר כ"מוכן".
 //
 //  גוף: { original: base64, copy: base64 }  (עמוד מקור ועמוד העתק, כל אחד PDF)
-//  תשובה: { ok, key, docNumber, date, archivePath, sendAfter } או { ok:false, code }
-//  הכלי כותב את ההעתק לתיקייה השיתופית לפי archivePath.
+//  תשובות:
+//    200 { ok, key, docNumber, date, archivePath, sendAfter }  שויכה — הכלי כותב העתק
+//    202 { ok, pending:true }  הודפסה אך החשבונית עוד לא נרשמה בתחנה — הכלי ינסה שוב
+//    4xx { ok:false, code }    נעצרה — הכלי מעביר ל-review
+//
+//  סדר לא משנה: חשבונית שנרשמה קודם ('awaiting') משויכת מיד; הדפסה שהגיעה
+//  קודם נשמרת כ'printed' ומשויכת כשהחשבונית נרשמת (_invoice-ctl.js).
 // ═══════════════════════════════════════════════════════════════════
 
 const crypto = require('crypto');
 const { lgHookTokenOk } = require('./_hook-token');
 const M = require('./_invoice-match');
-const S = require('./_invoice-send');
+const C = require('./_invoice-ctl');
 
 const MAX_PDF_BYTES = 600 * 1024;   // base64 ב-RTDB: שני קבצים נשארים מתחת ל-1MB לצומת
 
@@ -60,36 +65,49 @@ async function handleUpload(req, deps) {
   const { db } = deps, now = deps.now || Date.now();
   const hash = _sha(orig);
 
-  //  העלאה חוזרת של אותו קובץ (ניסיון חוזר של הכלי) → תשובה זהה, בלי עיבוד שני
+  //  העלאה חוזרת של אותו קובץ (ניסיון חוזר של הכלי) → תשובה זהה, בלי עיבוד שני.
+  //  הדפסה שעדיין 'printed' מנסה להשתייך עכשיו (ייתכן שהחשבונית נרשמה בינתיים).
   const dup = (await db.ref('invoicePdf').orderByChild('originalHash').equalTo(hash).limitToFirst(1).once('value')).val();
   if (dup) {
-    const k = Object.keys(dup)[0];
-    return { status: 200, body: { ok: true, duplicate: true, key: k, docNumber: dup[k].docNumber,
-      date: dup[k].date, archivePath: dup[k].archivePath, sendAfter: dup[k].sendAfter } };
+    let k = Object.keys(dup)[0], r = dup[k];
+    if (r.state === 'printed') {
+      const s = await C.settlePrinted(db, k, now);
+      if (!s.settled) return { status: 202, body: { ok: true, pending: true, duplicate: true, key: k } };
+      k = s.key; r = s.rec;
+    }
+    return { status: 200, body: { ok: true, duplicate: true, key: k, docNumber: r.docNumber,
+      date: r.date, archivePath: r.archivePath, sendAfter: r.sendAfter } };
   }
 
-  const pend = (await db.ref('invoicePdf').orderByChild('state').equalTo('awaiting').limitToFirst(200).once('value')).val() || {};
-  const pick = M.pickPending(oText, pend);
-  if (!pick.ok) return _fail(422, pick.code);
-
-  const rec = pend[pick.key];
   const docNumber = M.extractDocNumber(oText);
   const date = M.extractDate(oText);
-  const archivePath = S.lgInvoiceArchivePath(date, rec.client, docNumber);
-  if (!docNumber || !date || !archivePath) return _fail(422, 'no-docnumber-or-date');
+  const pend = (await db.ref('invoicePdf').orderByChild('state').equalTo('awaiting').limitToFirst(200).once('value')).val() || {};
+  const pick = M.pickPending(oText, pend);
 
+  if (!pick.ok) {
+    //  אין חשבונית רשומה שמתאימה: שומרים את ההדפסה עד שהחשבונית תירשם בתחנה.
+    //  'ambiguous' ממשיך לעצור. בלי מספר מסמך ותאריך אין לפי מה לשייך אחר כך.
+    if (pick.code !== 'no-match') return _fail(422, pick.code);
+    if (!docNumber || !date) return _fail(422, 'no-docnumber-or-date');
+    const pk = 'p' + hash.slice(0, 18);
+    await db.ref('invoicePdf/' + pk).set({ state: 'printed', docNumber, date, originalHash: hash,
+      text: oText.slice(0, 3000), createdAt: now, uploadedAt: now });
+    await db.ref('invoicePdfBlobs/' + pk).set({
+      original: orig.toString('base64'), copy: copy.toString('base64') });
+    const s = await C.settlePrinted(db, pk, now);
+    if (!s.settled) return { status: 202, body: { ok: true, pending: true, key: pk } };
+    return { status: 200, body: { ok: true, key: s.key, docNumber, date,
+      archivePath: s.rec.archivePath, sendAfter: s.rec.sendAfter } };
+  }
+
+  const rec = (pend[pick.key]);
+  if (!docNumber || !date) return _fail(422, 'no-docnumber-or-date');
+  if (rec.docNumber && rec.docNumber !== docNumber) return _fail(422, 'docnumber-mismatch');
   //  כתיבה אטומית: רק אם עדיין ממתינה (שתי העלאות מקבילות)
-  const tx = await db.ref('invoicePdf/' + pick.key).transaction(cur => {
-    if (!cur || cur.state !== 'awaiting') return;
-    return { ...cur, state: 'ready', docNumber, date, archivePath, originalHash: hash,
-      uploadedAt: now, sendAfter: S.lgInvoiceSendAfter(now),
-      sendKey: S.lgInvoiceSendKey(cur.clientPhone || cur.client, docNumber) };
-  });
-  if (!tx.committed) return _fail(409, 'already-processed');
-  await db.ref('invoicePdfBlobs/' + pick.key).set({
-    original: orig.toString('base64'), copy: copy.toString('base64') });
-  const r = tx.snapshot.val();
-  return { status: 200, body: { ok: true, key: pick.key, docNumber, date, archivePath, sendAfter: r.sendAfter } };
+  const done = await C.markReady(db, pick.key, { docNumber, date, hash, original: orig, copy }, now);
+  if (!done) return _fail(409, 'already-processed');
+  return { status: 200, body: { ok: true, key: pick.key, docNumber, date,
+    archivePath: done.archivePath, sendAfter: done.sendAfter } };
 }
 
 module.exports = async function handler(req, res) {

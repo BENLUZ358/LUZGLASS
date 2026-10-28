@@ -209,3 +209,12 @@ String(id)
 `invoicePdfBlobs/<key>` — `{ original, copy }` base64. לא קריא מהדפדפן.
 
 Endpoint: `POST /api/invoice-pdf-upload` (rewrite ל-`wa-inbound?invoice=upload`), משתנה סביבה `INVOICE_UPLOAD_TOKEN`.
+
+### בקרה על חשבוניות (`/api/invoice-ctl`, rewrite ל-`wa-inbound?invoice=ctl`)
+
+- `state` נוסף: `printed` — הודפסה (הכלי העלה) אך החשבונית עוד לא נרשמה בתחנה. מפתח `p<hash>`, נושא `docNumber`, `date`, `text` (טקסט המקור, לשיוך). כשהחשבונית נרשמת (`register`) או הכלי מנסה שוב — משויכת לפי `docNumber` + שמות הסקיצות ונמחקת מה-`printed`.
+- `register` (אדמין, נקרא מ-`lgMarkInvoiced` בתחנה): יוצר/מעדכן `awaiting` עם `docNumber`. הסדר "רישום ואז הדפסה" והסדר ההפוך מגיעים לאותה רשומה (`lgInvoicePdfKey`).
+- `list` / `pdf` (אדמין): ארכיון חצי שנה אחורה; `pdf` מחזיר `original` בלבד.
+- `mine` / `minepdf` (לקוח): רק `ready`, לא `simulated`, וכל הזמנות החשבונית חייבות להיות על הטלפון של הלקוח. ההעתק לעולם לא נחשף.
+- אינדקסים: `state, originalHash, docNumber, createdAt, clientPhone`. הרשומות עצמן נשארות קריאות לאדמין בלבד.
+- אין מחיקה של PDF (הוחלט: לא מוחקים).

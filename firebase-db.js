@@ -1017,6 +1017,9 @@ function lgNormalizeOrder(o) {
     // למצוא הזמנה כשמסתכלים על החשבונית שם. הוא נקרא מהרשומה ולא מחושב
     // ממספר ההזמנה, כי חישוב היה מציג אסמכתא גם להזמנה שמעולם לא נשלחה —
     // מספר שמצביע על מסמך שלא קיים.
+    // תיקונים שנעשו אחרי ששורה נשלחה לחשבשבת וממתינים לעדכון ידני שם
+    // (דף "תיקון הזמנות"). מפתח → רשומה, כמו ב-Firebase.
+    hsCorrections: (o.hsCorrections && typeof o.hsCorrections === 'object') ? o.hsCorrections : null,
     hsOrder:       o.hashavshevet ? {
       reference:  o.hashavshevet.reference || '',
       sentAt:     Number(o.hashavshevet.sentAt) || 0,
@@ -1383,8 +1386,152 @@ async function lgEditInvoiceItem(order, index, next) {
     update.totalFinal  = r.totalFinal;
     update.totalM2     = lgCalcOrderM2({ items });
   }
+  lgAddHsCorrection(update, order, Number(index), 'dims', oldW + '×' + oldH, w + '×' + h, it.editedBy);
   await _lgDb.ref('orders/' + order.id).update(update);
   return { changed: true, from: oldW + '×' + oldH, to: w + '×' + h };
+}
+
+// ── תיקון הזמנות · מה שחשבשבת צריכה לקבל ידנית ──────────────────────────────
+//
+// חשבשבת מקבלת מאיתנו רק פתיחה של הזמנה. אין שם מחיקה, ביטול או עדכון שורה
+// דרך ה-API, ולכן כל שינוי בשורה שכבר נשלחה (מידה או סוג זכוכית) נרשם כאן,
+// והעובד מעדכן ידנית בסוף היום ("בטל יתרה לאספקה" + שורה חדשה באותו מספר)
+// ומסמן "בוצע". הרישום נכתב באותה כתיבה רב-נתיבית של השינוי עצמו — אין מצב
+// ששורה השתנתה בלי שנרשם שצריך לתקן אותה.
+//
+// הזמנה שעוד לא נשלחה לחשבשבת לא נרשמת: אין שם מה לתקן, ומה שיישלח הוא
+// המצב העדכני. הזמנת סימולציה (simulated) לא נפתחה שם באמת.
+function lgHsWasSent(order) {
+  const h = order && order.hsOrder;
+  return !!(h && h.sentAt && !h.simulated);
+}
+
+function lgAddHsCorrection(update, order, itemIndex, type, from, to, by) {
+  if (!lgHsWasSent(order)) return null;
+  const items = Array.isArray(order.items) ? order.items : Object.values(order.items || {});
+  const it = items[itemIndex] || {};
+  const key = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  update['hsCorrections/' + key] = {
+    itemIndex, hsLine: Number(it.hsLine) || null, type,
+    from: String(from == null ? '' : from), to: String(to == null ? '' : to),
+    by: by || '', at: Date.now(), done: false,
+  };
+  return key;
+}
+
+// מקבץ את התיקונים לשורה אחת לכל (הזמנה, שורה בחשבשבת): שורה ששונתה כמה
+// פעמים מוצגת פעם אחת — מה שהיה לפני התיקון הראשון ומה שיש עכשיו, ועם
+// ההיסטוריה. status: 'pending' | 'done' | 'all'.
+function lgHsCorrectionQueue(orders, status) {
+  const want = status || 'pending';
+  const rows = [];
+  (orders || []).forEach(o => {
+    if (!o || !o.hsCorrections) return;
+    const byLine = Object.create(null);
+    Object.keys(o.hsCorrections).forEach(k => {
+      const c = o.hsCorrections[k];
+      if (!c) return;
+      const isDone = !!c.done;
+      if (want === 'pending' && isDone) return;
+      if (want === 'done' && !isDone) return;
+      const lineKey = (c.hsLine ? 'l' + c.hsLine : 'i' + c.itemIndex) + (isDone ? ':d' : ':p');
+      (byLine[lineKey] || (byLine[lineKey] = [])).push(Object.assign({ key: k }, c));
+    });
+    Object.keys(byLine).forEach(lk => {
+      const hist = byLine[lk].sort((a, b) => (a.at || 0) - (b.at || 0));
+      const net = {};   // לכל סוג: ה-from הראשון וה-to האחרון
+      hist.forEach(c => { net[c.type] = net[c.type] ? { from: net[c.type].from, to: c.to } : { from: c.from, to: c.to }; });
+      const last = hist[hist.length - 1];
+      rows.push({
+        orderId: o.id, orderNum: o.orderNum || o.id, client: o.orderClient || '',
+        hsLine: last.hsLine || (last.itemIndex + 1), itemIndex: last.itemIndex,
+        net, history: hist, keys: hist.map(c => c.key),
+        done: !!last.done, lastAt: last.at || 0, lastBy: last.by || '',
+        doneAt: last.doneAt || 0, doneBy: last.doneBy || '',
+      });
+    });
+  });
+  return rows.sort((a, b) => want === 'done' ? b.doneAt - a.doneAt : a.lastAt - b.lastAt);
+}
+
+// "בוצע בחשבשבת" — כל התיקונים הממתינים של השורה יחד
+async function lgMarkHsCorrectionDone(orderId, keys) {
+  const who = _lgInvoiceActor();
+  if (!orderId || !keys || !keys.length) throw new Error('lgMarkHsCorrectionDone: חסרים נתונים');
+  const now = Date.now(), update = {};
+  keys.forEach(k => {
+    update['hsCorrections/' + k + '/done']   = true;
+    update['hsCorrections/' + k + '/doneAt'] = now;
+    update['hsCorrections/' + k + '/doneBy'] = who.name || who.phone;
+  });
+  await _lgDb.ref('orders/' + orderId).update(update);
+}
+
+// ── החלפת סוג זכוכית בשורה ─────────────────────────────────────────────────
+//
+// אותם שדות ש-iwSetGroupSku / iwAdd כותבים (שם, עובי, עיבוד, מק"ט, גרפיקה,
+// חלבי, טריפלקס), והמידות נשארות. הפריט יוצא מקבוצת הכמות, כמו בעריכת מידה.
+// הכללים (DB-00007): מנהל בלבד, רק לפני חשבונית, והמחיר מחושב מחדש לפי מחיר
+// הסוג החדש (המחיר הישן של הזמנה נעולה לא רלוונטי לסוג אחר).
+//
+// opts = { catalog: מפת skuCatalog, globalP, clientP }. lgPlanSkuChange לא
+// כותבת כלום — היא גם מזינה את חלון "מחיר ישן מול חדש" לפני האישור.
+function lgPlanSkuChange(order, index, newSku, opts) {
+  opts = opts || {};
+  if (!order || !order.id) throw new Error('הזמנה חסרה');
+  if (!lgCanEditInvoiceItems(order)) throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  const items = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}))
+                  .map(it => Object.assign({}, it));
+  const it = items[Number(index)];
+  if (!it) throw new Error('הפריט לא נמצא בהזמנה');
+  const code = String(newSku || '').toUpperCase().trim();
+  const r = lgResolveSkuCode(code, opts.catalog || {});
+  if (!r) throw new Error('המק"ט ' + (code || '(ריק)') + ' לא נמצא בקטלוג');
+  const oldSku  = it.sku || '';
+  const oldName = it.glassFullName || it.name || '';
+  if (oldSku === code) return { changed: false };
+
+  if (it.quantityGroupId && items.filter(x => x.quantityGroupId === it.quantityGroupId).length > 1) {
+    delete it.quantityGroupId; delete it.originalQuantity; delete it.groupIndex;
+  }
+  Object.assign(it, {
+    name: r.label, glassFullName: r.label, glass: r.glass, mm: r.mm,
+    chisum: r.proc === 'chisum', litush: r.proc === 'litush', graphic: !!r.graphic,
+    chalavi: !!r.chalavi, triplex: !!r.triplex, sku: code,
+  });
+  delete it.skuMissing;
+  const who = _lgInvoiceActor();
+  it.skuChangedFrom = oldSku;
+  it.skuChangedName = oldName;
+  it.editedAt = Date.now();
+  it.editedBy = who.name || who.phone;
+
+  const update = { items, updatedAt: Date.now() };
+  const res = { changed: true, items, update, fromSku: oldSku, fromName: oldName, toSku: code, toName: r.label,
+                oldTotal: null, newTotal: null };
+  if (order.pricesLockedAt && Array.isArray(order.lockedItems) && order.lockedItems.length) {
+    const cp  = ((opts.clientP || {})[order.orderClient || '']) || {};
+    const ppm = parseFloat(cp[code] || (opts.globalP || {})[code] || 0);
+    if (!ppm) throw new Error('אין מחיר למק"ט ' + code + ' במחירון — אי אפשר לחשב מחדש');
+    const rp = lgRepriceLockedItems(items, order.lockedItems.concat([{ sku: code, pricePerM2: ppm }]));
+    update.lockedItems = rp.lockedItems;
+    update.totalFinal  = rp.totalFinal;
+    update.totalM2     = lgCalcOrderM2({ items });
+    res.oldTotal = Number(order.totalFinal) || 0;
+    res.newTotal = rp.totalFinal;
+  }
+  return res;
+}
+
+async function lgEditInvoiceItemSku(order, index, newSku, opts) {
+  const p = lgPlanSkuChange(order, index, newSku, opts);
+  if (!p.changed) return p;
+  lgAddHsCorrection(p.update, order, Number(index), 'glass',
+    (p.fromName || '') + (p.fromSku ? ' (' + p.fromSku + ')' : ''),
+    (p.toName || '') + ' (' + p.toSku + ')', p.items[Number(index)].editedBy);
+  await _lgDb.ref('orders/' + order.id).update(p.update);
+  return { changed: true, fromSku: p.fromSku, fromName: p.fromName, toSku: p.toSku, toName: p.toName,
+           oldTotal: p.oldTotal, newTotal: p.newTotal };
 }
 
 // "החשבונית הופקה" — על הזמנה אחת או כמה יחד, עם אותו מספר מסמך.
@@ -1411,6 +1558,11 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
     update[o.id + '/updatedAt']   = now;
   });
   await _lgDb.ref('orders').update(update);
+  // DB-00004: רושם את החשבונית גם בשרת, כדי לשייך אליה את ה-PDF שהודפס (בכל סדר).
+  // כשל כאן לא מפיל את הרישום — הוא כבר נשמר; ההדפסה פשוט תישאר "ממתינה לרישום".
+  try {
+    await _lgAuthPost('/api/invoice-ctl', { action: 'register', docNumber: p.docNumber, orderIds: list.map(o => o.id) });
+  } catch (e) { console.warn('[invoice-ctl] register failed:', e && e.message); }
   return { docNumber: p.docNumber, count: list.length };
 }
 

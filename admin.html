@@ -416,6 +416,7 @@ label.msec-t{display:block;}
     <a class="unav-a" href="#" onclick="openPricing()"><span class="ic" data-icon="wallet"></span>מחירונים</a>
     <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
     <a class="unav-a" href="invoices.html"><span class="ic" data-icon="receipt"></span>תחנת חשבוניות</a>
+    <a class="unav-a" href="hs-corrections.html"><span class="ic" data-icon="clipboard"></span>תיקון הזמנות<span id="navHsCorr" style="margin-inline-start:auto"></span></a>
     <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
     <div class="unav-sec">תחנות עבודה</div>
     <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
@@ -593,6 +594,8 @@ function load() {
   if (_unsubscribe) _unsubscribe();
   _unsubscribe = listenAllOrders(remoteOrders => {
     orders = remoteOrders;
+    const hsc = document.getElementById('navHsCorr');
+    if (hsc) { const n = lgHsCorrectionQueue(orders, 'pending').length; hsc.textContent = n || ''; hsc.className = n ? 'count alert' : ''; }
     renderAll();
     // הסתר loading overlay אחרי הטעינה הראשונה
     const ov = document.getElementById('lgLoading');
