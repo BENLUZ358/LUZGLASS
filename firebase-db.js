@@ -1558,6 +1558,11 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
     update[o.id + '/updatedAt']   = now;
   });
   await _lgDb.ref('orders').update(update);
+  // DB-00004: רושם את החשבונית גם בשרת, כדי לשייך אליה את ה-PDF שהודפס (בכל סדר).
+  // כשל כאן לא מפיל את הרישום — הוא כבר נשמר; ההדפסה פשוט תישאר "ממתינה לרישום".
+  try {
+    await _lgAuthPost('/api/invoice-ctl', { action: 'register', docNumber: p.docNumber, orderIds: list.map(o => o.id) });
+  } catch (e) { console.warn('[invoice-ctl] register failed:', e && e.message); }
   return { docNumber: p.docNumber, count: list.length };
 }
 

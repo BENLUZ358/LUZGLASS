@@ -27,7 +27,10 @@ const fail = (status, code) => ({ status, body: { ok: false, code } });
 //  awaiting → ready, אטומי. מחזיר את הרשומה או null אם כבר טופלה / אין נתיב ארכיון.
 async function markReady(db, key, d, now) {
   const tx = await db.ref('invoicePdf/' + key).transaction(cur => {
-    if (!cur || cur.state !== 'awaiting') return;
+    //  ⚠️ קריאה ראשונה היא עם null (מטמון ריק). undefined שם מבטל את כל
+    //  הטרנזקציה בשקט — ר' הערה ב-scripts/_fake-db.js. לכן null, לא return ריק.
+    if (!cur) return null;
+    if (cur.state !== 'awaiting') return;
     if (cur.docNumber && cur.docNumber !== d.docNumber) return;
     const archivePath = S.lgInvoiceArchivePath(d.date, cur.client, d.docNumber);
     if (!archivePath) return;
@@ -35,10 +38,11 @@ async function markReady(db, key, d, now) {
       originalHash: d.hash, uploadedAt: now, sendAfter: S.lgInvoiceSendAfter(now),
       sendKey: S.lgInvoiceSendKey(cur.clientPhone || cur.client, d.docNumber) };
   });
-  if (!tx.committed) return null;
+  const done = tx.snapshot.val();
+  if (!tx.committed || !done || done.state !== 'ready') return null;
   await db.ref('invoicePdfBlobs/' + key).set({
     original: d.original.toString('base64'), copy: d.copy.toString('base64') });
-  return tx.snapshot.val();
+  return done;
 }
 
 //  מנסה לשייך הדפסה שמחכה ('printed') לחשבונית רשומה עם אותו מספר מסמך.
