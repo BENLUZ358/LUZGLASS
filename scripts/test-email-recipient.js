@@ -63,6 +63,19 @@ const db = () => fakeDb({
   const r6 = await em.lgClientFromEmail(fakeDb({}), 'a@b.com');
   check('F2 empty database → none', r6.via, 'none');
 
+  // חשבון בחשבשבת להזמנה ממייל — לקוח בלי משתמש פורטל (אביבי 450, בן 28/10)
+  const linked = () => fakeDb({ waMeta: { emailSenders: { 'liora@avivi,com': { customerId: '450', customerName: 'אביבי' } } } });
+  check('G1 linked email order → its card, without a portal user',
+        await em.lgEmailOrderAccount(linked(), { emailFrom: 'Liora <liora@avivi.com>', customerId: '450' }), '450');
+  check('G2 card on the order differs from the link now → nothing',
+        await em.lgEmailOrderAccount(linked(), { emailFrom: 'liora@avivi.com', customerId: '999' }), '');
+  check('G3 not an email order → nothing',
+        await em.lgEmailOrderAccount(linked(), { customerId: '450' }), '');
+  check('G4 sender no longer linked → nothing',
+        await em.lgEmailOrderAccount(fakeDb({}), { emailFrom: 'liora@avivi.com', customerId: '450' }), '');
+  check('G5 matched by the card email also counts',
+        await em.lgEmailOrderAccount(db(), { emailFrom: 'solo@d.com', customerId: 'K4' }), 'K4');
+
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll email recipient checks passed.');
 })().catch(e => { console.error('FAIL  crashed:', e && e.stack || e); process.exit(1); });

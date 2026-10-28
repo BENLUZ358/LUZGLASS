@@ -28,6 +28,7 @@ const { verifyAdmin } = require('./_verifyAdmin');
 const { lgExternal, lgDatabaseUrl } = require('./_env');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
+const { lgEmailOrderAccount } = require('./_email-recipient');
 
 const ENDPOINT     = 'https://ws.wizground.com/api';
 // נגזרת ממפתח השירות — ר' lgDatabaseUrl ב-_env.js. הייתה קשיחה כאן, וזה
@@ -324,11 +325,10 @@ module.exports = async function handler(req, res) {
 
     // ── accountKey: מפתח החשבון של הלקוח ──
     const phone = String(order.clientPhone || order.phone || '').replace(/[-\s]/g, '');
-    if (!phone) { res.status(422).json({ error: 'להזמנה אין טלפון לקוח, ולכן אין דרך למצוא מפתח חשבון' }); return; }
-
-    const userSnap  = await db.ref('users/' + phone).once('value');
-    const user      = userSnap.val();
-    const accountKey = user && user.customerId;
+    const user  = phone ? (await db.ref('users/' + phone).once('value')).val() : null;
+    // הזמנה ממייל של לקוח בלי משתמש פורטל (אביבי, פלג) — לפי הכרטיס שבחרת בקליטות
+    const accountKey = (user && user.customerId) || await lgEmailOrderAccount(db, order);
+    if (!accountKey && !phone) { res.status(422).json({ error: 'להזמנה אין טלפון לקוח, ולכן אין דרך למצוא מפתח חשבון' }); return; }
     if (!accountKey) {
       res.status(422).json({
         error: `ללקוח ${order.orderClient || phone} אין מפתח חשבון (customerId) במערכת`,
