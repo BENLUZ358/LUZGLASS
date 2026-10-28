@@ -38,6 +38,7 @@ vm.runInContext([
   pick(/async function lgEditInvoiceItem\([\s\S]*?\n}/),
   pick(/function lgHsWasSent[\s\S]*?\n}/),
   pick(/function lgAddHsCorrection[\s\S]*?\n}/),
+  pick(/function lgHsCorrectionsForEdit[\s\S]*?\n}/),
   pick(/function lgHsCorrectionQueue[\s\S]*?\n}/),
   pick(/async function lgMarkHsCorrectionDone[\s\S]*?\n}/),
   pick(/function lgPlanSkuChange[\s\S]*?\n}/),
@@ -142,6 +143,54 @@ const last = () => writes[writes.length - 1].update;
     await ctx.lgMarkHsCorrectionDone('o1', q[0].keys);
     check('mark done writes done/doneAt/doneBy for every key',
           Object.keys(last()).length, 9);
+  }
+
+  /* עריכה בתור הסקיצות (iwSave) — בן, 28/10: הזמנה באמצע ייצור */
+  {
+    const sent = order(Object.assign({ stage: 'production' }, SENT));
+    const before = sent.items.map(it => Object.assign({}, it));
+    const edit = (after, o) => { const u = {}; const n = ctx.lgHsCorrectionsForEdit(u, o || sent, before, after, 'בן');
+      return { n, recs: Object.keys(u).filter(k => k.startsWith('hsCorrections/')).map(k => u[k]) }; };
+    const copy = () => before.map(it => Object.assign({}, it));
+
+    let a = copy(); a[1].w = 600;
+    let r = edit(a);
+    check('Q1 size change in production → dims on line 4',
+          r.recs.map(c => [c.type, c.hsLine, c.from, c.to]), [['dims', 4, '500×1000', '600×1000']]);
+
+    a = copy(); Object.assign(a[0], { sku: '10SMH', name: 'שקוף 10 מחוסם', glassFullName: 'שקוף 10 מחוסם' });
+    r = edit(a);
+    check('Q2 glass change → glass on line 3',
+          r.recs.map(c => [c.type, c.hsLine, c.to]), [['glass', 3, 'שקוף 10 מחוסם (10SMH)']]);
+
+    r = edit(copy().concat([{ sku: '8SMH', name: 'שקוף 8 מחוסם', w: 300, h: 400 }]));
+    check('Q3 added piece → add, no Hashavshevet line yet',
+          r.recs.map(c => [c.type, c.hsLine, c.itemIndex, c.to]), [['add', null, 2, 'שקוף 8 מחוסם (8SMH) 300×400']]);
+
+    r = edit([copy()[1]]);
+    check('Q4 deleted first piece → remove line 3 only',
+          r.recs.map(c => [c.type, c.hsLine, c.from]), [['remove', 3, 'שקוף 8 מחוסם (8SMH) 1000×1000']]);
+
+    check('Q5 nothing changed → nothing logged', edit(copy()).n, 0);
+    check('Q6 order not sent → nothing logged', edit((() => { const x = copy(); x[0].w = 1; return x; })(), order({ stage: 'production' })).n, 0);
+
+    // שורה שנוספה אחרי השליחה ונערכה — עדיין "שורה חדשה", עם המצב העדכני
+    const withNew = order(Object.assign({ stage: 'production', items: before.concat([{ sku: '8SMH', name: 'שקוף 8 מחוסם', w: 300, h: 400 }]) }, SENT));
+    const b2 = withNew.items.map(it => Object.assign({}, it));
+    const a2 = b2.map(it => Object.assign({}, it)); a2[2].w = 350;
+    const u2 = {}; ctx.lgHsCorrectionsForEdit(u2, withNew, b2, a2, 'בן');
+    const rec2 = Object.values(u2);
+    check('Q7 edit of a not-yet-added piece stays add', rec2.map(c => [c.type, c.hsLine, c.to]), [['add', null, 'שקוף 8 מחוסם (8SMH) 350×400']]);
+
+    // ומחיקה שלה סוגרת את ה-add הממתין
+    const withPending = Object.assign({}, withNew, { hsCorrections: { k1: { type: 'add', itemIndex: 2, done: false } } });
+    const u3 = {}; ctx.lgHsCorrectionsForEdit(u3, withPending, b2, b2.slice(0, 2), 'בן');
+    check('Q8 deleting a not-yet-added piece closes its pending add, logs nothing new',
+          [u3['hsCorrections/k1/done'], Object.keys(u3).filter(k => !k.startsWith('hsCorrections/k1/')).length], [true, 0]);
+
+    // הרשימה בדף: שורה חדשה בלי מספר
+    const q = ctx.lgHsCorrectionQueue([Object.assign({}, sent, { hsCorrections: { x: { type: 'add', itemIndex: 2, hsLine: null, from: '', to: 'y', at: 1 } } })]);
+    check('Q9 new line shows without a Hashavshevet line number', [q[0].hsLine, Object.keys(q[0].net)], [null, ['add']]);
   }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');

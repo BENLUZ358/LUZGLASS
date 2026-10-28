@@ -4529,8 +4529,12 @@ function sqRefreshMetrics(){
   }
 }
 
+// מה שנשמר לאחרונה — העתק נפרד, כי sqCurrent.items הוא אותו מערך שעורכים.
+// בלעדיו אין "לפני" להשוות אליו ברישום תיקון הזמנות (lgHsCorrectionsForEdit).
+let _iwSaved = [];
 function iwLoad(o){
   sqCurrentItems = (o.items||[]).map(it=>({...it}));
+  _iwSaved = sqCurrentItems.map(it=>({...it}));
   iwRender(); // → calls sqRefreshMetrics()
 }
 
@@ -4548,8 +4552,12 @@ function iwRender(){
   const cnt = document.getElementById('sqItemCount');
   if(!list) return;
   if(cnt) cnt.textContent = sqCurrentItems.length;
+  // אותו פס כמו בתחנת החשבוניות: כל שינוי כאן מחכה לעדכון ידני בחשבשבת
+  const hsBanner = sqCurrent && lgHsWasSent(_sqOrder(sqCurrent))
+    ? '<div class="iw-hs-banner" role="note" style="margin:0 0 8px;padding:8px 12px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.25);border-radius:6px;font-size:12px;font-weight:700;color:#a93226;">ההזמנה כבר בחשבשבת. כל שינוי כאן יירשם ב"תיקון הזמנות" — ויש לעדכן אותו שם ידנית.</div>'
+    : '';
   if(!sqCurrentItems.length){
-    list.innerHTML = '<div class="iw-empty">אין פריטים — הוסף באמצעות הקוד למעלה</div>';
+    list.innerHTML = hsBanner + '<div class="iw-empty">אין פריטים — הוסף באמצעות הקוד למעלה</div>';
     sqRefreshMetrics(); return;
   }
 
@@ -4566,7 +4574,7 @@ function iwRender(){
     }
   });
 
-  list.innerHTML = dispGroups.map((grp, gi) => {
+  list.innerHTML = hsBanner + dispGroups.map((grp, gi) => {
     const it = grp.rep;
     const qty = grp.indices.length;
     const idxJson = JSON.stringify(grp.indices);
@@ -4733,10 +4741,19 @@ function iwRemove(i){
 // בתחנת החשבוניות, כי שני הצדדים יראו את אותו מידע ישן.
 function iwSave(){
   if(!sqCurrent) return;
+  // הזמנה שכבר נשלחה לחשבשבת: השינוי נרשם ב"תיקון הזמנות" באותה כתיבה (בן, 28/10)
+  const fields = { items: sqCurrentItems };
+  let logged = 0;
+  try {
+    const who = lgVerifiedSession();
+    logged = lgHsCorrectionsForEdit(fields, _sqOrder(sqCurrent), _iwSaved, sqCurrentItems, who ? (who.name || who.phone) : '');
+  } catch(e) { console.error('iwSave corrections:', e); }
   // שמור פריטים ב-Firebase
-  updateOrder(sqCurrent.id, { items: sqCurrentItems })
+  updateOrder(sqCurrent.id, fields)
+    .then(() => { if(logged) showToast('נשמר — נרשם בתיקון הזמנות'); })
     .catch(e => { console.error('iwSave:', e); showToast('שמירת הפריטים נכשלה — נסה שוב'); });
   sqCurrent.items = sqCurrentItems;
+  _iwSaved = sqCurrentItems.map(it=>({...it}));
 }
 
 // lgLogout מוגדר ב-firebase-db.js — מנתק גם מ-Firebase Auth, לא רק מ-sessionStorage
