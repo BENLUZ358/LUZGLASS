@@ -82,4 +82,14 @@ async function lgClientFromEmail(db, from) {
   };
 }
 
-module.exports = { lgEmailAddr, lgEmailKey, lgEmailSenderLink, lgClientFromEmail };
+//  מפתח החשבון בחשבשבת של הזמנה שהגיעה במייל — ללקוח בלי משתמש פורטל
+//  (אביבי, פלג; בן 28/10). השיוך מחושב מחדש מכתובת השולח, ומתקבל רק אם הוא
+//  עדיין אותו כרטיס שעל ההזמנה: קישור שהוחלף מאז = עוצרים, לא מנחשים.
+//  מחזיר customerId, או '' כשאין התאמה.
+async function lgEmailOrderAccount(db, order) {
+  if (!order || !order.emailFrom || !order.customerId) return '';
+  const who = await lgClientFromEmail(db, order.emailFrom);
+  return who.matched && who.customerId === String(order.customerId) ? who.customerId : '';
+}
+
+module.exports = { lgEmailAddr, lgEmailKey, lgEmailSenderLink, lgClientFromEmail, lgEmailOrderAccount };
