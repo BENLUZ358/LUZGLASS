@@ -39,6 +39,7 @@ vm.runInContext([
   pick(/function lgHsWasSent[\s\S]*?\n}/),
   pick(/function lgAddHsCorrection[\s\S]*?\n}/),
   pick(/function lgHsCorrectionsForEdit[\s\S]*?\n}/),
+  pick(/async function lgSaveOrderItemsEdit[\s\S]*?\n}/),
   pick(/function lgHsCorrectionQueue[\s\S]*?\n}/),
   pick(/async function lgMarkHsCorrectionDone[\s\S]*?\n}/),
   pick(/function lgPlanSkuChange[\s\S]*?\n}/),
@@ -191,6 +192,35 @@ const last = () => writes[writes.length - 1].update;
     // הרשימה בדף: שורה חדשה בלי מספר
     const q = ctx.lgHsCorrectionQueue([Object.assign({}, sent, { hsCorrections: { x: { type: 'add', itemIndex: 2, hsLine: null, from: '', to: 'y', at: 1 } } })]);
     check('Q9 new line shows without a Hashavshevet line number', [q[0].hsLine, Object.keys(q[0].net)], [null, ['add']]);
+  }
+
+  /* עריכה מחלון "פרטים" באדמין — הזמנה בתחנת הבדיקה (בן, 28/10) */
+  {
+    const atCheck = order(Object.assign({ stage: 'check' }, SENT));
+    const next = atCheck.items.map(it => Object.assign({}, it)); next[1].w = 600;
+    writes.length = 0;
+    const r = await ctx.lgSaveOrderItemsEdit(atCheck, next, {});
+    const u = last();
+    check('M1 check-station edit writes the items and one correction',
+          [writes[0].path, u.items[1].w, r.logged, Object.values(u).filter(v => v && v.type).map(c => [c.type, c.hsLine])],
+          ['orders/o1', 600, 1, [['dims', 4]]]);
+    check('M2 locked order is repriced with the locked price', [u.totalFinal, r.newTotal], [200 + 120, 320]);
+
+    const withNewSku = atCheck.items.map(it => Object.assign({}, it)).concat([{ sku: '10SMH', name: 'שקוף 10', w: 1000, h: 1000 }]);
+    let err = '';
+    try { await ctx.lgSaveOrderItemsEdit(atCheck, withNewSku, {}); } catch (e) { err = e.message; }
+    check('M3 new SKU with no price → blocked, nothing written', [/אין מחיר למק"ט 10SMH/.test(err)], [true]);
+    writes.length = 0;
+    const r4 = await ctx.lgSaveOrderItemsEdit(atCheck, withNewSku, { globalP: { '10SMH': 300 } });
+    check('M4 new SKU priced from the price list', r4.newTotal, 200 + 100 + 300);
+
+    err = '';
+    try { await ctx.lgSaveOrderItemsEdit(order({ stage: 'collected', invoiceDone: { docNumber: '55' } }), next, {}); } catch (e) { err = e.message; }
+    check('M5 invoiced order → blocked', /חשבונית/.test(err), true);
+
+    writes.length = 0;
+    const r6 = await ctx.lgSaveOrderItemsEdit(order({ stage: 'check' }), next, {});
+    check('M6 not sent to Hashavshevet → saved, nothing logged', [r6.logged, Object.keys(last()).some(k => k.startsWith('hsCorrections/'))], [0, false]);
   }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');
