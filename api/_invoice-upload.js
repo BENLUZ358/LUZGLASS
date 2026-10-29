@@ -86,8 +86,9 @@ async function handleUpload(req, deps) {
 
   if (!pick.ok) {
     //  אין חשבונית רשומה שמתאימה: שומרים את ההדפסה עד שהחשבונית תירשם בתחנה.
-    //  'ambiguous' ממשיך לעצור. בלי מספר מסמך ותאריך אין לפי מה לשייך אחר כך.
-    if (pick.code !== 'no-match') return _fail(422, pick.code);
+    //  גם 'ambiguous' (שתי ממתינות של אותו לקוח בלי מספר מסמך) מחכה: השיוך
+    //  יקרה ב-settlePrinted, שם מספר המסמך חייב להתאים. בלי מספר מסמך ותאריך
+    //  אין לפי מה לשייך אחר כך.
     if (!docNumber || !date) return _fail(422, 'no-docnumber-or-date');
     const pk = 'p' + hash.slice(0, 18);
     await db.ref('invoicePdf/' + pk).set({ state: 'printed', docNumber, date, originalHash: hash,

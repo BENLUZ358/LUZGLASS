@@ -75,9 +75,12 @@ async function register(db, body, by, now) {
   if (phones.length !== 1 || !phones[0]) return fail(422, 'mixed-or-missing-phone');
 
   const key = S.lgInvoicePdfKey(ids);
+  //  כרטיס הלקוח בחשבשבת — לפיו ("מפתח" בחשבונית) משייכים את ההדפסה
+  const user = (await db.ref('users/' + phones[0]).once('value')).val();
   const rec = {
     state: 'awaiting', docNumber, createdAt: now, createdBy: by,
     client: orders.map(o => o.orderClient).find(Boolean) || '', clientPhone: phones[0],
+    accountKey: user && user.customerId ? String(user.customerId) : null,
     simulated: orders.every(o => o.isTest) || null,
     orderIds: ids, orderNums: orders.map(o => String(o.orderNum || o.id)),
     sketchNames: orders.map(o => String(o.sketchName || o.type || o.desc || '').trim()),
@@ -85,7 +88,7 @@ async function register(db, body, by, now) {
   const tx = await db.ref('invoicePdf/' + key).transaction(cur => {
     if (!cur) return rec;
     if (cur.state !== 'awaiting') return;
-    return { ...cur, docNumber };
+    return { ...cur, docNumber, accountKey: cur.accountKey || rec.accountKey };
   });
   const state = tx.committed ? tx.snapshot.val().state : ((await db.ref('invoicePdf/' + key).once('value')).val() || {}).state;
 
