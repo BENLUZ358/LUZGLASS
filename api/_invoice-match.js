@@ -4,9 +4,10 @@
 //  עוזר משותף, לא route. לוגיקה טהורה בלבד (חוץ מ-lgPdfPageTexts) כדי
 //  שאפשר לבדוק אותה בלי PDF אמיתי.
 //
-//  ⚠️ הכוונון מול חשבונית אמיתית של חשבשבת עדיין לא נעשה. לכן כל אי-ודאות
-//  כאן מחזירה "לא זוהה", לעולם לא ניחוש: חשבונית שלא זוהתה נעצרת לבדיקה
-//  ידנית ולא נשלחת ללקוח.
+//  כוונן מול חשבונית אמיתית (67346, 29/10): חשבשבת מדפיס "חשבונית מס 67346",
+//  "תאריך 29/10/2026", "מפתח 99" (כרטיס הלקוח) ו"מקור" / "העתק 1", בסדר לוגי.
+//  שם הסקיצה לא מודפס על החשבונית — השיוך לפי מספר מסמך + כרטיס לקוח.
+//  כל אי-ודאות מחזירה "לא זוהה", לעולם לא ניחוש.
 // ═══════════════════════════════════════════════════════════════════
 
 //  רווחים/סימני כיוון/גרשיים אחידים, כדי ששם סקיצה יתאים גם אחרי PDF.
@@ -56,9 +57,20 @@ function extractDate(text) {
   return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
-//  האם כל שמות הסקיצות של חשבונית ממתינה מופיעים בטקסט.
-//  שם ריק או שם כפול בין ההזמנות → לא חד-משמעי → false.
+//  כרטיס הלקוח בחשבשבת: "מפתח 99". null אם לא ברור.
+function extractAccountKey(text) {
+  const m = norm(text).match(/מפתח\s*:?\s*(\d{1,9})(?!\d)/);
+  return m ? m[1] : null;
+}
+
+//  האם החשבונית המודפסת שייכת לחשבונית ממתינה.
+//  מספר מסמך רשום שאינו תואם → false.
+//  יש כרטיס לקוח ברשומה → חייב להופיע זהה ב"מפתח".
+//  אין (רשומה ישנה) → כל שמות הסקיצות בטקסט; שם ריק/כפול → false.
 function matchesPending(text, pending) {
+  const dn = extractDocNumber(text);
+  if (pending.docNumber && dn !== String(pending.docNumber)) return false;
+  if (pending.accountKey) return extractAccountKey(text) === String(pending.accountKey);
   const names = (pending.sketchNames || []).map(norm);
   if (!names.length || names.some(n => !n)) return false;
   if (new Set(names).size !== names.length) return false;
@@ -101,4 +113,4 @@ async function lgPdfPageTexts(buf) {
   } finally { await doc.destroy().catch(() => {}); }
 }
 
-module.exports = { norm, pageRole, extractDocNumber, extractDate, matchesPending, pickPending, lgPdfPageTexts };
+module.exports = { norm, pageRole, extractDocNumber, extractDate, extractAccountKey, matchesPending, pickPending, lgPdfPageTexts };

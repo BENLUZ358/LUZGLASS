@@ -1,6 +1,9 @@
 {
   "name": "luzglass-invoice-watcher",
   "private": true,
-  "description": "DB-00004: watches the PDF printer output folder, splits original/copy, uploads, archives the copy to the shared folder.",
-  "dependencies": { "pdf-lib": "^1.17.1" }
+  "description": "DB-00004: watches the PDF printer output folder, pairs original/copy (two 1-page files, or one 2-page file), uploads, archives the copy to the shared folder.",
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "4.10.38"
+  }
 }

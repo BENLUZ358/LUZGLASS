@@ -431,6 +431,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <div id="view-invoices" style="display:none">
     <div style="height:14px"></div>
     <div class="sec-title">חשבוניות</div>
+    <div id="invoiceDocs"></div>
     <div id="invoicesList"></div>
     <div class="spacer"></div>
   </div>
@@ -1035,7 +1036,77 @@ function setTab(tab){
   });
   if(tab==='price') renderClientPrice();
   if(tab==='quote') initQ();
+  if(tab==='invoices') loadInvoiceDocs();
 }
+
+// DB-00004: מסמכי חשבונית (PDF מקור + סקיצות). השרת מחזיר רק חשבוניות מוכנות
+// שכל ההזמנות שלהן שייכות לטלפון של הלקוח, והקובץ הוא המקור בלבד.
+// רשימה; לחיצה על שורה פותחת פרטים, סקיצות וכפתור הורדה.
+let INV_DOCS = [], INV_OPEN = null;
+async function loadInvoiceDocs(){
+  const el = document.getElementById('invoiceDocs');
+  if(!el) return;
+  try{
+    const r = await _lgAuthFetch('/api/invoice-ctl?action=mine');
+    const j = await r.json();
+    INV_DOCS = (r.ok && j.ok) ? j.items : [];
+  }catch(e){ INV_DOCS = []; }
+  renderInvoiceDocs();
+}
+function renderInvoiceDocs(){
+  const el = document.getElementById('invoiceDocs');
+  if(!el) return;
+  if(!INV_DOCS.length){ el.innerHTML = ''; return; }
+  el.innerHTML = INV_DOCS.map(function(d){
+    const open = INV_OPEN === d.key;
+    const date = d.date ? d.date.split('-').reverse().join('/') : '';
+    return '<div class="inv-card" role="button" tabindex="0" aria-expanded="'+open+'" data-inv="'+lgEsc(d.key)+'" style="cursor:pointer;flex-wrap:wrap">'+
+      '<div class="inv-icon">&#129534;</div>'+
+      '<div class="inv-info"><div class="inv-num">חשבונית '+lgEsc(d.docNumber)+'</div>'+
+      '<div class="inv-date">'+lgEsc(date)+' &middot; '+d.orderNums.length+' '+(d.orderNums.length===1?'הזמנה':'הזמנות')+'</div></div>'+
+      (open ? '<div style="flex-basis:100%">'+
+        '<div class="inv-date">הזמנות: '+lgEsc(d.orderNums.join(' · '))+'</div>'+
+        '<button class="btn-pay" data-pdf="'+lgEsc(d.key)+'" style="margin-top:10px">פתח חשבונית (PDF)</button>'+
+        '<div class="inv-date" style="margin-top:10px">סקיצות בחשבונית</div>'+
+        '<div data-sk="'+lgEsc(d.key)+'"></div></div>' : '')+
+    '</div>';
+  }).join('');
+  const cur = INV_DOCS.find(function(d){ return d.key === INV_OPEN; });
+  if(cur) loadInvoiceSketches(cur);
+}
+async function loadInvoiceSketches(d){
+  const imgs = await Promise.all(d.orderIds.map(function(id){
+    return lgGetSketch(id).catch(function(){ return null; });
+  }));
+  const box = document.querySelector('[data-sk="'+d.key+'"]');
+  if(!box || INV_OPEN !== d.key) return;
+  const ok = imgs.filter(function(s){ return typeof s === 'string' && s.indexOf('data:image/') === 0; });
+  box.innerHTML = ok.length
+    ? ok.map(function(s){ return '<img src="'+lgEsc(s)+'" alt="סקיצה" style="max-width:100%;margin-top:8px;border:1px solid var(--border)">'; }).join('')
+    : '<div class="inv-date">אין סקיצות להצגה</div>';
+}
+async function downloadInvoicePdf(key){
+  try{
+    const r = await _lgAuthFetch('/api/invoice-ctl?action=minepdf&key='+encodeURIComponent(key));
+    if(!r.ok) throw new Error('pdf');
+    const d = INV_DOCS.find(function(x){ return x.key === key; }) || {};
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await r.blob());
+    a.download = 'חשבונית-'+(d.docNumber||key)+'.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 10000);
+  }catch(e){ alert('פתיחת החשבונית נכשלה. נסה שוב או צור קשר.'); }
+}
+document.addEventListener('click', function(e){
+  const pdf = e.target.closest && e.target.closest('[data-pdf]');
+  if(pdf){ e.stopPropagation(); downloadInvoicePdf(pdf.dataset.pdf); return; }
+  const row = e.target.closest && e.target.closest('[data-inv]');
+  if(row){ INV_OPEN = INV_OPEN === row.dataset.inv ? null : row.dataset.inv; renderInvoiceDocs(); }
+});
+document.addEventListener('keydown', function(e){
+  const row = e.target && e.target.matches && e.target.matches('[data-inv]') ? e.target : null;
+  if(row && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); INV_OPEN = INV_OPEN === row.dataset.inv ? null : row.dataset.inv; renderInvoiceDocs(); }
+});
 // הטאבים הם div — Enter / רווח פותחים אותם כמו לחיצה
 document.addEventListener('keydown', e => {
   const t = e.target;

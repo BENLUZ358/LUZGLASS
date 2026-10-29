@@ -2,9 +2,11 @@
 // ═══════════════════════════════════════════════════════════════════
 //  tools/invoice-watcher — רץ במחשב של המשרד (DB-00004).
 //
-//  עוקב אחרי תיקיית הפלט של מדפסת ה-PDF. חשבונית מודפסת = PDF בן שני עמודים
-//  (1 = מקור, 2 = העתק). הכלי מפצל, מעלה את שני העמודים לשרת, ואחרי שהשרת
-//  אישר — כותב את ההעתק לתיקייה השיתופית לפי הנתיב שהשרת החזיר (שנה/חודש/לקוח).
+//  עוקב אחרי תיקיית הפלט של מדפסת ה-PDF. חשבשבת מדפיס מקור והעתק כשתי עבודות
+//  הדפסה — שני קבצים של עמוד אחד; הכלי קורא מכל קובץ "מקור"/"העתק" ומספר
+//  חשבונית, ומצמיד את השניים לפי המספר. (קובץ אחד בן שני עמודים — מפוצל.)
+//  מעלה מקור+העתק לשרת, ואחרי שהשרת אישר — כותב את ההעתק לתיקייה השיתופית
+//  לפי הנתיב שהשרת החזיר (שנה/חודש/לקוח).
 //
 //  כללי בטיחות:
 //    • קובץ המקור לא נמחק ולא זז עד שההעתק נכתב בתיקייה השיתופית.
@@ -45,6 +47,63 @@ async function splitTwoPages(bytes) {
   return { original: await one(0), copy: await one(1) };
 }
 
+//  אותו זיהוי כמו בשרת (api/_invoice-match.js) — השרת בודק שוב, זה רק להצמדה.
+//  "העתק" גובר: דף שכתוב בו העתק לעולם לא ייחשב מקור.
+const _norm = t => String(t || '').replace(/\s+/g, ' ');
+function roleOf(text) {
+  const t = _norm(text);
+  if (t.includes('העתק')) return 'copy';
+  if (t.includes('מקור')) return 'original';
+  return null;
+}
+function docNumberOf(text) {
+  const m = _norm(text).match(/(?:חשבונית(?: מס)?(?: קבלה)?|מס'|מספר)\s*[:#]?\s*(\d{4,9})(?!\d)/);
+  return m ? m[1] : null;
+}
+
+//  קבצים של עמוד אחד שחיכו להצמדה → זוגות (מקור + העתקים, לפי מספר חשבונית)
+//  וקבצים שחיכו יותר מדי בלי בן זוג (→ review).
+//  entries: [[file, { role, doc, at }]]
+function groupSingles(entries, now, waitMs) {
+  const byDoc = new Map();
+  for (const [file, e] of entries) {
+    if (!byDoc.has(e.doc)) byDoc.set(e.doc, { original: [], copy: [] });
+    byDoc.get(e.doc)[e.role].push({ file, at: e.at });
+  }
+  const pairs = [], stale = [];
+  for (const [doc, g] of byDoc) {
+    g.original.sort((a, b) => a.at - b.at);
+    if (g.original.length && g.copy.length) {
+      pairs.push({ doc, original: g.original[0].file, copies: g.copy.map(c => c.file) });
+      //  מקור שהודפס פעמיים — השני לבדיקה ידנית אחרי ההמתנה
+      for (const o of g.original.slice(1)) if (now - o.at > waitMs) stale.push(o.file);
+    } else {
+      for (const x of [...g.original, ...g.copy]) if (now - x.at > waitMs) stale.push(x.file);
+    }
+  }
+  return { pairs, stale };
+}
+
+let _pdfjsP = null;
+function _pdfjs() {
+  if (!_pdfjsP) _pdfjsP = (async () => {
+    globalThis.pdfjsWorker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
+    return import('pdfjs-dist/legacy/build/pdf.mjs');
+  })();
+  return _pdfjsP;
+}
+
+//  { pages, text } — טקסט העמוד הראשון בלבד (מספיק לזיהוי)
+async function readPdf(bytes) {
+  const pdfjs = await _pdfjs();
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, verbosity: 0 }).promise;
+  try {
+    const page = await doc.getPage(1);
+    const tc = await page.getTextContent();
+    return { pages: doc.numPages, text: tc.items.map(i => i.str).join(' ') };
+  } finally { await doc.destroy().catch(() => {}); }
+}
+
 //  ── ריצה ──
 
 function loadConfig(file) {
@@ -58,22 +117,37 @@ const move = (file, dir) => {
   fs.renameSync(file, path.join(dir, Date.now() + '_' + path.basename(file)));
 };
 
+//  קובץ אחד בן שני עמודים (מקור + העתק)
 async function processFile(cfg, file, post = require_post(cfg)) {
   let parts;
   try { parts = await splitTwoPages(fs.readFileSync(file)); }
   catch (e) { console.error('review (split):', path.basename(file), e.message); move(file, path.join(cfg.watchDir, 'review')); return 'review'; }
+  return upload(cfg, parts, [file], post);
+}
 
+//  שני קבצים של עמוד אחד (העתקים נוספים — "העתק 2" — עוברים יחד איתם)
+async function processPair(cfg, pair, post = require_post(cfg)) {
+  const parts = { original: fs.readFileSync(pair.original), copy: fs.readFileSync(pair.copies[0]) };
+  return upload(cfg, parts, [pair.original, ...pair.copies], post);
+}
+
+async function upload(cfg, parts, files, post) {
+  const file = files[0];
+  const moveAll = dir => files.forEach(f => move(f, path.join(cfg.watchDir, dir)));
   let r;
   try { r = await post({ original: parts.original.toString('base64'), copy: parts.copy.toString('base64') }); }
   catch (e) { console.error('retry later (network):', e.message); return 'retry'; }
 
   if (r.status >= 500 || r.status === 429) return 'retry';
+  //  202: הודפסה, אבל החשבונית עוד לא נרשמה בתחנה ("החשבונית הופקה"). הקובץ נשאר
+  //  ומועלה שוב בסבב הבא — ההעלאה החוזרת מזוהה לפי hash ומשתייכת ברגע שהחשבונית נרשמת.
+  if (r.status === 202 && r.body && r.body.pending) { console.log('waiting for registration:', path.basename(file)); return 'retry'; }
   if (!r.body || !r.body.ok) {
     console.error('review:', path.basename(file), r.status, r.body && r.body.code);
-    move(file, path.join(cfg.watchDir, 'review')); return 'review';
+    moveAll('review'); return 'review';
   }
   const dest = resolveArchive(cfg.sharedRoot, r.body.archivePath);
-  if (!dest) { move(file, path.join(cfg.watchDir, 'review')); return 'review'; }
+  if (!dest) { moveAll('review'); return 'review'; }
   try {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.writeFileSync(dest, parts.copy);
@@ -85,7 +159,7 @@ async function processFile(cfg, file, post = require_post(cfg)) {
     fs.writeFileSync(path.join(keep, r.body.archivePath.replace(/\//g, '__')), parts.copy);
     return 'retry';
   }
-  move(file, path.join(cfg.watchDir, 'done'));
+  moveAll('done');
   console.log('ok', r.body.docNumber, '→', dest);
   return 'ok';
 }
@@ -100,23 +174,45 @@ function require_post(cfg) {
 }
 
 //  קובץ נחשב מוכן כשהגודל לא השתנה בין שני סבבים (המדפסת עדיין כותבת).
+//  קובץ של עמוד אחד מחכה לבן הזוג שלו עד pairWaitMs, ואז עובר ל-review.
 async function loop(cfg) {
-  const sizes = new Map();
+  const sizes = new Map(), retryAt = new Map(), singles = new Map();
+  const review = f => { try { move(f, path.join(cfg.watchDir, 'review')); } catch (_) {} };
   for (;;) {
     for (const n of fs.readdirSync(cfg.watchDir)) {
       if (!/\.pdf$/i.test(n)) continue;
       const f = path.join(cfg.watchDir, n);
+      if (singles.has(f) || (retryAt.get(f) || 0) > Date.now()) continue;
       const sz = fs.statSync(f).size;
-      if (sz > 0 && sizes.get(f) === sz) {
+      if (!(sz > 0 && sizes.get(f) === sz)) { sizes.set(f, sz); continue; }
+      sizes.delete(f);
+      let info;
+      try { info = await readPdf(fs.readFileSync(f)); }
+      catch (e) { console.error('review (unreadable):', n, e.message); review(f); continue; }
+      if (info.pages === 2) {
         const out = await processFile(cfg, f);
-        if (out !== 'retry') sizes.delete(f);
-      } else sizes.set(f, sz);
+        if (out === 'retry') retryAt.set(f, Date.now() + (cfg.retryMs || 60000));
+        else retryAt.delete(f);
+        continue;
+      }
+      const role = roleOf(info.text), doc = docNumberOf(info.text);
+      if (info.pages !== 1 || !role || !doc) { console.error('review (not an invoice page):', n); review(f); continue; }
+      singles.set(f, { role, doc, at: Date.now() });
+    }
+    const { pairs, stale } = groupSingles([...singles], Date.now(), cfg.pairWaitMs || 10 * 60000);
+    for (const f of stale) { console.error('review (no pair):', path.basename(f)); singles.delete(f); review(f); }
+    for (const pair of pairs) {
+      if ((retryAt.get(pair.original) || 0) > Date.now()) continue;
+      const out = await processPair(cfg, pair);
+      if (out === 'retry') { retryAt.set(pair.original, Date.now() + (cfg.retryMs || 60000)); continue; }
+      retryAt.delete(pair.original);
+      [pair.original, ...pair.copies].forEach(f => singles.delete(f));
     }
     await new Promise(r => setTimeout(r, cfg.intervalMs));
   }
 }
 
-module.exports = { resolveArchive, splitTwoPages, processFile };
+module.exports = { resolveArchive, splitTwoPages, processFile, processPair, groupSingles, roleOf, docNumberOf, readPdf };
 
 if (require.main === module) {
   loop(loadConfig(process.argv[2] || path.join(__dirname, 'config.json')))

@@ -180,6 +180,20 @@ html,body{height:100%;overflow:hidden;}
 .full-strip span{font-size:20px;font-weight:var(--fw-black);direction:ltr;}
 
 /* ── חלונות ─────────────────────────────────────────────────────────────── */
+/* ארכיון חשבוניות (DB-00004) */
+.arc{padding:var(--space-4);max-height:85vh;overflow:auto;}
+.arc h3{font-size:var(--fs-xl);font-weight:var(--fw-black);margin-bottom:var(--space-2);}
+.arc-bar{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);}
+.arc-bar input{flex:1;min-width:160px;min-height:44px;padding:0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;}
+.arc-bar .btn[aria-pressed="true"]{border-color:var(--gold);color:var(--text);}
+.arc-mon{font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-1);}
+.arc-cli{color:var(--muted);font-size:var(--fs-sm);margin:var(--space-2) 0 var(--space-1);}
+.arc-row{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;width:100%;min-height:48px;padding:var(--space-2) var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;text-align:start;cursor:pointer;margin-bottom:var(--space-1);}
+.arc-row.is-stale{border-color:var(--gold);}
+.arc-row b{font-variant-numeric:tabular-nums;}
+.arc-st{margin-inline-start:auto;font-size:var(--fs-sm);font-weight:var(--fw-bold);}
+.arc-det{padding:var(--space-2) var(--space-3) var(--space-3);border:1px solid var(--border);border-top:0;margin:-4px 0 var(--space-2);font-size:var(--fs-sm);}
+.arc-det img{max-width:120px;max-height:120px;margin:var(--space-1);border:1px solid var(--border);}
 .modal-in{padding:var(--space-5);}
 .modal-in h3{font-size:var(--fs-xl);font-weight:var(--fw-black);margin-bottom:var(--space-1);}
 .modal-in .sub{color:var(--muted);font-size:var(--fs-sm);margin-bottom:var(--space-4);}
@@ -252,6 +266,7 @@ html,body{height:100%;overflow:hidden;}
     <button class="tb-btn" id="btnBack" type="button" aria-label="חזרה"><span data-icon="arrow-right"></span><span>חזרה</span></button>
     <div class="tb-title" id="tbTitle">תחנת חשבוניות<small>בודקים פריטים מול סקיצה, ורק אז מפיקים חשבונית בחשבשבת</small></div>
     <a class="tb-btn" id="btnCorr" href="hs-corrections.html"><span data-icon="clipboard"></span><span>תיקון הזמנות</span></a>
+    <button class="tb-btn" id="btnArchive" type="button"><span data-icon="receipt"></span><span>ארכיון חשבוניות</span></button>
     <button class="tb-btn" id="btnCustomers" type="button" aria-controls="pCustomers" aria-expanded="false"><span data-icon="users"></span><span>לקוחות</span></button>
   </header>
 
@@ -802,6 +817,102 @@ function renderAll() {
   if (selId) { const o = orderOf(selId), s = o && lgInvoiceState(o); if (!s || s === 'invoiced') selId = null; }
   renderCustomers(); renderOrders(); renderVerify(); updateTitle();
 }
+
+// ═══ ארכיון חשבוניות (DB-00004) ═════════════════════════════════════════════
+// קריאה בלבד מ-/api/invoice-ctl. ההעתק לא נחשף כאן: "הורד PDF" מחזיר את המקור.
+const ARC_WORD = { ready: 'מוכן', awaiting: 'ממתין ל־PDF', printed: 'הודפסה, ממתינה לרישום' };
+let ARC = { days: 183, q: '', items: [], open: null, loading: false, err: false };
+
+function arcDay(it) { return it.date || new Date(it.createdAt).toISOString().slice(0, 10); }
+
+function openArchive() {
+  openModal(`<div class="arc"><h3 id="ovTitle">ארכיון חשבוניות</h3>
+    <div class="arc-bar">
+      <input id="arcQ" type="search" placeholder="לקוח, מספר מסמך או מספר הזמנה" autocomplete="off" aria-label="חיפוש">
+      <button class="btn btn-ghost" type="button" data-days="30">חודש</button>
+      <button class="btn btn-ghost" type="button" data-days="92">3 חודשים</button>
+      <button class="btn btn-ghost" type="button" data-days="183">חצי שנה</button>
+      <button class="btn btn-ghost" type="button" data-close>סגור</button></div>
+    <div id="arcList"></div></div>`);
+  $('arcQ').value = ARC.q;
+  $('arcQ').addEventListener('input', e => { ARC.q = e.target.value; renderArchive(); });
+  loadArchive();
+}
+
+async function loadArchive() {
+  ARC.loading = true; ARC.err = false; renderArchive();
+  try {
+    const from = Date.now() - ARC.days * 86400000;
+    const r = await _lgAuthFetch('/api/invoice-ctl?action=list&from=' + from);
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error('list');
+    ARC.items = j.items;
+  } catch (e) { ARC.err = true; ARC.items = []; }
+  ARC.loading = false; renderArchive();
+}
+
+function renderArchive() {
+  const box = $('arcList'); if (!box) return;
+  document.querySelectorAll('[data-days]').forEach(b => b.setAttribute('aria-pressed', String(Number(b.dataset.days) === ARC.days)));
+  if (ARC.loading) { box.innerHTML = '<div class="loading">טוען…</div>'; return; }
+  if (ARC.err) { box.innerHTML = '<div class="empty-state"><div class="empty-state-title">הטעינה נכשלה</div><div class="empty-state-msg">בדוק חיבור ונסה שוב</div></div>'; return; }
+  const q = ARC.q.trim().toLowerCase();
+  const items = ARC.items.filter(it => !q || [it.client, it.clientPhone, it.docNumber, ...it.orderNums, ...it.sketchNames]
+    .some(x => String(x).toLowerCase().includes(q)));
+  if (!items.length) { box.innerHTML = '<div class="empty-state"><div class="empty-state-title">אין חשבוניות בטווח</div></div>'; return; }
+  const byMon = {};
+  items.forEach(it => { const m = arcDay(it).slice(0, 7), c = it.client || 'לא משויך'; ((byMon[m] = byMon[m] || {})[c] = byMon[m][c] || []).push(it); });
+  box.innerHTML = Object.keys(byMon).sort().reverse().map(m => {
+    const [y, mo] = m.split('-');
+    return `<div class="arc-mon">${esc(mo + '/' + y)}</div>` + Object.keys(byMon[m]).sort().map(c =>
+      `<div class="arc-cli">${esc(c)}</div>` + byMon[m][c].map(it => {
+        const open = ARC.open === it.key;
+        return `<button class="arc-row${it.stale ? ' is-stale' : ''}" type="button" data-arc="${esc(it.key)}" aria-expanded="${open}">
+          <b>${esc(it.docNumber || '—')}</b><span>${esc(arcDay(it).split('-').reverse().join('/'))}</span>
+          <span>${nOrders(it.orderNums.length)}</span>
+          <span class="arc-st">${esc(ARC_WORD[it.state] || it.state)}${it.stale ? ' · מעל יום' : ''}${it.simulated ? ' · פיקטיבית' : ''}</span></button>` +
+          (open ? `<div class="arc-det" id="arcDet">${arcDetail(it)}</div>` : '');
+      }).join('')).join('');
+  }).join('');
+  const it = ARC.open && ARC.items.find(x => x.key === ARC.open);
+  if (it) arcSketches(it);
+}
+
+function arcDetail(it) {
+  return `<div>הזמנות: ${esc(it.orderNums.join(' · ') || '—')}</div>
+    <div>סקיצות: ${esc(it.sketchNames.filter(Boolean).join(' · ') || '—')}</div>
+    <div>העתק בתיקייה השיתופית: <bdi>${esc(it.archivePath || 'עדיין לא נשמר')}</bdi></div>
+    ${it.state === 'ready' ? `<button class="btn btn-primary" type="button" data-pdf="${esc(it.key)}"><span data-icon="receipt"></span>הורד PDF (מקור)</button>` : ''}
+    <div id="arcSk"></div>`;
+}
+
+async function arcSketches(it) {
+  const el = $('arcSk'); if (!el) return;
+  const imgs = await Promise.all((it.orderIds || []).map(id => lgGetSketch(id).catch(() => null)));
+  if (ARC.open !== it.key || !$('arcSk')) return;
+  $('arcSk').innerHTML = imgs.filter(s => typeof s === 'string' && s.startsWith('data:image/'))
+    .map(s => `<img src="${esc(s)}" alt="סקיצה">`).join('');
+}
+
+async function arcDownload(key) {
+  try {
+    const r = await _lgAuthFetch('/api/invoice-ctl?action=pdf&key=' + encodeURIComponent(key));
+    if (!r.ok) throw new Error('pdf');
+    const it = ARC.items.find(x => x.key === key) || {};
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await r.blob()); a.download = 'חשבונית-' + (it.docNumber || key) + '.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  } catch (e) { toast('פתיחת ה־PDF נכשלה', true); }
+}
+
+$('btnArchive').addEventListener('click', openArchive);
+$('ov').addEventListener('click', e => {
+  const d = e.target.closest('[data-days]'), row = e.target.closest('[data-arc]'), pdf = e.target.closest('[data-pdf]');
+  if (d) { ARC.days = Number(d.dataset.days); loadArchive(); }
+  else if (pdf) arcDownload(pdf.dataset.pdf);
+  else if (row) { ARC.open = ARC.open === row.dataset.arc ? null : row.dataset.arc; renderArchive(); }
+});
 
 lgRequireAuthAsync('admin').then(async session => {
   if (!session) return;
