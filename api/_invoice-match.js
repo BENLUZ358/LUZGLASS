@@ -63,6 +63,17 @@ function extractAccountKey(text) {
   return m ? m[1] : null;
 }
 
+//  מספרים שלמים שעומדים לבד בטקסט (3–9 ספרות, אפשר עם L לפני) — המועמדים
+//  למספרי הזמנה בטור "מ.מקור". בלי נקודה עשרונית: מחיר 1115.00 לא נספר.
+function extractRefs(text) {
+  const out = new Set();
+  for (const t of norm(text).split(' ')) {
+    const m = t.match(/^l?(\d{3,9})$/);
+    if (m) out.add(String(Number(m[1])));
+  }
+  return [...out];
+}
+
 //  האם החשבונית המודפסת שייכת לחשבונית ממתינה.
 //  מספר מסמך רשום שאינו תואם → false.
 //  יש כרטיס לקוח ברשומה → חייב להופיע זהה ב"מפתח".
@@ -113,4 +124,4 @@ async function lgPdfPageTexts(buf) {
   } finally { await doc.destroy().catch(() => {}); }
 }
 
-module.exports = { norm, pageRole, extractDocNumber, extractDate, extractAccountKey, matchesPending, pickPending, lgPdfPageTexts };
+module.exports = { norm, pageRole, extractDocNumber, extractDate, extractAccountKey, extractRefs, matchesPending, pickPending, lgPdfPageTexts };

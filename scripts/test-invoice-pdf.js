@@ -250,6 +250,40 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
       assert.equal(resolveArchive(root, bad), null, String(bad));
     }
   });
+  //  ── חשבונית שהופקה בחשבשבת מהזמנות סוכן: מספר ההזמנה בטור "מ.מקור" (בן, 29/10) ──
+  const HS = (ref, acct, extra) => ({ orderNum: 'L' + ref, orderClient: 'א.מ.מראות', clientPhone: '054-8000775',
+    sketchName: 'מראה ' + ref, hashavshevet: { httpOk: true, accountKey: acct, reference: String(ref) }, ...(extra || {}) });
+  const PRINT = (role, refs) => 'חשבונית מס 67400  תאריך 29/10/2026  מפתח 509  מזהה 348049  א.מ.מראות  '
+    + refs.map(r => `8 מ''מ שקוף מחוסם 1115.00 0.00 120.00   ${r} 1.00 1.00   1.00   1`).join('  ') + '  ' + role;
+  const byOrders = (orders, refs) => {
+    const t = { [Buffer.from('%PDF-1.4 o').toString()]: PRINT('מקור', refs), [Buffer.from('%PDF-1.4 c').toString()]: PRINT('העתק 1', refs) };
+    return { db: fakeDb({ orders }), env: { INVOICE_UPLOAD_TOKEN: TOKEN }, now: 1000, deliver: async () => {},
+      pageTexts: async buf => [t[buf.toString()] || ''] };
+  };
+  const PO = pdf('o'), PC = pdf('c');
+  await test('refs: standalone integers only — prices with decimals are not order numbers', () => {
+    const r = M.extractRefs(PRINT('מקור', [1115]));
+    assert.ok(r.includes('1115')); assert.ok(r.includes('67400')); assert.ok(!r.includes('120'));
+    assert.deepEqual(M.extractRefs('L1115 x 1115.00'), ['1115']);
+  });
+  await test('agent-order invoice: order numbers in the print + same account → matched now, no registration', async () => {
+    const d = byOrders({ a: HS(1115, '509'), b: HS(1116, '509'), z: HS(1117, '509') }, [1115, 1116]);
+    const r = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(r.status, 200); assert.equal(r.body.byOrders, true);
+    const rec = d.db._data.invoicePdf[r.body.key];
+    assert.deepEqual([rec.state, rec.docNumber, rec.accountKey, rec.orderIds, rec.client],
+      ['ready', '67400', '509', ['a', 'b'], 'א.מ.מראות']);
+    assert.equal(r.body.archivePath, '2026/10/א.מ.מראות/2026-10-29_67400.pdf');
+  });
+  await test('agent-order invoice: another customer\'s order with the same number is never taken', async () => {
+    const d = byOrders({ a: HS(1115, '14201') }, [1115]);
+    const r = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(r.status, 202); assert.equal(d.db._data.invoicePdf[r.body.key].state, 'printed');
+  });
+  await test('agent-order invoice: test orders and orders never sent to Hashavshevet are ignored', async () => {
+    const d = byOrders({ a: HS(1115, '509', { isTest: true }), b: { ...HS(1115, '509'), hashavshevet: { httpOk: false, accountKey: '509', reference: '1115' } } }, [1115]);
+    assert.equal((await handleUpload(req({ original: PO, copy: PC }), d)).status, 202);
+  });
   await test('watcher: same reading as the server on the real invoice text', () => {
     const W = require('../tools/invoice-watcher/watcher');
     assert.equal(W.roleOf(REAL('מקור')), 'original');

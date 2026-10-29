@@ -120,6 +120,16 @@ async function _handleUpload(req, deps) {
         archivePath: r.archivePath, sendAfter: r.sendAfter } };
     }
     if (sk.some(k => same[k].state === 'printed')) return { status: 202, body: { ok: true, pending: true, reprint: true } };
+    //  הופקה ישירות בחשבשבת מהזמנות סוכן (בן, 29/10): מספרי ההזמנות שלנו
+    //  מודפסים בטור "מ.מקור". נמצאו הזמנות של אותו כרטיס → משייכים עכשיו.
+    const acct = M.extractAccountKey(oText);
+    const ids = acct ? await C.ordersFromPrint(db, oText, acct, docNumber) : [];
+    if (ids.length) {
+      const key = await C.openFromOrders(db, ids, docNumber, acct, now);
+      const done = key && await C.markReady(db, key, { docNumber, date, hash, original: orig, copy }, now);
+      if (done) return { status: 200, body: { ok: true, key, docNumber, date, byOrders: true,
+        archivePath: done.archivePath, sendAfter: done.sendAfter } };
+    }
     const pk = 'p' + hash.slice(0, 18);
     await db.ref('invoicePdf/' + pk).set({ state: 'printed', docNumber, date, originalHash: hash,
       text: oText.slice(0, 3000), createdAt: now, uploadedAt: now });
