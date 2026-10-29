@@ -112,10 +112,24 @@ function loadConfig(file) {
   return { intervalMs: 5000, ...c };
 }
 
+//  קובץ פתוח בתוכנה אחרת (אקרובט נפתח לבד אחרי השמירה) — Windows לא נותן
+//  להזיז אותו. הטיפול בו כבר נגמר, ולכן לא נכשלים: מזיזים כשייסגר.
+const deferred = new Map();   // file → dir
+const _rename = (file, dir) => fs.renameSync(file, path.join(dir, Date.now() + '_' + path.basename(file)));
 const move = (file, dir) => {
   fs.mkdirSync(dir, { recursive: true });
-  fs.renameSync(file, path.join(dir, Date.now() + '_' + path.basename(file)));
+  try { _rename(file, dir); }
+  catch (e) {
+    if (e.code !== 'EBUSY' && e.code !== 'EPERM' && e.code !== 'EACCES') throw e;
+    deferred.set(file, dir);
+  }
 };
+function retryDeferred() {
+  for (const [file, dir] of deferred) {
+    if (!fs.existsSync(file)) { deferred.delete(file); continue; }
+    try { _rename(file, dir); deferred.delete(file); } catch (_) { /* עדיין פתוח */ }
+  }
+}
 
 //  קובץ אחד בן שני עמודים (מקור + העתק)
 async function processFile(cfg, file, post = require_post(cfg)) {
@@ -179,35 +193,43 @@ async function loop(cfg) {
   const sizes = new Map(), retryAt = new Map(), singles = new Map();
   const review = f => { try { move(f, path.join(cfg.watchDir, 'review')); } catch (_) {} };
   for (;;) {
-    for (const n of fs.readdirSync(cfg.watchDir)) {
-      if (!/\.pdf$/i.test(n)) continue;
-      const f = path.join(cfg.watchDir, n);
-      if (singles.has(f) || (retryAt.get(f) || 0) > Date.now()) continue;
-      const sz = fs.statSync(f).size;
-      if (!(sz > 0 && sizes.get(f) === sz)) { sizes.set(f, sz); continue; }
-      sizes.delete(f);
-      let info;
-      try { info = await readPdf(fs.readFileSync(f)); }
-      catch (e) { console.error('review (unreadable):', n, e.message); review(f); continue; }
-      if (info.pages === 2) {
-        const out = await processFile(cfg, f);
-        if (out === 'retry') retryAt.set(f, Date.now() + (cfg.retryMs || 60000));
-        else retryAt.delete(f);
-        continue;
+    //  סבב שנכשל (קובץ נעלם, תיקייה לא זמינה) לא מפיל את הכלי — מנסים בסבב הבא
+    try {
+      retryDeferred();
+      for (const n of fs.readdirSync(cfg.watchDir)) {
+        if (!/\.pdf$/i.test(n)) continue;
+        const f = path.join(cfg.watchDir, n);
+        if (deferred.has(f) || singles.has(f) || (retryAt.get(f) || 0) > Date.now()) continue;
+        const sz = fs.statSync(f).size;
+        if (!(sz > 0 && sizes.get(f) === sz)) { sizes.set(f, sz); continue; }
+        sizes.delete(f);
+        let info;
+        try { info = await readPdf(fs.readFileSync(f)); }
+        catch (e) { console.error('review (unreadable):', n, e.message); review(f); continue; }
+        if (info.pages === 2) {
+          const out = await processFile(cfg, f);
+          if (out === 'retry') retryAt.set(f, Date.now() + (cfg.retryMs || 60000));
+          else retryAt.delete(f);
+          continue;
+        }
+        const role = roleOf(info.text), doc = docNumberOf(info.text);
+        if (info.pages !== 1 || !role || !doc) { console.error('review (not an invoice page):', n); review(f); continue; }
+        singles.set(f, { role, doc, at: Date.now() });
       }
-      const role = roleOf(info.text), doc = docNumberOf(info.text);
-      if (info.pages !== 1 || !role || !doc) { console.error('review (not an invoice page):', n); review(f); continue; }
-      singles.set(f, { role, doc, at: Date.now() });
-    }
-    const { pairs, stale } = groupSingles([...singles], Date.now(), cfg.pairWaitMs || 10 * 60000);
-    for (const f of stale) { console.error('review (no pair):', path.basename(f)); singles.delete(f); review(f); }
-    for (const pair of pairs) {
-      if ((retryAt.get(pair.original) || 0) > Date.now()) continue;
-      const out = await processPair(cfg, pair);
-      if (out === 'retry') { retryAt.set(pair.original, Date.now() + (cfg.retryMs || 60000)); continue; }
-      retryAt.delete(pair.original);
-      [pair.original, ...pair.copies].forEach(f => singles.delete(f));
-    }
+      //  קובץ שמישהו מחק / העביר בזמן שחיכה — שוכחים אותו (בלי זה הכלי קורס)
+      for (const f of [...singles.keys()]) if (!fs.existsSync(f)) { singles.delete(f); retryAt.delete(f); }
+      const { pairs, stale } = groupSingles([...singles], Date.now(), cfg.pairWaitMs || 10 * 60000);
+      for (const f of stale) { console.error('review (no pair):', path.basename(f)); singles.delete(f); review(f); }
+      for (const pair of pairs) {
+        if ((retryAt.get(pair.original) || 0) > Date.now()) continue;
+        let out;
+        try { out = await processPair(cfg, pair); }
+        catch (e) { console.error('retry later:', path.basename(pair.original), e.message); out = 'retry'; }
+        if (out === 'retry') { retryAt.set(pair.original, Date.now() + (cfg.retryMs || 60000)); continue; }
+        retryAt.delete(pair.original);
+        [pair.original, ...pair.copies].forEach(f => singles.delete(f));
+      }
+    } catch (e) { console.error('round failed, retrying:', e.message); }
     await new Promise(r => setTimeout(r, cfg.intervalMs));
   }
 }

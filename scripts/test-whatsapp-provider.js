@@ -551,7 +551,7 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
 
   /* ⚠️ החותמת משקפת את מה שנפתר **ברגע השליחה**, לא את מה שנשמר בהכנסה
      לתור. מה שנשמר נשאר לצד זה, כדי שאפשר יהיה לראות פער. */
-  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
   check('the stamp records what actually decided the send',
         /phoneSource: live\.source/.test(DRAIN) && /accountKey:\s+live\.accountKey/.test(DRAIN), true);
   check('and keeps the queued value beside it for comparison',
@@ -564,7 +564,7 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
 //  השליחה יכולים לחלוף דקות: הכרטיס יכול להשתנות, הלקוח יכול לרדת
 //  מרשימת המורשים, וההזמנה יכולה להיות מסומנת פיקטיבית.
 {
-  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
 
   /* 06/10: resolveRecipient — "הסקיצות טופלו" מקבוצה מקושרת יוצא לקבוצה; כל
      השאר עובר ל-resolvePhone בדיוק כמו קודם (test-wa-groups 3a/3c). */
@@ -863,7 +863,7 @@ const seedSent = (db, n, t0) => {
 
 /* ═══ 5ד · ה-drain מכבד את החלון ═══════════════════════════════════ */
 {
-  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
   check('the drain reserves a window before it claims',
         DRAIN.indexOf('lgWaReserveSlot') > -1 &&
         DRAIN.indexOf('lgWaReserveSlot') < DRAIN.indexOf('await lgWaClaim'), true);
@@ -928,7 +928,7 @@ const seedSent = (db, n, t0) => {
         db3._data.waOutbox[q3.key].sketchNames, ['רק אחד', '', '']);
 
   /* ה-drain מעביר את המערך הלאה */
-  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
   check('the drain passes the sketch names to the provider',
         /sketchNames: entry\.sketchNames \|\| \[\]/.test(DRAIN), true);
 })();
@@ -966,7 +966,7 @@ const seedSent = (db, n, t0) => {
         ob.lgWaMsgKey('ready', A) === ob.lgWaMsgKey('dispatched', A), false);
 
   /* החותמת נכתבת לשדה הנכון לפי הסוג */
-  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
   /* 06/10: הטרנרי הוחלף במפה (lgWaStampField) כשנוסף sketches-handled —
      ההתנהגות של ready ו-dispatched נבדקת כאן ישירות, לא לפי נוסח השורה */
   check('ready stamps orders/<id>/whatsapp, dispatched its own field',
@@ -1075,7 +1075,7 @@ const seedSent = (db, n, t0) => {
 
 /* ═══ 7 · התקציב מתחת לתקרת הפונקציה ═══════════════════════════════ */
 {
-  const DRAIN  = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const DRAIN  = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
   const VERCEL = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   const ceiling = VERCEL.functions['api/whatsapp-drain.js'].maxDuration;
   const budget  = Number((DRAIN.match(/BUDGET_MS = (\d+)/) || [])[1]);

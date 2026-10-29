@@ -63,6 +63,45 @@ async function settlePrinted(db, printedKey, now) {
   return { settled: true, key: hits[0], rec };
 }
 
+//  ─── חשבונית שהופקה ישירות בחשבשבת מהזמנות סוכן (בן, 29/10) ───
+//  כל הזמנה נשלחה לחשבשבת עם אסמכתא = המספר שלה (L1115 → 1115), ובחשבונית
+//  המספר הזה מודפס בטור "מ.מקור". מוצאים לפיו את ההזמנות — רק של אותו כרטיס
+//  ("מפתח" בחשבונית), רק כאלה שבאמת נשלחו (לא פיקטיביות). אין התאמה → [].
+//  ⚠️ קורא את כל ההזמנות: אין אינדקס על hashavshevet/accountKey (ובלי שינוי
+//  חוקים). מספר ההזמנות בייצור קטן; אם יגדל — אינדקס על customerId.
+async function ordersFromPrint(db, text, accountKey, docNumber) {
+  const refs = new Set(M.extractRefs(text));
+  refs.delete(String(docNumber)); refs.delete(String(accountKey));
+  if (!refs.size || !accountKey) return [];
+  const all = (await db.ref('orders').once('value')).val() || {};
+  return Object.keys(all).filter(id => {
+    const o = all[id] || {}, h = o.hashavshevet;
+    return h && h.httpOk && !h.simulated && !o.isTest &&
+      String(h.accountKey) === String(accountKey) && refs.has(String(Number(h.reference)));
+  }).sort();
+}
+
+//  רשומה 'awaiting' להזמנות שנמצאו בהדפסה, עם מספר המסמך והכרטיס מהחשבונית.
+//  מחזיר את המפתח, או null אם כבר יש לאותן הזמנות רשומה שאינה ממתינה.
+async function openFromOrders(db, ids, docNumber, accountKey, now) {
+  const orders = (await Promise.all(ids.map(id => db.ref('orders/' + id).once('value')))).map(s => s.val());
+  if (!ids.length || orders.some(o => !o)) return null;
+  const key = S.lgInvoicePdfKey(ids);
+  const rec = {
+    state: 'awaiting', docNumber: String(docNumber), accountKey: String(accountKey), createdAt: now, createdBy: 'print',
+    client: orders.map(o => o.orderClient || o.client).find(Boolean) || '',
+    clientPhone: normPhone(orders.map(o => o.clientPhone || o.phone).find(Boolean) || ''),
+    orderIds: ids, orderNums: orders.map(o => String(o.orderNum || '')),
+    sketchNames: orders.map(o => String(o.sketchName || o.type || o.desc || '').trim()),
+  };
+  const tx = await db.ref('invoicePdf/' + key).transaction(cur => {
+    if (!cur) return rec;
+    if (cur.state !== 'awaiting') return;
+    return { ...cur, docNumber: rec.docNumber, accountKey: rec.accountKey };
+  });
+  return tx.committed ? key : null;
+}
+
 async function register(db, body, by, now) {
   const dn = String((body && body.docNumber) || '').trim();
   const ids = Array.isArray(body && body.orderIds) ? [...new Set(body.orderIds.map(String))] : [];
@@ -110,7 +149,8 @@ function view(k, r) {
   return { key: k, state: r.state, client: r.client || '', clientPhone: r.clientPhone || '',
     docNumber: r.docNumber || '', date: r.date || '', orderNums: r.orderNums || [],
     orderIds: r.orderIds || [], sketchNames: r.sketchNames || [], archivePath: r.archivePath || '',
-    createdAt: r.createdAt || 0, uploadedAt: r.uploadedAt || 0, simulated: !!r.simulated };
+    createdAt: r.createdAt || 0, uploadedAt: r.uploadedAt || 0, simulated: !!r.simulated,
+    delivery: r.delivery ? { state: r.delivery.state || '', channel: r.delivery.channel || '', reason: r.delivery.reason || '' } : null };
 }
 
 async function list(db, query, now) {
@@ -175,7 +215,13 @@ async function handleCtl(req, deps) {
   const admin = u.role === 'admin';
 
   if (req.method === 'POST' && action === 'register') {
-    return admin ? register(deps.db, body, u.phone, now) : fail(403, 'forbidden');
+    if (!admin) return fail(403, 'forbidden');
+    const r = await register(deps.db, body, u.phone, now);
+    //  הדפסה שחיכתה ושויכה עכשיו → נשלחת ללקוח מיד (כמו בהעלאה)
+    if (r.status === 200 && r.body && r.body.settled) {
+      await require('./_invoice-upload').deliverSafe(deps, r.body.key);
+    }
+    return r;
   }
   if (req.method !== 'GET') return fail(405, 'method');
   if (action === 'list') return admin ? list(deps.db, q, now) : fail(403, 'forbidden');
@@ -210,3 +256,5 @@ module.exports = async function handler(req, res) {
 module.exports.handleCtl = handleCtl;
 module.exports.markReady = markReady;
 module.exports.settlePrinted = settlePrinted;
+module.exports.ordersFromPrint = ordersFromPrint;
+module.exports.openFromOrders = openFromOrders;

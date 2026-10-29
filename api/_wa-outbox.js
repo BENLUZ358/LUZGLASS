@@ -67,7 +67,7 @@ function lgWaMsgKey(kind, orderIds) {
 //  מי מקבל את ההודעה — resolvePhone כבר הכריע — אלא עונים על השאלה
 //  **דרך מה** נמצא המספר. בחקירת L9005 בדיוק המידע הזה היה חסר.
 async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, orderIds,
-                                 queuedBy, phoneSource, accountKey }) {
+                                 queuedBy, phoneSource, accountKey, invoiceKey, docNumber }) {
   const key = lgWaMsgKey(kind, orderIds);
   const now = Date.now();
 
@@ -91,6 +91,9 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, o
       createdAt: (cur && cur.createdAt) || now,
       updatedAt: now,
       queuedBy:  String(queuedBy || ''),
+      //  חשבונית (DB-00004): הקבצים נטענים בשליחה מ-invoicePdfBlobs/<invoiceKey>
+      invoiceKey: invoiceKey ? String(invoiceKey) : null,
+      docNumber:  docNumber ? String(docNumber) : null,
       claimedAt: null, claimedBy: null, sentAt: null,
       messageId: null, lastError: null, httpStatus: null,
     };
@@ -271,7 +274,7 @@ async function lgWaPending(db, limit) {
 //  ⚠️ היה טרנרי של שניים (dispatched → whatsappDispatch, כל השאר → whatsapp).
 //  סוג שלישי היה דורס את whatsapp — כלומר את "מוכן לאיסוף" — ומשבש את
 //  הדילוג "כבר נשלחה הודעת מוכן לאיסוף".
-const _LG_WA_STAMP = { dispatched: 'whatsappDispatch', 'sketches-handled': 'sketchAck' };
+const _LG_WA_STAMP = { dispatched: 'whatsappDispatch', 'sketches-handled': 'sketchAck', invoice: 'whatsappInvoice' };
 function lgWaStampField(kind) { return _LG_WA_STAMP[kind] || 'whatsapp'; }
 
 module.exports = {
