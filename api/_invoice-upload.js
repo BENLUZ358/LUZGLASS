@@ -90,6 +90,18 @@ async function handleUpload(req, deps) {
     //  יקרה ב-settlePrinted, שם מספר המסמך חייב להתאים. בלי מספר מסמך ותאריך
     //  אין לפי מה לשייך אחר כך.
     if (!docNumber || !date) return _fail(422, 'no-docnumber-or-date');
+    //  הדפסה חוזרת של חשבונית שכבר טופלה (או ממחשב שני): לא שומרים שוב.
+    //  כבר שויכה → מחזירים את אותו נתיב ארכיון והכלי מסיים איתה; עדיין ממתינה
+    //  כהדפסה → הכלי ינסה שוב, ואחרי השיוך היא תיסגר כאן.
+    const same = (await db.ref('invoicePdf').orderByChild('docNumber').equalTo(docNumber).once('value')).val() || {};
+    const sk = Object.keys(same);
+    const settled = sk.find(k => !['awaiting', 'printed'].includes(same[k].state) && same[k].archivePath);
+    if (settled) {
+      const r = same[settled];
+      return { status: 200, body: { ok: true, reprint: true, key: settled, docNumber, date: r.date,
+        archivePath: r.archivePath, sendAfter: r.sendAfter } };
+    }
+    if (sk.some(k => same[k].state === 'printed')) return { status: 202, body: { ok: true, pending: true, reprint: true } };
     const pk = 'p' + hash.slice(0, 18);
     await db.ref('invoicePdf/' + pk).set({ state: 'printed', docNumber, date, originalHash: hash,
       text: oText.slice(0, 3000), createdAt: now, uploadedAt: now });
