@@ -84,7 +84,7 @@ function lgWaChatId(to) {
 //  שנרשמו. שורת "לפרטים נוספים ניתן להיכנס למשתמש שלך" הוסרה בינתיים: הפיילוט
 //  עובד רק מוואטסאפ, ולחלק מהלקוחות אין משתמש.
 //  orderNums עדיין מגיע, כי הוא הספירה, והתבנית של Meta (params) נשענת עליו.
-function renderText({ kind, clientName, orderNums, sketchNames }) {
+function renderText({ kind, clientName, orderNums, sketchNames, docNumber }) {
   const who  = String(clientName || 'לקוח');
   const n    = (orderNums || []).filter(Boolean).length;
   const one  = n === 1;
@@ -103,6 +103,10 @@ function renderText({ kind, clientName, orderNums, sketchNames }) {
                     : count + ' אושרו, מתחילים לעבוד עליהן.');
   }
   if (kind === 'dispatched') return wrap('ההובלה יצאה אליך עם ' + count + '.');
+  //  חשבונית (DB-00004, בן 29/10): קובץ החשבונית והסקיצות מצורפים להודעה.
+  if (kind === 'invoice') {
+    return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + ', והסקיצות שלהן.');
+  }
   return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'));
 }
 
@@ -226,6 +230,8 @@ function greenProvider() {
   const token      = String(process.env.GREENAPI_TOKEN || '').trim();
   const gapMs      = num(process.env.GREENAPI_GAP_MS,     10000);
   const maxPerRun  = num(process.env.GREENAPI_MAX_PER_RUN,    10);
+  //  העלאת קבצים עוברת בשרת המדיה שלהם, לא ב-api.green-api.com
+  const mediaUrl   = String(process.env.GREENAPI_MEDIA_URL || 'https://media.green-api.com').trim().replace(/\/+$/, '');
 
   return {
     name:       'green',
@@ -299,6 +305,50 @@ function greenProvider() {
     },
 
     params(facts) { return [renderText(facts || {})]; },
+
+    //  הודעה עם קבצים (חשבונית + סקיצות, DB-00004). הטקסט יוצא ככיתוב של
+    //  הקובץ הראשון; כל קובץ הוא sendFileByUpload נפרד לאותו צ'אט.
+    //  files: [{ name, mime, buf }]. ⚠️ כשל באמצע = ok:false — ניסיון חוזר
+    //  ישלח שוב את כל הקבצים (עדיף כפול על חסר).
+    async sendFiles(facts) {
+      const { to, files } = facts || {};
+      const text   = renderText(facts || {});
+      const chatId = lgWaChatId(to);
+      if (!chatId) return { ok: false, reason: 'נמען לא תקין', failureKind: FAIL.RECIPIENT };
+      if (!Array.isArray(files) || !files.length) return { ok: false, reason: 'אין קבצים', failureKind: FAIL.OTHER };
+      const redact = s => String(s == null ? '' : s).split(token).join('***');
+      const url = mediaUrl + '/waInstance' + idInstance + '/sendFileByUpload/' + token;
+      const ids = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const form = new FormData();
+        form.append('chatId', chatId);
+        form.append('fileName', f.name);
+        if (i === 0) form.append('caption', text);
+        form.append('file', new Blob([f.buf], { type: f.mime }), f.name);
+        let httpStatus = 0, parsed = null;
+        try {
+          const r = await fetch(url, { method: 'POST', body: form });
+          httpStatus = r.status;
+          try { parsed = JSON.parse(await r.text()); } catch (_) { /* לא JSON */ }
+        } catch (e) {
+          return { ok: false, httpStatus: 0, messageId: ids[0] || null, params: [text], failureKind: FAIL.NETWORK,
+                   detail: 'network', reason: 'שגיאת רשת מול GREEN API (' + (e && e.name) + ') בקובץ ' + (i + 1) };
+        }
+        const ok = httpStatus >= 200 && httpStatus < 300 && !!(parsed && parsed.idMessage);
+        if (!ok) {
+          const why = redact((parsed && (parsed.message || parsed.error)) || 'HTTP ' + httpStatus).slice(0, 300);
+          return { ok: false, httpStatus, messageId: ids[0] || null, params: [text],
+                   failureKind: classifyFailure(httpStatus, why), detail: why,
+                   reason: why + ' (קובץ ' + (i + 1) + ' מתוך ' + files.length + ')' };
+        }
+        ids.push(parsed.idMessage);
+        //  כמה קבצים לאותו צ'אט — מרווח קצר, לא חלון של 10 שניות (זה צ'אט אחד)
+        if (i < files.length - 1) await new Promise(r => setTimeout(r, 1200));
+      }
+      return { ok: true, httpStatus: 200, messageId: ids[0], params: [text], failureKind: null,
+               detail: 'sent ' + ids.length + ' files', reason: null };
+    },
 
     async send(facts) {
       const { to }  = facts || {};

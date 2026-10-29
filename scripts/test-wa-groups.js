@@ -157,7 +157,7 @@ const req = body => ({ method: 'POST', headers: { authorization: 'Bearer hs' }, 
   check('5c the group mapping: admin-read, no browser writes', [!!RULES.waGroups, RULES.waGroups && RULES.waGroups['.write']], [true, false]);
   check('5c a client cannot point an order at a group', RULES.orders.$orderId['.write'].includes("!newData.hasChild('waGroup')"), true);
   const D = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-dispatch.js'), 'utf8');
-  const DR = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const DR = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
   check('5d dispatch and drain both resolve through resolveRecipient, with the kind',
         /resolveRecipient\(db, x\.order, kind\)/.test(D) && /resolveRecipientWa\(db, order, entry\.kind\)/.test(DR), true);
   const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');

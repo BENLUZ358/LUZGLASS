@@ -58,7 +58,7 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  שלנו, תשובה ידנית של בן, או צד שלישי. הסקריפט גם בודק שהמייל הזה (Reply-To,
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
-                                    queuedBy, accountKey, now }) {
+                                    queuedBy, accountKey, invoiceKey, docNumber, now }) {
   const key = lgEmailMsgKey(kind, thread, orderIds);
   const at  = now || Date.now();
   const r = await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {
@@ -70,6 +70,8 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       orderNums: (orderNums || []).map(String),
       sketchNames: (orderNums || []).map((_, i) => String((sketchNames || [])[i] || '')),
       orderIds: _ids(orderIds),
+      //  חשבונית (DB-00004): הקבצים נשלפים בנפרד (outbox-file), לא בתור
+      invoiceKey: invoiceKey ? String(invoiceKey) : null, docNumber: docNumber ? String(docNumber) : null,
       state: 'pending', attempts: 0,
       createdAt: at, updatedAt: at, queuedBy: String(queuedBy || ''),
       leaseToken: null, leaseUntil: null, sentAt: null, lastError: null,
@@ -123,7 +125,10 @@ async function lgEmailClaim(db, limit, now) {
     const e = r.committed && r.snapshot.val();
     if (!e || e.state !== 'pending' || e.leaseToken !== token) continue;
     out.push({ key, thread: e.thread, messageId: String(e.messageId), email: String(e.email), leaseToken: token,
-               text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [], sketchNames: e.sketchNames || [] }) });
+               text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
+                                  sketchNames: e.sketchNames || [], docNumber: e.docNumber }),
+               //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
+               files: e.invoiceKey ? 1 + (e.orderIds || []).length : 0 });
   }
   return out;
 }
@@ -166,6 +171,12 @@ async function lgEmailComplete(db, key, leaseToken, ok, now) {
   }
   const e = r.snapshot.val();
   if (!e) return { ok: false, code: 'stale' };   // מפתח תקין שלא קיים
+  if (e.invoiceKey && (e.state === 'sent' || e.state === 'failed')) {
+    try {
+      await db.ref('invoicePdf/' + e.invoiceKey + '/delivery').update({ state: e.state, channel: 'email', outboxKey: key,
+        reason: e.state === 'sent' ? null : e.lastError || null, at });
+    } catch (err) { console.error('email-outbox: invoice delivery stamp failed', key, err && err.name); }
+  }
   if (e.state === 'sent') {
     // ⚠️ רק הזמנה שקיימת: עדכון על הזמנה שנמחקה היה מחייה שלד ריק שלה
     //  ⚠️ ההודעה כבר יצאה ונרשמה כ-sent; כשל בחותמת לא הופך אותה לכישלון
@@ -181,5 +192,20 @@ async function lgEmailComplete(db, key, leaseToken, ok, now) {
   return { ok: true };
 }
 
-module.exports = { lgEmailMsgKey, lgEmailOutboxKeyOk, lgEmailEnqueue, lgEmailClaim, lgEmailComplete, lgEmailActiveIds,
+//  קובץ אחד מצורף לחשבונית שבתור, לסקריפט שמחזיק את ההשכרה שלה בלבד.
+//  idx 0 = החשבונית, ואחריו הסקיצות. { ok, name, mime, b64 } | { ok:false, code }
+async function lgEmailOutboxFile(db, key, leaseToken, idx, now) {
+  if (!lgEmailOutboxKeyOk(key) || typeof leaseToken !== 'string' || !leaseToken) return { ok: false, code: 'stale' };
+  const at = now || Date.now();
+  const e = (await db.ref(EM_OUTBOX + '/' + key).once('value')).val();
+  if (!e || e.state !== 'pending' || e.leaseToken !== leaseToken || !(e.leaseUntil > at)) return { ok: false, code: 'stale' };
+  if (!e.invoiceKey) return { ok: false, code: 'no-files' };
+  const f = await require('./_invoice-deliver').lgInvoiceFiles(db, e.invoiceKey);
+  if (!f.ok) return { ok: false, code: f.code };
+  const one = f.files[Number(idx)];
+  if (!Number.isInteger(Number(idx)) || !one) return { ok: false, code: 'bad-idx' };
+  return { ok: true, name: one.name, mime: one.mime, b64: one.buf.toString('base64') };
+}
+
+module.exports = { lgEmailOutboxFile, lgEmailMsgKey, lgEmailOutboxKeyOk, lgEmailEnqueue, lgEmailClaim, lgEmailComplete, lgEmailActiveIds,
                    EM_OUTBOX, LEASE_MS, MAX_CLAIM, MAX_ATTEMPTS, MAX_AGE_MS };

@@ -110,7 +110,8 @@ function view(k, r) {
   return { key: k, state: r.state, client: r.client || '', clientPhone: r.clientPhone || '',
     docNumber: r.docNumber || '', date: r.date || '', orderNums: r.orderNums || [],
     orderIds: r.orderIds || [], sketchNames: r.sketchNames || [], archivePath: r.archivePath || '',
-    createdAt: r.createdAt || 0, uploadedAt: r.uploadedAt || 0, simulated: !!r.simulated };
+    createdAt: r.createdAt || 0, uploadedAt: r.uploadedAt || 0, simulated: !!r.simulated,
+    delivery: r.delivery ? { state: r.delivery.state || '', channel: r.delivery.channel || '', reason: r.delivery.reason || '' } : null };
 }
 
 async function list(db, query, now) {
@@ -175,7 +176,13 @@ async function handleCtl(req, deps) {
   const admin = u.role === 'admin';
 
   if (req.method === 'POST' && action === 'register') {
-    return admin ? register(deps.db, body, u.phone, now) : fail(403, 'forbidden');
+    if (!admin) return fail(403, 'forbidden');
+    const r = await register(deps.db, body, u.phone, now);
+    //  הדפסה שחיכתה ושויכה עכשיו → נשלחת ללקוח מיד (כמו בהעלאה)
+    if (r.status === 200 && r.body && r.body.settled) {
+      await require('./_invoice-upload').deliverSafe(deps, r.body.key);
+    }
+    return r;
   }
   if (req.method !== 'GET') return fail(405, 'method');
   if (action === 'list') return admin ? list(deps.db, q, now) : fail(403, 'forbidden');

@@ -218,7 +218,7 @@ const ERR   = (code, msg) => async () => ({ status: code, text: async () => JSON
 
 /* ═══ 5 · ה-drain — שואל לפני ששולח, ועוצר כשמנותק ══════════════════ */
 {
-  const D = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const D = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
 
   /* ⚠️ הסדר הוא העיקר: המצב נבדק **לפני** התפיסה הראשונה */
   check('the drain asks for the state before it claims anything',

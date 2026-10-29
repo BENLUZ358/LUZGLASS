@@ -213,8 +213,9 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     check('D1 claim leases the item', c1.map(i => [i.thread, typeof i.leaseToken, !!i.leaseToken]), [['T1', 'string', true]]);
     check('D1 with the WhatsApp wording',
           (c1[0] || {}).text, renderText({ kind: 'ready', clientName: 'אגן ברזל', orderNums: ['L1', 'L2'], sketchNames: ['מקלחון L1', 'מקלחון L2'] }));
-    check('D1 the item carries key, thread, the customer message id, the linked address, text, leaseToken',
-          Object.keys(c1[0] || {}).sort(), ['email', 'key', 'leaseToken', 'messageId', 'text', 'thread']);
+    check('D1 the item carries key, thread, the customer message id, the linked address, text, leaseToken, files',
+          Object.keys(c1[0] || {}).sort(), ['email', 'files', 'key', 'leaseToken', 'messageId', 'text', 'thread']);
+    check('D1 a notice that is not an invoice has no files', (c1[0] || {}).files, 0);
     check('D1 message id and address are the queued ones', [(c1[0] || {}).messageId, (c1[0] || {}).email], ['m2', CLIENT]);
     check('D2 second claim within the lease returns nothing', (await claim(db, NOW + LEASE - 1)).length, 0);
 
