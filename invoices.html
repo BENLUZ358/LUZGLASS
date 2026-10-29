@@ -878,8 +878,19 @@ function renderArchive() {
   if (it) arcSketches(it);
 }
 
+//  שליחה ללקוח (_invoice-deliver.js)
+const ARC_SEND = { sent: 'נשלחה ללקוח', queued: 'בדרך ללקוח', failed: 'השליחה נכשלה', blocked: 'לא נשלחה',
+                   portal: 'לא נשלחה — הזמנות מהאתר (הלקוח רואה אותה שם)', skipped: 'לא נשלחה — פיקטיבית' };
+function arcSend(it) {
+  const d = it.delivery;
+  if (!d) return it.state === 'ready' ? 'עוד לא נשלחה' : '—';
+  const via = d.channel === 'email' ? ' במייל' : d.channel === 'whatsapp' ? ' בוואטסאפ' : '';
+  return (ARC_SEND[d.state] || d.state) + (d.state === 'sent' || d.state === 'queued' ? via : '') + (d.reason ? ' — ' + d.reason : '');
+}
+
 function arcDetail(it) {
-  return `<div>הזמנות: ${esc(it.orderNums.join(' · ') || '—')}</div>
+  return `<div>שליחה ללקוח: ${esc(arcSend(it))}</div>
+    <div>הזמנות: ${esc(it.orderNums.join(' · ') || '—')}</div>
     <div>סקיצות: ${esc(it.sketchNames.filter(Boolean).join(' · ') || '—')}</div>
     <div>העתק בתיקייה השיתופית: <bdi>${esc(it.archivePath || 'עדיין לא נשמר')}</bdi></div>
     ${it.state === 'ready' ? `<button class="btn btn-primary" type="button" data-pdf="${esc(it.key)}"><span data-icon="receipt"></span>הורד PDF (מקור)</button>` : ''}

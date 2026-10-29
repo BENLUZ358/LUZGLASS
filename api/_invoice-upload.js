@@ -36,8 +36,26 @@ function _decode(b64) {
 
 const _sha = buf => crypto.createHash('sha1').update(buf).digest('hex');
 
-//  deps: { db, env, now, pageTexts(buf) → string[] }
+//  שויכה (200) → שולחים ללקוח מיד (_invoice-deliver). כשל בשליחה לא מפיל את
+//  ההעלאה: ההעתק כבר צריך להישמר בארכיון, והמצב נרשם ב-delivery.
+//  השליחה לא כפולה: deliver מדלג על חשבונית שכבר נשלחה / בתור.
+//  deps: { db, env, now, pageTexts(buf) → string[], deliver?(db, key, {now}) }
 async function handleUpload(req, deps) {
+  const r = await _handleUpload(req, deps);
+  if (r.status === 200 && r.body && r.body.key) await deliverSafe(deps, r.body.key);
+  return r;
+}
+
+async function deliverSafe(deps, key) {
+  try {
+    const deliver = deps.deliver || require('./_invoice-deliver').lgInvoiceDeliver;
+    await deliver(deps.db, key, { now: deps.now });
+  } catch (e) {
+    console.error('invoice-pdf-upload: deliver failed', e && e.name);
+  }
+}
+
+async function _handleUpload(req, deps) {
   if (req.method !== 'POST') return _fail(405, 'method');
   const env = deps.env || process.env;
   if (!lgHookTokenOk(req.headers && req.headers.authorization, env.INVOICE_UPLOAD_TOKEN, 'invoice-upload')) {
@@ -140,3 +158,4 @@ module.exports = async function handler(req, res) {
   }
 };
 module.exports.handleUpload = handleUpload;
+module.exports.deliverSafe = deliverSafe;

@@ -285,6 +285,18 @@ function emFinish(it, res, props) {
   props.deleteProperty('r_' + it.info.id);
 }
 
+//  קבצים מצורפים לתשובה (חשבונית + סקיצות, DB-00004): אחד-אחד מהשרת, עם
+//  ההשכרה של הפריט. מחזיר מערך Blob, או null אם קובץ כלשהו חסר — ואז לא שולחים.
+function emOutboxFiles(cfg, it) {
+  var out = [];
+  for (var i = 0; i < it.files; i++) {
+    var r = emPost(cfg, { op: 'outbox-file', key: it.key, leaseToken: it.leaseToken, idx: i });
+    if (r.code !== 200 || !r.body || r.body.ok !== true || !r.body.b64) return null;
+    out.push(Utilities.newBlob(Utilities.base64Decode(r.body.b64), r.body.mime, r.body.name));
+  }
+  return out;
+}
+
 //  ⚠️ שולחים תשובה לשרשור ולא יותר מפעם אחת לכל key — ר' emOutboxPlan.
 //  סדר חובה: u_ → reply → s_ → מחיקת u_ → done. כל חריגה = done ok:false, אף פעם
 //  לא משאירים פריט בלי אישור (השרת לא סופר פקיעות השכרה).
@@ -312,16 +324,20 @@ function emOutbox(cfg, started) {
         //  ⚠️ עונים על המייל של הלקוח עצמו, לא על השרשור: thread.reply עונה למי
         //  ששלח את ההודעה האחרונה בשרשור — יכול להיות ההודעה שלנו, תשובה ידנית של
         //  בן, או צד שלישי ב-CC. ו-msg.reply עונה ל-Reply-To — לכן emReplyOk.
-        var msg = null;
+        var msg = null, atts = null;
         try { msg = GmailApp.getMessageById(it.messageId); } catch (e0) { msg = null; }
         if (!msg) {
           ok = false;
         } else if (!emReplyOk(msg.getReplyTo(), msg.getFrom(), it.email)) {
           ok = false;
           Logger.log('תשובה ' + it.key + ': הכתובת במייל לא הכתובת המקושרת — לא נשלח');
+        } else if ((it.files || 0) > 0 && !(atts = emOutboxFiles(cfg, it))) {
+          ok = false;   // ⚠️ קובץ חסר — לא שולחים חבילה חלקית; ננסה שוב בריצה הבאה
+          Logger.log('תשובה ' + it.key + ': לא כל הקבצים התקבלו — לא נשלח');
         } else {
           props.setProperty('u_' + it.key, String(Date.now()));   // ⚠️ לפני reply
-          msg.reply(it.text);
+          if (atts) msg.reply(it.text, { attachments: atts });
+          else msg.reply(it.text);
           props.setProperty('s_' + it.key, String(Date.now()));   // ⚠️ לפני done
           props.deleteProperty('u_' + it.key);
         }

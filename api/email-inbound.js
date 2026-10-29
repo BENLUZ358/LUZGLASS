@@ -34,7 +34,7 @@ const { lgEmailInboundAllowed } = require('./_env');
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgEmailAddr, lgEmailKey, lgEmailSenderLink } = require('./_email-recipient');
 const { lgEmailInboundKey, lgEmailPutChunk, lgEmailCommit, EM_INBOX, EM_PARTS } = require('./_email-inbound');
-const { lgEmailClaim, lgEmailComplete, lgEmailOutboxKeyOk } = require('./_email-outbox');
+const { lgEmailClaim, lgEmailComplete, lgEmailOutboxKeyOk, lgEmailOutboxFile } = require('./_email-outbox');
 
 // אותם גבולות כמו ב-_email-inbound.js (20 קבצים, 10 חתיכות לקובץ)
 const _int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
@@ -85,6 +85,10 @@ async function handleEmailInbound(req, deps) {
   if (b.op === 'outbox-claim') {
     try { return { status: 200, body: { ok: true, items: await lgEmailClaim(deps.db, 5, deps.now) } }; }
     catch (e) { console.error('email-inbound: outbox claim failed', e && e.name); return { status: 500, body: { error: 'claim failed' } }; }
+  }
+  if (b.op === 'outbox-file') {
+    try { return { status: 200, body: await lgEmailOutboxFile(deps.db, b.key, b.leaseToken, b.idx, deps.now) }; }
+    catch (e) { console.error('email-inbound: outbox file failed', e && e.name); return { status: 500, body: { error: 'file failed' } }; }
   }
   if (b.op === 'outbox-done') {
     if (!lgEmailOutboxKeyOk(b.key) || typeof b.leaseToken !== 'string' || !b.leaseToken || typeof b.ok !== 'boolean') return _bad('bad-done');

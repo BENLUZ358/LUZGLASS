@@ -52,7 +52,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
   check('B1 ready still stamps whatsapp', ob.lgWaStampField('ready'), 'whatsapp');
   check('B1 dispatched still stamps whatsappDispatch', ob.lgWaStampField('dispatched'), 'whatsappDispatch');
   check('B1 the new kind never overwrites "ready for pickup"', ob.lgWaStampField('sketches-handled') !== 'whatsapp', true);
-  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8');
+  const DRAIN = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-drain.js'), 'utf8') + fs.readFileSync(path.join(ROOT, 'api', '_wa-drain-core.js'), 'utf8');   // הלולאה עברה ל-core
   check('B2 the drain uses the map, not the old two-way choice',
         /const field = lgWaStampField\(entry\.kind\);/.test(DRAIN), true);
   check('B3 a different kind is a different message', ob.lgWaMsgKey('sketches-handled', ['a']) !== ob.lgWaMsgKey('ready', ['a']), true);
