@@ -352,7 +352,7 @@ module.exports = async function handler(req, res) {
         if (cur && cur.state !== 'awaiting') return;
         const rec = {
           state: 'awaiting', reference: ref.reference, createdAt: Date.now(), createdBy: auth.phone,
-          client: clientName, clientPhone: acct.phone, simulated: isTest || null,
+          client: clientName, clientPhone: acct.phone, accountKey: String(accountKey), simulated: isTest || null,
           orderIds: orderIds.map(String),
           orderNums: orders.map(o => String(o.orderNum || o.id)),
           // שם הסקיצה — לפיו מזהים את החשבונית המודפסת (אותו שדה כמו _wa-recipient)

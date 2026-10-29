@@ -101,11 +101,34 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal(d.db._data.invoicePdf[r.body.key].state, 'printed');
     assert.equal(d.db._data.invoicePdf.k9.state, 'awaiting');
   });
-  await test('upload: registered doc number differing from the printed one is refused', async () => {
+  await test('upload: registered doc number differing from the printed one never pairs', async () => {
     const d = mk(); d.db._data.invoicePdf.k1.docNumber = '999999';
     const r = await handleUpload(req({ original: ORIG, copy: COPY }), d);
-    assert.equal(r.body.code, 'docnumber-mismatch');
+    assert.equal(r.status, 202); assert.equal(d.db._data.invoicePdf[r.body.key].state, 'printed');
     assert.equal(d.db._data.invoicePdf.k1.state, 'awaiting');
+  });
+
+  //  ── חשבונית אמיתית מחשבשבת (67346, 29/10) — הטקסט כפי ש-pdfjs מחלץ ──
+  const REAL = n => '17:09  חשבונית מס 67346  תאריך 29/10/2026  מפתח 99  מזהה 348048  בדיקה  לכבוד :  מס\' :  אסמ\' 2 '
+    + ' 8 מ\'\'מ שקוף מחוסם 1.00  סה"כ לתשלום: 0.00  תאריך תשלום 29/10/2026  513020198 : .מ.ע  ERP   הופק ע"י חשבשבת  ' + n;
+  await test('real invoice: role, doc number, date, account key', () => {
+    assert.equal(M.pageRole(REAL('מקור')), 'original');
+    assert.equal(M.pageRole(REAL('העתק 1')), 'copy');
+    assert.equal(M.extractDocNumber(REAL('מקור')), '67346');
+    assert.equal(M.extractDate(REAL('מקור')), '2026-10-29');
+    assert.equal(M.extractAccountKey(REAL('מקור')), '99');
+    assert.equal(M.extractAccountKey('מפתח 9912345678'), null);
+  });
+  await test('real invoice: pairs by doc number + account key, not by sketch names', () => {
+    const t = REAL('מקור');
+    const p = (dn, ak) => ({ docNumber: dn, accountKey: ak, sketchNames: ['לא מודפס'] });
+    assert.deepEqual(M.pickPending(t, { a: p('67346', '99') }), { ok: true, key: 'a' });
+    assert.equal(M.pickPending(t, { a: p('67346', '98') }).code, 'no-match');
+    assert.equal(M.pickPending(t, { a: p('67347', '99') }).code, 'no-match');
+    //  שתי ממתינות של אותו לקוח, רק לאחת מספר המסמך הזה
+    assert.deepEqual(M.pickPending(t, { a: p('67346', '99'), b: p('67350', '99') }), { ok: true, key: 'a' });
+    //  שתיהן בלי מספר מסמך → לא חד-משמעי
+    assert.equal(M.pickPending(t, { a: p(null, '99'), b: p(null, '99') }).code, 'ambiguous');
   });
 
   //  ── בקרה: רישום והדפסה בכל סדר, אדמין, לקוח ──
@@ -209,6 +232,25 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     for (const bad of ['../x.pdf', '/etc/x.pdf', '2026/../../x', 'a\\b.pdf', '', null, '2026//x.pdf']) {
       assert.equal(resolveArchive(root, bad), null, String(bad));
     }
+  });
+  await test('watcher: same reading as the server on the real invoice text', () => {
+    const W = require('../tools/invoice-watcher/watcher');
+    assert.equal(W.roleOf(REAL('מקור')), 'original');
+    assert.equal(W.roleOf(REAL('העתק 1')), 'copy');
+    assert.equal(W.docNumberOf(REAL('מקור')), M.extractDocNumber(REAL('מקור')));
+  });
+  await test('watcher: single-page files pair by invoice number; lone ones go to review after the wait', () => {
+    const { groupSingles } = require('../tools/invoice-watcher/watcher');
+    const e = (role, doc, at) => ({ role, doc, at });
+    const { pairs, stale } = groupSingles([
+      ['o1', e('original', '100', 0)], ['c1', e('copy', '100', 1)], ['c1b', e('copy', '100', 2)],
+      ['o2', e('original', '200', 0)],               // מחכה להעתק, עוד לא עבר הזמן
+      ['c3', e('copy', '300', 0)],                   // העתק בלי מקור, עבר הזמן
+    ], 1000, 5000);
+    assert.deepEqual(pairs, [{ doc: '100', original: 'o1', copies: ['c1', 'c1b'] }]);
+    assert.deepEqual(stale, []);
+    const later = groupSingles([['o2', e('original', '200', 0)], ['c3', e('copy', '300', 0)]], 9000, 5000);
+    assert.deepEqual(later.pairs, []); assert.deepEqual(later.stale.sort(), ['c3', 'o2']);
   });
   console.log(`\n${passed} passed`);
 })().catch(e => { console.error(e); process.exit(1); });
