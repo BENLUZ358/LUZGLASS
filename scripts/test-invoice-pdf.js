@@ -108,6 +108,23 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal(d.db._data.invoicePdf.k1.state, 'awaiting');
   });
 
+  await test('upload: reprint of a settled invoice (other bytes) ends with the same archive path', async () => {
+    const d = mk();
+    texts[Buffer.from('%PDF-1.4 orig2').toString()] = texts[Buffer.from('%PDF-1.4 orig').toString()];
+    const a = await handleUpload(req({ original: ORIG, copy: COPY }), d);
+    const b = await handleUpload(req({ original: pdf('orig2'), copy: COPY }), { ...d, now: 5000 });
+    assert.equal(b.status, 200); assert.equal(b.body.reprint, true);
+    assert.equal(b.body.archivePath, a.body.archivePath); assert.equal(b.body.sendAfter, a.body.sendAfter);
+    assert.equal(Object.keys(d.db._data.invoicePdf).length, 1);
+  });
+  await test('upload: reprint while still waiting as printed is not stored twice', async () => {
+    const d = mk({ db: fakeDb({ invoicePdf: {} }) });
+    assert.equal((await handleUpload(req({ original: ORIG, copy: COPY }), d)).status, 202);
+    const b = await handleUpload(req({ original: pdf('orig2'), copy: COPY }), d);
+    assert.equal(b.status, 202); assert.equal(b.body.reprint, true);
+    assert.equal(Object.keys(d.db._data.invoicePdf).length, 1);
+  });
+
   //  ── חשבונית אמיתית מחשבשבת (67346, 29/10) — הטקסט כפי ש-pdfjs מחלץ ──
   const REAL = n => '17:09  חשבונית מס 67346  תאריך 29/10/2026  מפתח 99  מזהה 348048  בדיקה  לכבוד :  מס\' :  אסמ\' 2 '
     + ' 8 מ\'\'מ שקוף מחוסם 1.00  סה"כ לתשלום: 0.00  תאריך תשלום 29/10/2026  513020198 : .מ.ע  ERP   הופק ע"י חשבשבת  ' + n;
