@@ -24,6 +24,8 @@ const { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentC
 const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
         lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText } = require('./_agent-okev');
 
+const { lgArchiveFind, lgArchiveActions, ARCHIVE_OK_TEXT } = require('./_agent-archive');
+
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
 const PILOT = 'waMeta/agentPilot';
@@ -57,6 +59,8 @@ function _handoff(r) {
 function _continue(intent, order, now) {
   const one = { match: 'one', orders: [order], via: 'conv' };
   if (intent === 'status') return { actions: [_reply(lgOkevReply('status', one))], conv: null };
+  // ארכיון: נבחרה הזמנה → סקיצה שלה (ההזמנה כבר מהרשימה של הלקוח; השליחה בודקת שוב)
+  if (intent === 'document') return { actions: [{ type: 'files', text: ARCHIVE_OK_TEXT, files: [{ kind: 'sketch', orderId: order.id }] }], conv: null };
   if (!lgOkevCanChange(order)) return { actions: [_reply(lgOkevTooLate(order))], conv: null };
   if (intent === 'cancel') return { actions: [_reply(lgOkevReply('cancel', one))], conv: { await: 'confirm-cancel', orderId: order.id, at: now } };
   if (intent === 'change') return { actions: [_reply(lgOkevReply('change', one))], conv: { await: 'change-details', orderId: order.id, at: now } };
@@ -99,7 +103,7 @@ function _onConv(r, orders, c, now) {
 }
 
 // ── ניתוב רגיל לפי route של המרכזן. keep = ה-conv הנוכחי (נשאר אם לא הוחלף) ──
-function _route(r, orders, now, keep) {
+function _route(r, orders, now, keep, archive) {
   switch (r.route) {
     case 'okev': {
       const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
@@ -113,8 +117,15 @@ function _route(r, orders, now, keep) {
       return { actions: [_reply(text)], conv };
     }
     case 'menu': return { actions: [_reply(AGENT_MENU_TEXT)], conv: keep };
-    // ארכיון ומחירון — עד משימות 5,6 עוברים לשאול
-    case 'shaul': case 'archive': case 'quote': return { actions: _handoff(r), conv: keep };
+    // ארכיון: תוצאת החיפוש (lgArchiveFind, בשכבה הלא-טהורה) מגיעה ב-p.archive.
+    // לא סופקה (אין חיפוש) → שאול, כמו קודם. 'many' מחליף conv בשאלת "על איזו".
+    case 'archive': {
+      if (!archive) return { actions: _handoff(r), conv: keep };
+      const a = lgArchiveActions(r, archive, now);
+      return { actions: a.actions, conv: a.conv || keep };
+    }
+    // מחירון — עד משימה 6 עובר לשאול
+    case 'shaul': case 'quote': return { actions: _handoff(r), conv: keep };
     default: return { actions: [], conv: keep };   // kolet (הקליטה הקיימת), none, ignore
   }
 }
@@ -146,7 +157,7 @@ function lgAgentDecide(p) {
     const h = _onConv(r, orders, c, now);
     if (h) return h;
   }
-  return _route(r, orders, now, c);
+  return _route(r, orders, now, c, p && p.archive);
 }
 
 // ─── ביצוע ──────────────────────────────────────────────────────────
@@ -291,7 +302,13 @@ async function _act(db, key, rec, recRef, env, now, o) {
     const all = (await db.ref('orders').once('value')).val() || {};
     orders = Object.entries(all).filter(([, x]) => x && String(x.customerId || '') === cid).map(([id, x]) => ({ ...x, id }));
   }
-  const d = lgAgentDecide({ rec, orders, conv, now });
+  // ארכיון: החיפוש ב-DB כאן (decide נשאר טהור). כשל בחיפוש → 'none' (שאול + "אני בודק")
+  let archive;
+  if (rec.route === 'archive' && rec.linked && cid) {
+    try { archive = await lgArchiveFind(db, { customerId: cid, ref: rec.ref, text: rec.text, orders }); }
+    catch (e) { console.warn('agent-act: archive', e && e.name); archive = { kind: 'none' }; }
+  }
+  const d = lgAgentDecide({ rec, orders, conv, now, archive });
   const staff = lgAgentStaff(env);
 
   let why = '';
