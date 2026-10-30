@@ -47,7 +47,20 @@ async function handleInbound(req, deps) {
 
 // Internal replay entry: the caller supplies only the stored, validated relay event.
 async function handleCustomerInbound(body, deps) {
-  const p = lgWaInboundParse(body);
+  // רשומת צל לסוכני הלקוחות — מאחורי דגל, אחרי devbrain. כשל כאן לא משנה
+  // שום דבר בתשובה; שום return למטה לא תלוי בזה. לא נרשם אלא שם השגיאה.
+  if (process.env.AGENT_SHADOW_ENABLED === 'true') {
+    try {
+      const sh = require('./_agent-shadow');
+      const rec = await sh.lgAgentShadowRecord(deps.db, body, deps.now);
+      if (rec && rec.created) {
+        deps.waitUntil(Promise.resolve()
+          .then(() => sh.lgAgentShadowProcess(deps.db, rec.key, { now: deps.now, fetchImpl: deps.fetchImpl }))
+          .catch(e => console.warn('wa-inbound: agent shadow process', e && e.name)));
+      }
+    } catch (e) { console.warn('wa-inbound: agent shadow record', e && e.name); }
+  }
+  const p =lgWaInboundParse(body);
   if (p.action !== 'record') return { status: 200, body: { ok: true, ignored: p.reason } };
   if (p.entry.groupId) {
     // קבוצה: הקישור ללקוח הוא ההרשאה (waGroups, נכתב רק מ-endpoint אדמיני).
