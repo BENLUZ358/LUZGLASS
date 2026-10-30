@@ -392,8 +392,15 @@ async function _act(db, key, rec, recRef, env, now, o) {
   const staff = lgAgentStaff(env);
   const _pilot = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
 
+  // תיקון סופי 2: "בפיילוט" = אותו קישור שהשליחה בודקת (waGroups / waSenders).
+  //  רשומה בלי linkVia (נרשמה לפני התיקון) — נבדק עכשיו. תשובת שאול (staff) —
+  //  הנמען הוא הלקוח של הבקשה, והשליחה בודקת את הקישור שלו.
+  const { lgAgentLinkVia, AGENT_SENDABLE_VIA } = require('./_agent-shadow');
+  const linkVia = rec.linked && rec.route !== 'staff'
+    ? (rec.linkVia != null ? String(rec.linkVia) : await lgAgentLinkVia(db, rec)) : '';
   let why = '';
   if (!d.actions.length) why = 'no-action';
+  else if (rec.linked && rec.route !== 'staff' && !AGENT_SENDABLE_VIA.includes(linkVia)) why = 'not-linked';
   else if (!_switchesOn(env)) why = 'switches-off';
   // תשובת שאול — הנמען הוא הלקוח של הבקשה (לא השולח), ולכן הפיילוט שלו
   else if (rec.route === 'staff') { if (!(await _pilot(staffQuote && staffQuote.customerId))) why = 'not-pilot'; }

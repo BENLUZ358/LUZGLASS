@@ -70,6 +70,7 @@ const shadowCount = db => Object.keys((db._data.waMeta || {}).agentShadow || {})
     const r = await sh.lgAgentShadowRecord(db, payload('A1', textMd('מה עם כהן?')), NOW);
     check('linked private: one record created', [r.created, shadowCount(db)], [true, 1]);
     check('linked private: record has text and linked:true', [rec(db, r.key).text, rec(db, r.key).linked, rec(db, r.key).state], ['מה עם כהן?', true, 'received']);
+    check('F2 waSenders → linkVia sender', rec(db, r.key).linkVia, 'sender');
     const res = await sh.lgAgentShadowProcess(db, r.key, { now: NOW + 100, fetchImpl: m.fetchImpl, env: ENV });
     const e = rec(db, r.key);
     check('process ok', res.ok, true);
@@ -103,6 +104,7 @@ const shadowCount = db => Object.keys((db._data.waMeta || {}).agentShadow || {})
     const r = await sh.lgAgentShadowRecord(db, payload('U1', textMd('מה עם כהן?'), STRANGER), NOW);
     const e0 = rec(db, r.key);
     check('unlinked: linked:false, no text field', [e0.linked, 'text' in e0], [false, false]);
+    check('F2 unlinked: linkVia empty', e0.linkVia, '');
     await sh.lgAgentShadowProcess(db, r.key, { now: NOW + 1, fetchImpl: m.fetchImpl, env: ENV });
     const e = rec(db, r.key);
     check('unlinked: route shaul, done, model not called', [e.state, e.route, m.calls, 'text' in e], ['done', 'shaul', 0, false]);
@@ -116,6 +118,8 @@ const shadowCount = db => Object.keys((db._data.waMeta || {}).agentShadow || {})
     const db = seed();
     const r = await sh.lgAgentShadowRecord(db, payload('V1', textMd('שלום'), STRANGER), NOW);
     check('allowlisted sender → linked:true with text', [rec(db, r.key).linked, rec(db, r.key).text], [true, 'שלום']);
+    check('F2 allowlist only → linkVia env (not sendable)', rec(db, r.key).linkVia, 'env');
+    check('F2 live helper agrees', await sh.lgAgentLinkVia(db, rec(db, r.key)), 'env');
     for (const [k, v] of [['GREENAPI_INBOUND_ALLOWED', prev[0]], ['FIREBASE_SERVICE_ACCOUNT', prev[1]]]) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
     }
@@ -126,6 +130,7 @@ const shadowCount = db => Object.keys((db._data.waMeta || {}).agentShadow || {})
     const db = seed(); const m = model('chitchat', '');
     const r = await sh.lgAgentShadowRecord(db, payload('G1', textMd('בוקר טוב'), GROUP, '972521111111@c.us'), NOW);
     check('group: recorded with groupId, linked', [rec(db, r.key).groupId, rec(db, r.key).linked], [GROUP, true]);
+    check('F2 group → linkVia group', rec(db, r.key).linkVia, 'group');
     await sh.lgAgentShadowProcess(db, r.key, { now: NOW + 1, fetchImpl: m.fetchImpl, env: ENV });
     check('group chitchat → ignore, customer from the group', [rec(db, r.key).route, rec(db, r.key).customerId, rec(db, r.key).wouldReply], ['ignore', '888', '']);
   }

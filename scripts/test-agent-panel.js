@@ -61,10 +61,13 @@ check('no raw innerHTML of message text in agent code', /lgAgRowHtml/.test(P) &&
 
 // ─── שלב 2: פיילוט ומה נשלח בפועל ────────────────────────────────────────
 const cx = (outbox, pilot) => ({ outbox: outbox || {}, pilot: pilot || {} });
-const acted = rec({ customerId: '777', acted: true, wouldAct: [{ type: 'reply', text: 'x' }] });
+const acted = rec({ customerId: '777', linkVia: 'sender', acted: true, wouldAct: [{ type: 'reply', text: 'x' }] });
 check('pilot toggle off by default', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, cx()); return [/data-agpilot/.test(x), /data-cid="777"/.test(x), /data-on="1"/.test(x), x.includes('פיילוט: לא')]; })(), [true, true, true, true]);
 check('pilot toggle on', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, cx({}, { 777: true })); return [/data-on="0"/.test(x), x.includes('פיילוט: כן')]; })(), [true, true]);
 check('unlinked row has no pilot toggle', /data-agpilot/.test(ctx.lgAgRowHtml('K1', rec({ linked: false, customerId: '' }), null, cx())), false);
+check('F2 pilot toggle only for waGroups/waSenders links', ['group', 'sender', 'env', '', undefined].map(v =>
+  /data-agpilot/.test(ctx.lgAgRowHtml('K1', rec({ customerId: '777', linkVia: v }), null, cx()))), [true, true, false, false, false]);
+check('F2 not-linked reason text', ctx.lgAgRowHtml('K1', rec({ acted: false, actReason: 'not-linked' }), null, cx()).includes('לא מקושר בקליטות'), true);
 check('pilot count', [ctx.lgAgPilotCount({ a: true, b: true, c: false, d: 'x' }), ctx.lgAgPilotCount(null)], [2, 0]);
 check('sent shows text', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'sent', text: 'שלום <b>' , reason: 'agent-reply' } })); return [x.includes('נשלח ✓: שלום &lt;b&gt;'), x.includes('היה עונה:')]; })(), [true, false]);
 check('pending → בתור', ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'pending', text: 't' } })).includes('בתור'), true);

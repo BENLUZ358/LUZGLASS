@@ -354,7 +354,7 @@ function lgAgRouteLabel(r) { return LG_AG_ROUTE[r] || String(r == null ? '' : r)
 function lgAgPilotCount(pilot) {
   return Object.keys(pilot || {}).filter(k => pilot[k] === true).length;
 }
-const LG_AG_WHY = { 'not-pilot': 'לא בפיילוט', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה' };
+const LG_AG_WHY = { 'not-pilot': 'לא בפיילוט', 'not-linked': 'לא מקושר בקליטות', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה' };
 const LG_AG_STATE = { received: 'ממתין', processing: 'בעיבוד', failed: 'נכשל' };
 const LG_AG_OB = { sent: 'נשלח ✓', pending: 'בתור', blocked: 'נחסם', failed: 'נכשל' };
 //  רשומות התור של שורה: <key>_<i> או <key>_<i>_s (מפתח מנוקה כמו בשרת)
@@ -404,7 +404,8 @@ function lgAgRowHtml(key, r, intake, c) {
   const k = _waInEsc(key);
   const cc = c || {};
   const pilotOn = !!(r.customerId && (cc.pilot || {})[r.customerId] === true);
-  const pilotBtn = r.linked && r.customerId
+  //  פיילוט רק לצ'אט שמקושר כמו שהשליחה בודקת (קבוצה / מספר בקליטות) — לא רשימת Vercel
+  const pilotBtn = r.linked && r.customerId && (r.linkVia === 'group' || r.linkVia === 'sender')
     ? `<button type="button" class="wain-btn" data-agpilot data-cid="${_waInEsc(r.customerId)}" data-on="${pilotOn ? 0 : 1}">פיילוט: ${pilotOn ? 'כן' : 'לא'}</button>` : '';
   //  הודעה שהסוכן לא ראה כהזמנה אבל נקלטה כהזמנה — בן צריך לראות את זה
   const both = r.intent !== 'order' && lgAgIntakeTaken(key, r, intake)

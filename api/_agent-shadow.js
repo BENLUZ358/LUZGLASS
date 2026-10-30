@@ -103,16 +103,20 @@ async function _humanQuiet(db, e, now) {
   return !!last && (now - Number(last)) < AGENT_HUMAN_QUIET_MS;
 }
 
-// מקושר = קבוצה ב-waGroups, מספר ב-waSenders, או ברשימת Vercel
-async function _isLinked(db, e) {
+// מקושר = קבוצה ב-waGroups, מספר ב-waSenders, או ברשימת Vercel.
+// linkVia: 'group' | 'sender' | 'env' | '' (תיקון סופי 2). ⚠️ רק group/sender הם
+// הקישור שהשליחה בודקת (_agent-send._liveRecipient) — ולכן רק הם "ניתנים לפיילוט".
+// 'env' (רשימת Vercel בלבד) נקלט ונרשם, אבל הסוכן לא פועל בו (actReason 'not-linked').
+async function lgAgentLinkVia(db, e) {
   if (e.groupId) {
     const g = (await db.ref('waGroups/' + lgWaInboundKey(e.groupId)).once('value')).val();
-    return !!(g && g.customerId);
+    return g && g.customerId ? 'group' : '';
   }
-  if (!e.sender) return false;
-  if (await lgWaSenderLink(db, e.sender)) return true;
-  return !!lgWaInboundAllowed(e.sender).allowed;
+  if (!e.sender) return '';
+  if (await lgWaSenderLink(db, e.sender)) return 'sender';
+  return lgWaInboundAllowed(e.sender).allowed ? 'env' : '';
 }
+const AGENT_SENDABLE_VIA = ['group', 'sender'];
 
 // ─── רישום — create-once ────────────────────────────────────────────
 //  מחזיר { key, created }, או null כשאין מה לרשום (כולל הודעה ידנית —
@@ -126,7 +130,8 @@ async function lgAgentShadowRecord(db, body, now, opts) {
     return null;
   }
   if (p.action !== 'record') return null;
-  const linked = await _isLinked(db, p.entry);
+  const linkVia = await lgAgentLinkVia(db, p.entry);
+  const linked = !!linkVia;
   // קבוצה שלא מקושרת ב-waGroups — לא רושמים כלום (המספר העסקי חבר בהרבה
   // קבוצות שאינן לקוחות). שולח פרטי לא מקושר — נרשם בלי תוכן, route 'shaul'.
   if (p.entry.groupId && !linked) return null;
@@ -136,7 +141,7 @@ async function lgAgentShadowRecord(db, body, now, opts) {
   // R6: איש צוות כתב בקבוצת לקוח → כמו הודעה ידנית מהטלפון: שקט שעתיים שם.
   //     (צ'אט פרטי של איש צוות הוא הצ'אט שלו — לא של לקוח.)
   if (staff && p.entry.groupId) await db.ref(HUMAN + '/' + _chatKey(p.entry)).update({ lastAt: t });
-  const rec = { ...p.entry, linked, staff, intakeKind: (ib && ib.entry && ib.entry.kind) || '',
+  const rec = { ...p.entry, linked, linkVia, staff, intakeKind: (ib && ib.entry && ib.entry.kind) || '',
                 state: 'received', attempts: 0, createdAt: t, updatedAt: t };
   // לא מקושר (ולא צוות) — לא שומרים את תוכן ההודעה
   if (!linked && !staff) delete rec.text;
@@ -278,4 +283,4 @@ async function lgAgentShadowVerdict(db, key, v, now) {
 }
 
 module.exports = { SHADOW, HUMAN, AGENT_HUMAN_QUIET_MS, AGENT_CHAIN_MS, AGENT_CLASSIFY_WORST_MS, lgAgentShadowParse, lgAgentShadowRecord,
-                   lgAgentShadowProcess, lgAgentShadowPending, lgAgentShadowVerdict };
+                   lgAgentShadowProcess, lgAgentShadowPending, lgAgentShadowVerdict, lgAgentLinkVia, AGENT_SENDABLE_VIA };

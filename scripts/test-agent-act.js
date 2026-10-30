@@ -377,6 +377,33 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
       [rec(db, c1.key).route, Object.keys(outbox(db)).length], ['silent-human', 0]);
   }
 
+  /* ─── תיקון סופי 2: פיילוט = אותו קישור כמו השליחה (waGroups / waSenders) ─── */
+  {
+    // מקושר רק דרך רשימת Vercel (linkVia env) — לקוח 777 בפיילוט, ובכל זאת לא פועלים
+    let db = seed();
+    put(db, 'L1', R({ idMessage: 'L1', chatId: STRANGER, sender: '0549999999', linkVia: 'env', route: 'okev', intent: 'cancel', ref: 'מטבח' }));
+    let r = await run(db, 'L1');
+    check('F2 env-only link → not acted, not-linked, nothing queued, no conv',
+      [r.acted, rec(db, 'L1').actReason, Object.keys(outbox(db)).length, conv(db, STRANGER)], [false, 'not-linked', 0, undefined]);
+    check('F2 not-linked still records wouldAct', (rec(db, 'L1').wouldAct || []).length > 0, true);
+    // בלי linkVia (רשומה ישנה) → נבדק עכשיו: waSenders → פועלים
+    db = seed();
+    put(db, 'L2', R({ idMessage: 'L2', route: 'menu' }));
+    r = await run(db, 'L2');
+    check('F2 legacy record, chat in waSenders → acted', [r.acted, rec(db, 'L2').actReason], [true, null]);
+    // בלי linkVia, הצ'אט לא ב-waSenders → not-linked
+    db = seed();
+    put(db, 'L3', R({ idMessage: 'L3', chatId: STRANGER, sender: '0549999999', route: 'menu' }));
+    r = await run(db, 'L3');
+    check('F2 legacy record, chat not in waSenders → not-linked', [r.acted, rec(db, 'L3').actReason], [false, 'not-linked']);
+    // ביטול לא קורה דרך קישור env
+    db = seed();
+    put(db, 'L4', R({ idMessage: 'L4', chatId: STRANGER, sender: '0549999999', linkVia: 'env', route: 'okev', text: 'כן', timestamp: NOW }));
+    db._data.waMeta.agentConv = { [key(STRANGER)]: { await: 'confirm-cancel', orderId: 'o3', at: NOW - MIN } };
+    await run(db, 'L4');
+    check('F2 env-only "כן" → no cancel', [!!db._data.orders.o3, rec(db, 'L4').actReason], [true, 'not-linked']);
+  }
+
   /* ─── תיקון סופי 1: דדליין ב-act — הצעת מחיר מדולגת, השליחה מקבלת את הדדליין ─── */
   {
     check('F1 quote worst constant', act.AGENT_QUOTE_WORST_MS, 20000);

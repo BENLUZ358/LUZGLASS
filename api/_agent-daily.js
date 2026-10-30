@@ -27,6 +27,7 @@ const { lgWaSenderKey } = require('./_wa-recipient');
 
 const QUOTES = 'waMeta/agentQuotes';
 const CANCELS = 'waMeta/agentCancels';
+const OUTBOX = 'waMeta/agentOutbox';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STUCK_MS = 3 * 60 * 60 * 1000;     // בקשה שמחכה מעל 3 שעות
 const SHADOW_LIMIT = 40;
@@ -58,6 +59,8 @@ async function lgAgentDailySummary(db, now) {
   //  ⚠️ הצעות וביטולים: כל הפריטים הממתינים כרגע, לא רק 24 השעות האחרונות
   const quotes = _vals(await db.ref(QUOTES).once('value'));
   const cancels = _vals(await db.ref(CANCELS).once('value'));
+  //  תיקון סופי 2: הודעות שנחסמו בשליחה ב-24 השעות האחרונות (לפי updatedAt)
+  const blocked = _vals(await db.ref(OUTBOX).once('value')).filter(r => r.v.state === 'blocked' && (r.v.updatedAt || 0) >= since);
 
   const acted = shadow.filter(r => r.v.acted === true);
   const toShaul = acted.filter(r => (r.v.wouldAct || []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask')));
@@ -74,6 +77,7 @@ async function lgAgentDailySummary(db, now) {
     markedWrong: shadow.filter(r => r.v.verdict && r.v.verdict.ok === false).length,
     unlinked: shadow.filter(r => r.v.linked === false).length,
     quotesStuck: stuck.length,
+    blockedSends: blocked.length,
   };
   const num = r => '#' + r.key;
   const orderNum = r => String((r.v.order && r.v.order.orderNum) || r.key);
@@ -87,6 +91,7 @@ async function lgAgentDailySummary(db, now) {
     'סומנו ✗ בפאנל: ' + counts.markedWrong,
     'ממספרים לא מקושרים: ' + counts.unlinked,
     'הצעות מחיר תקועות (מעל 3 שעות): ' + counts.quotesStuck + _list(stuck.map(num)),
+    'נחסמו בשליחה: ' + counts.blockedSends,
   ].join('\n');
   return { counts, text };
 }

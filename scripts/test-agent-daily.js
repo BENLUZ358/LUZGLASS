@@ -59,13 +59,17 @@ const seed = () => fakeDb({ waMeta: {
   }
   /* ספירות */
   {
-    const s = await D.lgAgentDailySummary(seed(), NOW);
+    const sdb = seed();
+    sdb._data.waMeta.agentOutbox = {   // F2: חסומות ב-24 השעות האחרונות
+      b1: { state: 'blocked', updatedAt: NOW - H }, b2: { state: 'blocked', updatedAt: NOW - 2 * H },
+      b3: { state: 'blocked', updatedAt: NOW - 30 * H }, s1: { state: 'sent', updatedAt: NOW - H } };
+    const s = await D.lgAgentDailySummary(sdb, NOW);
     check('counts', s.counts, { incoming: 4, selfClosed: 1, toShaul: 1, quotesWaiting: 2, cancelsWaitingHs: 1,
-      markedWrong: 1, unlinked: 1, quotesStuck: 2 });
+      markedWrong: 1, unlinked: 1, quotesStuck: 2, blockedSends: 2 });
     check('text', s.text.split('\n'), [
       'סיכום סוכנים — 31.10.2026', 'הודעות שנכנסו: 4', 'נסגרו לבד: 1', 'הועברו לשאול: 1',
       'הצעות מחיר שמחכות לשאול: 2 (#7, #8)', 'ביטולים שמחכים לחשבשבת: 1 (L2001)', 'סומנו ✗ בפאנל: 1',
-      'ממספרים לא מקושרים: 1', 'הצעות מחיר תקועות (מעל 3 שעות): 2 (#8, #9)']);
+      'ממספרים לא מקושרים: 1', 'הצעות מחיר תקועות (מעל 3 שעות): 2 (#8, #9)', 'נחסמו בשליחה: 2']);
   }
   /* שליחה לצוות בלבד + בלי כפילות */
   {
