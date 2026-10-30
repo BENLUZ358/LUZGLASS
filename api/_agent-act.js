@@ -15,6 +15,8 @@
 //  ⚠️ שינוי מידה/סקיצה מועבר לשאול עם הפרטים (R3) — לא עריכה אוטומטית.
 //  ⚠️ הביטול עצמו — lgAgentCancel (משימה 3), למטה: ההזמנה יורדת מ-orders
 //     ונשמרת ב-waMeta/agentCancels; מה שכבר נשלח לחשבשבת מוצג ב"תיקון הזמנות".
+//  ⚠️ מחירון (משימה 6, _agent-quote.js): הודעת צוות (route 'staff') פועלת רק
+//     כשהיא "השב" לבקשת מחיר ממתינה — ואז הנמען הוא הלקוח של הבקשה.
 //  ⚠️ לא נרשם ללוג: טקסט ההודעה, טוקנים, מפתחות. רק e.name.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -25,6 +27,8 @@ const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT,
         lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText } = require('./_agent-okev');
 
 const { lgArchiveFind, lgArchiveActions, ARCHIVE_OK_TEXT } = require('./_agent-archive');
+const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
+        lgQuoteFindWaiting, lgQuoteAnswer, AGENT_QUOTES } = require('./_agent-quote');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -103,7 +107,7 @@ function _onConv(r, orders, c, now) {
 }
 
 // ── ניתוב רגיל לפי route של המרכזן. keep = ה-conv הנוכחי (נשאר אם לא הוחלף) ──
-function _route(r, orders, now, keep, archive) {
+function _route(r, orders, now, keep, archive, quote) {
   switch (r.route) {
     case 'okev': {
       const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
@@ -124,8 +128,16 @@ function _route(r, orders, now, keep, archive) {
       const a = lgArchiveActions(r, archive, now);
       return { actions: a.actions, conv: a.conv || keep };
     }
-    // מחירון — עד משימה 6 עובר לשאול
-    case 'shaul': case 'quote': return { actions: _handoff(r), conv: keep };
+    // מחירון (משימה 6): סקיצה → "קיבלנו" + בקשת מחיר לשאול (המספר וההודעה
+    //  נבנים ב-_act — רק כשמותר לשלוח). טקסט → p.quote מהשכבה הלא-טהורה:
+    //  הובן ויש מחיר לכל פריט → ההצעה; אחרת → שאול.
+    case 'quote': {
+      if (r.hasImage) return { actions: [_reply(QUOTE_HOLD_TEXT), { type: 'quote-ask', who: _who(r), files: [_forward(r).files[0]] }], conv: keep };
+      const pr = quote && quote.ok ? quote.priced : null;
+      if (pr && pr.lines.length && !pr.missing.length) return { actions: [_reply(lgQuoteText(pr))], conv: keep };
+      return { actions: _handoff(r), conv: keep };
+    }
+    case 'shaul': return { actions: _handoff(r), conv: keep };
     default: return { actions: [], conv: keep };   // kolet (הקליטה הקיימת), none, ignore
   }
 }
@@ -138,8 +150,16 @@ function lgAgentDecide(p) {
   const orders = (p && p.orders) || [];
   const now = Number(p && p.now) || Date.now();
   let c = conv && conv.await ? conv : null;
-  // אדם עונה עכשיו / הודעת צוות — שום פעולה, conv לא נוגעים
-  if (r.route === 'silent-human' || r.route === 'staff') return { actions: [], conv: c };
+  // אדם עונה עכשיו — שום פעולה, conv לא נוגעים
+  if (r.route === 'silent-human') return { actions: [], conv: c };
+  // הודעת צוות: רק "השב" של שאול לבקשת מחיר ממתינה (p.staffQuote, נמצאה ב-_act)
+  //  → התשובה שלו ללקוח. כל הודעה אחרת מהצוות — כלום (Review Focus 1).
+  if (r.route === 'staff') {
+    const sq = p && p.staffQuote;
+    const t = String(r.text || '').trim();
+    if (!sq || sq.state !== 'waiting' || !t) return { actions: [], conv: c };
+    return { actions: [{ type: 'quote-relay', n: sq.n, chat: sq.chat, customerId: sq.customerId, text: 'הצעת מחיר:\n' + t }], conv: c };
+  }
   if (c && !(now - Number(c.at || 0) <= CONV_TTL_MS)) {
     // Review Focus 2: "כן" אחרי יותר מ-30 דקות — לא מבטלים; שואלים מחדש
     if (r.linked && c.await === 'confirm-cancel' && _isYes(r.text)) {
@@ -157,7 +177,7 @@ function lgAgentDecide(p) {
     const h = _onConv(r, orders, c, now);
     if (h) return h;
   }
-  return _route(r, orders, now, c, p && p.archive);
+  return _route(r, orders, now, c, p && p.archive, p && p.quote);
 }
 
 // ─── ביצוע ──────────────────────────────────────────────────────────
@@ -308,16 +328,29 @@ async function _act(db, key, rec, recRef, env, now, o) {
     try { archive = await lgArchiveFind(db, { customerId: cid, ref: rec.ref, text: rec.text, orders }); }
     catch (e) { console.warn('agent-act: archive', e && e.name); archive = { kind: 'none' }; }
   }
-  const d = lgAgentDecide({ rec, orders, conv, now, archive });
+  // מחירון: טקסט → מודל + מחירון (כשל → שאול). "השב" של שאול → הבקשה הממתינה
+  let quote, staffQuote;
+  if (rec.route === 'quote' && rec.linked && cid && !rec.hasImage) {
+    try { quote = await lgQuoteForText(db, { customerId: cid, text: rec.text, env, fetcher: o.fetchImpl }); }
+    catch (e) { console.warn('agent-act: quote', e && e.name); quote = { ok: false, priced: null }; }
+  }
+  if (rec.route === 'staff' && rec.quotedId) {
+    try { staffQuote = await lgQuoteFindWaiting(db, rec.quotedId); }
+    catch (e) { console.warn('agent-act: quote-find', e && e.name); staffQuote = null; }
+  }
+  const d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote });
   const staff = lgAgentStaff(env);
+  const _pilot = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
 
   let why = '';
   if (!d.actions.length) why = 'no-action';
   else if (!_switchesOn(env)) why = 'switches-off';
+  // תשובת שאול — הנמען הוא הלקוח של הבקשה (לא השולח), ולכן הפיילוט שלו
+  else if (rec.route === 'staff') { if (!(await _pilot(staffQuote && staffQuote.customerId))) why = 'not-pilot'; }
   else if (rec.linked && !(cid && (await db.ref(PILOT + '/' + cid).once('value')).val() === true)) why = 'not-pilot';
   else if (!rec.linked && d.actions.some(a => a.type !== 'staff')) why = 'not-pilot';
   // "העברנו לשאול" בלי שאול מוגדר — עדיף לא לענות מאשר לשקר
-  else if (d.actions.some(a => a.type === 'staff' || a.type === 'cancel') && !staff.length) why = 'no-staff';
+  else if (d.actions.some(a => a.type === 'staff' || a.type === 'cancel' || a.type === 'quote-ask') && !staff.length) why = 'no-staff';
 
   if (why) {
     await recRef.update({ wouldAct: d.actions, acted: false, actReason: why });
@@ -326,9 +359,9 @@ async function _act(db, key, rec, recRef, env, now, o) {
     return { acted: false, actions: d.actions };
   }
 
-  const queued = [], cancels = [];
-  const enq = async (k, to, text, files, reason) => {
-    const q = await lgAgentEnqueue(db, { key: k, to, customerId: cid, text, files, reason });
+  const queued = [], cancels = [], quotes = [];
+  const enq = async (k, to, text, files, reason, forCid) => {
+    const q = await lgAgentEnqueue(db, { key: k, to, customerId: forCid != null ? forCid : cid, text, files, reason });
     if (q.queued) queued.push(q.key);
     return q.queued;
   };
@@ -338,6 +371,17 @@ async function _act(db, key, rec, recRef, env, now, o) {
     if (a.type === 'reply') { if (await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k; }
     else if (a.type === 'staff') await enq(k, staff[0], a.text, a.files || [], 'agent-staff');
     else if (a.type === 'files') await enq(k, chat, a.text || '', a.files || [], 'agent-files');
+    else if (a.type === 'quote-ask') {
+      // הבקשה נשמרת לפני התור: staffMessageId יתמלא מהתור אחרי שהטקסט נשלח
+      const n = await lgQuoteNext(db);
+      await db.ref(AGENT_QUOTES + '/' + n).set({ customerId: cid, chat, staffMessageId: null, outboxKey: lgWaInboundKey(k),
+                                                 recordKey: key, at: now, state: 'waiting' });
+      quotes.push(n);
+      await enq(k, staff[0], lgQuoteStaffText(n, a.who), a.files || [], 'agent-quote');
+    } else if (a.type === 'quote-relay') {
+      // פעם אחת: רק מי שסגר waiting → answered שולח. השליחה בודקת שוב קישור + פיילוט
+      if (await lgQuoteAnswer(db, a.n, rec.quotedId, key, now)) await enq(k, a.chat, a.text, [], 'agent-quote', a.customerId);
+    }
     else if (a.type === 'cancel') {
       const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now });
       cancels.push({ orderId: String(a.orderId), ok: !!res.ok, code: String(res.code || '') });
@@ -359,6 +403,10 @@ async function _act(db, key, rec, recRef, env, now, o) {
   if (queued.length) {
     try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, budgetMs: SEND_BUDGET_MS }); }
     catch (e) { console.warn('agent-act: send', e && e.name); }
+  }
+  // בקשת מחיר שנשלחה עכשיו — staffMessageId מיד (אחרת יתמלא כשתגיע תשובה)
+  for (const n of quotes) {
+    try { await lgQuoteSync(db, n); } catch (e) { console.warn('agent-act: quote-sync', e && e.name); }
   }
   return { acted: true, actions: d.actions };
 }
