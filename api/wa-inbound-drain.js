@@ -5,6 +5,13 @@
 //    { action:'retry', key }          "נסה שוב" על קליטה קיימת
 //    { action:'close', key, note }    "טופל ידנית" — סימון + audit
 //
+//    { action:'agent-verdict', key, ok, note }  סימון נכון/לא נכון על רשומת צל
+//                                     של סוכני הלקוחות (30/10; ללא channel — לא שייך לערוץ)
+//
+//  'drain' משלים גם רשומות צל תקועות (waMeta/agentShadow) — רק כש-
+//  AGENT_SHADOW_ENABLED === 'true', עד BATCH, בתוך אותו תקציב. התוצאה בשדה נפרד
+//  agentShadow:{processed,failed}; כשל שם לא משנה את שאר התשובה.
+//
 //  channel:'email' (20/10) — אותן שלוש פעולות על התור של המייל
 //  (emailInbound, api/_email-inbound.js). בלי channel — WhatsApp, כמו תמיד.
 //  קישור קבוצות נשאר של WhatsApp בלבד.
@@ -24,6 +31,7 @@
 
 const { lgWaInboundKey, lgWaInboundPending, lgWaInboundProcess,
         lgWaInboundRetry, lgWaInboundClose } = require('./_wa-inbound');
+const { lgAgentShadowPending, lgAgentShadowProcess, lgAgentShadowVerdict } = require('./_agent-shadow');
 const { lgEmailKey } = require('./_email-recipient');
 const { lgEmailInboundKey, lgEmailInboundPending, lgEmailInboundProcess,
         lgEmailInboundRetry, lgEmailInboundClose } = require('./_email-inbound');
@@ -85,7 +93,24 @@ async function handleAdmin(body, deps) {
       results.push({ key, ok: r.ok, claimed: r.claimed !== false, reason: r.ok ? '' : r.reason });
     }
     const remaining = (await ch.pending(deps.db, BATCH + 1, deps.now)).length;
-    return { ok: true, processed: results.filter(r => r.claimed).length, results, remaining };
+    const out = { ok: true, processed: results.filter(r => r.claimed).length, results, remaining };
+    // ─── רשומות צל של הסוכנים (30/10): אחרי הקליטות, אותו דדליין ───────────
+    //  ⚠️ כשל כאן לעולם לא משנה את השדות הקיימים — רק agentShadow.failed.
+    if (process.env.AGENT_SHADOW_ENABLED === 'true') {
+      const ag = { processed: 0, failed: 0 };
+      try {
+        const sKeys = await lgAgentShadowPending(deps.db, BATCH, deps.now);
+        for (const key of sKeys) {
+          if (Date.now() > deadline) break;
+          try {
+            const p = await lgAgentShadowProcess(deps.db, key, { now: deps.now, fetchImpl: deps.fetchImpl });
+            if (p.ok) ag.processed++; else ag.failed++;
+          } catch (_) { ag.failed++; }
+        }
+      } catch (_) { ag.failed++; }
+      out.agentShadow = ag;
+    }
+    return out;
   }
 
   if (action === 'retry' || action === 'close') {
@@ -97,6 +122,13 @@ async function handleAdmin(body, deps) {
     const p = await ch.process(deps.db, b.key, opts);
     return p.ok ? { ok: true, code: '', message: '', orderIds: p.orderIds }
                 : { ok: false, code: 'failed', message: p.reason };
+  }
+
+  // ─── סימון נכון/לא נכון על רשומת צל (30/10) ───────────────────────────
+  //  לא תלוי בערוץ — המפתח נבדק כמו בשאר הפעולות.
+  if (action === 'agent-verdict') {
+    if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה רשומה לא תקין' };
+    return lgAgentShadowVerdict(deps.db, b.key, { ok: b.ok, note: b.note, by: String(deps.by || '') }, deps.now);
   }
 
   // ─── קבוצות (בן, 06/10): קישור קבוצת WhatsApp ללקוח ───────────────────

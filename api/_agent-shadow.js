@@ -210,5 +210,22 @@ async function lgAgentShadowPending(db, limit, now) {
   return rows.slice(0, limit || 20).map(r => r.key);
 }
 
+// ─── סימון נכון/לא נכון (אדמין) ─────────────────────────────────────
+//  כותב verdict על הרשומה בלבד; רשומה שלא קיימת לא נוצרת.
+async function lgAgentShadowVerdict(db, key, v, now) {
+  const x = v || {};
+  if (typeof x.ok !== 'boolean') return { ok: false, code: 'bad-verdict', message: 'חסר סימון נכון/לא נכון' };
+  const verdict = { ok: x.ok, note: String(x.note || '').trim().slice(0, 300), by: String(x.by || ''), at: now || Date.now() };
+  const r = await db.ref(SHADOW + '/' + key).transaction(cur => {
+    if (cur === null) return null;      // null-first: אין רשומה — לא יוצרים
+    return { ...cur, verdict };
+  });
+  const cur = r.snapshot.val();
+  if (!cur || !cur.verdict || cur.verdict.at !== verdict.at || cur.verdict.by !== verdict.by) {
+    return { ok: false, code: 'missing', message: 'הרשומה לא נמצאה' };
+  }
+  return { ok: true, code: '', message: '' };
+}
+
 module.exports = { SHADOW, HUMAN, AGENT_HUMAN_QUIET_MS, lgAgentShadowParse, lgAgentShadowRecord,
-                   lgAgentShadowProcess, lgAgentShadowPending };
+                   lgAgentShadowProcess, lgAgentShadowPending, lgAgentShadowVerdict };
