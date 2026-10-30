@@ -107,12 +107,14 @@ const seed = () => fakeDb({ waMeta: {
     const spy = (t) => ({ ...provider() });
     const send = require(path.join(ROOT, 'api', '_agent-send.js'));
     const orig = send.lgAgentSendPending;
-    send.lgAgentSendPending = async (d, o) => { budgets.push(o.budgetMs); return { sent: 0, failed: 0 }; };
+    const deadlines = [], clocks = [];
+    send.lgAgentSendPending = async (d, o) => { budgets.push(o.budgetMs); deadlines.push(o.deadline); clocks.push(typeof o.clock); return { sent: 0, failed: 0 }; };
     delete require.cache[require.resolve(path.join(ROOT, 'api', '_agent-daily.js'))];
     const D2 = require(path.join(ROOT, 'api', '_agent-daily.js'));
     let t = 0;
     await D2.lgAgentDailyRun(req('sek'), { db: seed(), env: ENV, now: NOW, provider: provider(), clock: () => t });
-    check('send budget = 60 − 0 − 30', budgets[0], 30000);
+    check('send: no relative budget (F1 deadline instead)', budgets[0], undefined);
+    check('F1 send gets the run deadline (start + 50s) + clock', [deadlines[0], clocks[0]], [50000, 'function']);
     budgets.length = 0; t = 0;
     const clk = () => t; const c0 = clk;
     await D2.lgAgentDailyRun(req('sek'), { db: seed(), env: { ...ENV, AGENT_SUMMARY_TO: '' }, now: NOW, provider: provider(), clock: (() => { let n = 0; return () => (n++ === 0 ? 0 : 26000); })() });
@@ -126,6 +128,19 @@ const seed = () => fakeDb({ waMeta: {
       await D3.lgAgentDailyRun(req('sek'), { db, env: { ...ENV, AGENT_SUMMARY_TO: '' }, now: NOW, provider: provider(), clock: () => (n++ === 0 ? 0 : el) });
       check('shadow item at elapsed ' + el + ' → ' + want, db._data.waMeta.agentShadow.pend.state, want);
     }
+  }
+  /* תיקון סופי 1: רשומת צל בריצה היומית מקבלת את הדדליין (התחלה + 50ש׳) */
+  {
+    const sh = require(path.join(ROOT, 'api', '_agent-shadow.js'));
+    const origP = sh.lgAgentShadowProcess, seen = [];
+    sh.lgAgentShadowProcess = async (d, k, o) => { seen.push([o.deadline, typeof o.clock]); return { ok: false }; };
+    delete require.cache[require.resolve(path.join(ROOT, 'api', '_agent-daily.js'))];
+    const D4 = require(path.join(ROOT, 'api', '_agent-daily.js'));
+    const db = seed();
+    db._data.waMeta.agentShadow.pend = { createdAt: NOW - H, linked: false, staff: false, state: 'received', attempts: 0, chatId: '972500000000@c.us', sender: '0500000000' };
+    try { await D4.lgAgentDailyRun(req('sek'), { db, env: { ...ENV, AGENT_SUMMARY_TO: '' }, now: NOW, provider: provider(), clock: () => 1000 }); }
+    finally { sh.lgAgentShadowProcess = origP; }
+    check('F1 daily shadow item gets deadline + clock', seen[0], [1000 + 50000, 'function']);
   }
   /* vercel.json */
   {

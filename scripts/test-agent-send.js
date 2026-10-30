@@ -277,7 +277,69 @@ const run = (db, provider, env) => A.lgAgentSendPending(db, { provider, env: env
       global.fetch = async () => ({ status: 400, text: async () => JSON.stringify({ message: 'bad at /x/TOK-secret' }) });
       const e = await g.sendText({ to: '0501112222', text: 'x' });
       check('sendText failure redacts token', [e.ok, String(e.reason).includes('TOK-secret')], [false, false]);
+      // תיקון סופי 1: getState עם תקרה של 10ש׳
+      let stInit = null;
+      global.fetch = async (url, init) => { stInit = init; return { status: 200, text: async () => JSON.stringify({ stateInstance: 'authorized' }) }; };
+      const st = await g.getState();
+      check('F1 getState has an abort signal (timeout)', [st.state, !!(stInit && stInit.signal && typeof stInit.signal.aborted === 'boolean')], ['authorized', true]);
+      check('F1 getState timeout is 10s in source', /getStateInstance[\s\S]{0,300}AbortSignal\.timeout\(10000\)/.test(require('fs').readFileSync(path.join(ROOT, 'api', '_wa-provider.js'), 'utf8')), true);
     } finally { process.env = saved; global.fetch = savedFetch; }
+  }
+
+  /* ─── תיקון סופי 1: דדליין מוחלט, שעון מדומה ─────────────────────────── */
+  {
+    check('F1 constants', [A.PER_CALL_MS, A.PER_ITEM_WORST_MS, A.STATE_WORST_MS], [15000, 17000, 10000]);
+    check('F1 item worst: text = base, 3 files = 3×15 + 2×1.2 + 2, forwards by chat + text', [A.lgAgentItemWorstMs({ text: 'x' }),
+      A.lgAgentItemWorstMs({ files: [{ kind: 'invoice-copy' }, { kind: 'sketch' }, { kind: 'sketch' }] }),
+      A.lgAgentItemWorstMs({ text: 'x', files: [{ kind: 'forward', fromChat: 'a' }, { kind: 'forward', fromChat: 'a' }, { kind: 'forward', fromChat: 'b' }] })],
+      [17000, 49400, 47000]);
+    // שעון מדומה: כל שליחה "לוקחת" 15ש׳
+    const clockedProvider = (clk, stateMs) => { const p = fakeProvider(); const o = p.sendText; p.sendText = async f => { clk.t += 15000; return o(f); };
+      p.getStateCalls = 0; const g = p.getState; p.getState = async () => { p.getStateCalls++; clk.t += stateMs || 0; return g(); }; return p; };
+    {
+      const db = seed(), clk = { t: 1000 }, p = clockedProvider(clk);
+      await A.lgAgentEnqueue(db, { key: 'd1', to: '0501112222', text: 'a' });
+      await A.lgAgentEnqueue(db, { key: 'd2', to: '0501112222', text: 'b' });
+      // נשארו 29ש׳: מספיק ל-getState (10) + פריט (17). אחרי שליחה של 15ש׳ נשארים 14 < 17
+      const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, clock: () => clk.t, deadline: 1000 + 29000 });
+      check('F1 deadline: first sent, second not started (pending, attempts 0)', [r.sent, ob(db, 'd1').state, ob(db, 'd2').state, ob(db, 'd2').attempts], [1, 'sent', 'pending', 0]);
+    }
+    {
+      const db = seed(), clk = { t: 0 }, p = clockedProvider(clk);
+      await A.lgAgentEnqueue(db, { key: 'd3', to: '0501112222', text: 'a' });
+      const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, clock: () => clk.t, deadline: 26999 });
+      check('F1 < state+item left: getState not called, entry untouched', [p.getStateCalls, r.sent, ob(db, 'd3').state, ob(db, 'd3').claimedAt], [0, 0, 'pending', null]);
+    }
+    {
+      // פריט עם שלוש סקיצות (49.4ש׳) כשנשארו 40ש׳ → חוזר לתור בלי ניסיון
+      const db = seed(), clk = { t: 0 }, p = clockedProvider(clk);
+      await A.lgAgentEnqueue(db, { key: 'd4', to: GROUP, customerId: '888', text: 'מצורף',
+        files: [{ kind: 'sketch', orderId: 'o1' }, { kind: 'sketch', orderId: 'o1' }, { kind: 'sketch', orderId: 'o1' }] });
+      const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, clock: () => clk.t, deadline: 40000 });
+      check('F1 big item does not fit → released, not sent', [r.sent, p.fileSends.length, ob(db, 'd4').state, ob(db, 'd4').attempts], [0, 0, 'pending', 0]);
+    }
+    {
+      // החלון: המתנה מוגבלת ל"מה שנשאר − הפריט". חלון תפוס בעוד 8ש׳; getState לוקח 10, נשארים 17+5 → 5ש׳ המתנה מותרת → לא מחכים
+      const db = seed(), clk = { t: 0 }, p = clockedProvider(clk, 10000);
+      db._data.waMeta.sendSlot = { nextAllowedAt: Date.now() + 8000 };
+      await A.lgAgentEnqueue(db, { key: 'd5', to: '0501112222', text: 'a' });
+      const waits = [];
+      const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, clock: () => clk.t, deadline: 10000 + 17000 + 5000, sleep: async ms => { waits.push(ms); } });
+      check('F1 slot wait capped by deadline → released, not sent', [r.sent, waits.length, ob(db, 'd5').state, ob(db, 'd5').attempts], [0, 0, 'pending', 0]);
+      const db2 = seed(), clk2 = { t: 0 }, p2 = clockedProvider(clk2, 10000);
+      db2._data.waMeta.sendSlot = { nextAllowedAt: Date.now() + 8000 };
+      await A.lgAgentEnqueue(db2, { key: 'd6', to: '0501112222', text: 'a' });
+      const waits2 = [];
+      const r2 = await A.lgAgentSendPending(db2, { provider: p2, env: ENV, clock: () => clk2.t, deadline: 50000, sleep: async ms => { waits2.push(ms); } });
+      check('F1 slot wait within cap → waits, then sent', [r2.sent, waits2.length === 1 && waits2[0] > 7000 && waits2[0] <= 8000], [1, true]);
+    }
+    {
+      // budgetMs הישן עדיין עובד, והמוקדם מבין השניים קובע
+      const db = seed(), clk = { t: 0 }, p = clockedProvider(clk);
+      await A.lgAgentEnqueue(db, { key: 'd7', to: '0501112222', text: 'a' });
+      const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, clock: () => clk.t, deadline: 60000, budgetMs: 20000 });
+      check('F1 earlier of budget/deadline wins', [r.sent, ob(db, 'd7').state], [0, 'pending']);
+    }
   }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');

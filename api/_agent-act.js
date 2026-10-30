@@ -27,7 +27,7 @@
 
 const crypto = require('crypto');
 const { lgWaInboundKey } = require('./_wa-inbound');
-const { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
+const { AGENT_OUTBOX, PER_ITEM_WORST_MS, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
 const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
         lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText } = require('./_agent-okev');
 
@@ -39,8 +39,11 @@ const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
 const PILOT = 'waMeta/agentPilot';
 const AGENT_CANCELS = 'waMeta/agentCancels';
-// שליחה מיידית אחרי ההכנסה לתור — קצר, כדי לא לחרוג מ-maxDuration של ה-drain
-const SEND_BUDGET_MS = 15 * 1000;
+// תיקון סופי 1 — דדליין: השליחה המיידית אחרי ההכנסה לתור מקבלת את הדדליין
+// של נקודת הכניסה (webhook / drain / cron). בלי דדליין (קורא ישן) — 50ש׳ מעכשיו.
+const AGENT_CHAIN_MS = 50 * 1000;
+// חילוץ הצעת מחיר (מודל, עד 20ש׳) רק אם נשאר אחריו זמן לפריט שליחה; אחרת שאול
+const AGENT_QUOTE_WORST_MS = 20 * 1000;
 
 // ── קולט: סקיצה שנמחקה (משימה 7) ──
 const DELETED_ASK_TEXT = 'הסקיצה שמחקת כבר בטיפול אצלנו. לבטל אותה?';
@@ -333,8 +336,11 @@ async function lgAgentAct(db, key, opts) {
   // פעם אחת לרשומה (null-first: הקריאה הראשונה עם null מחזירה ערך)
   const cl = await db.ref(SHADOW + '/' + key + '/actAt').transaction(cur => (cur ? undefined : now));
   if (!cl.committed) return { acted: false, actions: rec.wouldAct || [] };
+  // דדליין אחד לכל השרשרת (תיקון סופי 1)
+  const clock = typeof o.clock === 'function' ? o.clock : Date.now;
+  const oo = { ...o, clock, deadline: o.deadline != null ? Number(o.deadline) : clock() + AGENT_CHAIN_MS };
   // ⚠️ מכאן — כל כשל נרשם ברשומה (actReason:'error'), לא נבלע בשקט
-  try { return await _act(db, key, rec, recRef, env, now, o); }
+  try { return await _act(db, key, rec, recRef, env, now, oo); }
   catch (e) {
     console.warn('agent-act:', e && e.name);
     try { await recRef.update({ acted: false, actReason: 'error', actError: String((e && e.name) || 'Error') }); }
@@ -368,10 +374,13 @@ async function _act(db, key, rec, recRef, env, now, o) {
     catch (e) { console.warn('agent-act: archive', e && e.name); archive = { kind: 'none' }; }
   }
   // מחירון: טקסט → מודל + מחירון (כשל → שאול). "השב" של שאול → הבקשה הממתינה
-  let quote, staffQuote;
+  let quote, staffQuote, quoteSkipped = false;
   if (rec.route === 'quote' && rec.linked && cid && !rec.hasImage) {
-    try { quote = await lgQuoteForText(db, { customerId: cid, text: rec.text, env, fetcher: o.fetchImpl }); }
-    catch (e) { console.warn('agent-act: quote', e && e.name); quote = { ok: false, priced: null }; }
+    if (o.deadline - o.clock() < AGENT_QUOTE_WORST_MS + PER_ITEM_WORST_MS) { quoteSkipped = true; quote = { ok: false, priced: null }; }
+    else {
+      try { quote = await lgQuoteForText(db, { customerId: cid, text: rec.text, env, fetcher: o.fetchImpl }); }
+      catch (e) { console.warn('agent-act: quote', e && e.name); quote = { ok: false, priced: null }; }
+    }
   }
   if (rec.route === 'staff' && rec.quotedId) {
     try { staffQuote = await lgQuoteFindWaiting(db, rec.quotedId); }
@@ -379,7 +388,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   }
   const d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote });
   // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
-  const qUsage = quote ? { quoteUsage: quote.usage || null } : {};
+  const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null } : {};
   const staff = lgAgentStaff(env);
   const _pilot = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
 
@@ -454,7 +463,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actQueued: queued, actCancels: cancels, ...qUsage });
 
   if (queued.length) {
-    try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, budgetMs: SEND_BUDGET_MS }); }
+    try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, deadline: o.deadline, clock: o.clock }); }
     catch (e) { console.warn('agent-act: send', e && e.name); }
   }
   // בקשת מחיר שנשלחה עכשיו — staffMessageId מיד (אחרת יתמלא כשתגיע תשובה)
@@ -464,5 +473,5 @@ async function _act(db, key, rec, recRef, env, now, o) {
   return { acted: true, actions: d.actions };
 }
 
-module.exports = { CONV, CONV_TTL_MS, AGENT_CANCELS, DELETED_ASK_TEXT, DELETED_PROD_TEXT,
+module.exports = { CONV, CONV_TTL_MS, AGENT_CANCELS, AGENT_QUOTE_WORST_MS, DELETED_ASK_TEXT, DELETED_PROD_TEXT,
                    lgAgentDecide, lgAgentAct, lgAgentCancel };

@@ -377,6 +377,34 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
       [rec(db, c1.key).route, Object.keys(outbox(db)).length], ['silent-human', 0]);
   }
 
+  /* ─── תיקון סופי 1: דדליין ב-act — הצעת מחיר מדולגת, השליחה מקבלת את הדדליין ─── */
+  {
+    check('F1 quote worst constant', act.AGENT_QUOTE_WORST_MS, 20000);
+    const calls = [];
+    const spy = async (d, o) => { calls.push({ deadline: o.deadline, clock: typeof o.clock }); return { sent: 0 }; };
+    const qModel = { n: 0, fetchImpl: async () => { qModel.n++; return { ok: true, status: 200, json: async () => ({ status: 'completed', usage: null,
+      output: [{ content: [{ type: 'output_text', text: JSON.stringify({ ok: true, items: [{ sku: 'S1', w: 100, h: 100, qty: 1, holes: 0, cutouts: 0 }] }) }] }] }) }; } };
+    const qSeed = () => { const db = seed(); db._data.skuCatalog = { S1: { name: 'זכוכית 4', glass: 'שקוף', mm: 4 } };
+      db._data.prices = { global: { S1: 100 } }; return db; };
+    const t = 9000000, clock = () => t;
+    // נשארו 36ש׳ < 20 (מודל) + 17 (פריט) → בלי מודל → שאול
+    let db = qSeed();
+    put(db, 'Q1', R({ idMessage: 'Q1', route: 'quote', intent: 'quote', text: 'כמה עולה זכוכית 4 מ"מ 100 על 100?', timestamp: NOW }));
+    await act.lgAgentAct(db, 'Q1', { env: ON, now: NOW, sendPending: spy, fetchImpl: qModel.fetchImpl, clock, deadline: t + 36000 });
+    check('F1 quote skipped near deadline: no model, handoff to Shaul, marked',
+      [qModel.n, rec(db, 'Q1').quoteSkipped, (rec(db, 'Q1').wouldAct || []).map(a => a.type)], [0, 'deadline', ['staff', 'reply']]);
+    check('F1 act hands deadline + clock to send', calls[0], { deadline: t + 36000, clock: 'function' });
+    db = qSeed(); calls.length = 0;
+    put(db, 'Q2', R({ idMessage: 'Q2', route: 'quote', intent: 'quote', text: 'כמה עולה זכוכית 4 מ"מ 100 על 100?', timestamp: NOW }));
+    await act.lgAgentAct(db, 'Q2', { env: ON, now: NOW, sendPending: spy, fetchImpl: qModel.fetchImpl, clock, deadline: t + 37000 });
+    check('F1 quote with enough time: model called, priced reply', [qModel.n, rec(db, 'Q2').quoteSkipped, (rec(db, 'Q2').wouldAct || []).map(a => a.type)], [1, undefined, ['reply']]);
+    // בלי דדליין → 50ש׳ מעכשיו
+    db = seed(); calls.length = 0;
+    put(db, 'Q3', R({ idMessage: 'Q3', route: 'menu', text: 'היי', timestamp: NOW }));
+    await act.lgAgentAct(db, 'Q3', { env: ON, now: NOW, sendPending: spy, clock });
+    check('F1 act without deadline → clock + 50s', calls[0] && calls[0].deadline, t + 50000);
+  }
+
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -80,6 +80,22 @@ const seed = shadow => fakeDb({
     check('4c elapsed ' + el + 'ms → shadow ' + want, db._data.waMeta.agentShadow.A1.state, want);
   }
 
+  // 4d. תיקון סופי 1: רשומת הצל מקבלת את הדדליין של ה-drain (התחלה + 50ש׳)
+  {
+    db = seed({ A1: stuck('A1') });
+    const seen = [];
+    const origP = sh.lgAgentShadowProcess;
+    const realNow = Date.now, t0 = realNow();
+    Date.now = () => t0;
+    sh.lgAgentShadowProcess = async (d, k, o) => { seen.push(o.deadline); return { ok: true }; };
+    const DP = path.join(__dirname, '..', 'api', 'wa-inbound-drain.js');
+    delete require.cache[require.resolve(DP)];
+    const adm2 = require(DP);
+    try { await adm2.handleAdmin({ action: 'drain' }, { db, by: '052', now: NOW, ...model() }); }
+    finally { Date.now = realNow; sh.lgAgentShadowProcess = origP; delete require.cache[require.resolve(DP)]; }
+    check('4d F1: shadow process gets drain deadline', seen, [t0 + 50000]);
+  }
+
   // 5. agent-verdict
   db = seed({ A1: stuck('A1', { state: 'done' }) });
   const v = b => adm.handleAdmin({ action: 'agent-verdict', ...b }, { db, by: '0520000000', now: NOW + 5 });
@@ -123,7 +139,9 @@ const seed = shadow => fakeDb({
       Date.now = () => { if (first) { first = false; return t0; } return t0 + elapsed; };
       try { return await adm.handleAdmin({ action: 'drain' }, { db: seed({}), by: '052', now: NOW, ...model() }); } finally { Date.now = realNow; } };
     let rr = await run(5 * 1000);   // נשארו 55 שניות → תקציב 25
-    check('8a enough time: send called with budget = remaining − 30s', [calls.length, calls[0] && calls[0].budgetMs], [1, 25000]);
+    // F1: הדדליין המוחלט מחליף את "תקציב = מה שנשאר − 30ש׳" (שהיה משאיר 25ש׳ — פחות מ-getState + פריט)
+    check('8a enough time: send called once, no relative budget', [calls.length, calls[0] && calls[0].budgetMs], [1, undefined]);
+    check('8a2 F1: send gets the drain deadline (start + 50s)', calls[0] && calls[0].deadline, t0 + 50000);
     check('8b counts under agentShadow.sent', rr.agentShadow.sent, { sent: 2, failed: 1, blocked: 0, skipped: 0, state: null });
     rr = await run(26 * 1000);       // נשארו 34 → פחות מ-35, לא קוראים
     check('8c < 35s left: send not called', [calls.length, rr.agentShadow.sent], [0, undefined]);

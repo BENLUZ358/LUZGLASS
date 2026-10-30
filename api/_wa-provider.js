@@ -292,7 +292,8 @@ function greenProvider() {
       const url = 'https://api.green-api.com/waInstance' + idInstance +
                   '/getStateInstance/' + token;
       try {
-        const r = await fetch(url, { method: 'GET' });
+        //  ⚠️ תקרה: בדיקת המצב היא חלק מהדדליין של השליחה (תיקון סופי 1)
+        const r = await fetch(url, { method: 'GET', signal: AbortSignal.timeout(10000) });
         const raw = await r.text();
         let parsed = null;
         try { parsed = JSON.parse(raw); } catch (_) { /* לא JSON */ }

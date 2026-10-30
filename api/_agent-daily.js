@@ -31,11 +31,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const STUCK_MS = 3 * 60 * 60 * 1000;     // בקשה שמחכה מעל 3 שעות
 const SHADOW_LIMIT = 40;
 //  R14: נמדד מול מגבלת 60ש׳ של הפונקציה, מתחילת הריצה. פריט צל (סיווג 20ש׳ + הצעה 20ש׳ + שליחה)
-//  מתחיל רק אם עברו ≤10ש׳; שליחה מתחילה רק אם נשארו ≥35ש׳, ותקציבה = מה שנשאר פחות 30ש׳.
+//  מתחיל רק אם עברו ≤10ש׳; שליחה מתחילה רק אם נשארו ≥35ש׳. הגבול — הדדליין המוחלט (תיקון סופי 1).
 const FN_LIMIT_MS = 60 * 1000;
 const SHADOW_MAX_ELAPSED_MS = 10 * 1000;
 const SEND_MIN_LEFT_MS = 35 * 1000;
-const SEND_MARGIN_MS = 30 * 1000;
+//  תיקון סופי 1: דדליין מוחלט אחד לכל עבודת הסוכן בריצה (צל → act → שליחה), 50ש׳ מההתחלה
+const CHAIN_MS = 50 * 1000;
 
 const _vals = snap => { const out = []; if (snap) snap.forEach(ch => { out.push({ key: ch.key, v: ch.val() || {} }); }); return out; };
 const _list = a => a.length ? ' (' + a.join(', ') + ')' : '';
@@ -102,13 +103,14 @@ async function lgAgentDailyRun(req, deps) {
   const now = deps.now || Date.now();
   const clock = deps.clock || Date.now;
   const t0 = clock();
+  const deadline = t0 + CHAIN_MS;
   const body = { ok: true, sent: 0, failed: 0, shadowProcessed: 0, summary: null };
   const addSend = r => { if (r) { body.sent += r.sent || 0; body.failed += r.failed || 0; } };
-  //  שליחה עם מה שנשאר מהתקציב (פחות מרווח)
+  //  שליחה עד הדדליין המוחלט (R14: מתחילים רק אם נשארו ≥35ש׳)
   const send = async () => {
     const left = FN_LIMIT_MS - (clock() - t0);
     if (left < SEND_MIN_LEFT_MS) return;
-    try { addSend(await lgAgentSendPending(db, { env, now: deps.now, provider: deps.provider, budgetMs: Math.max(1, left - SEND_MARGIN_MS) })); }
+    try { addSend(await lgAgentSendPending(db, { env, now: deps.now, provider: deps.provider, deadline, clock })); }
     catch (e) { body.failed++; console.warn('agent-daily: send', e && e.name); }
   };
 
@@ -140,7 +142,7 @@ async function lgAgentDailyRun(req, deps) {
       for (const key of keys) {
         if (clock() - t0 > SHADOW_MAX_ELAPSED_MS) break;
         try {
-          const p = await lgAgentShadowProcess(db, key, { now, env, fetchImpl: deps.fetchImpl, provider: deps.provider });
+          const p = await lgAgentShadowProcess(db, key, { now, env, fetchImpl: deps.fetchImpl, provider: deps.provider, deadline, clock });
           if (p.ok) body.shadowProcessed++; else body.failed++;
         } catch (e) { body.failed++; }
       }

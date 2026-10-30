@@ -30,6 +30,24 @@ const AGENT_OUTBOX = 'waMeta/agentOutbox';
 const PILOT = 'waMeta/agentPilot';
 const BUDGET_MS = 45 * 1000;          // מתחת ל-maxDuration 60, כמו ב-drain
 const SLOT_MAX_WAIT_MS = 15 * 1000;
+//  תיקון סופי 1 — דדליין מוחלט (ms epoch) מנקודת הכניסה. פריט מתחיל רק אם
+//  נשאר לו המקרה הגרוע: כל קריאה לספק עד 15ש׳ (AbortSignal בספק), ועוד 2ש׳
+//  לבדיקות ב-DB. getState עד 10ש׳ — נבדק לפני שמתחילים בכלל.
+const PER_CALL_MS = 15 * 1000;
+const PER_ITEM_WORST_MS = PER_CALL_MS + 2 * 1000;
+const STATE_WORST_MS = 10 * 1000;
+const FILE_GAP_MS = 1200;             // המרווח בין קבצים ב-sendFiles
+
+//  המקרה הגרוע של פריט אחד: העברה לכל צ'אט מקור, העלאה לכל קובץ (+מרווחים)
+//  או טקסט, ועוד הבדיקות. לא פחות מ-PER_ITEM_WORST_MS.
+function lgAgentItemWorstMs(entry) {
+  const files = (entry && Array.isArray(entry.files)) ? entry.files.filter(Boolean) : [];
+  const fwdChats = new Set(files.filter(f => f.kind === 'forward').map(f => String(f.fromChat || ''))).size;
+  const media = files.filter(f => f.kind !== 'forward').length;
+  const tail = media ? media * PER_CALL_MS + (media - 1) * FILE_GAP_MS
+    : (String((entry && entry.text) || '').trim() ? PER_CALL_MS : 0);
+  return Math.max(PER_ITEM_WORST_MS, fwdChats * PER_CALL_MS + tail + 2 * 1000);
+}
 
 //  אותו ניקוי מפתח כמו lgWaInboundKey (לא מיובא — _wa-inbound כבד ולא נחוץ כאן)
 const _key = id => String(id || '').replace(/[.#$[\]/]/g, '_');
@@ -175,17 +193,23 @@ async function _block(db, key, why) {
   await db.ref(AGENT_OUTBOX + '/' + key).update({ state: 'blocked', claimedAt: null, lastError: String(why).slice(0, 300), updatedAt: Date.now() });
 }
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const _sleep = ms => new Promise(r => setTimeout(r, ms));
 
 //  { sent, failed, blocked, skipped, state }
+//  opts.deadline — ms epoch מנקודת הכניסה (webhook / drain / cron); opts.budgetMs —
+//  הצורה הישנה (מעכשיו). שניהם → המוקדם. opts.clock / opts.sleep — לבדיקות.
 async function lgAgentSendPending(db, opts) {
   const o = opts || {};
   const env = o.env || process.env;
   const provider = o.provider || lgWaProvider();
-  const started = o.now || Date.now();
-  const budget = o.budgetMs != null ? o.budgetMs : BUDGET_MS;   // 0 הוא 0, לא ברירת מחדל
+  const clock = typeof o.clock === 'function' ? o.clock : Date.now;
+  const sleep = typeof o.sleep === 'function' ? o.sleep : _sleep;
+  const started = clock();
+  const budget = o.budgetMs != null ? o.budgetMs : (o.deadline != null ? Infinity : BUDGET_MS);   // 0 הוא 0, לא ברירת מחדל
   const res = { sent: 0, failed: 0, blocked: 0, skipped: 0, state: null };
   if (budget <= 0) return res;                                   // אין תקציב — לא נוגעים בתור
+  const deadline = Math.min(o.deadline != null ? Number(o.deadline) || 0 : Infinity, started + budget);
+  const left = () => deadline - clock();
   const by = 'agent-send';
 
   const keys = await lgWaPending(db, 50, AGENT_OUTBOX);
@@ -205,6 +229,8 @@ async function lgAgentSendPending(db, opts) {
 
   if (!provider.configured) { res.state = 'not-configured'; return res; }
   //  ⚠️ לפני הכל — מנותק: לא נוגעים ברשומות, אין ניסיון שנספר
+  //  ⚠️ אין זמן ל-getState ולפריט אחד לפחות — לא מתחילים (הרשומות לא נתפסות)
+  if (left() < (provider.checksState ? STATE_WORST_MS : 0) + PER_ITEM_WORST_MS) return res;
   if (provider.checksState) {
     const st = await provider.getState();
     res.state = st.state;
@@ -215,7 +241,8 @@ async function lgAgentSendPending(db, opts) {
   let processed = 0;
   for (const key of keys) {
     if (processed >= (provider.maxPerRun || 10)) break;
-    if (Date.now() - started > budget) break;
+    //  פריט מתחיל רק אם נשאר לו המקרה הגרוע (תיקון סופי 1)
+    if (left() < PER_ITEM_WORST_MS) break;
 
     //  ⚠️ תפיסה ובדיקות **לפני** החלון (תיקון סקירה): החלון משותף להודעות
     //  הלקוחות הקיימות, ורשומה שנחסמת לא צריכה לשרוף gap של 10 שניות.
@@ -243,8 +270,14 @@ async function lgAgentSendPending(db, opts) {
     }
     if (!loaded.ok) { await _block(db, key, loaded.reason); res.blocked++; continue; }
 
+    //  הפריט הזה (כמה קבצים / העברות) לא נכנס במה שנשאר → חוזר לתור בלי ניסיון
+    const worst = lgAgentItemWorstMs(entry);
+    if (left() < worst) { await lgWaRelease(db, key, 'אין מספיק זמן בריצה הזו', AGENT_OUTBOX); res.skipped++; continue; }
+
     if (provider.globalSlot) {
-      const slot = await lgWaReserveSlot(db, provider.nextGap(), SLOT_MAX_WAIT_MS);
+      //  ההמתנה לחלון — לכל היותר מה שנשאר אחרי המקרה הגרוע של השליחה
+      const maxWait = Math.min(SLOT_MAX_WAIT_MS, left() - worst);
+      const slot = await lgWaReserveSlot(db, provider.nextGap(), maxWait);
       //  העתיד הקרוב תפוס → חוזרת לתור בלי לספור ניסיון, והסבב נעצר
       if (!slot.ok) { await lgWaRelease(db, key, 'חלון השליחה תפוס', AGENT_OUTBOX); res.skipped++; break; }
       if (slot.waitMs) await sleep(slot.waitMs);
@@ -268,10 +301,15 @@ async function lgAgentSendPending(db, opts) {
     processed++;
     if (out.ok) res.sent++; else res.failed++;
 
-    if (!provider.globalSlot && processed < (provider.maxPerRun || 10)) await sleep(provider.nextGap());
+    if (!provider.globalSlot && processed < (provider.maxPerRun || 10)) {
+      const gap = provider.nextGap();
+      if (left() < gap + PER_ITEM_WORST_MS) break;   // אחרי ההמתנה לא יישאר זמן לפריט
+      await sleep(gap);
+    }
   }
   return res;
 }
 
-module.exports = { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending,
+module.exports = { AGENT_OUTBOX, PER_CALL_MS, PER_ITEM_WORST_MS, STATE_WORST_MS, lgAgentItemWorstMs,
+                   lgAgentStaff, lgAgentEnqueue, lgAgentSendPending,
                    lgAgentChatOwnedBy: _chatOwnedBy };   // גם לביטול (_agent-act)

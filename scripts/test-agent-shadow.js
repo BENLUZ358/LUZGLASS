@@ -211,6 +211,34 @@ const shadowCount = db => Object.keys((db._data.waMeta || {}).agentShadow || {})
     check('ignored webhook → null', await sh.lgAgentShadowRecord(db, { typeWebhook: 'stateInstanceChanged' }, NOW), null);
   }
 
+  /* ─── תיקון סופי 1: דדליין — סיווג מדולג כשאין זמן, הדדליין עובר ל-act ─── */
+  {
+    const actMod = require(path.join(__dirname, '..', 'api', '_agent-act.js'));
+    const origAct = actMod.lgAgentAct;
+    const seen = [];
+    actMod.lgAgentAct = async (d, k, o) => { seen.push({ deadline: o.deadline, clock: typeof o.clock }); return { acted: false, actions: [] }; };
+    try {
+      check('F1 classify worst constant', sh.AGENT_CLASSIFY_WORST_MS, 20000);
+      const t = 5000000, clock = () => t;
+      // נשארו 36ש׳ < 20 (סיווג) + 17 (פריט שליחה) → בלי מודל, unclear → שאול
+      let db = seed(), m = model('status', 'כהן');
+      let r = await sh.lgAgentShadowRecord(db, payload('DL1', textMd('מה עם כהן?')), NOW);
+      await sh.lgAgentShadowProcess(db, r.key, { now: NOW + 1, fetchImpl: m.fetchImpl, env: ENV, clock, deadline: t + 36000 });
+      check('F1 little time left: model not called, unclear → shaul, marked', [m.calls, rec(db, r.key).intent, rec(db, r.key).route, rec(db, r.key).classifySkipped],
+        [0, 'unclear', 'shaul', 'deadline']);
+      check('F1 deadline + clock handed to act', seen[0], { deadline: t + 36000, clock: 'function' });
+      db = seed(); m = model('status', 'כהן');
+      r = await sh.lgAgentShadowRecord(db, payload('DL2', textMd('מה עם כהן?')), NOW);
+      await sh.lgAgentShadowProcess(db, r.key, { now: NOW + 1, fetchImpl: m.fetchImpl, env: ENV, clock, deadline: t + 37000 });
+      check('F1 enough time: model called', [m.calls, rec(db, r.key).intent, rec(db, r.key).classifySkipped], [1, 'status', undefined]);
+      // בלי דדליין (קורא ישן) → 50ש׳ מעכשיו
+      db = seed(); m = model('thanks'); seen.length = 0;
+      r = await sh.lgAgentShadowRecord(db, payload('DL3', textMd('תודה')), NOW);
+      await sh.lgAgentShadowProcess(db, r.key, { now: NOW + 1, fetchImpl: m.fetchImpl, env: ENV, clock });
+      check('F1 no deadline → clock + 50s', seen[0].deadline, t + 50000);
+    } finally { actMod.lgAgentAct = origAct; }
+  }
+
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

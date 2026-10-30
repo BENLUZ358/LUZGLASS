@@ -24,12 +24,18 @@ const { lgWaSenderLink, lgWaSenderKey, lgClientFromWaSender } = require('./_wa-r
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey } = require('./_wa-inbound');
 
+// תיקון סופי 1: שרשרת הסוכן להודעה אחת (צל → act → שליחה) נגמרת עד 50ש׳
+// מתחילת ה-webhook — מתחת ל-maxDuration 60 גם כש-waitUntil ממשיך אחרי התשובה.
+const AGENT_WEBHOOK_CHAIN_MS = 50 * 1000;
+
 //  הסוד נבדק ב-_hook-token.js — משותף עם email-inbound. שם גם ההסבר למה
 //  "Bearer ", רווחים וסימני כיוון בלתי נראים לא נחשבים חלק מהסוד (15/10).
 
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
 //  deps: { db, waitUntil, fetchImpl?, now? }. מחזיר { status, body }.
 async function handleInbound(req, deps) {
+  // תחילת ה-webhook — לפני כל await (הדדליין של הסוכן נמדד מכאן)
+  deps = { ...deps, startedAt: (typeof deps.clock === 'function' ? deps.clock : Date.now)() };
   if (req.method !== 'POST') return { status: 405, body: { error: 'method not allowed' } };
   const headers = req.headers || {};
   if (!lgHookTokenOk(headers.authorization || headers.Authorization, process.env.GREENAPI_WEBHOOK_TOKEN, 'wa-inbound')) return { status: 401, body: { error: 'unauthorized' } };
@@ -53,10 +59,13 @@ async function handleCustomerInbound(body, deps) {
   //    של הסוכן. רק בדיקת הדגל נשארת כאן, סינכרונית.
   if (process.env.AGENT_SHADOW_ENABLED === 'true') {
     try {
+      // סינכרוני: בלי await חדש בדרך התשובה
+      const clock = typeof deps.clock === 'function' ? deps.clock : Date.now;
+      const deadline = (deps.startedAt != null ? deps.startedAt : clock()) + AGENT_WEBHOOK_CHAIN_MS;
       deps.waitUntil(Promise.resolve().then(async () => {
         const sh = require('./_agent-shadow');
         const rec = await sh.lgAgentShadowRecord(deps.db, body, deps.now);
-        if (rec && rec.created) await sh.lgAgentShadowProcess(deps.db, rec.key, { now: deps.now, fetchImpl: deps.fetchImpl });
+        if (rec && rec.created) await sh.lgAgentShadowProcess(deps.db, rec.key, { now: deps.now, fetchImpl: deps.fetchImpl, deadline, clock });
       }).catch(e => console.warn('wa-inbound: agent shadow', e && e.name)));
     } catch (e) { console.warn('wa-inbound: agent shadow', e && e.name); }
   }

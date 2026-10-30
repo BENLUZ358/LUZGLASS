@@ -26,7 +26,7 @@ const { lgWaInboundAllowed } = require('./_env');
 const { lgInboxStillMine } = require('./_inbox-common');
 const { lgOkevFind, lgOkevReply, lgOkevRoute, AGENT_MENU_TEXT } = require('./_agent-okev');
 const { lgAgentClassify } = require('./_agent-classify');
-const { lgAgentStaff } = require('./_agent-send');
+const { lgAgentStaff, PER_ITEM_WORST_MS } = require('./_agent-send');
 
 const SHADOW = 'waMeta/agentShadow';
 const HUMAN = 'waMeta/agentHuman';
@@ -37,6 +37,11 @@ const AGENT_HUMAN_QUIET_MS = 2 * 60 * 60 * 1000;
 const CLAIM_TTL_MS = 2 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
 const TEXT_MAX = 4000;
+// תיקון סופי 1 — דדליין: שרשרת אחת (צל → act → שליחה) מסתיימת עד 50ש׳ מנקודת
+// הכניסה. סיווג (עד 20ש׳, AbortSignal ב-_agent-classify) רץ רק אם נשאר אחריו
+// זמן לפריט שליחה אחד; אחרת unclear → שאול, בלי קריאה למודל.
+const AGENT_CHAIN_MS = 50 * 1000;
+const AGENT_CLASSIFY_WORST_MS = 20 * 1000;
 
 const _isGroup = id => /^\d+(-\d+)?@g\.us$/.test(id);
 
@@ -169,6 +174,8 @@ async function lgAgentShadowProcess(db, key, opts) {
   const o = opts || {};
   const now = o.now || Date.now();
   const env = o.env || process.env;
+  const clock = typeof o.clock === 'function' ? o.clock : Date.now;
+  const deadline = o.deadline != null ? Number(o.deadline) : clock() + AGENT_CHAIN_MS;
   const c = await _claim(db, key, now);
   if (!c.claimed) return { ok: false, reason: c.reason };
   const e = c.entry;
@@ -191,11 +198,17 @@ async function lgAgentShadowProcess(db, key, opts) {
         // נמחקה / תגובה / סוג לא מוכר — אין מה לסווג
         out.route = 'none';
       } else {
-        const cls = await lgAgentClassify({ text: e.text, hasImage: !!e.hasImage,
-          model: env.AGENT_MODEL, key: env.OPENAI_API_KEY, fetcher: o.fetchImpl });
+        // אין זמן לסיווג + שליחה → unclear (שאול), בלי מודל. תמונה בלי טקסט
+        // לא קוראת למודל בכלל — לא מדלגים עליה.
+        const needsModel = !!String(e.text || '').trim();
+        const skip = needsModel && deadline - clock() < AGENT_CLASSIFY_WORST_MS + PER_ITEM_WORST_MS;
+        const cls = skip ? { intent: 'unclear', ref: '', usage: null }
+          : await lgAgentClassify({ text: e.text, hasImage: !!e.hasImage,
+              model: env.AGENT_MODEL, key: env.OPENAI_API_KEY, fetcher: o.fetchImpl });
+        if (skip) out.classifySkipped = 'deadline';
         out.intent = cls.intent; out.ref = cls.ref || ''; out.usage = cls.usage || null;
         // המודל נקרא רק כשיש טקסט (תמונה בלבד = order בלי קריאה)
-        out.model = String(e.text || '').trim() ? String(env.AGENT_MODEL || '') : '';
+        out.model = needsModel && !skip ? String(env.AGENT_MODEL || '') : '';
         const humanQuiet = await _humanQuiet(db, e, now);
         out.route = lgOkevRoute({ intent: out.intent, isGroup: !!e.groupId, linked: true, humanQuiet });
         if (out.route === 'okev') {
@@ -217,7 +230,7 @@ async function lgAgentShadowProcess(db, key, opts) {
     const touch = { ...out, state: 'done', doneAt: now, claimedAt: null, claimToken: null, lastError: null };
     if (!await lgInboxStillMine(db, SHADOW, key, e.claimToken, now, touch)) return { ok: false, reason: 'lost-claim' };
     // שלב 2: פעולה בפועל. ⚠️ כשל כאן לעולם לא מכשיל את רשומת הצל (כבר done)
-    try { await require('./_agent-act').lgAgentAct(db, key, { env, now, fetchImpl: o.fetchImpl, provider: o.provider }); }
+    try { await require('./_agent-act').lgAgentAct(db, key, { env, now, fetchImpl: o.fetchImpl, provider: o.provider, deadline, clock }); }
     catch (err) { console.warn('agent-shadow: act', err && err.name); }
     return { ok: true, reason: '' };
   } catch (err) {
@@ -264,5 +277,5 @@ async function lgAgentShadowVerdict(db, key, v, now) {
   return { ok: true, code: '', message: '' };
 }
 
-module.exports = { SHADOW, HUMAN, AGENT_HUMAN_QUIET_MS, lgAgentShadowParse, lgAgentShadowRecord,
+module.exports = { SHADOW, HUMAN, AGENT_HUMAN_QUIET_MS, AGENT_CHAIN_MS, AGENT_CLASSIFY_WORST_MS, lgAgentShadowParse, lgAgentShadowRecord,
                    lgAgentShadowProcess, lgAgentShadowPending, lgAgentShadowVerdict };

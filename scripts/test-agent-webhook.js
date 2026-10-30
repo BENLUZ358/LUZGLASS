@@ -158,6 +158,25 @@ const val = async (db, p) => (await db.ref(p).once('value')).val();
       check('6 process rejects: body identical', r, base.r);
     } finally { shadow.lgAgentShadowProcess = orig; }
   }
+  // 7. תיקון סופי 1: הדדליין = תחילת ה-webhook + 50ש׳, והשעון עובר הלאה
+  {
+    const orig = shadow.lgAgentShadowProcess;
+    const seen = [];
+    shadow.lgAgentShadowProcess = async (d, k, o) => { seen.push({ deadline: o.deadline, clock: typeof o.clock }); return { ok: true }; };
+    try {
+      let t = 7000000;
+      const db = seed(), later = [];
+      const clock = () => t;
+      await withEnv({ ...ENV, AGENT_SHADOW_ENABLED: 'true' }, async () => {
+        const out = hook.handleInbound(req(textMsg('T7')), { db, waitUntil: p => later.push(p), now: NOW, fetchImpl: okFetch, clock });
+        t += 3000;   // הזמן עובר אחרי ההתחלה — הדדליין לא זז
+        await out; await Promise.all(later);
+      });
+      check('7 deadline = webhook start + 50s, clock passed', seen[0], { deadline: 7000000 + 50000, clock: 'function' });
+      const src = require('fs').readFileSync(path.join(ROOT, 'api', 'wa-inbound.js'), 'utf8');
+      check('7 webhook chain limit is 50s', /AGENT_WEBHOOK_CHAIN_MS\s*=\s*50\s*\*\s*1000/.test(src), true);
+    } finally { shadow.lgAgentShadowProcess = orig; }
+  }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');
   process.exit(failed ? 1 : 0);
