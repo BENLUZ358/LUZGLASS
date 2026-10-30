@@ -23,10 +23,10 @@ const seed = () => fakeDb({
   waSenders: { '0501234567': { customerId: '777', customerName: 'כהן זכוכית' } },
   hashavshevetAccounts: { 777: { name: 'כהן זכוכית' }, 999: { name: 'אחר' } },
   orders: {
-    o1: { customerId: '777', orderNum: 'L1001', sketchName: 'כהן', stage: 'workday' },
-    o2: { customerId: '999', orderNum: 'L1002', sketchName: 'זר', stage: 'pending' },
-    o3: { customerId: '777', orderNum: 'L1003', sketchName: 'מטבח', stage: 'collected' },
-    o4: { customerId: '777', orderNum: 'L1004', sketchName: 'כהן', stage: 'pending' },
+    o1: { customerId: '777', orderNum: 'L1001', sketchName: 'כהן', stage: 'workday', hasSketch: true },
+    o2: { customerId: '999', orderNum: 'L1002', sketchName: 'זר', stage: 'pending', hasSketch: true },
+    o3: { customerId: '777', orderNum: 'L1003', sketchName: 'מטבח', stage: 'collected', hasSketch: true },
+    o4: { customerId: '777', orderNum: 'L1004', sketchName: 'כהן', stage: 'pending', hasSketch: true },
     o5: { customerId: '777', orderNum: 'L1005', sketchName: 'בלי', stage: 'pending' },
   },
   sketches: { o1: SK, o2: SK, o3: SK, o4: SK },
@@ -35,6 +35,7 @@ const seed = () => fakeDb({
     k2: { state: 'ready', docNumber: 55555, accountKey: '999', orderIds: ['o2'] },
     k3: { state: 'printed', docNumber: 66666, accountKey: '777', orderIds: [] },
     k4: { state: 'ready', docNumber: '77777', accountKey: '777', orderIds: [] },
+    k5: { state: 'ready', docNumber: '1001', accountKey: '777', orderIds: [] },
   },
   waMeta: { agentPilot: { 777: true } },
 });
@@ -117,6 +118,46 @@ const F = (db, ref, text) => ar.lgArchiveFind(db, { customerId: '777', ref, text
     const d = seed(); put(d, 'a4', { text: 'חשבונית 34472', ref: '34472' });
     const res = await act.lgAgentAct(d, 'a4', { env: { ...ON, AGENT_REPLY_ENABLED: 'false' }, now: NOW, sendPending: stub });
     check('act: switches off -> wouldAct only, nothing queued', [res.acted, outbox(d).length], [false, 0]);
+  }
+
+  /* ─── תיקון סופי 7: בלי הורדת base64 של סקיצה כדי לבדוק אם היא קיימת ─── */
+  {
+    const d = seed();
+    const reads = [];
+    const ref0 = d.ref.bind(d);
+    d.ref = p => { reads.push(String(p || '')); return ref0(p); };
+    const r1 = await F(d, 'כהן', 'סקיצה כהן');
+    const r2 = await F(d, '34472', 'חשבונית ריכוז 34472 עם הסקיצות');
+    check('F7 find: never reads sketches/', reads.some(p => p.indexOf('sketches') === 0), false);
+    check('F7 find: hasSketch decides (o5 has none)', [r1.kind, r1.orders.map(o => o.id), r2.orderIds], ['many', ['o1', 'o4'], ['o1', 'o3']]);
+    const d2 = seed(); d2._data.orders.o1 = { customerId: '777', orderNum: 'L1001', sketchName: 'כהן', sketch: SK };
+    check('F7 inline sketch on the order still counts', (await ar.lgArchiveFind(d2, { customerId: '777', ref: 'L1001', text: 'סקיצה L1001' })).orderId, 'o1');
+  }
+  {
+    // מתגים דולקים + לקוח לא בפיילוט → החיפוש לא רץ בכלל (אין קריאה ל-invoicePdf)
+    const d = seed(); delete d._data.waMeta.agentPilot;
+    const reads = []; const ref0 = d.ref.bind(d);
+    d.ref = p => { reads.push(String(p || '')); return ref0(p); };
+    put(d, 'g1', { text: 'חשבונית 34472', ref: '34472' });
+    const res = await act.lgAgentAct(d, 'g1', { env: ON, now: NOW, sendPending: stub });
+    check('F7 switches on, not pilot → find skipped, not-pilot', [res.acted, d._data.waMeta.agentShadow.g1.actReason, reads.some(p => p.indexOf('invoicePdf') === 0)],
+      [false, 'not-pilot', false]);
+    // מתגים כבויים (צל) → החיפוש רץ (wouldAct אמיתי), בלי להוריד סקיצות
+    const d3 = seed(); const reads3 = []; const ref3 = d3.ref.bind(d3);
+    d3.ref = p => { reads3.push(String(p || '')); return ref3(p); };
+    put(d3, 'g2', { text: 'חשבונית 34472 עם הסקיצות', ref: '34472' });
+    await act.lgAgentAct(d3, 'g2', { env: { ...ON, AGENT_REPLY_ENABLED: 'false' }, now: NOW, sendPending: stub });
+    check('F7 shadow: find runs, files in wouldAct, no sketch blobs read',
+      [reads3.some(p => p.indexOf('invoicePdf') === 0), reads3.some(p => p.indexOf('sketches') === 0), (d3._data.waMeta.agentShadow.g2.wouldAct[0] || {}).files.length],
+      [true, false, 3]);
+  }
+  /* ─── תיקון סופי 8: L1001 הוא מספר הזמנה, לא חשבונית ─── */
+  {
+    const d = seed();
+    check('F8 "חשבונית להזמנה L1001" → not invoice #1001', await F(d, 'L1001', 'חשבונית להזמנה L1001'), { kind: 'none' });
+    check('F8 lower-case l1001 too', await F(d, 'l1001', 'חשבונית להזמנה l1001'), { kind: 'none' });
+    check('F8 real number elsewhere in the text still works', (await F(d, 'L1001', 'חשבונית 34472 להזמנה L1001')).invoiceKey, 'k1');
+    check('F8 plain 1001 is still an invoice number', (await F(d, '1001', 'חשבונית 1001')).invoiceKey, 'k5');
   }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall ok');

@@ -391,8 +391,14 @@ async function _act(db, key, rec, recRef, env, now, o) {
     orders = Object.entries(all).filter(([, x]) => x && String(x.customerId || '') === cid).map(([id, x]) => ({ ...x, id }));
   }
   // ארכיון: החיפוש ב-DB כאן (decide נשאר טהור). כשל בחיפוש → 'none' (שאול + "אני בודק")
+  //  תיקון סופי 7: מתגים דולקים → מחפשים רק אחרי שער הפיילוט + הקישור (אחרת ממילא
+  //  לא פועלים). מתגים כבויים (צל) → מחפשים, כדי ש-wouldAct יראה מה היה נשלח.
+  const _pilotOn = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
   let archive;
-  if (rec.route === 'archive' && rec.linked && cid) {
+  const _archiveGate = async () => !_switchesOn(env)
+    || (await _pilotOn(cid) && (rec.linkVia != null ? ['group', 'sender'].includes(String(rec.linkVia))
+                                                   : ['group', 'sender'].includes(await require('./_agent-shadow').lgAgentLinkVia(db, rec))));
+  if (rec.route === 'archive' && rec.linked && cid && await _archiveGate()) {
     try { archive = await lgArchiveFind(db, { customerId: cid, ref: rec.ref, text: rec.text, orders }); }
     catch (e) { console.warn('agent-act: archive', e && e.name); archive = { kind: 'none' }; }
   }

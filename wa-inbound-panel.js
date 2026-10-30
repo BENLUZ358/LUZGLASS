@@ -354,6 +354,18 @@ function lgAgRouteLabel(r) { return LG_AG_ROUTE[r] || String(r == null ? '' : r)
 function lgAgPilotCount(pilot) {
   return Object.keys(pilot || {}).filter(k => pilot[k] === true).length;
 }
+//  תיקון סופי 6: לקוחות בפיילוט — רשימה קטנה בראש הלשונית, כדי שאפשר יהיה להוציא
+//  לקוח גם כשאין לו שורה ב-100 האחרונות. nameOf(id) → שם; אין → המזהה. escaped.
+function lgAgPilotListHtml(pilot, nameOf) {
+  const ids = Object.keys(pilot || {}).filter(k => pilot[k] === true).sort();
+  if (!ids.length) return '';
+  const e = _waInEsc;
+  return '<div class="wain-note"><b>לקוחות בפיילוט</b>' + ids.map(id => {
+    const n = String((nameOf && nameOf(id)) || '') || id;
+    return `<div class="wain-l1"><span class="wain-client">${e(n)}</span>
+          <button type="button" class="wain-btn" data-agpilot data-cid="${e(id)}" data-on="0">הוצא מפיילוט</button></div>`;
+  }).join('') + '</div>';
+}
 const LG_AG_WHY = { 'not-pilot': 'לא בפיילוט', 'not-linked': 'לא מקושר בקליטות', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה' };
 const LG_AG_STATE = { received: 'ממתין', processing: 'בעיבוד', failed: 'נכשל' };
 const LG_AG_OB = { sent: 'נשלח ✓', pending: 'בתור', blocked: 'נחסם', failed: 'נכשל' };
@@ -594,7 +606,9 @@ if (typeof document !== 'undefined') (function () {
   function agentsTab() {
     const rs = lgAgRows(agentShadow);
     const c = { pilot: agentPilot, outbox: agentOutbox };
-    return `<div class="wain-note">בפיילוט: ${lgAgPilotCount(agentPilot)} לקוחות. רק לקוח בפיילוט מקבל תשובות אמיתיות; לשאר נרשם מה היה עונה. סמן ✓ אם ההחלטה והתשובה נכונות, ✗ אם לא.</div>`
+    const accs = (typeof hashavshevetAccountsMap !== 'undefined' && hashavshevetAccountsMap) || {};
+    const nameOf = id => (accs[id] && accs[id].name) || ((rs.find(r => r.customerId === id) || {}).customerName) || '';
+    return lgAgPilotListHtml(agentPilot, nameOf) + `<div class="wain-note">בפיילוט: ${lgAgPilotCount(agentPilot)} לקוחות. רק לקוח בפיילוט מקבל תשובות אמיתיות; לשאר נרשם מה היה עונה. סמן ✓ אם ההחלטה והתשובה נכונות, ✗ אם לא.</div>`
       + sec('100 האחרונות', rs.length, rs.map(r => lgAgRowHtml(r.key, r, raw.whatsapp, c)).join('') || '<div class="wain-ok-note">עוד אין רשומות.</div>');
   }
 

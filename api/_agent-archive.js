@@ -14,7 +14,7 @@
 //     שניהם ("חשבונית 34472 עם הסקיצות") → חשבונית + סקיצות של ההזמנות שלה.
 //     אף אחד → לפי ref: ספרות בלבד = חשבונית (ואם אין — הזמנה), אחרת סקיצה.
 //  ⚠️ סקיצה בלי ref (אין מספר/שם) → 'none' → שאול. לא מנחשים "ההזמנה הפתוחה".
-//  ⚠️ לא נרשם ללוג: טקסט, ref, base64.
+//  ⚠️ לא נרשם ללוג: טקסט, ref, base64. החיפוש לא קורא את sketches/ (תיקון סופי 7).
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgOkevFind, lgOkevReply } = require('./_agent-okev');
@@ -32,16 +32,22 @@ function lgArchiveWants(text) {
   return { want: 'any', withSketches: false };
 }
 
-// מספר החשבונית: ספרות מה-ref, ואם אין — מהטקסט (הספרות הארוכה ביותר)
+// מספר החשבונית: ספרות מה-ref, ואם אין — מהטקסט (הספרות הארוכה ביותר).
+// ⚠️ תיקון סופי 8: L+ספרות הוא מספר **הזמנה** ("חשבונית להזמנה L1001") — לא
+//    חשבונית 1001. נזרק מה-ref ומהטקסט לפני שמחפשים ספרות.
+const ORDER_REF = /(?<![a-z\d])l\d+(?!\d)/gi;
 function _docDigits(ref, text) {
-  const grab = s => (String(s || '').match(/\d+/g) || []).sort((a, b) => b.length - a.length)[0] || '';
+  const strip = s => String(s || '').replace(ORDER_REF, ' ');
+  const grab = s => (strip(s).match(/\d+/g) || []).sort((a, b) => b.length - a.length)[0] || '';
   return grab(ref) || grab(text);
 }
 
-// הזמנת הלקוח עם סקיצה קיימת? (sketches/<id> או order.sketch)
-async function _hasSketch(db, id, order) {
-  if (order && order.sketch) return true;
-  return !!(await db.ref('sketches/' + id).once('value')).val();
+// הזמנת הלקוח עם סקיצה קיימת? ⚠️ תיקון סופי 7: לפי הסימון בהזמנה (hasSketch,
+// כמו lgHasSketch בדפדפן, או סקיצה ישנה בתוך ההזמנה) — **בלי** להוריד את ה-base64
+// מ-sketches/ רק כדי לדעת שהוא קיים. השליחה טוענת את הקובץ ובודקת שוב.
+// (sketchName לבד אינו סקיצה — זה שם; הזמנה בלי תמונה הייתה נחסמת בשליחה.)
+function _hasSketch(order) {
+  return !!(order && (order.hasSketch || order.sketch));
 }
 
 async function _findInvoice(db, cid, digits, orders, withSketches) {
@@ -60,7 +66,7 @@ async function _findInvoice(db, cid, digits, orders, withSketches) {
     // רק הזמנות של הלקוח עצמו שיש להן סקיצה
     for (const id of Array.isArray(rec.orderIds) ? rec.orderIds : []) {
       const o = orders.find(x => x.id === String(id));
-      if (o && await _hasSketch(db, o.id, o)) out.orderIds.push(o.id);
+      if (o && _hasSketch(o)) out.orderIds.push(o.id);
     }
   }
   return out;
@@ -71,7 +77,7 @@ async function _findSketch(db, orders, ref) {
   const found = lgOkevFind(orders, { ref });
   if (found.match === 'none') return null;
   const withSk = [];
-  for (const o of found.orders) if (await _hasSketch(db, o.id, o)) withSk.push(o);
+  for (const o of found.orders) if (_hasSketch(o)) withSk.push(o);
   if (!withSk.length) return null;
   if (withSk.length === 1) return { kind: 'sketch', orderId: withSk[0].id, orderIds: [withSk[0].id] };
   return { kind: 'many', orders: withSk.map(o => ({ id: o.id, orderNum: o.orderNum, refNum: o.refNum, sketchName: o.sketchName })) };

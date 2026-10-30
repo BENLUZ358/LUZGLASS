@@ -68,6 +68,16 @@ check('unlinked row has no pilot toggle', /data-agpilot/.test(ctx.lgAgRowHtml('K
 check('F2 pilot toggle only for waGroups/waSenders links', ['group', 'sender', 'env', '', undefined].map(v =>
   /data-agpilot/.test(ctx.lgAgRowHtml('K1', rec({ customerId: '777', linkVia: v }), null, cx()))), [true, true, false, false, false]);
 check('F2 not-linked reason text', ctx.lgAgRowHtml('K1', rec({ acted: false, actReason: 'not-linked' }), null, cx()).includes('לא מקושר בקליטות'), true);
+// F6: רשימת "לקוחות בפיילוט" בראש הלשונית, עם "הוצא מפיילוט"
+{
+  const html = ctx.lgAgPilotListHtml({ 777: true, 888: true, 999: false }, id => ({ 777: 'כהן <b>' })[id] || '');
+  check('F6 pilot list: only true entries, names escaped, id fallback', [html.includes('לקוחות בפיילוט'), html.includes('כהן &lt;b&gt;'), html.includes('כהן <b>'),
+    /data-cid="888"/.test(html), /data-cid="999"/.test(html), html.includes('888')], [true, true, false, true, false, true]);
+  check('F6 pilot list: switch-off buttons (agent-pilot on:false)', [(html.match(/data-agpilot/g) || []).length, (html.match(/data-on="0"/g) || []).length,
+    (html.match(/הוצא מפיילוט/g) || []).length], [2, 2, 2]);
+  check('F6 pilot list: empty → nothing', [ctx.lgAgPilotListHtml({}, () => ''), ctx.lgAgPilotListHtml(null, () => '')], ['', '']);
+  check('F6 agents tab renders the pilot list first', /agentsTab\(\)\s*\{[\s\S]{0,600}lgAgPilotListHtml\(/.test(P), true);
+}
 check('pilot count', [ctx.lgAgPilotCount({ a: true, b: true, c: false, d: 'x' }), ctx.lgAgPilotCount(null)], [2, 0]);
 check('sent shows text', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'sent', text: 'שלום <b>' , reason: 'agent-reply' } })); return [x.includes('נשלח ✓: שלום &lt;b&gt;'), x.includes('היה עונה:')]; })(), [true, false]);
 check('pending → בתור', ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'pending', text: 't' } })).includes('בתור'), true);
