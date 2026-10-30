@@ -467,7 +467,13 @@ async function _act(db, key, rec, recRef, env, now, o) {
       if (a.notify && !staff[0]) continue;   // לידיעה, ואין שאול — מדלגים
       if (await enq(k, staff[0], a.text, a.files || [], 'agent-staff') && !a.notify) staffQueued = true;
     }
-    else if (a.type === 'files') await enq(k, chat, a.text || '', a.files || [], 'agent-files');
+    else if (a.type === 'files') {
+      // R2-1: רשומה לכל קובץ (<key>_<i>_f<j>) — חשבונית + סקיצות בהודעה אחת לא נכנסת
+      //  לעולם בדדליין של 50ש׳. הטקסט ("מצורף") — כיתוב של הקובץ הראשון בלבד.
+      const fl = a.files || [];
+      for (let j = 0; j < fl.length; j++) await enq(k + '_f' + j, chat, j === 0 ? (a.text || '') : '', [fl[j]], 'agent-files');
+      if (!fl.length && a.text) await enq(k, chat, a.text, [], 'agent-files');
+    }
     else if (a.type === 'quote-ask') {
       // t6-3: הבקשה נשמרת רק אחרי שהודעה לשאול נכנסה לתור (ועוד לפני השליחה,
       //  שקורית אחרי הלולאה). staffMessageId יתמלא מהתור אחרי שהטקסט נשלח

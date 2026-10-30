@@ -83,6 +83,7 @@ check('sent shows text', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, c
 check('pending → בתור', ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'pending', text: 't' } })).includes('בתור'), true);
 check('blocked / failed labels', [ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'blocked', text: 't' } })).includes('נחסם'),
   ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'failed', text: 't' } })).includes('נכשל')], [true, true]);
+check('R2-1 split file entries (<key>_<i>_f<j>) shown', ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0_f0: { state: 'sent', text: 'מצורף' }, K1_0_f1: { state: 'pending', text: '' } })).includes('נשלח ✓: מצורף'), true);
 check('outbox prefix match is exact (K1 ≠ K10)', ctx.lgAgRowHtml('K1', acted, null, cx({ K10_0: { state: 'sent', text: 'זר' } })).includes('זר'), false);
 check('staff entry labelled', ctx.lgAgRowHtml('K1', acted, null, cx({ K1_1: { state: 'sent', text: 'לשאול', reason: 'agent-staff' } })).includes('לשאול ✓'), true);
 check('not acted reasons', ['not-pilot', 'off', 'switches-off', 'no-staff', 'error'].map(r =>

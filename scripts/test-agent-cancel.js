@@ -344,6 +344,8 @@ Module._load = function (req) {
       check('F4 html: hs row "לבטל בחשבשבת", non-hs "לידיעה — לא נשלחה לחשבשבת", both with the done button',
         [/לבטל בחשבשבת/.test(hj), /לידיעה — לא נשלחה לחשבשבת/.test(hj), /data-cancel-done="a"/.test(hj), /data-cancel-done="j"/.test(hj)], [true, true, true, true]);
       const hjOnly = c.agentCancelsHtml([rows[2]]);
+      check('R2-2 info-only row button says "סמן שנראה", same action', [/סמן שנראה/.test(hjOnly), /בוצע בחשבשבת/.test(hjOnly), /data-cancel-done="j"/.test(hjOnly)], [true, false, true]);
+      check('R2-2 hs row keeps "בוצע בחשבשבת"', /בוצע בחשבשבת/.test(c.agentCancelsHtml([rows[1]])), true);
       check('F4 html: non-hs row does not say to cancel in Hashavshevet', /לבטל בחשבשבת/.test(hjOnly), false);
       check('stale unconfirmed row is flagged', rows[3] && rows[3].check, true);
       const html = c.agentCancelsHtml(rows);

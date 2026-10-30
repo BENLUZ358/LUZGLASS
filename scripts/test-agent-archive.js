@@ -97,8 +97,15 @@ const F = (db, ref, text) => ar.lgArchiveFind(db, { customerId: '777', ref, text
   {
     const d = seed(); put(d, 'a1', { text: 'חשבונית 34472 עם הסקיצות', ref: '34472' });
     const res = await act.lgAgentAct(d, 'a1', { env: ON, now: NOW, sendPending: stub });
-    check('act: found -> one entry to customer with files + מצורף', [res.acted, outbox(d).map(e => [e.to, e.text, e.files])],
-      [true, [[PRIV, 'מצורף', [{ kind: 'invoice-copy', invoiceKey: 'k1' }, { kind: 'sketch', orderId: 'o1' }, { kind: 'sketch', orderId: 'o3' }]]]]);
+    // R2-1: קובץ לכל רשומה בתור (<key>_<i>_f<j>), "מצורף" ככיתוב של הראשון בלבד
+    const ob = (d._data.waMeta || {}).agentOutbox || {};
+    check('act: found -> one entry per file, caption on the first only', [res.acted, Object.keys(ob).sort(), Object.keys(ob).sort().map(k => [ob[k].to, ob[k].text, ob[k].files])],
+      [true, ['a1_0_f0', 'a1_0_f1', 'a1_0_f2'], [[PRIV, 'מצורף', [{ kind: 'invoice-copy', invoiceKey: 'k1' }]],
+        [PRIV, '', [{ kind: 'sketch', orderId: 'o1' }]], [PRIV, '', [{ kind: 'sketch', orderId: 'o3' }]]]]);
+    // כל אחת נכנסת בדדליין טרי של 50ש׳ (getState 10 + פריט)
+    const send = require(path.join(ROOT, 'api', '_agent-send.js'));
+    check('R2-1 each split entry fits a fresh 50s deadline', Object.values(ob).map(e => send.STATE_WORST_MS + send.lgAgentItemWorstMs(e) <= 50000), [true, true, true]);
+    check('R2-1 the unsplit entry would never fit', send.STATE_WORST_MS + send.lgAgentItemWorstMs({ text: 'מצורף', files: [{}, {}, {}] }) > 50000, true);
   }
   {
     const d = seed(); put(d, 'a2', { text: 'חשבונית 55555', ref: '55555' });

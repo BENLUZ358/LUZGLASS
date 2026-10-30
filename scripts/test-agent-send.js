@@ -311,11 +311,11 @@ const run = (db, provider, env) => A.lgAgentSendPending(db, { provider, env: env
       check('F1 < state+item left: getState not called, entry untouched', [p.getStateCalls, r.sent, ob(db, 'd3').state, ob(db, 'd3').claimedAt], [0, 0, 'pending', null]);
     }
     {
-      // פריט עם שלוש סקיצות (49.4ש׳) כשנשארו 40ש׳ → חוזר לתור בלי ניסיון
+      // פריט עם שתי סקיצות (33.2ש׳) כשנשארו 30ש׳ → חוזר לתור בלי ניסיון (R2-1: שלוש — failed, ר' למטה)
       const db = seed(), clk = { t: 0 }, p = clockedProvider(clk);
       await A.lgAgentEnqueue(db, { key: 'd4', to: GROUP, customerId: '888', text: 'מצורף',
-        files: [{ kind: 'sketch', orderId: 'o1' }, { kind: 'sketch', orderId: 'o1' }, { kind: 'sketch', orderId: 'o1' }] });
-      const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, clock: () => clk.t, deadline: 40000 });
+        files: [{ kind: 'sketch', orderId: 'o1' }, { kind: 'sketch', orderId: 'o1' }] });
+      const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, clock: () => clk.t, deadline: 30000 });
       check('F1 big item does not fit → released, not sent', [r.sent, p.fileSends.length, ob(db, 'd4').state, ob(db, 'd4').attempts], [0, 0, 'pending', 0]);
     }
     {
@@ -340,6 +340,20 @@ const run = (db, provider, env) => A.lgAgentSendPending(db, { provider, env: env
       const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, clock: () => clk.t, deadline: 60000, budgetMs: 20000 });
       check('F1 earlier of budget/deadline wins', [r.sent, ob(db, 'd7').state], [0, 'pending']);
     }
+  }
+
+  /* R2-1: רשומה שהמקרה הגרוע שלה לא ייכנס לעולם → failed (סופי), לא חוזרת לתור */
+  {
+    check('R2-1 max item constant = 50 − getState', A.MAX_ITEM_WORST_MS, 40000);
+    const db = seed(), p = fakeProvider();
+    await A.lgAgentEnqueue(db, { key: 'big', to: GROUP, customerId: '888', text: 'מצורף',
+      files: [{ kind: 'sketch', orderId: 'o1' }, { kind: 'sketch', orderId: 'o1' }, { kind: 'sketch', orderId: 'o1' }] });
+    const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, deadline: Date.now() + 50000 });
+    const e = ob(db, 'big');
+    check('R2-1 oversize entry → failed, attempts max, reason, nothing sent', [e.state, e.attempts, e.lastError, p.fileSends.length, r.failed],
+      ['failed', 3, 'גדול מדי לשליחה אחת', 0, 1]);
+    const r2 = await A.lgAgentSendPending(db, { provider: p, env: ENV, deadline: Date.now() + 50000 });
+    check('R2-1 not picked up again', [r2.failed, r2.skipped, ob(db, 'big').state], [0, 0, 'failed']);
   }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');

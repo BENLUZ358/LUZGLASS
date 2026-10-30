@@ -369,10 +369,10 @@ function lgAgPilotListHtml(pilot, nameOf) {
 const LG_AG_WHY = { 'not-pilot': 'לא בפיילוט', 'not-linked': 'לא מקושר בקליטות', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה' };
 const LG_AG_STATE = { received: 'ממתין', processing: 'בעיבוד', failed: 'נכשל' };
 const LG_AG_OB = { sent: 'נשלח ✓', pending: 'בתור', blocked: 'נחסם', failed: 'נכשל' };
-//  רשומות התור של שורה: <key>_<i> או <key>_<i>_s (מפתח מנוקה כמו בשרת)
+//  רשומות התור של שורה: <key>_<i>, <key>_<i>_s או <key>_<i>_f<j> (קובץ לכל רשומה; מפתח מנוקה כמו בשרת)
 function lgAgOutboxOf(key, outbox) {
   const pre = String(key).replace(/[.#$[\]/]/g, '_') + '_', m = outbox || {};
-  return Object.keys(m).filter(k => k.indexOf(pre) === 0 && /^\d+(_s)?$/.test(k.slice(pre.length))).sort()
+  return Object.keys(m).filter(k => k.indexOf(pre) === 0 && /^\d+(_s|_f\d+)?$/.test(k.slice(pre.length))).sort()
     .map(k => m[k]).filter(Boolean);
 }
 //  מה נעשה בפועל / מה היה נעשה — שורה אחת או יותר, הכל escaped

@@ -123,7 +123,7 @@ function agentCancelsHtml(rows) {
       ${r.check ? `<div class="todo">לבדוק — ייתכן שההזמנה נמחקה. בדוק אם היא עדיין במערכת ובחשבשבת, ואז סמן.</div>`
         : r.hs ? `<div class="todo">לבטל בחשבשבת</div>` : `<div class="chg">לידיעה — לא נשלחה לחשבשבת</div>`}
       <div class="meta">${r.check ? 'ביטול שלא הושלם' : 'בוטל ע״י הלקוח'} · ${lgEsc(fmtDate(r.at))}</div>
-      <button class="btn btn-primary" type="button" data-cancel-done="${lgEsc(r.key)}"><span data-icon="check"></span>${r.check ? 'נבדק — טופל' : 'בוצע בחשבשבת'}</button>
+      <button class="btn btn-primary" type="button" data-cancel-done="${lgEsc(r.key)}"><span data-icon="check"></span>${r.check ? 'נבדק — טופל' : r.hs ? 'בוצע בחשבשבת' : 'סמן שנראה'}</button>
     </div>`).join('')}</section>`;
 }
 // ── סוף ביטולים מהסוכן

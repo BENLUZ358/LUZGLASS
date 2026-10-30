@@ -37,6 +37,9 @@ const PER_CALL_MS = 15 * 1000;
 const PER_ITEM_WORST_MS = PER_CALL_MS + 2 * 1000;
 const STATE_WORST_MS = 10 * 1000;
 const FILE_GAP_MS = 1200;             // המרווח בין קבצים ב-sendFiles
+//  R2-1: הפריט הגדול ביותר שיכול להיכנס אי-פעם — דדליין של 50ש׳ פחות getState.
+//  גדול מזה → failed סופי (לא חוזר לתור לנצח). _agent-act מפצל קבצים לרשומה לכל קובץ.
+const MAX_ITEM_WORST_MS = 50 * 1000 - STATE_WORST_MS;
 
 //  המקרה הגרוע של פריט אחד: העברה לכל צ'אט מקור, העלאה לכל קובץ (+מרווחים)
 //  או טקסט, ועוד הבדיקות. לא פחות מ-PER_ITEM_WORST_MS.
@@ -249,6 +252,12 @@ async function lgAgentSendPending(db, opts) {
     //  מצב החיבור כבר נבדק למעלה, לפני כל תפיסה.
     const { claimed, entry } = await lgWaClaim(db, key, by, AGENT_OUTBOX);
     if (!claimed) { res.skipped++; continue; }
+    //  R2-1: לא ייכנס בשום ריצה → סופי, attempts למקסימום
+    if (lgAgentItemWorstMs(entry) > MAX_ITEM_WORST_MS) {
+      await lgWaComplete(db, key, { ok: false, reason: 'גדול מדי לשליחה אחת' }, AGENT_OUTBOX);
+      await db.ref(AGENT_OUTBOX + '/' + key).update({ attempts: MAX_ATTEMPTS });
+      res.failed++; continue;
+    }
 
     let live, gate, loaded;
     try {
@@ -310,6 +319,6 @@ async function lgAgentSendPending(db, opts) {
   return res;
 }
 
-module.exports = { AGENT_OUTBOX, PER_CALL_MS, PER_ITEM_WORST_MS, STATE_WORST_MS, lgAgentItemWorstMs,
+module.exports = { AGENT_OUTBOX, PER_CALL_MS, PER_ITEM_WORST_MS, STATE_WORST_MS, MAX_ITEM_WORST_MS, lgAgentItemWorstMs,
                    lgAgentStaff, lgAgentEnqueue, lgAgentSendPending,
                    lgAgentChatOwnedBy: _chatOwnedBy };   // גם לביטול (_agent-act)
