@@ -92,13 +92,22 @@ function instruction(r) {
 }
 // ── ביטולים מהסוכן (31/10) ───────────────────────────────────────────
 //  waMeta/agentCancels/<orderId> — נכתב ב-api/_agent-act.js (lgAgentCancel).
-//  מוצג רק מה שכבר נשלח לחשבשבת ועוד לא סומן "בוצע". טהור — נבדק ב-
-//  scripts/test-agent-cancel.js.
-function agentCancelRows(map) {
-  return Object.keys(map || {}).filter(k => map[k] && map[k].hsSent && !map[k].done).map(k => {
+//  מוצג: ביטול מאושר (confirmed) שכבר נשלח לחשבשבת ועוד לא סומן "בוצע".
+//  רשומה לא מאושרת — נכתבת לפני המחיקה; אם אחרי 10 דקות עדיין לא אושרה,
+//  הפונקציה כנראה נפלה באמצע → מוצגת "לבדוק" (check:true), גם בלי hsSent.
+//  טהור — נבדק ב-scripts/test-agent-cancel.js.
+const AC_STALE_MS = 10 * 60 * 1000;
+function agentCancelRows(map, now) {
+  const t = Number(now) || Date.now();
+  return Object.keys(map || {}).filter(k => {
+    const r = map[k];
+    if (!r || r.done) return false;
+    if (r.confirmed === true) return !!r.hsSent;
+    return t - (Number(r.at) || 0) >= AC_STALE_MS;
+  }).map(k => {
     const o = map[k].order || {};
     return { key: k, orderNum: o.orderNum || k, client: o.orderClient || o.client || o.customerId || '',
-             sketch: o.sketchName || '', at: Number(map[k].at) || 0 };
+             sketch: o.sketchName || '', at: Number(map[k].at) || 0, check: map[k].confirmed !== true };
   }).sort((a, b) => a.at - b.at);
 }
 function agentCancelsHtml(rows) {
@@ -108,13 +117,16 @@ function agentCancelsHtml(rows) {
     ${rows.map(r => `<div class="card">
       <div class="c-head"><span class="c-num">${lgEsc(r.orderNum)}</span><span class="c-client">${lgEsc(r.client)}</span></div>
       ${r.sketch ? `<div class="chg">סקיצה: ${lgEsc(r.sketch)}</div>` : ''}
-      <div class="meta">בוטל ע״י הלקוח · ${lgEsc(fmtDate(r.at))}</div>
-      <button class="btn btn-primary" type="button" data-cancel-done="${lgEsc(r.key)}"><span data-icon="check"></span>בוצע בחשבשבת</button>
+      ${r.check ? `<div class="todo">לבדוק — ייתכן שההזמנה נמחקה. בדוק אם היא עדיין במערכת ובחשבשבת, ואז סמן.</div>` : ''}
+      <div class="meta">${r.check ? 'ביטול שלא הושלם' : 'בוטל ע״י הלקוח'} · ${lgEsc(fmtDate(r.at))}</div>
+      <button class="btn btn-primary" type="button" data-cancel-done="${lgEsc(r.key)}"><span data-icon="check"></span>${r.check ? 'נבדק — טופל' : 'בוצע בחשבשבת'}</button>
     </div>`).join('')}</section>`;
 }
 // ── סוף ביטולים מהסוכן
 let AGENT_CANCELS = {};
-function renderAgentCancels() { $('agentCancels').innerHTML = agentCancelsHtml(agentCancelRows(AGENT_CANCELS)); }
+function renderAgentCancels() { $('agentCancels').innerHTML = agentCancelsHtml(agentCancelRows(AGENT_CANCELS, Date.now())); }
+// רשומה לא מאושרת הופכת ל"לבדוק" עם הזמן, בלי שינוי בבסיס הנתונים
+setInterval(renderAgentCancels, 60 * 1000);
 $('agentCancels').addEventListener('click', async e => {
   const b = e.target.closest('[data-cancel-done]'); if (!b) return;
   b.disabled = true;

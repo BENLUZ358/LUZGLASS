@@ -19,7 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgWaInboundKey } = require('./_wa-inbound');
-const { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending } = require('./_agent-send');
+const { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
 const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
         lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText } = require('./_agent-okev');
 
@@ -158,44 +158,65 @@ const _hsSent = o => { const h = o && (o.hashavshevet || o.hsOrder); return !!(h
 
 //  { ok, code } — code: '' | 'missing' | 'forbidden' | 'too-late' | 'error'
 //
-//  ⚠️ הבדיקה והמחיקה הן **אותה טרנזקציה** על orders/<id>: הזמנה שירדה
-//     לביצוע (או עברה ללקוח אחר) רגע לפני — לא תימחק (Review Focus 3).
-//     לא "בדיקה ואז עדכון רב-נתיבי": בין השניים שאול יכול להוריד לביצוע,
-//     ואז היינו מוחקים הזמנה שכבר בייצור.
-//  ⚠️ החלון שנשאר: אחרי המחיקה ולפני כתיבת waMeta/agentCancels/<id> ההזמנה
-//     קיימת רק בזיכרון. כתיבה שנכשלה → ההזמנה מוחזרת (רק אם המקום עדיין ריק)
-//     ו-'error'. רק פונקציה שנהרגת בדיוק בין שתי הכתיבות מאבדת את ההזמנה —
-//     עדיף על מחיקת הזמנה שבייצור, ו-actCancels ברשומת הצל עדיין מראה מה קרה.
+//  סדר הפעולות (תיקוני סקירה t3, 31/10):
+//   1. הצ'אט עדיין מקושר לאותו לקוח (waGroups / waSenders) — קישור שהוסר
+//      אחרי השאלה לא מבטל. אחרת 'forbidden'.
+//   2. קריאה מקדימה: קיימת / של הלקוח / בשלב מותר — בלי לכתוב כלום.
+//   3. **הרשומה קודם**: waMeta/agentCancels/<id> עם confirmed:false והעותק
+//      מהקריאה. נכשלה → 'error', ולא מוחקים. אין מסלול שמוחק בלי רשומה.
+//   4. הבדיקה והמחיקה — **אותה טרנזקציה** על orders/<id> (R8): הזמנה שירדה
+//      לביצוע או עברה ללקוח אחר רגע לפני — לא תימחק (Review Focus 3).
+//      סירוב → הרשומה נמחקת.
+//   5. אחרי המחיקה: confirmed:true + העותק מהטרנזקציה + hsSent.
+//  ⚠️ פונקציה שנהרגת בין 4 ל-5 משאירה רשומה confirmed:false שמחזיקה את
+//     ההזמנה; "תיקון הזמנות" מציג רשומה כזו אחרי 10 דקות כ"לבדוק". אם
+//     מחיקת הרשומה אחרי סירוב נכשלת — אותו דבר (רשומה לבדיקה, ההזמנה קיימת).
+//  ⚠️ רשומה קודמת באותו מפתח נדרסת — רק כשההזמנה קיימת שוב (שוחזרה ביד).
 //  sketches/<id> נשאר — לא נוגעים.
 async function lgAgentCancel(db, orderId, ctx) {
   const c = ctx || {};
   const id = String(orderId == null ? '' : orderId);
   const cid = String(c.customerId || '');
+  const chatId = String(c.chatId || '');
   // מזהה עם '/' וכו' היה מוחק נתיב אחר
   if (!id || id.length > 200 || lgWaInboundKey(id) !== id) return { ok: false, code: 'missing' };
-  if (!cid) return { ok: false, code: 'forbidden' };
-  let taken = null, why = '';
+  if (!cid || !chatId || !(await lgAgentChatOwnedBy(db, chatId, cid))) return { ok: false, code: 'forbidden' };
+
   const ref = db.ref('orders/' + id);
-  const tx = await ref.transaction(cur => {
-    taken = null; why = '';
-    // ⚠️ null-first: הקריאה הראשונה היא מהמטמון (null). מחזירים null (מחיקה
-    //    של כלום) כדי שפיירבייס יביא את הערך האמיתי; אם באמת אין — 'missing'.
-    if (cur === null) return null;
-    if (String(cur.customerId || '') !== cid) { why = 'forbidden'; return; }
-    if (!lgOkevCanChange(cur)) { why = 'too-late'; return; }
-    taken = cur;
-    return null;   // מחיקה — באותה טרנזקציה עם הבדיקה
-  });
-  if (!tx.committed) return { ok: false, code: why || 'error' };
-  if (!taken) return { ok: false, code: 'missing' };
+  const pre = (await ref.once('value')).val();
+  if (!pre) return { ok: false, code: 'missing' };
+  if (String(pre.customerId || '') !== cid) return { ok: false, code: 'forbidden' };
+  if (!lgOkevCanChange(pre)) return { ok: false, code: 'too-late' };
+
   const now = c.now || Date.now();
+  const recRef = db.ref(AGENT_CANCELS + '/' + id);
+  try { await recRef.set({ order: pre, at: now, chatId, done: false, confirmed: false }); }
+  catch (e) { console.warn('agent-cancel: record', e && e.name); return { ok: false, code: 'error' }; }
+
+  let taken = null, why = '';
+  let tx;
   try {
-    await db.ref(AGENT_CANCELS + '/' + id).set({ order: taken, at: now, chatId: String(c.chatId || ''),
-                                                 hsSent: _hsSent(taken), done: false });
-  } catch (e) {
-    console.warn('agent-cancel: record', e && e.name);
-    try { await ref.transaction(cur => (cur === null ? taken : undefined)); }
-    catch (e2) { console.warn('agent-cancel: restore failed', e2 && e2.name); }
+    tx = await ref.transaction(cur => {
+      taken = null; why = '';
+      // ⚠️ null-first: הקריאה הראשונה היא מהמטמון (null). מחזירים null (מחיקה
+      //    של כלום) כדי שפיירבייס יביא את הערך האמיתי; אם באמת אין — 'missing'.
+      if (cur === null) return null;
+      if (String(cur.customerId || '') !== cid) { why = 'forbidden'; return; }
+      if (!lgOkevCanChange(cur)) { why = 'too-late'; return; }
+      taken = cur;
+      return null;   // מחיקה — באותה טרנזקציה עם הבדיקה
+    });
+  } catch (e) { console.warn('agent-cancel: tx', e && e.name); tx = { committed: false }; why = 'error'; }
+
+  if (!tx.committed || !taken) {
+    // לא נמחק — הרשומה המוקדמת יורדת
+    try { await recRef.set(null); } catch (e) { console.warn('agent-cancel: unrecord', e && e.name); }
+    return { ok: false, code: !tx.committed ? (why || 'error') : 'missing' };
+  }
+  try { await recRef.update({ order: taken, hsSent: _hsSent(taken), confirmed: true }); }
+  catch (e) {
+    // נמחק, אבל לא אושר — הרשומה (confirmed:false) מחזיקה את ההזמנה ותוצג לבדיקה
+    console.warn('agent-cancel: confirm', e && e.name);
     return { ok: false, code: 'error' };
   }
   return { ok: true, code: '' };

@@ -142,9 +142,16 @@ async function handleAdmin(body, deps) {
   if (action === 'agent-cancel-done') {
     if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה ביטול לא תקין' };
     const t = deps.now || Date.now(), by = String(deps.by || '');
-    // null-first: null → null (לא כותבים כלום); אין רשומה אמיתית → 'missing'
-    const tx = await deps.db.ref(AGENT_CANCELS + '/' + b.key).transaction(cur =>
-      (cur === null ? null : { ...cur, done: true, doneAt: t, doneBy: by }));
+    // null-first: null → null (לא כותבים כלום); אין רשומה אמיתית → 'missing'.
+    // כבר סומן → ok, ומי/מתי הראשונים נשארים (לחיצה כפולה / שתי לשוניות)
+    let already = false;
+    const tx = await deps.db.ref(AGENT_CANCELS + '/' + b.key).transaction(cur => {
+      already = false;
+      if (cur === null) return null;
+      if (cur.done) { already = true; return; }
+      return { ...cur, done: true, doneAt: t, doneBy: by };
+    });
+    if (already) return { ok: true, code: '' };
     const v = tx.committed && tx.snapshot && tx.snapshot.val();
     if (!v) return { ok: false, code: 'missing', message: 'הביטול לא נמצא' };
     return { ok: true, code: '' };

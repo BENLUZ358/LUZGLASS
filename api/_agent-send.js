@@ -272,4 +272,5 @@ async function lgAgentSendPending(db, opts) {
   return res;
 }
 
-module.exports = { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending };
+module.exports = { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending,
+                   lgAgentChatOwnedBy: _chatOwnedBy };   // גם לביטול (_agent-act)
