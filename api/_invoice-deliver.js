@@ -76,7 +76,12 @@ async function lgInvoiceDeliver(db, key, deps) {
   //  אין שליחה כפולה: התפיסה בתור (2 דקות) והמצב 'sent' חוסמים.
   if (dv && dv.channel === 'whatsapp' && dv.outboxKey && ['queued', 'failed'].includes(dv.state)) {
     const q = (await db.ref('waOutbox/' + dv.outboxKey).once('value')).val();
-    if (!q || q.state !== 'pending') return dv;
+    if (!q || q.state === 'sent') return dv;
+    //  נכשלה סופית / פג תוקף — הדפסה חוזרת היא בקשה מפורשת לשלוח שוב: חוזרת לתור, מאפס
+    if (q.state !== 'pending') {
+      await db.ref('waOutbox/' + dv.outboxKey).update({ state: 'pending', attempts: 0, claimedAt: null, claimedBy: null,
+                                                        createdAt: now, updatedAt: now, lastError: null });
+    }
     const drain = d.drain || require('./_wa-drain-core').drainNow;
     const r = await drain(db, [dv.outboxKey], 'invoice-tool');
     const res = (r && r.results || []).find(x => x.key === dv.outboxKey);
