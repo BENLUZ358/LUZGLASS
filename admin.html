@@ -2950,6 +2950,10 @@ document.addEventListener('visibilitychange', () => {
 .wain-tab:focus-visible{outline:2px solid var(--gold-text);outline-offset:-2px;}
 .wain-tab-n{display:inline-block;min-width:20px;margin-right:6px;padding:0 6px;border-radius:10px;background:#c0392b;color:#fff;font-size:12px;line-height:20px;}
 .wain-tab-n[hidden]{display:none;}
+.wain-ag-t{font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;}
+.wain-ag-r{font-size:13px;line-height:1.5;color:rgba(247,244,239,0.75);border-inline-start:3px solid #b8922a;padding-inline-start:8px;overflow-wrap:anywhere;}
+.wain-ag-red{color:#ff8a80;font-weight:800;}
+.wain-ag .wain-acts .wain-btn{min-width:56px;min-height:44px;}
 .wain-sec{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:13px;font-weight:800;color:var(--gold-text);}
 .wain-sec span{color:rgba(247,244,239,0.55);font-weight:600;}
 .wain-ok-note{font-size:13px;color:rgba(247,244,239,0.55);padding:2px 2px 4px;}
@@ -3134,6 +3138,7 @@ document.addEventListener('visibilitychange', () => {
       <div class="wain-tabs" role="tablist" aria-label="ערוץ">
         <button type="button" class="wain-tab wain-tab-on" data-tab="whatsapp" role="tab" aria-selected="true">WhatsApp<span id="waInTabWa" class="wain-tab-n" hidden></span></button>
         <button type="button" class="wain-tab" data-tab="email" role="tab" aria-selected="false">מייל<span id="waInTabEm" class="wain-tab-n" hidden></span></button>
+        <button type="button" class="wain-tab" data-tab="agents" role="tab" aria-selected="false">סוכנים · ניסיון</button>
       </div>
       <div id="waInList"></div>
       <!-- בורר לקוח — נפתח מ"קשר ללקוח" / "הוסף", מחוץ לרשימה שמתרעננת חי -->

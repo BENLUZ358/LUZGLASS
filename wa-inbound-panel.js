@@ -340,6 +340,42 @@ function lgWaInTextCustomersHtml(map) {
       <div data-tkey=""><button type="button" class="wain-addbtn" data-tact="add">＋ הוסף לקוח שמזמין בטקסט חופשי</button></div>`;
 }
 
+// ─── לשונית "סוכנים · ניסיון" (30/10) ────────────────────────────────────
+//  מה המרכזן החליט על כל הודעה נכנסת ומה עוקב היה עונה. מצב צל: שום דבר
+//  לא נשלח ללקוח. הקריאה מ-waMeta/agentShadow; הסימון ✓/✗ עובר דרך
+//  /api/wa-inbound-drain (agent-verdict) — הפאנל לא כותב ל-Firebase.
+const LG_AG_INTENT = { status: 'איפה ההזמנה', cancel: 'ביטול', change: 'שינוי', document: 'מסמך', quote: 'הצעת מחיר',
+  order: 'הזמנה', chitchat: 'שיחה', thanks: 'תודה', unclear: 'לא ברור' };
+const LG_AG_ROUTE = { okev: 'עוקב', kolet: 'קולט', archive: 'ארכיון', quote: 'מחירון', menu: 'תפריט', none: 'בלי תשובה',
+  ignore: 'מתעלם', shaul: 'לשאול', 'silent-human': 'שותק (ענו ידנית)' };
+function lgAgIntentLabel(i) { return LG_AG_INTENT[i] || String(i == null ? '' : i); }
+function lgAgRouteLabel(r) { return LG_AG_ROUTE[r] || String(r == null ? '' : r); }
+//  100 האחרונות, חדש למעלה
+function lgAgRows(map) {
+  const m = map || {};
+  return Object.keys(m).map(k => Object.assign({ key: k }, m[k]))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 100);
+}
+function lgAgRowHtml(key, r) {
+  const k = _waInEsc(key);
+  //  הודעה שהסוכן לא ראה כהזמנה אבל נקלטה כהזמנה — בן צריך לראות את זה
+  const both = r.intakeKind && r.intent !== 'order'
+    ? ' <span class="wain-ag-red">נקלטה גם כהזמנה</span>' : '';
+  const v = r.verdict ? (r.verdict.ok ? 'נכון ✓' : 'לא נכון ✗') : '';
+  return `<div class="wain-row wain-ag" data-agkey="${k}">
+        <div class="wain-l1"><span class="wain-client">${r.linked ? _waInEsc(r.customerName || '') : 'לא מקושר'}</span>
+          <span class="wain-when">${_waInEsc(_waInWhen(r.createdAt))}</span></div>
+        ${r.text ? `<div class="wain-ag-t">${_waInEsc(r.text)}</div>` : ''}
+        <div class="wain-reason"><b>${_waInEsc(lgAgIntentLabel(r.intent))}</b> ← ${_waInEsc(lgAgRouteLabel(r.route))}${both}</div>
+        ${r.wouldReply ? `<div class="wain-ag-r">היה עונה: ${_waInEsc(r.wouldReply)}</div>` : ''}
+        <div class="wain-acts">
+          <button type="button" class="wain-btn" data-agv="1" data-key="${k}" aria-label="נכון">✓</button>
+          <button type="button" class="wain-btn" data-agv="0" data-key="${k}" aria-label="לא נכון">✗</button>
+          ${v ? `<span class="wain-chip">${v}</span>` : ''}
+        </div>
+      </div>`;
+}
+
 //  מכאן והלאה רק בדפדפן. ב-Node (בדיקות) אין document, ולכן לא רץ כלום.
 if (typeof document !== 'undefined') (function () {
   // שורות לכל ערוץ בנפרד — כל מאזין מחליף רק את שלו; rows = שניהם יחד
@@ -347,6 +383,7 @@ if (typeof document !== 'undefined') (function () {
   const draining = { whatsapp: false, email: false };
   // לשונית פתוחה, ואילו מקטעים מקופלים פתוחים — שרענון חי לא יסגור אותם
   let tab = 'whatsapp';
+  let agentShadow = {};
   const folds = {};
 
   const $ = id => document.getElementById(id);
@@ -504,11 +541,17 @@ if (typeof document !== 'undefined') (function () {
       + fold('em-hist', 'כל ההיסטוריה', ir.historyN, ir.history);
   }
 
+  function agentsTab() {
+    const rs = lgAgRows(agentShadow);
+    return '<div class="wain-note">מצב ניסיון: שום הודעה לא נשלחת ללקוח. סמן ✓ אם ההחלטה והתשובה נכונות, ✗ אם לא.</div>'
+      + sec('100 האחרונות', rs.length, rs.map(r => lgAgRowHtml(r.key, r)).join('') || '<div class="wain-ok-note">עוד אין רשומות.</div>');
+  }
+
   function render() {
     badge();
     const list = $('waInList'); if (!list) return;
     const top = list.scrollTop;
-    list.innerHTML = tab === 'email' ? emailTab() : waTab();
+    list.innerHTML = tab === 'agents' ? agentsTab() : tab === 'email' ? emailTab() : waTab();
     list.scrollTop = top;                             // רענון חי לא מקפיץ לראש הרשימה
     document.querySelectorAll('#waInPanel .wain-tab').forEach(b => {
       const on = b.dataset.tab === tab;
@@ -628,7 +671,14 @@ if (typeof document !== 'undefined') (function () {
       else b.dataset.tact === 'add' ? openPick('t', '', '') : textAct(row.dataset.tkey, b.dataset.tact);
     });
     const list = $('waInList');
-    if (list) list.addEventListener('click', ev => {
+    if (list) list.addEventListener('click', async ev => {
+      const g = ev.target.closest('button[data-agv]');
+      if (g) {   // ✓/✗ על רשומת צל — דרך ה-drain; הרשימה מתעדכנת מההאזנה
+        g.disabled = true;
+        const res = await post({ action: 'agent-verdict', key: g.dataset.key, ok: g.dataset.agv === '1', note: '' });
+        if (!res.ok) { g.disabled = false; alert(res.message || 'הסימון נכשל'); }
+        return;
+      }
       const b = ev.target.closest('button[data-act]'); if (!b) return;
       if (b.dataset.act === 'view') view(b.dataset.order);
       else act(b.dataset.act, b.dataset.key, b.dataset.ch || 'whatsapp');
@@ -657,6 +707,9 @@ if (typeof document !== 'undefined') (function () {
         e => console.warn('emailSendersSeen listen:', e && e.message));
       _lgDb.ref('waMeta/emailSenders').on('value', sn => { emailsLinked = sn.val() || {}; render(); },
         e => console.warn('emailSenders listen:', e && e.message));
+      _lgDb.ref('waMeta/agentShadow').orderByChild('createdAt').limitToLast(100)
+        .on('value', sn => { agentShadow = sn.val() || {}; if (tab === 'agents') render(); },
+        e => console.warn('agentShadow listen:', e && e.message));
       _lgDb.ref('waMeta/textCustomers').on('value', sn => { textCustomers = sn.val() || {}; render(); },
         e => console.warn('textCustomers listen:', e && e.message));
       // כל 2 דקות כל עוד הדף פתוח — ורק אם באמת יש מה לעבד
