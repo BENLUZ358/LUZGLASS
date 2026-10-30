@@ -56,6 +56,19 @@ const seed = shadow => fakeDb({
   r = await adm.handleAdmin({ action: 'drain' }, { db, by: '052', now: NOW, ...model() });
   check('4 at most BATCH per call', r.agentShadow.processed + r.agentShadow.failed, 5);
 
+  // 4b. הדדליין קרוב (פחות מ-22 שניות נשארו) — לא מתחילים רשומת צל חדשה
+  //     (כל רשומה יכולה לקחת 20 שניות של OpenAI + קריאת הזמנות)
+  {
+    db = seed({ A1: stuck('A1') });
+    const realNow = Date.now, t0 = realNow();
+    let calls = 0;
+    Date.now = () => (calls++ === 0 ? t0 : t0 + 25 * 1000);   // נשארו 15 שניות מתוך 40
+    try { r = await adm.handleAdmin({ action: 'drain' }, { db, by: '052', now: NOW, ...model() }); }
+    finally { Date.now = realNow; }
+    check('4b deadline near: no shadow record started', db._data.waMeta.agentShadow.A1.state, 'received');
+    check('4b deadline near: counts zero', r.agentShadow, { processed: 0, failed: 0 });
+  }
+
   // 5. agent-verdict
   db = seed({ A1: stuck('A1', { state: 'done' }) });
   const v = b => adm.handleAdmin({ action: 'agent-verdict', ...b }, { db, by: '0520000000', now: NOW + 5 });

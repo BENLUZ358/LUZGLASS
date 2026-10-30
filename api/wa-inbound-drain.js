@@ -39,6 +39,9 @@ const { lgEmailInboundKey, lgEmailInboundPending, lgEmailInboundProcess,
 // כמה קליטות בקריאה אחת, ותקציב זמן — מתחת ל-maxDuration (60) עם מרווח
 const BATCH = 5;
 const BUDGET_MS = 40 * 1000;
+// רשומת צל אחת יכולה לקחת עד 20 שניות של OpenAI + קריאת הזמנות — לא מתחילים
+// רשומה חדשה אם נשארו פחות מזה עד הדדליין
+const AGENT_SHADOW_MIN_LEFT_MS = 22 * 1000;
 
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && lgWaInboundKey(k) === k;
 
@@ -101,7 +104,7 @@ async function handleAdmin(body, deps) {
       try {
         const sKeys = await lgAgentShadowPending(deps.db, BATCH, deps.now);
         for (const key of sKeys) {
-          if (Date.now() > deadline) break;
+          if (deadline - Date.now() < AGENT_SHADOW_MIN_LEFT_MS) break;
           try {
             const p = await lgAgentShadowProcess(deps.db, key, { now: deps.now, fetchImpl: deps.fetchImpl });
             if (p.ok) ag.processed++; else ag.failed++;

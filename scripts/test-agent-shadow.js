@@ -130,6 +130,15 @@ const shadowCount = db => Object.keys((db._data.waMeta || {}).agentShadow || {})
     check('group chitchat → ignore, customer from the group', [rec(db, r.key).route, rec(db, r.key).customerId, rec(db, r.key).wouldReply], ['ignore', '888', '']);
   }
 
+  /* קבוצה שלא מקושרת ב-waGroups — null, שום כתיבה */
+  {
+    const db = seed();
+    const r = await sh.lgAgentShadowRecord(db, payload('G2', textMd('מתי מוכן?'), '120363000000000999@g.us', '972521111111@c.us'), NOW);
+    check('unlinked group → null', r, null);
+    check('unlinked group → no shadow write', shadowCount(db), 0);
+    check('unlinked group → no waMeta at all', db._data.waMeta === undefined || Object.keys(db._data.waMeta).length === 0, true);
+  }
+
   /* פרטי chitchat → תפריט */
   {
     const db = seed(); const m = model('chitchat', '');

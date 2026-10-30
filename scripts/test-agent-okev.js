@@ -68,6 +68,13 @@ f = lgOkevFind([old], { ref: 'סלון' });
 check('ref מוצא גם collected כשאין פתוחה', [f.match, f.orders[0].id], ['one', '3']);
 f = lgOkevFind([], { quotedId: 'X' });
 check('quoted לא קיים → none', f.match, 'none');
+// ציטוט של הודעה שלא שייכת לאף הזמנה של הלקוח → ממשיכים ל-ref ואז לפתוחות
+f = lgOkevFind([kohen, levi, old], { quotedId: 'NOPE', ref: 'לוי' });
+check('quoted לא תואם → נופל ל-ref', [f.match, f.via, f.orders.map(x => x.id)], ['one', 'ref', ['2']]);
+f = lgOkevFind([kohen, old], { quotedId: 'NOPE' });
+check('quoted לא תואם, בלי ref → הפתוחות', [f.match, f.via, f.orders.map(x => x.id)], ['one', 'open', ['1']]);
+f = lgOkevFind([kohen, levi], { quotedId: 'NOPE', ref: 'אין כזה' });
+check('quoted ו-ref לא תואמים → none', [f.match, f.via], ['none', '']);
 
 // ── lgOkevReply ──
 const one = st => ({ match: 'one', orders: [o('1', 'L1234', 'כהן', st)], via: 'ref' });

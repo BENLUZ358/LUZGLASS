@@ -63,8 +63,10 @@ const verdict = (orders, via) => ({ match: orders.length === 1 ? 'one' : orders.
 function lgOkevFind(orders, q) {
   orders = orders || []; q = q || {};
   if (q.quotedId) {
-    // התאמה לפי ההודעה שהלקוח ציטט — בלי קשר לשלב או לפתיחות
-    return verdict(orders.filter(o => o.waMessageId === q.quotedId), 'quoted');
+    // התאמה לפי ההודעה שהלקוח ציטט — בלי קשר לשלב או לפתיחות.
+    // ציטוט שלא שייך לאף הזמנה שלו (סתם הודעה בצ'אט) → ממשיכים ל-ref ואז לפתוחות
+    const hit = orders.filter(o => o.waMessageId === q.quotedId);
+    if (hit.length) return verdict(hit, 'quoted');
   }
   if (normRef(q.ref)) {
     // קודם בין הפתוחות; אם אין, גם הזמנה שכבר נאספה (כדי לענות "כבר נאספה")

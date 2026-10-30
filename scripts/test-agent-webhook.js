@@ -5,6 +5,7 @@
  *   • עם דגל: התשובה זהה, נוספת רשומת צל, והעיבוד עובר ל-waitUntil
  *   • הודעה ידנית (outgoingMessageReceived): agentHuman נכתב, אותו body
  *   • lgAgentShadowRecord זורק → עדיין אותה תשובה, לא 500
+ *   • רישום הצל כולו בתוך waitUntil — התשובה לא מחכה לו (אפס קריאות DB נוספות)
  * Run: node scripts/test-agent-webhook.js
  */
 const path = require('path');
@@ -118,9 +119,33 @@ const val = async (db, p) => (await db.ref(p).once('value')).val();
     const orig = shadow.lgAgentShadowRecord;
     shadow.lgAgentShadowRecord = async () => { throw new Error('db down'); };
     try {
-      const { r, queued } = await send(seed(), textMsg('T5'), 'true');
+      const db = seed();
+      const { r, queued } = await send(db, textMsg('T5'), 'true');
       check('5 throw: body identical', r, base.r);
-      check('5 throw: nothing queued', queued, 0);
+      check('5 throw: one waitUntil (rejection swallowed inside)', queued, 1);
+      check('5 throw: no shadow record', await val(db, 'waMeta/agentShadow'), null);
+    } finally { shadow.lgAgentShadowRecord = orig; }
+  }
+  // 5b. אפס המתנה לסוכן בדרך התשובה — הרשומה תלויה, התשובה כבר חזרה
+  {
+    const base = await send(seed(), textMsg('T5b'), undefined);
+    const orig = shadow.lgAgentShadowRecord;
+    let release, recCalled = false;
+    shadow.lgAgentShadowRecord = (...a) => { recCalled = true; return new Promise(res => { release = () => res(orig(...a)); }); };
+    try {
+      const db = seed(), later = [];
+      const x = await withEnv({ ...ENV, AGENT_SHADOW_ENABLED: 'true' }, async () => {
+        const out = await Promise.race([
+          hook.handleInbound(req(textMsg('T5b')), { db, waitUntil: p => later.push(p), now: NOW, fetchImpl: okFetch }),
+          new Promise(res => setTimeout(() => res('HUNG'), 200)),
+        ]);
+        const before = await val(db, 'waMeta/agentShadow');
+        if (release) release();
+        await Promise.all(later);
+        return { out, before, after: await val(db, 'waMeta/agentShadow') };
+      });
+      check('5b response not waiting on record', x.out, base.r);
+      check('5b record still ran in waitUntil', [recCalled, x.before, Object.keys(x.after || {}).length], [true, null, 1]);
     } finally { shadow.lgAgentShadowRecord = orig; }
   }
   // 6. process דוחה — לא משפיע

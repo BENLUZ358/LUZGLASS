@@ -30,8 +30,18 @@ check('row has two verdict buttons with key', [/data-agv="1"/.test(h), /data-agv
 check('no red flag for plain status', h.includes('נקלטה גם כהזמנה'), false);
 check('unlinked → "לא מקושר", no text', (() => { const x = ctx.lgAgRowHtml('K2', rec({ linked: false, text: undefined, customerName: undefined, route: 'shaul', intent: 'unclear', wouldReply: undefined }));
   return [x.includes('לא מקושר'), x.includes('לשאול'), x.includes('היה עונה:')]; })(), [true, true, false]);
-check('intakeKind + non-order intent → red flag', ctx.lgAgRowHtml('K3', rec({ intakeKind: 'image' })).includes('נקלטה גם כהזמנה'), true);
-check('intakeKind + order intent → no flag', ctx.lgAgRowHtml('K4', rec({ intakeKind: 'image', intent: 'order' })).includes('נקלטה גם כהזמנה'), false);
+// האדום משקף קליטה אמיתית: רשומת waInbound באותו מפתח, לא נדחתה; intakeKind לבד לא מספיק
+const RED = 'נקלטה גם כהזמנה';
+const ib = { 'M1': { state: 'done' }, 'P_1': { state: 'rejected', kind: 'pdf' }, 'C1': { state: 'closed', closedFrom: 'rejected' },
+             'C2': { state: 'closed', closedFrom: 'failed' } };
+check('free text dropped by intake (no waInbound) → no red', ctx.lgAgRowHtml('K3', rec({ idMessage: 'T9', intakeKind: 'text' }), ib).includes(RED), false);
+check('intakeKind alone (no intake map) → no red', ctx.lgAgRowHtml('K3', rec({ intakeKind: 'image', idMessage: 'M1' })).includes(RED), false);
+check('waInbound record exists + non-order intent → red', ctx.lgAgRowHtml('K3', rec({ intakeKind: 'image' }), ib).includes(RED), true);
+check('waInbound record + order intent → no red', ctx.lgAgRowHtml('K4', rec({ intakeKind: 'image', intent: 'order' }), ib).includes(RED), false);
+check('pdf rejected → no red', ctx.lgAgRowHtml('K8', rec({ idMessage: 'P.1', intakeKind: 'pdf' }), ib).includes(RED), false);
+check('closed after rejected → no red', ctx.lgAgRowHtml('K9', rec({ idMessage: 'C1', intakeKind: 'pdf' }), ib).includes(RED), false);
+check('closed after failed → red', ctx.lgAgRowHtml('K10', rec({ idMessage: 'C2', intakeKind: 'image' }), ib).includes(RED), true);
+check('agents tab passes waInbound map to the row', /lgAgRowHtml\(r\.key,\s*r,\s*raw\.whatsapp\)/.test(P), true);
 const x = ctx.lgAgRowHtml('K5', rec({ text: '<img src=x onerror=1>"', customerName: '<b>x</b>', wouldReply: '<script>' }));
 check('message text, name and reply are escaped', [x.includes('<img'), x.includes('<b>x'), x.includes('<script>'), x.includes('&lt;img')], [false, false, false, true]);
 check('verdict shown, buttons still there', (() => { const v = ctx.lgAgRowHtml('K6', rec({ verdict: { ok: true } })); return [v.includes('נכון ✓'), /data-agv/.test(v)]; })(), [true, true]);

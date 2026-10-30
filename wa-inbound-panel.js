@@ -356,10 +356,21 @@ function lgAgRows(map) {
   return Object.keys(m).map(k => Object.assign({ key: k }, m[k]))
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 100);
 }
-function lgAgRowHtml(key, r) {
+//  האם ההודעה באמת נקלטה בתור (waInbound באותו מפתח, ולא נדחתה)?
+//  ⚠️ intakeKind לבד לא מספיק — טקסט חופשי שהקליטה זרקה, או PDF שנדחה, לא נקלטו.
+//  המפתח — אותו ניקוי כמו lgWaInboundKey בשרת.
+function lgAgIntakeTaken(key, r, intake) {
+  const m = intake || {};
+  const ik = r.idMessage ? String(r.idMessage).replace(/[.#$[\]/]/g, '_') : key;
+  const x = Object.prototype.hasOwnProperty.call(m, ik) ? m[ik] : null;
+  if (!x) return false;
+  return x.state !== 'rejected' && !(x.state === 'closed' && x.closedFrom === 'rejected');
+}
+//  intake — waInbound הגולמי (raw.whatsapp בפאנל)
+function lgAgRowHtml(key, r, intake) {
   const k = _waInEsc(key);
   //  הודעה שהסוכן לא ראה כהזמנה אבל נקלטה כהזמנה — בן צריך לראות את זה
-  const both = r.intakeKind && r.intent !== 'order'
+  const both = r.intent !== 'order' && lgAgIntakeTaken(key, r, intake)
     ? ' <span class="wain-ag-red">נקלטה גם כהזמנה</span>' : '';
   const v = r.verdict ? (r.verdict.ok ? 'נכון ✓' : 'לא נכון ✗') : '';
   return `<div class="wain-row wain-ag" data-agkey="${k}">
@@ -544,7 +555,7 @@ if (typeof document !== 'undefined') (function () {
   function agentsTab() {
     const rs = lgAgRows(agentShadow);
     return '<div class="wain-note">מצב ניסיון: שום הודעה לא נשלחת ללקוח. סמן ✓ אם ההחלטה והתשובה נכונות, ✗ אם לא.</div>'
-      + sec('100 האחרונות', rs.length, rs.map(r => lgAgRowHtml(r.key, r)).join('') || '<div class="wain-ok-note">עוד אין רשומות.</div>');
+      + sec('100 האחרונות', rs.length, rs.map(r => lgAgRowHtml(r.key, r, raw.whatsapp)).join('') || '<div class="wain-ok-note">עוד אין רשומות.</div>');
   }
 
   function render() {

@@ -49,18 +49,18 @@ async function handleInbound(req, deps) {
 async function handleCustomerInbound(body, deps) {
   // רשומת צל לסוכני הלקוחות — מאחורי דגל, אחרי devbrain. כשל כאן לא משנה
   // שום דבר בתשובה; שום return למטה לא תלוי בזה. לא נרשם אלא שם השגיאה.
+  // ⚠️ הכול (רישום + עיבוד) בתוך waitUntil — דרך התשובה לא מחכה לשום קריאת DB
+  //    של הסוכן. רק בדיקת הדגל נשארת כאן, סינכרונית.
   if (process.env.AGENT_SHADOW_ENABLED === 'true') {
     try {
-      const sh = require('./_agent-shadow');
-      const rec = await sh.lgAgentShadowRecord(deps.db, body, deps.now);
-      if (rec && rec.created) {
-        deps.waitUntil(Promise.resolve()
-          .then(() => sh.lgAgentShadowProcess(deps.db, rec.key, { now: deps.now, fetchImpl: deps.fetchImpl }))
-          .catch(e => console.warn('wa-inbound: agent shadow process', e && e.name)));
-      }
-    } catch (e) { console.warn('wa-inbound: agent shadow record', e && e.name); }
+      deps.waitUntil(Promise.resolve().then(async () => {
+        const sh = require('./_agent-shadow');
+        const rec = await sh.lgAgentShadowRecord(deps.db, body, deps.now);
+        if (rec && rec.created) await sh.lgAgentShadowProcess(deps.db, rec.key, { now: deps.now, fetchImpl: deps.fetchImpl });
+      }).catch(e => console.warn('wa-inbound: agent shadow', e && e.name)));
+    } catch (e) { console.warn('wa-inbound: agent shadow', e && e.name); }
   }
-  const p =lgWaInboundParse(body);
+  const p = lgWaInboundParse(body);
   if (p.action !== 'record') return { status: 200, body: { ok: true, ignored: p.reason } };
   if (p.entry.groupId) {
     // קבוצה: הקישור ללקוח הוא ההרשאה (waGroups, נכתב רק מ-endpoint אדמיני).

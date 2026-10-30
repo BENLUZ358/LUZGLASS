@@ -103,6 +103,9 @@ async function lgAgentShadowRecord(db, body, now) {
   }
   if (p.action !== 'record') return null;
   const linked = await _isLinked(db, p.entry);
+  // קבוצה שלא מקושרת ב-waGroups — לא רושמים כלום (המספר העסקי חבר בהרבה
+  // קבוצות שאינן לקוחות). שולח פרטי לא מקושר — נרשם בלי תוכן, route 'shaul'.
+  if (p.entry.groupId && !linked) return null;
   const ib = lgWaInboundParse(body);
   const rec = { ...p.entry, linked, intakeKind: (ib && ib.entry && ib.entry.kind) || '',
                 state: 'received', attempts: 0, createdAt: t, updatedAt: t };
