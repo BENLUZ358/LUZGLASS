@@ -30,6 +30,9 @@ const CANCELS = 'waMeta/agentCancels';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STUCK_MS = 3 * 60 * 60 * 1000;     // בקשה שמחכה מעל 3 שעות
 const SHADOW_LIMIT = 40;
+const RUN_BUDGET_MS = 40 * 1000;       // תקציב כולל לריצה (maxDuration 60)
+const SHADOW_MIN_LEFT_MS = 22 * 1000;  // כמו ה-drain: פחות מזה — לא מתחילים עיבוד
+const SEND_MARGIN_MS = 20 * 1000;
 
 const _vals = snap => { const out = []; if (snap) snap.forEach(ch => { out.push({ key: ch.key, v: ch.val() || {} }); }); return out; };
 const _list = a => a.length ? ' (' + a.join(', ') + ')' : '';
@@ -45,19 +48,22 @@ function _jerDate(now) {
 //  ספירות מהנתונים. { counts, text }
 async function lgAgentDailySummary(db, now) {
   const since = now - DAY_MS;
-  const shadow = _vals(await db.ref(SHADOW).orderByChild('createdAt').startAt(since).once('value'))
-    .filter(r => (r.v.createdAt || 0) >= since);
+  //  once('value') + סינון (בלי orderByChild: אין אינדקס על createdAt)
+  const shadow = _vals(await db.ref(SHADOW).once('value'))
+    .filter(r => (r.v.createdAt || 0) >= since && r.v.staff !== true && r.v.route !== 'staff');   // הודעות צוות לא נספרות
+  //  ⚠️ הצעות וביטולים: כל הפריטים הממתינים כרגע, לא רק 24 השעות האחרונות
   const quotes = _vals(await db.ref(QUOTES).once('value'));
   const cancels = _vals(await db.ref(CANCELS).once('value'));
 
   const acted = shadow.filter(r => r.v.acted === true);
   const toShaul = acted.filter(r => (r.v.wouldAct || []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask')));
+  const toShaulKeys = new Set(toShaul.map(r => r.key));
   const waiting = quotes.filter(r => r.v.state === 'waiting');
   const stuck = quotes.filter(r => (r.v.state === 'waiting' || r.v.state === 'relaying') && r.v.at && now - r.v.at > STUCK_MS);
   const hsWait = cancels.filter(r => r.v.confirmed === true && r.v.hsSent === true && !r.v.done);
   const counts = {
     incoming: shadow.length,
-    selfClosed: acted.filter(r => r.v.route !== 'shaul').length,
+    selfClosed: acted.filter(r => r.v.route !== 'shaul' && !toShaulKeys.has(r.key)).length,
     toShaul: toShaul.length,
     quotesWaiting: waiting.length,
     cancelsWaitingHs: hsWait.length,
@@ -81,7 +87,9 @@ async function lgAgentDailySummary(db, now) {
   return { counts, text };
 }
 
-//  deps: { db, env, now, provider, fetchImpl }.  { status, body }
+//  deps: { db, env, now, provider, fetchImpl, clock }.  { status, body }
+//  ⚠️ תקציב אחד לכל הריצה: דדליין = התחלה + 40ש׳ (clock = Date.now, ניתן להחלפה בבדיקה).
+//     הסיכום נבנה ונכנס לתור **קודם**, ואז נשלח; רק אחר כך רשת הביטחון, ועוצרת כשנשאר פחות מ-22ש׳.
 async function lgAgentDailyRun(req, deps) {
   const env = deps.env || process.env;
   const headers = (req && req.headers) || {};
@@ -89,23 +97,20 @@ async function lgAgentDailyRun(req, deps) {
     return { status: 401, body: { error: 'unauthorized' } };
   const db = deps.db;
   const now = deps.now || Date.now();
+  const clock = deps.clock || Date.now;
+  const deadline = clock() + RUN_BUDGET_MS;
   const body = { ok: true, sent: 0, failed: 0, shadowProcessed: 0, summary: null };
-  const sendOpts = { env, now: deps.now, provider: deps.provider };
   const addSend = r => { if (r) { body.sent += r.sent || 0; body.failed += r.failed || 0; } };
+  //  שליחה עם מה שנשאר מהתקציב (פחות מרווח)
+  const send = async () => {
+    const left = deadline - clock();
+    if (left < SEND_MARGIN_MS) return;
+    try { addSend(await lgAgentSendPending(db, { env, now: deps.now, provider: deps.provider, budgetMs: Math.max(0, left - SEND_MARGIN_MS) })); }
+    catch (e) { body.failed++; console.warn('agent-daily: send', e && e.name); }
+  };
 
-  try { addSend(await lgAgentSendPending(db, sendOpts)); } catch (e) { body.failed++; console.warn('agent-daily: send', e && e.name); }
-
-  if (env.AGENT_SHADOW_ENABLED === 'true') {
-    try {
-      const keys = await lgAgentShadowPending(db, SHADOW_LIMIT, now);
-      for (const key of keys) {
-        try {
-          const p = await lgAgentShadowProcess(db, key, { now, env, fetchImpl: deps.fetchImpl });
-          if (p.ok) body.shadowProcessed++; else body.failed++;
-        } catch (e) { body.failed++; }
-      }
-    } catch (e) { body.failed++; console.warn('agent-daily: shadow', e && e.name); }
-
+  const shadowOn = env.AGENT_SHADOW_ENABLED === 'true';
+  if (shadowOn) {
     if (env.AGENT_REPLY_ENABLED !== 'true') {
       body.skipped = [{ reason: 'AGENT_REPLY_ENABLED כבוי — הסיכום לא נשלח' }];
     } else {
@@ -116,15 +121,28 @@ async function lgAgentDailyRun(req, deps) {
         const date = _jerDate(now).iso;
         const to = String(env.AGENT_SUMMARY_TO || '').split(',').map(s => lgWaSenderKey(s.trim())).filter(Boolean);
         body.skipped = [];
-        let queued = 0;
         for (const phone of to) {
           if (!staff.includes(phone)) { body.skipped.push({ to: phone, reason: 'לא ב-AGENT_STAFF_PHONES — לא נשלח' }); continue; }
-          const q = await lgAgentEnqueue(db, { key: 'daily-' + date + '-' + phone, to: phone, customerId: '', text: sum.text, reason: 'סיכום יומי' });
-          if (q.queued) queued++;
+          await lgAgentEnqueue(db, { key: 'daily-' + date + '-' + phone, to: phone, customerId: '', text: sum.text, reason: 'סיכום יומי' });
         }
-        if (queued) addSend(await lgAgentSendPending(db, sendOpts));
       } catch (e) { body.failed++; console.warn('agent-daily: summary', e && e.name); }
     }
+  }
+
+  await send();   // כולל הסיכום שנכנס עכשיו + מה שנתקע בתור
+
+  if (shadowOn) {
+    try {
+      const keys = await lgAgentShadowPending(db, SHADOW_LIMIT, now);
+      for (const key of keys) {
+        if (deadline - clock() < SHADOW_MIN_LEFT_MS) break;
+        try {
+          const p = await lgAgentShadowProcess(db, key, { now, env, fetchImpl: deps.fetchImpl });
+          if (p.ok) body.shadowProcessed++; else body.failed++;
+        } catch (e) { body.failed++; }
+      }
+    } catch (e) { body.failed++; console.warn('agent-daily: shadow', e && e.name); }
+    if (body.shadowProcessed) await send();   // תשובות שהעיבוד הכניס לתור
   }
   return { status: 200, body };
 }

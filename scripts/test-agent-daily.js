@@ -32,6 +32,7 @@ const seed = () => fakeDb({ waMeta: {
     b: { createdAt: NOW - 2 * H, linked: true, route: 'quote', acted: true, wouldAct: [{ type: 'reply' }, { type: 'staff' }], state: 'done' },
     c: { createdAt: NOW - 3 * H, linked: false, route: 'shaul', acted: false, state: 'done' },
     d: { createdAt: NOW - 4 * H, linked: true, route: 'okev', acted: false, verdict: { ok: false }, state: 'done' },
+    st: { createdAt: NOW - 1 * H, linked: false, staff: true, route: 'staff', acted: false, state: 'done' },
     old: { createdAt: NOW - 30 * H, linked: true, route: 'okev', acted: true, state: 'done' },
   },
   agentQuotes: {
@@ -59,10 +60,10 @@ const seed = () => fakeDb({ waMeta: {
   /* ספירות */
   {
     const s = await D.lgAgentDailySummary(seed(), NOW);
-    check('counts', s.counts, { incoming: 4, selfClosed: 2, toShaul: 1, quotesWaiting: 2, cancelsWaitingHs: 1,
+    check('counts', s.counts, { incoming: 4, selfClosed: 1, toShaul: 1, quotesWaiting: 2, cancelsWaitingHs: 1,
       markedWrong: 1, unlinked: 1, quotesStuck: 2 });
     check('text', s.text.split('\n'), [
-      'סיכום סוכנים — 31.10.2026', 'הודעות שנכנסו: 4', 'נסגרו לבד: 2', 'הועברו לשאול: 1',
+      'סיכום סוכנים — 31.10.2026', 'הודעות שנכנסו: 4', 'נסגרו לבד: 1', 'הועברו לשאול: 1',
       'הצעות מחיר שמחכות לשאול: 2 (#7, #8)', 'ביטולים שמחכים לחשבשבת: 1 (L2001)', 'סומנו ✗ בפאנל: 1',
       'ממספרים לא מקושרים: 1', 'הצעות מחיר תקועות (מעל 3 שעות): 2 (#8, #9)']);
   }
@@ -87,6 +88,18 @@ const seed = () => fakeDb({ waMeta: {
     const db2 = seed();
     const r3 = await D.lgAgentDailyRun(req('sek'), { db: db2, env: { ...ENV, AGENT_REPLY_ENABLED: '' }, now: NOW, provider: provider() });
     check('reply off → no summary queued', [r3.body.summary, db2._data.waMeta.agentOutbox], [null, undefined]);
+  }
+  /* תקציב: הסיכום נכנס ונשלח לפני רשת הביטחון, גם כשהעיבוד היה חורג */
+  {
+    const db = seed(); let t = 0;
+    db._data.waMeta.agentShadow.pend = { createdAt: NOW - H, linked: true, state: 'received', attempts: 0, chatId: 'x@c.us', sender: '0500000000', text: 'q' };
+    const p = provider();
+    const orig = p.sendText; p.sendText = async f => { t = 30000; return orig(f); };   // השליחה אכלה את התקציב
+    const r = await D.lgAgentDailyRun(req('sek'), { db, env: ENV, now: NOW, provider: p, clock: () => t });
+    check('overrun: summary sent, shadow work skipped', [r.body.sent, p.texts.length, r.body.shadowProcessed, db._data.waMeta.agentShadow.pend.state], [1, 1, 0, 'received']);
+    const db2 = seed(); const p2 = provider();
+    const r2 = await D.lgAgentDailyRun(req('sek'), { db: db2, env: ENV, now: NOW, provider: p2, clock: () => 0 });
+    check('no overrun: ok', [r2.body.sent, r2.body.failed], [1, 0]);
   }
   /* vercel.json */
   {
