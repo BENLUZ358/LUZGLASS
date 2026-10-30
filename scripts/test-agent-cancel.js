@@ -73,7 +73,8 @@ Module._load = function (req) {
     check('ok cancel → {ok:true}', r, { ok: true, code: '' });
     check('order removed from orders', db._data.orders.o3, undefined);
     check('sketch stays', db._data.sketches.o3, { img: 'x' });
-    check('cancel record written (confirmed)', sorted(cancels(db).o3),
+    check('cancel record carries an attempt token', typeof cancels(db).o3.token === 'string' && cancels(db).o3.token.length > 0, true);
+    check('cancel record written (confirmed)', sorted({ ...cancels(db).o3, token: undefined }),
       sorted({ order: ORDERS.o3, at: NOW, chatId: PRIV, hsSent: true, done: false, confirmed: true }));
     check('other orders untouched', Object.keys(db._data.orders).sort(), ['o1', 'o2', 'o4', 'o5', 'o6']);
     // כבר בוטל
@@ -146,7 +147,7 @@ Module._load = function (req) {
     let txCalled = false;
     db.ref = p => {
       const r = realRef(p);
-      if (p === 'waMeta/agentCancels/o3') r.set = async () => { throw Object.assign(new Error('x'), { name: 'NetErr' }); };
+      if (p === 'waMeta/agentCancels/o3') r.transaction = async () => { throw Object.assign(new Error('x'), { name: 'NetErr' }); };
       if (p === 'orders/o3') { const tx = r.transaction; r.transaction = fn => { txCalled = true; return tx(fn); }; }
       return r;
     };
@@ -164,6 +165,112 @@ Module._load = function (req) {
     delete db._data.waSenders['0501234567'];
     check('t3-3: sender unlinked after the question → forbidden', await act.lgAgentCancel(db, 'o3', ctx), { ok: false, code: 'forbidden' });
     check('t3-3: linked group → ok', await act.lgAgentCancel(db, 'o3', { ...ctx, chatId: GROUP }), { ok: true, code: '' });
+  }
+
+  /* ── R2-1: שני ביטולים במקביל (וביטול מול הורדה לביצוע) — כל שזירה ── */
+  //  כל פעולה על בסיס הנתונים של כל "שחקן" עוברת שער; הלוח (sched) קובע מי
+  //  מתקדם בכל צעד. כך נבדקות כל השזירות של צעדי A ו-B, לא רק "B כולו באמצע".
+  const interleave = async (db, actors, sched) => {
+    const realRef = db.ref.bind(db);
+    const arrived = actors.map(() => null), fin = actors.map(() => false), out = [];
+    let wake = null;
+    const poke = () => { const w = wake; wake = null; if (w) w(); };
+    const gate = i => new Promise(res => { arrived[i] = res; poke(); });
+    const view = i => ({ ref: p => {
+      const r = realRef(p);
+      ['once', 'set', 'update', 'transaction'].forEach(m => {
+        const orig = r[m];
+        r[m] = async (...a) => { await gate(i); return orig(...a); };
+      });
+      return r;
+    } });
+    actors.forEach((fn, i) => { fn(view(i)).then(v => { out[i] = v; fin[i] = true; poke(); },
+                                                 e => { out[i] = { err: e && e.name }; fin[i] = true; poke(); }); });
+    let step = 0;
+    for (;;) {
+      while (!actors.every((_, i) => fin[i] || arrived[i])) await new Promise(r => { wake = r; });
+      const ready = actors.map((_, i) => i).filter(i => arrived[i]);
+      if (!ready.length) break;
+      const want = step < sched.length ? sched[step] : step % actors.length;
+      const pick = ready.includes(want) ? want : ready[0];
+      step++;
+      const r = arrived[pick]; arrived[pick] = null; r();
+    }
+    return out;
+  };
+  const scheds = (n, k) => { const all = [[]];
+    for (let l = 1; l <= n; l++) { const nx = []; all.filter(x => x.length === l - 1).forEach(x => { for (let j = 0; j < k; j++) nx.push(x.concat(j)); }); all.push(...nx); }
+    return all.filter(x => x.length === n); };
+  {
+    const warn = console.warn; console.warn = () => {};
+    let bad = [], okCounts = new Set();
+    try {
+      for (const sc of scheds(10, 2)) {
+        const db = seed();
+        const res = await interleave(db, [d => act.lgAgentCancel(d, 'o3', ctx), d => act.lgAgentCancel(d, 'o3', ctx)], sc);
+        const rc = cancels(db).o3;
+        const good = db._data.orders.o3 === undefined && rc && rc.confirmed === true && rc.order && rc.order.orderNum === 'L1003'
+          && res.filter(r => r && r.ok).length === 1;
+        okCounts.add(res.filter(r => r && r.ok).length);
+        if (!good) bad.push(sc.join('') + ' → ' + JSON.stringify([res, db._data.orders.o3 ? 'order' : 'gone', rc || null]));
+      }
+    } finally { console.warn = warn; }
+    check('R2-1: two concurrent cancels, every interleaving (1024): order gone, confirmed record holds it, exactly one ok',
+      bad.slice(0, 2), []);
+  }
+  {
+    // ביטול מול שאול שמוריד לביצוע (update על ההזמנה) — אף פעם לא "נמחקה בלי רשומה"
+    const warn = console.warn; console.warn = () => {};
+    let bad = [];
+    try {
+      for (const sc of scheds(9, 2)) {
+        const db = seed();
+        const res = await interleave(db, [d => act.lgAgentCancel(d, 'o3', ctx),
+                                          d => d.ref('orders/o3').update({ stage: 'workday' })], sc);
+        const o = db._data.orders.o3, rc = cancels(db).o3;
+        const intact = o && o.orderNum === 'L1003';
+        // ok → רשומה מאושרת עם ההזמנה; לא ok → ההזמנה שלמה ואין רשומה
+        const good = res[0].ok ? (rc && rc.confirmed === true && rc.order.orderNum === 'L1003')
+                               : (intact && !rc && res[0].code === 'too-late');
+        if (!good) bad.push(sc.join('') + ' → ' + JSON.stringify([res[0], o || null, rc || null]));
+      }
+    } finally { console.warn = warn; }
+    check('R2-1: cancel vs move-to-workday, every interleaving: never deleted without a record, refusal leaves none', bad.slice(0, 2), []);
+  }
+  {
+    // ביטול חוזר אחרי שהושלם, כשההזמנה שוחזרה ביד — לא דורס רשומה מאושרת
+    const db = seed();
+    await act.lgAgentCancel(db, 'o3', ctx);
+    const first = JSON.stringify(cancels(db).o3);
+    db._data.orders.o3 = JSON.parse(JSON.stringify(ORDERS.o3));
+    check('R2-1: confirmed record exists → missing, record untouched, order stays',
+      [await act.lgAgentCancel(db, 'o3', ctx), JSON.stringify(cancels(db).o3) === first, !!db._data.orders.o3],
+      [{ ok: false, code: 'missing' }, true, true]);
+  }
+  {
+    // הסרה בסירוב — רק של הרשומה שלי: רשומה של ניסיון אחר לא נמחקת
+    const db = seed();
+    const realRef = db.ref.bind(db);
+    db.ref = p => { const r = realRef(p);
+      if (p === 'orders/o3') { const tx = r.transaction; r.transaction = fn => {
+        // ניסיון אחר כתב רשומה משלו בינתיים, וההזמנה ירדה לביצוע
+        db._data.waMeta.agentCancels.o3 = { ...db._data.waMeta.agentCancels.o3, token: 'other' };
+        db._data.orders.o3.stage = 'workday'; return tx(fn); }; }
+      return r; };
+    const r = await act.lgAgentCancel(db, 'o3', ctx);
+    check('R2-1: refusal does not remove another attempt\'s record', [r.code, cancels(db).o3 && cancels(db).o3.token], ['too-late', 'other']);
+  }
+  /* ── R2-2: הטרנזקציה זורקת → הרשומה נשארת ── */
+  {
+    const db = seed();
+    const realRef = db.ref.bind(db);
+    db.ref = p => { const r = realRef(p);
+      if (p === 'orders/o3') r.transaction = async () => { throw Object.assign(new Error('net'), { name: 'NetErr' }); };
+      return r; };
+    const warn = console.warn; console.warn = () => {};
+    let r; try { r = await act.lgAgentCancel(db, 'o3', ctx); } finally { console.warn = warn; }
+    check('R2-2: transaction throws → error, record kept (unconfirmed, with the order)',
+      [r, cancels(db).o3 && cancels(db).o3.confirmed, cancels(db).o3 && cancels(db).o3.order.orderNum], [{ ok: false, code: 'error' }, false, 'L1003']);
   }
 
   /* ── פעולת אדמין agent-cancel-done ── */

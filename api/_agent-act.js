@@ -18,6 +18,7 @@
 //  ⚠️ לא נרשם ללוג: טקסט ההודעה, טוקנים, מפתחות. רק e.name.
 // ═══════════════════════════════════════════════════════════════════
 
+const crypto = require('crypto');
 const { lgWaInboundKey } = require('./_wa-inbound');
 const { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
 const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
@@ -162,11 +163,16 @@ const _hsSent = o => { const h = o && (o.hashavshevet || o.hsOrder); return !!(h
 //   1. הצ'אט עדיין מקושר לאותו לקוח (waGroups / waSenders) — קישור שהוסר
 //      אחרי השאלה לא מבטל. אחרת 'forbidden'.
 //   2. קריאה מקדימה: קיימת / של הלקוח / בשלב מותר — בלי לכתוב כלום.
-//   3. **הרשומה קודם**: waMeta/agentCancels/<id> עם confirmed:false והעותק
-//      מהקריאה. נכשלה → 'error', ולא מוחקים. אין מסלול שמוחק בלי רשומה.
+//   3. **הרשומה קודם**: waMeta/agentCancels/<id> עם confirmed:false, העותק
+//      מהקריאה ו-token של הניסיון הזה — בטרנזקציה שלא דורסת רשומה מאושרת
+//      (כבר בוטל → 'missing'). נכשלה → 'error', ולא מוחקים. אין מסלול שמוחק
+//      בלי רשומה.
 //   4. הבדיקה והמחיקה — **אותה טרנזקציה** על orders/<id> (R8): הזמנה שירדה
 //      לביצוע או עברה ללקוח אחר רגע לפני — לא תימחק (Review Focus 3).
-//      סירוב → הרשומה נמחקת.
+//      ⚠️ הרשומה יורדת **רק** בסירוב אמיתי (forbidden/too-late — ההזמנה
+//      בוודאות קיימת), ורק אם היא עדיין שלי (token) ולא מאושרת. "אין הזמנה"
+//      (ניסיון מקביל כבר מחק) או טרנזקציה שזרקה → לא נוגעים ברשומה: אחרת
+//      ניסיון ב' היה מוחק את הרשומה של א' אחרי שא' מחק את ההזמנה (R2-1).
 //   5. אחרי המחיקה: confirmed:true + העותק מהטרנזקציה + hsSent.
 //  ⚠️ פונקציה שנהרגת בין 4 ל-5 משאירה רשומה confirmed:false שמחזיקה את
 //     ההזמנה; "תיקון הזמנות" מציג רשומה כזו אחרי 10 דקות כ"לבדוק". אם
@@ -190,8 +196,15 @@ async function lgAgentCancel(db, orderId, ctx) {
 
   const now = c.now || Date.now();
   const recRef = db.ref(AGENT_CANCELS + '/' + id);
-  try { await recRef.set({ order: pre, at: now, chatId, done: false, confirmed: false }); }
-  catch (e) { console.warn('agent-cancel: record', e && e.name); return { ok: false, code: 'error' }; }
+  const token = crypto.randomBytes(8).toString('hex');
+  const draft = { order: pre, at: now, chatId, done: false, confirmed: false, token };
+  let pw;
+  try {
+    // null-first: null → הטיוטה; רשומה מאושרת → ביטול (כבר בוטל). רשומה לא
+    // מאושרת (ניסיון מקביל / שנפל) נדרסת — היא מחזיקה את אותה הזמנה.
+    pw = await recRef.transaction(cur => (cur && cur.confirmed === true ? undefined : draft));
+  } catch (e) { console.warn('agent-cancel: record', e && e.name); return { ok: false, code: 'error' }; }
+  if (!pw.committed) return { ok: false, code: 'missing' };
 
   let taken = null, why = '';
   let tx;
@@ -206,12 +219,20 @@ async function lgAgentCancel(db, orderId, ctx) {
       taken = cur;
       return null;   // מחיקה — באותה טרנזקציה עם הבדיקה
     });
-  } catch (e) { console.warn('agent-cancel: tx', e && e.name); tx = { committed: false }; why = 'error'; }
+  } catch (e) {
+    // R2-2: לא ידוע אם נמחק — הרשומה נשארת (תוצג "לבדוק" אחרי 10 דקות)
+    console.warn('agent-cancel: tx', e && e.name);
+    return { ok: false, code: 'error' };
+  }
 
-  if (!tx.committed || !taken) {
-    // לא נמחק — הרשומה המוקדמת יורדת
-    try { await recRef.set(null); } catch (e) { console.warn('agent-cancel: unrecord', e && e.name); }
-    return { ok: false, code: !tx.committed ? (why || 'error') : 'missing' };
+  if (tx.committed && !taken) return { ok: false, code: 'missing' };   // ניסיון מקביל מחק — לא נוגעים
+  if (!tx.committed) {
+    if (why === 'forbidden' || why === 'too-late') {
+      // סירוב אמיתי — ההזמנה קיימת. מורידים רק את הטיוטה **שלי**
+      try { await recRef.transaction(cur => (cur === null ? null : (cur.token === token && cur.confirmed !== true ? null : undefined))); }
+      catch (e) { console.warn('agent-cancel: unrecord', e && e.name); }
+    }
+    return { ok: false, code: why || 'error' };
   }
   try { await recRef.update({ order: taken, hsSent: _hsSent(taken), confirmed: true }); }
   catch (e) {
