@@ -105,10 +105,11 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, o
 }
 
 //  תופס רשומה לשליחה. מחזיר { claimed, entry, reason }.
-async function lgWaClaim(db, key, claimedBy) {
+//  base — תור אחר באותו דפוס (תור הסוכנים, waMeta/agentOutbox). ברירת מחדל waOutbox.
+async function lgWaClaim(db, key, claimedBy, base) {
   const now = Date.now();
 
-  const r = await db.ref(OUTBOX + '/' + key).transaction(cur => {
+  const r = await db.ref((base || OUTBOX) + '/' + key).transaction(cur => {
     //  ⚠️ null ולא undefined, וזה ההבדל בין עובד לשבור.
     //
     //  פיירבייס קוראת לפונקציה הזו **פעמיים**: תחילה עם הערך שבמטמון
@@ -155,10 +156,10 @@ async function lgWaClaim(db, key, claimedBy) {
 //  סוגר רשומה אחרי שליחה.
 //  ⚠️ בכישלון claimedAt מתנקה — זה מה שמאפשר ל-retry לתפוס שוב. בהצלחה
 //  הוא נשאר יחד עם state='sent', והשילוב חוסם לנצח.
-async function lgWaComplete(db, key, result) {
+async function lgWaComplete(db, key, result, base) {
   const now = Date.now();
   const ok  = !!(result && result.ok);
-  await db.ref(OUTBOX + '/' + key).update({
+  await db.ref((base || OUTBOX) + '/' + key).update({
     state:     ok ? 'sent' : 'failed',
     sentAt:    ok ? now : null,
     claimedAt: ok ? now : null,
@@ -230,9 +231,9 @@ async function lgWaReserveSlot(db, gapMs, maxWaitMs) {
 //  הרשומה ממתינה ללא הגבלה עד ל-MAX_AGE_MS.
 //
 //  ⚠️ לעולם לא נוגע ברשומה ששוגרה. 'sent' הוא סופי.
-async function lgWaRelease(db, key, reason) {
+async function lgWaRelease(db, key, reason, base) {
   const now = Date.now();
-  const r = await db.ref(OUTBOX + '/' + key).transaction(cur => {
+  const r = await db.ref((base || OUTBOX) + '/' + key).transaction(cur => {
     // ⚠️ null-first — ר' ההערה המלאה ב-lgWaClaim
     if (cur === null)         return null;
     if (cur.state === 'sent') return;   // abort — הלקוח קיבל
@@ -256,8 +257,8 @@ async function lgWaRelease(db, key, reason) {
 //  נשארות לנצח (ה-guard "כבר נשלחה" ב-lgWaEnqueue נשען עליהן), ולכן
 //  "60 הוותיקות ואז סינון" החזיר תור ריק מרגע שהצטברו 60 סופיות —
 //  והשליחה נעצרה בשקט (2026-10-04). הסינון חייב לקרות לפני החיתוך.
-async function lgWaPending(db, limit) {
-  const byState = s => db.ref(OUTBOX).orderByChild('state').equalTo(s).once('value');
+async function lgWaPending(db, limit, base) {
+  const byState = s => db.ref(base || OUTBOX).orderByChild('state').equalTo(s).once('value');
   const [pending, failed] = await Promise.all([byState('pending'), byState('failed')]);
   const rows = [];
   const take = snap => snap.forEach(ch => {

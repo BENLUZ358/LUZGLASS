@@ -316,7 +316,8 @@ function greenProvider() {
     //  ישלח שוב את כל הקבצים (עדיף כפול על חסר).
     async sendFiles(facts) {
       const { to, files } = facts || {};
-      const text   = renderText(facts || {});
+      //  caption — כיתוב חופשי (תור הסוכנים); בלעדיו הנוסח הקבוע של renderText, כמו תמיד
+      const text   = typeof (facts && facts.caption) === 'string' ? facts.caption : renderText(facts || {});
       const chatId = lgWaChatId(to);
       if (!chatId) return { ok: false, reason: 'נמען לא תקין', failureKind: FAIL.RECIPIENT };
       if (!Array.isArray(files) || !files.length) return { ok: false, reason: 'אין קבצים', failureKind: FAIL.OTHER };
@@ -328,7 +329,7 @@ function greenProvider() {
         const form = new FormData();
         form.append('chatId', chatId);
         form.append('fileName', f.name);
-        if (i === 0) form.append('caption', text);
+        if (i === 0 && text) form.append('caption', text);
         form.append('file', new Blob([f.buf], { type: f.mime }), f.name);
         let httpStatus = 0, parsed = null;
         try {
@@ -354,6 +355,55 @@ function greenProvider() {
       }
       return { ok: true, httpStatus: 200, messageId: ids[0], params: [text], failureKind: null,
                detail: 'sent ' + ids.length + ' files', reason: null };
+    },
+
+    //  ─── תור הסוכנים (waMeta/agentOutbox) ─────────────────────────────
+    //
+    //  טקסט חופשי והעברת הודעה. אותו בסיס, אותו redact, אותו סיווג כשלים
+    //  כמו send — רק בלי renderText: הסוכן כבר כתב את המשפט.
+    //  ⚠️ השער (gate) והחלון לא כאן — הקורא עובר בהם לפני כל קריאה, כמו ב-send.
+    async _postJson(method, body, idOf) {
+      const redact = s => String(s == null ? '' : s).split(token).join('***');
+      const url = 'https://api.green-api.com/waInstance' + idInstance + '/' + method + '/' + token;
+      let httpStatus = 0, parsed = null;
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                     body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+        httpStatus = r.status;
+        try { parsed = JSON.parse(await r.text()); } catch (_) { /* לא JSON */ }
+      } catch (e) {
+        // ⚠️ e.message של fetch עלול להכיל את ה-URL, ועם זה את הטוקן
+        return { ok: false, httpStatus: 0, messageId: null, failureKind: FAIL.NETWORK,
+                 detail: 'network', reason: 'שגיאת רשת מול GREEN API (' + (e && e.name) + ')' };
+      }
+      const id = parsed ? idOf(parsed) : null;
+      const ok = httpStatus >= 200 && httpStatus < 300 && !!id;
+      const why = redact((parsed && (parsed.message || parsed.error)) || 'HTTP ' + httpStatus).slice(0, 300);
+      return { ok, httpStatus, messageId: id || null,
+               failureKind: ok ? null : classifyFailure(httpStatus, why),
+               detail: ok ? 'sent' : why, reason: ok ? null : why };
+    },
+
+    //  { to, text } — to: טלפון מקומי או קבוצה (…@g.us)
+    async sendText(facts) {
+      const { to, text } = facts || {};
+      const chatId = lgWaChatId(to);
+      if (!chatId) return { ok: false, reason: 'נמען לא תקין', failureKind: FAIL.RECIPIENT };
+      if (!String(text || '').trim()) return { ok: false, reason: 'אין טקסט', failureKind: FAIL.OTHER };
+      return this._postJson('sendMessage', { chatId, message: String(text) }, p => p.idMessage);
+    },
+
+    //  { to, fromChat, idMessages } — העברת הודעות קיימות (סקיצה של לקוח לשאול).
+    //  GREEN API forwardMessages מחזירה { messages: [id…] }.
+    async forward(facts) {
+      const { to, fromChat, idMessages } = facts || {};
+      const chatId = lgWaChatId(to);
+      const from   = String(fromChat || '');
+      if (!chatId) return { ok: false, reason: 'נמען לא תקין', failureKind: FAIL.RECIPIENT };
+      if (!/@(c|g)\.us$/.test(from) || !Array.isArray(idMessages) || !idMessages.length)
+        return { ok: false, reason: 'אין הודעה להעביר', failureKind: FAIL.OTHER };
+      return this._postJson('forwardMessages', { chatId, chatIdFrom: from, messages: idMessages.map(String) },
+                            p => (Array.isArray(p.messages) && p.messages[0]) || null);
     },
 
     async send(facts) {
