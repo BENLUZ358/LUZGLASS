@@ -350,6 +350,39 @@ const LG_AG_ROUTE = { okev: 'עוקב', kolet: 'קולט', archive: 'ארכיו�
   ignore: 'מתעלם', shaul: 'לשאול', 'silent-human': 'שותק (ענו ידנית)' };
 function lgAgIntentLabel(i) { return LG_AG_INTENT[i] || String(i == null ? '' : i); }
 function lgAgRouteLabel(r) { return LG_AG_ROUTE[r] || String(r == null ? '' : r); }
+//  שלב 2: כמה לקוחות בפיילוט
+function lgAgPilotCount(pilot) {
+  return Object.keys(pilot || {}).filter(k => pilot[k] === true).length;
+}
+const LG_AG_WHY = { 'not-pilot': 'לא בפיילוט', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה' };
+const LG_AG_STATE = { received: 'ממתין', processing: 'בעיבוד', failed: 'נכשל' };
+const LG_AG_OB = { sent: 'נשלח ✓', pending: 'בתור', blocked: 'נחסם', failed: 'נכשל' };
+//  רשומות התור של שורה: <key>_<i> או <key>_<i>_s (מפתח מנוקה כמו בשרת)
+function lgAgOutboxOf(key, outbox) {
+  const pre = String(key).replace(/[.#$[\]/]/g, '_') + '_', m = outbox || {};
+  return Object.keys(m).filter(k => k.indexOf(pre) === 0 && /^\d+(_s)?$/.test(k.slice(pre.length))).sort()
+    .map(k => m[k]).filter(Boolean);
+}
+//  מה נעשה בפועל / מה היה נעשה — שורה אחת או יותר, הכל escaped
+function lgAgActHtml(r, c) {
+  const e = _waInEsc;
+  if (r.state && r.state !== 'done') return `<div class="wain-reason">${e(LG_AG_STATE[r.state] || r.state)}</div>`;
+  if (r.acted) {
+    const ob = lgAgOutboxOf(r._key, c.outbox);
+    if (!ob.length) return '<div class="wain-reason">בוצע</div>';
+    return ob.map(o => {
+      const who = o.reason === 'agent-staff' ? 'לשאול' : '';
+      const st = LG_AG_OB[o.state] || String(o.state || '');
+      return o.state === 'sent'
+        ? `<div class="wain-ag-r">${who ? who + ' ✓' : st}: ${e(o.text || '')}</div>`
+        : `<div class="wain-reason">${who ? e(who) + ' · ' : ''}${e(st)}</div>`;
+    }).join('');
+  }
+  const would = r.wouldReply || ((r.wouldAct || []).filter(a => a && a.text).map(a => a.text)[0]) || '';
+  const why = r.actReason ? (LG_AG_WHY[r.actReason] || r.actReason) : '';
+  return (would ? `<div class="wain-ag-r">היה עונה: ${e(would)}</div>` : '')
+    + (why ? `<div class="wain-reason">${e(why)}</div>` : '');
+}
 //  100 האחרונות, חדש למעלה
 function lgAgRows(map) {
   const m = map || {};
@@ -367,8 +400,12 @@ function lgAgIntakeTaken(key, r, intake) {
   return x.state !== 'rejected' && !(x.state === 'closed' && x.closedFrom === 'rejected');
 }
 //  intake — waInbound הגולמי (raw.whatsapp בפאנל)
-function lgAgRowHtml(key, r, intake) {
+function lgAgRowHtml(key, r, intake, c) {
   const k = _waInEsc(key);
+  const cc = c || {};
+  const pilotOn = !!(r.customerId && (cc.pilot || {})[r.customerId] === true);
+  const pilotBtn = r.linked && r.customerId
+    ? `<button type="button" class="wain-btn" data-agpilot data-cid="${_waInEsc(r.customerId)}" data-on="${pilotOn ? 0 : 1}">פיילוט: ${pilotOn ? 'כן' : 'לא'}</button>` : '';
   //  הודעה שהסוכן לא ראה כהזמנה אבל נקלטה כהזמנה — בן צריך לראות את זה
   const both = r.intent !== 'order' && lgAgIntakeTaken(key, r, intake)
     ? ' <span class="wain-ag-red">נקלטה גם כהזמנה</span>' : '';
@@ -378,8 +415,9 @@ function lgAgRowHtml(key, r, intake) {
           <span class="wain-when">${_waInEsc(_waInWhen(r.createdAt))}</span></div>
         ${r.text ? `<div class="wain-ag-t">${_waInEsc(r.text)}</div>` : ''}
         <div class="wain-reason"><b>${_waInEsc(lgAgIntentLabel(r.intent))}</b> ← ${_waInEsc(lgAgRouteLabel(r.route))}${both}</div>
-        ${r.wouldReply ? `<div class="wain-ag-r">היה עונה: ${_waInEsc(r.wouldReply)}</div>` : ''}
+        ${lgAgActHtml(Object.assign({ _key: key }, r), cc)}
         <div class="wain-acts">
+          ${pilotBtn}
           <button type="button" class="wain-btn" data-agv="1" data-key="${k}" aria-label="נכון">✓</button>
           <button type="button" class="wain-btn" data-agv="0" data-key="${k}" aria-label="לא נכון">✗</button>
           ${v ? `<span class="wain-chip">${v}</span>` : ''}
@@ -394,7 +432,7 @@ if (typeof document !== 'undefined') (function () {
   const draining = { whatsapp: false, email: false };
   // לשונית פתוחה, ואילו מקטעים מקופלים פתוחים — שרענון חי לא יסגור אותם
   let tab = 'whatsapp';
-  let agentShadow = {};
+  let agentShadow = {}, agentPilot = {}, agentOutbox = {};
   const folds = {};
 
   const $ = id => document.getElementById(id);
@@ -554,8 +592,9 @@ if (typeof document !== 'undefined') (function () {
 
   function agentsTab() {
     const rs = lgAgRows(agentShadow);
-    return '<div class="wain-note">מצב ניסיון: שום הודעה לא נשלחת ללקוח. סמן ✓ אם ההחלטה והתשובה נכונות, ✗ אם לא.</div>'
-      + sec('100 האחרונות', rs.length, rs.map(r => lgAgRowHtml(r.key, r, raw.whatsapp)).join('') || '<div class="wain-ok-note">עוד אין רשומות.</div>');
+    const c = { pilot: agentPilot, outbox: agentOutbox };
+    return `<div class="wain-note">בפיילוט: ${lgAgPilotCount(agentPilot)} לקוחות. רק לקוח בפיילוט מקבל תשובות אמיתיות; לשאר נרשם מה היה עונה. סמן ✓ אם ההחלטה והתשובה נכונות, ✗ אם לא.</div>`
+      + sec('100 האחרונות', rs.length, rs.map(r => lgAgRowHtml(r.key, r, raw.whatsapp, c)).join('') || '<div class="wain-ok-note">עוד אין רשומות.</div>');
   }
 
   function render() {
@@ -683,6 +722,13 @@ if (typeof document !== 'undefined') (function () {
     });
     const list = $('waInList');
     if (list) list.addEventListener('click', async ev => {
+      const pb = ev.target.closest('button[data-agpilot]');
+      if (pb) {   // פיילוט ללקוח — דרך ה-drain; ההאזנה מרעננת
+        pb.disabled = true;
+        const res = await post({ action: 'agent-pilot', customerId: pb.dataset.cid, on: pb.dataset.on === '1' });
+        if (!res.ok) { pb.disabled = false; alert(res.message || 'הפעולה נכשלה'); }
+        return;
+      }
       const g = ev.target.closest('button[data-agv]');
       if (g) {   // ✓/✗ על רשומת צל — דרך ה-drain; הרשימה מתעדכנת מההאזנה
         g.disabled = true;
@@ -721,6 +767,11 @@ if (typeof document !== 'undefined') (function () {
       _lgDb.ref('waMeta/agentShadow').orderByChild('createdAt').limitToLast(100)
         .on('value', sn => { agentShadow = sn.val() || {}; if (tab === 'agents') render(); },
         e => console.warn('agentShadow listen:', e && e.message));
+      _lgDb.ref('waMeta/agentPilot').on('value', sn => { agentPilot = sn.val() || {}; if (tab === 'agents') render(); },
+        e => console.warn('agentPilot listen:', e && e.message));
+      _lgDb.ref('waMeta/agentOutbox').orderByChild('createdAt').limitToLast(300)
+        .on('value', sn => { agentOutbox = sn.val() || {}; if (tab === 'agents') render(); },
+        e => console.warn('agentOutbox listen:', e && e.message));
       _lgDb.ref('waMeta/textCustomers').on('value', sn => { textCustomers = sn.val() || {}; render(); },
         e => console.warn('textCustomers listen:', e && e.message));
       // כל 2 דקות כל עוד הדף פתוח — ורק אם באמת יש מה לעבד

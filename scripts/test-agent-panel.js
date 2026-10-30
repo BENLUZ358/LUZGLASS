@@ -59,5 +59,31 @@ check('panel listens to waMeta/agentShadow', /ref\(\s*['"`]waMeta\/agentShadow['
 check('panel posts agent-verdict via drain only', [/action:\s*'agent-verdict'/.test(P), /ref\(['"]waMeta\/agentShadow[^)]*\)\.(set|update|remove|push)/.test(P)], [true, false]);
 check('no raw innerHTML of message text in agent code', /lgAgRowHtml/.test(P) && !/innerHTML\s*=\s*[^;]*\.text/.test(P), true);
 
+// ─── שלב 2: פיילוט ומה נשלח בפועל ────────────────────────────────────────
+const cx = (outbox, pilot) => ({ outbox: outbox || {}, pilot: pilot || {} });
+const acted = rec({ customerId: '777', acted: true, wouldAct: [{ type: 'reply', text: 'x' }] });
+check('pilot toggle off by default', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, cx()); return [/data-agpilot/.test(x), /data-cid="777"/.test(x), /data-on="1"/.test(x), x.includes('פיילוט: לא')]; })(), [true, true, true, true]);
+check('pilot toggle on', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, cx({}, { 777: true })); return [/data-on="0"/.test(x), x.includes('פיילוט: כן')]; })(), [true, true]);
+check('unlinked row has no pilot toggle', /data-agpilot/.test(ctx.lgAgRowHtml('K1', rec({ linked: false, customerId: '' }), null, cx())), false);
+check('pilot count', [ctx.lgAgPilotCount({ a: true, b: true, c: false, d: 'x' }), ctx.lgAgPilotCount(null)], [2, 0]);
+check('sent shows text', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'sent', text: 'שלום <b>' , reason: 'agent-reply' } })); return [x.includes('נשלח ✓: שלום &lt;b&gt;'), x.includes('היה עונה:')]; })(), [true, false]);
+check('pending → בתור', ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'pending', text: 't' } })).includes('בתור'), true);
+check('blocked / failed labels', [ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'blocked', text: 't' } })).includes('נחסם'),
+  ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'failed', text: 't' } })).includes('נכשל')], [true, true]);
+check('outbox prefix match is exact (K1 ≠ K10)', ctx.lgAgRowHtml('K1', acted, null, cx({ K10_0: { state: 'sent', text: 'זר' } })).includes('זר'), false);
+check('staff entry labelled', ctx.lgAgRowHtml('K1', acted, null, cx({ K1_1: { state: 'sent', text: 'לשאול', reason: 'agent-staff' } })).includes('לשאול ✓'), true);
+check('not acted reasons', ['not-pilot', 'off', 'switches-off', 'no-staff', 'error'].map(r =>
+  ctx.lgAgRowHtml('K1', rec({ acted: false, actReason: r }), null, cx())).map(h => h.includes('היה עונה:')),
+  [true, true, true, true, true]);
+check('reason labels', [['not-pilot', 'לא בפיילוט'], ['off', 'מתג כבוי'], ['no-staff', 'אין מספר של שאול'], ['error', 'שגיאה']]
+  .map(([r, t]) => ctx.lgAgRowHtml('K1', rec({ acted: false, actReason: r }), null, cx()).includes(t)), [true, true, true, true]);
+check('wouldAct text used when no wouldReply', ctx.lgAgRowHtml('K1', rec({ wouldReply: undefined, acted: false, actReason: 'not-pilot', wouldAct: [{ type: 'reply', text: 'מהפעולה' }] }), null, cx()).includes('מהפעולה'), true);
+check('state labels', [['received', 'ממתין'], ['processing', 'בעיבוד'], ['failed', 'נכשל']]
+  .map(([s, t]) => ctx.lgAgRowHtml('K1', rec({ state: s, wouldReply: undefined }), null, cx()).includes(t)), [true, true, true]);
+check('done row has no state chip', ['ממתין', 'בעיבוד'].some(t => ctx.lgAgRowHtml('K1', rec(), null, cx()).includes(t)), false);
+check('actReason escaped', ctx.lgAgRowHtml('K1', rec({ acted: false, actReason: '<i>' }), null, cx()).includes('<i>'), false);
+check('panel listens to pilot + outbox, posts agent-pilot', [/ref\(\s*['"`]waMeta\/agentPilot['"`]\s*\)/.test(P), /ref\(\s*['"`]waMeta\/agentOutbox['"`]\s*\)/.test(P), /action:\s*'agent-pilot'/.test(P),
+  /ref\(['"]waMeta\/agentPilot[^)]*\)\.(set|update|remove|push)/.test(P)], [true, true, true, false]);
+
 if (failed) { console.error(`\n${failed} FAILED`); process.exit(1); }
 console.log('\nAll agent-tab checks passed.');

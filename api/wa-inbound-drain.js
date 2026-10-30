@@ -7,6 +7,8 @@
 //
 //    { action:'agent-verdict', key, ok, note }  סימון נכון/לא נכון על רשומת צל
 //                                     של סוכני הלקוחות (30/10; ללא channel — לא שייך לערוץ)
+//    { action:'agent-pilot', customerId, on }  הדלקה/כיבוי של פיילוט הסוכנים ללקוח
+//                                     (waMeta/agentPilot/<customerId> === true; 31/10)
 //    { action:'agent-cancel-done', key }  "בוצע בחשבשבת" על ביטול מהסוכן
 //                                     (waMeta/agentCancels/<key>; דף תיקון הזמנות, 31/10)
 //
@@ -45,6 +47,9 @@ const BUDGET_MS = 40 * 1000;
 // רשומת צל אחת יכולה לקחת עד 20 שניות של OpenAI + קריאת הזמנות — לא מתחילים
 // רשומה חדשה אם נשארו פחות מזה עד הדדליין
 const AGENT_SHADOW_MIN_LEFT_MS = 22 * 1000;
+// ניסיון חוזר של תור ההודעות של הסוכנים (R7): רק אם נשארו ≥ מינימום שניות,
+// והתקציב = מה שנשאר פחות מרווח ביטחון לסגירת התגובה
+const AGENT_SEND_MARGIN_MS = 20 * 1000;
 
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && lgWaInboundKey(k) === k;
 
@@ -114,6 +119,15 @@ async function handleAdmin(body, deps) {
           } catch (_) { ag.failed++; }
         }
       } catch (_) { ag.failed++; }
+      //  תור ההודעות של הסוכנים: רשומות pending שנתקעו (act שנקטע, חלון תפוס…).
+      //  ⚠️ כשל כאן לא משנה את התגובה; הספירה תחת agentShadow.sent.
+      const left = deadline - Date.now();
+      if (left >= AGENT_SHADOW_MIN_LEFT_MS) {
+        try {
+          ag.sent = await require('./_agent-send').lgAgentSendPending(deps.db,
+            { budgetMs: Math.max(0, left - AGENT_SEND_MARGIN_MS), provider: deps.provider });
+        } catch (_) { ag.sendFailed = true; }
+      }
       out.agentShadow = ag;
     }
     return out;
@@ -135,6 +149,16 @@ async function handleAdmin(body, deps) {
   if (action === 'agent-verdict') {
     if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה רשומה לא תקין' };
     return lgAgentShadowVerdict(deps.db, b.key, { ok: b.ok, note: b.note, by: String(deps.by || '') }, deps.now);
+  }
+
+  // ─── פיילוט הסוכנים ללקוח (31/10) ─────────────────────────────────────
+  //  waMeta לא נכתב מהדפדפן — ולכן כאן. on:true → true; on:false → מוסר.
+  if (action === 'agent-pilot') {
+    const cid = typeof b.customerId === 'string' ? b.customerId.trim() : '';
+    if (!cid || !_keyOk(cid)) return { ok: false, code: 'bad-key', message: 'מזהה לקוח לא תקין' };
+    if (typeof b.on !== 'boolean') return { ok: false, code: 'bad-on', message: 'חסר ערך הדלקה/כיבוי' };
+    await deps.db.ref('waMeta/agentPilot/' + cid).set(b.on ? true : null);
+    return { ok: true, code: '' };
   }
 
   // ─── "בוצע בחשבשבת" על ביטול מהסוכן (31/10) ───────────────────────────

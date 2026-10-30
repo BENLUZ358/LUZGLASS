@@ -39,7 +39,7 @@ const seed = shadow => fakeDb({
   db = seed({ A1: stuck('A1'), A2: stuck('A2', { state: 'done' }) });
   r = await adm.handleAdmin({ action: 'drain' }, { db, by: '052', now: NOW, ...model() });
   check('2a stuck record completed', db._data.waMeta.agentShadow.A1.state, 'done');
-  check('2b agentShadow counts', r.agentShadow, { processed: 1, failed: 0 });
+  check('2b agentShadow counts', { processed: r.agentShadow.processed, failed: r.agentShadow.failed }, { processed: 1, failed: 0 });
   check('2c old fields unchanged', [r.ok, r.processed, r.results, r.remaining], [true, 0, [], 0]);
 
   // 3. כשל במודל — נספר כ-failed, התגובה הרגילה ללא שינוי
@@ -47,7 +47,7 @@ const seed = shadow => fakeDb({
   const realRef = db.ref.bind(db);
   db.ref = p => { if (String(p).startsWith('waSenders')) throw new Error('boom'); return realRef(p); };
   r = await adm.handleAdmin({ action: 'drain' }, { db, by: '052', now: NOW, ...model() });
-  check('3a failure counted', r.agentShadow, { processed: 0, failed: 1 });
+  check('3a failure counted', { processed: r.agentShadow.processed, failed: r.agentShadow.failed }, { processed: 0, failed: 1 });
   check('3b old fields unchanged', [r.ok, r.processed, r.remaining], [true, 0, 0]);
 
   // 4. עד BATCH (5) בקריאה
@@ -87,6 +87,46 @@ const seed = shadow => fakeDb({
   const res = { code: 0, status(c) { this.code = c; return this; }, json(b) { this.body = b; } };
   await adm({ method: 'POST', headers: {}, body: { action: 'agent-verdict', key: 'A1', ok: true } }, res);
   check('6 no admin auth: refused', [401, 403, 500].includes(res.code) && res.code !== 200, true);
+
+  // 7. agent-pilot
+  {
+    db = seed({});
+    const pl = b => adm.handleAdmin({ action: 'agent-pilot', ...b }, { db, by: '052', now: NOW });
+    check('7a on', [(await pl({ customerId: '777', on: true })).ok, db._data.waMeta.agentPilot['777']], [true, true]);
+    check('7b off removes', [(await pl({ customerId: '777', on: false })).ok, (db._data.waMeta.agentPilot || {})['777']], [true, undefined]);
+    check('7c empty id', (await pl({ customerId: '', on: true })).code, 'bad-key');
+    check('7d bad id', (await pl({ customerId: 'a/b', on: true })).code, 'bad-key');
+    check('7e on must be boolean', (await pl({ customerId: '777', on: 'true' })).ok, false);
+    check('7f nothing written on bad input', Object.keys((db._data.waMeta || {}).agentPilot || {}), []);
+  }
+
+  // 8. תור השליחה של הסוכנים בתוך ה-drain
+  {
+    process.env.AGENT_SHADOW_ENABLED = 'true';
+    const send = require(path.join(__dirname, '..', 'api', '_agent-send.js'));
+    const origSend = send.lgAgentSendPending;
+    const calls = [];
+    send.lgAgentSendPending = async (d, o) => { calls.push(o); return { sent: 2, failed: 1, blocked: 0, skipped: 0, state: null }; };
+    const realNow = Date.now, t0 = realNow();
+    const run = async elapsed => { calls.length = 0; let first = true;
+      Date.now = () => { if (first) { first = false; return t0; } return t0 + elapsed; };
+      try { return await adm.handleAdmin({ action: 'drain' }, { db: seed({}), by: '052', now: NOW, ...model() }); } finally { Date.now = realNow; } };
+    let rr = await run(5 * 1000);   // נשארו 35 שניות → תקציב 15
+    check('8a enough time: send called with budget = remaining − 20s', [calls.length, calls[0] && calls[0].budgetMs], [1, 15000]);
+    check('8b counts under agentShadow.sent', rr.agentShadow.sent, { sent: 2, failed: 1, blocked: 0, skipped: 0, state: null });
+    rr = await run(19 * 1000);       // נשארו 21 → פחות מ-22, לא קוראים
+    check('8c < 22s left: send not called', [calls.length, rr.agentShadow.sent], [0, undefined]);
+    // נכשל — לא מפיל את שאר התגובה
+    send.lgAgentSendPending = async () => { throw new Error('boom'); };
+    rr = await run(5 * 1000);
+    check('8d send throws: drain still ok', [rr.ok, rr.agentShadow.sent], [true, undefined]);
+    delete process.env.AGENT_SHADOW_ENABLED;
+    send.lgAgentSendPending = async (d, o) => { calls.push(o); return {}; };
+    calls.length = 0; rr = await run(5 * 1000);
+    check('8e flag off: send not called', [calls.length, 'agentShadow' in rr], [0, false]);
+    send.lgAgentSendPending = origSend;
+    process.env.AGENT_SHADOW_ENABLED = 'true';
+  }
 
   if (saved === undefined) delete process.env.AGENT_SHADOW_ENABLED; else process.env.AGENT_SHADOW_ENABLED = saved;
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
