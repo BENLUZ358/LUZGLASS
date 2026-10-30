@@ -184,6 +184,66 @@ const run = (db, provider, env) => A.lgAgentSendPending(db, { provider, env: env
     check('disconnected mid-run → pending, attempts 0', [ob(d, 'r15').state, ob(d, 'r15').attempts], ['pending', 0]);
   }
 
+  /* תיקון סקירה 1: העברה ללקוח — רק מצ'אט שלו */
+  {
+    const db = seed(), p = fakeProvider();
+    await A.lgAgentEnqueue(db, { key: 'f1', to: '0501234567', customerId: '777', text: 'x',
+                                 files: [{ kind: 'forward', fromChat: GROUP, idMessage: 'WAM9' }] });          // קבוצה של 888
+    await A.lgAgentEnqueue(db, { key: 'f2', to: GROUP, customerId: '888', text: 'x',
+                                 files: [{ kind: 'forward', fromChat: '972501234567@c.us', idMessage: 'WAM8' }] }); // מספר של 777
+    await A.lgAgentEnqueue(db, { key: 'f3', to: '0501234567', customerId: '777', text: 'x',
+                                 files: [{ kind: 'forward', fromChat: '972501234567@c.us', idMessage: 'WAM7' }] }); // שלו
+    await run(db, p);
+    check('forward from foreign chat to non-staff → blocked', [ob(db, 'f1').state, ob(db, 'f2').state], ['blocked', 'blocked']);
+    check('forward from own chat → sent', [ob(db, 'f3').state, p.forwards.map(f => f.idMessages[0])], ['sent', ['WAM7']]);
+  }
+
+  /* תיקון סקירה 2: חריגה בבדיקה → failed, הסבב ממשיך */
+  {
+    const db = seed(), p = fakeProvider();
+    let n = 0;
+    p.gate = ctx => { if (n++ === 0) throw new TypeError('boom'); return { allowed: ctx.linked === true, reason: '' }; };
+    await A.lgAgentEnqueue(db, { key: 'g1', to: GROUP, customerId: '888', text: 'a' });
+    db._data.waMeta.agentOutbox.g1.createdAt -= 1000;   // ראשונה בתור
+    await A.lgAgentEnqueue(db, { key: 'g2', to: GROUP, customerId: '888', text: 'b' });
+    const r = await run(db, p);
+    const e = ob(db, 'g1');
+    check('throw in gate → failed, not claimed, run continues',
+          [e.state, e.claimedAt, String(e.lastError).includes('TypeError'), ob(db, 'g2').state, r.failed, r.sent],
+          ['failed', null, true, 'sent', 1, 1]);
+  }
+
+  /* תיקון סקירה 3: רשומה שנחסמת לא מזמינה חלון שליחה */
+  {
+    const db = seed(), p = fakeProvider();
+    await A.lgAgentEnqueue(db, { key: 'b1', to: '0549999999', customerId: '777', text: 'x' });
+    await A.lgAgentEnqueue(db, { key: 'b2', to: GROUP, customerId: '888', text: 'x', files: [{ kind: 'invoice-copy', invoiceKey: 'inv2' }] });
+    await run(db, p);
+    check('blocked entries never touch waMeta/sendSlot', [ob(db, 'b1').state, ob(db, 'b2').state, db._data.waMeta.sendSlot], ['blocked', 'blocked', undefined]);
+    await A.lgAgentEnqueue(db, { key: 'b3', to: GROUP, customerId: '888', text: 'x' });
+    await run(db, p);
+    check('a real send does reserve the slot', [ob(db, 'b3').state, !!db._data.waMeta.sendSlot], ['sent', true]);
+    //  החלון תפוס → חוזרת לתור בלי ניסיון
+    const d = seed(), q = fakeProvider();
+    q.nextGap = () => 60 * 1000;
+    d._data.waMeta.sendSlot = { nextAllowedAt: Date.now() + 5 * 60 * 1000 };
+    await A.lgAgentEnqueue(d, { key: 'b4', to: GROUP, customerId: '888', text: 'x' });
+    await run(d, q);
+    check('slot busy → pending, attempts 0, not sent', [ob(d, 'b4').state, ob(d, 'b4').attempts, q.texts.length], ['pending', 0, 0]);
+  }
+
+  /* תיקון סקירה 4: סקיצה בסוג שאינו נתמך */
+  {
+    const db = seed(), p = fakeProvider();
+    db._data.sketches.o1 = 'data:application/octet-stream;base64,' + b64('X');
+    await A.lgAgentEnqueue(db, { key: 'm1', to: GROUP, customerId: '888', text: 'x', files: [{ kind: 'sketch', orderId: 'o1' }] });
+    await run(db, p);
+    await run(db, p);
+    const e = ob(db, 'm1');
+    check('unsupported sketch mime → failed, final, nothing sent',
+          [e.state, e.lastError, e.attempts, p.fileSends.length], ['failed', 'סוג קובץ לא נתמך', 3, 0]);
+  }
+
   /* הספק האמיתי: sendText, forward, כיתוב ב-sendFiles — fetch מדומה */
   {
     const saved = { ...process.env }, savedFetch = global.fetch;

@@ -6,8 +6,8 @@
 //  לקוח לשאול. התור נפרד מ-waOutbox ומ-_wa-drain-core.js בכוונה — ההודעות
 //  הקיימות לא נוגעות כאן — אבל הדפוס אחד:
 //
-//    getState → חלון (lgWaReserveSlot) → תפיסה (lgWaClaim, אותה טרנזקציה)
-//    → בדיקה חוזרת מהנתונים החיים → provider.gate → שליחה → סגירה
+//    getState → תפיסה (lgWaClaim, אותה טרנזקציה) → בדיקות → חלון (lgWaReserveSlot)
+//    (בדיקה חוזרת מהנתונים החיים, provider.gate, קבצים) → שליחה → סגירה
 //
 //  ⚠️ שום הודעה לא יוצאת אלא אם (Global Constraints):
 //    AGENT_SHADOW_ENABLED==='true' וגם AGENT_REPLY_ENABLED==='true' וגם
@@ -23,7 +23,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgWaProvider } = require('./_wa-provider');
-const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot } = require('./_wa-outbox');
+const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot, MAX_ATTEMPTS } = require('./_wa-outbox');
 const { lgWaSenderKey, lgWaSenderLink } = require('./_wa-recipient');
 
 const AGENT_OUTBOX = 'waMeta/agentOutbox';
@@ -77,7 +77,7 @@ async function _liveRecipient(db, entry, staff) {
   const phone = lgWaSenderKey(entry.to);
   if (!phone) return { ok: false, reason: 'נמען לא תקין' };
   //  ⚠️ צוות: הקישור הוא הרשימה ב-Vercel. accountKey לא ריק כי השער דורש כרטיס.
-  if (staff.includes(phone)) return { ok: true, phone, accountKey: cid || 'staff' };
+  if (staff.includes(phone)) return { ok: true, phone, accountKey: cid || 'staff', staff: true };
   const link = await lgWaSenderLink(db, phone);
   if (!link || link.customerId !== cid || !cid) return { ok: false, reason: 'המספר אינו מקושר ללקוח — לא נשלח' };
   if ((await db.ref(PILOT + '/' + cid).once('value')).val() !== true)
@@ -90,7 +90,21 @@ const _safe = s => String(s || '').replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 
 
 //  הקבצים נטענים עכשיו, לא נשמרים בתור. { ok, media:[{name,mime,buf}], forwards:[{fromChat,idMessage}], reason }
 //  ⚠️ גם כאן התיק של אותו לקוח בלבד — שכבת הסוכן כבר בדקה, וזו רשת הביטחון.
-async function _loadFiles(db, entry) {
+//  האם צ'אט המקור של העברה שייך ללקוח: קבוצה ב-waGroups / מספר ב-waSenders.
+async function _chatOwnedBy(db, chat, cid) {
+  if (!cid) return false;
+  if (_isGroup(chat)) {
+    const link = (await db.ref('waGroups/' + _key(chat)).once('value')).val();
+    return !!(link && String(link.customerId || '') === cid);
+  }
+  const link = /@c\.us$/.test(chat) ? await lgWaSenderLink(db, chat) : null;
+  return !!(link && link.customerId === cid);
+}
+
+//  live.staff — העברה לצוות מותרת מכל צ'אט (סקיצה של לקוח לשאול). ללקוח —
+//  רק מצ'אט שלו, אחרת העברה הייתה מדליפה הודעה של לקוח אחד ללקוח אחר.
+//  final:'failed' — כשל שאין טעם לנסות שוב (סוג קובץ שאינו נתמך).
+async function _loadFiles(db, entry, live) {
   const cid = String(entry.customerId || '');
   const media = [], forwards = [];
   for (const f of entry.files || []) {
@@ -109,9 +123,12 @@ async function _loadFiles(db, entry) {
       const m = String(v || '').match(/^data:([^;,]+);base64,([\s\S]+)$/);
       if (!m) return { ok: false, reason: 'הסקיצה חסרה' };
       const mime = m[1].toLowerCase();
-      media.push({ name: 'סקיצה ' + _safe(order.orderNum || id) + '.' + (EXT[mime] || 'bin'), mime, buf: Buffer.from(m[2], 'base64') });
+      if (!EXT[mime]) return { ok: false, final: 'failed', reason: 'סוג קובץ לא נתמך' };
+      media.push({ name: 'סקיצה ' + _safe(order.orderNum || id) + '.' + EXT[mime], mime, buf: Buffer.from(m[2], 'base64') });
     } else if (f && f.kind === 'forward') {
       if (!f.fromChat || !f.idMessage) return { ok: false, reason: 'אין הודעה להעביר' };
+      if (!(live && live.staff) && !(await _chatOwnedBy(db, String(f.fromChat), cid)))
+        return { ok: false, reason: 'ההודעה להעברה אינה מהצ׳אט של הלקוח' };
       forwards.push({ fromChat: String(f.fromChat), idMessage: String(f.idMessage) });
     } else {
       return { ok: false, reason: 'סוג קובץ לא מוכר' };
@@ -199,23 +216,38 @@ async function lgAgentSendPending(db, opts) {
     if (processed >= (provider.maxPerRun || 10)) break;
     if (Date.now() - started > budget) break;
 
-    //  חלון לפני תפיסה — ר' ההסבר ב-_wa-drain-core.js
-    if (provider.globalSlot) {
-      const slot = await lgWaReserveSlot(db, provider.nextGap(), SLOT_MAX_WAIT_MS);
-      if (!slot.ok) break;
-      if (slot.waitMs) await sleep(slot.waitMs);
-    }
-
+    //  ⚠️ תפיסה ובדיקות **לפני** החלון (תיקון סקירה): החלון משותף להודעות
+    //  הלקוחות הקיימות, ורשומה שנחסמת לא צריכה לשרוף gap של 10 שניות.
+    //  מצב החיבור כבר נבדק למעלה, לפני כל תפיסה.
     const { claimed, entry } = await lgWaClaim(db, key, by, AGENT_OUTBOX);
     if (!claimed) { res.skipped++; continue; }
 
-    const live = await _liveRecipient(db, entry, staff);
+    let live, gate, loaded;
+    try {
+      live = await _liveRecipient(db, entry, staff);
+      if (live.ok) gate = provider.gate({ phone: live.phone, accountKey: live.accountKey, linked: true });
+      if (live.ok && gate.allowed) loaded = await _loadFiles(db, entry, live);
+    } catch (e) {
+      //  חריגה לא משאירה רשומה תפוסה ולא עוצרת את הסבב
+      await lgWaComplete(db, key, { ok: false, reason: 'חריגה בבדיקה (' + (e && e.name) + ')' }, AGENT_OUTBOX);
+      res.failed++; continue;
+    }
     if (!live.ok) { await _block(db, key, live.reason); res.blocked++; continue; }
-    const gate = provider.gate({ phone: live.phone, accountKey: live.accountKey, linked: true });
     if (!gate.allowed) { await _block(db, key, gate.reason || 'השער חסם'); res.blocked++; continue; }
-
-    const loaded = await _loadFiles(db, entry).catch(e => ({ ok: false, reason: 'חריגה בטעינת קבצים (' + (e && e.name) + ')' }));
+    if (!loaded.ok && loaded.final === 'failed') {
+      //  סופי: attempts למקסימום כדי שלא ינסה שוב
+      await lgWaComplete(db, key, { ok: false, reason: loaded.reason }, AGENT_OUTBOX);
+      await db.ref(AGENT_OUTBOX + '/' + key).update({ attempts: MAX_ATTEMPTS });
+      res.failed++; continue;
+    }
     if (!loaded.ok) { await _block(db, key, loaded.reason); res.blocked++; continue; }
+
+    if (provider.globalSlot) {
+      const slot = await lgWaReserveSlot(db, provider.nextGap(), SLOT_MAX_WAIT_MS);
+      //  העתיד הקרוב תפוס → חוזרת לתור בלי לספור ניסיון, והסבב נעצר
+      if (!slot.ok) { await lgWaRelease(db, key, 'חלון השליחה תפוס', AGENT_OUTBOX); res.skipped++; break; }
+      if (slot.waitMs) await sleep(slot.waitMs);
+    }
 
     let out;
     try { out = await _deliver(provider, live.phone, entry, loaded); }
