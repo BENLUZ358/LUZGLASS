@@ -144,6 +144,8 @@ module.exports = async function handler(req, res) {
   if (req.query && req.query.devbrain === 'relay') return require('./_devbrain-route')(req, res);
   if (req.query && req.query.invoice === 'upload') return require('./_invoice-upload')(req, res);
   if (req.query && req.query.invoice === 'ctl') return require('./_invoice-ctl')(req, res);
+  // מנהל הסוכנים: cron יומי (GET + CRON_SECRET) — מאומת בתוך _agent-daily
+  if (req.query && req.query.agent === 'daily') return require('./_agent-daily')(req, res);
   try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) { res.status(500).json({ error: 'server not configured' }); return; }
     const { waitUntil } = require('@vercel/functions');
@@ -155,5 +157,6 @@ module.exports = async function handler(req, res) {
   }
 };
 module.exports.handleInbound = handleInbound;
+module.exports._db = _db;
 
 module.exports.handleCustomerInbound = handleCustomerInbound;

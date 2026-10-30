@@ -2,7 +2,11 @@
   "rewrites": [
     { "source": "/api/devbrain-relay", "destination": "/api/wa-inbound?devbrain=relay" },
     { "source": "/api/invoice-pdf-upload", "destination": "/api/wa-inbound?invoice=upload" },
-    { "source": "/api/invoice-ctl", "destination": "/api/wa-inbound?invoice=ctl" }
+    { "source": "/api/invoice-ctl", "destination": "/api/wa-inbound?invoice=ctl" },
+    { "source": "/api/agent-daily", "destination": "/api/wa-inbound?agent=daily" }
+  ],
+  "crons": [
+    { "path": "/api/agent-daily", "schedule": "0 13 * * *" }
   ],
   "functions": {
     "api/sketch-reader.js": { "maxDuration": 60 },
