@@ -10,7 +10,9 @@
 //    בנפרד   → lgAgentShadowProcess: תפיסה → זיהוי לקוח → סיווג → ניתוב
 //              → "מה עוקב היה עונה" — נשמר ברשומה בלבד.
 //
-//  ⚠️ מצב צל: שום דבר מכאן לא נשלח ללקוח. אין כאן lgWaEnqueue ואין ספק.
+//  ⚠️ מצב צל: שום דבר מכאן לא נשלח ישירות. בסוף העיבוד (done) נקרא
+//     lgAgentAct (_agent-act.js, שלב 2) — הוא מחליט אם מותר לענות.
+//  ⚠️ הודעה ממספר צוות (AGENT_STAFF_PHONES) → route 'staff', בלי סיווג (R2).
 //  ⚠️ לא מקושר (לא בקבוצה מקושרת, לא ב-waSenders, לא ברשימת Vercel) →
 //     נרשם בלי טקסט, route:'shaul', והמודל לא נקרא.
 //  ⚠️ לא נרשם לוג של טקסט ההודעה, downloadUrl או מפתחות.
@@ -23,6 +25,7 @@ const { lgWaInboundAllowed } = require('./_env');
 const { lgInboxStillMine } = require('./_inbox-common');
 const { lgOkevFind, lgOkevReply, lgOkevRoute, AGENT_MENU_TEXT } = require('./_agent-okev');
 const { lgAgentClassify } = require('./_agent-classify');
+const { lgAgentStaff } = require('./_agent-send');
 
 const SHADOW = 'waMeta/agentShadow';
 const HUMAN = 'waMeta/agentHuman';
@@ -94,8 +97,9 @@ async function _isLinked(db, e) {
 // ─── רישום — create-once ────────────────────────────────────────────
 //  מחזיר { key, created }, או null כשאין מה לרשום (כולל הודעה ידנית —
 //  שם רק מסמנים HUMAN/<chat>/lastAt).
-async function lgAgentShadowRecord(db, body, now) {
+async function lgAgentShadowRecord(db, body, now, opts) {
   const t = now || Date.now();
+  const env = (opts && opts.env) || process.env;
   const p = lgAgentShadowParse(body);
   if (p.action === 'human') {
     await db.ref(HUMAN + '/' + _chatKey(p.entry)).update({ lastAt: t });
@@ -107,10 +111,12 @@ async function lgAgentShadowRecord(db, body, now) {
   // קבוצות שאינן לקוחות). שולח פרטי לא מקושר — נרשם בלי תוכן, route 'shaul'.
   if (p.entry.groupId && !linked) return null;
   const ib = lgWaInboundParse(body);
-  const rec = { ...p.entry, linked, intakeKind: (ib && ib.entry && ib.entry.kind) || '',
+  // צוות (שאול) — נשמר עם הטקסט גם ממספר לא מקושר: משימה 6 קוראת את "השב" שלו
+  const staff = !!p.entry.sender && lgAgentStaff(env).includes(p.entry.sender);
+  const rec = { ...p.entry, linked, staff, intakeKind: (ib && ib.entry && ib.entry.kind) || '',
                 state: 'received', attempts: 0, createdAt: t, updatedAt: t };
-  // לא מקושר — לא שומרים את תוכן ההודעה
-  if (!linked) delete rec.text;
+  // לא מקושר (ולא צוות) — לא שומרים את תוכן ההודעה
+  if (!linked && !staff) delete rec.text;
   const key = lgWaInboundKey(p.entry.idMessage);
   const r = await db.ref(SHADOW + '/' + key).transaction(cur => {
     if (cur === null) return rec;   // null-first: null הוא בדיוק המקרה שבו כותבים
@@ -151,7 +157,10 @@ async function lgAgentShadowProcess(db, key, opts) {
   try {
     const out = { intent: '', ref: '', route: 'shaul', wouldReply: '', matchedOrderIds: [],
                   customerId: '', customerName: '', model: '', usage: null };
-    if (e.linked) {
+    if (e.staff) {
+      // R2: הודעת צוות לא נכנסת לסיווג ולא לפעולה — רק משימה 6 מטפלת בה
+      out.route = 'staff';
+    } else if (e.linked) {
       const who = e.groupId ? await lgClientFromWaGroup(db, e.groupId, e.sender) : await lgClientFromWaSender(db, e.chatId);
       out.customerId = String((who && who.customerId) || '');
       out.customerName = String((who && who.name) || '');
@@ -185,6 +194,9 @@ async function lgAgentShadowProcess(db, key, opts) {
     }
     const touch = { ...out, state: 'done', doneAt: now, claimedAt: null, claimToken: null, lastError: null };
     if (!await lgInboxStillMine(db, SHADOW, key, e.claimToken, now, touch)) return { ok: false, reason: 'lost-claim' };
+    // שלב 2: פעולה בפועל. ⚠️ כשל כאן לעולם לא מכשיל את רשומת הצל (כבר done)
+    try { await require('./_agent-act').lgAgentAct(db, key, { env, now, fetchImpl: o.fetchImpl, provider: o.provider }); }
+    catch (err) { console.warn('agent-shadow: act', err && err.name); }
     return { ok: true, reason: '' };
   } catch (err) {
     // רק שם השגיאה — לא טקסט ההודעה ולא מפתחות

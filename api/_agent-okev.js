@@ -81,6 +81,16 @@ function lgOkevFind(orders, q) {
 const label = o => 'הזמנה ' + (o.orderNum || o.refNum || '') + (o.sketchName ? ' (סקיצה: ' + o.sketchName + ')' : '');
 const NOT_FOUND = 'לא מצאתי את ההזמנה. אפשר לכתוב את שם הסקיצה?';
 
+// ── נוסחים קבועים של שלב 2 (הסוכנים עונים בפועל) ──
+const AGENT_HANDOFF_TEXT = 'העברנו לשאול, הוא יחזור אליך';
+const CANCEL_DONE_TEXT = 'ההזמנה בוטלה';
+const CANCEL_KEPT_TEXT = 'בסדר, ההזמנה ממשיכה';
+// ההזמנה כבר בייצור — גם כשהביטול נדחה בזמן הביצוע (too-late)
+const lgOkevTooLate = o => 'הזמנה ' + (o.orderNum || o.refNum || '') + ' כבר בייצור ואי אפשר לבטל או לשנות אותה';
+// הודעה לשאול על שינוי: "שינוי בהזמנה L1003 (מטבח) של כהן: <טקסט>"
+const lgOkevChangeStaffText = (o, who, text) => 'שינוי בהזמנה ' + (o.orderNum || o.refNum || '')
+  + (o.sketchName ? ' (' + o.sketchName + ')' : '') + ' של ' + who + ': ' + text;
+
 function lgOkevReply(intent, found) {
   if (!found || found.match === 'none') return NOT_FOUND;
   if (found.match === 'many') {
@@ -92,7 +102,7 @@ function lgOkevReply(intent, found) {
     const st = String(o.stage || '');
     return label(o) + ': ' + (OKEV_STATUS_TEXT[st] || OKEV_STATUS_TEXT['']);
   }
-  if (!lgOkevCanChange(o)) return 'הזמנה ' + (o.orderNum || o.refNum || '') + ' כבר בייצור ואי אפשר לבטל או לשנות אותה';
+  if (!lgOkevCanChange(o)) return lgOkevTooLate(o);
   if (intent === 'cancel') return 'בטוח לבטל את ' + label(o) + '?';
   if (intent === 'change') return 'מה בדיוק לשנות ב' + label(o) + '?';
   return NOT_FOUND;
@@ -114,4 +124,5 @@ function lgOkevRoute(p) {
   }
 }
 
-module.exports = { OKEV_STATUS_TEXT, AGENT_MENU_TEXT, lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevRoute };
+module.exports = { OKEV_STATUS_TEXT, AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
+                   lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevRoute, lgOkevTooLate, lgOkevChangeStaffText };
