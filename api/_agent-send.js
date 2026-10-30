@@ -183,8 +183,9 @@ async function lgAgentSendPending(db, opts) {
   const env = o.env || process.env;
   const provider = o.provider || lgWaProvider();
   const started = o.now || Date.now();
-  const budget = o.budgetMs || BUDGET_MS;
+  const budget = o.budgetMs != null ? o.budgetMs : BUDGET_MS;   // 0 הוא 0, לא ברירת מחדל
   const res = { sent: 0, failed: 0, blocked: 0, skipped: 0, state: null };
+  if (budget <= 0) return res;                                   // אין תקציב — לא נוגעים בתור
   const by = 'agent-send';
 
   const keys = await lgWaPending(db, 50, AGENT_OUTBOX);

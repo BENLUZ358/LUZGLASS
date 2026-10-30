@@ -62,11 +62,22 @@ const seed = shadow => fakeDb({
     db = seed({ A1: stuck('A1') });
     const realNow = Date.now, t0 = realNow();
     let calls = 0;
-    Date.now = () => (calls++ === 0 ? t0 : t0 + 25 * 1000);   // נשארו 15 שניות מתוך 40
+    Date.now = () => (calls++ === 0 ? t0 : t0 + 30 * 1000);   // עברו 30ש׳
     try { r = await adm.handleAdmin({ action: 'drain' }, { db, by: '052', now: NOW, ...model() }); }
     finally { Date.now = realNow; }
     check('4b deadline near: no shadow record started', db._data.waMeta.agentShadow.A1.state, 'received');
     check('4b deadline near: counts zero', r.agentShadow, { processed: 0, failed: 0 });
+  }
+
+  // 4c. R14: רשומת צל מתחילה רק אם עברו ≤10ש׳ מתחילת ה-drain
+  for (const [el, want] of [[9000, 'done'], [11000, 'received']]) {
+    db = seed({ A1: stuck('A1') });
+    const realNow = Date.now, t0 = realNow();
+    let first = true;
+    Date.now = () => { if (first) { first = false; return t0; } return t0 + el; };
+    try { await adm.handleAdmin({ action: 'drain' }, { db, by: '052', now: NOW, ...model() }); }
+    finally { Date.now = realNow; }
+    check('4c elapsed ' + el + 'ms → shadow ' + want, db._data.waMeta.agentShadow.A1.state, want);
   }
 
   // 5. agent-verdict
@@ -111,11 +122,11 @@ const seed = shadow => fakeDb({
     const run = async elapsed => { calls.length = 0; let first = true;
       Date.now = () => { if (first) { first = false; return t0; } return t0 + elapsed; };
       try { return await adm.handleAdmin({ action: 'drain' }, { db: seed({}), by: '052', now: NOW, ...model() }); } finally { Date.now = realNow; } };
-    let rr = await run(5 * 1000);   // נשארו 35 שניות → תקציב 15
-    check('8a enough time: send called with budget = remaining − 20s', [calls.length, calls[0] && calls[0].budgetMs], [1, 15000]);
+    let rr = await run(5 * 1000);   // נשארו 55 שניות → תקציב 25
+    check('8a enough time: send called with budget = remaining − 30s', [calls.length, calls[0] && calls[0].budgetMs], [1, 25000]);
     check('8b counts under agentShadow.sent', rr.agentShadow.sent, { sent: 2, failed: 1, blocked: 0, skipped: 0, state: null });
-    rr = await run(19 * 1000);       // נשארו 21 → פחות מ-22, לא קוראים
-    check('8c < 22s left: send not called', [calls.length, rr.agentShadow.sent], [0, undefined]);
+    rr = await run(26 * 1000);       // נשארו 34 → פחות מ-35, לא קוראים
+    check('8c < 35s left: send not called', [calls.length, rr.agentShadow.sent], [0, undefined]);
     // נכשל — לא מפיל את שאר התגובה
     send.lgAgentSendPending = async () => { throw new Error('boom'); };
     rr = await run(5 * 1000);

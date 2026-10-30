@@ -56,6 +56,12 @@ const ob = (db, k) => db._data.waMeta.agentOutbox[k];
 const run = (db, provider, env) => A.lgAgentSendPending(db, { provider, env: env || ENV });
 
 (async () => {
+  {
+    const db = seed(); await A.lgAgentEnqueue(db, { key: 'b0', to: '0501112222', text: 'x' });
+    const p = fakeProvider();
+    const r = await A.lgAgentSendPending(db, { provider: p, env: ENV, budgetMs: 0 });
+    check('budgetMs 0 is 0: nothing sent, entry untouched', [r.sent, p.texts.length, ob(db, 'b0').state], [0, 0, 'pending']);
+  }
   check('constant', A.AGENT_OUTBOX, 'waMeta/agentOutbox');
   check('staff normalized to local digits', A.lgAgentStaff(ENV), ['0501112222', '0531234567']);
   check('staff empty', A.lgAgentStaff({}), []);

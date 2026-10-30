@@ -30,9 +30,12 @@ const CANCELS = 'waMeta/agentCancels';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const STUCK_MS = 3 * 60 * 60 * 1000;     // בקשה שמחכה מעל 3 שעות
 const SHADOW_LIMIT = 40;
-const RUN_BUDGET_MS = 40 * 1000;       // תקציב כולל לריצה (maxDuration 60)
-const SHADOW_MIN_LEFT_MS = 22 * 1000;  // כמו ה-drain: פחות מזה — לא מתחילים עיבוד
-const SEND_MARGIN_MS = 20 * 1000;
+//  R14: נמדד מול מגבלת 60ש׳ של הפונקציה, מתחילת הריצה. פריט צל (סיווג 20ש׳ + הצעה 20ש׳ + שליחה)
+//  מתחיל רק אם עברו ≤10ש׳; שליחה מתחילה רק אם נשארו ≥35ש׳, ותקציבה = מה שנשאר פחות 30ש׳.
+const FN_LIMIT_MS = 60 * 1000;
+const SHADOW_MAX_ELAPSED_MS = 10 * 1000;
+const SEND_MIN_LEFT_MS = 35 * 1000;
+const SEND_MARGIN_MS = 30 * 1000;
 
 const _vals = snap => { const out = []; if (snap) snap.forEach(ch => { out.push({ key: ch.key, v: ch.val() || {} }); }); return out; };
 const _list = a => a.length ? ' (' + a.join(', ') + ')' : '';
@@ -88,8 +91,8 @@ async function lgAgentDailySummary(db, now) {
 }
 
 //  deps: { db, env, now, provider, fetchImpl, clock }.  { status, body }
-//  ⚠️ תקציב אחד לכל הריצה: דדליין = התחלה + 40ש׳ (clock = Date.now, ניתן להחלפה בבדיקה).
-//     הסיכום נבנה ונכנס לתור **קודם**, ואז נשלח; רק אחר כך רשת הביטחון, ועוצרת כשנשאר פחות מ-22ש׳.
+//  ⚠️ תקציב אחד לכל הריצה: מדידה מתחילת הריצה מול 60ש׳ (R14); clock = Date.now, ניתן להחלפה בבדיקה.
+//     הסיכום נבנה ונכנס לתור **קודם**, ואז נשלח; רק אחר כך רשת הביטחון.
 async function lgAgentDailyRun(req, deps) {
   const env = deps.env || process.env;
   const headers = (req && req.headers) || {};
@@ -98,14 +101,14 @@ async function lgAgentDailyRun(req, deps) {
   const db = deps.db;
   const now = deps.now || Date.now();
   const clock = deps.clock || Date.now;
-  const deadline = clock() + RUN_BUDGET_MS;
+  const t0 = clock();
   const body = { ok: true, sent: 0, failed: 0, shadowProcessed: 0, summary: null };
   const addSend = r => { if (r) { body.sent += r.sent || 0; body.failed += r.failed || 0; } };
   //  שליחה עם מה שנשאר מהתקציב (פחות מרווח)
   const send = async () => {
-    const left = deadline - clock();
-    if (left < SEND_MARGIN_MS) return;
-    try { addSend(await lgAgentSendPending(db, { env, now: deps.now, provider: deps.provider, budgetMs: Math.max(0, left - SEND_MARGIN_MS) })); }
+    const left = FN_LIMIT_MS - (clock() - t0);
+    if (left < SEND_MIN_LEFT_MS) return;
+    try { addSend(await lgAgentSendPending(db, { env, now: deps.now, provider: deps.provider, budgetMs: Math.max(1, left - SEND_MARGIN_MS) })); }
     catch (e) { body.failed++; console.warn('agent-daily: send', e && e.name); }
   };
 
@@ -135,9 +138,9 @@ async function lgAgentDailyRun(req, deps) {
     try {
       const keys = await lgAgentShadowPending(db, SHADOW_LIMIT, now);
       for (const key of keys) {
-        if (deadline - clock() < SHADOW_MIN_LEFT_MS) break;
+        if (clock() - t0 > SHADOW_MAX_ELAPSED_MS) break;
         try {
-          const p = await lgAgentShadowProcess(db, key, { now, env, fetchImpl: deps.fetchImpl });
+          const p = await lgAgentShadowProcess(db, key, { now, env, fetchImpl: deps.fetchImpl, provider: deps.provider });
           if (p.ok) body.shadowProcessed++; else body.failed++;
         } catch (e) { body.failed++; }
       }

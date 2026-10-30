@@ -44,12 +44,12 @@ const { lgEmailInboundKey, lgEmailInboundPending, lgEmailInboundProcess,
 // כמה קליטות בקריאה אחת, ותקציב זמן — מתחת ל-maxDuration (60) עם מרווח
 const BATCH = 5;
 const BUDGET_MS = 40 * 1000;
-// רשומת צל אחת יכולה לקחת עד 20 שניות של OpenAI + קריאת הזמנות — לא מתחילים
-// רשומה חדשה אם נשארו פחות מזה עד הדדליין
-const AGENT_SHADOW_MIN_LEFT_MS = 22 * 1000;
-// ניסיון חוזר של תור ההודעות של הסוכנים (R7): רק אם נשארו ≥ מינימום שניות,
-// והתקציב = מה שנשאר פחות מרווח ביטחון לסגירת התגובה
-const AGENT_SEND_MARGIN_MS = 20 * 1000;
+// R14: נמדד מול מגבלת 60ש׳ של הפונקציה מתחילת ה-drain. רשומת צל (סיווג 20ש׳ + הצעה 20ש׳ +
+// שליחה) מתחילה רק אם עברו ≤10ש׳; שליחה מתחילה רק אם נשארו ≥35ש׳, תקציבה = מה שנשאר פחות 30ש׳.
+const FN_LIMIT_MS = 60 * 1000;
+const AGENT_SHADOW_MAX_ELAPSED_MS = 10 * 1000;
+const AGENT_SEND_MIN_LEFT_MS = 35 * 1000;
+const AGENT_SEND_MARGIN_MS = 30 * 1000;
 
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && lgWaInboundKey(k) === k;
 
@@ -112,20 +112,20 @@ async function handleAdmin(body, deps) {
       try {
         const sKeys = await lgAgentShadowPending(deps.db, BATCH, deps.now);
         for (const key of sKeys) {
-          if (deadline - Date.now() < AGENT_SHADOW_MIN_LEFT_MS) break;
+          if (Date.now() - started > AGENT_SHADOW_MAX_ELAPSED_MS) break;
           try {
-            const p = await lgAgentShadowProcess(deps.db, key, { now: deps.now, fetchImpl: deps.fetchImpl });
+            const p = await lgAgentShadowProcess(deps.db, key, { now: deps.now, fetchImpl: deps.fetchImpl, provider: deps.provider });
             if (p.ok) ag.processed++; else ag.failed++;
           } catch (_) { ag.failed++; }
         }
       } catch (_) { ag.failed++; }
       //  תור ההודעות של הסוכנים: רשומות pending שנתקעו (act שנקטע, חלון תפוס…).
       //  ⚠️ כשל כאן לא משנה את התגובה; הספירה תחת agentShadow.sent.
-      const left = deadline - Date.now();
-      if (left >= AGENT_SHADOW_MIN_LEFT_MS) {
+      const left = FN_LIMIT_MS - (Date.now() - started);
+      if (left >= AGENT_SEND_MIN_LEFT_MS) {
         try {
           ag.sent = await require('./_agent-send').lgAgentSendPending(deps.db,
-            { budgetMs: Math.max(0, left - AGENT_SEND_MARGIN_MS), provider: deps.provider });
+            { budgetMs: Math.max(1, left - AGENT_SEND_MARGIN_MS), provider: deps.provider });
         } catch (_) { ag.sendFailed = true; }
       }
       out.agentShadow = ag;

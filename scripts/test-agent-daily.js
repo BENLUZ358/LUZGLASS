@@ -94,12 +94,38 @@ const seed = () => fakeDb({ waMeta: {
     const db = seed(); let t = 0;
     db._data.waMeta.agentShadow.pend = { createdAt: NOW - H, linked: true, state: 'received', attempts: 0, chatId: 'x@c.us', sender: '0500000000', text: 'q' };
     const p = provider();
-    const orig = p.sendText; p.sendText = async f => { t = 30000; return orig(f); };   // השליחה אכלה את התקציב
+    const orig = p.sendText; p.sendText = async f => { t = 11000; return orig(f); };   // השליחה אכלה את התקציב
     const r = await D.lgAgentDailyRun(req('sek'), { db, env: ENV, now: NOW, provider: p, clock: () => t });
     check('overrun: summary sent, shadow work skipped', [r.body.sent, p.texts.length, r.body.shadowProcessed, db._data.waMeta.agentShadow.pend.state], [1, 1, 0, 'received']);
     const db2 = seed(); const p2 = provider();
     const r2 = await D.lgAgentDailyRun(req('sek'), { db: db2, env: ENV, now: NOW, provider: p2, clock: () => 0 });
     check('no overrun: ok', [r2.body.sent, r2.body.failed], [1, 0]);
+  }
+  /* R14: פריט צל מתחיל רק אם עברו ≤10ש׳; שליחה רק אם נשארו ≥35ש׳ ותקציבה left−30ש׳ */
+  {
+    const budgets = [];
+    const spy = (t) => ({ ...provider() });
+    const send = require(path.join(ROOT, 'api', '_agent-send.js'));
+    const orig = send.lgAgentSendPending;
+    send.lgAgentSendPending = async (d, o) => { budgets.push(o.budgetMs); return { sent: 0, failed: 0 }; };
+    delete require.cache[require.resolve(path.join(ROOT, 'api', '_agent-daily.js'))];
+    const D2 = require(path.join(ROOT, 'api', '_agent-daily.js'));
+    let t = 0;
+    await D2.lgAgentDailyRun(req('sek'), { db: seed(), env: ENV, now: NOW, provider: provider(), clock: () => t });
+    check('send budget = 60 − 0 − 30', budgets[0], 30000);
+    budgets.length = 0; t = 0;
+    const clk = () => t; const c0 = clk;
+    await D2.lgAgentDailyRun(req('sek'), { db: seed(), env: { ...ENV, AGENT_SUMMARY_TO: '' }, now: NOW, provider: provider(), clock: (() => { let n = 0; return () => (n++ === 0 ? 0 : 26000); })() });
+    check('34s left → send not started', budgets, []);
+    send.lgAgentSendPending = orig;
+    delete require.cache[require.resolve(path.join(ROOT, 'api', '_agent-daily.js'))];
+    for (const [el, want] of [[9000, 'done'], [11000, 'received']]) {
+      const D3 = require(path.join(ROOT, 'api', '_agent-daily.js'));
+      const db = seed(); let n = 0;
+      db._data.waMeta.agentShadow.pend = { createdAt: NOW - H, linked: false, staff: false, state: 'received', attempts: 0, chatId: '972500000000@c.us', sender: '0500000000' };
+      await D3.lgAgentDailyRun(req('sek'), { db, env: { ...ENV, AGENT_SUMMARY_TO: '' }, now: NOW, provider: provider(), clock: () => (n++ === 0 ? 0 : el) });
+      check('shadow item at elapsed ' + el + ' → ' + want, db._data.waMeta.agentShadow.pend.state, want);
+    }
   }
   /* vercel.json */
   {
