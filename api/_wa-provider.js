@@ -230,8 +230,12 @@ function greenProvider() {
   const token      = String(process.env.GREENAPI_TOKEN || '').trim();
   const gapMs      = num(process.env.GREENAPI_GAP_MS,     10000);
   const maxPerRun  = num(process.env.GREENAPI_MAX_PER_RUN,    10);
-  //  העלאת קבצים עוברת בשרת המדיה שלהם, לא ב-api.green-api.com
-  const mediaUrl   = String(process.env.GREENAPI_MEDIA_URL || 'https://media.green-api.com').trim().replace(/\/+$/, '');
+  //  שרת המדיה (העלאת קבצים) הוא לפי המופע: 4 הספרות הראשונות שלו (מסוף GREEN API,
+  //  30/10: mediaUrl = https://7107.api.greenapi.com). השרת הכללי media.green-api.com
+  //  לא מטפל במופע הזה — הבקשה נתקעה עד הזמן הקצוב (L1143).
+  const mediaUrl   = String(process.env.GREENAPI_MEDIA_URL ||
+                            (/^\d{4}/.test(idInstance) ? 'https://' + idInstance.slice(0, 4) + '.api.greenapi.com'
+                                                       : 'https://media.green-api.com')).trim().replace(/\/+$/, '');
 
   return {
     name:       'green',

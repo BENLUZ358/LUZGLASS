@@ -191,7 +191,7 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
                      { name: 'b.jpg', mime: 'image/jpeg', buf: Buffer.from('y') }];
       const ok = await p.sendFiles({ to: GROUP, kind: 'invoice', clientName: 'x', orderNums: ['L1'], docNumber: '5', files });
       assert.equal(ok.ok, true); assert.equal(ok.messageId, 'M1');
-      assert.equal(seen[0].url, 'https://media.green-api.com/waInstance7103/sendFileByUpload/SECRETTOKEN');
+      assert.equal(seen[0].url, 'https://7103.api.greenapi.com/waInstance7103/sendFileByUpload/SECRETTOKEN');
       assert.deepEqual([seen[0].fields.chatId, seen[0].fields.file, !!seen[0].fields.caption, seen[1].fields.caption],
                        [GROUP, 'application/pdf', true, undefined]);
       const bad = await p.sendFiles({ to: GROUP, kind: 'invoice', files: files.slice(0, 1) });
