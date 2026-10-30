@@ -19,7 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgWaInboundKey } = require('./_wa-inbound');
-const { lgAgentStaff, lgAgentEnqueue, lgAgentSendPending } = require('./_agent-send');
+const { AGENT_OUTBOX, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending } = require('./_agent-send');
 const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
         lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText } = require('./_agent-okev');
 
@@ -39,14 +39,15 @@ const _isNo = s => NO.includes(_norm(s));
 const _reply = text => ({ type: 'reply', text });
 const _staff = text => ({ type: 'staff', text });
 const _who = r => String(r.customerName || r.sender || '');
-// העברת ההודעה המקורית לשאול (תמונה / מספר לא מקושר שהטקסט שלו לא נשמר)
+// העברת ההודעה המקורית לשאול (תמונה)
 const _forward = r => ({ type: 'staff', text: '', files: [{ kind: 'forward', fromChat: String(r.chatId || ''), idMessage: String(r.idMessage || '') }] });
 const _body = r => String(r.text || '').trim() || (r.hasImage ? '(תמונה)' : '');
 
 // ── שאול: כל מה שהסוכנים לא מטפלים בו ──
-//  לא מקושר → רק לשאול (הטקסט לא נשמר — מעבירים את ההודעה עצמה), בלי תשובה.
+//  R5: לא מקושר → כלום, גם לא לשאול (הטלפון של המפעל כבר מראה אותם; סכנת
+//  ספאם). נספרים בסיכום היומי (משימה 8).
 function _handoff(r) {
-  if (!r.linked) return [_staff(String(r.sender || '') + ': הודעה ממספר שלא מקושר ללקוח'), _forward(r)];
+  if (!r.linked) return [];
   return [_staff(_who(r) + ': ' + _body(r)), ...(r.hasImage ? [_forward(r)] : []), _reply(AGENT_HANDOFF_TEXT)];
 }
 
@@ -134,7 +135,12 @@ function lgAgentDecide(p) {
     }
     c = null;   // פג — מתעלמים (ונמחק)
   }
-  if (c && r.linked) {
+  // ⚠️ הזמנה חדשה (kolet) לא נבלעת כתשובה לשאלה פתוחה.
+  // ⚠️ רק הודעה שנשלחה אחרי השאלה: askedAt = מתי השאלה נשלחה בפועל (act ממלא
+  //    מהתור; לא נשלחה עדיין → אינסוף), ובלי askedAt — זמן ההחלטה (at).
+  const msgAt = Number(r.timestamp || r.createdAt || 0);
+  const askedAt = c ? Number(c.askedAt != null ? c.askedAt : (c.at || 0)) : 0;
+  if (c && r.linked && r.route !== 'kolet' && msgAt > askedAt) {
     const h = _onConv(r, orders, c, now);
     if (h) return h;
   }
@@ -164,10 +170,27 @@ async function lgAgentAct(db, key, opts) {
   // פעם אחת לרשומה (null-first: הקריאה הראשונה עם null מחזירה ערך)
   const cl = await db.ref(SHADOW + '/' + key + '/actAt').transaction(cur => (cur ? undefined : now));
   if (!cl.committed) return { acted: false, actions: rec.wouldAct || [] };
+  // ⚠️ מכאן — כל כשל נרשם ברשומה (actReason:'error'), לא נבלע בשקט
+  try { return await _act(db, key, rec, recRef, env, now, o); }
+  catch (e) {
+    console.warn('agent-act:', e && e.name);
+    try { await recRef.update({ acted: false, actReason: 'error', actError: String((e && e.name) || 'Error') }); }
+    catch (e2) { console.warn('agent-act: could not record failure', e2 && e2.name); }
+    return { acted: false, actions: [] };
+  }
+}
+
+async function _act(db, key, rec, recRef, env, now, o) {
 
   const chat = String(rec.groupId || rec.chatId || '');
   const convRef = db.ref(CONV + '/' + lgWaInboundKey(chat));
-  const conv = chat ? (await convRef.once('value')).val() : null;
+  const stored = chat ? (await convRef.once('value')).val() : null;
+  // מתי השאלה נשלחה בפועל — מהתור (askKey). עדיין לא נשלחה → אי אפשר לענות עליה
+  let conv = stored;
+  if (stored && stored.askKey) {
+    const q = (await db.ref(AGENT_OUTBOX + '/' + stored.askKey).once('value')).val();
+    conv = { ...stored, askedAt: q && q.state === 'sent' && q.sentAt ? Number(q.sentAt) : Number.MAX_SAFE_INTEGER };
+  }
   const cid = String(rec.customerId || '');
   let orders = [];
   if (cid && rec.linked) {
@@ -189,22 +212,20 @@ async function lgAgentAct(db, key, opts) {
   if (why) {
     await recRef.update({ wouldAct: d.actions, acted: false, actReason: why });
     // conv שפג נמחק גם כשלא פועלים; שום שינוי אחר ב-conv
-    if (conv && !(now - Number(conv.at || 0) <= CONV_TTL_MS)) await convRef.set(null);
+    if (stored && !(now - Number(stored.at || 0) <= CONV_TTL_MS)) await convRef.set(null);
     return { acted: false, actions: d.actions };
   }
-
-  // conv לפני השליחה — כדי שתשובה מהירה של הלקוח תמצא אותו
-  if (!d.conv) { if (conv) await convRef.set(null); }
-  else if (JSON.stringify(d.conv) !== JSON.stringify(conv)) await convRef.set(d.conv);
 
   const queued = [], cancels = [];
   const enq = async (k, to, text, files, reason) => {
     const q = await lgAgentEnqueue(db, { key: k, to, customerId: cid, text, files, reason });
     if (q.queued) queued.push(q.key);
+    return q.queued;
   };
+  let askKey = '';   // השאלה (תשובה ראשונה) שנכנסה לתור בפועל
   for (let i = 0; i < d.actions.length; i++) {
     const a = d.actions[i], k = key + '_' + i;
-    if (a.type === 'reply') await enq(k, chat, a.text, [], 'agent-reply');
+    if (a.type === 'reply') { if (await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k; }
     else if (a.type === 'staff') await enq(k, staff[0], a.text, a.files || [], 'agent-staff');
     else if (a.type === 'files') await enq(k, chat, a.text || '', a.files || [], 'agent-files');
     else if (a.type === 'cancel') {
@@ -219,6 +240,10 @@ async function lgAgentAct(db, key, opts) {
       }
     }
   }
+  // conv אחרי התור ולפני השליחה. conv חדש נשמר רק אם השאלה באמת נכנסה לתור
+  //  (queued:true) — עם askKey, כדי לדעת מתי נשלחה
+  if (!d.conv) { if (stored) await convRef.set(null); }
+  else if (d.conv !== conv && askKey) await convRef.set({ ...d.conv, askKey: lgWaInboundKey(askKey) });
   await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actQueued: queued, actCancels: cancels });
 
   if (queued.length) {

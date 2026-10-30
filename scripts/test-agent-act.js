@@ -51,9 +51,13 @@ const outbox = db => (db._data.waMeta || {}).agentOutbox || {};
 const conv = (db, chat) => ((db._data.waMeta || {}).agentConv || {})[key(chat)];
 const noSend = { calls: 0 };
 const sendStub = async () => { noSend.calls++; return { sent: 0 }; };
-const run = (db, k, env, now) => act.lgAgentAct(db, k, { env: env || ON, now: now || NOW, sendPending: sendStub });
+// זמן ההודעה (timestamp) = זמן העיבוד, אלא אם הבדיקה קבעה אחרת
+const run = (db, k, env, now) => {
+  const r = rec(db, k); if (r && r.timestamp == null) r.timestamp = now || NOW;
+  return act.lgAgentAct(db, k, { env: env || ON, now: now || NOW, sendPending: sendStub });
+};
 
-const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: rec_, orders: orders_ || list('777'), conv: conv_ || null, now: now_ || NOW });
+const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: now_ || NOW, ...rec_ }, orders: orders_ || list('777'), conv: conv_ || null, now: now_ || NOW });
 
 (async () => {
   check('constants', [act.CONV, act.CONV_TTL_MS], ['waMeta/agentConv', 30 * 60 * 1000]);
@@ -133,10 +137,26 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: rec_, orders:
     check('shaul (linked, no name) → phone prefix',
       D(R({ route: 'shaul', intent: 'angry', text: 'איפה ההזמנה???', customerName: '' })).actions[0],
       { type: 'staff', text: '0501234567: איפה ההזמנה???' });
+    // R5: מספר לא מקושר — לא שולחים כלום, גם לא לשאול (נספר בסיכום היומי)
     const un = D(R({ route: 'shaul', linked: false, customerId: '', customerName: '', chatId: STRANGER, sender: '0549999999', text: undefined }), null, []);
-    check('shaul (unlinked) → staff only (text + forward of the message), no reply', un.actions, [
-      { type: 'staff', text: '0549999999: הודעה ממספר שלא מקושר ללקוח' },
-      { type: 'staff', text: '', files: [{ kind: 'forward', fromChat: STRANGER, idMessage: 'M1' }] }]);
+    check('R5: shaul (unlinked) → no action at all', un.actions, []);
+
+    // "כן" שנשלח לפני השאלה (או לפני שנמסרה) לא מאשר ביטול
+    const early = D(R({ text: 'כן', intent: 'unclear', route: 'shaul', timestamp: NOW - 1000 }), c.conv, null, NOW + MIN);
+    check('"כן" sent before the question → no cancel, normal routing, conv kept',
+      [early.actions.map(a => a.type), early.conv], [['staff', 'reply'], c.conv]);
+    const notYet = D(R({ text: 'כן', intent: 'unclear', route: 'shaul', timestamp: NOW + MIN }), { ...c.conv, askedAt: NOW + 2 * MIN }, null, NOW + 3 * MIN);
+    check('"כן" before the question was delivered (askedAt) → no cancel', notYet.actions.map(a => a.type), ['staff', 'reply']);
+    const after = D(R({ text: 'כן', intent: 'unclear', route: 'shaul', timestamp: NOW + 3 * MIN }), { ...c.conv, askedAt: NOW + 2 * MIN }, null, NOW + 3 * MIN);
+    check('"כן" after delivery → cancel', after.actions.map(a => a.type), ['cancel']);
+    const wEarly = D(R({ text: '3', intent: 'unclear', route: 'shaul', timestamp: NOW - 1 }), m.conv, null, NOW + MIN);
+    check('"3" sent before the list → not an answer', wEarly.conv, m.conv);
+
+    // הזמנה חדשה (kolet) לא נבלעת כתשובה לשאלה פתוחה
+    const kol = D(R({ route: 'kolet', intent: 'order', text: '', hasImage: true }), ch.conv, null, NOW + MIN);
+    check('kolet while awaiting change-details → no action, conv kept', [kol.actions, kol.conv], [[], ch.conv]);
+    const kol2 = D(R({ route: 'kolet', intent: 'order', text: '2' }), m.conv, null, NOW + MIN);
+    check('kolet while awaiting which → no action', kol2.actions, []);
 
     for (const r of ['silent-human', 'ignore', 'none', 'staff', 'kolet'])
       check(r + ' → no action', D(R({ route: r, intent: 'status', ref: 'כהן', text: 'כן' })).actions, []);
@@ -193,9 +213,26 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: rec_, orders:
     const db = seed(); put(db, 'U1', R({ route: 'shaul', linked: false, customerId: '', customerName: '', chatId: STRANGER, sender: '0549999999' }));
     delete rec(db, 'U1').text;
     const r = await run(db, 'U1');
-    check('unlinked → acted (staff only), two staff entries, nothing to the stranger',
-      [r.acted, Object.values(outbox(db)).map(x => x.to), outbox(db).U1_1.files],
-      [true, ['0501112222', '0501112222'], [{ kind: 'forward', fromChat: STRANGER, idMessage: 'M1' }]]);
+    check('R5: unlinked → not acted, nothing queued (not even to Shaul)',
+      [r.acted, rec(db, 'U1').actReason, Object.keys(outbox(db)).length], [false, 'no-action', 0]);
+  }
+  {
+    // act נופל אחרי שנתפס actAt → נרשם actReason:'error', לא שקט
+    const db = seed(); put(db, 'X1', R({ intent: 'status', ref: 'כהן' }));
+    const real = db.ref.bind(db);
+    db.ref = p => (p === 'orders' ? { once: async () => { throw new RangeError('db down'); } } : real(p));
+    const warn = console.warn; const warned = []; console.warn = (...a) => warned.push(a.join(' '));
+    const r = await run(db, 'X1');
+    console.warn = warn;
+    check('act throws after claim → acted:false, actReason error, e.name logged',
+      [r.acted, rec(db, 'X1').acted, rec(db, 'X1').actReason, rec(db, 'X1').actError, warned], [false, false, 'error', 'RangeError', ['agent-act: RangeError']]);
+  }
+  {
+    // השאלה כבר בתור (queued:false) → conv לא נכתב
+    const db = seed(); put(db, 'Q1', R({ intent: 'cancel', ref: 'מטבח', idMessage: 'Q1' }));
+    db._data.waMeta.agentOutbox = { Q1_0: { state: 'sent', text: 'ישן' } };
+    await run(db, 'Q1');
+    check('question not actually queued → conv not written', conv(db, PRIV), undefined);
   }
   {
     const db = seed(); put(db, 'S0', R({ route: 'shaul', intent: 'unclear', text: 'x' }));
@@ -207,11 +244,21 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: rec_, orders:
   {
     const db = seed(); put(db, 'C1', R({ intent: 'cancel', ref: 'מטבח', idMessage: 'C1' }));
     await run(db, 'C1');
-    check('cancel question → conv saved under the chat', conv(db, PRIV), { await: 'confirm-cancel', orderId: 'o3', at: NOW });
+    check('cancel question → conv saved under the chat, with the question\'s queue key',
+      conv(db, PRIV), { await: 'confirm-cancel', orderId: 'o3', at: NOW, askKey: 'C1_0' });
 
     // R1: lgAgentCancel עוד לא קיים (משימה 3) — כאן מזויף
     const calls = [];
     act.lgAgentCancel = async (d, orderId, ctx) => { calls.push([orderId, ctx.customerId, ctx.chatId]); return { ok: true, code: '' }; };
+    // השאלה עוד לא נשלחה — "כן" לא מבטל
+    put(db, 'C2a', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'C2a' }));
+    await run(db, 'C2a', ON, NOW + MIN);
+    check('"כן" while the question is still unsent → no cancel, conv kept', [calls.length, conv(db, PRIV).orderId], [0, 'o3']);
+    // נשלחה ב-NOW+2 דק'; "כן" עם זמן מוקדם יותר → לא מבטל
+    Object.assign(outbox(db).C1_0, { state: 'sent', sentAt: NOW + 2 * MIN });
+    put(db, 'C2b', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'C2b', timestamp: NOW + MIN }));
+    await run(db, 'C2b', ON, NOW + 3 * MIN);
+    check('"כן" timestamped before delivery → no cancel', calls.length, 0);
     put(db, 'C2', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'C2' }));
     const r = await run(db, 'C2', ON, NOW + 5 * MIN);
     check('"כן" → cancel called once with customer + chat', calls, [['o3', '777', PRIV]]);
@@ -219,7 +266,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: rec_, orders:
     // Review Focus 4: אותה הודעה פעמיים → ביטול ושליחה פעם אחת
     await run(db, 'C2', ON, NOW + 6 * MIN);
     check('focus 4: act again on the same record → cancel not called again, one entry',
-      [calls.length, Object.keys(outbox(db)).filter(k => k.startsWith('C2')).length], [1, 1]);
+      [calls.length, Object.keys(outbox(db)).filter(k => k.startsWith('C2_')).length], [1, 1]);
 
     act.lgAgentCancel = async () => ({ ok: false, code: 'too-late' });
     db._data.waMeta.agentConv = { [key(PRIV)]: { await: 'confirm-cancel', orderId: 'o4', at: NOW } };
@@ -278,9 +325,11 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: rec_, orders:
     const r = await sh.lgAgentShadowRecord(db, payload('E1', 'מה עם כהן?'), NOW, { env: ON });
     const orig = act.lgAgentAct;
     act.lgAgentAct = async () => { throw new TypeError('boom'); };
+    const warn = console.warn; const warned = []; console.warn = (...a) => warned.push(a.join(' '));
     const p = await sh.lgAgentShadowProcess(db, r.key, { now: NOW, fetchImpl: m.fetchImpl, env: ON });
+    console.warn = warn;
     act.lgAgentAct = orig;
-    check('act failure never fails the shadow record', [p.ok, rec(db, r.key).state], [true, 'done']);
+    check('act failure never fails the shadow record, only e.name logged', [p.ok, rec(db, r.key).state, warned], [true, 'done', ['agent-shadow: act TypeError']]);
   }
   {
     // R2: הודעה ממספר צוות → route staff, בלי סיווג ובלי פעולה
@@ -293,6 +342,13 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: rec_, orders:
     const g = await sh.lgAgentShadowRecord(db, payload('S2', 'אני מטפל', GROUP, SHAUL), NOW, { env: ON });
     await sh.lgAgentShadowProcess(db, g.key, { now: NOW, fetchImpl: m.fetchImpl, env: ON });
     check('staff writing in a customer group → staff, not classified', [rec(db, g.key).route, m.calls], ['staff', 0]);
+    // R6: שאול כתב בקבוצה → שקט שעתיים בקבוצה, כמו הודעה ידנית מהטלפון
+    check('R6: staff message in a group sets HUMAN lastAt', db._data.waMeta.agentHuman[key(GROUP)].lastAt, NOW);
+    check('R6: staff private chat does not mark human', (db._data.waMeta.agentHuman || {})[key(SHAUL)], undefined);
+    const c1 = await sh.lgAgentShadowRecord(db, payload('S3', 'מתי מוכן?', GROUP, '972521111111@c.us'), NOW + 10 * MIN, { env: ON });
+    await sh.lgAgentShadowProcess(db, c1.key, { now: NOW + 10 * MIN, fetchImpl: model('status', '').fetchImpl, env: ON, provider: { configured: false } });
+    check('R6: customer message in that group after Shaul → silent-human, nothing queued',
+      [rec(db, c1.key).route, Object.keys(outbox(db)).length], ['silent-human', 0]);
   }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');

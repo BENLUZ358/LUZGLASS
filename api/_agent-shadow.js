@@ -113,6 +113,9 @@ async function lgAgentShadowRecord(db, body, now, opts) {
   const ib = lgWaInboundParse(body);
   // צוות (שאול) — נשמר עם הטקסט גם ממספר לא מקושר: משימה 6 קוראת את "השב" שלו
   const staff = !!p.entry.sender && lgAgentStaff(env).includes(p.entry.sender);
+  // R6: איש צוות כתב בקבוצת לקוח → כמו הודעה ידנית מהטלפון: שקט שעתיים שם.
+  //     (צ'אט פרטי של איש צוות הוא הצ'אט שלו — לא של לקוח.)
+  if (staff && p.entry.groupId) await db.ref(HUMAN + '/' + _chatKey(p.entry)).update({ lastAt: t });
   const rec = { ...p.entry, linked, staff, intakeKind: (ib && ib.entry && ib.entry.kind) || '',
                 state: 'received', attempts: 0, createdAt: t, updatedAt: t };
   // לא מקושר (ולא צוות) — לא שומרים את תוכן ההודעה
