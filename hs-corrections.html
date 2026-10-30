@@ -39,6 +39,11 @@ html,body{height:100%;}
 .toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:700;background:var(--text);
   color:var(--bg);padding:var(--space-3) var(--space-5);border-radius:var(--radius-lg);font-weight:var(--fw-bold);}
 .toast.err{background:var(--red);color:#fff;}
+/* ביטולים מהסוכן (31/10): הזמנה שהלקוח ביטל בוואטסאפ ירדה מהמערכת, אבל
+   בחשבשבת היא עדיין פתוחה — מבטלים שם ביד ומסמנים. */
+.ac-sec{margin-bottom:var(--space-5);}
+.ac-sec h2{font-size:var(--fs-lg);font-weight:var(--fw-black);margin-bottom:var(--space-2);}
+.ac-sec .card{border-color:var(--red);}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -53,6 +58,7 @@ html,body{height:100%;}
     <h1>תיקון הזמנות</h1>
   </div>
   <p class="meta" style="margin:-8px 0 var(--space-4)">שינויים בשורות שכבר נשלחו לחשבשבת. עדכן אותם שם ביד, וסמן &quot;בוצע&quot;.</p>
+  <div id="agentCancels"></div>
   <div class="filters" role="tablist" aria-label="סינון">
     <button class="flt" role="tab" type="button" data-f="pending" aria-selected="true">ממתינות <span id="nPending"></span></button>
     <button class="flt" role="tab" type="button" data-f="done" aria-selected="false">טופלו</button>
@@ -84,6 +90,41 @@ function instruction(r) {
   const what = Object.keys(r.net).map(t => TYPE_WORD[t] || t).join(' ו');
   return `בחשבשבת: בטל יתרה בשורה ${r.hsLine}, והוסף שורה ${r.hsLine} חדשה עם ה${what} החדשים.`;
 }
+// ── ביטולים מהסוכן (31/10) ───────────────────────────────────────────
+//  waMeta/agentCancels/<orderId> — נכתב ב-api/_agent-act.js (lgAgentCancel).
+//  מוצג רק מה שכבר נשלח לחשבשבת ועוד לא סומן "בוצע". טהור — נבדק ב-
+//  scripts/test-agent-cancel.js.
+function agentCancelRows(map) {
+  return Object.keys(map || {}).filter(k => map[k] && map[k].hsSent && !map[k].done).map(k => {
+    const o = map[k].order || {};
+    return { key: k, orderNum: o.orderNum || k, client: o.orderClient || o.client || o.customerId || '',
+             sketch: o.sketchName || '', at: Number(map[k].at) || 0 };
+  }).sort((a, b) => a.at - b.at);
+}
+function agentCancelsHtml(rows) {
+  if (!rows.length) return '';
+  return `<section class="ac-sec" aria-label="ביטולים מהסוכן"><h2>ביטולים מהסוכן (${rows.length})</h2>
+    <p class="meta" style="margin:0 0 var(--space-3)">הלקוח ביטל בוואטסאפ, וההזמנה כבר נשלחה לחשבשבת. בטל אותה שם, וסמן.</p>
+    ${rows.map(r => `<div class="card">
+      <div class="c-head"><span class="c-num">${lgEsc(r.orderNum)}</span><span class="c-client">${lgEsc(r.client)}</span></div>
+      ${r.sketch ? `<div class="chg">סקיצה: ${lgEsc(r.sketch)}</div>` : ''}
+      <div class="meta">בוטל ע״י הלקוח · ${lgEsc(fmtDate(r.at))}</div>
+      <button class="btn btn-primary" type="button" data-cancel-done="${lgEsc(r.key)}"><span data-icon="check"></span>בוצע בחשבשבת</button>
+    </div>`).join('')}</section>`;
+}
+// ── סוף ביטולים מהסוכן
+let AGENT_CANCELS = {};
+function renderAgentCancels() { $('agentCancels').innerHTML = agentCancelsHtml(agentCancelRows(AGENT_CANCELS)); }
+$('agentCancels').addEventListener('click', async e => {
+  const b = e.target.closest('[data-cancel-done]'); if (!b) return;
+  b.disabled = true;
+  try {
+    const res = await _lgAuthPost('/api/wa-inbound-drain', { action: 'agent-cancel-done', key: b.dataset.cancelDone });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.ok) throw new Error(d.message || d.error || 'השמירה נכשלה');
+    toast('סומן כבוצע');   // הרשימה מתעדכנת מההאזנה
+  } catch (err) { toast(err.message || 'השמירה נכשלה', true); b.disabled = false; }
+});
 function render() {
   const rows = lgHsCorrectionQueue(ORDERS, filter);
   $('nPending').textContent = lgHsCorrectionQueue(ORDERS, 'pending').length || '';
@@ -113,6 +154,8 @@ $('list').addEventListener('click', async e => {
 });
 lgRequireAuthAsync('admin').then(session => {
   if (!session) return;
+  _lgDb.ref('waMeta/agentCancels').on('value', snap => { AGENT_CANCELS = snap.val() || {}; renderAgentCancels(); },
+    err => console.warn('agentCancels:', err && err.code));
   listenAllOrders(list => { ORDERS = list; render(); },
     () => { $('list').innerHTML = '<div class="meta">הטעינה נכשלה. בדוק חיבור ורענן.</div>'; });
 });

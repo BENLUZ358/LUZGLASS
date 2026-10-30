@@ -247,7 +247,8 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     check('cancel question → conv saved under the chat, with the question\'s queue key',
       conv(db, PRIV), { await: 'confirm-cancel', orderId: 'o3', at: NOW, askKey: 'C1_0' });
 
-    // R1: lgAgentCancel עוד לא קיים (משימה 3) — כאן מזויף
+    // כאן מזויף — בודק את החיווט; הביטול האמיתי מקצה לקצה למטה
+    const realCancel = act.lgAgentCancel;
     const calls = [];
     act.lgAgentCancel = async (d, orderId, ctx) => { calls.push([orderId, ctx.customerId, ctx.chatId]); return { ok: true, code: '' }; };
     // השאלה עוד לא נשלחה — "כן" לא מבטל
@@ -285,7 +286,32 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     db._data.waMeta.agentConv = { [key(PRIV)]: { await: 'confirm-cancel', orderId: 'o4', at: NOW } };
     put(db, 'C5', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'C5' }));
     await run(db, 'C5', ON, NOW + MIN);
-    check('no lgAgentCancel yet → no "בוטלה", goes to Shaul', [outbox(db).C5_0.text, !!outbox(db).C5_0_s], [HANDOFF, true]);
+    check('no lgAgentCancel → no "בוטלה", goes to Shaul', [outbox(db).C5_0.text, !!outbox(db).C5_0_s], [HANDOFF, true]);
+    act.lgAgentCancel = realCancel;
+
+    // ── מקצה לקצה עם lgAgentCancel האמיתי (משימה 3) ──
+    check('real lgAgentCancel is exported', typeof act.lgAgentCancel, 'function');
+    {
+      const db2 = seed(); put(db2, 'E1', R({ intent: 'cancel', ref: 'מטבח', idMessage: 'E1' }));
+      await run(db2, 'E1');
+      Object.assign(outbox(db2).E1_0, { state: 'sent', sentAt: NOW + MIN });
+      put(db2, 'E2', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'E2' }));
+      const e2 = await run(db2, 'E2', ON, NOW + 2 * MIN);
+      check('e2e: "כן" → order o3 removed, cancel record, "ההזמנה בוטלה"',
+        [e2.acted, db2._data.orders.o3, db2._data.waMeta.agentCancels.o3.order.orderNum, db2._data.waMeta.agentCancels.o3.chatId,
+         outbox(db2).E2_0.text, rec(db2, 'E2').actCancels],
+        [true, undefined, 'L1003', PRIV, 'ההזמנה בוטלה', [{ orderId: 'o3', ok: true, code: '' }]]);
+      // ירדה לביצוע בין השאלה ל"כן" — הבדיקה בטרנזקציה, לא רק בהחלטה
+      db2._data.waMeta.agentConv = { [key(PRIV)]: { await: 'confirm-cancel', orderId: 'o4', at: NOW + 2 * MIN } };
+      const realRef = db2.ref.bind(db2);
+      db2.ref = p => { const r = realRef(p); if (p === 'orders/o4') { const tx = r.transaction;
+        r.transaction = fn => { db2._data.orders.o4.stage = 'workday'; return tx(fn); }; } return r; };
+      put(db2, 'E3', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'E3' }));
+      await run(db2, 'E3', ON, NOW + 3 * MIN);
+      check('e2e focus 3: moved to workday at the last moment → not deleted, "already in production"',
+        [db2._data.orders.o4.stage, (db2._data.waMeta.agentCancels || {}).o4, outbox(db2).E3_0.text, rec(db2, 'E3').actCancels[0].code],
+        ['workday', undefined, 'הזמנה L1004 כבר בייצור ואי אפשר לבטל או לשנות אותה', 'too-late']);
+    }
 
     // conv שפג — נמחק גם כשלא פועלים
     db._data.waMeta.agentConv = { [key(PRIV)]: { await: 'which', intent: 'status', orderIds: ['o3'], at: NOW } };

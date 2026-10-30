@@ -7,6 +7,8 @@
 //
 //    { action:'agent-verdict', key, ok, note }  סימון נכון/לא נכון על רשומת צל
 //                                     של סוכני הלקוחות (30/10; ללא channel — לא שייך לערוץ)
+//    { action:'agent-cancel-done', key }  "בוצע בחשבשבת" על ביטול מהסוכן
+//                                     (waMeta/agentCancels/<key>; דף תיקון הזמנות, 31/10)
 //
 //  'drain' משלים גם רשומות צל תקועות (waMeta/agentShadow) — רק כש-
 //  AGENT_SHADOW_ENABLED === 'true', עד BATCH, בתוך אותו תקציב. התוצאה בשדה נפרד
@@ -32,6 +34,7 @@
 const { lgWaInboundKey, lgWaInboundPending, lgWaInboundProcess,
         lgWaInboundRetry, lgWaInboundClose } = require('./_wa-inbound');
 const { lgAgentShadowPending, lgAgentShadowProcess, lgAgentShadowVerdict } = require('./_agent-shadow');
+const { AGENT_CANCELS } = require('./_agent-act');
 const { lgEmailKey } = require('./_email-recipient');
 const { lgEmailInboundKey, lgEmailInboundPending, lgEmailInboundProcess,
         lgEmailInboundRetry, lgEmailInboundClose } = require('./_email-inbound');
@@ -132,6 +135,19 @@ async function handleAdmin(body, deps) {
   if (action === 'agent-verdict') {
     if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה רשומה לא תקין' };
     return lgAgentShadowVerdict(deps.db, b.key, { ok: b.ok, note: b.note, by: String(deps.by || '') }, deps.now);
+  }
+
+  // ─── "בוצע בחשבשבת" על ביטול מהסוכן (31/10) ───────────────────────────
+  //  waMeta לא נכתב מהדפדפן (rules) — ולכן דרך כאן, מאחורי verifyAdmin.
+  if (action === 'agent-cancel-done') {
+    if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה ביטול לא תקין' };
+    const t = deps.now || Date.now(), by = String(deps.by || '');
+    // null-first: null → null (לא כותבים כלום); אין רשומה אמיתית → 'missing'
+    const tx = await deps.db.ref(AGENT_CANCELS + '/' + b.key).transaction(cur =>
+      (cur === null ? null : { ...cur, done: true, doneAt: t, doneBy: by }));
+    const v = tx.committed && tx.snapshot && tx.snapshot.val();
+    if (!v) return { ok: false, code: 'missing', message: 'הביטול לא נמצא' };
+    return { ok: true, code: '' };
   }
 
   // ─── קבוצות (בן, 06/10): קישור קבוצת WhatsApp ללקוח ───────────────────

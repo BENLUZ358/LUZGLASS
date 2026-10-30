@@ -13,8 +13,8 @@
 //  ⚠️ פעם אחת לרשומה: actAt נתפס בטרנזקציה. webhook + drain על אותה הודעה
 //     → פעולה אחת; ומפתחות התור <recordKey>_<i> הם create-once בנוסף.
 //  ⚠️ שינוי מידה/סקיצה מועבר לשאול עם הפרטים (R3) — לא עריכה אוטומטית.
-//  ⚠️ הביטול עצמו (lgAgentCancel) נוסף במשימה 3, באותו קובץ. עד אז — אין
-//     ביטול, ובקשה מאושרת עוברת לשאול (R1).
+//  ⚠️ הביטול עצמו — lgAgentCancel (משימה 3), למטה: ההזמנה יורדת מ-orders
+//     ונשמרת ב-waMeta/agentCancels; מה שכבר נשלח לחשבשבת מוצג ב"תיקון הזמנות".
 //  ⚠️ לא נרשם ללוג: טקסט ההודעה, טוקנים, מפתחות. רק e.name.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -26,6 +26,7 @@ const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT,
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
 const PILOT = 'waMeta/agentPilot';
+const AGENT_CANCELS = 'waMeta/agentCancels';
 // שליחה מיידית אחרי ההכנסה לתור — קצר, כדי לא לחרוג מ-maxDuration של ה-drain
 const SEND_BUDGET_MS = 15 * 1000;
 
@@ -150,8 +151,58 @@ function lgAgentDecide(p) {
 // ─── ביצוע ──────────────────────────────────────────────────────────
 const _switchesOn = env => env.AGENT_SHADOW_ENABLED === 'true' && env.AGENT_REPLY_ENABLED === 'true';
 
+// ─── ביטול הזמנה (משימה 3) ─────────────────────────────────────────
+//  נשלחה לחשבשבת בפועל (לא סימולציה). ⚠️ בבסיס הנתונים השדה הוא
+//  hashavshevet; hsOrder הוא השם אחרי lgNormalizeOrder בדפדפן — שניהם נבדקים.
+const _hsSent = o => { const h = o && (o.hashavshevet || o.hsOrder); return !!(h && h.sentAt && !h.simulated); };
+
+//  { ok, code } — code: '' | 'missing' | 'forbidden' | 'too-late' | 'error'
+//
+//  ⚠️ הבדיקה והמחיקה הן **אותה טרנזקציה** על orders/<id>: הזמנה שירדה
+//     לביצוע (או עברה ללקוח אחר) רגע לפני — לא תימחק (Review Focus 3).
+//     לא "בדיקה ואז עדכון רב-נתיבי": בין השניים שאול יכול להוריד לביצוע,
+//     ואז היינו מוחקים הזמנה שכבר בייצור.
+//  ⚠️ החלון שנשאר: אחרי המחיקה ולפני כתיבת waMeta/agentCancels/<id> ההזמנה
+//     קיימת רק בזיכרון. כתיבה שנכשלה → ההזמנה מוחזרת (רק אם המקום עדיין ריק)
+//     ו-'error'. רק פונקציה שנהרגת בדיוק בין שתי הכתיבות מאבדת את ההזמנה —
+//     עדיף על מחיקת הזמנה שבייצור, ו-actCancels ברשומת הצל עדיין מראה מה קרה.
+//  sketches/<id> נשאר — לא נוגעים.
+async function lgAgentCancel(db, orderId, ctx) {
+  const c = ctx || {};
+  const id = String(orderId == null ? '' : orderId);
+  const cid = String(c.customerId || '');
+  // מזהה עם '/' וכו' היה מוחק נתיב אחר
+  if (!id || id.length > 200 || lgWaInboundKey(id) !== id) return { ok: false, code: 'missing' };
+  if (!cid) return { ok: false, code: 'forbidden' };
+  let taken = null, why = '';
+  const ref = db.ref('orders/' + id);
+  const tx = await ref.transaction(cur => {
+    taken = null; why = '';
+    // ⚠️ null-first: הקריאה הראשונה היא מהמטמון (null). מחזירים null (מחיקה
+    //    של כלום) כדי שפיירבייס יביא את הערך האמיתי; אם באמת אין — 'missing'.
+    if (cur === null) return null;
+    if (String(cur.customerId || '') !== cid) { why = 'forbidden'; return; }
+    if (!lgOkevCanChange(cur)) { why = 'too-late'; return; }
+    taken = cur;
+    return null;   // מחיקה — באותה טרנזקציה עם הבדיקה
+  });
+  if (!tx.committed) return { ok: false, code: why || 'error' };
+  if (!taken) return { ok: false, code: 'missing' };
+  const now = c.now || Date.now();
+  try {
+    await db.ref(AGENT_CANCELS + '/' + id).set({ order: taken, at: now, chatId: String(c.chatId || ''),
+                                                 hsSent: _hsSent(taken), done: false });
+  } catch (e) {
+    console.warn('agent-cancel: record', e && e.name);
+    try { await ref.transaction(cur => (cur === null ? taken : undefined)); }
+    catch (e2) { console.warn('agent-cancel: restore failed', e2 && e2.name); }
+    return { ok: false, code: 'error' };
+  }
+  return { ok: true, code: '' };
+}
+
 async function _cancel(db, orderId, ctx) {
-  // R1: מוגדר במשימה 3 (module.exports.lgAgentCancel). עד אז — לא מבטלים.
+  // דרך module.exports — כדי שבדיקות יוכלו להחליף אותה
   const fn = module.exports.lgAgentCancel;
   if (typeof fn !== 'function') return { ok: false, code: 'unavailable' };
   try { return (await fn(db, orderId, ctx)) || { ok: false, code: 'error' }; }
@@ -253,4 +304,4 @@ async function _act(db, key, rec, recRef, env, now, o) {
   return { acted: true, actions: d.actions };
 }
 
-module.exports = { CONV, CONV_TTL_MS, lgAgentDecide, lgAgentAct };
+module.exports = { CONV, CONV_TTL_MS, AGENT_CANCELS, lgAgentDecide, lgAgentAct, lgAgentCancel };
