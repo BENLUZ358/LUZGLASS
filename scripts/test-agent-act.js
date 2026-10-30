@@ -114,7 +114,8 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     const moved = list('777').map(o => o.id === 'o3' ? { ...o, stage: 'workday' } : o);
     const y2 = D(R({ text: 'כן', intent: 'unclear', route: 'shaul' }), c.conv, moved, NOW + MIN);
     check('confirm "כן" but order now in workday → too-late text, no cancel',
-      y2, { actions: [{ type: 'reply', text: 'הזמנה L1003 כבר בייצור ואי אפשר לבטל או לשנות אותה' }], conv: null });
+      y2, { actions: [{ type: 'reply', text: 'הזמנה L1003 כבר בייצור ואי אפשר לבטל או לשנות אותה' },
+                      { type: 'staff', notify: true, text: 'כהן זכוכית ביקש לבטל את הזמנה L1003 (מטבח) — כבר בשלב ייצור' }], conv: null });
 
     const ch = D(R({ intent: 'change', ref: 'מטבח' }));
     check('change allowed → "מה בדיוק לשנות?" + conv change-details',
@@ -125,9 +126,12 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
       { type: 'reply', text: HANDOFF }], conv: null });
 
     check('cancel not allowed (workday) → עוקב text, no conv',
-      D(R({ intent: 'cancel', ref: 'כהן' })), { actions: [{ type: 'reply', text: 'הזמנה L1001 כבר בייצור ואי אפשר לבטל או לשנות אותה' }], conv: null });
+      D(R({ intent: 'cancel', ref: 'כהן' })), { actions: [{ type: 'reply', text: 'הזמנה L1001 כבר בייצור ואי אפשר לבטל או לשנות אותה' },
+        { type: 'staff', notify: true, text: 'כהן זכוכית ביקש לבטל את הזמנה L1001 (כהן) — כבר בשלב ייצור' }], conv: null });
     check('change not allowed (workday) → עוקב text',
-      D(R({ intent: 'change', ref: 'L1001' })).actions, [{ type: 'reply', text: 'הזמנה L1001 כבר בייצור ואי אפשר לבטל או לשנות אותה' }]);
+      D(R({ intent: 'change', ref: 'L1001' })).actions, [{ type: 'reply', text: 'הזמנה L1001 כבר בייצור ואי אפשר לבטל או לשנות אותה' },
+        { type: 'staff', notify: true, text: 'כהן זכוכית ביקש לשנות את הזמנה L1001 (כהן) — כבר בשלב ייצור' }]);
+    check('F3 status on a production order → no staff notify', D(R({ intent: 'status', ref: 'L1001' })).actions.map(a => a.type), ['reply']);
 
     check('menu → AGENT_MENU_TEXT', D(R({ route: 'menu', intent: 'chitchat', text: 'היי' })).actions, [{ type: 'reply', text: AGENT_MENU_TEXT }]);
 
@@ -152,9 +156,11 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     const wEarly = D(R({ text: '3', intent: 'unclear', route: 'shaul', timestamp: NOW - 1 }), m.conv, null, NOW + MIN);
     check('"3" sent before the list → not an answer', wEarly.conv, m.conv);
 
-    // הזמנה חדשה (kolet) לא נבלעת כתשובה לשאלה פתוחה
+    // הזמנה חדשה (kolet) לא נבלעת כתשובה לשאלה פתוחה — הקליטה יוצרת אותה כרגיל.
+    // תיקון סופי 5: סקיצה אחרי "מה לשנות?" — בנוסף, שאול מקבל "נשלחה סקיצה חדשה" + העברה
     const kol = D(R({ route: 'kolet', intent: 'order', text: '', hasImage: true }), ch.conv, null, NOW + MIN);
-    check('kolet while awaiting change-details → no action, conv kept', [kol.actions, kol.conv], [[], ch.conv]);
+    check('kolet image while awaiting change-details → Shaul text + forward (F5), conv cleared',
+      [kol.actions.map(a => a.type), kol.conv], [['staff', 'staff'], null]);
     const kol2 = D(R({ route: 'kolet', intent: 'order', text: '2' }), m.conv, null, NOW + MIN);
     check('kolet while awaiting which → no action', kol2.actions, []);
 
@@ -274,6 +280,8 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     put(db, 'C3', R({ text: 'בטוח', intent: 'unclear', route: 'shaul', idMessage: 'C3' }));
     await run(db, 'C3', ON, NOW + MIN);
     check('cancel → too-late → "already in production" text', outbox(db).C3_0.text, 'הזמנה L1004 כבר בייצור ואי אפשר לבטל או לשנות אותה');
+    check('F3 runtime too-late → also Shaul', [outbox(db).C3_0_s && outbox(db).C3_0_s.to, outbox(db).C3_0_s && outbox(db).C3_0_s.text],
+      ['0501112222', 'כהן זכוכית ביקש לבטל את הזמנה L1004 (אמבטיה) — כבר בשלב ייצור']);
 
     act.lgAgentCancel = async () => ({ ok: false, code: 'missing' });
     db._data.waMeta.agentConv = { [key(PRIV)]: { await: 'confirm-cancel', orderId: 'o4', at: NOW } };
@@ -375,6 +383,78 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     await sh.lgAgentShadowProcess(db, c1.key, { now: NOW + 10 * MIN, fetchImpl: model('status', '').fetchImpl, env: ON, provider: { configured: false } });
     check('R6: customer message in that group after Shaul → silent-human, nothing queued',
       [rec(db, c1.key).route, Object.keys(outbox(db)).length], ['silent-human', 0]);
+  }
+
+  /* ─── תיקונים סופיים 3/4/5/9 ─────────────────────────────────────────── */
+  {
+    // 3: בלי שאול מוגדר — "כבר בייצור" עדיין יוצא ללקוח (ההודעה לשאול היא לידיעה)
+    let db = seed();
+    put(db, 'N1', R({ idMessage: 'N1', route: 'okev', intent: 'cancel', ref: 'כהן' }));
+    let r = await run(db, 'N1', { ...ON, AGENT_STAFF_PHONES: '' });
+    check('F3 too-late without staff → customer still answered, no staff entry',
+      [r.acted, outbox(db).N1_0 && outbox(db).N1_0.text, !!outbox(db).N1_1], [true, 'הזמנה L1001 כבר בייצור ואי אפשר לבטל או לשנות אותה', false]);
+    db = seed();
+    put(db, 'N2', R({ idMessage: 'N2', route: 'okev', intent: 'cancel', ref: 'כהן' }));
+    await run(db, 'N2');
+    check('F3 too-late with staff → Shaul gets the request', [outbox(db).N2_1.to, outbox(db).N2_1.text, outbox(db).N2_1.reason],
+      ['0501112222', 'כהן זכוכית ביקש לבטל את הזמנה L1001 (כהן) — כבר בשלב ייצור', 'agent-staff']);
+
+    // 4: ביטול אמיתי בשלב chash → ללקוח "בוטלה" + לשאול "בוטלה הזמנה … הייתה בשלב"
+    db = seed();
+    db._data.waMeta.agentConv = { [key(PRIV)]: { await: 'confirm-cancel', orderId: 'o4', at: NOW } };
+    put(db, 'N3', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'N3' }));
+    await run(db, 'N3', ON, NOW + MIN);
+    check('F4 cancel in chash → done text + Shaul notified with the stage',
+      [!!db._data.orders.o4, outbox(db).N3_0.text, outbox(db).N3_0_s && outbox(db).N3_0_s.to, outbox(db).N3_0_s && outbox(db).N3_0_s.text],
+      [false, 'ההזמנה בוטלה', '0501112222', 'בוטלה הזמנה L1004 (אמבטיה) של כהן זכוכית — הייתה בשלב שרטוט']);
+    db = seed();
+    db._data.waMeta.agentConv = { [key(PRIV)]: { await: 'confirm-cancel', orderId: 'o3', at: NOW } };
+    put(db, 'N4', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'N4' }));
+    await run(db, 'N4', ON, NOW + MIN);
+    check('F4 cancel in pending → no Shaul message', [!!db._data.orders.o3, outbox(db).N4_0.text, !!outbox(db).N4_0_s], [false, 'ההזמנה בוטלה', false]);
+    check('F4 lgAgentCancel reports the stage', await act.lgAgentCancel(seed(), 'o4', { customerId: '777', chatId: PRIV, now: NOW }), { ok: true, code: '', stage: 'chash' });
+
+    // 5: אחרי "מה לשנות?" הלקוח שלח סקיצה (route kolet) → לשאול + העברת התמונה; הקליטה ממשיכה כרגיל
+    const chc = { await: 'change-details', orderId: 'o3', at: NOW };
+    const k5 = D(R({ route: 'kolet', intent: 'order', hasImage: true, text: '', idMessage: 'IMG5' }), chc, null, NOW + MIN);
+    check('F5 decide: change-details + image → staff text + forward, conv cleared', k5, { actions: [
+      { type: 'staff', text: 'שינוי בהזמנה L1003 (מטבח) של כהן זכוכית: נשלחה סקיצה חדשה' },
+      { type: 'staff', text: '', files: [{ kind: 'forward', fromChat: PRIV, idMessage: 'IMG5' }] }], conv: null });
+    check('F5 kolet text without image → still not swallowed', D(R({ route: 'kolet', intent: 'order', text: '80 על 120' }), chc, null, NOW + MIN).actions, []);
+    check('F5 kolet image without open conv → nothing', D(R({ route: 'kolet', intent: 'order', hasImage: true })).actions, []);
+    db = seed();
+    db._data.waMeta.agentConv = { [key(PRIV)]: chc };
+    put(db, 'N5', R({ route: 'kolet', intent: 'order', hasImage: true, text: '', idMessage: 'N5' }));
+    await run(db, 'N5', ON, NOW + MIN);
+    check('F5 act: Shaul gets text + forward, conv deleted', [outbox(db).N5_0.text, outbox(db).N5_1.files[0].kind, conv(db, PRIV)],
+      ['שינוי בהזמנה L1003 (מטבח) של כהן זכוכית: נשלחה סקיצה חדשה', 'forward', undefined]);
+
+    // 9: ההודעה לשאול לא נכנסה לתור → לא אומרים ללקוח "העברנו לשאול"
+    db = seed();
+    db._data.waMeta.agentOutbox = { N6_0: { state: 'sent', text: 'קודם' } };   // המפתח של הודעת שאול כבר קיים → queued:false
+    put(db, 'N6', R({ idMessage: 'N6', route: 'shaul', intent: 'unclear', text: 'שאלה' }));
+    await run(db, 'N6');
+    check('F9 staff entry not queued → no handoff reply', [outbox(db).N6_0.text, !!outbox(db).N6_1], ['קודם', false]);
+    db = seed();
+    put(db, 'N7', R({ idMessage: 'N7', route: 'shaul', intent: 'unclear', text: 'שאלה' }));
+    await run(db, 'N7');
+    check('F9 staff queued → handoff reply', [outbox(db).N7_0.to, outbox(db).N7_1.text], ['0501112222', HANDOFF]);
+    // ביטול שנכשל: הודעת שאול (_s) לא נכנסה → בלי "העברנו לשאול"
+    const realC = act.lgAgentCancel;
+    act.lgAgentCancel = async () => ({ ok: false, code: 'missing' });
+    db = seed();
+    db._data.waMeta.agentConv = { [key(PRIV)]: { await: 'confirm-cancel', orderId: 'o4', at: NOW } };
+    db._data.waMeta.agentOutbox = { N8_0_s: { state: 'sent', text: 'קודם' } };
+    put(db, 'N8', R({ text: 'כן', intent: 'unclear', route: 'shaul', idMessage: 'N8' }));
+    await run(db, 'N8', ON, NOW + MIN);
+    act.lgAgentCancel = realC;
+    check('F9 failed cancel, staff not queued → no handoff', !!outbox(db).N8_0, false);
+    // בקשת מחיר מסקיצה: הבקשה לשאול לא נכנסה → בלי "נחזור אליך עם מחיר"
+    db = seed();
+    db._data.waMeta.agentOutbox = { N9_1: { state: 'sent', text: 'קודם' } };
+    put(db, 'N9', R({ idMessage: 'N9', route: 'quote', intent: 'quote', hasImage: true, text: '' }));
+    await run(db, 'N9');
+    check('F9 quote-ask not queued → no hold reply', !!outbox(db).N9_0, false);
   }
 
   /* ─── תיקון סופי 2: פיילוט = אותו קישור כמו השליחה (waGroups / waSenders) ─── */

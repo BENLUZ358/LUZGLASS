@@ -92,32 +92,36 @@ function instruction(r) {
 }
 // ── ביטולים מהסוכן (31/10) ───────────────────────────────────────────
 //  waMeta/agentCancels/<orderId> — נכתב ב-api/_agent-act.js (lgAgentCancel).
-//  מוצג: ביטול מאושר (confirmed) שכבר נשלח לחשבשבת ועוד לא סומן "בוצע".
+//  מוצג: ביטול מאושר (confirmed) שכבר נשלח לחשבשבת ועוד לא סומן "בוצע" — "לבטל בחשבשבת";
+//  וגם ביטול מאושר בשלב chash/drafter/opty שלא נשלח לחשבשבת — "לידיעה" (תיקון סופי 4:
+//  כבר עבדו עליה). אותו כפתור "בוצע".
 //  רשומה לא מאושרת — נכתבת לפני המחיקה; אם אחרי 10 דקות עדיין לא אושרה,
 //  הפונקציה כנראה נפלה באמצע → מוצגת "לבדוק" (check:true), גם בלי hsSent.
 //  טהור — נבדק ב-scripts/test-agent-cancel.js.
 const AC_STALE_MS = 10 * 60 * 1000;
+const AC_INFO_STAGES = ['chash', 'drafter', 'opty'];
 function agentCancelRows(map, now) {
   const t = Number(now) || Date.now();
   return Object.keys(map || {}).filter(k => {
     const r = map[k];
     if (!r || r.done) return false;
-    if (r.confirmed === true) return !!r.hsSent;
+    if (r.confirmed === true) return !!r.hsSent || AC_INFO_STAGES.includes(String((r.order || {}).stage || ''));
     return t - (Number(r.at) || 0) >= AC_STALE_MS;
   }).map(k => {
     const o = map[k].order || {};
     return { key: k, orderNum: o.orderNum || k, client: o.orderClient || o.client || o.customerId || '',
-             sketch: o.sketchName || '', at: Number(map[k].at) || 0, check: map[k].confirmed !== true };
+             sketch: o.sketchName || '', at: Number(map[k].at) || 0, check: map[k].confirmed !== true, hs: !!map[k].hsSent };
   }).sort((a, b) => a.at - b.at);
 }
 function agentCancelsHtml(rows) {
   if (!rows.length) return '';
   return `<section class="ac-sec" aria-label="ביטולים מהסוכן"><h2>ביטולים מהסוכן (${rows.length})</h2>
-    <p class="meta" style="margin:0 0 var(--space-3)">הלקוח ביטל בוואטסאפ, וההזמנה כבר נשלחה לחשבשבת. בטל אותה שם, וסמן.</p>
+    <p class="meta" style="margin:0 0 var(--space-3)">הלקוח ביטל בוואטסאפ. מה שכבר נשלח לחשבשבת — בטל שם, וסמן. השאר לידיעה.</p>
     ${rows.map(r => `<div class="card">
       <div class="c-head"><span class="c-num">${lgEsc(r.orderNum)}</span><span class="c-client">${lgEsc(r.client)}</span></div>
       ${r.sketch ? `<div class="chg">סקיצה: ${lgEsc(r.sketch)}</div>` : ''}
-      ${r.check ? `<div class="todo">לבדוק — ייתכן שההזמנה נמחקה. בדוק אם היא עדיין במערכת ובחשבשבת, ואז סמן.</div>` : ''}
+      ${r.check ? `<div class="todo">לבדוק — ייתכן שההזמנה נמחקה. בדוק אם היא עדיין במערכת ובחשבשבת, ואז סמן.</div>`
+        : r.hs ? `<div class="todo">לבטל בחשבשבת</div>` : `<div class="chg">לידיעה — לא נשלחה לחשבשבת</div>`}
       <div class="meta">${r.check ? 'ביטול שלא הושלם' : 'בוטל ע״י הלקוח'} · ${lgEsc(fmtDate(r.at))}</div>
       <button class="btn btn-primary" type="button" data-cancel-done="${lgEsc(r.key)}"><span data-icon="check"></span>${r.check ? 'נבדק — טופל' : 'בוצע בחשבשבת'}</button>
     </div>`).join('')}</section>`;

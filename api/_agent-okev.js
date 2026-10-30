@@ -91,6 +91,17 @@ const lgOkevTooLate = o => 'הזמנה ' + (o.orderNum || o.refNum || '') + ' כ
 const lgOkevChangeStaffText = (o, who, text) => 'שינוי בהזמנה ' + (o.orderNum || o.refNum || '')
   + (o.sketchName ? ' (' + o.sketchName + ')' : '') + ' של ' + who + ': ' + text;
 
+// ── הודעות לשאול (תיקונים סופיים 3, 4): שם השלב כפי שאומרים אותו ──
+const OKEV_STAGE_NAME = { '': 'תור סקיצות', pending: 'תור סקיצות', chash: 'שרטוט', drafter: 'שרטוט', opty: 'OptyWay',
+  workday: 'ייצור', chisum: 'חיסום', graphic: 'גרפיקה', delivery: 'משלוח', done: 'מוכן לאיסוף', collected: 'נאסף' };
+const lgOkevStageName = st => OKEV_STAGE_NAME[String(st == null ? '' : st)] || String(st);
+const _numSk = o => (o.orderNum || o.refNum || '') + (o.sketchName ? ' (' + o.sketchName + ')' : '');
+// "כהן ביקש לבטל את הזמנה L1001 (מטבח) — כבר בשלב ייצור" (spec §2: "ומעדכן את שאול")
+const lgOkevTooLateStaffText = (o, who, intent) => who + ' ביקש ' + (intent === 'change' ? 'לשנות' : 'לבטל')
+  + ' את הזמנה ' + _numSk(o) + ' — כבר בשלב ' + lgOkevStageName(o.stage);
+// "בוטלה הזמנה L1004 (אמבטיה) של כהן — הייתה בשלב שרטוט"
+const lgOkevCancelledStaffText = (o, who, stage) => 'בוטלה הזמנה ' + _numSk(o) + ' של ' + who + ' — הייתה בשלב ' + lgOkevStageName(stage);
+
 function lgOkevReply(intent, found) {
   if (!found || found.match === 'none') return NOT_FOUND;
   if (found.match === 'many') {
@@ -125,4 +136,5 @@ function lgOkevRoute(p) {
 }
 
 module.exports = { OKEV_STATUS_TEXT, AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
-                   lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevRoute, lgOkevTooLate, lgOkevChangeStaffText };
+                   lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevRoute, lgOkevTooLate, lgOkevChangeStaffText,
+                   lgOkevStageName, lgOkevTooLateStaffText, lgOkevCancelledStaffText };

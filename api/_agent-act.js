@@ -29,7 +29,8 @@ const crypto = require('crypto');
 const { lgWaInboundKey } = require('./_wa-inbound');
 const { AGENT_OUTBOX, PER_ITEM_WORST_MS, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
 const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
-        lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText } = require('./_agent-okev');
+        lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText,
+        lgOkevTooLateStaffText, lgOkevCancelledStaffText } = require('./_agent-okev');
 
 const { lgArchiveFind, lgArchiveActions, ARCHIVE_OK_TEXT } = require('./_agent-archive');
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
@@ -60,6 +61,11 @@ const _isNo = s => NO.includes(_norm(s));
 
 const _reply = text => ({ type: 'reply', text });
 const _staff = text => ({ type: 'staff', text });
+// הודעה לשאול **לידיעה** (notify): לא תנאי לתשובה ללקוח — בלי שאול מוגדר היא פשוט
+// לא נכנסת לתור, והלקוח עדיין מקבל את התשובה ("כבר בייצור", "בוטלה").
+const _notify = text => ({ type: 'staff', notify: true, text });
+// ביטול שבוצע בשלבים האלה — שאול מעודכן (תיקון סופי 4): כבר עבדו עליה
+const NOTIFY_CANCEL_STAGES = ['chash', 'drafter', 'opty'];
 const _who = r => String(r.customerName || r.sender || '');
 // העברת ההודעה המקורית לשאול (תמונה)
 const _forward = r => ({ type: 'staff', text: '', files: [{ kind: 'forward', fromChat: String(r.chatId || ''), idMessage: String(r.idMessage || '') }] });
@@ -73,13 +79,16 @@ function _handoff(r) {
   return [_staff(_who(r) + ': ' + _body(r)), ...(r.hasImage ? [_forward(r)] : []), _reply(AGENT_HANDOFF_TEXT)];
 }
 
+// ── מאוחר מדי לביטול/שינוי: התשובה ללקוח + שאול לידיעה (תיקון סופי 3) ──
+const _tooLate = (r, order, intent) => [_reply(lgOkevTooLate(order)), _notify(lgOkevTooLateStaffText(order, _who(r), intent))];
+
 // ── ממשיכים intent על הזמנה אחת שנבחרה ──
-function _continue(intent, order, now) {
+function _continue(intent, order, now, r) {
   const one = { match: 'one', orders: [order], via: 'conv' };
   if (intent === 'status') return { actions: [_reply(lgOkevReply('status', one))], conv: null };
   // ארכיון: נבחרה הזמנה → סקיצה שלה (ההזמנה כבר מהרשימה של הלקוח; השליחה בודקת שוב)
   if (intent === 'document') return { actions: [{ type: 'files', text: ARCHIVE_OK_TEXT, files: [{ kind: 'sketch', orderId: order.id }] }], conv: null };
-  if (!lgOkevCanChange(order)) return { actions: [_reply(lgOkevTooLate(order))], conv: null };
+  if (!lgOkevCanChange(order)) return { actions: _tooLate(r, order, intent), conv: null };
   if (intent === 'cancel') return { actions: [_reply(lgOkevReply('cancel', one))], conv: { await: 'confirm-cancel', orderId: order.id, at: now } };
   if (intent === 'change') return { actions: [_reply(lgOkevReply('change', one))], conv: { await: 'change-details', orderId: order.id, at: now } };
   return { actions: [_reply(NOT_FOUND)], conv: null };
@@ -99,7 +108,7 @@ function _onConv(r, orders, c, now) {
       const f = lgOkevFind(ids.map(byId).filter(Boolean), { ref: n });
       if (f.match === 'one') order = f.orders[0];
     }
-    return order ? _continue(c.intent, order, now) : null;
+    return order ? _continue(c.intent, order, now, r) : null;
   }
   if (c.await === 'confirm-cancel') {
     if (_isNo(r.text)) return { actions: [_reply(CANCEL_KEPT_TEXT)], conv: null };
@@ -107,8 +116,10 @@ function _onConv(r, orders, c, now) {
     const order = byId(c.orderId);
     if (!order) return { actions: [_reply(NOT_FOUND)], conv: null };
     // ירדה לייצור בין השאלה ל"כן" — לא מבטלים (וגם lgAgentCancel בודק שוב בטרנזקציה)
-    if (!lgOkevCanChange(order)) return { actions: [_reply(lgOkevTooLate(order))], conv: null };
+    if (!lgOkevCanChange(order)) return { actions: _tooLate(r, order, 'cancel'), conv: null };
+    // who + order — להודעות לשאול אחרי הביצוע (תיקונים סופיים 3, 4)
     return { actions: [{ type: 'cancel', orderId: order.id, okText: CANCEL_DONE_TEXT, lateText: lgOkevTooLate(order),
+      who: _who(r), order: { orderNum: order.orderNum || '', refNum: order.refNum || '', sketchName: order.sketchName || '' },
       staffText: _who(r) + ': ביקש לבטל את הזמנה ' + (order.orderNum || order.refNum || '') + ' — הביטול לא בוצע, נא לבדוק' }], conv: null };
   }
   if (c.await === 'change-details') {
@@ -135,6 +146,7 @@ function _deleted(r, orders, now) {
   const silent = o => SILENT_STAGES.includes(String(o.stage || ''));
   if (hit.every(silent)) {
     return { actions: hit.map(o => ({ type: 'cancel', orderId: o.id, silent: true, okText: '', lateText: DELETED_PROD_TEXT,
+      who: _who(r), order: { orderNum: o.orderNum || '', refNum: o.refNum || '', sketchName: o.sketchName || '' },
       staffText: _who(r) + ': מחק בוואטסאפ את הסקיצה של הזמנה ' + num(o) + ' — הביטול לא בוצע, נא לבדוק' })), conv: null };
   }
   if (hit.length === 1) {
@@ -151,6 +163,9 @@ function _route(r, orders, now, keep, archive, quote) {
   switch (r.route) {
     case 'okev': {
       const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
+      // ביטול/שינוי של הזמנה שכבר בייצור — התשובה + שאול לידיעה (תיקון סופי 3)
+      if (found.match === 'one' && (r.intent === 'cancel' || r.intent === 'change') && !lgOkevCanChange(found.orders[0]))
+        return { actions: _tooLate(r, found.orders[0], r.intent), conv: keep };
       const text = lgOkevReply(r.intent, found);
       let conv = keep;
       if (found.match === 'many') conv = { await: 'which', intent: r.intent, orderIds: found.orders.map(o => o.id), at: now };
@@ -206,7 +221,7 @@ function lgAgentDecide(p) {
     // Review Focus 2: "כן" אחרי יותר מ-30 דקות — לא מבטלים; שואלים מחדש
     if (r.linked && c.await === 'confirm-cancel' && _isYes(r.text)) {
       const order = orders.find(o => o.id === c.orderId);
-      if (order) return _continue('cancel', order, now);
+      if (order) return _continue('cancel', order, now, r);
     }
     c = null;   // פג — מתעלמים (ונמחק)
   }
@@ -215,6 +230,12 @@ function lgAgentDecide(p) {
   //    מהתור; לא נשלחה עדיין → אינסוף), ובלי askedAt — זמן ההחלטה (at).
   const msgAt = Number(r.timestamp || r.createdAt || 0);
   const askedAt = c ? Number(c.askedAt != null ? c.askedAt : (c.at || 0)) : 0;
+  // תיקון סופי 5: אחרי "מה לשנות?" הלקוח שלח סקיצה — היא נקלטת כהזמנה כרגיל (kolet),
+  //  ובנוסף שאול מקבל "נשלחה סקיצה חדשה" + העברת התמונה. בלי תשובה ללקוח (הקליטה מאשרת).
+  if (c && r.linked && r.route === 'kolet' && c.await === 'change-details' && r.hasImage && msgAt > askedAt) {
+    const order = orders.find(o => o.id === c.orderId) || { orderNum: '' };
+    return { actions: [_staff(lgOkevChangeStaffText(order, _who(r), 'נשלחה סקיצה חדשה')), _forward(r)], conv: null };
+  }
   if (c && r.linked && r.route !== 'kolet' && msgAt > askedAt) {
     const h = _onConv(r, orders, c, now);
     if (h) return h;
@@ -250,7 +271,9 @@ const _hsSent = o => { const h = o && (o.hashavshevet || o.hsOrder); return !!(h
 //  ⚠️ פונקציה שנהרגת בין 4 ל-5 משאירה רשומה confirmed:false שמחזיקה את
 //     ההזמנה; "תיקון הזמנות" מציג רשומה כזו אחרי 10 דקות כ"לבדוק". אם
 //     מחיקת הרשומה אחרי סירוב נכשלת — אותו דבר (רשומה לבדיקה, ההזמנה קיימת).
-//  ⚠️ רשומה קודמת באותו מפתח נדרסת — רק כשההזמנה קיימת שוב (שוחזרה ביד).
+//  ⚠️ רשומה קודמת באותו מפתח: **מאושרת** (confirmed:true) — לא נדרסת; הטרנזקציה
+//     מבטלת וחוזר 'missing' (גם אם ההזמנה שוחזרה ביד אחר כך — אז מבטלים ידנית).
+//     לא מאושרת (ניסיון מקביל / שנפל באמצע) — נדרסת: היא מחזיקה את אותה הזמנה.
 //  sketches/<id> נשאר — לא נוגעים.
 async function lgAgentCancel(db, orderId, ctx) {
   const c = ctx || {};
@@ -265,7 +288,7 @@ async function lgAgentCancel(db, orderId, ctx) {
   const pre = (await ref.once('value')).val();
   if (!pre) return { ok: false, code: 'missing' };
   if (String(pre.customerId || '') !== cid) return { ok: false, code: 'forbidden' };
-  if (!lgOkevCanChange(pre)) return { ok: false, code: 'too-late' };
+  if (!lgOkevCanChange(pre)) return { ok: false, code: 'too-late', stage: String(pre.stage || '') };
 
   const now = c.now || Date.now();
   const recRef = db.ref(AGENT_CANCELS + '/' + id);
@@ -279,7 +302,7 @@ async function lgAgentCancel(db, orderId, ctx) {
   } catch (e) { console.warn('agent-cancel: record', e && e.name); return { ok: false, code: 'error' }; }
   if (!pw.committed) return { ok: false, code: 'missing' };
 
-  let taken = null, why = '';
+  let taken = null, why = '', lateStage = '';
   let tx;
   try {
     tx = await ref.transaction(cur => {
@@ -288,7 +311,7 @@ async function lgAgentCancel(db, orderId, ctx) {
       //    של כלום) כדי שפיירבייס יביא את הערך האמיתי; אם באמת אין — 'missing'.
       if (cur === null) return null;
       if (String(cur.customerId || '') !== cid) { why = 'forbidden'; return; }
-      if (!lgOkevCanChange(cur)) { why = 'too-late'; return; }
+      if (!lgOkevCanChange(cur)) { why = 'too-late'; lateStage = String(cur.stage || ''); return; }
       taken = cur;
       return null;   // מחיקה — באותה טרנזקציה עם הבדיקה
     });
@@ -305,7 +328,7 @@ async function lgAgentCancel(db, orderId, ctx) {
       try { await recRef.transaction(cur => (cur === null ? null : (cur.token === token && cur.confirmed !== true ? null : undefined))); }
       catch (e) { console.warn('agent-cancel: unrecord', e && e.name); }
     }
-    return { ok: false, code: why || 'error' };
+    return why === 'too-late' ? { ok: false, code: why, stage: lateStage } : { ok: false, code: why || 'error' };
   }
   try { await recRef.update({ order: taken, hsSent: _hsSent(taken), confirmed: true }); }
   catch (e) {
@@ -313,7 +336,7 @@ async function lgAgentCancel(db, orderId, ctx) {
     console.warn('agent-cancel: confirm', e && e.name);
     return { ok: false, code: 'error' };
   }
-  return { ok: true, code: '' };
+  return { ok: true, code: '', stage: String(taken.stage || '') };
 }
 
 async function _cancel(db, orderId, ctx) {
@@ -407,7 +430,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
   else if (rec.linked && !(cid && (await db.ref(PILOT + '/' + cid).once('value')).val() === true)) why = 'not-pilot';
   else if (!rec.linked && d.actions.some(a => a.type !== 'staff')) why = 'not-pilot';
   // "העברנו לשאול" בלי שאול מוגדר — עדיף לא לענות מאשר לשקר
-  else if (d.actions.some(a => a.type === 'staff' || a.type === 'cancel' || a.type === 'quote-ask') && !staff.length) why = 'no-staff';
+  //  (הודעה לידיעה — notify — לא נחשבת: בלעדיה התשובה ללקוח עדיין נכונה)
+  else if (d.actions.some(a => (a.type === 'staff' && !a.notify) || a.type === 'cancel' || a.type === 'quote-ask') && !staff.length) why = 'no-staff';
 
   if (why) {
     await recRef.update({ wouldAct: d.actions, acted: false, actReason: why, ...qUsage });
@@ -423,16 +447,27 @@ async function _act(db, key, rec, recRef, env, now, o) {
     return q.queued;
   };
   let askKey = '';   // השאלה (תשובה ראשונה) שנכנסה לתור בפועל
+  //  תיקון סופי 9: בהחלטה שתלויה בשאול (העברה אליו / בקשת מחיר) התשובות ללקוח
+  //  ("העברנו לשאול", "נחזור אליך עם מחיר", "אני בודק") נכנסות לתור רק אחרי —
+  //  ורק אם — לפחות הודעה אחת לשאול באמת נכנסה. אחרת היינו מבטיחים משהו שלא יקרה.
+  const needsStaff = d.actions.some(a => (a.type === 'staff' && !a.notify) || a.type === 'quote-ask');
+  let staffQueued = false;
+  const deferred = [];
   for (let i = 0; i < d.actions.length; i++) {
     const a = d.actions[i], k = key + '_' + i;
-    if (a.type === 'reply') { if (await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k; }
-    else if (a.type === 'staff') await enq(k, staff[0], a.text, a.files || [], 'agent-staff');
+    if (a.type === 'reply' && needsStaff) deferred.push([k, a]);
+    else if (a.type === 'reply') { if (await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k; }
+    else if (a.type === 'staff') {
+      if (a.notify && !staff[0]) continue;   // לידיעה, ואין שאול — מדלגים
+      if (await enq(k, staff[0], a.text, a.files || [], 'agent-staff') && !a.notify) staffQueued = true;
+    }
     else if (a.type === 'files') await enq(k, chat, a.text || '', a.files || [], 'agent-files');
     else if (a.type === 'quote-ask') {
       // t6-3: הבקשה נשמרת רק אחרי שהודעה לשאול נכנסה לתור (ועוד לפני השליחה,
       //  שקורית אחרי הלולאה). staffMessageId יתמלא מהתור אחרי שהטקסט נשלח
       const n = await lgQuoteNext(db);
       if (await enq(k, staff[0], lgQuoteStaffText(n, a.who), a.files || [], 'agent-quote')) {
+        staffQueued = true;
         await db.ref(AGENT_QUOTES + '/' + n).set({ customerId: cid, chat, staffMessageId: null, outboxKey: lgWaInboundKey(k),
                                                    recordKey: key, at: now, state: 'waiting' });
         quotes.push(n);
@@ -452,17 +487,29 @@ async function _act(db, key, rec, recRef, env, now, o) {
     else if (a.type === 'cancel') {
       const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now });
       cancels.push({ orderId: String(a.orderId), ok: !!res.ok, code: String(res.code || '') });
+      const ord = { ...(a.order || {}) };
       // "ההזמנה בוטלה" רק אחרי ביטול שהצליח. ביטול שקט (סקיצה שנמחקה) — בלי okText
-      if (res.ok) { if (a.okText) await enq(k, chat, a.okText, [], 'agent-cancel'); }
-      else if (res.code === 'too-late') await enq(k, chat, a.lateText, [], 'agent-cancel');
+      if (res.ok) {
+        if (a.okText) await enq(k, chat, a.okText, [], 'agent-cancel');
+        // תיקון סופי 4: כבר עבדו עליה (שרטוט / OptyWay) → שאול לידיעה
+        if (NOTIFY_CANCEL_STAGES.includes(String(res.stage || '')) && staff[0])
+          await enq(k + '_s', staff[0], lgOkevCancelledStaffText(ord, String(a.who || ''), res.stage), [], 'agent-staff');
+      } else if (res.code === 'too-late') {
+        await enq(k, chat, a.lateText, [], 'agent-cancel');
+        // תיקון סופי 3: שאול לידיעה. השלב מהביטול; בלעדיו — "ייצור" (מאוחר מדי = אחרי OptyWay)
+        if (!a.silent && staff[0])
+          await enq(k + '_s', staff[0], lgOkevTooLateStaffText({ ...ord, stage: res.stage || 'workday' }, String(a.who || ''), 'cancel'), [], 'agent-staff');
+      }
       // שקט + כבר לא קיימת — אין מה להגיד ללקוח שמחק אותה
       else if (a.silent && res.code === 'missing') { /* כלום */ }
       else {
-        await enq(k + '_s', staff[0], a.staffText + ' (' + String(res.code || 'error') + ')', [], 'agent-staff');
-        await enq(k, chat, AGENT_HANDOFF_TEXT, [], 'agent-reply');
+        // תיקון סופי 9: "העברנו לשאול" רק אם ההודעה לשאול באמת נכנסה לתור
+        if (await enq(k + '_s', staff[0], a.staffText + ' (' + String(res.code || 'error') + ')', [], 'agent-staff'))
+          await enq(k, chat, AGENT_HANDOFF_TEXT, [], 'agent-reply');
       }
     }
   }
+  for (const [k, a] of deferred) if (staffQueued && await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k;
   // conv אחרי התור ולפני השליחה. conv חדש נשמר רק אם השאלה באמת נכנסה לתור
   //  (queued:true) — עם askKey, כדי לדעת מתי נשלחה
   if (!d.conv) { if (stored) await convRef.set(null); }

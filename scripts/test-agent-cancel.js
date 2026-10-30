@@ -70,7 +70,7 @@ Module._load = function (req) {
   {
     const db = seed();
     const r = await act.lgAgentCancel(db, 'o3', ctx);
-    check('ok cancel → {ok:true}', r, { ok: true, code: '' });
+    check('ok cancel → {ok:true} + the stage it had (F4)', r, { ok: true, code: '', stage: 'pending' });
     check('order removed from orders', db._data.orders.o3, undefined);
     check('sketch stays', db._data.sketches.o3, { img: 'x' });
     check('cancel record carries an attempt token', typeof cancels(db).o3.token === 'string' && cancels(db).o3.token.length > 0, true);
@@ -86,7 +86,7 @@ Module._load = function (req) {
     const db = seed();
     check('other customer → forbidden', await act.lgAgentCancel(db, 'o2', ctx), { ok: false, code: 'forbidden' });
     check('forbidden: order stays, no record', [!!db._data.orders.o2, cancels(db).o2], [true, undefined]);
-    check('stage workday → too-late', await act.lgAgentCancel(db, 'o1', ctx), { ok: false, code: 'too-late' });
+    check('stage workday → too-late (+ stage, F3)', await act.lgAgentCancel(db, 'o1', ctx), { ok: false, code: 'too-late', stage: 'workday' });
     check('too-late: order stays, no record', [db._data.orders.o1.stage, cancels(db).o1], ['workday', undefined]);
     check('no customerId → forbidden', await act.lgAgentCancel(db, 'o5', { ...ctx, customerId: '' }), { ok: false, code: 'forbidden' });
     check('bad id (path) → missing, nothing deleted', [await act.lgAgentCancel(db, 'o5/stage', ctx), db._data.orders.o5.stage],
@@ -118,7 +118,7 @@ Module._load = function (req) {
       r.transaction = fn => { db._data.orders.o3.stage = 'workday'; return tx(fn); };
       return r;
     };
-    check('focus 3: stage moved to workday just before the transaction → too-late', await act.lgAgentCancel(db, 'o3', ctx), { ok: false, code: 'too-late' });
+    check('focus 3: stage moved to workday just before the transaction → too-late', await act.lgAgentCancel(db, 'o3', ctx), { ok: false, code: 'too-late', stage: 'workday' });
     check('focus 3: order not deleted, no record', [db._data.orders.o3.stage, cancels(db).o3], ['workday', undefined]);
   }
   /* ── t3-1/2: הרשומה נכתבת **לפני** המחיקה ── */
@@ -164,7 +164,7 @@ Module._load = function (req) {
     check('t3-3: refused → order stays, no record', [!!db._data.orders.o3, cancels(db).o3], [true, undefined]);
     delete db._data.waSenders['0501234567'];
     check('t3-3: sender unlinked after the question → forbidden', await act.lgAgentCancel(db, 'o3', ctx), { ok: false, code: 'forbidden' });
-    check('t3-3: linked group → ok', await act.lgAgentCancel(db, 'o3', { ...ctx, chatId: GROUP }), { ok: true, code: '' });
+    check('t3-3: linked group → ok', await act.lgAgentCancel(db, 'o3', { ...ctx, chatId: GROUP }), { ok: true, code: '', stage: 'pending' });
   }
 
   /* ── R2-1: שני ביטולים במקביל (וביטול מול הורדה לביצוע) — כל שזירה ── */
@@ -331,17 +331,27 @@ Module._load = function (req) {
         g: { order: { orderNum: 'L7' }, at: T - 5 * M, done: false, confirmed: false },              // לא אושר, טרי — עוד באמצע
         h: { order: { orderNum: 'L8', sketchName: 'ח' }, at: T - 11 * M, done: false, confirmed: false },  // לא אושר, ישן → לבדוק
         i: { order: { orderNum: 'L9' }, at: T - 11 * M, done: true, confirmed: false },
+        // F4: בוטלה בשלב chash/drafter/opty בלי חשבשבת → "לידיעה"; בשלב pending בלי חשבשבת → לא מוצגת
+        j: { order: { orderNum: 'L10', stage: 'drafter', sketchName: 'ג' }, at: 30, hsSent: false, done: false, confirmed: true },
+        k: { order: { orderNum: 'L11', stage: 'pending' }, at: 31, hsSent: false, done: false, confirmed: true },
+        l: { order: { orderNum: 'L12', stage: 'opty' }, at: 32, hsSent: false, done: true, confirmed: true },
       };
       const rows = c.agentCancelRows(map, T);
-      check('rows: confirmed hsSent !done + stale unconfirmed, oldest first', rows.map(r => r.key), ['b', 'a', 'h']);
-      check('row fields', rows[1], { key: 'a', orderNum: 'L1', client: 'כהן <b>', sketch: 'מטבח', at: 20, check: false });
-      check('stale unconfirmed row is flagged', rows[2] && rows[2].check, true);
+      check('rows: confirmed hsSent !done + F4 chash/drafter/opty + stale unconfirmed, oldest first', rows.map(r => r.key), ['b', 'a', 'j', 'h']);
+      check('row fields', rows[1], { key: 'a', orderNum: 'L1', client: 'כהן <b>', sketch: 'מטבח', at: 20, check: false, hs: true });
+      check('F4 non-hs row', rows[2], { key: 'j', orderNum: 'L10', client: '', sketch: 'ג', at: 30, check: false, hs: false });
+      const hj = c.agentCancelsHtml([rows[1], rows[2]]);
+      check('F4 html: hs row "לבטל בחשבשבת", non-hs "לידיעה — לא נשלחה לחשבשבת", both with the done button',
+        [/לבטל בחשבשבת/.test(hj), /לידיעה — לא נשלחה לחשבשבת/.test(hj), /data-cancel-done="a"/.test(hj), /data-cancel-done="j"/.test(hj)], [true, true, true, true]);
+      const hjOnly = c.agentCancelsHtml([rows[2]]);
+      check('F4 html: non-hs row does not say to cancel in Hashavshevet', /לבטל בחשבשבת/.test(hjOnly), false);
+      check('stale unconfirmed row is flagged', rows[3] && rows[3].check, true);
       const html = c.agentCancelsHtml(rows);
       check('html: title + both orders + button with key', [/ביטולים מהסוכן/.test(html), /L1/.test(html), /L2/.test(html),
         /data-cancel-done="a"/.test(html), /בוצע בחשבשבת/.test(html), /D20/.test(html), /מטבח/.test(html)], [true, true, true, true, true, true, true]);
       check('html: escaped', [/כהן &lt;b&gt;/.test(html), /כהן <b>/.test(html)], [true, false]);
       check('html: nothing to show → empty', c.agentCancelsHtml([]), '');
-      const fl = c.agentCancelsHtml(rows[2] ? [rows[2]] : []);
+      const fl = c.agentCancelsHtml(rows[3] ? [rows[3]] : []);
       check('html: flagged row says to check', [/לבדוק — ייתכן שההזמנה נמחקה/.test(fl), /data-cancel-done="h"/.test(fl)], [true, true]);
     }
   }
