@@ -136,6 +136,30 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal(texts, 0); assert.equal(r.results[0].status, 'error');
     assert.equal(db._data.invoicePdf.k1.delivery.state, 'failed');
   });
+  await test('a stuck WhatsApp send is retried by a reprint; a sent one is not', async () => {
+    const db = base({ a: waOrder, b: portal });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [key] = Object.keys(db._data.waOutbox);
+    const calls = [];
+    const drain = async (_db, keys) => { calls.push(keys[0]); return { results: [{ key: keys[0], status: 'sent' }] }; };
+    const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain });
+    assert.deepEqual([calls, r.state, r.retried], [[key], 'sent', true]);
+    db._data.waOutbox[key].state = 'sent';
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain });
+    assert.equal(calls.length, 1);
+  });
+  await test('an exception while sending closes the message with a reason, never leaves it hanging', async () => {
+    const db = base({ a: waOrder, b: portal });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [key] = Object.keys(db._data.waOutbox);
+    const boom = { name: 'fake', configured: true, globalSlot: false, maxPerRun: 5, nextGap: () => 0,
+      gate: () => ({ allowed: true }), sendFiles: async () => { const e = new TypeError('fetch failed https://x/waInstance1/SECRET'); throw e; } };
+    const r = await core.drainKeys(db, boom, [key], 'x', Date.now());
+    assert.equal(r.results[0].status, 'error');
+    const dv = db._data.invoicePdf.k1.delivery;
+    assert.equal(dv.state, 'failed'); assert.match(dv.reason, /TypeError/); assert.doesNotMatch(dv.reason, /SECRET/);
+    assert.equal(db._data.waOutbox[key].claimedAt, null);
+  });
   await test('upload: a matched print triggers delivery once, with its key', async () => {
     const TOKEN = 't'.repeat(40);
     const calls = [];
