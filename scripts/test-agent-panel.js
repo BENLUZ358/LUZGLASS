@@ -41,7 +41,7 @@ check('waInbound record + order intent → no red', ctx.lgAgRowHtml('K4', rec({ 
 check('pdf rejected → no red', ctx.lgAgRowHtml('K8', rec({ idMessage: 'P.1', intakeKind: 'pdf' }), ib).includes(RED), false);
 check('closed after rejected → no red', ctx.lgAgRowHtml('K9', rec({ idMessage: 'C1', intakeKind: 'pdf' }), ib).includes(RED), false);
 check('closed after failed → red', ctx.lgAgRowHtml('K10', rec({ idMessage: 'C2', intakeKind: 'image' }), ib).includes(RED), true);
-check('agents tab passes waInbound map to the row', /lgAgRowHtml\(r\.key,\s*r,\s*raw\.whatsapp\)/.test(P), true);
+check('agents tab passes waInbound map to the row', /lgAgRowHtml\(r\.key,\s*r,\s*raw\.whatsapp[,)]/.test(P), true);
 const x = ctx.lgAgRowHtml('K5', rec({ text: '<img src=x onerror=1>"', customerName: '<b>x</b>', wouldReply: '<script>' }));
 check('message text, name and reply are escaped', [x.includes('<img'), x.includes('<b>x'), x.includes('<script>'), x.includes('&lt;img')], [false, false, false, true]);
 check('verdict shown, buttons still there', (() => { const v = ctx.lgAgRowHtml('K6', rec({ verdict: { ok: true } })); return [v.includes('נכון ✓'), /data-agv/.test(v)]; })(), [true, true]);
