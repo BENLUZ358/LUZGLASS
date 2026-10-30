@@ -28,7 +28,7 @@ const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT,
 
 const { lgArchiveFind, lgArchiveActions, ARCHIVE_OK_TEXT } = require('./_agent-archive');
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
-        lgQuoteFindWaiting, lgQuoteAnswer, AGENT_QUOTES } = require('./_agent-quote');
+        lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -339,6 +339,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
     catch (e) { console.warn('agent-act: quote-find', e && e.name); staffQuote = null; }
   }
   const d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote });
+  // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
+  const qUsage = quote ? { quoteUsage: quote.usage || null } : {};
   const staff = lgAgentStaff(env);
   const _pilot = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
 
@@ -353,7 +355,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   else if (d.actions.some(a => a.type === 'staff' || a.type === 'cancel' || a.type === 'quote-ask') && !staff.length) why = 'no-staff';
 
   if (why) {
-    await recRef.update({ wouldAct: d.actions, acted: false, actReason: why });
+    await recRef.update({ wouldAct: d.actions, acted: false, actReason: why, ...qUsage });
     // conv שפג נמחק גם כשלא פועלים; שום שינוי אחר ב-conv
     if (stored && !(now - Number(stored.at || 0) <= CONV_TTL_MS)) await convRef.set(null);
     return { acted: false, actions: d.actions };
@@ -372,15 +374,25 @@ async function _act(db, key, rec, recRef, env, now, o) {
     else if (a.type === 'staff') await enq(k, staff[0], a.text, a.files || [], 'agent-staff');
     else if (a.type === 'files') await enq(k, chat, a.text || '', a.files || [], 'agent-files');
     else if (a.type === 'quote-ask') {
-      // הבקשה נשמרת לפני התור: staffMessageId יתמלא מהתור אחרי שהטקסט נשלח
+      // t6-3: הבקשה נשמרת רק אחרי שהודעה לשאול נכנסה לתור (ועוד לפני השליחה,
+      //  שקורית אחרי הלולאה). staffMessageId יתמלא מהתור אחרי שהטקסט נשלח
       const n = await lgQuoteNext(db);
-      await db.ref(AGENT_QUOTES + '/' + n).set({ customerId: cid, chat, staffMessageId: null, outboxKey: lgWaInboundKey(k),
-                                                 recordKey: key, at: now, state: 'waiting' });
-      quotes.push(n);
-      await enq(k, staff[0], lgQuoteStaffText(n, a.who), a.files || [], 'agent-quote');
+      if (await enq(k, staff[0], lgQuoteStaffText(n, a.who), a.files || [], 'agent-quote')) {
+        await db.ref(AGENT_QUOTES + '/' + n).set({ customerId: cid, chat, staffMessageId: null, outboxKey: lgWaInboundKey(k),
+                                                   recordKey: key, at: now, state: 'waiting' });
+        quotes.push(n);
+      }
     } else if (a.type === 'quote-relay') {
-      // פעם אחת: רק מי שסגר waiting → answered שולח. השליחה בודקת שוב קישור + פיילוט
-      if (await lgQuoteAnswer(db, a.n, rec.quotedId, key, now)) await enq(k, a.chat, a.text, [], 'agent-quote', a.customerId);
+      // פעם אחת: רק התופס (waiting → relaying) מכניס לתור; answered רק אחרי
+      //  שנכנס (t6-2). כשל בתור → חוזר ל-waiting. השליחה בודקת שוב קישור + פיילוט
+      if (await lgQuoteClaim(db, a.n, rec.quotedId, key, k, now)) {
+        try { await enq(k, a.chat, a.text, [], 'agent-quote', a.customerId); }
+        catch (e) {
+          try { await lgQuoteRelease(db, a.n, key); } catch (e2) { console.warn('agent-act: quote-release', e2 && e2.name); }
+          throw e;
+        }
+        await lgQuoteDone(db, a.n, key, now);
+      }
     }
     else if (a.type === 'cancel') {
       const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now });
@@ -398,7 +410,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   //  (queued:true) — עם askKey, כדי לדעת מתי נשלחה
   if (!d.conv) { if (stored) await convRef.set(null); }
   else if (d.conv !== conv && askKey) await convRef.set({ ...d.conv, askKey: lgWaInboundKey(askKey) });
-  await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actQueued: queued, actCancels: cancels });
+  await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actQueued: queued, actCancels: cancels, ...qUsage });
 
   if (queued.length) {
     try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, budgetMs: SEND_BUDGET_MS }); }

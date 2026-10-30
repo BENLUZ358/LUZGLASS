@@ -61,6 +61,9 @@ const INSTRUCTIONS = [
 
 const FAIL = usage => ({ items: [], ok: false, usage: usage || null });
 const _int = (x, min) => Number.isInteger(x) && x >= min;
+// מידה סבירה בס"מ (t6-5): מתחת ל-1 או מעל 600 — כנראה טעות קריאה/יחידות → שאול
+const SIZE_MIN_CM = 1, SIZE_MAX_CM = 600;
+const _size = x => Number.isFinite(x) && x >= SIZE_MIN_CM && x <= SIZE_MAX_CM;
 
 //  { items, ok, usage } — לעולם לא זורק.
 async function lgQuoteExtract({ text, catalog, model, key, fetcher = fetch } = {}) {
@@ -94,7 +97,7 @@ async function lgQuoteExtract({ text, catalog, model, key, fetcher = fetch } = {
     if (!parsed || parsed.ok !== true || !Array.isArray(parsed.items) || !parsed.items.length) return FAIL(usage);
     // פריט אחד לא תקין → כל ההצעה לשאול (לא מציעים מחיר חלקי)
     const good = parsed.items.every(i => i && allowed.has(i.sku)
-      && Number.isFinite(i.w) && i.w > 0 && Number.isFinite(i.h) && i.h > 0
+      && _size(i.w) && _size(i.h)
       && _int(i.qty, 1) && _int(i.holes, 0) && _int(i.cutouts, 0));
     if (!good) return FAIL(usage);
     const items = parsed.items.map(i => ({ sku: i.sku, w: i.w, h: i.h, qty: i.qty, holes: i.holes, cutouts: i.cutouts }));
@@ -116,7 +119,8 @@ function lgQuotePrice({ items, catalog, clientPrices, globalPrices } = {}) {
     const qty = Number(it.qty) || 1;
     const min = MIN_AREA[c.proc] || MIN_AREA_DEFAULT;
     const area = Math.max((Number(it.w) / 100) * (Number(it.h) / 100), min);
-    // חורים ופינויים — לכל יחידה, ורק במראה
+    // חורים ופינויים — לכל יחידה, ורק במראה. ⚠️ חור בזכוכית שאינה מראה = 0 ₪
+    //  בכוונה — החלטה מפורשת של בן (R13), לא שכחה.
     const extras = c.glass === MIRROR ? ((Number(it.cutouts) || 0) * CUTOUT_PRICE + (Number(it.holes) || 0) * HOLE_PRICE) * qty : 0;
     const total = Math.round(area * ppm2 * qty + extras);
     lines.push({ sku: it.sku, name: String(c.name || it.sku), w: it.w, h: it.h, qty,
@@ -187,16 +191,32 @@ async function lgQuoteFindWaiting(db, quotedId) {
   return null;
 }
 
-//  waiting → answered, פעם אחת. true רק לקורא שסגר.
-async function lgQuoteAnswer(db, n, quotedId, by, now) {
+//  העברת התשובה של שאול — שלושה שלבים (t6-2: לא "נענתה" לפני שנכנסה לתור):
+//   lgQuoteClaim   waiting → relaying (by, relayKey). true רק לתופס — פעם אחת.
+//   lgQuoteDone    relaying → answered, אחרי שהרשומה ללקוח נכנסה לתור.
+//   lgQuoteRelease relaying → waiting, כשההכנסה לתור נכשלה — "השב" הבא יעבור.
+//  ⚠️ פונקציה שנהרגת בין תפיסה לסגירה משאירה relaying (לא נשלח כפול; לבדיקה ביד).
+async function lgQuoteClaim(db, n, quotedId, by, relayKey, now) {
   const r = await db.ref(AGENT_QUOTES + '/' + n).transaction(cur => {
     if (cur === null) return null;   // null-first
     if (cur.state !== 'waiting' || String(cur.staffMessageId || '') !== String(quotedId)) return;
-    return { ...cur, state: 'answered', answeredAt: now, answeredBy: by };
+    return { ...cur, state: 'relaying', relayBy: by, relayKey, relayAt: now };
   });
   const v = r.committed ? r.snapshot.val() : null;
-  return !!(v && v.state === 'answered' && v.answeredBy === by);
+  return !!(v && v.state === 'relaying' && v.relayBy === by);
+}
+const _mine = (to, by, extra) => cur => {
+  if (cur === null) return null;     // null-first
+  if (cur.state !== 'relaying' || cur.relayBy !== by) return;
+  return { ...cur, state: to, ...extra };
+};
+async function lgQuoteDone(db, n, by, now) {
+  await db.ref(AGENT_QUOTES + '/' + n).transaction(_mine('answered', by, { answeredAt: now, answeredBy: by }));
+}
+async function lgQuoteRelease(db, n, by) {
+  await db.ref(AGENT_QUOTES + '/' + n).transaction(_mine('waiting', by, { relayBy: null, relayKey: null, relayAt: null }));
 }
 
 module.exports = { AGENT_QUOTES, AGENT_QUOTES_SEQ, QUOTE_HOLD_TEXT, lgQuoteExtract, lgQuotePrice, lgQuoteText,
-                   lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync, lgQuoteFindWaiting, lgQuoteAnswer };
+                   lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync, lgQuoteFindWaiting,
+                   lgQuoteClaim, lgQuoteDone, lgQuoteRelease };

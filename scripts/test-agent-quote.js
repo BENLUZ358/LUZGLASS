@@ -97,6 +97,9 @@ const it = (sku, w, h, qty = 1, holes = 0, cutouts = 0) => ({ sku, w, h, qty, ho
     check('extract: inactive sku → ok:false', inactive.ok, false);
     const zero = await q.lgQuoteExtract({ text: 'x', catalog: CAT, model: 'm', key: 'k', fetcher: model({ ok: true, items: [it('G8', 0, 50)] }).fetcher });
     check('extract: zero size → ok:false', zero.ok, false);
+    // t6-5: מידה מעל 600 ס"מ או מתחת ל-1 ס"מ → כל הבקשה לשאול
+    const sz = async (w, h) => (await q.lgQuoteExtract({ text: 'x', catalog: CAT, model: 'm', key: 'k', fetcher: model({ ok: true, items: [it('G8', 50, 50), it('G8', w, h)] }).fetcher })).ok;
+    check('t6-5: size cap 601 / 0.5 / 600 / 1', [await sz(601, 50), await sz(50, 0.5), await sz(600, 50), await sz(50, 1)], [false, false, true, true]);
     const thr = await q.lgQuoteExtract({ text: 'x', catalog: CAT, model: 'm', key: 'k', fetcher: model({}, { throws: true }).fetcher });
     check('extract: network error never throws', [thr.ok, thr.items], [false, []]);
     const h = await q.lgQuoteExtract({ text: 'x', catalog: CAT, model: 'm', key: 'k', fetcher: model({}, { http: 500 }).fetcher });
@@ -160,6 +163,43 @@ const it = (sku, w, h, qty = 1, holes = 0, cutouts = 0) => ({ sku, w, h, qty, ho
     const m = model({ ok: true, items: [it('G8', 100, 100)] });
     const res = await act.lgAgentAct(d, 't3', { env: { ...ON, AGENT_REPLY_ENABLED: 'false' }, now: NOW, sendPending: stub, fetchImpl: m.fetcher });
     check('act switches off → wouldAct only', [res.acted, Object.keys(outbox(d)).length, (d._data.waMeta.agentQuotes || null)], [false, 0, null]);
+    // t6-4: usage של החילוץ נשמר ברשומה
+    check('t6-4: quoteUsage on the record (also when not acting)', d._data.waMeta.agentShadow.t3.quoteUsage, { input_tokens: 1 });
+  }
+  {
+    const d = seed(); put(d, 't4', { text: 'כמה עולה זכוכית 8 שקוף 100 על 100?' });
+    await act.lgAgentAct(d, 't4', { env: ON, now: NOW, sendPending: stub, fetchImpl: model({ ok: true, items: [it('G8', 100, 100)] }).fetcher });
+    check('t6-4: quoteUsage on an acted record', d._data.waMeta.agentShadow.t4.quoteUsage, { input_tokens: 1 });
+  }
+  {
+    // t6-3: הודעת הבקשה לשאול לא נכנסה לתור (מפתח קיים) → לא נשמרת בקשה ממתינה
+    const d = seed(); put(d, 'q3', { idMessage: 'IMG3', hasImage: true, text: 'כמה?' });
+    d._data.waMeta.agentOutbox = { q3_1: { to: 'x', state: 'sent', text: 'ישן', files: [] } };
+    await act.lgAgentAct(d, 'q3', { env: ON, now: NOW, sendPending: stub });
+    check('t6-3: staff entry not queued → no waiting request', d._data.waMeta.agentQuotes || null, null);
+  }
+  {
+    // t6-2: התור זורק בזמן ההעברה → הבקשה חוזרת ל-waiting (לא "נענתה" בלי שנשלח), ותשובה הבאה עוברת
+    const d = seed();
+    d._data.waMeta.agentQuotes = { 5: { customerId: '777', chat: PRIV, staffMessageId: 'X5', at: NOW, state: 'waiting' } };
+    put(d, 'e1', { route: 'staff', linked: false, customerId: '', customerName: '', chatId: SHAUL_CHAT, sender: SHAUL, quotedId: 'X5', text: '500' });
+    put(d, 'e2', { route: 'staff', linked: false, customerId: '', customerName: '', chatId: SHAUL_CHAT, sender: SHAUL, quotedId: 'X5', text: '550' });
+    const ref = d.ref.bind(d);
+    let boom = true;
+    d.ref = p => {
+      const r = ref(p);
+      if (boom && String(p).startsWith('waMeta/agentOutbox/')) r.transaction = async () => { throw new TypeError('down'); };
+      return r;
+    };
+    const warn = console.warn; console.warn = () => {};
+    const r1 = await act.lgAgentAct(d, 'e1', { env: ON, now: NOW, sendPending: stub });
+    console.warn = warn;
+    check('t6-2: enqueue failure → not acted, request back to waiting', [r1.acted, d._data.waMeta.agentShadow.e1.actReason, d._data.waMeta.agentQuotes[5].state],
+      [false, 'error', 'waiting']);
+    boom = false;
+    await act.lgAgentAct(d, 'e2', { env: ON, now: NOW, sendPending: stub });
+    check('t6-2: next reply is relayed and answered', [d._data.waMeta.agentQuotes[5].state, Object.values(outbox(d)).map(e => e.text)],
+      ['answered', ['הצעת מחיר:\n550']]);
   }
 
   // סקיצה → שאול → "השב" → ללקוח (עם תור השליחה האמיתי וספק מזויף)
