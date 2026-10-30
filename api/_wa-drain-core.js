@@ -48,10 +48,16 @@ async function _sendInvoice(db, provider, to, entry) {
   if (typeof provider.sendFiles !== 'function') {
     return { ok: false, failureKind: 'other', reason: 'הספק הנוכחי לא שולח קבצים — החשבונית לא נשלחה' };
   }
-  const f = await require('./_invoice-deliver').lgInvoiceFiles(db, entry.invoiceKey);
-  if (!f.ok) return { ok: false, failureKind: 'other', reason: 'קבצי החשבונית לא זמינים (' + f.code + ')' };
-  return provider.sendFiles({ to, kind: 'invoice', clientName: entry.clientName, orderNums: entry.orderNums,
-                              sketchNames: entry.sketchNames || [], docNumber: entry.docNumber, files: f.files });
+  //  ⚠️ חריגה כאן הייתה משאירה את הרשומה תפוסה בלי סגירה ובלי סיבה (30/10, L1143).
+  //  כל כשל נסגר כ-ok:false עם שם השגיאה בלבד — הודעת השגיאה עלולה להכיל URL עם טוקן.
+  try {
+    const f = await require('./_invoice-deliver').lgInvoiceFiles(db, entry.invoiceKey);
+    if (!f.ok) return { ok: false, failureKind: 'other', reason: 'קבצי החשבונית לא זמינים (' + f.code + ')' };
+    return await provider.sendFiles({ to, kind: 'invoice', clientName: entry.clientName, orderNums: entry.orderNums,
+                                      sketchNames: entry.sketchNames || [], docNumber: entry.docNumber, files: f.files });
+  } catch (e) {
+    return { ok: false, failureKind: 'other', reason: 'חריגה בשליחת החשבונית (' + (e && e.name) + (e && e.code ? ' ' + e.code : '') + ')' };
+  }
 }
 
 async function _invoiceDelivery(db, invoiceKey, outboxKey, out) {

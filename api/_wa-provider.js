@@ -328,12 +328,14 @@ function greenProvider() {
         form.append('file', new Blob([f.buf], { type: f.mime }), f.name);
         let httpStatus = 0, parsed = null;
         try {
-          const r = await fetch(url, { method: 'POST', body: form });
+          //  ⚠️ תקרה לכל קובץ: הבקשה כולה (העלאת החשבונית) חייבת להיגמר לפני 60 השניות של Vercel
+          const r = await fetch(url, { method: 'POST', body: form, signal: AbortSignal.timeout(15000) });
           httpStatus = r.status;
           try { parsed = JSON.parse(await r.text()); } catch (_) { /* לא JSON */ }
         } catch (e) {
+          const code = e && e.cause && e.cause.code ? ' ' + e.cause.code : '';
           return { ok: false, httpStatus: 0, messageId: ids[0] || null, params: [text], failureKind: FAIL.NETWORK,
-                   detail: 'network', reason: 'שגיאת רשת מול GREEN API (' + (e && e.name) + ') בקובץ ' + (i + 1) };
+                   detail: 'network', reason: 'שגיאת רשת מול GREEN API (' + (e && e.name) + code + ') בקובץ ' + (i + 1) };
         }
         const ok = httpStatus >= 200 && httpStatus < 300 && !!(parsed && parsed.idMessage);
         if (!ok) {

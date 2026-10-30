@@ -70,7 +70,19 @@ async function lgInvoiceDeliver(db, key, deps) {
   const rec = (await db.ref('invoicePdf/' + key).once('value')).val();
   if (!rec || rec.state !== 'ready') return { state: 'none' };
   //  הדפסה חוזרת / שיוך חוזר — לא שולחים פעמיים
-  if (rec.delivery && ['sent', 'queued'].includes(rec.delivery.state)) return rec.delivery;
+  const dv = rec.delivery;
+  if (dv && dv.state === 'sent') return dv;
+  //  וואטסאפ שנתקע או נכשל ועדיין ממתין בתור → הדפסה חוזרת מנסה שוב עכשיו.
+  //  אין שליחה כפולה: התפיסה בתור (2 דקות) והמצב 'sent' חוסמים.
+  if (dv && dv.channel === 'whatsapp' && dv.outboxKey && ['queued', 'failed'].includes(dv.state)) {
+    const q = (await db.ref('waOutbox/' + dv.outboxKey).once('value')).val();
+    if (!q || q.state !== 'pending') return dv;
+    const drain = d.drain || require('./_wa-drain-core').drainNow;
+    const r = await drain(db, [dv.outboxKey], 'invoice-tool');
+    const res = (r && r.results || []).find(x => x.key === dv.outboxKey);
+    return { state: res && res.status === 'sent' ? 'sent' : dv.state, channel: 'whatsapp', result: res || null, retried: true };
+  }
+  if (dv && dv.state === 'queued') return dv;
   if (rec.simulated) { await mark({ state: 'skipped', reason: 'חשבונית ניסיון' }); return { state: 'skipped' }; }
 
   const ids = rec.orderIds || [];
