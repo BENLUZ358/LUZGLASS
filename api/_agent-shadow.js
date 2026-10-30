@@ -13,6 +13,7 @@
 //  ⚠️ מצב צל: שום דבר מכאן לא נשלח ישירות. בסוף העיבוד (done) נקרא
 //     lgAgentAct (_agent-act.js, שלב 2) — הוא מחליט אם מותר לענות.
 //  ⚠️ הודעה ממספר צוות (AGENT_STAFF_PHONES) → route 'staff', בלי סיווג (R2).
+//  ⚠️ הודעה שנמחקה (משימה 7) → deletedId + route 'kolet-deleted', בלי סיווג.
 //  ⚠️ לא מקושר (לא בקבוצה מקושרת, לא ב-waSenders, לא ברשימת Vercel) →
 //     נרשם בלי טקסט, route:'shaul', והמודל לא נקרא.
 //  ⚠️ לא נרשם לוג של טקסט ההודעה, downloadUrl או מפתחות.
@@ -67,7 +68,15 @@ function lgAgentShadowParse(body) {
   else if (tm === 'imageMessage' || (tm === 'documentMessage' && String(f.mimeType || '').toLowerCase().startsWith('image/'))) {
     hasImage = true; text = f.caption;          // הכיתוב — בלי downloadUrl
   }
-  // כל סוג אחר (נמחקה, תגובה, סוג חדש) — נרשם עם typeMessage בלבד ו-text ריק
+  // כל סוג אחר (תגובה, סוג חדש) — נרשם עם typeMessage בלבד ו-text ריק
+  // ── נמחקה (משימה 7). ⚠️ צורת ה-payload של GREEN API לא אומתה — סובלני:
+  //    typeMessage 'deletedMessage' או שיש deletedMessageData. המזהה של
+  //    ההודעה שנמחקה — מה שקיים מבין שלושת ה-stanzaId. אין מזהה → deletedId
+  //    ריק (נרשם, בלי פעולה).
+  const dm = md.deletedMessageData;
+  const deleted = tm === 'deletedMessage' || !!(dm && typeof dm === 'object');
+  const deletedId = deleted ? String((dm && dm.stanzaId) || ext.stanzaId || md.stanzaId || '') : '';
+  if (deleted) { text = ''; quotedId = ''; hasImage = false; }
 
   return { action, entry: {
     idMessage: String(b.idMessage),
@@ -75,13 +84,19 @@ function lgAgentShadowParse(body) {
     typeMessage: tm,
     chatId, groupId, sender,
     text: String(text || '').slice(0, TEXT_MAX),
-    quotedId, hasImage,
+    quotedId, hasImage, deleted, deletedId,
     timestamp: (Number(b.timestamp) || 0) * 1000,
   } };
 }
 
 // מפתח הצ'אט ל-HUMAN: הקבוצה, או הצ'אט הפרטי
 const _chatKey = e => lgWaInboundKey(e.groupId || e.chatId);
+
+// אדם עונה עכשיו בצ'אט (שעתיים מהודעה ידנית)
+async function _humanQuiet(db, e, now) {
+  const last = (await db.ref(HUMAN + '/' + _chatKey(e) + '/lastAt').once('value')).val();
+  return !!last && (now - Number(last)) < AGENT_HUMAN_QUIET_MS;
+}
 
 // מקושר = קבוצה ב-waGroups, מספר ב-waSenders, או ברשימת Vercel
 async function _isLinked(db, e) {
@@ -167,7 +182,12 @@ async function lgAgentShadowProcess(db, key, opts) {
       const who = e.groupId ? await lgClientFromWaGroup(db, e.groupId, e.sender) : await lgClientFromWaSender(db, e.chatId);
       out.customerId = String((who && who.customerId) || '');
       out.customerName = String((who && who.name) || '');
-      if (!e.text && !e.hasImage) {
+      if (e.deleted) {
+        // קולט (משימה 7): הלקוח מחק הודעה — בלי סיווג. ההחלטה מה לעשות
+        //  בהזמנה (waMessageId === deletedId) — ב-lgAgentDecide.
+        //  אין מזהה (צורה לא מוכרת) → נרשם בלי פעולה.
+        out.route = await _humanQuiet(db, e, now) ? 'silent-human' : (e.deletedId ? 'kolet-deleted' : 'none');
+      } else if (!e.text && !e.hasImage) {
         // נמחקה / תגובה / סוג לא מוכר — אין מה לסווג
         out.route = 'none';
       } else {
@@ -176,8 +196,7 @@ async function lgAgentShadowProcess(db, key, opts) {
         out.intent = cls.intent; out.ref = cls.ref || ''; out.usage = cls.usage || null;
         // המודל נקרא רק כשיש טקסט (תמונה בלבד = order בלי קריאה)
         out.model = String(e.text || '').trim() ? String(env.AGENT_MODEL || '') : '';
-        const last = (await db.ref(HUMAN + '/' + _chatKey(e) + '/lastAt').once('value')).val();
-        const humanQuiet = !!last && (now - Number(last)) < AGENT_HUMAN_QUIET_MS;
+        const humanQuiet = await _humanQuiet(db, e, now);
         out.route = lgOkevRoute({ intent: out.intent, isGroup: !!e.groupId, linked: true, humanQuiet });
         if (out.route === 'okev') {
           // ⚠️ קורא את כל orders ומסנן כאן — מקובל כל עוד יש מעט הזמנות בפרודקשן.

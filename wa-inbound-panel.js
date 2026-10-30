@@ -347,7 +347,7 @@ function lgWaInTextCustomersHtml(map) {
 const LG_AG_INTENT = { status: 'איפה ההזמנה', cancel: 'ביטול', change: 'שינוי', document: 'מסמך', quote: 'הצעת מחיר',
   order: 'הזמנה', chitchat: 'שיחה', thanks: 'תודה', unclear: 'לא ברור' };
 const LG_AG_ROUTE = { okev: 'עוקב', kolet: 'קולט', archive: 'ארכיון', quote: 'מחירון', menu: 'תפריט', none: 'בלי תשובה',
-  ignore: 'מתעלם', shaul: 'לשאול', 'silent-human': 'שותק (ענו ידנית)' };
+  ignore: 'מתעלם', shaul: 'לשאול', 'silent-human': 'שותק (ענו ידנית)', 'kolet-deleted': 'קולט — סקיצה נמחקה' };
 function lgAgIntentLabel(i) { return LG_AG_INTENT[i] || String(i == null ? '' : i); }
 function lgAgRouteLabel(r) { return LG_AG_ROUTE[r] || String(r == null ? '' : r); }
 //  שלב 2: כמה לקוחות בפיילוט

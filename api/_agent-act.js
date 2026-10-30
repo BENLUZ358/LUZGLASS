@@ -17,6 +17,11 @@
 //     ונשמרת ב-waMeta/agentCancels; מה שכבר נשלח לחשבשבת מוצג ב"תיקון הזמנות".
 //  ⚠️ מחירון (משימה 6, _agent-quote.js): הודעת צוות (route 'staff') פועלת רק
 //     כשהיא "השב" לבקשת מחיר ממתינה — ואז הנמען הוא הלקוח של הבקשה.
+//  ⚠️ קולט — סקיצה שנמחקה (משימה 7): route 'kolet-deleted' + deletedId.
+//     הזמנה של אותו לקוח עם waMessageId === deletedId: בתור (''/pending) →
+//     ביטול שקט (בלי הודעה); בטיפול → "לבטל אותה?" + confirm-cancel (ה"כן"
+//     עובר במסלול הרגיל); בייצור → הודעה. אין הזמנה → כלום. גם הביטול השקט
+//     הוא פעולה — מתגים + פיילוט כמו כל השאר (בצל רק wouldAct).
 //  ⚠️ לא נרשם ללוג: טקסט ההודעה, טוקנים, מפתחות. רק e.name.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -36,6 +41,12 @@ const PILOT = 'waMeta/agentPilot';
 const AGENT_CANCELS = 'waMeta/agentCancels';
 // שליחה מיידית אחרי ההכנסה לתור — קצר, כדי לא לחרוג מ-maxDuration של ה-drain
 const SEND_BUDGET_MS = 15 * 1000;
+
+// ── קולט: סקיצה שנמחקה (משימה 7) ──
+const DELETED_ASK_TEXT = 'הסקיצה שמחקת כבר בטיפול אצלנו. לבטל אותה?';
+const DELETED_PROD_TEXT = 'הסקיצה שמחקת כבר בייצור, ואי אפשר לבטל אותה.';
+// עוד לא התחילו לטפל — יורדת מהתור בשקט
+const SILENT_STAGES = ['', 'pending'];
 
 // ── "כן" / "לא" לשאלת "בטוח?": בלי סימני פיסוק, רווחים מכווצים ──
 const YES = ['כן', 'כן תבטל', 'בטוח', 'כן בטוח', 'תבטל', 'יאללה'];
@@ -106,6 +117,32 @@ function _onConv(r, orders, c, now) {
   return null;
 }
 
+// ── קולט: הלקוח מחק את הודעת הסקיצה ──
+//  רק הזמנות של אותו לקוח (orders כבר מסוננות ב-_act; כאן שוב, ליתר ביטחון).
+//  כמה הזמנות מאותה הודעה: כולן בתור → ביטול שקט לכל אחת; אחת → לפי השלב;
+//  אחרת (מעורב) → שאול.
+function _deleted(r, orders, now) {
+  const id = String(r.deletedId || '');
+  const cid = String(r.customerId || '');
+  const none = { actions: [], conv: null };
+  if (!id || !cid || !r.linked) return none;
+  const hit = orders.filter(o => o && String(o.waMessageId || '') === id && String(o.customerId || '') === cid);
+  if (!hit.length) return none;
+  const num = o => String(o.orderNum || o.refNum || '');
+  const silent = o => SILENT_STAGES.includes(String(o.stage || ''));
+  if (hit.every(silent)) {
+    return { actions: hit.map(o => ({ type: 'cancel', orderId: o.id, silent: true, okText: '', lateText: DELETED_PROD_TEXT,
+      staffText: _who(r) + ': מחק בוואטסאפ את הסקיצה של הזמנה ' + num(o) + ' — הביטול לא בוצע, נא לבדוק' })), conv: null };
+  }
+  if (hit.length === 1) {
+    const o = hit[0];
+    if (lgOkevCanChange(o)) return { actions: [_reply(DELETED_ASK_TEXT)], conv: { await: 'confirm-cancel', orderId: o.id, at: now } };
+    return { actions: [_reply(DELETED_PROD_TEXT)], conv: null };
+  }
+  return { actions: [_staff(_who(r) + ': מחק בוואטסאפ סקיצה של כמה הזמנות (' + hit.map(num).join(', ') + ') — נא לבדוק'),
+                     _reply(AGENT_HANDOFF_TEXT)], conv: null };
+}
+
 // ── ניתוב רגיל לפי route של המרכזן. keep = ה-conv הנוכחי (נשאר אם לא הוחלף) ──
 function _route(r, orders, now, keep, archive, quote) {
   switch (r.route) {
@@ -138,6 +175,8 @@ function _route(r, orders, now, keep, archive, quote) {
       return { actions: _handoff(r), conv: keep };
     }
     case 'shaul': return { actions: _handoff(r), conv: keep };
+    // קולט — סקיצה שנמחקה. conv חדש (שאלת "לבטל?") מחליף; אחרת נשאר
+    case 'kolet-deleted': { const x = _deleted(r, orders, now); return { actions: x.actions, conv: x.conv || keep }; }
     default: return { actions: [], conv: keep };   // kolet (הקליטה הקיימת), none, ignore
   }
 }
@@ -397,9 +436,11 @@ async function _act(db, key, rec, recRef, env, now, o) {
     else if (a.type === 'cancel') {
       const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now });
       cancels.push({ orderId: String(a.orderId), ok: !!res.ok, code: String(res.code || '') });
-      // "ההזמנה בוטלה" רק אחרי ביטול שהצליח
-      if (res.ok) await enq(k, chat, a.okText, [], 'agent-cancel');
+      // "ההזמנה בוטלה" רק אחרי ביטול שהצליח. ביטול שקט (סקיצה שנמחקה) — בלי okText
+      if (res.ok) { if (a.okText) await enq(k, chat, a.okText, [], 'agent-cancel'); }
       else if (res.code === 'too-late') await enq(k, chat, a.lateText, [], 'agent-cancel');
+      // שקט + כבר לא קיימת — אין מה להגיד ללקוח שמחק אותה
+      else if (a.silent && res.code === 'missing') { /* כלום */ }
       else {
         await enq(k + '_s', staff[0], a.staffText + ' (' + String(res.code || 'error') + ')', [], 'agent-staff');
         await enq(k, chat, AGENT_HANDOFF_TEXT, [], 'agent-reply');
@@ -423,4 +464,5 @@ async function _act(db, key, rec, recRef, env, now, o) {
   return { acted: true, actions: d.actions };
 }
 
-module.exports = { CONV, CONV_TTL_MS, AGENT_CANCELS, lgAgentDecide, lgAgentAct, lgAgentCancel };
+module.exports = { CONV, CONV_TTL_MS, AGENT_CANCELS, DELETED_ASK_TEXT, DELETED_PROD_TEXT,
+                   lgAgentDecide, lgAgentAct, lgAgentCancel };
