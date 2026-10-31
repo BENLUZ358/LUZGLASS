@@ -45,7 +45,7 @@ check('waInbound record + order intent → no red', ctx.lgAgRowHtml('K4', rec({ 
 check('pdf rejected → no red', ctx.lgAgRowHtml('K8', rec({ idMessage: 'P.1', intakeKind: 'pdf' }), ib).includes(RED), false);
 check('closed after rejected → no red', ctx.lgAgRowHtml('K9', rec({ idMessage: 'C1', intakeKind: 'pdf' }), ib).includes(RED), false);
 check('closed after failed → red', ctx.lgAgRowHtml('K10', rec({ idMessage: 'C2', intakeKind: 'image' }), ib).includes(RED), true);
-check('agents page passes the waInbound map to the row', /lgAgRowHtml\(r\.key,\s*r,\s*intake[,)]/.test(P), true);
+check('agents page passes the waInbound map to the row', /lgAdReviewRowHtml\(r\.key,\s*r,\s*intake[,)]/.test(P), true);
 const x = ctx.lgAgRowHtml('K5', rec({ text: '<img src=x onerror=1>"', customerName: '<b>x</b>', wouldReply: '<script>' }));
 check('message text, name and reply are escaped', [x.includes('<img'), x.includes('<b>x'), x.includes('<script>'), x.includes('&lt;img')], [false, false, false, true]);
 check('verdict shown, buttons still there', (() => { const v = ctx.lgAgRowHtml('K6', rec({ verdict: { ok: true } })); return [v.includes('נכון ✓'), /data-agv/.test(v)]; })(), [true, true]);
@@ -62,7 +62,7 @@ check('admin.html: the agents tab is gone, the agents page is linked', [/data-ta
 check('the קליטות panel no longer listens to the agents', /waMeta\/agent/.test(PANEL), false);
 check('agents page listens to waMeta/agentShadow', /ref\(\s*['"`]waMeta\/agentShadow['"`]\s*\)/.test(P), true);
 check('panel posts agent-verdict via drain only', [/action:\s*'agent-verdict'/.test(P), /ref\(['"]waMeta\/agentShadow[^)]*\)\.(set|update|remove|push)/.test(P)], [true, false]);
-check('no raw innerHTML of message text in agent code', /lgAgRowHtml/.test(P) && !/innerHTML\s*=\s*[^;]*\.text/.test(P), true);
+check('no raw innerHTML of message text in agent code', /lgAdReviewRowHtml/.test(P) && !/innerHTML\s*=\s*[^;]*\.text/.test(P), true);
 
 // ─── שלב 2: פיילוט ומה נשלח בפועל ────────────────────────────────────────
 const cx = (outbox, pilot) => ({ outbox: outbox || {}, pilot: pilot || {} });

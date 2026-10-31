@@ -89,6 +89,12 @@ body{background:var(--bg);}
 .wain-btn:disabled,.sbtn:disabled{opacity:.45;cursor:default;}
 .sbtn.is-primary{background:var(--gold);border-color:var(--gold);color:var(--on-gold);}
 .more{width:100%;margin-top:var(--space-2);}
+.wain-q{margin-inline-end:auto;}
+.wain-acts .wain-btn[data-agv]{min-width:72px;}
+.ad-others{margin-top:var(--space-3);}
+.ad-others summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-size:var(--fs-sm);font-weight:var(--fw-bold);color:var(--muted);}
+.ad-other{padding:var(--space-2) 0;border-bottom:1px solid var(--border);font-size:var(--fs-sm);overflow-wrap:anywhere;}
+.ad-other small{display:block;color:var(--muted);font-size:var(--fs-xs);}
 
 /* מצב */
 .prob{color:var(--red);font-weight:var(--fw-bold);font-size:var(--fs-sm);margin-top:var(--space-2);}
@@ -110,7 +116,7 @@ body{background:var(--bg);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261031"></script>
 <script src="lg-icons.js?v=20260807"></script>
-<script src="agents-dash.js?v=20261031"></script>
+<script src="agents-dash.js?v=20261101"></script>
 </head>
 <body>
 <div class="wrap">
@@ -146,7 +152,7 @@ body{background:var(--bg);}
 
     <section id="secLog" class="sec" aria-labelledby="hLog">
       <h2 id="hLog"><span data-icon="list"></span>יומן עבודה<span class="n" id="nLog"></span></h2>
-      <p class="hint">כל הודעה מלקוח ב-30 הימים האחרונים: מה הוא שלח, מה הסוכן הבין, ומה קורה איתה. אחרי שקראת — לחץ "הבין נכון" או "טעה".</p>
+      <p class="hint">הודעות שהסוכן היה עונה עליהן. קרא מה הלקוח כתב ומה הסוכן היה עונה, ולחץ "כן" אם זה נכון או "לא" אם לא.</p>
       <div class="flt">
         <input id="fQ" type="search" placeholder="חיפוש לקוח…" aria-label="חיפוש לקוח">
         <select id="fRoute" aria-label="סוכן"></select>
@@ -234,14 +240,21 @@ function renderNums() {
 }
 
 // ─── 3. יומן ─────────────────────────────────────────────────────────
+//  רק מה שיש לבדוק — כשאלה "זה נכון?"; השאר במקטע מקופל, בלי כפתורים (בן, 31/10)
+let otherOpen = false;
 function renderLog() {
-  const rs = lgAdLogRows(SH, { route: $('fRoute').value, q: $('fQ').value, verdict: $('fVerdict').value }, lgAdPeriodStart('30d', Date.now()));
-  const c = { pilot: PILOT, outbox: OB };
+  const all = lgAdLogRows(SH, { route: $('fRoute').value, q: $('fQ').value, verdict: $('fVerdict').value }, lgAdPeriodStart('30d', Date.now()));
+  const rs = all.filter(lgAdNeedsReview), other = all.filter(r => !lgAdNeedsReview(r));
+  const c = { outbox: OB };
   $('nLog').textContent = rs.length || '';
-  $('log').innerHTML = rs.length
-    ? rs.slice(0, shown).map(r => lgAgRowHtml(r.key, r, intake, c)).join('')
+  $('log').innerHTML = (rs.length
+    ? rs.slice(0, shown).map(r => lgAdReviewRowHtml(r.key, r, intake, c)).join('')
       + (rs.length > shown ? `<button type="button" class="sbtn more" data-more>הצג עוד (${E(rs.length - shown)})</button>` : '')
-    : '<div class="hint">אין הודעות להצגה.</div>';
+    : '<div class="hint">אין הודעות שצריך לבדוק.</div>')
+    + (other.length ? `<details class="ad-others"${otherOpen ? ' open' : ''}><summary>עוד ${E(other.length)} הודעות שלא צריך לבדוק</summary>
+        ${other.slice(0, 100).map(r => lgAdOtherRowHtml(r)).join('')}</details>` : '');
+  const d = $('log').querySelector('details');
+  if (d) d.addEventListener('toggle', () => { otherOpen = d.open; });
 }
 function fillRouteFilter() {
   const keep = $('fRoute').value;

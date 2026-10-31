@@ -24,6 +24,11 @@ check('no Firebase writes from the page', /_lgDb\.ref\([^)]*\)[^;]*\.(set|update
 check('the "טופל" button only on dismissable cards', /x\.dismissable\s*\?[^:]*data-dismiss/.test(P), true);
 check('admin counter reads the same 31 days as the page',
   (() => { const m = live(A).match(/function lgAgentsNavCount\(\)[\s\S]*?\n}/); return !!m && /31 \* 24 \* 60 \* 60 \* 1000/.test(m[0]); })(), true);
+check('log shows review rows as questions, the rest folded',
+  [/lgAdNeedsReview\(/.test(P), /lgAdReviewRowHtml\(r\.key,\s*r,\s*intake/.test(P), /<details[^>]*>[\s\S]{0,200}לא צריך לבדוק/.test(P), /lgAdOtherRowHtml\(/.test(P)],
+  [true, true, true, true]);
+check('no pilot buttons in the log any more', /lgAgRowHtml\(/.test(live(P)), false);
+check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261101/.test(P), /agents-dash\.js\?v=20261101/.test(A)], [true, true]);
 check('reads the dismissals', /waMeta\/agentDash\/dismissed/.test(P), true);
 check('the log reads 30 days, not everything', /agentShadow['"`]\s*\)\s*\.orderByChild\(\s*'createdAt'\s*\)\s*\.startAt\(/.test(P), true);
 check('period switch: today / 7 days / 30 days', ['data-period="today"', 'data-period="7d"', 'data-period="30d"'].map(s => P.includes(s)), [true, true, true]);

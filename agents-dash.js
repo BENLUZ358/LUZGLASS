@@ -139,6 +139,47 @@ function lgAgRowHtml(key, r, intake, c) {
       </div>`;
 }
 
+// ─── יומן פשוט (בן, 31/10: "קצת מסובך למשתמש") ─────────────────────────
+//  ביומן מוצגות רק הודעות שיש מה לבדוק בהן — הסוכן היה עונה ללקוח או מעביר
+//  לשאול — וכל אחת כשאלה אחת "זה נכון?". השאר (תמונה שנכנסת לתור כרגיל, מספר
+//  לא מקושר, מישהו כבר ענה, אין מה לענות) — שורה קצרה במקטע מקופל.
+const AD_REVIEW_ROUTES = ['okev', 'quote', 'archive', 'menu', 'shaul', 'kolet-deleted'];
+function _adWould(r) {
+  return String(r.wouldReply || ((Array.isArray(r.wouldAct) ? r.wouldAct : []).filter(a => a && a.text && a.type !== 'staff' && a.type !== 'quote-ask').map(a => a.text)[0]) || '');
+}
+const _adToShaul = r => r.route === 'shaul' || (Array.isArray(r.wouldAct) ? r.wouldAct : []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask'));
+function lgAdNeedsReview(r) {
+  if (!r || r.linked !== true || r.state !== 'done') return false;
+  return AD_REVIEW_ROUTES.includes(r.route) || !!_adWould(r) || _adToShaul(r);
+}
+function lgAdReviewRowHtml(key, r, intake, c) {
+  const k = _adEsc(key), would = _adWould(r);
+  const sent = lgAgOutboxOf(key, (c || {}).outbox).filter(o => o.state === 'sent' && o.reason !== 'agent-staff').map(o => o.text)[0];
+  const what = sent ? `<div class="wain-ag-r">נשלח ללקוח: ${_adEsc(sent)}</div>`
+    : would ? `<div class="wain-ag-r">הסוכן היה עונה: ${_adEsc(would)}</div>`
+    : _adToShaul(r) ? '<div class="wain-ag-r">הסוכן היה מעביר לשאול</div>'
+    : `<div class="wain-ag-r">${_adEsc(lgAgOutcome(r))}</div>`;
+  const both = r.intent !== 'order' && lgAgIntakeTaken(key, r, intake) ? '<div class="wain-ag-red">נקלטה גם כהזמנה</div>' : '';
+  const v = r.verdict ? `<span class="wain-chip">סימנת: ${r.verdict.ok ? 'נכון ✓' : 'לא נכון ✗'}</span>` : '';
+  return `<div class="wain-row wain-ag" data-agkey="${k}">
+        <div class="wain-l1"><span class="wain-client">${_adEsc(r.customerName || '')}</span>
+          <span class="wain-when">${_adEsc(_adWhen(r.createdAt))}</span></div>
+        <div class="wain-ag-t">${_adEsc(lgAgSentText(r))}</div>
+        ${what}${both}
+        <div class="wain-acts"><b class="wain-q">זה נכון?</b>
+          <button type="button" class="wain-btn" data-agv="1" data-key="${k}">כן</button>
+          <button type="button" class="wain-btn" data-agv="0" data-key="${k}">לא</button>
+          ${v}
+        </div>
+      </div>`;
+}
+//  שורה קצרה, בלי כפתורים: מי · מה שלח · מה קורה
+function lgAdOtherRowHtml(r) {
+  const x = r || {};
+  return `<div class="ad-other"><b>${x.linked ? _adEsc(x.customerName || '') : 'לא מקושר'}</b> · ${_adEsc(lgAgSentText(x))}
+        <small>${_adEsc(lgAgOutcome(x))} · ${_adEsc(_adWhen(x.createdAt))}</small></div>`;
+}
+
 
 // ─── לוח הבקרה (31/10) ──────────────────────────────────────────────
 const _AD_H = 60 * 60 * 1000, _AD_D = 24 * _AD_H;

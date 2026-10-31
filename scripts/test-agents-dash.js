@@ -142,6 +142,38 @@ check('six agents', J(vm.runInContext('LG_AD_AGENTS', ctx)).map(a => a.id), ['ma
   check('verdict buttons say what they mean', [row({ route: 'okev' }).includes('הבין נכון'), row({ route: 'okev' }).includes('טעה')], [true, true]);
 }
 
+// ─── יומן פשוט: רק מה שיש לבדוק, כשאלה אחת (בן, 31/10: "קצת מסובך למשתמש") ──
+{
+  const base = { linked: true, customerName: 'טום גלאס', state: 'done', createdAt: NOW };
+  const R = o => Object.assign({}, base, o);
+  const needs = [
+    R({ text: 'כמה עולה מראה 80 על 60?', intent: 'quote', route: 'quote', wouldAct: [{ type: 'reply', text: '185 ש"ח + מע"מ' }] }),
+    R({ text: 'איפה ההזמנה?', intent: 'status', route: 'okev', wouldReply: 'ההזמנה בחיסום' }),
+    R({ text: '??', intent: 'unclear', route: 'shaul', wouldAct: [{ type: 'staff', text: 'לשאול' }] }),
+    R({ text: 'שלום', intent: 'chitchat', route: 'menu', wouldReply: 'תפריט' }),
+  ];
+  const skip = [
+    R({ hasImage: true, intent: 'order', route: 'kolet' }),          // תמונה רגילה — נכנסת לתור
+    { linked: false, route: 'shaul', state: 'done', createdAt: NOW },  // לא מקושר
+    R({ text: 'תודה', route: 'silent-human' }),                        // מישהו כבר ענה
+    R({ text: 'תודה', intent: 'thanks', route: 'none' }),
+    R({ text: 'x', route: 'okev', state: 'processing' }),              // עוד לא הוחלט
+  ];
+  check('needs review: what the agent would answer or pass to Shaul', needs.map(ctx.lgAdNeedsReview), [true, true, true, true]);
+  check('no review: plain image, unlinked, already answered, nothing to say, undecided', skip.map(ctx.lgAdNeedsReview), [false, false, false, false, false]);
+
+  const q = ctx.lgAdReviewRowHtml('K1', needs[0], null, { outbox: {} });
+  check('review row: who, what they wrote, what the agent would answer, one question',
+    ['טום גלאס', 'כתב: כמה עולה מראה 80 על 60?', 'הסוכן היה עונה:', '185 ש&quot;ח + מע&quot;מ', 'זה נכון?'].map(s => q.includes(s)), [true, true, true, true, true]);
+  check('review row: two buttons כן / לא, no pilot button', [/data-agv="1"[^>]*>כן</.test(q), /data-agv="0"[^>]*>לא</.test(q), /data-agpilot/.test(q)], [true, true, false]);
+  check('passed to Shaul → said in words', ctx.lgAdReviewRowHtml('K3', needs[2], null, {}).includes('הסוכן היה מעביר לשאול'), true);
+  check('marked rows say what you chose', ctx.lgAdReviewRowHtml('K1', Object.assign({}, needs[0], { verdict: { ok: false } }), null, {}).includes('סימנת: לא נכון'), true);
+  check('review row escapes text', ctx.lgAdReviewRowHtml('K', R({ text: '<img onerror=1>', route: 'okev', wouldReply: '<b>' }), null, {}).includes('<img'), false);
+
+  const o = ctx.lgAdOtherRowHtml(skip[0]);
+  check('the other rows: one short line, no buttons', [o.includes('טום גלאס'), o.includes('שלח תמונה'), /<button/.test(o)], [true, true, false]);
+}
+
 check('a record that failed for good reads in Hebrew, not "dead"',
   (() => { const h = ctx.lgAgRowHtml('K', { linked: true, state: 'dead' }); return [h.includes('נכשלה סופית'), />dead</.test(h)]; })(), [true, false]);
 
