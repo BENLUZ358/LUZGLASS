@@ -607,7 +607,8 @@ let _allRegisteredClients = [];
 function lgAgentsNavCount() {
   const el = document.getElementById('navAgents');
   if (!el || typeof lgAdExceptions !== 'function') return;
-  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  // אותם 31 ימים כמו הדף — אחרת רשומה שנכשלה לפני 8–31 ימים מופיעה שם ולא כאן
+  const since = Date.now() - 31 * 24 * 60 * 60 * 1000;
   const get = r => r.once('value').then(s => s.val() || {}, () => ({}));
   Promise.all([
     get(_lgDb.ref('waMeta/agentShadow').orderByChild('createdAt').startAt(since)),

@@ -172,13 +172,18 @@ function lgAdCounts(shadow, quotes, cancels, from) {
 
 //  "דורש טיפול". ver = מתי הרשומה השתנתה לאחרונה; "טופל" שומר אותו, ואם
 //  הרשומה השתנתה מאז — הכרטיס חוזר (waMeta/agentDash/dismissed/<kind>_<key>).
+//  להצעת מחיר אין updatedAt: waiting → relaying כותב relayAt, ולכן הוא ה-ver.
+//  ביטול לא מוסתר לעולם: הוא נסגר רק ב"בוצע בחשבשבת" בתיקון הזמנות — הסתרה
+//  הייתה משאירה הזמנה מבוטלת פתוחה בחשבשבת (סקירה, 31/10).
+const AD_UNDISMISSABLE = ['cancel'];
 function lgAdExceptions(d, now) {
   const t = Number(now) || Date.now(), x = d || {}, dis = x.dismissed || {}, out = [];
   const add = (kind, key, r, at, title, extra) => {
-    const ver = Number(r.updatedAt || r.at || r.createdAt) || 0;
+    const ver = Number(r.updatedAt || r.relayAt || r.at || r.createdAt) || 0;
+    const dismissable = !AD_UNDISMISSABLE.includes(kind);
     const h = dis[kind + '_' + key];
-    if (h && Number(h.ver) === ver) return;
-    out.push(Object.assign({ kind, key: String(key), at: Number(at) || 0, ver, title,
+    if (dismissable && h && Number(h.ver) === ver) return;
+    out.push(Object.assign({ kind, key: String(key), at: Number(at) || 0, ver, title, dismissable,
       customerName: String(r.customerName || (r.order && (r.order.orderClient || r.order.client)) || ''),
       phone: '', detail: '', red: false, link: '' }, extra || {}));
   };

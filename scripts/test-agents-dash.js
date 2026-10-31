@@ -83,6 +83,19 @@ const ex2 = J(ctx.lgAdExceptions(dis, NOW)).map(x => x.kind + ':' + x.key);
 check('dismissed with the same ver stays hidden', ex2.includes('dead:s1'), false);
 check('dismissed but changed since → comes back', ex2.includes('quote:7'), true);
 check('empty data → no exceptions, no crash', J(ctx.lgAdExceptions({}, NOW)), []);
+// סקירה 31/10: ביטול נסגר רק בתיקון הזמנות ("בוצע בחשבשבת") — אין לו "טופל", והסתרה לא חלה עליו
+{
+  const cx = J(ctx.lgAdExceptions(Object.assign({}, data, { dismissed: { cancel_L5: { ver: NOW - H } } }), NOW));
+  const cn = cx.find(x => x.kind === 'cancel');
+  check('a cancel cannot be dismissed — it stays until done in hs-corrections', [!!cn, cn && cn.dismissable], [true, false]);
+  check('every other kind can be dismissed', cx.filter(x => x.kind !== 'cancel').every(x => x.dismissable === true), true);
+}
+// הצעת מחיר בלי updatedAt: waiting → relaying כותב relayAt. הסתרה של waiting לא מסתירה את ה-relaying שנתקע
+{
+  const q = { quotes: { 7: { state: 'relaying', at: NOW - 4 * H, relayAt: NOW - H } }, dismissed: { quote_7: { ver: NOW - 4 * H } } };
+  check('a dismissed quote that moved to relaying comes back', J(ctx.lgAdExceptions(q, NOW)).map(x => x.key), ['7']);
+  check('quote ver follows relayAt', J(ctx.lgAdExceptions({ quotes: q.quotes }, NOW))[0].ver, NOW - H);
+}
 
 // ─── יומן ─────────────────────────────────────────────────────────────
 const log = {

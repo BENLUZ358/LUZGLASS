@@ -177,6 +177,7 @@ const seed = shadow => fakeDb({
     check('10a writes the dismissal', [(await ds({ kind: 'quote', key: '7', ver: 123 })).ok,
       db._data.waMeta.agentDash.dismissed.quote_7], [true, { ver: 123, at: NOW, by: '052' }]);
     check('10b unknown kind', (await ds({ kind: 'zzz', key: '7', ver: 1 })).code, 'bad-kind');
+    check('10b2 a cancel cannot be dismissed (only "done in Hashavshevet")', (await ds({ kind: 'cancel', key: 'L5', ver: 1 })).code, 'bad-kind');
     check('10c bad key', (await ds({ kind: 'send', key: 'a/b', ver: 1 })).code, 'bad-key');
     check('10d ver must be a number', [(await ds({ kind: 'send', key: 'o1', ver: '5' })).code, (await ds({ kind: 'send', key: 'o1', ver: NaN })).code], ['bad-ver', 'bad-ver']);
     check('10e nothing else written', Object.keys(db._data.waMeta.agentDash.dismissed), ['quote_7']);

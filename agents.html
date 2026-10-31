@@ -208,7 +208,7 @@ function renderTodo() {
       <div class="ex-acts">
         ${x.link ? `<a class="sbtn is-primary" href="${E(x.link)}">לתיקון הזמנות</a>` : ''}
         ${wa ? `<a class="sbtn" href="${E(wa)}" target="_blank" rel="noopener">פתח בוואטסאפ</a>` : ''}
-        <button type="button" class="sbtn" data-dismiss="${E(x.kind)}" data-key="${E(x.key)}" data-ver="${E(x.ver)}"><span data-icon="check"></span>טופל</button>
+        ${x.dismissable ? `<button type="button" class="sbtn" data-dismiss="${E(x.kind)}" data-key="${E(x.key)}" data-ver="${E(x.ver)}"><span data-icon="check"></span>טופל</button>` : ''}
       </div></div>`;
   }).join('');
 }

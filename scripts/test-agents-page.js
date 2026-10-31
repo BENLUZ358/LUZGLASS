@@ -21,6 +21,9 @@ check('every write goes through the drain',
   ['agent-status', 'agent-dismiss', 'agent-verdict', 'agent-pilot'].map(a => new RegExp("action:\\s*'" + a + "'").test(P)), [true, true, true, true]);
 check('posts only to /api/wa-inbound-drain', (live(P).match(/_lgAuthPost\(\s*'([^']+)'/g) || []).every(m => m.includes('/api/wa-inbound-drain')), true);
 check('no Firebase writes from the page', /_lgDb\.ref\([^)]*\)[^;]*\.(set|update|push|remove|transaction)\(/.test(live(P)), false);
+check('the "טופל" button only on dismissable cards', /x\.dismissable\s*\?[^:]*data-dismiss/.test(P), true);
+check('admin counter reads the same 31 days as the page',
+  (() => { const m = live(A).match(/function lgAgentsNavCount\(\)[\s\S]*?\n}/); return !!m && /31 \* 24 \* 60 \* 60 \* 1000/.test(m[0]); })(), true);
 check('reads the dismissals', /waMeta\/agentDash\/dismissed/.test(P), true);
 check('the log reads 30 days, not everything', /agentShadow['"`]\s*\)\s*\.orderByChild\(\s*'createdAt'\s*\)\s*\.startAt\(/.test(P), true);
 check('period switch: today / 7 days / 30 days', ['data-period="today"', 'data-period="7d"', 'data-period="30d"'].map(s => P.includes(s)), [true, true, true]);

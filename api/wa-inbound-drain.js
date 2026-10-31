@@ -58,8 +58,9 @@ const AGENT_SEND_MIN_LEFT_MS = 35 * 1000;
 const AGENT_CHAIN_MS = 50 * 1000;
 
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && lgWaInboundKey(k) === k;
-//  סוגי הכרטיסים ב"דורש טיפול" — כמו lgAdExceptions ב-agents-dash.js
-const AGENT_DISMISS_KINDS = ['quote', 'cancel', 'send', 'dead', 'unclear', 'wrong'];
+//  סוגי הכרטיסים ב"דורש טיפול" שאפשר להסתיר — כמו lgAdExceptions ב-agents-dash.js.
+//  ביטול (cancel) לא ברשימה: הוא נסגר רק ב-agent-cancel-done, אחרי שבוטל בחשבשבת.
+const AGENT_DISMISS_KINDS = ['quote', 'send', 'dead', 'unclear', 'wrong'];
 
 //  ⚠️ lgEmailInboundProcess מחזיר { state, reason? } ולא { ok, claimed } —
 //  מתורגם כאן לצורה של WhatsApp, כדי שהדף לא יצטרך לדעת מאיזה ערוץ הגיע.
