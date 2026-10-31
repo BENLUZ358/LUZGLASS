@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>LuzGlass — סוכנים</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+<style>
+/* לוח הבקרה לסוכנים (31/10): דורש טיפול, מספרים, יומן, מצב. הלוגיקה ב-agents-dash.js;
+   הדף קורא את waMeta/* וכותב רק דרך /api/wa-inbound-drain. אפיון:
+   docs/superpowers/specs/2026-10-31-agents-dashboard-design.md */
+html,body{min-height:100%;}
+body{background:var(--bg);}
+.wrap{max-width:1180px;margin:0 auto;padding:var(--space-4);padding-bottom:calc(var(--space-6) + env(safe-area-inset-bottom));}
+.bar{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-4);padding-top:env(safe-area-inset-top);}
+.bar h1{flex:1;font-size:var(--fs-xl);font-weight:var(--fw-black);}
+.tb-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-width:44px;min-height:44px;padding:0 var(--space-3);
+  border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:var(--radius);font-size:var(--fs-sm);
+  font-weight:var(--fw-bold);cursor:pointer;text-decoration:none;}
+.tb-btn:hover{border-color:var(--gold);}
+.mode{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:var(--fs-xs);font-weight:var(--fw-bold);
+  border:1px solid var(--border);background:var(--surface);}
+.mode::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--muted);}
+.mode.is-shadow::before{background:var(--orange);}
+.mode.is-live::before{background:var(--green);}
+
+.grid{display:grid;gap:var(--space-4);grid-template-columns:minmax(0,1fr);}
+@media (min-width:900px){
+  .grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);grid-template-areas:"todo nums" "state log";align-items:start;}
+  #secTodo{grid-area:todo;} #secNums{grid-area:nums;} #secLog{grid-area:log;grid-row:span 2;} #secState{grid-area:state;}
+}
+.sec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-4);min-width:0;}
+.sec h2{display:flex;align-items:center;gap:var(--space-2);font-size:var(--fs-lg);font-weight:var(--fw-black);margin-bottom:var(--space-3);}
+.sec h2 .n{margin-inline-start:auto;font-size:var(--fs-sm);color:var(--muted);font-weight:var(--fw-bold);}
+.hint{font-size:var(--fs-xs);color:var(--muted);line-height:var(--lh-base);margin-bottom:var(--space-3);}
+
+/* דורש טיפול */
+.ex{border:1px solid var(--border);border-inline-start:4px solid var(--orange);border-radius:var(--radius);padding:var(--space-3);margin-bottom:var(--space-2);background:var(--bg);}
+.ex.is-red{border-inline-start-color:var(--red);}
+.ex-t{font-weight:var(--fw-bold);}
+.ex-who{font-size:var(--fs-sm);color:var(--muted);}
+.ex-d{font-size:var(--fs-sm);margin-top:4px;overflow-wrap:anywhere;white-space:pre-wrap;}
+.ex-acts{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2);}
+.ok-box{display:flex;align-items:center;gap:var(--space-2);color:var(--green);font-weight:var(--fw-bold);padding:var(--space-2) 0;}
+
+/* מספרים */
+.seg{display:flex;gap:4px;margin-bottom:var(--space-3);background:var(--bg2);border-radius:var(--radius);padding:4px;}
+.seg button{flex:1;min-height:40px;border:0;border-radius:calc(var(--radius) - 2px);background:transparent;font:inherit;font-size:var(--fs-sm);
+  font-weight:var(--fw-bold);color:var(--muted);cursor:pointer;}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm);}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);}
+@media (min-width:600px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr));}}
+.tile{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-3);}
+.tile b{display:block;font-size:var(--fs-2xl);font-weight:var(--fw-black);line-height:1.1;font-variant-numeric:tabular-nums;}
+.tile span{font-size:var(--fs-xs);color:var(--muted);}
+.tile.is-acc b{color:var(--gold-text, var(--gold));}
+.routes{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--space-3);}
+.routes span{font-size:var(--fs-xs);padding:3px 10px;border-radius:999px;background:var(--bg2);}
+
+/* יומן */
+.flt{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-2);margin-bottom:var(--space-3);}
+.flt input{grid-column:1 / -1;}
+@media (min-width:600px){.flt{grid-template-columns:2fr 1fr 1fr;} .flt input{grid-column:auto;}}
+.flt input,.flt select{min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 var(--space-3);font:inherit;
+  font-size:var(--fs-sm);background:var(--bg);color:var(--text);min-width:0;}
+.wain-row{border:1px solid var(--border);border-inline-start:4px solid var(--muted);border-radius:var(--radius);padding:var(--space-3);
+  margin-bottom:var(--space-2);background:var(--bg);}
+.wain-l1{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;font-size:var(--fs-sm);}
+.wain-client{font-weight:var(--fw-bold);}
+.wain-when{color:var(--muted);font-size:var(--fs-xs);}
+.wain-ag-t{font-size:var(--fs-base);line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:4px;}
+.wain-reason{margin-top:4px;font-size:var(--fs-sm);line-height:1.5;}
+.wain-ag-r{font-size:var(--fs-sm);line-height:1.5;color:var(--muted);border-inline-start:3px solid var(--gold);padding-inline-start:8px;margin-top:4px;overflow-wrap:anywhere;}
+.wain-ag-red{color:var(--red);font-weight:var(--fw-black);}
+.wain-acts{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2);align-items:center;}
+.wain-chip{font-weight:var(--fw-bold);font-size:var(--fs-sm);}
+.wain-note{font-size:var(--fs-sm);line-height:1.5;color:var(--muted);margin-bottom:var(--space-2);}
+.wain-note .wain-l1{margin-top:var(--space-2);}
+.wain-btn,.sbtn{min-height:44px;min-width:44px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);font:inherit;
+  font-size:var(--fs-sm);font-weight:var(--fw-bold);cursor:pointer;text-decoration:none;}
+.wain-btn:hover,.sbtn:hover{border-color:var(--gold);}
+.wain-btn:disabled,.sbtn:disabled{opacity:.45;cursor:default;}
+.sbtn.is-primary{background:var(--gold);border-color:var(--gold);color:var(--on-gold);}
+.more{width:100%;margin-top:var(--space-2);}
+
+/* מצב */
+.prob{color:var(--red);font-weight:var(--fw-bold);font-size:var(--fs-sm);margin-top:var(--space-2);}
+.ag{display:flex;gap:var(--space-3);align-items:baseline;padding:var(--space-2) 0;border-bottom:1px solid var(--border);}
+.ag:last-child{border-bottom:0;}
+.ag b{min-width:64px;}
+.ag small{flex:1;color:var(--muted);font-size:var(--fs-xs);line-height:1.4;}
+.ag em{font-style:normal;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums;}
+.addp{display:flex;gap:var(--space-2);margin-top:var(--space-3);}
+.addp select{flex:1;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 var(--space-3);font:inherit;font-size:var(--fs-sm);background:var(--bg);color:var(--text);}
+.sub{font-size:var(--fs-sm);font-weight:var(--fw-black);margin:var(--space-4) 0 var(--space-2);}
+
+.toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:700;background:var(--text);
+  color:var(--bg);padding:var(--space-3) var(--space-5);border-radius:var(--radius-lg);font-weight:var(--fw-bold);max-width:calc(100% - 32px);}
+.toast.err{background:var(--red);color:#fff;}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="firebase-db.js?v=20261031"></script>
+<script src="lg-icons.js?v=20260807"></script>
+<script src="agents-dash.js?v=20261031"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar">
+    <a class="tb-btn" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
+    <h1>סוכנים</h1>
+    <span id="modeChip" class="mode">טוען…</span>
+  </div>
+
+  <div class="grid">
+    <section id="secTodo" class="sec" aria-labelledby="hTodo">
+      <h2 id="hTodo"><span data-icon="alert"></span>דורש טיפול<span class="n" id="nTodo"></span></h2>
+      <div id="todo"><div class="hint">טוען…</div></div>
+    </section>
+
+    <section id="secNums" class="sec" aria-labelledby="hNums">
+      <h2 id="hNums"><span data-icon="chart"></span>מספרים</h2>
+      <div class="seg" role="group" aria-label="תקופה">
+        <button type="button" data-period="today" aria-pressed="true">היום</button>
+        <button type="button" data-period="7d" aria-pressed="false">7 ימים</button>
+        <button type="button" data-period="30d" aria-pressed="false">30 יום</button>
+      </div>
+      <div id="nums"></div>
+    </section>
+
+    <section id="secLog" class="sec" aria-labelledby="hLog">
+      <h2 id="hLog"><span data-icon="list"></span>יומן עבודה<span class="n" id="nLog"></span></h2>
+      <p class="hint">כל הודעה מלקוח ומה הסוכן עשה איתה (30 יום). סמן ✓ אם הוא הבין נכון, ✗ אם טעה.</p>
+      <div class="flt">
+        <input id="fQ" type="search" placeholder="חיפוש לקוח…" aria-label="חיפוש לקוח">
+        <select id="fRoute" aria-label="סוכן"></select>
+        <select id="fVerdict" aria-label="סימון">
+          <option value="all">כל הסימונים</option>
+          <option value="none">עוד לא סומן</option>
+          <option value="ok">✓ נכון</option>
+          <option value="wrong">✗ לא נכון</option>
+        </select>
+      </div>
+      <div id="log"><div class="hint">טוען…</div></div>
+    </section>
+
+    <section id="secState" class="sec" aria-labelledby="hState">
+      <h2 id="hState"><span data-icon="settings"></span>מצב הסוכנים</h2>
+      <div id="state"><div class="hint">טוען…</div></div>
+    </section>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const E = s => _adEsc(s);
+const PAGE = 50;
+let SH = {}, Q = {}, C = {}, OB = {}, PILOT = {}, DIS = {}, GROUPS = {}, SENDERS = {}, intake = {}, STATUS = null;
+let period = 'today', shown = PAGE;
+
+function toast(msg, err) {
+  const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : '');
+  t.setAttribute('role', err ? 'alert' : 'status'); t.textContent = msg; document.body.appendChild(t);
+  setTimeout(() => t.remove(), err ? 5000 : 2800);
+}
+//  כל כתיבה — דרך ה-drain (waMeta לא נכתב מהדפדפן)
+async function drain(body) {
+  try {
+    const res = await _lgAuthPost('/api/wa-inbound-drain', body);
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || d.ok === false) return { ok: false, message: d.message || d.error || 'הפעולה נכשלה' };
+    return Object.assign({ ok: true }, d);
+  } catch (e) { return { ok: false, message: 'אין חיבור — נסה שוב' }; }
+}
+
+//  לקוחות מקושרים (קבוצה / מספר) — לשמות ולבחירת לקוח לפיילוט
+function linkedCustomers() {
+  const m = {};
+  [GROUPS, SENDERS].forEach(src => Object.keys(src || {}).forEach(k => {
+    const v = src[k]; if (v && v.customerId) m[v.customerId] = m[v.customerId] || String(v.customerName || v.customerId);
+  }));
+  return m;
+}
+const nameOf = id => linkedCustomers()[id] || ((Object.values(SH).find(r => r && r.customerId === id) || {}).customerName) || '';
+
+// ─── 1. דורש טיפול ───────────────────────────────────────────────────
+function renderTodo() {
+  const ex = lgAdExceptions({ shadow: SH, quotes: Q, cancels: C, outbox: OB, dismissed: DIS }, Date.now());
+  $('nTodo').textContent = ex.length || '';
+  if (!ex.length) { $('todo').innerHTML = '<div class="ok-box"><span data-icon="check-circle"></span>אין כלום שדורש טיפול</div>'; return; }
+  $('todo').innerHTML = ex.map(x => {
+    const wa = lgAdWaLink(x.phone);
+    return `<div class="ex${x.red ? ' is-red' : ''}">
+      <div class="ex-t">${E(x.title)}${x.red ? ' · מחכה יותר מ-3 שעות' : ''}</div>
+      <div class="ex-who">${E(x.customerName || 'לקוח לא ידוע')} · ${E(_adWhen(x.at))}</div>
+      ${x.detail ? `<div class="ex-d">${E(x.detail)}</div>` : ''}
+      <div class="ex-acts">
+        ${x.link ? `<a class="sbtn is-primary" href="${E(x.link)}">לתיקון הזמנות</a>` : ''}
+        ${wa ? `<a class="sbtn" href="${E(wa)}" target="_blank" rel="noopener">פתח בוואטסאפ</a>` : ''}
+        <button type="button" class="sbtn" data-dismiss="${E(x.kind)}" data-key="${E(x.key)}" data-ver="${E(x.ver)}"><span data-icon="check"></span>טופל</button>
+      </div></div>`;
+  }).join('');
+}
+
+// ─── 2. מספרים ───────────────────────────────────────────────────────
+function renderNums() {
+  document.querySelectorAll('[data-period]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.period === period)));
+  const c = lgAdCounts(SH, Q, C, lgAdPeriodStart(period, Date.now()));
+  const live = lgAdMode(STATUS).mode === 'live';
+  const tile = (n, label, cls) => `<div class="tile${cls ? ' ' + cls : ''}"><b>${E(n)}</b><span>${E(label)}</span></div>`;
+  const routes = Object.keys(c.byRoute).sort((a, b) => c.byRoute[b] - c.byRoute[a])
+    .map(r => `<span>${E(lgAgRouteLabel(r))}: ${E(c.byRoute[r])}</span>`).join('');
+  $('nums').innerHTML = `<div class="tiles">
+      ${tile(c.incoming, 'הודעות שנכנסו')}
+      ${tile(c.selfClosed, live ? 'נסגרו לבד' : 'היו נסגרות לבד')}
+      ${tile(c.toShaul, live ? 'הועברו לשאול' : 'היו עוברות לשאול')}
+      ${tile(c.quotes, 'בקשות הצעת מחיר')}
+      ${tile(c.cancels, 'ביטולים')}
+      ${tile(c.accuracy == null ? '—' : c.accuracy + '%', 'הסוכן צדק' + (c.unmarked ? ` · ${c.unmarked} לא סומנו` : ''), 'is-acc')}
+    </div>
+    ${c.unlinked ? `<p class="hint" style="margin:var(--space-3) 0 0">${E(c.unlinked)} הודעות ממספרים לא מקושרים</p>` : ''}
+    ${routes ? `<div class="routes">${routes}</div>` : ''}`;
+}
+
+// ─── 3. יומן ─────────────────────────────────────────────────────────
+function renderLog() {
+  const rs = lgAdLogRows(SH, { route: $('fRoute').value, q: $('fQ').value, verdict: $('fVerdict').value }, lgAdPeriodStart('30d', Date.now()));
+  const c = { pilot: PILOT, outbox: OB };
+  $('nLog').textContent = rs.length || '';
+  $('log').innerHTML = rs.length
+    ? rs.slice(0, shown).map(r => lgAgRowHtml(r.key, r, intake, c)).join('')
+      + (rs.length > shown ? `<button type="button" class="sbtn more" data-more>הצג עוד (${E(rs.length - shown)})</button>` : '')
+    : '<div class="hint">אין הודעות להצגה.</div>';
+}
+function fillRouteFilter() {
+  const keep = $('fRoute').value;
+  const seen = new Set(Object.values(SH).map(r => r && r.route).filter(Boolean));
+  $('fRoute').innerHTML = '<option value="">כל הסוכנים</option>' +
+    [...seen].sort().map(r => `<option value="${E(r)}">${E(lgAgRouteLabel(r))}</option>`).join('');
+  $('fRoute').value = seen.has(keep) ? keep : '';
+}
+
+// ─── 4. מצב ──────────────────────────────────────────────────────────
+const MODE_TEXT = { off: 'כבויים', shadow: 'מצב שקט', live: 'עונים בפיילוט' };
+const MODE_HINT = {
+  off: 'הסוכנים לא קוראים הודעות. כדי להדליק: AGENT_SHADOW_ENABLED=true ב-Vercel.',
+  shadow: 'הסוכנים קוראים כל הודעה ורושמים מה היו עונים, אבל לא שולחים כלום ללקוחות.',
+  live: 'הסוכנים עונים באמת — רק ללקוחות שבפיילוט. כל השאר במצב שקט.',
+};
+function renderState() {
+  const m = lgAdMode(STATUS);
+  const chip = $('modeChip');
+  chip.textContent = STATUS ? MODE_TEXT[m.mode] : 'לא ידוע';
+  chip.className = 'mode is-' + m.mode;
+  const c7 = lgAdCounts(SH, Q, C, lgAdPeriodStart('7d', Date.now()));
+  const agents = LG_AD_AGENTS.map(a => {
+    const n = a.id === 'markazan' ? c7.incoming : a.routes.reduce((s, r) => s + (c7.byRoute[r] || 0), 0);
+    return `<div class="ag"><b>${E(a.name)}</b><small>${E(a.does)}</small>${a.id === 'menahel' ? '' : `<em title="7 ימים">${E(n)}</em>`}</div>`;
+  }).join('');
+  const linked = linkedCustomers();
+  const free = Object.keys(linked).filter(id => PILOT[id] !== true).sort((a, b) => linked[a].localeCompare(linked[b], 'he'));
+  $('state').innerHTML = `
+    <p class="hint">${E(STATUS ? MODE_HINT[m.mode] : 'לא הצלחתי לבדוק את ההגדרות ב-Vercel.')}</p>
+    ${m.problems.map(p => `<div class="prob">⚠ ${E(p)}</div>`).join('')}
+    <div class="sub">הסוכנים · הודעות ב-7 ימים</div>${agents}
+    <div class="sub">לקוחות בפיילוט (${E(lgAgPilotCount(PILOT))})</div>
+    ${lgAgPilotListHtml(PILOT, nameOf) || '<div class="hint">אין עדיין לקוחות בפיילוט.</div>'}
+    ${free.length ? `<div class="addp"><select id="pilotPick" aria-label="לקוח להוספה לפיילוט">
+        ${free.map(id => `<option value="${E(id)}">${E(linked[id])}</option>`).join('')}</select>
+        <button type="button" class="sbtn is-primary" data-addpilot>הוסף לפיילוט</button></div>` : ''}
+    ${m.mode !== 'live' ? '<p class="hint" style="margin-top:var(--space-2)">לקוח בפיילוט יקבל תשובות רק אחרי שתדליק AGENT_REPLY_ENABLED.</p>' : ''}`;
+}
+
+function renderAll() { renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderState(); }
+let _t = null;
+const later = () => { clearTimeout(_t); _t = setTimeout(renderAll, 50); };   // כמה מאזינים בבת אחת → ציור אחד
+
+// ─── לחיצות ──────────────────────────────────────────────────────────
+document.addEventListener('click', async ev => {
+  const per = ev.target.closest('[data-period]');
+  if (per) { period = per.dataset.period; renderNums(); return; }
+  if (ev.target.closest('[data-more]')) { shown += PAGE; renderLog(); return; }
+  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot]');
+  if (!b) return;
+  let body;
+  if (b.dataset.dismiss) body = { action: 'agent-dismiss', kind: b.dataset.dismiss, key: b.dataset.key, ver: Number(b.dataset.ver) };
+  else if (b.dataset.agv) body = { action: 'agent-verdict', key: b.dataset.key, ok: b.dataset.agv === '1', note: '' };
+  else if (b.hasAttribute('data-agpilot')) body = { action: 'agent-pilot', customerId: b.dataset.cid, on: b.dataset.on === '1' };
+  else { const pick = $('pilotPick'); if (!pick || !pick.value) return; body = { action: 'agent-pilot', customerId: pick.value, on: true }; }
+  b.disabled = true;
+  const r = await drain(body);   // הרשימות מתעדכנות מההאזנה
+  if (!r.ok) { b.disabled = false; toast(r.message, true); }
+  else if (body.action === 'agent-dismiss') toast('הוסר מהרשימה');
+});
+['fQ', 'fRoute', 'fVerdict'].forEach(id => $(id).addEventListener(id === 'fQ' ? 'input' : 'change', () => { shown = PAGE; renderLog(); }));
+// "היום" ו"מחכה יותר מ-3 שעות" משתנים עם הזמן, גם בלי שינוי בנתונים
+setInterval(() => { renderTodo(); renderNums(); }, 60 * 1000);
+
+lgRequireAuthAsync('admin').then(session => {
+  if (!session) return;
+  const warn = n => e => console.warn(n + ':', e && e.code);
+  const on = (ref, set, n) => ref.on('value', s => { set(s.val() || {}); later(); }, warn(n));
+  on(_lgDb.ref('waMeta/agentShadow').orderByChild('createdAt').startAt(Date.now() - 31 * 24 * 60 * 60 * 1000), v => { SH = v; }, 'agentShadow');
+  on(_lgDb.ref('waMeta/agentQuotes'), v => { Q = v; }, 'agentQuotes');
+  on(_lgDb.ref('waMeta/agentCancels'), v => { C = v; }, 'agentCancels');
+  on(_lgDb.ref('waMeta/agentOutbox').orderByChild('createdAt').startAt(Date.now() - 31 * 24 * 60 * 60 * 1000), v => { OB = v; }, 'agentOutbox');
+  on(_lgDb.ref('waMeta/agentPilot'), v => { PILOT = v; }, 'agentPilot');
+  on(_lgDb.ref('waMeta/agentDash/dismissed'), v => { DIS = v; }, 'agentDash');
+  on(_lgDb.ref('waGroups'), v => { GROUPS = v; }, 'waGroups');
+  on(_lgDb.ref('waSenders'), v => { SENDERS = v; }, 'waSenders');
+  //  "נקלטה גם כהזמנה" בשורת היומן נשען על רשומות הקליטה
+  on(_lgDb.ref('waInbound').orderByChild('createdAt').limitToLast(300), v => { intake = v; }, 'waInbound');
+  drain({ action: 'agent-status' }).then(r => { STATUS = r.ok ? r.status : null; later(); });
+});
+</script>
+</body>
+</html>

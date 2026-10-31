@@ -400,6 +400,7 @@ label.msec-t{display:block;}
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
   <script src="wa-inbound-panel.js"></script>
+  <script src="agents-dash.js?v=20261031"></script>
   <script src="sq-assign.js?v=20261023h"></script>
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
@@ -427,6 +428,7 @@ label.msec-t{display:block;}
     <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
     <a class="unav-a" href="invoices.html"><span class="ic" data-icon="receipt"></span>תחנת חשבוניות</a>
     <a class="unav-a" href="hs-corrections.html"><span class="ic" data-icon="clipboard"></span>תיקון הזמנות<span id="navHsCorr" style="margin-inline-start:auto"></span></a>
+    <a class="unav-a" href="agents.html"><span class="ic" data-icon="bolt"></span>סוכנים<span id="navAgents" style="margin-inline-start:auto"></span></a>
     <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
     <div class="unav-sec">תחנות עבודה</div>
     <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
@@ -600,8 +602,27 @@ let _allRegisteredClients = [];
 // ══════════════════════════════════════════════════
 //  LOAD — מאזין ל-Firebase בזמן אמת
 // ══════════════════════════════════════════════════
+// מונה "דורש טיפול" של הסוכנים בתפריט (31/10) — קריאה אחת בטעינה, לא מאזין חי:
+// הדף agents.html הוא המקום להתעדכן בו. הלוגיקה ב-agents-dash.js (lgAdExceptions).
+function lgAgentsNavCount() {
+  const el = document.getElementById('navAgents');
+  if (!el || typeof lgAdExceptions !== 'function') return;
+  const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const get = r => r.once('value').then(s => s.val() || {}, () => ({}));
+  Promise.all([
+    get(_lgDb.ref('waMeta/agentShadow').orderByChild('createdAt').startAt(since)),
+    get(_lgDb.ref('waMeta/agentQuotes')), get(_lgDb.ref('waMeta/agentCancels')),
+    get(_lgDb.ref('waMeta/agentOutbox').orderByChild('createdAt').startAt(since)),
+    get(_lgDb.ref('waMeta/agentDash/dismissed')),
+  ]).then(([shadow, quotes, cancels, outbox, dismissed]) => {
+    const n = lgAdExceptions({ shadow, quotes, cancels, outbox, dismissed }, Date.now()).length;
+    el.textContent = n || ''; el.className = n ? 'count alert' : '';
+  });
+}
+
 function load() {
   if (_unsubscribe) _unsubscribe();
+  lgAgentsNavCount();
   _unsubscribe = listenAllOrders(remoteOrders => {
     orders = remoteOrders;
     const hsc = document.getElementById('navHsCorr');
@@ -3138,7 +3159,6 @@ document.addEventListener('visibilitychange', () => {
       <div class="wain-tabs" role="tablist" aria-label="ערוץ">
         <button type="button" class="wain-tab wain-tab-on" data-tab="whatsapp" role="tab" aria-selected="true">WhatsApp<span id="waInTabWa" class="wain-tab-n" hidden></span></button>
         <button type="button" class="wain-tab" data-tab="email" role="tab" aria-selected="false">מייל<span id="waInTabEm" class="wain-tab-n" hidden></span></button>
-        <button type="button" class="wain-tab" data-tab="agents" role="tab" aria-selected="false">סוכנים · ניסיון</button>
       </div>
       <div id="waInList"></div>
       <!-- בורר לקוח — נפתח מ"קשר ללקוח" / "הוסף", מחוץ לרשימה שמתרעננת חי -->
