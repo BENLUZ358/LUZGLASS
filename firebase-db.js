@@ -1076,6 +1076,10 @@ function lgNormalizeOrder(o) {
       httpStatus:  Number(o.sketchAck.httpStatus)  || 0,
       waMessageId: o.sketchAck.waMessageId || '',
     } : null,
+    // אותה קבלה לערוץ המייל: { <kind>: { sentAt, key } }, נכתבת רק בשרת
+    // (_email-outbox.js) אחרי שהסקריפט ב-Gmail שלח. בלעדיה הזמנת מייל שטופלה
+    // נשארת "ממתינה לעדכון" לנצח (אביבי, 29/10).
+    emailNotices:  (o.emailNotices && typeof o.emailNotices === 'object') ? o.emailNotices : null,
     urgent:        o.urgent       || false,
     sketch:        o.sketch       || null,
     // סימן בלבד — מאפשר למסך לדעת שיש סקיצה בלי להוריד אותה
