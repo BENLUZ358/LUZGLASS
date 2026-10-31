@@ -11,6 +11,9 @@
 //                                     (waMeta/agentPilot/<customerId> === true; 31/10)
 //    { action:'agent-cancel-done', key }  "בוצע בחשבשבת" על ביטול מהסוכן
 //                                     (waMeta/agentCancels/<key>; דף תיקון הזמנות, 31/10)
+//    { action:'agent-status' }        לוח הבקרה: אילו מתגים / משתנים מוגדרים — בוליאנים בלבד
+//    { action:'agent-dismiss', kind, key, ver }  "טופל" על כרטיס בלוח הבקרה
+//                                     (waMeta/agentDash/dismissed/<kind>_<key>; agents.html, 31/10)
 //
 //  'drain' משלים גם רשומות צל תקועות (waMeta/agentShadow) — רק כש-
 //  AGENT_SHADOW_ENABLED === 'true', עד BATCH, בתוך אותו תקציב. התוצאה בשדה נפרד
@@ -55,6 +58,8 @@ const AGENT_SEND_MIN_LEFT_MS = 35 * 1000;
 const AGENT_CHAIN_MS = 50 * 1000;
 
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && lgWaInboundKey(k) === k;
+//  סוגי הכרטיסים ב"דורש טיפול" — כמו lgAdExceptions ב-agents-dash.js
+const AGENT_DISMISS_KINDS = ['quote', 'cancel', 'send', 'dead', 'unclear', 'wrong'];
 
 //  ⚠️ lgEmailInboundProcess מחזיר { state, reason? } ולא { ok, claimed } —
 //  מתורגם כאן לצורה של WhatsApp, כדי שהדף לא יצטרך לדעת מאיזה ערוץ הגיע.
@@ -162,6 +167,26 @@ async function handleAdmin(body, deps) {
     if (!cid || !_keyOk(cid)) return { ok: false, code: 'bad-key', message: 'מזהה לקוח לא תקין' };
     if (typeof b.on !== 'boolean') return { ok: false, code: 'bad-on', message: 'חסר ערך הדלקה/כיבוי' };
     await deps.db.ref('waMeta/agentPilot/' + cid).set(b.on ? true : null);
+    return { ok: true, code: '' };
+  }
+
+  // ─── לוח הבקרה לסוכנים (agents.html, 31/10) ────────────────────────────
+  //  agent-status: אילו משתני סביבה מוגדרים — בוליאנים בלבד, אף ערך לא חוזר לדפדפן.
+  if (action === 'agent-status') {
+    const e = process.env;
+    return { ok: true, code: '', status: {
+      shadow: e.AGENT_SHADOW_ENABLED === 'true', reply: e.AGENT_REPLY_ENABLED === 'true',
+      model: !!e.AGENT_MODEL, key: !!e.OPENAI_API_KEY, staff: !!e.AGENT_STAFF_PHONES,
+      summary: !!e.AGENT_SUMMARY_TO, cron: !!e.CRON_SECRET } };
+  }
+  //  agent-dismiss: "טופל" על כרטיס ב"דורש טיפול" — הסתרה בלבד, הרשומה עצמה לא
+  //  משתנה. ver = מתי הרשומה השתנתה; השתנתה שוב → הכרטיס חוזר (lgAdExceptions).
+  if (action === 'agent-dismiss') {
+    if (!AGENT_DISMISS_KINDS.includes(b.kind)) return { ok: false, code: 'bad-kind', message: 'סוג לא מוכר' };
+    if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה לא תקין' };
+    if (typeof b.ver !== 'number' || !Number.isFinite(b.ver)) return { ok: false, code: 'bad-ver', message: 'חסר זמן עדכון' };
+    await deps.db.ref('waMeta/agentDash/dismissed/' + b.kind + '_' + b.key)
+      .set({ ver: b.ver, at: deps.now || Date.now(), by: String(deps.by || '') });
     return { ok: true, code: '' };
   }
 

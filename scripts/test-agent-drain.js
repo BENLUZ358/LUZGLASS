@@ -157,6 +157,31 @@ const seed = shadow => fakeDb({
     process.env.AGENT_SHADOW_ENABLED = 'true';
   }
 
+  // 9. agent-status (לוח הבקרה, 31/10) — בוליאנים בלבד, אף ערך לא חוזר
+  {
+    const keep = {};
+    const ENV = { AGENT_SHADOW_ENABLED: 'true', AGENT_REPLY_ENABLED: 'false', AGENT_MODEL: 'secret-model-x',
+      OPENAI_API_KEY: 'sk-SECRET123', AGENT_STAFF_PHONES: '0506824365', AGENT_SUMMARY_TO: '', CRON_SECRET: 'CronSECRET9' };
+    Object.keys(ENV).forEach(k => { keep[k] = process.env[k]; process.env[k] = ENV[k]; });
+    const r = await adm.handleAdmin({ action: 'agent-status' }, { db: seed({}), by: '052', now: NOW });
+    check('9a status: seven booleans', r.status, { shadow: true, reply: false, model: true, key: true, staff: true, summary: false, cron: true });
+    const s = JSON.stringify(r);
+    check('9b no env value leaks', ['secret-model-x', 'sk-SECRET123', '0506824365', 'CronSECRET9'].some(v => s.includes(v)), false);
+    Object.keys(keep).forEach(k => { if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k]; });
+  }
+
+  // 10. agent-dismiss — "טופל" בלוח הבקרה: waMeta/agentDash/dismissed/<kind>_<key>
+  {
+    db = seed({});
+    const ds = b => adm.handleAdmin({ action: 'agent-dismiss', ...b }, { db, by: '052', now: NOW });
+    check('10a writes the dismissal', [(await ds({ kind: 'quote', key: '7', ver: 123 })).ok,
+      db._data.waMeta.agentDash.dismissed.quote_7], [true, { ver: 123, at: NOW, by: '052' }]);
+    check('10b unknown kind', (await ds({ kind: 'zzz', key: '7', ver: 1 })).code, 'bad-kind');
+    check('10c bad key', (await ds({ kind: 'send', key: 'a/b', ver: 1 })).code, 'bad-key');
+    check('10d ver must be a number', [(await ds({ kind: 'send', key: 'o1', ver: '5' })).code, (await ds({ kind: 'send', key: 'o1', ver: NaN })).code], ['bad-ver', 'bad-ver']);
+    check('10e nothing else written', Object.keys(db._data.waMeta.agentDash.dismissed), ['quote_7']);
+  }
+
   if (saved === undefined) delete process.env.AGENT_SHADOW_ENABLED; else process.env.AGENT_SHADOW_ENABLED = saved;
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nall passed');
