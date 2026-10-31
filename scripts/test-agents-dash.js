@@ -38,6 +38,15 @@ const c = J(ctx.lgAdCounts(sh, quotes, cancels, ctx.lgAdPeriodStart('today', NOW
 check('counts for today', [c.incoming, c.selfClosed, c.toShaul, c.unlinked, c.quotes, c.cancels], [4, 1, 2, 1, 1, 1]);
 check('accuracy: 2 right, 1 wrong → 67%, 1 unmarked', [c.ok, c.wrong, c.accuracy, c.unmarked], [2, 1, 67, 1]);
 check('per-agent counts', c.byRoute, { okev: 1, quote: 1, shaul: 2 });
+// במצב שקט אף רשומה לא acted — הספירה לפי ההחלטה (state done), אחרת "היה נסגר לבד" תמיד 0
+const quiet = {
+  q1: { createdAt: NOW - H, linked: true, route: 'okev', state: 'done', acted: false, actReason: 'not-pilot' },
+  q2: { createdAt: NOW - H, linked: true, route: 'shaul', state: 'done', acted: false, wouldAct: [{ type: 'staff' }] },
+  q3: { createdAt: NOW - H, linked: false, route: 'shaul', state: 'done' },          // לא מקושר — רק נספר
+  q4: { createdAt: NOW - H, linked: true, route: 'okev', state: 'processing' },      // עוד לא הוחלט
+};
+const cq = J(ctx.lgAdCounts(quiet, {}, {}, 0));
+check('quiet mode: decisions still counted', [cq.incoming, cq.selfClosed, cq.toShaul, cq.unlinked], [4, 1, 1, 1]);
 check('no marks → accuracy null, not 0', ctx.lgAdCounts({ x: { createdAt: NOW, linked: true } }, {}, {}, 0).accuracy, null);
 check('broken records do not crash the counts',
   ctx.lgAdCounts({ x: null, y: { wouldAct: 'zz' }, z: {} }, null, undefined, 0).incoming, 2);
@@ -101,6 +110,9 @@ check('no status yet → off, no crash', ctx.lgAdMode(null).mode, 'off');
 check('wa.me link', [ctx.lgAdWaLink('050-123-4567'), ctx.lgAdWaLink('12'), ctx.lgAdWaLink('')],
   ['https://wa.me/972501234567', '', '']);
 check('six agents', J(vm.runInContext('LG_AD_AGENTS', ctx)).map(a => a.id), ['markazan', 'okev', 'archive', 'quote', 'kolet', 'menahel']);
+
+check('a record that failed for good reads in Hebrew, not "dead"',
+  (() => { const h = ctx.lgAgRowHtml('K', { linked: true, state: 'dead' }); return [h.includes('נכשלה סופית'), />dead</.test(h)]; })(), [true, false]);
 
 // ─── escaping בשורת יומן (הפונקציה עברה מהפאנל) ───────────────────────
 check('row escapes customer text',

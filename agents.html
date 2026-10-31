@@ -26,10 +26,14 @@ body{background:var(--bg);}
 .mode.is-shadow::before{background:var(--orange);}
 .mode.is-live::before{background:var(--green);}
 
-.grid{display:grid;gap:var(--space-4);grid-template-columns:minmax(0,1fr);}
+/* טלפון: עמודה אחת לפי הסדר דורש טיפול → מספרים → יומן → מצב (order).
+   מחשב/אייפד לרוחב: שתי עמודות עצמאיות, כדי שהיומן לא יחכה מתחת לרשימת חריגים ארוכה. */
+.grid{display:flex;flex-direction:column;gap:var(--space-4);}
+.col{display:contents;}
+#secTodo{order:1;} #secNums{order:2;} #secLog{order:3;} #secState{order:4;}
 @media (min-width:900px){
-  .grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);grid-template-areas:"todo nums" "state log";align-items:start;}
-  #secTodo{grid-area:todo;} #secNums{grid-area:nums;} #secLog{grid-area:log;grid-row:span 2;} #secState{grid-area:state;}
+  .grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);align-items:start;}
+  .col{display:flex;flex-direction:column;gap:var(--space-4);min-width:0;}
 }
 .sec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-4);min-width:0;}
 .sec h2{display:flex;align-items:center;gap:var(--space-2);font-size:var(--fs-lg);font-weight:var(--fw-black);margin-bottom:var(--space-3);}
@@ -117,10 +121,18 @@ body{background:var(--bg);}
   </div>
 
   <div class="grid">
+   <div class="col">
     <section id="secTodo" class="sec" aria-labelledby="hTodo">
       <h2 id="hTodo"><span data-icon="alert"></span>דורש טיפול<span class="n" id="nTodo"></span></h2>
       <div id="todo"><div class="hint">טוען…</div></div>
     </section>
+
+    <section id="secState" class="sec" aria-labelledby="hState">
+      <h2 id="hState"><span data-icon="settings"></span>מצב הסוכנים</h2>
+      <div id="state"><div class="hint">טוען…</div></div>
+    </section>
+   </div>
+   <div class="col">
 
     <section id="secNums" class="sec" aria-labelledby="hNums">
       <h2 id="hNums"><span data-icon="chart"></span>מספרים</h2>
@@ -147,11 +159,7 @@ body{background:var(--bg);}
       </div>
       <div id="log"><div class="hint">טוען…</div></div>
     </section>
-
-    <section id="secState" class="sec" aria-labelledby="hState">
-      <h2 id="hState"><span data-icon="settings"></span>מצב הסוכנים</h2>
-      <div id="state"><div class="hint">טוען…</div></div>
-    </section>
+   </div>
   </div>
 </div>
 <script>
@@ -266,7 +274,7 @@ function renderState() {
     <p class="hint">${E(STATUS ? MODE_HINT[m.mode] : 'לא הצלחתי לבדוק את ההגדרות ב-Vercel.')}</p>
     ${m.problems.map(p => `<div class="prob">⚠ ${E(p)}</div>`).join('')}
     <div class="sub">הסוכנים · הודעות ב-7 ימים</div>${agents}
-    <div class="sub">לקוחות בפיילוט (${E(lgAgPilotCount(PILOT))})</div>
+    <div class="sub">פיילוט · ${E(lgAgPilotCount(PILOT))} לקוחות</div>
     ${lgAgPilotListHtml(PILOT, nameOf) || '<div class="hint">אין עדיין לקוחות בפיילוט.</div>'}
     ${free.length ? `<div class="addp"><select id="pilotPick" aria-label="לקוח להוספה לפיילוט">
         ${free.map(id => `<option value="${E(id)}">${E(linked[id])}</option>`).join('')}</select>

@@ -50,7 +50,7 @@ function lgAgPilotListHtml(pilot, nameOf) {
   }).join('') + '</div>';
 }
 const LG_AG_WHY = { 'not-pilot': 'לא בפיילוט', 'not-linked': 'לא מקושר בקליטות', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה' };
-const LG_AG_STATE = { received: 'ממתין', processing: 'בעיבוד', failed: 'נכשל' };
+const LG_AG_STATE = { received: 'ממתין', processing: 'בעיבוד', failed: 'נכשל', dead: 'נכשלה סופית — המערכת הפסיקה לנסות' };
 const LG_AG_OB = { sent: 'נשלח ✓', pending: 'בתור', blocked: 'נחסם', failed: 'נכשל' };
 //  רשומות התור של שורה: <key>_<i>, <key>_<i>_s או <key>_<i>_f<j> (קובץ לכל רשומה; מפתח מנוקה כמו בשרת)
 function lgAgOutboxOf(key, outbox) {
@@ -143,13 +143,16 @@ function lgAdPeriodStart(period, now) {
 
 //  ספירות מ-from ואילך. ההגדרות של נכנסו / נסגרו לבד / לשאול / לא מקושרים —
 //  כמו lgAgentDailySummary (api/_agent-daily.js): הודעות צוות לא נספרות,
-//  "לשאול" = wouldAct עם staff או quote-ask.
+//  "לשאול" = wouldAct עם staff או quote-ask. ההבדל: הסיכום סופר רק acted, כי הוא
+//  נשלח רק כשהסוכנים עונים. במצב שקט אף רשומה לא acted, ולכן כאן נספרת כל
+//  רשומה שהוחלט עליה (state done) — "היה נסגר לבד" / "היה עובר לשאול".
+//  מספר לא מקושר רק נספר (לא נשלח לשאול), כמו בסיכום.
 function lgAdCounts(shadow, quotes, cancels, from) {
   const f = Number(from) || 0;
   const rs = _adVals(shadow).map(r => r.v).filter(r => (r.createdAt || 0) >= f && r.staff !== true && r.route !== 'staff');
   const acts = r => Array.isArray(r.wouldAct) ? r.wouldAct : [];
   const isShaul = r => acts(r).some(a => a && (a.type === 'staff' || a.type === 'quote-ask'));
-  const acted = rs.filter(r => r.acted === true);
+  const acted = rs.filter(r => r.linked !== false && (r.acted === true || r.state === 'done'));
   const ok = rs.filter(r => r.verdict && r.verdict.ok === true).length;
   const wrong = rs.filter(r => r.verdict && r.verdict.ok === false).length;
   const byRoute = {};
