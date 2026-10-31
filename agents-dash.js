@@ -49,7 +49,24 @@ function lgAgPilotListHtml(pilot, nameOf) {
           <button type="button" class="wain-btn" data-agpilot data-cid="${e(id)}" data-on="0">הוצא מפיילוט</button></div>`;
   }).join('') + '</div>';
 }
-const LG_AG_WHY = { 'not-pilot': 'לא בפיילוט', 'not-linked': 'לא מקושר בקליטות', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה' };
+//  'no-action' = לסוכן אין מה לעשות; ריק — שורת "מה קורה" כבר אומרת את זה
+const LG_AG_WHY = { 'not-pilot': 'לא נשלח — הלקוח לא בפיילוט', 'not-linked': 'לא מקושר בקליטות', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה', 'no-action': '' };
+//  "מה קורה" בשורת היומן — משפט במקום שם המסלול (בן, 31/10)
+const LG_AG_OUTCOME = { okev: 'עוקב עונה ללקוח', quote: 'מחירון מטפל בבקשת המחיר', archive: 'ארכיון שולח את המסמך',
+  kolet: 'נכנסה לתור הסקיצות כרגיל — אין צורך לענות', 'kolet-deleted': 'קולט בודק אם לבטל את הסקיצה',
+  menu: 'שולח ללקוח את התפריט', none: 'לא צריך לענות', ignore: 'לא צריך לענות',
+  shaul: 'עובר לשאול', 'silent-human': 'לא עונה — מישהו מכם כבר ענה בשעתיים האחרונות' };
+//  מה הלקוח שלח, במילים
+function lgAgSentText(r) {
+  if (r.deleted) return 'מחק הודעה';
+  if (!r.linked && !r.text) return 'מספר שלא מקושר לאף לקוח — התוכן לא נשמר';
+  if (r.hasImage) return r.text ? 'שלח תמונה: ' + r.text : 'שלח תמונה';
+  return r.text ? 'כתב: ' + r.text : 'שלח הודעה בלי טקסט';
+}
+function lgAgOutcome(r) {
+  if (!r.linked) return 'לא עונים למספר לא מקושר — רק נספר בסיכום';
+  return LG_AG_OUTCOME[r.route] || lgAgRouteLabel(r.route);
+}
 const LG_AG_STATE = { received: 'ממתין', processing: 'בעיבוד', failed: 'נכשל', dead: 'נכשלה סופית — המערכת הפסיקה לנסות' };
 const LG_AG_OB = { sent: 'נשלח ✓', pending: 'בתור', blocked: 'נחסם', failed: 'נכשל' };
 //  רשומות התור של שורה: <key>_<i>, <key>_<i>_s או <key>_<i>_f<j> (קובץ לכל רשומה; מפתח מנוקה כמו בשרת)
@@ -74,7 +91,7 @@ function lgAgActHtml(r, c) {
     }).join('');
   }
   const would = r.wouldReply || ((r.wouldAct || []).filter(a => a && a.text).map(a => a.text)[0]) || '';
-  const why = r.actReason ? (LG_AG_WHY[r.actReason] || r.actReason) : '';
+  const why = !r.actReason ? '' : Object.prototype.hasOwnProperty.call(LG_AG_WHY, r.actReason) ? LG_AG_WHY[r.actReason] : r.actReason;
   return (would ? `<div class="wain-ag-r">היה עונה: ${e(would)}</div>` : '')
     + (why ? `<div class="wain-reason">${e(why)}</div>` : '');
 }
@@ -101,7 +118,7 @@ function lgAgRowHtml(key, r, intake, c) {
   const pilotOn = !!(r.customerId && (cc.pilot || {})[r.customerId] === true);
   //  פיילוט רק לצ'אט שמקושר כמו שהשליחה בודקת (קבוצה / מספר בקליטות) — לא רשימת Vercel
   const pilotBtn = r.linked && r.customerId && (r.linkVia === 'group' || r.linkVia === 'sender')
-    ? `<button type="button" class="wain-btn" data-agpilot data-cid="${_adEsc(r.customerId)}" data-on="${pilotOn ? 0 : 1}">פיילוט: ${pilotOn ? 'כן' : 'לא'}</button>` : '';
+    ? `<button type="button" class="wain-btn" data-agpilot data-cid="${_adEsc(r.customerId)}" data-on="${pilotOn ? 0 : 1}">${pilotOn ? 'בפיילוט — הוצא' : 'הכנס לפיילוט'}</button>` : '';
   //  הודעה שהסוכן לא ראה כהזמנה אבל נקלטה כהזמנה — בן צריך לראות את זה
   const both = r.intent !== 'order' && lgAgIntakeTaken(key, r, intake)
     ? ' <span class="wain-ag-red">נקלטה גם כהזמנה</span>' : '';
@@ -109,13 +126,14 @@ function lgAgRowHtml(key, r, intake, c) {
   return `<div class="wain-row wain-ag" data-agkey="${k}">
         <div class="wain-l1"><span class="wain-client">${r.linked ? _adEsc(r.customerName || '') : 'לא מקושר'}</span>
           <span class="wain-when">${_adEsc(_adWhen(r.createdAt))}</span></div>
-        ${r.text ? `<div class="wain-ag-t">${_adEsc(r.text)}</div>` : ''}
-        <div class="wain-reason"><b>${_adEsc(lgAgIntentLabel(r.intent))}</b> ← ${_adEsc(lgAgRouteLabel(r.route))}${both}</div>
+        <div class="wain-ag-t">${_adEsc(lgAgSentText(r))}</div>
+        ${r.intent ? `<div class="wain-reason">הסוכן הבין: <b>${_adEsc(lgAgIntentLabel(r.intent))}</b></div>` : ''}
+        <div class="wain-reason">מה קורה: ${_adEsc(lgAgOutcome(r))}${both}</div>
         ${lgAgActHtml(Object.assign({ _key: key }, r), cc)}
         <div class="wain-acts">
           ${pilotBtn}
-          <button type="button" class="wain-btn" data-agv="1" data-key="${k}" aria-label="נכון">✓</button>
-          <button type="button" class="wain-btn" data-agv="0" data-key="${k}" aria-label="לא נכון">✗</button>
+          <button type="button" class="wain-btn" data-agv="1" data-key="${k}" aria-label="הסוכן הבין נכון">✓ הבין נכון</button>
+          <button type="button" class="wain-btn" data-agv="0" data-key="${k}" aria-label="הסוכן טעה">✗ טעה</button>
           ${v ? `<span class="wain-chip">${v}</span>` : ''}
         </div>
       </div>`;

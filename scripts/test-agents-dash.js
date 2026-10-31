@@ -124,6 +124,24 @@ check('wa.me link', [ctx.lgAdWaLink('050-123-4567'), ctx.lgAdWaLink('12'), ctx.l
   ['https://wa.me/972501234567', '', '']);
 check('six agents', J(vm.runInContext('LG_AD_AGENTS', ctx)).map(a => a.id), ['markazan', 'okev', 'archive', 'quote', 'kolet', 'menahel']);
 
+// ─── שורת יומן בעברית פשוטה (בן, 31/10: "לא הבנתי מה רשום שם") ─────────
+{
+  const row = r => ctx.lgAgRowHtml('K', Object.assign({ linked: true, customerName: 'טום גלאס', state: 'done', createdAt: NOW }, r), null, { pilot: {}, outbox: {} });
+  const img = row({ hasImage: true, text: '', intent: 'order', route: 'kolet', acted: false, actReason: 'no-action' });
+  check('image without caption → "שלח תמונה"', img.includes('שלח תמונה'), true);
+  check('kolet → plain outcome: went into the sketch queue', img.includes('נכנסה לתור הסקיצות'), true);
+  check('no English codes on screen', [/no-action/.test(img), />kolet</.test(img)], [false, false]);
+  check('what the agent understood is labelled', img.includes('הסוכן הבין:'), true);
+  check('caption is shown with the image', row({ hasImage: true, text: 'מקלחון 90', intent: 'order', route: 'kolet' }).includes('מקלחון 90'), true);
+  check('deleted message → "מחק הודעה"', row({ deleted: true, route: 'kolet-deleted' }).includes('מחק הודעה'), true);
+  check('a text message is shown as said', row({ text: 'איפה ההזמנה?', intent: 'status', route: 'okev' }).includes('כתב: איפה ההזמנה?'), true);
+  const un = ctx.lgAgRowHtml('K', { linked: false, route: 'shaul', state: 'done', actReason: 'no-action', createdAt: NOW }, null, {});
+  check('unlinked → explained, no reply, not "לשאול"',
+    [un.includes('מספר שלא מקושר'), un.includes('רק נספר'), un.includes('היה עונה:'), un.includes('no-action')], [true, true, false, false]);
+  check('someone already answered → says so', row({ text: 'תודה', route: 'silent-human' }).includes('כבר ענה'), true);
+  check('verdict buttons say what they mean', [row({ route: 'okev' }).includes('הבין נכון'), row({ route: 'okev' }).includes('טעה')], [true, true]);
+}
+
 check('a record that failed for good reads in Hebrew, not "dead"',
   (() => { const h = ctx.lgAgRowHtml('K', { linked: true, state: 'dead' }); return [h.includes('נכשלה סופית'), />dead</.test(h)]; })(), [true, false]);
 
