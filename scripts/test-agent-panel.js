@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/** לשונית "סוכנים · ניסיון" בקליטות — תצוגה בלבד. Run: node scripts/test-agent-panel.js */
+/** שורת יומן הסוכנים — תצוגה בלבד. עד 31/10 לשונית "סוכנים · ניסיון" בקליטות; היום בדף agents.html,
+ *  והפונקציות ב-agents-dash.js. Run: node scripts/test-agent-panel.js */
 const path = require('path'), fs = require('fs'), vm = require('vm');
 const ROOT = path.join(__dirname, '..');
 let failed = 0;
@@ -9,9 +10,11 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 const ctx = { console, Date, Intl };
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8'), ctx);
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'agents-dash.js'), 'utf8'), ctx);
 const A = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
-const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
+//  החיווט נבדק בדף עצמו
+const P = fs.existsSync(path.join(ROOT, 'agents.html')) ? fs.readFileSync(path.join(ROOT, 'agents.html'), 'utf8') : '';
+const PANEL = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
 
 const rec = (over) => ({ idMessage: 'M1', chatId: 'c', linked: true, customerName: 'דנה', text: 'איפה ההזמנה שלי?',
   intent: 'status', route: 'okev', wouldReply: 'קיבלנו, ההזמנה בבדיקה', state: 'done', createdAt: 1759650005000, ...over });
@@ -41,7 +44,7 @@ check('waInbound record + order intent → no red', ctx.lgAgRowHtml('K4', rec({ 
 check('pdf rejected → no red', ctx.lgAgRowHtml('K8', rec({ idMessage: 'P.1', intakeKind: 'pdf' }), ib).includes(RED), false);
 check('closed after rejected → no red', ctx.lgAgRowHtml('K9', rec({ idMessage: 'C1', intakeKind: 'pdf' }), ib).includes(RED), false);
 check('closed after failed → red', ctx.lgAgRowHtml('K10', rec({ idMessage: 'C2', intakeKind: 'image' }), ib).includes(RED), true);
-check('agents tab passes waInbound map to the row', /lgAgRowHtml\(r\.key,\s*r,\s*raw\.whatsapp[,)]/.test(P), true);
+check('agents page passes the waInbound map to the row', /lgAgRowHtml\(r\.key,\s*r,\s*intake[,)]/.test(P), true);
 const x = ctx.lgAgRowHtml('K5', rec({ text: '<img src=x onerror=1>"', customerName: '<b>x</b>', wouldReply: '<script>' }));
 check('message text, name and reply are escaped', [x.includes('<img'), x.includes('<b>x'), x.includes('<script>'), x.includes('&lt;img')], [false, false, false, true]);
 check('verdict shown, buttons still there', (() => { const v = ctx.lgAgRowHtml('K6', rec({ verdict: { ok: true } })); return [v.includes('נכון ✓'), /data-agv/.test(v)]; })(), [true, true]);
@@ -54,8 +57,9 @@ check('100 latest, newest first', [rows.length, rows[0].key, rows[99].key], [100
 check('empty map', ctx.lgAgRows(null), []);
 
 // חיווט
-check('admin.html has third tab', /data-tab="agents"[^>]*>[^<]*סוכנים · ניסיון/.test(A), true);
-check('panel listens to waMeta/agentShadow', /ref\(\s*['"`]waMeta\/agentShadow['"`]\s*\)/.test(P), true);
+check('admin.html: the agents tab is gone, the agents page is linked', [/data-tab="agents"/.test(A), /href="agents\.html"/.test(A)], [false, true]);
+check('the קליטות panel no longer listens to the agents', /waMeta\/agent/.test(PANEL), false);
+check('agents page listens to waMeta/agentShadow', /ref\(\s*['"`]waMeta\/agentShadow['"`]\s*\)/.test(P), true);
 check('panel posts agent-verdict via drain only', [/action:\s*'agent-verdict'/.test(P), /ref\(['"]waMeta\/agentShadow[^)]*\)\.(set|update|remove|push)/.test(P)], [true, false]);
 check('no raw innerHTML of message text in agent code', /lgAgRowHtml/.test(P) && !/innerHTML\s*=\s*[^;]*\.text/.test(P), true);
 
@@ -76,7 +80,7 @@ check('F2 not-linked reason text', ctx.lgAgRowHtml('K1', rec({ acted: false, act
   check('F6 pilot list: switch-off buttons (agent-pilot on:false)', [(html.match(/data-agpilot/g) || []).length, (html.match(/data-on="0"/g) || []).length,
     (html.match(/הוצא מפיילוט/g) || []).length], [2, 2, 2]);
   check('F6 pilot list: empty → nothing', [ctx.lgAgPilotListHtml({}, () => ''), ctx.lgAgPilotListHtml(null, () => '')], ['', '']);
-  check('F6 agents tab renders the pilot list first', /agentsTab\(\)\s*\{[\s\S]{0,600}lgAgPilotListHtml\(/.test(P), true);
+  check('F6 agents page renders the pilot list', /lgAgPilotListHtml\(/.test(P), true);
 }
 check('pilot count', [ctx.lgAgPilotCount({ a: true, b: true, c: false, d: 'x' }), ctx.lgAgPilotCount(null)], [2, 0]);
 check('sent shows text', (() => { const x = ctx.lgAgRowHtml('K1', acted, null, cx({ K1_0: { state: 'sent', text: 'שלום <b>' , reason: 'agent-reply' } })); return [x.includes('נשלח ✓: שלום &lt;b&gt;'), x.includes('היה עונה:')]; })(), [true, false]);
@@ -96,7 +100,7 @@ check('state labels', [['received', 'ממתין'], ['processing', 'בעיבוד'
   .map(([s, t]) => ctx.lgAgRowHtml('K1', rec({ state: s, wouldReply: undefined }), null, cx()).includes(t)), [true, true, true]);
 check('done row has no state chip', ['ממתין', 'בעיבוד'].some(t => ctx.lgAgRowHtml('K1', rec(), null, cx()).includes(t)), false);
 check('actReason escaped', ctx.lgAgRowHtml('K1', rec({ acted: false, actReason: '<i>' }), null, cx()).includes('<i>'), false);
-check('panel listens to pilot + outbox, posts agent-pilot', [/ref\(\s*['"`]waMeta\/agentPilot['"`]\s*\)/.test(P), /ref\(\s*['"`]waMeta\/agentOutbox['"`]\s*\)/.test(P), /action:\s*'agent-pilot'/.test(P),
+check('agents page listens to pilot + outbox, posts agent-pilot', [/ref\(\s*['"`]waMeta\/agentPilot['"`]\s*\)/.test(P), /ref\(\s*['"`]waMeta\/agentOutbox['"`]\s*\)/.test(P), /action:\s*'agent-pilot'/.test(P),
   /ref\(['"]waMeta\/agentPilot[^)]*\)\.(set|update|remove|push)/.test(P)], [true, true, true, false]);
 
 if (failed) { console.error(`\n${failed} FAILED`); process.exit(1); }
