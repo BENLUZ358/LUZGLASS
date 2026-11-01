@@ -32,7 +32,7 @@ const bodyOf = (src, name) => {
 
 const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number });
 vm.runInContext([
-  bodyOf(DB, 'lgEsc'), bodyOf(DB, 'lgGlassLabelOf'), bodyOf(DB, 'lgGlassTypesInOrders'),
+  bodyOf(DB, 'lgEsc'), bodyOf(DB, 'lgZgagiUpdatedTag'), bodyOf(DB, 'lgGlassLabelOf'), bodyOf(DB, 'lgGlassTypesInOrders'),
   'var csSkuCatalogMap = { "8HMH": { glass: "חלבי", mm: 8 } }; var cs = {}; var notes = {};',
   'function lgHasSketch(o){ return !!o.hasSketch; }',
   bodyOf(CS, 'csItemsOf'), bodyOf(CS, 'csGlassOf'), bodyOf(CS, 'chisumIdxs'),

@@ -25,7 +25,7 @@ const T = 1762000000000;
 (async () => {
   const db = fakeDb(WORLD());
   for (const i of ['a', 'b', 'c', 'd']) await send(db, i);
-  const id = i => 'zg_bizA_ord1_' + i;
+  const id = i => 'zg_' + require('../api/_zgagi-inbound').lgZgagiItemKey('bizA', 'ord1', i);
   db._data.orders[id('a')].stage = 'done';
   db._data.orders[id('b')].stage = 'chash';
   db._data.orders[id('c')].stage = 'workday';

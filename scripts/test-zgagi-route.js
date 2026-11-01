@@ -39,7 +39,7 @@ const ITEM = { biz: 'b', order: 'o', orderNo: '1', customerNo: '14201', rev: 1,
   check('ב. stages (גוף כמחרוזת)', [out.status, out.body.items.i.stage], [200, '']);
   out = await lgZgagiHandle(req(Object.assign({ op: 'receive' }, ITEM, { customerNo: '1' })), { db, env });
   check('ב. לקוח לא קיים → 422', out.status, 422);
-  db._data.orders.zg_b_o_i.stage = 'workday';
+  db._data.orders['zg_' + require('../api/_zgagi-inbound').lgZgagiItemKey('b', 'o', 'i')].stage = 'workday';
   out = await lgZgagiHandle(req({ op: 'cancel', biz: 'b', order: 'o', itemId: 'i' }), { db, env });
   check('ב. ביטול בייצור → 409', [out.status, out.body.stage], [409, 'workday']);
 
