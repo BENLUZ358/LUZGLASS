@@ -458,6 +458,7 @@ function mapFirebaseOrder(o){
     orderClient:  o.orderClient||o.client||'—',
     orderNum:     o.orderNum||o.refNum||'',
     sketchName:   o.sketchName||o.type||'',
+    zgagiUpdatedAt: o.zgagiUpdatedAt||0,
     type:         o.type||'',
     glass:        o.glassFullName||o.glass||'',
     glassFullName:o.glassFullName||o.glass||'',
@@ -722,6 +723,7 @@ function csOrderRowHtml(o){
       <div class="oc-top">
         <div class="oc-client">${lgEsc(o.orderClient||'—')}</div>
         <span class="oc-badge ${badgeCls}">${badgeTxt}</span>
+        ${lgZgagiUpdatedTag(o)}
         <button type="button" class="oc-note-btn" aria-label="הוסף הערה" onclick="event.stopPropagation();openQN('${id}')"><span data-icon="pencil"></span></button>
       </div>
       <div class="oc-id">

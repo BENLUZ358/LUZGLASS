@@ -302,6 +302,15 @@ function lgEmailLinkKey(raw) {
   return ['$', '#', '[', ']', '/'].some(c => k.includes(c)) ? '' : k;
 }
 
+//  תווית אדומה על הזמנה מזגאגי שהזגג תיקן אחרי השליחה (בן, 1/11: "הסקיצה
+//  החדשה חייבת להחליף את הישנה, כדי שהמפעל יעבוד לפי החדשה"). בתור, אצל
+//  השרטט ובתחנת הבדיקה. '' כשאין.
+function lgZgagiUpdatedTag(o) {
+  if (!o || !Number(o.zgagiUpdatedAt)) return '';
+  const when = new Date(Number(o.zgagiUpdatedAt)).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return '<span class="sq-tag lg-zg-updated" title="הסקיצה הוחלפה בגרסה המתוקנת" style="background:rgba(192,57,43,0.18);color:#e57361;font-weight:700">עודכן מזגאגי · ' + lgEsc(when) + '</span>';
+}
+
 //  האם "הסקיצות טופלו" יוצא על ההזמנה. WhatsApp — תמיד (D3). מייל (בן, 26/10)
 //  — רק כשהשולח עדיין מקושר לאותו כרטיס (waMeta/emailSenders), כמו
 //  resolveRecipient בשרת. בלי emailLinks — מייל לא נכלל, בדיוק כמו קודם.
@@ -1069,6 +1078,12 @@ function lgNormalizeOrder(o) {
     emailPage:       Number(o.emailPage)  || 0,
     emailPages:      Number(o.emailPages) || 0,
     emailUnassigned: !!o.emailUnassigned,
+    // הזמנה מזגאגי (source:'zgagi') — אפיון 2026-11-01. zgagi נכתב רק בשרת
+    // (api/_zgagi-inbound.js); zgagiUpdatedAt = הזגג תיקן אחרי השליחה, והסקיצה
+    // הוחלפה → תווית אדומה "עודכן מזגאגי" (lgZgagiUpdatedTag).
+    zgagi:          (o.zgagi && typeof o.zgagi === 'object') ? o.zgagi : null,
+    zgagiUpdatedAt: Number(o.zgagiUpdatedAt) || 0,
+    hardware:       Array.isArray(o.hardware) ? o.hardware : [],
     // הקבלה של "שלח עדכון ללקוח". sentAt נכתב רק אחרי הצלחה אמיתית, ולכן
     // ניסיון שנכשל מגיע כאן עם sentAt:0 — עדיין ממתין לעדכון.
     sketchAck:     (o.sketchAck && typeof o.sketchAck === 'object') ? {

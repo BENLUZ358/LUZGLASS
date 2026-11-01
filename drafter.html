@@ -264,6 +264,7 @@ function load(){
         orderClient:   o.orderClient||o.client||'—',
         orderNum:      o.orderNum||o.refNum||'',
         sketchName:    o.sketchName||o.type||'',
+        zgagiUpdatedAt: o.zgagiUpdatedAt||0,
         type:          o.type||'',
         glass:         o.glass||'',
         glassFullName: o.glassFullName||o.glass||'',
@@ -317,6 +318,7 @@ function renderSidebar(){
       <div class="sb-num">${lgEsc(o.orderNum||'—')} ${o.urgent?'⚡':''}</div>
       <div class="sb-name">${lgEsc(o.orderClient||'לקוח')}</div>
       <div class="sb-desc">${lgEsc(o.sketchName||o.type||'—')}</div>
+      ${lgZgagiUpdatedTag(o)}
     </div>`).join('');
 }
 

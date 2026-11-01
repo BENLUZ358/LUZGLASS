@@ -3704,6 +3704,7 @@ function buildSQItems(){
       type:         o.type  || '',
       isTest:       !!o.isTest,
       waDuplicateOf: o.waDuplicateOf || '',
+      zgagiUpdatedAt: o.zgagiUpdatedAt || 0,
       sketchSeenAt: o.sketchSeenAt || 0,
       // לקוח לא זוהה — "שייך ללקוח" (sq-assign.js) מציג כפתור בסקיצה
       waUnassigned:    !!o.waUnassigned,
@@ -3813,7 +3814,8 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':item.source==='email'?'מייל':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':item.source==='email'?'מייל':item.source==='zgagi'?'זגאגי':'מערכת'}</span>
+          ${lgZgagiUpdatedTag(item)}
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
           ${item.waUnassigned||item.emailUnassigned?'<span class="sq-tag sq-tag-unassigned">לא שויך</span>':''}
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
