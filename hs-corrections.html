@@ -110,7 +110,7 @@ function agentCancelRows(map, now) {
   }).map(k => {
     const o = map[k].order || {};
     return { key: k, orderNum: o.orderNum || k, client: o.orderClient || o.client || o.customerId || '',
-             sketch: o.sketchName || '', at: Number(map[k].at) || 0, check: map[k].confirmed !== true, hs: !!map[k].hsSent };
+             sketch: o.sketchName || '', at: Number(map[k].at) || 0, check: map[k].confirmed !== true, hs: !!map[k].hsSent, ...(map[k].via ? { via: map[k].via } : {}) };
   }).sort((a, b) => a.at - b.at);
 }
 function agentCancelsHtml(rows) {
@@ -122,7 +122,7 @@ function agentCancelsHtml(rows) {
       ${r.sketch ? `<div class="chg">סקיצה: ${lgEsc(r.sketch)}</div>` : ''}
       ${r.check ? `<div class="todo">לבדוק — ייתכן שההזמנה נמחקה. בדוק אם היא עדיין במערכת ובחשבשבת, ואז סמן.</div>`
         : r.hs ? `<div class="todo">לבטל בחשבשבת</div>` : `<div class="chg">לידיעה — לא נשלחה לחשבשבת</div>`}
-      <div class="meta">${r.check ? 'ביטול שלא הושלם' : 'בוטל ע״י הלקוח'} · ${lgEsc(fmtDate(r.at))}</div>
+      <div class="meta">${r.check ? 'ביטול שלא הושלם' : r.via === 'zgagi' ? 'בוטל בזגאגי' : 'בוטל ע״י הלקוח'} · ${lgEsc(fmtDate(r.at))}</div>
       <button class="btn btn-primary" type="button" data-cancel-done="${lgEsc(r.key)}"><span data-icon="check"></span>${r.check ? 'נבדק — טופל' : r.hs ? 'בוצע בחשבשבת' : 'סמן שנראה'}</button>
     </div>`).join('')}</section>`;
 }
