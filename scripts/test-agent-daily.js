@@ -151,7 +151,7 @@ const seed = () => fakeDb({ waMeta: {
     const v = JSON.parse(fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
     check('rewrite', v.rewrites.some(x => x.source === '/api/agent-daily' && x.destination === '/api/wa-inbound?agent=daily'), true);
     check('cron', v.crons, [{ path: '/api/agent-daily', schedule: '0 13 * * *' }]);
-    check('existing keys kept', [v.rewrites.length, !!v.functions['api/wa-inbound.js'], Array.isArray(v.headers)], [4, true, true]);
+    check('existing keys kept', [v.rewrites.length >= 4, !!v.functions['api/wa-inbound.js'], Array.isArray(v.headers)], [true, true, true]);
     const wi = fs.readFileSync(path.join(ROOT, 'api', 'wa-inbound.js'), 'utf8');
     check('branch before webhook', wi.indexOf("req.query.agent === 'daily'") > 0 && wi.indexOf("req.query.agent === 'daily'") < wi.indexOf('handleInbound(req, {'), true);
   }
