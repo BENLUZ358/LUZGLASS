@@ -19,7 +19,10 @@ function lgSketchAckSkip(order, id, activeIds) {
   //  השרשרת נכתבים רק בשרת). איזה ערוץ — מייל או וואטסאפ — מחליט
   //  resolveRecipient; whatsapp-dispatch מדלג על הזמנת מייל שלא יצאה למייל.
   const fromEmail = o.source === 'email' && !!o.emailThreadId && !!o.emailMessageId;
-  if (o.source !== 'whatsapp' && !fromEmail) return 'לא סקיצת WhatsApp';
+  //  זגאגי (בן, 1/11): "אנחנו שולחים לו". zgagi נכתב רק בשרת (_zgagi-inbound) —
+  //  source:'zgagi' לבד, שהפורטל יכול לכתוב, לא מספיק.
+  const fromZgagi = o.source === 'zgagi' && !!(o.zgagi && o.zgagi.biz);
+  if (o.source !== 'whatsapp' && !fromEmail && !fromZgagi) return 'לא סקיצת WhatsApp';
   if (!o.sketchSeenAt)         return 'עוד לא סומנה כטופלה';
   if (o.isTest)                return 'הזמנה פיקטיבית';
   if (o.sketchAck && o.sketchAck.sentAt) return 'הלקוח כבר עודכן';

@@ -60,6 +60,28 @@ async function _sendInvoice(db, provider, to, entry) {
   }
 }
 
+//  "הסקיצות טופלו" על הזמנות מזגאגי (בן, 1/11): הזגג לא שלח לנו כלום בוואטסאפ,
+//  ולכן התמונות עצמן הן התיעוד שם. רק כשכל ההזמנות בהודעה מזגאגי וכל התמונות
+//  קריאות; אחרת null → הטקסט הרגיל, כמו היום (לא נתקעים בגלל תמונה).
+async function _zgagiAckFiles(db, provider, entry) {
+  if (typeof provider.sendFiles !== 'function') return null;
+  const ids = entry.orderIds || [];
+  if (!ids.length) return null;
+  const files = [];
+  for (let i = 0; i < ids.length; i++) {
+    const o = (await db.ref('orders/' + ids[i]).once('value')).val();
+    if (!o || o.source !== 'zgagi' || !(o.zgagi && o.zgagi.biz)) return null;
+    const m = String((await db.ref('sketches/' + ids[i]).once('value')).val() || '').match(/^data:(image\/(?:png|jpeg));base64,([\s\S]+)$/);
+    if (!m) return null;
+    const ext = m[1] === 'image/png' ? 'png' : 'jpg';
+    const safe = s => String(s || '').replace(/[\/:*?"<>|\r\n]/g, ' ').trim().slice(0, 40);
+    const num = (entry.orderNums || [])[i] || o.refNum || String(i + 1);
+    const name = (entry.sketchNames || [])[i] || '';
+    files.push({ name: 'סקיצה ' + safe(num) + (name ? ' - ' + safe(name) : '') + '.' + ext, mime: m[1], buf: Buffer.from(m[2], 'base64') });
+  }
+  return files;
+}
+
 async function _invoiceDelivery(db, invoiceKey, outboxKey, out) {
   try {
     await db.ref('invoicePdf/' + invoiceKey + '/delivery').update({
@@ -146,7 +168,11 @@ async function drainKeys(db, provider, keys, by, started) {
       console.log('whatsapp-drain: recipient changed since enqueue', { key, source: live.source });
     }
 
-    const out = entry.kind === 'invoice' ? await _sendInvoice(db, provider, live.phone, entry) : await provider.send({
+    const zgFiles = entry.kind === 'sketches-handled' ? await _zgagiAckFiles(db, provider, entry) : null;
+    const out = entry.kind === 'invoice' ? await _sendInvoice(db, provider, live.phone, entry)
+      : zgFiles ? await provider.sendFiles({ to: live.phone, kind: entry.kind, clientName: entry.clientName,
+                                             orderNums: entry.orderNums, sketchNames: entry.sketchNames || [], files: zgFiles })
+      : await provider.send({
       to:          live.phone,
       kind:        entry.kind,
       clientName:  entry.clientName,

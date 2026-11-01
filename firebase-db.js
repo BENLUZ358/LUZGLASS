@@ -308,6 +308,8 @@ function lgEmailLinkKey(raw) {
 function lgSketchAckEligible(o, emailLinks) {
   if (!o) return false;
   if (o.source === 'whatsapp') return true;
+  // זגאגי (בן, 1/11) — השרת בודק שוב שהשדה zgagi אמיתי (lgSketchAckSkip)
+  if (o.source === 'zgagi' && o.zgagi && o.zgagi.biz) return true;
   if (o.source !== 'email' || !o.emailThreadId || !o.emailMessageId || !emailLinks) return false;
   const l = emailLinks[lgEmailLinkKey(o.emailFrom)];
   return !!(l && l.customerId && String(l.customerId) === String(o.customerId || ''));
@@ -329,7 +331,7 @@ function lgSketchAckPending(orders, emailLinks) {
 
 // סקיצות WhatsApp של אותו לקוח שעוד בתור ולא סומנו — "יש עוד".
 function lgSketchAckUnseen(orders, key, excludeId) {
-  return (orders || []).filter(o => o && (o.source === 'whatsapp' || o.source === 'email') && !(o.stage) && !o.sketchSeenAt &&
+  return (orders || []).filter(o => o && (o.source === 'whatsapp' || o.source === 'email' || o.source === 'zgagi') && !(o.stage) && !o.sketchSeenAt &&
     !o.isTest && String(o.id) !== String(excludeId) && lgSketchAckClientKey(o) === key);
 }
 
