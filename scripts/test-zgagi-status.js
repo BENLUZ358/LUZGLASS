@@ -52,9 +52,9 @@ const T = 1762000000000;
   check('ב. עסק אחר לא מבטל', (await S.lgZgagiCancel(db, { biz: 'bizB', order: 'ord1', itemId: 'a' }, T)).code, 'not-found');
   check('ב. ביטול שני — כבר בוטל', (await S.lgZgagiCancel(db, { biz: 'bizA', order: 'ord1', itemId: 'b' }, T)).code, 'ok');
 
-  // הכרטיס מוצג בדף בלי chatId, ועם "בוטל בזגאגי"
+  // הכרטיס מוצג בדף בלי chatId — כמו ביטול רגיל של לקוח, בלי המילה זגאגי (בן, 1/11)
   const html = fs.readFileSync(path.join(__dirname, '..', 'hs-corrections.html'), 'utf8');
-  check('ב. הדף מראה "בוטל בזגאגי"', /via === 'zgagi'[^\n]*בוטל בזגאגי/.test(html), true);
+  check('ב. הדף לא מזכיר את זגאגי', /זגאגי/.test(html), false);
 
   if (failed) { console.error(`\n${failed} נכשלו`); process.exit(1); }
   console.log('\nכל הבדיקות עברו');
