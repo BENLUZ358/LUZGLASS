@@ -302,12 +302,23 @@ function lgEmailLinkKey(raw) {
   return ['$', '#', '[', ']', '/'].some(c => k.includes(c)) ? '' : k;
 }
 
+//  תווית אדומה על הזמנה מזגאגי שהזגג תיקן אחרי השליחה (בן, 1/11: "הסקיצה
+//  החדשה חייבת להחליף את הישנה, כדי שהמפעל יעבוד לפי החדשה"). בתור, אצל
+//  השרטט ובתחנת הבדיקה. '' כשאין.
+function lgZgagiUpdatedTag(o) {
+  if (!o || !Number(o.zgagiUpdatedAt)) return '';
+  const when = new Date(Number(o.zgagiUpdatedAt)).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  return '<span class="sq-tag lg-zg-updated" title="הסקיצה הוחלפה בגרסה המתוקנת" style="background:rgba(192,57,43,0.18);color:#e57361;font-weight:700">עודכן מזגאגי · ' + lgEsc(when) + '</span>';
+}
+
 //  האם "הסקיצות טופלו" יוצא על ההזמנה. WhatsApp — תמיד (D3). מייל (בן, 26/10)
 //  — רק כשהשולח עדיין מקושר לאותו כרטיס (waMeta/emailSenders), כמו
 //  resolveRecipient בשרת. בלי emailLinks — מייל לא נכלל, בדיוק כמו קודם.
 function lgSketchAckEligible(o, emailLinks) {
   if (!o) return false;
   if (o.source === 'whatsapp') return true;
+  // זגאגי (בן, 1/11) — השרת בודק שוב שהשדה zgagi אמיתי (lgSketchAckSkip)
+  if (o.source === 'zgagi' && o.zgagi && o.zgagi.biz) return true;
   if (o.source !== 'email' || !o.emailThreadId || !o.emailMessageId || !emailLinks) return false;
   const l = emailLinks[lgEmailLinkKey(o.emailFrom)];
   return !!(l && l.customerId && String(l.customerId) === String(o.customerId || ''));
@@ -329,7 +340,7 @@ function lgSketchAckPending(orders, emailLinks) {
 
 // סקיצות WhatsApp של אותו לקוח שעוד בתור ולא סומנו — "יש עוד".
 function lgSketchAckUnseen(orders, key, excludeId) {
-  return (orders || []).filter(o => o && (o.source === 'whatsapp' || o.source === 'email') && !(o.stage) && !o.sketchSeenAt &&
+  return (orders || []).filter(o => o && (o.source === 'whatsapp' || o.source === 'email' || o.source === 'zgagi') && !(o.stage) && !o.sketchSeenAt &&
     !o.isTest && String(o.id) !== String(excludeId) && lgSketchAckClientKey(o) === key);
 }
 
@@ -1067,6 +1078,12 @@ function lgNormalizeOrder(o) {
     emailPage:       Number(o.emailPage)  || 0,
     emailPages:      Number(o.emailPages) || 0,
     emailUnassigned: !!o.emailUnassigned,
+    // הזמנה מזגאגי (source:'zgagi') — אפיון 2026-11-01. zgagi נכתב רק בשרת
+    // (api/_zgagi-inbound.js); zgagiUpdatedAt = הזגג תיקן אחרי השליחה, והסקיצה
+    // הוחלפה → תווית אדומה "עודכן מזגאגי" (lgZgagiUpdatedTag).
+    zgagi:          (o.zgagi && typeof o.zgagi === 'object') ? o.zgagi : null,
+    zgagiUpdatedAt: Number(o.zgagiUpdatedAt) || 0,
+    hardware:       Array.isArray(o.hardware) ? o.hardware : [],
     // הקבלה של "שלח עדכון ללקוח". sentAt נכתב רק אחרי הצלחה אמיתית, ולכן
     // ניסיון שנכשל מגיע כאן עם sentAt:0 — עדיין ממתין לעדכון.
     sketchAck:     (o.sketchAck && typeof o.sketchAck === 'object') ? {
@@ -1076,6 +1093,10 @@ function lgNormalizeOrder(o) {
       httpStatus:  Number(o.sketchAck.httpStatus)  || 0,
       waMessageId: o.sketchAck.waMessageId || '',
     } : null,
+    // אותה קבלה לערוץ המייל: { <kind>: { sentAt, key } }, נכתבת רק בשרת
+    // (_email-outbox.js) אחרי שהסקריפט ב-Gmail שלח. בלעדיה הזמנת מייל שטופלה
+    // נשארת "ממתינה לעדכון" לנצח (אביבי, 29/10).
+    emailNotices:  (o.emailNotices && typeof o.emailNotices === 'object') ? o.emailNotices : null,
     urgent:        o.urgent       || false,
     sketch:        o.sketch       || null,
     // סימן בלבד — מאפשר למסך לדעת שיש סקיצה בלי להוריד אותה
@@ -2341,8 +2362,22 @@ function lgFindPriceItem(glassName){
 //  לעבוד בדיוק כמו היום — קודם בודקים skuCatalog, ורק אם אין שם רשומה נופלים חזרה לישן.
 //  שלב 2 (עתידי, אחרי שכל המק"טים יעברו ויאומתו): הסרה הדרגתית של הקטלוגים הישנים.
 
-const LG_SKU_BUSINESS_FIELDS    = ['name', 'hashavshevetCode', 'active', 'source'];
+//  kind: 'hardware' — פרזול ("פריט רגיל" בחשבשבת; בן, 1/11). חסר = זכוכית, כמו תמיד.
+const LG_SKU_BUSINESS_FIELDS    = ['name', 'hashavshevetCode', 'active', 'source', 'kind'];
 const LG_SKU_OPERATIONAL_FIELDS = ['glass', 'mm', 'proc', 'graphic', 'chalavi', 'triplex'];
+
+//  שורות דוח הפריטים של חשבשבת → מה נכנס לקטלוג. "מכפלה" = זכוכית (כמו מאז
+//  ומתמיד), "פריט רגיל" = פרזול (בן, 1/11: "הגדרנו בהתחלה לא למשוך את המקטים של
+//  פריט רגיל"). סוג אחר (שירות וכו') לא נכנס. → [{ code, fields, price }]
+function lgHbItemsForCatalog(items) {
+  const KIND = { 'מכפלה': '', 'פריט רגיל': 'hardware' };
+  return (items || []).filter(it => it && it.code && Object.prototype.hasOwnProperty.call(KIND, it.itemType || 'מכפלה'))
+    .map(it => {
+      const kind = KIND[it.itemType || 'מכפלה'];
+      return { code: it.code, price: Number(it.price) || 0,
+               fields: { name: it.name, hashavshevetCode: it.code, active: true, ...(kind ? { kind } : {}) } };
+    });
+}
 
 // ניחוש שדות תפעוליים מתוך שם הפריט בחשבשבת (למשל '8 מ"מ שקוף מחוסם') — משמש רק כברירת מחדל
 // חד-פעמית בסנכרון ראשון של מק"ט חדש (ר' syncSkuCatalogFromHashavshevet). לעולם לא דורס ערך
@@ -2462,7 +2497,9 @@ async function syncSkuCatalogFromHashavshevet(code, businessFields) {
   const existing = snap.val() || {};
   // ברירת מחדל לשדות תפעוליים מתוך שם הפריט — רק לשדה שעדיין לא הוגדר בכלל (לא דורס עריכה קיימת).
   // זהו ניחוש טקסטואלי, לא ודאי — מסומן ב-opAuto כדי שיוצג כ"לא מאומת" עד לבדיקה ידנית (ר' saveSkuCatalogItem).
-  const guess = lgGuessOperationalFromName(safe.name || existing.name || '');
+  //  פרזול אינו זכוכית: "מגנט ישר שקוף" היה מנוחש כזכוכית שקופה ונכנס לרשימות הזכוכית
+  const isHardware = (safe.kind || existing.kind) === 'hardware';
+  const guess = isHardware ? {} : lgGuessOperationalFromName(safe.name || existing.name || '');
   const opFill = {};
   LG_SKU_OPERATIONAL_FIELDS.forEach(k => { if (existing[k] === undefined && guess[k] !== undefined) opFill[k] = guess[k]; });
   if (Object.keys(opFill).length) opFill.opAuto = true;

@@ -48,10 +48,43 @@ async function _sendInvoice(db, provider, to, entry) {
   if (typeof provider.sendFiles !== 'function') {
     return { ok: false, failureKind: 'other', reason: 'הספק הנוכחי לא שולח קבצים — החשבונית לא נשלחה' };
   }
-  const f = await require('./_invoice-deliver').lgInvoiceFiles(db, entry.invoiceKey);
-  if (!f.ok) return { ok: false, failureKind: 'other', reason: 'קבצי החשבונית לא זמינים (' + f.code + ')' };
-  return provider.sendFiles({ to, kind: 'invoice', clientName: entry.clientName, orderNums: entry.orderNums,
-                              sketchNames: entry.sketchNames || [], docNumber: entry.docNumber, files: f.files });
+  //  ⚠️ חריגה כאן הייתה משאירה את הרשומה תפוסה בלי סגירה ובלי סיבה (30/10, L1143).
+  //  כל כשל נסגר כ-ok:false עם שם השגיאה בלבד — הודעת השגיאה עלולה להכיל URL עם טוקן.
+  try {
+    const f = await require('./_invoice-deliver').lgInvoiceFiles(db, entry.invoiceKey);
+    if (!f.ok) return { ok: false, failureKind: 'other', reason: 'קבצי החשבונית לא זמינים (' + f.code + ')' };
+    return await provider.sendFiles({ to, kind: 'invoice', clientName: entry.clientName, orderNums: entry.orderNums,
+                                      sketchNames: entry.sketchNames || [], docNumber: entry.docNumber, files: f.files });
+  } catch (e) {
+    return { ok: false, failureKind: 'other', reason: 'חריגה בשליחת החשבונית (' + (e && e.name) + (e && e.code ? ' ' + e.code : '') + ')' };
+  }
+}
+
+//  "הסקיצות טופלו" על הזמנות מזגאגי (בן, 1/11): הזגג לא שלח לנו כלום בוואטסאפ,
+//  ולכן התמונות עצמן הן התיעוד שם. רק כשכל ההזמנות בהודעה מזגאגי וכל התמונות
+//  קריאות; אחרת null → הטקסט הרגיל, כמו היום (לא נתקעים בגלל תמונה).
+//  ⚠️ "מזגאגי" = רשומה ב-waMeta/zgagiItems (lgZgagiOwned), לא השדות על ההזמנה —
+//  אותם הפורטל יכול לכתוב, ואז היינו שולחים תמונה שהוא בחר לכרטיס של מישהו אחר.
+//  עד 10 תמונות: כל קובץ עד 15 שניות, והכל חייב להיגמר לפני 60 השניות.
+const ZG_ACK_MAX_FILES = 10;
+async function _zgagiAckFiles(db, provider, entry) {
+  if (typeof provider.sendFiles !== 'function') return null;
+  const ids = entry.orderIds || [];
+  if (!ids.length || ids.length > ZG_ACK_MAX_FILES) return null;
+  const { lgZgagiOwned } = require('./_zgagi-inbound');
+  const files = [];
+  for (let i = 0; i < ids.length; i++) {
+    const o = (await db.ref('orders/' + ids[i]).once('value')).val();
+    if (!o || o.source !== 'zgagi' || !(await lgZgagiOwned(db, ids[i]))) return null;
+    const m = String((await db.ref('sketches/' + ids[i]).once('value')).val() || '').match(/^data:(image\/(?:png|jpeg));base64,([\s\S]+)$/);
+    if (!m) return null;
+    const ext = m[1] === 'image/png' ? 'png' : 'jpg';
+    const safe = s => String(s || '').replace(/[\/:*?"<>|\r\n]/g, ' ').trim().slice(0, 40);
+    const num = (entry.orderNums || [])[i] || o.refNum || String(i + 1);
+    const name = (entry.sketchNames || [])[i] || '';
+    files.push({ name: 'סקיצה ' + safe(num) + (name ? ' - ' + safe(name) : '') + '.' + ext, mime: m[1], buf: Buffer.from(m[2], 'base64') });
+  }
+  return files;
 }
 
 async function _invoiceDelivery(db, invoiceKey, outboxKey, out) {
@@ -140,7 +173,11 @@ async function drainKeys(db, provider, keys, by, started) {
       console.log('whatsapp-drain: recipient changed since enqueue', { key, source: live.source });
     }
 
-    const out = entry.kind === 'invoice' ? await _sendInvoice(db, provider, live.phone, entry) : await provider.send({
+    const zgFiles = entry.kind === 'sketches-handled' ? await _zgagiAckFiles(db, provider, entry) : null;
+    const out = entry.kind === 'invoice' ? await _sendInvoice(db, provider, live.phone, entry)
+      : zgFiles ? await provider.sendFiles({ to: live.phone, kind: entry.kind, clientName: entry.clientName,
+                                             orderNums: entry.orderNums, sketchNames: entry.sketchNames || [], files: zgFiles })
+      : await provider.send({
       to:          live.phone,
       kind:        entry.kind,
       clientName:  entry.clientName,

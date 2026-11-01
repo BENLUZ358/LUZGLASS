@@ -254,6 +254,17 @@ check('the scan actually found fields to check', Object.keys(written).length > 1
   const plain = lgNormalizeOrder({ id: 'L1' });
   check('an ordinary order gets the email defaults — empty, 0, false',
         EM_FIELDS.map(f => plain[f]), ['', '', '', 0, 0, 0, false]);
+
+  /* emailNotices (31/10): החותמת "העדכון יצא במייל" נכתבת רק בשרת
+     (_email-outbox.js), ו-lgSketchAckPending נשען עליה. בלעדיה כל הזמנת
+     מייל שטופלה נשארת "ממתינה לעדכון" לנצח — כך קרה לאביבי ב-29/10. */
+  check('the whitelist carries emailNotices', whitelist.has('emailNotices'), true);
+  const stamp = { 'sketches-handled': { sentAt: 1793268072930, key: '36ba34b00c6e57718430' } };
+  check('the email-update stamp arrives intact',
+        lgNormalizeOrder({ id: 'em_M2_1', source: 'email', emailNotices: stamp }).emailNotices, stamp);
+  check('an order without one gets null', plain.emailNotices, null);
+  check('a stamp that is not an object is dropped',
+        lgNormalizeOrder({ id: 'L1', emailNotices: 'yes' }).emailNotices, null);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

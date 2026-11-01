@@ -346,6 +346,7 @@ if (typeof document !== 'undefined') (function () {
   let rows = [], byCh = { whatsapp: [], email: [] }, timer = null, busyKey = '';
   const draining = { whatsapp: false, email: false };
   // לשונית פתוחה, ואילו מקטעים מקופלים פתוחים — שרענון חי לא יסגור אותם
+  //  "סוכנים · ניסיון" עברה ל-agents.html (31/10) — כאן רק WhatsApp ומייל
   let tab = 'whatsapp';
   const folds = {};
 
@@ -628,7 +629,7 @@ if (typeof document !== 'undefined') (function () {
       else b.dataset.tact === 'add' ? openPick('t', '', '') : textAct(row.dataset.tkey, b.dataset.tact);
     });
     const list = $('waInList');
-    if (list) list.addEventListener('click', ev => {
+    if (list) list.addEventListener('click', async ev => {
       const b = ev.target.closest('button[data-act]'); if (!b) return;
       if (b.dataset.act === 'view') view(b.dataset.order);
       else act(b.dataset.act, b.dataset.key, b.dataset.ch || 'whatsapp');

@@ -39,6 +39,11 @@ html,body{height:100%;}
 .toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:700;background:var(--text);
   color:var(--bg);padding:var(--space-3) var(--space-5);border-radius:var(--radius-lg);font-weight:var(--fw-bold);}
 .toast.err{background:var(--red);color:#fff;}
+/* ביטולים מהסוכן (31/10): הזמנה שהלקוח ביטל בוואטסאפ ירדה מהמערכת, אבל
+   בחשבשבת היא עדיין פתוחה — מבטלים שם ביד ומסמנים. */
+.ac-sec{margin-bottom:var(--space-5);}
+.ac-sec h2{font-size:var(--fs-lg);font-weight:var(--fw-black);margin-bottom:var(--space-2);}
+.ac-sec .card{border-color:var(--red);}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -53,6 +58,7 @@ html,body{height:100%;}
     <h1>תיקון הזמנות</h1>
   </div>
   <p class="meta" style="margin:-8px 0 var(--space-4)">שינויים בשורות שכבר נשלחו לחשבשבת. עדכן אותם שם ביד, וסמן &quot;בוצע&quot;.</p>
+  <div id="agentCancels"></div>
   <div class="filters" role="tablist" aria-label="סינון">
     <button class="flt" role="tab" type="button" data-f="pending" aria-selected="true">ממתינות <span id="nPending"></span></button>
     <button class="flt" role="tab" type="button" data-f="done" aria-selected="false">טופלו</button>
@@ -84,6 +90,57 @@ function instruction(r) {
   const what = Object.keys(r.net).map(t => TYPE_WORD[t] || t).join(' ו');
   return `בחשבשבת: בטל יתרה בשורה ${r.hsLine}, והוסף שורה ${r.hsLine} חדשה עם ה${what} החדשים.`;
 }
+// ── ביטולים מהסוכן (31/10) ───────────────────────────────────────────
+//  waMeta/agentCancels/<orderId> — נכתב ב-api/_agent-act.js (lgAgentCancel).
+//  מוצג: ביטול מאושר (confirmed) שכבר נשלח לחשבשבת ועוד לא סומן "בוצע" — "לבטל בחשבשבת";
+//  וגם ביטול מאושר בשלב chash/drafter/opty שלא נשלח לחשבשבת — "לידיעה" (תיקון סופי 4:
+//  כבר עבדו עליה). אותו כפתור "בוצע".
+//  רשומה לא מאושרת — נכתבת לפני המחיקה; אם אחרי 10 דקות עדיין לא אושרה,
+//  הפונקציה כנראה נפלה באמצע → מוצגת "לבדוק" (check:true), גם בלי hsSent.
+//  טהור — נבדק ב-scripts/test-agent-cancel.js.
+const AC_STALE_MS = 10 * 60 * 1000;
+const AC_INFO_STAGES = ['chash', 'drafter', 'opty'];
+function agentCancelRows(map, now) {
+  const t = Number(now) || Date.now();
+  return Object.keys(map || {}).filter(k => {
+    const r = map[k];
+    if (!r || r.done) return false;
+    if (r.confirmed === true) return !!r.hsSent || AC_INFO_STAGES.includes(String((r.order || {}).stage || ''));
+    return t - (Number(r.at) || 0) >= AC_STALE_MS;
+  }).map(k => {
+    const o = map[k].order || {};
+    return { key: k, orderNum: o.orderNum || k, client: o.orderClient || o.client || o.customerId || '',
+             sketch: o.sketchName || '', at: Number(map[k].at) || 0, check: map[k].confirmed !== true, hs: !!map[k].hsSent, ...(map[k].via ? { via: map[k].via } : {}) };
+  }).sort((a, b) => a.at - b.at);
+}
+function agentCancelsHtml(rows) {
+  if (!rows.length) return '';
+  return `<section class="ac-sec" aria-label="ביטולים מהסוכן"><h2>ביטולים מהסוכן (${rows.length})</h2>
+    <p class="meta" style="margin:0 0 var(--space-3)">הלקוח ביטל בוואטסאפ. מה שכבר נשלח לחשבשבת — בטל שם, וסמן. השאר לידיעה.</p>
+    ${rows.map(r => `<div class="card">
+      <div class="c-head"><span class="c-num">${lgEsc(r.orderNum)}</span><span class="c-client">${lgEsc(r.client)}</span></div>
+      ${r.sketch ? `<div class="chg">סקיצה: ${lgEsc(r.sketch)}</div>` : ''}
+      ${r.check ? `<div class="todo">לבדוק — ייתכן שההזמנה נמחקה. בדוק אם היא עדיין במערכת ובחשבשבת, ואז סמן.</div>`
+        : r.hs ? `<div class="todo">לבטל בחשבשבת</div>` : `<div class="chg">לידיעה — לא נשלחה לחשבשבת</div>`}
+      <div class="meta">${r.check ? 'ביטול שלא הושלם' : r.via === 'zgagi' ? 'בוטל בזגאגי' : 'בוטל ע״י הלקוח'} · ${lgEsc(fmtDate(r.at))}</div>
+      <button class="btn btn-primary" type="button" data-cancel-done="${lgEsc(r.key)}"><span data-icon="check"></span>${r.check ? 'נבדק — טופל' : r.hs ? 'בוצע בחשבשבת' : 'סמן שנראה'}</button>
+    </div>`).join('')}</section>`;
+}
+// ── סוף ביטולים מהסוכן
+let AGENT_CANCELS = {};
+function renderAgentCancels() { $('agentCancels').innerHTML = agentCancelsHtml(agentCancelRows(AGENT_CANCELS, Date.now())); }
+// רשומה לא מאושרת הופכת ל"לבדוק" עם הזמן, בלי שינוי בבסיס הנתונים
+setInterval(renderAgentCancels, 60 * 1000);
+$('agentCancels').addEventListener('click', async e => {
+  const b = e.target.closest('[data-cancel-done]'); if (!b) return;
+  b.disabled = true;
+  try {
+    const res = await _lgAuthPost('/api/wa-inbound-drain', { action: 'agent-cancel-done', key: b.dataset.cancelDone });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.ok) throw new Error(d.message || d.error || 'השמירה נכשלה');
+    toast('סומן כבוצע');   // הרשימה מתעדכנת מההאזנה
+  } catch (err) { toast(err.message || 'השמירה נכשלה', true); b.disabled = false; }
+});
 function render() {
   const rows = lgHsCorrectionQueue(ORDERS, filter);
   $('nPending').textContent = lgHsCorrectionQueue(ORDERS, 'pending').length || '';
@@ -113,6 +170,8 @@ $('list').addEventListener('click', async e => {
 });
 lgRequireAuthAsync('admin').then(session => {
   if (!session) return;
+  _lgDb.ref('waMeta/agentCancels').on('value', snap => { AGENT_CANCELS = snap.val() || {}; renderAgentCancels(); },
+    err => console.warn('agentCancels:', err && err.code));
   listenAllOrders(list => { ORDERS = list; render(); },
     () => { $('list').innerHTML = '<div class="meta">הטעינה נכשלה. בדוק חיבור ורענן.</div>'; });
 });

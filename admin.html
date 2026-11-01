@@ -400,6 +400,7 @@ label.msec-t{display:block;}
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
   <script src="wa-inbound-panel.js"></script>
+  <script src="agents-dash.js?v=20261101"></script>
   <script src="sq-assign.js?v=20261023h"></script>
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
@@ -427,6 +428,7 @@ label.msec-t{display:block;}
     <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
     <a class="unav-a" href="invoices.html"><span class="ic" data-icon="receipt"></span>תחנת חשבוניות</a>
     <a class="unav-a" href="hs-corrections.html"><span class="ic" data-icon="clipboard"></span>תיקון הזמנות<span id="navHsCorr" style="margin-inline-start:auto"></span></a>
+    <a class="unav-a" href="agents.html"><span class="ic" data-icon="bolt"></span>סוכנים<span id="navAgents" style="margin-inline-start:auto"></span></a>
     <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
     <div class="unav-sec">תחנות עבודה</div>
     <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
@@ -600,8 +602,28 @@ let _allRegisteredClients = [];
 // ══════════════════════════════════════════════════
 //  LOAD — מאזין ל-Firebase בזמן אמת
 // ══════════════════════════════════════════════════
+// מונה "דורש טיפול" של הסוכנים בתפריט (31/10) — קריאה אחת בטעינה, לא מאזין חי:
+// הדף agents.html הוא המקום להתעדכן בו. הלוגיקה ב-agents-dash.js (lgAdExceptions).
+function lgAgentsNavCount() {
+  const el = document.getElementById('navAgents');
+  if (!el || typeof lgAdExceptions !== 'function') return;
+  // אותם 31 ימים כמו הדף — אחרת רשומה שנכשלה לפני 8–31 ימים מופיעה שם ולא כאן
+  const since = Date.now() - 31 * 24 * 60 * 60 * 1000;
+  const get = r => r.once('value').then(s => s.val() || {}, () => ({}));
+  Promise.all([
+    get(_lgDb.ref('waMeta/agentShadow').orderByChild('createdAt').startAt(since)),
+    get(_lgDb.ref('waMeta/agentQuotes')), get(_lgDb.ref('waMeta/agentCancels')),
+    get(_lgDb.ref('waMeta/agentOutbox').orderByChild('createdAt').startAt(since)),
+    get(_lgDb.ref('waMeta/agentDash/dismissed')),
+  ]).then(([shadow, quotes, cancels, outbox, dismissed]) => {
+    const n = lgAdExceptions({ shadow, quotes, cancels, outbox, dismissed }, Date.now()).length;
+    el.textContent = n || ''; el.className = n ? 'count alert' : '';
+  });
+}
+
 function load() {
   if (_unsubscribe) _unsubscribe();
+  lgAgentsNavCount();
   _unsubscribe = listenAllOrders(remoteOrders => {
     orders = remoteOrders;
     const hsc = document.getElementById('navHsCorr');
@@ -1919,18 +1941,20 @@ async function syncFromHashavshevetNow(){
   _hbSyncing = true;
   showToast('מסנכרן מול חשבשבת...');
   try{
-    const res = await _lgAuthFetch('/api/hashavshevet-items');
+    // זכוכית ("מכפלה") וגם פרזול ("פריט רגיל") — בן, 1/11. ר' lgHbItemsForCatalog
+    const res = await _lgAuthFetch('/api/hashavshevet-items?itemType=all');
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP '+res.status));
 
+    const rows = lgHbItemsForCatalog(data.items);
     const BATCH = 20;
     let created=0, priced=0;
     const priceUpdates = {};
-    for(let i=0;i<data.items.length;i+=BATCH){
-      const batch = data.items.slice(i,i+BATCH);
+    for(let i=0;i<rows.length;i+=BATCH){
+      const batch = rows.slice(i,i+BATCH);
       await Promise.all(batch.map(async it=>{
         try{
-          await syncSkuCatalogFromHashavshevet(it.code, { name: it.name, hashavshevetCode: it.code, active: true });
+          await syncSkuCatalogFromHashavshevet(it.code, it.fields);
           created++;
           if(it.price > 0) priceUpdates[it.code] = it.price; // 0 = טרם הוזן מחיר בחשבשבת, לא דורס מחיר קיים
         }catch(e){ console.error('syncFromHashavshevetNow item failed:', it.code, e); }
@@ -2950,6 +2974,10 @@ document.addEventListener('visibilitychange', () => {
 .wain-tab:focus-visible{outline:2px solid var(--gold-text);outline-offset:-2px;}
 .wain-tab-n{display:inline-block;min-width:20px;margin-right:6px;padding:0 6px;border-radius:10px;background:#c0392b;color:#fff;font-size:12px;line-height:20px;}
 .wain-tab-n[hidden]{display:none;}
+.wain-ag-t{font-size:14px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere;}
+.wain-ag-r{font-size:13px;line-height:1.5;color:rgba(247,244,239,0.75);border-inline-start:3px solid #b8922a;padding-inline-start:8px;overflow-wrap:anywhere;}
+.wain-ag-red{color:#ff8a80;font-weight:800;}
+.wain-ag .wain-acts .wain-btn{min-width:56px;min-height:44px;}
 .wain-sec{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:13px;font-weight:800;color:var(--gold-text);}
 .wain-sec span{color:rgba(247,244,239,0.55);font-weight:600;}
 .wain-ok-note{font-size:13px;color:rgba(247,244,239,0.55);padding:2px 2px 4px;}
@@ -3678,6 +3706,7 @@ function buildSQItems(){
       type:         o.type  || '',
       isTest:       !!o.isTest,
       waDuplicateOf: o.waDuplicateOf || '',
+      zgagiUpdatedAt: o.zgagiUpdatedAt || 0,
       sketchSeenAt: o.sketchSeenAt || 0,
       // לקוח לא זוהה — "שייך ללקוח" (sq-assign.js) מציג כפתור בסקיצה
       waUnassigned:    !!o.waUnassigned,
@@ -3787,7 +3816,8 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':item.source==='email'?'מייל':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':item.source==='email'?'מייל':item.source==='zgagi'?'זגאגי':'מערכת'}</span>
+          ${lgZgagiUpdatedTag(item)}
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
           ${item.waUnassigned||item.emailUnassigned?'<span class="sq-tag sq-tag-unassigned">לא שויך</span>':''}
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
@@ -4610,8 +4640,9 @@ function iwResolve(code){
 function _lgRenderIwCodeList(){
   const dl = document.getElementById('iwCodeList');
   if(!dl) return;
+  // שורת זכוכית — בלי פרזול (kind:'hardware'); לפרזול שורה משלו
   const list = Object.values(skuCatalogMap)
-    .filter(e => e && e.code && e.active !== false)
+    .filter(e => e && e.code && e.active !== false && e.kind !== 'hardware')
     .sort((a,b)=>String(a.code).localeCompare(String(b.code)));
   dl.innerHTML = list.map(e => `<option value="${lgEsc(e.code)}">${lgEsc(e.name||e.code)}</option>`).join('');
 }

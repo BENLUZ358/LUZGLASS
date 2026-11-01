@@ -5,6 +5,20 @@
 //    { action:'retry', key }          "נסה שוב" על קליטה קיימת
 //    { action:'close', key, note }    "טופל ידנית" — סימון + audit
 //
+//    { action:'agent-verdict', key, ok, note }  סימון נכון/לא נכון על רשומת צל
+//                                     של סוכני הלקוחות (30/10; ללא channel — לא שייך לערוץ)
+//    { action:'agent-pilot', customerId, on }  הדלקה/כיבוי של פיילוט הסוכנים ללקוח
+//                                     (waMeta/agentPilot/<customerId> === true; 31/10)
+//    { action:'agent-cancel-done', key }  "בוצע בחשבשבת" על ביטול מהסוכן
+//                                     (waMeta/agentCancels/<key>; דף תיקון הזמנות, 31/10)
+//    { action:'agent-status' }        לוח הבקרה: אילו מתגים / משתנים מוגדרים — בוליאנים בלבד
+//    { action:'agent-dismiss', kind, key, ver }  "טופל" על כרטיס בלוח הבקרה
+//                                     (waMeta/agentDash/dismissed/<kind>_<key>; agents.html, 31/10)
+//
+//  'drain' משלים גם רשומות צל תקועות (waMeta/agentShadow) — רק כש-
+//  AGENT_SHADOW_ENABLED === 'true', עד BATCH, בתוך אותו תקציב. התוצאה בשדה נפרד
+//  agentShadow:{processed,failed}; כשל שם לא משנה את שאר התשובה.
+//
 //  channel:'email' (20/10) — אותן שלוש פעולות על התור של המייל
 //  (emailInbound, api/_email-inbound.js). בלי channel — WhatsApp, כמו תמיד.
 //  קישור קבוצות נשאר של WhatsApp בלבד.
@@ -24,6 +38,8 @@
 
 const { lgWaInboundKey, lgWaInboundPending, lgWaInboundProcess,
         lgWaInboundRetry, lgWaInboundClose } = require('./_wa-inbound');
+const { lgAgentShadowPending, lgAgentShadowProcess, lgAgentShadowVerdict } = require('./_agent-shadow');
+const { AGENT_CANCELS } = require('./_agent-act');
 const { lgEmailKey } = require('./_email-recipient');
 const { lgEmailInboundKey, lgEmailInboundPending, lgEmailInboundProcess,
         lgEmailInboundRetry, lgEmailInboundClose } = require('./_email-inbound');
@@ -31,8 +47,20 @@ const { lgEmailInboundKey, lgEmailInboundPending, lgEmailInboundProcess,
 // כמה קליטות בקריאה אחת, ותקציב זמן — מתחת ל-maxDuration (60) עם מרווח
 const BATCH = 5;
 const BUDGET_MS = 40 * 1000;
+// R14: נמדד מול מגבלת 60ש׳ של הפונקציה מתחילת ה-drain. רשומת צל (סיווג 20ש׳ + הצעה 20ש׳ +
+// שליחה) מתחילה רק אם עברו ≤10ש׳; שליחה מתחילה רק אם נשארו ≥35ש׳. הגבול עצמו — הדדליין
+// המוחלט למטה (תיקון סופי 1), לא "מה שנשאר פחות 30ש׳".
+const FN_LIMIT_MS = 60 * 1000;
+const AGENT_SHADOW_MAX_ELAPSED_MS = 10 * 1000;
+const AGENT_SEND_MIN_LEFT_MS = 35 * 1000;
+// תיקון סופי 1: דדליין מוחלט אחד לכל עבודת הסוכן ב-drain (צל → act → שליחה),
+// 50ש׳ מתחילת ה-drain — מתחת ל-60 עם מרווח. R14 נשאר: הוא מתי *מתחילים*.
+const AGENT_CHAIN_MS = 50 * 1000;
 
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && lgWaInboundKey(k) === k;
+//  סוגי הכרטיסים ב"דורש טיפול" שאפשר להסתיר — כמו lgAdExceptions ב-agents-dash.js.
+//  ביטול (cancel) לא ברשימה: הוא נסגר רק ב-agent-cancel-done, אחרי שבוטל בחשבשבת.
+const AGENT_DISMISS_KINDS = ['quote', 'send', 'dead', 'unclear', 'wrong'];
 
 //  ⚠️ lgEmailInboundProcess מחזיר { state, reason? } ולא { ok, claimed } —
 //  מתורגם כאן לצורה של WhatsApp, כדי שהדף לא יצטרך לדעת מאיזה ערוץ הגיע.
@@ -85,7 +113,34 @@ async function handleAdmin(body, deps) {
       results.push({ key, ok: r.ok, claimed: r.claimed !== false, reason: r.ok ? '' : r.reason });
     }
     const remaining = (await ch.pending(deps.db, BATCH + 1, deps.now)).length;
-    return { ok: true, processed: results.filter(r => r.claimed).length, results, remaining };
+    const out = { ok: true, processed: results.filter(r => r.claimed).length, results, remaining };
+    // ─── רשומות צל של הסוכנים (30/10): אחרי הקליטות, אותו דדליין ───────────
+    //  ⚠️ כשל כאן לעולם לא משנה את השדות הקיימים — רק agentShadow.failed.
+    if (process.env.AGENT_SHADOW_ENABLED === 'true') {
+      const ag = { processed: 0, failed: 0 };
+      const agentDeadline = started + AGENT_CHAIN_MS;
+      try {
+        const sKeys = await lgAgentShadowPending(deps.db, BATCH, deps.now);
+        for (const key of sKeys) {
+          if (Date.now() - started > AGENT_SHADOW_MAX_ELAPSED_MS) break;
+          try {
+            const p = await lgAgentShadowProcess(deps.db, key, { now: deps.now, fetchImpl: deps.fetchImpl, provider: deps.provider, deadline: agentDeadline });
+            if (p.ok) ag.processed++; else ag.failed++;
+          } catch (_) { ag.failed++; }
+        }
+      } catch (_) { ag.failed++; }
+      //  תור ההודעות של הסוכנים: רשומות pending שנתקעו (act שנקטע, חלון תפוס…).
+      //  ⚠️ כשל כאן לא משנה את התגובה; הספירה תחת agentShadow.sent.
+      const left = FN_LIMIT_MS - (Date.now() - started);
+      if (left >= AGENT_SEND_MIN_LEFT_MS) {
+        try {
+          ag.sent = await require('./_agent-send').lgAgentSendPending(deps.db,
+            { deadline: agentDeadline, provider: deps.provider });
+        } catch (_) { ag.sendFailed = true; }
+      }
+      out.agentShadow = ag;
+    }
+    return out;
   }
 
   if (action === 'retry' || action === 'close') {
@@ -97,6 +152,63 @@ async function handleAdmin(body, deps) {
     const p = await ch.process(deps.db, b.key, opts);
     return p.ok ? { ok: true, code: '', message: '', orderIds: p.orderIds }
                 : { ok: false, code: 'failed', message: p.reason };
+  }
+
+  // ─── סימון נכון/לא נכון על רשומת צל (30/10) ───────────────────────────
+  //  לא תלוי בערוץ — המפתח נבדק כמו בשאר הפעולות.
+  if (action === 'agent-verdict') {
+    if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה רשומה לא תקין' };
+    return lgAgentShadowVerdict(deps.db, b.key, { ok: b.ok, note: b.note, by: String(deps.by || '') }, deps.now);
+  }
+
+  // ─── פיילוט הסוכנים ללקוח (31/10) ─────────────────────────────────────
+  //  waMeta לא נכתב מהדפדפן — ולכן כאן. on:true → true; on:false → מוסר.
+  if (action === 'agent-pilot') {
+    const cid = typeof b.customerId === 'string' ? b.customerId.trim() : '';
+    if (!cid || !_keyOk(cid)) return { ok: false, code: 'bad-key', message: 'מזהה לקוח לא תקין' };
+    if (typeof b.on !== 'boolean') return { ok: false, code: 'bad-on', message: 'חסר ערך הדלקה/כיבוי' };
+    await deps.db.ref('waMeta/agentPilot/' + cid).set(b.on ? true : null);
+    return { ok: true, code: '' };
+  }
+
+  // ─── לוח הבקרה לסוכנים (agents.html, 31/10) ────────────────────────────
+  //  agent-status: אילו משתני סביבה מוגדרים — בוליאנים בלבד, אף ערך לא חוזר לדפדפן.
+  if (action === 'agent-status') {
+    const e = process.env;
+    return { ok: true, code: '', status: {
+      shadow: e.AGENT_SHADOW_ENABLED === 'true', reply: e.AGENT_REPLY_ENABLED === 'true',
+      model: !!e.AGENT_MODEL, key: !!e.OPENAI_API_KEY, staff: !!e.AGENT_STAFF_PHONES,
+      summary: !!e.AGENT_SUMMARY_TO, cron: !!e.CRON_SECRET } };
+  }
+  //  agent-dismiss: "טופל" על כרטיס ב"דורש טיפול" — הסתרה בלבד, הרשומה עצמה לא
+  //  משתנה. ver = מתי הרשומה השתנתה; השתנתה שוב → הכרטיס חוזר (lgAdExceptions).
+  if (action === 'agent-dismiss') {
+    if (!AGENT_DISMISS_KINDS.includes(b.kind)) return { ok: false, code: 'bad-kind', message: 'סוג לא מוכר' };
+    if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה לא תקין' };
+    if (typeof b.ver !== 'number' || !Number.isFinite(b.ver)) return { ok: false, code: 'bad-ver', message: 'חסר זמן עדכון' };
+    await deps.db.ref('waMeta/agentDash/dismissed/' + b.kind + '_' + b.key)
+      .set({ ver: b.ver, at: deps.now || Date.now(), by: String(deps.by || '') });
+    return { ok: true, code: '' };
+  }
+
+  // ─── "בוצע בחשבשבת" על ביטול מהסוכן (31/10) ───────────────────────────
+  //  waMeta לא נכתב מהדפדפן (rules) — ולכן דרך כאן, מאחורי verifyAdmin.
+  if (action === 'agent-cancel-done') {
+    if (!_keyOk(b.key)) return { ok: false, code: 'bad-key', message: 'מזהה ביטול לא תקין' };
+    const t = deps.now || Date.now(), by = String(deps.by || '');
+    // null-first: null → null (לא כותבים כלום); אין רשומה אמיתית → 'missing'.
+    // כבר סומן → ok, ומי/מתי הראשונים נשארים (לחיצה כפולה / שתי לשוניות)
+    let already = false;
+    const tx = await deps.db.ref(AGENT_CANCELS + '/' + b.key).transaction(cur => {
+      already = false;
+      if (cur === null) return null;
+      if (cur.done) { already = true; return; }
+      return { ...cur, done: true, doneAt: t, doneBy: by };
+    });
+    if (already) return { ok: true, code: '' };
+    const v = tx.committed && tx.snapshot && tx.snapshot.val();
+    if (!v) return { ok: false, code: 'missing', message: 'הביטול לא נמצא' };
+    return { ok: true, code: '' };
   }
 
   // ─── קבוצות (בן, 06/10): קישור קבוצת WhatsApp ללקוח ───────────────────

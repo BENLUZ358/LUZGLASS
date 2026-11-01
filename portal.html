@@ -985,7 +985,9 @@ function renderClientPrice(){
   const gp = _portalGlobalPrices;
 
   // מאחד את המחירון הישן (LG_PRICE_ITEMS) עם קטלוג המק"טים החדש (skuCatalog) — אותו דפוס כמו באדמין
+  // פרזול (kind:'hardware') לא כאן: המחירון הזה מציג "למ״ר", ועוד לא הוחלט שהלקוח רואה מחירי פרזול
   const skuItems = Object.values(_portalSkuCatalog)
+    .filter(e => e && e.kind !== 'hardware')
     .sort((a,b)=>String(a.code).localeCompare(String(b.code)))
     .map(e => ({ cat: 'מק"טים', id: e.code, name: `${e.code} — ${e.name||''}` }));
   const allItems = [...LG_PRICE_ITEMS, ...skuItems];

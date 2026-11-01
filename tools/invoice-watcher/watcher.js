@@ -112,10 +112,24 @@ function loadConfig(file) {
   return { intervalMs: 5000, ...c };
 }
 
+//  קובץ פתוח בתוכנה אחרת (אקרובט נפתח לבד אחרי השמירה) — Windows לא נותן
+//  להזיז אותו. הטיפול בו כבר נגמר, ולכן לא נכשלים: מזיזים כשייסגר.
+const deferred = new Map();   // file → dir
+const _rename = (file, dir) => fs.renameSync(file, path.join(dir, Date.now() + '_' + path.basename(file)));
 const move = (file, dir) => {
   fs.mkdirSync(dir, { recursive: true });
-  fs.renameSync(file, path.join(dir, Date.now() + '_' + path.basename(file)));
+  try { _rename(file, dir); }
+  catch (e) {
+    if (e.code !== 'EBUSY' && e.code !== 'EPERM' && e.code !== 'EACCES') throw e;
+    deferred.set(file, dir);
+  }
 };
+function retryDeferred() {
+  for (const [file, dir] of deferred) {
+    if (!fs.existsSync(file)) { deferred.delete(file); continue; }
+    try { _rename(file, dir); deferred.delete(file); } catch (_) { /* עדיין פתוח */ }
+  }
+}
 
 //  קובץ אחד בן שני עמודים (מקור + העתק)
 async function processFile(cfg, file, post = require_post(cfg)) {
@@ -181,10 +195,11 @@ async function loop(cfg) {
   for (;;) {
     //  סבב שנכשל (קובץ נעלם, תיקייה לא זמינה) לא מפיל את הכלי — מנסים בסבב הבא
     try {
+      retryDeferred();
       for (const n of fs.readdirSync(cfg.watchDir)) {
         if (!/\.pdf$/i.test(n)) continue;
         const f = path.join(cfg.watchDir, n);
-        if (singles.has(f) || (retryAt.get(f) || 0) > Date.now()) continue;
+        if (deferred.has(f) || singles.has(f) || (retryAt.get(f) || 0) > Date.now()) continue;
         const sz = fs.statSync(f).size;
         if (!(sz > 0 && sizes.get(f) === sz)) { sizes.set(f, sz); continue; }
         sizes.delete(f);

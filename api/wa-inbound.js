@@ -24,12 +24,18 @@ const { lgWaSenderLink, lgWaSenderKey, lgClientFromWaSender } = require('./_wa-r
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey } = require('./_wa-inbound');
 
+// תיקון סופי 1: שרשרת הסוכן להודעה אחת (צל → act → שליחה) נגמרת עד 50ש׳
+// מתחילת ה-webhook — מתחת ל-maxDuration 60 גם כש-waitUntil ממשיך אחרי התשובה.
+const AGENT_WEBHOOK_CHAIN_MS = 50 * 1000;
+
 //  הסוד נבדק ב-_hook-token.js — משותף עם email-inbound. שם גם ההסבר למה
 //  "Bearer ", רווחים וסימני כיוון בלתי נראים לא נחשבים חלק מהסוד (15/10).
 
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
 //  deps: { db, waitUntil, fetchImpl?, now? }. מחזיר { status, body }.
 async function handleInbound(req, deps) {
+  // תחילת ה-webhook — לפני כל await (הדדליין של הסוכן נמדד מכאן)
+  deps = { ...deps, startedAt: (typeof deps.clock === 'function' ? deps.clock : Date.now)() };
   if (req.method !== 'POST') return { status: 405, body: { error: 'method not allowed' } };
   const headers = req.headers || {};
   if (!lgHookTokenOk(headers.authorization || headers.Authorization, process.env.GREENAPI_WEBHOOK_TOKEN, 'wa-inbound')) return { status: 401, body: { error: 'unauthorized' } };
@@ -47,6 +53,22 @@ async function handleInbound(req, deps) {
 
 // Internal replay entry: the caller supplies only the stored, validated relay event.
 async function handleCustomerInbound(body, deps) {
+  // רשומת צל לסוכני הלקוחות — מאחורי דגל, אחרי devbrain. כשל כאן לא משנה
+  // שום דבר בתשובה; שום return למטה לא תלוי בזה. לא נרשם אלא שם השגיאה.
+  // ⚠️ הכול (רישום + עיבוד) בתוך waitUntil — דרך התשובה לא מחכה לשום קריאת DB
+  //    של הסוכן. רק בדיקת הדגל נשארת כאן, סינכרונית.
+  if (process.env.AGENT_SHADOW_ENABLED === 'true') {
+    try {
+      // סינכרוני: בלי await חדש בדרך התשובה
+      const clock = typeof deps.clock === 'function' ? deps.clock : Date.now;
+      const deadline = (deps.startedAt != null ? deps.startedAt : clock()) + AGENT_WEBHOOK_CHAIN_MS;
+      deps.waitUntil(Promise.resolve().then(async () => {
+        const sh = require('./_agent-shadow');
+        const rec = await sh.lgAgentShadowRecord(deps.db, body, deps.now);
+        if (rec && rec.created) await sh.lgAgentShadowProcess(deps.db, rec.key, { now: deps.now, fetchImpl: deps.fetchImpl, deadline, clock });
+      }).catch(e => console.warn('wa-inbound: agent shadow', e && e.name)));
+    } catch (e) { console.warn('wa-inbound: agent shadow', e && e.name); }
+  }
   const p = lgWaInboundParse(body);
   if (p.action !== 'record') return { status: 200, body: { ok: true, ignored: p.reason } };
   if (p.entry.groupId) {
@@ -131,6 +153,10 @@ module.exports = async function handler(req, res) {
   if (req.query && req.query.devbrain === 'relay') return require('./_devbrain-route')(req, res);
   if (req.query && req.query.invoice === 'upload') return require('./_invoice-upload')(req, res);
   if (req.query && req.query.invoice === 'ctl') return require('./_invoice-ctl')(req, res);
+  // מנהל הסוכנים: cron יומי (GET + CRON_SECRET) — מאומת בתוך _agent-daily
+  if (req.query && req.query.agent === 'daily') return require('./_agent-daily')(req, res);
+  // זגאגי (בן, 1/11): קליטה / שלבים / ביטול — מאומת בתוך _zgagi-route (ZGAGI_LINK_TOKEN)
+  if (req.query && req.query.zgagi === '1') return require('./_zgagi-route')(req, res);
   try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) { res.status(500).json({ error: 'server not configured' }); return; }
     const { waitUntil } = require('@vercel/functions');
@@ -142,5 +168,6 @@ module.exports = async function handler(req, res) {
   }
 };
 module.exports.handleInbound = handleInbound;
+module.exports._db = _db;
 
 module.exports.handleCustomerInbound = handleCustomerInbound;
