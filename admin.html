@@ -1964,7 +1964,11 @@ async function syncFromHashavshevetNow(){
       priced = Object.keys(priceUpdates).length;
       await savePricesGlobal({...globalPrices, ...priceUpdates}).catch(e=>console.error('syncFromHashavshevetNow prices:',e));
     }
-    showToast(`✓ סונכרנו ${created} מק"טים מחשבשבת (${priced} עם מחיר)`);
+    // כמה מהם פרזול — ואם אף אחד, אילו סוגים חשבשבת החזירה (data.types), כדי לראות למה
+    const hwN = rows.filter(r => r.fields.kind === 'hardware').length;
+    const typesTxt = Object.entries(data.types || {}).map(([k, n]) => `${k}: ${n}`).join(', ');
+    showToast(`✓ סונכרנו ${created} מק"טים (${hwN} פרזול, ${priced} עם מחיר)`);
+    if (!hwN) alert('לא נמצא פרזול בדוח של חשבשבת.\nהסוגים שחזרו: ' + (typesTxt || '(אין)'));
   }catch(e){
     console.error('syncFromHashavshevetNow:', e);
     showToast('⚠️ סנכרון נכשל — בדוק קונסול');
