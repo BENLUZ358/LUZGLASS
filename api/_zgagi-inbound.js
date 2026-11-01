@@ -167,7 +167,7 @@ async function lgZgagiReceive(db, body, now) {
       const after = _carryHsLines(before, mapped.items);
       const next = { ...cur, items: after, hardware: mapped.hardware, sketchName, notes, zgagi: zg, zgagiUpdatedAt: t, updatedAt: t };
       if (body.imagePng) { next.hasSketch = true; delete next._editedSketch; }   // הציור של השרטט
-      const corr = lgZgagiCorrections(cur, before, after, 'זגאגי', t);
+      const corr = lgZgagiCorrections(cur, before, after, 'הלקוח', t);
       if (Object.keys(corr).length) {
         next.hsCorrections = { ...(cur.hsCorrections || {}) };
         Object.keys(corr).forEach(c => { next.hsCorrections[c.slice('hsCorrections/'.length)] = corr[c]; });

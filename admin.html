@@ -3816,7 +3816,7 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':item.source==='whatsapp'?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':item.source==='whatsapp'?'WhatsApp':item.source==='email'?'מייל':item.source==='zgagi'?'זגאגי':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':(item.source==='whatsapp'||item.source==='zgagi')?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':(item.source==='whatsapp'||item.source==='zgagi')?'WhatsApp':item.source==='email'?'מייל':'מערכת'}</span>
           ${lgZgagiUpdatedTag(item)}
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
           ${item.waUnassigned||item.emailUnassigned?'<span class="sq-tag sq-tag-unassigned">לא שויך</span>':''}

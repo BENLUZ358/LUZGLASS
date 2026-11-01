@@ -29,12 +29,14 @@ check('א. zgagiUpdatedAt נשמר', n.zgagiUpdatedAt, 5);
 check('א. פרזול נשמר', n.hardware, [{ name: 'ציר', qty: 2, sku: '0001' }]);
 const plain = ctx.lgNormalizeOrder({ id: 'x' });
 check('א. הזמנה רגילה — ריק', [plain.zgagi, plain.zgagiUpdatedAt, plain.hardware], [null, 0, []]);
-check('א. תווית — יש', /עודכן מזגאגי/.test(ctx.lgZgagiUpdatedTag({ zgagiUpdatedAt: 5 })), true);
+// בן, 1/11: "לא יהיה תג זגאגי… כאילו זה מוואטסאפ" — התווית בלי המילה זגאגי
+const tag = ctx.lgZgagiUpdatedTag({ zgagiUpdatedAt: 5 });
+check('א. תווית — יש, בלי המילה זגאגי', [/הסקיצה עודכנה/.test(tag), /זגאגי/.test(tag)], [true, false]);
 check('א. תווית — אין', ctx.lgZgagiUpdatedTag({}), '');
 
 const ADMIN = read('admin.html');
 check('ב. התור מעביר את השדות', /zgagiUpdatedAt:\s*o\.zgagiUpdatedAt/.test(ADMIN), true);
-check('ב. תג "זגאגי" במקור', /item\.source==='zgagi'\?'זגאגי'/.test(ADMIN), true);
+check('ב. בלי תג זגאגי — נראה כמו WhatsApp', [/'זגאגי'/.test(ADMIN), /\(item\.source==='whatsapp'\|\|item\.source==='zgagi'\)\?'sq-tag-wa'/.test(ADMIN)], [false, true]);
 check('ב. תווית בתור', /lgZgagiUpdatedTag\(item\)/.test(ADMIN), true);
 check('ג. תווית אצל השרטט', /lgZgagiUpdatedTag\(o\)/.test(read('drafter.html')), true);
 check('ג. השרטט מעביר את השדה', /zgagiUpdatedAt:\s*o\.zgagiUpdatedAt/.test(read('drafter.html')), true);

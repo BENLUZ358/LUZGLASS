@@ -304,11 +304,12 @@ function lgEmailLinkKey(raw) {
 
 //  תווית אדומה על הזמנה מזגאגי שהזגג תיקן אחרי השליחה (בן, 1/11: "הסקיצה
 //  החדשה חייבת להחליף את הישנה, כדי שהמפעל יעבוד לפי החדשה"). בתור, אצל
-//  השרטט ובתחנת הבדיקה. '' כשאין.
+//  השרטט ובתחנת הבדיקה. '' כשאין. ⚠️ בלי המילה "זגאגי" — במסכים זו הזמנה
+//  רגילה של הלקוח, כמו מוואטסאפ (בן, 1/11).
 function lgZgagiUpdatedTag(o) {
   if (!o || !Number(o.zgagiUpdatedAt)) return '';
   const when = new Date(Number(o.zgagiUpdatedAt)).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-  return '<span class="sq-tag lg-zg-updated" title="הסקיצה הוחלפה בגרסה המתוקנת" style="background:rgba(192,57,43,0.18);color:#e57361;font-weight:700">עודכן מזגאגי · ' + lgEsc(when) + '</span>';
+  return '<span class="sq-tag lg-zg-updated" title="הלקוח תיקן — הסקיצה הוחלפה בגרסה החדשה" style="background:rgba(192,57,43,0.18);color:#e57361;font-weight:700">הסקיצה עודכנה · ' + lgEsc(when) + '</span>';
 }
 
 //  האם "הסקיצות טופלו" יוצא על ההזמנה. WhatsApp — תמיד (D3). מייל (בן, 26/10)
