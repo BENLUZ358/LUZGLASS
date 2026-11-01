@@ -80,6 +80,7 @@ const app = initializeApp({
   const fixed   = [];
   for (const [code, row] of Object.entries(sku)) {
     if (REMOVE.includes(code)) continue;
+    if (row.kind === 'hardware') continue;   // פרזול אינו זכוכית — אין מה לנחש
     const guess = parse(row.name || '');
     const fill  = {};
     const redo  = {};

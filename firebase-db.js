@@ -2362,8 +2362,22 @@ function lgFindPriceItem(glassName){
 //  לעבוד בדיוק כמו היום — קודם בודקים skuCatalog, ורק אם אין שם רשומה נופלים חזרה לישן.
 //  שלב 2 (עתידי, אחרי שכל המק"טים יעברו ויאומתו): הסרה הדרגתית של הקטלוגים הישנים.
 
-const LG_SKU_BUSINESS_FIELDS    = ['name', 'hashavshevetCode', 'active', 'source'];
+//  kind: 'hardware' — פרזול ("פריט רגיל" בחשבשבת; בן, 1/11). חסר = זכוכית, כמו תמיד.
+const LG_SKU_BUSINESS_FIELDS    = ['name', 'hashavshevetCode', 'active', 'source', 'kind'];
 const LG_SKU_OPERATIONAL_FIELDS = ['glass', 'mm', 'proc', 'graphic', 'chalavi', 'triplex'];
+
+//  שורות דוח הפריטים של חשבשבת → מה נכנס לקטלוג. "מכפלה" = זכוכית (כמו מאז
+//  ומתמיד), "פריט רגיל" = פרזול (בן, 1/11: "הגדרנו בהתחלה לא למשוך את המקטים של
+//  פריט רגיל"). סוג אחר (שירות וכו') לא נכנס. → [{ code, fields, price }]
+function lgHbItemsForCatalog(items) {
+  const KIND = { 'מכפלה': '', 'פריט רגיל': 'hardware' };
+  return (items || []).filter(it => it && it.code && Object.prototype.hasOwnProperty.call(KIND, it.itemType || 'מכפלה'))
+    .map(it => {
+      const kind = KIND[it.itemType || 'מכפלה'];
+      return { code: it.code, price: Number(it.price) || 0,
+               fields: { name: it.name, hashavshevetCode: it.code, active: true, ...(kind ? { kind } : {}) } };
+    });
+}
 
 // ניחוש שדות תפעוליים מתוך שם הפריט בחשבשבת (למשל '8 מ"מ שקוף מחוסם') — משמש רק כברירת מחדל
 // חד-פעמית בסנכרון ראשון של מק"ט חדש (ר' syncSkuCatalogFromHashavshevet). לעולם לא דורס ערך
@@ -2483,7 +2497,9 @@ async function syncSkuCatalogFromHashavshevet(code, businessFields) {
   const existing = snap.val() || {};
   // ברירת מחדל לשדות תפעוליים מתוך שם הפריט — רק לשדה שעדיין לא הוגדר בכלל (לא דורס עריכה קיימת).
   // זהו ניחוש טקסטואלי, לא ודאי — מסומן ב-opAuto כדי שיוצג כ"לא מאומת" עד לבדיקה ידנית (ר' saveSkuCatalogItem).
-  const guess = lgGuessOperationalFromName(safe.name || existing.name || '');
+  //  פרזול אינו זכוכית: "מגנט ישר שקוף" היה מנוחש כזכוכית שקופה ונכנס לרשימות הזכוכית
+  const isHardware = (safe.kind || existing.kind) === 'hardware';
+  const guess = isHardware ? {} : lgGuessOperationalFromName(safe.name || existing.name || '');
   const opFill = {};
   LG_SKU_OPERATIONAL_FIELDS.forEach(k => { if (existing[k] === undefined && guess[k] !== undefined) opFill[k] = guess[k]; });
   if (Object.keys(opFill).length) opFill.opAuto = true;

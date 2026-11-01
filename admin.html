@@ -1941,18 +1941,20 @@ async function syncFromHashavshevetNow(){
   _hbSyncing = true;
   showToast('מסנכרן מול חשבשבת...');
   try{
-    const res = await _lgAuthFetch('/api/hashavshevet-items');
+    // זכוכית ("מכפלה") וגם פרזול ("פריט רגיל") — בן, 1/11. ר' lgHbItemsForCatalog
+    const res = await _lgAuthFetch('/api/hashavshevet-items?itemType=all');
     const data = await res.json();
     if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP '+res.status));
 
+    const rows = lgHbItemsForCatalog(data.items);
     const BATCH = 20;
     let created=0, priced=0;
     const priceUpdates = {};
-    for(let i=0;i<data.items.length;i+=BATCH){
-      const batch = data.items.slice(i,i+BATCH);
+    for(let i=0;i<rows.length;i+=BATCH){
+      const batch = rows.slice(i,i+BATCH);
       await Promise.all(batch.map(async it=>{
         try{
-          await syncSkuCatalogFromHashavshevet(it.code, { name: it.name, hashavshevetCode: it.code, active: true });
+          await syncSkuCatalogFromHashavshevet(it.code, it.fields);
           created++;
           if(it.price > 0) priceUpdates[it.code] = it.price; // 0 = טרם הוזן מחיר בחשבשבת, לא דורס מחיר קיים
         }catch(e){ console.error('syncFromHashavshevetNow item failed:', it.code, e); }
@@ -4638,8 +4640,9 @@ function iwResolve(code){
 function _lgRenderIwCodeList(){
   const dl = document.getElementById('iwCodeList');
   if(!dl) return;
+  // שורת זכוכית — בלי פרזול (kind:'hardware'); לפרזול שורה משלו
   const list = Object.values(skuCatalogMap)
-    .filter(e => e && e.code && e.active !== false)
+    .filter(e => e && e.code && e.active !== false && e.kind !== 'hardware')
     .sort((a,b)=>String(a.code).localeCompare(String(b.code)));
   dl.innerHTML = list.map(e => `<option value="${lgEsc(e.code)}">${lgEsc(e.name||e.code)}</option>`).join('');
 }
