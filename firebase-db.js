@@ -2369,9 +2369,11 @@ const LG_SKU_OPERATIONAL_FIELDS = ['glass', 'mm', 'proc', 'graphic', 'chalavi', 
 
 //  שורות דוח הפריטים של חשבשבת → מה נכנס לקטלוג. "מכפלה" = זכוכית (כמו מאז
 //  ומתמיד), "פריט רגיל" = פרזול (בן, 1/11: "הגדרנו בהתחלה לא למשוך את המקטים של
-//  פריט רגיל"). סוג אחר (שירות וכו') לא נכנס. → [{ code, fields, price }]
+//  פריט רגיל"). סוג אחר (מונה וכו') לא נכנס. → [{ code, fields, price }]
+//  ⚠️ בדוח עצמו הסוג כתוב "רגיל" (1/11: "רגיל: 404, מכפלה: 183, מונה: 1"); גם
+//  "פריט רגיל" מתקבל, כפי שהוא מוצג בחשבשבת.
 function lgHbItemsForCatalog(items) {
-  const KIND = { 'מכפלה': '', 'פריט רגיל': 'hardware' };
+  const KIND = { 'מכפלה': '', 'רגיל': 'hardware', 'פריט רגיל': 'hardware' };
   return (items || []).filter(it => it && it.code && Object.prototype.hasOwnProperty.call(KIND, it.itemType || 'מכפלה'))
     .map(it => {
       const kind = KIND[it.itemType || 'מכפלה'];

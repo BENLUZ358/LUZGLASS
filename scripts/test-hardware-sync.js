@@ -53,11 +53,14 @@ vm.runInContext([
     { code: '300', name: 'ציר ק/זכ זהב מוברש פליז', price: 70, itemType: 'פריט רגיל' },
     { code: '1014', name: 'מגנט ישר שקוף', price: 0, itemType: 'פריט רגיל' },
     { code: 'X1', name: 'הובלה', price: 50, itemType: 'שירות' },
+    // בדוח האמיתי הסוג כתוב "רגיל" (בן, 1/11 — הדוח החזיר "רגיל: 404, מכפלה: 183, מונה: 1")
+    { code: '1004', name: 'זווית ק/זכ 90 ניקל זאמק', price: 12, itemType: 'רגיל' },
+    { code: 'M1', name: 'מונה', price: 0, itemType: 'מונה' },
   ];
   const out = ctx.lgHbItemsForCatalog(rows);
-  check('א. מכפלה + פריט רגיל נכנסים, שירות לא', out.map(x => x.code), ['8SMH', '300', '1014']);
-  check('א. פריט רגיל = פרזול', out.map(x => x.fields.kind || ''), ['', 'hardware', 'hardware']);
-  check('א. מחיר רק כשיש', out.map(x => x.price), [210, 70, 0]);
+  check('א. מכפלה + פריט רגיל / רגיל נכנסים, שירות ומונה לא', out.map(x => x.code), ['8SMH', '300', '1014', '1004']);
+  check('א. רגיל = פרזול', out.map(x => x.fields.kind || ''), ['', 'hardware', 'hardware', 'hardware']);
+  check('א. מחיר רק כשיש', out.map(x => x.price), [210, 70, 0, 12]);
 
   // ── ב ──
   for (const x of out) await ctx.syncSkuCatalogFromHashavshevet(x.code, x.fields);
