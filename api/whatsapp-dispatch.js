@@ -41,6 +41,7 @@ const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaEnqueue }   = require('./_wa-outbox');
 const { resolveRecipient, orderSketchName } = require('./_wa-recipient');
 const { lgSketchAckSkip, lgSketchAckActiveIds } = require('./_wa-sketch-ack');
+const { lgZgagiOwned } = require('./_zgagi-inbound');
 const { lgEmailSendGate } = require('./_env');
 const { lgEmailEnqueue, lgEmailActiveIds } = require('./_email-outbox');
 
@@ -108,6 +109,9 @@ module.exports = async function handler(req, res, deps) {
       if (kind === 'sketches-handled') {
         const why = lgSketchAckSkip(order, id, ackActive);
         if (why) { loaded.push({ id, skip: why }); continue; }
+        //  זגאגי (סקירה, 1/11): השדות על ההזמנה אינם הוכחה — הפורטל יכול לכתוב אותם.
+        //  רק הזמנה שהקליטה מזגאגי יצרה (waMeta/zgagiItems) מקבלת הודעה.
+        if (order.source === 'zgagi' && !(await lgZgagiOwned(db, id))) { loaded.push({ id, skip: 'לא סקיצת WhatsApp' }); continue; }
         //  הזמנת מייל שלא יוצאת למייל (השולח לא מקושר / נותק / כרטיס אחר) —
         //  כמו קודם: "הסקיצות טופלו" לא יוצא עליה בוואטסאפ.
         if (order.source === 'email' && (await resolveRecipient(db, order, kind)).channel !== 'email') {

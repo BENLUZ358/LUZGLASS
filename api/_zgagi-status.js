@@ -24,7 +24,8 @@ async function lgZgagiStages(db, q) {
   const out = {};
   for (const itemId of b.items) {
     const rec = (await db.ref(ZGAGI_ITEMS + '/' + lgZgagiItemKey(b.biz, b.order, itemId)).once('value')).val();
-    if (!rec || rec.biz !== String(b.biz)) continue;
+    //  רק רשומה שלמה של אותו עסק ואותה הזמנה (בזמן יצירה יש רק refNum — לא "נמחק")
+    if (!rec || !rec.orderId || rec.biz !== String(b.biz) || rec.order !== String(b.order) || rec.itemId !== String(itemId)) continue;
     const o = (await db.ref('orders/' + rec.orderId).once('value')).val();
     if (!o) { out[itemId] = { refNum: rec.refNum, gone: true }; continue; }
     const stage = String(o.stage || '');
@@ -42,7 +43,7 @@ async function lgZgagiCancel(db, q, now) {
   const t = now || Date.now();
   const k = lgZgagiItemKey(b.biz, b.order, b.itemId);
   const rec = (await db.ref(ZGAGI_ITEMS + '/' + k).once('value')).val();
-  if (!rec || rec.biz !== String(b.biz)) return { code: 'not-found' };
+  if (!rec || !rec.orderId || rec.biz !== String(b.biz) || rec.order !== String(b.order) || rec.itemId !== String(b.itemId)) return { code: 'not-found' };
   const ref = db.ref('orders/' + rec.orderId);
   const pre = (await ref.once('value')).val();
   if (!pre) return { code: 'ok', already: true };

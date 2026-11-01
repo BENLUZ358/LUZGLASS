@@ -41,36 +41,58 @@ const zg = (id, over) => Object.assign({ id, source: 'zgagi', zgagi: { biz: 'b',
   ctx.L = [zg('1', { sketchSeenAt: null }), zg('2', { sketchSeenAt: null })];
   check('א. דפדפן: "יש עוד" סופר גם זגאגי', vm.runInContext('lgSketchAckUnseen(L, lgSketchAckClientKey(L[0]), "1").length', ctx), 1);
 
-  // ── ב ──
-  const world = orders => fakeDb({ orders, sketches: { 1: PNG, 2: PNG },
-    hashavshevetAccounts: { 14201: { key: '14201', name: 'א.מ מראות', phone: '0501234567' } } });
+  // ── ב ── הזמנות אמיתיות מזגאגי נוצרות דרך הקליטה (הרשומה ב-waMeta/zgagiItems)
+  const { lgZgagiReceive } = require('../api/_zgagi-inbound');
+  const world = async (n, extra) => {
+    const db = fakeDb({ hashavshevetAccounts: { 14201: { key: '14201', name: 'א.מ מראות', phone: '0501234567' } }, skuCatalog: {} });
+    const ids = [];
+    for (let i = 1; i <= n; i++) {
+      const r = await lgZgagiReceive(db, { biz: 'b', order: 'o', orderNo: '1', customerNo: '14201', rev: 1, imagePng: PNG,
+        item: { itemId: 'i' + i, type: 'measure', title: 'מקלחון ' + i, qty: 1, measure: { glassType: 'שקוף', thickness: 8, processing: 'chisum', w: 1, h: 1 } } }, 1000 + i);
+      ids.push(r.items['i' + i].orderId);
+    }
+    if (extra) extra(db, ids);
+    return { db, ids };
+  };
   const provider = (sent, withFiles) => Object.assign({ name: 'fake', configured: true, globalSlot: false, maxPerRun: 5, nextGap: () => 0,
     gate: () => ({ allowed: true }),
     send: async f => { sent.push(['text', f]); return { ok: true, messageId: 't', httpStatus: 200 }; } },
     withFiles ? { sendFiles: async f => { sent.push(['files', f]); return { ok: true, messageId: 'f', httpStatus: 200 }; } } : {});
-  const run = async (orders, ids, withFiles) => {
-    const db = world(orders);
+  const run = async ({ db, ids }, withFiles) => {
     const q = await lgWaEnqueue(db, { kind: 'sketches-handled', to: '972501234567', clientName: 'א.מ מראות',
-      orderNums: ids.map(i => 'L' + i), sketchNames: ids.map(i => 'מקלחון ' + i), orderIds: ids });
+      orderNums: ids.map(i => (db._data.orders[i] || {}).refNum || i), sketchNames: ids.map(i => (db._data.orders[i] || {}).sketchName || ''), orderIds: ids });
     const sent = [];
     const r = await core.drainKeys(db, provider(sent, withFiles), [q.key], 'test', Date.now());
-    return { r, sent, db, key: q.key };
+    return { r, sent, db };
   };
 
-  let x = await run({ 1: zg('1'), 2: zg('2') }, ['1', '2'], true);
+  let w = await world(2);
+  let x = await run(w, true);
   check('ב. זגאגי → קבצים', x.sent.map(s => s[0]), ['files']);
-  check('ב. סקיצה לכל הזמנה, לפי מספר', x.sent[0][1].files.map(f => [f.name, f.mime]),
-    [['סקיצה L1 - מקלחון 1.png', 'image/png'], ['סקיצה L2 - מקלחון 2.png', 'image/png']]);
+  check('ב. סקיצה לכל הזמנה, לפי מספר', x.sent[0][1].files.map(f => [f.name, f.mime]).sort(),
+    [['סקיצה L1000 - מקלחון 1 · 1.png', 'image/png'], ['סקיצה L1001 - מקלחון 2 · 1.png', 'image/png']]);
   check('ב. הנוסח הרגיל (kind)', [x.sent[0][1].kind, x.sent[0][1].caption], ['sketches-handled', undefined]);
   check('ב. סומן נשלח', x.r.results[0].status, 'sent');
-  check('ב. sketchAck על ההזמנה', !!(x.db._data.orders[1].sketchAck && x.db._data.orders[1].sketchAck.sentAt), true);
+  check('ב. sketchAck על ההזמנה', !!(x.db._data.orders[w.ids[0]].sketchAck && x.db._data.orders[w.ids[0]].sketchAck.sentAt), true);
 
-  x = await run({ 1: zg('1'), 2: zg('2', { source: 'whatsapp', zgagi: null }) }, ['1', '2'], true);
-  check('ב. מעורב → טקסט', x.sent.map(s => s[0]), ['text']);
-  x = await run({ 1: zg('1') }, ['1'], false);
-  check('ב. ספק בלי קבצים → טקסט', x.sent.map(s => s[0]), ['text']);
-  x = await run({ 3: zg('3') }, ['3'], true);
-  check('ב. תמונה חסרה → טקסט (לא נתקע)', x.sent.map(s => s[0]), ['text']);
+  w = await world(1, (db, ids) => { db._data.orders.p1 = zg('p1', { source: 'whatsapp', zgagi: null }); ids.push('p1'); });
+  check('ב. מעורב → טקסט', (await run(w, true)).sent.map(s => s[0]), ['text']);
+  check('ב. ספק בלי קבצים → טקסט', (await run(await world(1), false)).sent.map(s => s[0]), ['text']);
+  w = await world(1, db => { delete db._data.sketches; });
+  check('ב. תמונה חסרה → טקסט (לא נתקע)', (await run(w, true)).sent.map(s => s[0]), ['text']);
+
+  // ── ג. זיוף מהפורטל (סקירה C1): source:'zgagi' + zgagi:{} בלי רשומה → בלי תמונות ──
+  w = await world(0, (db, ids) => { db._data.orders = { f1: zg('f1') }; db._data.sketches = { f1: PNG }; ids.push('f1'); });
+  check('ג. הזמנה מזויפת — לא נשלחות תמונות', (await run(w, true)).sent.map(s => s[0]), ['text']);
+  const D = fs.readFileSync(path.join(__dirname, '..', 'api', 'whatsapp-dispatch.js'), 'utf8');
+  check('ג. dispatch בודק בעלות לפני שהזמנת זגאגי נכנסת להודעה',
+    /order\.source === 'zgagi' && !\(await lgZgagiOwned\(db, id\)\)/.test(D), true);
+
+  // ── ד. יותר מ-10 סקיצות → טקסט (סקירה I5: 60 שניות, ושליחה חוזרת של חצי) ──
+  w = await world(11);
+  check('ד. 11 סקיצות → טקסט', (await run(w, true)).sent.map(s => s[0]), ['text']);
+  w = await world(10);
+  check('ד. 10 → קבצים', (await run(w, true)).sent.map(s => [s[0], s[1].files && s[1].files.length]), [['files', 10]]);
 
   if (failed) { console.error(`\n${failed} נכשלו`); process.exit(1); }
   console.log('\nכל הבדיקות עברו');

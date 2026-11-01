@@ -39,7 +39,8 @@ const T = 1762000000000;
   // ── א. קליטה ראשונה ──
   let db = fakeDb(WORLD());
   let r = await Z.lgZgagiReceive(db, body(), T);
-  const id = 'zg_bizA_ord1_it1';
+  const K = Z.lgZgagiItemKey('bizA', 'ord1', 'it1');
+  const id = 'zg_' + K;
   check('א. נוצרה', [r.code, r.items.it1.state, r.items.it1.refNum, r.items.it1.orderId], ['ok', 'created', 'L1000', id]);
   let o = db._data.orders[id];
   check('א. שדות ההזמנה', [o.source, o.customerId, o.orderClient, o.client, o.stage, o.status, o.hasSketch, o.refNum, o.orderNum, o.sketchName, o.paymentStatus],
@@ -49,7 +50,7 @@ const T = 1762000000000;
   check('א. פרזול', o.hardware, [{ name: 'ציר', qty: 2, sku: '0001' }]);
   check('א. לשונית ראשונה — בלי sketchSeenAt', o.sketchSeenAt, undefined);
   check('א. התמונה ב-sketches/', db._data.sketches[id], PNG);
-  check('א. רשומת זהות', [db._data.waMeta.zgagiItems.bizA_ord1_it1.orderId, db._data.waMeta.zgagiItems.bizA_ord1_it1.rev], [id, 1]);
+  check('א. רשומת זהות', [db._data.waMeta.zgagiItems[K].orderId, db._data.waMeta.zgagiItems[K].rev], [id, 1]);
   check('א. תאריך ושעה בשעון ישראל', [typeof o.date, typeof o.time, o.createdAt], ['string', 'string', T]);
 
   // ── ב. אותה שליחה שוב ──
@@ -125,26 +126,64 @@ const T = 1762000000000;
   r = await Z.lgZgagiReceive(db, fixed(), T + 100);
   check('ד. ההזמנה נמחקה אצלנו → gone, לא נוצרת מחדש', [r.items.it1.state, db._data.orders && db._data.orders[id]], ['gone', undefined]);
 
-  // ── ה. זהה לדפדפן ──
-  const DB = fs.readFileSync(path.join(__dirname, '..', 'firebase-db.js'), 'utf8');
-  const ctx = vm.createContext({ Math, Date, Number, String, Object, Array, JSON });
-  ['function lgHsWasSent\\(order\\) \\{[\\s\\S]*?\\n\\}', 'function lgAddHsCorrection\\([\\s\\S]*?\\n\\}', 'function lgHsCorrectionsForEdit\\([\\s\\S]*?\\n\\}']
-    .forEach(re => vm.runInContext(DB.match(new RegExp(re))[0], ctx));
-  const cases = [
-    [[{ w: 900, h: 1950, sku: '8SMH', name: 'a', hsLine: 1 }], [{ w: 950, h: 1950, sku: '8SMH', name: 'a' }]],
-    [[{ w: 900, h: 1950, sku: '8SMH', name: 'a', hsLine: 1 }], [{ w: 900, h: 1950, sku: '10SMH', name: 'b' }]],
-    [[{ w: 1, h: 2, sku: 'X', name: 'a', hsLine: 1 }, { w: 3, h: 4, sku: 'Y', name: 'b', hsLine: 2 }], [{ w: 3, h: 4, sku: 'Y', name: 'b' }]],
-    [[{ w: 1, h: 2, sku: 'X', name: 'a', hsLine: 1 }], [{ w: 1, h: 2, sku: 'X', name: 'a' }, { w: 5, h: 6, sku: 'Z', name: 'c' }]],
-  ];
-  const strip = u => Object.values(u).map(c => [c.itemIndex, c.hsLine, c.type, c.from, c.to]);
-  const diff = cases.filter(([b, a]) => {
-    const order = { hsOrder: { sentAt: 1 }, items: b };
-    const u1 = {}; ctx.U = u1; ctx.O = order; ctx.B = b; ctx.A = a;
-    vm.runInContext('lgHsCorrectionsForEdit(U, O, B, A, "zgagi")', ctx);
-    const u2 = Z.lgZgagiCorrections({ hashavshevet: { sentAt: 1 }, items: b }, b, a, 'zgagi', 1);
-    return JSON.stringify(strip(u1)) !== JSON.stringify(strip(u2));
-  });
-  check('ה. אותם רישומים כמו בדפדפן', diff.length, 0);
+  // ── ה. שורות חשבשבת לפי הזכוכית, לא לפי המקום (סקירה I2) ──
+  const sent = () => { Object.assign(db._data.orders[id], { stage: 'chash', hashavshevet: { sentAt: T + 50 } }); };
+  db = fakeDb(WORLD());
+  await Z.lgZgagiReceive(db, body(), T);
+  sent(); db._data.orders[id].items[0].hsLine = 1; db._data.orders[id].items[1].hsLine = 2;
+  await Z.lgZgagiReceive(db, body({ rev: 2 }, { output: { panels: [pane('B', 600, 1950)] } }), T + 100);
+  o = db._data.orders[id];
+  check('ה. A נמחקה — B שומרת את השורה שלה (2), לא של A', o.items.map(i => [i.paneLabel, i.hsLine]), [['B', 2]]);
+  check('ה. נרשם רק "להסיר A"', Object.values(o.hsCorrections).map(c => [c.type, c.hsLine]), [['remove', 1]]);
+
+  db = fakeDb(WORLD());
+  await Z.lgZgagiReceive(db, body({}, { qty: 2 }), T);
+  sent(); db._data.orders[id].items.forEach((x, i) => { x.hsLine = 10 + i; });   // A0 A1 B0 B1
+  await Z.lgZgagiReceive(db, body({ rev: 2 }, { qty: 3 }), T + 100);
+  o = db._data.orders[id];
+  check('ה. כמות 2→3: כל זכוכית שומרת את השורות שלה', o.items.map(i => [i.paneLabel, i.groupIndex, i.hsLine || null]),
+    [['A', 0, 10], ['A', 1, 11], ['A', 2, null], ['B', 0, 12], ['B', 1, 13], ['B', 2, null]]);
+  check('ה. נרשמו רק 2 תוספות, בלי "מידה" מזויפת', Object.values(o.hsCorrections).map(c => c.type).sort(), ['add', 'add']);
+
+  // ── ה2. תיקון בלי תמונה חדשה — לא מוחקים את ציור השרטט (סקירה M1) ──
+  db = fakeDb(WORLD());
+  await Z.lgZgagiReceive(db, body(), T);
+  db._data.orders[id]._editedSketch = 'x'; db._data.checkEdits = { [id]: { s: 1 } };
+  await Z.lgZgagiReceive(db, body({ rev: 2, imagePng: null }, { output: { panels: [pane('A', 950, 1950)] } }), T + 100);
+  check('ה2. ציורים נשארו', [db._data.orders[id]._editedSketch, !!db._data.checkEdits[id], db._data.sketches[id]], ['x', true, PNG]);
+
+  // ── ה3. זהות: גיבוב, תווים, רשומה של מישהו אחר (סקירה I3) ──
+  check('ה3. a + b_c ≠ a_b + c', Z.lgZgagiItemKey('a', 'b_c', 'X') === Z.lgZgagiItemKey('a_b', 'c', 'X'), false);
+  db = fakeDb(WORLD());
+  check('ה3. מזהה עם / נדחה', (await Z.lgZgagiReceive(db, body({ order: 'a/b' }), T)).code, 'bad-input');
+  check('ה3. מזהה ארוך מ-64 נדחה', (await Z.lgZgagiReceive(db, body({ biz: 'x'.repeat(65) }), T)).code, 'bad-input');
+  check('ה3. מספר לקוח לא ספרות נדחה', (await Z.lgZgagiReceive(db, body({ customerNo: '../x' }), T)).code, 'bad-input');
+  await Z.lgZgagiReceive(db, body(), T);
+  db._data.waMeta.zgagiItems[K].biz = 'אחר';
+  check('ה3. רשומה שלא שלו → נדחה', (await Z.lgZgagiReceive(db, body({ rev: 2 }, { output: { panels: [pane('A', 1, 1)] } }), T)).code, 'bad-input');
+
+  // ── ה4. תקרות (סקירה I4) ──
+  db = fakeDb(WORLD());
+  check('ה4. כמות 101 נדחית', (await Z.lgZgagiReceive(db, body({}, { qty: 101 }), T)).code, 'bad-input');
+  check('ה4. כמות שבר נדחית', (await Z.lgZgagiReceive(db, body({}, { qty: 1.5 }), T)).code, 'bad-input');
+  check('ה4. 51 זכוכיות נדחות', (await Z.lgZgagiReceive(db, body({}, { output: { panels: Array.from({ length: 51 }, (_, i) => pane('P' + i, 1, 1)) } }), T)).code, 'bad-input');
+  check('ה4. 101 פרזול נדחה', (await Z.lgZgagiReceive(db, body({}, { hardware: Array.from({ length: 101 }, () => ({ name: 'x', qty: 1 })) }), T)).code, 'bad-input');
+  check('ה4. שום דבר לא נכתב, גם לא המונה', [db._data.orders, (db._data.meta || {}).orderCounter], [undefined, undefined]);
+
+  // ── ה5. פרזול בהערות; מק"ט רק אם פעיל אצלנו (סקירה I6) ──
+  db = fakeDb(WORLD());
+  await Z.lgZgagiReceive(db, body({}, { hardware: [{ name: 'ציר', qty: 2, sku: '8SMH' }, { name: 'ידית', qty: 1, sku: 'NOPE' }] }), T);
+  check('ה5. הערה', db._data.orders[id].notes, 'פרזול (להוסיף בחשבשבת ידנית): ציר ×2 (8SMH), ידית ×1');
+
+  // ── ה6. בעלות (סקירה C1) ──
+  check('ה6. הזמנה שלנו — שייכת', await Z.lgZgagiOwned(db, id), true);
+  db._data.orders.fake = { id: 'fake', source: 'zgagi', zgagi: { biz: 'x' } };
+  check('ה6. הזמנה מזויפת מהפורטל — לא', await Z.lgZgagiOwned(db, 'fake'), false);
+  check('ה6. zg_ בלי רשומה — לא', await Z.lgZgagiOwned(db, 'zg_' + 'a'.repeat(24)), false);
+  db._data.waMeta.zgagiItems[K].cancelledAt = 5;
+  check('ה6. אחרי ביטול — לא', await Z.lgZgagiOwned(db, id), false);
+  r = await Z.lgZgagiReceive(db, body(), T + 1);
+  check('ה6. שליחה חוזרת של פריט שבוטל → gone (סקירה M3)', r.items.it1.state, 'gone');
 
   // ── ו. מתג ──
   db = fakeDb(Object.assign(WORLD(), { waMeta: { zgagiConfig: { skipFirstTab: true } } }));

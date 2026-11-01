@@ -63,14 +63,19 @@ async function _sendInvoice(db, provider, to, entry) {
 //  "הסקיצות טופלו" על הזמנות מזגאגי (בן, 1/11): הזגג לא שלח לנו כלום בוואטסאפ,
 //  ולכן התמונות עצמן הן התיעוד שם. רק כשכל ההזמנות בהודעה מזגאגי וכל התמונות
 //  קריאות; אחרת null → הטקסט הרגיל, כמו היום (לא נתקעים בגלל תמונה).
+//  ⚠️ "מזגאגי" = רשומה ב-waMeta/zgagiItems (lgZgagiOwned), לא השדות על ההזמנה —
+//  אותם הפורטל יכול לכתוב, ואז היינו שולחים תמונה שהוא בחר לכרטיס של מישהו אחר.
+//  עד 10 תמונות: כל קובץ עד 15 שניות, והכל חייב להיגמר לפני 60 השניות.
+const ZG_ACK_MAX_FILES = 10;
 async function _zgagiAckFiles(db, provider, entry) {
   if (typeof provider.sendFiles !== 'function') return null;
   const ids = entry.orderIds || [];
-  if (!ids.length) return null;
+  if (!ids.length || ids.length > ZG_ACK_MAX_FILES) return null;
+  const { lgZgagiOwned } = require('./_zgagi-inbound');
   const files = [];
   for (let i = 0; i < ids.length; i++) {
     const o = (await db.ref('orders/' + ids[i]).once('value')).val();
-    if (!o || o.source !== 'zgagi' || !(o.zgagi && o.zgagi.biz)) return null;
+    if (!o || o.source !== 'zgagi' || !(await lgZgagiOwned(db, ids[i]))) return null;
     const m = String((await db.ref('sketches/' + ids[i]).once('value')).val() || '').match(/^data:(image\/(?:png|jpeg));base64,([\s\S]+)$/);
     if (!m) return null;
     const ext = m[1] === 'image/png' ? 'png' : 'jpg';
