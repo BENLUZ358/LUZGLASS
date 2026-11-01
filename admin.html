@@ -1807,7 +1807,8 @@ function togglePriceClient(k){ _clientPriceOpen = (_clientPriceOpen===k?null:k);
 
 // ─── טאב "מחירון כללי" — קטלוג מק"טים מחשבשבת, מחיר תצוגה בלבד ────────────
 function renderGlobalPriceTab(el){
-  const list = Object.values(skuCatalogMap).sort((a,b)=>String(a.code).localeCompare(String(b.code)));
+  // זכוכית קודם, פרזול (kind:'hardware') אחריה — כל קבוצה לפי מק"ט
+  const list = Object.values(skuCatalogMap).sort((a,b)=>((a.kind==='hardware')-(b.kind==='hardware')) || String(a.code).localeCompare(String(b.code)));
   const ed   = _skuEditCode ? skuCatalogMap[_skuEditCode] : null;
   el.innerHTML = `
     <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
@@ -1856,17 +1857,17 @@ function renderGlobalPriceTab(el){
       </div>
     </div>`:''}
     <table class="price-table">
-      <thead><tr><th>מק"ט</th><th>שם</th><th>מחיר ₪/מ"ר</th><th>תפעולי</th><th>מקור</th><th></th></tr></thead>
+      <thead><tr><th>מק"ט</th><th>שם</th><th>מחיר ₪</th><th>תפעולי</th><th>מקור</th><th></th></tr></thead>
       <tbody>
         ${list.length?list.map(e=>`
           <tr style="${e.active===false?'opacity:0.5;':''}${e.opAuto?'background:rgba(184,146,42,0.06);':''}">
             <td style="font-weight:700">${lgEsc(e.code)}</td>
             <td>${lgEsc(e.name||'—')}</td>
-            <td style="color:var(--gold-text);font-weight:700">${globalPrices[e.code]?'₪'+globalPrices[e.code]:'—'}</td>
-            <td style="font-size:12px;color:var(--muted)">${lgEsc(e.glass||'')} ${e.mm||''}מ"מ · ${e.proc==='chisum'?'🔥':'✂️'}${e.graphic?' 🖼':''}${e.opAuto?' <span title="זוהה אוטומטית משם הפריט — טרם אומת ידנית" style="color:#c0392b;font-weight:700;cursor:help;">⚠ לא מאומת</span>':''}</td>
+            <td style="color:var(--gold-text);font-weight:700">${globalPrices[e.code]?'₪'+globalPrices[e.code]+'<span style="font-size:11px;font-weight:400;color:var(--muted)">'+(e.kind==='hardware'?'/יח׳':'/מ"ר')+'</span>':'—'}</td>
+            <td style="font-size:12px;color:var(--muted)">${e.kind==='hardware'?'🔩 פרזול':`${lgEsc(e.glass||'')} ${e.mm||''}מ"מ · ${e.proc==='chisum'?'🔥':'✂️'}${e.graphic?' 🖼':''}${e.opAuto?' <span title="זוהה אוטומטית משם הפריט — טרם אומת ידנית" style="color:#c0392b;font-weight:700;cursor:help;">⚠ לא מאומת</span>':''}`}</td>
             <td>${e.source==='hashavshevet'?'<span style="font-size:12px;background:rgba(184,146,42,0.12);color:var(--gold-text);padding:1px 6px;border-radius:3px">חשבשבת</span>':'<span style="font-size:12px;color:var(--muted)">ידני</span>'}</td>
             <td style="white-space:nowrap">
-              <button onclick="_skuEditCode='${lgJsStr(e.code)}';renderPricing()" style="padding:3px 8px;background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px;">ערוך תפעולי</button>
+              ${e.kind==='hardware'?'':`<button onclick="_skuEditCode='${lgJsStr(e.code)}';renderPricing()" style="padding:3px 8px;background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:12px;">ערוך תפעולי</button>`}
               <button onclick="deleteSkuCatalogEntry('${lgJsStr(e.code)}')" style="padding:3px 8px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:12px;">מחק</button>
             </td>
           </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">הקטלוג ריק — לחץ "סנכרן מחשבשבת" למעלה</td></tr>'}

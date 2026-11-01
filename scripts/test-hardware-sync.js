@@ -79,6 +79,12 @@ vm.runInContext([
   const BF = fs.readFileSync(path.join(ROOT, 'scripts', 'backfill-sku-operational.js'), 'utf8');
   check('ג2. סקריפט המילוי לא מנחש זכוכית לפרזול', /row\.kind === 'hardware'\) continue;/.test(BF), true);
 
+  // ── ג3. מסך המחירונים: פרזול מוצג כפרזול — מחיר ליחידה, בלי מ"מ/מספריים, בלי "ערוך תפעולי", אחרי הזכוכית ──
+  check('ג3. מחיר ליחידה לפרזול', /e\.kind==='hardware'\?'\/יח׳':'\/מ"ר'/.test(ADMIN), true);
+  check('ג3. תא תפעולי: "🔩 פרזול"', /e\.kind==='hardware'\?'🔩 פרזול'/.test(ADMIN), true);
+  check('ג3. אין "ערוך תפעולי" לפרזול', /e\.kind==='hardware'\?'':`<button onclick="_skuEditCode=/.test(ADMIN), true);
+  check('ג3. זכוכית קודם, פרזול אחריה', /\(a\.kind==='hardware'\)-\(b\.kind==='hardware'\)/.test(ADMIN), true);
+
   // ── ד ──
   const sync = pick(ADMIN, /async function syncFromHashavshevetNow[\s\S]*?\n}/);
   check('ד. מבקש את כל הסוגים', /hashavshevet-items\?itemType=all/.test(sync), true);
