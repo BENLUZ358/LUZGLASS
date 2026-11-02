@@ -51,6 +51,20 @@ const B64 = BM.toString('base64');
   const d = calls.find(c => c.action === 'agent-done');
   check('C1 printer not answering → retryable failure', [d.ok, d.retryable, /ECONNREFUSED/.test(d.error)], [false, true, true]);
 
+  /* E — a printer that keeps the connection open after receiving everything: printed, not failed */
+  calls.length = 0;
+  const sticky = net.createServer(sk => { sk.on('data', () => {}); sk.on('end', () => {}); /* never closes */ });
+  sticky.allowHalfOpen = true;
+  await new Promise(r => sticky.listen(0, '127.0.0.1', r));
+  const out = await W.sendLabels({ host: '127.0.0.1', port: sticky.address().port, timeoutMs: 300 }, [B64]);
+  check('E1 all data sent, printer silent → printed', out.ok, true);
+  sticky.close();
+
+  /* F — a failed round stops; the loop does not hammer the next job at once */
+  calls.length = 0;
+  const more = await W.printOnce({ labelPrinter: { host: '127.0.0.1', port: deadPort } }, post({ id: 'j3', printer: 'labels', bitmaps: [B64] }));
+  check('F1 a failed round reports not-ok (the loop waits)', more && more.ok, false);
+
   /* D */
   calls.length = 0; got.length = 0;
   await W.printOnce(cfg, post(null));

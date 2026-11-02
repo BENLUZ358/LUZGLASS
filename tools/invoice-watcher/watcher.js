@@ -316,21 +316,27 @@ function tsplForBitmap(b64) {
 }
 
 //  כל המדבקות בחיבור אחד. מחזיר {ok} / {ok:false, retryable, error}.
-//  retryable — רק כשלא נשלח אף בית (מדפסת כבויה / לא ברשת): מותר לנסות שוב.
-//  נשלח משהו ואז נפל — לא retryable (ייתכן שחלק יצא; בן מחליט).
+//  "הודפס" = כל הבתים נכתבו לחיבור ונשלחו (finish) — גם אם המדפסת משאירה את
+//  החיבור פתוח ולא סוגרת (אז אחרי timeoutMs מסיימים). בלי זה הדפסה שיצאה הייתה
+//  מסומנת "נכשל", ובן היה מדפיס שוב — כפול.
+//  retryable — רק כשלא התחברנו בכלל (מדפסת כבויה / לא ברשת): שום דבר לא נשלח.
+//  התחברנו ונפל באמצע — לא retryable (ייתכן שחלק יצא; בן מחליט).
 function sendLabels(printer, bitmaps) {
   let data;
   try { data = Buffer.concat(bitmaps.map(tsplForBitmap)); }
   catch (e) { return Promise.resolve({ ok: false, retryable: false, error: e.message }); }
   return new Promise(resolve => {
-    let sent = false, done = false;
+    let connected = false, finished = false, done = false;
     const end = r => { if (!done) { done = true; resolve(r); } };
     const sock = require('net').connect(Number(printer.port) || 9100, printer.host);
-    sock.setTimeout(15000);
-    sock.on('connect', () => { sent = true; sock.end(data); });
-    sock.on('close', hadErr => { if (!hadErr) end({ ok: true }); });
-    sock.on('timeout', () => { sock.destroy(); end({ ok: false, retryable: !sent, error: 'ETIMEDOUT' }); });
-    sock.on('error', e => end({ ok: false, retryable: !sent, error: e.code || e.message }));
+    sock.setTimeout(printer.timeoutMs || 15000);
+    sock.on('connect', () => {
+      connected = true;
+      sock.end(data, () => { finished = sock.bytesWritten >= data.length; if (finished) sock.setTimeout(printer.timeoutMs || 5000); });
+    });
+    sock.on('close', () => end(finished ? { ok: true } : { ok: false, retryable: !connected, error: connected ? 'החיבור נסגר באמצע' : 'ECONNRESET' }));
+    sock.on('timeout', () => { sock.destroy(); end(finished ? { ok: true } : { ok: false, retryable: !connected, error: 'ETIMEDOUT' }); });
+    sock.on('error', e => end(finished ? { ok: true } : { ok: false, retryable: !connected, error: e.code || e.message }));
   });
 }
 
@@ -352,9 +358,11 @@ const printUrl = cfg => cfg.printUrl || new URL('/api/print', cfg.url).href;
 async function printLoop(cfg) {
   const post = require_post({ ...cfg, url: printUrl(cfg) });
   for (;;) {
-    try { while (await printOnce(cfg, post)) { /* עוד עבודות בתור */ } }
+    //  עוד עבודות בתור — ברצף. סבב שנכשל (מדפסת כבויה) עוצר עד הסבב הבא
+    try { for (let out = await printOnce(cfg, post); out && out.ok; out = await printOnce(cfg, post)) { /* הבאה */ } }
     catch (e) { console.error('labels round failed:', e.message); }
-    await new Promise(r => setTimeout(r, cfg.labelPollMs || 3000));
+    //  כל 10 שניות — מספיק מהר לאייפד, ולא עומס על השרת (כ-260 אלף קריאות בחודש)
+    await new Promise(r => setTimeout(r, cfg.labelPollMs || 10000));
   }
 }
 

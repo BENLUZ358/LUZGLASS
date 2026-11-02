@@ -348,7 +348,7 @@
   <script src="firebase-db.js?v=20260601"></script>
   <script src="print-labels.js?v=20261103"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
-<script src="lg-icons.js?v=20260807"></script>
+<script src="lg-icons.js?v=20261103"></script>
 </head>
 <body>
 <a href="#wdMain" class="skip-link">דלג לתוכן</a>
@@ -2442,7 +2442,7 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
   const clientKey = (reportId||'legacy') + '_' + clientName;
   const isOpen    = T.open[clientKey] === true;   // סגור כברירת מחדל
   // מדבקות (בן, 3/11) — החלון בונה את המדבקות מכאן, ברגע שנפתח
-  _lblGroups[clientKey] = { clientName, orderIds: orders.map(o => String(o.id)), track: tk };
+  _lblGroups[tk + '|' + clientKey] = { clientName, orderIds: orders.map(o => String(o.id)), track: tk };
 
   let totalItems   = 0;   // כל פריטי הדוח של הלקוח
   let arrivedCountAll = 0; // כמה מהם כבר סומנו כהגיעו
@@ -2539,7 +2539,7 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
         <span style="font-size:13px;font-weight:900;color:#1a1714">👤 ${lgEsc(clientName)}</span>
         <span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:'+T.color+'1a;color:'+T.color}">${arrivedCountAll}/${totalItems} הגיעו</span>
       </div>
-      <button onclick="event.stopPropagation();openLabelsModal('${lgJsStr(clientKey)}')"
+      <button onclick="event.stopPropagation();openLabelsModal('${lgJsStr(tk + '|' + clientKey)}')"
         style="padding:4px 10px;background:#fff;color:#1a1714;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(0,0,0,0.18);cursor:pointer;border-radius:4px;white-space:nowrap;">🏷 מדבקות</button>
       <button onclick="event.stopPropagation();markAllClientArrived('${lgJsStr(clientKey)}','${lgJsStr(reportId||'')}','${lgJsStr(clientName)}','${tk}')"
         style="padding:4px 10px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ סמן הכל</button>
@@ -2571,7 +2571,7 @@ function openLabelsModal(key){
   const g = _lblGroups[key]; if(!g) return;
   const entries = _lblEntries(key);
   const labels = lgLabelsForClient(entries);
-  if(!labels.length){ showToast('אין זכוכיות שסומנו שהגיעו — סמן קודם מה הגיע'); return; }
+  if(!labels.length){ showToast('אין זכוכיות מסומנות שהגיעו. מדבקות של בדיקה שכבר נסגרה — בלוח ההדפסות'); return; }
   _lblClose();
   _lbl = { key, client: g.clientName, labels, orderIds: entries.map(e => String(e.order.id)) };
   const ov = document.createElement('div');
@@ -2636,7 +2636,8 @@ function _lblRender(){
 }
 
 // הגופן חייב להיטען לפני הציור — אחרת התצוגה (וההדפסה) יוצאות בגופן אחר
-async function _lblFonts(){ try { await document.fonts.load('700 64px Heebo'); } catch(e){} }
+//  עם טקסט עברי — אחרת נטען רק החלק הלטיני של הגופן
+async function _lblFonts(){ try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch(e){} }
 async function _lblDrawAll(){
   await _lblFonts();
   document.querySelectorAll('#lblGrid canvas[data-lbl]').forEach(c => {
@@ -2652,6 +2653,10 @@ function _lblEdit(i, field, v){
 function _lblCopy(i){ if(!_lbl) return; _lbl.labels.splice(i + 1, 0, Object.assign({}, _lbl.labels[i])); _lblRender(); }
 function _lblRemove(i){ if(!_lbl) return; _lbl.labels.splice(i, 1); _lblRender(); }
 
+// שגיאת מדפסת במילים (הכלי מדווח את קוד הרשת)
+const _LBL_ERR = { ECONNREFUSED: 'המדפסת לא ענתה — כבויה או לא ברשת', EHOSTUNREACH: 'המדפסת לא ברשת',
+  ETIMEDOUT: 'המדפסת לא ענתה בזמן', ECONNRESET: 'החיבור למדפסת נקטע' };
+const _lblErr = e => _LBL_ERR[e] || e || '';
 const _LBL_STATE = { queued: '⏳ בתור — המחשב במשרד ידפיס תוך כמה שניות', printing: '🖨 מדפיס…',
   printed: '✓ הודפס', failed: '✗ נכשל', unknown: '⚠ לא ידוע אם הודפס — בדוק את המדפסת' };
 
@@ -2688,7 +2693,7 @@ function _lblFollow(id){
       const res = await _lgAuthPost('/api/print', { action: 'get', id });
       const d = await res.json().catch(() => ({}));
       const s = d.job && d.job.state;
-      if(s) st.textContent = (_LBL_STATE[s] || s) + (s === 'failed' && d.job.error ? ': ' + d.job.error : '');
+      if(s) st.textContent = (_LBL_STATE[s] || s) + (s === 'failed' && d.job.error ? ': ' + _lblErr(d.job.error) : '');
       if(s && s !== 'queued' && s !== 'printing'){
         clearInterval(_lbl.poll); _lbl.poll = null;
         const b = document.getElementById('lblPrintBtn'); if(b) b.disabled = false;

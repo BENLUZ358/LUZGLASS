@@ -110,6 +110,10 @@ const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
 const STATE = { queued: 'בתור', printing: 'מדפיס', printed: 'הודפס', failed: 'נכשל', unknown: 'לא ידוע — בדוק את המדפסת' };
 const KIND = { labels: 'מדבקות' };
+// שגיאת מדפסת במילים (הכלי מדווח את קוד הרשת)
+const ERR = { ECONNREFUSED: 'המדפסת לא ענתה — כבויה או לא ברשת', EHOSTUNREACH: 'המדפסת לא ברשת',
+  ETIMEDOUT: 'המדפסת לא ענתה בזמן', ECONNRESET: 'החיבור למדפסת נקטע' };
+const errText = e => ERR[e] || e || '';
 let JOBS = [], AGENT = 0, DAYS = 30, OPEN = null;
 
 const post = async body => {
@@ -144,7 +148,7 @@ function render() {
       <b>${esc(KIND[j.kind] || j.kind)} · ${esc(j.client || '—')} · ${j.count}</b>
       <span class="st st-${esc(j.state)}">${esc(STATE[j.state] || j.state)}</span>
       <span class="meta">${esc(when(j.createdAt))} · ${esc(j.createdBy || '')}${j.reprintOf ? ' · הדפסה חוזרת' : ''}${j.printedAt ? ' · הודפס ' + esc(when(j.printedAt)) : ''}</span>
-      ${j.error && j.state !== 'printed' ? `<span class="err">${esc(j.error)}</span>` : ''}
+      ${j.error && j.state !== 'printed' ? `<span class="err">${esc(errText(j.error))}</span>` : ''}
     </button>`).join('') : '<div class="empty">אין הדפסות בטווח הזה</div>';
 }
 
@@ -171,7 +175,7 @@ function drawBox() {
   count();
 }
 async function paint(i) {
-  try { await document.fonts.load('700 64px Heebo'); } catch (e) {}
+  try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
   document.querySelectorAll('#boxGrid canvas').forEach(c => {
     const k = Number(c.dataset.c);
     if (i == null || i === k) lgLabelDraw(c.getContext('2d'), OPEN.labels[k]);
@@ -188,17 +192,17 @@ async function reprint() {
   if (!pick.length) return;
   $('boxGo').disabled = true; $('boxSt').textContent = 'שולח…';
   try {
-    try { await document.fonts.load('700 64px Heebo'); } catch (e) {}
+    try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
     const labels = pick.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum }));
     const bitmaps = labels.map(l => lgLabelRender(l).bitmap);
     await post({ action: 'create', kind: OPEN.job.kind, printer: OPEN.job.printer, client: OPEN.job.client,
                  orderIds: OPEN.job.orderIds, labels, bitmaps, reprintOf: OPEN.id });
-    $('boxSt').textContent = '⏳ בתור — יודפס תוך כמה שניות';
+    $('boxSt').textContent = '⏳ בתור — יודפס תוך כמה שניות. המצב ברשימה.';
     load();
   } catch (e) {
     $('boxSt').textContent = '✗ לא נשלח: ' + e.message;
+    $('boxGo').disabled = false;
   }
-  $('boxGo').disabled = false;
 }
 
 $('list').addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (b) openJob(b.dataset.id); });
