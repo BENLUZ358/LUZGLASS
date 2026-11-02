@@ -125,6 +125,29 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal(db._data.invoicePdf.k1.delivery.state, 'sent');
     assert.ok(db._data.orders.a.whatsappInvoice); assert.equal(db._data.orders.a.whatsapp, undefined);
   });
+  //  בן, 2/11: הזמנה שנפתחה בחשבשבת באמת וסומנה "פיקטיבית" אחר כך — החשבונית
+  //  עליה אמיתית ויוצאת. הודעה רגילה (מוכן לאיסוף וכו') על הזמנה כזו — עדיין חסומה.
+  const fileProvider = sent => ({ name: 'fake', configured: true, globalSlot: false, maxPerRun: 5, nextGap: () => 0,
+    gate: () => ({ allowed: true }), send: async () => { throw new Error('text send used'); },
+    sendFiles: async facts => { sent.push(facts); return { ok: true, messageId: 'id1', httpStatus: 200 }; } });
+  await test('invoice: an order marked fake after a real Hashavshevet send does not block the invoice', async () => {
+    const db = base({ a: { ...waOrder, isTest: true, hashavshevet: { httpOk: true, accountKey: '3150', reference: '1' } }, b: portal });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [key] = Object.keys(db._data.waOutbox);
+    const sent = [];
+    const r = await core.drainKeys(db, fileProvider(sent), [key], 'invoice-tool', Date.now());
+    assert.equal(r.results[0].status, 'sent');
+    assert.equal(sent.length, 1);
+  });
+  await test('invoice: a simulated (never really sent) fake order still blocks', async () => {
+    const db = base({ a: { ...waOrder, isTest: true, hashavshevet: { httpOk: true, simulated: true } }, b: portal });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [key] = Object.keys(db._data.waOutbox);
+    const sent = [];
+    const r = await core.drainKeys(db, fileProvider(sent), [key], 'invoice-tool', Date.now());
+    assert.equal(r.results[0].status, 'blocked');
+    assert.equal(sent.length, 0);
+  });
   await test('a provider that cannot send files never sends a text in place of the invoice', async () => {
     const db = base({ a: waOrder, b: portal });
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });

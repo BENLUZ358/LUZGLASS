@@ -223,6 +223,24 @@ check('the account key is resolved server-side',
   /* מקור אחד להחלטה "האם חויבה" — ולא העתק שני שיכול להתפצל */
   check('_billIsBilled is the only place that decides it',
         /function _billIsBilled\(o\)\{[\s\S]{0,160}?o\.invoice/.test(admin), true);
+
+  /* בן, 2/11: 1117 ו-1121 סומנו פיקטיביות אחרי שנפתחו בחשבשבת באמת. הזמנה
+     שיש עליה מסמך אמיתי בחשבשבת לא מסמנים יותר — הכפתור נעלם. */
+  const fn = (admin.match(/function _lgCanMarkTest\(o\)\{[\s\S]*?\n\}/) || [])[0];
+  check('the mark-fake decision lives in _lgCanMarkTest', !!fn, true);
+  if (fn) {
+    const c = vm.createContext({ _billIsBilled: o => !!(o.invoice && o.invoice.sentAt) });
+    vm.runInContext(fn, c);
+    const can = o => c._lgCanMarkTest(o);
+    check('a fresh order can be marked fake', can({}), true);
+    check('an order already in Hashavshevet cannot', can({ hsOrder: { httpOk: true, simulated: false } }), false);
+    check('a simulated run can (no real document)', can({ hsOrder: { httpOk: true, simulated: true } }), true);
+    check('a failed send can', can({ hsOrder: { httpOk: false } }), true);
+    check('already fake → no button', can({ isTest: true }), false);
+    check('invoiced → no button', can({ invoice: { sentAt: 1 } }), false);
+  }
+  check('the modal button uses it',
+        /testBtn\.style\.display = _lgCanMarkTest\(o\) \? '' : 'none';/.test(admin), true);
 }
 
 /* Finishing a delivery does NOT issue an invoice.
