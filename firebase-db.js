@@ -1191,6 +1191,13 @@ function lgNormalizeOrder(o) {
       markedBy:  o.invoiceDone.markedBy || '',
       docNumber: String(o.invoiceDone.docNumber),
     } : null,
+    // חשבונית חלקית (בן, 2/11): מספר פריט → מספר המסמך שבו חויב. ר' lgInvoiceablePieces
+    invoicePieces: (o.invoicePieces && typeof o.invoicePieces === 'object')
+      ? Object.keys(o.invoicePieces).reduce((m, k) => {
+          if (/^\d+$/.test(k) && o.invoicePieces[k]) m[k] = String(o.invoicePieces[k]);
+          return m;
+        }, {})
+      : {},
     _isSub:        String(o.id).startsWith('sub_')
   };
 }
@@ -1243,9 +1250,45 @@ function _lgLegacyInvoiced(o) {
 //    'invoiced'  הופקה חשבונית — יוצאת מהתהליך
 //  המקום היחיד שמחליט. מסך לא גוזר מצב בעצמו.
 const LG_INVOICE_STATES = ['pending', 'verified', 'changed', 'invoiced'];
+
+// ── חשבונית חלקית (בן, 2/11) ──
+//  הלקוחות האלה מקבלים סחורה כל יום. מה שחזר מחיסום ונסגר ב"סיום בדיקה" יוצא
+//  אליהם באותו יום, גם כשההזמנה עוד לא שלמה — והחשבונית כוללת בדיוק מה שיצא.
+//  בחשבשבת מושכים חלק מההזמנה; מה שלא נמשך נשאר פתוח, ונמשך בחשבונית הבאה.
+//  invoicePieces/<מספר פריט> = מספר המסמך. הודעת "מוכן" לא משתנה — רק כשהכל חזר.
+//  לפי מפתח הכרטיס בחשבשבת (customerId), כמו LG_MIN_AREA.
+const LG_PARTIAL_INVOICE_ACCOUNTS = ['9117', '14201'];   // נאור חזקיה, המקום לאמבט
+function lgPartialInvoiceOrder(o) {
+  return !!o && LG_PARTIAL_INVOICE_ACCOUNTS.includes(String(o.customerId || ''));
+}
+//  הפריטים שאפשר לחייב עכשיו (מספרי פריט, ממוינים):
+//    נאספה — כל מה שעוד לא חויב.
+//    לקוח חלקי, בחיסום — מה שחזר ונסגר ב"סיום בדיקה", פחות מה שכבר חויב.
+//  ⚠️ כש"סיום בדיקה" משלים הזמנה, workday מוחק את רשימות הסגורים — לכן מה
+//  שחויב נשמר ב-invoicePieces ולא נגזר מהן.
+function lgInvoiceablePieces(o) {
+  if (!o) return [];
+  const n = (o.items || []).length;
+  const billed = o.invoicePieces || {};
+  let idxs;
+  if (o.stage === 'collected') idxs = Array.from({ length: n }, (_, i) => i);
+  else if (o.stage === 'chisum' && lgPartialInvoiceOrder(o)) {
+    idxs = [...new Set(lgArrivedIdxs(o.chisumClosedIdxs).concat(lgArrivedIdxs(o.triplexClosedIdxs)))].sort((a, b) => a - b);
+  } else return [];
+  return idxs.filter(i => i < n && !billed[i]);
+}
+//  מספרי המסמכים שכבר כיסו חלק מההזמנה (לתצוגה: "4 חתיכות כבר בחשבונית 67400")
+function lgPartialInvoiceDocs(o) {
+  return [...new Set(Object.values((o && o.invoicePieces) || {}).map(String))];
+}
+
 function lgInvoiceState(o) {
-  if (!o || o.stage !== 'collected') return null;
+  if (!o) return null;
+  const early = o.stage === 'chisum' && lgPartialInvoiceOrder(o) && lgInvoiceablePieces(o).length > 0;
+  if (o.stage !== 'collected' && !early) return null;
   if ((o.invoiceDone && o.invoiceDone.docNumber) || _lgLegacyInvoiced(o)) return 'invoiced';
+  //  כל הפריטים כבר חויבו בחשבוניות חלקיות
+  if (o.stage === 'collected' && Object.keys(o.invoicePieces || {}).length && !lgInvoiceablePieces(o).length) return 'invoiced';
   const c = o.invoiceCheck;
   if (!c || !c.verifiedAt || c.revokedAt) return 'pending';
   return c.itemsHash === lgItemsHash(o.items) ? 'verified' : 'changed';
@@ -1274,8 +1317,11 @@ function lgDocNumberParse(raw) {
 function lgDocNumberConflicts(allOrders, docNumber, selectedIds) {
   const sel = new Set((selectedIds || []).map(String));
   const dn  = String(docNumber);
-  return (allOrders || []).filter(o =>
-    o && o.invoiceDone && o.invoiceDone.docNumber === dn && !sel.has(String(o.id)));
+  //  חשבונית חלקית: המספר כבר על חלק מהזמנה — של הזמנה אחרת, או של אחת הנבחרות
+  //  עצמן (חשבונית שנייה לאותה הזמנה היא מסמך אחר, עם מספר אחר)
+  const onPieces = o => lgPartialInvoiceDocs(o).includes(dn);
+  return (allOrders || []).filter(o => o && (
+    (o.invoiceDone && o.invoiceDone.docNumber === dn && !sel.has(String(o.id))) || onPieces(o)));
 }
 
 function _lgInvoiceActor() {
@@ -1663,8 +1709,16 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
   const now = Date.now();
   const update = {};
   list.forEach(o => {
-    update[o.id + '/invoiceDone'] = { markedAt: now, markedBy: who.name || who.phone, docNumber: p.docNumber };
-    update[o.id + '/updatedAt']   = now;
+    const done = { markedAt: now, markedBy: who.name || who.phone, docNumber: p.docNumber };
+    //  לקוח חלקי: כל פריט נרשם על המסמך. ההזמנה נסגרת רק כשהיא נאספה וכל
+    //  הפריטים חויבו — חשבונית על מה שחזר מחיסום משאירה אותה פתוחה.
+    if (lgPartialInvoiceOrder(o)) {
+      lgInvoiceablePieces(o).forEach(i => { update[o.id + '/invoicePieces/' + i] = p.docNumber; });
+      if (o.stage === 'collected') update[o.id + '/invoiceDone'] = done;
+    } else {
+      update[o.id + '/invoiceDone'] = done;
+    }
+    update[o.id + '/updatedAt'] = now;
   });
   await _lgDb.ref('orders').update(update);
   // DB-00004: רושם את החשבונית גם בשרת, כדי לשייך אליה את ה-PDF שהודפס (בכל סדר).
