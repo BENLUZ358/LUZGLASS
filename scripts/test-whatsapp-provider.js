@@ -588,8 +588,11 @@ const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
 
   /* הזמנה שנעלמה או סומנה פיקטיבית אחרי ההכנסה לתור */
   check('an order that vanished blocks the send', /ההזמנה לא נמצאה/.test(DRAIN), true);
+  //  חוץ מחשבונית על הזמנה שנפתחה בחשבשבת באמת (בן, 2/11) — נבדק בהתנהגות ב-test-invoice-deliver
   check('and one marked fictitious after queueing blocks too',
-        /if \(order\.isTest\)/.test(DRAIN), true);
+        /if \(order\.isTest && !realInvoice\)/.test(DRAIN), true);
+  check('the exception is for a real Hashavshevet invoice only',
+        /const realInvoice = entry\.kind === 'invoice' && hs && hs\.httpOk && !hs\.simulated;/.test(DRAIN), true);
   check('a blocked message is closed as failed, not left hanging',
         (DRAIN.match(/status: 'blocked'/g) || []).length >= 3, true);
 }

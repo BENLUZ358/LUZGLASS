@@ -66,7 +66,9 @@ async function settlePrinted(db, printedKey, now) {
 //  ─── חשבונית שהופקה ישירות בחשבשבת מהזמנות סוכן (בן, 29/10) ───
 //  כל הזמנה נשלחה לחשבשבת עם אסמכתא = המספר שלה (L1115 → 1115), ובחשבונית
 //  המספר הזה מודפס בטור "מ.מקור". מוצאים לפיו את ההזמנות — רק של אותו כרטיס
-//  ("מפתח" בחשבונית), רק כאלה שבאמת נשלחו (לא פיקטיביות). אין התאמה → [].
+//  ("מפתח" בחשבונית), רק כאלה שבאמת נשלחו (לא ריצה פיקטיבית). אין התאמה → [].
+//  סימון "פיקטיבית" שנעשה אחרי שליחה אמיתית לא מוציא אותה — המסמך בחשבשבת אמיתי
+//  (בן, 2/11: 1117 ו-1121 של נאור יצאו בלי סקיצות).
 //  ⚠️ קורא את כל ההזמנות: אין אינדקס על hashavshevet/accountKey (ובלי שינוי
 //  חוקים). מספר ההזמנות בייצור קטן; אם יגדל — אינדקס על customerId.
 async function ordersFromPrint(db, text, accountKey, docNumber) {
@@ -76,7 +78,7 @@ async function ordersFromPrint(db, text, accountKey, docNumber) {
   const all = (await db.ref('orders').once('value')).val() || {};
   return Object.keys(all).filter(id => {
     const o = all[id] || {}, h = o.hashavshevet;
-    return h && h.httpOk && !h.simulated && !o.isTest &&
+    return h && h.httpOk && !h.simulated &&
       String(h.accountKey) === String(accountKey) && refs.has(String(Number(h.reference)));
   }).sort();
 }

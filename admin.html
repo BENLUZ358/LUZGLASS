@@ -1008,13 +1008,7 @@ function openMod(id) {
   // חד-כיווני בכוונה: הפיכת הזמנה פיקטיבית לאמיתית היא הכיוון המסוכן.
   const testBtn = document.getElementById('modalTestBtn');
   if(testBtn){
-    const already = !!o.isTest;
-    // ⚠️ כאן נבדק o.hashavshevetInvoice — השם הגולמי ב-Firebase.
-    // lgNormalizeOrder מחזיר אותו בשם invoice, ולכן הביטוי היה תמיד
-    // undefined והמנגנון מעולם לא חסם. _billIsBilled הוא המקום היחיד
-    // שמחליט "האם חויבה", והוא כבר מטפל גם ב-httpOk וגם בריצה פיקטיבית.
-    const invoiced = _billIsBilled(o);
-    testBtn.style.display = (already || invoiced) ? 'none' : '';
+    testBtn.style.display = _lgCanMarkTest(o) ? '' : 'none';
     testBtn.title = 'ההזמנה תרוץ בכל התהליך אבל לא תיצור מסמך בחשבשבת';
   }
 
@@ -1252,13 +1246,28 @@ function invToggle(id, client, ev){
 
 function invClear(){ invSel.clear(); invSelClient = null; renderAll(); }
 
+// האם מותר לסמן את ההזמנה כפיקטיבית — רק כשעדיין לא סומנה, לא הופקה עליה
+// חשבונית, ולא נפתח עליה מסמך אמיתי בחשבשבת. חד-כיווני בכוונה: הפיכת הזמנה
+// פיקטיבית לאמיתית היא הכיוון המסוכן.
+// ⚠️ _billIsBilled הוא המקום היחיד שמחליט "האם חויבה" (פעם נבדק כאן
+// o.hashavshevetInvoice, השם הגולמי, והמנגנון מעולם לא חסם).
+// בן, 2/11: 1117 ו-1121 של נאור סומנו פיקטיביות אחרי שנפתחו בחשבשבת באמת,
+// והחשבונית יצאה ללקוח בלי הסקיצות שלהן.
+function _lgCanMarkTest(o){
+  if(!o || o.isTest) return false;
+  const invoiced = _billIsBilled(o);
+  if(invoiced) return false;
+  const hs = o.hsOrder;
+  return !(hs && hs.httpOk && !hs.simulated);
+}
+
 // מסמן הזמנה קיימת כפיקטיבית. הכפתור בתור הסקיצות תופס רק בכניסה, וזה
 // המקום היחיד לסמן הזמנה שכבר בתהליך — למשל כדי לבדוק הפקת חשבונית בלי
 // שייווצר מסמך אמיתי בחשבשבת.
 async function markOrderTest(){
   if(!eid) return;
   const o = orders.find(x => String(x.id) === String(eid));
-  if(!o) return;
+  if(!o || !_lgCanMarkTest(o)) return;
   if(!confirm('לסמן את ההזמנה כפיקטיבית?\n\n'
       + (o.orderNum||'') + ' · ' + (o.orderClient||'') + '\n\n'
       + 'היא תמשיך לרוץ בכל התהליך, אבל לא ייווצר עליה מסמך בחשבשבת.\n'

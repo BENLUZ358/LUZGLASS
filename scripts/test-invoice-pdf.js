@@ -280,9 +280,18 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     const r = await handleUpload(req({ original: PO, copy: PC }), d);
     assert.equal(r.status, 202); assert.equal(d.db._data.invoicePdf[r.body.key].state, 'printed');
   });
-  await test('agent-order invoice: test orders and orders never sent to Hashavshevet are ignored', async () => {
-    const d = byOrders({ a: HS(1115, '509', { isTest: true }), b: { ...HS(1115, '509'), hashavshevet: { httpOk: false, accountKey: '509', reference: '1115' } } }, [1115]);
+  await test('agent-order invoice: simulated runs and orders never sent to Hashavshevet are ignored', async () => {
+    const sim = { ...HS(1115, '509', { isTest: true }), hashavshevet: { httpOk: true, simulated: true, accountKey: '509', reference: '1115' } };
+    const d = byOrders({ a: sim, b: { ...HS(1115, '509'), hashavshevet: { httpOk: false, accountKey: '509', reference: '1115' } } }, [1115]);
     assert.equal((await handleUpload(req({ original: PO, copy: PC }), d)).status, 202);
+  });
+  //  בן, 2/11: 1117 ו-1121 של נאור סומנו "פיקטיבית" אחרי שנפתחו בחשבשבת באמת —
+  //  החשבונית יצאה בלי הסקיצות שלהן. מסמך אמיתי בחשבשבת = הזמנה אמיתית.
+  await test('agent-order invoice: an order marked fake AFTER a real Hashavshevet send is still matched', async () => {
+    const d = byOrders({ a: HS(1115, '509'), b: HS(1116, '509', { isTest: true }) }, [1115, 1116]);
+    const r = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(r.status, 200);
+    assert.deepEqual(d.db._data.invoicePdf[r.body.key].orderIds, ['a', 'b']);
   });
   await test('watcher: same reading as the server on the real invoice text', () => {
     const W = require('../tools/invoice-watcher/watcher');

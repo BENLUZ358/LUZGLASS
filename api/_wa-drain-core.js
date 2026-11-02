@@ -145,8 +145,11 @@ async function drainKeys(db, provider, keys, by, started) {
       results.push({ key, status: 'blocked', reason: why });
       continue;
     }
-    // הזמנה שסומנה פיקטיבית אחרי ההכנסה לתור
-    if (order.isTest) {
+    // הזמנה שסומנה פיקטיבית אחרי ההכנסה לתור.
+    // חשבונית על הזמנה שנפתחה בחשבשבת באמת — המסמך אמיתי, והסימון לא עוצר אותה (בן, 2/11).
+    const hs = order.hashavshevet;
+    const realInvoice = entry.kind === 'invoice' && hs && hs.httpOk && !hs.simulated;
+    if (order.isTest && !realInvoice) {
       const why = 'ההזמנה סומנה פיקטיבית — לא נשלחה הודעה';
       await lgWaComplete(db, key, { ok: false, reason: why });
       results.push({ key, status: 'blocked', reason: why });
