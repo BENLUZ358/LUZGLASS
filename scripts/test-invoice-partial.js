@@ -95,9 +95,9 @@ const rawOf = extra => Object.assign({
   await ctx.lgMarkInvoiced([order({})], '67400', []);
   const w1 = writes.find(w => w.path === 'orders');
   check('B1 the 4 pieces are recorded on document 67400',
-        Object.keys(w1.update).filter(k => k.includes('/invoicePieces/')).sort(),
-        ['o1/invoicePieces/0', 'o1/invoicePieces/1', 'o1/invoicePieces/2', 'o1/invoicePieces/3']);
-  check('B2 the order is not closed', Object.keys(w1.update).some(k => k.endsWith('/invoiceDone')), false);
+        Object.keys(w1.update).filter(k => k.includes('/invoiceDone/pieces/')).sort(),
+        ['o1/invoiceDone/pieces/0', 'o1/invoiceDone/pieces/1', 'o1/invoiceDone/pieces/2', 'o1/invoiceDone/pieces/3']);
+  check('B2 the order is not closed', Object.keys(w1.update).some(k => k.endsWith('/invoiceDone/docNumber')), false);
   raw = apply(raw, w1);
   check('B3 then it leaves the station (nothing left to invoice now)', ctx.lgInvoiceState(ctx.lgNormalizeOrder(raw)), null);
 
@@ -118,8 +118,8 @@ const rawOf = extra => Object.assign({
   writes.length = 0;
   await ctx.lgMarkInvoiced([o2], '67410', [o2]);
   const w2 = writes.find(w => w.path === 'orders');
-  check('C3 the fifth piece goes on 67410', w2.update['o1/invoicePieces/4'], '67410');
-  check('C4 and the order is closed on 67410', w2.update['o1/invoiceDone'] && w2.update['o1/invoiceDone'].docNumber, '67410');
+  check('C3 the fifth piece goes on 67410', w2.update['o1/invoiceDone/pieces/4'], '67410');
+  check('C4 and the order is closed on 67410', w2.update['o1/invoiceDone/docNumber'], '67410');
   raw = apply(raw, w2);
   check('C5 invoiced', ctx.lgInvoiceState(ctx.lgNormalizeOrder(raw)), 'invoiced');
 
@@ -133,8 +133,11 @@ const rawOf = extra => Object.assign({
   check('F2 a partial customer whose order came back whole: closed in one go',
         ctx.lgInvoiceablePieces(ctx.lgNormalizeOrder(rawOf({ stage: 'collected', chisumClosedIdxs: null }))), [0, 1, 2, 3, 4]);
 
+  /* a customer cannot pre-mark pieces: a top-level field is ignored (the rules forbid invoiceDone on create) */
+  check('G0 invoicePieces written by anyone at the top level is ignored',
+        ctx.lgInvoiceablePieces(ctx.lgNormalizeOrder(rawOf({ stage: 'collected', invoicePieces: { 0: 'x', 1: 'x', 2: 'x', 3: 'x', 4: 'x' } }))).length, 5);
   /* the number on another order still conflicts */
-  const prior = ctx.lgNormalizeOrder(rawOf({ id: 'o5', invoicePieces: { 0: '67430' } }));
+  const prior = ctx.lgNormalizeOrder(rawOf({ id: 'o5', invoiceDone: { pieces: { 0: '67430' } } }));
   check('G1 a number used for pieces of another order conflicts',
         ctx.lgDocNumberConflicts([prior], '67430', ['o1']).map(o => o.id), ['o5']);
 

@@ -1192,9 +1192,12 @@ function lgNormalizeOrder(o) {
       docNumber: String(o.invoiceDone.docNumber),
     } : null,
     // חשבונית חלקית (בן, 2/11): מספר פריט → מספר המסמך שבו חויב. ר' lgInvoiceablePieces
-    invoicePieces: (o.invoicePieces && typeof o.invoicePieces === 'object')
-      ? Object.keys(o.invoicePieces).reduce((m, k) => {
-          if (/^\d+$/.test(k) && o.invoicePieces[k]) m[k] = String(o.invoicePieces[k]);
+    // ⚠️ יושב בתוך invoiceDone ולא כשדה משלו: החוקים כבר אוסרים על לקוח ליצור
+    // הזמנה עם invoiceDone, ולכן לקוח לא יכול לסמן מראש חתיכות כ"חויבו" — בלי
+    // שינוי חוקים. invoiceDone בלי docNumber = עדיין לא נסגרה (למעלה: null).
+    invoicePieces: (o.invoiceDone && o.invoiceDone.pieces && typeof o.invoiceDone.pieces === 'object')
+      ? Object.keys(o.invoiceDone.pieces).reduce((m, k) => {
+          if (/^\d+$/.test(k) && o.invoiceDone.pieces[k]) m[k] = String(o.invoiceDone.pieces[k]);
           return m;
         }, {})
       : {},
@@ -1255,7 +1258,7 @@ const LG_INVOICE_STATES = ['pending', 'verified', 'changed', 'invoiced'];
 //  הלקוחות האלה מקבלים סחורה כל יום. מה שחזר מחיסום ונסגר ב"סיום בדיקה" יוצא
 //  אליהם באותו יום, גם כשההזמנה עוד לא שלמה — והחשבונית כוללת בדיוק מה שיצא.
 //  בחשבשבת מושכים חלק מההזמנה; מה שלא נמשך נשאר פתוח, ונמשך בחשבונית הבאה.
-//  invoicePieces/<מספר פריט> = מספר המסמך. הודעת "מוכן" לא משתנה — רק כשהכל חזר.
+//  invoiceDone/pieces/<מספר פריט> = מספר המסמך (בהזמנה המנורמלת: invoicePieces). הודעת "מוכן" לא משתנה — רק כשהכל חזר.
 //  לפי מפתח הכרטיס בחשבשבת (customerId), כמו LG_MIN_AREA.
 const LG_PARTIAL_INVOICE_ACCOUNTS = ['9117', '14201'];   // נאור חזקיה, המקום לאמבט
 function lgPartialInvoiceOrder(o) {
@@ -1712,9 +1715,10 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
     const done = { markedAt: now, markedBy: who.name || who.phone, docNumber: p.docNumber };
     //  לקוח חלקי: כל פריט נרשם על המסמך. ההזמנה נסגרת רק כשהיא נאספה וכל
     //  הפריטים חויבו — חשבונית על מה שחזר מחיסום משאירה אותה פתוחה.
+    //  ⚠️ שדה-שדה ולא אובייקט שלם: אובייקט היה מוחק את invoiceDone/pieces
     if (lgPartialInvoiceOrder(o)) {
-      lgInvoiceablePieces(o).forEach(i => { update[o.id + '/invoicePieces/' + i] = p.docNumber; });
-      if (o.stage === 'collected') update[o.id + '/invoiceDone'] = done;
+      lgInvoiceablePieces(o).forEach(i => { update[o.id + '/invoiceDone/pieces/' + i] = p.docNumber; });
+      if (o.stage === 'collected') Object.keys(done).forEach(k => { update[o.id + '/invoiceDone/' + k] = done[k]; });
     } else {
       update[o.id + '/invoiceDone'] = done;
     }
