@@ -1069,7 +1069,9 @@ function _modItemsHtml(items){
 // (lgSaveOrderItemsEdit), ובהזמנה שכבר בחשבשבת נרשמת ב"תיקון הזמנות".
 // מידות במטרים, כמו בתור הסקיצות (0.45 = 450 מ"מ).
 function _modCanEditItems(o){
-  return !!o && !((o.invoiceDone && o.invoiceDone.docNumber) || _lgLegacyInvoiced(o));
+  //  חשבונית חלקית (2/11): חלק מהחתיכות כבר חויבו — הוספה/מחיקה הייתה מזיזה אותן
+  return !!o && !((o.invoiceDone && o.invoiceDone.docNumber) || _lgLegacyInvoiced(o))
+         && !Object.keys(o.invoicePieces || {}).length;
 }
 function _modEditHtml(o){
   const items = o.items || [];

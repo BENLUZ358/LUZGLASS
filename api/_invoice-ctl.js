@@ -88,7 +88,7 @@ async function ordersFromPrint(db, text, accountKey, docNumber) {
 async function openFromOrders(db, ids, docNumber, accountKey, now) {
   const orders = (await Promise.all(ids.map(id => db.ref('orders/' + id).once('value')))).map(s => s.val());
   if (!ids.length || orders.some(o => !o)) return null;
-  const key = S.lgInvoicePdfKey(ids);
+  const key = S.lgInvoicePdfKey(ids, docNumber);
   const rec = {
     state: 'awaiting', docNumber: String(docNumber), accountKey: String(accountKey), createdAt: now, createdBy: 'print',
     client: orders.map(o => o.orderClient || o.client).find(Boolean) || '',
@@ -115,7 +115,7 @@ async function register(db, body, by, now) {
   const phones = [...new Set(orders.map(o => normPhone(o.clientPhone || o.phone)))];
   if (phones.length !== 1 || !phones[0]) return fail(422, 'mixed-or-missing-phone');
 
-  const key = S.lgInvoicePdfKey(ids);
+  const key = S.lgInvoicePdfKey(ids, docNumber);
   //  כרטיס הלקוח בחשבשבת — לפיו ("מפתח" בחשבונית) משייכים את ההדפסה
   const user = (await db.ref('users/' + phones[0]).once('value')).val();
   const rec = {

@@ -1191,6 +1191,16 @@ function lgNormalizeOrder(o) {
       markedBy:  o.invoiceDone.markedBy || '',
       docNumber: String(o.invoiceDone.docNumber),
     } : null,
+    // חשבונית חלקית (בן, 2/11): מספר פריט → מספר המסמך שבו חויב. ר' lgInvoiceablePieces
+    // ⚠️ יושב בתוך invoiceDone ולא כשדה משלו: החוקים כבר אוסרים על לקוח ליצור
+    // הזמנה עם invoiceDone, ולכן לקוח לא יכול לסמן מראש חתיכות כ"חויבו" — בלי
+    // שינוי חוקים. invoiceDone בלי docNumber = עדיין לא נסגרה (למעלה: null).
+    invoicePieces: (o.invoiceDone && o.invoiceDone.pieces && typeof o.invoiceDone.pieces === 'object')
+      ? Object.keys(o.invoiceDone.pieces).reduce((m, k) => {
+          if (/^\d+$/.test(k) && o.invoiceDone.pieces[k]) m[k] = String(o.invoiceDone.pieces[k]);
+          return m;
+        }, {})
+      : {},
     _isSub:        String(o.id).startsWith('sub_')
   };
 }
@@ -1243,9 +1253,51 @@ function _lgLegacyInvoiced(o) {
 //    'invoiced'  הופקה חשבונית — יוצאת מהתהליך
 //  המקום היחיד שמחליט. מסך לא גוזר מצב בעצמו.
 const LG_INVOICE_STATES = ['pending', 'verified', 'changed', 'invoiced'];
+
+// ── חשבונית חלקית (בן, 2/11) ──
+//  הלקוחות האלה מקבלים סחורה כל יום. מה שחזר מחיסום ונסגר ב"סיום בדיקה" יוצא
+//  אליהם באותו יום, גם כשההזמנה עוד לא שלמה — והחשבונית כוללת בדיוק מה שיצא.
+//  בחשבשבת מושכים חלק מההזמנה; מה שלא נמשך נשאר פתוח, ונמשך בחשבונית הבאה.
+//  invoiceDone/pieces/<מספר פריט> = מספר המסמך (בהזמנה המנורמלת: invoicePieces). הודעת "מוכן" לא משתנה — רק כשהכל חזר.
+//  לפי מפתח הכרטיס בחשבשבת (customerId), כמו LG_MIN_AREA.
+const LG_PARTIAL_INVOICE_ACCOUNTS = ['9117', '14201'];   // נאור חזקיה, המקום לאמבט
+function lgPartialInvoiceOrder(o) {
+  return !!o && LG_PARTIAL_INVOICE_ACCOUNTS.includes(String(o.customerId || ''));
+}
+//  הפריטים שאפשר לחייב עכשיו (מספרי פריט, ממוינים):
+//    נאספה — כל מה שעוד לא חויב.
+//    לקוח חלקי, בחיסום — מה שחזר ונסגר ב"סיום בדיקה", פחות מה שכבר חויב.
+//  ⚠️ כש"סיום בדיקה" משלים הזמנה, workday מוחק את רשימות הסגורים — לכן מה
+//  שחויב נשמר ב-invoicePieces ולא נגזר מהן.
+function lgInvoiceablePieces(o) {
+  if (!o) return [];
+  const n = (o.items || []).length;
+  const billed = o.invoicePieces || {};
+  let idxs;
+  if (o.stage === 'collected') idxs = Array.from({ length: n }, (_, i) => i);
+  else if (o.stage === 'chisum' && lgPartialInvoiceOrder(o)) {
+    idxs = [...new Set(lgArrivedIdxs(o.chisumClosedIdxs).concat(lgArrivedIdxs(o.triplexClosedIdxs)))].sort((a, b) => a - b);
+  } else return [];
+  return idxs.filter(i => i < n && !billed[i]);
+}
+//  מספרי המסמכים שכבר כיסו חלק מההזמנה (לתצוגה: "4 חתיכות כבר בחשבונית 67400")
+function lgPartialInvoiceDocs(o) {
+  return [...new Set(Object.values((o && o.invoicePieces) || {}).map(String))];
+}
+
+//  האימות בתוקף: נעשה, לא בוטל, והפריטים לא השתנו מאז
+function _lgCheckOk(o) {
+  const c = o && o.invoiceCheck;
+  return !!(c && c.verifiedAt && !c.revokedAt && c.itemsHash === lgItemsHash(o.items));
+}
+
 function lgInvoiceState(o) {
-  if (!o || o.stage !== 'collected') return null;
+  if (!o) return null;
+  const early = o.stage === 'chisum' && lgPartialInvoiceOrder(o) && lgInvoiceablePieces(o).length > 0;
+  if (o.stage !== 'collected' && !early) return null;
   if ((o.invoiceDone && o.invoiceDone.docNumber) || _lgLegacyInvoiced(o)) return 'invoiced';
+  //  כל הפריטים כבר חויבו בחשבוניות חלקיות
+  if (o.stage === 'collected' && Object.keys(o.invoicePieces || {}).length && !lgInvoiceablePieces(o).length) return 'invoiced';
   const c = o.invoiceCheck;
   if (!c || !c.verifiedAt || c.revokedAt) return 'pending';
   return c.itemsHash === lgItemsHash(o.items) ? 'verified' : 'changed';
@@ -1274,8 +1326,11 @@ function lgDocNumberParse(raw) {
 function lgDocNumberConflicts(allOrders, docNumber, selectedIds) {
   const sel = new Set((selectedIds || []).map(String));
   const dn  = String(docNumber);
-  return (allOrders || []).filter(o =>
-    o && o.invoiceDone && o.invoiceDone.docNumber === dn && !sel.has(String(o.id)));
+  //  חשבונית חלקית: המספר כבר על חלק מהזמנה — של הזמנה אחרת, או של אחת הנבחרות
+  //  עצמן (חשבונית שנייה לאותה הזמנה היא מסמך אחר, עם מספר אחר)
+  const onPieces = o => lgPartialInvoiceDocs(o).includes(dn);
+  return (allOrders || []).filter(o => o && (
+    (o.invoiceDone && o.invoiceDone.docNumber === dn && !sel.has(String(o.id))) || onPieces(o)));
 }
 
 function _lgInvoiceActor() {
@@ -1336,8 +1391,10 @@ async function lgRevokeInvoiceCheck(order, reason) {
 // ולא נגזר מ-items. עדכון w/h בלבד היה משאיר את כרטיס ההזמנה באדמין מציג את
 // המידה הישנה ואת המחיר הישן — עוד מקור אמת מקביל. לכן כל עריכה מחשבת את
 // שניהם מחדש מאותו מקור: ה-items אחרי השינוי.
-function lgCanEditInvoiceItems(order) {
+//  index — חשבונית חלקית: חתיכה שכבר חויבה לא נערכת (המידה שלה כבר בחשבונית)
+function lgCanEditInvoiceItems(order, index) {
   const s = lgInvoiceState(order);
+  if (index != null && order && (order.invoicePieces || {})[Number(index)]) return false;
   return s === 'pending' || s === 'verified' || s === 'changed';
 }
 
@@ -1377,7 +1434,7 @@ function lgRepriceLockedItems(items, prevLocked) {
 async function lgEditInvoiceItem(order, index, next) {
   const who = _lgInvoiceActor();
   if (!order || !order.id) throw new Error('lgEditInvoiceItem: הזמנה חסרה');
-  if (!lgCanEditInvoiceItems(order)) throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  if (!lgCanEditInvoiceItems(order, index)) throw new Error('אי אפשר לערוך פריט שכבר הופקה עליו חשבונית');
   const items = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}))
                   .map(it => Object.assign({}, it));
   const it = items[Number(index)];
@@ -1502,6 +1559,10 @@ async function lgSaveOrderItemsEdit(order, newItems, opts) {
   if (!order || !order.id) throw new Error('הזמנה חסרה');
   if ((order.invoiceDone && order.invoiceDone.docNumber) || _lgLegacyInvoiced(order))
     throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  //  חשבונית חלקית: החתיכות שחויבו מזוהות לפי המקום ברשימה — הוספה או מחיקה
+  //  הייתה מזיזה אותן, וחתיכה אחרת הייתה נחשבת "חויבה"
+  if (Object.keys(order.invoicePieces || {}).length)
+    throw new Error('חלק מההזמנה כבר בחשבונית — אי אפשר להוסיף או למחוק פריטים. תיקון מידה בודדת: בתחנת החשבוניות');
   const before = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}));
   const items = (newItems || []).map(it => Object.assign({}, it));
   const update = { items, updatedAt: Date.now() };
@@ -1588,7 +1649,7 @@ async function lgMarkHsCorrectionDone(orderId, keys) {
 function lgPlanSkuChange(order, index, newSku, opts) {
   opts = opts || {};
   if (!order || !order.id) throw new Error('הזמנה חסרה');
-  if (!lgCanEditInvoiceItems(order)) throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  if (!lgCanEditInvoiceItems(order, index)) throw new Error('אי אפשר לערוך פריט שכבר הופקה עליו חשבונית');
   const items = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}))
                   .map(it => Object.assign({}, it));
   const it = items[Number(index)];
@@ -1646,13 +1707,19 @@ async function lgEditInvoiceItemSku(order, index, newSku, opts) {
 // "החשבונית הופקה" — על הזמנה אחת או כמה יחד, עם אותו מספר מסמך.
 // כל הזמנה חייבת להיות 'verified' עכשיו; אחרת לא מסמנים אף אחת.
 // allOrders — לבדיקת כפילות מול מה שכבר סומן.
-async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
+//  chosen — {orderId: [מספרי פריט]} כפי שהוצגו בחלון ברגע שנפתח (חשבונית חלקית).
+//  ⚠️ לא מחשבים מחדש בלחיצה: חתיכה שנסגרה בינתיים לא נמשכה בחשבשבת, והייתה
+//  נרשמת כמחויבת בלי שחויבה. והזמנה שהשלימה בינתיים את המפעל (יצאה מהתחנה עד
+//  שתיאסף) עדיין נרשמת — המסמך בחשבשבת כבר קיים.
+async function lgMarkInvoiced(selected, docNumberRaw, allOrders, chosen) {
   const who = _lgInvoiceActor();
   const p = lgDocNumberParse(docNumberRaw);
   if (!p.ok) throw new Error(p.error);
   const list = (selected || []).filter(Boolean);
   if (!list.length) throw new Error('לא נבחרה אף הזמנה');
-  const notReady = list.filter(o => lgInvoiceState(o) !== 'verified');
+  const pick = o => (chosen && Array.isArray(chosen[o.id])) ? chosen[o.id].map(Number) : null;
+  const notReady = list.filter(o => lgInvoiceState(o) !== 'verified' &&
+    !(lgPartialInvoiceOrder(o) && pick(o) && _lgCheckOk(o) && !(o.invoiceDone && o.invoiceDone.docNumber)));
   if (notReady.length) {
     throw new Error('יש הזמנות שלא מאומתות: ' + notReady.map(o => o.orderNum || o.id).join(', '));
   }
@@ -1660,11 +1727,27 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
   if (dup.length) {
     throw new Error('מספר המסמך ' + p.docNumber + ' כבר רשום על: ' + dup.map(o => o.orderNum || o.id).join(', '));
   }
+  const twice = list.filter(o => lgPartialInvoiceOrder(o) && (pick(o) || []).some(i => (o.invoicePieces || {})[i]));
+  if (twice.length) {
+    throw new Error('יש חתיכות שכבר חויבו בחשבונית אחרת: ' + twice.map(o => o.orderNum || o.id).join(', ') + ' — סגור ופתח שוב');
+  }
   const now = Date.now();
   const update = {};
   list.forEach(o => {
-    update[o.id + '/invoiceDone'] = { markedAt: now, markedBy: who.name || who.phone, docNumber: p.docNumber };
-    update[o.id + '/updatedAt']   = now;
+    const done = { markedAt: now, markedBy: who.name || who.phone, docNumber: p.docNumber };
+    //  לקוח חלקי: כל פריט נרשם על המסמך. ההזמנה נסגרת רק כשהיא נאספה וכל
+    //  הפריטים חויבו — חשבונית על מה שחזר מחיסום משאירה אותה פתוחה.
+    //  ⚠️ שדה-שדה ולא אובייקט שלם: אובייקט היה מוחק את invoiceDone/pieces
+    if (lgPartialInvoiceOrder(o)) {
+      const pieces = pick(o) || lgInvoiceablePieces(o);
+      pieces.forEach(i => { update[o.id + '/invoiceDone/pieces/' + i] = p.docNumber; });
+      const billed = new Set(Object.keys(o.invoicePieces || {}).map(Number).concat(pieces));
+      const all = (o.items || []).every((_, i) => billed.has(i));
+      if (o.stage === 'collected' && all) Object.keys(done).forEach(k => { update[o.id + '/invoiceDone/' + k] = done[k]; });
+    } else {
+      update[o.id + '/invoiceDone'] = done;
+    }
+    update[o.id + '/updatedAt'] = now;
   });
   await _lgDb.ref('orders').update(update);
   // DB-00004: רושם את החשבונית גם בשרת, כדי לשייך אליה את ה-PDF שהודפס (בכל סדר).

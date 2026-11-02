@@ -102,7 +102,7 @@ async function lgEmailPutChunk(db, p) {
 const _answer = cur => {
   const c = cur || {};
   const out = { state: c.state || 'missing' };
-  if (c.state === 'done') { out.refNum = c.refNum; out.orderIds = c.orderIds || []; }
+  if (c.state === 'done') { out.refNum = c.refNum; out.orderIds = c.orderIds || []; if (c.autoHandled) out.autoHandled = true; }
   else if (c.reason) out.reason = c.reason;
   return out;
 };
@@ -328,7 +328,19 @@ async function lgEmailInboundProcess(db, key, opts) {
     upd[base + 'updatedAt'] = now;
     upd[EM_PARTS + '/' + key] = null;
     await db.ref().update(upd);
-    return { state: 'done', refNum, orderIds };
+    //  כתובת מקושרת → "טופל" לבד והודעה ללקוח (בן, 2/11). ר' _email-auto-handled.js
+    let autoHandled = false;
+    //  ⚠️ לא כשהמייל צריך את בן: קובץ שלא נקרא, תמונה ענקית, "כפולה?", שורה בלי
+    //  מק"ט — אחרת הלקוח היה מקבל "טופל" על משהו שנשאר בחוץ
+    const needsBen = skipped.length || upd[base + 'oversize'] ||
+      orderIds.some(id => { const o = upd['orders/' + id]; return o.waDuplicateOf || (o.items || []).some(it => it && it.skuMissing); });
+    if (who.via === 'link' && !needsBen) {
+      try { autoHandled = (await require('./_email-auto-handled').lgEmailAutoHandle(db, orderIds, now)).queued; }
+      catch (e) { console.warn('email-inbound: auto-handle failed', e && e.name); }
+      //  נשמר על הרשומה — הסקריפט ששואל שוב על אותו מייל עדיין יוציא אותו מהדואר הנכנס
+      if (autoHandled) await db.ref(base + 'autoHandled').set(true).catch(() => {});
+    }
+    return { state: 'done', refNum, orderIds, ...(autoHandled ? { autoHandled: true } : {}) };
   } catch (e) {
     const final = e instanceof Final;
     const msg = String((e && e.message) || 'עיבוד נכשל').slice(0, 300);

@@ -152,6 +152,8 @@ async function handleEmailInbound(req, deps) {
   const out = { ok: true, state: r.state };
   if (r.refNum) out.refNum = r.refNum;
   if (r.reason) out.reason = r.reason;
+  //  "טופל" לבד (בן, 2/11) — הסקריפט מוציא את השרשור מהדואר הנכנס
+  if (r.autoHandled) out.autoHandled = true;
   return { status: 200, body: out };
 }
 

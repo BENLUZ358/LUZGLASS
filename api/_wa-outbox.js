@@ -68,7 +68,8 @@ function lgWaMsgKey(kind, orderIds) {
 //  **דרך מה** נמצא המספר. בחקירת L9005 בדיוק המידע הזה היה חסר.
 async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, orderIds,
                                  queuedBy, phoneSource, accountKey, invoiceKey, docNumber }) {
-  const key = lgWaMsgKey(kind, orderIds);
+  //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
+  const key = lgWaMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber : kind, orderIds);
   const now = Date.now();
 
   const r = await db.ref(OUTBOX + '/' + key).transaction(cur => {

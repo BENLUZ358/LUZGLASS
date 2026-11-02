@@ -105,6 +105,11 @@ html,body{height:100%;overflow:hidden;}
 .banner-red{background:#fbeae7;color:#7c241b;border:2px solid var(--red);font-weight:var(--fw-bold);}
 .banner-green{background:#e7f3ec;color:#155d33;border:1px solid var(--green);}
 .banner .banner-act{margin-inline-start:auto;}
+/* חשבונית חלקית (בן, 2/11) */
+.banner-part{background:#fbf3df;color:#5c4510;border:2px solid var(--gold);font-weight:var(--fw-bold);}
+.item-out{opacity:.45;}
+.item-tag{font-size:var(--fs-xs);font-weight:var(--fw-bold);color:var(--muted);white-space:nowrap;}
+.ord-part{font-size:var(--fs-xs);font-weight:var(--fw-bold);color:#7a5c12;}
 
 .vtabs{display:none;gap:var(--space-2);padding:var(--space-3) var(--space-4) 0;}
 .vtab{flex:1;min-height:44px;border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);font-weight:var(--fw-bold);
@@ -328,6 +333,14 @@ const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
 const nOrders = n => n === 1 ? 'הזמנה אחת' : n + ' הזמנות';
 const nItems  = n => n === 1 ? 'פריט אחד'  : n + ' פריטים';
+// חשבונית חלקית (בן, 2/11): אילו פריטים בחשבונית הזו. part=false — כל ההזמנה, כמו תמיד.
+//   lines — מספרי השורות בחשבשבת (hsLine, אחרת מקום בהזמנה), כי אותן מושכים שם
+const partOf = o => {
+  const now = lgInvoiceablePieces(o), n = o.items.length;
+  return { part: now.length > 0 && now.length < n, now, n, docs: lgPartialInvoiceDocs(o),
+           lines: now.map(i => (o.items[i] && o.items[i].hsLine) || i + 1) };
+};
+const partText = p => `${p.now.length} מתוך ${p.n} חתיכות`;
 const isNarrow = () => matchMedia('(max-width:899px)').matches;
 
 const STATE_UI = {
@@ -447,6 +460,12 @@ const hsRef = o => {
   return r ? `<div class="ord-hs"><span data-icon="receipt"></span>אסמכתא ${esc(r)}</div>` : '';
 };
 
+const partLine = o => {
+  const p = partOf(o);
+  if (!p.part) return p.docs.length ? `<div class="ord-part">השאר כבר בחשבונית ${esc(p.docs.join(', '))}</div>` : '';
+  return `<div class="ord-part">חלקית · ${partText(p)}${p.docs.length ? ' · השאר כבר בחשבונית ' + esc(p.docs.join(', ')) : ''}</div>`;
+};
+
 // ═══ עמודה 2 · ההזמנות, המונים והשער ════════════════════════════════════════
 function renderOrders() {
   const g = selKey && groupOf(selKey);
@@ -462,7 +481,7 @@ function renderOrders() {
     return `<button class="ord is-${s}" type="button" data-id="${esc(o.id)}" aria-current="${String(o.id) === String(selId)}">
       <div class="ord-row"><span class="ord-num">${esc(o.orderNum || o.id)}</span>${stChip(s)}</div>
       <div class="ord-meta">${nItems(n)}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}${o.date ? ' · ' + esc(o.date) : ''}</div>
-      ${hsRef(o)}</button>`;
+      ${partLine(o)}${hsRef(o)}</button>`;
   }).join('');
 
   const c = g.counts;
@@ -520,6 +539,14 @@ function renderVerify() {
       <span>האימות בוטל ע״י ${esc(c.revokedBy)} · ${esc(fmtDate(c.revokedAt))}: ${esc(c.revokeReason)}</span></div>`;
   }
 
+  //  חשבונית חלקית: מה למשוך בחשבשבת, ומה עוד לא יצא
+  const part = partOf(o), inNow = new Set(part.now);
+  if (part.part || part.docs.length) {
+    const why = o.stage === 'chisum' ? 'השאר עוד לא חזר מחיסום' : 'השאר כבר חויב';
+    banner += `<div class="banner banner-part"><span data-icon="receipt"></span>
+      <span>בחשבונית הזו רק ${partText(part)} — למשוך בחשבשבת את שורות ${esc(part.lines.join(', '))}. ${why}${part.docs.length ? ' (חשבונית ' + esc(part.docs.join(', ')) + ')' : ''}.</span></div>`;
+  }
+
   const t = ticks[o.id] || (ticks[o.id] = {});
   if (editIdx !== null && !o.items[editIdx]) editIdx = null;
   const rows = o.items.map((it, i) => {
@@ -546,12 +573,17 @@ function renderVerify() {
         <button class="tick" type="button" id="edCancel" aria-label="בטל עריכה"><span data-icon="x"></span></button>
       </div>`;
     }
-    return `<div class="item">
+    const out = (part.part || part.docs.length) && !inNow.has(i);
+    const tag = !out ? '' : o.invoicePieces && o.invoicePieces[i]
+      ? `<span class="item-tag">בחשבונית ${esc(o.invoicePieces[i])}</span>` : '<span class="item-tag">עוד לא חזר</span>';
+    //  חתיכה שכבר חויבה — המידה שלה כבר בחשבונית, לא עורכים
+    const canEd = lgCanEditInvoiceItems(o, i);
+    return `<div class="item${out ? ' item-out' : ''}">
       <span class="item-n">${esc(n)}</span>
       <div class="item-main"><div class="item-dim">${w} × ${h}</div>
-        <div class="item-sub">${sub}</div>${was}</div>
-      <button class="edit" type="button" data-edit="${i}" aria-label="תקן את המידה של שורה ${esc(n)}"><span data-icon="pencil"></span></button>
-      <button class="edit" type="button" data-glass="${i}" aria-label="החלף סוג זכוכית בשורה ${esc(n)}"><span data-icon="refresh"></span></button>
+        <div class="item-sub">${sub}</div>${was}</div>${tag}
+      ${canEd ? `<button class="edit" type="button" data-edit="${i}" aria-label="תקן את המידה של שורה ${esc(n)}"><span data-icon="pencil"></span></button>
+      <button class="edit" type="button" data-glass="${i}" aria-label="החלף סוג זכוכית בשורה ${esc(n)}"><span data-icon="refresh"></span></button>` : ''}
       <button class="tick" type="button" data-tick="${i}" aria-pressed="${!!t[i]}" aria-label="סמן שורה ${esc(n)} כנבדקה"><span data-icon="check"></span></button>
     </div>`;
   }).join('') || `<div class="empty-state"><div class="empty-state-title">אין פריטים בהזמנה</div></div>`;
@@ -697,13 +729,16 @@ document.addEventListener('keydown', e => {
 function openInvoiceModal() {
   const g = selKey && groupOf(selKey); if (!g || !g.counts.gateOpen) return;
   const ready = g.ords.filter(o => lgInvoiceState(o) === 'verified');
+  //  החתיכות כפי שמוצגות עכשיו — הן מה שנמשך בחשבשבת, והן מה שנרשם (ר' lgMarkInvoiced)
+  const chosen = {};
+  ready.forEach(o => { if (lgPartialInvoiceOrder(o)) chosen[o.id] = lgInvoiceablePieces(o); });
   openModal(`<div class="modal-in">
     <h3 id="ovTitle">${esc(g.name)}</h3>
     <div class="sub">${ready.length === 1 ? "הזמנה אחת מאומתת" : ready.length + " הזמנות מאומתות"}</div>
     <ol class="steps"><li>עבור לחשבשבת</li><li>הפק חשבונית ללקוח</li><li>חזור לכאן והקלד את מספר המסמך</li></ol>
     <div class="field" style="margin-bottom:var(--space-2)"><label>ההזמנות שבחשבונית הזו</label></div>
     <div class="pick-list">${ready.map(o => `<label class="pick"><input type="checkbox" data-pick="${esc(o.id)}" checked>
-      <span><b>${esc(o.orderNum || o.id)}</b> · ${nItems(o.items.length)}</span></label>`).join('')}</div>
+      <span><b>${esc(o.orderNum || o.id)}</b> · ${(p => p.part ? partText(p) + ' (שורות ' + esc(p.lines.join(', ')) + ')' : nItems(o.items.length))(partOf(o))}</span></label>`).join('')}</div>
     <div class="field" id="docField"><label for="docNum">מספר המסמך מחשבשבת (חובה)</label>
       <input id="docNum" class="doc-input" inputmode="numeric" autocomplete="off" enterkeyhint="done">
       <div class="field-msg" id="docMsg">חשבונית אחת יכולה לכסות כמה הזמנות. הורד סימון מהזמנה שלא בחשבונית הזו.</div></div>
@@ -732,7 +767,7 @@ function openInvoiceModal() {
     if (!sel.length) { toast('סמן לפחות הזמנה אחת', true); return; }
     const b = $('markBtn'); b.disabled = true; b.innerHTML = '<span class="spin"></span>שומר…';
     try {
-      const r = await lgMarkInvoiced(sel, input.value, ORDERS);
+      const r = await lgMarkInvoiced(sel, input.value, ORDERS, chosen);
       closeModal();
       toast(`נרשם: חשבונית ${r.docNumber} על ${nOrders(r.count)}`);
     } catch (err) {
