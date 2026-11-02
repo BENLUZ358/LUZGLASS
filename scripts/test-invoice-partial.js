@@ -138,6 +138,29 @@ const rawOf = extra => Object.assign({
   check('G1 a number used for pieces of another order conflicts',
         ctx.lgDocNumberConflicts([prior], '67430', ['o1']).map(o => o.id), ['o5']);
 
+  /* H — the queues: a second invoice for the same order is a new message, not "already sent" */
+  {
+    const { fakeDb } = require(path.join(__dirname, '_fake-db.js'));
+    const { lgWaEnqueue } = require(path.join(ROOT, 'api', '_wa-outbox.js'));
+    const { lgEmailEnqueue } = require(path.join(ROOT, 'api', '_email-outbox.js'));
+    const db = fakeDb({});
+    const wa = dn => lgWaEnqueue(db, { kind: 'invoice', to: '972535214912', orderIds: ['o1'], orderNums: ['L1200'], invoiceKey: 'k' + dn, docNumber: dn });
+    const a = await wa('67400');
+    db._data.waOutbox[a.key].state = 'sent';
+    const b = await wa('67410');
+    check('H1 WhatsApp: the second invoice is queued', b.queued, true);
+    check('H2 WhatsApp: as its own message', b.key !== a.key, true);
+    check('H3 WhatsApp: the same invoice twice is still one message', (await wa('67410')).queued, false);
+    const em = dn => lgEmailEnqueue(db, { kind: 'invoice', thread: 'T1', messageId: 'M1', email: 'x@y.co', orderIds: ['o1'], orderNums: ['L1200'], invoiceKey: 'k' + dn, docNumber: dn, now: 1 });
+    const c = await em('67400');
+    db._data.waMeta.emailOutbox[c.key].state = 'sent';
+    check('H4 email: the second invoice is queued', (await em('67410')).queued, true);
+    //  ready / sketches-handled keep their keys — no docNumber, no change
+    const r1 = await lgWaEnqueue(db, { kind: 'ready', to: '972535214912', orderIds: ['o1'] });
+    db._data.waOutbox[r1.key].state = 'sent';
+    check('H5 "ready" still goes out once per order', (await lgWaEnqueue(db, { kind: 'ready', to: '972535214912', orderIds: ['o1'] })).queued, false);
+  }
+
   if (failed) { console.error('\n' + failed + ' failed'); process.exit(1); }
   console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -59,7 +59,8 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
                                     queuedBy, accountKey, invoiceKey, docNumber, fileCount, now }) {
-  const key = lgEmailMsgKey(kind, thread, orderIds);
+  //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
+  const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber : kind, thread, orderIds);
   const at  = now || Date.now();
   const r = await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {
     if (cur && (cur.state === 'pending' || cur.state === 'sent')) return;   // abort — בתור / נשלחה

@@ -294,6 +294,33 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal(r.status, 200);
     assert.deepEqual(d.db._data.invoicePdf[r.body.key].orderIds, ['a', 'b']);
   });
+  //  חשבונית חלקית (בן, 2/11): 4 חתיכות של L1115 בחשבונית 67400, החמישית אחר כך
+  //  בחשבונית 67410 — אותה הזמנה, שתי חשבוניות. השנייה נתקעה כ"printed" ולא נשלחה.
+  await test('partial invoice: a second invoice for the same order gets its own record', async () => {
+    const d = byOrders({ a: HS(1115, '509') }, [1115]);
+    const first = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(first.status, 200);
+    const t2 = { [Buffer.from('%PDF-1.4 o2').toString()]: PRINT('מקור', [1115]).replace('67400', '67410'),
+                 [Buffer.from('%PDF-1.4 c2').toString()]: PRINT('העתק 1', [1115]).replace('67400', '67410') };
+    d.pageTexts = async buf => [t2[buf.toString()] || ''];
+    const second = await handleUpload(req({ original: pdf('o2'), copy: pdf('c2') }), d);
+    assert.equal(second.status, 200); assert.equal(second.body.byOrders, true);
+    assert.notEqual(second.body.key, first.body.key);
+    const rec = d.db._data.invoicePdf[second.body.key];
+    assert.deepEqual([rec.state, rec.docNumber, rec.orderIds], ['ready', '67410', ['a']]);
+    assert.equal(d.db._data.invoicePdf[first.body.key].docNumber, '67400');
+  });
+  await test('partial invoice: the station registering doc 2 for the same order opens a new record', async () => {
+    const { handleCtl } = require('../api/_invoice-ctl');
+    const db = fakeDb({ orders: { a: HS(1115, '509') }, users: { '0548000775': { customerId: '509' } } });
+    const ctl = body => handleCtl({ method: 'POST', body: { action: 'register', ...body } },
+                                  { db, now: 5, verify: async () => ({ ok: true, role: 'admin', phone: '050' }) });
+    const r1 = await ctl({ docNumber: '67400', orderIds: ['a'] });
+    db._data.invoicePdf[r1.body.key].state = 'ready';
+    const r2 = await ctl({ docNumber: '67410', orderIds: ['a'] });
+    assert.equal(r2.status, 200); assert.notEqual(r2.body.key, r1.body.key); assert.equal(r2.body.state, 'awaiting');
+    assert.equal(db._data.invoicePdf[r2.body.key].docNumber, '67410');
+  });
   await test('watcher: same reading as the server on the real invoice text', () => {
     const W = require('../tools/invoice-watcher/watcher');
     assert.equal(W.roleOf(REAL('מקור')), 'original');

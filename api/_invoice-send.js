@@ -19,9 +19,12 @@ function lgInvoiceSendKey(clientKey, docNumber) {
 
 //  מפתח רשומת invoicePdf: דטרמיניסטי לפי קבוצת ההזמנות, כך שהפקה חוזרת
 //  או רישום ידני של אותן הזמנות מגיעים לאותה רשומה.
-function lgInvoicePdfKey(orderIds) {
+//  עם מספר מסמך (בן, 2/11): חשבונית חלקית — אותה הזמנה בשתי חשבוניות. בלי
+//  המספר במפתח, השנייה נפלה על הרשומה של הראשונה ונתקעה כ"printed".
+function lgInvoicePdfKey(orderIds, docNumber) {
+  const dn = docNumber ? '#' + String(docNumber) : '';
   return crypto.createHash('sha1')
-    .update('invoicePdf|' + [...orderIds].map(String).sort().join(',')).digest('hex').slice(0, 20);
+    .update('invoicePdf|' + [...orderIds].map(String).sort().join(',') + dn).digest('hex').slice(0, 20);
 }
 
 //  שם בטוח לתיקייה/קובץ ב-Windows (גם בנתיב רשת).
