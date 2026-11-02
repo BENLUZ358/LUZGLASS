@@ -24,8 +24,9 @@ const core = fs.readFileSync(corePath, 'utf8');
 const ctx = {};
 vm.createContext(ctx);
 vm.runInContext(core + '\nthis.f={emPlanChunks,emAddr,emShouldTake,emLabelFor,emDecide,emGiveUp,emOutboxPlan,emBudgetOk,emOutboxClaim,emSentToPrune,' +
+  'emThreadSettled:typeof emThreadSettled==="function"?emThreadSettled:function(){return "missing";},' +
   'emReplyOk:typeof emReplyOk==="function"?emReplyOk:function(){return "missing";}};', ctx);
-const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp, emOutboxPlan, emBudgetOk, emOutboxClaim, emSentToPrune, emReplyOk } = ctx.f;
+const { emPlanChunks, emAddr, emShouldTake, emLabelFor, emDecide, emGiveUp, emOutboxPlan, emBudgetOk, emOutboxClaim, emSentToPrune, emReplyOk, emThreadSettled } = ctx.f;
 
 // A
 check('chunks 0', emPlanChunks(0, 3000000), 1);
@@ -141,6 +142,19 @@ check('budget claim ok', emBudgetOk('outbox-claim', M - 31000, M), true);
 check('budget claim stops 30s early', emBudgetOk('outbox-claim', M - 29000, M), false);
 check('budget item until the end', emBudgetOk('outbox-item', M - 1, M), true);
 check('budget item over', emBudgetOk('outbox-item', M + 1, M), false);
+
+// F — "טופל" לבד (בן, 2/11): השרת ענה autoHandled → מוציאים את השרשור מהדואר הנכנס
+check('decide done + autoHandled archives', emDecide(200, { state: 'done', autoHandled: true }), { label: 'LG/נקלט', handled: true, archive: true });
+check('decide plain done does not archive', emDecide(200, { state: 'done' }).archive, undefined);
+check('decide failed + autoHandled ignored', emDecide(200, { state: 'failed', autoHandled: true }), { label: null, handled: false });
+//  ⚠️ שרשור יוצא מהדואר הנכנס רק כשכל המיילים בו טופלו — אחרת מייל שעוד לא נקלט
+//  (נשאר לריצה הבאה) נעלם מ-in:inbox ולא נקלט לעולם
+const fcfg = { START_AT: '2026-10-20T00:00:00Z', ALLOWED_SENDERS: '', ME: 'orderluz@gmail.com' };
+const ft = Date.parse('2026-11-02T10:00:00Z');
+check('thread settled when all handled', emThreadSettled([{ id: 'a', from: 'p@x.com', date: ft }, { id: 'b', from: 'p@x.com', date: ft }], fcfg, { a: 1, b: 1 }), true);
+check('thread not settled with an unhandled mail', emThreadSettled([{ id: 'a', from: 'p@x.com', date: ft }, { id: 'b', from: 'p@x.com', date: ft }], fcfg, { a: 1 }), false);
+check('our own reply does not hold the thread', emThreadSettled([{ id: 'a', from: 'p@x.com', date: ft }, { id: 'r', from: 'orderluz@gmail.com', date: ft }], fcfg, { a: 1 }), true);
+check('an empty thread is not archived', emThreadSettled([], fcfg, {}), false);
 
 // D
 const gs = fs.existsSync(gsPath) ? fs.readFileSync(gsPath, 'utf8') : '';

@@ -84,9 +84,19 @@ function emDecide(httpCode, body) {
   if (httpCode === 200 && body) {
     if (body.state === 'not-allowed') return { label: null, handled: true };
     var label = emLabelFor(body.state);
+    //  "טופל" לבד (בן, 2/11): השרת סימן וענה ללקוח — השרשור יוצא מהדואר הנכנס
+    if (body.state === 'done' && body.autoHandled === true) return { label: label, handled: true, archive: true };
     return { label: label, handled: label !== null };
   }
   return { label: null, handled: false };
+}
+//  האם מותר להוציא שרשור מהדואר הנכנס. msgs: [{id, from, date}] — כל המיילים בו.
+//  ⚠️ רק כשאין בו אף מייל שעוד צריך לקלוט: הסריקה היא in:inbox, ומייל שנשאר לריצה
+//  הבאה (תקרת מיילים לריצה, ניסיון חוזר) היה נעלם ולא נקלט לעולם. מייל שלנו (תשובה)
+//  או ישן מ-START_AT לא מחזיק את השרשור — emShouldTake כבר מדלג עליהם.
+function emThreadSettled(msgs, cfg, handled) {
+  var list = Array.isArray(msgs) ? msgs : [];
+  return list.length > 0 && list.every(function (m) { return !emShouldTake(m, cfg, handled); });
 }
 //  האם להפסיק לנסות מייל. retries = מספר הניסיונות עד כה (כולל הנוכחי),
 //  ageMs = גיל המייל. 20 ניסיונות או 60 שעות (לפני שנופל מחלון 3 הימים).
@@ -297,6 +307,27 @@ function emOutboxFiles(cfg, it) {
   return out;
 }
 
+//  "טופל" לבד (בן, 2/11): שרשור שהשרת סימן וענה עליו יוצא מהדואר הנכנס (ארכיון,
+//  לא מחיקה; התווית LG/נקלט נשארת). ⚠️ רק כשכל המיילים בו טופלו — emThreadSettled.
+//  תשובה חדשה של הלקוח באותו שרשור מחזירה אותו לדואר הנכנס, והוא נקלט כרגיל.
+function emArchive(threads, cfg, handled) {
+  var seen = {};
+  for (var i = 0; i < threads.length; i++) {
+    var th = threads[i];
+    try {
+      var tid = th.getId();
+      if (seen[tid]) continue;
+      seen[tid] = true;
+      var infos = th.getMessages().map(function (m) {
+        return { id: m.getId(), from: m.getFrom(), date: m.getDate().getTime() };
+      });
+      if (emThreadSettled(infos, cfg, handled)) th.moveToArchive();
+    } catch (e) {
+      Logger.log('ארכיון: חריגה ' + (e && e.name));
+    }
+  }
+}
+
 //  ⚠️ שולחים תשובה לשרשור ולא יותר מפעם אחת לכל key — ר' emOutboxPlan.
 //  סדר חובה: u_ → reply → s_ → מחיקת u_ → done. כל חריגה = done ok:false, אף פעם
 //  לא משאירים פריט בלי אישור (השרת לא סופר פקיעות השכרה).
@@ -386,6 +417,7 @@ function emRun() {
     }
 
     var queue = fresh.concat(again);
+    var toArchive = [];
     for (var q = 0; q < queue.length && q < EM_MAX_COMMITS; q++) {
       if (!emBudgetOk('intake', Date.now() - started, EM_MAX_MS)) break;
       var it = queue[q], mid = it.info.id;
@@ -400,7 +432,11 @@ function emRun() {
           break;
         }
         if (!res.handled) res = emRetry(it, st, props);
-        if (res.handled) emFinish(it, res, props);
+        if (res.handled) {
+          emFinish(it, res, props);
+          st.handled[mid] = Date.now();
+          if (res.archive) toArchive.push(it.thread);
+        }
       } catch (e) {
         // ⚠️ שם השגיאה בלבד — ההודעה עלולה לכלול תוכן
         Logger.log('מייל ' + mid + ': חריגה ' + (e && e.name));
@@ -413,6 +449,7 @@ function emRun() {
         }
       }
     }
+    emArchive(toArchive, cfg, st.handled);
     emOutbox(cfg, started);
   } finally {
     lock.releaseLock();
