@@ -113,6 +113,18 @@ function groupSingles(entries, now, waitMs) {
   return { pairs, stale };
 }
 
+//  מה זה הקובץ, לפי הטקסט של כל העמודים:
+//    { split: true }                    — 2 עמודים, מקור ואחריו העתק (קובץ אחד לשניהם)
+//    { split: false, role, doc }        — מקור או העתק, עמוד אחד או יותר (חשבונית ארוכה,
+//                                         בן 2/11 — 67395: מקור 2 עמודים, העתק 2 עמודים)
+//    null                               — לא חשבונית
+function fileKind(texts) {
+  const roles = texts.map(roleOf);
+  if (texts.length === 2 && roles[0] === 'original' && roles[1] === 'copy') return { split: true };
+  const role = roles[0], doc = docNumberOf(texts[0] || '');
+  return role && doc ? { split: false, role, doc } : null;
+}
+
 let _pdfjsP = null;
 function _pdfjs() {
   if (!_pdfjsP) _pdfjsP = (async () => {
@@ -122,14 +134,17 @@ function _pdfjs() {
   return _pdfjsP;
 }
 
-//  { pages, text } — טקסט העמוד הראשון בלבד (מספיק לזיהוי)
+//  { pages, text, texts } — text = העמוד הראשון, texts = כל העמודים (עד 5)
 async function readPdf(bytes) {
   const pdfjs = await _pdfjs();
   const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, verbosity: 0 }).promise;
   try {
-    const page = await doc.getPage(1);
-    const tc = await page.getTextContent();
-    return { pages: doc.numPages, text: tc.items.map(i => i.str).join(' ') };
+    const texts = [];
+    for (let n = 1; n <= Math.min(doc.numPages, 5); n++) {
+      const tc = await (await doc.getPage(n)).getTextContent();
+      texts.push(tc.items.map(i => i.str).join(' '));
+    }
+    return { pages: doc.numPages, text: texts[0], texts };
   } finally { await doc.destroy().catch(() => {}); }
 }
 
@@ -235,15 +250,15 @@ async function loop(cfg) {
         let info;
         try { info = await readPdf(fs.readFileSync(f)); }
         catch (e) { console.error('review (unreadable):', n, e.message); review(f); continue; }
-        if (info.pages === 2) {
+        const kind = info.pages <= 5 ? fileKind(info.texts) : null;
+        if (kind && kind.split) {
           const out = await processFile(cfg, f);
           if (out === 'retry') retryAt.set(f, Date.now() + (cfg.retryMs || 60000));
           else retryAt.delete(f);
           continue;
         }
-        const role = roleOf(info.text), doc = docNumberOf(info.text);
-        if (info.pages !== 1 || !role || !doc) { console.error('review (not an invoice page):', n); review(f); continue; }
-        singles.set(f, { role, doc, at: Date.now() });
+        if (!kind) { console.error('review (not an invoice):', n); review(f); continue; }
+        singles.set(f, { role: kind.role, doc: kind.doc, at: Date.now() });
       }
       //  קובץ שמישהו מחק / העביר בזמן שחיכה — שוכחים אותו (בלי זה הכלי קורס)
       for (const f of [...singles.keys()]) if (!fs.existsSync(f)) { singles.delete(f); retryAt.delete(f); }
@@ -263,7 +278,7 @@ async function loop(cfg) {
   }
 }
 
-module.exports = { resolveArchive, filedPaths, sideDirs, splitTwoPages, processFile, processPair, groupSingles, roleOf, docNumberOf, readPdf };
+module.exports = { resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, groupSingles, roleOf, docNumberOf, readPdf };
 
 if (require.main === module) {
   loop(loadConfig(process.argv[2] || path.join(__dirname, 'config.json')))

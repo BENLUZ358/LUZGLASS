@@ -69,16 +69,21 @@ async function _handleUpload(req, deps) {
   if (!orig || !copy) return _fail(400, 'bad-pdf');
 
   const pageTexts = deps.pageTexts || M.lgPdfPageTexts;
-  let oText, cText;
+  //  חשבונית ארוכה היא כמה עמודים בכל קובץ (בן, 2/11 — 67395: 2+2). כל עמוד
+  //  מודפס עם "מקור"/"העתק" בתחתית, ולכן כל עמוד נבדק; הטקסט של כל העמודים
+  //  נקרא יחד (מספרי הזמנה יכולים להופיע רק בעמוד השני).
+  let oPages, cPages;
   try {
-    const o = await pageTexts(orig), c = await pageTexts(copy);
-    if (o.length !== 1 || c.length !== 1) return _fail(422, 'page-count');
-    oText = o[0]; cText = c[0];
+    oPages = await pageTexts(orig); cPages = await pageTexts(copy);
+    if (!oPages.length || !cPages.length) return _fail(422, 'page-count');
   } catch (_) {
     return _fail(422, 'unreadable-pdf');
   }
   //  הבדיקה שמונעת שליחת העתק ללקוח
-  if (M.pageRole(oText) !== 'original' || M.pageRole(cText) !== 'copy') return _fail(422, 'role-unverified');
+  if (oPages.some(t => M.pageRole(t) !== 'original') || cPages.some(t => M.pageRole(t) !== 'copy')) {
+    return _fail(422, 'role-unverified');
+  }
+  const oText = oPages.join('\n');
 
   const { db } = deps, now = deps.now || Date.now();
   const hash = _sha(orig);

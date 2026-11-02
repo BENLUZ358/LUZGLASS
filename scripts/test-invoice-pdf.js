@@ -356,5 +356,42 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual(fs.readdirSync(cfg.watchDir), []);
     fs.rmSync(top, { recursive: true, force: true });
   });
+  //  ── חשבונית ארוכה (בן, 2/11 — 67395): המקור הוא קובץ של 2 עמודים, וההעתק קובץ
+  //  נפרד של 2 עמודים. מספרי ההזמנות יכולים להופיע רק בעמוד השני. ──
+  await test('upload: a 2-page original + 2-page copy is accepted; order numbers on page 2 count', async () => {
+    const P1 = role => 'חשבונית מס 67400  תאריך 29/10/2026  מפתח 509  א.מ.מראות  מ.מקור  שם פריט  '
+      + `8 מ''מ שקוף 1.00 120.00   1115 1.00 1.00   1   ${role}`;
+    const P2 = role => `8 מ''מ שקוף 1.00 120.00   1116 1.00 1.00   1  סה"כ  ${role}`;
+    const t = { [Buffer.from('%PDF-1.4 o').toString()]: [P1('מקור'), P2('מקור')],
+                [Buffer.from('%PDF-1.4 c').toString()]: [P1('העתק 1'), P2('העתק 1')] };
+    const d = { db: fakeDb({ orders: { a: HS(1115, '509'), b: HS(1116, '509') } }), env: { INVOICE_UPLOAD_TOKEN: TOKEN },
+      now: 1000, deliver: async () => {}, pageTexts: async buf => t[buf.toString()] || [''] };
+    const r = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(d.db._data.invoicePdf[r.body.key].orderIds, ['a', 'b']);
+  });
+  await test('upload: a copy page hiding inside the original file is refused', async () => {
+    const t = { [Buffer.from('%PDF-1.4 o').toString()]: [PRINT('מקור', [1115]), PRINT('העתק 1', [1115])],
+                [Buffer.from('%PDF-1.4 c').toString()]: [PRINT('העתק 1', [1115])] };
+    const d = { db: fakeDb({ orders: { a: HS(1115, '509') } }), env: { INVOICE_UPLOAD_TOKEN: TOKEN },
+      now: 1000, deliver: async () => {}, pageTexts: async buf => t[buf.toString()] || [''] };
+    assert.equal((await handleUpload(req({ original: PO, copy: PC }), d)).status, 422);
+  });
+  await test('upload: an original page inside the copy file is refused', async () => {
+    const t = { [Buffer.from('%PDF-1.4 o').toString()]: [PRINT('מקור', [1115])],
+                [Buffer.from('%PDF-1.4 c').toString()]: [PRINT('העתק 1', [1115]), 'חשבונית מס 67401 מקור'] };
+    const d = { db: fakeDb({ orders: { a: HS(1115, '509') } }), env: { INVOICE_UPLOAD_TOKEN: TOKEN },
+      now: 1000, deliver: async () => {}, pageTexts: async buf => t[buf.toString()] || [''] };
+    assert.equal((await handleUpload(req({ original: PO, copy: PC }), d)).status, 422);
+  });
+  await test('watcher: a 2-page file is split only when it is original+copy; a long invoice stays whole', () => {
+    const { fileKind } = require('../tools/invoice-watcher/watcher');
+    const p = (role, doc) => `חשבונית מס ${doc} תאריך 02/11/2026 ${role}`;
+    assert.deepEqual(fileKind([p('מקור', 67400), p('העתק 1', 67400)]), { split: true });
+    assert.deepEqual(fileKind([p('מקור', 67395), 'עמוד 2 בלי כותרת']), { split: false, role: 'original', doc: '67395' });
+    assert.deepEqual(fileKind([p('העתק 1', 67395), 'עמוד 2']), { split: false, role: 'copy', doc: '67395' });
+    assert.deepEqual(fileKind([p('מקור', 67395)]), { split: false, role: 'original', doc: '67395' });
+    assert.equal(fileKind(['שום דבר']), null);
+  });
   console.log(`\n${passed} passed`);
 })().catch(e => { console.error(e); process.exit(1); });
