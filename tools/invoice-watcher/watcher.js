@@ -207,6 +207,8 @@ async function upload(cfg, parts, files, post) {
   }
   const dest = filedPaths(cfg.sharedRoot, r.body.archivePath);
   if (!dest) { moveAll('review'); return 'review'; }
+  //  ההעתק לנייר — רק בפעם הראשונה שהוא מתויק (הדפסה חוזרת מחשבשבת לא מוציאה דף נוסף)
+  const print = !!cfg.printCopyTo && !r.body.reprint && !fs.existsSync(dest.copy);
   try {
     fs.mkdirSync(path.dirname(dest.original), { recursive: true });
     fs.writeFileSync(dest.original, parts.original);
@@ -219,7 +221,24 @@ async function upload(cfg, parts, files, post) {
   }
   moveAll('done');
   console.log('ok', r.body.docNumber, '→', path.dirname(dest.original));
+  if (print) {
+    //  מדפסת כבויה / תקועה — החשבונית כבר תויקה ונשלחה; מדפיסים ידנית מהתיקייה
+    try { await (cfg.printFn || printWithGs)(dest.copy, cfg.printCopyTo, cfg); console.log('printed copy', r.body.docNumber); }
+    catch (e) { console.error('print failed (file is filed):', r.body.docNumber, e.message); }
+  }
   return 'ok';
+}
+
+//  הדפסה שקטה (בלי חלון) דרך Ghostscript שמגיע עם PDF24 (בן, 2/11)
+function printWithGs(file, printer, cfg) {
+  const gs = (cfg && cfg.gsPath) || 'C:\\Program Files\\PDF24\\gs\\bin\\gswin64c.exe';
+  return new Promise((resolve, reject) => {
+    require('child_process').execFile(gs,
+      ['-q', '-dBATCH', '-dNOPAUSE', '-dSAFER', '-dNoCancel', '-sDEVICE=mswinpr2', '-r300',
+       '-sOutputFile=%printer%' + printer, file],
+      { timeout: 120000, windowsHide: true },
+      (err, _out, errOut) => err ? reject(new Error(String(errOut || err.message).trim())) : resolve());
+  });
 }
 
 function require_post(cfg) {
