@@ -153,6 +153,8 @@ module.exports = async function handler(req, res) {
   if (req.query && req.query.devbrain === 'relay') return require('./_devbrain-route')(req, res);
   if (req.query && req.query.invoice === 'upload') return require('./_invoice-upload')(req, res);
   if (req.query && req.query.invoice === 'ctl') return require('./_invoice-ctl')(req, res);
+  // מרכז הדפסות (בן, 3/11): עבודות הדפסה — מאומת בתוך _print-jobs (אדמין / טוקן הכלי)
+  if (req.query && req.query.print === '1') return require('./_print-route')(req, res);
   // מנהל הסוכנים: cron יומי (GET + CRON_SECRET) — מאומת בתוך _agent-daily
   if (req.query && req.query.agent === 'daily') return require('./_agent-daily')(req, res);
   // זגאגי (בן, 1/11): קליטה / שלבים / ביטול — מאומת בתוך _zgagi-route (ZGAGI_LINK_TOKEN)

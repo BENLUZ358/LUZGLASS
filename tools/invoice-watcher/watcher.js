@@ -297,9 +297,80 @@ async function loop(cfg) {
   }
 }
 
-module.exports = { resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, groupSingles, roleOf, docNumberOf, readPdf };
+//  ── מדבקות (בן, 3/11) — מרכז ההדפסות ───────────────────────────────────
+//  האייפד שולח מדבקות לשרת (/api/print, api/_print-jobs.js). הכלי הזה מושך
+//  כל כמה שניות, שולח ל-TSC TE210 ברשת (TSPL בפורט 9100) ומדווח. כל מדבקה
+//  היא תמונה ארוזה מהדפדפן (print-labels.js): 70 בתים לשורה × 560 שורות,
+//  0 = נקודה מודפסת. עברית רק כתמונה — אין גופן עברי במדפסת.
+//  config.json: "labelPrinter": {"host": "10.0.0.253", "port": 9100}
+const LABEL_ROW_BYTES = 70, LABEL_ROWS = 560;
+
+function tsplForBitmap(b64) {
+  const raw = Buffer.from(String(b64 || ''), 'base64');
+  if (raw.length !== LABEL_ROW_BYTES * LABEL_ROWS) throw new Error('bad label bitmap: ' + raw.length + ' bytes');
+  return Buffer.concat([
+    Buffer.from('SIZE 70 mm,70 mm\r\nGAP 3 mm,0 mm\r\nDIRECTION 1\r\nCLS\r\nBITMAP 0,0,' + LABEL_ROW_BYTES + ',' + LABEL_ROWS + ',0,', 'latin1'),
+    raw,
+    Buffer.from('\r\nPRINT 1,1\r\n', 'latin1'),
+  ]);
+}
+
+//  כל המדבקות בחיבור אחד. מחזיר {ok} / {ok:false, retryable, error}.
+//  "הודפס" = כל הבתים נכתבו לחיבור ונשלחו (finish) — גם אם המדפסת משאירה את
+//  החיבור פתוח ולא סוגרת (אז אחרי timeoutMs מסיימים). בלי זה הדפסה שיצאה הייתה
+//  מסומנת "נכשל", ובן היה מדפיס שוב — כפול.
+//  retryable — רק כשלא התחברנו בכלל (מדפסת כבויה / לא ברשת): שום דבר לא נשלח.
+//  התחברנו ונפל באמצע — לא retryable (ייתכן שחלק יצא; בן מחליט).
+function sendLabels(printer, bitmaps) {
+  let data;
+  try { data = Buffer.concat(bitmaps.map(tsplForBitmap)); }
+  catch (e) { return Promise.resolve({ ok: false, retryable: false, error: e.message }); }
+  return new Promise(resolve => {
+    let connected = false, finished = false, done = false;
+    const end = r => { if (!done) { done = true; resolve(r); } };
+    const sock = require('net').connect(Number(printer.port) || 9100, printer.host);
+    sock.setTimeout(printer.timeoutMs || 15000);
+    sock.on('connect', () => {
+      connected = true;
+      sock.end(data, () => { finished = sock.bytesWritten >= data.length; if (finished) sock.setTimeout(printer.timeoutMs || 5000); });
+    });
+    sock.on('close', () => end(finished ? { ok: true } : { ok: false, retryable: !connected, error: connected ? 'החיבור נסגר באמצע' : 'ECONNRESET' }));
+    sock.on('timeout', () => { sock.destroy(); end(finished ? { ok: true } : { ok: false, retryable: !connected, error: 'ETIMEDOUT' }); });
+    sock.on('error', e => end(finished ? { ok: true } : { ok: false, retryable: !connected, error: e.code || e.message }));
+  });
+}
+
+//  סבב אחד: עבודה אחת לכל היותר.
+async function printOnce(cfg, post, send) {
+  const r = await post({ action: 'agent-claim' });
+  const job = r && r.status === 200 && r.body && r.body.job;
+  if (!job) return null;
+  const out = await (send || sendLabels)(cfg.labelPrinter, job.bitmaps || []);
+  if (out.ok) console.log('labels printed:', job.id, (job.bitmaps || []).length);
+  else console.error('labels failed:', job.id, out.error);
+  await post({ action: 'agent-done', id: job.id, ok: !!out.ok, retryable: !!out.retryable, error: out.error || '' });
+  return out;
+}
+
+//  כתובת מרכז ההדפסות — מאותו אתר כמו העלאת החשבוניות, אלא אם הוגדר printUrl
+const printUrl = cfg => cfg.printUrl || new URL('/api/print', cfg.url).href;
+
+async function printLoop(cfg) {
+  const post = require_post({ ...cfg, url: printUrl(cfg) });
+  for (;;) {
+    //  עוד עבודות בתור — ברצף. סבב שנכשל (מדפסת כבויה) עוצר עד הסבב הבא
+    try { for (let out = await printOnce(cfg, post); out && out.ok; out = await printOnce(cfg, post)) { /* הבאה */ } }
+    catch (e) { console.error('labels round failed:', e.message); }
+    //  כל 10 שניות — מספיק מהר לאייפד, ולא עומס על השרת (כ-260 אלף קריאות בחודש)
+    await new Promise(r => setTimeout(r, cfg.labelPollMs || 10000));
+  }
+}
+
+module.exports = { tsplForBitmap, sendLabels, printOnce, resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, groupSingles, roleOf, docNumberOf, readPdf };
 
 if (require.main === module) {
-  loop(loadConfig(process.argv[2] || path.join(__dirname, 'config.json')))
-    .catch(e => { console.error(e); process.exit(1); });
+  const cfg = loadConfig(process.argv[2] || path.join(__dirname, 'config.json'));
+  //  מדבקות — לולאה נפרדת, כדי שחשבונית ארוכה לא תעכב מדבקות (ולהפך)
+  if (cfg.labelPrinter && cfg.labelPrinter.host) printLoop(cfg).catch(e => console.error('labels loop:', e));
+  loop(cfg).catch(e => { console.error(e); process.exit(1); });
 }
