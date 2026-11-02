@@ -25,7 +25,7 @@ const { lgWaSenderLink, lgClientFromWaSender, lgClientFromWaGroup, waChatToLocal
 const { lgWaInboundAllowed } = require('./_env');
 const { lgInboxStillMine } = require('./_inbox-common');
 const { lgOkevFind, lgOkevReply, lgOkevRoute, AGENT_MENU_TEXT } = require('./_agent-okev');
-const { lgAgentClassify } = require('./_agent-classify');
+const { lgAgentClassify, lgAgentImageName } = require('./_agent-classify');
 const { lgAgentStaff, PER_ITEM_WORST_MS } = require('./_agent-send');
 
 const SHADOW = 'waMeta/agentShadow';
@@ -205,7 +205,8 @@ async function lgAgentShadowProcess(db, key, opts) {
       } else {
         // אין זמן לסיווג + שליחה → unclear (שאול), בלי מודל. תמונה בלי טקסט
         // לא קוראת למודל בכלל — לא מדלגים עליה.
-        const needsModel = !!String(e.text || '').trim();
+        //  תמונה + שם קצר — גם בלי מודל (lgAgentImageName)
+        const needsModel = !!String(e.text || '').trim() && !lgAgentImageName(e.text, !!e.hasImage);
         const skip = needsModel && deadline - clock() < AGENT_CLASSIFY_WORST_MS + PER_ITEM_WORST_MS;
         const cls = skip ? { intent: 'unclear', ref: '', usage: null }
           : await lgAgentClassify({ text: e.text, hasImage: !!e.hasImage,
