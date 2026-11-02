@@ -30,7 +30,7 @@ const PRINTERS = ['labels'];
 const fail = (status, code) => ({ status, body: { ok: false, code } });
 const _str = (v, n) => String(v == null ? '' : v).slice(0, n);
 const _label = l => ({ title: _str(l && l.title, 80), dims: _str(l && l.dims, 40),
-                       sketch: _str(l && l.sketch, 80), orderNum: _str(l && l.orderNum, 30) });
+                       sketchName: _str(l && l.sketchName, 80), orderNum: _str(l && l.orderNum, 30) });
 const _b64 = s => typeof s === 'string' && s.length > 0 && s.length < 120000 && /^[A-Za-z0-9+/=]+$/.test(s);
 
 //  שדות לתצוגה — בלי תמונות

@@ -24,9 +24,9 @@ const O2 = { id: 'o2', orderNum: 'L1201', orderClient: 'המקום לאמבט', 
 /* A + B */
 const labels = PL.lgLabelsForClient([{ order: O1, idxs: [0, 1, 3] }, { order: O2, idxs: [] }]);
 check('A1 one label per arrived glass, none for the rest', labels.length, 3);
-check('B1 content', labels[0], { title: 'המקום לאמבט', dims: '500 × 2000', sketch: 'אסף', orderNum: 'L1200', orderId: 'o1', idx: 0 });
+check('B1 content', labels[0], { title: 'המקום לאמבט', dims: '500 × 2000', sketchName: 'אסף', orderNum: 'L1200', orderId: 'o1', idx: 0 });
 check('A2 in item order', labels.map(l => l.idx), [0, 1, 3]);
-check('B2 no sketch name → empty, not "undefined"', PL.lgLabelsForClient([{ order: O2, idxs: [0] }])[0].sketch, '');
+check('B2 no sketch name → empty, not "undefined"', PL.lgLabelsForClient([{ order: O2, idxs: [0] }])[0].sketchName, '');
 
 /* C */
 const W = PL.LG_LABEL_PX;
@@ -45,7 +45,7 @@ const c = createCanvas(W, W), ctx = c.getContext('2d');
 PL.lgLabelDraw(ctx, labels[0]);
 const px = Buffer.from(PL.lgLabelPack(ctx.getImageData(0, 0, W, W)), 'base64');
 check('D1 something black is drawn', px.some(b => b !== 0xFF), true);
-const long = { ...labels[0], sketch: 'מקלחון פינתי גדול עם דלת הזזה ומדף זכוכית בקומה השנייה', title: 'א.מ. מראות וזכוכית בע"מ סניף ראשי' };
+const long = { ...labels[0], sketchName: 'מקלחון פינתי גדול עם דלת הזזה ומדף זכוכית בקומה השנייה', title: 'א.מ. מראות וזכוכית בע"מ סניף ראשי' };
 const sizes = PL.lgLabelDraw(ctx, long);
 check('D2 long lines are shrunk to fit the width', sizes.every(s => s.width <= W - 40), true);
 check('D3 and the text is kept (ellipsis only if even the smallest size cannot fit)', sizes.filter(s => s.cut).length <= 1, true);

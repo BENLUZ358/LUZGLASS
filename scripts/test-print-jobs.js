@@ -24,7 +24,7 @@ const TOKEN = 'x'.repeat(40);
 const env = { INVOICE_UPLOAD_TOKEN: TOKEN };
 const admin = async () => ({ ok: true, role: 'admin', phone: '0547725552' });
 const client = async () => ({ ok: true, role: 'client', phone: '0501111111' });
-const L = n => Array.from({ length: n }, (_, i) => ({ title: 'המקום לאמבט', dims: '500 × ' + (2000 + i), sketch: 'אסף', orderNum: 'L1200' }));
+const L = n => Array.from({ length: n }, (_, i) => ({ title: 'המקום לאמבט', dims: '500 × ' + (2000 + i), sketchName: 'אסף', orderNum: 'L1200' }));
 const B = n => Array.from({ length: n }, () => 'AAAA');
 
 (async () => {

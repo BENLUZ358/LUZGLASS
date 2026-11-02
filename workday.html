@@ -346,6 +346,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <script src="print-labels.js?v=20261103"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20260807"></script>
 </head>
@@ -2439,6 +2440,8 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
   const tk        = T === LG_TRACK.triplex ? 'triplex' : 'chisum';
   const clientKey = (reportId||'legacy') + '_' + clientName;
   const isOpen    = T.open[clientKey] === true;   // סגור כברירת מחדל
+  // מדבקות (בן, 3/11) — החלון בונה את המדבקות מכאן, ברגע שנפתח
+  _lblGroups[clientKey] = { clientName, orderIds: orders.map(o => String(o.id)), track: tk };
 
   let totalItems   = 0;   // כל פריטי הדוח של הלקוח
   let arrivedCountAll = 0; // כמה מהם כבר סומנו כהגיעו
@@ -2535,6 +2538,8 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
         <span style="font-size:13px;font-weight:900;color:#1a1714">👤 ${lgEsc(clientName)}</span>
         <span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:3px;${allChecked?'background:rgba(39,174,96,0.12);color:#27ae60':'background:'+T.color+'1a;color:'+T.color}">${arrivedCountAll}/${totalItems} הגיעו</span>
       </div>
+      <button onclick="event.stopPropagation();openLabelsModal('${lgJsStr(clientKey)}')"
+        style="padding:4px 10px;background:#fff;color:#1a1714;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(0,0,0,0.18);cursor:pointer;border-radius:4px;white-space:nowrap;">🏷 מדבקות</button>
       <button onclick="event.stopPropagation();markAllClientArrived('${lgJsStr(clientKey)}','${lgJsStr(reportId||'')}','${lgJsStr(clientName)}','${tk}')"
         style="padding:4px 10px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ סמן הכל</button>
       <span style="font-size:16px;color:#8a8278;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
@@ -2543,6 +2548,158 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
   </div>`;
 }
 
+
+// ═══════════════════════════════════════
+//  מדבקות מחיסום (בן, 3/11) — print-labels.js + /api/print
+// ═══════════════════════════════════════
+// מדבקה לכל זכוכית שסומנה שהגיעה אצל הלקוח בדוח הזה. ההדפסה עוברת לשרת,
+// והכלי במחשב במשרד מדפיס במדפסת המדבקות (TSC). לוח ההדפסות: prints.html.
+const _lblGroups = {};   // clientKey → { clientName, orderIds, track } — נרשם ברינדור
+let _lbl = null;         // החלון הפתוח: { key, client, labels, orderIds, jobId, poll }
+
+// [{order, idxs}] — רק מה שמסומן שהגיע ועוד פתוח בדוח (מה שלא הגיע — אין מדבקה)
+function _lblEntries(key){
+  const g = _lblGroups[key]; if(!g) return [];
+  return g.orderIds.map(id => allOrders.find(o => String(o.id) === id)).filter(Boolean).map(o => {
+    const marked = _markedIdxSet(String(o.id), g.track);
+    return { order: o, idxs: _pendingIdxsOf(o, g.track).filter(i => marked.has(i)) };
+  }).filter(e => e.idxs.length);
+}
+
+function openLabelsModal(key){
+  const g = _lblGroups[key]; if(!g) return;
+  const entries = _lblEntries(key);
+  const labels = lgLabelsForClient(entries);
+  if(!labels.length){ showToast('אין זכוכיות שסומנו שהגיעו — סמן קודם מה הגיע'); return; }
+  _lblClose();
+  _lbl = { key, client: g.clientName, labels, orderIds: entries.map(e => String(e.order.id)) };
+  const ov = document.createElement('div');
+  ov.id = 'lblOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:600;display:flex;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;padding:12px;';
+  ov.innerHTML = `
+    <div style="background:#fff;border-radius:12px;max-width:760px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="background:#1a1714;padding:10px 18px;border-radius:12px 12px 0 0;display:flex;align-items:center;gap:10px;">
+        <h3 style="color:#f0ede8;font-size:15px;margin:0;flex:1;">🏷 מדבקות · ${lgEsc(g.clientName)}</h3>
+        <button aria-label="סגור" onclick="_lblClose()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:20px;cursor:pointer;min-width:44px;min-height:44px;">✕</button>
+      </div>
+      <div style="padding:10px 18px;border-bottom:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <label for="lblAllTitle" style="font-size:12px;color:#8a8278;">שם הלקוח בכל המדבקות</label>
+        <input id="lblAllTitle" value="${lgEsc(g.clientName)}" oninput="_lblSetAll(this.value)"
+          style="flex:1;min-width:160px;padding:8px;border:1px solid rgba(0,0,0,0.15);border-radius:6px;font-family:Heebo,sans-serif;font-size:14px;">
+      </div>
+      <div id="lblGrid" style="padding:12px 18px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;"></div>
+      <div style="padding:12px 18px;border-top:1px solid rgba(0,0,0,0.08);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <button id="lblPrintBtn" onclick="_lblPrint()" style="flex:1;min-height:48px;padding:12px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:15px;font-weight:900;border:none;cursor:pointer;border-radius:8px;">🖨 הדפס</button>
+        <a href="prints.html" target="_blank" style="font-size:13px;color:#2980b9;">🖨 לוח הדפסות</a>
+        <div id="lblStatus" role="status" style="width:100%;font-size:13px;font-weight:700;color:#8a8278;"></div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  _lblRender();
+}
+
+function _lblClose(){
+  if(_lbl && _lbl.poll) clearInterval(_lbl.poll);
+  const ov = document.getElementById('lblOv'); if(ov) ov.remove();
+  _lbl = null;
+}
+
+function _lblSetAll(v){
+  if(!_lbl) return;
+  _lbl.labels.forEach(l => { l.title = v; });
+  document.querySelectorAll('#lblGrid input[data-f="title"]').forEach(x => { x.value = v; });
+  _lblDrawAll();
+}
+
+// כרטיס לכל מדבקה: התצוגה המקדימה (אותו ציור שיודפס) ושדות לעריכה
+function _lblRender(){
+  if(!_lbl) return;
+  const grid = document.getElementById('lblGrid'); if(!grid) return;
+  const inp = (i, f, v, extra) => `<input aria-label="${f === 'title' ? 'שם לקוח' : f === 'dims' ? 'מידה' : 'שם סקיצה'}" data-f="${f}" value="${lgEsc(v)}"
+        oninput="_lblEdit(${i},'${f}',this.value)" ${extra || ''} style="padding:6px;border:1px solid rgba(0,0,0,0.12);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;">`;
+  grid.innerHTML = _lbl.labels.map((l, i) => `
+    <div style="border:1px solid rgba(0,0,0,0.12);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;">
+      <canvas data-lbl="${i}" width="560" height="560" style="width:100%;aspect-ratio:1;border:1px dashed rgba(0,0,0,0.2);border-radius:4px;"></canvas>
+      ${inp(i, 'title', l.title)}
+      ${inp(i, 'dims', l.dims, 'dir="ltr"')}
+      ${inp(i, 'sketchName', l.sketchName)}
+      <div style="display:flex;gap:6px;">
+        <button onclick="_lblCopy(${i})" style="flex:1;min-height:36px;background:#f5f2ed;border:1px solid rgba(0,0,0,0.1);border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">+ עותק</button>
+        <button onclick="_lblRemove(${i})" style="flex:1;min-height:36px;background:#fff;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;">הסר</button>
+      </div>
+    </div>`).join('');
+  _lblDrawAll();
+  const n = _lbl.labels.length;
+  const b = document.getElementById('lblPrintBtn');
+  if(b){ b.textContent = n === 1 ? '🖨 הדפס מדבקה אחת' : '🖨 הדפס ' + n + ' מדבקות'; b.disabled = !n; }
+}
+
+// הגופן חייב להיטען לפני הציור — אחרת התצוגה (וההדפסה) יוצאות בגופן אחר
+async function _lblFonts(){ try { await document.fonts.load('700 64px Heebo'); } catch(e){} }
+async function _lblDrawAll(){
+  await _lblFonts();
+  document.querySelectorAll('#lblGrid canvas[data-lbl]').forEach(c => {
+    const l = _lbl && _lbl.labels[Number(c.dataset.lbl)]; if(l) lgLabelDraw(c.getContext('2d'), l);
+  });
+}
+function _lblEdit(i, field, v){
+  if(!_lbl || !_lbl.labels[i]) return;
+  _lbl.labels[i][field] = v;
+  const c = document.querySelector('#lblGrid canvas[data-lbl="' + i + '"]');
+  if(c) lgLabelDraw(c.getContext('2d'), _lbl.labels[i]);
+}
+function _lblCopy(i){ if(!_lbl) return; _lbl.labels.splice(i + 1, 0, Object.assign({}, _lbl.labels[i])); _lblRender(); }
+function _lblRemove(i){ if(!_lbl) return; _lbl.labels.splice(i, 1); _lblRender(); }
+
+const _LBL_STATE = { queued: '⏳ בתור — המחשב במשרד ידפיס תוך כמה שניות', printing: '🖨 מדפיס…',
+  printed: '✓ הודפס', failed: '✗ נכשל', unknown: '⚠ לא ידוע אם הודפס — בדוק את המדפסת' };
+
+async function _lblPrint(){
+  if(!_lbl || !_lbl.labels.length) return;
+  const b = document.getElementById('lblPrintBtn'), st = document.getElementById('lblStatus');
+  if(_lbl.labels.length > 70){ st.textContent = 'עד 70 מדבקות בהדפסה אחת — הסר חלק והדפס בשתי פעמים'; return; }
+  b.disabled = true; st.textContent = 'שולח…';
+  try {
+    await _lblFonts();
+    const labels = _lbl.labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum }));
+    const bitmaps = labels.map(l => lgLabelRender(l).bitmap);
+    const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels',
+      client: _lbl.client, orderIds: _lbl.orderIds, labels, bitmaps });
+    const d = await res.json().catch(() => ({}));
+    if(!res.ok || !d.ok) throw new Error(d.code || ('HTTP ' + res.status));
+    _lbl.jobId = d.id;
+    st.textContent = _LBL_STATE.queued;
+    _lblFollow(d.id);
+  } catch(e) {
+    console.error('labels print:', e);
+    st.textContent = '✗ לא נשלח: ' + (e.message || 'שגיאה') + ' — נסה שוב';
+    b.disabled = false;
+  }
+}
+
+// מצב ההדפסה — כל 3 שניות, עד 2 דקות. אחר כך: לוח ההדפסות.
+function _lblFollow(id){
+  const started = Date.now();
+  const tick = async () => {
+    if(!_lbl || _lbl.jobId !== id) return;
+    const st = document.getElementById('lblStatus'); if(!st) return;
+    try {
+      const res = await _lgAuthPost('/api/print', { action: 'get', id });
+      const d = await res.json().catch(() => ({}));
+      const s = d.job && d.job.state;
+      if(s) st.textContent = (_LBL_STATE[s] || s) + (s === 'failed' && d.job.error ? ': ' + d.job.error : '');
+      if(s && s !== 'queued' && s !== 'printing'){
+        clearInterval(_lbl.poll); _lbl.poll = null;
+        const b = document.getElementById('lblPrintBtn'); if(b) b.disabled = false;
+      }
+    } catch(e) {}
+    if(Date.now() - started > 120000 && _lbl && _lbl.poll){
+      clearInterval(_lbl.poll); _lbl.poll = null;
+      st.textContent += ' · המשך המעקב בלוח ההדפסות';
+    }
+  };
+  _lbl.poll = setInterval(tick, 3000);
+}
 
 // lightbox פשוט — לפתיחת סקיצה בגודל מלא בלחיצה
 function _openSketchFull(src){

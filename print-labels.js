@@ -21,7 +21,7 @@ function lgLabelsForClient(entries) {
       out.push({
         title: String(order.orderClient || order.client || ''),
         dims: Math.round(Number(it.w) || 0) + ' × ' + Math.round(Number(it.h) || 0),
-        sketch: String(order.sketchName || ''),
+        sketchName: String(order.sketchName || ''),
         orderNum: String(order.orderNum || ''),
         orderId: String(order.id || ''), idx: i,
       });
@@ -60,12 +60,12 @@ function lgLabelDraw(ctx, label, W) {
     ctx.fillText(f.text, W / 2, y);
     out.push({ size: f.size, width: ctx.measureText(f.text).width, cut: f.cut });
   };
-  line(l.title, 80, 64, 28, '900', 'rtl');                       // שם הלקוח
+  line(l.title, 80, 64, 28, '700', 'rtl');                       // שם הלקוח
   ctx.fillRect(M, 140, maxW, 4);
   //  רוחב × גובה — משמאל לימין, כמו בכל המסכים (lgDimsText)
-  line(l.dims, 275, 130, 48, '900', 'ltr');
+  line(l.dims, 275, 130, 48, '700', 'ltr');
   ctx.fillRect(M, 400, maxW, 4);
-  line(l.sketch, 465, 64, 28, '700', 'rtl');                     // שם הסקיצה
+  line(l.sketchName, 465, 64, 28, '700', 'rtl');                     // שם הסקיצה
   if (l.orderNum) {
     ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'ltr'; ctx.textAlign = 'left';
     ctx.fillText(String(l.orderNum), M, 535);
