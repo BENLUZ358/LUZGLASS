@@ -76,6 +76,25 @@ const base = { text: 'מוכן?', hasImage: false, model: 'm1', key: 'k1' };
   check('טקסט ריק', strip(nt), UNCLEAR);
   check('טקסט ריק בלי fetch', n3.calls.length, 0);
 
+  // בן, 2/11: המקום לאמבט שולחים כל סקיצה עם שם הלקוח בכיתוב ("אסף", "ברדה").
+  // שם לבד המודל לא הבין → unclear → "העברנו לשאול". תמונה + כיתוב קצר = הזמנה.
+  for (const cap of ['אסף', 'ברדה', 'רועי', 'אריה כהן', 'דירה 4 קומה 2']) {
+    const n4 = mk(okBody('{"intent":"unclear","ref":""}'));
+    const r4 = await lgAgentClassify({ ...base, text: cap, hasImage: true, fetcher: n4.fetcher });
+    check('תמונה + "' + cap + '" → order עם השם', strip(r4), { intent: 'order', ref: cap });
+    check('תמונה + "' + cap + '" בלי fetch', n4.calls.length, 0);
+  }
+  // שאלה, או כיתוב ארוך — עדיין למודל
+  for (const cap of ['מתי זה מוכן?', 'זה המקלחון של אסף תשנו בבקשה את המידה ל 80']) {
+    const n5 = mk(okBody('{"intent":"change","ref":"אסף"}'));
+    await lgAgentClassify({ ...base, text: cap, hasImage: true, fetcher: n5.fetcher });
+    check('תמונה + "' + cap.slice(0, 12) + '…" → למודל', n5.calls.length, 1);
+  }
+  // שם קצר בלי תמונה — לא הזמנה, למודל כרגיל
+  const n6 = mk(okBody('{"intent":"chitchat","ref":""}'));
+  await lgAgentClassify({ ...base, text: 'אסף', hasImage: false, fetcher: n6.fetcher });
+  check('"אסף" בלי תמונה → למודל', n6.calls.length, 1);
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nall ok');
 })();
