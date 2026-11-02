@@ -85,6 +85,19 @@ const outbox = db => Object.values((db._data.waMeta || {}).emailOutbox || {});
     check('D4 not reported as auto-handled (mail stays in the inbox)', !!r.autoHandled, false);
   }
 
+  {
+    //  E — needs Ben: an attachment that could not be read → not auto-handled
+    const db = seed(true);
+    await em.lgEmailPutChunk(db, { messageId: 'M4', idx: 0, chunk: 0, chunks: 1, data: PNG.toString('base64') });
+    await em.lgEmailPutChunk(db, { messageId: 'M4', idx: 1, chunk: 0, chunks: 1, data: Buffer.from('not an image at all').toString('base64') });
+    const r = await em.lgEmailCommit(db, { messageId: 'M4', threadId: 'T-M4', from: 'dana@client.co.il', subject: '', date: NOW,
+      parts: [{ idx: 0, name: 'a.png', mime: 'image/png', size: PNG.length, chunks: 1 }, { idx: 1, name: 'b.heic', mime: 'image/heic', size: 19, chunks: 1 }] },
+      { by: 'gmail-script', now: NOW });
+    check('E1 intake done', r.state, 'done');
+    check('E2 a skipped file → left for Ben', !!r.autoHandled, false);
+    check('E3 order not marked', db._data.orders[r.orderIds[0]].sketchSeenAt, undefined);
+  }
+
   if (failed) { console.error('\n' + failed + ' failed'); process.exit(1); }
   console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

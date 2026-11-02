@@ -68,13 +68,16 @@ function emDecide(httpCode, body) {
   }
   return { label: null, handled: false };
 }
-//  האם מותר להוציא שרשור מהדואר הנכנס. msgs: [{id, from, date}] — כל המיילים בו.
+//  האם מותר להוציא שרשור מהדואר הנכנס. msgs: [{id, from, date}] — כל המיילים בו;
+//  auto: {id: ts} — מיילים שהשרת סימן "טופל" לבד. כל מייל של לקוח חייב להיות שם.
 //  ⚠️ רק כשאין בו אף מייל שעוד צריך לקלוט: הסריקה היא in:inbox, ומייל שנשאר לריצה
 //  הבאה (תקרת מיילים לריצה, ניסיון חוזר) היה נעלם ולא נקלט לעולם. מייל שלנו (תשובה)
 //  או ישן מ-START_AT לא מחזיק את השרשור — emShouldTake כבר מדלג עליהם.
-function emThreadSettled(msgs, cfg, handled) {
+function emThreadSettled(msgs, cfg, auto) {
   var list = Array.isArray(msgs) ? msgs : [];
-  return list.length > 0 && list.every(function (m) { return !emShouldTake(m, cfg, handled); });
+  return list.length > 0 && list.every(function (m) {
+    return !emShouldTake(m, cfg, {}) || Object.prototype.hasOwnProperty.call(auto || {}, m.id);
+  });
 }
 //  האם להפסיק לנסות מייל. retries = מספר הניסיונות עד כה (כולל הנוכחי),
 //  ageMs = גיל המייל. 20 ניסיונות או 60 שעות (לפני שנופל מחלון 3 הימים).

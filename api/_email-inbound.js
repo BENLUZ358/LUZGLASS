@@ -330,7 +330,11 @@ async function lgEmailInboundProcess(db, key, opts) {
     await db.ref().update(upd);
     //  כתובת מקושרת → "טופל" לבד והודעה ללקוח (בן, 2/11). ר' _email-auto-handled.js
     let autoHandled = false;
-    if (who.via === 'link') {
+    //  ⚠️ לא כשהמייל צריך את בן: קובץ שלא נקרא, תמונה ענקית, "כפולה?", שורה בלי
+    //  מק"ט — אחרת הלקוח היה מקבל "טופל" על משהו שנשאר בחוץ
+    const needsBen = skipped.length || upd[base + 'oversize'] ||
+      orderIds.some(id => { const o = upd['orders/' + id]; return o.waDuplicateOf || (o.items || []).some(it => it && it.skuMissing); });
+    if (who.via === 'link' && !needsBen) {
       try { autoHandled = (await require('./_email-auto-handled').lgEmailAutoHandle(db, orderIds, now)).queued; }
       catch (e) { console.warn('email-inbound: auto-handle failed', e && e.name); }
       //  נשמר על הרשומה — הסקריפט ששואל שוב על אותו מייל עדיין יוציא אותו מהדואר הנכנס

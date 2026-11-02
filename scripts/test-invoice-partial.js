@@ -164,6 +164,31 @@ const rawOf = extra => Object.assign({
     check('H5 "ready" still goes out once per order', (await lgWaEnqueue(db, { kind: 'ready', to: '972535214912', orderIds: ['o1'] })).queued, false);
   }
 
+  /* I — review fixes: exactly the lines shown, and no edits that would shift billed pieces */
+  {
+    writes.length = 0;
+    await ctx.lgMarkInvoiced([order({})], '67500', [], { o1: [0, 1] });
+    const u = writes.find(w => w.path === 'orders').update;
+    check('I1 only the lines the dialog showed are recorded (piece 3 closed meanwhile is not)',
+          Object.keys(u).filter(k => k.includes('/pieces/')).sort(), ['o1/invoiceDone/pieces/0', 'o1/invoiceDone/pieces/1']);
+    let e1 = '';
+    try { await ctx.lgMarkInvoiced([order({ invoiceDone: { pieces: { 1: '67400' } } })], '67501', [], { o1: [0, 1] }); } catch (e) { e1 = e.message; }
+    check('I2 a piece already billed is refused', /כבר/.test(e1), true);
+    writes.length = 0;
+    await ctx.lgMarkInvoiced([order({ stage: 'done', chisumClosedIdxs: null })], '67502', [], { o1: [0, 1, 2, 3] });
+    check('I3 the order moved on before the click — the document is still recorded',
+          Object.keys(writes.find(w => w.path === 'orders').update).filter(k => k.includes('/pieces/')).length, 4);
+    let e4 = '';
+    try { await ctx.lgMarkInvoiced([order({ stage: 'done', chisumClosedIdxs: null, invoiceCheck: null })], '67503', [], { o1: [0] }); } catch (e) { e4 = e.message; }
+    check('I4 but never without the check', /מאומתות/.test(e4), true);
+    const billed = order({ stage: 'collected', chisumClosedIdxs: null, invoiceDone: { pieces: { 0: '67400' } } });
+    check('I5 a billed piece cannot be edited in the station', ctx.lgCanEditInvoiceItems(billed, 0), false);
+    check('I6 an unbilled piece still can', ctx.lgCanEditInvoiceItems(billed, 4), true);
+    let e7 = '';
+    try { await ctx.lgSaveOrderItemsEdit(billed, ITEMS.slice(1)); } catch (e) { e7 = e.message; }
+    check('I7 adding/removing items is blocked once some pieces are billed', /חלק/.test(e7), true);
+  }
+
   if (failed) { console.error('\n' + failed + ' failed'); process.exit(1); }
   console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

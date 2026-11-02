@@ -151,7 +151,8 @@ check('decide failed + autoHandled ignored', emDecide(200, { state: 'failed', au
 //  (נשאר לריצה הבאה) נעלם מ-in:inbox ולא נקלט לעולם
 const fcfg = { START_AT: '2026-10-20T00:00:00Z', ALLOWED_SENDERS: '', ME: 'orderluz@gmail.com' };
 const ft = Date.parse('2026-11-02T10:00:00Z');
-check('thread settled when all handled', emThreadSettled([{ id: 'a', from: 'p@x.com', date: ft }, { id: 'b', from: 'p@x.com', date: ft }], fcfg, { a: 1, b: 1 }), true);
+check('thread settled when every customer mail was auto-handled', emThreadSettled([{ id: 'a', from: 'p@x.com', date: ft }, { id: 'b', from: 'p@x.com', date: ft }], fcfg, { a: 1, b: 1 }), true);
+check('a mail handled the ordinary way (text-only correction) keeps the thread', emThreadSettled([{ id: 'a', from: 'p@x.com', date: ft }, { id: 'b', from: 'p@x.com', date: ft }], fcfg, { b: 1 }), false);
 check('thread not settled with an unhandled mail', emThreadSettled([{ id: 'a', from: 'p@x.com', date: ft }, { id: 'b', from: 'p@x.com', date: ft }], fcfg, { a: 1 }), false);
 check('our own reply does not hold the thread', emThreadSettled([{ id: 'a', from: 'p@x.com', date: ft }, { id: 'r', from: 'orderluz@gmail.com', date: ft }], fcfg, { a: 1 }), true);
 check('an empty thread is not archived', emThreadSettled([], fcfg, {}), false);

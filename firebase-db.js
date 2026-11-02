@@ -1285,6 +1285,12 @@ function lgPartialInvoiceDocs(o) {
   return [...new Set(Object.values((o && o.invoicePieces) || {}).map(String))];
 }
 
+//  האימות בתוקף: נעשה, לא בוטל, והפריטים לא השתנו מאז
+function _lgCheckOk(o) {
+  const c = o && o.invoiceCheck;
+  return !!(c && c.verifiedAt && !c.revokedAt && c.itemsHash === lgItemsHash(o.items));
+}
+
 function lgInvoiceState(o) {
   if (!o) return null;
   const early = o.stage === 'chisum' && lgPartialInvoiceOrder(o) && lgInvoiceablePieces(o).length > 0;
@@ -1385,8 +1391,10 @@ async function lgRevokeInvoiceCheck(order, reason) {
 // ולא נגזר מ-items. עדכון w/h בלבד היה משאיר את כרטיס ההזמנה באדמין מציג את
 // המידה הישנה ואת המחיר הישן — עוד מקור אמת מקביל. לכן כל עריכה מחשבת את
 // שניהם מחדש מאותו מקור: ה-items אחרי השינוי.
-function lgCanEditInvoiceItems(order) {
+//  index — חשבונית חלקית: חתיכה שכבר חויבה לא נערכת (המידה שלה כבר בחשבונית)
+function lgCanEditInvoiceItems(order, index) {
   const s = lgInvoiceState(order);
+  if (index != null && order && (order.invoicePieces || {})[Number(index)]) return false;
   return s === 'pending' || s === 'verified' || s === 'changed';
 }
 
@@ -1426,7 +1434,7 @@ function lgRepriceLockedItems(items, prevLocked) {
 async function lgEditInvoiceItem(order, index, next) {
   const who = _lgInvoiceActor();
   if (!order || !order.id) throw new Error('lgEditInvoiceItem: הזמנה חסרה');
-  if (!lgCanEditInvoiceItems(order)) throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  if (!lgCanEditInvoiceItems(order, index)) throw new Error('אי אפשר לערוך פריט שכבר הופקה עליו חשבונית');
   const items = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}))
                   .map(it => Object.assign({}, it));
   const it = items[Number(index)];
@@ -1551,6 +1559,10 @@ async function lgSaveOrderItemsEdit(order, newItems, opts) {
   if (!order || !order.id) throw new Error('הזמנה חסרה');
   if ((order.invoiceDone && order.invoiceDone.docNumber) || _lgLegacyInvoiced(order))
     throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  //  חשבונית חלקית: החתיכות שחויבו מזוהות לפי המקום ברשימה — הוספה או מחיקה
+  //  הייתה מזיזה אותן, וחתיכה אחרת הייתה נחשבת "חויבה"
+  if (Object.keys(order.invoicePieces || {}).length)
+    throw new Error('חלק מההזמנה כבר בחשבונית — אי אפשר להוסיף או למחוק פריטים. תיקון מידה בודדת: בתחנת החשבוניות');
   const before = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}));
   const items = (newItems || []).map(it => Object.assign({}, it));
   const update = { items, updatedAt: Date.now() };
@@ -1637,7 +1649,7 @@ async function lgMarkHsCorrectionDone(orderId, keys) {
 function lgPlanSkuChange(order, index, newSku, opts) {
   opts = opts || {};
   if (!order || !order.id) throw new Error('הזמנה חסרה');
-  if (!lgCanEditInvoiceItems(order)) throw new Error('אי אפשר לערוך הזמנה שכבר הופקה לה חשבונית');
+  if (!lgCanEditInvoiceItems(order, index)) throw new Error('אי אפשר לערוך פריט שכבר הופקה עליו חשבונית');
   const items = (Array.isArray(order.items) ? order.items : Object.values(order.items || {}))
                   .map(it => Object.assign({}, it));
   const it = items[Number(index)];
@@ -1695,19 +1707,29 @@ async function lgEditInvoiceItemSku(order, index, newSku, opts) {
 // "החשבונית הופקה" — על הזמנה אחת או כמה יחד, עם אותו מספר מסמך.
 // כל הזמנה חייבת להיות 'verified' עכשיו; אחרת לא מסמנים אף אחת.
 // allOrders — לבדיקת כפילות מול מה שכבר סומן.
-async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
+//  chosen — {orderId: [מספרי פריט]} כפי שהוצגו בחלון ברגע שנפתח (חשבונית חלקית).
+//  ⚠️ לא מחשבים מחדש בלחיצה: חתיכה שנסגרה בינתיים לא נמשכה בחשבשבת, והייתה
+//  נרשמת כמחויבת בלי שחויבה. והזמנה שהשלימה בינתיים את המפעל (יצאה מהתחנה עד
+//  שתיאסף) עדיין נרשמת — המסמך בחשבשבת כבר קיים.
+async function lgMarkInvoiced(selected, docNumberRaw, allOrders, chosen) {
   const who = _lgInvoiceActor();
   const p = lgDocNumberParse(docNumberRaw);
   if (!p.ok) throw new Error(p.error);
   const list = (selected || []).filter(Boolean);
   if (!list.length) throw new Error('לא נבחרה אף הזמנה');
-  const notReady = list.filter(o => lgInvoiceState(o) !== 'verified');
+  const pick = o => (chosen && Array.isArray(chosen[o.id])) ? chosen[o.id].map(Number) : null;
+  const notReady = list.filter(o => lgInvoiceState(o) !== 'verified' &&
+    !(lgPartialInvoiceOrder(o) && pick(o) && _lgCheckOk(o) && !(o.invoiceDone && o.invoiceDone.docNumber)));
   if (notReady.length) {
     throw new Error('יש הזמנות שלא מאומתות: ' + notReady.map(o => o.orderNum || o.id).join(', '));
   }
   const dup = lgDocNumberConflicts(allOrders, p.docNumber, list.map(o => o.id));
   if (dup.length) {
     throw new Error('מספר המסמך ' + p.docNumber + ' כבר רשום על: ' + dup.map(o => o.orderNum || o.id).join(', '));
+  }
+  const twice = list.filter(o => lgPartialInvoiceOrder(o) && (pick(o) || []).some(i => (o.invoicePieces || {})[i]));
+  if (twice.length) {
+    throw new Error('יש חתיכות שכבר חויבו בחשבונית אחרת: ' + twice.map(o => o.orderNum || o.id).join(', ') + ' — סגור ופתח שוב');
   }
   const now = Date.now();
   const update = {};
@@ -1717,8 +1739,11 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders) {
     //  הפריטים חויבו — חשבונית על מה שחזר מחיסום משאירה אותה פתוחה.
     //  ⚠️ שדה-שדה ולא אובייקט שלם: אובייקט היה מוחק את invoiceDone/pieces
     if (lgPartialInvoiceOrder(o)) {
-      lgInvoiceablePieces(o).forEach(i => { update[o.id + '/invoiceDone/pieces/' + i] = p.docNumber; });
-      if (o.stage === 'collected') Object.keys(done).forEach(k => { update[o.id + '/invoiceDone/' + k] = done[k]; });
+      const pieces = pick(o) || lgInvoiceablePieces(o);
+      pieces.forEach(i => { update[o.id + '/invoiceDone/pieces/' + i] = p.docNumber; });
+      const billed = new Set(Object.keys(o.invoicePieces || {}).map(Number).concat(pieces));
+      const all = (o.items || []).every((_, i) => billed.has(i));
+      if (o.stage === 'collected' && all) Object.keys(done).forEach(k => { update[o.id + '/invoiceDone/' + k] = done[k]; });
     } else {
       update[o.id + '/invoiceDone'] = done;
     }

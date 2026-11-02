@@ -90,13 +90,16 @@ function emDecide(httpCode, body) {
   }
   return { label: null, handled: false };
 }
-//  האם מותר להוציא שרשור מהדואר הנכנס. msgs: [{id, from, date}] — כל המיילים בו.
+//  האם מותר להוציא שרשור מהדואר הנכנס. msgs: [{id, from, date}] — כל המיילים בו;
+//  auto: {id: ts} — מיילים שהשרת סימן "טופל" לבד. כל מייל של לקוח חייב להיות שם.
 //  ⚠️ רק כשאין בו אף מייל שעוד צריך לקלוט: הסריקה היא in:inbox, ומייל שנשאר לריצה
 //  הבאה (תקרת מיילים לריצה, ניסיון חוזר) היה נעלם ולא נקלט לעולם. מייל שלנו (תשובה)
 //  או ישן מ-START_AT לא מחזיק את השרשור — emShouldTake כבר מדלג עליהם.
-function emThreadSettled(msgs, cfg, handled) {
+function emThreadSettled(msgs, cfg, auto) {
   var list = Array.isArray(msgs) ? msgs : [];
-  return list.length > 0 && list.every(function (m) { return !emShouldTake(m, cfg, handled); });
+  return list.length > 0 && list.every(function (m) {
+    return !emShouldTake(m, cfg, {}) || Object.prototype.hasOwnProperty.call(auto || {}, m.id);
+  });
 }
 //  האם להפסיק לנסות מייל. retries = מספר הניסיונות עד כה (כולל הנוכחי),
 //  ageMs = גיל המייל. 20 ניסיונות או 60 שעות (לפני שנופל מחלון 3 הימים).
@@ -183,11 +186,15 @@ function emLoadState() {
   var props = PropertiesService.getScriptProperties();
   var all = props.getProperties();
   var cut = Date.now() - EM_KEEP_MS;
-  var handled = {}, retries = {};
+  var handled = {}, retries = {}, auto = {};
   Object.keys(all).forEach(function (k) {
     if (k.indexOf('h_') === 0) {
       if (Number(all[k]) < cut) props.deleteProperty(k);
       else handled[k.slice(2)] = Number(all[k]);
+    } else if (k.indexOf('a_') === 0) {
+      //  "טופל" לבד — רק שרשור שכל המיילים של הלקוח בו כאלה יוצא מהדואר הנכנס
+      if (Number(all[k]) < cut) props.deleteProperty(k);
+      else auto[k.slice(2)] = Number(all[k]);
     } else if (k.indexOf('r_') === 0) {
       var r = {};
       try { r = JSON.parse(all[k]) || {}; } catch (e) {}
@@ -195,7 +202,7 @@ function emLoadState() {
       else retries[k.slice(2)] = Number(r.n) || 0;
     }
   });
-  return { handled: handled, retries: retries };
+  return { handled: handled, retries: retries, auto: auto };
 }
 
 //  שליחה אחת. מחזיר {code, body}; code 0 = שגיאת רשת (ננסה שוב).
@@ -308,9 +315,10 @@ function emOutboxFiles(cfg, it) {
 }
 
 //  "טופל" לבד (בן, 2/11): שרשור שהשרת סימן וענה עליו יוצא מהדואר הנכנס (ארכיון,
-//  לא מחיקה; התווית LG/נקלט נשארת). ⚠️ רק כשכל המיילים בו טופלו — emThreadSettled.
+//  לא מחיקה; התווית LG/נקלט נשארת). ⚠️ רק כשכל המיילים של הלקוח בו טופלו **לבד** —
+//  מייל שנקלט רגיל (תיקון בטקסט, נכשל, קובץ שלא נקרא) נשאר לבן בדואר הנכנס.
 //  תשובה חדשה של הלקוח באותו שרשור מחזירה אותו לדואר הנכנס, והוא נקלט כרגיל.
-function emArchive(threads, cfg, handled) {
+function emArchive(threads, cfg, auto) {
   var seen = {};
   for (var i = 0; i < threads.length; i++) {
     var th = threads[i];
@@ -321,7 +329,7 @@ function emArchive(threads, cfg, handled) {
       var infos = th.getMessages().map(function (m) {
         return { id: m.getId(), from: m.getFrom(), date: m.getDate().getTime() };
       });
-      if (emThreadSettled(infos, cfg, handled)) th.moveToArchive();
+      if (emThreadSettled(infos, cfg, auto)) th.moveToArchive();
     } catch (e) {
       Logger.log('ארכיון: חריגה ' + (e && e.name));
     }
@@ -434,8 +442,11 @@ function emRun() {
         if (!res.handled) res = emRetry(it, st, props);
         if (res.handled) {
           emFinish(it, res, props);
-          st.handled[mid] = Date.now();
-          if (res.archive) toArchive.push(it.thread);
+          if (res.archive) {
+            st.auto[mid] = Date.now();
+            props.setProperty('a_' + mid, String(st.auto[mid]));
+            toArchive.push(it.thread);
+          }
         }
       } catch (e) {
         // ⚠️ שם השגיאה בלבד — ההודעה עלולה לכלול תוכן
@@ -449,7 +460,7 @@ function emRun() {
         }
       }
     }
-    emArchive(toArchive, cfg, st.handled);
+    emArchive(toArchive, cfg, st.auto);
     emOutbox(cfg, started);
   } finally {
     lock.releaseLock();

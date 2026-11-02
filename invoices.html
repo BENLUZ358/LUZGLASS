@@ -576,12 +576,14 @@ function renderVerify() {
     const out = (part.part || part.docs.length) && !inNow.has(i);
     const tag = !out ? '' : o.invoicePieces && o.invoicePieces[i]
       ? `<span class="item-tag">בחשבונית ${esc(o.invoicePieces[i])}</span>` : '<span class="item-tag">עוד לא חזר</span>';
+    //  חתיכה שכבר חויבה — המידה שלה כבר בחשבונית, לא עורכים
+    const canEd = lgCanEditInvoiceItems(o, i);
     return `<div class="item${out ? ' item-out' : ''}">
       <span class="item-n">${esc(n)}</span>
       <div class="item-main"><div class="item-dim">${w} × ${h}</div>
         <div class="item-sub">${sub}</div>${was}</div>${tag}
-      <button class="edit" type="button" data-edit="${i}" aria-label="תקן את המידה של שורה ${esc(n)}"><span data-icon="pencil"></span></button>
-      <button class="edit" type="button" data-glass="${i}" aria-label="החלף סוג זכוכית בשורה ${esc(n)}"><span data-icon="refresh"></span></button>
+      ${canEd ? `<button class="edit" type="button" data-edit="${i}" aria-label="תקן את המידה של שורה ${esc(n)}"><span data-icon="pencil"></span></button>
+      <button class="edit" type="button" data-glass="${i}" aria-label="החלף סוג זכוכית בשורה ${esc(n)}"><span data-icon="refresh"></span></button>` : ''}
       <button class="tick" type="button" data-tick="${i}" aria-pressed="${!!t[i]}" aria-label="סמן שורה ${esc(n)} כנבדקה"><span data-icon="check"></span></button>
     </div>`;
   }).join('') || `<div class="empty-state"><div class="empty-state-title">אין פריטים בהזמנה</div></div>`;
@@ -727,6 +729,9 @@ document.addEventListener('keydown', e => {
 function openInvoiceModal() {
   const g = selKey && groupOf(selKey); if (!g || !g.counts.gateOpen) return;
   const ready = g.ords.filter(o => lgInvoiceState(o) === 'verified');
+  //  החתיכות כפי שמוצגות עכשיו — הן מה שנמשך בחשבשבת, והן מה שנרשם (ר' lgMarkInvoiced)
+  const chosen = {};
+  ready.forEach(o => { if (lgPartialInvoiceOrder(o)) chosen[o.id] = lgInvoiceablePieces(o); });
   openModal(`<div class="modal-in">
     <h3 id="ovTitle">${esc(g.name)}</h3>
     <div class="sub">${ready.length === 1 ? "הזמנה אחת מאומתת" : ready.length + " הזמנות מאומתות"}</div>
@@ -762,7 +767,7 @@ function openInvoiceModal() {
     if (!sel.length) { toast('סמן לפחות הזמנה אחת', true); return; }
     const b = $('markBtn'); b.disabled = true; b.innerHTML = '<span class="spin"></span>שומר…';
     try {
-      const r = await lgMarkInvoiced(sel, input.value, ORDERS);
+      const r = await lgMarkInvoiced(sel, input.value, ORDERS, chosen);
       closeModal();
       toast(`נרשם: חשבונית ${r.docNumber} על ${nOrders(r.count)}`);
     } catch (err) {
