@@ -120,7 +120,7 @@ async function lgInvoiceDeliver(db, key, deps) {
     return { state: 'queued', channel: 'email' };
   }
 
-  if (!who.phone) { await mark({ state: 'blocked', channel: 'whatsapp', reason: 'אין נמען בוואטסאפ' }); return { state: 'blocked' }; }
+  if (!who.phone) { await mark({ state: 'blocked', channel: 'whatsapp', reason: who.source === 'invoice-private-missing' ? 'סומן "חשבוניות לפרטי" אבל אין מספר פרטי בכרטיס הלקוח' : 'אין נמען בוואטסאפ' }); return { state: 'blocked' }; }
   const { lgWaEnqueue } = require('./_wa-outbox');
   const q = await lgWaEnqueue(db, { ...common, to: who.phone, phoneSource: who.source });
   await mark({ state: 'queued', channel: 'whatsapp', outboxKey: q.key });

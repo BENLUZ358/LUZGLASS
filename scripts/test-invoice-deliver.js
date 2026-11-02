@@ -66,6 +66,52 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual([q.kind, q.to, q.invoiceKey, q.docNumber, q.state], ['invoice', GROUP, 'k1', '67346', 'pending']);
     assert.equal(db._data.invoicePdf.k1.delivery.channel, 'whatsapp');
   });
+  //  ── חשבוניות לפרטי (בן, 2/11: המקום לאמבט ונאור חזקיה) — waMeta/invoiceToPrivate/<מפתח> ──
+  const privDb = (on, phone) => {
+    const db = base({ a: waOrder, b: portal });
+    db._data.hashavshevetAccounts = { 3150: { name: 'אגן ברזל', ...(phone ? { phone } : {}) } };
+    if (on) db._data.waMeta.invoiceToPrivate = { 3150: { customerName: 'אגן ברזל', addedAt: 1 } };
+    return db;
+  };
+  const R = require('../api/_wa-recipient');
+  await test('private: switch on → the invoice goes to the card phone, not the group', async () => {
+    const db = privDb(true, '050-111-2222');
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const q = Object.values(db._data.waOutbox)[0];
+    assert.equal(q.to, '0501112222');
+    const live = await R.resolveRecipientWa(db, waOrder, 'invoice');   // ה-drain פותר שוב — אותה תשובה
+    assert.deepEqual([live.phone, live.accountKey, live.linked], ['0501112222', '3150', true]);
+  });
+  await test('private: switch off → the group, as today', async () => {
+    const db = privDb(false, '0501112222');
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.equal(Object.values(db._data.waOutbox)[0].to, GROUP);
+  });
+  await test('private: "ready" and other messages still go to the group', async () => {
+    const db = privDb(true, '0501112222');
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'ready')).phone, GROUP);
+  });
+  await test('private: switch on but no phone on the card → blocked, never the group', async () => {
+    const db = privDb(true, '');
+    const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.equal(r.state, 'blocked');
+    assert.equal(db._data.waOutbox, undefined);
+    assert.match(db._data.invoicePdf.k1.delivery.reason, /פרטי/);
+  });
+  await test('private: set from קליטות through the admin endpoint; needs a card with a phone', async () => {
+    const adm = require('../api/wa-inbound-drain');
+    const db = privDb(false, '0501112222');
+    db._data.hashavshevetAccounts['99'] = { name: 'בלי טלפון' };
+    const act = b => adm.handleAdmin({ channel: 'whatsapp', ...b }, { db, by: '0520000000', now: NOW });
+    assert.equal((await act({ action: 'invoice-private-add', customerId: '3150' })).ok, true);
+    assert.equal(db._data.waMeta.invoiceToPrivate['3150'].customerName, 'אגן ברזל');
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'invoice')).phone, '0501112222');
+    assert.equal((await act({ action: 'invoice-private-add', customerId: '99' })).code, 'no-phone');
+    assert.equal((await act({ action: 'invoice-private-add', customerId: '777' })).code, 'unknown-customer');
+    assert.equal((await act({ action: 'invoice-private-remove', customerId: '3150' })).ok, true);
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'invoice')).phone, GROUP);
+    assert.equal((await act({ action: 'invoice-private-remove', customerId: '3150' })).code, 'not-enabled');
+  });
   await test('email order from a linked sender: reply queued in its thread, never WhatsApp', async () => {
     const db = base({ a: emOrder, b: portal });
     const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: async () => { throw new Error('no WA'); } });
