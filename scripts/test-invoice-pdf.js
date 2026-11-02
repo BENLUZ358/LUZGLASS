@@ -3,6 +3,7 @@
 // טקסט העמודים מוזרק (pageTexts), ה-PDF רק צריך להתחיל ב-%PDF-.
 const assert = require('node:assert/strict');
 const path = require('node:path');
+const fs = require('node:fs');
 const { fakeDb } = require('./_fake-db');
 const M = require('../api/_invoice-match');
 const S = require('../api/_invoice-send');
@@ -311,6 +312,49 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual(stale, []);
     const later = groupSingles([['o2', e('original', '200', 0)], ['c3', e('copy', '300', 0)]], 9000, 5000);
     assert.deepEqual(later.pairs, []); assert.deepEqual(later.stale.sort(), ['c3', 'o2']);
+  });
+  //  ── תיוק (בן, 2/11): לקוחות/<לקוח>/<שנה-חודש>/<מספר> <לקוח> מקור|העתק <תאריך>.pdf,
+  //  מקור והעתק שניהם; שום תיקיית עזר בתוך תיקיית ההדפסות (שם שמרו בטעות ל-done) ──
+  await test('watcher: filed names — customer / year-month / number customer role date', () => {
+    const { filedPaths } = require('../tools/invoice-watcher/watcher');
+    const root = path.resolve('/x/לקוחות');
+    const f = filedPaths(root, '2026/11/נאור חזקיה/2026-11-02_67393.pdf');
+    assert.equal(f.original, path.join(root, 'נאור חזקיה', '2026-11', '67393 נאור חזקיה מקור 02-11-2026.pdf'));
+    assert.equal(f.copy,     path.join(root, 'נאור חזקיה', '2026-11', '67393 נאור חזקיה העתק 02-11-2026.pdf'));
+    for (const bad of ['../x/y/2026-11-02_1.pdf', '2026/11/../2026-11-02_1.pdf', '2026/11/a/b.pdf', '2026/11/a\\b/2026-11-02_1.pdf', '', null])
+      assert.equal(filedPaths(root, bad), null, String(bad));
+  });
+  await test('watcher: a matched pair files BOTH original and copy, raw files leave the print folder', async () => {
+    const W = require('../tools/invoice-watcher/watcher');
+    const os = require('os');
+    const top = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-'));
+    const cfg = { watchDir: path.join(top, 'הדפסות'), sharedRoot: path.join(top, 'לקוחות') };
+    fs.mkdirSync(cfg.watchDir);
+    const o = path.join(cfg.watchDir, 'a.pdf'), c = path.join(cfg.watchDir, 'b.pdf');
+    fs.writeFileSync(o, 'ORIG'); fs.writeFileSync(c, 'COPY');
+    const post = async () => ({ status: 200, body: { ok: true, docNumber: '67393', archivePath: '2026/11/נאור חזקיה/2026-11-02_67393.pdf' } });
+    assert.equal(await W.processPair(cfg, { original: o, copies: [c] }, post), 'ok');
+    const dir = path.join(cfg.sharedRoot, 'נאור חזקיה', '2026-11');
+    assert.equal(fs.readFileSync(path.join(dir, '67393 נאור חזקיה מקור 02-11-2026.pdf'), 'utf8'), 'ORIG');
+    assert.equal(fs.readFileSync(path.join(dir, '67393 נאור חזקיה העתק 02-11-2026.pdf'), 'utf8'), 'COPY');
+    assert.deepEqual(fs.readdirSync(cfg.watchDir), [], 'nothing left in the print folder — no done/ to save into by mistake');
+    assert.equal(fs.readdirSync(W.sideDirs(cfg).done).length, 2);
+    fs.rmSync(top, { recursive: true, force: true });
+  });
+  await test('watcher: a refused file goes to "לבדיקה" next to the print folder, not inside it', async () => {
+    const W = require('../tools/invoice-watcher/watcher');
+    const os = require('os');
+    const top = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-'));
+    const cfg = { watchDir: path.join(top, 'הדפסות'), sharedRoot: path.join(top, 'לקוחות') };
+    fs.mkdirSync(cfg.watchDir);
+    const o = path.join(cfg.watchDir, 'a.pdf'), c = path.join(cfg.watchDir, 'b.pdf');
+    fs.writeFileSync(o, 'ORIG'); fs.writeFileSync(c, 'COPY');
+    const post = async () => ({ status: 422, body: { ok: false, code: 'bad' } });
+    assert.equal(await W.processPair(cfg, { original: o, copies: [c] }, post), 'review');
+    assert.equal(W.sideDirs(cfg).review, path.join(top, 'לבדיקה'));
+    assert.equal(fs.readdirSync(path.join(top, 'לבדיקה')).length, 2);
+    assert.deepEqual(fs.readdirSync(cfg.watchDir), []);
+    fs.rmSync(top, { recursive: true, force: true });
   });
   console.log(`\n${passed} passed`);
 })().catch(e => { console.error(e); process.exit(1); });

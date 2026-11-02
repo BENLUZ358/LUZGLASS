@@ -5,12 +5,17 @@
 //  עוקב אחרי תיקיית הפלט של מדפסת ה-PDF. חשבשבת מדפיס מקור והעתק כשתי עבודות
 //  הדפסה — שני קבצים של עמוד אחד; הכלי קורא מכל קובץ "מקור"/"העתק" ומספר
 //  חשבונית, ומצמיד את השניים לפי המספר. (קובץ אחד בן שני עמודים — מפוצל.)
-//  מעלה מקור+העתק לשרת, ואחרי שהשרת אישר — כותב את ההעתק לתיקייה השיתופית
-//  לפי הנתיב שהשרת החזיר (שנה/חודש/לקוח).
+//  מעלה מקור+העתק לשרת, ואחרי שהשרת אישר — מתייק את שניהם בתיקיית הלקוחות
+//  (sharedRoot) לפי הלקוח והתאריך שהשרת החזיר (בן, 2/11):
+//    <לקוח>/<שנה-חודש>/<מספר> <לקוח> מקור <יום-חודש-שנה>.pdf  (+ אותו דבר "העתק")
+//
+//  תיקיית ההדפסות נשארת ריקה: מה שטופל, מה שלבדיקה ומה שממתין לתיוק עוברים
+//  לתיקיות שליד תיקיית ההדפסות — לא בתוכה. (2/11 נשמרה חשבונית בטעות ל-done/
+//  שבתוך ההדפסות, והכלי לא ראה אותה.)
 //
 //  כללי בטיחות:
-//    • קובץ המקור לא נמחק ולא זז עד שההעתק נכתב בתיקייה השיתופית.
-//    • שרת סירב (422: לא זוהה/לא אומת מקור-העתק) → הקובץ עובר ל-review/, לא נשלח.
+//    • קובץ ההדפסה לא נמחק ולא זז עד ששני הקבצים תויקו.
+//    • שרת סירב (422: לא זוהה/לא אומת מקור-העתק) → הקובץ עובר ל"לבדיקה", לא נשלח.
 //    • אין רשת / השרת נפל → הקובץ נשאר, וינסה שוב בסבב הבא.
 //
 //  הרצה:  node watcher.js [config.json]
@@ -30,6 +35,30 @@ function resolveArchive(root, rel) {
   const full = path.resolve(root, ...parts);
   const base = path.resolve(root) + path.sep;
   return full.startsWith(base) ? full : null;
+}
+
+//  נתיב הארכיון מהשרת ('2026/11/לקוח/2026-11-02_67393.pdf') → שני הקבצים המתויקים:
+//  <root>/לקוח/2026-11/67393 לקוח מקור 02-11-2026.pdf (ו"העתק"). null אם הנתיב לא בתבנית.
+function filedPaths(root, rel) {
+  if (!resolveArchive(root, rel)) return null;
+  const parts = rel.split('/');
+  if (parts.length !== 4) return null;
+  const [, , client, file] = parts;
+  const m = file.match(/^(\d{4})-(\d{2})-(\d{2})_(\d{1,12})\.pdf$/);
+  if (!m) return null;
+  const [, y, mo, d, doc] = m;
+  const one = role => resolveArchive(root, `${client}/${y}-${mo}/${doc} ${client} ${role} ${d}-${mo}-${y}.pdf`);
+  const original = one('מקור'), copy = one('העתק');
+  return original && copy ? { original, copy } : null;
+}
+
+//  תיקיות העזר — ליד תיקיית ההדפסות, לא בתוכה (אפשר לדרוס ב-config).
+function sideDirs(cfg) {
+  const up = path.dirname(path.resolve(cfg.watchDir));
+  return {
+    done:   cfg.doneDir   || path.join(up, '_הדפסות שטופלו'),
+    review: cfg.reviewDir || path.join(up, 'לבדיקה'),
+  };
 }
 
 //  מפצל PDF של שני עמודים לשני קבצים. זורק אם מספר העמודים אינו 2.
@@ -135,7 +164,7 @@ function retryDeferred() {
 async function processFile(cfg, file, post = require_post(cfg)) {
   let parts;
   try { parts = await splitTwoPages(fs.readFileSync(file)); }
-  catch (e) { console.error('review (split):', path.basename(file), e.message); move(file, path.join(cfg.watchDir, 'review')); return 'review'; }
+  catch (e) { console.error('review (split):', path.basename(file), e.message); move(file, sideDirs(cfg).review); return 'review'; }
   return upload(cfg, parts, [file], post);
 }
 
@@ -147,7 +176,8 @@ async function processPair(cfg, pair, post = require_post(cfg)) {
 
 async function upload(cfg, parts, files, post) {
   const file = files[0];
-  const moveAll = dir => files.forEach(f => move(f, path.join(cfg.watchDir, dir)));
+  const dirs = sideDirs(cfg);
+  const moveAll = dir => files.forEach(f => move(f, dirs[dir]));
   let r;
   try { r = await post({ original: parts.original.toString('base64'), copy: parts.copy.toString('base64') }); }
   catch (e) { console.error('retry later (network):', e.message); return 'retry'; }
@@ -160,21 +190,20 @@ async function upload(cfg, parts, files, post) {
     console.error('review:', path.basename(file), r.status, r.body && r.body.code);
     moveAll('review'); return 'review';
   }
-  const dest = resolveArchive(cfg.sharedRoot, r.body.archivePath);
+  const dest = filedPaths(cfg.sharedRoot, r.body.archivePath);
   if (!dest) { moveAll('review'); return 'review'; }
   try {
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.writeFileSync(dest, parts.copy);
+    fs.mkdirSync(path.dirname(dest.original), { recursive: true });
+    fs.writeFileSync(dest.original, parts.original);
+    fs.writeFileSync(dest.copy, parts.copy);
   } catch (e) {
-    //  תיקייה שיתופית לא זמינה: שומרים מקומית ומנסים שוב, המקור נשאר במקומו
-    console.error('shared folder unavailable, retry later:', e.message);
-    const keep = path.join(cfg.watchDir, 'pending-copy');
-    fs.mkdirSync(keep, { recursive: true });
-    fs.writeFileSync(path.join(keep, r.body.archivePath.replace(/\//g, '__')), parts.copy);
+    //  תיקיית הלקוחות לא זמינה: קובץ ההדפסה נשאר במקומו ומנסים שוב בסבב הבא
+    //  (הדפסה חוזרת מזוהה בשרת לפי hash — לא נשלח ללקוח פעמיים)
+    console.error('filing folder unavailable, retry later:', e.message);
     return 'retry';
   }
   moveAll('done');
-  console.log('ok', r.body.docNumber, '→', dest);
+  console.log('ok', r.body.docNumber, '→', path.dirname(dest.original));
   return 'ok';
 }
 
@@ -191,7 +220,7 @@ function require_post(cfg) {
 //  קובץ של עמוד אחד מחכה לבן הזוג שלו עד pairWaitMs, ואז עובר ל-review.
 async function loop(cfg) {
   const sizes = new Map(), retryAt = new Map(), singles = new Map();
-  const review = f => { try { move(f, path.join(cfg.watchDir, 'review')); } catch (_) {} };
+  const review = f => { try { move(f, sideDirs(cfg).review); } catch (_) {} };
   for (;;) {
     //  סבב שנכשל (קובץ נעלם, תיקייה לא זמינה) לא מפיל את הכלי — מנסים בסבב הבא
     try {
@@ -234,7 +263,7 @@ async function loop(cfg) {
   }
 }
 
-module.exports = { resolveArchive, splitTwoPages, processFile, processPair, groupSingles, roleOf, docNumberOf, readPdf };
+module.exports = { resolveArchive, filedPaths, sideDirs, splitTwoPages, processFile, processPair, groupSingles, roleOf, docNumberOf, readPdf };
 
 if (require.main === module) {
   loop(loadConfig(process.argv[2] || path.join(__dirname, 'config.json')))
