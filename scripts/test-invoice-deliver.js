@@ -19,8 +19,16 @@ const core = require('../api/_wa-drain-core');
 const { renderText } = require('../api/_wa-provider');
 const { handleUpload } = require('../api/_invoice-upload');
 
-const PDF = Buffer.from('%PDF-1.4 invoice').toString('base64');
-const JPG = 'data:image/jpeg;base64,' + Buffer.from('jpegbytes').toString('base64');
+//  קבצים אמיתיים — מאז 2/11 החשבונית והסקיצות מתאחדות לקובץ PDF אחד, וזה דורש PDF ותמונה קריאים
+const { PDFDocument } = require('pdf-lib');
+const { createCanvas } = require('@napi-rs/canvas');
+let PDF, JPG;
+async function fixtures() {
+  const d = await PDFDocument.create(); d.addPage([595, 842]);
+  PDF = Buffer.from(await d.save()).toString('base64');
+  const c = createCanvas(40, 30); c.getContext('2d').fillRect(0, 0, 40, 30);
+  JPG = 'data:image/jpeg;base64,' + c.toBuffer('image/jpeg').toString('base64');
+}
 const GROUP = '120363000000000001@g.us';
 const NOW = 1793280000000;
 
@@ -43,17 +51,27 @@ let passed = 0;
 async function test(name, fn) { await fn(); passed++; console.log('ok ' + name); }
 
 (async () => {
+  await fixtures();
   await test('text: invoice message names the document and counts the sketches', () => {
     const t = renderText({ kind: 'invoice', clientName: 'אגן ברזל', orderNums: ['L1', 'L2'], sketchNames: ['מקלחון', ''], docNumber: '67346' });
     assert.match(t, /חשבונית מס 67346/); assert.match(t, /2 סקיצות/); assert.match(t, /• מקלחון/);
     assert.doesNotMatch(t, /מוכנות לאיסוף/);
   });
-  await test('files: invoice PDF first, then one sketch per order, named by order number', async () => {
+  await test('files: ONE pdf — the invoice, then a page per sketch (בן, 2/11)', async () => {
     const f = await D.lgInvoiceFiles(base({ a: waOrder, b: portal }), 'k1');
-    assert.equal(f.ok, true);
-    assert.deepEqual(f.files.map(x => [x.name, x.mime]), [['חשבונית 67346.pdf', 'application/pdf'],
-      ['סקיצה L1 - מקלחון.jpg', 'image/jpeg'], ['סקיצה L2 - מראה.jpg', 'image/jpeg']]);
-    assert.equal(f.files[0].buf.toString(), '%PDF-1.4 invoice');
+    assert.equal(f.ok, true, JSON.stringify(f).slice(0, 200));
+    assert.deepEqual(f.files.map(x => [x.name, x.mime]), [['חשבונית 67346 - אגן ברזל.pdf', 'application/pdf']]);
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 3);
+  });
+  await test('files: an unreadable sketch blocks — never a partial package', async () => {
+    const db = base({ a: waOrder, b: portal });
+    db._data.sketches.b = 'data:image/jpeg;base64,' + Buffer.from('broken').toString('base64');
+    const f = await D.lgInvoiceFiles(db, 'k1');
+    assert.deepEqual([f.ok, f.code], [false, 'sketch-unreadable']);
+  });
+  await test('files: too big to merge → sent as separate files, as before', async () => {
+    const f = await D.lgInvoiceFiles(base({ a: waOrder, b: portal }), 'k1', { maxMergedBytes: 10 });
+    assert.deepEqual(f.files.map(x => x.mime), ['application/pdf', 'image/jpeg', 'image/jpeg']);
   });
   await test('whatsapp order: queued with the invoice key and sent right away to the same group', async () => {
     const db = base({ a: waOrder, b: portal });
@@ -66,6 +84,52 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual([q.kind, q.to, q.invoiceKey, q.docNumber, q.state], ['invoice', GROUP, 'k1', '67346', 'pending']);
     assert.equal(db._data.invoicePdf.k1.delivery.channel, 'whatsapp');
   });
+  //  ── חשבוניות לפרטי (בן, 2/11: המקום לאמבט ונאור חזקיה) — waMeta/invoiceToPrivate/<מפתח> ──
+  const privDb = (on, phone) => {
+    const db = base({ a: waOrder, b: portal });
+    db._data.hashavshevetAccounts = { 3150: { name: 'אגן ברזל', ...(phone ? { phone } : {}) } };
+    if (on) db._data.waMeta.invoiceToPrivate = { 3150: { customerName: 'אגן ברזל', addedAt: 1 } };
+    return db;
+  };
+  const R = require('../api/_wa-recipient');
+  await test('private: switch on → the invoice goes to the card phone, not the group', async () => {
+    const db = privDb(true, '050-111-2222');
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const q = Object.values(db._data.waOutbox)[0];
+    assert.equal(q.to, '0501112222');
+    const live = await R.resolveRecipientWa(db, waOrder, 'invoice');   // ה-drain פותר שוב — אותה תשובה
+    assert.deepEqual([live.phone, live.accountKey, live.linked], ['0501112222', '3150', true]);
+  });
+  await test('private: switch off → the group, as today', async () => {
+    const db = privDb(false, '0501112222');
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.equal(Object.values(db._data.waOutbox)[0].to, GROUP);
+  });
+  await test('private: "ready" and other messages still go to the group', async () => {
+    const db = privDb(true, '0501112222');
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'ready')).phone, GROUP);
+  });
+  await test('private: switch on but no phone on the card → blocked, never the group', async () => {
+    const db = privDb(true, '');
+    const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.equal(r.state, 'blocked');
+    assert.equal(db._data.waOutbox, undefined);
+    assert.match(db._data.invoicePdf.k1.delivery.reason, /פרטי/);
+  });
+  await test('private: set from קליטות through the admin endpoint; needs a card with a phone', async () => {
+    const adm = require('../api/wa-inbound-drain');
+    const db = privDb(false, '0501112222');
+    db._data.hashavshevetAccounts['99'] = { name: 'בלי טלפון' };
+    const act = b => adm.handleAdmin({ channel: 'whatsapp', ...b }, { db, by: '0520000000', now: NOW });
+    assert.equal((await act({ action: 'invoice-private-add', customerId: '3150' })).ok, true);
+    assert.equal(db._data.waMeta.invoiceToPrivate['3150'].customerName, 'אגן ברזל');
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'invoice')).phone, '0501112222');
+    assert.equal((await act({ action: 'invoice-private-add', customerId: '99' })).code, 'no-phone');
+    assert.equal((await act({ action: 'invoice-private-add', customerId: '777' })).code, 'unknown-customer');
+    assert.equal((await act({ action: 'invoice-private-remove', customerId: '3150' })).ok, true);
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'invoice')).phone, GROUP);
+    assert.equal((await act({ action: 'invoice-private-remove', customerId: '3150' })).code, 'not-enabled');
+  });
   await test('email order from a linked sender: reply queued in its thread, never WhatsApp', async () => {
     const db = base({ a: emOrder, b: portal });
     const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: async () => { throw new Error('no WA'); } });
@@ -74,14 +138,14 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     const [k] = Object.keys(db._data.waMeta.emailOutbox);
     const e = db._data.waMeta.emailOutbox[k];
     assert.deepEqual([e.kind, e.thread, e.messageId, e.invoiceKey], ['invoice', 't1', 'm1', 'k1']);
-    //  הסקריפט מושך: 3 קבצים, כל אחד רק עם ההשכרה שלו
+    //  הסקריפט מושך: קובץ אחד (חשבונית + סקיצות, 2/11), רק עם ההשכרה שלו
     const items = await ob.lgEmailClaim(db, 5, NOW);
-    assert.equal(items[0].files, 3); assert.match(items[0].text, /חשבונית מס 67346/);
+    assert.equal(items[0].files, 1); assert.match(items[0].text, /חשבונית מס 67346/);
     const f0 = await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, 0, NOW);
-    assert.deepEqual([f0.ok, f0.mime, Buffer.from(f0.b64, 'base64').toString()], [true, 'application/pdf', '%PDF-1.4 invoice']);
-    assert.equal((await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, 2, NOW)).mime, 'image/jpeg');
+    assert.deepEqual([f0.ok, f0.mime], [true, 'application/pdf']);
+    assert.equal((await PDFDocument.load(Buffer.from(f0.b64, 'base64'))).getPageCount(), 3);   // חשבונית + 2 סקיצות
     assert.equal((await ob.lgEmailOutboxFile(db, k, 'wrong', 0, NOW)).code, 'stale');
-    assert.equal((await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, 3, NOW)).code, 'bad-idx');
+    assert.equal((await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, 1, NOW)).code, 'bad-idx');
     //  הסקריפט מאשר → החשבונית מסומנת "נשלחה"
     await ob.lgEmailComplete(db, k, items[0].leaseToken, true, NOW);
     assert.deepEqual([db._data.invoicePdf.k1.delivery.state, db._data.invoicePdf.k1.delivery.channel], ['sent', 'email']);
@@ -121,7 +185,7 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     const r = await core.drainKeys(db, provider, [key], 'invoice-tool', Date.now());
     assert.equal(r.results[0].status, 'sent');
     assert.equal(sent[0].to, GROUP); assert.equal(sent[0].docNumber, '67346');
-    assert.deepEqual(sent[0].files.map(f => f.mime), ['application/pdf', 'image/jpeg', 'image/jpeg']);
+    assert.deepEqual(sent[0].files.map(f => f.mime), ['application/pdf']);
     assert.equal(db._data.invoicePdf.k1.delivery.state, 'sent');
     assert.ok(db._data.orders.a.whatsappInvoice); assert.equal(db._data.orders.a.whatsapp, undefined);
   });

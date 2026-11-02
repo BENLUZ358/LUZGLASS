@@ -482,6 +482,20 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('O3 actions go through the admin endpoint', /'text-customer-add'/.test(P) && /'text-customer-remove'/.test(P), true);
   }
 
+// ═══ Q. חשבוניות לפרטי (בן, 2/11) ════════════════════════════════════
+  {
+    const h = typeof ctx.lgWaInInvoicePrivateHtml === 'function'
+      ? ctx.lgWaInInvoicePrivateHtml({ '9117': { customerName: 'נאור <i>חזקיה</i>' }, '14201': { customerName: 'המקום לאמבט' } }) : '';
+    check('Q1 a row per customer with a remove button', [/data-ikey="9117"/.test(h), /data-ikey="14201"/.test(h), (h.match(/data-iact="remove"/g) || []).length], [true, true, 2]);
+    check('Q1 names are escaped', /<i>חזקיה/.test(h), false);
+    check('Q1 explains and offers add', [/למספר הפרטי/.test(h), /data-iact="add"/.test(h)], [true, true]);
+    const P = fs.readFileSync(path.join(ROOT, 'wa-inbound-panel.js'), 'utf8');
+    check('Q2 the panel listens to waMeta/invoiceToPrivate and never writes it',
+          [/ref\(\s*['"`]waMeta\/invoiceToPrivate['"`]\s*\)/.test(P), /ref\(\s*['"`]waMeta\/invoiceToPrivate[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P)], [true, false]);
+    check('Q2 actions go through the admin endpoint', /'invoice-private-add'/.test(P) && /'invoice-private-remove'/.test(P), true);
+    check('Q3 the WhatsApp tab shows the list', /fold\('wa-inv', 'חשבוניות לפרטי'/.test(P), true);
+  }
+
 // ═══ P. כתובות מייל (בן, 26/10) ═══════════════════════════════════════
   {
     const seen = {

@@ -315,6 +315,24 @@ async function handleAdmin(body, deps) {
     return { ok: true, code: '', message: '' };
   }
 
+  // ─── חשבוניות לפרטי (בן, 2/11): החשבונית יוצאת למספר שבכרטיס, לא לקבוצה ───
+  //  נקרא ב-resolveRecipientWa (רק חשבונית). כרטיס בלי טלפון — לא מאפשרים לסמן.
+  if (chName === 'whatsapp' && (action === 'invoice-private-add' || action === 'invoice-private-remove')) {
+    const db = deps.db, t = deps.now || Date.now(), by = String(deps.by || '');
+    const cid = String(b.customerId || '').trim();
+    const ref = 'waMeta/invoiceToPrivate/' + cid;
+    if (action === 'invoice-private-remove') {
+      if (!cid || !_keyOk(cid) || !(await db.ref(ref).once('value')).val()) return { ok: false, code: 'not-enabled', message: 'הלקוח לא מוגדר' };
+      await db.ref(ref).set(null);
+      return { ok: true, code: '', message: '' };
+    }
+    const acc = cid && _keyOk(cid) ? (await db.ref('hashavshevetAccounts/' + cid).once('value')).val() : null;
+    if (!acc) return { ok: false, code: 'unknown-customer', message: 'כרטיס הלקוח לא נמצא' };
+    if (!String(acc.phone || '').replace(/\D/g, '')) return { ok: false, code: 'no-phone', message: 'אין מספר טלפון בכרטיס הלקוח' };
+    await db.ref(ref).set({ customerName: String(acc.name || ''), addedAt: t, addedBy: by });
+    return { ok: true, code: '', message: '' };
+  }
+
   return { ok: false, code: 'bad-action', message: 'פעולה לא מוכרת' };
 }
 

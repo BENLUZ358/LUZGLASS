@@ -38,8 +38,28 @@ async function _sketch(db, id) {
 }
 
 //  { ok, rec, files:[{name, mime, buf}] } | { ok:false, code, orderIds? }
-//  הקובץ הראשון תמיד החשבונית (מקור), ואחריו סקיצה לכל הזמנה בסדר ההזמנות.
-async function lgInvoiceFiles(db, key) {
+//  מ-2/11 (בן): קובץ PDF אחד — עמודי החשבונית (מקור) ואחריהם עמוד לכל סקיצה,
+//  בסדר ההזמנות. סקיצה שלא נכנסת → חסום (אין חבילה חלקית). קובץ מאוחד גדול
+//  מדי לוואטסאפ → כמו קודם: החשבונית, ואחריה סקיצה לכל הזמנה כקבצים נפרדים.
+const MAX_MERGED_BYTES = 15 * 1024 * 1024;
+async function lgInvoiceFiles(db, key, opts) {
+  const sep = await _separateFiles(db, key);
+  if (!sep.ok) return sep;
+  const { rec, files } = sep;
+  let merged;
+  try {
+    merged = await require('./_invoice-merge').lgInvoiceMerge(files[0].buf, files.slice(1).map((f, i) => ({
+      buf: f.buf, mime: f.mime, num: (rec.orderNums || [])[i] || '', name: (rec.sketchNames || [])[i] || '' })));
+  } catch (e) {
+    return { ok: false, code: 'sketch-unreadable', orderIds: rec.orderIds || [] };
+  }
+  if (merged.length > ((opts && opts.maxMergedBytes) || MAX_MERGED_BYTES)) return sep;
+  const name = 'חשבונית ' + rec.docNumber + (rec.client ? ' - ' + _safe(rec.client) : '') + '.pdf';
+  return { ok: true, rec, files: [{ name, mime: 'application/pdf', buf: merged }] };
+}
+
+//  החשבונית ואחריה סקיצה לכל הזמנה, כל אחד קובץ משלו (הצורה שלפני 2/11).
+async function _separateFiles(db, key) {
   const rec = (await db.ref('invoicePdf/' + key).once('value')).val();
   if (!rec || rec.state !== 'ready') return { ok: false, code: 'not-ready' };
   const pdf = (await db.ref('invoicePdfBlobs/' + key + '/original').once('value')).val();
@@ -114,13 +134,13 @@ async function lgInvoiceDeliver(db, key, deps) {
 
   if (who.channel === 'email') {
     const { lgEmailEnqueue } = require('./_email-outbox');
-    const q = await lgEmailEnqueue(db, { ...common, thread: who.thread, messageId: emOrder.emailMessageId,
+    const q = await lgEmailEnqueue(db, { ...common, fileCount: files.files.length, thread: who.thread, messageId: emOrder.emailMessageId,
                                          email: who.email, now });
     await mark({ state: 'queued', channel: 'email', outboxKey: q.key });
     return { state: 'queued', channel: 'email' };
   }
 
-  if (!who.phone) { await mark({ state: 'blocked', channel: 'whatsapp', reason: 'אין נמען בוואטסאפ' }); return { state: 'blocked' }; }
+  if (!who.phone) { await mark({ state: 'blocked', channel: 'whatsapp', reason: who.source === 'invoice-private-missing' ? 'סומן "חשבוניות לפרטי" אבל אין מספר פרטי בכרטיס הלקוח' : 'אין נמען בוואטסאפ' }); return { state: 'blocked' }; }
   const { lgWaEnqueue } = require('./_wa-outbox');
   const q = await lgWaEnqueue(db, { ...common, to: who.phone, phoneSource: who.source });
   await mark({ state: 'queued', channel: 'whatsapp', outboxKey: q.key });

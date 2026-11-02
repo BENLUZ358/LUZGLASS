@@ -211,9 +211,26 @@ async function resolveRecipient(db, order, kind) {
 //  ⚠️ whatsapp-drain משתמש בזה: הודעה שכבר בתור הוואטסאפ (נכנסה לפני שבן קישר
 //  את הכתובת) יוצאת בוואטסאפ. resolveRecipient היה מחזיר שם 'email' עם phone:''
 //  והיא הייתה נסגרת "אין מספר טלפון" — הלקוח לא היה מקבל כלום באף ערוץ.
-// eslint-disable-next-line no-unused-vars
+//
+//  חשבונית ללקוח שסומן "חשבוניות לפרטי" (waMeta/invoiceToPrivate/<מפתח>, בן 2/11)
+//  יוצאת למספר שבכרטיס הלקוח במקום לקבוצה. רק חשבונית, ורק לצ'אט מקושר של אותו
+//  לקוח — הקישור והסימון של המנהל הם ההרשאה. אין מספר בכרטיס → phone ריק
+//  (חסום), לעולם לא חזרה לקבוצה.
 async function resolveRecipientWa(db, order, kind) {
-  return { ...(await _resolveWa(db, order)), channel: 'whatsapp' };
+  const r = await _resolveWa(db, order);
+  if (kind === 'invoice' && r.linked && r.accountKey && await lgInvoiceToPrivate(db, r.accountKey)) {
+    const acc = (await db.ref('hashavshevetAccounts/' + r.accountKey).once('value')).val();
+    const phone = norm(acc && acc.phone);
+    return { phone, source: phone ? 'invoice-private' : 'invoice-private-missing',
+             accountKey: r.accountKey, linked: true, channel: 'whatsapp' };
+  }
+  return { ...r, channel: 'whatsapp' };
+}
+
+async function lgInvoiceToPrivate(db, accountKey) {
+  const k = String(accountKey || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(k)) return false;
+  return !!(await db.ref('waMeta/invoiceToPrivate/' + k).once('value')).val();
 }
 
 async function _resolveWa(db, order) {
@@ -232,5 +249,5 @@ async function _resolveWa(db, order) {
   return { phone: String(g), source: 'group', accountKey: String(link.customerId), linked: true };
 }
 
-module.exports = { resolvePhone, resolveRecipient, resolveRecipientWa, toWaNumber, norm, orderSketchName, waChatToLocal,
+module.exports = { resolvePhone, resolveRecipient, resolveRecipientWa, lgInvoiceToPrivate, toWaNumber, norm, orderSketchName, waChatToLocal,
                    lgClientFromWaSender, lgClientFromWaGroup, lgWaSenderKey, lgWaSenderLink };

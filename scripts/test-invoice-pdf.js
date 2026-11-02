@@ -393,5 +393,44 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual(fileKind([p('מקור', 67395)]), { split: false, role: 'original', doc: '67395' });
     assert.equal(fileKind(['שום דבר']), null);
   });
+  //  ── ההעתק לנייר (בן, 2/11): עד שתהיה חשבונית דיגיטלית מחשבשבת בן מתייק ידנית ──
+  const printRun = async (body, cfgOver) => {
+    const W = require('../tools/invoice-watcher/watcher');
+    const os = require('os');
+    const top = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-'));
+    const printed = [];
+    const cfg = { watchDir: path.join(top, 'הדפסות'), sharedRoot: path.join(top, 'לקוחות'),
+      printCopyTo: 'iR-ADV 525 III', printFn: async (file, printer) => { printed.push([path.basename(file), printer, fs.readFileSync(file, 'utf8')]); }, ...cfgOver };
+    fs.mkdirSync(cfg.watchDir);
+    const o = path.join(cfg.watchDir, 'a.pdf'), c = path.join(cfg.watchDir, 'b.pdf');
+    fs.writeFileSync(o, 'ORIG'); fs.writeFileSync(c, 'COPY');
+    if (cfgOver && cfgOver._alreadyFiled) {
+      const d = path.join(cfg.sharedRoot, 'נאור חזקיה', '2026-11');
+      fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '67395 נאור חזקיה העתק 02-11-2026.pdf'), 'COPY');
+    }
+    const out = await W.processPair(cfg, { original: o, copies: [c] },
+      async () => ({ status: 200, body: { ok: true, docNumber: '67395', archivePath: '2026/11/נאור חזקיה/2026-11-02_67395.pdf', ...body } }));
+    fs.rmSync(top, { recursive: true, force: true });
+    return { out, printed };
+  };
+  await test('watcher: a newly filed invoice prints its COPY once, on the configured printer', async () => {
+    const { out, printed } = await printRun({});
+    assert.equal(out, 'ok');
+    assert.deepEqual(printed, [['67395 נאור חזקיה העתק 02-11-2026.pdf', 'iR-ADV 525 III', 'COPY']]);
+  });
+  await test('watcher: printing the same invoice again from Hashavshevet does not print another copy', async () => {
+    assert.deepEqual((await printRun({ reprint: true })).printed, []);
+    assert.deepEqual((await printRun({ duplicate: true }, { _alreadyFiled: true })).printed, []);
+  });
+  await test('watcher: a retry after a failed filing still prints (copy was never filed)', async () => {
+    assert.equal((await printRun({ duplicate: true })).printed.length, 1);
+  });
+  await test('watcher: no printer configured → nothing printed', async () => {
+    assert.deepEqual((await printRun({}, { printCopyTo: '' })).printed, []);
+  });
+  await test('watcher: a printer failure does not hold the invoice back', async () => {
+    const { out } = await printRun({}, { printFn: async () => { throw new Error('printer off'); } });
+    assert.equal(out, 'ok');
+  });
   console.log(`\n${passed} passed`);
 })().catch(e => { console.error(e); process.exit(1); });

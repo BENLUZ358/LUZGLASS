@@ -58,7 +58,7 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  שלנו, תשובה ידנית של בן, או צד שלישי. הסקריפט גם בודק שהמייל הזה (Reply-To,
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
-                                    queuedBy, accountKey, invoiceKey, docNumber, now }) {
+                                    queuedBy, accountKey, invoiceKey, docNumber, fileCount, now }) {
   const key = lgEmailMsgKey(kind, thread, orderIds);
   const at  = now || Date.now();
   const r = await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {
@@ -72,6 +72,8 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       orderIds: _ids(orderIds),
       //  חשבונית (DB-00004): הקבצים נשלפים בנפרד (outbox-file), לא בתור
       invoiceKey: invoiceKey ? String(invoiceKey) : null, docNumber: docNumber ? String(docNumber) : null,
+      //  כמה קבצים בפועל (מ-2/11 בדרך כלל אחד — חשבונית + סקיצות). חסר (רשומה ישנה) → החשבון הישן
+      fileCount: fileCount > 0 ? Number(fileCount) : null,
       state: 'pending', attempts: 0,
       createdAt: at, updatedAt: at, queuedBy: String(queuedBy || ''),
       leaseToken: null, leaseUntil: null, sentAt: null, lastError: null,
@@ -128,7 +130,7 @@ async function lgEmailClaim(db, limit, now) {
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
                                   sketchNames: e.sketchNames || [], docNumber: e.docNumber }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
-               files: e.invoiceKey ? 1 + (e.orderIds || []).length : 0 });
+               files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 });
   }
   return out;
 }
