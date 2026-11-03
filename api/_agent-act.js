@@ -301,7 +301,9 @@ async function lgAgentCancel(db, orderId, ctx) {
   const pre = (await ref.once('value')).val();
   if (!pre) return { ok: false, code: 'missing' };
   if (String(pre.customerId || '') !== cid) return { ok: false, code: 'forbidden' };
-  if (!lgOkevCanChange(pre)) return { ok: false, code: 'too-late', stage: String(pre.stage || '') };
+  //  ctx.onlyStages — ביטול שקט (סקיצה שנמחקה): רק בשלבים האלה, גם אם lgOkevCanChange מרשה יותר
+  const _stageOk = o => lgOkevCanChange(o) && (!Array.isArray(c.onlyStages) || c.onlyStages.includes(String(o.stage || '')));
+  if (!_stageOk(pre)) return { ok: false, code: 'too-late', stage: String(pre.stage || '') };
 
   const now = c.now || Date.now();
   const recRef = db.ref(AGENT_CANCELS + '/' + id);
@@ -324,7 +326,7 @@ async function lgAgentCancel(db, orderId, ctx) {
       //    של כלום) כדי שפיירבייס יביא את הערך האמיתי; אם באמת אין — 'missing'.
       if (cur === null) return null;
       if (String(cur.customerId || '') !== cid) { why = 'forbidden'; return; }
-      if (!lgOkevCanChange(cur)) { why = 'too-late'; lateStage = String(cur.stage || ''); return; }
+      if (!_stageOk(cur)) { why = 'too-late'; lateStage = String(cur.stage || ''); return; }
       taken = cur;
       return null;   // מחיקה — באותה טרנזקציה עם הבדיקה
     });
@@ -519,7 +521,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
       }
     }
     else if (a.type === 'cancel') {
-      const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now });
+      const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now, onlyStages: a.silent ? SILENT_STAGES : undefined });
       cancels.push({ orderId: String(a.orderId), ok: !!res.ok, code: String(res.code || '') });
       const ord = { ...(a.order || {}) };
       // "ההזמנה בוטלה" רק אחרי ביטול שהצליח. ביטול שקט (סקיצה שנמחקה) — בלי okText
@@ -539,8 +541,6 @@ async function _act(db, key, rec, recRef, env, now, o) {
         if (!a.silent && staff[0])
           await enq(k + '_s', staff[0], lgOkevTooLateStaffText({ ...ord, stage: res.stage || 'workday' }, String(a.who || ''), 'cancel'), [], 'agent-staff');
       }
-      // שקט + כבר לא קיימת — אין מה להגיד ללקוח שמחק אותה
-      else if (a.silent && res.code === 'missing') { /* כלום */ }
       else {
         // תיקון סופי 9: "העברנו לשאול" רק אם ההודעה לשאול באמת נכנסה לתור
         if (await enq(k + '_s', staff[0], a.staffText + ' (' + String(res.code || 'error') + ')', [], 'agent-staff'))

@@ -284,6 +284,8 @@ async function handleAdmin(body, deps) {
     const manual = !seen && action === 'link-sender' && b.manual === true;
     if (!seen && !manual) return { ok: false, code: 'unknown-sender', message: cfg.msg.unknown };
     const cur = (await db.ref(linkRef).once('value')).val();
+    //  הוספה ידנית של מה שכבר מקושר — לא מעבירים בשקט ללקוח אחר (נתק קודם)
+    if (action === 'link-sender' && b.manual === true && cur && cur.customerId) return { ok: false, code: 'linked', message: cfg.msg.linked };
 
     if (action === 'unlink-sender') {
       if (!cur) return { ok: false, code: 'not-linked', message: cfg.msg.notLinked };

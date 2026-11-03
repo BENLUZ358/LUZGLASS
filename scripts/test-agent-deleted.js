@@ -271,6 +271,13 @@ const D = (r, orders) => act.lgAgentDecide({ rec: R(r), orders: orders || list('
     await sw({ on: false });
     check('switch: off → removed', db11._data.waMeta.agentDeleteLive, undefined);
     check('switch: needs a boolean', (await sw({ on: 'yes' })).code, 'bad-on');
+
+    // מרוץ: ההזמנה עברה לטיפול בין ההחלטה לביטול — ביטול "שקט" לא מוחק אותה
+    const db12 = seed(); db12._data.orders.o3.stage = 'chash';
+    const rc = await act.lgAgentCancel(db12, 'o3', { customerId: '777', chatId: PRIV, now: NOW, onlyStages: ['', 'pending'] });
+    check('race: silent cancel of an order now in treatment → too-late, order kept', [rc.code, !!db12._data.orders.o3], ['too-late', true]);
+    const rc2 = await act.lgAgentCancel(db12, 'o3', { customerId: '777', chatId: PRIV, now: NOW });
+    check('race: a normal cancel (customer said yes) still allows chash', [rc2.ok, !!db12._data.orders.o3], [true, false]);
     const H = require('fs').readFileSync(path.join(ROOT, 'agents.html'), 'utf8');
     check('agents page listens to the switch and toggles it', /waMeta\/agentDeleteLive/.test(H) && /'agent-delete-live'/.test(H), true);
   }

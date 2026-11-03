@@ -232,7 +232,7 @@ function lgWaInSenderRows(seen, linked, showAll) {
     return { key: k, phoneText: _waInPhoneText(k), linked: !!(l && l.customerId),
              customerId: l ? String(l.customerId || '') : '',
              customerName: l ? String(l.customerName || l.customerId || '') : '',
-             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, ignored: !l && !!s.ignored };
+             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, ignored: !l && !!s.ignored, manual: !!s.manual };
   })
     .filter(r => showAll || !r.ignored)
     .sort((a, b) => (a.linked - b.linked) || (a.ignored - b.ignored) || (b.lastAt - a.lastAt));
@@ -289,7 +289,7 @@ function lgWaInSenderHtml(r, textOn) {
   if (r.linked) return _waInLine(attr, '📱', r.phoneText, _waInTo(r.customerName, 'מספר', textOn), 'data-sact="unlink"', 'נתק');
   if (r.ignored) return _waInLine(attr, '📱', r.phoneText, 'מוסתר — הודעות ממנו לא נקלטות', 'data-sact="unignore"', 'בטל התעלמות');
   return _waInCard(attr, '📱', r.phoneText, r.lastAt,
-    `${r.count || 1} הודעות נשלחו מהמספר ולא נקלטו. קשר אותו ללקוח, וההודעות הבאות ייכנסו לתור.`,
+    r.manual && !r.count ? 'נוסף ידנית ועוד לא שלח. קשר אותו ללקוח, וההודעות ממנו ייכנסו לתור.' : `${r.count || 1} הודעות נשלחו מהמספר ולא נקלטו. קשר אותו ללקוח, וההודעות הבאות ייכנסו לתור.`,
     `<button class="wain-btn wain-primary" data-sact="link">קשר ללקוח</button>
           <button class="wain-btn" data-sact="ignore">התעלם</button>`);
 }
@@ -306,7 +306,7 @@ function lgWaInEmailRows(seen, linked, showAll) {
     const s = S[k] || {}, l = L[k] || null;
     return { key: k, emailText: String(s.email || (l && l.email) || k.replace(/,/g, '.')), linked: !!(l && l.customerId),
              customerName: l ? String(l.customerName || l.customerId || '') : '',
-             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0,
+             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, manual: !!s.manual,
              listed: !l && !!s.listed, ignored: !l && !s.listed && !!s.ignored };
   })
     .filter(r => showAll || !r.ignored)
@@ -323,7 +323,7 @@ function lgWaInEmailHtml(r) {
   if (r.listed) return _waInCard(attr, '✉', r.emailText, r.lastAt,
     `<span class="wain-chip">ברשימה</span> המיילים ממנה כבר נקלטים. קשר אותה ללקוח, וההודעות על ההזמנות יחזרו אליה במייל.`, link);
   return _waInCard(attr, '✉', r.emailText, r.lastAt,
-    `${r.count || 1} מיילים נשלחו מהכתובת ולא נקלטו. קשר אותה ללקוח, והמיילים הבאים ייכנסו לתור.`,
+    r.manual && !r.count ? 'נוספה ידנית ועוד לא שלחה. קשר אותה ללקוח, והמיילים ממנה ייכנסו לתור.' : `${r.count || 1} מיילים נשלחו מהכתובת ולא נקלטו. קשר אותה ללקוח, והמיילים הבאים ייכנסו לתור.`,
     link + `
           <button class="wain-btn" data-eact="ignore">התעלם</button>`);
 }
@@ -338,8 +338,9 @@ function lgWaInManualKey(kind, raw) {
   const t = String(raw || '').trim();
   if (kind === 's') {
     let d = t.replace(/\D/g, '');
-    if (d.indexOf('972') === 0) d = '0' + d.slice(3);
-    return /^0\d{8,11}$/.test(d) ? d : '';
+    if (d.indexOf('972') === 0) d = '0' + d.slice(3).replace(/^0/, '');   // "+972 (0)50…"
+    //  נייח 9 ספרות (03-7436564), נייד 10
+    return /^0\d{8,9}$/.test(d) ? d : '';
   }
   const m = t.toLowerCase();
   return /^[^\s@,/#$[\]]+@[^\s@,/#$[\]]+\.[a-z]{2,}$/.test(m) ? m.replace(/\./g, ',') : '';

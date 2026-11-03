@@ -290,6 +290,7 @@ function renderState() {
     <p class="hint">${DEL_LIVE
       ? 'פעיל לכל הלקוחות המקושרים, גם בלי פיילוט: סקיצה שעוד בתור מתבטלת לבד; אם כבר בטיפול — הודעה לשאול. ללקוח לא נשלח כלום.'
       : 'כבוי: כשלקוח מוחק סקיצה רק נרשם מה היה קורה.'}</p>
+    ${DEL_LIVE && STATUS && STATUS.shadow !== true ? '<div class="prob">⚠ הסוכנים כבויים (AGENT_SHADOW_ENABLED) — בלי זה מחיקות לא נקלטות בכלל</div>' : ''}
     <div class="addp"><button type="button" class="sbtn${DEL_LIVE ? '' : ' is-primary'}" data-dellive="${DEL_LIVE ? 0 : 1}">${DEL_LIVE ? 'כבה' : 'הפעל'}</button></div>
     <div class="sub">הסוכנים · הודעות ב-7 ימים</div>${agents}
     <div class="sub">פיילוט · ${E(lgAgPilotCount(PILOT))} לקוחות</div>

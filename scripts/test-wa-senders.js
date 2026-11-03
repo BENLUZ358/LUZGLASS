@@ -196,6 +196,9 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
   check('5n by hand still needs a valid number', (await act({ action: 'link-sender', key: '12345', customerId: '14201', manual: true })).code, 'bad-key');
   check('5o without manual the old rule stays', (await act({ action: 'link-sender', key: '0529999999', customerId: '14201' })).code, 'unknown-sender');
   check('5p manual only means link — not unlink of a stranger', (await act({ action: 'unlink-sender', key: '0528888888', manual: true })).code, 'unknown-sender');
+  await act({ action: 'link-sender', key: '0523333333', customerId: '14201', manual: true });
+  check('5q adding by hand a number that is already linked is refused (no silent move)',
+        [(await act({ action: 'link-sender', key: '0523333333', customerId: '3150', manual: true })).code, db._data.waSenders['0523333333'].customerId], ['linked', '14201']);
 }
 {
   const rules = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8')).rules;
