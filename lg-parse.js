@@ -26,8 +26,13 @@ function lgParseDimensionInput(rawStr) {
   if (isNaN(n) || !isFinite(n)) return { ok: false, error: 'יש להזין מספר תקין' };
   if (n <= 0) return { ok: false, error: 'יש להזין מידה חיובית' };
 
+  //  יחידה שנכתבה גוברת על הניחוש (בן, 3/11: "30 ממ" יצא 300):
+  //  30 ממ / מ"מ / mm → 30 · 30 ס"מ / cm → 300 · 3 מ' / מטר / m → 3000
+  const u = s.match(/^(\d*\.?\d+)\s*(?:(מ["'״׳]?מ|mm)|(ס["'״׳]?מ|cm)|(מטר|מ['׳]|m))$/i);
   let mm;
-  if (hasDecimal) {
+  if (u) {
+    mm = Math.round(n * (u[2] ? 1 : u[3] ? 10 : 1000));
+  } else if (hasDecimal) {
     mm = Math.round(n * 1000);
   } else {
     const intVal = Math.trunc(n);

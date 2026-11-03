@@ -97,5 +97,19 @@ check('250 mm is not turned into 2500 by a redraw', parse(toInput(250)).mm, 250)
         /lgParseDimensionInput\(/.test(DEMO), true);
 }
 
+/* ── a written unit wins over the guess (בן, 3/11: "30 ממ" יצא 300) ─────── */
+check('30 ממ is 30 mm',        parse('30 ממ').mm,   30);
+check('30 מ"מ is 30 mm',       parse('30 מ"מ').mm,  30);
+check('30 מ״מ is 30 mm',       parse('30 מ״מ').mm,  30);
+check('30mm is 30 mm',         parse('30mm').mm,    30);
+check('30 ס"מ is 300 mm',      parse('30 ס"מ').mm,  300);
+check('30 סמ is 300 mm',       parse('30 סמ').mm,   300);
+check('350 ס"מ is 3500 mm',    parse('350 ס"מ').mm, 3500);
+check("3 מ' is 3000 mm",       parse("3 מ'").mm,    3000);
+check('1.5 מטר is 1500 mm',    parse('1.5 מטר').mm, 1500);
+check('without a unit 30 is still 300', parse('30').mm, 300);
+check('a unit does not lift the 5000 limit', parse('6000 ממ').ok, false);
+check('a written unit survives the round trip', parse(toInput(parse('30 ממ').mm)).mm, 30);
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll dimension checks passed.');
