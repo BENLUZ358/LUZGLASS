@@ -547,6 +547,19 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     check('P7 and never writes them itself', /ref\(\s*['"`]waMeta\/emailSenders[^)]*\)\s*\.(set|update|remove|push|transaction)/.test(P), false);
     check('P7 actions go through the admin endpoint with channel email', /channel:\s*'email'/.test(P) && /'link-sender'/.test(P), true);
     check('P7 the picker finds email rows too', /\[data-ekey\]/.test(P), true);
+
+    // ── הוספה ידנית (בן, 3/11): מספר / כתובת שעוד לא שלחו ──
+    const mk = ctx.lgWaInManualKey || (() => 'missing');
+    check('R1 phone typed in any form → the key the server checks',
+          ['052-123-4567', '+972 52 1234567', '0521234567', '03-7436564'].map(x => mk('s', x)), ['0521234567', '0521234567', '0521234567', '037436564']);
+    check('R1 not a phone → empty', ['', '12345', 'abc', '052-123'].map(x => mk('s', x)), ['', '', '', '']);
+    check('R2 address → lower case, dots as commas', [mk('e', ' Orit.M@Avivi.com '), mk('e', 'x@y')], ['orit,m@avivi,com', '']);
+    check('R5 "+972 (0)50…" → one leading zero; short numbers refused', [mk('s', '+972 (0)50 123 4567'), mk('s', '05012345'), mk('s', '0501234567890')], ['0501234567', '', '']);
+    const manualRow = ctx.lgWaInSenderRows({ '0521234567': { phone: '0521234567', count: 0, manual: { at: 1, by: 'b' } } }, {}, true)[0];
+    check('R6 a hand-added number that was unlinked does not claim messages it never sent',
+          [/נוסף ידנית/.test(ctx.lgWaInSenderHtml(manualRow)), /הודעות נשלחו/.test(ctx.lgWaInSenderHtml(manualRow))], [true, false]);
+    check('R3 the linked lists have an add button (both tabs)', /data-sact="add"/.test(P) && /data-eact="add"/.test(P), true);
+    check('R4 the add sends manual:true through the admin endpoint', /action: name, key, customerId: customerId \|\| '', manual: manual === true/.test(P), true);
   }
 
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

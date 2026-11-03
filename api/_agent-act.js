@@ -27,7 +27,7 @@
 
 const crypto = require('crypto');
 const { lgWaInboundKey } = require('./_wa-inbound');
-const { AGENT_OUTBOX, PER_ITEM_WORST_MS, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
+const { AGENT_OUTBOX, AGENT_DELETE_LIVE, AGENT_DELETED_REASON, PER_ITEM_WORST_MS, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
 const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
         lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText,
         lgOkevTooLateStaffText, lgOkevCancelledStaffText } = require('./_agent-okev');
@@ -156,6 +156,19 @@ function _deleted(r, orders, now) {
   }
   return { actions: [_staff(_who(r) + ': מחק בוואטסאפ סקיצה של כמה הזמנות (' + hit.map(num).join(', ') + ') — נא לבדוק'),
                      _reply(AGENT_HANDOFF_TEXT)], conv: null };
+}
+
+// ── "סקיצה שנמחקה — פעיל" בלי שאר הסוכנים (בן, 3/11) ──
+//  ההחלטה הרגילה, בלי שום דבר ללקוח: כולן בתור → אותם ביטולים שקטים (staffOnly —
+//  כשל מגיע לשאול, לא ללקוח). כל השאר (בטיפול / בייצור / מעורב) → הודעה אחת לשאול.
+function lgAgentDeleteOnly(d, r, orders) {
+  const cancels = d.actions.filter(a => a.type === 'cancel');
+  if (cancels.length && cancels.length === d.actions.length) return { actions: cancels.map(a => ({ ...a, staffOnly: true })), conv: null };
+  const id = String(r.deletedId || ''), cid = String(r.customerId || '');
+  const nums = orders.filter(o => o && String(o.waMessageId || '') === id && String(o.customerId || '') === cid)
+    .map(o => String(o.orderNum || o.refNum || '')).join(', ');
+  return { actions: [{ type: 'staff', reason: AGENT_DELETED_REASON,
+    text: _who(r) + ': מחק בוואטסאפ את הסקיצה של הזמנה ' + nums + ' — היא כבר בטיפול ולא בוטלה. נא לבדוק מולו' }], conv: null };
 }
 
 // ── ניתוב רגיל לפי route של המרכזן. keep = ה-conv הנוכחי (נשאר אם לא הוחלף) ──
@@ -288,7 +301,9 @@ async function lgAgentCancel(db, orderId, ctx) {
   const pre = (await ref.once('value')).val();
   if (!pre) return { ok: false, code: 'missing' };
   if (String(pre.customerId || '') !== cid) return { ok: false, code: 'forbidden' };
-  if (!lgOkevCanChange(pre)) return { ok: false, code: 'too-late', stage: String(pre.stage || '') };
+  //  ctx.onlyStages — ביטול שקט (סקיצה שנמחקה): רק בשלבים האלה, גם אם lgOkevCanChange מרשה יותר
+  const _stageOk = o => lgOkevCanChange(o) && (!Array.isArray(c.onlyStages) || c.onlyStages.includes(String(o.stage || '')));
+  if (!_stageOk(pre)) return { ok: false, code: 'too-late', stage: String(pre.stage || '') };
 
   const now = c.now || Date.now();
   const recRef = db.ref(AGENT_CANCELS + '/' + id);
@@ -311,7 +326,7 @@ async function lgAgentCancel(db, orderId, ctx) {
       //    של כלום) כדי שפיירבייס יביא את הערך האמיתי; אם באמת אין — 'missing'.
       if (cur === null) return null;
       if (String(cur.customerId || '') !== cid) { why = 'forbidden'; return; }
-      if (!lgOkevCanChange(cur)) { why = 'too-late'; lateStage = String(cur.stage || ''); return; }
+      if (!_stageOk(cur)) { why = 'too-late'; lateStage = String(cur.stage || ''); return; }
       taken = cur;
       return null;   // מחיקה — באותה טרנזקציה עם הבדיקה
     });
@@ -415,7 +430,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
     try { staffQuote = await lgQuoteFindWaiting(db, rec.quotedId); }
     catch (e) { console.warn('agent-act: quote-find', e && e.name); staffQuote = null; }
   }
-  const d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote });
+  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote });
   // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
   const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null } : {};
   const staff = lgAgentStaff(env);
@@ -438,6 +453,15 @@ async function _act(db, key, rec, recRef, env, now, o) {
   // "העברנו לשאול" בלי שאול מוגדר — עדיף לא לענות מאשר לשקר
   //  (הודעה לידיעה — notify — לא נחשבת: בלעדיה התשובה ללקוח עדיין נכונה)
   else if (d.actions.some(a => (a.type === 'staff' && !a.notify) || a.type === 'cancel' || a.type === 'quote-ask') && !staff.length) why = 'no-staff';
+
+  //  "סקיצה שנמחקה — פעיל" (בן, 3/11): תשובות כבויות / לא בפיילוט, אבל המתג הנפרד
+  //  דולק → רק המחיקה פועלת, ללקוח לא יוצא כלום. צ'אט מקושר בלבד (נבדק למעלה).
+  let mode = null;
+  if ((why === 'switches-off' || why === 'not-pilot') && rec.route === 'kolet-deleted' && rec.linked
+      && (await db.ref(AGENT_DELETE_LIVE).once('value')).val() === true) {
+    if (!staff.length) why = 'no-staff';
+    else { d = lgAgentDeleteOnly(d, rec, orders); mode = 'delete-only'; why = ''; }
+  }
 
   if (why) {
     await recRef.update({ wouldAct: d.actions, acted: false, actReason: why, ...qUsage });
@@ -465,7 +489,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
     else if (a.type === 'reply') { if (await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k; }
     else if (a.type === 'staff') {
       if (a.notify && !staff[0]) continue;   // לידיעה, ואין שאול — מדלגים
-      if (await enq(k, staff[0], a.text, a.files || [], 'agent-staff') && !a.notify) staffQueued = true;
+      if (await enq(k, staff[0], a.text, a.files || [], a.reason || 'agent-staff') && !a.notify) staffQueued = true;
     }
     else if (a.type === 'files') {
       // R2-1: רשומה לכל קובץ (<key>_<i>_f<j>) — חשבונית + סקיצות בהודעה אחת לא נכנסת
@@ -497,23 +521,26 @@ async function _act(db, key, rec, recRef, env, now, o) {
       }
     }
     else if (a.type === 'cancel') {
-      const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now });
+      const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now, onlyStages: a.silent ? SILENT_STAGES : undefined });
       cancels.push({ orderId: String(a.orderId), ok: !!res.ok, code: String(res.code || '') });
       const ord = { ...(a.order || {}) };
       // "ההזמנה בוטלה" רק אחרי ביטול שהצליח. ביטול שקט (סקיצה שנמחקה) — בלי okText
+      //  staffOnly ("סקיצה שנמחקה — פעיל" בלבד): ללקוח לא יוצא כלום; כשל → שאול
+      const sReason = a.staffOnly ? AGENT_DELETED_REASON : 'agent-staff';
       if (res.ok) {
-        if (a.okText) await enq(k, chat, a.okText, [], 'agent-cancel');
+        if (a.okText && !a.staffOnly) await enq(k, chat, a.okText, [], 'agent-cancel');
         // תיקון סופי 4: כבר עבדו עליה (שרטוט / OptyWay) → שאול לידיעה
         if (NOTIFY_CANCEL_STAGES.includes(String(res.stage || '')) && staff[0])
-          await enq(k + '_s', staff[0], lgOkevCancelledStaffText(ord, String(a.who || ''), res.stage), [], 'agent-staff');
+          await enq(k + '_s', staff[0], lgOkevCancelledStaffText(ord, String(a.who || ''), res.stage), [], sReason);
+      } else if (a.silent && res.code === 'missing') { /* כבר לא קיימת — אין מה להגיד */ }
+      else if (a.staffOnly) {
+        await enq(k + '_s', staff[0], a.staffText + (res.code === 'too-late' ? ' (כבר בייצור)' : ' (' + String(res.code || 'error') + ')'), [], sReason);
       } else if (res.code === 'too-late') {
         await enq(k, chat, a.lateText, [], 'agent-cancel');
         // תיקון סופי 3: שאול לידיעה. השלב מהביטול; בלעדיו — "ייצור" (מאוחר מדי = אחרי OptyWay)
         if (!a.silent && staff[0])
           await enq(k + '_s', staff[0], lgOkevTooLateStaffText({ ...ord, stage: res.stage || 'workday' }, String(a.who || ''), 'cancel'), [], 'agent-staff');
       }
-      // שקט + כבר לא קיימת — אין מה להגיד ללקוח שמחק אותה
-      else if (a.silent && res.code === 'missing') { /* כלום */ }
       else {
         // תיקון סופי 9: "העברנו לשאול" רק אם ההודעה לשאול באמת נכנסה לתור
         if (await enq(k + '_s', staff[0], a.staffText + ' (' + String(res.code || 'error') + ')', [], 'agent-staff'))
@@ -526,7 +553,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   //  (queued:true) — עם askKey, כדי לדעת מתי נשלחה
   if (!d.conv) { if (stored) await convRef.set(null); }
   else if (d.conv !== conv && askKey) await convRef.set({ ...d.conv, askKey: lgWaInboundKey(askKey) });
-  await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actQueued: queued, actCancels: cancels, ...qUsage });
+  await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actMode: mode, actQueued: queued, actCancels: cancels, ...qUsage });
 
   if (queued.length) {
     try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, deadline: o.deadline, clock: o.clock }); }

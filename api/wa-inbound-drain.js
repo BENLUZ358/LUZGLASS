@@ -171,6 +171,14 @@ async function handleAdmin(body, deps) {
     return { ok: true, code: '' };
   }
 
+  // ─── "סקיצה שנמחקה — פעיל" (בן, 3/11) ─────────────────────────────────
+  //  מתג נפרד: רק הפעולה הזו פועלת, לכל לקוח מקושר, גם כשהתשובות כבויות.
+  if (action === 'agent-delete-live') {
+    if (typeof b.on !== 'boolean') return { ok: false, code: 'bad-on', message: 'חסר ערך הדלקה/כיבוי' };
+    await deps.db.ref('waMeta/agentDeleteLive').set(b.on ? true : null);
+    return { ok: true, code: '' };
+  }
+
   // ─── לוח הבקרה לסוכנים (agents.html, 31/10) ────────────────────────────
   //  agent-status: אילו משתני סביבה מוגדרים — בוליאנים בלבד, אף ערך לא חוזר לדפדפן.
   if (action === 'agent-status') {
@@ -246,6 +254,9 @@ async function handleAdmin(body, deps) {
 
   // ─── מספרים פרטיים (בן, 26/10): אותו דבר כמו קבוצה, למספר בודד ─────────
   //  רק מספר שכבר שלח (waMeta/sendersSeen — נכתב ב-webhook) ורק לכרטיס קיים.
+  //  הוספה ידנית (בן, 3/11): link-sender עם manual:true — בן מקליד מספר/כתובת
+  //  שעוד לא שלחו, כדי שגם ההודעה הראשונה תיכנס. נרשמת שורת "נראה" עם count 0
+  //  ו-manual {at, by}, כדי שניתוק / הסתרה יעבדו אחר כך כמו לכל שולח.
   //  הקישור הוא ההרשאה של המספר — לקליטה וגם להודעות שחוזרות אליו.
   //  כתובות מייל (בן, 26/10): אותו דבר בדיוק, בנתיבים של המייל — המפתח הוא
   //  הכתובת עם פסיק במקום נקודה, ונשמרת הכתובת המפוענחת.
@@ -269,9 +280,12 @@ async function handleAdmin(body, deps) {
     if (typeof b.key !== 'string' || !b.key || b.key.length > 200 || !cfg.valid(b.key)) return { ok: false, code: 'bad-key', message: cfg.msg.badKey };
     const db = deps.db, t = deps.now || Date.now(), by = String(deps.by || '');
     const seenRef = cfg.seen + b.key, linkRef = cfg.link + b.key;
-    const seen = (await db.ref(seenRef).once('value')).val();
-    if (!seen) return { ok: false, code: 'unknown-sender', message: cfg.msg.unknown };
+    let seen = (await db.ref(seenRef).once('value')).val();
+    const manual = !seen && action === 'link-sender' && b.manual === true;
+    if (!seen && !manual) return { ok: false, code: 'unknown-sender', message: cfg.msg.unknown };
     const cur = (await db.ref(linkRef).once('value')).val();
+    //  הוספה ידנית של מה שכבר מקושר — לא מעבירים בשקט ללקוח אחר (נתק קודם)
+    if (action === 'link-sender' && b.manual === true && cur && cur.customerId) return { ok: false, code: 'linked', message: cfg.msg.linked };
 
     if (action === 'unlink-sender') {
       if (!cur) return { ok: false, code: 'not-linked', message: cfg.msg.notLinked };
@@ -287,6 +301,8 @@ async function handleAdmin(body, deps) {
     const cid = String(b.customerId || '').trim();
     const acc = cid && _keyOk(cid) ? (await db.ref('hashavshevetAccounts/' + cid).once('value')).val() : null;
     if (!acc) return { ok: false, code: 'unknown-customer', message: 'כרטיס הלקוח לא נמצא' };
+    //  ⚠️ רק אחרי שהכרטיס נמצא — הוספה שנדחתה לא משאירה שורה
+    if (manual) await db.ref(seenRef).transaction(cur => cur || { [cfg.field]: cfg.decode(b.key), count: 0, manual: { at: t, by } });
     await db.ref(linkRef).transaction(prevRaw => {
       const prev = prevRaw || {};
       return {

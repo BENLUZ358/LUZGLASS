@@ -232,7 +232,7 @@ function lgWaInSenderRows(seen, linked, showAll) {
     return { key: k, phoneText: _waInPhoneText(k), linked: !!(l && l.customerId),
              customerId: l ? String(l.customerId || '') : '',
              customerName: l ? String(l.customerName || l.customerId || '') : '',
-             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, ignored: !l && !!s.ignored };
+             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, ignored: !l && !!s.ignored, manual: !!s.manual };
   })
     .filter(r => showAll || !r.ignored)
     .sort((a, b) => (a.linked - b.linked) || (a.ignored - b.ignored) || (b.lastAt - a.lastAt));
@@ -289,7 +289,7 @@ function lgWaInSenderHtml(r, textOn) {
   if (r.linked) return _waInLine(attr, '📱', r.phoneText, _waInTo(r.customerName, 'מספר', textOn), 'data-sact="unlink"', 'נתק');
   if (r.ignored) return _waInLine(attr, '📱', r.phoneText, 'מוסתר — הודעות ממנו לא נקלטות', 'data-sact="unignore"', 'בטל התעלמות');
   return _waInCard(attr, '📱', r.phoneText, r.lastAt,
-    `${r.count || 1} הודעות נשלחו מהמספר ולא נקלטו. קשר אותו ללקוח, וההודעות הבאות ייכנסו לתור.`,
+    r.manual && !r.count ? 'נוסף ידנית ועוד לא שלח. קשר אותו ללקוח, וההודעות ממנו ייכנסו לתור.' : `${r.count || 1} הודעות נשלחו מהמספר ולא נקלטו. קשר אותו ללקוח, וההודעות הבאות ייכנסו לתור.`,
     `<button class="wain-btn wain-primary" data-sact="link">קשר ללקוח</button>
           <button class="wain-btn" data-sact="ignore">התעלם</button>`);
 }
@@ -306,7 +306,7 @@ function lgWaInEmailRows(seen, linked, showAll) {
     const s = S[k] || {}, l = L[k] || null;
     return { key: k, emailText: String(s.email || (l && l.email) || k.replace(/,/g, '.')), linked: !!(l && l.customerId),
              customerName: l ? String(l.customerName || l.customerId || '') : '',
-             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0,
+             count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, manual: !!s.manual,
              listed: !l && !!s.listed, ignored: !l && !s.listed && !!s.ignored };
   })
     .filter(r => showAll || !r.ignored)
@@ -323,7 +323,7 @@ function lgWaInEmailHtml(r) {
   if (r.listed) return _waInCard(attr, '✉', r.emailText, r.lastAt,
     `<span class="wain-chip">ברשימה</span> המיילים ממנה כבר נקלטים. קשר אותה ללקוח, וההודעות על ההזמנות יחזרו אליה במייל.`, link);
   return _waInCard(attr, '✉', r.emailText, r.lastAt,
-    `${r.count || 1} מיילים נשלחו מהכתובת ולא נקלטו. קשר אותה ללקוח, והמיילים הבאים ייכנסו לתור.`,
+    r.manual && !r.count ? 'נוספה ידנית ועוד לא שלחה. קשר אותה ללקוח, והמיילים ממנה ייכנסו לתור.' : `${r.count || 1} מיילים נשלחו מהכתובת ולא נקלטו. קשר אותה ללקוח, והמיילים הבאים ייכנסו לתור.`,
     link + `
           <button class="wain-btn" data-eact="ignore">התעלם</button>`);
 }
@@ -331,6 +331,26 @@ function lgWaInEmailHtml(r) {
 // ─── הזמנות מטקסט חופשי (בן, 26/10) ─────────────────────────────────────
 //  הלקוחות שהודעה כמו "מראה 5 70 על 120" מהם פותחת הזמנה לבד. הכתיבה דרך
 //  /api/wa-inbound-drain (text-customer-add/remove) — לא ישירות.
+// ─── הוספה ידנית (בן, 3/11): מספר / כתובת שעוד לא שלחו ─────────────────
+//  מה שבן הקליד → המפתח שהשרת בודק (wa-inbound-drain SENDER_CFG). לא תקין → ''.
+//  s: ספרות בלבד, 972 → 0 (כמו lgWaSenderKey). e: אותיות קטנות, נקודה → פסיק.
+function lgWaInManualKey(kind, raw) {
+  const t = String(raw || '').trim();
+  if (kind === 's') {
+    let d = t.replace(/\D/g, '');
+    if (d.indexOf('972') === 0) d = '0' + d.slice(3).replace(/^0/, '');   // "+972 (0)50…"
+    //  נייח 9 ספרות (03-7436564), נייד 10
+    return /^0\d{8,9}$/.test(d) ? d : '';
+  }
+  const m = t.toLowerCase();
+  return /^[^\s@,/#$[\]]+@[^\s@,/#$[\]]+\.[a-z]{2,}$/.test(m) ? m.replace(/\./g, ',') : '';
+}
+function _waInAddBtn(kind) {
+  return kind === 's'
+    ? '<div data-skey=""><button type="button" class="wain-addbtn" data-sact="add">＋ הוסף מספר שעוד לא שלח</button></div>'
+    : '<div data-ekey=""><button type="button" class="wain-addbtn" data-eact="add">＋ הוסף כתובת שעוד לא שלחה</button></div>';
+}
+
 function lgWaInTextCustomersHtml(map) {
   const m = map || {};
   const rows = Object.keys(m).sort((a, b) => String(m[a].customerName || a).localeCompare(String(m[b].customerName || b), 'he'))
@@ -381,7 +401,7 @@ if (typeof document !== 'undefined') (function () {
   //  מתחת לשדה בתוך הכרטיס, נפתחה לבד בפוקוס ונחתכה בתחתית הכרטיס.
   //  רשימה גלויה ולא רשימת ההצעות של הדפדפן (07/10): ב-iOS ההצעות מופיעות רק
   //  מעל המקלדת ורק כשיש התאמה, ונראה כמו שדה שלא עושה כלום.
-  let pick = null;   // { kind: 'g'|'s'|'e'|'t', key }
+  let pick = null;   // { kind: 'g'|'s'|'e'|'t', key, manual? }
   function accountMatches(q) {
     const m = (typeof hashavshevetAccountsMap !== 'undefined' && hashavshevetAccountsMap) || {};
     const t = String(q || '').trim().toLowerCase();
@@ -406,9 +426,9 @@ if (typeof document !== 'undefined') (function () {
     t: ['הודעה כמו "מראה 5 70 על 120" מהלקוח תפתח הזמנה בתור.'],
     i: ['החשבונית תישלח למספר שבכרטיס הלקוח בחשבשבת, לא לקבוצה.'],
   };
-  function openPick(kind, key, who) {
+  function openPick(kind, key, who, manual) {
     const box = $('waInPick'), q = $('waInPickQ'); if (!box || !q) return;
-    pick = { kind, key };
+    pick = { kind, key, manual: manual === true };
     $('waInPickT').textContent = kind === 't' ? 'איזה לקוח מזמין בטקסט חופשי?'
       : kind === 'i' ? 'איזה לקוח מקבל חשבונית לפרטי?'
       : 'למי שייך ' + String.fromCharCode(0x2066) + who + String.fromCharCode(0x2069) + '?';
@@ -422,8 +442,8 @@ if (typeof document !== 'undefined') (function () {
   function picked(customerId) {
     const p = pick; closePick(); if (!p || !customerId) return;
     if (p.kind === 'g') groupAct(p.key, 'link', customerId);
-    else if (p.kind === 's') senderAct(p.key, 'link', customerId);
-    else if (p.kind === 'e') emailAct(p.key, 'link', customerId);
+    else if (p.kind === 's') senderAct(p.key, 'link', customerId, p.manual === true);
+    else if (p.kind === 'e') emailAct(p.key, 'link', customerId, p.manual === true);
     else if (p.kind === 'i') invoicePrivateAct('', 'add', customerId);
     else textAct('', 'add', customerId);
   }
@@ -433,18 +453,26 @@ if (typeof document !== 'undefined') (function () {
     const r = await post({ action: action === 'link' ? 'link-group' : 'unlink-group', key, customerId: customerId || '' });
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
-  async function senderAct(key, action, customerId) {
+  //  "＋ הוסף" — בן מקליד מספר / כתובת, ואז אותו בורר לקוח כמו "קשר ללקוח"
+  function addByHand(kind) {
+    const raw = prompt(kind === 's' ? 'מספר הטלפון של הלקוח (וואטסאפ):' : 'כתובת המייל של הלקוח:');
+    if (raw == null || !String(raw).trim()) return;
+    const key = lgWaInManualKey(kind, raw);
+    if (!key) { alert(kind === 's' ? 'המספר לא תקין' : 'הכתובת לא תקינה'); return; }
+    openPick(kind, key, kind === 's' ? _waInPhoneText(key) : key.replace(/,/g, '.'), true);
+  }
+  async function senderAct(key, action, customerId, manual) {
     if (action === 'unlink' && !confirm('לנתק את המספר? הודעות חדשות ממנו לא ייכנסו לתור.')) return;
     const name = { link: 'link-sender', unlink: 'unlink-sender', ignore: 'ignore-sender', unignore: 'unignore-sender' }[action];
     if (!name) return;
-    const r = await post({ action: name, key, customerId: customerId || '' });
+    const r = await post({ action: name, key, customerId: customerId || '', manual: manual === true });
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
-  async function emailAct(key, action, customerId) {
+  async function emailAct(key, action, customerId, manual) {
     if (action === 'unlink' && !confirm('לנתק את הכתובת? מיילים חדשים ממנה לא ייכנסו לתור, והיא לא תקבל יותר הודעות.')) return;
     const name = { link: 'link-sender', unlink: 'unlink-sender', ignore: 'ignore-sender', unignore: 'unignore-sender' }[action];
     if (!name) return;
-    const r = await post({ channel: 'email', action: name, key, customerId: customerId || '' });
+    const r = await post({ channel: 'email', action: name, key, customerId: customerId || '', manual: manual === true });
     if (!r.ok) alert(r.message || 'הפעולה לא בוצעה');
   }
   async function textAct(key, action, customerId) {
@@ -508,7 +536,7 @@ if (typeof document !== 'undefined') (function () {
     const ir = intakeRows('whatsapp');
     const tN = Object.keys(textCustomers).length;
     return sec('מחכים לקישור', waiting.length, waiting.join('') || '<div class="wain-ok-note">אין קבוצות או מספרים חדשים ✓</div>')
-      + sec('מקושרים', linkedG.length + linkedS.length, lines(linked) || '<div class="wain-ok-note">עוד אין קבוצות או מספרים מקושרים.</div>')
+      + sec('מקושרים', linkedG.length + linkedS.length, (lines(linked) || '<div class="wain-ok-note">עוד אין קבוצות או מספרים מקושרים.</div>') + _waInAddBtn('s'))
       + fold('wa-text', 'מזמינים בטקסט חופשי', tN, lgWaInTextCustomersHtml(textCustomers))
       + fold('wa-inv', 'חשבוניות לפרטי', Object.keys(invoicePrivate).length, lgWaInInvoicePrivateHtml(invoicePrivate))
       + (ir.problemsN ? sec('הודעות שלא נקלטו', ir.problemsN, ir.problems)
@@ -522,7 +550,7 @@ if (typeof document !== 'undefined') (function () {
     const linked = all.filter(r => r.linked), ignored = all.filter(r => r.ignored);
     const ir = intakeRows('email');
     return sec('מחכים לקישור', waiting.length, waiting.map(lgWaInEmailHtml).join('') || '<div class="wain-ok-note">אין כתובות חדשות ✓</div>')
-      + sec('מקושרים', linked.length, lines(linked.map(lgWaInEmailHtml).join('')) || '<div class="wain-ok-note">עוד אין כתובות מקושרות.</div>')
+      + sec('מקושרים', linked.length, (lines(linked.map(lgWaInEmailHtml).join('')) || '<div class="wain-ok-note">עוד אין כתובות מקושרות.</div>') + _waInAddBtn('e'))
       + (ir.problemsN ? sec('מיילים שלא נקלטו', ir.problemsN, ir.problems)
                       : fold('em-prob', 'מיילים שלא נקלטו', 'אין ✓', '<div class="wain-ok-note">כל המיילים נקלטו ✓</div>'))
       + (ignored.length ? fold('em-ign', 'כתובות מוסתרות', ignored.length, lines(ignored.map(lgWaInEmailHtml).join(''))) : '')
@@ -648,6 +676,8 @@ if (typeof document !== 'undefined') (function () {
       const row = b.closest('[data-gkey],[data-skey],[data-ekey],[data-tkey],[data-ikey]'); if (!row) return;
       const who = (row.querySelector('bdi') || {}).textContent || '';
       if (b.dataset.gact) b.dataset.gact === 'link' ? openPick('g', row.dataset.gkey, who) : groupAct(row.dataset.gkey, b.dataset.gact);
+      else if (b.dataset.sact === 'add') addByHand('s');
+      else if (b.dataset.eact === 'add') addByHand('e');
       else if (b.dataset.sact) b.dataset.sact === 'link' ? openPick('s', row.dataset.skey, who) : senderAct(row.dataset.skey, b.dataset.sact);
       else if (b.dataset.eact) b.dataset.eact === 'link' ? openPick('e', row.dataset.ekey, who) : emailAct(row.dataset.ekey, b.dataset.eact);
       else if (b.dataset.iact) b.dataset.iact === 'add' ? openPick('i', '', '') : invoicePrivateAct(row.dataset.ikey, b.dataset.iact);

@@ -175,6 +175,31 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
   check('5g an unknown card cannot be linked', (await act({ action: 'link-sender', key: AGAN, customerId: '777' })).code, 'unknown-customer');
   check('5h a malformed key is refused', (await act({ action: 'link-sender', key: '03/74', customerId: '3150' })).code, 'bad-key');
 }
+// ═══ 5ב. הוספה ידנית — לקשר מספר לפני שהוא שלח (בן, 3/11) ═════════════
+{
+  const db = seed();
+  const act = (body, t = NOW + 10) => adm.handleAdmin({ channel: 'whatsapp', ...body }, { db, by: '0520000000', now: t });
+  const K = '0521234567';
+  const r = await act({ action: 'link-sender', key: K, customerId: '14201', manual: true });
+  const m = (db._data.waSenders || {})[K];
+  check('5j a number that never wrote can be added by hand', [r.ok, m && m.customerId, m && m.phone], [true, '14201', K]);
+  const s = ((db._data.waMeta || {}).sendersSeen || {})[K];
+  check('5j it is noted as added by hand (no messages yet)', s && [s.phone, s.count, s.manual], [K, 0, { at: NOW + 10, by: '0520000000' }]);
+  const h = await send(db, privHook('972521234567@c.us', 'PM1'), NOW + 20);
+  const o = (db._data.orders || {}).wa_PM1_1 || {};
+  check('5k its very first image goes into the queue on that card', [h.body.recorded, o.customerId, o.waChat], [true, '14201', K]);
+  check('5k and the hand-added note stays (count not bumped by a linked number)', db._data.waMeta.sendersSeen[K].count, 0);
+  const u = await act({ action: 'unlink-sender', key: K }, NOW + 30);
+  check('5l a hand-added number can be unlinked', [u.ok, (db._data.waSenders || {})[K]], [true, undefined]);
+  check('5m by hand still needs a real card', (await act({ action: 'link-sender', key: '0527654321', customerId: '777', manual: true })).code, 'unknown-customer');
+  check('5m and nothing is noted for a refused add', ((db._data.waMeta || {}).sendersSeen || {})['0527654321'], undefined);
+  check('5n by hand still needs a valid number', (await act({ action: 'link-sender', key: '12345', customerId: '14201', manual: true })).code, 'bad-key');
+  check('5o without manual the old rule stays', (await act({ action: 'link-sender', key: '0529999999', customerId: '14201' })).code, 'unknown-sender');
+  check('5p manual only means link — not unlink of a stranger', (await act({ action: 'unlink-sender', key: '0528888888', manual: true })).code, 'unknown-sender');
+  await act({ action: 'link-sender', key: '0523333333', customerId: '14201', manual: true });
+  check('5q adding by hand a number that is already linked is refused (no silent move)',
+        [(await act({ action: 'link-sender', key: '0523333333', customerId: '3150', manual: true })).code, db._data.waSenders['0523333333'].customerId], ['linked', '14201']);
+}
 {
   const rules = JSON.parse(require('fs').readFileSync(path.join(ROOT, 'database.rules.json'), 'utf8')).rules;
   check('5i rules: waSenders is admin-read like waGroups, browser cannot write',
