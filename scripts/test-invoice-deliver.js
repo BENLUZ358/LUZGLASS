@@ -288,5 +288,29 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
       for (const k of ['WA_PROVIDER', 'GREENAPI_ID_INSTANCE', 'GREENAPI_TOKEN']) if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k];
     }
   });
+  //  ── 'הסחורה תגיע מחר' — המקום לאמבט ונאור חזקיה (בן, 3/11) ──
+  await test('tomorrow: the line is in the text only when asked for', () => {
+    const facts = { kind: 'invoice', clientName: 'המקום לאמבט', orderNums: ['L1'], sketchNames: ['דינה'], docNumber: '5' };
+    assert.match(renderText({ ...facts, deliveryTomorrow: true }), /הסחורה תגיע אליך מחר במהלך היום/);
+    assert.doesNotMatch(renderText(facts), /מחר/);
+    assert.doesNotMatch(renderText({ ...facts, kind: 'ready', deliveryTomorrow: true }), /מחר/);
+  });
+  const tomorrowDb = cid => base({ a: { ...waOrder, customerId: cid }, b: { ...portal, customerId: cid } });
+  await test('tomorrow: 14201 / 9117 invoice → the line reaches the customer', async () => {
+    for (const cid of ['14201', '9117']) {
+      const db = tomorrowDb(cid);
+      await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+      const [key] = Object.keys(db._data.waOutbox);
+      assert.equal(db._data.waOutbox[key].deliveryTomorrow, true, cid);
+      const sent = [];
+      await core.drainKeys(db, fileProvider(sent), [key], 'invoice-tool', Date.now());
+      assert.equal(sent[0].deliveryTomorrow, true, cid);
+    }
+  });
+  await test('tomorrow: other customers — no line', async () => {
+    const db = tomorrowDb('3150');
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.equal(Object.values(db._data.waOutbox)[0].deliveryTomorrow, false);
+  });
   console.log(`\n${passed} passed`);
 })().catch(e => { console.error(e); process.exit(1); });

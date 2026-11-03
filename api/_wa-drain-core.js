@@ -54,7 +54,8 @@ async function _sendInvoice(db, provider, to, entry) {
     const f = await require('./_invoice-deliver').lgInvoiceFiles(db, entry.invoiceKey);
     if (!f.ok) return { ok: false, failureKind: 'other', reason: 'קבצי החשבונית לא זמינים (' + f.code + ')' };
     return await provider.sendFiles({ to, kind: 'invoice', clientName: entry.clientName, orderNums: entry.orderNums,
-                                      sketchNames: entry.sketchNames || [], docNumber: entry.docNumber, files: f.files });
+                                      sketchNames: entry.sketchNames || [], docNumber: entry.docNumber,
+                                      deliveryTomorrow: entry.deliveryTomorrow === true, files: f.files });
   } catch (e) {
     return { ok: false, failureKind: 'other', reason: 'חריגה בשליחת החשבונית (' + (e && e.name) + (e && e.code ? ' ' + e.code : '') + ')' };
   }
