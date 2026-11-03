@@ -27,6 +27,11 @@ const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot, MAX_
 const { lgWaSenderKey, lgWaSenderLink } = require('./_wa-recipient');
 
 const AGENT_OUTBOX = 'waMeta/agentOutbox';
+//  "סקיצה שנמחקה — פעיל" (בן, 3/11): מתג נפרד מ-AGENT_REPLY_ENABLED. דולק →
+//  גם כשהתשובות כבויות יוצאת הודעה אחת בלבד: reason AGENT_DELETED_REASON, לאיש צוות.
+//  נבדק בזמן השליחה, כמו שאר המתגים.
+const AGENT_DELETE_LIVE = 'waMeta/agentDeleteLive';
+const AGENT_DELETED_REASON = 'agent-deleted-staff';
 const PILOT = 'waMeta/agentPilot';
 const BUDGET_MS = 45 * 1000;          // מתחת ל-maxDuration 60, כמו ב-drain
 const SLOT_MAX_WAIT_MS = 15 * 1000;
@@ -220,7 +225,9 @@ async function lgAgentSendPending(db, opts) {
 
   //  ⚠️ מתגים כבויים → כל מה שבתור נחסם. לא "ימתין עד שידליקו": הודעה
   //  שנכתבה כשהמתג דלק יכולה להיות לא רלוונטית לגמרי כשידליקו שוב.
-  if (!_switchesOn(env)) {
+  const on = _switchesOn(env);
+  const delLive = !on && (await db.ref(AGENT_DELETE_LIVE).once('value')).val() === true;
+  if (!on && !delLive) {
     for (const key of keys) {
       const c = await lgWaClaim(db, key, by, AGENT_OUTBOX);
       if (!c.claimed) { res.skipped++; continue; }
@@ -252,6 +259,11 @@ async function lgAgentSendPending(db, opts) {
     //  מצב החיבור כבר נבדק למעלה, לפני כל תפיסה.
     const { claimed, entry } = await lgWaClaim(db, key, by, AGENT_OUTBOX);
     if (!claimed) { res.skipped++; continue; }
+    //  תשובות כבויות + "סקיצה שנמחקה" דולק → רק הודעת המחיקה לצוות; כל השאר נחסם
+    if (!on && !(entry.reason === AGENT_DELETED_REASON && staff.includes(lgWaSenderKey(entry.to)))) {
+      await _block(db, key, 'הסוכנים כבויים (AGENT_SHADOW_ENABLED / AGENT_REPLY_ENABLED)');
+      res.blocked++; continue;
+    }
     //  R2-1: לא ייכנס בשום ריצה → סופי, attempts למקסימום
     if (lgAgentItemWorstMs(entry) > MAX_ITEM_WORST_MS) {
       await lgWaComplete(db, key, { ok: false, reason: 'גדול מדי לשליחה אחת' }, AGENT_OUTBOX);
@@ -319,6 +331,6 @@ async function lgAgentSendPending(db, opts) {
   return res;
 }
 
-module.exports = { AGENT_OUTBOX, PER_CALL_MS, PER_ITEM_WORST_MS, STATE_WORST_MS, MAX_ITEM_WORST_MS, lgAgentItemWorstMs,
+module.exports = { AGENT_OUTBOX, AGENT_DELETE_LIVE, AGENT_DELETED_REASON, PER_CALL_MS, PER_ITEM_WORST_MS, STATE_WORST_MS, MAX_ITEM_WORST_MS, lgAgentItemWorstMs,
                    lgAgentStaff, lgAgentEnqueue, lgAgentSendPending,
                    lgAgentChatOwnedBy: _chatOwnedBy };   // גם לביטול (_agent-act)

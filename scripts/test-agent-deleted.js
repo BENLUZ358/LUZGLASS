@@ -195,6 +195,86 @@ const D = (r, orders) => act.lgAgentDecide({ rec: R(r), orders: orders || list('
     check('act: other customer deleting a 777 message id → nothing', [!!db9._data.orders.o3, rec(db9, 'C1').actReason], [true, 'no-action']);
   }
 
+  /* ── מתג נפרד: "סקיצה שנמחקה — פעיל" (בן, 3/11) ─────────────────────
+     waMeta/agentDeleteLive === true → רק הפעולה הזו פועלת, לכל לקוח מקושר,
+     גם כשהתשובות כבויות ובלי פיילוט. ללקוח לא נשלח כלום: בתור → ביטול שקט;
+     כל השאר → הודעה לשאול לבדוק. */
+  {
+    const OFF = { ...ON, AGENT_REPLY_ENABLED: 'false' };
+    const live = extra => { const db = seed({ agentDeleteLive: true, ...(extra || {}) }); delete db._data.waMeta.agentPilot; return db; };
+
+    const db1 = live(); put(db1, 'E1', R({ idMessage: 'E1' }));
+    const a1 = await run(db1, 'E1', OFF);
+    check('live: queued order → cancelled even with replies off and no pilot',
+      [a1.acted, !!db1._data.orders.o3, cancels(db1).o3 && cancels(db1).o3.confirmed, rec(db1, 'E1').actMode], [true, false, true, 'delete-only']);
+    check('live: and nothing to the customer', Object.values(outbox(db1)).filter(e => e.to === PRIV).length, 0);
+
+    const db2 = live(); put(db2, 'E2', R({ idMessage: 'E2', deletedId: 'WA1' }));
+    await run(db2, 'E2', OFF);
+    const e2 = Object.values(outbox(db2));
+    check('live: in production → one note to Shaul, nothing to the customer, order kept',
+      [e2.length, e2[0] && e2[0].to, e2[0] && e2[0].reason, /L1001/.test(e2[0] && e2[0].text), !!db2._data.orders.o1], [1, '0501112222', 'agent-deleted-staff', true, true]);
+    check('live: no question asked → no conv', conv(db2, PRIV), undefined);
+
+    const db3 = live(); put(db3, 'E3', R({ idMessage: 'E3', deletedId: 'WA4' }));
+    await run(db3, 'E3', OFF);
+    const e3 = Object.values(outbox(db3));
+    check('live: in treatment (chash) → Shaul only, not cancelled', [e3.map(e => e.to), /L1004/.test(e3[0] && e3[0].text), !!db3._data.orders.o4], [['0501112222'], true, true]);
+
+    const db4 = live(); put(db4, 'E4', R({ idMessage: 'E4' }));
+    const realC = act.lgAgentCancel;
+    act.lgAgentCancel = async () => ({ ok: false, code: 'too-late' });
+    await run(db4, 'E4', OFF);
+    act.lgAgentCancel = realC;
+    check('live: cancel too late → Shaul, not the customer', Object.values(outbox(db4)).map(e => [e.to, e.reason]), [['0501112222', 'agent-deleted-staff']]);
+
+    const db5 = seed(); delete db5._data.waMeta.agentPilot; put(db5, 'E5', R({ idMessage: 'E5' }));
+    await run(db5, 'E5', OFF);
+    check('live switch off → as before (wouldAct only)', [!!db5._data.orders.o3, rec(db5, 'E5').actReason], [true, 'switches-off']);
+
+    const db6 = live(); put(db6, 'E6', R({ idMessage: 'E6', route: 'okev', deletedId: '', text: 'תבטל את L1003' }));
+    await run(db6, 'E6', OFF);
+    check('live: other routes are not affected', [!!db6._data.orders.o3, rec(db6, 'E6').acted], [true, false]);
+
+    const db7 = live(); put(db7, 'E7', R({ idMessage: 'E7', linked: false }));
+    await run(db7, 'E7', OFF);
+    check('live: unlinked chat → nothing', [!!db7._data.orders.o3, Object.keys(outbox(db7)).length], [true, 0]);
+
+    const db8 = live(); put(db8, 'E8', R({ idMessage: 'E8' }));
+    await run(db8, 'E8', { ...OFF, AGENT_STAFF_PHONES: '' });
+    check('live: no Shaul configured → no action at all', [!!db8._data.orders.o3, rec(db8, 'E8').actReason], [true, 'no-staff']);
+
+    // שליחה: עם התשובות כבויות, רק הודעת "נמחקה" לשאול יוצאת; כל השאר נחסם
+    const send = require(path.join(ROOT, 'api', '_agent-send.js'));
+    const prov = () => { const p = { name: 'fake', configured: true, globalSlot: false, maxPerRun: 10, checksState: false, nextGap: () => 0,
+      texts: [], gate: () => ({ allowed: true, reason: '' }), async sendText(f) { p.texts.push(f); return { ok: true, httpStatus: 200, messageId: 'T' + p.texts.length }; } }; return p; };
+    const db9 = live();
+    await send.lgAgentEnqueue(db9, { key: 'k1', to: '0501112222', customerId: '777', text: 'נמחקה', files: [], reason: 'agent-deleted-staff' });
+    await send.lgAgentEnqueue(db9, { key: 'k2', to: '0501112222', customerId: '777', text: 'אחר', files: [], reason: 'agent-staff' });
+    await send.lgAgentEnqueue(db9, { key: 'k3', to: PRIV, customerId: '777', text: 'ללקוח', files: [], reason: 'agent-deleted-staff' });
+    const p9 = prov();
+    await send.lgAgentSendPending(db9, { provider: p9, env: OFF });
+    check('send (replies off, live on): only the deleted note to Shaul goes out',
+      [p9.texts.map(t => t.text), outbox(db9).k1.state, outbox(db9).k2.state, outbox(db9).k3.state], [['נמחקה'], 'sent', 'blocked', 'blocked']);
+    const db10 = seed();
+    await send.lgAgentEnqueue(db10, { key: 'k1', to: '0501112222', customerId: '777', text: 'נמחקה', files: [], reason: 'agent-deleted-staff' });
+    const p10 = prov();
+    await send.lgAgentSendPending(db10, { provider: p10, env: OFF });
+    check('send: live switch off → blocked like everything else', [p10.texts.length, outbox(db10).k1.state], [0, 'blocked']);
+
+    // המתג — רק דרך ה-endpoint האדמיני, ומוצג בלוח הסוכנים
+    const adm = require(path.join(ROOT, 'api', 'wa-inbound-drain.js'));
+    const db11 = seed();
+    const sw = b => adm.handleAdmin({ action: 'agent-delete-live', ...b }, { db: db11, by: '0520000000', now: NOW });
+    await sw({ on: true });
+    check('switch: on → true', db11._data.waMeta.agentDeleteLive, true);
+    await sw({ on: false });
+    check('switch: off → removed', db11._data.waMeta.agentDeleteLive, undefined);
+    check('switch: needs a boolean', (await sw({ on: 'yes' })).code, 'bad-on');
+    const H = require('fs').readFileSync(path.join(ROOT, 'agents.html'), 'utf8');
+    check('agents page listens to the switch and toggles it', /waMeta\/agentDeleteLive/.test(H) && /'agent-delete-live'/.test(H), true);
+  }
+
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

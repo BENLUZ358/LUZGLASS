@@ -171,6 +171,14 @@ async function handleAdmin(body, deps) {
     return { ok: true, code: '' };
   }
 
+  // ─── "סקיצה שנמחקה — פעיל" (בן, 3/11) ─────────────────────────────────
+  //  מתג נפרד: רק הפעולה הזו פועלת, לכל לקוח מקושר, גם כשהתשובות כבויות.
+  if (action === 'agent-delete-live') {
+    if (typeof b.on !== 'boolean') return { ok: false, code: 'bad-on', message: 'חסר ערך הדלקה/כיבוי' };
+    await deps.db.ref('waMeta/agentDeleteLive').set(b.on ? true : null);
+    return { ok: true, code: '' };
+  }
+
   // ─── לוח הבקרה לסוכנים (agents.html, 31/10) ────────────────────────────
   //  agent-status: אילו משתני סביבה מוגדרים — בוליאנים בלבד, אף ערך לא חוזר לדפדפן.
   if (action === 'agent-status') {
