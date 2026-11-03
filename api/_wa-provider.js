@@ -84,7 +84,7 @@ function lgWaChatId(to) {
 //  שנרשמו. שורת "לפרטים נוספים ניתן להיכנס למשתמש שלך" הוסרה בינתיים: הפיילוט
 //  עובד רק מוואטסאפ, ולחלק מהלקוחות אין משתמש.
 //  orderNums עדיין מגיע, כי הוא הספירה, והתבנית של Meta (params) נשענת עליו.
-function renderText({ kind, clientName, orderNums, sketchNames, docNumber }) {
+function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliveryTomorrow }) {
   const who  = String(clientName || 'לקוח');
   const n    = (orderNums || []).filter(Boolean).length;
   const one  = n === 1;
@@ -94,7 +94,7 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber }) {
   //  ⚠️ רשימה ולא שרשור בפסיקים: שלושה שמות בשורה אחת הם משפט שאי אפשר לקרוא בטלפון.
   const names = (sketchNames || []).slice(0, n).map(s => String(s || '').trim()).filter(Boolean);
   const list  = names.length ? '\n' + names.map(s => '• ' + s).join('\n') : '';
-  const wrap  = body => `שלום ${who},\n\n${body}${list}\n\n${BUSINESS}`;
+  const wrap  = (body, tail) => `שלום ${who},\n\n${body}${list}${tail ? '\n\n' + tail : ''}\n\n${BUSINESS}`;
 
   //  "הסקיצות טופלו" (אפיון §16). ⚠️ חייב להיות לפני ברירת המחדל למטה —
   //  אחרת סוג לא מוכר נופל ל"מוכן לאיסוף".
@@ -105,7 +105,9 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber }) {
   if (kind === 'dispatched') return wrap('ההובלה יצאה אליך עם ' + count + '.');
   //  חשבונית (DB-00004, בן 29/10): קובץ החשבונית והסקיצות מצורפים להודעה.
   if (kind === 'invoice') {
-    return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + ', והסקיצות שלהן.');
+    //  בן, 3/11: המקום לאמבט ונאור חזקיה — החשבונית יוצאת על מה שנשלח אליהם למחרת
+    return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + ', והסקיצות שלהן.',
+                deliveryTomorrow ? 'הסחורה תגיע אליך מחר במהלך היום.' : '');
   }
   return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'));
 }

@@ -20,6 +20,10 @@
 
 const S = require('./_invoice-send');
 
+//  בן, 3/11: בהודעת החשבונית — "הסחורה תגיע אליך מחר במהלך היום". לפי מפתח הכרטיס
+//  בחשבשבת, כמו LG_PARTIAL_INVOICE_ACCOUNTS ב-firebase-db.js (נאור חזקיה, המקום לאמבט).
+const LG_DELIVERY_TOMORROW_ACCOUNTS = ['9117', '14201'];
+
 const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
               'image/svg+xml': 'svg', 'application/pdf': 'pdf' };
 
@@ -130,7 +134,8 @@ async function lgInvoiceDeliver(db, key, deps) {
                       : await R.resolveRecipient(db, emOrder, 'invoice');
   const common = { kind: 'invoice', clientName: rec.client, orderNums: rec.orderNums || [],
                    sketchNames: rec.sketchNames || [], orderIds: ids, queuedBy: 'invoice-tool',
-                   accountKey: who.accountKey, invoiceKey: key, docNumber: rec.docNumber };
+                   accountKey: who.accountKey, invoiceKey: key, docNumber: rec.docNumber,
+                   deliveryTomorrow: orders.some(o => LG_DELIVERY_TOMORROW_ACCOUNTS.includes(String(o.customerId || ''))) };
 
   if (who.channel === 'email') {
     const { lgEmailEnqueue } = require('./_email-outbox');

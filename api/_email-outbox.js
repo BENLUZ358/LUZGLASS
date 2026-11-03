@@ -58,7 +58,7 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  שלנו, תשובה ידנית של בן, או צד שלישי. הסקריפט גם בודק שהמייל הזה (Reply-To,
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
-                                    queuedBy, accountKey, invoiceKey, docNumber, fileCount, now }) {
+                                    queuedBy, accountKey, invoiceKey, docNumber, fileCount, deliveryTomorrow, now }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber : kind, thread, orderIds);
   const at  = now || Date.now();
@@ -73,6 +73,7 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       orderIds: _ids(orderIds),
       //  חשבונית (DB-00004): הקבצים נשלפים בנפרד (outbox-file), לא בתור
       invoiceKey: invoiceKey ? String(invoiceKey) : null, docNumber: docNumber ? String(docNumber) : null,
+      deliveryTomorrow: deliveryTomorrow === true,
       //  כמה קבצים בפועל (מ-2/11 בדרך כלל אחד — חשבונית + סקיצות). חסר (רשומה ישנה) → החשבון הישן
       fileCount: fileCount > 0 ? Number(fileCount) : null,
       state: 'pending', attempts: 0,
@@ -129,7 +130,8 @@ async function lgEmailClaim(db, limit, now) {
     if (!e || e.state !== 'pending' || e.leaseToken !== token) continue;
     out.push({ key, thread: e.thread, messageId: String(e.messageId), email: String(e.email), leaseToken: token,
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
-                                  sketchNames: e.sketchNames || [], docNumber: e.docNumber }),
+                                  sketchNames: e.sketchNames || [], docNumber: e.docNumber,
+                                  deliveryTomorrow: e.deliveryTomorrow === true }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
                files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 });
   }
