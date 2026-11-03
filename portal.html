@@ -338,7 +338,8 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   </div>
 </div>
 <div class="tabs" role="tablist" aria-label="הפורטל שלי">
-  <div class="tab" id="tab-quote" role="tab" tabindex="0" aria-selected="false" onclick="setTab('quote')"><span class="tab-ic" aria-hidden="true">&#128176;</span><span class="tab-lbl">הצעת מחיר</span></div>
+  <!-- הצעת מחיר מוסתרת מהלקוחות עד שנתכנן אותה מחדש (בן, 4/11). הקוד נשאר. -->
+  <div class="tab" id="tab-quote" role="tab" tabindex="-1" aria-selected="false" aria-hidden="true" style="display:none" onclick="setTab('quote')"><span class="tab-ic" aria-hidden="true">&#128176;</span><span class="tab-lbl">הצעת מחיר</span></div>
   <div class="tab active" id="tab-orders" role="tab" tabindex="0" aria-selected="true" onclick="setTab('orders')"><span class="tab-ic" aria-hidden="true">&#128230;</span><span class="tab-lbl">הזמנות פעילות</span> <span class="badge" id="badge-orders">0</span></div>
   <div class="tab" id="tab-ready" role="tab" tabindex="0" aria-selected="false" onclick="setTab('ready')"><span class="tab-ic" aria-hidden="true">&#9989;</span><span class="tab-lbl">מוכן</span> <span class="badge g" id="badge-ready">0</span></div>
   <div class="tab" id="tab-collected" role="tab" tabindex="0" aria-selected="false" onclick="setTab('collected')"><span class="tab-ic" aria-hidden="true">&#128229;</span><span class="tab-lbl">נאספו</span> <span class="badge" id="badge-collected">0</span></div>
