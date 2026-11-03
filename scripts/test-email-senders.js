@@ -210,6 +210,17 @@ const link = (addr, customerId, customerName) => ({ waMeta: { emailSenders: {
     check('H8 a key with a real dot (not encoded) is refused', (await act({ action: 'link-sender', key: 'x@y.com', customerId: '3150' })).code, 'bad-key');
     check('H8 not an address is refused', (await act({ action: 'link-sender', key: 'nonsense', customerId: '3150' })).code, 'bad-key');
   }
+  // ═══ H9. הוספה ידנית של כתובת (בן, 3/11) ═══════════════════════════
+  {
+    const adm = require(path.join(ROOT, 'api', 'wa-inbound-drain.js'));
+    const db = seed();
+    const act = (body, t = NOW + 10) => adm.handleAdmin({ channel: 'email', ...body }, { db, by: '0520000000', now: t });
+    const r = await act({ action: 'link-sender', key: 'orit,m@avivi,com', customerId: '3150', manual: true });
+    const m = ((db._data.waMeta || {}).emailSenders || {})['orit,m@avivi,com'];
+    check('H9 an address that never wrote can be added by hand', [r.ok, m && m.email, m && m.customerId], [true, 'orit.m@avivi.com', '3150']);
+    check('H9 noted as added by hand', db._data.waMeta.emailSendersSeen['orit,m@avivi,com'].manual, { at: NOW + 10, by: '0520000000' });
+    check('H9 a bad address by hand is still refused', (await act({ action: 'link-sender', key: 'x@y.com', customerId: '3150', manual: true })).code, 'bad-key');
+  }
 
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll email sender checks passed.');
