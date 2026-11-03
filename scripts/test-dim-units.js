@@ -118,5 +118,16 @@ console.log('');
   check('the editor and the sheet no longer guess the unit', guessing <= 1, true);
 }
 
+/* ── a written unit wins over the toggle (בן, 3/11) ─────────────────────── */
+{
+  const cm = withUnit('cm'), mmc = withUnit('mm');
+  const p = (c, s) => vm.runInContext('_dimParse(' + JSON.stringify(s) + ')', c);
+  check('cm mode, "30 ממ" is 30 mm',   p(cm, '30 ממ').mm, 30);
+  check('cm mode, "30 מ"מ" is 30 mm',  p(cm, '30 מ"מ').mm, 30);
+  check('mm mode, "30 ס"מ" is 300 mm', p(mmc, '30 ס"מ').mm, 300);
+  check("mm mode, \"2 מ'\" is 2000 mm", p(mmc, "2 מ'").mm, 2000);
+  check('cm mode, plain 30 is still 300', p(cm, '30').mm, 300);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll unit checks passed.');

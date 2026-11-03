@@ -4265,7 +4265,9 @@ function _dimParse(str){
   const n=parseFloat(raw);
   if(!isFinite(n)) return {ok:false,error:'צריך מספר'};
   if(n<0) return {ok:false,error:'מידה לא יכולה להיות שלילית'};
-  const mm=_dimFromUnit(n);
+  // יחידה שנכתבה ליד המספר גוברת על הכפתור: "30 ממ" הוא 30 גם במצב ס"מ (בן, 3/11)
+  const u=raw.match(/^(\d*\.?\d+)\s*(?:(מ["'״׳]?מ|mm)|(ס["'״׳]?מ|cm)|(מטר|מ['׳]|m))$/i);
+  const mm=u ? Math.round(n*(u[2]?1:u[3]?10:1000)) : _dimFromUnit(n);
   if(mm>5000) return {ok:false,error:'מידה גדולה מדי — מקסימום '+_dimToUnit(5000)+' '+_dimUnitLabel()};
   return {ok:true,mm:mm};
 }
