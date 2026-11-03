@@ -62,7 +62,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .inv-sim{font-size:var(--fs-xs);font-weight:700;color:var(--gold-text);
          background:rgba(184,146,42,0.12);border:1px solid rgba(184,146,42,0.30);
          padding:1px 7px;border-radius:3px;margin-inline-start:6px;white-space:nowrap;}
-.hero-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;}
+.hero-stats{display:grid;grid-template-columns:repeat(2,1fr);gap:2px;}
 .hstat{background:rgba(255,255,255,0.05);padding:14px 10px;text-align:center;}
 .hstat .n{font-family:"Playfair Display",serif;font-size:22px;font-weight:900;color:var(--gold);}
 .hstat .l{font-size:12px;color:rgba(247,244,239,0.4);margin-top:4px;}
@@ -84,6 +84,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .oc-price{font-size:14px;font-weight:700;color:var(--gold-text);}
 .oc-num{font-size:12px;color:var(--muted);margin-top:2px;}
 .oc-status-bar{padding:8px 16px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);}
+.oc-arrival{padding:8px 16px;border-top:1px solid var(--border);font-size:14px;font-weight:700;color:#2980b9;}
 .sbadge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;font-size:12px;font-weight:700;border-radius:2px;}
 .s-wait{background:rgba(107,127,163,0.1);color:#6b7fa3;}
 .s-prod{background:rgba(41,128,185,0.1);color:var(--blue);}
@@ -334,7 +335,8 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <div class="hero-stats">
     <div class="hstat"><div class="n" id="statActive">0</div><div class="l">הזמנות פעילות</div></div>
     <div class="hstat"><div class="n" id="statReady">0</div><div class="l">מוכן לאיסוף</div></div>
-    <div class="hstat"><div class="n" id="statDebt">&#8362;0</div><div class="l">יתרת חוב</div></div>
+    <!-- יתרת חוב מוסתרת לגמרי (בן, 4/11): הסכום חושב מההזמנות ולא מחשבשבת, והטעה לקוחות שכבר שילמו. -->
+    <div class="hstat" style="display:none"><div class="n" id="statDebt">&#8362;0</div><div class="l">יתרת חוב</div></div>
   </div>
 </div>
 <div class="tabs" role="tablist" aria-label="הפורטל שלי">
@@ -565,6 +567,8 @@ function _subscribePortalOrders(clientPhone) {
         date:       o.date      || '',
         status:     o.status    || lgStageToStatus(o.stage || ''),
         stage:      o.stage     || '',
+        customerId: o.customerId|| '',
+        deliveryAt: o.deliveryAt|| 0,
         ...lgSketchFields(o),   // התמונה עצמה רק דרך השכבה — ר' firebase-db
         items:      o.items     || [],
         panels:     o.panels    || [],
@@ -635,7 +639,8 @@ function renderStats(){
 function renderOrders(){
   const unpaid = _calcUnpaidTotal();
   const unpaidOrders = ORDERS.filter(o => o.status !== 'מוכן לאיסוף' && o.status !== 'נאסף' && (o.total||0) > 0);
-  if(unpaid > 0){
+  // יתרת החוב מוסתרת לגמרי (בן, 4/11) — debtBar לא מוצג
+  if(LG_PORTAL_SHOW_DEBT && unpaid > 0){
     document.getElementById("debtBar").style.display="block";
     document.getElementById("debtAmount").innerHTML="&#8362;"+unpaid.toLocaleString();
     document.getElementById("debtDetail").textContent = "סכום הזמנות שלא שולמו · " + unpaidOrders.length + " הזמנות";
@@ -832,6 +837,7 @@ function orderCard(o, extra){
   // הכרטיס מראה עכשיו את מה שבאמת מזהה הזמנה — שם, זכוכית, תאריך, סכום,
   // מצב — והסקיצה נמצאת מאחורי "פרטים", כלומר נטענת רק כשמבקשים אותה.
   const oid = o.id;
+  const arrival = lgPortalArrival(o);
 
   return '<div class="order-card">'+
     '<div class="oc-hdr" data-id="'+o.id+'" onclick="toggleExp(this.dataset.id)">'+
@@ -845,7 +851,7 @@ function orderCard(o, extra){
       '<button type="button" class="oc-toggle" data-id="'+o.id+'" aria-expanded="'+(isExp?'true':'false')+'" onclick="toggleExp(this.dataset.id)">'+
         (isExp?"▲ סגור":"▾ פרטים")+(lgHasSketch(o)&&!isExp?' <span class="oc-has-sk">🖼</span>':'')+
       '</button><span class="oc-date">'+lgEsc(o.date)+"</span>"+
-    "</div>"+exp+(extra||'')+"</div>";
+    "</div>"+(arrival?'<div class="oc-arrival">&#128666; '+lgEsc(arrival)+'</div>':'')+exp+(extra||'')+"</div>";
 }
 
 // שני הטאבים מציגים כרטיסים, ולכן פתיחת "פרטים" חייבת לצייר את שניהם —
@@ -878,6 +884,8 @@ function renderReady(){
   // ועליו נוסף גוש בחירת התאריך. קודם היה כאן מבנה נפרד (ready-card) בלי
   // "פרטים", ולכן לא הייתה שום דרך לראות את הסקיצה של הזמנה מוכנה.
   document.getElementById("readyOrders").innerHTML=ready.map(o=>{
+    // בחירת תאריך איסוף מוסתרת בינתיים (בן, 4/11) — אף אחד במפעל לא רואה אותה
+    if(!LG_PORTAL_SHOW_PICKUP) return orderCard(o);
     const pd=pickupDates[o.id]||o.pickedDate;
     const pick = pd
       ? '<div class="pickup-ok"><div class="pk-lbl">&#9989; תאריך איסוף נקבע</div><div class="pk-date">'+lgEsc(pd)+'</div><button class="pk-change" data-id="'+o.id+'" onclick="cancelPick(this.dataset.id)">שנה תאריך</button></div>'
@@ -962,19 +970,18 @@ function renderInvoices(){
   }).join('');
 }
 
-// ההודעות אינן מחוברות לשום מקום. כאן ישבה שיחה מומצאת, ו-sendMsg הוסיף
-// אחרי 1.2 שניות "תודה! נחזור אליך בהקדם" — תשובה מאף אחד. לקוח היה כותב,
-// מקבל אישור, ומחכה לתשובה שלא תגיע. עדיף מסך שאומר את האמת.
+// "הודעות" = כפתור לוואטסאפ של המפעל (בן, 4/11). שדה הכתיבה כאן לא היה
+// מחובר לשום מקום, ולכן הוא מוסתר.
 function renderChat(){
   const box = document.getElementById("chatMessages");
   if(box) box.innerHTML =
     '<div class="soon-panel">' +
-      '<div class="soon-ttl">בפיתוח</div>' +
-      '<div class="soon-txt">ההודעות כאן עדיין לא פעילות. לכל שאלה — אנחנו זמינים בטלפון ובוואטספ.</div>' +
-      '<button class="btn-pay" onclick="contactUs()">&#128222; צור קשר</button>' +
+      '<div class="soon-ttl">כתבו לנו בוואטסאפ</div>' +
+      '<div class="soon-txt">שאלה על הזמנה, שינוי או כל דבר אחר — הוואטסאפ פותח שיחה ישירה עם המפעל.</div>' +
+      '<button class="btn-pay" onclick="contactFactory()">&#128172; פתח וואטסאפ</button>' +
     '</div>';
-  const inp = document.getElementById("chatInput");
-  if(inp){ inp.disabled = true; inp.placeholder = "ההודעות עדיין לא פעילות"; }
+  const wrap = document.querySelector("#view-chat .chat-wrap");
+  if(wrap) wrap.style.display = "none";
 }
 function sendMsg(){ /* ההודעות אינן מחוברות — ר' renderChat */ }
 
@@ -1118,7 +1125,33 @@ document.addEventListener('keydown', e => {
   }
 });
 
-function contactUs(){window.open("https://wa.me/972XXXXXXXXX","_blank");}
+// "צור קשר" → שאול. "הודעות" → וואטסאפ של המפעל; עד שיש מספר, גם הוא לשאול (בן, 4/11)
+const LG_PORTAL_SHAUL_WA = '972506824365';
+const LG_PORTAL_FACTORY_WA = '';
+const LG_PORTAL_SHOW_DEBT = false;
+const LG_PORTAL_SHOW_PICKUP = false;
+// ⚠️ אותה רשימה כמו LG_DELIVERY_TOMORROW_ACCOUNTS ב-api/_invoice-deliver.js
+// (scripts/test-portal-arrival.js בודק שהן זהות)
+const LG_PORTAL_TOMORROW_ACCOUNTS = ['9117', '14201'];
+function contactUs(){window.open("https://wa.me/"+LG_PORTAL_SHAUL_WA,"_blank");}
+function contactFactory(){window.open("https://wa.me/"+(LG_PORTAL_FACTORY_WA||LG_PORTAL_SHAUL_WA),"_blank");}
+
+// "צפוי להגיע" — רק ללקוחות שמקבלים "הסחורה תגיע אליך מחר" בהודעת החשבונית,
+// ורק להזמנה שיש לה deliveryAt (נרשם ב-lgLockAndAdvance במעבר להובלה).
+// היום שאחרי deliveryAt, בלי שבת. עבר → אין שורה (נשאר "בדרך אליך").
+function lgPortalArrival(o, now){
+  if(!o || o.stage !== 'delivery' || !Number(o.deliveryAt)) return '';
+  if(!LG_PORTAL_TOMORROW_ACCOUNTS.includes(String(o.customerId||''))) return '';
+  const day = t => new Date(t).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+  const d = new Date(day(Number(o.deliveryAt)) + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  if(d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+  const arr = d.toISOString().slice(0, 10), today = day(now || Date.now());
+  if(arr < today) return '';
+  if(arr === today) return 'מגיע אליך היום';
+  const fmt = d.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric', timeZone: 'UTC' });
+  return 'צפוי להגיע: ' + fmt;
+}
 function logout(){ lgLogout(); } // lgLogout (firebase-db.js) מנתק גם מ-Firebase Auth
 
 // QUOTE

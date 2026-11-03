@@ -613,9 +613,10 @@ check('there is a way to deploy the rules',
   /* the code, not the comment that explains why it went */
   check('and no fabricated reply', !/CHAT\.push\(/.test(portal),
         'a customer typed into a void and was told someone had answered');
-  check('the chat input is disabled while it is not connected',
-        /inp\.disabled = true;/.test(portal));
-  check('the chat says so plainly', /soon-ttl">בפיתוח/.test(portal));
+  // 4/11 (בן): "הודעות" פותח וואטסאפ ישיר — שדה הכתיבה הלא-מחובר מוסתר
+  check('the unconnected chat input is hidden',
+        /#view-chat \.chat-wrap"\);\s*if\(wrap\) wrap\.style\.display = "none";/.test(portal));
+  check('the chat sends the customer to WhatsApp', /onclick="contactFactory\(\)"/.test(portal));
 
   /* The invoices tab is no longer "in development" — it is built and reads
      what was actually issued in Hashavshevet. One invoice can cover several

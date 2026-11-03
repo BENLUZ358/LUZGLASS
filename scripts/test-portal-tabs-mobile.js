@@ -23,7 +23,8 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 const tabs = [...P.matchAll(/<div class="tab[^"]*" id="tab-(\w+)"[^>]*>/g)];
 check('the portal still has its seven tabs', tabs.length, 7);
 check('every tab is announced as a tab', tabs.every(m => /role="tab"/.test(m[0])), true);
-check('and can be reached from the keyboard', tabs.every(m => /tabindex="0"/.test(m[0])), true);
+// טאב מוסתר (הצעת מחיר, 4/11) לא אמור לקבל פוקוס
+check('and can be reached from the keyboard', tabs.filter(m => !/display:none/.test(m[0])).every(m => /tabindex="0"/.test(m[0])), true);
 check('the strip is a tablist', /<div class="tabs" role="tablist"/.test(P), true);
 
 const body = id => (P.match(new RegExp('id="tab-' + id + '"[^>]*>([\\s\\S]*?)</div>')) || ['', ''])[1];

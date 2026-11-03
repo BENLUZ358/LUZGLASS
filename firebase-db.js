@@ -2842,6 +2842,8 @@ function lgCalcOrderTotal(order, globalP, clientP){
 async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
   const status = lgStageToStatus(nextStage);
   const update = { stage: nextStage, status, updatedAt: Date.now() };
+  // מתי יצאה להובלה — הפורטל מציג ממנו "צפוי להגיע" (lgPortalArrival)
+  if(nextStage === 'delivery') update.deliveryAt = update.updatedAt;
   const result = { locked: false, unpricedNames: [] };
   // נעל מחיר רק אם עדיין לא נעול. בודקים pricesLockedAt ולא totalFinal —
   // totalFinal יכול להיות באמת 0 (הזמנה שננעלה בלי אף פריט מתומחר), ואז
