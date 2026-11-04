@@ -43,6 +43,8 @@ const MAX_ATTEMPTS = 3;
 const MAX_AGE_MS   = 24 * 60 * 60 * 1000;   // "מוכן לאיסוף" של שלשום — לא שולחים
 
 const _ids = ids => [...new Set((ids || []).map(String))].sort();
+//  RTDB מחזירה מערך כאובייקט כשיש בו חורים
+const _list = v => Array.isArray(v) ? v : Object.values(v || {});
 
 function lgEmailMsgKey(kind, thread, orderIds) {
   return crypto.createHash('sha1')
@@ -128,12 +130,45 @@ async function lgEmailClaim(db, limit, now) {
     });
     const e = r.committed && r.snapshot.val();
     if (!e || e.state !== 'pending' || e.leaseToken !== token) continue;
-    out.push({ key, thread: e.thread, messageId: String(e.messageId), email: String(e.email), leaseToken: token,
+    const item = { key, thread: e.thread, messageId: String(e.messageId), email: String(e.email), leaseToken: token,
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
                                   sketchNames: e.sketchNames || [], docNumber: e.docNumber,
                                   deliveryTomorrow: e.deliveryTomorrow === true }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
-               files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 });
+               files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 };
+    //  "טופל" ידני (בן, 4/11): המיילים שכל הסקיצות שלהם טופלו — הסקריפט מוציא את
+    //  השרשור לארכיון אחרי שהתשובה יצאה. ריק → אין שדה (כמו קודם).
+    if (e.kind === 'sketches-handled') {
+      const done = await lgEmailDoneMails(db, _ids(_list(e.orderIds)));
+      if (done.length) item.doneMails = done;
+    }
+    out.push(item);
+  }
+  return out;
+}
+
+//  מזהי המיילים (של Gmail) שכל ההזמנות שנוצרו מהם כבר סומנו "טופל".
+//  orderIds: ההזמנות שבתשובה. לכל מייל שלהן — כל ההזמנות שהוא יצר (emailInbound/<key>/orderIds),
+//  וכולן חייבות sketchSeenAt. הזמנה שנמחקה לא מחזיקה את המייל. ⚠️ מייל שרשומת הקליטה
+//  שלו חסרה — לא נכלל (לא יודעים מה עוד יצא ממנו).
+//  ⚠️ אותו ניקוי מפתח כמו lgEmailInboundKey (_email-inbound.js) — לא מייבאים משם (מעגל).
+async function lgEmailDoneMails(db, orderIds) {
+  const mids = [];
+  for (const id of orderIds || []) {
+    const m = (await db.ref('orders/' + id + '/emailMessageId').once('value')).val();
+    if (m && !mids.includes(String(m))) mids.push(String(m));
+  }
+  const out = [];
+  for (const mid of mids) {
+    const key = mid.replace(/[.#$[\]/]/g, '_');
+    const ids = _ids(_list((await db.ref('emailInbound/' + key + '/orderIds').once('value')).val()));
+    if (!ids.length) continue;
+    let all = true;
+    for (const oid of ids) {
+      const o = (await db.ref('orders/' + oid).once('value')).val();
+      if (o && !o.sketchSeenAt) { all = false; break; }
+    }
+    if (all) out.push(mid);
   }
   return out;
 }
@@ -212,5 +247,5 @@ async function lgEmailOutboxFile(db, key, leaseToken, idx, now) {
   return { ok: true, name: one.name, mime: one.mime, b64: one.buf.toString('base64') };
 }
 
-module.exports = { lgEmailOutboxFile, lgEmailMsgKey, lgEmailOutboxKeyOk, lgEmailEnqueue, lgEmailClaim, lgEmailComplete, lgEmailActiveIds,
+module.exports = { lgEmailDoneMails, lgEmailOutboxFile, lgEmailMsgKey, lgEmailOutboxKeyOk, lgEmailEnqueue, lgEmailClaim, lgEmailComplete, lgEmailActiveIds,
                    EM_OUTBOX, LEASE_MS, MAX_CLAIM, MAX_ATTEMPTS, MAX_AGE_MS };

@@ -122,6 +122,11 @@ check('plan: empty thread/text dropped', emOutboxPlan([{ key: 'a', thread: '', t
 check('plan: null inputs', emOutboxPlan(null, null), []);
 check('plan: malformed items dropped', emOutboxPlan([{ key: 'k', thread: 't' }, null, { key: 'k3', thread: 't3', messageId: 'm3', email: 'c@x.com', text: 'x', leaseToken: 'L' }], {}).map(x => x.key), ['k3']);
 
+//  "טופל" ידני (4/11) + קבצי חשבונית: השדות עוברים לתכנית רק כשיש בהם משהו
+check('plan: doneMails kept', emOutboxPlan([Object.assign({}, items[0], { doneMails: ['m1', '', 5] })], {})[0].doneMails, ['m1']);
+check('plan: files kept (invoice attachments)', emOutboxPlan([Object.assign({}, items[0], { files: 3 })], {})[0].files, 3);
+check('plan: no files -> no field', 'files' in emOutboxPlan([Object.assign({}, items[0], { files: 0 })], {})[0], false);
+
 // E2 emOutboxClaim — מה עושים עם תשובת claim
 check('claim 200 items', emOutboxClaim(200, { ok: true, items: items }), { stop: false, items: items });
 check('claim 200 no items', emOutboxClaim(200, { ok: true, items: [] }), { stop: false, items: [] });

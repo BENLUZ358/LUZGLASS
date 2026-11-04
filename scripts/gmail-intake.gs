@@ -127,8 +127,14 @@ function emOutboxPlan(items, props) {
       typeof it.leaseToken === 'string';
   }).map(function (it) {
     var action = has('s_' + it.key) ? 'ack' : (has('u_' + it.key) ? 'fail' : 'send');
-    return { key: it.key, thread: it.thread, messageId: it.messageId, email: it.email,
-             text: it.text, leaseToken: it.leaseToken, action: action };
+    var out = { key: it.key, thread: it.thread, messageId: it.messageId, email: it.email,
+                text: it.text, leaseToken: it.leaseToken, action: action };
+    //  "טופל" ידני (בן, 4/11): מיילים שכל הסקיצות שלהם טופלו — לארכיון אחרי התשובה
+    var dm = Array.isArray(it.doneMails) ? it.doneMails.filter(function (x) { return typeof x === 'string' && x; }) : [];
+    if (dm.length) out.doneMails = dm;
+    //  ⚠️ כמה קבצים לצרף (חשבונית, DB-00004) — בלי זה emOutbox לא מושך אותם והמייל יוצא בלי קבצים
+    if (Number(it.files) > 0) out.files = Number(it.files);
+    return out;
   });
 }
 //  האם מותר לענות על המייל הזה. ⚠️ msg.reply עונה ל-Reply-To אם יש, אחרת ל-From —
@@ -383,6 +389,19 @@ function emOutbox(cfg, started) {
       } catch (e) {
         ok = false;   // ⚠️ שם השגיאה בלבד; u_ נשאר — אין שליחה חוזרת
         Logger.log('תשובה ' + it.key + ': חריגה ' + (e && e.name));
+      }
+    }
+    //  "טופל" ידני (בן, 4/11): התשובה יצאה (או יצאה בריצה קודמת) — המיילים שכל
+    //  הסקיצות שלהם טופלו נחשבים כמו "טופל לבד", והשרשור יוצא לארכיון אם אין בו
+    //  מייל אחר שמחכה לבן (emThreadSettled). כשל כאן לא נוגע בתשובה.
+    if (ok && it.doneMails) {
+      try {
+        var at = Date.now();
+        for (var d = 0; d < it.doneMails.length; d++) props.setProperty('a_' + it.doneMails[d], String(at));
+        var th = GmailApp.getThreadById(it.thread);
+        if (th) emArchive([th], cfg, emLoadState().auto);
+      } catch (eA) {
+        Logger.log('תשובה ' + it.key + ': ארכיון נכשל ' + (eA && eA.name));
       }
     }
     var dn = emPost(cfg, { op: 'outbox-done', key: it.key, leaseToken: it.leaseToken, ok: ok });

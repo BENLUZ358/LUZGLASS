@@ -105,8 +105,14 @@ function emOutboxPlan(items, props) {
       typeof it.leaseToken === 'string';
   }).map(function (it) {
     var action = has('s_' + it.key) ? 'ack' : (has('u_' + it.key) ? 'fail' : 'send');
-    return { key: it.key, thread: it.thread, messageId: it.messageId, email: it.email,
-             text: it.text, leaseToken: it.leaseToken, action: action };
+    var out = { key: it.key, thread: it.thread, messageId: it.messageId, email: it.email,
+                text: it.text, leaseToken: it.leaseToken, action: action };
+    //  "טופל" ידני (בן, 4/11): מיילים שכל הסקיצות שלהם טופלו — לארכיון אחרי התשובה
+    var dm = Array.isArray(it.doneMails) ? it.doneMails.filter(function (x) { return typeof x === 'string' && x; }) : [];
+    if (dm.length) out.doneMails = dm;
+    //  ⚠️ כמה קבצים לצרף (חשבונית, DB-00004) — בלי זה emOutbox לא מושך אותם והמייל יוצא בלי קבצים
+    if (Number(it.files) > 0) out.files = Number(it.files);
+    return out;
   });
 }
 //  האם מותר לענות על המייל הזה. ⚠️ msg.reply עונה ל-Reply-To אם יש, אחרת ל-From —

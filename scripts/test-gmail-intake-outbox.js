@@ -20,7 +20,7 @@ function world(opts) {
     GmailApp: {
       search: () => [], getMessagesForThreads: () => [],
       //  ⚠️ שרשור: reply שלו עונה למי ששלח את ההודעה האחרונה — אסור להשתמש בו
-      getThreadById: id => ({ reply: () => { log.push('thread-reply'); } }),
+      getThreadById: id => opts.thread ? opts.thread(log) : ({ reply: () => { log.push('thread-reply'); } }),
       getMessageById: id => {
         log.push('get ' + id);
         if (opts.noMessage) throw new Error('nf');
@@ -96,6 +96,28 @@ check('401 claim stops', w.log, ['outbox-claim']);
 // 6. no message text in logs
 const wl = world({ replyThrows: true, server: claimOk }); wl.run();
 check('logs carry no text', wl.logs.length > 0 && wl.logs.some(l => /hi|boom/.test(l)), false);
+
+// 7. "טופל" ידני (בן, 4/11): after the reply, mails the server says are done -> archive
+const thr = msgs => log => ({ getId: () => 't1', reply: () => log.push('thread-reply'),
+  getMessages: () => msgs.map(m => ({ getId: () => m.id, getFrom: () => m.from, getDate: () => new Date(m.date) })),
+  moveToArchive: () => log.push('archive') });
+const cust = 'Client <client@shop.co.il>', mine = 'me@x.com', recent = Date.now() - 3600e3;
+const itemD = Object.assign({}, item, { doneMails: ['m1'] });
+const claimD = p => p.op === 'outbox-claim' ? { code: 200, body: { ok: true, items: [itemD] } } : { code: 200, body: { ok: true } };
+w = world({ server: claimD, thread: thr([{ id: 'm1', from: cust, date: recent }, { id: 'r1', from: mine, date: recent }]) });
+w.store.START_AT = String(recent - 1e6);
+w.run();
+check('done mail -> marked a_ and archived after reply', [('a_m1' in w.store), w.log.includes('archive'), w.log.indexOf('archive') > w.log.indexOf('reply')], [true, true, true]);
+w = world({ server: claimD, thread: thr([{ id: 'm1', from: cust, date: recent }, { id: 'm2', from: cust, date: recent }]) });
+w.store.START_AT = String(recent - 1e6);
+w.run();
+check('another customer mail still waiting -> not archived', [('a_m1' in w.store), w.log.includes('archive')], [true, false]);
+w = world({ replyThrows: true, server: claimD, thread: thr([{ id: 'm1', from: cust, date: recent }]) });
+w.run();
+check('reply failed -> nothing marked, not archived', [('a_m1' in w.store), w.log.includes('archive')], [false, false]);
+w = world({ server: claimOk, thread: thr([{ id: 'm1', from: cust, date: recent }]) });
+w.run();
+check('no doneMails -> no archive (as before)', w.log.includes('archive'), false);
 
 if (fails) { console.log(fails + ' failed'); process.exit(1); }
 console.log('all passed');
