@@ -67,7 +67,8 @@ function lgWaMsgKey(kind, orderIds) {
 //  מי מקבל את ההודעה — resolvePhone כבר הכריע — אלא עונים על השאלה
 //  **דרך מה** נמצא המספר. בחקירת L9005 בדיוק המידע הזה היה חסר.
 async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, orderIds,
-                                 queuedBy, phoneSource, accountKey, invoiceKey, docNumber, deliveryTomorrow }) {
+                                 queuedBy, phoneSource, accountKey, invoiceKey, docNumber, deliveryTomorrow,
+                                 missingSketchNums }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   const key = lgWaMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber : kind, orderIds);
   const now = Date.now();
@@ -96,6 +97,8 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, o
       invoiceKey: invoiceKey ? String(invoiceKey) : null,
       docNumber:  docNumber ? String(docNumber) : null,
       deliveryTomorrow: deliveryTomorrow === true,
+      //  בן, 4/11: הזמנות בחשבונית שאין להן סקיצה (לתצוגה; בשליחה נבדק שוב)
+      missingSketchNums: (missingSketchNums || []).map(String),
       claimedAt: null, claimedBy: null, sentAt: null,
       messageId: null, lastError: null, httpStatus: null,
     };

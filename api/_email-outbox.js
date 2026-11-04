@@ -60,7 +60,8 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  שלנו, תשובה ידנית של בן, או צד שלישי. הסקריפט גם בודק שהמייל הזה (Reply-To,
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
-                                    queuedBy, accountKey, invoiceKey, docNumber, fileCount, deliveryTomorrow, variant, delayMs, now }) {
+                                    queuedBy, accountKey, invoiceKey, docNumber, fileCount, deliveryTomorrow, variant, delayMs, now,
+                                    missingSketchNums }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber : kind, thread, orderIds);
   const at  = now || Date.now();
@@ -76,6 +77,8 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       //  חשבונית (DB-00004): הקבצים נשלפים בנפרד (outbox-file), לא בתור
       invoiceKey: invoiceKey ? String(invoiceKey) : null, docNumber: docNumber ? String(docNumber) : null,
       deliveryTomorrow: deliveryTomorrow === true,
+      //  בן, 4/11: הזמנות בחשבונית שאין להן סקיצה — נאמר בגוף המייל
+      missingSketchNums: (missingSketchNums || []).map(String),
       //  כמה קבצים בפועל (מ-2/11 בדרך כלל אחד — חשבונית + סקיצות). חסר (רשומה ישנה) → החשבון הישן
       fileCount: fileCount > 0 ? Number(fileCount) : null,
       //  נוסח אחר לאותו סוג (הזמנת רכש של אביבי, בן 4/11), ו"לא לפני" — דקה עד שהתשובה יוצאת
@@ -138,7 +141,8 @@ async function lgEmailClaim(db, limit, now) {
     const item = { key, thread: e.thread, messageId: String(e.messageId), email: String(e.email), leaseToken: token,
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
                                   sketchNames: e.sketchNames || [], docNumber: e.docNumber,
-                                  deliveryTomorrow: e.deliveryTomorrow === true, variant: e.variant || '' }),
+                                  deliveryTomorrow: e.deliveryTomorrow === true, variant: e.variant || '',
+                                  missingSketchNums: e.missingSketchNums || [] }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
                files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 };
     //  "טופל" ידני (בן, 4/11): המיילים שכל הסקיצות שלהם טופלו — הסקריפט מוציא את

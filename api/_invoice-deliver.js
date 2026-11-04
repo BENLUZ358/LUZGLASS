@@ -8,7 +8,8 @@
 //    • בערוץ שבו ההזמנות הגיעו: הזמנה מוואטסאפ → וואטסאפ (אותה קבוצה /
 //      אותו מספר); הזמנה מהמייל → תשובה באותה שרשרת. הזמנה מהפורטל → לא
 //      נשלח כלום (הלקוח רואה את החשבונית בפורטל). ערוצים מעורבים → וואטסאפ.
-//    • חסרה סקיצה להזמנה כלשהי → לא שולחים כלום (אין חבילה חלקית).
+//    • חסרה סקיצה להזמנה → בכל זאת שולחים, עם הסקיצות שיש, וההודעה אומרת
+//      לאיזו הזמנה אין סקיצה (בן, 4/11 — קודם לא נשלח כלום).
 //
 //  השליחה עוברת דרך התורים הקיימים (waOutbox / emailOutbox) — אותן נעילות,
 //  אותן הרשאות, אותה הגנה מכפילות. וואטסאפ יוצא בתוך הבקשה הזו; מייל יוצא
@@ -41,48 +42,61 @@ async function _sketch(db, id) {
   return (await db.ref('orders/' + id + '/sketch').once('value')).val();
 }
 
-//  { ok, rec, files:[{name, mime, buf}] } | { ok:false, code, orderIds? }
+//  { ok, rec, files:[{name, mime, buf}], missing:[orderNum] } | { ok:false, code }
 //  מ-2/11 (בן): קובץ PDF אחד — עמודי החשבונית (מקור) ואחריהם עמוד לכל סקיצה,
-//  בסדר ההזמנות. סקיצה שלא נכנסת → חסום (אין חבילה חלקית). קובץ מאוחד גדול
-//  מדי לוואטסאפ → כמו קודם: החשבונית, ואחריה סקיצה לכל הזמנה כקבצים נפרדים.
+//  בסדר ההזמנות. קובץ מאוחד גדול מדי לוואטסאפ → כמו קודם: החשבונית, ואחריה
+//  סקיצה לכל הזמנה כקבצים נפרדים.
+//  מ-4/11 (בן): סקיצה חסרה או שלא נקראת לא עוצרת — היא נשמטת ונרשמת ב-missing.
 const MAX_MERGED_BYTES = 15 * 1024 * 1024;
 async function lgInvoiceFiles(db, key, opts) {
   const sep = await _separateFiles(db, key);
   if (!sep.ok) return sep;
-  const { rec, files } = sep;
+  const { rec } = sep;
+  const M = require('./_invoice-merge');
+  const inv = sep.files[0].buf;
+  let sks = sep.files.slice(1);
+  const missing = sep.missing.slice();
   let merged;
   try {
-    merged = await require('./_invoice-merge').lgInvoiceMerge(files[0].buf, files.slice(1).map((f, i) => ({
-      buf: f.buf, mime: f.mime, num: (rec.orderNums || [])[i] || '', name: (rec.sketchNames || [])[i] || '' })));
+    merged = await M.lgInvoiceMerge(inv, sks.map(f => f.page));
   } catch (e) {
-    return { ok: false, code: 'sketch-unreadable', orderIds: rec.orderIds || [] };
+    //  סקיצה שלא נכנסת ל-PDF — בודקים כל אחת לבד, ומשמיטים את אלה שנכשלות
+    const good = [];
+    for (const f of sks) {
+      try { await M.lgInvoiceMerge(inv, [f.page]); good.push(f); } catch (_) { missing.push(f.num); }
+    }
+    sks = good;
+    merged = await M.lgInvoiceMerge(inv, sks.map(f => f.page));
   }
-  if (merged.length > ((opts && opts.maxMergedBytes) || MAX_MERGED_BYTES)) return sep;
+  const order = (rec.orderNums || []).map(String);
+  missing.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  if (merged.length > ((opts && opts.maxMergedBytes) || MAX_MERGED_BYTES)) {
+    return { ok: true, rec, files: [sep.files[0], ...sks].map(_plain), missing };
+  }
   const name = 'חשבונית ' + rec.docNumber + (rec.client ? ' - ' + _safe(rec.client) : '') + '.pdf';
-  return { ok: true, rec, files: [{ name, mime: 'application/pdf', buf: merged }] };
+  return { ok: true, rec, files: [{ name, mime: 'application/pdf', buf: merged }], missing };
 }
+const _plain = f => ({ name: f.name, mime: f.mime, buf: f.buf });
 
-//  החשבונית ואחריה סקיצה לכל הזמנה, כל אחד קובץ משלו (הצורה שלפני 2/11).
+//  החשבונית ואחריה סקיצה לכל הזמנה שיש לה סקיצה, כל אחד קובץ משלו (הצורה שלפני 2/11).
 async function _separateFiles(db, key) {
   const rec = (await db.ref('invoicePdf/' + key).once('value')).val();
   if (!rec || rec.state !== 'ready') return { ok: false, code: 'not-ready' };
   const pdf = (await db.ref('invoicePdfBlobs/' + key + '/original').once('value')).val();
   if (!pdf) return { ok: false, code: 'no-pdf' };
   const ids = rec.orderIds || [];
-  const sk = {};
-  for (const id of ids) sk[id] = await _sketch(db, id);
-  const pkg = S.lgInvoiceBuildPackage(rec, sk);
-  if (!pkg.ok) return pkg;
+  if (!ids.length) return { ok: false, code: 'no-orders' };
   const files = [{ name: 'חשבונית ' + rec.docNumber + '.pdf', mime: 'application/pdf', buf: Buffer.from(pdf, 'base64') }];
+  const missing = [];
   for (let i = 0; i < ids.length; i++) {
-    const d = _dataUrl(sk[ids[i]]);
-    if (!d || !d.buf.length) return { ok: false, code: 'sketch-unreadable', orderIds: [ids[i]] };
     const num  = (rec.orderNums || [])[i] || String(i + 1);
     const name = (rec.sketchNames || [])[i];
+    const d = _dataUrl(await _sketch(db, ids[i]));
+    if (!d || !d.buf.length) { missing.push(num); continue; }
     files.push({ name: 'סקיצה ' + _safe(num) + (name ? ' - ' + _safe(name) : '') + '.' + (EXT[d.mime] || 'bin'),
-                 mime: d.mime, buf: d.buf });
+                 mime: d.mime, buf: d.buf, num, page: { buf: d.buf, mime: d.mime, num, name: name || '' } });
   }
-  return { ok: true, rec, files };
+  return { ok: true, rec, files, missing };
 }
 
 //  deps: { now?, drain?(db, keys, by) → { results }, provider? }
@@ -124,8 +138,7 @@ async function lgInvoiceDeliver(db, key, deps) {
 
   const files = await lgInvoiceFiles(db, key);
   if (!files.ok) {
-    const why = files.code === 'sketch-missing' || files.code === 'sketch-unreadable' ? 'חסרה סקיצה' : 'קובץ החשבונית חסר';
-    await mark({ state: 'blocked', reason: why, code: files.code });
+    await mark({ state: 'blocked', reason: 'קובץ החשבונית חסר', code: files.code });
     return { state: 'blocked', code: files.code };
   }
 
@@ -135,6 +148,7 @@ async function lgInvoiceDeliver(db, key, deps) {
   const common = { kind: 'invoice', clientName: rec.client, orderNums: rec.orderNums || [],
                    sketchNames: rec.sketchNames || [], orderIds: ids, queuedBy: 'invoice-tool',
                    accountKey: who.accountKey, invoiceKey: key, docNumber: rec.docNumber,
+                   missingSketchNums: files.missing || [],
                    deliveryTomorrow: orders.some(o => LG_DELIVERY_TOMORROW_ACCOUNTS.includes(String(o.customerId || ''))) };
 
   if (who.channel === 'email') {

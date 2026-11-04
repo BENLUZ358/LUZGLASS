@@ -84,7 +84,7 @@ function lgWaChatId(to) {
 //  שנרשמו. שורת "לפרטים נוספים ניתן להיכנס למשתמש שלך" הוסרה בינתיים: הפיילוט
 //  עובד רק מוואטסאפ, ולחלק מהלקוחות אין משתמש.
 //  orderNums עדיין מגיע, כי הוא הספירה, והתבנית של Meta (params) נשענת עליו.
-function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliveryTomorrow, variant }) {
+function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliveryTomorrow, variant, missingSketchNums }) {
   const who  = String(clientName || 'לקוח');
   const n    = (orderNums || []).filter(Boolean).length;
   const one  = n === 1;
@@ -114,7 +114,12 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliv
   //  חשבונית (DB-00004, בן 29/10): קובץ החשבונית והסקיצות מצורפים להודעה.
   if (kind === 'invoice') {
     //  בן, 3/11: המקום לאמבט ונאור חזקיה — החשבונית יוצאת על מה שנשלח אליהם למחרת
-    return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + ', והסקיצות שלהן.',
+    //  בן, 4/11: סקיצה חסרה לא עוצרת את החשבונית — יוצאות הסקיצות שיש, ונאמר על מה אין
+    const miss = (missingSketchNums || []).filter(Boolean).map(String);
+    const sk = !miss.length ? ', והסקיצות שלהן.'
+      : miss.length >= n ? '.'
+      : ', והסקיצות שלהן (בלי סקיצה ל' + miss.join(', ') + ').';
+    return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + sk,
                 deliveryTomorrow ? 'הסחורה תגיע אליך מחר במהלך היום.' : '');
   }
   return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'));
