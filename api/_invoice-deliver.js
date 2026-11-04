@@ -56,9 +56,10 @@ async function lgInvoiceFiles(db, key, opts) {
   const inv = sep.files[0].buf;
   let sks = sep.files.slice(1);
   const missing = sep.missing.slice();
+  const meta = { docNumber: rec.docNumber, client: rec.client };
   let merged;
   try {
-    merged = await M.lgInvoiceMerge(inv, sks.map(f => f.page));
+    merged = await M.lgInvoiceMerge(inv, sks.map(f => f.page), meta);
   } catch (e) {
     //  סקיצה שלא נכנסת ל-PDF — בודקים כל אחת לבד, ומשמיטים את אלה שנכשלות
     const good = [];
@@ -66,7 +67,7 @@ async function lgInvoiceFiles(db, key, opts) {
       try { await M.lgInvoiceMerge(inv, [f.page]); good.push(f); } catch (_) { missing.push(f.num); }
     }
     sks = good;
-    merged = await M.lgInvoiceMerge(inv, sks.map(f => f.page));
+    merged = await M.lgInvoiceMerge(inv, sks.map(f => f.page), meta);
   }
   const order = (rec.orderNums || []).map(String);
   missing.sort((a, b) => order.indexOf(a) - order.indexOf(b));
