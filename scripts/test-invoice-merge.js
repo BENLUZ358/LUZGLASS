@@ -56,5 +56,21 @@ function image(mime, w, h) {
   await test('a broken invoice PDF throws', async () => {
     await assert.rejects(lgInvoiceMerge(Buffer.from('%PDF-1.4 nothing'), []));
   });
+  //  בן, 4/11: שם גדול + שורת פרטים. fontkit הופך שורה עברית בעצמו — עד 4/11
+  //  הפכנו גם אנחנו, והעברית יצאה הפוכה. כאן נבדק מה שבאמת מצויר בעמוד.
+  await test('header: Hebrew is not reversed twice; numbers read the right way', async () => {
+    const { _visual } = require('../api/_invoice-merge');
+    assert.equal(_visual('אחיעד'), 'אחיעד');
+    assert.equal(_visual('הזמנה L1135'), 'הזמנה 5311L');
+    assert.equal(_visual('L1135'), 'L1135');
+    const out = await lgInvoiceMerge(await invoicePdf(1), [{ buf: image('image/png', 300, 400), mime: 'image/png', num: 'L1135', name: 'אחיעד דירה 12' }],
+                                     { docNumber: '67450', client: 'המקום לאמבט' });
+    const { lgPdfToJpegs } = require('../api/_pdf-pages');
+    const pages = await lgPdfToJpegs(out, { withText: true });
+    const text = pages[1].text.map(t => t.str).join(' ');
+    assert.match(text, /L1135/); assert.match(text, /67450/); assert.match(text, /12/);
+    assert.doesNotMatch(text, /5311L|05476|דעיחא/);
+    assert.match(text, /אחיעד/);
+  });
   console.log(`\n${passed} passed`);
 })().catch(e => { console.error(e); process.exit(1); });
