@@ -55,6 +55,7 @@ async function _sendInvoice(db, provider, to, entry) {
     if (!f.ok) return { ok: false, failureKind: 'other', reason: 'קבצי החשבונית לא זמינים (' + f.code + ')' };
     return await provider.sendFiles({ to, kind: 'invoice', clientName: entry.clientName, orderNums: entry.orderNums,
                                       sketchNames: entry.sketchNames || [], docNumber: entry.docNumber,
+                                      missingSketchNums: f.missing || [],
                                       deliveryTomorrow: entry.deliveryTomorrow === true, files: f.files });
   } catch (e) {
     return { ok: false, failureKind: 'other', reason: 'חריגה בשליחת החשבונית (' + (e && e.name) + (e && e.code ? ' ' + e.code : '') + ')' };

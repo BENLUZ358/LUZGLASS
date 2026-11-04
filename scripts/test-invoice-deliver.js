@@ -2,7 +2,7 @@
 // DB-00004 — שליחת החשבונית והסקיצות ללקוח, מיד, בערוץ שבו ההזמנות הגיעו (בן, 29/10).
 //   • וואטסאפ → תור waOutbox + שליחה מיידית (drain) עם קבצים
 //   • מייל (שולח מקושר) → תור המייל, הסקריפט מושך כל קובץ ב-outbox-file
-//   • פורטל → לא נשלח כלום; חסרה סקיצה → לא נשלח כלום; ניסיון → מדלגים; פעם אחת בלבד
+//   • פורטל → לא נשלח כלום; חסרה סקיצה → נשלח עם הסקיצות שיש (בן, 4/11); ניסיון → מדלגים; פעם אחת בלבד
 // Run: node scripts/test-invoice-deliver.js
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -63,11 +63,35 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual(f.files.map(x => [x.name, x.mime]), [['חשבונית 67346 - אגן ברזל.pdf', 'application/pdf']]);
     assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 3);
   });
-  await test('files: an unreadable sketch blocks — never a partial package', async () => {
+  //  בן, 4/11: סקיצה חסרה / שבורה לא עוצרת — יוצאות הסקיצות שיש
+  await test('files: an unreadable sketch is left out, the rest still go (בן, 4/11)', async () => {
     const db = base({ a: waOrder, b: portal });
     db._data.sketches.b = 'data:image/jpeg;base64,' + Buffer.from('broken').toString('base64');
     const f = await D.lgInvoiceFiles(db, 'k1');
-    assert.deepEqual([f.ok, f.code], [false, 'sketch-unreadable']);
+    assert.equal(f.ok, true, JSON.stringify(f).slice(0, 200));
+    assert.deepEqual(f.missing, ['L2']);
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 2);
+  });
+  await test('files: a missing sketch is left out; too big → separate files without it', async () => {
+    const db = base({ a: waOrder, b: portal }); db._data.sketches = { b: JPG };
+    const f = await D.lgInvoiceFiles(db, 'k1');
+    assert.deepEqual([f.ok, f.missing], [true, ['L1']]);
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 2);
+    const big = await D.lgInvoiceFiles(db, 'k1', { maxMergedBytes: 10 });
+    assert.deepEqual(big.files.map(x => x.name), ['חשבונית 67346.pdf', 'סקיצה L2 - מראה.jpg']);
+    assert.deepEqual(Object.keys(big.files[1]).sort(), ['buf', 'mime', 'name']);
+  });
+  await test('files: no sketch at all → the invoice alone', async () => {
+    const db = base({ a: waOrder, b: portal }); db._data.sketches = {};
+    const f = await D.lgInvoiceFiles(db, 'k1');
+    assert.deepEqual([f.ok, f.missing], [true, ['L1', 'L2']]);
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 1);
+  });
+  await test('text: says which order has no sketch', () => {
+    const f = { kind: 'invoice', clientName: 'אגן ברזל', orderNums: ['L1', 'L2'], sketchNames: [], docNumber: '67346' };
+    assert.match(renderText(f), /2 סקיצות, והסקיצות שלהן\./);
+    assert.match(renderText({ ...f, missingSketchNums: ['L2'] }), /והסקיצות שלהן \(בלי סקיצה לL2\)\./);
+    assert.match(renderText({ ...f, missingSketchNums: ['L1', 'L2'] }), /עבור 2 סקיצות\.\n/);
   });
   await test('files: too big to merge → sent as separate files, as before', async () => {
     const f = await D.lgInvoiceFiles(base({ a: waOrder, b: portal }), 'k1', { maxMergedBytes: 10 });
@@ -160,11 +184,12 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal((await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain })).state, 'portal');
     assert.equal(db._data.waOutbox, undefined);
   });
-  await test('a missing sketch blocks the whole message', async () => {
+  await test('a missing sketch no longer blocks: queued, and the entry names the order without one', async () => {
     const db = base({ a: waOrder, b: portal }); db._data.sketches = { a: JPG };
     const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
-    assert.equal(r.state, 'blocked'); assert.equal(db._data.waOutbox, undefined);
-    assert.equal(db._data.invoicePdf.k1.delivery.reason, 'חסרה סקיצה');
+    assert.equal(r.state, 'queued');
+    const e = Object.values(db._data.waOutbox)[0];
+    assert.deepEqual(e.missingSketchNums, ['L2']);
   });
   await test('test invoice is skipped; an invoice already sent is not sent again', async () => {
     const db = base({ a: waOrder, b: portal }, { simulated: true });
