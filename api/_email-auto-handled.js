@@ -14,6 +14,15 @@
 
 const KIND = 'sketches-handled';
 
+//  הזמנת רכש מהמחשב של הלקוח (בן, 4/11): נוסח משלה, ודקה עד שהתשובה יוצאת.
+//  כרטיס בחשבשבת → הספק ש-_po-pdf.js מזהה. רק כשכל ההזמנות במייל הן הזמנת
+//  רכש של אותו ספק עם מספר הזמנה; אחרת "הסקיצות טופלו" הרגיל, מיד.
+const LG_PO_CONFIRM_CARDS = { '450': 'avivi' };   // אביבי
+const PO_CONFIRM_DELAY_MS = 60 * 1000;
+
+const lgPoConfirm = orders => orders.length > 0 && orders.every(o => o &&
+  LG_PO_CONFIRM_CARDS[String(o.customerId || '')] === o.poSupplier && !!String(o.sketchName || '').trim());
+
 //  { marked, queued, reason? }
 async function lgEmailAutoHandle(db, orderIds, now) {
   const { lgSketchAckSkip, lgSketchAckActiveIds } = require('./_wa-sketch-ack');
@@ -36,9 +45,12 @@ async function lgEmailAutoHandle(db, orderIds, now) {
   }
   if (!live.length) return { marked: true, queued: false, reason: 'אין הזמנות לשליחה' };
 
-  const r = await lgEmailDispatch(db, { kind: KIND, dryRun: false, force: false, live, targets, queuedBy: 'email-auto' });
+  const po = lgPoConfirm(live.map(x => x.order));
+  const r = await lgEmailDispatch(db, { kind: KIND, dryRun: false, force: false, live, targets, queuedBy: 'email-auto', now,
+                                        ...(po ? { variant: 'po', delayMs: PO_CONFIRM_DELAY_MS } : {}) });
   const b = r.body || {};
-  return { marked: true, queued: r.status === 200 && !!b.queued, reason: b.error || b.reason || null };
+  //  later: התשובה מחכה דקה — הסקריפט מוציא לארכיון רק אחרי שהיא יצאה (doneMails), לא בקליטה
+  return { marked: true, queued: r.status === 200 && !!b.queued, later: po, reason: b.error || b.reason || null };
 }
 
-module.exports = { lgEmailAutoHandle };
+module.exports = { lgEmailAutoHandle, lgPoConfirm, LG_PO_CONFIRM_CARDS, PO_CONFIRM_DELAY_MS };

@@ -84,7 +84,7 @@ function lgWaChatId(to) {
 //  שנרשמו. שורת "לפרטים נוספים ניתן להיכנס למשתמש שלך" הוסרה בינתיים: הפיילוט
 //  עובד רק מוואטסאפ, ולחלק מהלקוחות אין משתמש.
 //  orderNums עדיין מגיע, כי הוא הספירה, והתבנית של Meta (params) נשענת עליו.
-function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliveryTomorrow }) {
+function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliveryTomorrow, variant }) {
   const who  = String(clientName || 'לקוח');
   const n    = (orderNums || []).filter(Boolean).length;
   const one  = n === 1;
@@ -92,12 +92,20 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliv
 
   //  ⚠️ סקיצה בלי שם נספרת אבל לא נרשמת — בלי נקודה ריקה ובלי מקף תלוי.
   //  ⚠️ רשימה ולא שרשור בפסיקים: שלושה שמות בשורה אחת הם משפט שאי אפשר לקרוא בטלפון.
-  const names = (sketchNames || []).slice(0, n).map(s => String(s || '').trim()).filter(Boolean);
+  const all   = (sketchNames || []).slice(0, n).map(s => String(s || '').trim()).filter(Boolean);
+  //  הזמנת רכש: כמה עמודים באותו PDF = אותו מספר הזמנה — נרשם פעם אחת
+  const po    = kind === 'sketches-handled' && variant === 'po' && all.length > 0;
+  const names = po ? [...new Set(all)] : all;
   const list  = names.length ? '\n' + names.map(s => '• ' + s).join('\n') : '';
   const wrap  = (body, tail) => `שלום ${who},\n\n${body}${list}${tail ? '\n\n' + tail : ''}\n\n${BUSINESS}`;
 
   //  "הסקיצות טופלו" (אפיון §16). ⚠️ חייב להיות לפני ברירת המחדל למטה —
   //  אחרת סוג לא מוכר נופל ל"מוכן לאיסוף".
+  //  הזמנת רכש של אביבי (בן, 4/11) — "ההזמנה", לא "סקיצה". ר' _email-auto-handled.js
+  if (po) {
+    return wrap(names.length === 1 ? 'ההזמנה שלכם התקבלה ואושרה, אנחנו מטפלים בה.'
+                                   : 'ההזמנות שלכם התקבלו ואושרו, אנחנו מטפלים בהן.');
+  }
   if (kind === 'sketches-handled') {
     return wrap(one ? 'סקיצה אחת אושרה, מתחילים לעבוד עליה.'
                     : count + ' אושרו, מתחילים לעבוד עליהן.');

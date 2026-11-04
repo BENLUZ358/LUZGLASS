@@ -98,6 +98,57 @@ const outbox = db => Object.values((db._data.waMeta || {}).emailOutbox || {});
     check('E3 order not marked', db._data.orders[r.orderIds[0]].sketchSeenAt, undefined);
   }
 
+  {
+    //  F — אביבי (בן, 4/11): הזמנת רכש מכרטיס 450 → נוסח "ההזמנה התקבלה ואושרה",
+    //  ותשובה שיוצאת רק אחרי דקה (הריצה הבאה של הסקריפט), ואז לארכיון.
+    const { PAGE } = require('./_po-fixture.js');
+    const ob = require(path.join(ROOT, 'api', '_email-outbox.js'));
+    const JPEG = Buffer.concat([Buffer.from('ffd8ffe000104a464946', 'hex'), Buffer.alloc(40, 3)]);
+    const avivi = (pages, card) => {
+      const db = fakeDb({
+        meta: { orderCounter: 1041 },
+        hashavshevetAccounts: { [card]: { key: card, name: 'יצחק אביבי ייצור', email: 'po@avivi.co.il' } },
+        skuCatalog: { '8CM': { name: '8 מ"מ קליר מלוטש', glass: 'קליר', mm: 8, proc: 'litush' } },
+        waMeta: { emailSenders: { 'po@avivi,co,il': { email: 'po@avivi.co.il', customerId: card, customerName: 'יצחק אביבי ייצור' } } },
+      });
+      return { db, run: async id => {
+        await em.lgEmailPutChunk(db, { messageId: id, idx: 0, chunk: 0, chunks: 1, data: Buffer.from('%PDF-1.7 stub').toString('base64') });
+        return em.lgEmailCommit(db, { messageId: id, threadId: 'T-' + id, from: 'po@avivi.co.il', subject: 'הזמנת רכש', date: NOW,
+          parts: [{ idx: 0, name: 'PO.pdf', mime: 'application/pdf', size: 13, chunks: 1 }] },
+          { by: 'gmail-script', now: NOW, pdfToJpegs: async () => pages.map(t => ({ bytes: JPEG, w: 1, h: 1, text: t })) });
+      } };
+    };
+    process.env.EMAIL_ONLY_TO = 'po@avivi.co.il';
+
+    const a = avivi([PAGE], '450');
+    const r = await a.run('P1');
+    check('F1 Avivi PO → done; not archived at intake (only after the reply)', [r.state, !!r.autoHandled], ['done', false]);
+    check('F1b the repeat answer does not archive either', !!(await a.run('P1')).autoHandled, false);
+    check('F2 the order is marked handled', a.db._data.orders[r.orderIds[0]].sketchSeenAt, NOW);
+    const q = outbox(a.db)[0] || {};
+    check('F3 queued with the PO wording and a one-minute wait', [q.variant, q.notBefore], ['po', NOW + 60000]);
+    check('F4 not sent in the same run (before the minute)', (await ob.lgEmailClaim(a.db, 5, NOW + 5000)).length, 0);
+    const later = await ob.lgEmailClaim(a.db, 5, NOW + 61000);
+    check('F5 sent in the next run', later.length, 1);
+    check('F6 the text Ben approved', (later[0] || {}).text,
+      'שלום יצחק אביבי ייצור,\n\nההזמנה שלכם התקבלה ואושרה, אנחנו מטפלים בה.\n• PO26H016504\n\nלוז זגגות ומראות האחים בע"מ');
+    check('F7 the mail goes to the archive after the reply', (later[0] || {}).doneMails, ['P1']);
+
+    //  שני עמודים של אותה הזמנה → מספר ההזמנה פעם אחת
+    const b = avivi([PAGE, PAGE], '450');
+    await b.run('P2');
+    const t2 = ((await ob.lgEmailClaim(b.db, 5, NOW + 61000))[0] || {}).text || '';
+    check('F8 two pages of one PO → the number once', (t2.match(/PO26H016504/g) || []).length, 1);
+
+    //  אותה הזמנת רכש מכרטיס אחר → "הסקיצות טופלו" הרגיל, מיד
+    const c = avivi([PAGE], '07');
+    await c.run('P3');
+    const qc = outbox(c.db)[0] || {};
+    check('F9 another card → usual wording, no wait', [qc.variant, qc.notBefore], [null, null]);
+    check('F10 …and it goes out in the same run', (await ob.lgEmailClaim(c.db, 5, NOW)).map(x => /סקיצה אחת אושרה/.test(x.text)), [true]);
+    process.env.EMAIL_ONLY_TO = 'dana@client.co.il';
+  }
+
   if (failed) { console.error('\n' + failed + ' failed'); process.exit(1); }
   console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

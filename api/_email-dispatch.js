@@ -13,7 +13,7 @@ const { orderSketchName } = require('./_wa-recipient');
 //  שונים"), ואז הודעה אחת לכל שרשרת. נעילת הסביבה נבדקת לכל כתובת.
 //  ⚠️ לא נוגע ב-waOutbox ולא בספק הוואטסאפ: התור הוא waMeta/emailOutbox,
 //  והסקריפט בג'ימייל שולח משם (api/_email-outbox.js).
-async function lgEmailDispatch(db, { kind, dryRun, force, live, targets, queuedBy }) {
+async function lgEmailDispatch(db, { kind, dryRun, force, live, targets, queuedBy, variant, delayMs, now }) {
   const cards = [...new Set(targets.map(t => String(t.accountKey || '')))];
   if (cards.length !== 1 || !cards[0]) {
     return { status: 409, body: {
@@ -56,7 +56,7 @@ async function lgEmailDispatch(db, { kind, dryRun, force, live, targets, queuedB
     else if (dryRun)   { msg.reason = 'dryRun'; }
     else {
       const q = await lgEmailEnqueue(db, { kind, thread, messageId, email: emails[0], clientName, orderNums, sketchNames,
-                                           orderIds: ts.map(t => t.id), queuedBy, accountKey: cards[0] });
+                                           orderIds: ts.map(t => t.id), queuedBy, accountKey: cards[0], variant, delayMs, now });
       msg.queued = q.queued; msg.reason = q.queued ? null : q.reason; msg.outboxKey = q.key;
     }
     messages.push(msg);

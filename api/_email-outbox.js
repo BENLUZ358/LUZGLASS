@@ -60,7 +60,7 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  שלנו, תשובה ידנית של בן, או צד שלישי. הסקריפט גם בודק שהמייל הזה (Reply-To,
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
-                                    queuedBy, accountKey, invoiceKey, docNumber, fileCount, deliveryTomorrow, now }) {
+                                    queuedBy, accountKey, invoiceKey, docNumber, fileCount, deliveryTomorrow, variant, delayMs, now }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber : kind, thread, orderIds);
   const at  = now || Date.now();
@@ -78,6 +78,9 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       deliveryTomorrow: deliveryTomorrow === true,
       //  כמה קבצים בפועל (מ-2/11 בדרך כלל אחד — חשבונית + סקיצות). חסר (רשומה ישנה) → החשבון הישן
       fileCount: fileCount > 0 ? Number(fileCount) : null,
+      //  נוסח אחר לאותו סוג (הזמנת רכש של אביבי, בן 4/11), ו"לא לפני" — דקה עד שהתשובה יוצאת
+      variant: variant ? String(variant) : null,
+      notBefore: delayMs > 0 ? at + Number(delayMs) : null,
       state: 'pending', attempts: 0,
       createdAt: at, updatedAt: at, queuedBy: String(queuedBy || ''),
       leaseToken: null, leaseUntil: null, sentAt: null, lastError: null,
@@ -108,6 +111,7 @@ async function lgEmailClaim(db, limit, now) {
   for (const { key, v } of rows) {
     if (out.length >= max) break;
     if (v.leaseUntil && v.leaseUntil > at) continue;                    // באוויר אצל ריצה אחרת
+    if (v.notBefore && v.notBefore > at) continue;                      // עוד לא הגיע הזמן — ריצה הבאה
     //  ⚠️ הגיל לפני הנעילה והקישור — אחרת הודעה חסומה הייתה נשארת בתור לנצח
     if ((at - (v.createdAt || at)) > MAX_AGE_MS) { await _close(db, key, at, 'expired', 'פג תוקף — לא נשלח'); continue; }
     //  בלי מזהה המייל של הלקוח אין על מה לענות בבטחה — לא מחכירים לנצח, סוגרים
@@ -123,6 +127,7 @@ async function lgEmailClaim(db, limit, now) {
       if (cur === null) return null;
       if (cur.state !== 'pending') return;                               // abort
       if (cur.leaseUntil && cur.leaseUntil > at) return;                 // abort — נתפסה בינתיים
+      if (cur.notBefore && cur.notBefore > at) return;                   // abort — עוד לא הגיע הזמן
       if ((at - (cur.createdAt || at)) > MAX_AGE_MS) {
         return { ...cur, state: 'expired', leaseToken: null, leaseUntil: null, updatedAt: at, lastError: 'פג תוקף — לא נשלח' };
       }
@@ -133,7 +138,7 @@ async function lgEmailClaim(db, limit, now) {
     const item = { key, thread: e.thread, messageId: String(e.messageId), email: String(e.email), leaseToken: token,
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
                                   sketchNames: e.sketchNames || [], docNumber: e.docNumber,
-                                  deliveryTomorrow: e.deliveryTomorrow === true }),
+                                  deliveryTomorrow: e.deliveryTomorrow === true, variant: e.variant || '' }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
                files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 };
     //  "טופל" ידני (בן, 4/11): המיילים שכל הסקיצות שלהם טופלו — הסקריפט מוציא את

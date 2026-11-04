@@ -281,6 +281,7 @@ async function lgEmailInboundProcess(db, key, opts) {
       // נכנסת עם skuMissing — התור חוסם שליחה לחשבשבת עד שבן בוחר מק"ט.
       if (poGroups[i]) {
         order.sketchName = f.po.ref || '';
+        order.poSupplier = f.po.supplier;   // אביבי → נוסח "ההזמנה התקבלה ואושרה" (_email-auto-handled.js)
         order.items = lgWaTextItems({ groups: poGroups[i] }, cat);
         if (f.po.warnings.length) order.notes = f.po.warnings.join('\n');
       } else if (f.po) {
@@ -335,7 +336,12 @@ async function lgEmailInboundProcess(db, key, opts) {
     const needsBen = skipped.length || upd[base + 'oversize'] ||
       orderIds.some(id => { const o = upd['orders/' + id]; return o.waDuplicateOf || (o.items || []).some(it => it && it.skuMissing); });
     if (who.via === 'link' && !needsBen) {
-      try { autoHandled = (await require('./_email-auto-handled').lgEmailAutoHandle(db, orderIds, now)).queued; }
+      try {
+        const a = await require('./_email-auto-handled').lgEmailAutoHandle(db, orderIds, now);
+        //  ⚠️ אביבי (בן, 4/11): "לארכיון אחרי שנשלח אליה מייל" — התשובה יוצאת אחרי דקה,
+        //  ולכן לא אומרים לסקריפט autoHandled (= ארכיון מיד). הארכיון בא עם התשובה (doneMails).
+        autoHandled = a.queued && !a.later;
+      }
       catch (e) { console.warn('email-inbound: auto-handle failed', e && e.name); }
       //  נשמר על הרשומה — הסקריפט ששואל שוב על אותו מייל עדיין יוציא אותו מהדואר הנכנס
       if (autoHandled) await db.ref(base + 'autoHandled').set(true).catch(() => {});
