@@ -224,12 +224,23 @@ function _waInPhoneText(p) {
   if (d.length === 9 && d[0] === '0') return d.slice(0, 2) + '-' + d.slice(2);   // קווי: 03-7436564
   return _waInPhone(d);
 }
-function lgWaInSenderRows(seen, linked, showAll) {
-  const S = seen || {}, L = linked || {};
+//  users (בן, 4/11): טלפון הכניסה של לקוח עם משתמש נחשב מקושר — כמו בשרת
+//  (lgWaSenderLink): רק נייד, רק role client עם כרטיס. קישור מפורש גובר.
+function _waInLoginLinks(users, L) {
+  const out = {};
+  for (const [k, u] of Object.entries(users || {})) {
+    if (L[k] && L[k].customerId) continue;
+    if (!/^05\d{8}$/.test(k) || !u || u.role !== 'client' || !u.customerId) continue;
+    out[k] = { customerId: String(u.customerId), customerName: String((u.businessName || '').trim() || u.name || ''), auto: true };
+  }
+  return out;
+}
+function lgWaInSenderRows(seen, linked, showAll, users) {
+  const S = seen || {}, L = Object.assign({}, _waInLoginLinks(users, linked || {}), linked || {});
   const keys = Array.from(new Set(Object.keys(S).concat(Object.keys(L))));
   return keys.map(k => {
     const s = S[k] || {}, l = L[k] || null;
-    return { key: k, phoneText: _waInPhoneText(k), linked: !!(l && l.customerId),
+    return { key: k, phoneText: _waInPhoneText(k), linked: !!(l && l.customerId), auto: !!(l && l.auto),
              customerId: l ? String(l.customerId || '') : '',
              customerName: l ? String(l.customerName || l.customerId || '') : '',
              count: s.count || 0, lastAt: s.lastAt || (l && l.linkedAt) || 0, ignored: !l && !!s.ignored, manual: !!s.manual };
@@ -237,8 +248,8 @@ function lgWaInSenderRows(seen, linked, showAll) {
     .filter(r => showAll || !r.ignored)
     .sort((a, b) => (a.linked - b.linked) || (a.ignored - b.ignored) || (b.lastAt - a.lastAt));
 }
-function lgWaInSendersAttention(seen, linked) {
-  return lgWaInSenderRows(seen, linked, false).filter(r => !r.linked).length;
+function lgWaInSendersAttention(seen, linked, users) {
+  return lgWaInSenderRows(seen, linked, false, users).filter(r => !r.linked).length;
 }
 // ─── שתי צורות לכל שולח (בן, 27/10: "שיהיה מסודר") ─────────────────────
 //  מחכה לקישור — כרטיס עם "קשר ללקוח" (פותח את בורר הלקוח על כל המסך).
@@ -286,6 +297,10 @@ function lgWaInGroupHtml(g, textOn) {
 
 function lgWaInSenderHtml(r, textOn) {
   const attr = `data-skey="${_waInEsc(r.key)}"`;
+  if (r.auto) return `<div class="wain-line" ${attr}>
+        <span class="wain-ic" aria-hidden="true">📱</span>
+        <span class="wain-who"><b><bdi dir="ltr">${_waInEsc(r.phoneText)}</bdi></b><small>${_waInTo(r.customerName, 'טלפון כניסה', textOn)}</small></span>
+      </div>`;
   if (r.linked) return _waInLine(attr, '📱', r.phoneText, _waInTo(r.customerName, 'מספר', textOn), 'data-sact="unlink"', 'נתק');
   if (r.ignored) return _waInLine(attr, '📱', r.phoneText, 'מוסתר — הודעות ממנו לא נקלטות', 'data-sact="unignore"', 'בטל התעלמות');
   return _waInCard(attr, '📱', r.phoneText, r.lastAt,
@@ -389,7 +404,7 @@ if (typeof document !== 'undefined') (function () {
   //  "קשר ללקוח" → כל תמונה בה נכנסת לתור על הלקוח, והעדכון יוצא לקבוצה.
   let groupsSeen = {}, groupsLinked = {};
   //  מספרים פרטיים וכתובות מייל (26/10) — אותו דבר, לשולח בודד
-  let sendersSeen = {}, sendersLinked = {};
+  let sendersSeen = {}, sendersLinked = {}, clientUsers = {};
   let emailsSeen = {}, emailsLinked = {};
   //  לקוחות שמזמינים בטקסט חופשי (26/10)
   let textCustomers = {};
@@ -490,7 +505,7 @@ if (typeof document !== 'undefined') (function () {
   function attention() {
     const wa = lgWaInCounts(byCh.whatsapp).attention
       + lgWaInGroupRows(groupsSeen, groupsLinked).filter(g => !g.linked).length   // קבוצה שלא קושרה
-      + lgWaInSendersAttention(sendersSeen, sendersLinked);
+      + lgWaInSendersAttention(sendersSeen, sendersLinked, clientUsers);
     const em = lgWaInCounts(byCh.email).attention + lgWaInEmailsAttention(emailsSeen, emailsLinked);
     return { wa, em };
   }
@@ -524,7 +539,7 @@ if (typeof document !== 'undefined') (function () {
 
   function waTab() {
     const groups = lgWaInGroupRows(groupsSeen, groupsLinked);
-    const senders = lgWaInSenderRows(sendersSeen, sendersLinked, true);
+    const senders = lgWaInSenderRows(sendersSeen, sendersLinked, true, clientUsers);
     const textOn = id => !!(id && textCustomers[id]);
     const waiting = groups.filter(g => !g.linked).map(g => [g.lastAt, lgWaInGroupHtml(g)])
       .concat(senders.filter(s => !s.linked && !s.ignored).map(s => [s.lastAt, lgWaInSenderHtml(s)]))
@@ -709,6 +724,8 @@ if (typeof document !== 'undefined') (function () {
         e => console.warn('sendersSeen listen:', e && e.message));
       _lgDb.ref('waSenders').on('value', sn => { sendersLinked = sn.val() || {}; render(); },
         e => console.warn('waSenders listen:', e && e.message));
+      _lgDb.ref('users').on('value', sn => { clientUsers = sn.val() || {}; render(); },
+        e => console.warn('users listen:', e && e.message));
       _lgDb.ref('waMeta/emailSendersSeen').on('value', sn => { emailsSeen = sn.val() || {}; render(); },
         e => console.warn('emailSendersSeen listen:', e && e.message));
       _lgDb.ref('waMeta/emailSenders').on('value', sn => { emailsLinked = sn.val() || {}; render(); },
