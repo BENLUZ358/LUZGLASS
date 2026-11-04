@@ -114,9 +114,16 @@ async function lgWaSenderLink(db, phone) {
   const key = lgWaSenderKey(phone);
   if (!key) return null;
   const link = (await db.ref('waSenders/' + key).once('value')).val();
-  if (!link || !link.customerId) return null;
-  return { customerId: String(link.customerId), customerName: String(link.customerName || ''), phone: key };
+  if (link && link.customerId) return { customerId: String(link.customerId), customerName: String(link.customerName || ''), phone: key };
+  //  בן, 4/11: טלפון הכניסה לפורטל של לקוח עם משתמש = מקושר, בלי קישור ידני
+  //  ובלי רשימה ב-Vercel. רק נייד (קווי לא מקבל וואטסאפ), רק לקוח עם כרטיס.
+  //  קישור מפורש למעלה גובר תמיד.
+  if (!LG_MOBILE_RE.test(key)) return null;
+  const u = (await db.ref('users/' + key).once('value')).val();
+  if (!u || u.role !== 'client' || !u.customerId) return null;
+  return { customerId: String(u.customerId), customerName: String((u.businessName || '').trim() || u.name || ''), phone: key, via: 'login' };
 }
+const LG_MOBILE_RE = /^05\d{8}$/;
 
 async function lgClientFromWaSender(db, chatId) {
   const phone = waChatToLocal(chatId);

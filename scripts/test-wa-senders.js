@@ -227,6 +227,31 @@ check('1a empty stays empty', rcp.lgWaSenderKey(''), '');
         (await withEnv(live, () => env.lgGreenApiGate({ accountKey: '3150', phone: AGAN, linked: true }))).allowed, true);
 }
 
+// ═══ 7. טלפון הכניסה לפורטל = מקושר (בן, 4/11: "שיתנהג באותה הצורה") ═══
+{
+  const AM = '0548000775', AM_CHAT = '972548000775@c.us';
+  const users = { [AM]: { name: 'א.מ.מראות', customerId: '509', role: 'client' } };
+  const acc = { '509': { key: '509', name: 'א.מ.מראות', phone: AM } };
+  const mk = extra => seed({ users, ...extra, hashavshevetAccounts: { ...acc, '3150': { key: '3150', name: 'אגן ברזל', phone: '7436564' } } });
+  const l = await rcp.lgWaSenderLink(mk(), AM_CHAT);
+  check('7a a client login phone counts as linked, marked as such', l && [l.customerId, l.customerName, l.phone, l.via], ['509', 'א.מ.מראות', AM, 'login']);
+  const db = mk();
+  const r = await send(db, privHook(AM_CHAT, 'L1'));
+  const o = (db._data.orders || {}).wa_L1_1 || {};
+  check('7b its message is taken in without any list', [r.body.recorded, o.customerId, o.waChat], [true, '509', AM]);
+  check('7b and nothing piles up in "waiting for a link"', ((db._data.waMeta || {}).sendersSeen || {})[AM], undefined);
+  const rr = await rcp.resolveRecipient(db, { customerId: '509', waChat: AM, source: 'whatsapp', waMessageId: 'L1' }, 'ready');
+  check('7c and replies go back to it as a linked chat', [rr.phone, rr.linked, rr.accountKey], [AM, true, '509']);
+  const land = await rcp.lgWaSenderLink(seed({ users: { [AGAN]: { name: 'אגן', customerId: '3150', role: 'client' } } }), AGAN_CHAT);
+  check('7d a landline login is not a WhatsApp link', land, null);
+  const staff = await rcp.lgWaSenderLink(seed({ users: { '0521111111': { name: 'שאול', role: 'admin', customerId: '509' } } }), '0521111111');
+  check('7e a staff login is not a customer link', staff, null);
+  const noCard = await rcp.lgWaSenderLink(seed({ users: { '0522222222': { name: 'x', role: 'client' } } }), '0522222222');
+  check('7f a client with no card is not linked', noCard, null);
+  const both = await rcp.lgWaSenderLink(mk({ waSenders: { [AM]: { customerId: '3150', customerName: 'אגן ברזל' } } }), AM);
+  check('7g a link made in the intake screen still wins', [both.customerId, both.via], ['3150', undefined]);
+}
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

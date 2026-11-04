@@ -456,6 +456,19 @@ const act = (db, body, over = {}) => drain.handleAdmin(body, { db, by: '05200000
     const hLinked = ctx.lgWaInSenderHtml(rows[1]);
     check('N4 a linked number shows its customer and unlink only',
           [/כתר מקלחונים/.test(hLinked), /data-sact="unlink"/.test(hLinked), /data-sact="link"/.test(hLinked)], [true, true, false]);
+
+    // בן, 4/11: טלפון הכניסה של לקוח עם משתמש מוצג כמקושר (בלי קישור ידני)
+    const users = { '0548000775': { name: 'א.מ.מראות', customerId: '509', role: 'client' },
+                    '037436564': { name: 'אגן', customerId: '3150', role: 'client' },
+                    '0521111111': { name: 'שאול', role: 'admin' },
+                    '0533334444': { name: 'אחר', customerId: '9', role: 'client' } };
+    const wu = ctx.lgWaInSenderRows(seen, linked, true, users);
+    const am = wu.find(r => r.key === '0548000775');
+    check('N5 a client login phone is listed as linked, marked "login phone"', am && [am.linked, am.auto, am.customerName, am.customerId], [true, true, 'א.מ.מראות', '509']);
+    check('N5 landline / staff logins are not listed; an explicit link keeps its customer',
+          [!!wu.find(r => r.key === '0521111111'), wu.find(r => r.key === '037436564').linked, wu.find(r => r.key === '0533334444').customerName], [false, false, 'כתר מקלחונים']);
+    const hAuto = ctx.lgWaInSenderHtml(am);
+    check('N5 its line says login phone and has no unlink', [/טלפון כניסה/.test(hAuto), /data-sact="unlink"/.test(hAuto), /א.מ.מראות/.test(hAuto)], [true, false, true]);
     const hIgn = ctx.lgWaInSenderHtml(all.find(r => r.ignored));
     check('N4 an ignored number can be un-ignored', [/מוסתר/.test(hIgn), /data-sact="unignore"/.test(hIgn)], [true, true]);
     check('N5 names are escaped', /<script>/.test(ctx.lgWaInSenderHtml({ ...rows[1], customerName: '<script>' })), false);
