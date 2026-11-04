@@ -111,5 +111,17 @@ check('without a unit 30 is still 300', parse('30').mm, 300);
 check('a unit does not lift the 5000 limit', parse('6000 ממ').ok, false);
 check('a written unit survives the round trip', parse(toInput(parse('30 ממ').mm)).mm, 30);
 
+/* ── כמו בחשבשבת (בן, 4/11): ".55" = 55 ס"מ, ".05" = 5 ס"מ, "2.5" = 2.5 מטר ──
+   ושלם עד 5 הוא מטרים: התור מציג זכוכית של 2 מטר כ-"2", והקלדה של "2"
+   הייתה נקראת 2 ס"מ. */
+check('.55 is 55 cm',          parse('.55').mm,  550);
+check('.05 is 5 cm',           parse('.05').mm,  50);
+check('2.5 is 2.5 m',          parse('2.5').mm,  2500);
+check('2 is 2 m',              parse('2').mm,    2000);
+check('1 is 1 m',              parse('1').mm,    1000);
+check('5 is 5 m',              parse('5').mm,    5000);
+check('6 is still 6 cm',       parse('6').mm,    60);
+check('a whole meter shown in the queue reads back the same', parse(String(2000 / 1000)).mm, 2000);
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll dimension checks passed.');
