@@ -481,6 +481,22 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     check('E6 other ops still need a message id', part.status, 400);
   }
 
+  // ═══ F. "טופל" ידני → ארכיון (בן, 4/11) ═══════════════════════════
+  {
+    const mk = (orders, inbound) => fakeDb({ orders, emailInbound: inbound });
+    const db1 = mk({ A1: { sketchSeenAt: 1, emailMessageId: 'mA' }, A2: { sketchSeenAt: 2, emailMessageId: 'mA' },
+                     B1: { emailMessageId: 'mB' }, C1: { sketchSeenAt: 3, emailMessageId: 'mC' } },
+                   { mA: { orderIds: ['A1', 'A2'] }, mB: { orderIds: ['B1'] }, mC: { orderIds: ['C1', 'C2'] } });
+    check('F1 a mail whose orders are all handled is done', await ob.lgEmailDoneMails(db1, ['A1']), ['mA']);
+    check('F2 a mail with an unhandled order is not', await ob.lgEmailDoneMails(db1, ['B1']), []);
+    check('F3 a deleted order does not hold the mail', await ob.lgEmailDoneMails(db1, ['C1']), ['mC']);
+    check('F4 several mails, each judged alone', await ob.lgEmailDoneMails(db1, ['A1', 'B1', 'C1']), ['mA', 'mC']);
+    const db2 = mk({ X1: { sketchSeenAt: 1, emailMessageId: 'mX' } }, {});
+    check('F5 no intake record -> not done', await ob.lgEmailDoneMails(db2, ['X1']), []);
+    const db3 = mk({ A1: { sketchSeenAt: 1, emailMessageId: 'mA' } }, { mA: { orderIds: { 0: 'A1' } } });
+    check('F6 order list stored as an object still works', await ob.lgEmailDoneMails(db3, ['A1']), ['mA']);
+  }
+
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
