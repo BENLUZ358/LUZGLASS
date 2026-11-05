@@ -46,6 +46,7 @@ const model = out => {
   check('A5 a caption with a measurement stays an order, even with a price', cap.lgWaCaptionNotOrder('מראה 100x50 ב 114 שח'), false);
   check('A6 "100 על 50" counts as a measurement', cap.lgWaCaptionNotOrder('מחיר 100 על 50'), false);
   check('A7 empty caption is an order', cap.lgWaCaptionNotOrder(''), false);
+  check('A9 a price question with a sketch stays an order (agents in shadow would drop it)', cap.lgWaCaptionNotOrder('מה המחיר?'), false);
   check('A8 "דירה 12" is a name, not money', cap.lgWaCaptionNotOrder('דירה 12'), false);
 
   /* ── המרכזן: הכיתוב לא נבלע כשם סקיצה ── */
