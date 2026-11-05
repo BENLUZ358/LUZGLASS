@@ -2,7 +2,7 @@
 // לעולם לא זורק: כל כשל מחזיר {intent:'unclear', ref:'', usage}.
 // לא נרשם לוג של טקסט ההודעה או המפתח.
 
-const AGENT_INTENTS = ['order', 'status', 'cancel', 'change', 'document', 'quote', 'chitchat', 'thanks', 'unclear'];
+const AGENT_INTENTS = ['order', 'status', 'cancel', 'change', 'document', 'quote', 'price', 'chitchat', 'thanks', 'unclear'];
 
 const SCHEMA = {
   type: 'object',
@@ -23,6 +23,7 @@ const INSTRUCTIONS = [
   'change — שינוי מידה או סקיצה בהזמנה קיימת.',
   'document — בקשה לחשבונית, חשבונית ריכוז, או דיווח על סקיצה חסרה.',
   'quote — שאלת מחיר, למשל "כמה עולה".',
+  'price — טענה שהמחיר שחויב לא נכון או בקשת זיכוי, למשל "אני קונה את המראה ב-114, תזכו אותי".',
   'chitchat — ברכות ושיחה כללית.',
   'thanks — תודה, אחלה, אישור סגירה.',
   'unclear — כל מקרה שאינו ברור.',
@@ -37,6 +38,8 @@ const UNCLEAR = (usage) => ({ intent: 'unclear', ref: '', usage: usage || null }
 //  מחזיר את השם, או '' כשזה לא המקרה. הקליטה כבר שמה את הכיתוב כשם הסקיצה.
 function lgAgentImageName(text, hasImage) {
   const t = typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+  //  כיתוב על מחיר/זיכוי ("ב-114 שח, תזכו") — לא שם סקיצה; המודל מסווג (בן, 5/11)
+  if (hasImage && require('./_wa-caption').lgWaCaptionNotOrder(t)) return '';
   if (!hasImage || !t || t.length > 40 || /[?？]/.test(t) || t.split(' ').length > 4) return '';
   return t;
 }

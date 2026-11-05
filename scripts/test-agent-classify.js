@@ -21,7 +21,7 @@ const mk = (body, ok = true) => {
 const base = { text: 'מוכן?', hasImage: false, model: 'm1', key: 'k1' };
 
 (async () => {
-  check('intents', AGENT_INTENTS, ['order', 'status', 'cancel', 'change', 'document', 'quote', 'chitchat', 'thanks', 'unclear']);
+  check('intents', AGENT_INTENTS, ['order', 'status', 'cancel', 'change', 'document', 'quote', 'price', 'chitchat', 'thanks', 'unclear']);
 
   // בקשה
   const a = mk(okBody('{"intent":"status","ref":"כהן"}'));
