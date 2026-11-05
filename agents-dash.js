@@ -27,9 +27,9 @@ function _adWhen(ms) {
 //  מה המרכזן החליט על כל הודעה נכנסת ומה עוקב היה עונה. מצב צל: שום דבר
 //  לא נשלח ללקוח. הקריאה מ-waMeta/agentShadow; הסימון ✓/✗ עובר דרך
 //  /api/wa-inbound-drain (agent-verdict) — הפאנל לא כותב ל-Firebase.
-const LG_AG_INTENT = { status: 'איפה ההזמנה', cancel: 'ביטול', change: 'שינוי', document: 'מסמך', quote: 'הצעת מחיר',
+const LG_AG_INTENT = { status: 'איפה ההזמנה', cancel: 'ביטול', change: 'שינוי', document: 'מסמך', quote: 'הצעת מחיר', price: 'טענת מחיר',
   order: 'הזמנה', chitchat: 'שיחה', thanks: 'תודה', unclear: 'לא ברור' };
-const LG_AG_ROUTE = { okev: 'עוקב', kolet: 'קולט', archive: 'ארכיון', quote: 'מחירון', menu: 'תפריט', none: 'בלי תשובה',
+const LG_AG_ROUTE = { okev: 'עוקב', kolet: 'קולט', archive: 'ארכיון', quote: 'מחירון', price: 'מחירון — טענת מחיר', menu: 'תפריט', none: 'בלי תשובה',
   ignore: 'מתעלם', shaul: 'לשאול', 'silent-human': 'שותק (ענו ידנית)', 'kolet-deleted': 'קולט — סקיצה נמחקה' };
 function lgAgIntentLabel(i) { return LG_AG_INTENT[i] || String(i == null ? '' : i); }
 function lgAgRouteLabel(r) { return LG_AG_ROUTE[r] || String(r == null ? '' : r); }
@@ -52,7 +52,7 @@ function lgAgPilotListHtml(pilot, nameOf) {
 //  'no-action' = לסוכן אין מה לעשות; ריק — שורת "מה קורה" כבר אומרת את זה
 const LG_AG_WHY = { 'not-pilot': 'לא נשלח — הלקוח לא בפיילוט', 'not-linked': 'לא מקושר בקליטות', off: 'מתג כבוי', 'switches-off': 'מתג כבוי', 'no-staff': 'אין מספר של שאול', error: 'שגיאה', 'no-action': '' };
 //  "מה קורה" בשורת היומן — משפט במקום שם המסלול (בן, 31/10)
-const LG_AG_OUTCOME = { okev: 'עוקב עונה ללקוח', quote: 'מחירון מטפל בבקשת המחיר', archive: 'ארכיון שולח את המסמך',
+const LG_AG_OUTCOME = { okev: 'עוקב עונה ללקוח', quote: 'מחירון מטפל בבקשת המחיר', price: 'מחירון בודק את המחיר ומעביר לשאול', archive: 'ארכיון שולח את המסמך',
   kolet: 'נכנסה לתור הסקיצות כרגיל — אין צורך לענות', 'kolet-deleted': 'קולט בודק אם לבטל את הסקיצה',
   menu: 'שולח ללקוח את התפריט', none: 'לא צריך לענות', ignore: 'לא צריך לענות',
   shaul: 'עובר לשאול', 'silent-human': 'לא עונה — מישהו מכם כבר ענה בשעתיים האחרונות' };
@@ -143,7 +143,7 @@ function lgAgRowHtml(key, r, intake, c) {
 //  ביומן מוצגות רק הודעות שיש מה לבדוק בהן — הסוכן היה עונה ללקוח או מעביר
 //  לשאול — וכל אחת כשאלה אחת "זה נכון?". השאר (תמונה שנכנסת לתור כרגיל, מספר
 //  לא מקושר, מישהו כבר ענה, אין מה לענות) — שורה קצרה במקטע מקופל.
-const AD_REVIEW_ROUTES = ['okev', 'quote', 'archive', 'menu', 'shaul', 'kolet-deleted'];
+const AD_REVIEW_ROUTES = ['okev', 'quote', 'price', 'archive', 'menu', 'shaul', 'kolet-deleted'];
 function _adWould(r) {
   return String(r.wouldReply || ((Array.isArray(r.wouldAct) ? r.wouldAct : []).filter(a => a && a.text && a.type !== 'staff' && a.type !== 'quote-ask').map(a => a.text)[0]) || '');
 }
@@ -315,7 +315,7 @@ const LG_AD_AGENTS = [
   { id: 'markazan', name: 'מרכזן', does: 'קורא כל הודעה ומעביר לסוכן הנכון', routes: [] },
   { id: 'okev', name: 'עוקב', does: 'עונה איפה ההזמנה, מבטל ומעביר שינויים לשאול', routes: ['okev'] },
   { id: 'archive', name: 'ארכיון', does: 'שולח העתק חשבונית או סקיצה', routes: ['archive'] },
-  { id: 'quote', name: 'מחירון', does: 'מחשב הצעת מחיר, סקיצה עוברת לשאול', routes: ['quote'] },
+  { id: 'quote', name: 'מחירון', does: 'מחשב הצעת מחיר, סקיצה עוברת לשאול', routes: ['quote', 'price'] },
   { id: 'kolet', name: 'קולט', does: 'מטפל בסקיצה שהלקוח מחק', routes: ['kolet', 'kolet-deleted'] },
   { id: 'menahel', name: 'מנהל', does: 'סיכום יומי ב-15:00 (רק כשהסוכנים עונים)', routes: [] },
 ];

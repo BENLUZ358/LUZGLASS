@@ -28,6 +28,7 @@ const { sniffImage, stripJpegMeta } = require('./_wa-image');
 const { waChatToLocal, lgClientFromWaSender, lgClientFromWaGroup } = require('./_wa-recipient');
 const { lgWaTextIsOrder, lgWaTextParse, lgWaTextItems, lgWaTextSvg } = require('./_wa-text-order');
 const { lgWaFreeTextIsOrder, lgWaFreeTextParse, lgWaFreeTextResolve } = require('./_wa-free-text');
+const { lgWaCaptionNotOrder, WA_NOT_ORDER_NOTE } = require('./_wa-caption');
 const { lgInboxStillMine, lgInboxRefNum, lgInboxAudit, lgInboxDropNulls } = require('./_inbox-common');
 
 const INBOX = 'waInbound';
@@ -221,6 +222,14 @@ async function lgWaInboundProcess(db, key, opts) {
 
   try {
     if (entry.kind !== 'image' && entry.kind !== 'text') throw new Permanent(entry.kind === 'pdf' ? PDF_REASON : 'סוג קובץ לא נתמך');
+
+    //  בן, 5/11: תמונה עם כיתוב על מחיר/זיכוי ("אני קונה ב-114, תזכו אותי") — לא הזמנה.
+    //  נסגרת בלי הזמנה (נשארת בקליטות כ'טופל'); הסוכנים מטפלים בה כטענת מחיר.
+    if (entry.kind === 'image' && lgWaCaptionNotOrder(entry.caption)) {
+      const mine = await _stillMine(db, key, entry.claimToken, now, { state: 'closed', closedFrom: 'received', closedBy: 'auto',
+        closedAt: now, closedNote: WA_NOT_ORDER_NOTE, claimedAt: null, claimToken: null, downloadUrl: null });
+      return mine ? { ok: true, reason: 'not-order', orderIds: [] } : { ok: false, reason: 'lost-claim', orderIds: [] };
+    }
 
     // טקסט: אין מה להוריד — הפריטים מההודעה, והסקיצה היא תמונה של ההודעה (נבנית למטה)
     const isText = entry.kind === 'text';

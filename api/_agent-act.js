@@ -35,6 +35,7 @@ const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT,
 const { lgArchiveFind, lgArchiveActions, ARCHIVE_OK_TEXT } = require('./_agent-archive');
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
         lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
+const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -172,7 +173,7 @@ function lgAgentDeleteOnly(d, r, orders) {
 }
 
 // ── ניתוב רגיל לפי route של המרכזן. keep = ה-conv הנוכחי (נשאר אם לא הוחלף) ──
-function _route(r, orders, now, keep, archive, quote) {
+function _route(r, orders, now, keep, archive, quote, price) {
   switch (r.route) {
     case 'okev': {
       const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
@@ -204,6 +205,14 @@ function _route(r, orders, now, keep, archive, quote) {
       const pr = quote && quote.ok ? quote.priced : null;
       if (pr && pr.lines.length && !pr.missing.length) return { actions: [_reply(lgQuoteText(pr))], conv: keep };
       return { actions: _handoff(r), conv: keep };
+    }
+    // טענת מחיר / זיכוי (בן, 5/11): תמיד לשאול, עם הבדיקה מול המחירון של הלקוח
+    //  (p.price מהשכבה הלא-טהורה; אין — 'לא זוהה'). ללקוח: "קיבלנו, בודקים".
+    case 'price': {
+      if (!r.linked) return { actions: [], conv: keep };
+      const check = price && price.check ? price.check : { verdict: 'unknown', price: 0, lines: [] };
+      return { actions: [_staff(lgPriceStaffText(check, _who(r), _body(r))), ...(r.hasImage ? [_forward(r)] : []),
+                         _reply(PRICE_HOLD_TEXT)], conv: keep };
     }
     case 'shaul': return { actions: _handoff(r), conv: keep };
     // קולט — סקיצה שנמחקה. conv חדש (שאלת "לבטל?") מחליף; אחרת נשאר
@@ -253,7 +262,7 @@ function lgAgentDecide(p) {
     const h = _onConv(r, orders, c, now);
     if (h) return h;
   }
-  return _route(r, orders, now, c, p && p.archive, p && p.quote);
+  return _route(r, orders, now, c, p && p.archive, p && p.quote, p && p.price);
 }
 
 // ─── ביצוע ──────────────────────────────────────────────────────────
@@ -426,13 +435,23 @@ async function _act(db, key, rec, recRef, env, now, o) {
       catch (e) { console.warn('agent-act: quote', e && e.name); quote = { ok: false, priced: null }; }
     }
   }
+  // טענת מחיר: מודל + מחירון (כשל / אין זמן → 'לא זוהה', עדיין לשאול)
+  let price, priceSkipped = false;
+  if (rec.route === 'price' && rec.linked && cid) {
+    if (o.deadline - o.clock() < AGENT_QUOTE_WORST_MS + PER_ITEM_WORST_MS) priceSkipped = true;
+    else {
+      try { price = await lgPriceClaimFor(db, { customerId: cid, text: rec.text, env, fetcher: o.fetchImpl }); }
+      catch (e) { console.warn('agent-act: price', e && e.name); price = null; }
+    }
+  }
   if (rec.route === 'staff' && rec.quotedId) {
     try { staffQuote = await lgQuoteFindWaiting(db, rec.quotedId); }
     catch (e) { console.warn('agent-act: quote-find', e && e.name); staffQuote = null; }
   }
-  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote });
+  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price });
   // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
-  const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null } : {};
+  const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null }
+    : priceSkipped ? { priceSkipped: 'deadline' } : price ? { priceUsage: price.usage || null } : {};
   const staff = lgAgentStaff(env);
   const _pilot = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
 

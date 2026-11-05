@@ -129,6 +129,7 @@ function lgOkevRoute(p) {
     case 'order': return 'kolet';
     case 'document': return 'archive';
     case 'quote': return 'quote';
+    case 'price': return 'price';
     case 'chitchat': return isGroup ? 'ignore' : 'menu';
     case 'thanks': return 'none';
     default: return 'shaul';
