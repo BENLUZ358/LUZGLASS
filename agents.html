@@ -116,7 +116,7 @@ body{background:var(--bg);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261031"></script>
 <script src="lg-icons.js?v=20260807"></script>
-<script src="agents-dash.js?v=20261105"></script>
+<script src="agents-dash.js?v=20261108"></script>
 </head>
 <body>
 <div class="wrap">
@@ -241,19 +241,24 @@ function renderNums() {
 
 // ─── 3. יומן ─────────────────────────────────────────────────────────
 //  רק מה שיש לבדוק — כשאלה "זה נכון?"; השאר במקטע מקופל, בלי כפתורים (בן, 31/10)
-let otherOpen = false;
+let otherOpen = false, markedOpen = false;
 function renderLog() {
   const all = lgAdLogRows(SH, { route: $('fRoute').value, q: $('fQ').value, verdict: $('fVerdict').value }, lgAdPeriodStart('30d', Date.now()));
-  const rs = all.filter(lgAdNeedsReview), other = all.filter(r => !lgAdNeedsReview(r));
+  //  מה שסימנת יוצא מהרשימה ועובר למקטע "כבר סימנת" (בן, 8/11)
+  const { todo: rs, marked, other } = lgAdSplitLog(all, $('fVerdict').value);
   const c = { outbox: OB };
   $('nLog').textContent = rs.length || '';
   $('log').innerHTML = (rs.length
     ? rs.slice(0, shown).map(r => lgAdReviewRowHtml(r.key, r, intake, c)).join('')
       + (rs.length > shown ? `<button type="button" class="sbtn more" data-more>הצג עוד (${E(rs.length - shown)})</button>` : '')
     : '<div class="hint">אין הודעות שצריך לבדוק.</div>')
-    + (other.length ? `<details class="ad-others"${otherOpen ? ' open' : ''}><summary>עוד ${E(other.length)} הודעות שלא צריך לבדוק</summary>
+    + (marked.length ? `<details class="ad-others" data-fold="marked"${markedOpen ? ' open' : ''}><summary>${E(marked.length)} הודעות שכבר סימנת</summary>
+        ${marked.slice(0, 100).map(r => lgAdReviewRowHtml(r.key, r, intake, c)).join('')}</details>` : '')
+    + (other.length ? `<details class="ad-others" data-fold="other"${otherOpen ? ' open' : ''}><summary>עוד ${E(other.length)} הודעות שלא צריך לבדוק</summary>
         ${other.slice(0, 100).map(r => lgAdOtherRowHtml(r)).join('')}</details>` : '');
-  const d = $('log').querySelector('details');
+  const dm = $('log').querySelector('details[data-fold="marked"]');
+  if (dm) dm.addEventListener('toggle', () => { markedOpen = dm.open; });
+  const d = $('log').querySelector('details[data-fold="other"]');
   if (d) d.addEventListener('toggle', () => { otherOpen = d.open; });
 }
 function fillRouteFilter() {
