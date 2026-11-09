@@ -23,6 +23,7 @@
  *   LG_ROOT=<תיקייה עם גרסה ישנה> node scripts/test-workday-partial.js
  *     — מריץ את אותם תרחישים על קוד אחר (הוכחה שהבדיקה תופסת את הבאג).
  */
+class SyncAllPromise extends Promise { static allSettled() { return { then: f => f() }; } }
 const fs   = require('fs');
 const path = require('path');
 const vm   = require('vm');
@@ -60,7 +61,9 @@ function world(orders, opts = {}) {
   const log = { wa: [], toasts: [], renders: 0, advanced: [] };
   const deliveryPhones = new Set(opts.deliveryPhones || []);
   const ctx = {
-    console, Promise, Object, Array, Set, Map, JSON, Number, String, Math, Date,
+    //  "סיום בדיקה" מחכה לכתיבות (Promise.allSettled, בן 9/11) — כאן הן מיידיות,
+    //  ולכן allSettled מריץ את ההמשך מיד, כמו ה-setTimeout המזויף.
+    console, Promise: SyncAllPromise, Object, Array, Set, Map, JSON, Number, String, Math, Date,
     allOrders: orders,
     workDay: { date: '', selected: [], inWork: [], inChisum: [], itemsSel: {} },
     draftItems: [],

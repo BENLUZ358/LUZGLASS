@@ -174,6 +174,33 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     await ob.lgEmailComplete(db, k, items[0].leaseToken, true, NOW);
     assert.deepEqual([db._data.invoicePdf.k1.delivery.state, db._data.invoicePdf.k1.delivery.channel], ['sent', 'email']);
   });
+  await test('invoice email of the card (9/11): a new mail to that address, not a reply', async () => {
+    const db = base({ a: emOrder, b: portal });
+    const acct = String(emOrder.customerId);
+    db._data.waMeta.invoiceEmail = { [acct]: 'ILANATA@bdo.co.il' };
+    const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.deepEqual([r.state, r.channel], ['queued', 'email']);
+    //  נעילת הסביבה חלה גם על כתובת החשבוניות — לא מורשית → לא יוצא
+    assert.equal((await ob.lgEmailClaim(db, 5, NOW)).length, 0);
+    process.env.EMAIL_ONLY_TO = 'client@shop.co.il,ilanata@bdo.co.il';
+    let items;
+    try { items = await ob.lgEmailClaim(db, 5, NOW); } finally { process.env.EMAIL_ONLY_TO = 'client@shop.co.il'; }
+    assert.equal(items[0].sendTo, 'ilanata@bdo.co.il');
+    assert.match(items[0].subject, /חשבונית מס 67346/);
+    assert.equal(items[0].files, 1);
+  });
+  await test('no invoice email for the card → plain reply (no sendTo)', async () => {
+    const db = base({ a: emOrder, b: portal });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const items = await ob.lgEmailClaim(db, 5, NOW);
+    assert.equal(items[0].sendTo, undefined);
+  });
+  await test('Peleg (07) is in the built-in list', async () => {
+    assert.equal(D.LG_INVOICE_EMAIL['07'], 'ILANATA@bdo.co.il');
+    const db = base({ a: emOrder, b: portal });
+    assert.equal(await D.lgInvoiceEmailFor(db, '07'), 'ilanata@bdo.co.il');
+    assert.equal(await D.lgInvoiceEmailFor(db, '../x'), '');
+  });
   await test('mixed channels → WhatsApp', async () => {
     const db = base({ a: emOrder, b: waOrder });
     const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });

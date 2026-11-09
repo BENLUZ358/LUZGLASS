@@ -345,7 +345,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20260601"></script>
+  <script src="firebase-db.js?v=20261109"></script>
   <script src="print-labels.js?v=20261103"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20261103"></script>
@@ -962,6 +962,12 @@ async function load(){
       lgWaDrain().then(_waDrainOutcome).catch(e => {
         console.error('[WhatsApp] ריקון התור בטעינה נכשל:', e);
       });
+      //  "מוכן לאיסוף" שלא יצא כי הדף נסגר באמצע (בן, 9/11) — יוצא עכשיו
+      const _readyLost = typeof lgReadyUnsentIds === 'function' ? lgReadyUnsentIds(allOrders, Date.now()) : [];
+      if(_readyLost.length){
+        console.info('[WhatsApp] הודעות "מוכן" שלא יצאו — שולח עכשיו:', _readyLost);
+        _waSendReadyGrouped(_readyLost);
+      }
     }
     // הסתר loading overlay אחרי הטעינה הראשונה
     const ov = document.getElementById('lgLoading');
@@ -3520,6 +3526,7 @@ function confirmResetChisum(){
   let msgCount      = 0;
   let polishCount   = 0;
   const _waPending  = [];   // הזמנות שעוברות ל-done — הודעה אחת מרוכזת
+  const _advWrites  = [];   // הכתיבות של המעבר ל-done — ההודעה יוצאת רק אחריהן
 
   chisumOrds.forEach(o => {
     const sid = String(o.id);
@@ -3543,9 +3550,9 @@ function confirmResetChisum(){
       const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
       if(nextSt === 'done' || nextSt === 'delivery'){
         // write אטומי: נועל מחיר + stage + מנקה chisumArrivedIdxs
-        lgLockAndAdvance(sid, o, _wdGlobalPrices, _wdClientPrices, nextSt)
+        _advWrites.push(lgLockAndAdvance(sid, o, _wdGlobalPrices, _wdClientPrices, nextSt)
           .then(r => { _lgWarnUnpriced(r); return updateOrder(sid, { chisumArrivedIdxs: null, triplexArrivedIdxs: null, chisumClosedIdxs: null, triplexClosedIdxs: null }).catch(()=>{}); })
-          .catch(e => console.error('confirmReset lockAndAdvance:', e));
+          .catch(e => console.error('confirmReset lockAndAdvance:', e)));
       } else {
         updateOrder(sid, { stage: nextSt, status: lgStageToStatus(nextSt), chisumArrivedIdxs: null, triplexArrivedIdxs: null, chisumClosedIdxs: null, triplexClosedIdxs: null })
           .catch(e => console.error('confirmReset done:', e));
@@ -3565,9 +3572,10 @@ function confirmResetChisum(){
     }
   });
 
-  // אחרי שהשלבים נכתבו — שליחה אחת מרוכזת מהשרת. השהיה קצרה כדי שהכתיבות
-  // יספיקו להיקלט, אחרת השרת קורא הזמנה שעדיין לא סומנה done.
-  if(_waPending.length) setTimeout(() => _waSendReadyGrouped(_waPending), 1200);
+  // אחרי שהשלבים נכתבו — שליחה אחת מרוכזת מהשרת. מחכים לכתיבות עצמן (ולא
+  // להשהיה קבועה), אחרת השרת קורא הזמנה שעדיין לא סומנה done. ואם הדף נסגר
+  // לפני — רשת הביטחון בטעינה הבאה שולחת (lgReadyUnsentIds, בן 9/11).
+  if(_waPending.length) Promise.allSettled(_advWrites).then(() => _waSendReadyGrouped(_waPending));
 
   LG_TRACK.chisum.echo  = {};
   LG_TRACK.triplex.echo = {};
