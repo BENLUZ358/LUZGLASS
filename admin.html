@@ -428,21 +428,19 @@ label.msec-t{display:block;}
 <div class="unav-sidebar on-dark" id="unavSidebar">
   <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
   <nav class="unav-nav">
-    <!-- סידור לפי הדרך שהזמנה עוברת: נכנס → ייצור → יוצא ללקוח, והגדרות בתחתית (בן, 9/11) -->
-    <div class="unav-sec">📥 נכנס</div>
+    <!-- סידור לפי הדרך שהזמנה עוברת: משרד → ייצור; לוח איסופים הוסר מהתפריט, והגדרות בתחתית (בן, 9/11) -->
+    <div class="unav-sec">🏢 משרד</div>
     <a class="unav-a active" href="#" onclick="setView('kanban',this)"><span class="ic" data-icon="kanban"></span>לוח הזמנות</a>
     <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
+    <a class="unav-a" href="invoices.html"><span class="ic" data-icon="receipt"></span>תחנת חשבוניות</a>
     <a class="unav-a" href="hs-corrections.html"><span class="ic" data-icon="clipboard"></span>תיקון הזמנות<span id="navHsCorr" style="margin-inline-start:auto"></span></a>
     <a class="unav-a" href="agents.html"><span class="ic" data-icon="bolt"></span>סוכנים<span id="navAgents" style="margin-inline-start:auto"></span></a>
+    <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
     <div class="unav-sec">🏭 ייצור</div>
     <a class="unav-a" href="drafter.html"><span class="ic" data-icon="pencil"></span>שרטט</a>
     <a class="unav-a" href="check-station.html"><span class="ic" data-icon="search"></span>תחנת בדיקה</a>
     <a class="unav-a" href="workday.html"><span class="ic" data-icon="factory"></span>יום עבודה</a>
     <a class="unav-a" href="prints.html"><span class="ic" data-icon="printer"></span>הדפסות</a>
-    <div class="unav-sec">📦 יוצא ללקוח</div>
-    <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
-    <a class="unav-a" href="invoices.html"><span class="ic" data-icon="receipt"></span>תחנת חשבוניות</a>
-    <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
     <div class="unav-sec unav-sec-set">⚙️ הגדרות</div>
     <a class="unav-a unav-set" href="#" onclick="openPricing()"><span class="ic" data-icon="wallet"></span>מחירונים</a>
     <!-- בונה הסקיצות עדיין בפיתוח, ולכן הוא מוצג לאדמין הראשי בלבד —

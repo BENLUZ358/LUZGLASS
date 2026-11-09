@@ -10,10 +10,10 @@ const groups = {}; let cur = null;
 for (const m of nav.matchAll(/<div class="unav-sec[^"]*"[^>]*>([^<]*)<\/div>|<a class="unav-a[^>]*>(?:<span[^>]*><\/span>)?([^<]*)/g)) {
   if (m[1] != null) { cur = m[1].replace(/^\S+\s/, '').trim(); groups[cur] = []; } else groups[cur].push(m[2].trim());
 }
-check('four groups in order', Object.keys(groups), ['נכנס', 'ייצור', 'יוצא ללקוח', 'הגדרות']);
-check('incoming', groups['נכנס'], ['לוח הזמנות', 'תור סקיצות', 'תיקון הזמנות', 'סוכנים']);
+check('three groups in order', Object.keys(groups), ['משרד', 'ייצור', 'הגדרות']);
+check('office', groups['משרד'], ['לוח הזמנות', 'תור סקיצות', 'תחנת חשבוניות', 'תיקון הזמנות', 'סוכנים', 'סיכום יום']);
 check('production', groups['ייצור'], ['שרטט', 'תחנת בדיקה', 'יום עבודה', 'הדפסות']);
-check('out to customer', groups['יוצא ללקוח'], ['לוח איסופים', 'תחנת חשבוניות', 'סיכום יום']);
+check('pickup board is out of the menu (Ben 9/11: not in use)', /openPickupBoard/.test(nav), false);
 check('settings', groups['הגדרות'], ['מחירונים', 'משתמשים', 'בונה סקיצות']);
 check('ids the code looks for are still there', ['sqNav', 'navHsCorr', 'navAgents', 'navUsers', 'navBuilder'].every(id => nav.includes('id="' + id + '"')), true);
 check('users / builder still hidden until main admin', /id="navUsers"[^>]*display:none/.test(nav) && /id="navBuilder"[^>]*display:none/.test(nav), true);
