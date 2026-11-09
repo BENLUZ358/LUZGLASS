@@ -5213,16 +5213,21 @@ async function umCreateUser(){
 // מעדכן את כל הזמנות הלקוח עם deliveryClient — כולל ישנות
 // מעדכן deliveryClient על הזמנות לפי טלפון (מזהה קבוע — לא שם)
 // phone = הטלפון של הלקוח כפי שרשום ב-Firebase users/<phone>
-async function _propagateDeliveryToOrders(phone, isDelivery){
-  if(!phone) return 0;
-  const normPhone = String(phone).replace(/[-\s]/g, '');
+//  customerId (בן, 9/11): הזמנות מייל נפתחות בלי טלפון — מתאימים גם לפי מפתח
+//  הכרטיס, אבל רק הזמנות פתוחות (לא מוכן / נאסף / הובלה).
+async function _propagateDeliveryToOrders(phone, isDelivery, customerId){
+  if(!phone && !customerId) return 0;
+  const normPhone = String(phone||'').replace(/[-\s]/g, '');
+  const cid = customerId ? String(customerId) : '';
   let updated = 0;
   try {
     const allOrds = await getAllOrders();
     // תאם לפי שדה phone של ההזמנה (הטלפון של הלקוח, שמשמש גם ל-WhatsApp)
     const clientOrders = allOrds.filter(o => {
       const op = String(o.phone||'').replace(/[-\s]/g,'');
-      return op && op === normPhone;
+      if(op && normPhone && op === normPhone) return true;
+      return !!cid && String(o.customerId||'') === cid && !op
+          && !['done','collected','delivery'].includes(o.stage||'');
     });
     for(const o of clientOrders){
       if(!!o.deliveryClient !== !!isDelivery){
@@ -5265,7 +5270,7 @@ async function umToggleDelivery(userId, clientName, currentVal){
     await firebase.database().ref('users/' + userId).update({ isDelivery: newVal, updatedAt: Date.now() });
     // עדכן הזמנות רק כשמגדירים כהובלות
     if(newVal){
-      await _propagateDeliveryToOrders(user.phone, true);
+      await _propagateDeliveryToOrders(user.phone, true, user.customerId);
     }
     showToast(`✓ ${clientName} עודכן ל${label}`);
     _loadUsers();

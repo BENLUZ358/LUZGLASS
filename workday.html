@@ -643,6 +643,7 @@ let skuCatalogMap = {}; // קטלוג מק"טים חדש (skuCatalog) — תוס
 // מטמון שמות לקוחות הובלות — טוען פעם אחת בסטארטאפ
 // מטמון הובלות — מזוהים לפי מספר טלפון (מזהה קבוע), לא לפי שם
 let _deliveryPhones = new Set(); // Set של טלפונים מנורמלים: '0522578559'
+let _deliveryAccounts = new Set(); // מפתחות כרטיס (customerId) של לקוחות הובלות — הזמנות בלי טלפון
 // מטמון שוטף 30 — אותה תבנית בדיוק ומאותה סיבה. הדגל נכתב על ההזמנה, אבל
 // שום דבר לא מעתיק אותו לרשומה בזמן יצירת ההזמנה: _propagateMonthlyToOrders
 // רץ רק כשמפעילים את הכפתור באדמין. בלי המטמון הזה כל הזמנה שנפתחה *אחרי*
@@ -662,6 +663,11 @@ async function _loadDeliveryClients(){
       users
         .filter(u => u.isDelivery && u.phone)
         .map(u => String(u.phone).replace(/[-\s]/g, ''))
+    );
+    _deliveryAccounts = new Set(
+      users
+        .filter(u => u.isDelivery && u.customerId)
+        .map(u => String(u.customerId))
     );
     _monthlyPhones = new Set(
       users
@@ -777,11 +783,15 @@ function _waLink(o, kind){
   return `https://wa.me/972${cleanPhone(t.phone)}?text=${encodeURIComponent(waMessage(o, kind))}`;
 }
 // בדיקה לפי טלפון בלבד — שם הלקוח לתצוגה בלבד, לא לזיהוי
-function _isDeliveryClient(orderClient, phone){
+//  customerId (בן, 9/11): הזמנות מייל (אביבי, פלג) נפתחות בלי טלפון — לפי
+//  הטלפון בלבד לקוח הובלות כזה היה נשלח ל"מוכן לאיסוף" עם הודעה. מפתח הכרטיס
+//  בחשבשבת (users/<טלפון>/customerId) מזהה אותו גם בלי טלפון.
+function _isDeliveryClient(orderClient, phone, customerId){
   if(phone){
     const norm = String(phone).replace(/[-\s]/g, '');
     if(_deliveryPhones.has(norm)) return true;
   }
+  if(customerId && _deliveryAccounts.has(String(customerId))) return true;
   return false;
 }
 // אותה צורה בדיוק, ומאותה סיבה: הזיהוי לפי טלפון בלבד, כי שם לקוח משתנה.
@@ -1823,7 +1833,7 @@ function markStageValue(sid, stage){
 // סימון סופי — שלב הבא לפי לוגיקה דינמית (done / graphic / delivery)
 function markStageDone(sid){
   const o = allOrders.find(x => String(x.id) === String(sid));
-  const nextSt = o ? lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) : 'done';
+  const nextSt = o ? lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId)) : 'done';
   if(o && (nextSt === 'done' || nextSt === 'delivery')){
     // write אטומי אחד: נועל מחיר + מעביר stage
     lgLockAndAdvance(String(o.id), o, _wdGlobalPrices, _wdClientPrices, nextSt).then(_lgWarnUnpriced).catch(e=>console.error('markStageDone:',e));
@@ -2780,7 +2790,7 @@ function _stageTabHTML(cfg, cn, cOrds){
       // בלי סקיצה — אומרים את זה, אחרת המקום הריק נראה כמו תקלה (06/10)
       : `<div class="stv-nosk">אין סקיצה להזמנה</div>`;
     const act = cfg.stage==='graphic'
-      ? (()=>{ const ns=lgNextStage(o,_isDeliveryClient(o.orderClient,o.phone));
+      ? (()=>{ const ns=lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone, o.customerId));
                return `<button class="stv-act" style="background:${ns==='delivery'?'#2980b9':'#27ae60'}"
                  onclick="completeGraphic('${lgEsc(String(o.id))}')">${ns==='delivery'?'🚚 העבר להובלה':'✅ גרפיקה הושלמה — מוכן לאיסוף'}</button>`; })()
       : '';
@@ -2866,7 +2876,7 @@ function renderDeliveryTab(){ _renderStageTab('delivery'); }
 async function completeGraphic(orderId){
   const o = allOrders.find(x => String(x.id) === String(orderId));
   if(!o) return;
-  const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
+  const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId));
   if(nextSt === 'done'){
     setTimeout(() => _waSendReadyGrouped([String(o.id)]), 1200);
   }
@@ -3454,9 +3464,9 @@ function resetChisumList(){
       <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;">
         ${doneOrds.length?(()=>{
           // חלק לפי השלב הבא: done / graphic / delivery
-          const toMsg   = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone))==='done');
-          const toGraph = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone))==='graphic');
-          const toDeliv = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone))==='delivery');
+          const toMsg   = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone, o.customerId))==='done');
+          const toGraph = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone, o.customerId))==='graphic');
+          const toDeliv = doneOrds.filter(o => lgNextStage(o,_isDeliveryClient(o.orderClient, o.phone, o.customerId))==='delivery');
           return `
           ${toMsg.length?`<div style="padding:10px 14px;background:rgba(39,174,96,0.08);border:1px solid rgba(39,174,96,0.2);border-radius:6px;">
             <div style="font-size:12px;font-weight:700;color:#27ae60;margin-bottom:6px;">✅ ${toMsg.length} סקיצות הושלמו — תישלח הודעה ללקוח</div>
@@ -3547,7 +3557,7 @@ function confirmResetChisum(){
     if(st.done){
       doneCount++;
       // כל הפריטים הגיעו — חשב שלב הבא לפי לוגיקה דינמית
-      const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone));
+      const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId));
       if(nextSt === 'done' || nextSt === 'delivery'){
         // write אטומי: נועל מחיר + stage + מנקה chisumArrivedIdxs
         _advWrites.push(lgLockAndAdvance(sid, o, _wdGlobalPrices, _wdClientPrices, nextSt)
@@ -3757,9 +3767,9 @@ function _waitsForPolish(o){
 function finishDay(){
   const { ready: cutReady, partial, pendingPartial, cutPending, chisumOrds, mixed } = _finishPlan();
   // חלק cutReady לפי השלב הבא
-  const cutReadyDone    = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'done');
-  const cutReadyGraph   = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'graphic');
-  const cutReadyDeliv   = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'delivery');
+  const cutReadyDone    = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId)) === 'done');
+  const cutReadyGraph   = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId)) === 'graphic');
+  const cutReadyDeliv   = cutReady.filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId)) === 'delivery');
 
   document.getElementById('finishBody').innerHTML = `
     <div style="margin-bottom:14px">
@@ -3896,7 +3906,7 @@ function handleWorkdayStart(){
     o.readyStatus      = 'blocked';
     o.status           = 'ביום עבודה';
     // סנכרן deliveryClient מה-cache — תופס הזמנות חדשות שנוצרו לפני הגדרת ההובלות
-    if(_isDeliveryClient(o.orderClient, o.phone) && !o.deliveryClient){
+    if(_isDeliveryClient(o.orderClient, o.phone, o.customerId) && !o.deliveryClient){
       o.deliveryClient = true;
       updateOrder(_sid, { deliveryClient: true }).catch(e => console.error('setDeliveryClient:', e));
     }
@@ -4025,7 +4035,7 @@ function confirmFinish(){
   // זה הרגע עם הכי הרבה הודעות ביום — פעם אחת נפתח כאן חלון וואטסאפ לכל
   // הזמנה בנפרד. עכשיו זו קריאה אחת לשרת, והוא מקצב בעצמו.
   const _waReady = cutReady
-    .filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone)) === 'done')
+    .filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId)) === 'done')
     .map(o => String(o.id));
   if(_waReady.length) setTimeout(() => _waSendReadyGrouped(_waReady), 1200);
 
