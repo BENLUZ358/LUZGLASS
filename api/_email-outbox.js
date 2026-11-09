@@ -33,7 +33,7 @@
 
 const crypto = require('crypto');
 const { lgEmailSendGate } = require('./_env');
-const { lgEmailSenderLink } = require('./_email-recipient');
+const { lgEmailSenderLink, lgEmailAddr } = require('./_email-recipient');
 const { renderText } = require('./_wa-provider');
 
 const EM_OUTBOX    = 'waMeta/emailOutbox';
@@ -61,7 +61,7 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
                                     queuedBy, accountKey, invoiceKey, docNumber, fileCount, deliveryTomorrow, variant, delayMs, now,
-                                    missingSketchNums }) {
+                                    missingSketchNums, sendTo }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber : kind, thread, orderIds);
   const at  = now || Date.now();
@@ -79,6 +79,9 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       deliveryTomorrow: deliveryTomorrow === true,
       //  בן, 4/11: הזמנות בחשבונית שאין להן סקיצה — נאמר בגוף המייל
       missingSketchNums: (missingSketchNums || []).map(String),
+      //  מייל חשבוניות של הלקוח (בן, 9/11 — פלג: ההזמנות מכתובת אחת, החשבוניות לכתובת
+      //  של מנהלת החשבונות). יש → מייל חדש לכתובת הזו במקום תשובה על מייל ההזמנה.
+      sendTo: (kind === 'invoice' && lgEmailAddr(sendTo)) || null,
       //  כמה קבצים בפועל (מ-2/11 בדרך כלל אחד — חשבונית + סקיצות). חסר (רשומה ישנה) → החשבון הישן
       fileCount: fileCount > 0 ? Number(fileCount) : null,
       //  נוסח אחר לאותו סוג (הזמנת רכש של אביבי, בן 4/11), ו"לא לפני" — דקה עד שהתשובה יוצאת
@@ -120,6 +123,7 @@ async function lgEmailClaim(db, limit, now) {
     //  בלי מזהה המייל של הלקוח אין על מה לענות בבטחה — לא מחכירים לנצח, סוגרים
     if (!v.messageId) { await _close(db, key, at, 'cancelled', 'אין מזהה מייל של הלקוח — לא נשלח'); continue; }
     if (!lgEmailSendGate(v.email).allowed) continue;                     // נעילת הסביבה — לא נוגעים
+    if (v.sendTo && !lgEmailSendGate(v.sendTo).allowed) continue;       // גם הכתובת שהחשבונית יוצאת אליה
     const link = await lgEmailSenderLink(db, v.email);
     if (!link || !v.accountKey || link.customerId !== String(v.accountKey)) {
       await _close(db, key, at, 'cancelled', 'הכתובת כבר לא מקושרת לכרטיס — לא נשלח');
@@ -145,6 +149,11 @@ async function lgEmailClaim(db, limit, now) {
                                   missingSketchNums: e.missingSketchNums || [] }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
                files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 };
+    //  חשבונית למייל החשבוניות של הלקוח — מייל חדש עם נושא, לא תשובה
+    if (e.sendTo) {
+      item.sendTo = String(e.sendTo);
+      item.subject = 'חשבונית מס ' + (e.docNumber || '') + ' — לוז גלאס' + (e.clientName ? ' — ' + e.clientName : '');
+    }
     //  "טופל" ידני (בן, 4/11): המיילים שכל הסקיצות שלהם טופלו — הסקריפט מוציא את
     //  השרשור לארכיון אחרי שהתשובה יצאה. ריק → אין שדה (כמו קודם).
     if (e.kind === 'sketches-handled') {

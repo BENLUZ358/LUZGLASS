@@ -134,6 +134,11 @@ function emOutboxPlan(items, props) {
     if (dm.length) out.doneMails = dm;
     //  ⚠️ כמה קבצים לצרף (חשבונית, DB-00004) — בלי זה emOutbox לא מושך אותם והמייל יוצא בלי קבצים
     if (Number(it.files) > 0) out.files = Number(it.files);
+    //  חשבונית למייל החשבוניות של הלקוח (בן, 9/11) — מייל חדש לכתובת הזו, לא תשובה
+    if (typeof it.sendTo === 'string' && /^[^@\s<>",;]+@[^@\s<>",;]+\.[^@\s<>",;]+$/.test(it.sendTo)) {
+      out.sendTo = it.sendTo;
+      out.subject = typeof it.subject === 'string' && it.subject ? it.subject : 'חשבונית — לוז גלאס';
+    }
     return out;
   });
 }
@@ -370,6 +375,18 @@ function emOutbox(cfg, started) {
         //  ששלח את ההודעה האחרונה בשרשור — יכול להיות ההודעה שלנו, תשובה ידנית של
         //  בן, או צד שלישי ב-CC. ו-msg.reply עונה ל-Reply-To — לכן emReplyOk.
         var msg = null, atts = null;
+        if (it.sendTo) {
+          //  מייל חשבוניות נפרד (בן, 9/11): מייל חדש, הכתובת נקבעה בשרת לפי כרטיס הלקוח
+          if ((it.files || 0) > 0 && !(atts = emOutboxFiles(cfg, it))) {
+            ok = false;   // ⚠️ קובץ חסר — לא שולחים חבילה חלקית
+            Logger.log('חשבונית ' + it.key + ': לא כל הקבצים התקבלו — לא נשלח');
+          } else {
+            props.setProperty('u_' + it.key, String(Date.now()));
+            GmailApp.sendEmail(it.sendTo, it.subject, it.text, atts ? { attachments: atts } : {});
+            props.setProperty('s_' + it.key, String(Date.now()));
+            props.deleteProperty('u_' + it.key);
+          }
+        } else {
         try { msg = GmailApp.getMessageById(it.messageId); } catch (e0) { msg = null; }
         if (!msg) {
           ok = false;
@@ -385,6 +402,7 @@ function emOutbox(cfg, started) {
           else msg.reply(it.text);
           props.setProperty('s_' + it.key, String(Date.now()));   // ⚠️ לפני done
           props.deleteProperty('u_' + it.key);
+        }
         }
       } catch (e) {
         ok = false;   // ⚠️ שם השגיאה בלבד; u_ נשאר — אין שליחה חוזרת

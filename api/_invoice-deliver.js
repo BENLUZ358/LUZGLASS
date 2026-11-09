@@ -25,6 +25,19 @@ const S = require('./_invoice-send');
 //  בחשבשבת, כמו LG_PARTIAL_INVOICE_ACCOUNTS ב-firebase-db.js (נאור חזקיה, המקום לאמבט).
 const LG_DELIVERY_TOMORROW_ACCOUNTS = ['9117', '14201'];
 
+//  מייל חשבוניות נפרד ללקוח שההזמנות שלו מגיעות במייל (בן, 9/11): החשבונית יוצאת
+//  כמייל חדש לכתובת הזו, ולא כתשובה על מייל ההזמנה. לפי מפתח הכרטיס בחשבשבת.
+//  waMeta/invoiceEmail/<מפתח> (אם ייכתב) גובר על הרשימה הזו.
+const LG_INVOICE_EMAIL = { '07': 'ILANATA@bdo.co.il' };   // פלג מקלחונים — מנהלת החשבונות
+async function lgInvoiceEmailFor(db, accountKey) {
+  const k = String(accountKey || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(k)) return '';
+  let v = null;
+  try { v = (await db.ref('waMeta/invoiceEmail/' + k).once('value')).val(); } catch (_) { v = null; }
+  const { lgEmailAddr } = require('./_email-recipient');
+  return lgEmailAddr(typeof v === 'string' ? v : (v && v.email) || LG_INVOICE_EMAIL[k] || '');
+}
+
 const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
               'image/svg+xml': 'svg', 'application/pdf': 'pdf' };
 
@@ -154,8 +167,9 @@ async function lgInvoiceDeliver(db, key, deps) {
 
   if (who.channel === 'email') {
     const { lgEmailEnqueue } = require('./_email-outbox');
+    const sendTo = await lgInvoiceEmailFor(db, who.accountKey);
     const q = await lgEmailEnqueue(db, { ...common, fileCount: files.files.length, thread: who.thread, messageId: emOrder.emailMessageId,
-                                         email: who.email, now });
+                                         email: who.email, sendTo, now });
     await mark({ state: 'queued', channel: 'email', outboxKey: q.key });
     return { state: 'queued', channel: 'email' };
   }
@@ -173,4 +187,4 @@ async function lgInvoiceDeliver(db, key, deps) {
   return { state: res && res.status === 'sent' ? 'sent' : 'queued', channel: 'whatsapp', result: res || null };
 }
 
-module.exports = { lgInvoiceFiles, lgInvoiceDeliver };
+module.exports = { lgInvoiceFiles, lgInvoiceDeliver, lgInvoiceEmailFor, LG_INVOICE_EMAIL };

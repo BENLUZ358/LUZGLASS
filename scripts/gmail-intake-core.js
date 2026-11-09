@@ -112,6 +112,11 @@ function emOutboxPlan(items, props) {
     if (dm.length) out.doneMails = dm;
     //  ⚠️ כמה קבצים לצרף (חשבונית, DB-00004) — בלי זה emOutbox לא מושך אותם והמייל יוצא בלי קבצים
     if (Number(it.files) > 0) out.files = Number(it.files);
+    //  חשבונית למייל החשבוניות של הלקוח (בן, 9/11) — מייל חדש לכתובת הזו, לא תשובה
+    if (typeof it.sendTo === 'string' && /^[^@\s<>",;]+@[^@\s<>",;]+\.[^@\s<>",;]+$/.test(it.sendTo)) {
+      out.sendTo = it.sendTo;
+      out.subject = typeof it.subject === 'string' && it.subject ? it.subject : 'חשבונית — לוז גלאס';
+    }
     return out;
   });
 }
