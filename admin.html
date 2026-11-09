@@ -184,7 +184,13 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .unav-logo .lg span{color:var(--gold);}
 .unav-logo .sub{font-size:12px;color:rgba(247,244,239,0.3);letter-spacing:0.12em;text-transform:uppercase;margin-top:2px;}
 .unav-nav{flex:1;padding:8px 0;}
-.unav-sec{font-size:12px;font-weight:700;letter-spacing:0.15em;color:rgba(247,244,239,0.25);text-transform:uppercase;padding:12px 16px 4px;}
+.unav-sec{font-size:12px;font-weight:800;letter-spacing:0.04em;color:rgba(212,175,85,0.75);padding:14px 16px 4px;margin-top:4px;border-top:1px solid rgba(255,255,255,0.07);}
+.unav-nav>.unav-sec:first-of-type{border-top:none;margin-top:0;padding-top:6px;}
+.unav-sec-set{color:rgba(247,244,239,0.35);}
+.unav-a.unav-set{color:rgba(247,244,239,0.4);}
+/* מונה "מחכה לטיפול" — עיגול אדום בולט (בן, 9/11: האפור לא נראה) */
+.unav-a .count.alert{background:#d64545;color:#fff;font-size:12px;font-weight:800;min-width:20px;height:20px;line-height:20px;padding:0 6px;border-radius:10px;text-align:center;}
+@media (pointer:coarse){.unav-a{min-height:42px;padding-top:6px;padding-bottom:6px;font-size:14px;}.unav-sec{padding-top:10px;}}
 .unav-a{display:flex;align-items:center;gap:10px;padding:9px 16px;color:rgba(247,244,239,0.55);font-size:13px;text-decoration:none;transition:all 0.15s;cursor:pointer;border:none;background:none;width:100%;text-align:right;font-family:Heebo,sans-serif;}
 .unav-a:hover{background:rgba(255,255,255,0.05);color:#f7f4ef;}
 .unav-a.active{background:rgba(184,146,42,0.15);color:var(--gold);font-weight:700;}
@@ -422,27 +428,27 @@ label.msec-t{display:block;}
 <div class="unav-sidebar on-dark" id="unavSidebar">
   <div class="unav-logo"><div class="lg">Luz<span>Glass</span></div><div class="sub">מערכת ניהול</div></div>
   <nav class="unav-nav">
-    <div class="unav-sec">מנהל עבודה</div>
+    <!-- סידור לפי הדרך שהזמנה עוברת: נכנס → ייצור → יוצא ללקוח, והגדרות בתחתית (בן, 9/11) -->
+    <div class="unav-sec">📥 נכנס</div>
     <a class="unav-a active" href="#" onclick="setView('kanban',this)"><span class="ic" data-icon="kanban"></span>לוח הזמנות</a>
-    <a class="unav-a" href="#" onclick="openPricing()"><span class="ic" data-icon="wallet"></span>מחירונים</a>
-    <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
-    <a class="unav-a" href="invoices.html"><span class="ic" data-icon="receipt"></span>תחנת חשבוניות</a>
-    <a class="unav-a" href="prints.html"><span class="ic" data-icon="printer"></span>הדפסות</a>
+    <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
     <a class="unav-a" href="hs-corrections.html"><span class="ic" data-icon="clipboard"></span>תיקון הזמנות<span id="navHsCorr" style="margin-inline-start:auto"></span></a>
     <a class="unav-a" href="agents.html"><span class="ic" data-icon="bolt"></span>סוכנים<span id="navAgents" style="margin-inline-start:auto"></span></a>
-    <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
-    <div class="unav-sec">תחנות עבודה</div>
-    <a class="unav-a" href="#" onclick="openSketchQueue()" id="sqNav"><span class="ic" data-icon="ruler"></span>תור סקיצות</a>
+    <div class="unav-sec">🏭 ייצור</div>
     <a class="unav-a" href="drafter.html"><span class="ic" data-icon="pencil"></span>שרטט</a>
     <a class="unav-a" href="check-station.html"><span class="ic" data-icon="search"></span>תחנת בדיקה</a>
     <a class="unav-a" href="workday.html"><span class="ic" data-icon="factory"></span>יום עבודה</a>
-    <div class="unav-sec" id="navSecUsers" style="display:none">מערכת</div>
+    <a class="unav-a" href="prints.html"><span class="ic" data-icon="printer"></span>הדפסות</a>
+    <div class="unav-sec">📦 יוצא ללקוח</div>
+    <a class="unav-a" href="#" onclick="openPickupBoard()"><span class="ic" data-icon="calendar"></span>לוח איסופים</a>
+    <a class="unav-a" href="invoices.html"><span class="ic" data-icon="receipt"></span>תחנת חשבוניות</a>
+    <a class="unav-a" href="#" onclick="openDailySummary()"><span class="ic" data-icon="chart"></span>סיכום יום</a>
+    <div class="unav-sec unav-sec-set">⚙️ הגדרות</div>
+    <a class="unav-a unav-set" href="#" onclick="openPricing()"><span class="ic" data-icon="wallet"></span>מחירונים</a>
     <!-- בונה הסקיצות עדיין בפיתוח, ולכן הוא מוצג לאדמין הראשי בלבד —
-         אותו שער בדיוק כמו ניהול המשתמשים. עד עכשיו הוא לא היה מקושר
-         משום מקום פרט ל-order-view.html, שהוא עצמו דף יתום שאיש אינו
-         מקשר אליו: כל מה שנבנה שם ישב מאחורי כתובת שאיש לא מקליד. -->
-    <a class="unav-a" id="navBuilder" href="sketch-demo.html" style="display:none"><span class="ic" data-icon="ruler"></span>בונה סקיצות <span style="opacity:0.5;">· בפיתוח</span></a>
-    <a class="unav-a" id="navUsers" href="#" style="display:none" onclick="openUserMgmt()"><span class="ic" data-icon="users"></span>משתמשים</a>
+         אותו שער בדיוק כמו ניהול המשתמשים. -->
+    <a class="unav-a unav-set" id="navUsers" href="#" style="display:none" onclick="openUserMgmt()"><span class="ic" data-icon="users"></span>משתמשים</a>
+    <a class="unav-a unav-set" id="navBuilder" href="sketch-demo.html" style="display:none"><span class="ic" data-icon="ruler"></span>בונה סקיצות <span style="opacity:0.5;">· בפיתוח</span></a>
   </nav>
   <div class="unav-bot">
     <div style="font-size:12px;color:rgba(247,244,239,0.45);padding:4px 0 8px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:8px;" id="sidebarUserName"></div>
