@@ -55,6 +55,7 @@ const WD_FNS = ['isMirrorOrder', 'classifyOrder', 'getActiveItemsForOrder', 'sav
 const WD_OPT = ['_todayPolishIdxs', '_finishPlan', '_waitsForPolish', '_wdBuildable', '_wdUnavailIdxs'];
 
 const STAGE_MAP = (DB.match(/const LG_STAGE_TO_STATUS = \{[\s\S]*?\n\};/) || [''])[0];
+const DELIV_LIST = (DB.match(/const LG_DELIVERY_ACCOUNTS = .*;/) || [""])[0];
 
 // עולם חדש לכל תרחיש: הזמנות, workDay, ורישום של כל מה שיצא החוצה
 function world(orders, opts = {}) {
@@ -95,7 +96,7 @@ function world(orders, opts = {}) {
     _closeArrived() { return Promise.resolve(); },
   };
   vm.createContext(ctx);
-  vm.runInContext(STAGE_MAP, ctx);
+  vm.runInContext(STAGE_MAP + '\n' + DELIV_LIST, ctx);
   [...DB_FNS.map(n => grab(DB, n)), ...DB_OPT.map(n => grab(DB, n, true)),
    ...WD_FNS.map(n => grab(WD, n)), ...WD_OPT.map(n => grab(WD, n, true))]
     .forEach(src => src && vm.runInContext(src, ctx));

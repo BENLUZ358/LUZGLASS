@@ -26,6 +26,7 @@ const parts = [
   SRC.match(/function _lgItemIsTriplex[\s\S]*?\n}/),
   SRC.match(/function _lgItemIsLaminatedTriplex[\s\S]*?\n}/),
   SRC.match(/function _lgItemHasSurfaceWork[\s\S]*?\n}/),
+  SRC.match(/const LG_DELIVERY_ACCOUNTS = .*;/),
   SRC.match(/function lgNextStage[\s\S]*?\n}/),
 ];
 if (parts.some(p => !p)) {

@@ -464,6 +464,10 @@ function lgIdxsObj(idxs) {
 //  שני מקורות לזיהוי לקוח הובלות (OR — מספיק שאחד מהם נכון):
 //    1. order.deliveryClient = true  (denormalized על ההזמנה)
 //    2. isDelivery = true            (מה-cache של משתמשים בworkday.html)
+//  לקוחות הובלות בלי משתמש בניהול המשתמשים (אין להם כפתור 🚚) — לפי מפתח
+//  הכרטיס בחשבשבת. בסיום יום עבודה / בדיקה הם עוברים להובלות, בלי הודעת
+//  "מוכן לאיסוף". (בן, 9/11: פלג מקלחונים — ההזמנות מגיעות במייל.)
+const LG_DELIVERY_ACCOUNTS = ['07'];   // פלג מקלחונים
 function lgNextStage(order, isDelivery) {
   const items      = order.items || [];
   // טריפלקס רגיל אינו מסומן chisum מלכתחילה, ולכן הוא כבר לא נכנס לכאן —
@@ -473,7 +477,8 @@ function lgNextStage(order, isDelivery) {
   // עבודת פנים = גרפיקה או חלבי. אותו שלב, אותה תחנה, ולכן שם אחד.
   const hasGraphic = items.some(i => _lgItemHasSurfaceWork(i));
   // OR בין שני המקורות — לא מאפשרים ל-false מה-cache לדרוס deliveryClient=true על ההזמנה
-  const deliveryFl = !!order.deliveryClient || (isDelivery === true);
+  const deliveryFl = !!order.deliveryClient || (isDelivery === true)
+                  || LG_DELIVERY_ACCOUNTS.includes(String(order.customerId || ''));
   const finalStage = deliveryFl ? 'delivery' : 'done';
 
   switch (order.stage || '') {
