@@ -2844,6 +2844,8 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
   const update = { stage: nextStage, status, updatedAt: Date.now() };
   // מתי יצאה להובלה — הפורטל מציג ממנו "צפוי להגיע" (lgPortalArrival)
   if(nextStage === 'delivery') update.deliveryAt = update.updatedAt;
+  // מתי הגיעה ל"מוכן לאיסוף" — רשת הביטחון של הודעת "מוכן" (lgReadyUnsentIds)
+  if(nextStage === 'done') update.readyAt = update.updatedAt;
   const result = { locked: false, unpricedNames: [] };
   // נעל מחיר רק אם עדיין לא נעול. בודקים pricesLockedAt ולא totalFinal —
   // totalFinal יכול להיות באמת 0 (הזמנה שננעלה בלי אף פריט מתומחר), ואז
@@ -2879,6 +2881,26 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
   }
   await _lgDb.ref('orders/'+orderId).update(update);
   return result;
+}
+
+// ── הודעת "מוכן לאיסוף" שלא יצאה (בן, 9/11) ──
+//  יום העבודה שולח את ההודעה מהדפדפן אחרי "סיום בדיקה". דף שנסגר / נטען מחדש
+//  באותו רגע — ההודעה לא יוצאת ואיש לא יודע (דוח חיסום 50, 9/11: א.מ מראות ופלג).
+//  בטעינת יום העבודה: הזמנות שהגיעו ל"מוכן" ב-24 השעות האחרונות, לפני יותר
+//  מ-3 דקות (שהשליחה הרגילה תספיק לצאת), ובלי הודעה — נשלחות. השרת מדלג על
+//  מה שכבר נשלח (whatsapp.sentAt / emailNotices.ready) ועל הזמנה פיקטיבית.
+const LG_READY_NET_MIN_MS = 3 * 60 * 1000;
+const LG_READY_NET_MAX_MS = 24 * 3600 * 1000;
+function lgReadyUnsentIds(orders, now){
+  const t = Number(now) || Date.now();
+  return (orders || []).filter(o => {
+    if(!o || o.stage !== 'done' || o.isTest) return false;
+    const at = Number(o.readyAt) || 0;
+    if(!at || t - at < LG_READY_NET_MIN_MS || t - at > LG_READY_NET_MAX_MS) return false;
+    if(o.whatsapp && o.whatsapp.sentAt) return false;
+    if(o.emailNotices && o.emailNotices.ready) return false;
+    return true;
+  }).map(o => String(o.id));
 }
 
 async function savePricesGlobal(prices){

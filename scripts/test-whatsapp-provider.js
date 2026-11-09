@@ -431,7 +431,7 @@ const GREEN_ENV = {
 
   /* שלוש נקודות הטריגר עברו לקיבוץ, ואף אחת לא נשארה מאחור */
   check('every ready trigger now goes through the grouping',
-        (WD.match(/_waSendReadyGrouped\(/g) || []).length, 4);   // הגדרה + 3 קריאות
+        (WD.match(/_waSendReadyGrouped\(/g) || []).length, 5);   // הגדרה + 3 קריאות + רשת הביטחון בטעינה (בן, 9/11)
   check('and none still calls the per-order sender',
         /setTimeout\(\(\) => _waSendBulk\(/.test(WD), false);
 
