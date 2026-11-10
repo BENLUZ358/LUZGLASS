@@ -29,11 +29,34 @@ const _brief = (id, o) => ({ id, orderNum: String(o.orderNum || ''), client: Str
                              sketchName: String(o.sketchName || ''), stage: o.stage, createdAt: o.createdAt || 0 });
 const _sort = (a, b) => a.client.localeCompare(b.client, 'he') || (a.createdAt - b.createdAt) || (a.id < b.id ? -1 : 1);
 
-async function lgDrafterBasket(db) {
+//  משלוחים שנסגרו ("השרטט סיים"). הזמנה שחזרה לשרטט אחרי שהמשלוח שלה נסגר —
+//  חוזרת לסל (סקירה 10/11: אחרת היא נעלמת מהסל ומ"השרטט סיים").
+async function _doneSet(db) {
+  const all = (await db.ref(BATCHES).once('value')).val() || {};
+  return new Set(Object.entries(all).filter(([k, b]) => k[0] !== '_' && b && b.doneAt).map(([, b]) => Number(b.n)));
+}
+const _inBasket = (o, done) => _atDrafter(o) && (o.drafterBatch == null || done.has(Number(o.drafterBatch)));
+
+async function lgDrafterBasket(db, done) {
+  const d = done || await _doneSet(db);
   const all = (await db.ref('orders').once('value')).val() || {};
   return Object.entries(all)
-    .filter(([, o]) => _atDrafter(o) && o.drafterBatch == null)
+    .filter(([, o]) => _inBasket(o, d))
     .map(([id, o]) => _brief(id, o)).sort(_sort);
+}
+
+//  נעילה קצרה — שתי לחיצות "שלח" במקביל = משלוח אחד (סקירה 10/11). פגה אחרי 2 דקות.
+const LOCK_MS = 2 * 60 * 1000;
+async function _lock(db, at) {
+  const token = at + ':' + Math.random().toString(36).slice(2);
+  const r = await db.ref(BATCHES + '/_sending').transaction(cur => {
+    if (cur && cur.until > at && cur.token !== token) return;   // abort — מישהו אחר שולח
+    return { token, until: at + LOCK_MS };
+  });
+  return r.committed && r.snapshot.val() && r.snapshot.val().token === token ? token : null;
+}
+async function _unlock(db, token) {
+  await db.ref(BATCHES + '/_sending').transaction(cur => (cur === null ? null : cur.token === token ? null : undefined));
 }
 
 async function _nextNumber(db) {
@@ -44,35 +67,67 @@ async function _nextNumber(db) {
 //  deps.enqueue(db, n) — המייל (lgDrafterEnqueueEmail). מוזרק כדי שהבדיקה לא תצטרך את התור.
 async function lgDrafterSend(db, { by, now } = {}, deps = {}) {
   const at = now || Date.now();
-  const basket = await lgDrafterBasket(db);
-  if (!basket.length) return { ok: false, code: 'empty' };
-  const n = await _nextNumber(db);
-  const orderIds = [];
-  for (const { id } of basket) {
-    const r = await db.ref('orders/' + id).transaction(cur => {
-      if (cur === null) return null;
-      if (!_atDrafter(cur) || cur.drafterBatch != null) return;   // abort — זזה / נתפסה במשלוח אחר
-      return { ...cur, drafterBatch: n };
-    });
-    if (r.committed && r.snapshot.val() && r.snapshot.val().drafterBatch === n) orderIds.push(id);
+  const token = await _lock(db, at);
+  if (!token) return { ok: false, code: 'busy' };
+  try {
+    const done = await _doneSet(db);
+    const basket = await lgDrafterBasket(db, done);
+    if (!basket.length) return { ok: false, code: 'empty' };
+    const n = await _nextNumber(db);
+    //  הרשומה לפני ההזמנות — קריסה באמצע משאירה משלוח שרואים ואפשר לשלוח שוב
+    await db.ref(BATCHES + '/' + n).set({ n, at, by: String(by || ''), orderIds: [], count: 0, doneAt: null });
+    const orderIds = [];
+    for (const { id } of basket) {
+      const r = await db.ref('orders/' + id).transaction(cur => {
+        if (cur === null) return null;
+        if (!_inBasket(cur, done)) return;   // abort — זזה / נתפסה במשלוח אחר
+        return { ...cur, drafterBatch: n };
+      });
+      if (r.committed && r.snapshot.val() && r.snapshot.val().drafterBatch === n) orderIds.push(id);
+    }
+    if (!orderIds.length) { await db.ref(BATCHES + '/' + n).set(null); return { ok: false, code: 'empty' }; }
+    await db.ref(BATCHES + '/' + n).update({ orderIds, count: orderIds.length });
+    const enqueue = deps.enqueue || ((d, x) => lgDrafterEnqueueEmail(d, x, at));
+    let email = null;
+    try { email = await enqueue(db, n); }
+    catch (e) { await db.ref(BATCHES + '/' + n + '/emailError').set(String((e && e.message) || e).slice(0, 200)); }
+    return { ok: true, n, orderIds, email };
+  } finally {
+    await _unlock(db, token);
   }
-  if (!orderIds.length) return { ok: false, code: 'empty' };
-  await db.ref(BATCHES + '/' + n).set({ n, at, by: String(by || ''), orderIds, count: orderIds.length, doneAt: null });
-  const enqueue = deps.enqueue || ((d, x) => lgDrafterEnqueueEmail(d, x));
-  const email = await enqueue(db, n);
-  return { ok: true, n, orderIds, email };
+}
+
+//  מייל שנכשל / פג / לא נבנה — שליחה חוזרת של אותו משלוח (אותו מפתח בתור; רשומה שנכשלה נוצרת מחדש)
+async function lgDrafterResend(db, n, { now } = {}) {
+  const b = (await db.ref(BATCHES + '/' + n).once('value')).val();
+  if (!b || !b.n || b.doneAt) return { ok: false, code: 'no-batch' };
+  await db.ref(BATCHES + '/' + n + '/emailError').set(null);
+  const r = await lgDrafterEnqueueEmail(db, n, now);
+  return { ok: !!r.key, key: r.key, queued: r.queued, reason: r.reason };
 }
 
 async function _openBatches(db) {
   const all = (await db.ref(BATCHES).once('value')).val() || {};
-  return Object.entries(all).filter(([k, b]) => k !== '_next' && b && !b.doneAt)
+  return Object.entries(all).filter(([k, b]) => k[0] !== '_' && b && !b.doneAt)
     .map(([, b]) => b).sort((a, b) => a.n - b.n);
 }
+const MAIL_FAILED = ['failed', 'expired', 'cancelled'];
 
 async function lgDrafterDone(db, { by, now } = {}) {
   const at = now || Date.now();
-  const moved = [], skipped = [], batches = [];
+  const moved = [], skipped = [], batches = [], held = [];
+  const outbox = (await db.ref('waMeta/emailOutbox').once('value')).val() || {};
   for (const b of await _openBatches(db)) {
+    //  המייל לא יצא — השרטט לא קיבל את המשלוח הזה; לא מעבירים (סקירה 10/11)
+    const mail = b.emailKey && outbox[b.emailKey] ? outbox[b.emailKey].state : '';
+    if (b.emailError || MAIL_FAILED.includes(mail)) { held.push(b.n); continue; }
+    //  תופסים את המשלוח קודם — שתי לחיצות במקביל לא דורסות זו את זו
+    const c = await db.ref(BATCHES + '/' + b.n).transaction(cur => {
+      if (cur === null) return null;
+      if (cur.doneAt) return;   // abort — לחיצה אחרת כבר סוגרת
+      return { ...cur, doneAt: at, doneBy: String(by || '') };
+    });
+    if (!c.committed || !c.snapshot.val() || c.snapshot.val().doneAt !== at) continue;
     const bm = [], bs = [];
     for (const id of b.orderIds || []) {
       const r = await db.ref('orders/' + id).transaction(cur => {
@@ -81,13 +136,13 @@ async function lgDrafterDone(db, { by, now } = {}) {
         return { ...cur, stage: 'opty', status: OPTY_STATUS, updatedAt: at, optyAt: at };
       });
       const v = r.snapshot.val();
-      if (r.committed && v && v.stage === 'opty') bm.push({ id, orderNum: String(v.orderNum || ''), client: String(v.orderClient || ''), n: b.n });
+      if (r.committed && v && v.stage === 'opty') bm.push({ id, orderNum: String(v.orderNum || ''), client: String(v.orderClient || v.client || ''), n: b.n });
       else bs.push({ id, orderNum: v ? String(v.orderNum || '') : '', reason: v ? 'כבר לא אצל שרטט' : 'נמחקה' });
     }
-    await db.ref(BATCHES + '/' + b.n).update({ doneAt: at, doneBy: String(by || ''), moved: bm.map(m => m.id), skipped: bs });
+    await db.ref(BATCHES + '/' + b.n).update({ moved: bm.map(m => m.id), skipped: bs });
     moved.push(...bm); skipped.push(...bs); batches.push(b.n);
   }
-  return { ok: true, moved, skipped, batches };
+  return { ok: true, moved, skipped, batches, held };
 }
 
 async function lgDrafterStatus(db) {
@@ -95,7 +150,7 @@ async function lgDrafterStatus(db) {
   const all = (await db.ref('orders').once('value')).val() || {};
   const outbox = (await db.ref('waMeta/emailOutbox').once('value')).val() || {};
   const open = (await _openBatches(db)).map(b => ({ n: b.n, at: b.at, count: b.count, emailKey: b.emailKey || null,
-    emailState: b.emailKey && outbox[b.emailKey] ? String(outbox[b.emailKey].state || '') : '',
+    emailState: b.emailError ? 'failed' : b.emailKey && outbox[b.emailKey] ? String(outbox[b.emailKey].state || '') : '',
     orders: (b.orderIds || []).map(id => ({ id, orderNum: String((all[id] || {}).orderNum || ''), client: String((all[id] || {}).orderClient || '') })) }));
   return { basket, open };
 }
@@ -104,7 +159,9 @@ async function lgDrafterStatus(db) {
 //  עמוד שער ("משלוח 12", תאריך, רשימת ההזמנות) ועמוד לכל הזמנה — אותו עמוד
 //  סקיצה כמו בחשבונית (lgAddSketchPage). סקיצה חסרה/פגומה → עמוד "אין סקיצה";
 //  המשלוח יוצא בכל זאת. גדול מ-maxBytes → כמה קבצים (השער רק בראשון).
-const MAX_PDF_BYTES = 20 * 1024 * 1024;
+//  ⚠️ 3MB: הקובץ חוזר לסקריפט כ-base64 בתוך תשובת Vercel, שמוגבלת ל-4.5MB (סקירה 10/11).
+//  סקיצה טיפוסית 40–460KB (נמדד 10/11) → משלוח של ~10 הזמנות = חלק אחד.
+const MAX_PDF_BYTES = 3 * 1024 * 1024;
 const _ilTime = t => new Date(t).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit',
                                                           year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -177,13 +234,28 @@ async function lgDrafterPdf(db, n, opts) {
   return { ok: true, files };
 }
 
-//  המייל — משימה 3
+//  קובץ שנשמר בשליחה → { ok, name, mime, b64 } | { ok:false, code }
+async function lgDrafterStoredFile(db, n, idx) {
+  const v = (await db.ref('waMeta/drafterPdf/' + n).once('value')).val();
+  const i = Number(idx);
+  if (!v || !v.parts || !Number.isInteger(i) || !v.parts[i]) return { ok: false, code: v ? 'bad-idx' : 'no-file' };
+  return { ok: true, name: String((v.names || {})[i] || ('משלוח ' + n + '.pdf')), mime: 'application/pdf', b64: String(v.parts[i]) };
+}
+
+//  המייל
 //  → { key, queued, reason } — ומסמן במשלוח את מפתח המייל (emailKey)
 async function lgDrafterEnqueueEmail(db, n, now) {
   const b = (await db.ref(BATCHES + '/' + n).once('value')).val();
   if (!b) return { key: null, queued: false, reason: 'no-batch' };
   const items = await _items(db, b);
   const pdf = await lgDrafterPdf(db, n);
+  //  נבנה פעם אחת ונשמר — outbox-file רק קורא (סקירה 10/11: אחרת נבנה מחדש לכל קובץ,
+  //  ושינוי בסקיצה באמצע היה משנה את מספר החלקים)
+  if (pdf.ok) {
+    const parts = {}, names = {};
+    pdf.files.forEach((f, i) => { parts[i] = f.buf.toString('base64'); names[i] = f.name; });
+    await db.ref('waMeta/drafterPdf/' + n).set({ at: now || Date.now(), parts, names });
+  }
   const lines = ['משלוח ' + b.n + ' · ' + _ilTime(b.at) + ' · ' + b.count + ' הזמנות',
                  ...items.map(it => [it.orderNum, it.client, it.sketchName].filter(Boolean).join(' · '))];
   const { lgEmailEnqueue } = require('./_email-outbox');
@@ -194,4 +266,4 @@ async function lgDrafterEnqueueEmail(db, n, now) {
   return r;
 }
 
-module.exports = { lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
+module.exports = { lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };

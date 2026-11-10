@@ -34,6 +34,16 @@ const db = fakeDb({ orders: {
   r = await adm.handleAdmin({ action: 'drafter-done' }, { db, by: '052', now: NOW + 3 });
   check('done', [r.ok, r.moved.length, r.skipped.length, db._data.orders.A1.stage], [true, 2, 0, 'opty']);
 
+  // שליחה חוזרת
+  db._data.orders.A3 = { id: 'A3', orderNum: 'L3', orderClient: 'אגן', stage: 'drafter', createdAt: NOW };
+  r = await adm.handleAdmin({ action: 'drafter-send' }, { db, by: '052', now: NOW + 10 });
+  const key = db._data.waMeta.drafterBatches[String(r.n)].emailKey;
+  db._data.waMeta.emailOutbox[key].state = 'failed';
+  r = await adm.handleAdmin({ action: 'drafter-resend', n: 2 }, { db, by: '052', now: NOW + 11 });
+  check('resend', [r.ok, db._data.waMeta.emailOutbox[key].state], [true, 'pending']);
+  r = await adm.handleAdmin({ action: 'drafter-resend', n: 'x' }, { db, by: '052', now: NOW + 12 });
+  check('resend bad n', r.ok, false);
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nAll drafter-drain checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });

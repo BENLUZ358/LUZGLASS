@@ -21,7 +21,7 @@ const T = vm.runInContext('({ drafterBarModel, drafterDoneText, drafterTag, draf
 
 const AT = Date.UTC(2026, 10, 10, 12, 30);   // 14:30 בישראל
 check('empty basket', T.drafterBarModel({ basket: [], open: [] }),
-  { basketText: 'הסל ריק', canSend: false, sendLabel: 'שלח לשרטט', open: [], canDone: false });
+  { basketText: 'הסל ריק', canSend: false, sendLabel: 'שלח לשרטט', open: [], canDone: false, resend: [] });
 const m = T.drafterBarModel({ basket: [{ id: 'A' }, { id: 'B' }],
   open: [{ n: 3, at: AT, count: 4, emailState: 'pending' }, { n: 4, at: AT, count: 1, emailState: 'sent' }, { n: 5, at: AT, count: 2, emailState: 'failed' }] });
 check('basket text', [m.basketText, m.canSend, m.sendLabel], ['בסל: 2 הזמנות', true, 'שלח לשרטט (2)']);
@@ -34,6 +34,9 @@ check('done confirm', T.drafterDoneConfirm(5), 'להעביר את כל מה שנ
 
 check('done text', T.drafterDoneText({ moved: [{ orderNum: 'L1' }, { orderNum: 'L2' }], skipped: [{ orderNum: 'L3', reason: 'כבר לא אצל שרטט' }] }),
   'עברו ל"בנה יום עבודה": 2 הזמנות\nלא הועברו:\nL3 — כבר לא אצל שרטט');
+check('done text with held batch', T.drafterDoneText({ moved: [], skipped: [], held: [5] }),
+  'עברו ל"בנה יום עבודה": 0 הזמנות\nמשלוח 5 לא הועבר — המייל שלו לא יצא. לחץ "שלח שוב" ליד המשלוח.');
+check('failed batch can be resent', T.drafterBarModel({ basket: [], open: [{ n: 5, at: AT, count: 2, emailState: 'failed' }, { n: 6, at: AT, count: 1, emailState: 'sent' }] }).resend, [5]);
 check('done text nothing', T.drafterDoneText({ moved: [], skipped: [] }), 'אין הזמנות שנשלחו לשרטט ומחכות');
 
 check('tag basket', T.drafterTag({ stage: 'drafter' }), 'בסל');

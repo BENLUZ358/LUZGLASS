@@ -23,15 +23,18 @@ function drafterBarModel(st) {
     sendLabel: basket.length ? 'שלח לשרטט (' + basket.length + ')' : 'שלח לשרטט',
     open: open.map(b => ['משלוח ' + b.n, _dbTime(b.at), _dbCount(b.count), _DB_MAIL[b.emailState] || ''].filter(Boolean).join(' · ')),
     canDone: open.length > 0,
+    //  משלוחים שהמייל שלהם נכשל — כפתור "שלח שוב" (סקירה 10/11)
+    resend: open.filter(b => ['failed', 'expired', 'cancelled'].includes(b.emailState)).map(b => b.n),
   };
 }
 const drafterSendConfirm = n => 'לשלוח ' + n + ' הזמנות לשרטט במייל?';
 const drafterDoneConfirm = n => 'להעביר את כל מה שנשלח לשרטט (' + n + ') ל"בנה יום עבודה"?';
 function drafterDoneText(r) {
-  const moved = (r && r.moved) || [], skipped = (r && r.skipped) || [];
-  if (!moved.length && !skipped.length) return 'אין הזמנות שנשלחו לשרטט ומחכות';
-  const out = ['עברו ל"בנה יום עבודה": ' + _dbCount(moved.length)];
+  const moved = (r && r.moved) || [], skipped = (r && r.skipped) || [], held = (r && r.held) || [];
+  if (!moved.length && !skipped.length && !held.length) return 'אין הזמנות שנשלחו לשרטט ומחכות';
+  const out = ['עברו ל"בנה יום עבודה": ' + (moved.length ? _dbCount(moved.length) : '0 הזמנות')];
   if (skipped.length) out.push('לא הועברו:', ...skipped.map(s => (s.orderNum || s.id) + ' — ' + s.reason));
+  held.forEach(n => out.push('משלוח ' + n + ' לא הועבר — המייל שלו לא יצא. לחץ "שלח שוב" ליד המשלוח.'));
   return out.join('\n');
 }
 function drafterTag(o) {
@@ -60,7 +63,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       '<div class="drb-row"><span class="drb-basket">' + esc(m.basketText) + '</span>'
       + '<button type="button" class="btn btn-primary drb-btn" id="drbSend"' + (m.canSend && !busy ? '' : ' aria-disabled="true"') + '>' + esc(m.sendLabel) + '</button>'
       + '<button type="button" class="btn btn-secondary drb-btn" id="drbDone"' + (m.canDone && !busy ? '' : ' aria-disabled="true"') + '>השרטט סיים</button></div>'
-      + (m.open.length ? '<ul class="drb-open">' + m.open.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul>' : '')
+      + (m.open.length ? '<ul class="drb-open">' + m.open.map((t, i) => {
+          const n = last.open[i].n;
+          return '<li>' + esc(t) + (m.resend.includes(n) ? ' <button type="button" class="btn btn-secondary drb-resend" data-n="' + n + '">שלח שוב</button>' : '') + '</li>';
+        }).join('') + '</ul>' : '')
       + (msg ? '<div class="drb-msg" role="status">' + esc(msg).replace(/\n/g, '<br>') + '</div>' : '');
     box.querySelector('#drbSend').onclick = async () => {
       if (busy || !m.canSend) return;
@@ -71,6 +77,14 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       await refresh(r.ok ? 'משלוח ' + r.n + ' נשלח לתור המיילים — יגיע ל-lozzagagot תוך דקה-שתיים'
                          : (r.code === 'empty' ? 'הסל ריק' : 'השליחה נכשלה: ' + (r.message || '')));
     };
+    box.querySelectorAll('.drb-resend').forEach(btn => { btn.onclick = async () => {
+      if (busy) return;
+      const n = Number(btn.dataset.n);
+      busy = true; draw('שולח שוב את משלוח ' + n + '…');
+      const r = await post({ action: 'drafter-resend', n }).catch(e => ({ ok: false, message: e.message }));
+      busy = false;
+      await refresh(r.ok ? 'משלוח ' + n + ' נשלח שוב לתור המיילים' : 'לא הצליח: ' + (r.message || ''));
+    }; });
     box.querySelector('#drbDone').onclick = async () => {
       if (busy || !m.canDone) return;
       if (!confirm(drafterDoneConfirm(total))) return;

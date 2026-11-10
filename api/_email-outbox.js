@@ -270,11 +270,8 @@ async function lgEmailOutboxFile(db, key, leaseToken, idx, now) {
   const e = (await db.ref(EM_OUTBOX + '/' + key).once('value')).val();
   if (!e || e.state !== 'pending' || e.leaseToken !== leaseToken || !(e.leaseUntil > at)) return { ok: false, code: 'stale' };
   if (e.kind === 'drafter-batch' && e.drafterBatch) {
-    const p = await require('./_drafter-batch').lgDrafterPdf(db, e.drafterBatch);
-    if (!p.ok) return { ok: false, code: p.code };
-    const f = p.files[Number(idx)];
-    if (!Number.isInteger(Number(idx)) || !f) return { ok: false, code: 'bad-idx' };
-    return { ok: true, name: f.name, mime: f.mime, b64: f.buf.toString('base64') };
+    //  הקובץ נבנה ונשמר כשהמשלוח נכנס לתור — כאן רק קוראים (_drafter-batch.js)
+    return require('./_drafter-batch').lgDrafterStoredFile(db, e.drafterBatch, idx);
   }
   if (!e.invoiceKey) return { ok: false, code: 'no-files' };
   const f = await require('./_invoice-deliver').lgInvoiceFiles(db, e.invoiceKey);
