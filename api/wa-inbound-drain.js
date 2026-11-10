@@ -183,7 +183,15 @@ async function handleAdmin(body, deps) {
   //  כותב להזמנה ב-orders וסוגר את השאלה בחדר (waMeta — רק בשרת). api/_sample-suspect.js
   if (action === 'sample-decide') {
     return require('./_sample-suspect').lgSampleDecide(deps.db,
-      { orderId: typeof b.orderId === 'string' ? b.orderId : '', decision: b.decision, by: String(deps.by || '') }, deps.now);
+      { orderId: typeof b.orderId === 'string' ? b.orderId : '', decision: b.decision, by: String(deps.by || '') }, deps.now, deps.env);
+  }
+
+  // ─── קולט: בן צירף / הפריד צרופה בדפדפן → שורה בחדר (11/11) ─────────────
+  //  הדפדפן לא כותב ל-waMeta; השרת מוודא שהאיחוד/ההפרדה באמת קרו. api/_order-attachments.js
+  if (action === 'att-room') {
+    return require('./_order-attachments').lgAttRoomEvent(deps.db,
+      { op: b.op, orderId: typeof b.orderId === 'string' ? b.orderId : '', srcId: typeof b.srcId === 'string' ? b.srcId : '' },
+      { env: deps.env || process.env, now: deps.now });
   }
 
   // ─── פיילוט הסוכנים ללקוח (31/10) ─────────────────────────────────────
@@ -254,6 +262,12 @@ async function handleAdmin(body, deps) {
     }
     if (action === 'drafter-hold') {
       const r = await DB.lgDrafterHold(deps.db, b.id, b.hold === true);
+      if (r.ok) {
+        //  קולט (11/11): "לא לשלוח עכשיו" / "החזר" — שורה בחדר
+        const o = (await deps.db.ref('orders/' + b.id).once('value')).val() || {};
+        const what = 'הזמנה ' + String(o.orderNum || o.sketchName || b.id).slice(0, 40) + (o.orderClient ? ' · ' + String(o.orderClient).slice(0, 60) : '');
+        await room(b.hold === true ? what + ' — לא לשלוח עכשיו לשרטט' : what + ' חזרה לטיוטה לשרטט');
+      }
       return r.ok ? { ok: true, code: '' } : { ok: false, code: r.code, message: 'ההזמנה כבר לא מחכה בטיוטה' };
     }
     if (action === 'drafter-resend') {

@@ -256,6 +256,15 @@ if (typeof window !== 'undefined') (function () {
     return '';
   }
 
+  //  חדר הסוכנים (קולט, 11/11): אחרי איחוד / הפרדה — השרת מוודא וכותב שורה בחדר.
+  //  הדפדפן לא כותב ל-waMeta. כשל לא נוגע בפעולה עצמה.
+  function roomEvent(op, orderId, srcId) {
+    try {
+      if (typeof _lgAuthPost !== 'function') return;
+      _lgAuthPost('/api/wa-inbound-drain', { action: 'att-room', op: op, orderId: String(orderId), srcId: String(srcId) }).catch(() => {});
+    } catch (e) { /* תיעוד בלבד */ }
+  }
+
   //  איחוד: srcId (שורה בתור) נכנסת לתוך dstId כצרופה. כתיבה אטומית אחת.
   window.lgAttMerge = async function (srcId, dstId, kind) {
     try {
@@ -284,6 +293,7 @@ if (typeof window !== 'undefined') (function () {
       if (c) { c.set(dst.id + '__att' + plan.k, img); c.delete(String(src.id)); }
       toast('צורף ל' + (dst.orderNum ? 'הזמנה ' + dst.orderNum : 'הזמנה') + ' — ' + LG_ATT_KINDS[kind]);
       if (lgAttInvoiced(dst)) setTimeout(() => toast('החשבונית כבר נשלחה בלי התמונה הזו'), 2700);
+      roomEvent('merge', dst.id, src.id);
       return true;
     } catch (e) {
       toast('האיחוד לא נשמר: ' + ((e && e.message) || e));
@@ -304,6 +314,7 @@ if (typeof window !== 'undefined') (function () {
       const c = cache();
       if (c) { c.delete(dstId + '__att' + k); c.set(String(back), img); }
       toast('הופרד — התמונה חזרה לתור הסקיצות');
+      roomEvent('split', dstId, back);
       return true;
     } catch (e) {
       toast('ההפרדה לא נשמרה: ' + ((e && e.message) || e));

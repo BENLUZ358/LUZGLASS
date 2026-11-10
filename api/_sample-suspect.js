@@ -103,7 +103,8 @@ async function lgSampleAfterOrder(db, key, entry, orderId, now) {
 }
 
 //  "זו הזמנה" / "דוגמה — הוצא מהתור". b: { orderId, decision:'order'|'sample', by }
-async function lgSampleDecide(db, b, now) {
+//  env (רשות) — לשורה בחדר: המרכזן מדווח על ההחלטה (info, לפי המתג שלו; חדר הסוכנים 11/11)
+async function lgSampleDecide(db, b, now, env) {
   const x = b || {}, t = Number(now) || Date.now();
   const id = typeof x.orderId === 'string' ? x.orderId : '';
   if (!id || id.length > 200 || /[.#$[\]/]/.test(id)) return { ok: false, code: 'bad-key', message: 'מזהה הזמנה לא תקין' };
@@ -119,6 +120,12 @@ async function lgSampleDecide(db, b, now) {
     try { await require('./_agent-room').lgRoomClose(db, String(o.sampleRoomKey), t, { by: 'ben' }); }
     catch (e) { console.warn('sample-suspect: room close', e && e.name); }
   }
+  try {
+    const who = String(o.orderClient || o.client || '').trim();
+    const text = 'בן סימן: ' + String(o.orderNum || o.sketchName || id).slice(0, 60) + (who ? ' · ' + who.slice(0, 60) : '')
+      + (x.decision === 'sample' ? ' — דוגמה, הוצאה מהתור' : ' — זו הזמנה, נשארת בתור');
+    await require('./_agent-watch').lgAgentEvent(db, 'markazan', { kind: 'info', text, ref: { orderId: id } }, { env: env || process.env, now: t });
+  } catch (e) { console.warn('sample-suspect: room info', e && e.name); }
   return { ok: true, code: '' };
 }
 

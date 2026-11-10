@@ -347,7 +347,7 @@ function renderSummary() {
 function renderCards() {
   $('cards').innerHTML = lgAgentCards(ROOM, SH, Date.now()).map(c => `<button type="button" class="card" data-cardagent="${E(c.id)}" aria-pressed="${FILTER === c.id}">
       <b>${E(c.name)}</b><small>${E(c.does)}</small>
-      <span class="nums"><span>היום: ${E(c.today)}</span>${c.waiting ? `<span class="w">מחכה לך: ${E(c.waiting)}</span>` : ''}</span></button>`).join('');
+      <span class="nums"><span>היום: ${E(c.today)}</span><span>בחדר היום: ${E(c.room)}</span>${c.waiting ? `<span class="w">מחכה לך: ${E(c.waiting)}</span>` : ''}</span></button>`).join('');
 }
 
 // ─── 4. החדר ─────────────────────────────────────────────────────────

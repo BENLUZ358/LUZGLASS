@@ -127,4 +127,35 @@ async function lgAttMergeServer(db, srcId, dstId, kind, opts) {
   return { ok: true, k };
 }
 
-module.exports = { LG_ATT_KINDS, lgAttListOf, lgAttOf, lgAttFindByMsg, lgAttCanMerge, lgAttMergePlan, lgAttMergeServer };
+// ─── חדר הסוכנים: בן צירף / הפריד בדפדפן (קולט, 11/11) ─────────────────
+//  האיחוד וההפרדה נכתבים מהדפדפן (lgAttMerge / lgAttSplit), שלא כותב ל-waMeta — ולכן אחרי
+//  ההצלחה הוא קורא ל-att-room, והשרת **מוודא שזה באמת קרה** לפני השורה בחדר:
+//    merge — ל-orderId יש צרופה שמקורה srcId (ולא כזו שהמרכזן צירף לבד — הוא כותב שורה משלו)
+//    split — srcId חזרה להיות הזמנה, ול-orderId כבר אין צרופה ממנה
+//  השורה — lgAgentEvent של הקולט (כבוי → כלום; בלי הגדרות → אפור). בלי בדיקת כפילות: אדמין בלבד.
+//  b: { op:'merge'|'split', orderId (ההזמנה שמקבלת/מאבדת), srcId }. o: { env, now }
+async function lgAttRoomEvent(db, b, o) {
+  const x = b || {}, opt = o || {};
+  if (!['merge', 'split'].includes(x.op)) return { ok: false, code: 'bad-op', message: 'פעולה לא מוכרת' };
+  const did = String(x.orderId || ''), sid = String(x.srcId || '');
+  if (!_okId(did) || !_okId(sid) || did.length > 200 || sid.length > 200) return { ok: false, code: 'bad-key', message: 'מזהה לא תקין' };
+  const dst = (await db.ref('orders/' + did).once('value')).val();
+  if (!dst) return { ok: false, code: 'missing', message: 'ההזמנה לא נמצאה' };
+  const atts = dst.attachments || {};
+  const k = Object.keys(atts).find(i => atts[i] && atts[i].from && atts[i].from.order && String(atts[i].from.order.id) === sid);
+  const a = k != null ? atts[k] : null;
+  const where = 'הזמנה ' + String(dst.orderNum || dst.sketchName || did).slice(0, 40)
+    + (dst.orderClient || dst.client ? ' · ' + String(dst.orderClient || dst.client).slice(0, 60) : '');
+  let text;
+  if (x.op === 'merge') {
+    if (!a || a.attachedBy === 'markazan') return { ok: false, code: 'not-merged', message: 'הצרופה לא נמצאה' };
+    text = 'בן צירף ' + (LG_ATT_KINDS[a.kind] || 'צרופה') + ' ל' + where + ' (מהתור)';
+  } else {
+    if (a || !(await db.ref('orders/' + sid).once('value')).val()) return { ok: false, code: 'not-split', message: 'הצרופה לא הופרדה' };
+    text = 'בן הפריד צרופה מ' + where + ' — חזרה לתור הסקיצות';
+  }
+  await require('./_agent-watch').lgAgentEvent(db, 'kolet', { kind: 'info', text, ref: { orderId: did } }, { env: opt.env, now: opt.now });
+  return { ok: true, code: '' };
+}
+
+module.exports = { lgAttRoomEvent, LG_ATT_KINDS, lgAttListOf, lgAttOf, lgAttFindByMsg, lgAttCanMerge, lgAttMergePlan, lgAttMergeServer };

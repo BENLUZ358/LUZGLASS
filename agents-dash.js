@@ -483,12 +483,15 @@ function lgAdWatcherLine(watchers, now) {
 function lgAgentCards(room, shadow, now) {
   const from = lgAdPeriodStart('today', now);
   const sh = _adVals(shadow).map(r => r.v).filter(r => (r.createdAt || 0) >= from && r.staff !== true && r.route !== 'staff');
-  const rm = _adVals(room).map(r => r.v).filter(r => r.kind !== 'summary');
+  const all = _adVals(room).map(r => r.v);
+  const rm = all.filter(r => r.kind !== 'summary');
   return LG_AD_AGENTS.map(a => ({
     id: a.id, name: a.name, does: a.does,
     today: (a.id === 'markazan' ? sh.length : sh.filter(r => a.routes.includes(r.route)).length)
       + rm.filter(r => (Number(r.at) || 0) >= from && lgRoomAgentKey(r.agent) === a.id).length,
     waiting: rm.filter(r => r.kind === 'ask' && r.state === 'open' && lgRoomAgentKey(r.agent) === a.id).length,
+    //  שורות בחדר היום (כולל סיכום של המנהל) — הקישור של כל סוכן לגלגל (11/11)
+    room: all.filter(r => (Number(r.at) || 0) >= from && lgRoomAgentKey(r.agent) === a.id).length,
   }));
 }
 //  המתגים — כבוי / שקט / עונה לכל סוכן. master = AGENT_SHADOW_ENABLED (מתג החירום ב-Vercel)
