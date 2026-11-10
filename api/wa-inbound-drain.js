@@ -214,12 +214,17 @@ async function handleAdmin(body, deps) {
     const idx = Number(b.idx) || 0;
     //  חדר הסוכנים (שלב ב׳, 10/11): הקולט מדווח על שלח / סיים / שלח שוב — לפי המתג שלו
     //  (_agent-watch.lgAgentEvent). דיווח שנכשל לא נוגע בפעולה עצמה.
-    const room = async text => {
-      try { await require('./_agent-watch').lgAgentEvent(deps.db, 'kolet', { kind: 'info', text }, { env: deps.env || process.env, now: deps.now }); }
+    const room = async (text, kind) => {
+      try { await require('./_agent-watch').lgAgentEvent(deps.db, 'kolet', { kind: kind || 'info', text }, { env: deps.env || process.env, now: deps.now }); }
       catch (e) { console.warn('drafter: room', e && e.name); }
     };
+    //  "השרטט סיים" (בן, 11/11): הקולט בודק כל משלוח מול הקובץ ומול בנה יום עבודה — שורה אחת
+    //  למשלוח: הכל תואם → info ✓; פער (נמחקה / הוזזה / לא בקובץ / קובץ חסר) → ask (צהוב לפי lgAgentEvent)
     const roomDone = async r => {
-      for (const n of r.batches || []) await room(`השרטט סיים משלוח ${n} — ${(r.moved || []).filter(m => m.n === n).length} עברו לבנה יום עבודה`);
+      for (const n of r.batches || []) {
+        try { const c = await DB.lgDrafterSyncCheck(deps.db, n); await room(c.text, c.kind); }
+        catch (e) { console.warn('drafter: sync check', e && e.name); }
+      }
       return r;
     };
     //  הטיוטה כקובץ (לא משנה כלום) / קובץ של משלוח שנשלח — חלק אחד בכל קריאה (≤3MB)

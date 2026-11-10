@@ -166,6 +166,52 @@ async function lgDrafterDone(db, { by, now, n } = {}) {
   return { ok: true, moved, skipped, batches, held };
 }
 
+//  ─── בדיקת סנכרון אחרי "השרטט סיים" (קולט, בן 11/11) ───────────────────
+//  שלושה מקורות: (1) המשלוח (orderIds) מול הקובץ שנשמר (drafterPdf/<n>/items — מה שנכנס ל-PDF),
+//  (2) מי עכשיו בשלב opty ("בנה יום עבודה"), (3) מי דולג ולמה. קורא רק names/items מהקובץ (לא את ה-base64).
+//  קובץ ישן בלי items (לפני 11/11) — לא משווים את הרשימות (אין מה להשוות), רק בודקים שהוא קיים.
+//  → { kind:'info'|'ask', text, ok, total, inOpty, issues:[{ id, orderNum, client, reason }] }
+async function lgDrafterSyncCheck(db, n) {
+  const b = (await db.ref(BATCHES + '/' + n).once('value')).val() || {};
+  const names = (await db.ref('waMeta/drafterPdf/' + n + '/names').once('value')).val();
+  const rawItems = (await db.ref('waMeta/drafterPdf/' + n + '/items').once('value')).val();
+  const pdfItems = rawItems ? Object.values(rawItems).filter(x => x && x.id) : null;
+  const ids = (Array.isArray(b.orderIds) ? b.orderIds : Object.values(b.orderIds || {})).map(String);
+  const skipped = {};
+  Object.values(b.skipped || {}).forEach(x => { if (x && x.id) skipped[x.id] = x; });
+  const pdfById = {};
+  (pdfItems || []).forEach(x => { pdfById[String(x.id)] = x; });
+  const orders = {};
+  for (const id of new Set([...ids, ...Object.keys(pdfById)])) {
+    orders[id] = /[.#$[\]/]/.test(id) ? null : (await db.ref('orders/' + id).once('value')).val();
+  }
+  const label = id => {
+    const o = orders[id] || {}, p = pdfById[id] || {}, s = skipped[id] || {};
+    return { id, orderNum: String(o.orderNum || p.orderNum || s.orderNum || id), client: String(o.orderClient || o.client || p.client || '') };
+  };
+  const issues = [];
+  if (!names) issues.push({ id: '', orderNum: '', client: '', reason: 'הקובץ של המשלוח לא נשמר' });
+  let inOpty = 0;
+  for (const id of ids) {
+    const o = orders[id];
+    if (pdfItems && !pdfById[id]) issues.push({ ...label(id), reason: 'במשלוח אבל לא בקובץ' });
+    if (o && o.stage === 'opty') { inOpty++; continue; }
+    const reason = !o ? 'נמחקה'
+      : Number(o.drafterBatch) !== Number(n) ? 'עברה למשלוח אחר'
+      : _atDrafter(o) ? 'לא עברה — עדיין אצל שרטט'
+      : 'הוזזה ידנית (לא אצל שרטט)';
+    issues.push({ ...label(id), reason });
+  }
+  for (const id of Object.keys(pdfById)) if (!ids.includes(id)) issues.push({ ...label(id), reason: 'בקובץ אבל לא במשלוח' });
+  //  סדר יציב: לפי מספר ההזמנה (הבעיה של הקובץ ראשונה)
+  issues.sort((x, y) => (x.id ? 1 : 0) - (y.id ? 1 : 0) || x.orderNum.localeCompare(y.orderNum, 'he', { numeric: true }));
+  const head = `השרטט סיים משלוח ${n}: ${inOpty} מתוך ${ids.length} בבנה יום עבודה`;
+  const ok = !issues.length;
+  const text = ok ? head + ' ✓'
+    : head + ' — לבדוק: ' + issues.map(x => (x.id ? [x.orderNum, x.client, x.reason].filter(Boolean).join(' · ') : x.reason)).join('; ');
+  return { kind: ok ? 'info' : 'ask', text, ok, total: ids.length, inOpty, issues };
+}
+
 async function lgDrafterStatus(db) {
   const done = await _doneSet(db);
   const basket = await lgDrafterBasket(db, done);
@@ -276,7 +322,9 @@ async function lgDrafterPdf(db, n, opts) {
   const items = await _items(db, b);
   const bufs = await _split(items, b, max);
   const name = i => 'משלוח ' + b.n + (bufs.length > 1 ? ' (' + (i + 1) + ' מתוך ' + bufs.length + ')' : '') + '.pdf';
-  return { ok: true, files: bufs.map((buf, i) => ({ name: name(i), mime: 'application/pdf', buf })) };
+  //  items — ההזמנות שבאמת נכנסו לקובץ (בדיקת הסנכרון של הקולט, 11/11)
+  return { ok: true, files: bufs.map((buf, i) => ({ name: name(i), mime: 'application/pdf', buf })),
+           items: items.map(it => ({ id: it.id, orderNum: it.orderNum, client: it.client })) };
 }
 
 //  קובץ שנשמר בשליחה → { ok, name, mime, b64 } | { ok:false, code }
@@ -299,7 +347,8 @@ async function lgDrafterEnqueueEmail(db, n, now) {
   if (pdf.ok) {
     const parts = {}, names = {};
     pdf.files.forEach((f, i) => { parts[i] = f.buf.toString('base64'); names[i] = f.name; });
-    await db.ref('waMeta/drafterPdf/' + n).set({ at: now || Date.now(), parts, names });
+    //  items — רשימת ההזמנות שנכנסו לקובץ, לבדיקת הסנכרון ב"השרטט סיים" (lgDrafterSyncCheck)
+    await db.ref('waMeta/drafterPdf/' + n).set({ at: now || Date.now(), parts, names, items: pdf.items });
   }
   const lines = ['משלוח ' + b.n + ' · ' + _ilTime(b.at) + ' · ' + b.count + ' הזמנות',
                  ...items.map(it => [it.orderNum, it.client, it.sketchName].filter(Boolean).join(' · '))];
@@ -311,4 +360,4 @@ async function lgDrafterEnqueueEmail(db, n, now) {
   return r;
 }
 
-module.exports = { lgDrafterPreview, lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
+module.exports = { lgDrafterSyncCheck, lgDrafterInBasket: _inBasket, lgDrafterDoneSet: _doneSet, lgDrafterPreview, lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };

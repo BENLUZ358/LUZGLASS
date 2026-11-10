@@ -79,7 +79,7 @@ const db = fakeDb({ orders: {
     r = await adm.handleAdmin({ action: 'drafter-resend', n: 1 }, { db: db2, by: '052', now: NOW + 1, env: ENV });
     check('room: resend', texts()[1], ['kolet', 'info', 'המייל למשלוח 1 נשלח שוב לשרטט']);
     r = await adm.handleAdmin({ action: 'drafter-done' }, { db: db2, by: '052', now: NOW + 2, env: ENV });
-    check('room: done', texts()[2], ['kolet', 'info', 'השרטט סיים משלוח 1 — 2 עברו לבנה יום עבודה']);
+    check('room: done', texts()[2], ['kolet', 'info', 'השרטט סיים משלוח 1: 2 מתוך 2 בבנה יום עבודה ✓']);
     db2._data.waMeta.agentConfig.agents.kolet = 'off';
     db2._data.orders.B3 = { id: 'B3', orderNum: 'L13', orderClient: 'אגן', stage: 'drafter', createdAt: NOW };
     await adm.handleAdmin({ action: 'drafter-send' }, { db: db2, by: '052', now: NOW + 3, env: ENV });

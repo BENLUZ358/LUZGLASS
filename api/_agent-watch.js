@@ -35,6 +35,8 @@
 //    לוקח כל שלב (_agent-stats.js, לכל היותר פעם ביום — computedAt) → waMeta/agentStats/stageDays (לתשובת "מתי יהיה מוכן"),
 //    והזמנה של לקוח במערכת שתקועה בשלב > פי 2 מהרגיל (ו>יומיים) → info פעם אחת (stuck_<id>_<שלב>).
 //    יצאה מהשלב → הבעיה יורדת בשקט (בלי "תוקן").
+//  קולט (בן, 11/11) — באותה סריקה (כשהקולט לא כבוי): הזמנה שהגיעה ל-opty ב-24 השעות האחרונות
+//    בלי drafterBatch → info פעם אחת (opty_<id>), "הגיעה לבנה יום עבודה בלי משלוח לשרטט".
 //
 //  מתגים (lgAgentMode): כבוי → כלום. שקט/עונה → לחדר. התראה לבן — רק "עונה".
 //  בלי waMeta/agentConfig בכלל (פרודקשן היום) → הכל לחדר כאפור, אף פעם לא לבן ולא ניסיון חוזר.
@@ -62,8 +64,8 @@ const MAIL_FAILED = ['failed', 'expired', 'cancelled'];   // כמו _drafter-bat
 const WHO = { archive: 'כלי החשבוניות', kolet: 'משלוחים לשרטט' };
 const INTERNAL_NOTE = 'פנימי — ייסגר לבד כשיתוקן';
 const RANK = { info: 1, ask: 2 };
-const SLOW_KEY = /^(printed|deliv|mail|long|stuck)_/;
-const SCAN_KEY = /^stuck_/;                // נבדק רק בסריקת orders (פעם בשעה)
+const SLOW_KEY = /^(printed|deliv|mail|long|stuck|opty)_/;
+const SCAN_KEY = /^(stuck|opty)_/;              // נבדק רק בסריקת orders (פעם בשעה)
 const ORDERS_SCAN_GAP_MS = H;              // שומר עלות: orders נקרא לכל היותר פעם בשעה
 const STATS_GAP_MS = DAY;                  // הזמן הרגיל לכל שלב — לכל היותר פעם ביום
 
@@ -155,6 +157,22 @@ function lgWatchProblems(input) {
   return out;
 }
 
+//  קולט (בן, 11/11): הזמנה שהגיעה ל-opty ("בנה יום עבודה") ב-24 השעות האחרונות (optyAt) בלי
+//  שהייתה בשום משלוח לשרטט (אין drafterBatch) → info אחד להזמנה. יוצאת מהחלון → יורדת בשקט.
+const OPTY_NOBATCH_MS = DAY;
+function lgOptyWithoutBatch(orders, now) {
+  const out = [];
+  for (const [id, o] of Object.entries(orders || {})) {
+    if (!o || typeof o !== 'object' || o.isTest === true || o.isSample === true || o.agentCancelled) continue;
+    const t = Number(o.optyAt) || 0;
+    if (!t || t > now || now - t > OPTY_NOBATCH_MS || o.drafterBatch != null) continue;
+    const who = String(o.orderClient || o.client || '').trim();
+    out.push({ key: 'opty_' + _safeKey(id), src: String(id), agent: 'kolet', level: 'info',
+               text: 'הזמנה ' + _s(o.orderNum || id, 40) + (who ? ' · ' + _s(who, 60) : '') + ' הגיעה לבנה יום עבודה בלי משלוח לשרטט' });
+  }
+  return out;
+}
+
 //  prev = { key: {level, dismissed?} }, problems = [{key, level}] → { open:[key], clear:[key] }
 //  dismissed ("סגור" של בן) — לא נפתח שוב כל עוד הבעיה קיימת
 function lgWatchDiff(prev, problems) {
@@ -223,7 +241,7 @@ async function _gone(db, k, p) {
     return r.delivery && r.delivery.state === 'sent' ? { act: 'fixed' } : { act: 'keep' };
   }
   //  הזמנה תקועה שזזה / נמחקה — בלי "תוקן" (זה דיווח, לא תקלה שמישהו תיקן)
-  if (k.startsWith('stuck_')) return { act: 'drop' };
+  if (k.startsWith('stuck_') || k.startsWith('opty_')) return { act: 'drop' };
   if (k.startsWith('mail_') || k.startsWith('long_')) {
     const b = (await db.ref('waMeta/drafterBatches/' + src).once('value')).val();
     if (!b) return { act: 'drop' };
@@ -307,19 +325,23 @@ async function lgAgentWatchRun(db, o) {
   //  פעם בשעה (מפתח lastOrdersScan); הזמן הרגיל לכל שלב מחושב מחדש לכל היותר פעם ביום (computedAt).
   //  בלי waMeta/agentConfig (פרודקשן היום) — אף פעם לא קוראים את orders.
   let stuck = [], scanned = false;
-  if (slow && cfg && on('okev')) {
+  if (slow && cfg && (on('okev') || on('kolet'))) {
     if ((await gate('lastOrdersScan', ORDERS_SCAN_GAP_MS)).committed) {
       try {
-        const ST = require('./_agent-stats');
         const orders = (await db.ref('orders').once('value')).val() || {};
-        let stats = (await db.ref(ST.AGENT_STATS).once('value')).val();
-        if (!stats || !(now - (Number(stats.computedAt) || 0) < STATS_GAP_MS) || Number(stats.computedAt) > now) {
-          stats = { ...ST.lgStageStats(orders, now), computedAt: now };
-          await db.ref(ST.AGENT_STATS).set(stats);
+        if (on('okev')) {
+          const ST = require('./_agent-stats');
+          let stats = (await db.ref(ST.AGENT_STATS).once('value')).val();
+          if (!stats || !(now - (Number(stats.computedAt) || 0) < STATS_GAP_MS) || Number(stats.computedAt) > now) {
+            stats = { ...ST.lgStageStats(orders, now), computedAt: now };
+            await db.ref(ST.AGENT_STATS).set(stats);
+          }
+          stuck = ST.lgStuckOrders(orders, stats, now);
         }
-        stuck = ST.lgStuckOrders(orders, stats, now);
+        //  קולט: הגיעה לבנה יום עבודה בלי משלוח לשרטט (אותה קריאה של orders)
+        if (on('kolet')) stuck = stuck.concat(lgOptyWithoutBatch(orders, now));
         scanned = true;   // רק סריקה שהצליחה "מנקה" בעיות ישנות
-      } catch (e) { console.warn('agent-watch: stage stats', e && e.name); }
+      } catch (e) { console.warn('agent-watch: orders scan', e && e.name); }
     }
   }
   const all = lgWatchProblems({ now, watchers, invoices, retried, reply, noRetry, batches, mail }).concat(stuck).filter(p => on(p.agent));
@@ -386,5 +408,5 @@ async function lgWatchDismiss(db, key, deps) {
   return { ok: true, code: '' };
 }
 
-module.exports = { WATCHERS, WATCH, LG_AGENT_KEYS, lgIsWorkingHours, lgWatchHeartbeatClean, lgWatchProblems, lgWatchDiff,
+module.exports = { WATCHERS, WATCH, LG_AGENT_KEYS, lgOptyWithoutBatch, lgIsWorkingHours, lgWatchHeartbeatClean, lgWatchProblems, lgWatchDiff,
                    lgWatcherSilentLine, lgAgentEvent, lgAgentWatchRun, lgWatchDismiss };
