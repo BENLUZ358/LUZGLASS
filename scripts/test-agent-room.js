@@ -87,13 +87,13 @@ const run = (db, k, env, extra) => act.lgAgentAct(db, k, { env: env || ENV, now:
     const r = await run(db, 'A1');
     const ob = outbox(db);
     check('acted', [r.acted, rec(db, 'A1').actReason], [true, null]);
-    check('customer gets exactly the hold text', [ob.A1_0.to, ob.A1_0.text, ob.A1_0.agent], [PRIV, HOLD, 'manager']);
+    check('customer gets exactly the hold text', [ob.A1_0.to, ob.A1_0.text, ob.A1_0.agent], [PRIV, HOLD, 'markazan']);
     check('Ben gets one short line + link', [ob.A1_0_b.to, ob.A1_0_b.text, ob.A1_0_b.reason],
       ['0547725552', 'יש שאלה שמחכה לך בחדר הסוכנים: כהן זכוכית — יש לכם זכוכית חכמה?\nhttps://luz.example.app/agents.html', 'agent-ask']);
     check('nothing to Shaul', Object.values(ob).some(e => e.to === '0501112222'), false);
     const asks = room(db).filter(e => e.kind === 'ask');
     check('one yellow entry in the room', asks.map(e => [e.agent, e.state, e.customerId, e.customerName, e.question, e.chat]),
-      [['manager', 'open', '777', 'כהן זכוכית', 'יש לכם זכוכית חכמה?', PRIV]]);
+      [['markazan', 'open', '777', 'כהן זכוכית', 'יש לכם זכוכית חכמה?', PRIV]]);
     check('room entry points at the record', asks[0].ref, { customerId: '777', shadowKey: 'A1' });
   }
   {
@@ -111,7 +111,8 @@ const run = (db, k, env, extra) => act.lgAgentAct(db, k, { env: env || ENV, now:
   }
   /* ── לקוח לא מופעל / סוכן לא עונה → כלום, גם לא צהוב ── */
   {
-    const db = seed({ manager: 'shadow' });
+    //  "לא יודע" — של המרכזן (התפריט שלו מבטיח "נחזור אליך"; תיקון סקירה 10/11)
+    const db = seed({ markazan: 'shadow' });
     put(db, 'B1', R({}));
     await run(db, 'B1');
     check('agent in shadow → no yellow, nothing sent', [room(db).length, Object.keys(outbox(db)).length, rec(db, 'B1').actReason], [0, 0, 'switches-off']);
@@ -159,12 +160,12 @@ const run = (db, k, env, extra) => act.lgAgentAct(db, k, { env: env || ENV, now:
     check('answer ok', [r.ok, r.outboxKey], [true, 'room_' + ask.key]);
     const e = outbox(db)['room_' + ask.key];
     check('answer queued to the customer through the send layer', [e.to, e.customerId, e.text, e.agent, e.reason],
-      [PRIV, '777', 'כן, יש. נשלח לך מחיר מחר', 'manager', 'agent-room-answer']);
+      [PRIV, '777', 'כן, יש. נשלח לך מחיר מחר', 'markazan', 'agent-room-answer']);
     check('send attempted right away', sent.length, 1);
     const after = db._data.waMeta.agentRoom[ask.key];
     check('yellow entry is answered', [after.state, after.answeredBy, after.answeredAt, after.outboxKey], ['answered', '0547725552', NOW + 5 * MIN, 'room_' + ask.key]);
     const ans = room(db).filter(x => x.kind === 'answer');
-    check('the room shows what was sent', ans.map(x => [x.agent, x.text, x.replyTo, x.by]), [['manager', 'כן, יש. נשלח לך מחיר מחר', ask.key, '0547725552']]);
+    check('the room shows what was sent', ans.map(x => [x.agent, x.text, x.replyTo, x.by]), [['markazan', 'כן, יש. נשלח לך מחיר מחר', ask.key, '0547725552']]);
     const again = await ROOMJS.lgRoomAnswer(db, { key: ask.key, text: 'שוב' }, deps);
     check('second answer → refused, nothing new queued', [again.ok, again.code, outbox(db)['room_' + ask.key].text], [false, 'answered', 'כן, יש. נשלח לך מחיר מחר']);
     const info = await ROOMJS.lgRoomPost(db, { kind: 'info', text: 'x' }, NOW);

@@ -67,6 +67,8 @@ const seed = () => fakeDb({ waMeta: {
     sdb._data.waMeta.agentShadow.q = { createdAt: NOW - H, linked: true, route: 'shaul', acted: true, wouldAct: [{ type: 'ask' }], state: 'done' };
     sdb._data.waMeta.agentRoom = { r1: { kind: 'ask', state: 'open', at: NOW - H }, r2: { kind: 'ask', state: 'answered', at: NOW - H },
       r3: { kind: 'ask', at: NOW - H }, r4: { kind: 'info', at: NOW - H } };
+    //  השאלות הפתוחות נספרות מהאינדקס (תיקון סקירה 10/11)
+    sdb._data.waMeta.agentRoomOpen = { r1: { at: NOW - H, agent: 'markazan', customer: 'x' } };
     const s = await D.lgAgentDailySummary(sdb, NOW);
     check('counts', s.counts, { incoming: 5, selfClosed: 1, toShaul: 1, toBen: 1, benOpen: 1, quotesWaiting: 2, cancelsWaitingHs: 1,
       markedWrong: 1, unlinked: 1, quotesStuck: 2, blockedSends: 2 });

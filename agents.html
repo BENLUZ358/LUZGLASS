@@ -252,6 +252,20 @@ const E = s => _adEsc(s);
 const PAGE = 50, ROOM_PAGE = 40;
 let SH = {}, Q = {}, C = {}, OB = {}, PILOT = {}, DIS = {}, GROUPS = {}, SENDERS = {}, intake = {}, STATUS = null, DEL_LIVE = false;
 let ROOM = {}, CFG = null;
+//  ROOM = חלון 500 האירועים האחרונים (ROOM_WIN) + שאלות פתוחות ישנות יותר מהאינדקס (OPEN_IDX → OLD_OPEN)
+let ROOM_WIN = {}, OPEN_IDX = {}, OLD_OPEN = {};
+const _fetching = new Set();
+function mergeRoom() {
+  Object.keys(OLD_OPEN).forEach(k => { if (!OPEN_IDX[k] || ROOM_WIN[k]) delete OLD_OPEN[k]; });
+  lgRoomMissingOpen(OPEN_IDX, ROOM_WIN).filter(k => !OLD_OPEN[k] && !_fetching.has(k)).forEach(k => {
+    _fetching.add(k);
+    _lgDb.ref('waMeta/agentRoom/' + k).once('value').then(s => {
+      _fetching.delete(k);
+      if (s.val() && OPEN_IDX[k]) { OLD_OPEN[k] = s.val(); mergeRoom(); later(); }
+    }, e => { _fetching.delete(k); console.warn('agentRoom old:', e && e.code); });
+  });
+  ROOM = Object.assign({}, OLD_OPEN, ROOM_WIN);
+}
 let period = 'today', shown = PAGE, roomShown = ROOM_PAGE, FILTER = '', ANSWERING = '', DRAFT = '', EDIT_BEN = false;
 
 function toast(msg, err) {
@@ -320,12 +334,12 @@ function renderRoom() {
   if (ta) DRAFT = ta.value;
   const all = lgRoomRows(ROOM, { agent: FILTER, limit: 100000 });
   const rows = all.slice(Math.max(0, all.length - roomShown));
-  const open = lgRoomOpenCount(ROOM);
+  const open = lgRoomOpenIndexCount(OPEN_IDX);
   $('nRoom').textContent = open ? open + ' מחכות לך' : '';
   $('roomFlt').innerHTML = FILTER ? `<div class="flt-line">מציג רק: <b>${E(lgRoomAgentName(FILTER))}</b>
       <button type="button" class="sbtn" data-cardagent="">הצג הכל</button></div>` : '';
   $('room').innerHTML = (all.length > rows.length ? `<button type="button" class="sbtn more" data-roommore>הצג ישנות יותר (${E(all.length - rows.length)})</button>` : '')
-    + (rows.length ? rows.map(e => lgRoomBubbleHtml(e, OB) + (ANSWERING === e.key && e.state === 'open' ? `<div class="compose">
+    + (rows.length ? rows.map(e => lgRoomBubbleHtml(e, OB) + (ANSWERING === e.key && lgRoomCanAnswer(e, OB) ? `<div class="compose">
         <textarea id="ansText" maxlength="1000" placeholder="מה לענות ללקוח?" aria-label="התשובה ללקוח">${E(DRAFT)}</textarea>
         <p class="hint" style="margin:4px 0 0">התשובה יוצאת ללקוח בוואטסאפ כמו שכתבת.</p>
         <div class="rb-acts"><button type="button" class="sbtn is-primary" data-ansend="${E(e.key)}">שלח ללקוח</button>
@@ -484,7 +498,13 @@ document.addEventListener('click', async ev => {
   const r = await drain(body);   // הרשימות מתעדכנות מההאזנה
   if (!r.ok) { b.disabled = false; toast(r.message, true); return; }
   if (body.action === 'agent-dismiss') toast('הוסר מהרשימה');
-  else if (body.action === 'agent-room-answer') { ANSWERING = ''; DRAFT = ''; toast('נשלח ללקוח'); renderRoom(); }
+  //  מה קרה באמת (תיקון סקירה 10/11): נשלח / עדיין בתור / לא נשלח — והשאלה חוזרת לפתוחה
+  else if (body.action === 'agent-room-answer') {
+    ANSWERING = ''; DRAFT = '';
+    if (r.sent) toast('נשלח ללקוח');
+    else toast('לא נשלח — ' + (r.sendReason || 'סיבה לא ידועה') + (r.reopened ? '. אפשר לענות שוב.' : ''), r.sendState !== 'pending');
+    renderRoom();
+  }
   else if (body.action === 'agent-config-set' && body.escalatePhone != null) { EDIT_BEN = false; toast('נשמר'); }
   else if (body.action === 'agent-config-set') toast(lgRoomAgentName(body.agent) + ': ' + ({ off: 'כבוי', shadow: 'שקט', reply: 'עונה' }[body.mode]));
 });
@@ -502,7 +522,9 @@ lgRequireAuthAsync('admin').then(session => {
   on(_lgDb.ref('waMeta/agentOutbox').orderByChild('createdAt').startAt(Date.now() - 31 * 24 * 60 * 60 * 1000), v => { OB = v; }, 'agentOutbox');
   on(_lgDb.ref('waMeta/agentPilot'), v => { PILOT = v; }, 'agentPilot');
   //  חדר הסוכנים — המפתחות ממוינים לפי זמן; 500 האחרונים (כמו המונה בתפריט)
-  on(_lgDb.ref('waMeta/agentRoom').limitToLast(500), v => { ROOM = v; }, 'agentRoom');
+  on(_lgDb.ref('waMeta/agentRoom').limitToLast(500), v => { ROOM_WIN = v; mergeRoom(); }, 'agentRoom');
+  //  שאלות פתוחות — מהאינדקס בשרת (תיקון סקירה 10/11); שאלה ישנה מחוץ ל-500 נטענת לבד
+  on(_lgDb.ref('waMeta/agentRoomOpen'), v => { OPEN_IDX = v; mergeRoom(); }, 'agentRoomOpen');
   _lgDb.ref('waMeta/agentConfig').on('value', s => { CFG = s.val() || null; later(); }, warn('agentConfig'));
   _lgDb.ref('waMeta/agentDeleteLive').on('value', s => { DEL_LIVE = s.val() === true; later(); }, warn('agentDeleteLive'));
   on(_lgDb.ref('waMeta/agentDash/dismissed'), v => { DIS = v; }, 'agentDash');

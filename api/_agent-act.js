@@ -29,7 +29,7 @@
 
 const crypto = require('crypto');
 const { lgWaInboundKey } = require('./_wa-inbound');
-const { AGENT_OUTBOX, AGENT_DELETE_LIVE, AGENT_DELETED_REASON, PER_ITEM_WORST_MS, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
+const { AGENT_OUTBOX, AGENT_DELETE_LIVE, AGENT_DELETED_REASON, AGENT_ASK_REASON, PER_ITEM_WORST_MS, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
 const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
         lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText,
         lgOkevTooLateStaffText, lgOkevCancelledStaffText } = require('./_agent-okev');
@@ -609,7 +609,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
   //  "סקיצה שנמחקה — פעיל" (בן, 3/11): תשובות כבויות / לא בפיילוט, אבל המתג הנפרד
   //  דולק → רק המחיקה פועלת, ללקוח לא יוצא כלום. צ'אט מקושר בלבד (נבדק למעלה).
   let mode = null;
-  if ((why === 'switches-off' || why === 'not-pilot') && rec.route === 'kolet-deleted' && rec.linked
+  //  ⚠️ גם כשהקולט "כבוי" במסך (agent-off) — המתג הנפרד מחליט על המחיקה (תיקון סקירה 10/11)
+  if ((why === 'switches-off' || why === 'not-pilot' || why === 'agent-off') && rec.route === 'kolet-deleted' && rec.linked
       && (await db.ref(AGENT_DELETE_LIVE).once('value')).val() === true) {
     if (!staff.length) why = 'no-staff';
     else { d = lgAgentDeleteOnly(d, rec, orders); mode = 'delete-only'; why = ''; }
@@ -657,8 +658,13 @@ async function _act(db, key, rec, recRef, env, now, o) {
       const rk = await lgRoomPost(db, { agent, kind: 'ask', state: 'open', text: a.note || (String(a.who || '') + ': ' + line.slice(0, 200)),
         customerId: cid, customerName: a.who, chat, question: a.question, suggest: a.suggest, note: a.note,
         ref: { customerId: cid, shadowKey: key } }, now);
-      const benOk = await enq(k + '_b', lgAgentEscalatePhone(cfg), lgRoomAskBenText(a.who, a.question, env), a.files || [], 'agent-ask', '');
-      if (rk || benOk) await enq(k, chat, ASK_HOLD_TEXT, [], 'agent-reply');
+      //  ⚠️ (תיקון סקירה 10/11) הכל תלוי בצהוב: בלעדיו אין על מה לענות בחדר — לא
+      //  מציקים לבן ולא מבטיחים ללקוח. ההתראה נושאת את הלקוח (cid): השליחה מתירה
+      //  העברת תמונה למספר של בן רק מהצ'אט של הלקוח הזה.
+      if (rk) {
+        await enq(k + '_b', lgAgentEscalatePhone(cfg), lgRoomAskBenText(a.who, a.question, env), a.files || [], AGENT_ASK_REASON, cid);
+        await enq(k, chat, ASK_HOLD_TEXT, [], 'agent-reply');
+      }
     }
     else if (a.type === 'quote-ask') {
       // t6-3: הבקשה נשמרת רק אחרי שהודעה לשאול נכנסה לתור (ועוד לפני השליחה,

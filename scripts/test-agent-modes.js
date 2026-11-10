@@ -47,7 +47,7 @@ function provider() {
 
 (async () => {
   check('route → agent', ['okev', 'menu', 'archive', 'quote', 'price', 'staff', 'kolet-deleted', 'shaul', 'kolet', 'none'].map(C.lgAgentOfRoute),
-    ['okev', 'markazan', 'archive', 'price', 'price', 'price', 'kolet', 'manager', 'kolet', 'markazan']);
+    ['okev', 'markazan', 'archive', 'price', 'price', 'price', 'kolet', 'markazan', 'kolet', 'markazan']);   // shaul → המרכזן (תיקון סקירה 10/11)
 
   /* ── act: לפי הסוכן של המסלול ── */
   {
@@ -97,19 +97,20 @@ function provider() {
   }
   {
     const db = seed(CFG({}, { escalatePhone: '0521234567' }), {}), p = provider();
-    db._data.waMeta.agentConfig.agents.manager = 'reply';
-    await S.lgAgentEnqueue(db, { key: 'q4', to: '0521234567', customerId: '', text: 'לבן', reason: 'agent-ask', agent: 'manager' });
-    await S.lgAgentEnqueue(db, { key: 'q5', to: '0547725552', customerId: '', text: 'לא בן', reason: 'agent-ask', agent: 'manager' });
+    db._data.waMeta.agentConfig.agents.markazan = 'reply';
+    await S.lgAgentEnqueue(db, { key: 'q4', to: '0521234567', customerId: '', text: 'לבן', reason: 'agent-ask', agent: 'markazan' });
+    await S.lgAgentEnqueue(db, { key: 'q5', to: '0547725552', customerId: '', text: 'לא בן', reason: 'agent-ask', agent: 'markazan' });
     await S.lgAgentSendPending(db, { provider: p, env: SH });
-    check('Ben\'s number counts as staff (no link needed); the default is not staff once another is saved',
+    check('Ben\'s number gets the ask ping (no link needed); the default gets nothing once another is saved',
       [outbox(db).q4.state, outbox(db).q5.state], ['sent', 'blocked']);
-    check('staff list includes Ben', await S.lgAgentStaffAll(db, SH), ['0501112222', '0521234567']);
+    check('staff list = the Vercel list only (Ben is not staff — תיקון סקירה 10/11)', S.lgAgentStaff(SH), ['0501112222']);
   }
   {
     const db = seed(null), p = provider();
-    await S.lgAgentEnqueue(db, { key: 'q6', to: '0547725552', customerId: '', text: 'לבן', agent: 'manager' });
+    await S.lgAgentEnqueue(db, { key: 'q6', to: '0547725552', customerId: '', text: 'לבן', reason: 'agent-ask', agent: 'markazan' });
+    await S.lgAgentEnqueue(db, { key: 'q6b', to: '0547725552', customerId: '', text: 'סתם', reason: 'agent-reply', agent: 'okev' });
     await S.lgAgentSendPending(db, { provider: p, env: { ...SH, AGENT_REPLY_ENABLED: 'true' } });
-    check('no config → Ben\'s default number is staff', outbox(db).q6.state, 'sent');
+    check('no config → Ben\'s default number gets the ask ping, and only that', [outbox(db).q6.state, outbox(db).q6b.state], ['sent', 'blocked']);
   }
   {
     const db = seed(null), p = provider();

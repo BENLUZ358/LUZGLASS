@@ -330,12 +330,13 @@ function lgAdWaLink(phone) {
 //  does — "מי אחראי על מה" באפיון חדר הסוכנים (10/11). routes: אילו מסלולים ביומן שייכים לו.
 //  heb — השם שסוכנים ישנים כותבים בחדר (agent:'מרכזן').
 const LG_AD_AGENTS = [
-  { id: 'markazan', name: 'מרכזן', does: 'כל הודעה שנכנסת, "סקיצות נקלטו", והצעת צרופות', routes: ['menu'] },
+  //  ⚠️ (תיקון סקירה 10/11) רק מה שהמתג הזה שולט בו. "נקלטו" והצעת צרופות — מתגים נפרדים.
+  { id: 'markazan', name: 'מרכזן', does: 'תפריט ללקוח, ומה שאף סוכן לא יודע — שאלה אליך ("נקלטו" והצעת צרופות — לא במתג הזה)', routes: ['menu', 'shaul'] },
   { id: 'kolet', name: 'קולט', does: 'מתור הסקיצות עד "השרטט סיים", וסקיצה שהלקוח מחק', routes: ['kolet', 'kolet-deleted'] },
   { id: 'archive', name: 'ארכיון', does: 'חשבוניות, והעתק חשבונית או סקיצה ללקוח', routes: ['archive'] },
   { id: 'okev', name: 'עוקב', does: '"איפה ההזמנה" ללקוח, ביטול ושינוי לפני ייצור', routes: ['okev'] },
   { id: 'price', name: 'מחירון', does: 'מחירים, הצעות מחיר וטענות מחיר', routes: ['quote', 'price'] },
-  { id: 'manager', name: 'מנהל', does: 'סיכום יומי מכולם, ומה שאף אחד לא יודע — שאלה אליך', routes: ['shaul'] },
+  { id: 'manager', name: 'מנהל', does: 'סיכום יומי מכולם — בחדר, ובוואטסאפ כשהוא "עונה"', routes: [] },
 ];
 const LG_AD_MODES = [['off', 'כבוי'], ['shadow', 'שקט'], ['reply', 'עונה']];
 
@@ -356,6 +357,23 @@ const lgRoomIsQuestion = e => !!e && e.kind === 'ask' && (e.state === 'open' || 
 function lgRoomOpenCount(room) {
   return _adVals(room).filter(r => r.v.kind === 'ask' && r.v.state === 'open').length;
 }
+//  waMeta/agentRoomOpen — אינדקס השאלות הפתוחות בשרת (תיקון סקירה 10/11). המונה בתפריט ובחדר
+function lgRoomOpenIndexCount(idx) {
+  return _adVals(idx).filter(r => r.v && typeof r.v === 'object').length;
+}
+//  שאלות פתוחות מהאינדקס שלא בחלון האירועים שנטען — המפתחות שצריך להביא בנפרד
+function lgRoomMissingOpen(idx, room) {
+  const r = room || {};
+  return _adVals(idx).map(x => x.key).filter(k => !Object.prototype.hasOwnProperty.call(r, k));
+}
+//  התשובה בתור נגמרה בלי לצאת (נחסמה / פגה / נכשלה 3 פעמים — MAX_ATTEMPTS ב-_wa-outbox.js)
+const lgRoomSendFinal = o => !!o && (o.state === 'blocked' || o.state === 'expired' || (o.state === 'failed' && (Number(o.attempts) || 0) >= 3));
+//  אפשר לענות: שאלה פתוחה, או שנענתה והתשובה לא יצאה ("שלח שוב")
+function lgRoomCanAnswer(e, outbox) {
+  if (!lgRoomIsQuestion(e)) return false;
+  if (e.state === 'open') return true;
+  return !!e.outboxKey && lgRoomSendFinal((outbox || {})[e.outboxKey]);
+}
 //  החדר — הישן למעלה, החדש למטה (צ'אט). o: { agent (מפתח), limit }
 function lgRoomRows(room, o) {
   const f = o || {}, lim = Number(f.limit) || 200;
@@ -375,17 +393,20 @@ function lgRoomBubbleHtml(e, outbox) {
   const x = e || {}, esc = _adEsc;
   const head = `<div class="rb-h"><b>${esc(x.kind === 'answer' ? 'אתה' : lgRoomAgentName(x.agent))}</b><span>${esc(_adWhen(x.at))}</span></div>`;
   if (lgRoomIsQuestion(x)) {
-    const open = x.state === 'open';
-    return `<div class="rb rb-ask${open ? ' is-open' : ''}" data-roomkey="${esc(x.key)}">${head}
+    const open = x.state === 'open', retry = !open && lgRoomCanAnswer(x, outbox);
+    const lost = retry ? (outbox || {})[x.outboxKey] : null;
+    return `<div class="rb rb-ask${open || retry ? ' is-open' : ''}" data-roomkey="${esc(x.key)}">${head}
       <div class="rb-who">${esc(x.customerName || 'לקוח')}${x.note ? ' · ' + esc(x.note) : ''}</div>
       <div class="rb-q">${esc(x.question || x.text || '')}</div>
       ${x.suggest ? `<div class="rb-s">הצעה: ${esc(x.suggest)}</div>` : ''}
       ${open ? `<div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">ענה</button></div>`
-             : '<div class="rb-st">ענית ✓</div>'}
+        : retry ? `<div class="rb-st">התשובה לא נשלחה: ${esc(lost.lastError || lost.state)}</div>
+            <div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">שלח שוב</button></div>`
+        : '<div class="rb-st">ענית ✓</div>'}
     </div>`;
   }
   if (x.kind === 'answer') {
-    const o = (outbox || {})['room_' + String(x.replyTo || '')];
+    const o = (outbox || {})[x.outboxKey || 'room_' + String(x.replyTo || '')];
     const st = !o ? '' : o.state === 'blocked' ? 'לא נשלח: ' + String(o.lastError || '') : (LG_ROOM_OB[o.state] || String(o.state || ''));
     return `<div class="rb rb-answer" data-roomkey="${esc(x.key)}">${head}
       <div class="rb-q">${esc(x.text || '')}</div>${st ? `<div class="rb-st">${esc(st)}</div>` : ''}</div>`;

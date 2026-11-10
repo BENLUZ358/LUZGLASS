@@ -22,10 +22,10 @@ check('every write goes through the drain',
 check('posts only to /api/wa-inbound-drain', (live(P).match(/_lgAuthPost\(\s*'([^']+)'/g) || []).every(m => m.includes('/api/wa-inbound-drain')), true);
 check('no Firebase writes from the page', /_lgDb\.ref\([^)]*\)[^;]*\.(set|update|push|remove|transaction)\(/.test(live(P)), false);
 check('the "טופל" button only on dismissable cards', /x\.dismissable\s*\?[^:]*data-dismiss/.test(P), true);
-//  חדר הסוכנים (10/11): המונה = שאלות צהובות שמחכות לבן, מאותם 500 אירועים אחרונים כמו הדף
-check('admin counter = open questions in the room, same window as the page',
+//  חדר הסוכנים (10/11): המונה = שאלות צהובות שמחכות לבן — מהאינדקס בשרת, כמו הדף (תיקון סקירה)
+check('admin counter = open questions from the server index, same as the page',
   (() => { const m = live(A).match(/function lgAgentsNavCount\(\)[\s\S]*?\n}/);
-    return !!m && /lgRoomOpenCount\(/.test(m[0]) && /agentRoom'\)\.limitToLast\(500\)/.test(m[0]) && /agentRoom'\)\.limitToLast\(500\)/.test(P); })(), true);
+    return !!m && /lgRoomOpenIndexCount\(/.test(m[0]) && /agentRoomOpen'\)/.test(m[0]) && /lgRoomOpenIndexCount\(OPEN_IDX\)/.test(P); })(), true);
 check('log shows review rows as questions, the rest folded',
   [/lgAdSplitLog\(/.test(P), /lgAdReviewRowHtml\(r\.key,\s*r,\s*intake/.test(P), /<details[^>]*>[\s\S]{0,200}לא צריך לבדוק/.test(P), /lgAdOtherRowHtml\(/.test(P)],
   [true, true, true, true]);

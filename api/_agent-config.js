@@ -13,8 +13,10 @@
 //    אחרת — הערך של הסוכן ב-agentConfig
 //    אין agentConfig (או ערך לא תקין) → כמו היום: 'reply' רק אם
 //      AGENT_REPLY_ENABLED==='true', אחרת 'shadow' — כך שהפריסה לא משנה כלום.
-//  ⚠️ escalatePhone — המספר של בן לשאלות "לא יודע". שכבת השליחה מחשיבה אותו
-//     כאיש צוות (כמו AGENT_STAFF_PHONES).
+//  ⚠️ escalatePhone — המספר של בן לשאלות "לא יודע". **לא** איש צוות: שכבת השליחה
+//     מתירה אליו רק את ההתראה על שאלה (reason 'agent-ask'), והעברת תמונה רק מהצ'אט
+//     של הלקוח של אותה שאלה (תיקון סקירה 10/11). בלי הגדרות — AGENT_ESCALATE_DEFAULT
+//     הוא רק היעד של ההתראה, לא צוות.
 //  אפיון: docs/superpowers/specs/2026-11-10-agents-room-design.md
 // ═══════════════════════════════════════════════════════════════════
 
@@ -48,9 +50,11 @@ function lgAgentEscalatePhone(cfg) {
 }
 
 //  איזה סוכן אחראי על מסלול של המרכזן ("מי אחראי על מה" באפיון).
-//  'shaul' — מה שאף סוכן לא יודע — של המנהל (צהוב לבן). השאר — המרכזן.
+//  'shaul' — מה שאף סוכן לא יודע (צהוב לבן) — של המרכזן: התפריט שלו מבטיח ללקוח
+//  "כתבו כאן ונחזור אליך", ולכן ההמשך הולך לפי המתג שלו — אחרת הובטחה תשובה שאף
+//  אחד לא ייתן (תיקון סקירה 10/11). השאר — המרכזן.
 const LG_ROUTE_AGENT = { okev: 'okev', menu: 'markazan', archive: 'archive', quote: 'price', price: 'price', staff: 'price',
-                         kolet: 'kolet', 'kolet-deleted': 'kolet', shaul: 'manager' };
+                         kolet: 'kolet', 'kolet-deleted': 'kolet', shaul: 'markazan' };
 const lgAgentOfRoute = route => (_own(LG_ROUTE_AGENT, String(route || '')) ? LG_ROUTE_AGENT[String(route)] : 'markazan');
 
 async function lgAgentConfig(db) {

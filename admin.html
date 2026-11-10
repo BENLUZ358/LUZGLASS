@@ -610,13 +610,13 @@ let _allRegisteredClients = [];
 //  LOAD — מאזין ל-Firebase בזמן אמת
 // ══════════════════════════════════════════════════
 // מונה הסוכנים בתפריט (בן, 10/11): כמה שאלות צהובות בחדר הסוכנים מחכות לתשובה שלך.
-// קריאה אחת בטעינה, לא מאזין חי — agents.html הוא המקום להתעדכן בו. הלוגיקה ב-agents-dash.js (lgRoomOpenCount).
+// קריאה אחת בטעינה, לא מאזין חי — agents.html הוא המקום להתעדכן בו. הלוגיקה ב-agents-dash.js.
+// ⚠️ (תיקון סקירה 10/11) מהאינדקס בשרת waMeta/agentRoomOpen — שאלה ישנה לא נעלמת מהמונה
 function lgAgentsNavCount() {
   const el = document.getElementById('navAgents');
-  if (!el || typeof lgRoomOpenCount !== 'function') return;
-  // המפתחות בחדר ממוינים לפי זמן — 500 האחרונים, כמו (ויותר מ)הדף
-  _lgDb.ref('waMeta/agentRoom').limitToLast(500).once('value').then(s => s.val() || {}, () => ({})).then(room => {
-    const n = lgRoomOpenCount(room);
+  if (!el || typeof lgRoomOpenIndexCount !== 'function') return;
+  _lgDb.ref('waMeta/agentRoomOpen').once('value').then(s => s.val() || {}, () => ({})).then(idx => {
+    const n = lgRoomOpenIndexCount(idx);
     el.textContent = n || ''; el.className = n ? 'count alert' : '';
   });
 }

@@ -13,7 +13,9 @@
 //    הסוכן של הרשומה (entry.agent) במצב 'reply' — lgAgentModeOf: המתג העליון
 //    AGENT_SHADOW_ENABLED + המתג במסך (waMeta/agentConfig; בלעדיו AGENT_REPLY_ENABLED) — וגם
 //    הנמען לקוח בפיילוט (waMeta/agentPilot/<customerId> === true) או איש צוות
-//    (AGENT_STAFF_PHONES + המספר של בן, escalatePhone).
+//    (AGENT_STAFF_PHONES בלבד). המספר של בן (escalatePhone) — רק להתראה על שאלה
+//    (reason 'agent-ask'), והעברה רק מהצ'אט של הלקוח של הרשומה.
+//    רשומה ישנה בלי agent — כשיש הגדרות במסך: רק אם לפחות סוכן אחד "עונה".
 //  הכל נבדק **בזמן השליחה**, לא בהכנסה לתור: בן יכול לכבות את המתג או לנתק
 //  קבוצה בין לבין, והקישור השמור ברשומה הוא תיעוד, לא הרשאה.
 //
@@ -70,14 +72,8 @@ function lgAgentStaff(env) {
     .map(s => lgWaSenderKey(s.trim())).filter(Boolean);
 }
 
-//  הצוות + המספר של בן מהמסך (escalatePhone, בן 10/11). cfg — אם כבר נקרא
-async function lgAgentStaffAll(db, env, cfg) {
-  const c = cfg !== undefined ? cfg : await lgAgentConfig(db);
-  const out = lgAgentStaff(env);
-  const ben = lgAgentEscalatePhone(c);
-  if (ben && !out.includes(ben)) out.push(ben);
-  return out;
-}
+//  ההתראה לבן על שאלה בחדר (_agent-act) — הסיבה היחידה שמותרת למספר של בן
+const AGENT_ASK_REASON = 'agent-ask';
 
 //  create-once: מפתח קיים (בכל מצב) → queued:false. הסוכן גוזר את המפתח
 //  מ-idMessage, ולכן webhook + drain על אותה הודעה מכניסים פעם אחת.
@@ -101,7 +97,7 @@ async function lgAgentEnqueue(db, { key, to, customerId, text, files, reason, ag
 //  מי הנמען **עכשיו**. { ok, phone, accountKey, reason }.
 //  קבוצה → עדיין ב-waGroups לאותו customerId. טלפון → צוות, או עדיין ב-waSenders
 //  לאותו customerId. לקוח (לא צוות) → גם בפיילוט.
-async function _liveRecipient(db, entry, staff) {
+async function _liveRecipient(db, entry, staff, ben) {
   const cid = String(entry.customerId || '');
   if (_isGroup(entry.to)) {
     const link = (await db.ref('waGroups/' + _key(entry.to)).once('value')).val();
@@ -115,6 +111,11 @@ async function _liveRecipient(db, entry, staff) {
   if (!phone) return { ok: false, reason: 'נמען לא תקין' };
   //  ⚠️ צוות: הקישור הוא הרשימה ב-Vercel. accountKey לא ריק כי השער דורש כרטיס.
   if (staff.includes(phone)) return { ok: true, phone, accountKey: cid || 'staff', staff: true };
+  //  המספר של בן — לא צוות: רק ההתראה על שאלה. העברה — רק מהצ'אט של cid (_loadFiles)
+  if (ben && phone === ben) {
+    if (entry.reason !== AGENT_ASK_REASON) return { ok: false, reason: 'המספר של בן מקבל רק התראה על שאלה בחדר' };
+    return { ok: true, phone, accountKey: cid || 'staff' };
+  }
   const link = await lgWaSenderLink(db, phone);
   if (!link || link.customerId !== cid || !cid) return { ok: false, reason: 'המספר אינו מקושר ללקוח — לא נשלח' };
   if ((await db.ref(PILOT + '/' + cid).once('value')).val() !== true)
@@ -238,8 +239,10 @@ async function lgAgentSendPending(db, opts) {
   //  שנכתבה כשהמתג דלק יכולה להיות לא רלוונטית לגמרי כשידליקו שוב.
   //  לכל רשומה — המתג של הסוכן שלה (entry.agent; רשומה ישנה בלי — המתגים הישנים).
   const cfg = env.AGENT_SHADOW_ENABLED === 'true' ? await lgAgentConfig(db) : null;
-  const modeOf = a => lgAgentModeOf(cfg, a, env);
-  const on = [...LG_AGENT_KEYS, ''].some(a => modeOf(a) === 'reply');
+  const anyReply = LG_AGENT_KEYS.some(a => lgAgentModeOf(cfg, a, env) === 'reply');
+  //  רשומה בלי סוכן מוכר (ישנה): בלי הגדרות — המתגים הישנים; עם הגדרות — רק אם מישהו "עונה"
+  const modeOf = a => (cfg && !LG_AGENT_KEYS.includes(a) ? (anyReply ? 'reply' : 'off') : lgAgentModeOf(cfg, a, env));
+  const on = anyReply;
   const delLive = (await db.ref(AGENT_DELETE_LIVE).once('value')).val() === true;
   if (!on && !delLive) {
     for (const key of keys) {
@@ -261,7 +264,8 @@ async function lgAgentSendPending(db, opts) {
     if (st.state !== 'authorized') { res.skipped = keys.length; return res; }
   }
 
-  const staff = await lgAgentStaffAll(db, env, cfg);
+  const staff = lgAgentStaff(env);
+  const ben = lgAgentEscalatePhone(cfg);
   let processed = 0;
   for (const key of keys) {
     if (processed >= (provider.maxPerRun || 10)) break;
@@ -288,7 +292,7 @@ async function lgAgentSendPending(db, opts) {
 
     let live, gate, loaded;
     try {
-      live = await _liveRecipient(db, entry, staff);
+      live = await _liveRecipient(db, entry, staff, ben);
       if (live.ok) gate = provider.gate({ phone: live.phone, accountKey: live.accountKey, linked: true });
       if (live.ok && gate.allowed) loaded = await _loadFiles(db, entry, live);
     } catch (e) {
@@ -347,5 +351,5 @@ async function lgAgentSendPending(db, opts) {
 }
 
 module.exports = { AGENT_OUTBOX, AGENT_DELETE_LIVE, AGENT_DELETED_REASON, PER_CALL_MS, PER_ITEM_WORST_MS, STATE_WORST_MS, MAX_ITEM_WORST_MS, lgAgentItemWorstMs,
-                   lgAgentStaff, lgAgentStaffAll, lgAgentEnqueue, lgAgentSendPending,
+                   AGENT_ASK_REASON, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending,
                    lgAgentChatOwnedBy: _chatOwnedBy };   // גם לביטול (_agent-act)
