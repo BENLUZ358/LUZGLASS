@@ -24,8 +24,19 @@ function lgAttList(order) {
 }
 
 function lgAttSlides(order) {
+  const atts = (order && order.attachments) || {};
+  //  מרכזן (10/11): צרופה שהמרכזן צירף לבד — כתוב עליה, ו"הפרד" שם כמו תמיד
+  const by = a => (atts[a.k] && atts[a.k].attachedBy === 'markazan' ? ' · צורף ע"י המרכזן' : '');
   return [{ label: 'סקיצה', key: order.id },
-          ...lgAttList(order).map(a => ({ label: a.label, key: order.id + '__att' + a.k, k: a.k }))];
+          ...lgAttList(order).map(a => ({ label: a.label + by(a), key: order.id + '__att' + a.k, k: a.k }))];
+}
+
+//  מרכזן (10/11): הצעת צרופה על שורה בתור — orders/<id>/attachSuggest (api/_attach-suggest.js)
+function lgAttSuggestText(order) {
+  const s = order && order.attachSuggest;
+  if (!s || !s.targetId || !LG_ATT_KINDS[s.kind]) return '';
+  const name = String(s.targetName || '').trim() || String(s.targetNum || '').trim() || 'הסקיצה';
+  return 'נראה כמו ' + LG_ATT_KINDS[s.kind] + " — לצרף ל'" + name + "'?";
 }
 
 function lgAttCanMerge(src, dst) {

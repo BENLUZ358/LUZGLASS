@@ -267,5 +267,15 @@ check('the scan actually found fields to check', Object.keys(written).length > 1
         lgNormalizeOrder({ id: 'L1', emailNotices: 'yes' }).emailNotices, null);
 }
 
+/* attachSuggest (מרכזן, 10/11): "נראה כמו גרפיקה חלבי — לצרף?" נכתב רק בשרת
+   (api/_attach-suggest.js) ומוצג בתור הסקיצות. בלי השדה כאן התג לעולם לא מופיע. */
+{
+  check('the whitelist carries attachSuggest', whitelist.has('attachSuggest'), true);
+  const s = { kind: 'graphic', targetId: 'wa_1', at: 1762790000000, targetName: 'מקלחון רון', targetNum: 'L1090' };
+  check('the suggestion arrives intact', lgNormalizeOrder({ id: 'wa_2', attachSuggest: s }).attachSuggest, s);
+  check('an order without one gets null', lgNormalizeOrder({ id: 'L1' }).attachSuggest, null);
+  check('a suggestion that is not an object is dropped', lgNormalizeOrder({ id: 'L1', attachSuggest: 'yes' }).attachSuggest, null);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll order-normaliser checks passed.');

@@ -161,6 +161,14 @@ async function handleAdmin(body, deps) {
     return lgAgentShadowVerdict(deps.db, b.key, { ok: b.ok, note: b.note, by: String(deps.by || '') }, deps.now);
   }
 
+  // ─── מרכזן: "צרף" / "לא" על הצעת צרופה בתור (10/11) ─────────────────────
+  //  הלמידה ב-waMeta/attachLearn — הדפדפן לא כותב ל-waMeta. ר' api/_attach-suggest.js
+  if (action === 'attach-answer') {
+    if (!_keyOk(String(b.orderId || ''))) return { ok: false, code: 'bad-key', message: 'מזהה הזמנה לא תקין' };
+    return require('./_attach-suggest').lgAttachAnswer(deps.db,
+      { answer: b.answer, orderId: String(b.orderId), targetId: b.targetId == null ? '' : String(b.targetId), by: String(deps.by || '') }, deps.now);
+  }
+
   // ─── פיילוט הסוכנים ללקוח (31/10) ─────────────────────────────────────
   //  waMeta לא נכתב מהדפדפן — ולכן כאן. on:true → true; on:false → מוסר.
   if (action === 'agent-pilot') {

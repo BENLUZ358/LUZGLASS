@@ -49,4 +49,82 @@ function lgAttFindByMsg(orders, waMessageId) {
   return null;
 }
 
-module.exports = { LG_ATT_KINDS, lgAttListOf, lgAttOf, lgAttFindByMsg };
+// ─── איחוד בשרת (מרכזן, 10/11) ──────────────────────────────────────
+//  ⚠️ העתק של lgAttCanMerge / _attNextK / lgAttMergePlan מ-order-attachments.js (הדפדפן).
+//  scripts/test-attach-suggest.js משווה את שניהם על אותם קלטים — שינוי באחד בלי השני נכשל שם.
+const _attMail = s => { const m = String(s || '').match(/<([^>]+)>/); return String(m ? m[1] : s || '').trim().toLowerCase(); };
+
+function lgAttCanMerge(src, dst) {
+  if (!src || !dst || !src.id || !dst.id) return { ok: false, why: 'הזמנה לא נמצאה' };
+  if (src.id === dst.id) return { ok: false, why: 'אי אפשר לחבר הזמנה לעצמה' };
+  if (src.stage) return { ok: false, why: 'אפשר לחבר רק תמונה שעוד בתור הסקיצות' };
+  if (src.items && Object.keys(src.items).length) return { ok: false, why: 'לתמונה הזו כבר הוזנו פריטים — היא הזמנה, לא צרופה' };
+  if (lgAttListOf(src).length) return { ok: false, why: 'לתמונה הזו יש כבר תמונות נוספות — קודם הפרד אותן' };
+  if (src.hashavshevet && Object.keys(src.hashavshevet).length) return { ok: false, why: 'התמונה הזו כבר נשלחה לחשבשבת' };
+  const sc = String(src.customerId || ''), dc = String(dst.customerId || '');
+  if (sc || dc) {
+    if (sc !== dc) return { ok: false, why: 'אפשר לחבר רק בין הזמנות של אותו לקוח' };
+  } else {
+    const sameWa = src.waSender && String(src.waSender) === String(dst.waSender || '');
+    const sameMail = src.emailFrom && _attMail(src.emailFrom) === _attMail(dst.emailFrom);
+    if (!sameWa && !sameMail) return { ok: false, why: 'אפשר לחבר רק בין הזמנות של אותו שולח' };
+  }
+  return { ok: true };
+}
+
+function _attNextK(dst, attNext) {
+  const ks = Object.keys((dst && dst.attachments) || {}).map(Number).filter(Number.isInteger);
+  const n = Number(attNext);
+  return Math.max((ks.length ? Math.max(...ks) : 0) + 1, Number.isInteger(n) && n > 0 ? n : 1);
+}
+
+function lgAttMergePlan(src, dst, kind, srcSketch, extra, now, by, kAlloc) {
+  if (!LG_ATT_KINDS[kind]) throw new Error('סוג צרופה לא מוכר');
+  const k = Number.isInteger(kAlloc) && kAlloc > 0 ? kAlloc : _attNextK(dst, dst && dst.attNext);
+  const e = extra || {};
+  const copy = JSON.parse(JSON.stringify(src));
+  delete copy.sketch; delete copy.files;
+  const upd = {};
+  upd['sketches/' + dst.id + '__att' + k] = srcSketch;
+  upd['orders/' + dst.id + '/attachments/' + k] = { kind, at: now, by: String(by || ''),
+    from: { order: copy, layer: e.layer || null, base: e.base || null } };
+  upd['orders/' + dst.id + '/updatedAt'] = now;
+  upd['orders/' + src.id] = null;
+  upd['sketches/' + src.id] = null;
+  upd['sketches/' + src.id + '__layer'] = null;
+  upd['sketches/' + src.id + '__base'] = null;
+  return { k, upd };
+}
+
+const _okId = id => !!id && !/[.#$[\]/]/.test(id);
+
+//  srcId (שורה בתור) → צרופה של dstId. בדיוק כמו lgAttMerge בדפדפן: k מוקצה בטרנזקציה על
+//  orders/<dst>/attNext, ואז עדכון רב-נתיבי אחד. opts: { by, now, attachedBy, srcPatch }
+//  srcPatch — שדות שנכנסים לעותק ב-from (למשל attachSuggest, כדי ש"הפרד" יחזיר את ההצעה).
+//  → { ok:true, k } | { ok:false, why }
+async function lgAttMergeServer(db, srcId, dstId, kind, opts) {
+  const o = opts || {};
+  const sid = String(srcId || ''), did = String(dstId || '');
+  if (!_okId(sid) || !_okId(did)) return { ok: false, why: 'מזהה לא תקין' };
+  if (!LG_ATT_KINDS[kind]) return { ok: false, why: 'סוג צרופה לא מוכר' };
+  const read = async id => { const v = (await db.ref('orders/' + id).once('value')).val(); return v ? { ...v, id: v.id || id } : null; };
+  const [src0, dst] = await Promise.all([read(sid), read(did)]);
+  if (!src0 || !dst) return { ok: false, why: 'ההזמנה לא נמצאה' };
+  const src = o.srcPatch ? { ...src0, ...o.srcPatch } : src0;
+  const ok = lgAttCanMerge(src, dst);
+  if (!ok.ok) return ok;
+  const img = (await db.ref('sketches/' + sid).once('value')).val();
+  if (!img) return { ok: false, why: 'אין תמונה להעביר' };
+  const [l, b] = await Promise.all([db.ref('sketches/' + sid + '__layer').once('value'), db.ref('sketches/' + sid + '__base').once('value')]);
+  const minK = _attNextK(dst, dst.attNext);
+  const tx = await db.ref('orders/' + did + '/attNext').transaction(cur => _attNextK(null, Math.max(Number(cur) || 0, minK)) + 1);
+  if (!tx || !tx.committed) return { ok: false, why: 'לא הוקצה מקום לצרופה' };
+  const k = Number(tx.snapshot.val()) - 1;
+  const now = Number(o.now) || Date.now();
+  const plan = lgAttMergePlan(src, dst, kind, img, { layer: l.val(), base: b.val() }, now, o.by, k);
+  if (o.attachedBy) plan.upd['orders/' + did + '/attachments/' + k].attachedBy = String(o.attachedBy);
+  await db.ref().update(plan.upd);
+  return { ok: true, k };
+}
+
+module.exports = { LG_ATT_KINDS, lgAttListOf, lgAttOf, lgAttFindByMsg, lgAttCanMerge, lgAttMergePlan, lgAttMergeServer };

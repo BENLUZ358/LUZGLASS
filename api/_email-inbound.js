@@ -351,6 +351,15 @@ async function lgEmailInboundProcess(db, key, opts) {
     //  כבר בתור על המייל הזה (שתי הודעות בבת אחת). מתג כבוי → כלום. ר' api/_intake-ack.js
     try { await require('./_intake-ack').lgIntakeAckEmail(db, orderIds, now, { ackedByAuto }); }
     catch (e) { console.warn('email-inbound: intake ack failed', e && e.name); }
+    //  מרכזן: הצעת צרופה לכל תמונה — עד שנגמר הזמן של הבקשה (deadline); מה שלא הספיק נשאר בלי הצעה
+    for (const id of orderIds) {
+      try {
+        const a = o.attach || {};
+        const r = await require('./_attach-suggest').lgAttachSuggestFor(db, { ...upd['orders/' + id] }, { now, caption: entry.subject || '',
+          fetcher: a.fetcher, shrink: a.shrink, deadline });
+        if (r.reason === 'off' || r.reason === 'no-time' || r.reason === 'no-model') break;
+      } catch (e) { console.warn('email-inbound: attach suggest failed', e && e.name); }
+    }
     return { state: 'done', refNum, orderIds, ...(autoHandled ? { autoHandled: true } : {}) };
   } catch (e) {
     const final = e instanceof Final;

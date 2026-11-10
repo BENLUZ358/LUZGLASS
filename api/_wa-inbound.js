@@ -213,6 +213,12 @@ const _fmtLocal = p => (p.length === 10 ? p.slice(0, 3) + '-' + p.slice(3) : p);
 async function _markazan(db, order, entry, now, o) {
   try { await require('./_intake-ack').lgIntakeAckNote(db, order, now); }
   catch (e) { console.warn('wa-inbound: intake ack note failed', e && e.name); }
+  //  הסיווג לוקח כמה שניות — אחרי האישור (שנרשם מיד), ולא כשנגמר הזמן של ה-drain
+  try {
+    const a = o.attach || {};
+    await require('./_attach-suggest').lgAttachSuggestFor(db, order, { now, caption: entry.caption || '', fetcher: a.fetcher,
+                                                                       shrink: a.shrink, deadline: o.deadline });
+  } catch (e) { console.warn('wa-inbound: attach suggest failed', e && e.name); }
 }
 
 // ─── עיבוד ──────────────────────────────────────────────────────────
