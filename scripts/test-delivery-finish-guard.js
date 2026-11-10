@@ -146,10 +146,13 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
   /* ומסך ההובלות ממשיך לעבוד בדיוק כפי שהוא */
   check('the delivery screen still finishes deliveries',
         /showClientDeliveryPrompt\(btn\.dataset\.ids\)/.test(WD), true);
-  check('and still sends the grouped dispatched message',
-        /_waDispatch\(orderIds, clientName\)/.test(WD), true);
-  check('with the business action first',
-        WD.indexOf('finalizeDelivery') < WD.indexOf('_waDispatch(orderIds'), true);
+  /* בן, 10/11: סיום הובלה אינו שולח הודעה. "ההובלה יצאה" בוטלה — לקוח הובלות
+     מקבל רק את החשבונית, ובה "ההובלה תצא אליך בקרוב". */
+  const prompt = (WD.match(/function showClientDeliveryPrompt[\s\S]*?\n}/) || [''])[0];
+  check('finishing a delivery sends no message to the customer',
+        /whatsapp-dispatch|_waDispatch|kind:\s*'dispatched'/.test(prompt), false);
+  check('and the dispatched-message sender is gone from the page',
+        /_waDispatch/.test(WD), false);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
