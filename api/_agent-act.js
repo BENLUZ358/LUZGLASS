@@ -561,7 +561,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
     || (await _pilotOn(cid) && (rec.linkVia != null ? ['group', 'sender'].includes(String(rec.linkVia))
                                                    : ['group', 'sender'].includes(await require('./_agent-shadow').lgAgentLinkVia(db, rec))));
   if (rec.route === 'archive' && rec.linked && cid && await _archiveGate()) {
-    try { archive = await lgArchiveFind(db, { customerId: cid, ref: rec.ref, text: rec.text, orders }); }
+    //  שיפור 4: "כל החשבוניות של <חודש>" — רק כשיש הגדרות במסך
+    try { archive = await lgArchiveFind(db, { customerId: cid, ref: rec.ref, text: rec.text, orders, byMonth: !!cfg, now }); }
     catch (e) { console.warn('agent-act: archive', e && e.name); archive = { kind: 'none' }; }
   }
   // מחירון: טקסט → מודל + מחירון (כשל → שאול). "השב" של שאול → הבקשה הממתינה
@@ -667,7 +668,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  למידה (שלב ג׳, _agent-lessons): שאלה דומה לכלל שבן אישר? רק טקסט (לא תמונה).
       //  ⚠️ כאן כבר עברו כל השערים (הסוכן "עונה", לקוח מופעל ומקושר) — אחרת המודל לא נקרא.
       let lm = null;
-      if (!(a.files && a.files.length) && a.question && a.question !== '(תמונה)') {
+      //  hold משלו (שיפורים 4, 6 — כמות חשבוניות / בקשת מחיר) — בלי למידה: ההודעה ללקוח קבועה
+      if (!(a.files && a.files.length) && !a.hold && a.question && a.question !== '(תמונה)') {
         try {
           lm = await lgLessonFind(db, { agent, question: a.question, env, fetcher: o.fetchImpl, matcher: o.lessonMatch,
                                         deadline: o.deadline, clock: o.clock, reserveMs: 2 * PER_ITEM_WORST_MS });

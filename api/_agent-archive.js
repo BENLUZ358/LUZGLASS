@@ -20,6 +20,64 @@
 const { lgOkevFind, lgOkevReply } = require('./_agent-okev');
 
 const ARCHIVE_OK_TEXT = 'מצורף';
+
+// ─── שיפור 4 (חדר הסוכנים, 11/11): "כל החשבוניות של אוקטובר" ─────────────
+//  חודש בשם עברי (עם/בלי שנה, עם תחילית ב/ל/מ/ו/ש/ה) או MM/YYYY / M/YY.
+//  בלי שנה → המופע האחרון שאינו בעתיד (שעון ישראל). תאריך מלא (15/10/2026) — לא חודש.
+//  החיפוש: invoicePdf בטווח createdAt של החודש (+45 יום — חשבונית שהודפסה אחר כך),
+//  רק 'ready' של אותו כרטיס (accountKey === customerId), לפי date של החשבונית.
+//  עד 10 → נשלחות (שכבת השליחה בודקת שוב כל קובץ); יותר → הודעה עם הכמות + בן.
+//  ⚠️ רק כשיש הגדרות במסך (byMonth מ-_agent-act) — בלעדיהן כמו קודם.
+const HE_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const _HE_ALT = { 'מרס': 3 };
+const ARCHIVE_MONTH_MAX = 10;
+const _monthRe = () => new RegExp('(^|[^א-ת])[בלמושה]?(' + [...HE_MONTHS, ...Object.keys(_HE_ALT)].join('|')
+  + ')(?![א-ת])(?:\\s*(\\d{4}))?');
+const _NUM_MONTH = /(^|[^\d./-])(\d{1,2})[./-](\d{4}|\d{2})(?![\d]|[./-]\d)/;
+function _ilYm(now) {
+  const p = {};
+  new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit' })
+    .formatToParts(new Date(now)).forEach(x => { p[x.type] = x.value; });
+  return { y: Number(p.year), m: Number(p.month) };
+}
+//  → { ym:'YYYY-MM', token } או null
+function _monthOf(text, now) {
+  const t = String(text == null ? '' : text);
+  const cur = _ilYm(Number(now) || Date.now());
+  const he = t.match(_monthRe());
+  let m = 0, y = 0, token = '';
+  if (he) {
+    m = HE_MONTHS.indexOf(he[2]) + 1 || _HE_ALT[he[2]];
+    y = he[3] ? Number(he[3]) : (m > cur.m ? cur.y - 1 : cur.y);
+    token = he[0];
+  } else {
+    const n = t.match(_NUM_MONTH);
+    if (!n) return null;
+    m = Number(n[2]); y = n[3].length === 2 ? 2000 + Number(n[3]) : Number(n[3]);
+    token = n[0];
+  }
+  if (!(m >= 1 && m <= 12) || !(y >= 2000 && y <= 2100)) return null;
+  return { ym: y + '-' + String(m).padStart(2, '0'), token };
+}
+const lgArchiveMonth = (text, now) => { const r = _monthOf(text, now); return r ? r.ym : ''; };
+//  "אוקטובר 2026"
+const lgArchiveMonthName = ym => { const [y, m] = String(ym).split('-').map(Number); return (HE_MONTHS[m - 1] || '') + ' ' + y; };
+//  "מאוקטובר 2026" / "ממרץ 2026"
+const _fromMonth = ym => 'מ' + lgArchiveMonthName(ym);
+
+async function _findMonth(db, cid, ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const start = Date.UTC(y, m - 1, 1) - 3 * 24 * 3600 * 1000;
+  const end = Date.UTC(y, m, 1) + 45 * 24 * 3600 * 1000;
+  const v = (await db.ref('invoicePdf').orderByChild('createdAt').startAt(start).endAt(end).once('value')).val() || {};
+  const keys = Object.keys(v).filter(k => {
+    const r = v[k];
+    return r && r.state === 'ready' && cid && String(r.accountKey || '') === cid && String(r.date || '').slice(0, 7) === ym;
+  }).sort((a, b) => String(v[a].date).localeCompare(String(v[b].date)) || (Number(v[a].docNumber) || 0) - (Number(v[b].docNumber) || 0));
+  if (!keys.length) return null;
+  if (keys.length > ARCHIVE_MONTH_MAX) return { kind: 'invoices-many', month: ym, count: keys.length };
+  return { kind: 'invoices', month: ym, invoiceKeys: keys, count: keys.length };
+}
 const ARCHIVE_HOLD_TEXT = 'אני בודק ואחזור אליך';
 
 // מה ביקשו: { want:'invoice'|'sketch'|'any', withSketches }
@@ -99,7 +157,11 @@ async function lgArchiveFind(db, p) {
     orders = Object.entries(all).filter(([, x]) => x && String(x.customerId || '') === cid).map(([id, x]) => ({ ...x, id }));
   }
   const w = lgArchiveWants(text);
-  const digits = _docDigits(ref, text);
+  //  שיפור 4: חודש בלי מספר חשבונית → כל החשבוניות של החודש
+  const mo = p.byMonth === true && w.want === 'invoice' ? _monthOf(text, p.now) || _monthOf(ref, p.now) : null;
+  const strip = s => (mo ? String(s || '').split(mo.token).join(' ') : s);
+  const digits = mo ? _docDigits(strip(ref).replace(_NUM_MONTH, ' '), strip(text)) : _docDigits(ref, text);
+  if (mo && !digits) return (await _findMonth(db, cid, mo.ym)) || { kind: 'none', month: mo.ym };
   let hit = null;
   if (w.want === 'invoice') hit = await _findInvoice(db, cid, digits, orders, w.withSketches);
   else if (w.want === 'sketch') hit = await _findSketch(db, orders, ref);
@@ -120,6 +182,19 @@ function lgArchiveActions(r, found, now) {
     const files = [{ kind: 'invoice-copy', invoiceKey: f.invoiceKey }, ...(f.orderIds || []).map(id => ({ kind: 'sketch', orderId: id }))];
     return { actions: [{ type: 'files', text: ARCHIVE_OK_TEXT, files }], archived: true };
   }
+  if (f.kind === 'invoices') {
+    const files = (f.invoiceKeys || []).map(k => ({ kind: 'invoice-copy', invoiceKey: k }));
+    const text = files.length === 1 ? ARCHIVE_OK_TEXT : 'מצורפות ' + files.length + ' חשבוניות ' + _fromMonth(f.month);
+    return { actions: [{ type: 'files', text, files }], archived: true };
+  }
+  if (f.kind === 'invoices-many') {
+    return { actions: [{ type: 'ask', who, question: String(r.text || '').trim(),
+      hold: 'יש ' + f.count + ' חשבוניות ' + _fromMonth(f.month) + ' — יותר מדי לשלוח כאן. אנחנו בודקים ונחזור אליך בהקדם.',
+      note: 'ביקשו את כל החשבוניות ' + _fromMonth(f.month) + ' — ' + f.count + ' חשבוניות, יותר מ-' + ARCHIVE_MONTH_MAX }], archived: true };
+  }
+  if (f.kind === 'none' && f.month) {
+    return { actions: [{ type: 'ask', who, question: String(r.text || '').trim(), note: 'ביקשו חשבוניות ' + _fromMonth(f.month) + ' — לא נמצא' }], archived: true };
+  }
   if (f.kind === 'sketch') return { actions: [{ type: 'files', text: ARCHIVE_OK_TEXT, files: [{ kind: 'sketch', orderId: f.orderId }] }], archived: true };
   if (f.kind === 'many') {
     return { actions: [{ type: 'reply', text: lgOkevReply('status', { match: 'many', orders: f.orders }) }],
@@ -132,4 +207,4 @@ function lgArchiveActions(r, found, now) {
   return { actions: [{ type: 'ask', who, question: String(r.text || '').trim(), note }], archived: true };
 }
 
-module.exports = { ARCHIVE_OK_TEXT, ARCHIVE_HOLD_TEXT, lgArchiveWants, lgArchiveFind, lgArchiveActions };
+module.exports = { ARCHIVE_OK_TEXT, ARCHIVE_HOLD_TEXT, ARCHIVE_MONTH_MAX, lgArchiveMonth, lgArchiveMonthName, lgArchiveWants, lgArchiveFind, lgArchiveActions };
