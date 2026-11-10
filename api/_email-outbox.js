@@ -187,6 +187,13 @@ async function lgEmailDoneMails(db, orderIds) {
   for (const id of orderIds || []) {
     const m = (await db.ref('orders/' + id + '/emailMessageId').once('value')).val();
     if (m && !mids.includes(String(m))) mids.push(String(m));
+    //  צרופות (בן, 10/11): המייל של תמונה שאוחדה לתוך ההזמנה — נשפט כמו כל מייל
+    //  (ההזמנה המקורית נמחקה באיחוד, ולכן לא מחזיקה אותו)
+    const atts = (await db.ref('orders/' + id + '/attachments').once('value')).val() || {};
+    for (const k of Object.keys(atts)) {
+      const am = atts[k] && atts[k].from && atts[k].from.order && atts[k].from.order.emailMessageId;
+      if (am && !mids.includes(String(am))) mids.push(String(am));
+    }
   }
   const out = [];
   for (const mid of mids) {

@@ -36,6 +36,12 @@ let f = lgOkevFind([kohen, levi, old], { quotedId: 'ABC' });
 check('quoted גם collected', [f.match, f.via, f.orders.map(x => x.id)], ['one', 'quoted', ['3']]);
 f = lgOkevFind([kohen, levi, old], { quotedId: 'ABC', ref: 'כהן' });
 check('quoted גובר על ref', [f.match, f.via, f.orders[0].id], ['one', 'quoted', '3']);
+// צרופה (בן, 10/11): "השב" על הודעת התמונה שאוחדה כצרופה → ההזמנה הראשית
+const withAtt = o('5', 'L5555', 'מקלחון', 'workday', { waMessageId: 'MAIN', attachments: { 1: { kind: 'graphic', from: { order: { waMessageId: 'ATT1' } } } } });
+f = lgOkevFind([kohen, withAtt], { quotedId: 'ATT1' });
+check('quoted על צרופה → ההזמנה הראשית', [f.match, f.via, f.orders.map(x => x.id)], ['one', 'quoted', ['5']]);
+f = lgOkevFind([kohen, withAtt, { ...withAtt, id: '6', waMessageId: 'ATT1', attachments: null }], { quotedId: 'ATT1' });
+check('quoted: הזמנה עם אותה הודעה גוברת על צרופה', [f.match, f.orders.map(x => x.id)], ['one', ['6']]);
 f = lgOkevFind([kohen, levi], { ref: 'כהן' });
 check('ref טקסט includes', [f.match, f.via, f.orders[0].id], ['one', 'ref', '1']);
 f = lgOkevFind([kohen, levi], { ref: '1234' });

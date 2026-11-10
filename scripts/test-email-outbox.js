@@ -491,6 +491,13 @@ const outbox = db => (db._data.waMeta && db._data.waMeta.emailOutbox) || {};
     check('F2 a mail with an unhandled order is not', await ob.lgEmailDoneMails(db1, ['B1']), []);
     check('F3 a deleted order does not hold the mail', await ob.lgEmailDoneMails(db1, ['C1']), ['mC']);
     check('F4 several mails, each judged alone', await ob.lgEmailDoneMails(db1, ['A1', 'B1', 'C1']), ['mA', 'mC']);
+    // צרופה (בן, 10/11): המייל של תמונה שאוחדה לתוך ההזמנה נכנס לארכיון יחד איתה
+    const att = k => ({ kind: 'graphic', from: { order: { emailMessageId: k } } });
+    const dbA = mk({ A1: { sketchSeenAt: 1, emailMessageId: 'mA', attachments: { 1: att('mZ'), 2: att('mA') } }, A2: { sketchSeenAt: 2, emailMessageId: 'mA' } },
+                   { mA: { orderIds: ['A1', 'A2'] }, mZ: { orderIds: ['Z1'] } });
+    check('F7 the attachment mail is archived with its order', await ob.lgEmailDoneMails(dbA, ['A1']), ['mA', 'mZ']);
+    dbA._data.emailInbound.mZ.orderIds = ['Z1', 'Z2']; dbA._data.orders.Z2 = { emailMessageId: 'mZ' };
+    check('F8 ...but not while another order from that mail is unhandled', await ob.lgEmailDoneMails(dbA, ['A1']), ['mA']);
     const db2 = mk({ X1: { sketchSeenAt: 1, emailMessageId: 'mX' } }, {});
     check('F5 no intake record -> not done', await ob.lgEmailDoneMails(db2, ['X1']), []);
     const db3 = mk({ A1: { sketchSeenAt: 1, emailMessageId: 'mA' } }, { mA: { orderIds: { 0: 'A1' } } });
