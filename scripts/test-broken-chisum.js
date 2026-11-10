@@ -11,7 +11,7 @@ const pick = re => { const m = SRC.match(re); if (!m) { fail++; console.log('FAI
 /* ── Task 1: ההחלטה ───────────────────────────────────────────────── */
 const ctx = { console }; vm.createContext(ctx);
 vm.runInContext([pick(/function lgBrokenPlan[\s\S]*?\n}/), pick(/function lgBrokenOpen[\s\S]*?\n}/),
-                 pick(/function lgBrokenReturnedUndelivered[\s\S]*?\n}/)].join('\n'), ctx);
+                 pick(/function _lgBrokenEntries[\s\S]*?\n}/), pick(/function lgBrokenReturnedUndelivered[\s\S]*?\n}/)].join('\n'), ctx);
 const base = { isDelivery: true, waitsPolish: false, done: false, chisumPending: [0, 1, 2], chisumArrived: [0, 1],
                triplexPending: [], triplexArrived: [], triplexBack: false, closedAny: false, itemCount: 3, factoryCount: 3 };
 const P = x => ctx.lgBrokenPlan({ ...base, ...x });
