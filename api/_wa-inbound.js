@@ -208,6 +208,21 @@ const _refNum = (db, key, entry) => lgInboxRefNum(db, INBOX, key, entry);
 
 const _fmtLocal = p => (p.length === 10 ? p.slice(0, 3) + '-' + p.slice(3) : p);
 
+// ─── מרכזן — אחרי שההזמנה נכתבה ─────────────────────────────────────
+//  ר' api/_intake-ack.js (אישור קליטה) ו-api/_attach-suggest.js (הצעת צרופה).
+async function _markazan(db, order, entry, now, o) {
+  try { await require('./_intake-ack').lgIntakeAckNote(db, order, now); }
+  catch (e) { console.warn('wa-inbound: intake ack note failed', e && e.name); }
+  //  הסיווג לוקח כמה שניות — אחרי האישור (שנרשם מיד), ולא כשנגמר הזמן של ה-drain
+  try {
+    const a = o.attach || {};
+    //  o.attachMs (webhook): הסיווג לא מוסיף יותר מזה לבקשה — הדדליין הקרוב מבין השניים
+    const deadline = o.attachMs != null ? Math.min(o.deadline != null ? o.deadline : Infinity, Date.now() + Number(o.attachMs)) : o.deadline;
+    await require('./_attach-suggest').lgAttachSuggestFor(db, order, { now, caption: entry.caption || '', fetcher: a.fetcher,
+                                                                       shrink: a.shrink, deadline });
+  } catch (e) { console.warn('wa-inbound: attach suggest failed', e && e.name); }
+}
+
 // ─── עיבוד ──────────────────────────────────────────────────────────
 //  מחזיר { ok, reason, orderIds }.
 async function lgWaInboundProcess(db, key, opts) {
@@ -331,6 +346,8 @@ async function lgWaInboundProcess(db, key, opts) {
     upd[base + 'doneAt'] = now;
     upd[base + 'updatedAt'] = now;
     await db.ref().update(upd);
+    //  מרכזן (10/11): "N סקיצות נקלטו" + הצעת צרופה. מתגים כבויים → כלום; כשל → לא מפיל את הקליטה
+    if (!isText) await _markazan(db, order, entry, now, o);
     return { ok: true, reason: '', orderIds: [id] };
   } catch (e) {
     const permanent = e instanceof Permanent;

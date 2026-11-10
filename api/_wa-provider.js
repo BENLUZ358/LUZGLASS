@@ -106,6 +106,15 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliv
     return wrap(names.length === 1 ? 'ההזמנה שלכם התקבלה ואושרה, אנחנו מטפלים בה.'
                                    : 'ההזמנות שלכם התקבלו ואושרו, אנחנו מטפלים בהן.');
   }
+  //  מרכזן — אישור קליטה (בן, 10/11): המספר בלבד, בלי רשימת שמות (הסקיצות עוד לא נקראו).
+  //  ר' api/_intake-ack.js
+  if (kind === 'sketches-received') {
+    return `שלום ${who},
+
+${one ? 'סקיצה אחת נקלטה.' : n + ' סקיצות נקלטו.'}
+
+${BUSINESS}`;
+  }
   if (kind === 'sketches-handled') {
     return wrap(one ? 'סקיצה אחת אושרה, מתחילים לעבוד עליה.'
                     : count + ' אושרו, מתחילים לעבוד עליהן.');

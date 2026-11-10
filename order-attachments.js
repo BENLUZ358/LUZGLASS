@@ -24,8 +24,25 @@ function lgAttList(order) {
 }
 
 function lgAttSlides(order) {
+  const atts = (order && order.attachments) || {};
+  //  מרכזן (10/11): צרופה שהמרכזן צירף לבד — כתוב עליה, ו"הפרד" שם כמו תמיד
+  const by = a => (atts[a.k] && atts[a.k].attachedBy === 'markazan' ? ' · צורף ע"י המרכזן' : '');
   return [{ label: 'סקיצה', key: order.id },
-          ...lgAttList(order).map(a => ({ label: a.label, key: order.id + '__att' + a.k, k: a.k }))];
+          ...lgAttList(order).map(a => ({ label: a.label + by(a), key: order.id + '__att' + a.k, k: a.k }))];
+}
+
+//  מרכזן (סקירה 10/11): להזמנה יש צרופה שהמרכזן צירף לבד — תג בשורה בתור, כדי שבן יפתח ו"הפרד"
+function lgAttByMarkazan(order) {
+  const a = (order && order.attachments) || {};
+  return Object.keys(a).some(k => a[k] && a[k].attachedBy === 'markazan');
+}
+
+//  מרכזן (10/11): הצעת צרופה על שורה בתור — orders/<id>/attachSuggest (api/_attach-suggest.js)
+function lgAttSuggestText(order) {
+  const s = order && order.attachSuggest;
+  if (!s || !s.targetId || !LG_ATT_KINDS[s.kind]) return '';
+  const name = String(s.targetName || '').trim() || String(s.targetNum || '').trim() || 'הסקיצה';
+  return 'נראה כמו ' + LG_ATT_KINDS[s.kind] + " — לצרף ל'" + name + "'?";
 }
 
 function lgAttCanMerge(src, dst) {
@@ -90,6 +107,8 @@ function lgAttSplitPlan(dst, k, attSketch) {
   const o = a.from.order;
   const upd = {};
   upd['orders/' + o.id] = JSON.parse(JSON.stringify(o));
+  //  מרכזן (סקירה 10/11): השורה חוזרת בלי ההצעה — אחרת התג חוזר ו"צרף" נספר פעמיים
+  delete upd['orders/' + o.id].attachSuggest;
   upd['sketches/' + o.id] = attSketch;
   if (a.from.layer) upd['sketches/' + o.id + '__layer'] = a.from.layer;
   if (a.from.base) upd['sketches/' + o.id + '__base'] = a.from.base;

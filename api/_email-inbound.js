@@ -330,7 +330,7 @@ async function lgEmailInboundProcess(db, key, opts) {
     upd[EM_PARTS + '/' + key] = null;
     await db.ref().update(upd);
     //  כתובת מקושרת → "טופל" לבד והודעה ללקוח (בן, 2/11). ר' _email-auto-handled.js
-    let autoHandled = false;
+    let autoHandled = false, ackedByAuto = false;
     //  ⚠️ לא כשהמייל צריך את בן: קובץ שלא נקרא, תמונה ענקית, "כפולה?", שורה בלי
     //  מק"ט — אחרת הלקוח היה מקבל "טופל" על משהו שנשאר בחוץ
     const needsBen = skipped.length || upd[base + 'oversize'] ||
@@ -341,10 +341,24 @@ async function lgEmailInboundProcess(db, key, opts) {
         //  ⚠️ אביבי (בן, 4/11): "לארכיון אחרי שנשלח אליה מייל" — התשובה יוצאת אחרי דקה,
         //  ולכן לא אומרים לסקריפט autoHandled (= ארכיון מיד). הארכיון בא עם התשובה (doneMails).
         autoHandled = a.queued && !a.later;
+        ackedByAuto = !!a.queued;
       }
       catch (e) { console.warn('email-inbound: auto-handle failed', e && e.name); }
       //  נשמר על הרשומה — הסקריפט ששואל שוב על אותו מייל עדיין יוציא אותו מהדואר הנכנס
       if (autoHandled) await db.ref(base + 'autoHandled').set(true).catch(() => {});
+    }
+    //  מרכזן (10/11): "N סקיצות נקלטו" — מייל אחד = סבב אחד. לא כש"טופלו" / אישור אביבי
+    //  כבר בתור על המייל הזה (שתי הודעות בבת אחת). מתג כבוי → כלום. ר' api/_intake-ack.js
+    try { await require('./_intake-ack').lgIntakeAckEmail(db, orderIds, now, { ackedByAuto }); }
+    catch (e) { console.warn('email-inbound: intake ack failed', e && e.name); }
+    //  מרכזן: הצעת צרופה לכל תמונה — עד שנגמר הזמן של הבקשה (deadline); מה שלא הספיק נשאר בלי הצעה
+    for (const id of orderIds) {
+      try {
+        const a = o.attach || {};
+        const r = await require('./_attach-suggest').lgAttachSuggestFor(db, { ...upd['orders/' + id] }, { now, caption: entry.subject || '',
+          fetcher: a.fetcher, shrink: a.shrink, deadline });
+        if (r.reason === 'off' || r.reason === 'no-time' || r.reason === 'no-model' || r.reason === 'cap') break;
+      } catch (e) { console.warn('email-inbound: attach suggest failed', e && e.name); }
     }
     return { state: 'done', refNum, orderIds, ...(autoHandled ? { autoHandled: true } : {}) };
   } catch (e) {

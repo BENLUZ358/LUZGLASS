@@ -27,6 +27,8 @@ const { lgWaInboundParse, lgWaInboundRecord, lgWaInboundProcess, lgWaInboundKey 
 // תיקון סופי 1: שרשרת הסוכן להודעה אחת (צל → act → שליחה) נגמרת עד 50ש׳
 // מתחילת ה-webhook — מתחת ל-maxDuration 60 גם כש-waitUntil ממשיך אחרי התשובה.
 const AGENT_WEBHOOK_CHAIN_MS = 50 * 1000;
+// מרכזן (סקירה 10/11): סיווג הצרופה מוסיף לבקשה לכל היותר ~8ש׳; פחות מ-3ש׳ פנויות → לא מסווגים
+const WA_WEBHOOK_ATTACH_MS = 8 * 1000;
 
 //  הסוד נבדק ב-_hook-token.js — משותף עם email-inbound. שם גם ההסבר למה
 //  "Bearer ", רווחים וסימני כיוון בלתי נראים לא נחשבים חלק מהסוד (15/10).
@@ -128,7 +130,7 @@ async function handleCustomerInbound(body, deps) {
 
   if (rec.created && (p.entry.kind === 'image' || p.entry.kind === 'text')) {
     deps.waitUntil(
-      lgWaInboundProcess(deps.db, rec.key, { by: 'webhook', fetchImpl: deps.fetchImpl, now: deps.now })
+      lgWaInboundProcess(deps.db, rec.key, { by: 'webhook', fetchImpl: deps.fetchImpl, now: deps.now, attachMs: WA_WEBHOOK_ATTACH_MS })
         .catch(e => console.error('wa-inbound: process crashed', e && e.name)));
   }
   return { status: 200, body: { ok: true, recorded: rec.created } };

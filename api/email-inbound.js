@@ -67,6 +67,14 @@ async function _noteSeen(deps, from, listed) {
   } catch (e) { console.warn('email-inbound: sendersSeen', e && e.name); }
 }
 
+//  אישורי קליטה בוואטסאפ שהגיע זמנם. כבוי (INTAKE_ACK_ENABLED) → כלום. לעולם לא מפיל את התפיסה.
+function _intakeTick(deps) {
+  const IA = require('./_intake-ack');
+  if (!IA.lgIntakeAckOn() || typeof deps.waitUntil !== 'function') return;
+  deps.waitUntil(IA.lgIntakeAckFlush(deps.db, deps.now, { drain: deps.drain })
+    .catch(e => console.error('email-inbound: intake ack flush failed', e && e.name)));
+}
+
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
 //  deps: { db, now? }. מחזיר { status, body }.
 async function handleEmailInbound(req, deps) {
@@ -83,6 +91,9 @@ async function handleEmailInbound(req, deps) {
   //  הסקריפט מושך מה לשלוח ומאשר. אותו טוקן; לפני בדיקת messageId כי
   //  לפעולות האלה אין הודעה נכנסת. ר' api/_email-outbox.js.
   if (b.op === 'outbox-claim') {
+    //  מרכזן (10/11): הסקריפט קורא לכאן כל דקה — זה השעון של "N סקיצות נקלטו" בוואטסאפ.
+    //  ברקע (waitUntil), כדי שהסקריפט לא יחכה ל-drain. ר' api/_intake-ack.js
+    _intakeTick(deps);
     try { return { status: 200, body: { ok: true, items: await lgEmailClaim(deps.db, 5, deps.now) } }; }
     catch (e) { console.error('email-inbound: outbox claim failed', e && e.name); return { status: 500, body: { error: 'claim failed' } }; }
   }
@@ -173,7 +184,8 @@ function _db() {
 module.exports = async function handler(req, res) {
   try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) { res.status(500).json({ error: 'server not configured' }); return; }
-    const r = await handleEmailInbound(req, { db: _db() });
+    const { waitUntil } = require('@vercel/functions');
+    const r = await handleEmailInbound(req, { db: _db(), waitUntil });
     res.status(r.status).json(r.body);
   } catch (e) {
     console.error('email-inbound: unexpected', e && e.name);

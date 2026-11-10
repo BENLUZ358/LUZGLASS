@@ -401,8 +401,8 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261110"></script>
-  <script src="order-attachments.js?v=20261111"></script>
+  <script src="firebase-db.js?v=20261112"></script>
+  <script src="order-attachments.js?v=20261112"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20261103"></script>
@@ -2913,6 +2913,14 @@ document.addEventListener('visibilitychange', () => {
 .sq-item-sub{font-size:12px;color:rgba(247,244,239,0.3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .sq-item-tags{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap;}
 .sq-tag{font-size:12px;padding:1px 5px;border-radius:3px;font-weight:700;}
+/* מרכזן — הצעת צרופה על השורה (10/11) */
+.sq-suggest{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;padding:6px 8px;border-radius:6px;
+  background:rgba(184,146,42,0.14);border:1px solid rgba(184,146,42,0.35);font-size:12px;color:var(--gold-text,#e0c068);}
+.sq-suggest-t{flex:1 1 160px;min-width:0;overflow-wrap:anywhere;font-weight:700;}
+.sq-suggest-b{display:flex;gap:6px;}
+.sq-suggest button{min-height:36px;min-width:56px;padding:0 12px;border-radius:6px;font:700 13px Heebo,sans-serif;cursor:pointer;}
+.sq-suggest-yes{background:#b8922a;color:#1a1714;border:1px solid #b8922a;}
+.sq-suggest-no{background:transparent;color:#f0ede8;border:1px solid rgba(247,244,239,0.3);}
 .sq-tag-sketch{background:rgba(41,128,185,0.25);color:#5dade2;}
 .sq-tag-upload{background:rgba(142,68,173,0.25);color:#bb8fce;}
 .sq-tag-wa{background:rgba(37,211,102,0.18);color:#5fe08f;}
@@ -3998,6 +4006,8 @@ function buildSQItems(){
       emailFrom:       o.emailFrom || '',
       // צרופות (גרפיקה חלבי / שרטוט פרזול) — "📎 N" בשורה, דפדוף בסקיצה
       attachments:     o.attachments || null,
+      // מרכזן (10/11): "נראה כמו גרפיקה חלבי — לצרף?" (api/_attach-suggest.js)
+      attachSuggest:   o.attachSuggest || null,
     });
   });
 }
@@ -4110,6 +4120,7 @@ function sqRender(){
           ${_sqAttTag(item)}
           ${item.waDuplicateOf?`<span class="sq-tag" title="אותו מספר הזמנה כבר קיים אצל הלקוח" style="background:rgba(192,57,43,0.18);color:#e57361">כפולה? ${lgEsc(item.waDuplicateOf)}</span>`:''}
         </div>
+        ${_sqSuggestTag(item)}
       </div>
     </div>`;
   }).join('');
@@ -4125,13 +4136,61 @@ function _sqAttFlip(o){
   if(typeof lgAttFlipper!=='function' || !o) return;
   const img=document.getElementById('sqImg');
   lgAttFlipper(document.getElementById('sqImgWrap'), lgHasSketch(o) ? _sqOrder(o) : null,
-    { img, onSplit: k => window.lgAttSplit(o.id, k) });
+    { img, onSplit: async k => {
+      const a=(o.attachments||{})[k];
+      const back=a && a.from && a.from.order && a.from.order.id;
+      const ok=await window.lgAttSplit(o.id, k);
+      // מרכזן: להפריד מה שהמרכזן צירף לבד = "לא" — הלמידה מתאפסת (api/_attach-suggest.js).
+      // השורה חוזרת בלי attachSuggest (lgAttSplitPlan), ולכן split:true
+      if(ok && back && a.attachedBy==='markazan')
+        _lgAuthPost('/api/wa-inbound-drain', { action:'attach-answer', answer:'no', orderId:String(back), split: true }).catch(()=>{});
+      return ok;
+    } });
+}
+
+// מרכזן (10/11): הצעת צרופה על השורה — "צרף" = אותו איחוד כמו "חבר אל…" (lgAttMerge),
+// "לא" = ההצעה יורדת. שתי התשובות נספרות בשרת (waMeta/attachLearn — הדפדפן לא כותב שם).
+function _sqSuggestTag(item){
+  const t = typeof lgAttSuggestText==='function' ? lgAttSuggestText(item) : '';
+  if(!t) return '';
+  const id = lgJsStr(String(item.id));   // בתוך onclick — lgEsc לבד לא מספיק (ר' lgJsStr)
+  return `<div class="sq-suggest" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()">
+    <span class="sq-suggest-t">${lgEsc(t)}</span>
+    <span class="sq-suggest-b">
+      <button type="button" class="sq-suggest-yes" onclick="event.stopPropagation();sqSuggestAnswer('${id}',true)">צרף</button>
+      <button type="button" class="sq-suggest-no" aria-label="לא לצרף" onclick="event.stopPropagation();sqSuggestAnswer('${id}',false)">לא</button>
+    </span></div>`;
+}
+
+const _sqSuggestBusy = new Set();
+async function sqSuggestAnswer(id, yes){
+  const item = sqItems.find(i => String(i.id) === String(id));
+  const s = item && item.attachSuggest;
+  if(!s || !s.targetId || _sqSuggestBusy.has(id)) return;
+  _sqSuggestBusy.add(id);
+  try{
+    if(yes){
+      const ok = await window.lgAttMerge(id, s.targetId, s.kind);
+      if(!ok) return;   // lgAttMerge כבר הסביר למה
+    }
+    const res = await _lgAuthPost('/api/wa-inbound-drain', { action:'attach-answer', answer: yes ? 'yes' : 'no', orderId: id, targetId: s.targetId });
+    const d = await res.json().catch(() => ({}));
+    if(!yes) showToast(res.ok && d.ok ? 'ההצעה הוסרה' : 'לא נשמר: ' + (d.message || d.error || res.status));
+  } catch(e){
+    showToast('שגיאה: ' + ((e && e.message) || e));
+  } finally {
+    _sqSuggestBusy.delete(id);
+  }
 }
 
 // "📎 2" — לשורה יש צרופות
 function _sqAttTag(item){
   const t = typeof lgAttBadge==='function' ? lgAttBadge(item) : '';
-  return t ? `<span class="sq-tag" title="תמונות שצורפו להזמנה" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">${lgEsc(t)}</span>` : '';
+  if(!t) return '';
+  // מרכזן (סקירה 10/11): צרופה שהמרכזן צירף לבד — לפתוח ולבדוק, ו"הפרד" אם טעה
+  const mk = typeof lgAttByMarkazan==='function' && lgAttByMarkazan(item)
+    ? `<span class="sq-tag" title="המרכזן צירף לבד — פתח את הסקיצה, ואם טעה: הפרד" style="background:rgba(41,128,185,0.15);color:#2c7fb8">צורף ע"י המרכזן</span>` : '';
+  return `<span class="sq-tag" title="תמונות שצורפו להזמנה" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">${lgEsc(t)}</span>` + mk;
 }
 
 function sqSelect(id){

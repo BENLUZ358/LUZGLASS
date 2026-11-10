@@ -52,6 +52,7 @@ const MAX_ATTEMPTS = 3;
 // ⚠️ הודעה בת יממה לא יוצאת. "ההזמנה מוכנה לאיסוף" שמגיעה ליום אחרי
 // שהלקוח כבר אסף היא יותר גרועה משום הודעה.
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const RECEIVED_MAX_AGE_MS = 30 * 60 * 1000;   // = INTAKE_ACK_OUTBOX_MAX_MS (_intake-ack.js)
 
 //  מזהה ההודעה. kind נכנס לגיבוב כי אותן הזמנות בדיוק יכולות לייצר גם
 //  "מוכן לאיסוף" וגם "ההובלה יצאה", והן שתי הודעות שונות.
@@ -140,7 +141,9 @@ async function lgWaClaim(db, key, claimedBy, base) {
     if ((cur.attempts || 0) >= MAX_ATTEMPTS) return;  // abort — נגמרו הניסיונות
 
     // ⚠️ פג תוקף נסגר כאן ולא נשלח. הודעה בת יממה מזיקה יותר מכלום.
-    if ((now - (cur.createdAt || now)) > MAX_AGE_MS) {
+    //  "N סקיצות נקלטו" (מרכזן): חצי שעה, לא יממה — "נקלטו" באיחור הוא רעש (סקירה 10/11)
+    const maxAge = cur.kind === 'sketches-received' ? RECEIVED_MAX_AGE_MS : MAX_AGE_MS;
+    if ((now - (cur.createdAt || now)) > maxAge) {
       return { ...cur, state: 'expired', claimedAt: null, claimedBy: null,
                updatedAt: now, lastError: 'פג תוקף — לא נשלחה' };
     }
@@ -284,7 +287,9 @@ async function lgWaPending(db, limit, base) {
 //  ⚠️ היה טרנרי של שניים (dispatched → whatsappDispatch, כל השאר → whatsapp).
 //  סוג שלישי היה דורס את whatsapp — כלומר את "מוכן לאיסוף" — ומשבש את
 //  הדילוג "כבר נשלחה הודעת מוכן לאיסוף".
-const _LG_WA_STAMP = { dispatched: 'whatsappDispatch', 'sketches-handled': 'sketchAck', invoice: 'whatsappInvoice' };
+//  'sketches-received' (מרכזן, 10/11) — לעולם לא 'whatsapp': זה השדה של "מוכן לאיסוף"
+const _LG_WA_STAMP = { dispatched: 'whatsappDispatch', 'sketches-handled': 'sketchAck', invoice: 'whatsappInvoice',
+                       'sketches-received': 'intakeAck' };
 function lgWaStampField(kind) { return _LG_WA_STAMP[kind] || 'whatsapp'; }
 
 module.exports = {

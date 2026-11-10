@@ -1096,6 +1096,8 @@ function lgNormalizeOrder(o) {
     attachments:   o.attachments || null,
     //  המספר הבא לצרופה — לא חוזר אחורה גם אחרי "הפרד" (מוקצה בטרנזקציה, order-attachments.js)
     attNext:       o.attNext ?? null,
+    // מרכזן (10/11): "נראה כמו גרפיקה חלבי — לצרף?" — נכתב רק בשרת (api/_attach-suggest.js)
+    attachSuggest: (o.attachSuggest && typeof o.attachSuggest === 'object') ? o.attachSuggest : null,
     // משלוח לשרטט (בן, 10/11) — נכתב רק בשרת (api/_drafter-batch.js)
     drafterBatch:  o.drafterBatch ?? null,
     drafterHold:   o.drafterHold ?? null,
