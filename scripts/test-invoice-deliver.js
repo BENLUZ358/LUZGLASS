@@ -371,5 +371,16 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
     assert.equal(Object.values(db._data.waOutbox)[0].deliveryTomorrow, false);
   });
+  await test('delivery line: user-less delivery card (Peleg 07) → the line too', async () => {
+    const db = delivDb('07', {});
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.equal(Object.values(db._data.waOutbox)[0].deliveryTomorrow, true);
+  });
+  await test('delivery list: same cards as LG_DELIVERY_ACCOUNTS in firebase-db.js', () => {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'firebase-db.js'), 'utf8');
+    const m = src.match(/const LG_DELIVERY_ACCOUNTS = (\[[^\]]*\])/);
+    assert.ok(m, 'LG_DELIVERY_ACCOUNTS not found in firebase-db.js');
+    assert.deepEqual(JSON.parse(m[1].replace(/'/g, '"')), D.LG_DELIVERY_ACCOUNTS);
+  });
   console.log(`\n${passed} passed`);
 })().catch(e => { console.error(e); process.exit(1); });
