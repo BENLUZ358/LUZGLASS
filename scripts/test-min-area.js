@@ -30,7 +30,7 @@ for (const re of [/function areaM2[\s\S]*?\n}/, /const LG_MIN_AREA = \{[\s\S]*?\
 const bctx = {};
 vm.createContext(bctx);
 for (const re of [/function lgCalcAreaM2[\s\S]*?\n}/, /const LG_MIN_AREA = \{[\s\S]*?\n\};/, /function lgBillAreaM2[\s\S]*?\n}/,
-                  /function lgCalcOrderTotal[\s\S]*?\n}/]) {
+                  /function lgOrderPpm2[\s\S]*?\n}/, /function lgCalcOrderTotal[\s\S]*?\n}/]) {
   const m = DB.match(re);
   if (!m) { console.error('FAIL  could not find in firebase-db ' + re); process.exit(1); }
   vm.runInContext(m[0].replace(/^const /, 'var '), bctx);

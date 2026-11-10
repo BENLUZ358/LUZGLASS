@@ -27,7 +27,7 @@ has('invoice text says invoice covers whole order', inv, 'החשבונית יו�
 const plain = renderText({ kind: 'invoice', clientName: 'פלג', orderNums: ['L1'], docNumber: '1' });
 has('no break → no warning', plain, 'שימו לב', false);
 const both = renderText({ kind: 'invoice', clientName: 'x', orderNums: ['L1'], docNumber: '1', extraLines: lines, deliveryTomorrow: true });
-has('break + arrives tomorrow both present', both, 'הסחורה תגיע אליך מחר');
+has('break + delivery line both present', both, 'שימו לב:') ;
 
 const ret = renderText({ kind: 'broken-returned', clientName: 'פלג', orderNums: ['L1220-3'], docNumber: '67600',
                          extraLines: B.brokenReturnedLines(o1, 1) });

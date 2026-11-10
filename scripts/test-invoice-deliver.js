@@ -340,17 +340,19 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
       for (const k of ['WA_PROVIDER', 'GREENAPI_ID_INSTANCE', 'GREENAPI_TOKEN']) if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k];
     }
   });
-  //  ── 'הסחורה תגיע מחר' — המקום לאמבט ונאור חזקיה (בן, 3/11) ──
-  await test('tomorrow: the line is in the text only when asked for', () => {
+  //  ── לקוח הובלות: "ההובלה תצא אליך בקרוב" בהודעת החשבונית (בן, 10/11) ──
+  await test('delivery line: in the invoice text only when asked for', () => {
     const facts = { kind: 'invoice', clientName: 'המקום לאמבט', orderNums: ['L1'], sketchNames: ['דינה'], docNumber: '5' };
-    assert.match(renderText({ ...facts, deliveryTomorrow: true }), /הסחורה תגיע אליך מחר במהלך היום/);
-    assert.doesNotMatch(renderText(facts), /מחר/);
-    assert.doesNotMatch(renderText({ ...facts, kind: 'ready', deliveryTomorrow: true }), /מחר/);
+    assert.match(renderText({ ...facts, deliveryTomorrow: true }), /ההובלה תצא אליך בקרוב/);
+    assert.doesNotMatch(renderText({ ...facts, deliveryTomorrow: true }), /מחר/);
+    assert.doesNotMatch(renderText(facts), /ההובלה/);
+    assert.doesNotMatch(renderText({ ...facts, kind: 'ready', deliveryTomorrow: true }), /ההובלה/);
   });
-  const tomorrowDb = cid => base({ a: { ...waOrder, customerId: cid }, b: { ...portal, customerId: cid } });
-  await test('tomorrow: 14201 / 9117 invoice → the line reaches the customer', async () => {
-    for (const cid of ['14201', '9117']) {
-      const db = tomorrowDb(cid);
+  const delivDb = (cid, users) => { const db = base({ a: { ...waOrder, customerId: cid }, b: { ...portal, customerId: cid } });
+                                    db._data.users = users || {}; return db; };
+  await test('delivery line: customer marked isDelivery (by account) → the line reaches the customer', async () => {
+    for (const cid of ['14201', '9117', '3150']) {
+      const db = delivDb(cid, { '0500000000': { isDelivery: true, customerId: cid, phone: '0500000000' } });
       await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
       const [key] = Object.keys(db._data.waOutbox);
       assert.equal(db._data.waOutbox[key].deliveryTomorrow, true, cid);
@@ -359,8 +361,13 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
       assert.equal(sent[0].deliveryTomorrow, true, cid);
     }
   });
-  await test('tomorrow: other customers — no line', async () => {
-    const db = tomorrowDb('3150');
+  await test('delivery line: deliveryClient flag on the order is enough', async () => {
+    const db = base({ a: { ...waOrder, deliveryClient: true }, b: { ...portal } });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.equal(Object.values(db._data.waOutbox)[0].deliveryTomorrow, true);
+  });
+  await test('delivery line: pickup customer (not isDelivery) — no line', async () => {
+    const db = delivDb('14201', { '0500000000': { customerId: '14201', phone: '0500000000' } });
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
     assert.equal(Object.values(db._data.waOutbox)[0].deliveryTomorrow, false);
   });

@@ -2918,10 +2918,9 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
       showToast(_orderIsMonthly(firstO)
         ? '✓ הובלה הושלמה — ' + clientName + ' בשוטף 30, החשבונית תופק מרוכזת'
         : '✓ הובלה הושלמה — ' + orderIds.length + ' בנאסף, ממתינות לחשבונית');
-      // ⚠️ אחרי שהשלב נכתב, ולא במקומו. הפעולה העסקית הסתיימה — וכשל
-      // בהודעה לא מחזיר אותה לאחור, בדיוק כמו ב-completeGraphic. השהיה
-      // קצרה כדי שהכתיבות ייקלטו לפני שהשרת קורא את ההזמנות.
-      setTimeout(() => _waDispatch(orderIds, clientName), 1200);
+      // אין כאן הודעה ללקוח (בן, 10/11). "ההובלה יצאה" בוטלה: לקוח הובלות
+      // מקבל הודעה אחת בלבד — החשבונית, ובה "ההובלה תצא אליך בקרוב"
+      // (api/_invoice-deliver.js → lgIsDeliveryInvoice).
     });
 }
 
@@ -2981,45 +2980,6 @@ async function _waSendReadyGrouped(orderIds){
   if(queued){
     showToast('📤 ' + queued + ' הודעות נכנסו לתור — יוצאות בהדרגה');
     _waDrainWithProgress();
-  }
-}
-
-// ── "ההובלה יצאה" — הודעה אחת ללקוח עם כל ההזמנות שבהובלה ──
-//
-//  הדפדפן מוסר **מזהי הזמנות בלבד**. הטלפון נפתר בשרת מכרטיס הלקוח, ואם
-//  הזמנות בקבוצה מובילות למספרים שונים — השרת מסרב ולא מנחש. ר'
-//  api/whatsapp-dispatch.js.
-async function _waDispatch(orderIds, clientName){
-  const ids = [...new Set((orderIds||[]).map(String))];
-  if(!ids.length) return;
-  try {
-    const res  = await _lgAuthPost('/api/whatsapp-dispatch', { orderIds: ids, dryRun: false });
-    const data = await res.json();
-
-    if(res.status === 409){
-      // ⚠️ לא תקלה טכנית אלא ממצא בנתונים: שני כרטיסים עם אותו שם. חייב
-      // להיראות, אחרת הודעה אחת תצא ללקוח הלא נכון.
-      showToast('⚠️ ' + clientName + ' — ' + (data.error || 'לא נשלחה הודעה — ההזמנות מובילות למספרים שונים'));
-      return;
-    }
-    if(!res.ok){ showToast('⚠️ הודעת ההובלה נכשלה: ' + (data.error||res.status)); return; }
-
-    if(data.preview){
-      // אותו כלל כמו ב-_waReport: לא מוגדר → שקט. נחסם → נראה.
-      if(!data.configured){
-        console.info('[WhatsApp] לא מוגדר בסביבה הזו — הודעת ההובלה לא נשלחה', data.reason||'');
-        return;
-      }
-      showToast('📱 הודעת ההובלה לא נשלחה — ' + (data.reason || 'חסומה'));
-      return;
-    }
-    if(!data.queued){ showToast('📱 הודעת ההובלה ' + (data.reason || 'לא נכנסה לתור')); return; }
-
-    showToast('📱 הודעה אחת ל' + clientName + ' נכנסה לתור — ' + (data.orderNums||[]).join(', '));
-    _waDrainWithProgress();
-  } catch(e){
-    console.error('whatsapp dispatch:', e);
-    showToast('⚠️ לא הצלחתי להגיע לשרת השליחה');
   }
 }
 

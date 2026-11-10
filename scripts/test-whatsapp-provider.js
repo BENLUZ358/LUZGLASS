@@ -372,7 +372,9 @@ const GREEN_ENV = {
   const report   = (WD.match(/function _waReport[\s\S]*?\n}/) || [''])[0];
   const dispatch = (WD.match(/async function _waDispatch[\s\S]*?\n}/) || [''])[0];
 
-  for (const [name, fn] of [['the ready path', report], ['the delivery path', dispatch]]) {
+  //  "ההובלה יצאה" בוטלה (בן, 10/11) — נשאר רק מסלול "מוכן לאיסוף"
+  check('the delivery-left sender is gone', dispatch, '');
+  for (const [name, fn] of [['the ready path', report]]) {
     check(name + ' stays silent when WhatsApp is not configured',
           /if\(!data\.configured\)\{/.test(fn), true);
     check(name + ' still leaves something in the console',
@@ -381,8 +383,6 @@ const GREEN_ENV = {
           /console\.info\([\s\S]{0,120}?\n\s*return;/.test(fn), true);
   }
   /* ⚠️ ומה שכן חייב להישאר גלוי */
-  check('a mixed-phone refusal is still shown', /res\.status === 409/.test(dispatch), true);
-  check('and a real block is still shown',      /הודעת ההובלה לא נשלחה/.test(dispatch), true);
   check('a failed send is still shown',         /נכשלו/.test(report), true);
 
   /* השרת מספק את הדגל שהמסך מסתמך עליו */
@@ -1101,13 +1101,11 @@ const seedSent = (db, n, t0) => {
   /* ⚠️ הסדר הוא העיקר: השלב נכתב, ורק אחר כך ההודעה. ההפוך היה הופך כשל
      ב-GREEN API לכשל בהובלה. */
   const prompt = (WD.match(/function showClientDeliveryPrompt[\s\S]*?\n}/) || [''])[0];
-  check('the delivery prompt advances the stage first',
-        prompt.indexOf('finalizeDelivery') > -1 &&
-        prompt.indexOf('finalizeDelivery') < prompt.indexOf('_waDispatch'), true);
-  check('and the message is fired from .then, never awaited into it',
-        /\.then\(\(\) => \{[\s\S]*_waDispatch\(orderIds, clientName\)/.test(prompt), true);
-  check('_waDispatch exists and takes ids, not phones',
-        /async function _waDispatch\(orderIds, clientName\)/.test(WD), true);
+  //  בן, 10/11: סיום הובלה כבר לא שולח "ההובלה יצאה" — רק מקדם את השלב.
+  check('the delivery prompt advances the stage',
+        prompt.indexOf('finalizeDelivery') > -1, true);
+  check('and sends no message to the customer',
+        /whatsapp-dispatch|_waDispatch/.test(prompt), false);
 
   /* 409 הוא ממצא בנתונים ולא תקלה טכנית — חייב להיראות, לא להיבלע */
   check('a mixed-phone refusal reaches the screen',
