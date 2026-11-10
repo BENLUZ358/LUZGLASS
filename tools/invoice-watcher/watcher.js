@@ -449,9 +449,21 @@ async function printLoop(cfg) {
 
 module.exports = { loop, tsplForBitmap, sendLabels, printOnce, resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, processRestored, paper, paperArchivePath, docFromName, groupSingles, roleOf, docNumberOf, readPdf };
 
-if (require.main === module) {
+//  עותק אחד בלבד (בן, 10/11): הכלי מופעל מכמה מקומות (הפעלה בכניסה, משימה מתוזמנת
+//  שבודקת כל כמה דקות שהוא חי). שני עותקים היו מדפיסים כל דף פעמיים — לכן הראשון
+//  תופס פורט מקומי, וכל עותק נוסף יוצא מיד עם קוד 3 (הסקריפט שמפעיל עוצר עליו).
+function singleInstance(port, then) {
+  const srv = require('net').createServer();
+  srv.once('error', e => {
+    if (e.code === 'EADDRINUSE') { console.log('already running — exiting'); process.exit(3); }
+    then();   // תקלה אחרת בנעילה לא עוצרת את הכלי
+  });
+  srv.listen(port, '127.0.0.1', then);
+}
+
+if (require.main === module) singleInstance(47811, () => {
   const cfg = loadConfig(process.argv[2] || path.join(__dirname, 'config.json'));
   //  מדבקות — לולאה נפרדת, כדי שחשבונית ארוכה לא תעכב מדבקות (ולהפך)
   if (cfg.labelPrinter && cfg.labelPrinter.host) printLoop(cfg).catch(e => console.error('labels loop:', e));
   loop(cfg).catch(e => { console.error(e); process.exit(1); });
-}
+});
