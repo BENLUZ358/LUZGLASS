@@ -90,6 +90,32 @@ const deps = { enqueue: async (db, n) => { sent.push(n); return { key: 'k' + n, 
     check('status: basket + open batch', [s.basket.map(x => x.id), s.open.map(b => [b.n, b.count])], [['A9'], [[1, 2]]]);
   }
 
+  // ── הקובץ ──
+  {
+    const { createCanvas } = require('@napi-rs/canvas');
+    const { PDFDocument } = require('pdf-lib');
+    const img = (mime, w, h) => { const c = createCanvas(w, h); const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.fillStyle = '#000'; g.fillRect(5, 5, w / 2, h / 2);
+      return 'data:' + mime + ';base64,' + c.toBuffer(mime).toString('base64'); };
+    const db = seed({ sketches: { A1: img('image/jpeg', 800, 600), A2: img('image/png', 300, 900) } });
+    await D.lgDrafterSend(db, { by: 'ben', now: NOW }, deps);
+    const pages = async f => (await PDFDocument.load(f.buf)).getPageCount();
+    const r = await D.lgDrafterPdf(db, 1);
+    check('pdf: one file, cover + 2 sketch pages', [r.files.length, await pages(r.files[0]), r.files[0].mime], [1, 3, 'application/pdf']);
+    check('pdf: file name', r.files[0].name, 'משלוח 1.pdf');
+    // הזמנה בלי סקיצה — עדיין עמוד, והמייל יוצא
+    const db2 = seed({ sketches: { A1: img('image/jpeg', 400, 300), A2: 'data:image/png;base64,AAAA' } });
+    await D.lgDrafterSend(db2, { by: 'ben', now: NOW }, deps);
+    const r2 = await D.lgDrafterPdf(db2, 1);
+    check('pdf: broken sketch still gets a page', await pages(r2.files[0]), 3);
+    // קובץ גדול → כמה חלקים
+    const r3 = await D.lgDrafterPdf(db, 1, { maxBytes: 1 });
+    check('pdf: split when too big', [r3.files.length, r3.files.map(f => f.name)],
+      [2, ['משלוח 1 (1 מתוך 2).pdf', 'משלוח 1 (2 מתוך 2).pdf']]);
+    check('pdf: cover only in part 1', [await pages(r3.files[0]), await pages(r3.files[1])], [2, 1]);
+    check('pdf: unknown batch → error', (await D.lgDrafterPdf(db, 99)).code, 'no-batch');
+  }
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nAll drafter-batch checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });

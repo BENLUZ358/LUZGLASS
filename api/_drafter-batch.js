@@ -98,9 +98,86 @@ async function lgDrafterStatus(db) {
   return { basket, open };
 }
 
+//  ─── הקובץ ───────────────────────────────────────────────────────────
+//  עמוד שער ("משלוח 12", תאריך, רשימת ההזמנות) ועמוד לכל הזמנה — אותו עמוד
+//  סקיצה כמו בחשבונית (lgAddSketchPage). סקיצה חסרה/פגומה → עמוד "אין סקיצה";
+//  המשלוח יוצא בכל זאת. גדול מ-maxBytes → כמה קבצים (השער רק בראשון).
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const _ilTime = t => new Date(t).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit',
+                                                          year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+async function _items(db, b) {
+  const { _sketch, _dataUrl } = require('./_invoice-deliver');
+  const out = [];
+  for (const id of b.orderIds || []) {
+    const o = (await db.ref('orders/' + id).once('value')).val() || {};
+    const d = _dataUrl(await _sketch(db, id));
+    out.push({ id, orderNum: String(o.orderNum || ''), client: String(o.orderClient || o.client || ''),
+               sketchName: String(o.sketchName || ''), img: d && /^image\//.test(d.mime) ? d : null });
+  }
+  return out;
+}
+
+async function _build(cover, items, b) {
+  const { PDFDocument, rgb } = require('pdf-lib');
+  const M = require('./_invoice-merge');
+  const doc = await PDFDocument.create();
+  doc.registerFontkit(require('@pdf-lib/fontkit'));
+  const font = await doc.embedFont(M._fontBytes(), { subset: true });
+  if (cover) {
+    const page = doc.addPage(M.A4);
+    const [W, H] = M.A4;
+    const line = (t, y, size, color) => { const v = M._visual(t);
+      page.drawText(v, { x: W - 40 - font.widthOfTextAtSize(v, size), y, size, font, color: color || rgb(0, 0, 0) }); };
+    line('משלוח ' + b.n, H - 80, 34);
+    line(_ilTime(b.at) + '   ·   ' + b.count + ' הזמנות', H - 115, 16, rgb(0.35, 0.35, 0.35));
+    let y = H - 165;
+    for (const it of cover) {
+      if (y < 50) break;
+      line([it.orderNum, it.client, it.sketchName].filter(Boolean).join('   ·   '), y, 13);
+      y -= 22;
+    }
+  }
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const head = { title: it.sketchName || it.orderNum || 'סקיצה',
+                   info: [it.orderNum ? 'הזמנה ' + it.orderNum : '', it.client].filter(Boolean).join('   ·   '),
+                   idx: i, total: items.length };
+    try { await M.lgAddSketchPage(doc, font, it.img, head); }
+    catch (_) { await M.lgAddSketchPage(doc, font, null, head); }   // תמונה פגומה — עמוד "אין סקיצה"
+  }
+  return Buffer.from(await doc.save());
+}
+
+//  → { ok:true, files:[{name, mime, buf}] } | { ok:false, code:'no-batch' }
+async function lgDrafterPdf(db, n, opts) {
+  const b = (await db.ref(BATCHES + '/' + n).once('value')).val();
+  if (!b || !b.n) return { ok: false, code: 'no-batch' };
+  const max = (opts && opts.maxBytes) || MAX_PDF_BYTES;
+  const items = await _items(db, b);
+  const one = await _build(items, items, b);
+  if (one.length <= max || items.length <= 1) {
+    return { ok: true, files: [{ name: 'משלוח ' + b.n + '.pdf', mime: 'application/pdf', buf: one }] };
+  }
+  //  חלוקה: מוסיפים הזמנות לחלק עד שהוא עובר את הגבול (לפחות הזמנה אחת בכל חלק)
+  const parts = [];
+  let cur = [];
+  for (const it of items) {
+    const tryBuf = await _build(parts.length ? null : items, [...cur, it], b);
+    if (cur.length && tryBuf.length > max) { parts.push(cur); cur = [it]; } else cur.push(it);
+  }
+  if (cur.length) parts.push(cur);
+  const files = [];
+  for (let i = 0; i < parts.length; i++) {
+    files.push({ name: 'משלוח ' + b.n + ' (' + (i + 1) + ' מתוך ' + parts.length + ').pdf', mime: 'application/pdf',
+                 buf: await _build(i === 0 ? items : null, parts[i], b) });
+  }
+  return { ok: true, files };
+}
+
 //  המייל — משימה 3
 async function lgDrafterEnqueueEmail(db, n) {
   throw new Error('lgDrafterEnqueueEmail: not implemented');
 }
 
-module.exports = { LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
+module.exports = { lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
