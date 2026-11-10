@@ -482,9 +482,6 @@ label.msec-t{display:block;}
 
   <div id="waStatusBar" style="display:none"></div>
 
-  <!-- משלוחים לשרטט (בן, 10/11) — drafter-batch.js; גלוי רק בלשונית "אצל שרטט" -->
-  <div id="drafterBar" class="drb" hidden></div>
-
   <div class="stats" id="stats"></div>
 
   <div class="filters">
@@ -1542,8 +1539,6 @@ function setSF(s,btn){
   // התחתון היה מציע להפיק חשבונית על הזמנות שכבר לא על המסך.
   if(s !== 'מוכן לאיסוף' && invSel.size){ invSel.clear(); invSelClient = null; }
   sf=s;
-  // משלוחים לשרטט (בן, 10/11) — הפס מופיע רק בלשונית "אצל שרטט"
-  if(window.lgDrafterBarShow) window.lgDrafterBarShow(s === 'אצל שרטט');
   document.querySelectorAll('.fb').forEach(b=>b.classList.remove('active'));
   if(btn)btn.classList.add('active');
   // כאן היה מעבר כפוי ללוח בכל לחיצה על פילטר. עם טבלה כברירת מחדל זה היה
@@ -3467,6 +3462,9 @@ document.addEventListener('visibilitychange', () => {
 
       <!-- LIST -->
       <div id="sqListPanel">
+        <!-- משלוחים לשרטט (בן, 10/11) — drafter-batch.js. כאן ולא במסך הראשי: בן פותח הזמנות
+             ברצף מהתור, כל אחת שנשלחת לחשבשבת נכנסת לסל, ואחרי שהתור ריק — "שלח לשרטט". -->
+        <div id="drafterBar" class="drb" hidden></div>
         <!-- שלב 6: טופלו וממתינים לעדכון ללקוח — רשת ביטחון. _sqRenderAckPending -->
         <div id="sqAckPending" hidden></div>
         <div id="sqList"></div>
@@ -3867,6 +3865,7 @@ function makeDemoSketch(title,client,glass,dims,color){
 
 function openSketchQueue(){
   buildSQItems();
+  if(window.lgDrafterBarShow) window.lgDrafterBarShow(true);   // משלוחים לשרטט (בן, 10/11)
   sqRender();
   const el = document.getElementById('sqOverlay') || document.getElementById('sqEditor');
   if(el) el.style.display = 'flex';
@@ -4585,7 +4584,8 @@ async function sqSendHashavshevet(id, force){
   // אותה הזמנה נשלחת שוב מחר. שליחה משמעה chash, מאיפה שלא באה.
   if((sqStageMap[id] || '') !== 'chash'){
     sqStageMap[id] = 'chash';
-    updateStage(id, 'chash');
+    // נכנסה לסל לשרטט — הפס מתעדכן (בן, 10/11)
+    updateStage(id, 'chash').then(() => { if(window.lgDrafterBarShow) window.lgDrafterBarShow(true); }).catch(e => console.warn('chash:', e && e.message));
     sqSaveState();
   }
   const btn   = document.getElementById('sqHbSend') || document.getElementById('sqBtnChash');

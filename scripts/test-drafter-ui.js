@@ -48,5 +48,14 @@ check('tag other stage', T.drafterTag({ stage: 'opty', drafterBatch: 7 }), '');
 const SRC = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
 check('lgNormalizeOrder keeps drafterBatch', /drafterBatch:\s+o\.drafterBatch\s+\?\? null/.test(SRC), true);
 
+// בן, 10/11: הפס בתור הסקיצות (שם הוא פותח הזמנות ברצף ושולח לחשבשבת), לא במסך הראשי
+const ADM = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
+const lp = ADM.indexOf('<div id="sqListPanel">');
+check('bar sits at the top of the sketch-queue list', lp > 0 && ADM.indexOf('id="drafterBar"') > lp && ADM.indexOf('id="drafterBar"') < ADM.indexOf('<div id="sqList">'), true);
+check('only one bar on the page', ADM.split('id="drafterBar"').length - 1, 1);
+check('opening the queue shows the bar', /function openSketchQueue\(\)\{[\s\S]*?lgDrafterBarShow\(true\)[\s\S]*?\n\}/.test(ADM), true);
+check('sending to Hashavshevet refreshes the basket', /updateStage\(id, 'chash'\)\.then\([\s\S]{0,80}lgDrafterBarShow/.test(ADM), true);
+check('status filter no longer drives the bar', /lgDrafterBarShow\(s === 'אצל שרטט'\)/.test(ADM), false);
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nAll drafter-ui checks passed.');
