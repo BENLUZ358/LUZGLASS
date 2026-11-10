@@ -37,8 +37,8 @@ function lgOkevCanChange(order) {
   return CHANGEABLE.includes(String((order && order.stage) || ''));
 }
 
-// הזמנה "פתוחה": לא נאספה ולא בוטלה על ידי הסוכן
-const isOpen = o => o.stage !== 'collected' && !o.agentCancelled;
+// הזמנה "פתוחה": לא נאספה, לא בוטלה על ידי הסוכן, ולא תמונה שבן סימן כדוגמה (שיפור 1, 11/11)
+const isOpen = o => o.stage !== 'collected' && !o.agentCancelled && !o.isSample;
 
 // ── נרמול הפניה: רווחים, גרש/גרשיים, אותיות קטנות ──
 const normRef = s => String(s == null ? '' : s).toLowerCase().replace(/[\s'"`׳״‘’“”]/g, '');

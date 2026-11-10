@@ -346,6 +346,8 @@ async function lgWaInboundProcess(db, key, opts) {
     upd[base + 'doneAt'] = now;
     upd[base + 'updatedAt'] = now;
     await db.ref().update(upd);
+    //  מרכזן — תמונה לדוגמה (שיפור 1): "כזאת" שהגיע בזמן העיבוד / כיתוב כזה → התג בתור. לא זורק
+    if (!isText) await require('./_sample-suspect').lgSampleAfterOrder(db, key, entry, id, now);
     //  מרכזן (10/11): "N סקיצות נקלטו" + הצעת צרופה. מתגים כבויים → כלום; כשל → לא מפיל את הקליטה
     if (!isText) await _markazan(db, order, entry, now, o);
     return { ok: true, reason: '', orderIds: [id] };

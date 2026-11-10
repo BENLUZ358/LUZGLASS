@@ -55,6 +55,23 @@ const db = fakeDb({ orders: {
   r = await adm.handleAdmin({ action: 'drafter-hold', id: '../x', hold: true }, { db, by: '052', now: NOW + 23 });
   check('hold bad id', r.ok, false);
 
+  //  סקירת שחרור 11/11: ההחזקה הצליחה, קריאת ההזמנה לשורה בחדר נכשלה → עדיין הצלחה
+  {
+    const ref0 = db.ref.bind(db);
+    db._failRead = false;
+    db.ref = p => { const r = ref0(p); if (p === 'orders/A4') { const once0 = r.once; r.once = async (...a) => { if (db._failRead) throw new Error('read'); return once0(...a); }; } return r; };
+    // ההחזקה עצמה (lgDrafterHold) קוראת מאותו נתיב — נכשיל רק את הקריאה שאחריה
+    const DBm = require(require('path').join(__dirname, '..', 'api', '_drafter-batch.js'));
+    const hold0 = DBm.lgDrafterHold;
+    DBm.lgDrafterHold = async (...a) => { const r2 = await hold0(...a); db._failRead = true; return r2; };
+    let thrown = null;
+    try { r = await adm.handleAdmin({ action: 'drafter-hold', id: 'A4', hold: true }, { db, by: '052', now: NOW + 24 }); }
+    catch (e) { thrown = e.message; }
+    DBm.lgDrafterHold = hold0; db.ref = ref0; db._failRead = false;
+    check('hold: room-row read fails → action still ok', [thrown, r && r.ok, db._data.orders.A4.drafterHold], [null, true, true]);
+    await adm.handleAdmin({ action: 'drafter-hold', id: 'A4', hold: false }, { db, by: '052', now: NOW + 25 });
+  }
+
   // טיוטה כקובץ, קובץ של משלוח, "סיים" על משלוח אחד
   r = await adm.handleAdmin({ action: 'drafter-preview', idx: 0 }, { db, by: '052', now: NOW + 30 });
   check('preview', [r.ok, r.parts, r.name, typeof r.b64], [true, 1, 'טיוטה לשרטט.pdf', 'string']);
@@ -79,7 +96,7 @@ const db = fakeDb({ orders: {
     r = await adm.handleAdmin({ action: 'drafter-resend', n: 1 }, { db: db2, by: '052', now: NOW + 1, env: ENV });
     check('room: resend', texts()[1], ['kolet', 'info', 'המייל למשלוח 1 נשלח שוב לשרטט']);
     r = await adm.handleAdmin({ action: 'drafter-done' }, { db: db2, by: '052', now: NOW + 2, env: ENV });
-    check('room: done', texts()[2], ['kolet', 'info', 'השרטט סיים משלוח 1 — 2 עברו לבנה יום עבודה']);
+    check('room: done', texts()[2], ['kolet', 'info', 'השרטט סיים משלוח 1: 2 מתוך 2 בבנה יום עבודה ✓']);
     db2._data.waMeta.agentConfig.agents.kolet = 'off';
     db2._data.orders.B3 = { id: 'B3', orderNum: 'L13', orderClient: 'אגן', stage: 'drafter', createdAt: NOW };
     await adm.handleAdmin({ action: 'drafter-send' }, { db: db2, by: '052', now: NOW + 3, env: ENV });

@@ -71,6 +71,15 @@ async function handleCustomerInbound(body, deps) {
       }).catch(e => console.warn('wa-inbound: agent shadow', e && e.name)));
     } catch (e) { console.warn('wa-inbound: agent shadow', e && e.name); }
   }
+  //  מרכזן — תמונה לדוגמה (שיפור 1, 11/11): "כזאת" / "דוגמה" אחרי תמונה באותו צ'אט → התמונה
+  //  מסומנת "אולי דוגמה" בתור (לא נמחקת). רק עם הגדרות במסך והמרכזן לא כבוי (שחרור 11/11);
+  //  השאלה בחדר — לפי המתג. ב-waitUntil, רק להודעה כזו — דרך התשובה לא משתנה.
+  try {
+    const SS = require('./_sample-suspect');
+    const sm = SS.lgSampleFromBody(body);
+    if (sm) deps.waitUntil(SS.lgSampleSuspectMark(deps.db, { ...sm, now: deps.now || Date.now(), env: process.env })
+      .catch(e => console.warn('wa-inbound: sample', e && e.name)));
+  } catch (e) { console.warn('wa-inbound: sample', e && e.name); }
   const p = lgWaInboundParse(body);
   if (p.action !== 'record') return { status: 200, body: { ok: true, ignored: p.reason } };
   if (p.entry.groupId) {

@@ -8,6 +8,8 @@
 const path = require('path');
 const { fakeDb } = require(path.join(__dirname, '_fake-db.js'));
 const W = require(path.join(__dirname, '..', 'api', '_agent-watch.js'));
+//  סיכום הבוקר של המנהל (11/11) נבדק ב-test-agent-morning.js — כאן הוא כבוי כדי שהספירות של החדר יישארו של הבדיקות בלבד
+require(path.join(__dirname, '..', 'api', '_agent-morning.js')).lgAgentMorningRun = async () => ({ posted: false, skipped: 'test' });
 
 let failed = 0;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
@@ -55,23 +57,26 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
   // ─── הרצה ───
   const mk = (data, cfg) => fakeDb({ ...data, waMeta: { ...(data.waMeta || {}), ...(cfg ? { agentConfig: cfg } : {}) } });
 
-  // 1. בלי agentConfig (פרודקשן היום): בחדר כאפור, אף פעם לא צהוב ולא לבן
+  // 1. בלי agentConfig (שחרור "הכל כבוי", 11/11): הבדיקות לא רצות בכלל — לא חדר, לא מצב שמור
   {
-    const db = mk({ waMeta: { invoiceWatcher: { A: hb([{ name: 'y.pdf', ageSec: 11 * 60 }]) } } });
+    const db = mk({ waMeta: { invoiceWatcher: { A: hb([{ name: 'y.pdf', ageSec: 31 * 60 }], { lastPrintError: { at: NOW, message: 'x' } }) } } });
+    const r = await W.lgAgentWatchRun(db, { env: ENV, now: NOW });
+    check('no config: nothing runs (no room, no watch state)', [r.skipped, room(db).length, !!db._data.waMeta.agentWatch, outbox(db).length],
+      ['no-config', 0, false, 0]);
+  }
+  // 1b. עם הגדרות ("שקט"): קובץ >10 דק' → אפור; ויסות; בלי כפילות; נעלם → "תוקן"
+  {
+    const db = mk({ waMeta: { invoiceWatcher: { A: hb([{ name: 'y.pdf', ageSec: 11 * 60 }]) } } }, CFG('shadow'));
     let r = await W.lgAgentWatchRun(db, { env: ENV, now: NOW });
-    check('no config: file >10 min → one grey line', room(db).map(e => [e.agent, e.kind, e.state || null]), [['archive', 'info', null]]);
+    check('shadow: file >10 min → one grey line', room(db).map(e => [e.agent, e.kind, e.state || null]), [['archive', 'info', null]]);
     r = await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 20 * 1000 });
     check('throttle: second run within a minute does nothing', [r.skipped, room(db).length], ['throttled', 1]);
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 2 * MIN });
     check('dedupe: same problem a minute later — no second line', room(db).length, 1);
-    db._data.waMeta.invoiceWatcher.A = hb([{ name: 'y.pdf', ageSec: 31 * 60 }], { at: NOW + 4 * MIN });
-    await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 4 * MIN });
-    check('no config: >30 min is still grey (no yellow, no open index, nothing to Ben)',
-      [room(db).map(e => e.kind), openIdx(db).length, outbox(db).length], [['info', 'info'], 0, 0]);
     db._data.waMeta.invoiceWatcher.A = hb([], { at: NOW + 6 * MIN });
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 6 * MIN });
-    check('cleared → short "תוקן" line, state forgotten', [room(db).length, /תוקן/.test(room(db)[2].text),
-      Object.keys(db._data.waMeta.agentWatch.problems || {}).length], [3, true, 0]);
+    check('cleared → short "תוקן" line, state forgotten', [room(db).length, /תוקן/.test(room(db)[1].text),
+      Object.keys(db._data.waMeta.agentWatch.problems || {}).length], [2, true, 0]);
   }
 
   // 2. ארכיון "עונה": שגיאת הדפסה → צהוב + התראה לבן; תוקן → נסגר
@@ -142,7 +147,7 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
       delivery: { state: 'failed', channel: 'whatsapp', reason: 'מנותק', at: NOW - 10 * MIN, ...dv } } },
       waMeta: { invoiceWatcher: { A: hb([]) } }, ...extra });
     for (const [name, cfg, dv, extra, kind] of [
-      ['C1: no agentConfig → no deliver, grey line only', null, {}, {}, 'info'],
+      ['C1: no agentConfig → no deliver, no room line (release all-off)', null, {}, {}, null],
       ['C1: shadow → no deliver, yellow', CFG('shadow'), {}, {}, 'ask'],
       ['C1: reply but failed 3h ago → no deliver, yellow', CFG('reply'), { at: NOW - 3 * H }, {}, 'ask'],
       ['C1: reply but outbox entry expired → no deliver (never reset), yellow', CFG('reply'), { outboxKey: 'w1' }, { waOutbox: { w1: { state: 'expired' } } }, 'ask'],
@@ -153,7 +158,7 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
       db._data.waMeta.invoiceWatcher.A.at = NOW + 11 * MIN;
       await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 11 * MIN, deliver: async (d, k) => { tries.push(k); }, sendPending: async () => {} });
       check(name, [tries.length, room(db).map(e => e.kind), ((db._data.waOutbox || {}).w1 || {}).state || null],
-        [0, [kind], extra.waOutbox ? 'expired' : null]);
+        [0, kind ? [kind] : [], extra.waOutbox ? 'expired' : null]);
     }
   }
 

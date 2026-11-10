@@ -488,6 +488,12 @@ module.exports = async function handler(req, res) {
     for (const [key, n] of Object.entries(hsLines)) numbering['items/' + key + '/hsLine'] = n;
     if (Object.keys(numbering).length) await db.ref('orders/' + orderId).update(numbering);
 
+    // ── מחירון (שיפור 5, חדר הסוכנים 11/11): המחיר שנשלח מול המחירון של הלקוח ──
+    // קריאה בלבד; פער → שורה בחדר למחירון. לא מפיל ולא מעכב את התשובה בכשל.
+    try {
+      await require('./_agent-price-check').lgPriceCheckRun(db, { orderId, order, accountKey, preview, prices, now: Date.now() });
+    } catch (e) { console.warn('hashavshevet-order: price check', e && e.name); }
+
     // ── מתי להטריד את מי שעובד על המסך ──
     //
     // המסך מראה הודעה רגילה כשהכל תקין ואזהרה כשלא, ולכן ההחלטה הזו חייבת

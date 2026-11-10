@@ -35,6 +35,7 @@ const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT,
         lgOkevTooLateStaffText, lgOkevCancelledStaffText } = require('./_agent-okev');
 
 const { lgArchiveFind, lgArchiveActions, ARCHIVE_OK_TEXT } = require('./_agent-archive');
+const { lgOkevEta, lgOkevEtaText } = require('./_agent-stats');
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
         lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
 const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
@@ -101,9 +102,16 @@ function _ask(r, extra) {
 const _tooLate = (r, order, intent) => [_reply(lgOkevTooLate(order)), _notify(lgOkevTooLateStaffText(order, _who(r), intent))];
 
 // ── ממשיכים intent על הזמנה אחת שנבחרה ──
-function _continue(intent, order, now, r) {
+//  שיפור 2 (חדר הסוכנים): "בדרך כלל זה לוקח עוד בערך N ימים" — רק כשיש סטטיסטיקה (x.stageDays,
+//  נטענת רק כשיש הגדרות במסך) ו-10 דגימות לפחות (_agent-stats.js). אחרת — הנוסח הקודם בדיוק.
+function _statusText(order, x, now) {
+  const t = lgOkevReply('status', { match: 'one', orders: [order], via: 'eta' });
+  const n = x && x.stageDays ? lgOkevEta(order, x.stageDays, now) : 0;
+  return n ? t + '. ' + lgOkevEtaText(n) : t;
+}
+function _continue(intent, order, now, r, x) {
   const one = { match: 'one', orders: [order], via: 'conv' };
-  if (intent === 'status') return { actions: [_reply(lgOkevReply('status', one))], conv: null };
+  if (intent === 'status') return { actions: [_reply(_statusText(order, x, now))], conv: null };
   // ארכיון: נבחרה הזמנה → סקיצה שלה (ההזמנה כבר מהרשימה של הלקוח; השליחה בודקת שוב)
   if (intent === 'document') return { actions: [{ type: 'files', text: ARCHIVE_OK_TEXT, files: [{ kind: 'sketch', orderId: order.id }] }], conv: null };
   if (!lgOkevCanChange(order)) return { actions: _tooLate(r, order, intent), conv: null };
@@ -113,7 +121,7 @@ function _continue(intent, order, now, r) {
 }
 
 // ── הודעה כשיש conv פעיל. null = לא תשובה לשאלה → ניתוב רגיל, conv נשאר ──
-function _onConv(r, orders, c, now) {
+function _onConv(r, orders, c, now, x) {
   const byId = id => orders.find(o => o.id === id) || null;
   if (c.await === 'which') {
     const ids = Array.isArray(c.orderIds) ? c.orderIds : [];
@@ -126,7 +134,7 @@ function _onConv(r, orders, c, now) {
       const f = lgOkevFind(ids.map(byId).filter(Boolean), { ref: n });
       if (f.match === 'one') order = f.orders[0];
     }
-    return order ? _continue(c.intent, order, now, r) : null;
+    return order ? _continue(c.intent, order, now, r, x) : null;
   }
   if (c.await === 'confirm-cancel') {
     if (_isNo(r.text)) return { actions: [_reply(CANCEL_KEPT_TEXT)], conv: null };
@@ -232,14 +240,16 @@ function lgAgentDeleteOnly(d, r, orders) {
 }
 
 // ── ניתוב רגיל לפי route של המרכזן. keep = ה-conv הנוכחי (נשאר אם לא הוחלף) ──
-function _route(r, orders, now, keep, archive, quote, price) {
+//  x: { quoteToBen, … } — שיפורים לכל סוכן (חדר הסוכנים), רק כשיש הגדרות במסך
+function _route(r, orders, now, keep, archive, quote, price, x) {
+  const xo = x || {};
   switch (r.route) {
     case 'okev': {
       const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
       // ביטול/שינוי של הזמנה שכבר בייצור — התשובה + שאול לידיעה (תיקון סופי 3)
       if (found.match === 'one' && (r.intent === 'cancel' || r.intent === 'change') && !lgOkevCanChange(found.orders[0]))
         return { actions: _tooLate(r, found.orders[0], r.intent), conv: keep };
-      const text = lgOkevReply(r.intent, found);
+      const text = r.intent === 'status' && found.match === 'one' ? _statusText(found.orders[0], xo, now) : lgOkevReply(r.intent, found);
       let conv = keep;
       if (found.match === 'many') conv = { await: 'which', intent: r.intent, orderIds: found.orders.map(o => o.id), at: now };
       else if (found.match === 'one' && lgOkevCanChange(found.orders[0])) {
@@ -259,7 +269,11 @@ function _route(r, orders, now, keep, archive, quote, price) {
     // מחירון (משימה 6): סקיצה → "קיבלנו" + בקשת מחיר לשאול (המספר וההודעה
     //  נבנים ב-_act — רק כשמותר לשלוח). טקסט → p.quote מהשכבה הלא-טהורה:
     //  הובן ויש מחיר לכל פריט → ההצעה; אחרת → שאול.
+    //  שיפור 6 (חדר הסוכנים, 11/11): עם הגדרות במסך (quoteToBen) — סקיצה → לבן כמו כל שאלה:
+    //  צהוב בחדר + וואטסאפ לבן עם התמונה, ללקוח "נחזור אליך עם מחיר"; בן עונה בחדר
+    //  (agent-room-answer) והתשובה יוצאת ללקוח. בלי הגדרות — לשאול כמו קודם.
     case 'quote': {
+      if (r.hasImage && xo.quoteToBen) return { actions: _ask(r, { hold: QUOTE_HOLD_TEXT, note: _who(r) + ': בקשת מחיר על סקיצה' }), conv: keep };
       if (r.hasImage) return { actions: [_reply(QUOTE_HOLD_TEXT), { type: 'quote-ask', who: _who(r), files: [_forward(r).files[0]] }], conv: keep };
       const pr = quote && quote.ok ? quote.priced : null;
       if (pr && pr.lines.length && !pr.missing.length) return { actions: [_reply(lgQuoteText(pr))], conv: keep };
@@ -287,6 +301,7 @@ function lgAgentDecide(p) {
   const r = rec || {};
   const orders = (p && p.orders) || [];
   const now = Number(p && p.now) || Date.now();
+  const xo = { quoteToBen: !!(p && p.quoteToBen), stageDays: (p && p.stageDays) || null };
   let c = conv && conv.await ? conv : null;
   // אדם עונה עכשיו — שום פעולה, conv לא נוגעים
   if (r.route === 'silent-human') return { actions: [], conv: c };
@@ -328,10 +343,10 @@ function lgAgentDecide(p) {
     return { actions: [_staff(lgOkevChangeStaffText(order, _who(r), 'נשלחה סקיצה חדשה')), _forward(r)], conv: null };
   }
   if (c && r.linked && r.route !== 'kolet' && msgAt > askedAt) {
-    const h = _onConv(r, orders, c, now);
+    const h = _onConv(r, orders, c, now, xo);
     if (h) return h;
   }
-  return _route(r, orders, now, c, p && p.archive, p && p.quote, p && p.price);
+  return _route(r, orders, now, c, p && p.archive, p && p.quote, p && p.price, xo);
 }
 
 // ─── ביצוע ──────────────────────────────────────────────────────────
@@ -555,7 +570,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
     || (await _pilotOn(cid) && (rec.linkVia != null ? ['group', 'sender'].includes(String(rec.linkVia))
                                                    : ['group', 'sender'].includes(await require('./_agent-shadow').lgAgentLinkVia(db, rec))));
   if (rec.route === 'archive' && rec.linked && cid && await _archiveGate()) {
-    try { archive = await lgArchiveFind(db, { customerId: cid, ref: rec.ref, text: rec.text, orders }); }
+    //  שיפור 4: "כל החשבוניות של <חודש>" — רק כשיש הגדרות במסך
+    try { archive = await lgArchiveFind(db, { customerId: cid, ref: rec.ref, text: rec.text, orders, byMonth: !!cfg, now }); }
     catch (e) { console.warn('agent-act: archive', e && e.name); archive = { kind: 'none' }; }
   }
   // מחירון: טקסט → מודל + מחירון (כשל → שאול). "השב" של שאול → הבקשה הממתינה
@@ -580,7 +596,14 @@ async function _act(db, key, rec, recRef, env, now, o) {
     try { staffQuote = await lgQuoteFindWaiting(db, rec.quotedId); }
     catch (e) { console.warn('agent-act: quote-find', e && e.name); staffQuote = null; }
   }
-  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price });
+  //  שיפורים לכל סוכן — רק כשיש הגדרות במסך (בלי waMeta/agentConfig שום דבר מול לקוח לא משתנה)
+  //  שיפור 2: זמן רגיל לשלב — נשמר בריצה האיטית של הדופק (_agent-watch → _agent-stats)
+  let stageDays = null;
+  if (cfg && rec.route === 'okev') {
+    try { stageDays = (await db.ref(require('./_agent-stats').AGENT_STATS).once('value')).val() || null; }
+    catch (e) { console.warn('agent-act: stage stats', e && e.name); stageDays = null; }
+  }
+  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price, quoteToBen: !!cfg, stageDays });
   // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
   const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null }
     : priceSkipped ? { priceSkipped: 'deadline' } : price ? { priceUsage: price.usage || null } : {};
@@ -660,7 +683,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  למידה (שלב ג׳, _agent-lessons): שאלה דומה לכלל שבן אישר? רק טקסט (לא תמונה).
       //  ⚠️ כאן כבר עברו כל השערים (הסוכן "עונה", לקוח מופעל ומקושר) — אחרת המודל לא נקרא.
       let lm = null;
-      if (!(a.files && a.files.length) && a.question && a.question !== '(תמונה)') {
+      //  hold משלו (שיפורים 4, 6 — כמות חשבוניות / בקשת מחיר) — בלי למידה: ההודעה ללקוח קבועה
+      if (!(a.files && a.files.length) && !a.hold && a.question && a.question !== '(תמונה)') {
         try {
           lm = await lgLessonFind(db, { agent, question: a.question, env, fetcher: o.fetchImpl, matcher: o.lessonMatch,
                                         deadline: o.deadline, clock: o.clock, reserveMs: 2 * PER_ITEM_WORST_MS });
@@ -698,7 +722,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  העברת תמונה למספר של בן רק מהצ'אט של הלקוח הזה.
       if (rk) {
         await enq(k + '_b', lgAgentEscalatePhone(cfg), lgRoomAskBenText(a.who, a.question, env), a.files || [], AGENT_ASK_REASON, cid);
-        await enq(k, chat, ASK_HOLD_TEXT, [], 'agent-reply');
+        await enq(k, chat, a.hold || ASK_HOLD_TEXT, [], 'agent-reply');
       }
     }
     else if (a.type === 'quote-ask') {

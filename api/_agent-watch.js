@@ -30,6 +30,14 @@
 //    בעיה של סוכן כבוי / מחשב שלא ענה — לא נפתחת ולא "מתוקנת". מחשב שלא ענה 7 ימים —
 //    נמחק מ-invoiceWatcher יחד עם הבעיות שלו.
 //
+//  עוקב (שיפורים 2+3, 11/11) — בריצה האיטית, רק כשיש הגדרות במסך והעוקב לא כבוי, ולכל היותר
+//    פעם בשעה (שומר עלות — lastOrdersScan; בלי agentConfig אין סריקה בכלל): קורא את orders, מחשב כמה זמן
+//    לוקח כל שלב (_agent-stats.js, לכל היותר פעם ביום — computedAt) → waMeta/agentStats/stageDays (לתשובת "מתי יהיה מוכן"),
+//    והזמנה של לקוח במערכת שתקועה בשלב > פי 2 מהרגיל (ו>יומיים) → info פעם אחת (stuck_<id>_<שלב>).
+//    יצאה מהשלב → הבעיה יורדת בשקט (בלי "תוקן").
+//  קולט (בן, 11/11) — באותה סריקה (כשהקולט לא כבוי): הזמנה שהגיעה ל-opty ב-24 השעות האחרונות
+//    בלי drafterBatch → info פעם אחת (opty_<id>), "הגיעה לבנה יום עבודה בלי משלוח לשרטט".
+//
 //  מתגים (lgAgentMode): כבוי → כלום. שקט/עונה → לחדר. התראה לבן — רק "עונה".
 //  בלי waMeta/agentConfig בכלל (פרודקשן היום) → הכל לחדר כאפור, אף פעם לא לבן ולא ניסיון חוזר.
 // ═══════════════════════════════════════════════════════════════════
@@ -56,7 +64,11 @@ const MAIL_FAILED = ['failed', 'expired', 'cancelled'];   // כמו _drafter-bat
 const WHO = { archive: 'כלי החשבוניות', kolet: 'משלוחים לשרטט' };
 const INTERNAL_NOTE = 'פנימי — ייסגר לבד כשיתוקן';
 const RANK = { info: 1, ask: 2 };
-const SLOW_KEY = /^(printed|deliv|mail|long)_/;
+const SLOW_KEY = /^(printed|deliv|mail|long|stuck|opty)_/;
+const SCAN_ROOM_MAX = 5;                         // שורות חדשות בחדר לכל סריקת orders (השאר — סיכום)
+const SCAN_KEY = /^(stuck|opty)_/;              // נבדק רק בסריקת orders (פעם בשעה)
+const ORDERS_SCAN_GAP_MS = H;              // שומר עלות: orders נקרא לכל היותר פעם בשעה
+const STATS_GAP_MS = DAY;                  // הזמן הרגיל לכל שלב — לכל היותר פעם ביום
 
 const _safeKey = s => String(s == null ? '' : s).replace(/[.#$[\]/\s]/g, '_').slice(0, 60);
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && !/[.#$[\]/]/.test(k);
@@ -146,6 +158,22 @@ function lgWatchProblems(input) {
   return out;
 }
 
+//  קולט (בן, 11/11): הזמנה שהגיעה ל-opty ("בנה יום עבודה") ב-24 השעות האחרונות (optyAt) בלי
+//  שהייתה בשום משלוח לשרטט (אין drafterBatch) → info אחד להזמנה. יוצאת מהחלון → יורדת בשקט.
+const OPTY_NOBATCH_MS = DAY;
+function lgOptyWithoutBatch(orders, now) {
+  const out = [];
+  for (const [id, o] of Object.entries(orders || {})) {
+    if (!o || typeof o !== 'object' || o.isTest === true || o.isSample === true || o.agentCancelled) continue;
+    const t = Number(o.optyAt) || 0;
+    if (!t || t > now || now - t > OPTY_NOBATCH_MS || o.drafterBatch != null) continue;
+    const who = String(o.orderClient || o.client || '').trim();
+    out.push({ key: 'opty_' + _safeKey(id), src: String(id), agent: 'kolet', level: 'info',
+               text: 'הזמנה ' + _s(o.orderNum || id, 40) + (who ? ' · ' + _s(who, 60) : '') + ' הגיעה לבנה יום עבודה בלי משלוח לשרטט' });
+  }
+  return out;
+}
+
 //  prev = { key: {level, dismissed?} }, problems = [{key, level}] → { open:[key], clear:[key] }
 //  dismissed ("סגור" של בן) — לא נפתח שוב כל עוד הבעיה קיימת
 function lgWatchDiff(prev, problems) {
@@ -213,6 +241,8 @@ async function _gone(db, k, p) {
     //  'queued' עוד לא אומר שהלקוח קיבל — רק 'sent' (סקירה I1)
     return r.delivery && r.delivery.state === 'sent' ? { act: 'fixed' } : { act: 'keep' };
   }
+  //  הזמנה תקועה שזזה / נמחקה — בלי "תוקן" (זה דיווח, לא תקלה שמישהו תיקן)
+  if (k.startsWith('stuck_') || k.startsWith('opty_')) return { act: 'drop' };
   if (k.startsWith('mail_') || k.startsWith('long_')) {
     const b = (await db.ref('waMeta/drafterBatches/' + src).once('value')).val();
     if (!b) return { act: 'drop' };
@@ -228,13 +258,16 @@ async function lgAgentWatchRun(db, o) {
   const deadline = Number(opt.deadline) || Date.now() + RUN_BUDGET_MS;
   const late = () => Date.now() > deadline;
   if (env.AGENT_SHADOW_ENABLED !== 'true') return { ok: true, skipped: 'off', opened: 0, cleared: 0 };
+  //  שחרור "הכל כבוי" (11/11): בלי waMeta/agentConfig — הבדיקות לא רצות בכלל (לא חדר, לא ניסיון חוזר).
+  //  הדופק עצמו נשמר (_invoice-upload) — זה מה ששורת המצב של הכלי במשרד קוראת.
+  const cfg = await lgAgentConfig(db);
+  if (!cfg) return { ok: true, skipped: 'no-config', opened: 0, cleared: 0 };
   //  פעם בדקה לכל היותר (גם כמה מחשבים / דופק כפול). null-first: הקריאה הראשונה מחזירה ערך
   const gate = (path, gap) => db.ref(WATCH + '/' + path).transaction(cur => (cur != null && Math.abs(now - Number(cur)) < gap ? undefined : now));
   if (!(await gate('lastRun', RUN_GAP_MS)).committed) return { ok: true, skipped: 'throttled', opened: 0, cleared: 0 };
   //  בדיקות החשבוניות והקולט — פעם ב-10 דק' (מפתח נפרד)
   const slow = (await gate('lastRunSlow', SLOW_GAP_MS)).committed;
 
-  const cfg = await lgAgentConfig(db);
   const modeOf = a => lgAgentModeOf(cfg, a, env);
   const on = a => modeOf(a) !== 'off';
   //  פעולה אוטומטית מול לקוח — רק "עונה" שנבחר במסך (בלי הגדרות — אף פעם)
@@ -292,20 +325,56 @@ async function lgAgentWatchRun(db, o) {
     }
   }
 
-  const all = lgWatchProblems({ now, watchers, invoices, retried, reply, noRetry, batches, mail }).filter(p => on(p.agent));
+  //  ⚠️ שומר עלות (11/11): orders נקרא רק כשיש הגדרות במסך, והעוקב לא כבוי — לכל היותר
+  //  פעם בשעה (מפתח lastOrdersScan); הזמן הרגיל לכל שלב מחושב מחדש לכל היותר פעם ביום (computedAt).
+  //  בלי waMeta/agentConfig (פרודקשן היום) — אף פעם לא קוראים את orders.
+  let stuck = [], scanned = false;
+  if (slow && cfg && (on('okev') || on('kolet'))) {
+    if ((await gate('lastOrdersScan', ORDERS_SCAN_GAP_MS)).committed) {
+      try {
+        const orders = (await db.ref('orders').once('value')).val() || {};
+        if (on('okev')) {
+          const ST = require('./_agent-stats');
+          let stats = (await db.ref(ST.AGENT_STATS).once('value')).val();
+          if (!stats || !(now - (Number(stats.computedAt) || 0) < STATS_GAP_MS) || Number(stats.computedAt) > now) {
+            stats = { ...ST.lgStageStats(orders, now), computedAt: now };
+            await db.ref(ST.AGENT_STATS).set(stats);
+          }
+          stuck = ST.lgStuckOrders(orders, stats, now);
+        }
+        //  קולט: הגיעה לבנה יום עבודה בלי משלוח לשרטט (אותה קריאה של orders)
+        if (on('kolet')) stuck = stuck.concat(lgOptyWithoutBatch(orders, now));
+        scanned = true;   // רק סריקה שהצליחה "מנקה" בעיות ישנות
+      } catch (e) { console.warn('agent-watch: orders scan', e && e.name); }
+    }
+  }
+  const all = lgWatchProblems({ now, watchers, invoices, retried, reply, noRetry, batches, mail }).concat(stuck).filter(p => on(p.agent));
   const byKey = {};
   all.forEach(p => { byKey[p.key] = p; });
   //  לא "מתוקן": בעיה של סוכן כבוי, או של מחשב שלא שלח דופק עדכני, או בדיקה איטית שלא רצה עכשיו
   const freshPc = pc => { const w = watchers[pc]; return !!w && now - (Number(w.at) || 0) <= FRESH_MS; };
-  const keep = (k, p) => !p || !on(p.agent) || (!slow && SLOW_KEY.test(k)) || ((k.startsWith('file_') || k.startsWith('print_'))
+  const keep = (k, p) => !p || !on(p.agent) || (!slow && SLOW_KEY.test(k)) || (!scanned && SCAN_KEY.test(k)) || ((k.startsWith('file_') || k.startsWith('print_'))
     && !Object.keys(watchers).some(pc => freshPc(pc) && (k === 'print_' + _safeKey(pc) || k.startsWith('file_' + _safeKey(pc) + '_'))));
   const diff = lgWatchDiff(prev, all);
 
   let retriedNow = false;
+  //  סקירת שחרור 11/11: סריקת orders ראשונה יכולה למצוא עשרות הזמנות — עד SCAN_ROOM_MAX שורות חדשות
+  //  בסריקה, השאר נרשמות (כדי שלא יעלו שוב) ושורת סיכום אחת לכל סוכן "ועוד N הזמנות"
+  let scanPosted = 0;
+  const scanExtra = {};
   for (const k of diff.open) {
     if (late()) break;
     const p = byKey[k];
     const rec = { level: p.level, agent: p.agent, at: now, text: _s(p.text, 300), src: p.src || null, roomKey: null, asked: false };
+    if (SCAN_KEY.test(k)) {
+      if (scanPosted >= SCAN_ROOM_MAX) {
+        scanExtra[p.agent] = (scanExtra[p.agent] || 0) + 1;
+        await setProblem(k, rec);
+        opened++;
+        continue;
+      }
+      scanPosted++;
+    }
     if (p.retry) {
       //  ניסיון אחד לכל ריצה; השאר — בריצה הבאה
       if (retriedNow) continue;
@@ -321,6 +390,10 @@ async function lgAgentWatchRun(db, o) {
     await setProblem(k, { ...rec, roomKey: r ? r.roomKey : null, asked: !!(r && r.asked) });
     opened++;
   }
+  for (const [agent, n] of Object.entries(scanExtra)) {
+    const what = agent === 'kolet' ? 'שהגיעו לבנה יום עבודה בלי משלוח לשרטט' : 'תקועות יותר מהרגיל';
+    await lgAgentEvent(db, agent, { kind: 'info', text: `ועוד ${n} הזמנות ${what}` }, { env, now, cfg });
+  }
   for (const k of diff.clear) {
     if (late()) break;
     const p = prev[k];
@@ -333,6 +406,12 @@ async function lgAgentWatchRun(db, o) {
     }
     await setProblem(k, null);
     cleared++;
+  }
+  //  מנהל (פריט 8, 11/11): סיכום בוקר בחדר — פעם ביום, בדופק הראשון אחרי 07:00 (א'–ו').
+  //  רק עם הגדרות במסך והמנהל לא כבוי (_agent-morning.js). תקלה לא נוגעת בבדיקות.
+  if (!late()) {
+    try { await require('./_agent-morning').lgAgentMorningRun(db, { env, now, cfg }); }
+    catch (e) { console.warn('agent-watch: morning', e && e.name); }
   }
   return { ok: true, opened, cleared };
 }
@@ -356,5 +435,5 @@ async function lgWatchDismiss(db, key, deps) {
   return { ok: true, code: '' };
 }
 
-module.exports = { WATCHERS, WATCH, LG_AGENT_KEYS, lgIsWorkingHours, lgWatchHeartbeatClean, lgWatchProblems, lgWatchDiff,
+module.exports = { WATCHERS, WATCH, LG_AGENT_KEYS, lgOptyWithoutBatch, lgIsWorkingHours, lgWatchHeartbeatClean, lgWatchProblems, lgWatchDiff,
                    lgWatcherSilentLine, lgAgentEvent, lgAgentWatchRun, lgWatchDismiss };
