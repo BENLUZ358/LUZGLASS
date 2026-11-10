@@ -1182,6 +1182,9 @@ function lgNormalizeOrder(o) {
     // פאנלים שנסגרו ב"סיום בדיקה" — ירדו מהרשימה ולא חוזרים אליה
     chisumClosedIdxs:   o.chisumClosedIdxs   ?? null,
     triplexClosedIdxs:  o.triplexClosedIdxs  ?? null,
+    // שבר בחיסום (בן, 10/11) — גולמי, lgBrokenOpen מפענח. בלעדיו הנרמול היה מעלים
+    // את השבור מכל מסך, והכרטיס בחיסום והתג בתחנת החשבוניות לא היו מופיעים.
+    brokenChisum:       o.brokenChisum       ?? null,
     // מה שיום העבודה כבר סיים או מסר — גולמי, lgWorkdayLeft מפענח.
     // בלעדיו כאן, הזמנה חלקית הייתה נשכחת בכל טעינה ומתקדמת כולה שוב.
     wdDoneIdxs:         o.wdDoneIdxs         ?? null,
