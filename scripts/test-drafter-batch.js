@@ -226,6 +226,37 @@ const deps = { enqueue: async (db, n) => { sent.push(n); return { key: 'k' + n, 
     check('hold: already sent → refused', (await D.lgDrafterHold(db, 'A2', true)).ok, false);
   }
 
+  // ── "השרטט סיים" על משלוח אחד (בן: בתחנת שרטט, לפי קובץ) ──
+  {
+    const db = seed();
+    await D.lgDrafterSend(db, { by: 'ben', now: NOW }, deps);
+    db._data.orders.A9 = o('A9', 'drafter');
+    await D.lgDrafterSend(db, { by: 'ben', now: NOW + 5 }, deps);
+    const d = await D.lgDrafterDone(db, { by: 'ben', now: NOW + 10, n: 2 });
+    check('done one batch: only its orders move', [d.batches, d.moved.map(m => m.id), db._data.orders.A1.stage], [[2], ['A9'], 'drafter']);
+    check('done one batch: other stays open', [db._data.waMeta.drafterBatches['1'].doneAt, !!db._data.waMeta.drafterBatches['2'].doneAt], [null, true]);
+    check('done unknown batch → nothing', (await D.lgDrafterDone(db, { by: 'ben', now: NOW + 11, n: 99 })).batches, []);
+    const st = await D.lgDrafterStatus(db);
+    check('status: open batch lists its orders with sketch names', st.open[0].orders.map(x => [x.id, x.sketchName]), [['A1', 'סקיצה A1'], ['A2', 'סקיצה A2']]);
+  }
+  // ── הטיוטה כקובץ, לפני שליחה ──
+  {
+    const { createCanvas } = require('@napi-rs/canvas');
+    const img = () => 'data:image/png;base64,' + createCanvas(200, 100).toBuffer('image/png').toString('base64');
+    const db = seed(null, { sketches: { A1: img(), A2: img() } });
+    const p = await D.lgDrafterPreview(db, { now: NOW });
+    const { PDFDocument } = require('pdf-lib');
+    check('preview: one file with cover + 2', [p.ok, p.files.length, (await PDFDocument.load(p.files[0].buf)).getPageCount(), p.files[0].name], [true, 1, 3, 'טיוטה לשרטט.pdf']);
+    check('preview changes nothing', [db._data.orders.A1.drafterBatch, (db._data.waMeta || {}).drafterBatches], [undefined, undefined]);
+    await D.lgDrafterHold(db, 'A1', true);
+    check('preview skips held', (await PDFDocument.load((await D.lgDrafterPreview(db, { now: NOW })).files[0].buf)).getPageCount(), 2);
+    const empty = seed(null, {}); Object.values(empty._data.orders).forEach(x => { x.stage = 'opty'; });
+    check('preview empty', (await D.lgDrafterPreview(empty, { now: NOW })).code, 'empty');
+    // הקובץ של משלוח שנשלח
+    const r = await D.lgDrafterSend(db, { by: 'ben', now: NOW }, deps);
+    check('stored file of a sent batch (send stored it only via real enqueue — none here)', (await D.lgDrafterStoredFile(db, r.n, 0)).ok, false);
+  }
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nAll drafter-batch checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -131,11 +131,14 @@ async function _openBatches(db) {
 }
 const MAIL_FAILED = ['failed', 'expired', 'cancelled'];
 
-async function lgDrafterDone(db, { by, now } = {}) {
+//  n (רשות) — רק המשלוח הזה ("השרטט סיים" על קובץ אחד בתחנת שרטט, בן 10/11). בלי n — כל הפתוחים.
+async function lgDrafterDone(db, { by, now, n } = {}) {
   const at = now || Date.now();
   const moved = [], skipped = [], batches = [], held = [];
   const outbox = (await db.ref('waMeta/emailOutbox').once('value')).val() || {};
+  const only = n == null ? null : Number(n);
   for (const b of await _openBatches(db)) {
+    if (only != null && Number(b.n) !== only) continue;
     //  המייל לא יצא — השרטט לא קיבל את המשלוח הזה; לא מעבירים (סקירה 10/11)
     const mail = b.emailKey && outbox[b.emailKey] ? outbox[b.emailKey].state : '';
     if (b.emailError || MAIL_FAILED.includes(mail)) { held.push(b.n); continue; }
@@ -172,7 +175,8 @@ async function lgDrafterStatus(db) {
   const outbox = (await db.ref('waMeta/emailOutbox').once('value')).val() || {};
   const open = (await _openBatches(db)).map(b => ({ n: b.n, at: b.at, count: b.count, emailKey: b.emailKey || null,
     emailState: b.emailError ? 'failed' : b.emailKey && outbox[b.emailKey] ? String(outbox[b.emailKey].state || '') : '',
-    orders: (b.orderIds || []).map(id => ({ id, orderNum: String((all[id] || {}).orderNum || ''), client: String((all[id] || {}).orderClient || '') })) }));
+    orders: (b.orderIds || []).map(id => ({ id, orderNum: String((all[id] || {}).orderNum || ''), client: String((all[id] || {}).orderClient || ''),
+                                            sketchName: String((all[id] || {}).sketchName || ''), stage: String((all[id] || {}).stage || '') })) }));
   return { basket, held, open };
 }
 
@@ -209,7 +213,7 @@ async function _build(cover, items, b) {
     const [W, H] = M.A4;
     const line = (t, y, size, color) => { const v = M._visual(t);
       page.drawText(v, { x: W - 40 - font.widthOfTextAtSize(v, size), y, size, font, color: color || rgb(0, 0, 0) }); };
-    line('משלוח ' + b.n, H - 80, 34);
+    line(b.title || ('משלוח ' + b.n), H - 80, 34);
     line(_ilTime(b.at) + '   ·   ' + b.count + ' הזמנות', H - 115, 16, rgb(0.35, 0.35, 0.35));
     let y = H - 165;
     for (const it of cover) {
@@ -230,16 +234,22 @@ async function _build(cover, items, b) {
 }
 
 //  → { ok:true, files:[{name, mime, buf}] } | { ok:false, code:'no-batch' }
-async function lgDrafterPdf(db, n, opts) {
-  const b = (await db.ref(BATCHES + '/' + n).once('value')).val();
-  if (!b || !b.n) return { ok: false, code: 'no-batch' };
-  const max = (opts && opts.maxBytes) || MAX_PDF_BYTES;
+//  הטיוטה כקובץ — מה שייצא אם לוחצים עכשיו "שלח לשרטט". לא משנה כלום.
+//  → { ok, files:[...] } | { ok:false, code:'empty' }
+async function lgDrafterPreview(db, { now, maxBytes } = {}) {
+  const basket = await lgDrafterBasket(db);
+  if (!basket.length) return { ok: false, code: 'empty' };
+  const b = { n: 0, title: 'טיוטה לשרטט', at: now || Date.now(), count: basket.length, orderIds: basket.map(x => x.id) };
   const items = await _items(db, b);
+  const files = await _split(items, b, maxBytes || MAX_PDF_BYTES);
+  return { ok: true, files: files.map((buf, i) => ({ name: 'טיוטה לשרטט' + (files.length > 1 ? ' (' + (i + 1) + ' מתוך ' + files.length + ')' : '') + '.pdf',
+                                                      mime: 'application/pdf', buf })) };
+}
+
+//  פיצול לחלקים עד max (השער רק בראשון) → [Buffer]
+async function _split(items, b, max) {
   const one = await _build(items, items, b);
-  if (one.length <= max || items.length <= 1) {
-    return { ok: true, files: [{ name: 'משלוח ' + b.n + '.pdf', mime: 'application/pdf', buf: one }] };
-  }
-  //  חלוקה: מוסיפים הזמנות לחלק עד שהוא עובר את הגבול (לפחות הזמנה אחת בכל חלק)
+  if (one.length <= max || items.length <= 1) return [one];
   const parts = [];
   let cur = [];
   for (const it of items) {
@@ -247,12 +257,19 @@ async function lgDrafterPdf(db, n, opts) {
     if (cur.length && tryBuf.length > max) { parts.push(cur); cur = [it]; } else cur.push(it);
   }
   if (cur.length) parts.push(cur);
-  const files = [];
-  for (let i = 0; i < parts.length; i++) {
-    files.push({ name: 'משלוח ' + b.n + ' (' + (i + 1) + ' מתוך ' + parts.length + ').pdf', mime: 'application/pdf',
-                 buf: await _build(i === 0 ? items : null, parts[i], b) });
-  }
-  return { ok: true, files };
+  const out = [];
+  for (let i = 0; i < parts.length; i++) out.push(await _build(i === 0 ? items : null, parts[i], b));
+  return out;
+}
+
+async function lgDrafterPdf(db, n, opts) {
+  const b = (await db.ref(BATCHES + '/' + n).once('value')).val();
+  if (!b || !b.n) return { ok: false, code: 'no-batch' };
+  const max = (opts && opts.maxBytes) || MAX_PDF_BYTES;
+  const items = await _items(db, b);
+  const bufs = await _split(items, b, max);
+  const name = i => 'משלוח ' + b.n + (bufs.length > 1 ? ' (' + (i + 1) + ' מתוך ' + bufs.length + ')' : '') + '.pdf';
+  return { ok: true, files: bufs.map((buf, i) => ({ name: name(i), mime: 'application/pdf', buf })) };
 }
 
 //  קובץ שנשמר בשליחה → { ok, name, mime, b64 } | { ok:false, code }
@@ -287,4 +304,4 @@ async function lgDrafterEnqueueEmail(db, n, now) {
   return r;
 }
 
-module.exports = { lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
+module.exports = { lgDrafterPreview, lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };

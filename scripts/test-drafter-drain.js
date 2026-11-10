@@ -55,6 +55,16 @@ const db = fakeDb({ orders: {
   r = await adm.handleAdmin({ action: 'drafter-hold', id: '../x', hold: true }, { db, by: '052', now: NOW + 23 });
   check('hold bad id', r.ok, false);
 
+  // טיוטה כקובץ, קובץ של משלוח, "סיים" על משלוח אחד
+  r = await adm.handleAdmin({ action: 'drafter-preview', idx: 0 }, { db, by: '052', now: NOW + 30 });
+  check('preview', [r.ok, r.parts, r.name, typeof r.b64], [true, 1, 'טיוטה לשרטט.pdf', 'string']);
+  r = await adm.handleAdmin({ action: 'drafter-file', n: 2, idx: 0 }, { db, by: '052', now: NOW + 31 });
+  check('file of sent batch', [r.ok, r.name, typeof r.b64], [true, 'משלוח 2.pdf', 'string']);
+  r = await adm.handleAdmin({ action: 'drafter-file', n: 'x', idx: 0 }, { db, by: '052', now: NOW + 32 });
+  check('file bad n', r.ok, false);
+  r = await adm.handleAdmin({ action: 'drafter-done', n: 2 }, { db, by: '052', now: NOW + 33 });
+  check('done one batch', [r.ok, r.batches], [true, [2]]);
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nAll drafter-drain checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });
