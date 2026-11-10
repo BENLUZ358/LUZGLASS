@@ -4,7 +4,7 @@
 //
 //  עוזר משותף, לא route. טהור — בלי DB. הריצה האיטית של הדופק (_agent-watch,
 //  פעם ב-10 דק') קוראת את orders, מחשבת כאן, שומרת waMeta/agentStats/stageDays
-//  _agent-act קורא את הערך השמור לתשובת "מתי יהיה מוכן".
+//  ומדווחת על הזמנות תקועות; _agent-act קורא את הערך השמור לתשובת "מתי יהיה מוכן".
 //
 //  ⚠️ מקורות הזמן — מה שבאמת נשמר על ההזמנה (אין היסטוריית שלבים):
 //     createdAt  — נכנסה לתור (שלב ''/pending)
@@ -19,9 +19,13 @@
 //  בלי הזמנות בדיקה (isTest), דוגמאות (isSample) והזמנות שהסוכן ביטל.
 // ═══════════════════════════════════════════════════════════════════
 
+const { lgOkevStageName } = require('./_agent-okev');
+
 const DAY = 24 * 3600 * 1000;
 const STATS_WINDOW_DAYS = 60;
 const STATS_MIN_SAMPLES = 10;
+const STUCK_FACTOR = 2;
+const STUCK_MIN_DAYS = 2;
 const AGENT_STATS = 'waMeta/agentStats/stageDays';
 const LG_STAGE_PHASE = { '': 'pre', pending: 'pre', chash: 'pre', drafter: 'pre',
                          opty: 'prod', workday: 'prod', chisum: 'prod', graphic: 'prod' };
@@ -68,5 +72,28 @@ function lgOkevEta(order, stats, now) {
 }
 const lgOkevEtaText = n => 'בדרך כלל זה לוקח עוד בערך ' + (Number(n) === 1 ? 'יום' : n + ' ימים');
 
+//  הזמנה תקועה: לקוח במערכת (customerId), בשלב יותר מפי 2 מהחציון וגם יותר מיומיים.
+//  → [{ key, agent:'okev', level:'info', src, text }] — אותה צורה כמו בעיות הדופק
+function lgStuckOrders(orders, stats, now) {
+  const out = [];
+  for (const [id, o] of Object.entries(orders || {})) {
+    if (_skip(o) || !String(o.customerId || '').trim()) continue;
+    const phase = _phaseOf(o);
+    const s = phase && stats && stats.phases && stats.phases[phase] && stats.phases[phase].inStage;
+    if (!s || !(Number(s.n) >= STATS_MIN_SAMPLES)) continue;
+    const anchor = _anchor(o, phase);
+    if (!anchor) continue;
+    const el = Number(now) - anchor;
+    if (!(el > STUCK_FACTOR * Number(s.days) * DAY && el > STUCK_MIN_DAYS * DAY)) continue;
+    const num = String(o.orderNum || o.refNum || id);
+    const who = String(o.orderClient || o.client || o.businessName || '').trim();
+    const usual = Math.max(1, Math.round(Number(s.days)));
+    out.push({ key: 'stuck_' + String(id).replace(/[.#$[\]/\s]/g, '_').slice(0, 80) + '_' + phase, agent: 'okev', level: 'info', src: String(id),
+      text: 'הזמנה ' + num + (o.sketchName ? ' (' + String(o.sketchName).slice(0, 60) + ')' : '') + (who ? ' של ' + who.slice(0, 60) : '')
+            + ' תקועה בשלב ' + lgOkevStageName(o.stage || '') + ' כבר ' + Math.floor(el / DAY) + ' ימים (בדרך כלל ' + usual + ')' });
+  }
+  return out;
+}
+
 module.exports = { AGENT_STATS, LG_STAGE_PHASE, STATS_MIN_SAMPLES, STATS_WINDOW_DAYS,
-                   lgStageStats, lgOkevEta, lgOkevEtaText, };
+                   lgStageStats, lgOkevEta, lgOkevEtaText, lgStuckOrders };

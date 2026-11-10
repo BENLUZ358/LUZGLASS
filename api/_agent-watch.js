@@ -32,6 +32,8 @@
 //
 //  עוקב (שיפורים 2+3, 11/11) — בריצה האיטית, כשהעוקב לא כבוי: קורא את orders, מחשב כמה זמן
 //    לוקח כל שלב (_agent-stats.js) → waMeta/agentStats/stageDays (לתשובת "מתי יהיה מוכן"),
+//    והזמנה של לקוח במערכת שתקועה בשלב > פי 2 מהרגיל (ו>יומיים) → info פעם אחת (stuck_<id>_<שלב>).
+//    יצאה מהשלב → הבעיה יורדת בשקט (בלי "תוקן").
 //
 //  מתגים (lgAgentMode): כבוי → כלום. שקט/עונה → לחדר. התראה לבן — רק "עונה".
 //  בלי waMeta/agentConfig בכלל (פרודקשן היום) → הכל לחדר כאפור, אף פעם לא לבן ולא ניסיון חוזר.
@@ -59,7 +61,7 @@ const MAIL_FAILED = ['failed', 'expired', 'cancelled'];   // כמו _drafter-bat
 const WHO = { archive: 'כלי החשבוניות', kolet: 'משלוחים לשרטט' };
 const INTERNAL_NOTE = 'פנימי — ייסגר לבד כשיתוקן';
 const RANK = { info: 1, ask: 2 };
-const SLOW_KEY = /^(printed|deliv|mail|long)_/;
+const SLOW_KEY = /^(printed|deliv|mail|long|stuck)_/;
 
 const _safeKey = s => String(s == null ? '' : s).replace(/[.#$[\]/\s]/g, '_').slice(0, 60);
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && !/[.#$[\]/]/.test(k);
@@ -216,6 +218,8 @@ async function _gone(db, k, p) {
     //  'queued' עוד לא אומר שהלקוח קיבל — רק 'sent' (סקירה I1)
     return r.delivery && r.delivery.state === 'sent' ? { act: 'fixed' } : { act: 'keep' };
   }
+  //  הזמנה תקועה שזזה / נמחקה — בלי "תוקן" (זה דיווח, לא תקלה שמישהו תיקן)
+  if (k.startsWith('stuck_')) return { act: 'drop' };
   if (k.startsWith('mail_') || k.startsWith('long_')) {
     const b = (await db.ref('waMeta/drafterBatches/' + src).once('value')).val();
     if (!b) return { act: 'drop' };
@@ -302,6 +306,7 @@ async function lgAgentWatchRun(db, o) {
       const orders = (await db.ref('orders').once('value')).val() || {};
       const stats = ST.lgStageStats(orders, now);
       await db.ref(ST.AGENT_STATS).set(stats);
+      stuck = ST.lgStuckOrders(orders, stats, now);
     } catch (e) { console.warn('agent-watch: stage stats', e && e.name); }
   }
   const all = lgWatchProblems({ now, watchers, invoices, retried, reply, noRetry, batches, mail }).concat(stuck).filter(p => on(p.agent));

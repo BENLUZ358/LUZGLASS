@@ -3,6 +3,7 @@
  * שיפורים 2+3 (חדר הסוכנים): עוקב — "מתי יהיה מוכן?" + הזמנה תקועה.
  *  • lgStageStats — מהיסטוריית ההזמנות (60 יום): createdAt / optyAt / readyAt / deliveryAt.
  *  • lgOkevEta — "בדרך כלל זה לוקח עוד בערך N ימים" רק מ-10 דגימות.
+ *  • lgStuckOrders + הריצה האיטית של הדופק: info לחדר פעם אחת, לקוח במערכת בלבד.
  * Run:  node scripts/test-agent-stage-stats.js
  */
 const path = require('path');
@@ -62,6 +63,26 @@ const hist = (n, extra) => {
     check('eta text one day', ST.lgOkevEtaText(1), 'בדרך כלל זה לוקח עוד בערך יום');
   }
 
+  /* ── lgStuckOrders ── */
+  {
+    const s = ST.lgStageStats(hist(12), NOW);
+    const orders = {
+      a: { customerId: '777', orderClient: 'כהן', orderNum: 'L1', sketchName: 'מטבח', stage: 'workday', optyAt: NOW - 7 * DAY },  // 7 > 2×3
+      b: { customerId: '777', orderNum: 'L2', stage: 'workday', optyAt: NOW - 5 * DAY },                                          // 5 < 6
+      c: { customerId: '', orderNum: 'L3', stage: 'workday', optyAt: NOW - 9 * DAY },                                             // לא במערכת
+      d: { customerId: '777', orderNum: 'L4', stage: 'pending', createdAt: NOW - 5 * DAY },                                      // 5 > 4 (2×2)
+      e: { customerId: '777', orderNum: 'L5', stage: 'done', optyAt: NOW - 30 * DAY },
+      f: { customerId: '777', orderNum: 'L6', stage: 'workday', optyAt: NOW - 9 * DAY, isSample: true },
+    };
+    const st = ST.lgStuckOrders(orders, s, NOW);
+    check('stuck: only in-system orders past 2× the median',
+      st.map(p => [p.key, p.agent, p.level, p.src]), [['stuck_a_prod', 'okev', 'info', 'a'], ['stuck_d_pre', 'okev', 'info', 'd']]);
+    check('stuck text', st[0].text, 'הזמנה L1 (מטבח) של כהן תקועה בשלב ייצור כבר 7 ימים (בדרך כלל 3)');
+    const quick = { phases: { pre: { inStage: { n: 12, days: 0.4 }, remain: { n: 12, days: 1 } }, prod: { inStage: { n: 12, days: 0.5 }, remain: { n: 12, days: 1 } } } };
+    check('stuck: never under 2 days', ST.lgStuckOrders({ x: { customerId: '7', stage: 'workday', optyAt: NOW - 1.5 * DAY } }, quick, NOW).length, 0);
+    check('stuck: fewer than 10 samples → nothing', ST.lgStuckOrders(orders, ST.lgStageStats(hist(9), NOW), NOW).length, 0);
+  }
+
   /* ── הריצה האיטית של הדופק ── */
   const seed = cfg => fakeDb({
     orders: { ...hist(12), a: { customerId: '777', orderClient: 'כהן', orderNum: 'L1', sketchName: 'מטבח', stage: 'workday', optyAt: NOW - 7 * DAY } },
@@ -73,11 +94,24 @@ const hist = (n, extra) => {
     await W.lgAgentWatchRun(d, { env: ENV, now: NOW });
     check('watch: stats cached in waMeta/agentStats/stageDays', [d._data.waMeta.agentStats.stageDays.phases.prod.inStage, d._data.waMeta.agentStats.stageDays.at],
       [{ n: 12, days: 3 }, NOW]);
+    check('watch: one room info for עוקב', roomOf(d).filter(v => v.agent === 'okev').map(v => [v.kind, v.text]),
+      [['info', 'הזמנה L1 (מטבח) של כהן תקועה בשלב ייצור כבר 7 ימים (בדרך כלל 3)']]);
+    await W.lgAgentWatchRun(d, { env: ENV, now: NOW + 11 * MIN });
+    check('watch: not repeated on the next slow run', roomOf(d).filter(v => v.agent === 'okev').length, 1);
+    d._data.orders.a.stage = 'done'; d._data.orders.a.readyAt = NOW + 20 * MIN;
+    await W.lgAgentWatchRun(d, { env: ENV, now: NOW + 22 * MIN });
+    check('watch: moved on → problem dropped quietly (no "תוקן")', [roomOf(d).filter(v => v.agent === 'okev').length,
+      Object.keys(d._data.waMeta.agentWatch.problems || {}).filter(k => k.startsWith('stuck_')).length], [1, 0]);
+  }
+  {
+    const d = seed(null);
+    await W.lgAgentWatchRun(d, { env: ENV, now: NOW });
+    check('watch no agentConfig: grey info only', roomOf(d).filter(v => v.agent === 'okev').map(v => v.kind), ['info']);
   }
   {
     const d = seed(CFG('off'));
     await W.lgAgentWatchRun(d, { env: ENV, now: NOW });
-    check('watch okev off: no stats computed', !!(d._data.waMeta.agentStats), false);
+    check('watch okev off: nothing, no orders read for it', [roomOf(d).filter(v => v.agent === 'okev').length, !!(d._data.waMeta.agentStats)], [0, false]);
   }
 
   /* ── תשובת עוקב עם "בדרך כלל" ── */
