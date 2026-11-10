@@ -1764,6 +1764,16 @@ let _pricesRaw = {};        // הצומת prices כמו שהוא: global, client
 function setPriceTab(t){ _priceTab = t; renderPricing(); }
 
 function renderPricing(){
+  // שמירת מחיר מציירת את המסך מחדש — לשמור את מקום הגלילה ואת החיפוש,
+  // כדי שאפשר לעבור מוצר אחרי מוצר בלי לחזור לראש הרשימה.
+  const _sc = ['pricingBody','cpList'].map(id => { const e = document.getElementById(id); return e ? e.scrollTop : 0; });
+  _renderPricingInner();
+  [['pgSearch','priceTable'],['cpSearch','cpList'],['clSearch','clList']].forEach(([i,t]) => {
+    if(_priceSearch[i] && document.getElementById(i)) _priceFilter(i, t, _priceSearch[i]);
+  });
+  ['pricingBody','cpList'].forEach((id,n) => { const e = document.getElementById(id); if(e && _sc[n]) e.scrollTop = _sc[n]; });
+}
+function _renderPricingInner(){
   const el = document.getElementById('pricingBody');
   const tab = (id, label) =>
     '<button onclick="setPriceTab(\'' + id + '\')" style="flex:1;padding:10px 4px;border:none;cursor:pointer;'
@@ -1851,39 +1861,44 @@ function renderClientPriceTab(el){
     const m   = _clientPriceMap[k] || {};
     let inner = '';
     if(sel){
-      const avail = Object.values(skuCatalogMap).filter(c => c && c.code && prices[c.code]==null && c.active!==false)
-        .sort((a,b)=>String(a.code).localeCompare(String(b.code)));
+      // בן, 10/11: "לערוך בקלות מחירון של לקוח, ולחפש כל מוצר". כל המוצרים
+      // מוצגים, המיוחדים של הלקוח למעלה. כותבים מחיר ליד מוצר = מחיר מיוחד;
+      // מוחקים אותו = הלקוח חוזר לכללי. המחיר הכללי מופיע בשדה הריק כרמז.
+      const codes = {};
+      Object.keys(prices).forEach(c => codes[c] = 1);
+      Object.values(skuCatalogMap).forEach(c => { if(c && c.code && c.active!==false) codes[c.code] = 1; });
+      const list = Object.keys(codes).sort((a,b) => ((prices[b]!=null)-(prices[a]!=null)) || a.localeCompare(b));
       inner = '<div style="border-top:1px solid var(--border)">'
-        + (n ? '' : '<div style="padding:12px 14px;font-size:12px;color:var(--muted)">אין עדיין מחירים מיוחדים — הלקוח משלם לפי הכללי.</div>')
-        + '<div style="max-height:360px;overflow-y:auto">'
-        + Object.keys(prices).sort().map(function(sku){
+        + '<div style="padding:10px 14px 0">' + _priceSearchBox('cpSearch', 'cpList', 'חפש מוצר אצל ' + _priceClientName(k) + '…') + '</div>'
+        + '<div style="padding:0 14px 6px;font-size:12px;color:var(--muted)">'
+        +   (n ? n + ' מחירים מיוחדים למעלה, מסומנים בזהב. ' : 'אין עדיין מחירים מיוחדים — הלקוח משלם לפי הכללי. ')
+        +   'כתוב מחיר ליד מוצר כדי לקבוע לו מחיר מיוחד; מחק אותו כדי לחזור לכללי.</div>'
+        + '<div id="cpList" style="max-height:420px;overflow-y:auto">'
+        + list.map(function(sku){
             const cat = skuCatalogMap[sku];
             const g   = gp[sku];
-            const diff = (g != null && Number(g) !== Number(prices[sku]));
-            return '<div class="cp-row">'
+            const has = prices[sku] != null;
+            const diff = has && g != null && Number(g) !== Number(prices[sku]);
+            return '<div class="cp-row" data-q="' + lgEsc(_priceQ(sku, cat&&cat.name)) + '"' + (has ? ' style="background:rgba(184,146,42,0.07)"' : '') + '>'
               + '<span class="cp-sku">' + lgEsc(sku) + '</span>'
               + '<span class="cp-name">' + lgEsc((cat&&cat.name)||'') + '</span>'
               + '<span class="cp-money">'
               +   (diff ? '<span class="cp-old" title="המחירון הכללי">₪' + lgEsc(String(g)) + '</span>' : '')
-              +   '<input type="number" min="0" step="0.5" inputmode="decimal" value="' + lgEsc(String(prices[sku])) + '" style="' + _pInp + '"'
-              +   ' onchange="priceEdit(\'' + lgJsStr(k) + '\',\'' + lgJsStr(sku) + '\',this.value)">'
-              +   '<button title="מחק — יחזור למחיר הכללי" onclick="priceEdit(\'' + lgJsStr(k) + '\',\'' + lgJsStr(sku) + '\',\'\')" style="padding:4px 8px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:12px">✕</button>'
+              +   '<input type="number" min="0" step="0.5" inputmode="decimal" value="' + (has ? lgEsc(String(prices[sku])) : '') + '"'
+              +   ' placeholder="' + (g != null ? 'כללי ' + lgEsc(String(g)) : 'אין מחיר') + '" title="ריק = לפי המחירון הכללי"'
+              +   ' style="' + _pInp + 'width:96px;' + (has ? 'border-color:var(--gold);' : 'font-weight:400;') + '"'
+              +   ' onchange="clientPriceInput(\'' + lgJsStr(k) + '\',\'' + lgJsStr(sku) + '\',this.value,' + (has?'true':'false') + ')">'
+              +   (has
+                    ? '<button title="מחק — יחזור למחיר הכללי" onclick="priceEdit(\'' + lgJsStr(k) + '\',\'' + lgJsStr(sku) + '\',\'\')" style="padding:4px 8px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:12px">✕</button>'
+                    : '<span style="display:inline-block;width:30px"></span>')
               + '</span></div>';
           }).join('')
         + '</div>'
-        + '<div style="display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap">'
-        +   '<select id="cpAddSku" style="' + _pSel + 'flex:1;width:auto;min-width:160px">'
-        +     '<option value="">הוסף מק"ט…</option>'
-        +     avail.map(c => '<option value="' + lgEsc(c.code) + '">' + lgEsc(c.code) + ' · ' + lgEsc(c.name||'') + (gp[c.code]!=null ? ' (כללי ₪' + lgEsc(String(gp[c.code])) + ')' : '') + '</option>').join('')
-        +   '</select>'
-        +   '<input id="cpAddPrice" type="number" min="0" step="0.5" inputmode="decimal" placeholder="מחיר ₪" style="' + _pInp + '">'
-        +   '<button onclick="addClientPrice(\'' + lgJsStr(k) + '\')" style="' + _pBtn + 'background:var(--gold);color:var(--on-gold);border:none">הוסף</button>'
-        + '</div>'
-        + '<div style="padding:0 14px 12px;text-align:left">'
+        + '<div style="padding:10px 14px 12px;text-align:left;border-top:1px solid var(--border)">'
         +   '<button onclick="deleteClientPriceList(\'' + lgJsStr(k) + '\')" style="padding:5px 10px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:12px">מחק את כל המחירון של הלקוח</button>'
         + '</div></div>';
     }
-    return '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">'
+    return '<div data-q="' + lgEsc(_priceQ(k, _priceClientName(k))) + '" style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">'
       + '<div onclick="togglePriceClient(\'' + lgJsStr(k) + '\')" style="padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;background:' + (sel?'var(--bg2)':'var(--surface)') + '">'
       + '<div style="flex:1"><div style="font-size:13px;font-weight:900">' + lgEsc(_priceClientName(k)) + '</div>'
       + '<div style="font-size:12px;color:var(--muted);margin-top:2px">כרטיס ' + lgEsc(k) + (m.list ? ' · מחירון חשבשבת ' + lgEsc(String(m.list)) : '') + '</div></div>'
@@ -1895,15 +1910,47 @@ function renderClientPriceTab(el){
   el.innerHTML = '<p style="font-size:12px;color:var(--muted);margin-bottom:14px">'
     + 'מחיר של לקוח גובר על המחירון הכללי. מה שלא רשום כאן — הלקוח משלם לפי הכללי. '
     + 'המחיר הכללי מוצג מחוק ליד מחיר ששונה ממנו. שינוי חל על הזמנות חדשות בלבד.'
-    + '</p>' + newBox + (rows || '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">אין עדיין מחירוני לקוחות.</div>');
+    + '</p>'
+    + (keys.length > 3 ? _priceSearchBox('clSearch', 'clList', 'חפש לקוח…') : '')
+    + '<div id="clList">' + (rows || '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">אין עדיין מחירוני לקוחות.</div>') + '</div>'
+    + newBox;
 }
 
-function addClientPrice(k){
-  const sku = (document.getElementById('cpAddSku')||{}).value || '';
-  const v   = (document.getElementById('cpAddPrice')||{}).value || '';
-  if(!sku){ showToast('בחר מק"ט'); return; }
-  if(!(Number(v) > 0)){ showToast('הכנס מחיר'); return; }
-  _priceSave({ clients: { [k]: { [sku]: Number(v) } }, note: _priceClientName(k) + ' · הוספת ' + sku }, 'נוסף');
+// שדה מחיר בשורת מוצר אצל לקוח. ריק במוצר שאין לו מחיר מיוחד = כלום.
+function clientPriceInput(k, sku, raw, had){
+  if(String(raw).trim() === '' && !had) return;
+  priceEdit(k, sku, raw);
+}
+
+// ─── חיפוש מוצר / לקוח ────────────────────────────────────────────────────
+// מסנן את השורות במקום (בלי לצייר מחדש, כדי שהמקלדת לא תיסגר). הטקסט נשמר
+// כך שאחרי שמירת מחיר — שמציירת את המסך מחדש — החיפוש נשאר כמו שהיה.
+const _priceSearch = {};
+const _priceNorm = s => String(s || '').toLowerCase().replace(/["'״׳·\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+function _priceQ(code, name){ return _priceNorm(code + ' ' + (name || '') + ' ' + String(code||'').replace(/\s+/g, '')); }
+function _priceSearchBox(id, target, ph){
+  return '<input id="' + id + '" type="search" autocomplete="off" placeholder="' + lgEsc(ph || '🔍 חפש מוצר — מק"ט או שם…') + '"'
+    + ' value="' + lgEsc(_priceSearch[id] || '') + '" oninput="_priceFilter(\'' + id + '\',\'' + target + '\',this.value)"'
+    + ' style="width:100%;padding:10px 12px;margin-bottom:10px;border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:14px;background:var(--surface);color:var(--text);box-sizing:border-box">';
+}
+function _priceFilter(id, target, v){
+  _priceSearch[id] = v;
+  const box = document.getElementById(target);
+  if(!box) return;
+  const words = _priceNorm(v).split(' ').filter(Boolean);
+  let shown = 0;
+  box.querySelectorAll('[data-q]').forEach(r => {
+    const q = r.getAttribute('data-q');
+    const ok = words.every(w => q.includes(w));
+    r.style.display = ok ? '' : 'none';
+    if(ok) shown++;
+  });
+  let none = box.querySelector('.p-none');
+  if(!shown && words.length){
+    if(!none){ none = document.createElement(box.tagName === 'TABLE' ? 'caption' : 'div'); none.className = 'p-none';
+      none.style.cssText = 'padding:14px;text-align:center;color:var(--muted);font-size:13px;caption-side:bottom'; box.appendChild(none); }
+    none.textContent = 'לא נמצא "' + v + '"';
+  } else if(none) none.remove();
 }
 
 function createClientPriceList(){
@@ -2060,11 +2107,12 @@ function renderGlobalPriceTab(el){
         <button onclick="_skuEditCode=null;renderPricing()" style="padding:9px 16px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;cursor:pointer;">ביטול</button>
       </div>
     </div>`:''}
-    <table class="price-table">
+    ${_priceSearchBox('pgSearch', 'priceTable')}
+    <table class="price-table" id="priceTable">
       <thead><tr><th>מק"ט</th><th>שם</th><th>מחיר ₪</th><th>תפעולי</th><th>מקור</th><th></th></tr></thead>
       <tbody>
         ${list.length?list.map(e=>`
-          <tr style="${e.active===false?'opacity:0.5;':''}${e.opAuto?'background:rgba(184,146,42,0.06);':''}">
+          <tr data-q="${lgEsc(_priceQ(e.code, e.name))}" style="${e.active===false?'opacity:0.5;':''}${e.opAuto?'background:rgba(184,146,42,0.06);':''}">
             <td style="font-weight:700">${lgEsc(e.code)}</td>
             <td>${lgEsc(e.name||'—')}</td>
             <td style="white-space:nowrap"><input type="number" min="0" step="0.5" inputmode="decimal" placeholder="—" value="${globalPrices[e.code]!=null?lgEsc(String(globalPrices[e.code])):''}" style="${_pInp}" onchange="priceEdit('global','${lgJsStr(e.code)}',this.value)"><span style="font-size:12px;font-weight:400;color:var(--muted)"> ${e.kind==='hardware'?'/יח׳':'/מ"ר'}</span></td>
