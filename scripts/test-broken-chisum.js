@@ -47,4 +47,7 @@ check('dialog has a broken bucket before partial', WD.indexOf('else if(o._broken
 check('chisum tab draws the broken box', /function renderChisumTab\(\)\{\s*_renderBrokenChisumBox\(\);/.test(WD), true);
 check('delivery tab draws returned pieces', /function renderDeliveryTab\(\)\{ _renderBrokenReturnBox\(\);/.test(WD), true);
 check('"חזר" asks the server to tell the customer', /kind:'broken-returned', orderIds:\[String\(id\)\], idx/.test(WD), true);
+/* ── Task 4: תחנת החשבוניות ─────────────────────────────────────── */
+const INV = fs.readFileSync(path.join(ROOT, 'invoices.html'), 'utf8');
+check('invoice station tags a broken order', /\$\{brokenTag\(o\)\}/.test(INV) && /lgBrokenOpen\(o\)/.test(INV), true);
 console.log(fail ? '\n' + fail + ' failed' : '\nall passed'); process.exit(fail ? 1 : 0);
