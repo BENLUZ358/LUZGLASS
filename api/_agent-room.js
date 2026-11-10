@@ -184,4 +184,23 @@ async function lgRoomAnswer(db, b, deps) {
   return { ok: true, code: '', outboxKey: okey, sent, sendState, sendReason, reopened };
 }
 
-module.exports = { lgRoomPost, lgRoomAnswer, lgRoomLink, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN };
+// ─── שאלה פנימית שנסגרת לבד (שלב ב׳, 10/11) ─────────────────────────
+//  שאלה של בדיקות הדופק (_agent-watch) — אין לקוח לענות לו. כשהבעיה תוקנה:
+//  open → answered (answeredBy 'auto') ויורדת מהאינדקס. לא זורק.
+async function lgRoomClose(db, key, now) {
+  if (!_keyOk(key)) return false;
+  let closed = false;
+  try {
+    await db.ref(ROOM + '/' + key).transaction(cur => {
+      closed = false;
+      if (cur === null) return null;   // null-first
+      if (cur.kind !== 'ask' || cur.state !== 'open') return;
+      closed = true;
+      return { ...cur, state: 'answered', answer: 'תוקן', answeredAt: Number(now) || Date.now(), answeredBy: 'auto' };
+    });
+  } catch (e) { console.warn('agent-room: close', e && e.name); closed = false; }
+  if (closed) await _openIdx(db, key, null);
+  return closed;
+}
+
+module.exports = { lgRoomPost, lgRoomAnswer, lgRoomClose, lgRoomLink, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN };

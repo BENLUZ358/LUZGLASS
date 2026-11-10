@@ -12,6 +12,8 @@
 //    200 { ok, key, docNumber, date, archivePath, sendAfter }  שויכה — הכלי כותב העתק
 //    202 { ok, pending:true }  הודפסה אך החשבונית עוד לא נרשמה בתחנה — הכלי ינסה שוב
 //    4xx { ok:false, code }    נעצרה — הכלי מעביר ל-review
+//  דופק (10/11): { op:'heartbeat', pc, pending, lastPrintError, version } → 200 { ok, heartbeat }
+//    — ר' heartbeat() למטה ו-api/_agent-watch.js.
 //
 //  סדר לא משנה: חשבונית שנרשמה קודם ('awaiting') משויכת מיד; הדפסה שהגיעה
 //  קודם נשמרת כ'printed' ומשויכת כשהחשבונית נרשמת (_invoice-ctl.js).
@@ -67,6 +69,23 @@ async function deliverSafe(deps, key) {
   }
 }
 
+//  ─── הדופק (חדר הסוכנים, שלב ב׳, 10/11) ───
+//  { op:'heartbeat', pc, pending:[{name, ageSec}], lastPrintError, version } — כל דקה מהכלי
+//  במשרד, אחרי אותה בדיקת טוקן. נשמר ב-waMeta/invoiceWatcher/<pc>, ואז הבדיקות של
+//  הארכיון והקולט (api/_agent-watch.js — לכל היותר פעם בדקה). תקלה בבדיקות → עדיין 200:
+//  הדופק עצמו נשמר, וזה מה שמסך הסוכנים והסיכום היומי קוראים.
+async function heartbeat(body, deps) {
+  const W = require('./_agent-watch');
+  const hb = W.lgWatchHeartbeatClean(body);
+  if (!hb) return _fail(400, 'bad-heartbeat');
+  const now = deps.now || Date.now();
+  await deps.db.ref(W.WATCHERS + '/' + hb.pc).set({ at: now, pending: hb.pending, lastPrintError: hb.lastPrintError, version: hb.version });
+  try {
+    await (deps.watchRun || W.lgAgentWatchRun)(deps.db, { env: deps.env || process.env, now });
+  } catch (e) { console.error('invoice-pdf-upload: watch failed', e && e.name); }
+  return { status: 200, body: { ok: true, heartbeat: true } };
+}
+
 async function _handleUpload(req, deps) {
   if (req.method !== 'POST') return _fail(405, 'method');
   const env = deps.env || process.env;
@@ -76,6 +95,7 @@ async function _handleUpload(req, deps) {
   let body = req.body;
   if (typeof body === 'string') { try { body = JSON.parse(body); } catch (_) { body = null; } }
   if (!body) return _fail(400, 'bad-body');
+  if (body.op === 'heartbeat') return heartbeat(body, deps);
 
   const orig = _decode(body.original), copy = _decode(body.copy);
   if (!orig || !copy) return _fail(400, 'bad-pdf');
