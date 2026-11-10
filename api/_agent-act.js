@@ -232,7 +232,9 @@ function lgAgentDeleteOnly(d, r, orders) {
 }
 
 // ── ניתוב רגיל לפי route של המרכזן. keep = ה-conv הנוכחי (נשאר אם לא הוחלף) ──
-function _route(r, orders, now, keep, archive, quote, price) {
+//  x: { quoteToBen, … } — שיפורים לכל סוכן (חדר הסוכנים), רק כשיש הגדרות במסך
+function _route(r, orders, now, keep, archive, quote, price, x) {
+  const xo = x || {};
   switch (r.route) {
     case 'okev': {
       const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
@@ -259,7 +261,11 @@ function _route(r, orders, now, keep, archive, quote, price) {
     // מחירון (משימה 6): סקיצה → "קיבלנו" + בקשת מחיר לשאול (המספר וההודעה
     //  נבנים ב-_act — רק כשמותר לשלוח). טקסט → p.quote מהשכבה הלא-טהורה:
     //  הובן ויש מחיר לכל פריט → ההצעה; אחרת → שאול.
+    //  שיפור 6 (חדר הסוכנים, 11/11): עם הגדרות במסך (quoteToBen) — סקיצה → לבן כמו כל שאלה:
+    //  צהוב בחדר + וואטסאפ לבן עם התמונה, ללקוח "נחזור אליך עם מחיר"; בן עונה בחדר
+    //  (agent-room-answer) והתשובה יוצאת ללקוח. בלי הגדרות — לשאול כמו קודם.
     case 'quote': {
+      if (r.hasImage && xo.quoteToBen) return { actions: _ask(r, { hold: QUOTE_HOLD_TEXT, note: _who(r) + ': בקשת מחיר על סקיצה' }), conv: keep };
       if (r.hasImage) return { actions: [_reply(QUOTE_HOLD_TEXT), { type: 'quote-ask', who: _who(r), files: [_forward(r).files[0]] }], conv: keep };
       const pr = quote && quote.ok ? quote.priced : null;
       if (pr && pr.lines.length && !pr.missing.length) return { actions: [_reply(lgQuoteText(pr))], conv: keep };
@@ -331,7 +337,7 @@ function lgAgentDecide(p) {
     const h = _onConv(r, orders, c, now);
     if (h) return h;
   }
-  return _route(r, orders, now, c, p && p.archive, p && p.quote, p && p.price);
+  return _route(r, orders, now, c, p && p.archive, p && p.quote, p && p.price, { quoteToBen: !!(p && p.quoteToBen) });
 }
 
 // ─── ביצוע ──────────────────────────────────────────────────────────
@@ -580,7 +586,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
     try { staffQuote = await lgQuoteFindWaiting(db, rec.quotedId); }
     catch (e) { console.warn('agent-act: quote-find', e && e.name); staffQuote = null; }
   }
-  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price });
+  //  שיפורים לכל סוכן — רק כשיש הגדרות במסך (בלי waMeta/agentConfig שום דבר מול לקוח לא משתנה)
+  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price, quoteToBen: !!cfg });
   // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
   const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null }
     : priceSkipped ? { priceSkipped: 'deadline' } : price ? { priceUsage: price.usage || null } : {};
@@ -698,7 +705,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  העברת תמונה למספר של בן רק מהצ'אט של הלקוח הזה.
       if (rk) {
         await enq(k + '_b', lgAgentEscalatePhone(cfg), lgRoomAskBenText(a.who, a.question, env), a.files || [], AGENT_ASK_REASON, cid);
-        await enq(k, chat, ASK_HOLD_TEXT, [], 'agent-reply');
+        await enq(k, chat, a.hold || ASK_HOLD_TEXT, [], 'agent-reply');
       }
     }
     else if (a.type === 'quote-ask') {
