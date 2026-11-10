@@ -23,7 +23,7 @@ const rec = (over) => ({ idMessage: 'M1', chatId: 'c', linked: true, customerNam
 check('intent labels', ['status','cancel','change','document','quote','order','chitchat','thanks','unclear','zzz']
   .map(ctx.lgAgIntentLabel), ['איפה ההזמנה','ביטול','שינוי','מסמך','הצעת מחיר','הזמנה','שיחה','תודה','לא ברור','zzz']);
 check('route labels', ['okev','kolet','archive','quote','menu','none','ignore','shaul','silent-human']
-  .map(ctx.lgAgRouteLabel), ['עוקב','קולט','ארכיון','מחירון','תפריט','בלי תשובה','מתעלם','לשאול','שותק (ענו ידנית)']);
+  .map(ctx.lgAgRouteLabel), ['עוקב','קולט','ארכיון','מחירון','תפריט','בלי תשובה','מתעלם','שאלה לבן','שותק (ענו ידנית)']);
 
 // שורה
 const h = ctx.lgAgRowHtml('K1', rec());

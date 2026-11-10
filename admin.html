@@ -407,7 +407,7 @@ label.msec-t{display:block;}
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20261103"></script>
   <script src="wa-inbound-panel.js"></script>
-  <script src="agents-dash.js?v=20261108"></script>
+  <script src="agents-dash.js?v=20261110"></script>
   <script src="sq-assign.js?v=20261023h"></script>
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
@@ -609,21 +609,14 @@ let _allRegisteredClients = [];
 // ══════════════════════════════════════════════════
 //  LOAD — מאזין ל-Firebase בזמן אמת
 // ══════════════════════════════════════════════════
-// מונה "דורש טיפול" של הסוכנים בתפריט (31/10) — קריאה אחת בטעינה, לא מאזין חי:
-// הדף agents.html הוא המקום להתעדכן בו. הלוגיקה ב-agents-dash.js (lgAdExceptions).
+// מונה הסוכנים בתפריט (בן, 10/11): כמה שאלות צהובות בחדר הסוכנים מחכות לתשובה שלך.
+// קריאה אחת בטעינה, לא מאזין חי — agents.html הוא המקום להתעדכן בו. הלוגיקה ב-agents-dash.js (lgRoomOpenCount).
 function lgAgentsNavCount() {
   const el = document.getElementById('navAgents');
-  if (!el || typeof lgAdExceptions !== 'function') return;
-  // אותם 31 ימים כמו הדף — אחרת רשומה שנכשלה לפני 8–31 ימים מופיעה שם ולא כאן
-  const since = Date.now() - 31 * 24 * 60 * 60 * 1000;
-  const get = r => r.once('value').then(s => s.val() || {}, () => ({}));
-  Promise.all([
-    get(_lgDb.ref('waMeta/agentShadow').orderByChild('createdAt').startAt(since)),
-    get(_lgDb.ref('waMeta/agentQuotes')), get(_lgDb.ref('waMeta/agentCancels')),
-    get(_lgDb.ref('waMeta/agentOutbox').orderByChild('createdAt').startAt(since)),
-    get(_lgDb.ref('waMeta/agentDash/dismissed')),
-  ]).then(([shadow, quotes, cancels, outbox, dismissed]) => {
-    const n = lgAdExceptions({ shadow, quotes, cancels, outbox, dismissed }, Date.now()).length;
+  if (!el || typeof lgRoomOpenCount !== 'function') return;
+  // המפתחות בחדר ממוינים לפי זמן — 500 האחרונים, כמו (ויותר מ)הדף
+  _lgDb.ref('waMeta/agentRoom').limitToLast(500).once('value').then(s => s.val() || {}, () => ({})).then(room => {
+    const n = lgRoomOpenCount(room);
     el.textContent = n || ''; el.className = n ? 'count alert' : '';
   });
 }

@@ -30,7 +30,7 @@ function _adWhen(ms) {
 const LG_AG_INTENT = { status: 'איפה ההזמנה', cancel: 'ביטול', change: 'שינוי', document: 'מסמך', quote: 'הצעת מחיר', price: 'טענת מחיר',
   order: 'הזמנה', chitchat: 'שיחה', thanks: 'תודה', unclear: 'לא ברור' };
 const LG_AG_ROUTE = { okev: 'עוקב', kolet: 'קולט', archive: 'ארכיון', quote: 'מחירון', price: 'מחירון — טענת מחיר', menu: 'תפריט', none: 'בלי תשובה',
-  ignore: 'מתעלם', shaul: 'לשאול', 'silent-human': 'שותק (ענו ידנית)', 'kolet-deleted': 'קולט — סקיצה נמחקה' };
+  ignore: 'מתעלם', shaul: 'שאלה לבן', 'silent-human': 'שותק (ענו ידנית)', 'kolet-deleted': 'קולט — סקיצה נמחקה' };
 function lgAgIntentLabel(i) { return LG_AG_INTENT[i] || String(i == null ? '' : i); }
 function lgAgRouteLabel(r) { return LG_AG_ROUTE[r] || String(r == null ? '' : r); }
 //  שלב 2: כמה לקוחות בפיילוט
@@ -55,7 +55,7 @@ const LG_AG_WHY = { 'not-pilot': 'לא נשלח — הלקוח לא בפיילו
 const LG_AG_OUTCOME = { okev: 'עוקב עונה ללקוח', quote: 'מחירון מטפל בבקשת המחיר', price: 'מחירון בודק את המחיר ומעביר לשאול', archive: 'ארכיון שולח את המסמך',
   kolet: 'נכנסה לתור הסקיצות כרגיל — אין צורך לענות', 'kolet-deleted': 'קולט בודק אם לבטל את הסקיצה',
   menu: 'שולח ללקוח את התפריט', none: 'לא צריך לענות', ignore: 'לא צריך לענות',
-  shaul: 'עובר לשאול', 'silent-human': 'לא עונה — מישהו מכם כבר ענה בשעתיים האחרונות' };
+  shaul: 'הסוכן לא יודע — שואל אותך בחדר הסוכנים', 'silent-human': 'לא עונה — מישהו מכם כבר ענה בשעתיים האחרונות' };
 //  מה הלקוח שלח, במילים
 function lgAgSentText(r) {
   if (r.deleted) return 'מחק הודעה';
@@ -72,7 +72,7 @@ const LG_AG_OB = { sent: 'נשלח ✓', pending: 'בתור', blocked: 'נחסם
 //  רשומות התור של שורה: <key>_<i>, <key>_<i>_s או <key>_<i>_f<j> (קובץ לכל רשומה; מפתח מנוקה כמו בשרת)
 function lgAgOutboxOf(key, outbox) {
   const pre = String(key).replace(/[.#$[\]/]/g, '_') + '_', m = outbox || {};
-  return Object.keys(m).filter(k => k.indexOf(pre) === 0 && /^\d+(_s|_f\d+)?$/.test(k.slice(pre.length))).sort()
+  return Object.keys(m).filter(k => k.indexOf(pre) === 0 && /^\d+(_s|_b|_f\d+)?$/.test(k.slice(pre.length))).sort()
     .map(k => m[k]).filter(Boolean);
 }
 //  מה נעשה בפועל / מה היה נעשה — שורה אחת או יותר, הכל escaped
@@ -83,7 +83,7 @@ function lgAgActHtml(r, c) {
     const ob = lgAgOutboxOf(r._key, c.outbox);
     if (!ob.length) return '<div class="wain-reason">בוצע</div>';
     return ob.map(o => {
-      const who = o.reason === 'agent-staff' ? 'לשאול' : '';
+      const who = o.reason === 'agent-staff' ? 'לשאול' : o.reason === 'agent-ask' ? 'לבן' : '';
       const st = LG_AG_OB[o.state] || String(o.state || '');
       return o.state === 'sent'
         ? `<div class="wain-ag-r">${who ? who + ' ✓' : st}: ${e(o.text || '')}</div>`
@@ -147,10 +147,12 @@ const AD_REVIEW_ROUTES = ['okev', 'quote', 'price', 'archive', 'menu', 'shaul', 
 function _adWould(r) {
   return String(r.wouldReply || ((Array.isArray(r.wouldAct) ? r.wouldAct : []).filter(a => a && a.text && a.type !== 'staff' && a.type !== 'quote-ask').map(a => a.text)[0]) || '');
 }
-const _adToShaul = r => r.route === 'shaul' || (Array.isArray(r.wouldAct) ? r.wouldAct : []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask'));
+const _adToShaul = r => (Array.isArray(r.wouldAct) ? r.wouldAct : []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask'));
+//  "לא יודע → בן" (חדר הסוכנים, 10/11)
+const _adToBen = r => r.route === 'shaul' || (Array.isArray(r.wouldAct) ? r.wouldAct : []).some(a => a && a.type === 'ask');
 function lgAdNeedsReview(r) {
   if (!r || r.linked !== true || r.state !== 'done') return false;
-  return AD_REVIEW_ROUTES.includes(r.route) || !!_adWould(r) || _adToShaul(r);
+  return AD_REVIEW_ROUTES.includes(r.route) || !!_adWould(r) || _adToShaul(r) || _adToBen(r);
 }
 //  היומן בשלושה חלקים (בן, 8/11): todo — עוד לא סומנו; marked — כבר סימנת
 //  (יוצאות מהרשימה, נשארות במקטע מקופל כדי שאפשר לשנות); other — אין מה לבדוק.
@@ -167,10 +169,11 @@ function lgAdSplitLog(rows, verdictFilter) {
 }
 function lgAdReviewRowHtml(key, r, intake, c) {
   const k = _adEsc(key), would = _adWould(r);
-  const sent = lgAgOutboxOf(key, (c || {}).outbox).filter(o => o.state === 'sent' && o.reason !== 'agent-staff').map(o => o.text)[0];
+  const sent = lgAgOutboxOf(key, (c || {}).outbox).filter(o => o.state === 'sent' && o.reason !== 'agent-staff' && o.reason !== 'agent-ask').map(o => o.text)[0];
   const what = sent ? `<div class="wain-ag-r">נשלח ללקוח: ${_adEsc(sent)}</div>`
     : would ? `<div class="wain-ag-r">הסוכן היה עונה: ${_adEsc(would)}</div>`
     : _adToShaul(r) ? '<div class="wain-ag-r">הסוכן היה מעביר לשאול</div>'
+    : _adToBen(r) ? '<div class="wain-ag-r">הסוכן היה שואל אותך בחדר הסוכנים</div>'
     : `<div class="wain-ag-r">${_adEsc(lgAgOutcome(r))}</div>`;
   const both = r.intent !== 'order' && lgAgIntakeTaken(key, r, intake) ? '<div class="wain-ag-red">נקלטה גם כהזמנה</div>' : '';
   const v = r.verdict ? `<span class="wain-chip">סימנת: ${r.verdict.ok ? 'נכון ✓' : 'לא נכון ✗'}</span>` : '';
@@ -323,12 +326,98 @@ function lgAdWaLink(phone) {
   return '';
 }
 
-//  ששת הסוכנים — routes: אילו מסלולים ביומן שייכים לו (למונה ולסינון)
+//  ששת הסוכנים — id = המפתח בשרת (waMeta/agentConfig, api/_agent-config.js).
+//  does — "מי אחראי על מה" באפיון חדר הסוכנים (10/11). routes: אילו מסלולים ביומן שייכים לו.
+//  heb — השם שסוכנים ישנים כותבים בחדר (agent:'מרכזן').
 const LG_AD_AGENTS = [
-  { id: 'markazan', name: 'מרכזן', does: 'קורא כל הודעה ומעביר לסוכן הנכון', routes: [] },
-  { id: 'okev', name: 'עוקב', does: 'עונה איפה ההזמנה, מבטל ומעביר שינויים לשאול', routes: ['okev'] },
-  { id: 'archive', name: 'ארכיון', does: 'שולח העתק חשבונית או סקיצה', routes: ['archive'] },
-  { id: 'quote', name: 'מחירון', does: 'מחשב הצעת מחיר, סקיצה עוברת לשאול', routes: ['quote', 'price'] },
-  { id: 'kolet', name: 'קולט', does: 'מטפל בסקיצה שהלקוח מחק', routes: ['kolet', 'kolet-deleted'] },
-  { id: 'menahel', name: 'מנהל', does: 'סיכום יומי ב-15:00 (רק כשהסוכנים עונים)', routes: [] },
+  { id: 'markazan', name: 'מרכזן', does: 'כל הודעה שנכנסת, "סקיצות נקלטו", והצעת צרופות', routes: ['menu'] },
+  { id: 'kolet', name: 'קולט', does: 'מתור הסקיצות עד "השרטט סיים", וסקיצה שהלקוח מחק', routes: ['kolet', 'kolet-deleted'] },
+  { id: 'archive', name: 'ארכיון', does: 'חשבוניות, והעתק חשבונית או סקיצה ללקוח', routes: ['archive'] },
+  { id: 'okev', name: 'עוקב', does: '"איפה ההזמנה" ללקוח, ביטול ושינוי לפני ייצור', routes: ['okev'] },
+  { id: 'price', name: 'מחירון', does: 'מחירים, הצעות מחיר וטענות מחיר', routes: ['quote', 'price'] },
+  { id: 'manager', name: 'מנהל', does: 'סיכום יומי מכולם, ומה שאף אחד לא יודע — שאלה אליך', routes: ['shaul'] },
 ];
+const LG_AD_MODES = [['off', 'כבוי'], ['shadow', 'שקט'], ['reply', 'עונה']];
+
+// ─── חדר הסוכנים (בן, 10/11) ──────────────────────────────────────────
+//  waMeta/agentRoom: info (אפור) | ask (צהוב; state open/answered = שאלה לבן) |
+//  answer (תשובת בן, בצד שלו) | summary (המנהל — מוצמד למעלה, לא ברשימה).
+//  ⚠️ ask בלי state = הצעת צרופה בתור — לא שאלה לבן, מוצגת כמו info.
+function lgRoomAgentKey(a) {
+  const s = String(a == null ? '' : a);
+  const hit = LG_AD_AGENTS.find(x => x.id === s || x.name === s);
+  return hit ? hit.id : s;
+}
+function lgRoomAgentName(a) {
+  const hit = LG_AD_AGENTS.find(x => x.id === lgRoomAgentKey(a));
+  return hit ? hit.name : (String(a || '') || 'סוכן');
+}
+const lgRoomIsQuestion = e => !!e && e.kind === 'ask' && (e.state === 'open' || e.state === 'answered');
+function lgRoomOpenCount(room) {
+  return _adVals(room).filter(r => r.v.kind === 'ask' && r.v.state === 'open').length;
+}
+//  החדר — הישן למעלה, החדש למטה (צ'אט). o: { agent (מפתח), limit }
+function lgRoomRows(room, o) {
+  const f = o || {}, lim = Number(f.limit) || 200;
+  const rows = _adVals(room).map(r => Object.assign({ key: r.key }, r.v))
+    .filter(r => r.kind !== 'summary')
+    .filter(r => !f.agent || lgRoomAgentKey(r.agent) === f.agent)
+    .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  return rows.slice(Math.max(0, rows.length - lim));
+}
+function lgRoomLatestSummary(room) {
+  const s = _adVals(room).filter(r => r.v.kind === 'summary').sort((a, b) => (Number(b.v.at) || 0) - (Number(a.v.at) || 0))[0];
+  return s ? Object.assign({ key: s.key }, s.v) : null;
+}
+const LG_ROOM_OB = { sent: 'נשלח ✓', pending: 'בתור', failed: 'נכשל — המערכת תנסה שוב', expired: 'פג' };
+//  בועה אחת. outbox — waMeta/agentOutbox (למצב השליחה של תשובת בן)
+function lgRoomBubbleHtml(e, outbox) {
+  const x = e || {}, esc = _adEsc;
+  const head = `<div class="rb-h"><b>${esc(x.kind === 'answer' ? 'אתה' : lgRoomAgentName(x.agent))}</b><span>${esc(_adWhen(x.at))}</span></div>`;
+  if (lgRoomIsQuestion(x)) {
+    const open = x.state === 'open';
+    return `<div class="rb rb-ask${open ? ' is-open' : ''}" data-roomkey="${esc(x.key)}">${head}
+      <div class="rb-who">${esc(x.customerName || 'לקוח')}${x.note ? ' · ' + esc(x.note) : ''}</div>
+      <div class="rb-q">${esc(x.question || x.text || '')}</div>
+      ${x.suggest ? `<div class="rb-s">הצעה: ${esc(x.suggest)}</div>` : ''}
+      ${open ? `<div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">ענה</button></div>`
+             : '<div class="rb-st">ענית ✓</div>'}
+    </div>`;
+  }
+  if (x.kind === 'answer') {
+    const o = (outbox || {})['room_' + String(x.replyTo || '')];
+    const st = !o ? '' : o.state === 'blocked' ? 'לא נשלח: ' + String(o.lastError || '') : (LG_ROOM_OB[o.state] || String(o.state || ''));
+    return `<div class="rb rb-answer" data-roomkey="${esc(x.key)}">${head}
+      <div class="rb-q">${esc(x.text || '')}</div>${st ? `<div class="rb-st">${esc(st)}</div>` : ''}</div>`;
+  }
+  return `<div class="rb rb-info" data-roomkey="${esc(x.key)}">${head}<div class="rb-q">${esc(x.text || '')}</div></div>`;
+}
+//  כרטיס לכל סוכן: מה עשה היום (רשומות היומן במסלולים שלו + אירועים שלו בחדר),
+//  וכמה שאלות שלו מחכות לבן. המרכזן — כל הודעה שנכנסה.
+function lgAgentCards(room, shadow, now) {
+  const from = lgAdPeriodStart('today', now);
+  const sh = _adVals(shadow).map(r => r.v).filter(r => (r.createdAt || 0) >= from && r.staff !== true && r.route !== 'staff');
+  const rm = _adVals(room).map(r => r.v).filter(r => r.kind !== 'summary');
+  return LG_AD_AGENTS.map(a => ({
+    id: a.id, name: a.name, does: a.does,
+    today: (a.id === 'markazan' ? sh.length : sh.filter(r => a.routes.includes(r.route)).length)
+      + rm.filter(r => (Number(r.at) || 0) >= from && lgRoomAgentKey(r.agent) === a.id).length,
+    waiting: rm.filter(r => r.kind === 'ask' && r.state === 'open' && lgRoomAgentKey(r.agent) === a.id).length,
+  }));
+}
+//  המתגים — כבוי / שקט / עונה לכל סוכן. master = AGENT_SHADOW_ENABLED (מתג החירום ב-Vercel)
+function lgAdSwitchesHtml(cfg, master) {
+  const ag = (cfg && cfg.agents) || {}, esc = _adEsc;
+  return (master ? '' : '<div class="prob">⚠ מתג החירום ב-Vercel כבוי — כל הסוכנים כבויים, בלי קשר למה שנבחר כאן</div>')
+    + LG_AD_AGENTS.map(a => `<div class="sw" role="group" aria-label="${esc(a.name)}"><b>${esc(a.name)}</b><div class="seg">`
+      + LG_AD_MODES.map(([m, t]) => `<button type="button" data-agent="${esc(a.id)}" data-agmode="${m}" aria-pressed="${ag[a.id] === m}"${master ? '' : ' disabled'}>${t}</button>`).join('')
+      + '</div></div>').join('');
+}
+//  התג בראש המסך
+function lgAdModeChip(status, cfg) {
+  if (!status) return { text: 'לא ידוע', mode: 'off' };
+  if (status.shadow !== true) return { text: 'כבויים', mode: 'off' };
+  const ag = (cfg && cfg.agents) || {};
+  const n = LG_AD_AGENTS.filter(a => ag[a.id] === 'reply').length;
+  return n ? { text: n + ' עונים', mode: 'live' } : { text: 'מצב שקט', mode: 'shadow' };
+}
