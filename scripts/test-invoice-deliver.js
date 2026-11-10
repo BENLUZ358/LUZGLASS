@@ -87,6 +87,47 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual([f.ok, f.missing], [true, ['L1', 'L2']]);
     assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 1);
   });
+  //  צרופות (בן, 10/11): אחרי עמוד הסקיצה של כל הזמנה — עמוד לכל צרופה, עם התווית בכותרת
+  const withAtt = () => {
+    const db = base({ a: { ...waOrder, attachments: { 2: { kind: 'hardware', at: 2 }, 1: { kind: 'graphic', at: 1 } } }, b: portal });
+    db._data.sketches.a__att1 = JPG; db._data.sketches.a__att2 = JPG;
+    return db;
+  };
+  await test('files: attachments → a page each right after their order sketch, label in the title', async () => {
+    const M = require('../api/_invoice-merge');
+    const real = M.lgInvoiceMerge; const seen = [];
+    M.lgInvoiceMerge = async (pdf, sks, meta) => { seen.push(sks.map(s => [s.num, s.name])); return real(pdf, sks, meta); };
+    let f;
+    try { f = await D.lgInvoiceFiles(withAtt(), 'k1'); } finally { M.lgInvoiceMerge = real; }
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 5);
+    assert.deepEqual(seen[0], [['L1', 'מקלחון'], ['L1', 'גרפיקה חלבי — מקלחון'], ['L1', 'שרטוט פרזול — מקלחון'], ['L2', 'מראה']]);
+    assert.deepEqual(f.missing, []);
+  });
+  await test('files: attachment title falls back to the order number; too big → attachments as separate files', async () => {
+    const db = withAtt(); db._data.invoicePdf.k1.sketchNames = ['', 'מראה'];
+    const big = await D.lgInvoiceFiles(db, 'k1', { maxMergedBytes: 10 });
+    assert.deepEqual(big.files.map(x => x.name),
+      ['חשבונית 67346.pdf', 'סקיצה L1.jpg', 'גרפיקה חלבי L1.jpg', 'שרטוט פרזול L1.jpg', 'סקיצה L2 - מראה.jpg']);
+    const M = require('../api/_invoice-merge');
+    const real = M.lgInvoiceMerge; const seen = [];
+    M.lgInvoiceMerge = async (pdf, sks, meta) => { seen.push(sks.map(s => s.name)); return real(pdf, sks, meta); };
+    try { await D.lgInvoiceFiles(db, 'k1'); } finally { M.lgInvoiceMerge = real; }
+    assert.deepEqual(seen[0], ['', 'גרפיקה חלבי — L1', 'שרטוט פרזול — L1', 'מראה']);
+  });
+  await test('files: a broken / missing attachment is left out and does not mark the order as missing', async () => {
+    const db = withAtt();
+    db._data.sketches.a__att1 = 'data:image/jpeg;base64,' + Buffer.from('broken').toString('base64');
+    delete db._data.sketches.a__att2;
+    const f = await D.lgInvoiceFiles(db, 'k1');
+    assert.deepEqual(f.missing, []);
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 3);
+  });
+  await test('files: order without a sketch still sends its attachments', async () => {
+    const db = withAtt(); delete db._data.sketches.a;
+    const f = await D.lgInvoiceFiles(db, 'k1');
+    assert.deepEqual(f.missing, ['L1']);
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 4);
+  });
   await test('text: says which order has no sketch', () => {
     const f = { kind: 'invoice', clientName: 'אגן ברזל', orderNums: ['L1', 'L2'], sketchNames: [], docNumber: '67346' };
     assert.match(renderText(f), /2 סקיצות, והסקיצות שלהן\./);

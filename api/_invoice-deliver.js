@@ -20,6 +20,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const S = require('./_invoice-send');
+//  עצל: _order-attachments טוען את הקובץ הזה (_dataUrl)
+const lgAttOf = (db, id) => require('./_order-attachments').lgAttOf(db, id);
 
 //  לקוח הובלות (בן, 10/11): לא מקבל "מוכן לאיסוף" ולא "ההובלה יצאה". ההודעה היחידה
 //  היא החשבונית, ובה השורה "ההובלה תצא אליך בקרוב." (השם deliveryTomorrow נשאר בתור
@@ -100,7 +102,8 @@ async function lgInvoiceFiles(db, key, opts) {
     //  סקיצה שלא נכנסת ל-PDF — בודקים כל אחת לבד, ומשמיטים את אלה שנכשלות
     const good = [];
     for (const f of sks) {
-      try { await M.lgInvoiceMerge(inv, [f.page]); good.push(f); } catch (_) { missing.push(f.num); }
+      //  צרופה שבורה — נשמטת בשקט; היא לא "סקיצה חסרה" של ההזמנה
+      try { await M.lgInvoiceMerge(inv, [f.page]); good.push(f); } catch (_) { if (!f.att) missing.push(f.num); }
     }
     sks = good;
     merged = await M.lgInvoiceMerge(inv, sks.map(f => f.page), meta);
@@ -129,9 +132,17 @@ async function _separateFiles(db, key) {
     const num  = (rec.orderNums || [])[i] || String(i + 1);
     const name = (rec.sketchNames || [])[i];
     const d = _dataUrl(await _sketch(db, ids[i]));
-    if (!d || !d.buf.length) { missing.push(num); continue; }
-    files.push({ name: 'סקיצה ' + _safe(num) + (name ? ' - ' + _safe(name) : '') + '.' + (EXT[d.mime] || 'bin'),
-                 mime: d.mime, buf: d.buf, num, page: { buf: d.buf, mime: d.mime, num, name: name || '' } });
+    if (!d || !d.buf.length) missing.push(num);
+    else files.push({ name: 'סקיצה ' + _safe(num) + (name ? ' - ' + _safe(name) : '') + '.' + (EXT[d.mime] || 'bin'),
+                      mime: d.mime, buf: d.buf, num, page: { buf: d.buf, mime: d.mime, num, name: name || '' } });
+    //  צרופות (בן, 10/11): אחרי הסקיצה של ההזמנה — עמוד לכל צרופה, "<תווית> — <שם הסקיצה>".
+    //  הולכות ללקוח עם החשבונית גם כשלהזמנה אין סקיצה. צרופה בלי תמונה — נשמטת.
+    for (const a of await lgAttOf(db, ids[i])) {
+      if (!a.img) continue;
+      files.push({ name: a.label + ' ' + _safe(num) + (name ? ' - ' + _safe(name) : '') + '.' + (EXT[a.img.mime] || 'bin'),
+                   mime: a.img.mime, buf: a.img.buf, num, att: true,
+                   page: { buf: a.img.buf, mime: a.img.mime, num, name: a.label + ' — ' + (name || num) } });
+    }
   }
   return { ok: true, rec, files, missing };
 }
