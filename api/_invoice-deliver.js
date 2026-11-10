@@ -21,9 +21,26 @@
 
 const S = require('./_invoice-send');
 
-//  בן, 3/11: בהודעת החשבונית — "הסחורה תגיע אליך מחר במהלך היום". לפי מפתח הכרטיס
-//  בחשבשבת, כמו LG_PARTIAL_INVOICE_ACCOUNTS ב-firebase-db.js (נאור חזקיה, המקום לאמבט).
-const LG_DELIVERY_TOMORROW_ACCOUNTS = ['9117', '14201'];
+//  לקוח הובלות (בן, 10/11): לא מקבל "מוכן לאיסוף" ולא "ההובלה יצאה". ההודעה היחידה
+//  היא החשבונית, ובה השורה "ההובלה תצא אליך בקרוב." (השם deliveryTomorrow נשאר בתור
+//  ובטקסט — הוא כבר יושב ברשומות התור; לפני 10/11 זו הייתה שורת "מחר" ל-9117/14201.)
+//  מי לקוח הובלות — אותו מקור כמו workday.html (_loadDeliveryClients): users עם isDelivery,
+//  לפי טלפון או מפתח כרטיס, ובנוסף הדגל deliveryClient על ההזמנה עצמה.
+async function lgIsDeliveryInvoice(db, orders, accountKey) {
+  if (orders.some(o => o && o.deliveryClient)) return true;
+  let users = {};
+  try { users = (await db.ref('users').once('value')).val() || {}; } catch (_) { users = {}; }
+  const norm = p => String(p || '').replace(/[-\s]/g, '');
+  const phones = new Set(), accounts = new Set();
+  for (const [k, u] of Object.entries(users)) {
+    if (!u || !u.isDelivery) continue;
+    phones.add(norm(u.phone || k));
+    if (u.customerId) accounts.add(String(u.customerId));
+  }
+  if (accountKey && accounts.has(String(accountKey))) return true;
+  return orders.some(o => o && ((o.customerId && accounts.has(String(o.customerId)))
+                              || [o.clientPhone, o.phone].some(p => p && phones.has(norm(p)))));
+}
 
 //  מייל חשבוניות נפרד ללקוח שההזמנות שלו מגיעות במייל (בן, 9/11): החשבונית יוצאת
 //  כמייל חדש לכתובת הזו, ולא כתשובה על מייל ההזמנה. לפי מפתח הכרטיס בחשבשבת.
@@ -163,7 +180,7 @@ async function lgInvoiceDeliver(db, key, deps) {
                    sketchNames: rec.sketchNames || [], orderIds: ids, queuedBy: 'invoice-tool',
                    accountKey: who.accountKey, invoiceKey: key, docNumber: rec.docNumber,
                    missingSketchNums: files.missing || [],
-                   deliveryTomorrow: orders.some(o => LG_DELIVERY_TOMORROW_ACCOUNTS.includes(String(o.customerId || ''))) };
+                   deliveryTomorrow: await lgIsDeliveryInvoice(db, orders, who.accountKey) };
 
   if (who.channel === 'email') {
     const { lgEmailEnqueue } = require('./_email-outbox');
@@ -187,4 +204,4 @@ async function lgInvoiceDeliver(db, key, deps) {
   return { state: res && res.status === 'sent' ? 'sent' : 'queued', channel: 'whatsapp', result: res || null };
 }
 
-module.exports = { lgInvoiceFiles, lgInvoiceDeliver, lgInvoiceEmailFor, LG_INVOICE_EMAIL };
+module.exports = { lgInvoiceFiles, lgInvoiceDeliver, lgInvoiceEmailFor, lgIsDeliveryInvoice, LG_INVOICE_EMAIL };
