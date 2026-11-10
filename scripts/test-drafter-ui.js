@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+/**
+ * הפס "שלח לשרטט" / "השרטט סיים" בלשונית "אצל שרטט" (בן, 10/11).
+ * הפונקציות הטהורות של drafter-batch.js, ב-Node (כמו test-sq-assign.js).
+ * Run: node scripts/test-drafter-ui.js
+ */
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+let failed = 0;
+const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
+  ? console.log('ok    ' + name)
+  : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
+
+const ROOT = path.join(__dirname, '..');
+const ctx = { console };
+vm.createContext(ctx);
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'drafter-batch.js'), 'utf8'), ctx);
+const T = vm.runInContext('({ drafterBarModel, drafterDoneText, drafterTag, drafterSendConfirm, drafterDoneConfirm })', ctx);
+
+const AT = Date.UTC(2026, 10, 10, 12, 30);   // 14:30 בישראל
+check('empty basket', T.drafterBarModel({ basket: [], open: [] }),
+  { basketText: 'הסל ריק', canSend: false, sendLabel: 'שלח לשרטט', open: [], canDone: false });
+const m = T.drafterBarModel({ basket: [{ id: 'A' }, { id: 'B' }],
+  open: [{ n: 3, at: AT, count: 4, emailState: 'pending' }, { n: 4, at: AT, count: 1, emailState: 'sent' }, { n: 5, at: AT, count: 2, emailState: 'failed' }] });
+check('basket text', [m.basketText, m.canSend, m.sendLabel], ['בסל: 2 הזמנות', true, 'שלח לשרטט (2)']);
+check('open lines', m.open, ['משלוח 3 · 14:30 · 4 הזמנות · המייל בדרך', 'משלוח 4 · 14:30 · הזמנה אחת · המייל נשלח', 'משלוח 5 · 14:30 · 2 הזמנות · המייל נכשל']);
+check('can press done when something was sent', m.canDone, true);
+check('one order basket', T.drafterBarModel({ basket: [{ id: 'A' }], open: [] }).basketText, 'בסל: הזמנה אחת');
+
+check('send confirm', T.drafterSendConfirm(2), 'לשלוח 2 הזמנות לשרטט במייל?');
+check('done confirm', T.drafterDoneConfirm(5), 'להעביר את כל מה שנשלח לשרטט (5) ל"בנה יום עבודה"?');
+
+check('done text', T.drafterDoneText({ moved: [{ orderNum: 'L1' }, { orderNum: 'L2' }], skipped: [{ orderNum: 'L3', reason: 'כבר לא אצל שרטט' }] }),
+  'עברו ל"בנה יום עבודה": 2 הזמנות\nלא הועברו:\nL3 — כבר לא אצל שרטט');
+check('done text nothing', T.drafterDoneText({ moved: [], skipped: [] }), 'אין הזמנות שנשלחו לשרטט ומחכות');
+
+check('tag basket', T.drafterTag({ stage: 'drafter' }), 'בסל');
+check('tag chash basket', T.drafterTag({ stage: 'chash' }), 'בסל');
+check('tag sent', T.drafterTag({ stage: 'drafter', drafterBatch: 7 }), 'נשלח · משלוח 7');
+check('tag other stage', T.drafterTag({ stage: 'opty', drafterBatch: 7 }), '');
+
+// ⚠️ הזמנה שעוברת דרך lgNormalizeOrder ונשמרת שוב — לא מאבדת את מספר המשלוח
+const SRC = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
+check('lgNormalizeOrder keeps drafterBatch', /drafterBatch:\s+o\.drafterBatch\s+\?\? null/.test(SRC), true);
+
+if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
+console.log('\nAll drafter-ui checks passed.');
