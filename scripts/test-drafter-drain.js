@@ -44,6 +44,17 @@ const db = fakeDb({ orders: {
   r = await adm.handleAdmin({ action: 'drafter-resend', n: 'x' }, { db, by: '052', now: NOW + 12 });
   check('resend bad n', r.ok, false);
 
+  // "לא לשלוח עכשיו" / "החזר"
+  db._data.orders.A4 = { id: 'A4', orderNum: 'L4', orderClient: 'אגן', stage: 'chash', createdAt: NOW };
+  r = await adm.handleAdmin({ action: 'drafter-hold', id: 'A4', hold: true }, { db, by: '052', now: NOW + 20 });
+  check('hold action', [r.ok, db._data.orders.A4.drafterHold], [true, true]);
+  r = await adm.handleAdmin({ action: 'drafter-status' }, { db, by: '052', now: NOW + 21 });
+  check('status shows held', r.held.map(x => x.id), ['A4']);
+  r = await adm.handleAdmin({ action: 'drafter-hold', id: 'A4', hold: false }, { db, by: '052', now: NOW + 22 });
+  check('unhold action', [r.ok, db._data.orders.A4.drafterHold], [true, undefined]);
+  r = await adm.handleAdmin({ action: 'drafter-hold', id: '../x', hold: true }, { db, by: '052', now: NOW + 23 });
+  check('hold bad id', r.ok, false);
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nAll drafter-drain checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });

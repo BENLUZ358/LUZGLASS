@@ -1,11 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
-//  drafter-batch.js — "שלח לשרטט" / "השרטט סיים" בלשונית "אצל שרטט" (admin.html).
+//  drafter-batch.js — מגירת "טיוטה לשרטט" בתחתית תור הסקיצות (admin.html).
 //  בן, 10/11. אפיון: docs/superpowers/specs/2026-11-10-drafter-pdf-batches-design.md
 //
-//  השרטט לא עובד על הממשק. "שלח לשרטט" בונה בשרת PDF מכל ההזמנות שאצל שרטט
-//  ועוד לא נשלחו, ושולח במייל ל-lozzagagot. "השרטט סיים" מעביר את כל מה
-//  שנשלח ל"בנה יום עבודה" (opty), בדיוק כמו "✓ סיים סקיצה" ב-drafter.html.
-//  הכל דרך /api/wa-inbound-drain (drafter-status / drafter-send / drafter-done).
+//  בן פותח הזמנות ברצף מהתור. כל הזמנה שנשלחת לחשבשבת נכנסת לטיוטה (סל),
+//  ובמגירה למטה תמיד רואים מה כבר נכנס ומחכה. "לא לשלוח עכשיו" מוציא הזמנה
+//  מהטיוטה (ו"החזר" מחזיר). כשהתור ריק — "שלח לשרטט": PDF אחד במייל ל-lozzagagot.
+//  "השרטט סיים" מעביר את כל מה שנשלח ל"בנה יום עבודה" (opty).
+//  הכל דרך /api/wa-inbound-drain (drafter-status/-send/-done/-resend/-hold).
 //
 //  החלק העליון — פונקציות טהורות, נבדקות ב-Node (scripts/test-drafter-ui.js).
 //  החלק התחתון — DOM, רץ רק בדפדפן.
@@ -27,6 +28,12 @@ function drafterBarModel(st) {
     resend: open.filter(b => ['failed', 'expired', 'cancelled'].includes(b.emailState)).map(b => b.n),
   };
 }
+const drafterTrayTitle = st => {
+  const n = ((st && st.basket) || []).length;
+  return 'טיוטה לשרטט · ' + (n ? _dbCount(n) : 'ריקה');
+};
+const drafterItemLine = it => [it.orderNum, it.client, it.sketchName].filter(Boolean).join(' · ');
+const drafterAddedToast = n => 'נכנסה לטיוטה לשרטט (' + n + ')';
 const drafterSendConfirm = n => 'לשלוח ' + n + ' הזמנות לשרטט במייל?';
 const drafterDoneConfirm = n => 'להעביר את כל מה שנשלח לשרטט (' + n + ') ל"בנה יום עבודה"?';
 function drafterDoneText(r) {
@@ -39,12 +46,13 @@ function drafterDoneText(r) {
 }
 function drafterTag(o) {
   if (!o || (o.stage !== 'drafter' && o.stage !== 'chash')) return '';
-  return o.drafterBatch != null ? 'נשלח · משלוח ' + o.drafterBatch : 'בסל';
+  if (o.drafterHold) return 'לא לשלוח עכשיו';
+  return o.drafterBatch != null ? 'נשלח · משלוח ' + o.drafterBatch : 'בטיוטה לשרטט';
 }
 
 // ─── DOM ────────────────────────────────────────────────────────────
 if (typeof window !== 'undefined' && typeof document !== 'undefined') (function () {
-  let busy = false, last = null;
+  let busy = false, last = null, expanded = false;
   const el = () => document.getElementById('drafterBar');
 
   async function post(body) {
@@ -57,26 +65,60 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
 
   function draw(msg) {
     const box = el(); if (!box) return;
-    const m = drafterBarModel(last || {});
-    const total = ((last && last.open) || []).reduce((a, b) => a + (b.count || 0), 0);
-    box.innerHTML =
-      '<div class="drb-row"><span class="drb-basket">' + esc(m.basketText) + '</span>'
-      + '<button type="button" class="btn btn-primary drb-btn" id="drbSend"' + (m.canSend && !busy ? '' : ' aria-disabled="true"') + '>' + esc(m.sendLabel) + '</button>'
-      + '<button type="button" class="btn btn-secondary drb-btn" id="drbDone"' + (m.canDone && !busy ? '' : ' aria-disabled="true"') + '>השרטט סיים</button></div>'
-      + (m.open.length ? '<ul class="drb-open">' + m.open.map((t, i) => {
-          const n = last.open[i].n;
-          return '<li>' + esc(t) + (m.resend.includes(n) ? ' <button type="button" class="btn btn-secondary drb-resend" data-n="' + n + '">שלח שוב</button>' : '') + '</li>';
-        }).join('') + '</ul>' : '')
-      + (msg ? '<div class="drb-msg" role="status">' + esc(msg).replace(/\n/g, '<br>') + '</div>' : '');
+    const st = last || { basket: [], held: [], open: [] };
+    const m = drafterBarModel(st);
+    const total = (st.open || []).reduce((a, b) => a + (b.count || 0), 0);
+    let h = '<div class="drb-head">'
+      + '<button type="button" class="drb-toggle" id="drbToggle" aria-expanded="' + expanded + '">'
+      + '<span aria-hidden="true">📄</span> ' + esc(drafterTrayTitle(st)) + ' <span class="drb-caret" aria-hidden="true">' + (expanded ? '▼' : '▲') + '</span></button>'
+      + '<button type="button" class="btn btn-primary drb-btn" id="drbSend"' + (m.canSend && !busy ? '' : ' aria-disabled="true"') + '>' + esc(m.sendLabel) + '</button></div>';
+    if (expanded) {
+      h += '<div class="drb-body">';
+      h += (st.basket || []).length
+        ? '<ul class="drb-list">' + st.basket.map(it => '<li><span>' + esc(drafterItemLine(it)) + '</span>'
+            + '<button type="button" class="btn btn-ghost drb-mini" data-hold="' + esc(it.id) + '">לא לשלוח עכשיו</button></li>').join('') + '</ul>'
+        : '<p class="drb-empty">עוד לא נכנסה הזמנה. כל הזמנה שתשלח לחשבשבת תיכנס לכאן.</p>';
+      if ((st.held || []).length) {
+        h += '<div class="drb-sub">לא לשלוח עכשיו</div><ul class="drb-list drb-held">' + st.held.map(it => '<li><span>' + esc(drafterItemLine(it)) + '</span>'
+          + '<button type="button" class="btn btn-secondary drb-mini" data-unhold="' + esc(it.id) + '">החזר</button></li>').join('') + '</ul>';
+      }
+      if (m.open.length) {
+        h += '<div class="drb-sub">נשלח לשרטט</div><ul class="drb-list">' + m.open.map((t, i) => {
+          const n = st.open[i].n;
+          return '<li><span>' + esc(t) + '</span>' + (m.resend.includes(n) ? '<button type="button" class="btn btn-secondary drb-mini drb-resend" data-n="' + n + '">שלח שוב</button>' : '') + '</li>';
+        }).join('') + '</ul>'
+          + '<button type="button" class="btn btn-secondary drb-btn drb-done" id="drbDone"' + (busy ? ' aria-disabled="true"' : '') + '>השרטט סיים</button>';
+      }
+      h += '</div>';
+    } else if (m.open.length) {
+      h += '<div class="drb-peek">' + esc('אצל השרטט: ' + _dbCount(total)) + '</div>';
+    }
+    if (msg) h += '<div class="drb-msg" role="status">' + esc(msg).replace(/\n/g, '<br>') + '</div>';
+    box.innerHTML = h;
+    wire(st, m, total);
+  }
+
+  function wire(st, m, total) {
+    const box = el();
+    box.querySelector('#drbToggle').onclick = () => { expanded = !expanded; draw(); };
     box.querySelector('#drbSend').onclick = async () => {
       if (busy || !m.canSend) return;
-      if (!confirm(drafterSendConfirm(last.basket.length))) return;
+      if (!confirm(drafterSendConfirm(st.basket.length))) return;
       busy = true; draw('שולח…');
       const r = await post({ action: 'drafter-send' }).catch(e => ({ ok: false, message: e.message }));
       busy = false;
       await refresh(r.ok ? 'משלוח ' + r.n + ' נשלח לתור המיילים — יגיע ל-lozzagagot תוך דקה-שתיים'
-                         : (r.code === 'empty' ? 'הסל ריק' : 'השליחה נכשלה: ' + (r.message || '')));
+                         : (r.code === 'empty' ? 'הטיוטה ריקה' : r.code === 'busy' ? 'שליחה אחרת באמצע — נסה שוב בעוד דקה' : 'השליחה נכשלה: ' + (r.message || '')));
     };
+    box.querySelectorAll('[data-hold],[data-unhold]').forEach(btn => { btn.onclick = async () => {
+      if (busy) return;
+      const hold = btn.hasAttribute('data-hold');
+      const id = btn.getAttribute(hold ? 'data-hold' : 'data-unhold');
+      busy = true;
+      const r = await post({ action: 'drafter-hold', id, hold }).catch(e => ({ ok: false, message: e.message }));
+      busy = false;
+      await refresh(r.ok ? '' : (r.message || 'לא הצליח'));
+    }; });
     box.querySelectorAll('.drb-resend').forEach(btn => { btn.onclick = async () => {
       if (busy) return;
       const n = Number(btn.dataset.n);
@@ -85,7 +127,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       busy = false;
       await refresh(r.ok ? 'משלוח ' + n + ' נשלח שוב לתור המיילים' : 'לא הצליח: ' + (r.message || ''));
     }; });
-    box.querySelector('#drbDone').onclick = async () => {
+    const done = box.querySelector('#drbDone');
+    if (done) done.onclick = async () => {
       if (busy || !m.canDone) return;
       if (!confirm(drafterDoneConfirm(total))) return;
       busy = true; draw('מעביר…');
@@ -98,13 +141,16 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
   async function refresh(msg) {
     const r = await post({ action: 'drafter-status' }).catch(() => null);
     if (r && r.ok) last = r;
-    draw(msg || (r && r.ok ? '' : 'לא הצלחתי לטעון את מצב השרטט'));
+    draw(msg || (r && r.ok ? '' : 'לא הצלחתי לטעון את הטיוטה לשרטט'));
+    return last;
   }
 
-  //  נקרא מ-setSF ב-admin.html
-  window.lgDrafterBarShow = function (on) {
+  //  נקרא מ-openSketchQueue, ואחרי כל שליחה לחשבשבת (added=true → הודעה קצרה)
+  window.lgDrafterBarShow = async function (on, added) {
     const box = el(); if (!box) return;
     box.hidden = !on;
-    if (on) refresh();
+    if (!on) return;
+    const st = await refresh();
+    if (added && st && typeof showToast === 'function') showToast(drafterAddedToast((st.basket || []).length));
   };
 })();

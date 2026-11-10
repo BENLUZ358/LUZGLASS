@@ -209,6 +209,23 @@ const deps = { enqueue: async (db, n) => { sent.push(n); return { key: 'k' + n, 
     check('lock released', db._data.waMeta.drafterBatches._sending || null, null);
   }
 
+  // ── "לא לשלוח עכשיו" (בן, 10/11: שליטה מה נכנס לטיוטה) ──
+  {
+    const db = seed();
+    check('hold', (await D.lgDrafterHold(db, 'A1', true)).ok, true);
+    check('held order out of the basket', (await D.lgDrafterBasket(db)).map(x => x.id), ['A2']);
+    const st = await D.lgDrafterStatus(db);
+    check('status lists held', st.held.map(x => x.id), ['A1']);
+    const r = await D.lgDrafterSend(db, { by: 'ben', now: NOW }, deps);
+    check('send skips held', r.orderIds, ['A2']);
+    check('return to draft', (await D.lgDrafterHold(db, 'A1', false)).ok, true);
+    check('back in the basket', (await D.lgDrafterBasket(db)).map(x => x.id), ['A1']);
+    check('hold field cleared', db._data.orders.A1.drafterHold, undefined);
+    check('hold: not at drafter → refused', (await D.lgDrafterHold(db, 'A3', true)).ok, false);
+    check('hold: missing order → refused, not created', [(await D.lgDrafterHold(db, 'ZZ', true)).ok, db._data.orders.ZZ], [false, undefined]);
+    check('hold: already sent → refused', (await D.lgDrafterHold(db, 'A2', true)).ok, false);
+  }
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nAll drafter-batch checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });

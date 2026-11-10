@@ -35,7 +35,25 @@ async function _doneSet(db) {
   const all = (await db.ref(BATCHES).once('value')).val() || {};
   return new Set(Object.entries(all).filter(([k, b]) => k[0] !== '_' && b && b.doneAt).map(([, b]) => Number(b.n)));
 }
-const _inBasket = (o, done) => _atDrafter(o) && (o.drafterBatch == null || done.has(Number(o.drafterBatch)));
+const _waiting = (o, done) => _atDrafter(o) && (o.drafterBatch == null || done.has(Number(o.drafterBatch)));
+//  "לא לשלוח עכשיו" (בן, 10/11) — drafterHold: נשאר אצל שרטט, לא נכנס למשלוח עד "החזר"
+const _inBasket = (o, done) => _waiting(o, done) && !o.drafterHold;
+
+//  hold=true → "לא לשלוח עכשיו"; false → "החזר". רק הזמנה שמחכה (אצל שרטט, לא במשלוח פתוח).
+async function lgDrafterHold(db, id, hold) {
+  if (typeof id !== 'string' || !id || /[.#$[\]/]/.test(id)) return { ok: false, code: 'bad-id' };
+  const done = await _doneSet(db);
+  const r = await db.ref('orders/' + id).transaction(cur => {
+    if (cur === null) return null;
+    if (!_waiting(cur, done)) return;   // abort — לא אצל שרטט / כבר במשלוח
+    const next = { ...cur };
+    if (hold) next.drafterHold = true; else delete next.drafterHold;
+    return next;
+  });
+  const v = r.snapshot.val();
+  if (!r.committed || !v) return { ok: false, code: 'not-waiting' };
+  return { ok: true };
+}
 
 async function lgDrafterBasket(db, done) {
   const d = done || await _doneSet(db);
@@ -146,13 +164,16 @@ async function lgDrafterDone(db, { by, now } = {}) {
 }
 
 async function lgDrafterStatus(db) {
-  const basket = await lgDrafterBasket(db);
+  const done = await _doneSet(db);
+  const basket = await lgDrafterBasket(db, done);
   const all = (await db.ref('orders').once('value')).val() || {};
+  const held = Object.entries(all).filter(([, o]) => _waiting(o, done) && o.drafterHold)
+    .map(([id, o]) => _brief(id, o)).sort(_sort);
   const outbox = (await db.ref('waMeta/emailOutbox').once('value')).val() || {};
   const open = (await _openBatches(db)).map(b => ({ n: b.n, at: b.at, count: b.count, emailKey: b.emailKey || null,
     emailState: b.emailError ? 'failed' : b.emailKey && outbox[b.emailKey] ? String(outbox[b.emailKey].state || '') : '',
     orders: (b.orderIds || []).map(id => ({ id, orderNum: String((all[id] || {}).orderNum || ''), client: String((all[id] || {}).orderClient || '') })) }));
-  return { basket, open };
+  return { basket, held, open };
 }
 
 //  ─── הקובץ ───────────────────────────────────────────────────────────
@@ -266,4 +287,4 @@ async function lgDrafterEnqueueEmail(db, n, now) {
   return r;
 }
 
-module.exports = { lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
+module.exports = { lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
