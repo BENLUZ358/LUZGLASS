@@ -157,7 +157,7 @@ async function lgAgentEvent(db, agent, ev, o) {
   //  בלי הגדרות במסך (פרודקשן היום) — הכל אפור, לא צהוב ולא לבן
   const ask = !!cfg && ev && ev.kind === 'ask';
   const roomKey = await lgRoomPost(db, ask
-    ? { agent, kind: 'ask', state: 'open', text, question: text, customerName: WHO[agent] || 'סוכן', note: INTERNAL_NOTE, ref: ev.ref }
+    ? { agent, kind: 'ask', state: 'open', text, question: text, customerName: WHO[agent] || 'סוכן', note: INTERNAL_NOTE, internal: true, ref: ev.ref }
     : { agent, kind: 'info', text, ref: ev && ev.ref }, now);
   if (!roomKey) return null;
   let pinged = false;

@@ -27,6 +27,10 @@ body{background:var(--bg);}
 .mode::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--muted);}
 .mode.is-shadow::before{background:var(--orange);}
 .mode.is-live::before{background:var(--green);}
+/* כלי החשבוניות במשרד (הדופק) — שורה מתחת לכרטיסים */
+.wline{margin-top:var(--space-3);font-size:var(--fs-sm);font-weight:var(--fw-bold);}
+.wline.is-ok{color:var(--green);}
+.wline.is-silent,.wline.is-never{color:var(--orange);}
 
 /* טלפון: עמודה אחת. מחשב (900+): מתגים/סיכום/כרטיסים מימין, החדר משמאל; המקופלים למטה לכל הרוחב */
 .top{display:flex;flex-direction:column;gap:var(--space-4);}
@@ -163,7 +167,7 @@ body{background:var(--bg);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261031"></script>
 <script src="lg-icons.js?v=20260807"></script>
-<script src="agents-dash.js?v=20261110"></script>
+<script src="agents-dash.js?v=20261110b"></script>
 </head>
 <body>
 <div class="wrap">
@@ -191,6 +195,7 @@ body{background:var(--bg);}
     <section id="secCards" class="sec" aria-labelledby="hCards">
       <h2 id="hCards"><span data-icon="users"></span>הסוכנים</h2>
       <div id="cards" class="cards"></div>
+      <div id="watcherLine" class="wline" role="status"></div>
     </section>
    </div>
 
@@ -251,7 +256,7 @@ const $ = id => document.getElementById(id);
 const E = s => _adEsc(s);
 const PAGE = 50, ROOM_PAGE = 40;
 let SH = {}, Q = {}, C = {}, OB = {}, PILOT = {}, DIS = {}, GROUPS = {}, SENDERS = {}, intake = {}, STATUS = null, DEL_LIVE = false;
-let ROOM = {}, CFG = null;
+let ROOM = {}, CFG = null, WATCHERS = null;   // WATCHERS — waMeta/invoiceWatcher (הדופק מהמשרד)
 //  ROOM = חלון 500 האירועים האחרונים (ROOM_WIN) + שאלות פתוחות ישנות יותר מהאינדקס (OPEN_IDX → OLD_OPEN)
 let ROOM_WIN = {}, OPEN_IDX = {}, OLD_OPEN = {};
 const _fetching = new Set();
@@ -446,7 +451,14 @@ function renderState() {
     <div class="addp"><button type="button" class="sbtn${DEL_LIVE ? '' : ' is-primary'}" data-dellive="${DEL_LIVE ? 0 : 1}">${DEL_LIVE ? 'כבה' : 'הפעל'}</button></div>`;
 }
 
-function renderAll() { renderSwitches(); renderSummary(); renderCards(); renderRoom(); renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderCancels(); renderState(); }
+//  "כלי החשבוניות במשרד: עובד / לא ענה X דקות" (lgAdWatcherLine)
+function renderWatcher() {
+  const el = $('watcherLine');
+  if (!WATCHERS) { el.textContent = ''; el.className = 'wline'; return; }
+  const w = lgAdWatcherLine(WATCHERS, Date.now());
+  el.textContent = w.text; el.className = 'wline is-' + w.state;
+}
+function renderAll() { renderSwitches(); renderSummary(); renderCards(); renderWatcher(); renderRoom(); renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderCancels(); renderState(); }
 let _t = null;
 const later = () => { clearTimeout(_t); _t = setTimeout(renderAll, 50); };   // כמה מאזינים בבת אחת → ציור אחד
 
@@ -510,7 +522,7 @@ document.addEventListener('click', async ev => {
 });
 ['fQ', 'fRoute', 'fVerdict'].forEach(id => $(id).addEventListener(id === 'fQ' ? 'input' : 'change', () => { shown = PAGE; renderLog(); }));
 // "היום" ו"מחכה יותר מ-3 שעות" משתנים עם הזמן, גם בלי שינוי בנתונים
-setInterval(() => { renderTodo(); renderNums(); renderCards(); }, 60 * 1000);
+setInterval(() => { renderTodo(); renderNums(); renderCards(); renderWatcher(); }, 60 * 1000);
 
 lgRequireAuthAsync('admin').then(session => {
   if (!session) return;
@@ -528,6 +540,7 @@ lgRequireAuthAsync('admin').then(session => {
   _lgDb.ref('waMeta/agentConfig').on('value', s => { CFG = s.val() || null; later(); }, warn('agentConfig'));
   _lgDb.ref('waMeta/agentDeleteLive').on('value', s => { DEL_LIVE = s.val() === true; later(); }, warn('agentDeleteLive'));
   on(_lgDb.ref('waMeta/agentDash/dismissed'), v => { DIS = v; }, 'agentDash');
+  on(_lgDb.ref('waMeta/invoiceWatcher'), v => { WATCHERS = v; }, 'invoiceWatcher');
   on(_lgDb.ref('waGroups'), v => { GROUPS = v; }, 'waGroups');
   on(_lgDb.ref('waSenders'), v => { SENDERS = v; }, 'waSenders');
   //  "נקלטה גם כהזמנה" בשורת היומן נשען על רשומות הקליטה

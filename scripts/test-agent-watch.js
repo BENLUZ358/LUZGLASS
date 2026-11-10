@@ -81,7 +81,7 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW, sendPending: async () => { sends++; } });
     const ask = room(db)[0];
     check('reply: print error → yellow open question', [ask.agent, ask.kind, ask.state, /printer off/.test(ask.text)], ['archive', 'ask', 'open', true]);
-    check('reply: in the open index', openIdx(db).length, 1);
+    check('reply: in the open index, marked internal', [openIdx(db).length, ask.internal], [1, true]);
     const ob = outbox(db);
     check('reply: Ben pinged once (agent-ask, his number, archive agent)', ob.map(o => [o.to, o.reason, o.agent]), [['0547725552', 'agent-ask', 'archive']]);
     check('reply: send attempted', sends, 1);

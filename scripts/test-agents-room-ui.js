@@ -94,5 +94,18 @@ const rv = ctx.lgAdReviewRowHtml('K', { linked: true, state: 'done', route: 'sha
 check('review row says it asks Ben', rv.includes('הסוכן היה שואל אותך בחדר'), true);
 check('outbox entries of a row include the line to Ben (_b)', J(ctx.lgAgOutboxOf('K', { K_0: { text: 'a' }, K_0_b: { text: 'b' }, K_1x: { text: 'c' } })).map(o => o.text), ['a', 'b']);
 
+// ─── שלב ב׳: שאלה פנימית (בדיקות הדופק) + "כלי החשבוניות במשרד" ─────────
+const M = 60 * 1000;
+const inOpen = ctx.lgRoomBubbleHtml({ key: 'w1', at: NOW, agent: 'archive', kind: 'ask', state: 'open', text: 'שגיאת הדפסה', question: 'שגיאת הדפסה',
+  customerName: 'כלי החשבוניות', note: 'פנימי — ייסגר לבד כשיתוקן', internal: true }, {});
+check('internal question: yellow, no "answer" button (no customer to answer)', [/is-open/.test(inOpen), /data-roomanswer/.test(inOpen), inOpen.includes('מחכה לתיקון')], [true, false, true]);
+const inDone = ctx.lgRoomBubbleHtml({ key: 'w1', at: NOW, agent: 'archive', kind: 'ask', state: 'answered', answeredBy: 'auto', internal: true, text: 'x', question: 'x' }, {});
+check('internal question closed by itself → "תוקן ✓"', [inDone.includes('תוקן ✓'), inDone.includes('ענית')], [true, false]);
+check('office tool: never heard', J(ctx.lgAdWatcherLine({}, NOW)), { state: 'never', text: 'כלי החשבוניות במשרד: עוד לא שלח דופק' });
+check('office tool: working', J(ctx.lgAdWatcherLine({ OFFICE: { at: NOW - 1 * M, pending: [] } }, NOW)), { state: 'ok', text: 'כלי החשבוניות במשרד: עובד' });
+check('office tool: working, files waiting', ctx.lgAdWatcherLine({ OFFICE: { at: NOW - 1 * M, pending: [{ name: 'a.pdf', ageSec: 30 }, { name: 'b.pdf', ageSec: 5 }] } }, NOW).text,
+  'כלי החשבוניות במשרד: עובד · 2 קבצים מחכים');
+check('office tool: silent', J(ctx.lgAdWatcherLine({ A: { at: NOW - 50 * M }, B: { at: NOW - 7 * M } }, NOW)), { state: 'silent', text: 'כלי החשבוניות במשרד: לא ענה 7 דקות' });
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll agents-room-ui checks passed.');

@@ -26,6 +26,7 @@ const { lgAgentMode } = require('./_agent-config');
 const { lgRoomPost, ROOM_OPEN } = require('./_agent-room');
 const { lgAgentShadowPending, lgAgentShadowProcess, SHADOW } = require('./_agent-shadow');
 const { lgWaSenderKey } = require('./_wa-recipient');
+const { lgWatcherSilentLine, WATCHERS } = require('./_agent-watch');
 
 const QUOTES = 'waMeta/agentQuotes';
 const CANCELS = 'waMeta/agentCancels';
@@ -70,6 +71,8 @@ async function lgAgentDailySummary(db, now) {
     .filter(r => r.v.state === 'blocked' && (r.v.updatedAt || 0) >= since);
   //  חדר הסוכנים (10/11): שאלות לבן שעוד מחכות — מהאינדקס waMeta/agentRoomOpen (לא החדר כולו)
   const benOpen = _vals(await db.ref(ROOM_OPEN).once('value'));
+  //  חדר הסוכנים שלב ב׳: כלי החשבוניות במשרד (השעון) לא שלח דופק 30 דק' בשעות עבודה
+  const watcherLine = lgWatcherSilentLine((await db.ref(WATCHERS).once('value')).val() || {}, now);
 
   const acted = shadow.filter(r => r.v.acted === true);
   const toShaul = acted.filter(r => (r.v.wouldAct || []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask')));
@@ -90,6 +93,7 @@ async function lgAgentDailySummary(db, now) {
     unlinked: shadow.filter(r => r.v.linked === false).length,
     quotesStuck: stuck.length,
     blockedSends: blocked.length,
+    watcherSilent: !!watcherLine,
   };
   const num = r => '#' + r.key;
   const orderNum = r => String((r.v.order && r.v.order.orderNum) || r.key);
@@ -105,6 +109,7 @@ async function lgAgentDailySummary(db, now) {
     'ממספרים לא מקושרים: ' + counts.unlinked,
     'הצעות מחיר תקועות (מעל 3 שעות): ' + counts.quotesStuck + _list(stuck.map(num)),
     'נחסמו בשליחה: ' + counts.blockedSends,
+    ...(watcherLine ? [watcherLine] : []),
   ].join('\n');
   return { counts, text };
 }

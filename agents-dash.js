@@ -369,8 +369,10 @@ function lgRoomMissingOpen(idx, room) {
 //  התשובה בתור נגמרה בלי לצאת (נחסמה / פגה / נכשלה 3 פעמים — MAX_ATTEMPTS ב-_wa-outbox.js)
 const lgRoomSendFinal = o => !!o && (o.state === 'blocked' || o.state === 'expired' || (o.state === 'failed' && (Number(o.attempts) || 0) >= 3));
 //  אפשר לענות: שאלה פתוחה, או שנענתה והתשובה לא יצאה ("שלח שוב")
+//  שאלה פנימית (בדיקות הדופק, _agent-watch — שלב ב׳ 10/11): אין לקוח לענות לו; נסגרת לבד כשתוקן
+const lgRoomIsInternal = e => lgRoomIsQuestion(e) && e.internal === true;
 function lgRoomCanAnswer(e, outbox) {
-  if (!lgRoomIsQuestion(e)) return false;
+  if (!lgRoomIsQuestion(e) || lgRoomIsInternal(e)) return false;
   if (e.state === 'open') return true;
   return !!e.outboxKey && lgRoomSendFinal((outbox || {})[e.outboxKey]);
 }
@@ -399,7 +401,8 @@ function lgRoomBubbleHtml(e, outbox) {
       <div class="rb-who">${esc(x.customerName || 'לקוח')}${x.note ? ' · ' + esc(x.note) : ''}</div>
       <div class="rb-q">${esc(x.question || x.text || '')}</div>
       ${x.suggest ? `<div class="rb-s">הצעה: ${esc(x.suggest)}</div>` : ''}
-      ${open ? `<div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">ענה</button></div>`
+      ${lgRoomIsInternal(x) ? `<div class="rb-st">${open ? 'מחכה לתיקון — ייסגר לבד' : 'תוקן ✓'}</div>`
+        : open ? `<div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">ענה</button></div>`
         : retry ? `<div class="rb-st">התשובה לא נשלחה: ${esc(lost.lastError || lost.state)}</div>
             <div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">שלח שוב</button></div>`
         : '<div class="rb-st">ענית ✓</div>'}
@@ -412,6 +415,16 @@ function lgRoomBubbleHtml(e, outbox) {
       <div class="rb-q">${esc(x.text || '')}</div>${st ? `<div class="rb-st">${esc(st)}</div>` : ''}</div>`;
   }
   return `<div class="rb rb-info" data-roomkey="${esc(x.key)}">${head}<div class="rb-q">${esc(x.text || '')}</div></div>`;
+}
+//  "כלי החשבוניות במשרד" — מהדופק (waMeta/invoiceWatcher/<pc>, כל דקה). המחשב האחרון ששלח קובע.
+//  → { state: 'ok'|'silent'|'never', text }. עובד = דופק ב-3 הדקות האחרונות.
+function lgAdWatcherLine(watchers, now) {
+  const last = Object.values(watchers || {}).filter(w => w && Number(w.at)).sort((a, b) => Number(b.at) - Number(a.at))[0];
+  if (!last) return { state: 'never', text: 'כלי החשבוניות במשרד: עוד לא שלח דופק' };
+  const m = Math.floor((now - Number(last.at)) / 60000);
+  if (m >= 3) return { state: 'silent', text: 'כלי החשבוניות במשרד: לא ענה ' + m + ' דקות' };
+  const n = Array.isArray(last.pending) ? last.pending.length : 0;
+  return { state: 'ok', text: 'כלי החשבוניות במשרד: עובד' + (n ? ' · ' + n + (n === 1 ? ' קובץ מחכה' : ' קבצים מחכים') : '') };
 }
 //  כרטיס לכל סוכן: מה עשה היום (רשומות היומן במסלולים שלו + אירועים שלו בחדר),
 //  וכמה שאלות שלו מחכות לבן. המרכזן — כל הודעה שנכנסה.
