@@ -1092,6 +1092,8 @@ function lgNormalizeOrder(o) {
     // תת-שלב ויזואלי בתוך תור הסקיצות, לא שלב. מסומן כשמי שעובר על
     // הסקיצות אישר אותה, ונקרא רק בתור הסקיצות ובפורטל. stage לא מושפע.
     sketchSeenAt:  o.sketchSeenAt || 0,
+    // צרופות — "גרפיקה חלבי" / "שרטוט פרזול" (בן, 10/11, order-attachments.js)
+    attachments:   o.attachments || null,
     source:        o.source       || 'sketch',
     // סקיצה שהגיעה ב-WhatsApp (source:'whatsapp') — אפיון 2026-10-04 §4.
     // נכתבים רק בשרת, ונקראים בתור: פילטר לקוח, "לא מזוהה", ו"טופל וטרם
