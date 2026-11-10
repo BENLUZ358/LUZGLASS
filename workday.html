@@ -345,7 +345,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261110"></script>
+  <script src="firebase-db.js?v=20261110b"></script>
   <script src="print-labels.js?v=20261103"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20261103"></script>
@@ -531,6 +531,7 @@
       </div>
       <div class="available-section">
         <div class="avail-title">רשימת חיסום</div>
+        <div id="brokenChisumBox"></div>
         <div class="avail-grid" id="chisumOrders"></div>
 </div></div>
 
@@ -565,6 +566,7 @@
     <div id="view-delivery" style="display:none">
       <div class="available-section">
         <div class="avail-title">🚚 הובלות ממתינות</div>
+        <div id="brokenReturnBox"></div>
         <div id="deliveryOrders"></div>
       </div>
     </div>
@@ -2871,7 +2873,7 @@ function _renderStageTab(key){
 }
 
 function renderGraphicTab(){ _renderStageTab('graphic'); }
-function renderDeliveryTab(){ _renderStageTab('delivery'); }
+function renderDeliveryTab(){ _renderBrokenReturnBox(); _renderStageTab('delivery'); }
 
 async function completeGraphic(orderId){
   const o = allOrders.find(x => String(x.id) === String(orderId));
@@ -3166,6 +3168,7 @@ function wdInChisumTab(o){
 }
 
 function renderChisumTab(){
+  _renderBrokenChisumBox();
   const el = document.getElementById('chisumOrders');
   const all = allOrders.filter(wdInChisumTab);
   if(!all.length){
@@ -3394,7 +3397,7 @@ function resetChisumList(){
   const chisumOrds = _ordersUnderCheck();
   if(!chisumOrds.length){ showToast('אין הזמנות בבדיקה'); return; }
 
-  const doneOrds = [], partialOrds = [], waitingTriplex = [], unchangedOrds = [], waitPolish = [];
+  const doneOrds = [], partialOrds = [], waitingTriplex = [], unchangedOrds = [], waitPolish = [], brokenOrds = [];
 
   chisumOrds.forEach(o => {
     const st = _factoryDoneState(o);
@@ -3406,8 +3409,10 @@ function resetChisumList(){
 
     // allArrivedNow ולא sessionArrived — הסימונים נשמרים ל-Firebase מיד,
     // אז אחרי רענון הם קיימים ב-existingArrived והסשן ריק.
+    o._broken = _brokenPlanOf(o, st);
     if(st.done && _waitsForPolish(o))      waitPolish.push(o);
     else if(st.done)                       doneOrds.push(o);
+    else if(o._broken)                     brokenOrds.push(o);
     else if(!st.chisumMissing && st.triplexMissing) waitingTriplex.push(o);
     else if(st.marked)                     partialOrds.push(o);
     else                                   unchangedOrds.push(o);
@@ -3450,6 +3455,11 @@ function resetChisumList(){
             ${toDeliv.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}</div>`).join('')}
           </div>`:''}`;
         })():''}
+        ${brokenOrds.length?`<div style="padding:10px 14px;background:rgba(214,69,69,0.07);border:1px solid rgba(214,69,69,0.3);border-radius:6px;">
+          <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px;">🚚 ${brokenOrds.length} סקיצות של לקוחות הובלות ממשיכות — מה שלא חזר ייחשב שבור ויישאר בחיסום</div>
+          ${brokenOrds.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}${o.sketchName?' · '+lgEsc(o.sketchName):''} — <strong style="color:#c0392b">${o._broken.length===1?'פריט אחד לא חזר':o._broken.length+' פריטים לא חזרו'}: ${o._broken.map(b=>_brokenItemText(o,b.idx)).join(', ')}</strong></div>`).join('')}
+          <div style="font-size:12px;color:#8a8278;margin-top:5px;">החשבונית תצא על כל ההזמנה, והלקוח יקבל הודעה על הפריט השבור.</div>
+        </div>`:''}
         ${partialOrds.length?`<div style="padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.2);border-radius:6px;">
           <div style="font-size:12px;font-weight:700;color:var(--gold-text);margin-bottom:6px;">⚠️ ${partialOrds.length} סקיצות חלקיות — נשארות בחיסום עד שכל הפאנלים יחזרו</div>
           ${partialOrds.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')} — <strong style="color:var(--gold-text)">חסרים ${o._st.chisumMissing} מתוך ${o._st.chisumTotal}</strong></div>`).join('')}
@@ -3467,7 +3477,7 @@ function resetChisumList(){
         ${unchangedOrds.length?`<div style="padding:10px 14px;background:rgba(0,0,0,0.04);border:1px solid rgba(0,0,0,0.08);border-radius:6px;">
           <div style="font-size:12px;font-weight:700;color:#8a8278;margin-bottom:6px;">⏳ ${unchangedOrds.length} סקיצות — לא סומנו, אין שינוי</div>
         </div>`:''}
-        ${!doneOrds.length&&!partialOrds.length&&!waitPolish.length?`<div style="padding:12px;text-align:center;color:#8a8278;font-size:13px;">לא סומנו פריטים בסשן זה</div>`:''}
+        ${!doneOrds.length&&!partialOrds.length&&!waitPolish.length&&!brokenOrds.length?`<div style="padding:12px;text-align:center;color:#8a8278;font-size:13px;">לא סומנו פריטים בסשן זה</div>`:''}
         <div style="display:flex;gap:8px;margin-top:4px;">
           <button onclick="confirmResetChisum()" style="flex:2;padding:13px;background:#b8922a;color:var(--on-gold);font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
             ✓ אשר סיום בדיקה
@@ -3495,6 +3505,7 @@ function confirmResetChisum(){
   let partialCount  = 0;
   let msgCount      = 0;
   let polishCount   = 0;
+  let brokenCount   = 0;
   const _waPending  = [];   // הזמנות שעוברות ל-done — הודעה אחת מרוכזת
   const _advWrites  = [];   // הכתיבות של המעבר ל-done — ההודעה יוצאת רק אחריהן
 
@@ -3514,7 +3525,20 @@ function confirmResetChisum(){
     // שולחת "מוכן לאיסוף". הסימונים נשארים, ולחיצה אחרי הליטוש מקדמת.
     if(st.done && _waitsForPolish(o)){ polishCount++; return; }
 
-    if(st.done){
+    // שבר בחיסום (בן, 10/11): לקוח הובלות — מה שלא חזר נרשם שבור, וההזמנה
+    // ממשיכה בדיוק כמו הזמנה שהושלמה. הרישום נכתב לפני ההתקדמות, כי ההתקדמות
+    // מוחקת את רשימות הסימון — ובלעדיו השבור היה נעלם.
+    const broken = st.done ? null : _brokenPlanOf(o, st);
+    if(broken){
+      brokenCount++;
+      const at = Date.now(), rec = {};
+      broken.forEach(b => { rec[b.idx] = { at, track: b.track }; });
+      _closeArrived(sid, st.chisumArrived,  'chisum');
+      _closeArrived(sid, st.triplexArrived, 'triplex');
+      _advWrites.push(updateOrder(sid, { brokenChisum: rec }).catch(e => console.error('brokenChisum:', e)));
+    }
+
+    if(st.done || broken){
       doneCount++;
       // כל הפריטים הגיעו — חשב שלב הבא לפי לוגיקה דינמית
       const nextSt = lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId));
@@ -3552,7 +3576,7 @@ function confirmResetChisum(){
   if(doneCount > 0) saveWorkDay(); // שמור ניקוי inChisum
   const msg  = doneCount   ? `✓ ${doneCount} סקיצות הושלמו` : '';
   const msg2 = partialCount ? ` · ${partialCount} עם פריטים חסרים` : '';
-  const msg3 = polishCount ? ` · ${polishCount} ממתינות לליטוש` : '';
+  const msg3 = (polishCount ? ` · ${polishCount} ממתינות לליטוש` : '') + (brokenCount ? ` · ${brokenCount} עם פריט שבור — המשיכו` : '');
   showToast((msg || '✓ בדיקה הושלמה') + msg2 + msg3);
   renderAll();
   } finally {
@@ -3719,6 +3743,82 @@ function _finishPlan(){
 // ממתינה לליטוש: הוחל המעקב (wdDoneIdxs) ונשארו פריטי ליטוש שלא בוצעו.
 // הזמנה כזו לא יוצאת מהחיסום גם כשכל המפעל חזר — היא תצא בלחיצה הבאה על
 // "סיום בדיקה", אחרי שהליטוש שלה יסתיים.
+// ── שבר בחיסום (בן, 10/11) ─────────────────────────────────────────────
+//  null = אין שינוי מהיום. אחרת [{idx, track}] — מה שלא חזר ויירשם שבור.
+//  ההחלטה עצמה ב-lgBrokenPlan (firebase-db.js, test-broken-chisum); כאן רק
+//  איסוף הנתונים מהמסך.
+function _brokenPlanOf(o, st){
+  st = st || _factoryDoneState(o);
+  const cid = String(o.customerId || '');
+  const isDel = !!o.deliveryClient || _isDeliveryClient(o.orderClient, o.phone, o.customerId)
+             || LG_DELIVERY_ACCOUNTS.includes(cid);
+  const split = lgSplitFactoryItems(o.items || []);
+  return lgBrokenPlan({
+    isDelivery: isDel, waitsPolish: _waitsForPolish(o), done: st.done,
+    chisumPending: _pendingIdxsOf(o, 'chisum'),   chisumArrived: st.chisumArrived,
+    triplexPending: _pendingIdxsOf(o, 'triplex'), triplexArrived: st.triplexArrived,
+    triplexBack: !!o.triplexArrived,
+    closedAny: lgArrivedIdxs(o.chisumClosedIdxs).length + lgArrivedIdxs(o.triplexClosedIdxs).length > 0,
+    itemCount: (o.items || []).length, factoryCount: split.chisum.length + split.triplex.length,
+  });
+}
+function _brokenItemText(o, idx){
+  const it = (o.items || [])[idx] || {};
+  return 'פריט ' + (idx + 1) + ' ' + lgDimsText(it.w, it.h, '?');
+}
+function _renderBrokenChisumBox(){
+  const el = document.getElementById('brokenChisumBox'); if(!el) return;
+  const rows = [];
+  allOrders.forEach(o => lgBrokenOpen(o).forEach(b => rows.push({ o, b })));
+  if(!rows.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="margin:12px 12px 0;padding:12px 14px;background:rgba(214,69,69,0.06);border:1px solid rgba(214,69,69,0.3);border-radius:8px;">
+    <div style="font-size:14px;font-weight:900;color:#c0392b;margin-bottom:8px;">💥 פריטים שבורים — בייצור מחדש (${rows.length})</div>
+    ${rows.map(({o,b}) => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid rgba(0,0,0,0.06);">
+      <div style="flex:1;min-width:0;font-size:13px;color:#333;">
+        <b>${lgEsc(o.orderNum||o.id)}</b> · ${lgEsc(o.orderClient||'')}${o.sketchName?' · <b>'+lgEsc(o.sketchName)+'</b>':''}
+        <div style="font-size:12px;color:#8a8278;">${lgEsc(_brokenItemText(o,b.idx))}${b.track==='triplex'?' · טריפלקס':''} · ההזמנה כבר המשיכה (${lgEsc(lgStageToStatus(o.stage||'')||o.stage||'')})</div>
+      </div>
+      <button type="button" onclick="markBrokenReturned('${lgEsc(String(o.id))}',${b.idx})"
+        style="padding:9px 14px;min-height:40px;background:#27ae60;color:#fff;border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;">✓ חזר</button>
+    </div>`).join('')}
+  </div>`;
+}
+function _renderBrokenReturnBox(){
+  const el = document.getElementById('brokenReturnBox'); if(!el) return;
+  const rows = [];
+  allOrders.forEach(o => lgBrokenReturnedUndelivered(o).forEach(b => rows.push({ o, b })));
+  if(!rows.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div style="margin:12px 12px 0;padding:12px 14px;background:rgba(41,128,185,0.07);border:1px solid rgba(41,128,185,0.3);border-radius:8px;">
+    <div style="font-size:14px;font-weight:900;color:#2980b9;margin-bottom:8px;">🔁 פריטים שחזרו מחיסום — להובלה (${rows.length})</div>
+    ${rows.map(({o,b}) => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid rgba(0,0,0,0.06);">
+      <div style="flex:1;min-width:0;font-size:13px;color:#333;">
+        <b>${lgEsc(o.orderClient||'')}</b> · ${lgEsc(o.orderNum||o.id)}${o.sketchName?' · <b>'+lgEsc(o.sketchName)+'</b>':''}
+        <div style="font-size:12px;color:#8a8278;">${lgEsc(_brokenItemText(o,b.idx))} · החשבונית כבר יצאה על כל ההזמנה</div>
+      </div>
+      <button type="button" onclick="markBrokenDelivered('${lgEsc(String(o.id))}',${b.idx})"
+        style="padding:9px 14px;min-height:40px;background:#2980b9;color:#fff;border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;">🚚 נמסר</button>
+    </div>`).join('')}
+  </div>`;
+}
+const _brokenBusy = {};
+async function markBrokenReturned(id, idx){
+  const k = id + ':' + idx; if(_brokenBusy[k]) return; _brokenBusy[k] = true;
+  try {
+    await updateOrder(String(id), { ['brokenChisum/' + idx + '/returnedAt']: Date.now() });
+    showToast('✓ סומן שחזר — עובר ללשונית ההובלה');
+    try {
+      const res  = await _lgAuthPost('/api/whatsapp-dispatch', { kind:'broken-returned', orderIds:[String(id)], idx });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) showToast('⚠️ ההודעה ללקוח לא נשלחה: ' + (data.error || res.status));
+    } catch(e){ showToast('⚠️ ההודעה ללקוח לא נשלחה — בדוק חיבור'); }
+  } catch(e){ console.error('markBrokenReturned:', e); showToast('⚠️ לא נשמר — בדוק חיבור'); }
+  finally { setTimeout(() => { delete _brokenBusy[k]; }, 3000); }
+}
+async function markBrokenDelivered(id, idx){
+  try { await updateOrder(String(id), { ['brokenChisum/' + idx + '/deliveredAt']: Date.now() }); showToast('✓ נמסר'); }
+  catch(e){ console.error('markBrokenDelivered:', e); showToast('⚠️ לא נשמר — בדוק חיבור'); }
+}
+
 function _waitsForPolish(o){
   const left = lgWorkdayLeft(o);
   return left.tracked && left.polish.length > 0;

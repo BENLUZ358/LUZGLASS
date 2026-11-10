@@ -180,6 +180,8 @@ async function lgInvoiceDeliver(db, key, deps) {
                    sketchNames: rec.sketchNames || [], orderIds: ids, queuedBy: 'invoice-tool',
                    accountKey: who.accountKey, invoiceKey: key, docNumber: rec.docNumber,
                    missingSketchNums: files.missing || [],
+                   //  שבר בחיסום (בן, 10/11): מה שעוד לא חזר מהמפעל — נאמר עם החשבונית
+                   extraLines: require('./_broken').brokenInvoiceLines(orders),
                    deliveryTomorrow: await lgIsDeliveryInvoice(db, orders, who.accountKey) };
 
   if (who.channel === 'email') {
