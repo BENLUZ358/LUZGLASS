@@ -124,4 +124,10 @@ async function lgPdfPageTexts(buf) {
   } finally { await doc.destroy().catch(() => {}); }
 }
 
-module.exports = { norm, pageRole, extractDocNumber, extractDate, extractAccountKey, extractRefs, matchesPending, pickPending, lgPdfPageTexts };
+//  "העתק משוחזר" (בן, 10/11): חשבשבת מדפיס אותו כשהמקור כבר יצא. הוא עמוד "העתק"
+//  שמותר לשלוח ללקוח — רק כשהכלי ביקש זאת במפורש (restored) והמילה מופיעה בעמוד.
+function isRestoredCopy(text) {
+  return pageRole(text) === 'copy' && _has(text, 'משוחזר');
+}
+
+module.exports = { norm, pageRole, isRestoredCopy,extractDocNumber, extractDate, extractAccountKey, extractRefs, matchesPending, pickPending, lgPdfPageTexts };

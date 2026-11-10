@@ -36,6 +36,18 @@ function _decode(b64) {
 
 const _sha = buf => crypto.createHash('sha1').update(buf).digest('hex');
 
+//  האם כרטיס הלקוח שעל החשבונית ("מפתח") מחובר למערכת: משתמש עם אותו customerId.
+//  לא נקרא / תקלה → true (הכיוון הבטוח: הכלי ממשיך לחכות כמו קודם, ואחרי
+//  ההמתנה מדפיס על נייר בכל מקרה).
+async function _knownAccount(db, text) {
+  const acct = M.extractAccountKey(text);
+  if (!acct) return true;
+  try {
+    const users = (await db.ref('users').once('value')).val() || {};
+    return Object.values(users).some(u => u && String(u.customerId || '') === acct);
+  } catch (_) { return true; }
+}
+
 //  שויכה (200) → שולחים ללקוח מיד (_invoice-deliver). כשל בשליחה לא מפיל את
 //  ההעלאה: ההעתק כבר צריך להישמר בארכיון, והמצב נרשם ב-delivery.
 //  השליחה לא כפולה: deliver מדלג על חשבונית שכבר נשלחה / בתור.
@@ -79,14 +91,21 @@ async function _handleUpload(req, deps) {
   } catch (_) {
     return _fail(422, 'unreadable-pdf');
   }
-  //  הבדיקה שמונעת שליחת העתק ללקוח
-  if (oPages.some(t => M.pageRole(t) !== 'original') || cPages.some(t => M.pageRole(t) !== 'copy')) {
+  //  הבדיקה שמונעת שליחת העתק ללקוח. החריג היחיד: "העתק משוחזר" שהכלי סימן
+  //  במפורש (restored) — חשבשבת לא ידפיס מקור שני, וזה מה שהלקוח צריך לקבל.
+  const restored = body.restored === true;
+  if (restored) {
+    if (!oPages.every(M.isRestoredCopy) || !cPages.every(M.isRestoredCopy)) return _fail(422, 'role-unverified');
+  } else if (oPages.some(t => M.pageRole(t) !== 'original') || cPages.some(t => M.pageRole(t) !== 'copy')) {
     return _fail(422, 'role-unverified');
   }
   const oText = oPages.join('\n');
 
   const { db } = deps, now = deps.now || Date.now();
   const hash = _sha(orig);
+  //  202 אומר לכלי גם אם הלקוח מחובר למערכת (בן, 10/11): לקוח שלא במערכת →
+  //  הכלי מדפיס מקור והעתק על נייר מיד, במקום לחכות לרישום שלא יגיע.
+  const pending = async extra => ({ status: 202, body: { ok: true, pending: true, known: await _knownAccount(db, oText), ...extra } });
 
   //  העלאה חוזרת של אותו קובץ (ניסיון חוזר של הכלי) → תשובה זהה, בלי עיבוד שני.
   //  הדפסה שעדיין 'printed' מנסה להשתייך עכשיו (ייתכן שהחשבונית נרשמה בינתיים).
@@ -95,7 +114,7 @@ async function _handleUpload(req, deps) {
     let k = Object.keys(dup)[0], r = dup[k];
     if (r.state === 'printed') {
       const s = await C.settlePrinted(db, k, now);
-      if (!s.settled) return { status: 202, body: { ok: true, pending: true, duplicate: true, key: k } };
+      if (!s.settled) return pending({ duplicate: true, key: k });
       k = s.key; r = s.rec;
     }
     return { status: 200, body: { ok: true, duplicate: true, key: k, docNumber: r.docNumber,
@@ -124,7 +143,7 @@ async function _handleUpload(req, deps) {
       return { status: 200, body: { ok: true, reprint: true, key: settled, docNumber, date: r.date,
         archivePath: r.archivePath, sendAfter: r.sendAfter } };
     }
-    if (sk.some(k => same[k].state === 'printed')) return { status: 202, body: { ok: true, pending: true, reprint: true } };
+    if (sk.some(k => same[k].state === 'printed')) return pending({ reprint: true });
     //  הופקה ישירות בחשבשבת מהזמנות סוכן (בן, 29/10): מספרי ההזמנות שלנו
     //  מודפסים בטור "מ.מקור". נמצאו הזמנות של אותו כרטיס → משייכים עכשיו.
     const acct = M.extractAccountKey(oText);
@@ -141,7 +160,7 @@ async function _handleUpload(req, deps) {
     await db.ref('invoicePdfBlobs/' + pk).set({
       original: orig.toString('base64'), copy: copy.toString('base64') });
     const s = await C.settlePrinted(db, pk, now);
-    if (!s.settled) return { status: 202, body: { ok: true, pending: true, key: pk } };
+    if (!s.settled) return pending({ key: pk });
     return { status: 200, body: { ok: true, key: s.key, docNumber, date,
       archivePath: s.rec.archivePath, sendAfter: s.rec.sendAfter } };
   }
