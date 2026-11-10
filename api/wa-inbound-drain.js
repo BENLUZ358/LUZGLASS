@@ -181,6 +181,18 @@ async function handleAdmin(body, deps) {
 
   // ─── לוח הבקרה לסוכנים (agents.html, 31/10) ────────────────────────────
   //  agent-status: אילו משתני סביבה מוגדרים — בוליאנים בלבד, אף ערך לא חוזר לדפדפן.
+  // ─── משלוחים לשרטט (בן, 10/11) — api/_drafter-batch.js ───────────────
+  //  הנמען קבוע בשרת; שום שדה מהבקשה מלבד action לא נקרא.
+  if (action === 'drafter-status' || action === 'drafter-send' || action === 'drafter-done') {
+    const DB = require('./_drafter-batch');
+    const who = { by: String(deps.by || ''), now: deps.now };
+    if (action === 'drafter-status') return { ok: true, code: '', ...(await DB.lgDrafterStatus(deps.db)) };
+    if (action === 'drafter-done') return { code: '', ...(await DB.lgDrafterDone(deps.db, who)) };
+    const r = await DB.lgDrafterSend(deps.db, who);
+    if (!r.ok) return { ok: false, code: r.code, message: 'הסל ריק' };
+    const st = r.email && r.email.key ? ((await deps.db.ref('waMeta/emailOutbox/' + r.email.key + '/state').once('value')).val() || '') : '';
+    return { ok: true, code: '', n: r.n, orderIds: r.orderIds, emailState: st };
+  }
   if (action === 'agent-status') {
     const e = process.env;
     return { ok: true, code: '', status: {

@@ -93,7 +93,9 @@ async function lgDrafterDone(db, { by, now } = {}) {
 async function lgDrafterStatus(db) {
   const basket = await lgDrafterBasket(db);
   const all = (await db.ref('orders').once('value')).val() || {};
+  const outbox = (await db.ref('waMeta/emailOutbox').once('value')).val() || {};
   const open = (await _openBatches(db)).map(b => ({ n: b.n, at: b.at, count: b.count, emailKey: b.emailKey || null,
+    emailState: b.emailKey && outbox[b.emailKey] ? String(outbox[b.emailKey].state || '') : '',
     orders: (b.orderIds || []).map(id => ({ id, orderNum: String((all[id] || {}).orderNum || ''), client: String((all[id] || {}).orderClient || '') })) }));
   return { basket, open };
 }
