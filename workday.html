@@ -3833,7 +3833,7 @@ function _renderBrokenReturnBox(){
     ${rows.map(({o,b}) => `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid rgba(0,0,0,0.06);">
       <div style="flex:1;min-width:0;font-size:13px;color:#333;">
         <b>${lgEsc(o.orderClient||'')}</b> · ${lgEsc(o.orderNum||o.id)}${o.sketchName?' · <b>'+lgEsc(o.sketchName)+'</b>':''}
-        <div style="font-size:12px;color:#8a8278;">${lgEsc(_brokenItemText(o,b.idx))} · החשבונית כבר יצאה על כל ההזמנה</div>
+        <div style="font-size:12px;color:#8a8278;">${lgEsc(_brokenItemText(o,b.idx))} · ${o.invoiceDone&&o.invoiceDone.docNumber?'החשבונית כבר יצאה על כל ההזמנה ('+lgEsc(o.invoiceDone.docNumber)+')':'בלי חשבונית נוספת — נכלל בחשבונית של ההזמנה'}</div>
       </div>
       <button type="button" onclick="markBrokenDelivered('${lgEsc(String(o.id))}',${b.idx})"
         style="padding:9px 14px;min-height:40px;background:#2980b9;color:#fff;border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;">🚚 נמסר</button>

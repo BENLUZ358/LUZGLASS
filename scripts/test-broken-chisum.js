@@ -50,4 +50,6 @@ check('"חזר" asks the server to tell the customer', /kind:'broken-returned', 
 /* ── Task 4: תחנת החשבוניות ─────────────────────────────────────── */
 const INV = fs.readFileSync(path.join(ROOT, 'invoices.html'), 'utf8');
 check('invoice station tags a broken order', /\$\{brokenTag\(o\)\}/.test(INV) && /lgBrokenOpen\(o\)/.test(INV), true);
+//  נמצא בבדיקה בדפדפן: הנרמול שמט את השדה, והשבור לא הופיע באף מסך
+check('lgNormalizeOrder keeps brokenChisum', /brokenChisum:\s+o\.brokenChisum\s+\?\? null/.test(SRC), true);
 console.log(fail ? '\n' + fail + ' failed' : '\nall passed'); process.exit(fail ? 1 : 0);
