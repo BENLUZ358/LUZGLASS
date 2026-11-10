@@ -13,8 +13,8 @@
 //
 //  ⚠️ הנמען הוא איש צוות: שכבת השליחה מתירה אותו רק אם הוא ב-AGENT_STAFF_PHONES.
 //     מספר ב-AGENT_SUMMARY_TO שאינו שם — מדולג כאן, עם סיבה בתשובה (אחרת
-//     הרשומה הייתה נחסמת בשקט). הסיכום נשלח גם רק כששני המתגים דולקים
-//     (SHADOW + REPLY), כדי שמפתח היום לא יישרף על רשומה חסומה.
+//     הרשומה הייתה נחסמת בשקט). הסיכום נשלח גם רק כשהמנהל "עונה"
+//     (lgAgentMode — המתג העליון + המסך), כדי שמפתח היום לא יישרף על רשומה חסומה.
 //  ⚠️ מפתח התור לפי תאריך+מספר: ריצה שנייה באותו יום לא שולחת שוב.
 //  ⚠️ מספרים מקומיים (0…) בלבד; לא נרשם ללוג ולא מוחזר טקסט הודעות לקוח.
 //  שעון: 13:00 UTC = 15:00 חורף; בשעון קיץ 16:00 — במרץ לעדכן ל-'0 12 * * *'.
@@ -22,6 +22,8 @@
 
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgAgentSendPending, lgAgentEnqueue, lgAgentStaff } = require('./_agent-send');
+const { lgAgentMode } = require('./_agent-config');
+const { lgRoomPost, ROOM_OPEN } = require('./_agent-room');
 const { lgAgentShadowPending, lgAgentShadowProcess, SHADOW } = require('./_agent-shadow');
 const { lgWaSenderKey } = require('./_wa-recipient');
 
@@ -29,6 +31,9 @@ const QUOTES = 'waMeta/agentQuotes';
 const CANCELS = 'waMeta/agentCancels';
 const OUTBOX = 'waMeta/agentOutbox';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const READ_MS = 2 * DAY_MS;              // כמה אחורה קוראים מהתור (תיקון סקירה 10/11)
+//  סיכום בחדר — פעם ביום: מפתח לפי תאריך, נתפס בטרנזקציה (הדופק מריץ את זה הרבה פעמים)
+const ROOM_DAILY = 'waMeta/agentRoomDaily';
 const STUCK_MS = 3 * 60 * 60 * 1000;     // בקשה שמחכה מעל 3 שעות
 const SHADOW_LIMIT = 40;
 //  R14: נמדד מול מגבלת 60ש׳ של הפונקציה, מתחילת הריצה. פריט צל (סיווג 20ש׳ + הצעה 20ש׳ + שליחה)
@@ -60,11 +65,16 @@ async function lgAgentDailySummary(db, now) {
   const quotes = _vals(await db.ref(QUOTES).once('value'));
   const cancels = _vals(await db.ref(CANCELS).once('value'));
   //  תיקון סופי 2: הודעות שנחסמו בשליחה ב-24 השעות האחרונות (לפי updatedAt)
-  const blocked = _vals(await db.ref(OUTBOX).once('value')).filter(r => r.v.state === 'blocked' && (r.v.updatedAt || 0) >= since);
+  //  ⚠️ (תיקון סקירה 10/11) רק החלון האחרון, לא כל התור
+  const blocked = _vals(await db.ref(OUTBOX).orderByChild('updatedAt').startAt(now - READ_MS).once('value'))
+    .filter(r => r.v.state === 'blocked' && (r.v.updatedAt || 0) >= since);
+  //  חדר הסוכנים (10/11): שאלות לבן שעוד מחכות — מהאינדקס waMeta/agentRoomOpen (לא החדר כולו)
+  const benOpen = _vals(await db.ref(ROOM_OPEN).once('value'));
 
   const acted = shadow.filter(r => r.v.acted === true);
   const toShaul = acted.filter(r => (r.v.wouldAct || []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask')));
-  const toShaulKeys = new Set(toShaul.map(r => r.key));
+  const toBen = acted.filter(r => (r.v.wouldAct || []).some(a => a && a.type === 'ask'));
+  const toShaulKeys = new Set([...toShaul, ...toBen].map(r => r.key));
   const waiting = quotes.filter(r => r.v.state === 'waiting');
   const stuck = quotes.filter(r => (r.v.state === 'waiting' || r.v.state === 'relaying') && r.v.at && now - r.v.at > STUCK_MS);
   const hsWait = cancels.filter(r => r.v.confirmed === true && r.v.hsSent === true && !r.v.done);
@@ -72,6 +82,8 @@ async function lgAgentDailySummary(db, now) {
     incoming: shadow.length,
     selfClosed: acted.filter(r => r.v.route !== 'shaul' && !toShaulKeys.has(r.key)).length,
     toShaul: toShaul.length,
+    toBen: toBen.length,
+    benOpen: benOpen.length,
     quotesWaiting: waiting.length,
     cancelsWaitingHs: hsWait.length,
     markedWrong: shadow.filter(r => r.v.verdict && r.v.verdict.ok === false).length,
@@ -86,6 +98,7 @@ async function lgAgentDailySummary(db, now) {
     'הודעות שנכנסו: ' + counts.incoming,
     'נסגרו לבד: ' + counts.selfClosed,
     'הועברו לשאול: ' + counts.toShaul,
+    'שאלות לבן: ' + counts.toBen + ' (מחכות לתשובה: ' + counts.benOpen + ')',
     'הצעות מחיר שמחכות לשאול: ' + counts.quotesWaiting + _list(waiting.map(num)),
     'ביטולים שמחכים לחשבשבת: ' + counts.cancelsWaitingHs + _list(hsWait.map(orderNum)),
     'סומנו ✗ בפאנל: ' + counts.markedWrong,
@@ -121,19 +134,30 @@ async function lgAgentDailyRun(req, deps) {
 
   const shadowOn = env.AGENT_SHADOW_ENABLED === 'true';
   if (shadowOn) {
-    if (env.AGENT_REPLY_ENABLED !== 'true') {
-      body.skipped = [{ reason: 'AGENT_REPLY_ENABLED כבוי — הסיכום לא נשלח' }];
-    } else {
+    //  המתג של המנהל במסך (waMeta/agentConfig; בלעדיו — AGENT_REPLY_ENABLED כמו קודם)
+    //  הסיכום תמיד גם בחדר (מוצמד במסך הסוכנים); בוואטסאפ — רק כשהמנהל "עונה"
+    let sum = null;
+    try {
+      sum = await lgAgentDailySummary(db, now);
+      body.summary = sum.counts;
+      const day = _jerDate(now).iso;
+      const t = await db.ref(ROOM_DAILY + '/' + day).transaction(cur => (cur ? undefined : { at: now }));
+      if (t.committed) {
+        const rk = await lgRoomPost(db, { agent: 'manager', kind: 'summary', text: sum.text }, now);
+        if (!rk) await db.ref(ROOM_DAILY + '/' + day).set(null);   // לא נכתב — שהריצה הבאה תנסה
+      }
+    } catch (e) { body.failed++; console.warn('agent-daily: summary', e && e.name); }
+    if (await lgAgentMode(db, 'manager', env) !== 'reply') {
+      body.skipped = [{ reason: 'המנהל לא במצב "עונה" — הסיכום לא נשלח' }];
+    } else if (sum) {
       try {
-        const sum = await lgAgentDailySummary(db, now);
-        body.summary = sum.counts;
-        const staff = lgAgentStaff(env);
+        const staff = lgAgentStaff(env);   // המספר של בן אינו צוות — רק התראות על שאלות
         const date = _jerDate(now).iso;
         const to = String(env.AGENT_SUMMARY_TO || '').split(',').map(s => lgWaSenderKey(s.trim())).filter(Boolean);
         body.skipped = [];
         for (const phone of to) {
           if (!staff.includes(phone)) { body.skipped.push({ to: phone, reason: 'לא ב-AGENT_STAFF_PHONES — לא נשלח' }); continue; }
-          await lgAgentEnqueue(db, { key: 'daily-' + date + '-' + phone, to: phone, customerId: '', text: sum.text, reason: 'סיכום יומי' });
+          await lgAgentEnqueue(db, { key: 'daily-' + date + '-' + phone, to: phone, customerId: '', text: sum.text, reason: 'סיכום יומי', agent: 'manager' });
         }
       } catch (e) { body.failed++; console.warn('agent-daily: summary', e && e.name); }
     }

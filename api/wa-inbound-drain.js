@@ -12,6 +12,9 @@
 //    { action:'agent-cancel-done', key }  "בוצע בחשבשבת" על ביטול מהסוכן
 //                                     (waMeta/agentCancels/<key>; דף תיקון הזמנות, 31/10)
 //    { action:'agent-status' }        לוח הבקרה: אילו מתגים / משתנים מוגדרים — בוליאנים בלבד
+//    { action:'agent-config-set', agent, mode } | { escalatePhone }  מתגי הסוכנים במסך
+//                                     (waMeta/agentConfig; בן, 10/11 — בלי Vercel)
+//    { action:'agent-room-answer', key, text }  בן עונה בחדר הסוכנים על שאלה צהובה
 //    { action:'agent-dismiss', kind, key, ver }  "טופל" על כרטיס בלוח הבקרה
 //                                     (waMeta/agentDash/dismissed/<kind>_<key>; agents.html, 31/10)
 //
@@ -240,10 +243,27 @@ async function handleAdmin(body, deps) {
   }
   if (action === 'agent-status') {
     const e = process.env;
+    const AC = require('./_agent-config');
+    //  config — המתגים שבמסך (בן, 10/11): המצב של כל סוכן (שמור, או מה שהוא עושה היום) + המספר של בן
     return { ok: true, code: '', status: {
       shadow: e.AGENT_SHADOW_ENABLED === 'true', reply: e.AGENT_REPLY_ENABLED === 'true',
       model: !!e.AGENT_MODEL, key: !!e.OPENAI_API_KEY, staff: !!e.AGENT_STAFF_PHONES,
-      summary: !!e.AGENT_SUMMARY_TO, cron: !!e.CRON_SECRET } };
+      summary: !!e.AGENT_SUMMARY_TO, cron: !!e.CRON_SECRET },
+      config: AC.lgAgentConfigView(await AC.lgAgentConfig(deps.db), e) };
+  }
+  // ─── חדר הסוכנים: בן עונה על שאלה צהובה (בן, 10/11) ─────────────────────
+  //  התשובה יוצאת ללקוח דרך שכבת השליחה של הסוכנים (אותן הגנות). api/_agent-room.js
+  if (action === 'agent-room-answer') {
+    return require('./_agent-room').lgRoomAnswer(deps.db, { key: b.key, text: b.text },
+      { by: String(deps.by || ''), now: deps.now, provider: deps.provider, sendPending: deps.sendPending });
+  }
+  // ─── מתגי הסוכנים במסך (בן, 10/11) — waMeta/agentConfig ─────────────────
+  //  { agent, mode } או { escalatePhone }. אימות קפדני ב-api/_agent-config.js
+  if (action === 'agent-config-set') {
+    const body2 = {};
+    if (Object.prototype.hasOwnProperty.call(b, 'agent')) { body2.agent = b.agent; body2.mode = b.mode; }
+    if (Object.prototype.hasOwnProperty.call(b, 'escalatePhone')) body2.escalatePhone = b.escalatePhone;
+    return require('./_agent-config').lgAgentConfigSet(deps.db, body2, { by: String(deps.by || ''), now: deps.now });
   }
   //  agent-dismiss: "טופל" על כרטיס ב"דורש טיפול" — הסתרה בלבד, הרשומה עצמה לא
   //  משתנה. ver = מתי הרשומה השתנתה; השתנתה שוב → הכרטיס חוזר (lgAdExceptions).

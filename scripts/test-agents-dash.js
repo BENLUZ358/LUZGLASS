@@ -122,7 +122,7 @@ check('no status yet → off, no crash', ctx.lgAdMode(null).mode, 'off');
 // ─── קישור וואטסאפ וסוכנים ───────────────────────────────────────────
 check('wa.me link', [ctx.lgAdWaLink('050-123-4567'), ctx.lgAdWaLink('12'), ctx.lgAdWaLink('')],
   ['https://wa.me/972501234567', '', '']);
-check('six agents', J(vm.runInContext('LG_AD_AGENTS', ctx)).map(a => a.id), ['markazan', 'okev', 'archive', 'quote', 'kolet', 'menahel']);
+check('six agents', J(vm.runInContext('LG_AD_AGENTS', ctx)).map(a => a.id), ['markazan', 'kolet', 'archive', 'okev', 'price', 'manager']);
 
 // ─── שורת יומן בעברית פשוטה (בן, 31/10: "לא הבנתי מה רשום שם") ─────────
 {

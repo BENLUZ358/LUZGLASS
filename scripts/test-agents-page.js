@@ -22,13 +22,26 @@ check('every write goes through the drain',
 check('posts only to /api/wa-inbound-drain', (live(P).match(/_lgAuthPost\(\s*'([^']+)'/g) || []).every(m => m.includes('/api/wa-inbound-drain')), true);
 check('no Firebase writes from the page', /_lgDb\.ref\([^)]*\)[^;]*\.(set|update|push|remove|transaction)\(/.test(live(P)), false);
 check('the "טופל" button only on dismissable cards', /x\.dismissable\s*\?[^:]*data-dismiss/.test(P), true);
-check('admin counter reads the same 31 days as the page',
-  (() => { const m = live(A).match(/function lgAgentsNavCount\(\)[\s\S]*?\n}/); return !!m && /31 \* 24 \* 60 \* 60 \* 1000/.test(m[0]); })(), true);
+//  חדר הסוכנים (10/11): המונה = שאלות צהובות שמחכות לבן — מהאינדקס בשרת, כמו הדף (תיקון סקירה)
+check('admin counter = open questions from the server index, same as the page',
+  (() => { const m = live(A).match(/function lgAgentsNavCount\(\)[\s\S]*?\n}/);
+    return !!m && /lgRoomOpenIndexCount\(/.test(m[0]) && /agentRoomOpen'\)/.test(m[0]) && /lgRoomOpenIndexCount\(OPEN_IDX\)/.test(P); })(), true);
 check('log shows review rows as questions, the rest folded',
   [/lgAdSplitLog\(/.test(P), /lgAdReviewRowHtml\(r\.key,\s*r,\s*intake/.test(P), /<details[^>]*>[\s\S]{0,200}לא צריך לבדוק/.test(P), /lgAdOtherRowHtml\(/.test(P)],
   [true, true, true, true]);
 check('no pilot buttons in the log any more', /lgAgRowHtml\(/.test(live(P)), false);
-check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261108/.test(P), /agents-dash\.js\?v=20261108/.test(A)], [true, true]);
+check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261110/.test(P), /agents-dash\.js\?v=20261110/.test(A)], [true, true]);
+// ─── חדר הסוכנים (בן, 10/11) ───
+check('room screen: switches, summary, cards, room on top; the old sections folded',
+  [['id="secSwitches"', 'id="secSummary"', 'id="secCards"', 'id="secRoom"'].every(x => P.includes(x)),
+   ['secTodo', 'secNums', 'secLog', 'secCancels', 'secState'].every(id => new RegExp('<details[^>]*id="' + id + '"').test(P))], [true, true]);
+check('switches and answers go through the drain', ['agent-config-set', 'agent-room-answer'].map(a => new RegExp("action:\\s*'" + a + "'").test(P)), [true, true]);
+check('reads the room and the switches', [/waMeta\/agentRoom/.test(P), /waMeta\/agentConfig/.test(P)], [true, true]);
+check('no Vercel switch names left in the texts', /AGENT_REPLY_ENABLED|AGENT_SHADOW_ENABLED/.test(P), false);
+check('only the allowed breakpoints', (P.match(/@media[^{]*/g) || []).every(m => /\((min|max)-width:\s*(600|768|900|1200)px\)/.test(m)), true);
+check('no font below 12px', /font-size:\s*(\d|1[01])px/.test(P), false);
+check('the page script parses', (() => { try { (P.match(/<script>([\s\S]*?)<\/script>/g) || []).forEach(s => new (require('vm').Script)(s.replace(/<\/?script>/g, ''))); return true; }
+  catch (e) { return e.message; } })(), true);
 check('reads the dismissals', /waMeta\/agentDash\/dismissed/.test(P), true);
 check('the log reads 30 days, not everything', /agentShadow['"`]\s*\)\s*\.orderByChild\(\s*'createdAt'\s*\)\s*\.startAt\(/.test(P), true);
 check('period switch: today / 7 days / 30 days', ['data-period="today"', 'data-period="7d"', 'data-period="30d"'].map(s => P.includes(s)), [true, true, true]);

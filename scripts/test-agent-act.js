@@ -24,6 +24,8 @@ const SHAUL = '972501112222@c.us';
 const GROUP = '120363000000@g.us';       // קבוצה מקושרת → לקוח 888 (בפיילוט)
 const key = id => String(id).replace(/[.#$[\]/]/g, '_');
 const HANDOFF = 'העברנו לשאול, הוא יחזור אליך';
+// "לא יודע → בן" (חדר הסוכנים, 10/11): שאלת לקוח שאף סוכן לא יודע — ללקוח "קיבלנו", לבן וואטסאפ + צהוב
+const HOLD = 'קיבלנו, אנחנו בודקים ונחזור אליך בהקדם.';
 const ON = { AGENT_SHADOW_ENABLED: 'true', AGENT_REPLY_ENABLED: 'true', AGENT_STAFF_PHONES: '050-1112222,0531234567',
              AGENT_MODEL: 'm1', OPENAI_API_KEY: 'k1' };
 
@@ -76,8 +78,8 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     const w2 = D(R({ text: 'מטבח', intent: 'unclear', route: 'shaul' }), m.conv, null, NOW + MIN);
     check('which + name → that order', w2.actions[0].text, 'הזמנה L1003 (סקיצה: מטבח): קיבלנו, ההזמנה בבדיקה');
     const w3 = D(R({ text: '7', intent: 'unclear', route: 'shaul' }), m.conv, null, NOW + MIN);
-    check('which + out-of-range number → normal routing (shaul), conv kept',
-      [w3.actions.map(a => a.type), w3.conv], [['staff', 'reply'], m.conv]);
+    check('which + out-of-range number → normal routing (ask Ben), conv kept',
+      [w3.actions.map(a => a.type), w3.conv], [['ask'], m.conv]);
 
     const mc = D(R({ intent: 'cancel', ref: '' }));
     const wc = D(R({ text: '2', intent: 'unclear', route: 'shaul' }), mc.conv, null, NOW + MIN);
@@ -135,12 +137,12 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
 
     check('menu → AGENT_MENU_TEXT', D(R({ route: 'menu', intent: 'chitchat', text: 'היי' })).actions, [{ type: 'reply', text: AGENT_MENU_TEXT }]);
 
-    check('shaul (linked) → staff "<לקוח>: <טקסט>" + handoff reply',
+    check('shaul (linked) → ask Ben (who + question)',
       D(R({ route: 'shaul', intent: 'unclear', text: 'יש לכם זכוכית חכמה?' })).actions,
-      [{ type: 'staff', text: 'כהן זכוכית: יש לכם זכוכית חכמה?' }, { type: 'reply', text: HANDOFF }]);
+      [{ type: 'ask', who: 'כהן זכוכית', question: 'יש לכם זכוכית חכמה?' }]);
     check('shaul (linked, no name) → phone prefix',
       D(R({ route: 'shaul', intent: 'angry', text: 'איפה ההזמנה???', customerName: '' })).actions[0],
-      { type: 'staff', text: '0501234567: איפה ההזמנה???' });
+      { type: 'ask', who: '0501234567', question: 'איפה ההזמנה???' });
     // R5: מספר לא מקושר — לא שולחים כלום, גם לא לשאול (נספר בסיכום היומי)
     const un = D(R({ route: 'shaul', linked: false, customerId: '', customerName: '', chatId: STRANGER, sender: '0549999999', text: undefined }), null, []);
     check('R5: shaul (unlinked) → no action at all', un.actions, []);
@@ -148,9 +150,9 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     // "כן" שנשלח לפני השאלה (או לפני שנמסרה) לא מאשר ביטול
     const early = D(R({ text: 'כן', intent: 'unclear', route: 'shaul', timestamp: NOW - 1000 }), c.conv, null, NOW + MIN);
     check('"כן" sent before the question → no cancel, normal routing, conv kept',
-      [early.actions.map(a => a.type), early.conv], [['staff', 'reply'], c.conv]);
+      [early.actions.map(a => a.type), early.conv], [['ask'], c.conv]);
     const notYet = D(R({ text: 'כן', intent: 'unclear', route: 'shaul', timestamp: NOW + MIN }), { ...c.conv, askedAt: NOW + 2 * MIN }, null, NOW + 3 * MIN);
-    check('"כן" before the question was delivered (askedAt) → no cancel', notYet.actions.map(a => a.type), ['staff', 'reply']);
+    check('"כן" before the question was delivered (askedAt) → no cancel', notYet.actions.map(a => a.type), ['ask']);
     const after = D(R({ text: 'כן', intent: 'unclear', route: 'shaul', timestamp: NOW + 3 * MIN }), { ...c.conv, askedAt: NOW + 2 * MIN }, null, NOW + 3 * MIN);
     check('"כן" after delivery → cancel', after.actions.map(a => a.type), ['cancel']);
     const wEarly = D(R({ text: '3', intent: 'unclear', route: 'shaul', timestamp: NOW - 1 }), m.conv, null, NOW + MIN);
@@ -211,9 +213,9 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     const db = seed(); put(db, 'G1', R({ chatId: GROUP, groupId: GROUP, sender: '0521111111', customerId: '888', customerName: 'קבוצת לוי',
       route: 'shaul', intent: 'unclear', text: 'שאלה' }));
     await run(db, 'G1');
-    check('group shaul → staff to Shaul (first staff phone) + reply to the group',
-      [outbox(db).G1_0.to, outbox(db).G1_0.text, outbox(db).G1_0.customerId, outbox(db).G1_1.to, outbox(db).G1_1.text],
-      ['0501112222', 'קבוצת לוי: שאלה', '888', GROUP, HANDOFF]);
+    check('group question → hold to the group + short line to Ben (not Shaul)',
+      [outbox(db).G1_0.to, outbox(db).G1_0.text, outbox(db).G1_0.customerId, outbox(db).G1_0_b.to, /^יש שאלה שמחכה לך בחדר הסוכנים: קבוצת לוי — שאלה/.test(outbox(db).G1_0_b.text)],
+      [GROUP, HOLD, '888', '0547725552', true]);
   }
   {
     const db = seed(); put(db, 'U1', R({ route: 'shaul', linked: false, customerId: '', customerName: '', chatId: STRANGER, sender: '0549999999' }));
@@ -243,7 +245,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
   {
     const db = seed(); put(db, 'S0', R({ route: 'shaul', intent: 'unclear', text: 'x' }));
     const r = await run(db, 'S0', { ...ON, AGENT_STAFF_PHONES: '' });
-    check('no AGENT_STAFF_PHONES → handoff not acted (would lie "העברנו לשאול")', [r.acted, Object.keys(outbox(db)).length], [false, 0]);
+    check('no AGENT_STAFF_PHONES → the question still goes to Ben (not Shaul)', [r.acted, outbox(db).S0_0.text, outbox(db).S0_0_b.to], [true, HOLD, '0547725552']);
   }
 
   /* ── conv בבסיס הנתונים ── */
@@ -429,16 +431,20 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     check('F5 act: Shaul gets text + forward, conv deleted', [outbox(db).N5_0.text, outbox(db).N5_1.files[0].kind, conv(db, PRIV)],
       ['שינוי בהזמנה L1003 (מטבח) של כהן זכוכית: נשלחה סקיצה חדשה', 'forward', undefined]);
 
-    // 9: ההודעה לשאול לא נכנסה לתור → לא אומרים ללקוח "העברנו לשאול"
+    // 9 ("לא יודע → בן", 10/11): "קיבלנו" ללקוח רק אם הצהוב בחדר או ההודעה לבן באמת נכתבו
     db = seed();
-    db._data.waMeta.agentOutbox = { N6_0: { state: 'sent', text: 'קודם' } };   // המפתח של הודעת שאול כבר קיים → queued:false
+    const realRef = db.ref.bind(db);
+    db.ref = p => (String(p).startsWith('waMeta/agentRoom') ? { set: async () => { throw new Error('down'); } } : realRef(p));
+    db._data.waMeta.agentOutbox = { N6_0_b: { state: 'sent', text: 'קודם' } };   // ההודעה לבן כבר קיימת → queued:false
     put(db, 'N6', R({ idMessage: 'N6', route: 'shaul', intent: 'unclear', text: 'שאלה' }));
+    const w0 = console.warn; console.warn = () => {};
     await run(db, 'N6');
-    check('F9 staff entry not queued → no handoff reply', [outbox(db).N6_0.text, !!outbox(db).N6_1], ['קודם', false]);
+    console.warn = w0;
+    check('F9 room failed and Ben not queued → no hold reply', [outbox(db).N6_0_b.text, !!outbox(db).N6_0], ['קודם', false]);
     db = seed();
     put(db, 'N7', R({ idMessage: 'N7', route: 'shaul', intent: 'unclear', text: 'שאלה' }));
     await run(db, 'N7');
-    check('F9 staff queued → handoff reply', [outbox(db).N7_0.to, outbox(db).N7_1.text], ['0501112222', HANDOFF]);
+    check('F9 question → Ben + hold reply', [outbox(db).N7_0_b.to, outbox(db).N7_0.text], ['0547725552', HOLD]);
     // ביטול שנכשל: הודעת שאול (_s) לא נכנסה → בלי "העברנו לשאול"
     const realC = act.lgAgentCancel;
     act.lgAgentCancel = async () => ({ ok: false, code: 'missing' });
@@ -498,8 +504,8 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     let db = qSeed();
     put(db, 'Q1', R({ idMessage: 'Q1', route: 'quote', intent: 'quote', text: 'כמה עולה זכוכית 4 מ"מ 100 על 100?', timestamp: NOW }));
     await act.lgAgentAct(db, 'Q1', { env: ON, now: NOW, sendPending: spy, fetchImpl: qModel.fetchImpl, clock, deadline: t + 36000 });
-    check('F1 quote skipped near deadline: no model, handoff to Shaul, marked',
-      [qModel.n, rec(db, 'Q1').quoteSkipped, (rec(db, 'Q1').wouldAct || []).map(a => a.type)], [0, 'deadline', ['staff', 'reply']]);
+    check('F1 quote skipped near deadline: no model, ask Ben, marked',
+      [qModel.n, rec(db, 'Q1').quoteSkipped, (rec(db, 'Q1').wouldAct || []).map(a => a.type)], [0, 'deadline', ['ask']]);
     check('F1 act hands deadline + clock to send', calls[0], { deadline: t + 36000, clock: 'function' });
     db = qSeed(); calls.length = 0;
     put(db, 'Q2', R({ idMessage: 'Q2', route: 'quote', intent: 'quote', text: 'כמה עולה זכוכית 4 מ"מ 100 על 100?', timestamp: NOW }));

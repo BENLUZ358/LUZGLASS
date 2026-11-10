@@ -63,11 +63,17 @@ const seed = () => fakeDb({ waMeta: {
     sdb._data.waMeta.agentOutbox = {   // F2: חסומות ב-24 השעות האחרונות
       b1: { state: 'blocked', updatedAt: NOW - H }, b2: { state: 'blocked', updatedAt: NOW - 2 * H },
       b3: { state: 'blocked', updatedAt: NOW - 30 * H }, s1: { state: 'sent', updatedAt: NOW - H } };
+    //  חדר הסוכנים (10/11): שאלה לבן — רשומה שנענתה ב-'ask' + שאלות פתוחות בחדר
+    sdb._data.waMeta.agentShadow.q = { createdAt: NOW - H, linked: true, route: 'shaul', acted: true, wouldAct: [{ type: 'ask' }], state: 'done' };
+    sdb._data.waMeta.agentRoom = { r1: { kind: 'ask', state: 'open', at: NOW - H }, r2: { kind: 'ask', state: 'answered', at: NOW - H },
+      r3: { kind: 'ask', at: NOW - H }, r4: { kind: 'info', at: NOW - H } };
+    //  השאלות הפתוחות נספרות מהאינדקס (תיקון סקירה 10/11)
+    sdb._data.waMeta.agentRoomOpen = { r1: { at: NOW - H, agent: 'markazan', customer: 'x' } };
     const s = await D.lgAgentDailySummary(sdb, NOW);
-    check('counts', s.counts, { incoming: 4, selfClosed: 1, toShaul: 1, quotesWaiting: 2, cancelsWaitingHs: 1,
+    check('counts', s.counts, { incoming: 5, selfClosed: 1, toShaul: 1, toBen: 1, benOpen: 1, quotesWaiting: 2, cancelsWaitingHs: 1,
       markedWrong: 1, unlinked: 1, quotesStuck: 2, blockedSends: 2 });
     check('text', s.text.split('\n'), [
-      'סיכום סוכנים — 31.10.2026', 'הודעות שנכנסו: 4', 'נסגרו לבד: 1', 'הועברו לשאול: 1',
+      'סיכום סוכנים — 31.10.2026', 'הודעות שנכנסו: 5', 'נסגרו לבד: 1', 'הועברו לשאול: 1', 'שאלות לבן: 1 (מחכות לתשובה: 1)',
       'הצעות מחיר שמחכות לשאול: 2 (#7, #8)', 'ביטולים שמחכים לחשבשבת: 1 (L2001)', 'סומנו ✗ בפאנל: 1',
       'ממספרים לא מקושרים: 1', 'הצעות מחיר תקועות (מעל 3 שעות): 2 (#8, #9)', 'נחסמו בשליחה: 2']);
   }
@@ -91,7 +97,9 @@ const seed = () => fakeDb({ waMeta: {
     check('shadow off → nothing sent/queued', [r.status, r.body.sent, r.body.summary, p.texts.length, db._data.waMeta.agentOutbox], [200, 0, null, 0, undefined]);
     const db2 = seed();
     const r3 = await D.lgAgentDailyRun(req('sek'), { db: db2, env: { ...ENV, AGENT_REPLY_ENABLED: '' }, now: NOW, provider: provider() });
-    check('reply off → no summary queued', [r3.body.summary, db2._data.waMeta.agentOutbox], [null, undefined]);
+    //  חדר הסוכנים (10/11): הסיכום תמיד בחדר; בוואטסאפ רק כשהמנהל "עונה"
+    check('reply off → no summary queued, but it is in the room', [db2._data.waMeta.agentOutbox,
+      Object.values(db2._data.waMeta.agentRoom || {}).filter(e => e.kind === 'summary').length], [undefined, 1]);
   }
   /* תקציב: הסיכום נכנס ונשלח לפני רשת הביטחון, גם כשהעיבוד היה חורג */
   {

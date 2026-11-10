@@ -10,8 +10,12 @@
 //    (בדיקה חוזרת מהנתונים החיים, provider.gate, קבצים) → שליחה → סגירה
 //
 //  ⚠️ שום הודעה לא יוצאת אלא אם (Global Constraints):
-//    AGENT_SHADOW_ENABLED==='true' וגם AGENT_REPLY_ENABLED==='true' וגם
-//    הנמען לקוח בפיילוט (waMeta/agentPilot/<customerId> === true) או איש צוות.
+//    הסוכן של הרשומה (entry.agent) במצב 'reply' — lgAgentModeOf: המתג העליון
+//    AGENT_SHADOW_ENABLED + המתג במסך (waMeta/agentConfig; בלעדיו AGENT_REPLY_ENABLED) — וגם
+//    הנמען לקוח בפיילוט (waMeta/agentPilot/<customerId> === true) או איש צוות
+//    (AGENT_STAFF_PHONES בלבד). המספר של בן (escalatePhone) — רק להתראה על שאלה
+//    (reason 'agent-ask'), והעברה רק מהצ'אט של הלקוח של הרשומה.
+//    רשומה ישנה בלי agent — כשיש הגדרות במסך: רק אם לפחות סוכן אחד "עונה".
 //  הכל נבדק **בזמן השליחה**, לא בהכנסה לתור: בן יכול לכבות את המתג או לנתק
 //  קבוצה בין לבין, והקישור השמור ברשומה הוא תיעוד, לא הרשאה.
 //
@@ -25,6 +29,7 @@
 const { lgWaProvider } = require('./_wa-provider');
 const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot, MAX_ATTEMPTS } = require('./_wa-outbox');
 const { lgWaSenderKey, lgWaSenderLink } = require('./_wa-recipient');
+const { LG_AGENT_KEYS, lgAgentConfig, lgAgentModeOf, lgAgentEscalatePhone } = require('./_agent-config');
 
 const AGENT_OUTBOX = 'waMeta/agentOutbox';
 //  "סקיצה שנמחקה — פעיל" (בן, 3/11): מתג נפרד מ-AGENT_REPLY_ENABLED. דולק →
@@ -67,11 +72,13 @@ function lgAgentStaff(env) {
     .map(s => lgWaSenderKey(s.trim())).filter(Boolean);
 }
 
-const _switchesOn = env => (env || {}).AGENT_SHADOW_ENABLED === 'true' && (env || {}).AGENT_REPLY_ENABLED === 'true';
+//  ההתראה לבן על שאלה בחדר (_agent-act) — הסיבה היחידה שמותרת למספר של בן
+const AGENT_ASK_REASON = 'agent-ask';
 
 //  create-once: מפתח קיים (בכל מצב) → queued:false. הסוכן גוזר את המפתח
 //  מ-idMessage, ולכן webhook + drain על אותה הודעה מכניסים פעם אחת.
-async function lgAgentEnqueue(db, { key, to, customerId, text, files, reason }) {
+//  agent — הסוכן ששולח (markazan/okev/…); השליחה בודקת את המתג שלו. בלי — המתגים הישנים.
+async function lgAgentEnqueue(db, { key, to, customerId, text, files, reason, agent }) {
   const k = _key(key);
   if (!k) return { key: k, queued: false };
   const now = Date.now();
@@ -80,7 +87,7 @@ async function lgAgentEnqueue(db, { key, to, customerId, text, files, reason }) 
     return {
       to: String(to || ''), customerId: customerId == null ? '' : String(customerId),
       text: String(text || ''), files: Array.isArray(files) ? files : [], reason: String(reason || ''),
-      state: 'pending', attempts: 0, createdAt: now, updatedAt: now,
+      agent: String(agent || ''), state: 'pending', attempts: 0, createdAt: now, updatedAt: now,
       claimedAt: null, claimedBy: null, sentAt: null, messageId: null, lastError: null, httpStatus: null,
     };
   });
@@ -90,7 +97,7 @@ async function lgAgentEnqueue(db, { key, to, customerId, text, files, reason }) 
 //  מי הנמען **עכשיו**. { ok, phone, accountKey, reason }.
 //  קבוצה → עדיין ב-waGroups לאותו customerId. טלפון → צוות, או עדיין ב-waSenders
 //  לאותו customerId. לקוח (לא צוות) → גם בפיילוט.
-async function _liveRecipient(db, entry, staff) {
+async function _liveRecipient(db, entry, staff, ben) {
   const cid = String(entry.customerId || '');
   if (_isGroup(entry.to)) {
     const link = (await db.ref('waGroups/' + _key(entry.to)).once('value')).val();
@@ -104,6 +111,11 @@ async function _liveRecipient(db, entry, staff) {
   if (!phone) return { ok: false, reason: 'נמען לא תקין' };
   //  ⚠️ צוות: הקישור הוא הרשימה ב-Vercel. accountKey לא ריק כי השער דורש כרטיס.
   if (staff.includes(phone)) return { ok: true, phone, accountKey: cid || 'staff', staff: true };
+  //  המספר של בן — לא צוות: רק ההתראה על שאלה. העברה — רק מהצ'אט של cid (_loadFiles)
+  if (ben && phone === ben) {
+    if (entry.reason !== AGENT_ASK_REASON) return { ok: false, reason: 'המספר של בן מקבל רק התראה על שאלה בחדר' };
+    return { ok: true, phone, accountKey: cid || 'staff' };
+  }
   const link = await lgWaSenderLink(db, phone);
   if (!link || link.customerId !== cid || !cid) return { ok: false, reason: 'המספר אינו מקושר ללקוח — לא נשלח' };
   if ((await db.ref(PILOT + '/' + cid).once('value')).val() !== true)
@@ -225,8 +237,13 @@ async function lgAgentSendPending(db, opts) {
 
   //  ⚠️ מתגים כבויים → כל מה שבתור נחסם. לא "ימתין עד שידליקו": הודעה
   //  שנכתבה כשהמתג דלק יכולה להיות לא רלוונטית לגמרי כשידליקו שוב.
-  const on = _switchesOn(env);
-  const delLive = !on && (await db.ref(AGENT_DELETE_LIVE).once('value')).val() === true;
+  //  לכל רשומה — המתג של הסוכן שלה (entry.agent; רשומה ישנה בלי — המתגים הישנים).
+  const cfg = env.AGENT_SHADOW_ENABLED === 'true' ? await lgAgentConfig(db) : null;
+  const anyReply = LG_AGENT_KEYS.some(a => lgAgentModeOf(cfg, a, env) === 'reply');
+  //  רשומה בלי סוכן מוכר (ישנה): בלי הגדרות — המתגים הישנים; עם הגדרות — רק אם מישהו "עונה"
+  const modeOf = a => (cfg && !LG_AGENT_KEYS.includes(a) ? (anyReply ? 'reply' : 'off') : lgAgentModeOf(cfg, a, env));
+  const on = anyReply;
+  const delLive = (await db.ref(AGENT_DELETE_LIVE).once('value')).val() === true;
   if (!on && !delLive) {
     for (const key of keys) {
       const c = await lgWaClaim(db, key, by, AGENT_OUTBOX);
@@ -248,6 +265,7 @@ async function lgAgentSendPending(db, opts) {
   }
 
   const staff = lgAgentStaff(env);
+  const ben = lgAgentEscalatePhone(cfg);
   let processed = 0;
   for (const key of keys) {
     if (processed >= (provider.maxPerRun || 10)) break;
@@ -259,9 +277,10 @@ async function lgAgentSendPending(db, opts) {
     //  מצב החיבור כבר נבדק למעלה, לפני כל תפיסה.
     const { claimed, entry } = await lgWaClaim(db, key, by, AGENT_OUTBOX);
     if (!claimed) { res.skipped++; continue; }
-    //  תשובות כבויות + "סקיצה שנמחקה" דולק → רק הודעת המחיקה לצוות; כל השאר נחסם
-    if (!on && !(entry.reason === AGENT_DELETED_REASON && staff.includes(lgWaSenderKey(entry.to)))) {
-      await _block(db, key, 'הסוכנים כבויים (AGENT_SHADOW_ENABLED / AGENT_REPLY_ENABLED)');
+    //  הסוכן של הרשומה לא "עונה" → נחסם; חוץ מ"סקיצה שנמחקה" דולק — הודעת המחיקה לצוות בלבד
+    if (modeOf(String(entry.agent || '')) !== 'reply'
+        && !(delLive && entry.reason === AGENT_DELETED_REASON && staff.includes(lgWaSenderKey(entry.to)))) {
+      await _block(db, key, on ? 'הסוכן לא במצב "עונה" (מסך הסוכנים)' : 'הסוכנים כבויים (AGENT_SHADOW_ENABLED / AGENT_REPLY_ENABLED)');
       res.blocked++; continue;
     }
     //  R2-1: לא ייכנס בשום ריצה → סופי, attempts למקסימום
@@ -273,7 +292,7 @@ async function lgAgentSendPending(db, opts) {
 
     let live, gate, loaded;
     try {
-      live = await _liveRecipient(db, entry, staff);
+      live = await _liveRecipient(db, entry, staff, ben);
       if (live.ok) gate = provider.gate({ phone: live.phone, accountKey: live.accountKey, linked: true });
       if (live.ok && gate.allowed) loaded = await _loadFiles(db, entry, live);
     } catch (e) {
@@ -332,5 +351,5 @@ async function lgAgentSendPending(db, opts) {
 }
 
 module.exports = { AGENT_OUTBOX, AGENT_DELETE_LIVE, AGENT_DELETED_REASON, PER_CALL_MS, PER_ITEM_WORST_MS, STATE_WORST_MS, MAX_ITEM_WORST_MS, lgAgentItemWorstMs,
-                   lgAgentStaff, lgAgentEnqueue, lgAgentSendPending,
+                   AGENT_ASK_REASON, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending,
                    lgAgentChatOwnedBy: _chatOwnedBy };   // גם לביטול (_agent-act)

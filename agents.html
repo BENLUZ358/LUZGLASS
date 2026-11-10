@@ -8,9 +8,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="lg-ui.css?v=20260807">
 <style>
-/* לוח הבקרה לסוכנים (31/10): דורש טיפול, מספרים, יומן, מצב. הלוגיקה ב-agents-dash.js;
-   הדף קורא את waMeta/* וכותב רק דרך /api/wa-inbound-drain. אפיון:
-   docs/superpowers/specs/2026-10-31-agents-dashboard-design.md */
+/* מסך הסוכנים + חדר הסוכנים (בן, 10/11). טלפון קודם (375px), מטרות לחיצה 44px.
+   מלמעלה למטה: מתגים → סיכום המנהל → כרטיס לכל סוכן → החדר → מקופלים (דורש טיפול,
+   מספרים, יומן עבודה, ביטולים, מצב). הלוגיקה ב-agents-dash.js; הדף קורא את waMeta/*
+   וכותב רק דרך /api/wa-inbound-drain. אפיון: docs/superpowers/specs/2026-11-10-agents-room-design.md */
+.wrap{--ask-bg:#fdf3d0;--ask-line:#c9971c;--ben-bg:#e6efe8;}
 html,body{min-height:100%;}
 body{background:var(--bg);}
 .wrap{max-width:1180px;margin:0 auto;padding:var(--space-4);padding-bottom:calc(var(--space-6) + env(safe-area-inset-bottom));}
@@ -26,19 +28,77 @@ body{background:var(--bg);}
 .mode.is-shadow::before{background:var(--orange);}
 .mode.is-live::before{background:var(--green);}
 
-/* טלפון: עמודה אחת לפי הסדר דורש טיפול → מספרים → יומן → מצב (order).
-   מחשב/אייפד לרוחב: שתי עמודות עצמאיות, כדי שהיומן לא יחכה מתחת לרשימת חריגים ארוכה. */
-.grid{display:flex;flex-direction:column;gap:var(--space-4);}
-.col{display:contents;}
-#secTodo{order:1;} #secNums{order:2;} #secLog{order:3;} #secState{order:4;}
-@media (min-width:900px){
-  .grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);align-items:start;}
-  .col{display:flex;flex-direction:column;gap:var(--space-4);min-width:0;}
-}
+/* טלפון: עמודה אחת. מחשב (900+): מתגים/סיכום/כרטיסים מימין, החדר משמאל; המקופלים למטה לכל הרוחב */
+.top{display:flex;flex-direction:column;gap:var(--space-4);}
+.col{display:flex;flex-direction:column;gap:var(--space-4);min-width:0;}
+@media (min-width:900px){ .top{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);align-items:start;} }
 .sec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-4);min-width:0;}
 .sec h2{display:flex;align-items:center;gap:var(--space-2);font-size:var(--fs-lg);font-weight:var(--fw-black);margin-bottom:var(--space-3);}
 .sec h2 .n{margin-inline-start:auto;font-size:var(--fs-sm);color:var(--muted);font-weight:var(--fw-bold);}
 .hint{font-size:var(--fs-xs);color:var(--muted);line-height:var(--lh-base);margin-bottom:var(--space-3);}
+.sub{font-size:var(--fs-sm);font-weight:var(--fw-black);margin:var(--space-4) 0 var(--space-2);}
+.prob{color:var(--red);font-weight:var(--fw-bold);font-size:var(--fs-sm);margin:var(--space-2) 0;}
+
+/* מתגים */
+.sw{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--border);}
+.sw:last-child{border-bottom:0;}
+.sw b{min-width:64px;font-size:var(--fs-base);}
+.seg{display:flex;flex:1;gap:4px;background:var(--bg2);border-radius:var(--radius);padding:4px;}
+.seg button{flex:1;min-height:44px;border:0;border-radius:calc(var(--radius) - 2px);background:transparent;font:inherit;font-size:var(--fs-sm);
+  font-weight:var(--fw-bold);color:var(--muted);cursor:pointer;}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm);}
+.seg button[data-agmode="reply"][aria-pressed="true"]{background:var(--green);color:#fff;}
+.seg button:disabled{cursor:default;opacity:.6;}
+.addp{display:flex;gap:var(--space-2);margin-top:var(--space-3);}
+.addp select,.addp input{flex:1;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 var(--space-3);font:inherit;
+  font-size:var(--fs-base);background:var(--bg);color:var(--text);}
+.ben{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);font-size:var(--fs-sm);}
+.ben b{font-variant-numeric:tabular-nums;direction:ltr;}
+
+/* סיכום המנהל */
+.sum{white-space:pre-wrap;font-size:var(--fs-sm);line-height:1.6;overflow-wrap:anywhere;}
+.sum-when{font-size:var(--fs-xs);color:var(--muted);margin-bottom:var(--space-2);}
+
+/* כרטיסים */
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);}
+@media (min-width:600px){.cards{grid-template-columns:repeat(3,minmax(0,1fr));}}
+.card{display:flex;flex-direction:column;gap:4px;text-align:start;min-height:44px;padding:var(--space-3);border:1px solid var(--border);
+  border-radius:var(--radius);background:var(--bg);color:var(--text);font:inherit;cursor:pointer;}
+.card:hover{border-color:var(--gold);}
+.card[aria-pressed="true"]{border-color:var(--gold);box-shadow:var(--ring);}
+.card b{font-size:var(--fs-base);font-weight:var(--fw-black);}
+.card small{font-size:var(--fs-xs);color:var(--muted);line-height:1.4;}
+.card .nums{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:var(--fs-xs);margin-top:auto;padding-top:4px;}
+.card .w{color:var(--text);background:var(--ask-bg);border:1px solid var(--ask-line);border-radius:999px;padding:0 8px;font-weight:var(--fw-bold);}
+
+/* החדר — צ'אט: סוכנים בצד אחד (אפור / צהוב), התשובות שלך בצד שלך */
+.flt-line{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3);font-size:var(--fs-sm);}
+.room{display:flex;flex-direction:column;gap:var(--space-2);}
+.rb{max-width:88%;align-self:flex-end;border:1px solid var(--border);background:var(--bg2);border-radius:var(--radius-lg);
+  border-end-end-radius:4px;padding:var(--space-2) var(--space-3);overflow-wrap:anywhere;}
+.rb-h{display:flex;gap:var(--space-2);align-items:baseline;font-size:var(--fs-xs);color:var(--muted);margin-bottom:2px;}
+.rb-h b{color:var(--text);font-size:var(--fs-sm);}
+.rb-q{font-size:var(--fs-base);line-height:1.5;white-space:pre-wrap;}
+.rb-who{font-size:var(--fs-sm);font-weight:var(--fw-bold);}
+.rb-s{font-size:var(--fs-sm);color:var(--muted);border-inline-start:3px solid var(--ask-line);padding-inline-start:8px;margin-top:4px;}
+.rb-st{font-size:var(--fs-xs);color:var(--muted);margin-top:4px;}
+.rb-acts{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2);}
+.rb-ask{background:var(--ask-bg);border-color:var(--ask-line);}
+.rb-ask.is-open{border-width:2px;}
+.rb-answer{align-self:flex-start;background:var(--ben-bg);border-color:var(--green);border-end-end-radius:var(--radius-lg);border-end-start-radius:4px;}
+.compose{margin-top:var(--space-2);}
+.compose textarea{width:100%;min-height:88px;border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-2) var(--space-3);
+  font:inherit;font-size:var(--fs-base);background:var(--surface);color:var(--text);resize:vertical;}
+
+/* מקופלים */
+.fold{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-top:var(--space-4);}
+.fold>summary{min-height:52px;display:flex;align-items:center;gap:var(--space-2);padding:0 var(--space-4);cursor:pointer;font-size:var(--fs-base);
+  font-weight:var(--fw-black);list-style:none;}
+.fold>summary::-webkit-details-marker{display:none;}
+.fold>summary::after{content:'▾';margin-inline-start:auto;color:var(--muted);}
+.fold[open]>summary::after{content:'▴';}
+.fold>summary .n{font-size:var(--fs-sm);color:var(--muted);font-weight:var(--fw-bold);}
+.fold>.in{padding:0 var(--space-4) var(--space-4);}
 
 /* דורש טיפול */
 .ex{border:1px solid var(--border);border-inline-start:4px solid var(--orange);border-radius:var(--radius);padding:var(--space-3);margin-bottom:var(--space-2);background:var(--bg);}
@@ -50,10 +110,6 @@ body{background:var(--bg);}
 .ok-box{display:flex;align-items:center;gap:var(--space-2);color:var(--green);font-weight:var(--fw-bold);padding:var(--space-2) 0;}
 
 /* מספרים */
-.seg{display:flex;gap:4px;margin-bottom:var(--space-3);background:var(--bg2);border-radius:var(--radius);padding:4px;}
-.seg button{flex:1;min-height:40px;border:0;border-radius:calc(var(--radius) - 2px);background:transparent;font:inherit;font-size:var(--fs-sm);
-  font-weight:var(--fw-bold);color:var(--muted);cursor:pointer;}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:var(--shadow-sm);}
 .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);}
 @media (min-width:600px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr));}}
 .tile{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-3);}
@@ -95,17 +151,8 @@ body{background:var(--bg);}
 .ad-others summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-size:var(--fs-sm);font-weight:var(--fw-bold);color:var(--muted);}
 .ad-other{padding:var(--space-2) 0;border-bottom:1px solid var(--border);font-size:var(--fs-sm);overflow-wrap:anywhere;}
 .ad-other small{display:block;color:var(--muted);font-size:var(--fs-xs);}
-
-/* מצב */
-.prob{color:var(--red);font-weight:var(--fw-bold);font-size:var(--fs-sm);margin-top:var(--space-2);}
-.ag{display:flex;gap:var(--space-3);align-items:baseline;padding:var(--space-2) 0;border-bottom:1px solid var(--border);}
-.ag:last-child{border-bottom:0;}
-.ag b{min-width:64px;}
-.ag small{flex:1;color:var(--muted);font-size:var(--fs-xs);line-height:1.4;}
-.ag em{font-style:normal;font-weight:var(--fw-bold);font-variant-numeric:tabular-nums;}
-.addp{display:flex;gap:var(--space-2);margin-top:var(--space-3);}
-.addp select{flex:1;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 var(--space-3);font:inherit;font-size:var(--fs-sm);background:var(--bg);color:var(--text);}
-.sub{font-size:var(--fs-sm);font-weight:var(--fw-black);margin:var(--space-4) 0 var(--space-2);}
+.cx{padding:var(--space-2) 0;border-bottom:1px solid var(--border);font-size:var(--fs-sm);}
+.cx small{display:block;color:var(--muted);font-size:var(--fs-xs);}
 
 .toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:700;background:var(--text);
   color:var(--bg);padding:var(--space-3) var(--space-5);border-radius:var(--radius-lg);font-weight:var(--fw-bold);max-width:calc(100% - 32px);}
@@ -116,7 +163,7 @@ body{background:var(--bg);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261031"></script>
 <script src="lg-icons.js?v=20260807"></script>
-<script src="agents-dash.js?v=20261108"></script>
+<script src="agents-dash.js?v=20261110"></script>
 </head>
 <body>
 <div class="wrap">
@@ -126,32 +173,54 @@ body{background:var(--bg);}
     <span id="modeChip" class="mode">טוען…</span>
   </div>
 
-  <div class="grid">
+  <div class="top">
    <div class="col">
-    <section id="secTodo" class="sec" aria-labelledby="hTodo">
-      <h2 id="hTodo"><span data-icon="alert"></span>דורש טיפול<span class="n" id="nTodo"></span></h2>
-      <div id="todo"><div class="hint">טוען…</div></div>
+    <section id="secSwitches" class="sec" aria-labelledby="hSw">
+      <h2 id="hSw"><span data-icon="settings"></span>מתגים</h2>
+      <p class="hint">כבוי — לא עושה כלום. שקט — רק רושם מה היה עונה. עונה — עונה באמת, רק ללקוחות שברשימה למטה.</p>
+      <div id="switches"><div class="hint">טוען…</div></div>
+      <div id="pilot"></div>
+      <div id="benLine"></div>
     </section>
 
-    <section id="secState" class="sec" aria-labelledby="hState">
-      <h2 id="hState"><span data-icon="settings"></span>מצב הסוכנים</h2>
-      <div id="state"><div class="hint">טוען…</div></div>
+    <section id="secSummary" class="sec" aria-labelledby="hSum">
+      <h2 id="hSum"><span data-icon="clipboard"></span>סיכום המנהל</h2>
+      <div id="summary"><div class="hint">טוען…</div></div>
+    </section>
+
+    <section id="secCards" class="sec" aria-labelledby="hCards">
+      <h2 id="hCards"><span data-icon="users"></span>הסוכנים</h2>
+      <div id="cards" class="cards"></div>
     </section>
    </div>
-   <div class="col">
 
-    <section id="secNums" class="sec" aria-labelledby="hNums">
-      <h2 id="hNums"><span data-icon="chart"></span>מספרים</h2>
-      <div class="seg" role="group" aria-label="תקופה">
+   <section id="secRoom" class="sec" aria-labelledby="hRoom">
+     <h2 id="hRoom"><span data-icon="inbox"></span>חדר הסוכנים<span class="n" id="nRoom"></span></h2>
+     <div id="roomFlt"></div>
+     <div id="room" class="room" aria-live="polite"><div class="hint">טוען…</div></div>
+   </section>
+  </div>
+
+  <details class="fold" id="secTodo" data-fold="todo">
+    <summary><span data-icon="alert"></span>דורש טיפול <span class="n" id="nTodo"></span></summary>
+    <div class="in" id="todo"><div class="hint">טוען…</div></div>
+  </details>
+
+  <details class="fold" id="secNums" data-fold="nums">
+    <summary><span data-icon="chart"></span>מספרים</summary>
+    <div class="in">
+      <div class="seg" role="group" aria-label="תקופה" style="margin-bottom:var(--space-3)">
         <button type="button" data-period="today" aria-pressed="true">היום</button>
         <button type="button" data-period="7d" aria-pressed="false">7 ימים</button>
         <button type="button" data-period="30d" aria-pressed="false">30 יום</button>
       </div>
       <div id="nums"></div>
-    </section>
+    </div>
+  </details>
 
-    <section id="secLog" class="sec" aria-labelledby="hLog">
-      <h2 id="hLog"><span data-icon="list"></span>יומן עבודה<span class="n" id="nLog"></span></h2>
+  <details class="fold" id="secLog" data-fold="log">
+    <summary><span data-icon="list"></span>יומן עבודה <span class="n" id="nLog"></span></summary>
+    <div class="in">
       <p class="hint">הודעות שהסוכן היה עונה עליהן. קרא מה הלקוח כתב ומה הסוכן היה עונה, ולחץ "כן" אם זה נכון או "לא" אם לא.</p>
       <div class="flt">
         <input id="fQ" type="search" placeholder="חיפוש לקוח…" aria-label="חיפוש לקוח">
@@ -164,16 +233,40 @@ body{background:var(--bg);}
         </select>
       </div>
       <div id="log"><div class="hint">טוען…</div></div>
-    </section>
-   </div>
-  </div>
+    </div>
+  </details>
+
+  <details class="fold" id="secCancels" data-fold="cancels">
+    <summary><span data-icon="x"></span>ביטולים <span class="n" id="nCancels"></span></summary>
+    <div class="in" id="cancels"></div>
+  </details>
+
+  <details class="fold" id="secState" data-fold="state">
+    <summary><span data-icon="settings"></span>מצב והגדרות נוספות</summary>
+    <div class="in" id="state"><div class="hint">טוען…</div></div>
+  </details>
 </div>
 <script>
 const $ = id => document.getElementById(id);
 const E = s => _adEsc(s);
-const PAGE = 50;
+const PAGE = 50, ROOM_PAGE = 40;
 let SH = {}, Q = {}, C = {}, OB = {}, PILOT = {}, DIS = {}, GROUPS = {}, SENDERS = {}, intake = {}, STATUS = null, DEL_LIVE = false;
-let period = 'today', shown = PAGE;
+let ROOM = {}, CFG = null;
+//  ROOM = חלון 500 האירועים האחרונים (ROOM_WIN) + שאלות פתוחות ישנות יותר מהאינדקס (OPEN_IDX → OLD_OPEN)
+let ROOM_WIN = {}, OPEN_IDX = {}, OLD_OPEN = {};
+const _fetching = new Set();
+function mergeRoom() {
+  Object.keys(OLD_OPEN).forEach(k => { if (!OPEN_IDX[k] || ROOM_WIN[k]) delete OLD_OPEN[k]; });
+  lgRoomMissingOpen(OPEN_IDX, ROOM_WIN).filter(k => !OLD_OPEN[k] && !_fetching.has(k)).forEach(k => {
+    _fetching.add(k);
+    _lgDb.ref('waMeta/agentRoom/' + k).once('value').then(s => {
+      _fetching.delete(k);
+      if (s.val() && OPEN_IDX[k]) { OLD_OPEN[k] = s.val(); mergeRoom(); later(); }
+    }, e => { _fetching.delete(k); console.warn('agentRoom old:', e && e.code); });
+  });
+  ROOM = Object.assign({}, OLD_OPEN, ROOM_WIN);
+}
+let period = 'today', shown = PAGE, roomShown = ROOM_PAGE, FILTER = '', ANSWERING = '', DRAFT = '', EDIT_BEN = false;
 
 function toast(msg, err) {
   const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : '');
@@ -189,8 +282,11 @@ async function drain(body) {
     return Object.assign({ ok: true }, d);
   } catch (e) { return { ok: false, message: 'אין חיבור — נסה שוב' }; }
 }
+//  המתגים: מה שנשמר במסך; עוד לא נשמר — מה שהשרת אומר שהסוכנים עושים היום
+const cfgView = () => CFG && CFG.agents ? CFG : (STATUS && STATUS.config) || null;
+const benPhone = () => String((CFG && CFG.escalatePhone) || (STATUS && STATUS.config && STATUS.config.escalatePhone) || '0547725552');
 
-//  לקוחות מקושרים (קבוצה / מספר) — לשמות ולבחירת לקוח לפיילוט
+//  לקוחות מקושרים (קבוצה / מספר) — לשמות ולבחירת לקוח
 function linkedCustomers() {
   const m = {};
   [GROUPS, SENDERS].forEach(src => Object.keys(src || {}).forEach(k => {
@@ -200,7 +296,60 @@ function linkedCustomers() {
 }
 const nameOf = id => linkedCustomers()[id] || ((Object.values(SH).find(r => r && r.customerId === id) || {}).customerName) || '';
 
-// ─── 1. דורש טיפול ───────────────────────────────────────────────────
+// ─── 1. מתגים + לקוחות מופעלים + המספר של בן ─────────────────────────
+function renderSwitches() {
+  const chip = lgAdModeChip(STATUS, cfgView());
+  $('modeChip').textContent = chip.text; $('modeChip').className = 'mode is-' + chip.mode;
+  $('switches').innerHTML = STATUS || CFG ? lgAdSwitchesHtml(cfgView(), !STATUS || STATUS.shadow === true) : '<div class="hint">לא הצלחתי לקרוא את ההגדרות.</div>';
+  const linked = linkedCustomers();
+  const free = Object.keys(linked).filter(id => PILOT[id] !== true).sort((a, b) => linked[a].localeCompare(linked[b], 'he'));
+  $('pilot').innerHTML = `<div class="sub">"עונה" חל על ${E(lgAgPilotCount(PILOT))} לקוחות</div>
+    ${lgAgPilotListHtml(PILOT, nameOf) || '<div class="hint">אין עדיין לקוחות ברשימה — "עונה" לא יענה לאף אחד.</div>'}
+    ${free.length ? `<div class="addp"><select id="pilotPick" aria-label="לקוח להוספה">
+        ${free.map(id => `<option value="${E(id)}">${E(linked[id])}</option>`).join('')}</select>
+        <button type="button" class="sbtn is-primary" data-addpilot>הוסף</button></div>` : ''}`;
+  $('benLine').innerHTML = `<div class="sub">שאלות שהסוכנים לא יודעים</div>
+    ${EDIT_BEN ? `<div class="addp"><input id="benPick" type="tel" inputmode="tel" dir="ltr" value="${E(benPhone())}" aria-label="מספר לשאלות">
+        <button type="button" class="sbtn is-primary" data-bensave>שמור</button><button type="button" class="sbtn" data-benedit="0">ביטול</button></div>`
+      : `<div class="ben">נשלחות אליך בוואטסאפ למספר <b>${E(benPhone())}</b><button type="button" class="sbtn" data-benedit="1">שנה</button></div>`}`;
+}
+
+// ─── 2. סיכום המנהל ──────────────────────────────────────────────────
+function renderSummary() {
+  const s = lgRoomLatestSummary(ROOM), body = s ? String(s['text'] || '') : '';
+  $('summary').innerHTML = s ? `<div class="sum-when">${E(_adWhen(s.at))}</div><div class="sum">${E(body)}</div>`
+    : '<div class="hint">עוד אין סיכום. המנהל כותב סיכום פעם ביום.</div>';
+}
+
+// ─── 3. כרטיס לכל סוכן ───────────────────────────────────────────────
+function renderCards() {
+  $('cards').innerHTML = lgAgentCards(ROOM, SH, Date.now()).map(c => `<button type="button" class="card" data-cardagent="${E(c.id)}" aria-pressed="${FILTER === c.id}">
+      <b>${E(c.name)}</b><small>${E(c.does)}</small>
+      <span class="nums"><span>היום: ${E(c.today)}</span>${c.waiting ? `<span class="w">מחכה לך: ${E(c.waiting)}</span>` : ''}</span></button>`).join('');
+}
+
+// ─── 4. החדר ─────────────────────────────────────────────────────────
+function renderRoom() {
+  const ta = $('ansText'), focused = ta && document.activeElement === ta;
+  if (ta) DRAFT = ta.value;
+  const all = lgRoomRows(ROOM, { agent: FILTER, limit: 100000 });
+  const rows = all.slice(Math.max(0, all.length - roomShown));
+  const open = lgRoomOpenIndexCount(OPEN_IDX);
+  $('nRoom').textContent = open ? open + ' מחכות לך' : '';
+  $('roomFlt').innerHTML = FILTER ? `<div class="flt-line">מציג רק: <b>${E(lgRoomAgentName(FILTER))}</b>
+      <button type="button" class="sbtn" data-cardagent="">הצג הכל</button></div>` : '';
+  $('room').innerHTML = (all.length > rows.length ? `<button type="button" class="sbtn more" data-roommore>הצג ישנות יותר (${E(all.length - rows.length)})</button>` : '')
+    + (rows.length ? rows.map(e => lgRoomBubbleHtml(e, OB) + (ANSWERING === e.key && lgRoomCanAnswer(e, OB) ? `<div class="compose">
+        <textarea id="ansText" maxlength="1000" placeholder="מה לענות ללקוח?" aria-label="התשובה ללקוח">${E(DRAFT)}</textarea>
+        <p class="hint" style="margin:4px 0 0">התשובה יוצאת ללקוח בוואטסאפ כמו שכתבת.</p>
+        <div class="rb-acts"><button type="button" class="sbtn is-primary" data-ansend="${E(e.key)}">שלח ללקוח</button>
+          <button type="button" class="sbtn" data-ancancel>ביטול</button></div></div>` : '')).join('')
+      : '<div class="hint">אין עדיין הודעות בחדר.</div>');
+  const nt = $('ansText');
+  if (nt && focused) { nt.focus(); nt.setSelectionRange(nt.value.length, nt.value.length); }
+}
+
+// ─── מקופל: דורש טיפול ───────────────────────────────────────────────
 function renderTodo() {
   const ex = lgAdExceptions({ shadow: SH, quotes: Q, cancels: C, outbox: OB, dismissed: DIS }, Date.now());
   $('nTodo').textContent = ex.length || '';
@@ -219,11 +368,11 @@ function renderTodo() {
   }).join('');
 }
 
-// ─── 2. מספרים ───────────────────────────────────────────────────────
+// ─── מקופל: מספרים ───────────────────────────────────────────────────
 function renderNums() {
   document.querySelectorAll('[data-period]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.period === period)));
   const c = lgAdCounts(SH, Q, C, lgAdPeriodStart(period, Date.now()));
-  const live = lgAdMode(STATUS).mode === 'live';
+  const live = lgAdModeChip(STATUS, cfgView()).mode === 'live';
   const tile = (n, label, cls) => `<div class="tile${cls ? ' ' + cls : ''}"><b>${E(n)}</b><span>${E(label)}</span></div>`;
   const routes = Object.keys(c.byRoute).sort((a, b) => c.byRoute[b] - c.byRoute[a])
     .map(r => `<span>${E(lgAgRouteLabel(r))}: ${E(c.byRoute[r])}</span>`).join('');
@@ -239,7 +388,7 @@ function renderNums() {
     ${routes ? `<div class="routes">${routes}</div>` : ''}`;
 }
 
-// ─── 3. יומן ─────────────────────────────────────────────────────────
+// ─── מקופל: יומן עבודה ──────────────────────────────────────────────
 //  רק מה שיש לבדוק — כשאלה "זה נכון?"; השאר במקטע מקופל, בלי כפתורים (בן, 31/10)
 let otherOpen = false, markedOpen = false;
 function renderLog() {
@@ -269,58 +418,76 @@ function fillRouteFilter() {
   $('fRoute').value = seen.has(keep) ? keep : '';
 }
 
-// ─── 4. מצב ──────────────────────────────────────────────────────────
-const MODE_TEXT = { off: 'כבויים', shadow: 'מצב שקט', live: 'עונים בפיילוט' };
-const MODE_HINT = {
-  off: 'הסוכנים לא קוראים הודעות. כדי להדליק: AGENT_SHADOW_ENABLED=true ב-Vercel.',
-  shadow: 'הסוכנים קוראים כל הודעה ורושמים מה היו עונים, אבל לא שולחים כלום ללקוחות.',
-  live: 'הסוכנים עונים באמת — רק ללקוחות שבפיילוט. כל השאר במצב שקט.',
-};
+// ─── מקופל: ביטולים ─────────────────────────────────────────────────
+function renderCancels() {
+  const rows = Object.keys(C || {}).map(k => Object.assign({ key: k }, C[k])).filter(r => r && r.order)
+    .sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 30);
+  const waiting = rows.filter(r => r.confirmed === true && r.hsSent === true && !r.done).length;
+  $('nCancels').textContent = waiting ? waiting + ' מחכים לחשבשבת' : '';
+  $('cancels').innerHTML = rows.length ? rows.map(r => {
+    const st = r.confirmed !== true ? 'לא הושלם — לבדוק' : r.hsSent && !r.done ? 'מחכה לביטול בחשבשבת' : r.done ? 'בוצע בחשבשבת ✓' : 'בוטל (לא נשלח לחשבשבת)';
+    return `<div class="cx"><b>${E((r.order && (r.order.orderNum || r.order.refNum)) || r.key)}</b> · ${E(st)}<small>${E(_adWhen(r.at))}</small></div>`;
+  }).join('') + (waiting ? '<div class="ex-acts"><a class="sbtn is-primary" href="hs-corrections.html">לתיקון הזמנות</a></div>' : '')
+    : '<div class="hint">אין ביטולים.</div>';
+}
+
+// ─── מקופל: מצב והגדרות נוספות ──────────────────────────────────────
 function renderState() {
   const m = lgAdMode(STATUS);
-  const chip = $('modeChip');
-  chip.textContent = STATUS ? MODE_TEXT[m.mode] : 'לא ידוע';
-  chip.className = 'mode is-' + m.mode;
-  const c7 = lgAdCounts(SH, Q, C, lgAdPeriodStart('7d', Date.now()));
-  const agents = LG_AD_AGENTS.map(a => {
-    const n = a.id === 'markazan' ? c7.incoming : a.routes.reduce((s, r) => s + (c7.byRoute[r] || 0), 0);
-    return `<div class="ag"><b>${E(a.name)}</b><small>${E(a.does)}</small>${a.id === 'menahel' ? '' : `<em title="7 ימים">${E(n)}</em>`}</div>`;
-  }).join('');
-  const linked = linkedCustomers();
-  const free = Object.keys(linked).filter(id => PILOT[id] !== true).sort((a, b) => linked[a].localeCompare(linked[b], 'he'));
   $('state').innerHTML = `
-    <p class="hint">${E(STATUS ? MODE_HINT[m.mode] : 'לא הצלחתי לבדוק את ההגדרות ב-Vercel.')}</p>
+    <p class="hint">${E(!STATUS ? 'לא הצלחתי לבדוק את ההגדרות בשרת.' : STATUS.shadow === true
+      ? 'מתג החירום ב-Vercel דולק — הסוכנים קוראים הודעות, וכל סוכן עושה מה שנבחר במתגים למעלה.'
+      : 'מתג החירום ב-Vercel כבוי — הסוכנים לא קוראים הודעות בכלל.')}</p>
     ${m.problems.map(p => `<div class="prob">⚠ ${E(p)}</div>`).join('')}
     <div class="sub">סקיצה שהלקוח מחק · ${DEL_LIVE ? 'פעיל' : 'כבוי'}</div>
     <p class="hint">${DEL_LIVE
-      ? 'פעיל לכל הלקוחות המקושרים, גם בלי פיילוט: סקיצה שעוד בתור מתבטלת לבד; אם כבר בטיפול — הודעה לשאול. ללקוח לא נשלח כלום.'
+      ? 'פעיל לכל הלקוחות המקושרים, גם בלי "עונה": סקיצה שעוד בתור מתבטלת לבד; אם כבר בטיפול — הודעה לשאול. ללקוח לא נשלח כלום.'
       : 'כבוי: כשלקוח מוחק סקיצה רק נרשם מה היה קורה.'}</p>
-    ${DEL_LIVE && STATUS && STATUS.shadow !== true ? '<div class="prob">⚠ הסוכנים כבויים (AGENT_SHADOW_ENABLED) — בלי זה מחיקות לא נקלטות בכלל</div>' : ''}
-    <div class="addp"><button type="button" class="sbtn${DEL_LIVE ? '' : ' is-primary'}" data-dellive="${DEL_LIVE ? 0 : 1}">${DEL_LIVE ? 'כבה' : 'הפעל'}</button></div>
-    <div class="sub">הסוכנים · הודעות ב-7 ימים</div>${agents}
-    <div class="sub">פיילוט · ${E(lgAgPilotCount(PILOT))} לקוחות</div>
-    ${lgAgPilotListHtml(PILOT, nameOf) || '<div class="hint">אין עדיין לקוחות בפיילוט.</div>'}
-    ${free.length ? `<div class="addp"><select id="pilotPick" aria-label="לקוח להוספה לפיילוט">
-        ${free.map(id => `<option value="${E(id)}">${E(linked[id])}</option>`).join('')}</select>
-        <button type="button" class="sbtn is-primary" data-addpilot>הוסף לפיילוט</button></div>` : ''}
-    ${m.mode !== 'live' ? '<p class="hint" style="margin-top:var(--space-2)">לקוח בפיילוט יקבל תשובות רק אחרי שתדליק AGENT_REPLY_ENABLED.</p>' : ''}`;
+    <div class="addp"><button type="button" class="sbtn${DEL_LIVE ? '' : ' is-primary'}" data-dellive="${DEL_LIVE ? 0 : 1}">${DEL_LIVE ? 'כבה' : 'הפעל'}</button></div>`;
 }
 
-function renderAll() { renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderState(); }
+function renderAll() { renderSwitches(); renderSummary(); renderCards(); renderRoom(); renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderCancels(); renderState(); }
 let _t = null;
 const later = () => { clearTimeout(_t); _t = setTimeout(renderAll, 50); };   // כמה מאזינים בבת אחת → ציור אחד
 
 // ─── לחיצות ──────────────────────────────────────────────────────────
+document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'ansText') DRAFT = ev.target.value; });
 document.addEventListener('click', async ev => {
   const per = ev.target.closest('[data-period]');
   if (per) { period = per.dataset.period; renderNums(); return; }
   if (ev.target.closest('[data-more]')) { shown += PAGE; renderLog(); return; }
-  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive]');
+  if (ev.target.closest('[data-roommore]')) { roomShown += ROOM_PAGE; renderRoom(); return; }
+  const card = ev.target.closest('[data-cardagent]');
+  if (card) {
+    const id = card.dataset.cardagent;
+    FILTER = id && FILTER !== id ? id : ''; roomShown = ROOM_PAGE;
+    renderCards(); renderRoom();
+    if (FILTER) $('secRoom').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const ans = ev.target.closest('[data-roomanswer]');
+  if (ans) { if (ANSWERING !== ans.dataset.roomanswer) DRAFT = ''; ANSWERING = ans.dataset.roomanswer; renderRoom(); const t = $('ansText'); if (t) t.focus(); return; }
+  if (ev.target.closest('[data-ancancel]')) { ANSWERING = ''; DRAFT = ''; renderRoom(); return; }
+  const be = ev.target.closest('[data-benedit]');
+  if (be) { EDIT_BEN = be.dataset.benedit === '1'; renderSwitches(); return; }
+  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave]');
   if (!b) return;
   let body;
   if (b.dataset.dismiss) body = { action: 'agent-dismiss', kind: b.dataset.dismiss, key: b.dataset.key, ver: Number(b.dataset.ver) };
   else if (b.dataset.agv) body = { action: 'agent-verdict', key: b.dataset.key, ok: b.dataset.agv === '1', note: '' };
   else if (b.hasAttribute('data-agpilot')) body = { action: 'agent-pilot', customerId: b.dataset.cid, on: b.dataset.on === '1' };
+  else if (b.dataset.agmode) {
+    if (b.getAttribute('aria-pressed') === 'true') return;
+    const name = lgRoomAgentName(b.dataset.agent);
+    if (b.dataset.agmode === 'reply' && !confirm('להעביר את ' + name + ' ל"עונה"? הוא יענה באמת ללקוחות שברשימה.')) return;
+    body = { action: 'agent-config-set', agent: b.dataset.agent, mode: b.dataset.agmode };
+  }
+  else if (b.dataset.ansend) {
+    const text = ($('ansText') || {}).value || '';
+    if (!text.trim()) { toast('כתוב תשובה קודם', true); return; }
+    body = { action: 'agent-room-answer', key: b.dataset.ansend, text };
+  }
+  else if (b.hasAttribute('data-bensave')) body = { action: 'agent-config-set', escalatePhone: ($('benPick') || {}).value || '' };
   else if (b.hasAttribute('data-dellive')) {
     const turnOn = b.dataset.dellive === '1';
     if (!confirm(turnOn ? 'להפעיל? מעכשיו סקיצה שלקוח מוחק ועוד בתור תתבטל לבד.' : 'לכבות את הטיפול בסקיצה שנמחקה?')) return;
@@ -329,12 +496,21 @@ document.addEventListener('click', async ev => {
   else { const pick = $('pilotPick'); if (!pick || !pick.value) return; body = { action: 'agent-pilot', customerId: pick.value, on: true }; }
   b.disabled = true;
   const r = await drain(body);   // הרשימות מתעדכנות מההאזנה
-  if (!r.ok) { b.disabled = false; toast(r.message, true); }
-  else if (body.action === 'agent-dismiss') toast('הוסר מהרשימה');
+  if (!r.ok) { b.disabled = false; toast(r.message, true); return; }
+  if (body.action === 'agent-dismiss') toast('הוסר מהרשימה');
+  //  מה קרה באמת (תיקון סקירה 10/11): נשלח / עדיין בתור / לא נשלח — והשאלה חוזרת לפתוחה
+  else if (body.action === 'agent-room-answer') {
+    ANSWERING = ''; DRAFT = '';
+    if (r.sent) toast('נשלח ללקוח');
+    else toast('לא נשלח — ' + (r.sendReason || 'סיבה לא ידועה') + (r.reopened ? '. אפשר לענות שוב.' : ''), r.sendState !== 'pending');
+    renderRoom();
+  }
+  else if (body.action === 'agent-config-set' && body.escalatePhone != null) { EDIT_BEN = false; toast('נשמר'); }
+  else if (body.action === 'agent-config-set') toast(lgRoomAgentName(body.agent) + ': ' + ({ off: 'כבוי', shadow: 'שקט', reply: 'עונה' }[body.mode]));
 });
 ['fQ', 'fRoute', 'fVerdict'].forEach(id => $(id).addEventListener(id === 'fQ' ? 'input' : 'change', () => { shown = PAGE; renderLog(); }));
 // "היום" ו"מחכה יותר מ-3 שעות" משתנים עם הזמן, גם בלי שינוי בנתונים
-setInterval(() => { renderTodo(); renderNums(); }, 60 * 1000);
+setInterval(() => { renderTodo(); renderNums(); renderCards(); }, 60 * 1000);
 
 lgRequireAuthAsync('admin').then(session => {
   if (!session) return;
@@ -345,13 +521,18 @@ lgRequireAuthAsync('admin').then(session => {
   on(_lgDb.ref('waMeta/agentCancels'), v => { C = v; }, 'agentCancels');
   on(_lgDb.ref('waMeta/agentOutbox').orderByChild('createdAt').startAt(Date.now() - 31 * 24 * 60 * 60 * 1000), v => { OB = v; }, 'agentOutbox');
   on(_lgDb.ref('waMeta/agentPilot'), v => { PILOT = v; }, 'agentPilot');
+  //  חדר הסוכנים — המפתחות ממוינים לפי זמן; 500 האחרונים (כמו המונה בתפריט)
+  on(_lgDb.ref('waMeta/agentRoom').limitToLast(500), v => { ROOM_WIN = v; mergeRoom(); }, 'agentRoom');
+  //  שאלות פתוחות — מהאינדקס בשרת (תיקון סקירה 10/11); שאלה ישנה מחוץ ל-500 נטענת לבד
+  on(_lgDb.ref('waMeta/agentRoomOpen'), v => { OPEN_IDX = v; mergeRoom(); }, 'agentRoomOpen');
+  _lgDb.ref('waMeta/agentConfig').on('value', s => { CFG = s.val() || null; later(); }, warn('agentConfig'));
   _lgDb.ref('waMeta/agentDeleteLive').on('value', s => { DEL_LIVE = s.val() === true; later(); }, warn('agentDeleteLive'));
   on(_lgDb.ref('waMeta/agentDash/dismissed'), v => { DIS = v; }, 'agentDash');
   on(_lgDb.ref('waGroups'), v => { GROUPS = v; }, 'waGroups');
   on(_lgDb.ref('waSenders'), v => { SENDERS = v; }, 'waSenders');
   //  "נקלטה גם כהזמנה" בשורת היומן נשען על רשומות הקליטה
   on(_lgDb.ref('waInbound').orderByChild('createdAt').limitToLast(300), v => { intake = v; }, 'waInbound');
-  drain({ action: 'agent-status' }).then(r => { STATUS = r.ok ? r.status : null; later(); });
+  drain({ action: 'agent-status' }).then(r => { STATUS = r.ok ? Object.assign({}, r.status, { config: r.config }) : null; later(); });
 });
 </script>
 </body>
