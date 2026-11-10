@@ -181,5 +181,20 @@ check('a record that failed for good reads in Hebrew, not "dead"',
 check('row escapes customer text',
   ctx.lgAgRowHtml('K', { linked: true, customerName: '<b>x</b>', text: '<img onerror=1>', state: 'done' }).includes('<img'), false);
 
+// ─── הודעה שסומנה יוצאת מ"לבדוק" (בן, 8/11: "סימנתי ... וזה לא עובר הלאה") ──
+{
+  const base = { linked: true, customerName: 'נאור', state: 'done', createdAt: NOW, route: 'okev', wouldReply: 'x' };
+  const rows = [
+    Object.assign({ key: 'a' }, base),
+    Object.assign({ key: 'b' }, base, { verdict: { ok: true } }),
+    Object.assign({ key: 'c' }, base, { verdict: { ok: false } }),
+    { key: 'd', linked: true, state: 'done', createdAt: NOW, route: 'none' },
+  ];
+  const S = f => { const x = ctx.lgAdSplitLog(rows, f); return [x.todo.map(r => r.key), x.marked.map(r => r.key), x.other.map(r => r.key)]; };
+  check('split: unmarked to check, marked ones aside, the rest folded', S('all'), [['a'], ['b', 'c'], ['d']]);
+  check('split: no filter acts like "all"', S(undefined), [['a'], ['b', 'c'], ['d']]);
+  check('split: filtering by a mark keeps marked rows in the main list (the filter already chose them)', S('ok'), [['a', 'b', 'c'], [], ['d']]);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll agents-dashboard checks passed.');

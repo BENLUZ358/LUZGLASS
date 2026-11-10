@@ -152,6 +152,19 @@ function lgAdNeedsReview(r) {
   if (!r || r.linked !== true || r.state !== 'done') return false;
   return AD_REVIEW_ROUTES.includes(r.route) || !!_adWould(r) || _adToShaul(r);
 }
+//  היומן בשלושה חלקים (בן, 8/11): todo — עוד לא סומנו; marked — כבר סימנת
+//  (יוצאות מהרשימה, נשארות במקטע מקופל כדי שאפשר לשנות); other — אין מה לבדוק.
+//  כשמסננים לפי סימון (✓/✗) — מה שסומן הוא מה שמחפשים, אז הוא נשאר ברשימה.
+function lgAdSplitLog(rows, verdictFilter) {
+  const byMark = verdictFilter === 'ok' || verdictFilter === 'wrong';
+  const todo = [], marked = [], other = [];
+  (Array.isArray(rows) ? rows : []).forEach(r => {
+    if (!lgAdNeedsReview(r)) other.push(r);
+    else if (r.verdict && !byMark) marked.push(r);
+    else todo.push(r);
+  });
+  return { todo, marked, other };
+}
 function lgAdReviewRowHtml(key, r, intake, c) {
   const k = _adEsc(key), would = _adWould(r);
   const sent = lgAgOutboxOf(key, (c || {}).outbox).filter(o => o.state === 'sent' && o.reason !== 'agent-staff').map(o => o.text)[0];
