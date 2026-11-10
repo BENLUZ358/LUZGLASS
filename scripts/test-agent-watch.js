@@ -8,6 +8,8 @@
 const path = require('path');
 const { fakeDb } = require(path.join(__dirname, '_fake-db.js'));
 const W = require(path.join(__dirname, '..', 'api', '_agent-watch.js'));
+//  סיכום הבוקר של המנהל (11/11) נבדק ב-test-agent-morning.js — כאן הוא כבוי כדי שהספירות של החדר יישארו של הבדיקות בלבד
+require(path.join(__dirname, '..', 'api', '_agent-morning.js')).lgAgentMorningRun = async () => ({ posted: false, skipped: 'test' });
 
 let failed = 0;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)

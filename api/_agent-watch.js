@@ -386,6 +386,12 @@ async function lgAgentWatchRun(db, o) {
     await setProblem(k, null);
     cleared++;
   }
+  //  מנהל (פריט 8, 11/11): סיכום בוקר בחדר — פעם ביום, בדופק הראשון אחרי 07:00 (א'–ו').
+  //  רק עם הגדרות במסך והמנהל לא כבוי (_agent-morning.js). תקלה לא נוגעת בבדיקות.
+  if (!late()) {
+    try { await require('./_agent-morning').lgAgentMorningRun(db, { env, now, cfg }); }
+    catch (e) { console.warn('agent-watch: morning', e && e.name); }
+  }
   return { ok: true, opened, cleared };
 }
 
