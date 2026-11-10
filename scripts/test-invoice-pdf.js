@@ -459,5 +459,98 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     const { out } = await printRun({}, { printFn: async () => { throw new Error('printer off'); } });
     assert.equal(out, 'ok');
   });
+
+  //  ── PDF24 לתמיד (בן, 10/11): מה שהודפס תמיד יוצא על נייר ──
+  const W2 = require('../tools/invoice-watcher/watcher');
+  const paperRig = (files = { 'a.pdf': 'ORIG', 'b.pdf': 'COPY' }, over = {}) => {
+    const os = require('os');
+    const top = fs.mkdtempSync(path.join(os.tmpdir(), 'inv-'));
+    const printed = [];
+    const cfg = { watchDir: path.join(top, 'הדפסות'), sharedRoot: path.join(top, 'לקוחות'), printCopyTo: 'Brother',
+      printFn: async (file, printer) => { printed.push([path.basename(file), printer, fs.readFileSync(file, 'utf8')]); }, ...over };
+    fs.mkdirSync(cfg.watchDir);
+    const f = {};
+    for (const [n, v] of Object.entries(files)) { f[n] = path.join(cfg.watchDir, n); fs.writeFileSync(f[n], v); }
+    return { top, cfg, f, printed, done: () => fs.rmSync(top, { recursive: true, force: true }) };
+  };
+  await test('fileKind: restored copy is recognised; a non-invoice with מקור is not an invoice', () => {
+    assert.deepEqual(W2.fileKind(['חשבונית מס 67580 העתק משוחזר']), { split: false, role: 'copy', doc: '67580', restored: true });
+    assert.deepEqual(W2.fileKind(['חשבונית מס 67580 העתק']), { split: false, role: 'copy', doc: '67580' });
+    assert.equal(W2.fileKind(['תעודת משלוח מספר 250423 מקור']), null);
+    assert.equal(W2.docFromName('H-erp Document RtL - HDoc10.ard - 348338_67423_249926 (1).pdf'), '67423');
+  });
+  await test('server: restored copy accepted only when flagged AND the page says משוחזר', async () => {
+    const R = Buffer.from('%PDF-1.4 rest').toString('base64');
+    const T = { ...texts, [Buffer.from('%PDF-1.4 rest').toString()]: 'חשבונית מס 123456 תאריך 27/10/2026 העתק משוחזר שער ראשי דלת מקלחת' };
+    const d = mk({ pageTexts: async buf => [T[buf.toString()] || ''] });
+    assert.equal((await handleUpload(req({ original: R, copy: R }), d)).body.code, 'role-unverified', 'not flagged → refused');
+    const ok = await handleUpload(req({ original: R, copy: R, restored: true }), d);
+    assert.equal(ok.status, 200); assert.equal(d.db._data.invoicePdf.k1.state, 'ready');
+    const d2 = mk();
+    assert.equal((await handleUpload(req({ original: COPY, copy: COPY, restored: true }), d2)).body.code, 'role-unverified', 'plain copy flagged → refused');
+  });
+  await test('server: 202 says whether the account (מפתח) belongs to a customer in the system', async () => {
+    const T = { [Buffer.from('%PDF-1.4 orig').toString()]: 'חשבונית מס 77777 תאריך 27/10/2026 מפתח 1231 מקור',
+                [Buffer.from('%PDF-1.4 copy').toString()]: 'חשבונית מס 77777 תאריך 27/10/2026 מפתח 1231 העתק' };
+    const run = async users => {
+      const d = mk({ db: fakeDb({ invoicePdf: {}, users }), pageTexts: async buf => [T[buf.toString()] || ''] });
+      return handleUpload(req({ original: ORIG, copy: COPY }), d);
+    };
+    const unknown = await run({ '050': { customerId: '999' } });
+    assert.equal(unknown.status, 202); assert.equal(unknown.body.known, false);
+    assert.equal((await run({ '050': { customerId: '1231' } })).body.known, true);
+  });
+  await test('watcher: customer not in the system → original+copy on paper now, copy archived, print folder empty', async () => {
+    const g = paperRig();
+    const out = await W2.processPair(g.cfg, { doc: '67423', original: g.f['a.pdf'], copies: [g.f['b.pdf']] },
+      async () => ({ status: 202, body: { ok: true, pending: true, known: false } }), Date.now());
+    assert.equal(out, 'paper');
+    assert.deepEqual(g.printed.map(p => p[2]), ['ORIG', 'COPY']);
+    const arch = path.join(g.cfg.sharedRoot, 'לקוחות שלא במערכת');
+    const month = fs.readdirSync(arch)[0];
+    assert.match(fs.readdirSync(path.join(arch, month))[0], /^67423 \d\d-\d\d-\d{4}\.pdf$/);
+    assert.deepEqual(fs.readdirSync(g.cfg.watchDir), []);
+    g.done();
+  });
+  await test('watcher: customer in the system waits; after 10 minutes with no match → paper', async () => {
+    const g = paperRig();
+    const post = async () => ({ status: 202, body: { ok: true, pending: true, known: true } });
+    const pair = { doc: '1', original: g.f['a.pdf'], copies: [g.f['b.pdf']] };
+    assert.equal(await W2.processPair(g.cfg, pair, post, Date.now()), 'retry');
+    assert.equal(g.printed.length, 0);
+    assert.equal(await W2.processPair(g.cfg, pair, post, Date.now() - 11 * 60000), 'paper');
+    assert.equal(g.printed.length, 2);
+    g.done();
+  });
+  await test('watcher: refused by the server → still printed on paper, kept in לבדיקה', async () => {
+    const g = paperRig();
+    const out = await W2.processPair(g.cfg, { original: g.f['a.pdf'], copies: [g.f['b.pdf']] },
+      async () => ({ status: 422, body: { ok: false, code: 'bad' } }));
+    assert.equal(out, 'review'); assert.equal(g.printed.length, 2);
+    assert.equal(fs.readdirSync(path.join(g.top, 'לבדיקה')).length, 2);
+    g.done();
+  });
+  await test('watcher: restored copy → sent flagged, filed, printed once; never overwrites a filed original', async () => {
+    const g = paperRig({ 'r.pdf': 'RESTORED' });
+    const dir = path.join(g.cfg.sharedRoot, 'פלג', '2026-11');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, '67581 פלג מקור 10-11-2026.pdf'), 'REAL-ORIGINAL');
+    let sent = null;
+    const out = await W2.processRestored(g.cfg, g.f['r.pdf'], async b => { sent = b;
+      return { status: 200, body: { ok: true, reprint: true, docNumber: '67581', archivePath: '2026/11/פלג/2026-11-10_67581.pdf' } }; }, Date.now(), '67581');
+    assert.equal(sent.restored, true);
+    assert.equal(out, 'paper');
+    assert.deepEqual(g.printed.map(p => p[2]), ['RESTORED']);
+    assert.equal(fs.readFileSync(path.join(dir, '67581 פלג מקור 10-11-2026.pdf'), 'utf8'), 'REAL-ORIGINAL');
+    assert.deepEqual(fs.readdirSync(g.cfg.watchDir), []);
+    g.done();
+  });
+  await test('watcher: no server for 10 minutes → paper instead of waiting forever', async () => {
+    const g = paperRig();
+    const out = await W2.processPair(g.cfg, { original: g.f['a.pdf'], copies: [g.f['b.pdf']] },
+      async () => { throw new Error('offline'); }, Date.now() - 11 * 60000);
+    assert.equal(out, 'review'); assert.equal(g.printed.length, 2);
+    g.done();
+  });
   console.log(`\n${passed} passed`);
 })().catch(e => { console.error(e); process.exit(1); });

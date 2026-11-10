@@ -13,10 +13,19 @@
 //  לתיקיות שליד תיקיית ההדפסות — לא בתוכה. (2/11 נשמרה חשבונית בטעות ל-done/
 //  שבתוך ההדפסות, והכלי לא ראה אותה.)
 //
+//  PDF24 מוגדר בחשבשבת לתמיד (בן, 10/11) — כל הדפסה מחשבשבת מגיעה לכאן, והכלל:
+//  **מה שהודפס תמיד יוצא על נייר** (cfg.printCopyTo — ה-Brother):
+//    • חשבונית של לקוח במערכת → נשלחת, מתויקת, וההעתק מודפס (כמו קודם).
+//    • "העתק משוחזר" → נשלח ללקוח (אם לא נשלח קודם) ומודפס פעם אחת.
+//    • חשבונית של לקוח שלא במערכת (השרת: known=false) → מקור והעתק על נייר מיד,
+//      ועותק בתיקיית הלקוחות תחת "לקוחות שלא במערכת".
+//    • לקוח במערכת שאין לו התאמה אחרי pendingPaperMs (10 דק') → על נייר.
+//    • מסמך שאינו חשבונית (תעודת משלוח, דוח...) → על נייר כמו שהוא.
+//    • השרת סירב / לא נקרא / אין בן זוג → על נייר, והקובץ ל"לבדיקה".
+//
 //  כללי בטיחות:
-//    • קובץ ההדפסה לא נמחק ולא זז עד ששני הקבצים תויקו.
-//    • שרת סירב (422: לא זוהה/לא אומת מקור-העתק) → הקובץ עובר ל"לבדיקה", לא נשלח.
-//    • אין רשת / השרת נפל → הקובץ נשאר, וינסה שוב בסבב הבא.
+//    • קובץ ההדפסה לא נמחק ולא זז עד ששני הקבצים תויקו (או הודפסו על נייר).
+//    • אין רשת / השרת נפל → הקובץ נשאר, וינסה שוב בסבב הבא; אחרי pendingPaperMs — נייר.
 //
 //  הרצה:  node watcher.js [config.json]
 // ═══════════════════════════════════════════════════════════════════
@@ -118,11 +127,30 @@ function groupSingles(entries, now, waitMs) {
 //    { split: false, role, doc }        — מקור או העתק, עמוד אחד או יותר (חשבונית ארוכה,
 //                                         בן 2/11 — 67395: מקור 2 עמודים, העתק 2 עמודים)
 //    null                               — לא חשבונית
+//    { split: false, role:'copy', doc, restored: true } — "העתק משוחזר": לא מחכה לבן זוג
 function fileKind(texts) {
   const roles = texts.map(roleOf);
   if (texts.length === 2 && roles[0] === 'original' && roles[1] === 'copy') return { split: true };
   const role = roles[0], doc = docNumberOf(texts[0] || '');
-  return role && doc ? { split: false, role, doc } : null;
+  if (!(role && doc)) return null;
+  //  חשבונית מס בלבד — "חשבונית" בעמוד. מסמך אחר עם "מקור"/"העתק" (תעודת משלוח) הוא לא חשבונית.
+  if (!_norm(texts[0]).includes('חשבונית')) return null;
+  const restored = role === 'copy' && texts.every(t => _norm(t).includes('משוחזר'));
+  return restored ? { split: false, role, doc, restored: true } : { split: false, role, doc };
+}
+
+//  מספר המסמך משם הקובץ של חשבשבת: "H-erp Document RtL - HDoc10.ard - 348338_67423_249926.pdf"
+function docFromName(file) {
+  const m = path.basename(String(file || '')).match(/_(\d{4,9})_\d+(?: \(\d+\))?\.pdf$/i);
+  return m ? m[1] : null;
+}
+
+//  לאן נשמר עותק של חשבונית שהודפסה על נייר כי הלקוח לא במערכת
+function paperArchivePath(root, doc, now) {
+  const d = new Date(now || Date.now());
+  const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  const dmy = String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + d.getFullYear();
+  return resolveArchive(root, `לקוחות שלא במערכת/${ym}/${String(doc || 'ללא מספר').replace(/[^\d]/g, '') || 'ללא מספר'} ${dmy}.pdf`);
 }
 
 let _pdfjsP = null;
@@ -176,37 +204,85 @@ function retryDeferred() {
 }
 
 //  קובץ אחד בן שני עמודים (מקור + העתק)
-async function processFile(cfg, file, post = require_post(cfg)) {
+async function processFile(cfg, file, post = require_post(cfg), firstAt) {
   let parts;
   try { parts = await splitTwoPages(fs.readFileSync(file)); }
-  catch (e) { console.error('review (split):', path.basename(file), e.message); move(file, sideDirs(cfg).review); return 'review'; }
-  return upload(cfg, parts, [file], post);
+  catch (e) { console.error('review (split):', path.basename(file), e.message); await paper(cfg, [file], 'review', 'split'); return 'review'; }
+  return upload(cfg, parts, [file], post, { firstAt });
 }
 
 //  שני קבצים של עמוד אחד (העתקים נוספים — "העתק 2" — עוברים יחד איתם)
-async function processPair(cfg, pair, post = require_post(cfg)) {
+async function processPair(cfg, pair, post = require_post(cfg), firstAt) {
   const parts = { original: fs.readFileSync(pair.original), copy: fs.readFileSync(pair.copies[0]) };
-  return upload(cfg, parts, [pair.original, ...pair.copies], post);
+  return upload(cfg, parts, [pair.original, ...pair.copies], post, { firstAt, doc: pair.doc });
 }
 
-async function upload(cfg, parts, files, post) {
+//  "העתק משוחזר" — קובץ אחד, נשלח כמקור וכהעתק (השרת בודק שכתוב בו "משוחזר")
+async function processRestored(cfg, file, post = require_post(cfg), firstAt, doc) {
+  const buf = fs.readFileSync(file);
+  return upload(cfg, { original: buf, copy: buf }, [file], post, { firstAt, restored: true, doc });
+}
+
+//  ── נייר ──
+//  מדפיס את הקבצים כמו שהם ב-Brother, ואז מזיז אותם (done / review).
+//  הדפסה שנכשלה (מדפסת כבויה): הקובץ בכל זאת זז, והשגיאה ביומן — לא מדפיסים
+//  בלולאה אינסופית. archive: נתיב לעותק בתיקיית הלקוחות (לקוח שלא במערכת).
+async function paper(cfg, files, dir, why, archive) {
+  const printer = cfg.printCopyTo;
+  for (const f of files) {
+    if (!printer) { console.error('paper: no printer configured —', path.basename(f)); break; }
+    try { await (cfg.printFn || printWithGs)(f, printer, cfg); console.log('paper (' + why + '):', path.basename(f)); }
+    catch (e) { console.error('paper failed (' + why + '):', path.basename(f), e.message); }
+  }
+  if (archive) {
+    try { fs.mkdirSync(path.dirname(archive), { recursive: true });
+          if (!fs.existsSync(archive)) fs.copyFileSync(files[0], archive); }
+    catch (e) { console.error('paper archive failed:', e.message); }
+  }
+  files.forEach(f => { try { move(f, sideDirs(cfg)[dir]); } catch (e) { console.error('move failed:', e.message); } });
+  return dir === 'review' ? 'review' : 'paper';
+}
+
+async function upload(cfg, parts, files, post, opts = {}) {
   const file = files[0];
   const dirs = sideDirs(cfg);
   const moveAll = dir => files.forEach(f => move(f, dirs[dir]));
+  const waitedTooLong = () => opts.firstAt && Date.now() - opts.firstAt > (cfg.pendingPaperMs || 10 * 60000);
   let r;
-  try { r = await post({ original: parts.original.toString('base64'), copy: parts.copy.toString('base64') }); }
-  catch (e) { console.error('retry later (network):', e.message); return 'retry'; }
+  try { r = await post({ original: parts.original.toString('base64'), copy: parts.copy.toString('base64'),
+                         ...(opts.restored ? { restored: true } : {}) }); }
+  catch (e) {
+    console.error('retry later (network):', e.message);
+    return waitedTooLong() ? paper(cfg, files, 'review', 'no server') : 'retry';
+  }
 
-  if (r.status >= 500 || r.status === 429) return 'retry';
-  //  202: הודפסה, אבל החשבונית עוד לא נרשמה בתחנה ("החשבונית הופקה"). הקובץ נשאר
-  //  ומועלה שוב בסבב הבא — ההעלאה החוזרת מזוהה לפי hash ומשתייכת ברגע שהחשבונית נרשמת.
-  if (r.status === 202 && r.body && r.body.pending) { console.log('waiting for registration:', path.basename(file)); return 'retry'; }
+  if (r.status >= 500 || r.status === 429) return waitedTooLong() ? paper(cfg, files, 'review', 'server ' + r.status) : 'retry';
+  //  202: הודפסה, אבל אין חשבונית רשומה שמתאימה.
+  //  לקוח שלא במערכת (known=false) → נייר מיד. לקוח במערכת → מנסים שוב, ואחרי
+  //  pendingPaperMs → נייר (בן, 10/11: שום חשבונית לא נתקעת כמו 67423).
+  if (r.status === 202 && r.body && r.body.pending) {
+    if (r.body.known === false) {
+      return paper(cfg, files, 'done', 'not in system', paperArchivePath(cfg.sharedRoot, opts.doc || docFromName(file)));
+    }
+    if (waitedTooLong()) return paper(cfg, files, 'done', 'no match after wait');
+    console.log('waiting for registration:', path.basename(file)); return 'retry';
+  }
   if (!r.body || !r.body.ok) {
     console.error('review:', path.basename(file), r.status, r.body && r.body.code);
-    moveAll('review'); return 'review';
+    return paper(cfg, files, 'review', 'refused ' + (r.body && r.body.code || r.status));
   }
   const dest = filedPaths(cfg.sharedRoot, r.body.archivePath);
-  if (!dest) { moveAll('review'); return 'review'; }
+  if (!dest) return paper(cfg, files, 'review', 'bad archive path');
+  //  העתק משוחזר: תמיד יוצא על נייר פעם אחת, ולא דורס את המקור שכבר מתויק
+  if (opts.restored) {
+    try {
+      fs.mkdirSync(path.dirname(dest.original), { recursive: true });
+      if (!fs.existsSync(dest.original)) fs.writeFileSync(dest.original, parts.original);
+      if (!fs.existsSync(dest.copy)) fs.writeFileSync(dest.copy, parts.copy);
+    } catch (e) { console.error('filing folder unavailable, retry later:', e.message); return 'retry'; }
+    console.log('ok (restored)', r.body.docNumber, r.body.reprint ? '(already sent before — not sent again)' : '');
+    return paper(cfg, files, 'done', 'restored copy');
+  }
   //  ההעתק לנייר — רק בפעם הראשונה שהוא מתויק (הדפסה חוזרת מחשבשבת לא מוציאה דף נוסף)
   const print = !!cfg.printCopyTo && !r.body.reprint && !fs.existsSync(dest.copy);
   try {
@@ -253,8 +329,9 @@ function require_post(cfg) {
 //  קובץ נחשב מוכן כשהגודל לא השתנה בין שני סבבים (המדפסת עדיין כותבת).
 //  קובץ של עמוד אחד מחכה לבן הזוג שלו עד pairWaitMs, ואז עובר ל-review.
 async function loop(cfg) {
-  const sizes = new Map(), retryAt = new Map(), singles = new Map();
-  const review = f => { try { move(f, sideDirs(cfg).review); } catch (_) {} };
+  const sizes = new Map(), retryAt = new Map(), singles = new Map(), firstAt = new Map();
+  const first = f => { if (!firstAt.has(f)) firstAt.set(f, Date.now()); return firstAt.get(f); };
+  const review = f => paper(cfg, [f], 'review', 'review').catch(e => console.error('paper:', e.message));
   for (;;) {
     //  סבב שנכשל (קובץ נעלם, תיקייה לא זמינה) לא מפיל את הכלי — מנסים בסבב הבא
     try {
@@ -268,28 +345,32 @@ async function loop(cfg) {
         sizes.delete(f);
         let info;
         try { info = await readPdf(fs.readFileSync(f)); }
-        catch (e) { console.error('review (unreadable):', n, e.message); review(f); continue; }
+        catch (e) { console.error('review (unreadable):', n, e.message); await review(f); continue; }
         const kind = info.pages <= 5 ? fileKind(info.texts) : null;
-        if (kind && kind.split) {
-          const out = await processFile(cfg, f);
+        if (kind && (kind.split || kind.restored)) {
+          let out;
+          try { out = kind.split ? await processFile(cfg, f, undefined, first(f))
+                                 : await processRestored(cfg, f, undefined, first(f), kind.doc); }
+          catch (e) { console.error('retry later:', n, e.message); out = 'retry'; }
           if (out === 'retry') retryAt.set(f, Date.now() + (cfg.retryMs || 60000));
-          else retryAt.delete(f);
+          else { retryAt.delete(f); firstAt.delete(f); }
           continue;
         }
-        if (!kind) { console.error('review (not an invoice):', n); review(f); continue; }
+        //  לא חשבונית (תעודת משלוח, דוח...) — יוצא על נייר כמו שהוא
+        if (!kind) { await paper(cfg, [f], 'done', 'not an invoice'); continue; }
         singles.set(f, { role: kind.role, doc: kind.doc, at: Date.now() });
       }
       //  קובץ שמישהו מחק / העביר בזמן שחיכה — שוכחים אותו (בלי זה הכלי קורס)
-      for (const f of [...singles.keys()]) if (!fs.existsSync(f)) { singles.delete(f); retryAt.delete(f); }
+      for (const f of [...singles.keys()]) if (!fs.existsSync(f)) { singles.delete(f); retryAt.delete(f); firstAt.delete(f); }
       const { pairs, stale } = groupSingles([...singles], Date.now(), cfg.pairWaitMs || 10 * 60000);
-      for (const f of stale) { console.error('review (no pair):', path.basename(f)); singles.delete(f); review(f); }
+      for (const f of stale) { console.error('review (no pair):', path.basename(f)); singles.delete(f); await review(f); }
       for (const pair of pairs) {
         if ((retryAt.get(pair.original) || 0) > Date.now()) continue;
         let out;
-        try { out = await processPair(cfg, pair); }
+        try { out = await processPair(cfg, pair, undefined, first(pair.original)); }
         catch (e) { console.error('retry later:', path.basename(pair.original), e.message); out = 'retry'; }
         if (out === 'retry') { retryAt.set(pair.original, Date.now() + (cfg.retryMs || 60000)); continue; }
-        retryAt.delete(pair.original);
+        retryAt.delete(pair.original); firstAt.delete(pair.original);
         [pair.original, ...pair.copies].forEach(f => singles.delete(f));
       }
     } catch (e) { console.error('round failed, retrying:', e.message); }
@@ -366,7 +447,7 @@ async function printLoop(cfg) {
   }
 }
 
-module.exports = { tsplForBitmap, sendLabels, printOnce, resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, groupSingles, roleOf, docNumberOf, readPdf };
+module.exports = { loop, tsplForBitmap, sendLabels, printOnce, resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, processRestored, paper, paperArchivePath, docFromName, groupSingles, roleOf, docNumberOf, readPdf };
 
 if (require.main === module) {
   const cfg = loadConfig(process.argv[2] || path.join(__dirname, 'config.json'));
