@@ -158,6 +158,8 @@ async function lgIntakeAckFlush(db, now, deps) {
 async function lgIntakeAckEmail(db, orderIds, now, opts) {
   const no = reason => ({ queued: false, reason });
   if (!lgIntakeAckOn()) return no('off');
+  //  בן, 10/11: במייל לא משתנה כלום בינתיים — הודעה אחת כמו היום. מתג משלו, כבוי.
+  if (process.env.INTAKE_ACK_EMAIL_ENABLED !== 'true') return no('off');
   if (opts && opts.ackedByAuto) return no('auto-handled');
   const { resolveRecipient } = require('./_wa-recipient');
   const live = [], targets = [];

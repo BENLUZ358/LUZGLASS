@@ -228,7 +228,14 @@ const emOrder = (id, n, extra) => ({ id, refNum: 'L50-' + n, orderNum: 'L50-' + 
   stage: '', hasSketch: true, createdAt: NOW, ...(extra || {}) });
 const emq = db => Object.values((db._data.waMeta || {}).emailOutbox || {});
 
-await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+// בן, 10/11: במייל לא משתנה כלום בינתיים — הודעה אחת כמו היום (פלג). "נקלטו" במייל רק עם מתג משלו.
+await withEnv({ INTAKE_ACK_ENABLED: 'true', INTAKE_ACK_EMAIL_ENABLED: undefined, EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+  const db = emSeed(true);
+  put(db, emOrder('em_off_1', 1));
+  check('F0 email ack off unless its own switch is on', [(await IA.lgIntakeAckEmail(db, ['em_off_1'], NOW, {})).reason, emq(db).length], ['off', 0]);
+});
+
+await withEnv({ INTAKE_ACK_ENABLED: 'true', INTAKE_ACK_EMAIL_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
   const db = emSeed(true);
   ['em_x_1', 'em_x_2'].forEach((id, i) => put(db, emOrder(id, i + 1)));
   const r = await IA.lgIntakeAckEmail(db, ['em_x_1', 'em_x_2'], NOW, {});
@@ -245,7 +252,7 @@ await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }
   check('F5 the same email again → no second reply', (await IA.lgIntakeAckEmail(db, ['em_x_1', 'em_x_2'], NOW, {})).queued, false);
 });
 
-await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+await withEnv({ INTAKE_ACK_ENABLED: 'true', INTAKE_ACK_EMAIL_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
   const db = emSeed(true);
   put(db, emOrder('em_y_1', 1));
   check('F6 "handled" already went out on its own → no "received" too',
@@ -254,7 +261,7 @@ await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }
   check('F7 Avivi purchase order → nothing extra', [(await IA.lgIntakeAckEmail(db, ['em_z_1'], NOW, {})).queued, emq(db).length], [false, 0]);
 });
 
-await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+await withEnv({ INTAKE_ACK_ENABLED: 'true', INTAKE_ACK_EMAIL_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
   const db = emSeed(false);
   put(db, emOrder('em_u_1', 1));
   check('F8 address not linked → nothing', [(await IA.lgIntakeAckEmail(db, ['em_u_1'], NOW, {})).queued, emq(db).length], [false, 0]);
@@ -292,7 +299,7 @@ await withEnv({ INTAKE_ACK_ENABLED: undefined, EMAIL_ONLY_TO: 'dana@client.co.il
   const off = await run({ INTAKE_ACK_ENABLED: undefined });
   check('G2 switch off → the intake does not touch it', (off._data.waMeta || {}).intakeAcks, undefined);
 }
-await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+await withEnv({ INTAKE_ACK_ENABLED: 'true', INTAKE_ACK_EMAIL_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
   //  מייל: נכנס לקליטה; ענה רק כש"טופלו" לא יצא לבד
   const em = require(path.join(ROOT, 'api', '_email-inbound.js'));
   const PNG = Buffer.concat([Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'), Buffer.alloc(40, 7)]);
@@ -340,7 +347,7 @@ await withEnv(GREEN, async () => {
   const q = outbox(db);
   check('H2 one still waiting → sent; the deleted one is not counted', [q.length, (q[0] || {}).orderNums], [1, ['La_1', 'Lb_1']]);
 });
-await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+await withEnv({ INTAKE_ACK_ENABLED: 'true', INTAKE_ACK_EMAIL_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
   const ob = require(path.join(ROOT, 'api', '_email-outbox.js'));
   const db = emSeed(true);
   ['em_h_1', 'em_h_2'].forEach((id, i) => put(db, emOrder(id, i + 1)));
@@ -352,7 +359,7 @@ await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }
   check('H3 email: all handled before the claim → not sent, cancelled with a reason',
         [items.length, row.state, /טופלו/.test(String(row.lastError || ''))], [0, 'cancelled', true]);
 });
-await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+await withEnv({ INTAKE_ACK_ENABLED: 'true', INTAKE_ACK_EMAIL_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
   const ob = require(path.join(ROOT, 'api', '_email-outbox.js'));
   const db = emSeed(true);
   ['em_i_1', 'em_i_2', 'em_i_3'].forEach((id, i) => put(db, emOrder(id, i + 1)));
