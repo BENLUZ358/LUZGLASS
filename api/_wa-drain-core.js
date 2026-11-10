@@ -238,8 +238,14 @@ async function drainKeys(db, provider, keys, by, started) {
       waMessageId: out.messageId,
       response:    String(out.detail || '').slice(0, 2000),
     };
+    //  ⚠️ רק הזמנה שעוד קיימת: set על orders/<id>/<field> של הזמנה שנמחקה (למשל
+    //  אוחדה כצרופה לתוך הזמנה אחרת) היה מחייה אותה כשורה ריקה. טרנזקציה על ההזמנה:
+    //  פיירבייס קוראת קודם עם null → מחזירים null; ההזמנה באמת חסרה → ביטול.
     await Promise.all((entry.orderIds || []).map(id =>
-      db.ref('orders/' + id + '/' + field).set(stamp).catch(e => {
+      db.ref('orders/' + id).transaction(cur => {
+        if (cur === null) return null;
+        return { ...cur, [field]: stamp };
+      }, undefined, false).catch(e => {
         // ⚠️ ההודעה כבר יצאה. כישלון ברישום לא הופך אותה ללא-נשלחה,
         // ולכן הוא לא מחזיר את הרשומה לתור — רק נרשם.
         console.error('whatsapp-drain: stamp failed', { id, name: e && e.name });

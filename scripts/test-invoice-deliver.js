@@ -287,6 +287,19 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
   const fileProvider = sent => ({ name: 'fake', configured: true, globalSlot: false, maxPerRun: 5, nextGap: () => 0,
     gate: () => ({ allowed: true }), send: async () => { throw new Error('text send used'); },
     sendFiles: async facts => { sent.push(facts); return { ok: true, messageId: 'id1', httpStatus: 200 }; } });
+  //  סקירת צרופות (10/11): הזמנה שאוחדה לתוך אחרת (נמחקה) בזמן שההודעה בדרך —
+  //  החותמת אחרי השליחה לא מחייה אותה כשורה ריקה
+  await test('drain: stamp after sending never recreates a deleted (merged-away) order', async () => {
+    const db = base({ a: waOrder, b: portal });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [key] = Object.keys(db._data.waOutbox);
+    delete db._data.orders.b;
+    const r = await core.drainKeys(db, fileProvider([]), [key], 'invoice-tool', Date.now());
+    assert.equal(r.results[0].status, 'sent');
+    assert.equal(db._data.orders.b, undefined);
+    assert.ok(db._data.orders.a.whatsappInvoice && db._data.orders.a.whatsappInvoice.outboxKey === key);
+    assert.equal(db._data.orders.a.orderNum, 'L1');   // שאר ההזמנה נשאר
+  });
   await test('invoice: an order marked fake after a real Hashavshevet send does not block the invoice', async () => {
     const db = base({ a: { ...waOrder, isTest: true, hashavshevet: { httpOk: true, accountKey: '3150', reference: '1' } }, b: portal });
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
