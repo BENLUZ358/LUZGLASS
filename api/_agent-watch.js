@@ -30,8 +30,9 @@
 //    בעיה של סוכן כבוי / מחשב שלא ענה — לא נפתחת ולא "מתוקנת". מחשב שלא ענה 7 ימים —
 //    נמחק מ-invoiceWatcher יחד עם הבעיות שלו.
 //
-//  עוקב (שיפורים 2+3, 11/11) — בריצה האיטית, כשהעוקב לא כבוי: קורא את orders, מחשב כמה זמן
-//    לוקח כל שלב (_agent-stats.js) → waMeta/agentStats/stageDays (לתשובת "מתי יהיה מוכן"),
+//  עוקב (שיפורים 2+3, 11/11) — בריצה האיטית, רק כשיש הגדרות במסך והעוקב לא כבוי, ולכל היותר
+//    פעם בשעה (שומר עלות — lastOrdersScan; בלי agentConfig אין סריקה בכלל): קורא את orders, מחשב כמה זמן
+//    לוקח כל שלב (_agent-stats.js, לכל היותר פעם ביום — computedAt) → waMeta/agentStats/stageDays (לתשובת "מתי יהיה מוכן"),
 //    והזמנה של לקוח במערכת שתקועה בשלב > פי 2 מהרגיל (ו>יומיים) → info פעם אחת (stuck_<id>_<שלב>).
 //    יצאה מהשלב → הבעיה יורדת בשקט (בלי "תוקן").
 //
@@ -62,6 +63,9 @@ const WHO = { archive: 'כלי החשבוניות', kolet: 'משלוחים לש�
 const INTERNAL_NOTE = 'פנימי — ייסגר לבד כשיתוקן';
 const RANK = { info: 1, ask: 2 };
 const SLOW_KEY = /^(printed|deliv|mail|long|stuck)_/;
+const SCAN_KEY = /^stuck_/;                // נבדק רק בסריקת orders (פעם בשעה)
+const ORDERS_SCAN_GAP_MS = H;              // שומר עלות: orders נקרא לכל היותר פעם בשעה
+const STATS_GAP_MS = DAY;                  // הזמן הרגיל לכל שלב — לכל היותר פעם ביום
 
 const _safeKey = s => String(s == null ? '' : s).replace(/[.#$[\]/\s]/g, '_').slice(0, 60);
 const _keyOk = k => typeof k === 'string' && k.length > 0 && k.length <= 200 && !/[.#$[\]/]/.test(k);
@@ -299,22 +303,31 @@ async function lgAgentWatchRun(db, o) {
     }
   }
 
-  let stuck = [];
-  if (slow && on('okev')) {
-    try {
-      const ST = require('./_agent-stats');
-      const orders = (await db.ref('orders').once('value')).val() || {};
-      const stats = ST.lgStageStats(orders, now);
-      await db.ref(ST.AGENT_STATS).set(stats);
-      stuck = ST.lgStuckOrders(orders, stats, now);
-    } catch (e) { console.warn('agent-watch: stage stats', e && e.name); }
+  //  ⚠️ שומר עלות (11/11): orders נקרא רק כשיש הגדרות במסך, והעוקב לא כבוי — לכל היותר
+  //  פעם בשעה (מפתח lastOrdersScan); הזמן הרגיל לכל שלב מחושב מחדש לכל היותר פעם ביום (computedAt).
+  //  בלי waMeta/agentConfig (פרודקשן היום) — אף פעם לא קוראים את orders.
+  let stuck = [], scanned = false;
+  if (slow && cfg && on('okev')) {
+    if ((await gate('lastOrdersScan', ORDERS_SCAN_GAP_MS)).committed) {
+      try {
+        const ST = require('./_agent-stats');
+        const orders = (await db.ref('orders').once('value')).val() || {};
+        let stats = (await db.ref(ST.AGENT_STATS).once('value')).val();
+        if (!stats || !(now - (Number(stats.computedAt) || 0) < STATS_GAP_MS) || Number(stats.computedAt) > now) {
+          stats = { ...ST.lgStageStats(orders, now), computedAt: now };
+          await db.ref(ST.AGENT_STATS).set(stats);
+        }
+        stuck = ST.lgStuckOrders(orders, stats, now);
+        scanned = true;   // רק סריקה שהצליחה "מנקה" בעיות ישנות
+      } catch (e) { console.warn('agent-watch: stage stats', e && e.name); }
+    }
   }
   const all = lgWatchProblems({ now, watchers, invoices, retried, reply, noRetry, batches, mail }).concat(stuck).filter(p => on(p.agent));
   const byKey = {};
   all.forEach(p => { byKey[p.key] = p; });
   //  לא "מתוקן": בעיה של סוכן כבוי, או של מחשב שלא שלח דופק עדכני, או בדיקה איטית שלא רצה עכשיו
   const freshPc = pc => { const w = watchers[pc]; return !!w && now - (Number(w.at) || 0) <= FRESH_MS; };
-  const keep = (k, p) => !p || !on(p.agent) || (!slow && SLOW_KEY.test(k)) || ((k.startsWith('file_') || k.startsWith('print_'))
+  const keep = (k, p) => !p || !on(p.agent) || (!slow && SLOW_KEY.test(k)) || (!scanned && SCAN_KEY.test(k)) || ((k.startsWith('file_') || k.startsWith('print_'))
     && !Object.keys(watchers).some(pc => freshPc(pc) && (k === 'print_' + _safeKey(pc) || k.startsWith('file_' + _safeKey(pc) + '_'))));
   const diff = lgWatchDiff(prev, all);
 

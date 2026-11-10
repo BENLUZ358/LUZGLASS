@@ -99,14 +99,15 @@ const hist = (n, extra) => {
     await W.lgAgentWatchRun(d, { env: ENV, now: NOW + 11 * MIN });
     check('watch: not repeated on the next slow run', roomOf(d).filter(v => v.agent === 'okev').length, 1);
     d._data.orders.a.stage = 'done'; d._data.orders.a.readyAt = NOW + 20 * MIN;
-    await W.lgAgentWatchRun(d, { env: ENV, now: NOW + 22 * MIN });
+    await W.lgAgentWatchRun(d, { env: ENV, now: NOW + 61 * MIN });   // orders נסרק לכל היותר פעם בשעה (שומר עלות)
     check('watch: moved on → problem dropped quietly (no "תוקן")', [roomOf(d).filter(v => v.agent === 'okev').length,
       Object.keys(d._data.waMeta.agentWatch.problems || {}).filter(k => k.startsWith('stuck_')).length], [1, 0]);
   }
   {
     const d = seed(null);
     await W.lgAgentWatchRun(d, { env: ENV, now: NOW });
-    check('watch no agentConfig: grey info only', roomOf(d).filter(v => v.agent === 'okev').map(v => v.kind), ['info']);
+    //  שומר עלות (11/11): בלי הגדרות במסך — לא קוראים את orders בכלל, ולכן אין בדיקת תקועות
+    check('watch no agentConfig: no orders scan → nothing', [roomOf(d).filter(v => v.agent === 'okev').length, !!d._data.waMeta.agentStats], [0, false]);
   }
   {
     const d = seed(CFG('off'));
