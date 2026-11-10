@@ -64,6 +64,27 @@ const db = fakeDb({ orders: {
   check('file bad n', r.ok, false);
   r = await adm.handleAdmin({ action: 'drafter-done', n: 2 }, { db, by: '052', now: NOW + 33 });
   check('done one batch', [r.ok, r.batches], [true, [2]]);
+  check('no agent switches (test env) → nothing in the room', (db._data.waMeta.agentRoom || null), null);
+
+  // חדר הסוכנים שלב ב׳: הקולט מדווח בחדר על שלח / סיים / שלח שוב — לפי המתג שלו
+  {
+    const ENV = { AGENT_SHADOW_ENABLED: 'true' };
+    const db2 = fakeDb({ orders: {
+      B1: { id: 'B1', orderNum: 'L11', orderClient: 'אגן', stage: 'drafter', createdAt: NOW },
+      B2: { id: 'B2', orderNum: 'L12', orderClient: 'נאור', stage: 'chash', createdAt: NOW },
+    }, waMeta: { agentConfig: { agents: { kolet: 'shadow' } } } });
+    const texts = () => Object.values(db2._data.waMeta.agentRoom || {}).sort((a, b) => a.at - b.at).map(e => [e.agent, e.kind, e.text]);
+    r = await adm.handleAdmin({ action: 'drafter-send' }, { db: db2, by: '052', now: NOW, env: ENV });
+    check('room: send', texts(), [['kolet', 'info', 'משלוח 1 נשלח לשרטט — 2 הזמנות']]);
+    r = await adm.handleAdmin({ action: 'drafter-resend', n: 1 }, { db: db2, by: '052', now: NOW + 1, env: ENV });
+    check('room: resend', texts()[1], ['kolet', 'info', 'המייל למשלוח 1 נשלח שוב לשרטט']);
+    r = await adm.handleAdmin({ action: 'drafter-done' }, { db: db2, by: '052', now: NOW + 2, env: ENV });
+    check('room: done', texts()[2], ['kolet', 'info', 'השרטט סיים משלוח 1 — 2 עברו לבנה יום עבודה']);
+    db2._data.waMeta.agentConfig.agents.kolet = 'off';
+    db2._data.orders.B3 = { id: 'B3', orderNum: 'L13', orderClient: 'אגן', stage: 'drafter', createdAt: NOW };
+    await adm.handleAdmin({ action: 'drafter-send' }, { db: db2, by: '052', now: NOW + 3, env: ENV });
+    check('room: kolet off → nothing', texts().length, 3);
+  }
 
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nAll drafter-drain checks passed.');

@@ -11,6 +11,7 @@
 //    ask מהסוכנים: state 'open'→'answered', customerId, customerName, chat, question,
 //      suggest?, note? — ו-answeredAt/By, outboxKey אחרי שבן ענה.
 //    ⚠️ ask בלי state (הצעת צרופה בתור, _attach-suggest) — לא שאלה לבן; נענית בתור.
+//    ask עם internal:true (בדיקות הדופק, _agent-watch) — אין לקוח לענות לו; נסגר לבד (lgRoomClose).
 //  waMeta/agentRoomOpen/<מפתח> = { at, agent, customer } — אינדקס קטן של השאלות הפתוחות
 //    (תיקון סקירה 10/11): נכתב כשנפתחת שאלה, יורד כשבן עונה, חוזר אם התשובה לא יצאה.
 //    המונה בתפריט והרשימה בחדר קוראים אותו — לא את 500 האירועים האחרונים.
@@ -64,7 +65,8 @@ async function lgRoomPost(db, e, now) {
     //  שדות נוספים — רק כשיש (שורת info נשארת כמו קודם)
     const extra = { to: _s(x.to, 40), state: STATES.includes(x.state) ? x.state : null, customerId: _s(x.customerId, 200),
       customerName: _s(x.customerName, 120), chat: _s(x.chat, 120), question: _s(x.question, 1000), suggest: _s(x.suggest, 1000),
-      note: _s(x.note, 300), replyTo: _s(x.replyTo, 60), by: _s(x.by, 60), outboxKey: _s(x.outboxKey, 200) };
+      note: _s(x.note, 300), replyTo: _s(x.replyTo, 60), by: _s(x.by, 60), outboxKey: _s(x.outboxKey, 200),
+      internal: x.internal === true ? true : null };
     Object.keys(extra).forEach(k => { if (extra[k] != null) rec[k] = extra[k]; });
     await db.ref(ROOM + '/' + key).set(rec);
     if (rec.kind === 'ask' && rec.state === 'open') await _openIdx(db, key, rec);
@@ -184,4 +186,25 @@ async function lgRoomAnswer(db, b, deps) {
   return { ok: true, code: '', outboxKey: okey, sent, sendState, sendReason, reopened };
 }
 
-module.exports = { lgRoomPost, lgRoomAnswer, lgRoomLink, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN };
+// ─── שאלה פנימית שנסגרת לבד (שלב ב׳, 10/11) ─────────────────────────
+//  שאלה של בדיקות הדופק (_agent-watch) — אין לקוח לענות לו. כשהבעיה תוקנה:
+//  open → answered (answeredBy 'auto') ויורדת מהאינדקס. לא זורק.
+//  o.by: 'auto' (תוקן) | 'ben' ("סגור" במסך, I4) | 'stale' (המחשב לא שלח דופק שבוע)
+async function lgRoomClose(db, key, now, o) {
+  const by = ['ben', 'stale'].includes(o && o.by) ? o.by : 'auto';
+  if (!_keyOk(key)) return false;
+  let closed = false;
+  try {
+    await db.ref(ROOM + '/' + key).transaction(cur => {
+      closed = false;
+      if (cur === null) return null;   // null-first
+      if (cur.kind !== 'ask' || cur.state !== 'open') return;
+      closed = true;
+      return { ...cur, state: 'answered', answer: by === 'auto' ? 'תוקן' : 'נסגר', answeredAt: Number(now) || Date.now(), answeredBy: by };
+    });
+  } catch (e) { console.warn('agent-room: close', e && e.name); closed = false; }
+  if (closed) await _openIdx(db, key, null);
+  return closed;
+}
+
+module.exports = { lgRoomPost, lgRoomAnswer, lgRoomClose, lgRoomLink, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN };

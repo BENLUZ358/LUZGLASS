@@ -15,6 +15,7 @@
 //    { action:'agent-config-set', agent, mode } | { escalatePhone }  מתגי הסוכנים במסך
 //                                     (waMeta/agentConfig; בן, 10/11 — בלי Vercel)
 //    { action:'agent-room-answer', key, text }  בן עונה בחדר הסוכנים על שאלה צהובה
+//    { action:'agent-room-close', key }  "סגור" על שאלה פנימית צהובה (בדיקות הדופק; 10/11)
 //    { action:'agent-dismiss', kind, key, ver }  "טופל" על כרטיס בלוח הבקרה
 //                                     (waMeta/agentDash/dismissed/<kind>_<key>; agents.html, 31/10)
 //
@@ -199,6 +200,16 @@ async function handleAdmin(body, deps) {
     const DB = require('./_drafter-batch');
     const who = { by: String(deps.by || ''), now: deps.now };
     const idx = Number(b.idx) || 0;
+    //  חדר הסוכנים (שלב ב׳, 10/11): הקולט מדווח על שלח / סיים / שלח שוב — לפי המתג שלו
+    //  (_agent-watch.lgAgentEvent). דיווח שנכשל לא נוגע בפעולה עצמה.
+    const room = async text => {
+      try { await require('./_agent-watch').lgAgentEvent(deps.db, 'kolet', { kind: 'info', text }, { env: deps.env || process.env, now: deps.now }); }
+      catch (e) { console.warn('drafter: room', e && e.name); }
+    };
+    const roomDone = async r => {
+      for (const n of r.batches || []) await room(`השרטט סיים משלוח ${n} — ${(r.moved || []).filter(m => m.n === n).length} עברו לבנה יום עבודה`);
+      return r;
+    };
     //  הטיוטה כקובץ (לא משנה כלום) / קובץ של משלוח שנשלח — חלק אחד בכל קריאה (≤3MB)
     if (action === 'drafter-preview') {
       const p = await DB.lgDrafterPreview(deps.db, who);
@@ -222,7 +233,7 @@ async function handleAdmin(body, deps) {
     if (action === 'drafter-done' && b.n != null) {
       const n = Number(b.n);
       if (!Number.isInteger(n) || n < 1) return { ok: false, code: 'bad-n', message: 'מספר משלוח לא תקין' };
-      return { code: '', ...(await DB.lgDrafterDone(deps.db, { ...who, n })) };
+      return { code: '', ...(await roomDone(await DB.lgDrafterDone(deps.db, { ...who, n }))) };
     }
     if (action === 'drafter-hold') {
       const r = await DB.lgDrafterHold(deps.db, b.id, b.hold === true);
@@ -232,12 +243,14 @@ async function handleAdmin(body, deps) {
       const n = Number(b.n);
       if (!Number.isInteger(n) || n < 1) return { ok: false, code: 'bad-n', message: 'מספר משלוח לא תקין' };
       const r = await DB.lgDrafterResend(deps.db, n, who);
+      if (r.ok) await room(`המייל למשלוח ${n} נשלח שוב לשרטט`);
       return r.ok ? { ok: true, code: '' } : { ok: false, code: r.code || 'failed', message: 'השליחה החוזרת נכשלה' };
     }
     if (action === 'drafter-status') return { ok: true, code: '', ...(await DB.lgDrafterStatus(deps.db)) };
-    if (action === 'drafter-done') return { code: '', ...(await DB.lgDrafterDone(deps.db, who)) };
+    if (action === 'drafter-done') return { code: '', ...(await roomDone(await DB.lgDrafterDone(deps.db, who))) };
     const r = await DB.lgDrafterSend(deps.db, who);
     if (!r.ok) return { ok: false, code: r.code, message: 'הסל ריק' };
+    await room(`משלוח ${r.n} נשלח לשרטט — ${r.orderIds.length} הזמנות`);
     const st = r.email && r.email.key ? ((await deps.db.ref('waMeta/emailOutbox/' + r.email.key + '/state').once('value')).val() || '') : '';
     return { ok: true, code: '', n: r.n, orderIds: r.orderIds, emailState: st };
   }
@@ -256,6 +269,10 @@ async function handleAdmin(body, deps) {
   if (action === 'agent-room-answer') {
     return require('./_agent-room').lgRoomAnswer(deps.db, { key: b.key, text: b.text },
       { by: String(deps.by || ''), now: deps.now, provider: deps.provider, sendPending: deps.sendPending });
+  }
+  //  "סגור" על שאלה פנימית (בדיקות הדופק) — answeredBy 'ben', והבעיה לא עולה שוב לאותו מפתח
+  if (action === 'agent-room-close') {
+    return require('./_agent-watch').lgWatchDismiss(deps.db, b.key, { by: String(deps.by || ''), now: deps.now });
   }
   // ─── מתגי הסוכנים במסך (בן, 10/11) — waMeta/agentConfig ─────────────────
   //  { agent, mode } או { escalatePhone }. אימות קפדני ב-api/_agent-config.js

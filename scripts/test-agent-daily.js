@@ -71,11 +71,22 @@ const seed = () => fakeDb({ waMeta: {
     sdb._data.waMeta.agentRoomOpen = { r1: { at: NOW - H, agent: 'markazan', customer: 'x' } };
     const s = await D.lgAgentDailySummary(sdb, NOW);
     check('counts', s.counts, { incoming: 5, selfClosed: 1, toShaul: 1, toBen: 1, benOpen: 1, quotesWaiting: 2, cancelsWaitingHs: 1,
-      markedWrong: 1, unlinked: 1, quotesStuck: 2, blockedSends: 2 });
+      markedWrong: 1, unlinked: 1, quotesStuck: 2, blockedSends: 2, watcherSilent: false });
     check('text', s.text.split('\n'), [
       'סיכום סוכנים — 31.10.2026', 'הודעות שנכנסו: 5', 'נסגרו לבד: 1', 'הועברו לשאול: 1', 'שאלות לבן: 1 (מחכות לתשובה: 1)',
       'הצעות מחיר שמחכות לשאול: 2 (#7, #8)', 'ביטולים שמחכים לחשבשבת: 1 (L2001)', 'סומנו ✗ בפאנל: 1',
       'ממספרים לא מקושרים: 1', 'הצעות מחיר תקועות (מעל 3 שעות): 2 (#8, #9)', 'נחסמו בשליחה: 2']);
+  }
+  /* חדר הסוכנים שלב ב׳: כלי החשבוניות במשרד לא ענה 30 דק' בשעות עבודה → שורה בסיכום */
+  {
+    const TUE = Date.UTC(2026, 10, 10, 13, 0, 0);   // שלישי 15:00 ישראל
+    const sdb = seed();
+    sdb._data.waMeta.invoiceWatcher = { OFFICE: { at: TUE - 45 * 60 * 1000, pending: [] } };
+    let s = await D.lgAgentDailySummary(sdb, TUE);
+    check('silent office tool → line', [s.text.split('\n').pop(), s.counts.watcherSilent], ['כלי החשבוניות במשרד לא ענה 45 דקות', true]);
+    sdb._data.waMeta.invoiceWatcher.OFFICE.at = TUE - 2 * 60 * 1000;
+    s = await D.lgAgentDailySummary(sdb, TUE);
+    check('fresh heartbeat → no line', [s.text.includes('כלי החשבוניות'), s.counts.watcherSilent], [false, false]);
   }
   /* שליחה לצוות בלבד + בלי כפילות */
   {

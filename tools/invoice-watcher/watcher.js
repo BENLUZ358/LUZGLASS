@@ -230,9 +230,9 @@ async function processRestored(cfg, file, post = require_post(cfg), firstAt, doc
 async function paper(cfg, files, dir, why, archive) {
   const printer = cfg.printCopyTo;
   for (const f of files) {
-    if (!printer) { console.error('paper: no printer configured —', path.basename(f)); break; }
-    try { await (cfg.printFn || printWithGs)(f, printer, cfg); console.log('paper (' + why + '):', path.basename(f)); }
-    catch (e) { console.error('paper failed (' + why + '):', path.basename(f), e.message); }
+    if (!printer) { console.error('paper: no printer configured —', path.basename(f)); notePrint(new Error('no printer configured'), f); break; }
+    try { await (cfg.printFn || printWithGs)(f, printer, cfg); console.log('paper (' + why + '):', path.basename(f)); notePrint(null); }
+    catch (e) { console.error('paper failed (' + why + '):', path.basename(f), e.message); notePrint(e, f); }
   }
   if (archive) {
     try { fs.mkdirSync(path.dirname(archive), { recursive: true });
@@ -299,8 +299,8 @@ async function upload(cfg, parts, files, post, opts = {}) {
   console.log('ok', r.body.docNumber, '→', path.dirname(dest.original));
   if (print) {
     //  מדפסת כבויה / תקועה — החשבונית כבר תויקה ונשלחה; מדפיסים ידנית מהתיקייה
-    try { await (cfg.printFn || printWithGs)(dest.copy, cfg.printCopyTo, cfg); console.log('printed copy', r.body.docNumber); }
-    catch (e) { console.error('print failed (file is filed):', r.body.docNumber, e.message); }
+    try { await (cfg.printFn || printWithGs)(dest.copy, cfg.printCopyTo, cfg); console.log('printed copy', r.body.docNumber); notePrint(null); }
+    catch (e) { console.error('print failed (file is filed):', r.body.docNumber, e.message); notePrint(e, dest.copy); }
   }
   return 'ok';
 }
@@ -378,6 +378,54 @@ async function loop(cfg) {
   }
 }
 
+//  ── דופק (חדר הסוכנים, שלב ב׳, 10/11) ──────────────────────────────────
+//  כל דקה: { op:'heartbeat', pc, pending:[{name, ageSec}], lastPrintError, version } לאותה
+//  כתובת ואותו טוקן של ההעלאה. השרת שומר אותו ומריץ את הבדיקות של הארכיון והקולט
+//  (קובץ שתקוע בתיקייה, שגיאת הדפסה...). ⚠️ לולאה נפרדת: דופק שנכשל (אין רשת, השרת
+//  נפל) לא נוגע בטיפול בחשבוניות — רק נרשם ביומן, וינסה שוב בעוד דקה.
+const WATCHER_VERSION = '2026-11-10';
+let lastPrintError = null;   // ההדפסה האחרונה שנכשלה; הדפסה שהצליחה מנקה
+function notePrint(err, file) {
+  lastPrintError = err ? { at: Date.now(), message: String((err && err.message) || err).slice(0, 300), file: path.basename(String(file || '')) } : null;
+}
+
+//  הקבצים שמחכים עכשיו בתיקיית ההדפסות, עם הגיל שלהם (מזמן הכתיבה)
+function heartbeatBody(cfg, now) {
+  const t = now || Date.now();
+  let names = [];
+  try { names = fs.readdirSync(cfg.watchDir).filter(n => /\.pdf$/i.test(n)); } catch (_) { names = []; }
+  const pending = [];
+  for (const name of names.slice(0, 50)) {
+    try { pending.push({ name, ageSec: Math.max(0, Math.floor((t - fs.statSync(path.join(cfg.watchDir, name)).mtimeMs) / 1000)) }); }
+    catch (_) { /* נעלם בינתיים */ }
+  }
+  return { op: 'heartbeat', pc: require('os').hostname(), pending, lastPrintError, version: WATCHER_VERSION };
+}
+
+//  true = השרת קיבל. לא זורק לעולם.
+async function heartbeatOnce(cfg, post) {
+  try {
+    const r = await (post || heartbeatPost(cfg))(heartbeatBody(cfg, Date.now()));
+    return !!r && r.status === 200;
+  } catch (e) { console.error('heartbeat failed:', e && e.message); return false; }
+}
+
+//  כמו require_post, עם זמן קצוב — דופק תקוע לא נערם
+function heartbeatPost(cfg) {
+  return async body => {
+    const res = await fetch(cfg.url, { method: 'POST', signal: AbortSignal.timeout(50000),
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.token }, body: JSON.stringify(body) });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+}
+
+async function heartbeatLoop(cfg) {
+  for (;;) {
+    await heartbeatOnce(cfg);
+    await new Promise(r => setTimeout(r, cfg.heartbeatMs || 60000));
+  }
+}
+
 //  ── מדבקות (בן, 3/11) — מרכז ההדפסות ───────────────────────────────────
 //  האייפד שולח מדבקות לשרת (/api/print, api/_print-jobs.js). הכלי הזה מושך
 //  כל כמה שניות, שולח ל-TSC TE210 ברשת (TSPL בפורט 9100) ומדווח. כל מדבקה
@@ -447,7 +495,7 @@ async function printLoop(cfg) {
   }
 }
 
-module.exports = { loop, tsplForBitmap, sendLabels, printOnce, resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, processRestored, paper, paperArchivePath, docFromName, groupSingles, roleOf, docNumberOf, readPdf };
+module.exports = { loop, heartbeatBody, heartbeatOnce, WATCHER_VERSION, _resetPrintError: () => { lastPrintError = null; }, tsplForBitmap, sendLabels, printOnce, resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, processRestored, paper, paperArchivePath, docFromName, groupSingles, roleOf, docNumberOf, readPdf };
 
 //  עותק אחד בלבד (בן, 10/11): הכלי מופעל מכמה מקומות (הפעלה בכניסה, משימה מתוזמנת
 //  שבודקת כל כמה דקות שהוא חי). שני עותקים היו מדפיסים כל דף פעמיים — לכן הראשון
@@ -464,6 +512,8 @@ function singleInstance(port, then) {
 if (require.main === module) singleInstance(47811, () => {
   const cfg = loadConfig(process.argv[2] || path.join(__dirname, 'config.json'));
   //  מדבקות — לולאה נפרדת, כדי שחשבונית ארוכה לא תעכב מדבקות (ולהפך)
+  //  דופק — לולאה נפרדת; כשל בה לא נוגע בחשבוניות
+  heartbeatLoop(cfg).catch(e => console.error('heartbeat loop:', e && e.message));
   if (cfg.labelPrinter && cfg.labelPrinter.host) printLoop(cfg).catch(e => console.error('labels loop:', e));
   loop(cfg).catch(e => { console.error(e); process.exit(1); });
 });

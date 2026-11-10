@@ -494,11 +494,13 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
                 [Buffer.from('%PDF-1.4 copy').toString()]: 'חשבונית מס 77777 תאריך 27/10/2026 מפתח 1231 העתק' };
     const run = async users => {
       const d = mk({ db: fakeDb({ invoicePdf: {}, users }), pageTexts: async buf => [T[buf.toString()] || ''] });
-      return handleUpload(req({ original: ORIG, copy: COPY }), d);
+      return { ...(await handleUpload(req({ original: ORIG, copy: COPY }), d)), db: d.db };
     };
     const unknown = await run({ '050': { customerId: '999' } });
     assert.equal(unknown.status, 202); assert.equal(unknown.body.known, false);
-    assert.equal((await run({ '050': { customerId: '1231' } })).body.known, true);
+    assert.equal(Object.values(unknown.db._data.invoicePdf)[0].known, false, 'known stored on the printed record');
+    const kn = await run({ '050': { customerId: '1231' } });
+    assert.equal(kn.body.known, true); assert.equal(Object.values(kn.db._data.invoicePdf)[0].known, true);
   });
   await test('watcher: customer not in the system → original+copy on paper now, copy archived, print folder empty', async () => {
     const g = paperRig();
@@ -550,6 +552,62 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     const out = await W2.processPair(g.cfg, { original: g.f['a.pdf'], copies: [g.f['b.pdf']] },
       async () => { throw new Error('offline'); }, Date.now() - 11 * 60000);
     assert.equal(out, 'review'); assert.equal(g.printed.length, 2);
+    g.done();
+  });
+  //  ── הדופק (חדר הסוכנים, שלב ב׳, 10/11): כל דקה, אותו route ואותו טוקן ──
+  await test('server heartbeat: wrong token refused, nothing stored', async () => {
+    const d = mk();
+    const r = await handleUpload(req({ op: 'heartbeat', pc: 'OFFICE' }, 'Bearer nope'), d);
+    assert.equal(r.status, 401);
+    assert.equal((d.db._data.waMeta || {}).invoiceWatcher, undefined);
+  });
+  await test('server heartbeat: stored under waMeta/invoiceWatcher/<pc>, checks run, no PDF needed', async () => {
+    let ran = 0;
+    const d = mk({ watchRun: async () => { ran++; } });
+    const r = await handleUpload(req({ op: 'heartbeat', pc: 'OFFICE', version: '2026-11-10',
+      pending: [{ name: 'a.pdf', ageSec: 700 }], lastPrintError: { at: 5, message: 'printer off', file: 'a.pdf' } }), d);
+    assert.equal(r.status, 200); assert.equal(r.body.heartbeat, true);
+    assert.deepEqual(d.db._data.waMeta.invoiceWatcher.OFFICE, { at: 1000, pending: [{ name: 'a.pdf', ageSec: 700 }],
+      lastPrintError: { at: 5, message: 'printer off', file: 'a.pdf' }, version: '2026-11-10' });
+    assert.equal(ran, 1);
+    assert.equal(d.db._data.invoicePdf.k1.state, 'awaiting', 'invoice untouched');
+  });
+  await test('server heartbeat: a failing check still answers 200; no pc → 400', async () => {
+    const d = mk({ watchRun: async () => { throw new Error('boom'); } });
+    assert.equal((await handleUpload(req({ op: 'heartbeat', pc: 'OFFICE', pending: [] }), d)).status, 200);
+    assert.equal((await handleUpload(req({ op: 'heartbeat', pending: [] }), d)).status, 400);
+  });
+  await test('watcher heartbeat: pc, waiting PDFs with age, last print error, version', async () => {
+    const os = require('os');
+    const g = paperRig({ 'a.pdf': 'A', 'note.txt': 'x' }, { printFn: async () => { throw new Error('printer off'); } });
+    const old = Date.now() - 12 * 60000;
+    W2._resetPrintError();
+    assert.equal(W2.heartbeatBody(g.cfg, Date.now()).lastPrintError, null);
+    await W2.paper(g.cfg, [g.f['a.pdf']], 'done', 'test');   // ההדפסה נכשלת
+    fs.writeFileSync(path.join(g.cfg.watchDir, 'b.pdf'), 'B');
+    const b = W2.heartbeatBody(g.cfg, Date.now());
+    assert.equal(b.op, 'heartbeat'); assert.equal(b.pc, os.hostname()); assert.equal(b.version, W2.WATCHER_VERSION);
+    assert.deepEqual(b.pending.map(x => x.name), ['b.pdf']);
+    assert.ok(b.pending[0].ageSec < 60);
+    assert.equal(b.lastPrintError.message, 'printer off'); assert.equal(b.lastPrintError.file, 'a.pdf');
+    fs.writeFileSync(path.join(g.cfg.watchDir, 'c.pdf'), 'C');
+    fs.utimesSync(path.join(g.cfg.watchDir, 'c.pdf'), old / 1000, old / 1000);
+    assert.ok(W2.heartbeatBody(g.cfg, Date.now()).pending.find(x => x.name === 'c.pdf').ageSec >= 12 * 60);
+    //  הדפסה שהצליחה מנקה את השגיאה
+    g.cfg.printFn = async () => {};
+    await W2.paper(g.cfg, [path.join(g.cfg.watchDir, 'b.pdf')], 'done', 'test');
+    assert.equal(W2.heartbeatBody(g.cfg, Date.now()).lastPrintError, null);
+    g.done();
+  });
+  await test('watcher heartbeat: posts op heartbeat; a failure never throws', async () => {
+    const g = paperRig({});
+    let sent = null;
+    assert.equal(await W2.heartbeatOnce(g.cfg, async body => { sent = body; return { status: 200, body: { ok: true } }; }), true);
+    assert.equal(sent.op, 'heartbeat'); assert.ok(Array.isArray(sent.pending));
+    assert.equal(await W2.heartbeatOnce(g.cfg, async () => { throw new Error('offline'); }), false);
+    assert.equal(await W2.heartbeatOnce({ ...g.cfg, watchDir: path.join(g.top, 'missing') }, async () => ({ status: 200 })), true,
+      'missing folder → still a heartbeat (empty list)');
+    assert.equal(await W2.heartbeatOnce(g.cfg, async () => ({ status: 401, body: null })), false);
     g.done();
   });
   console.log(`\n${passed} passed`);
