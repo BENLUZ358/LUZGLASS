@@ -401,9 +401,13 @@ function lgRoomBubbleHtml(e, outbox) {
       <div class="rb-who">${esc(x.customerName || 'לקוח')}${x.note ? ' · ' + esc(x.note) : ''}</div>
       <div class="rb-q">${esc(x.question || x.text || '')}</div>
       ${x.suggest ? `<div class="rb-s">הצעה: ${esc(x.suggest)}</div>` : ''}
+      ${x.proposal && open ? `<div class="rb-s">אני מציע לענות: ${esc(x.proposal)}</div>` : ''}
       ${lgRoomIsInternal(x) ? (open ? `<div class="rb-st">מחכה לתיקון — ייסגר לבד</div>
             <div class="rb-acts"><button type="button" class="sbtn" data-roomclose="${esc(x.key)}">סגור</button></div>`
           : `<div class="rb-st">${x.answeredBy === 'ben' ? 'סגרת ✓' : x.answeredBy === 'stale' ? 'נסגר — המחשב לא שלח דופק שבוע' : 'תוקן ✓'}</div>`)
+        : open && x.proposal && x.lessonId ? `<div class="rb-acts"><button type="button" class="sbtn is-primary" data-lessonok="${esc(x.key)}">אשר</button>
+            <button type="button" class="sbtn" data-lessoncorrect="${esc(x.key)}">תקן</button>
+            <button type="button" class="sbtn" data-roomanswer="${esc(x.key)}">ענה אחרת</button></div>`
         : open ? `<div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">ענה</button></div>`
         : retry ? `<div class="rb-st">התשובה לא נשלחה: ${esc(lost.lastError || lost.state)}</div>
             <div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">שלח שוב</button></div>`
@@ -416,7 +420,49 @@ function lgRoomBubbleHtml(e, outbox) {
     return `<div class="rb rb-answer" data-roomkey="${esc(x.key)}">${head}
       <div class="rb-q">${esc(x.text || '')}</div>${st ? `<div class="rb-st">${esc(st)}</div>` : ''}</div>`;
   }
+  //  תשובה שהסוכן נתן לבד לפי כלל (למידה, 11/11) — עם "תקן"
+  if (x.kind === 'info' && x.lessonAuto === true) {
+    const fix = lgRoomCanFix(x, outbox), fo = x.fixOutboxKey ? (outbox || {})[x.fixOutboxKey] : null;
+    return `<div class="rb rb-info" data-roomkey="${esc(x.key)}">${head}<div class="rb-q">${esc(x.text || '')}</div>
+      <div class="rb-who">${esc(x.customerName || 'לקוח')}: ${esc(x.question || '')}</div>
+      ${x.proposal ? `<div class="rb-s">עניתי: ${esc(x.proposal)}</div>` : ''}
+      ${fix ? `${fo ? `<div class="rb-st">התיקון לא נשלח: ${esc(fo.lastError || fo.state)}</div>` : ''}
+        <div class="rb-acts"><button type="button" class="sbtn" data-autofix="${esc(x.key)}">תקן</button></div>`
+        : x.fixOutboxKey ? '<div class="rb-st">תיקנת ✓ — מעכשיו אני שוב שואל קודם</div>' : ''}</div>`;
+  }
   return `<div class="rb rb-info" data-roomkey="${esc(x.key)}">${head}<div class="rb-q">${esc(x.text || '')}</div></div>`;
+}
+//  אפשר לתקן תשובה אוטומטית: עוד לא תוקנה, או שהתיקון לא יצא (נחסם / נכשל סופית)
+function lgRoomCanFix(e, outbox) {
+  if (!e || e.kind !== 'info' || e.lessonAuto !== true || !e.lessonId) return false;
+  return !e.fixOutboxKey || lgRoomSendFinal((outbox || {})[e.fixOutboxKey]);
+}
+
+// ─── מה הסוכנים למדו (למידה, 11/11) — waMeta/agentLessons ─────────────
+//  שורה לכל כלל, לפי סדר הסוכנים, החדש ראשון בתוך כל סוכן
+function lgLessonRows(lessons) {
+  const order = LG_AD_AGENTS.map(a => a.id);
+  const pos = a => { const i = order.indexOf(lgRoomAgentKey(a)); return i < 0 ? order.length : i; };
+  return _adVals(lessons).filter(r => r.v && typeof r.v === 'object')
+    .sort((a, b) => pos(a.v.agent) - pos(b.v.agent) || (Number(b.v.createdAt) || 0) - (Number(a.v.createdAt) || 0))
+    .map(r => ({ id: r.key, agent: lgRoomAgentKey(r.v.agent), agentName: lgRoomAgentName(r.v.agent), topic: String(r.v.topic || ''),
+                 answer: String(r.v.answer || ''), approvals: Number(r.v.approvals) || 0, corrections: Number(r.v.corrections) || 0,
+                 auto: !!r.v.autoAt }));
+}
+function lgLessonCount(lessons) { return lgLessonRows(lessons).length; }
+function lgLessonsHtml(lessons) {
+  const rows = lgLessonRows(lessons), esc = _adEsc;
+  if (!rows.length) return '<div class="hint">הסוכנים עוד לא למדו כלום. כל תשובה שלך בחדר נשמרת כאן.</div>';
+  let last = '';
+  return rows.map(r => {
+    const h = r.agent !== last ? `<h3 class="ls-h">${esc(r.agentName)}</h3>` : '';
+    last = r.agent;
+    return h + `<div class="ls-row">
+      <div class="ls-t"><b>${esc(r.topic || 'בלי נושא')}</b> · ${r.auto ? '<span class="ls-auto">עונה לבד</span>' : 'מציע ושואל'}</div>
+      <div class="ls-a">${esc(r.answer)}</div>
+      <div class="ls-n">אושר ${esc(r.approvals)} ברצף${r.corrections ? ' · תוקן ' + esc(r.corrections) : ''}
+        <button type="button" class="sbtn" data-lessondel="${esc(r.id)}">מחק</button></div></div>`;
+  }).join('');
 }
 //  "כלי החשבוניות במשרד" — מהדופק (waMeta/invoiceWatcher/<pc>, כל דקה). המחשב האחרון ששלח קובע.
 //  → { state: 'ok'|'silent'|'never', text }. עובד = דופק ב-3 הדקות האחרונות.

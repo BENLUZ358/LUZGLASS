@@ -12,6 +12,8 @@
 //      suggest?, note? — ו-answeredAt/By, outboxKey אחרי שבן ענה.
 //    ⚠️ ask בלי state (הצעת צרופה בתור, _attach-suggest) — לא שאלה לבן; נענית בתור.
 //    ask עם internal:true (בדיקות הדופק, _agent-watch) — אין לקוח לענות לו; נסגר לבד (lgRoomClose).
+//    למידה (שלב ג׳, _agent-lessons.js): ask עם lessonId + proposal ("אני מציע לענות"), topic;
+//      info עם lessonAuto:true + lessonId ("עניתי לפי מה שאישרת") — ואחרי "תקן" fixOutboxKey.
 //  waMeta/agentRoomOpen/<מפתח> = { at, agent, customer } — אינדקס קטן של השאלות הפתוחות
 //    (תיקון סקירה 10/11): נכתב כשנפתחת שאלה, יורד כשבן עונה, חוזר אם התשובה לא יצאה.
 //    המונה בתפריט והרשימה בחדר קוראים אותו — לא את 500 האירועים האחרונים.
@@ -66,7 +68,10 @@ async function lgRoomPost(db, e, now) {
     const extra = { to: _s(x.to, 40), state: STATES.includes(x.state) ? x.state : null, customerId: _s(x.customerId, 200),
       customerName: _s(x.customerName, 120), chat: _s(x.chat, 120), question: _s(x.question, 1000), suggest: _s(x.suggest, 1000),
       note: _s(x.note, 300), replyTo: _s(x.replyTo, 60), by: _s(x.by, 60), outboxKey: _s(x.outboxKey, 200),
-      internal: x.internal === true ? true : null };
+      internal: x.internal === true ? true : null,
+      //  למידה (שלב ג׳, _agent-lessons): הצעה מכלל / תשובה אוטומטית לפי כלל
+      lessonId: _keyOk(x.lessonId) ? x.lessonId : null, proposal: _s(x.proposal, 1000), topic: _s(x.topic, 80),
+      lessonAuto: x.lessonAuto === true ? true : null };
     Object.keys(extra).forEach(k => { if (extra[k] != null) rec[k] = extra[k]; });
     await db.ref(ROOM + '/' + key).set(rec);
     if (rec.kind === 'ask' && rec.state === 'open') await _openIdx(db, key, rec);
@@ -207,4 +212,4 @@ async function lgRoomClose(db, key, now, o) {
   return closed;
 }
 
-module.exports = { lgRoomPost, lgRoomAnswer, lgRoomClose, lgRoomLink, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN };
+module.exports = { lgRoomPost, lgRoomAnswer, lgRoomClose, lgRoomLink, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN, SEND_FINAL };

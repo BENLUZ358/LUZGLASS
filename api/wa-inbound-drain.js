@@ -16,6 +16,10 @@
 //                                     (waMeta/agentConfig; בן, 10/11 — בלי Vercel)
 //    { action:'agent-room-answer', key, text }  בן עונה בחדר הסוכנים על שאלה צהובה
 //    { action:'agent-room-close', key }  "סגור" על שאלה פנימית צהובה (בדיקות הדופק; 10/11)
+//    { action:'agent-lesson-approve', key } | { action:'agent-lesson-correct', key, text }
+//                                     אשר / תקן על "אני מציע לענות" (למידה, 11/11)
+//    { action:'agent-lesson-fix', key, text }  "תקן" על תשובה שהסוכן נתן לבד לפי כלל
+//    { action:'agent-lesson-delete', id }  מחיקת כלל (waMeta/agentLessons)
 //    { action:'agent-dismiss', kind, key, ver }  "טופל" על כרטיס בלוח הבקרה
 //                                     (waMeta/agentDash/dismissed/<kind>_<key>; agents.html, 31/10)
 //
@@ -266,10 +270,22 @@ async function handleAdmin(body, deps) {
   }
   // ─── חדר הסוכנים: בן עונה על שאלה צהובה (בן, 10/11) ─────────────────────
   //  התשובה יוצאת ללקוח דרך שכבת השליחה של הסוכנים (אותן הגנות). api/_agent-room.js
+  //  למידה (שלב ג׳): כל תשובה שיצאה לתור נשמרת ככלל (גם "ענה אחרת" על צהוב עם הצעה)
   if (action === 'agent-room-answer') {
-    return require('./_agent-room').lgRoomAnswer(deps.db, { key: b.key, text: b.text },
+    const r = await require('./_agent-room').lgRoomAnswer(deps.db, { key: b.key, text: b.text },
+      { by: String(deps.by || ''), now: deps.now, provider: deps.provider, sendPending: deps.sendPending });
+    if (r && r.ok) await require('./_agent-lessons').lgLessonFromAnswer(deps.db, b.key, b.text, { by: String(deps.by || ''), now: deps.now });
+    return r;
+  }
+  // ─── למידה (שלב ג׳, 11/11) — api/_agent-lessons.js ───────────────────────
+  //  אשר / תקן על צהוב עם "אני מציע לענות"; "תקן" על תשובה שהסוכן נתן לבד; מחק כלל
+  if (action === 'agent-lesson-approve' || action === 'agent-lesson-correct' || action === 'agent-lesson-fix') {
+    const LS = require('./_agent-lessons');
+    const fn = { 'agent-lesson-approve': LS.lgLessonApprove, 'agent-lesson-correct': LS.lgLessonCorrect, 'agent-lesson-fix': LS.lgLessonFix }[action];
+    return fn(deps.db, { key: b.key, text: b.text },
       { by: String(deps.by || ''), now: deps.now, provider: deps.provider, sendPending: deps.sendPending });
   }
+  if (action === 'agent-lesson-delete') return require('./_agent-lessons').lgLessonDelete(deps.db, { id: b.id });
   //  "סגור" על שאלה פנימית (בדיקות הדופק) — answeredBy 'ben', והבעיה לא עולה שוב לאותו מפתח
   if (action === 'agent-room-close') {
     return require('./_agent-watch').lgWatchDismiss(deps.db, b.key, { by: String(deps.by || ''), now: deps.now });

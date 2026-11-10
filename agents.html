@@ -91,6 +91,13 @@ body{background:var(--bg);}
 .rb-ask.is-open{border-width:2px;}
 .rb-answer{align-self:flex-start;background:var(--ben-bg);border-color:var(--green);border-end-end-radius:var(--radius-lg);border-end-start-radius:4px;}
 .compose{margin-top:var(--space-2);}
+/* מה הסוכנים למדו (למידה, 11/11) */
+.ls-h{font-size:var(--fs-base);font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-2);}
+.ls-row{border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-2) var(--space-3);margin-bottom:var(--space-2);background:var(--bg);}
+.ls-t{font-size:var(--fs-sm);}
+.ls-auto{color:var(--green);font-weight:var(--fw-bold);}
+.ls-a{font-size:var(--fs-base);white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px;}
+.ls-n{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);font-size:var(--fs-xs);color:var(--muted);margin-top:var(--space-2);}
 .compose textarea{width:100%;min-height:88px;border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-2) var(--space-3);
   font:inherit;font-size:var(--fs-base);background:var(--surface);color:var(--text);resize:vertical;}
 
@@ -167,7 +174,7 @@ body{background:var(--bg);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261031"></script>
 <script src="lg-icons.js?v=20260807"></script>
-<script src="agents-dash.js?v=20261110b"></script>
+<script src="agents-dash.js?v=20261110c"></script>
 </head>
 <body>
 <div class="wrap">
@@ -241,6 +248,14 @@ body{background:var(--bg);}
     </div>
   </details>
 
+  <details class="fold" id="secLessons" data-fold="lessons">
+    <summary><span data-icon="list"></span>מה הסוכנים למדו <span class="n" id="nLessons"></span></summary>
+    <div class="in">
+      <p class="hint">כל תשובה שלך בחדר נשמרת ככלל. שאלה דומה — הסוכן מציע ושואל אותך. אחרי 3 אישורים ברצף בלי תיקון הוא עונה לבד (רק כשהוא "עונה" ורק ללקוחות שברשימה).</p>
+      <div id="lessons"><div class="hint">טוען…</div></div>
+    </div>
+  </details>
+
   <details class="fold" id="secCancels" data-fold="cancels">
     <summary><span data-icon="x"></span>ביטולים <span class="n" id="nCancels"></span></summary>
     <div class="in" id="cancels"></div>
@@ -256,7 +271,7 @@ const $ = id => document.getElementById(id);
 const E = s => _adEsc(s);
 const PAGE = 50, ROOM_PAGE = 40;
 let SH = {}, Q = {}, C = {}, OB = {}, PILOT = {}, DIS = {}, GROUPS = {}, SENDERS = {}, intake = {}, STATUS = null, DEL_LIVE = false;
-let ROOM = {}, CFG = null, WATCHERS = null;   // WATCHERS — waMeta/invoiceWatcher (הדופק מהמשרד)
+let ROOM = {}, CFG = null, WATCHERS = null, LESSONS = {};   // LESSONS — waMeta/agentLessons (למידה)   // WATCHERS — waMeta/invoiceWatcher (הדופק מהמשרד)
 //  ROOM = חלון 500 האירועים האחרונים (ROOM_WIN) + שאלות פתוחות ישנות יותר מהאינדקס (OPEN_IDX → OLD_OPEN)
 let ROOM_WIN = {}, OPEN_IDX = {}, OLD_OPEN = {};
 const _fetching = new Set();
@@ -272,6 +287,8 @@ function mergeRoom() {
   ROOM = Object.assign({}, OLD_OPEN, ROOM_WIN);
 }
 let period = 'today', shown = PAGE, roomShown = ROOM_PAGE, FILTER = '', ANSWERING = '', DRAFT = '', EDIT_BEN = false;
+//  MODE — מה תיבת הכתיבה שולחת: '' ענה / 'correct' תקן הצעה / 'fix' תקן תשובה שהסוכן נתן לבד
+let MODE = '';
 
 function toast(msg, err) {
   const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : '');
@@ -344,9 +361,9 @@ function renderRoom() {
   $('roomFlt').innerHTML = FILTER ? `<div class="flt-line">מציג רק: <b>${E(lgRoomAgentName(FILTER))}</b>
       <button type="button" class="sbtn" data-cardagent="">הצג הכל</button></div>` : '';
   $('room').innerHTML = (all.length > rows.length ? `<button type="button" class="sbtn more" data-roommore>הצג ישנות יותר (${E(all.length - rows.length)})</button>` : '')
-    + (rows.length ? rows.map(e => lgRoomBubbleHtml(e, OB) + (ANSWERING === e.key && lgRoomCanAnswer(e, OB) ? `<div class="compose">
+    + (rows.length ? rows.map(e => lgRoomBubbleHtml(e, OB) + (ANSWERING === e.key && (MODE === 'fix' ? lgRoomCanFix(e, OB) : lgRoomCanAnswer(e, OB)) ? `<div class="compose">
         <textarea id="ansText" maxlength="1000" placeholder="מה לענות ללקוח?" aria-label="התשובה ללקוח">${E(DRAFT)}</textarea>
-        <p class="hint" style="margin:4px 0 0">התשובה יוצאת ללקוח בוואטסאפ כמו שכתבת.</p>
+        <p class="hint" style="margin:4px 0 0">${MODE ? 'התיקון יוצא ללקוח בוואטסאפ, והסוכן לומד אותו (ושוב שואל אותך לפני שהוא עונה לבד).' : 'התשובה יוצאת ללקוח בוואטסאפ כמו שכתבת.'}</p>
         <div class="rb-acts"><button type="button" class="sbtn is-primary" data-ansend="${E(e.key)}">שלח ללקוח</button>
           <button type="button" class="sbtn" data-ancancel>ביטול</button></div></div>` : '')).join('')
       : '<div class="hint">אין עדיין הודעות בחדר.</div>');
@@ -458,7 +475,11 @@ function renderWatcher() {
   const w = lgAdWatcherLine(WATCHERS, Date.now());
   el.textContent = w.text; el.className = 'wline is-' + w.state;
 }
-function renderAll() { renderSwitches(); renderSummary(); renderCards(); renderWatcher(); renderRoom(); renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderCancels(); renderState(); }
+function renderLessons() {
+  $('nLessons').textContent = lgLessonCount(LESSONS) || '';
+  $('lessons').innerHTML = lgLessonsHtml(LESSONS);
+}
+function renderAll() { renderLessons(); renderSwitches(); renderSummary(); renderCards(); renderWatcher(); renderRoom(); renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderCancels(); renderState(); }
 let _t = null;
 const later = () => { clearTimeout(_t); _t = setTimeout(renderAll, 50); };   // כמה מאזינים בבת אחת → ציור אחד
 
@@ -478,11 +499,18 @@ document.addEventListener('click', async ev => {
     return;
   }
   const ans = ev.target.closest('[data-roomanswer]');
-  if (ans) { if (ANSWERING !== ans.dataset.roomanswer) DRAFT = ''; ANSWERING = ans.dataset.roomanswer; renderRoom(); const t = $('ansText'); if (t) t.focus(); return; }
-  if (ev.target.closest('[data-ancancel]')) { ANSWERING = ''; DRAFT = ''; renderRoom(); return; }
+  if (ans) { if (ANSWERING !== ans.dataset.roomanswer || MODE) DRAFT = ''; ANSWERING = ans.dataset.roomanswer; MODE = ''; renderRoom(); const t = $('ansText'); if (t) t.focus(); return; }
+  //  תקן הצעה / תקן תשובה אוטומטית — אותה תיבה, ממולאת במה שהסוכן הציע / ענה
+  const fx = ev.target.closest('[data-lessoncorrect],[data-autofix]');
+  if (fx) {
+    const k = fx.dataset.lessoncorrect || fx.dataset.autofix, m = fx.dataset.lessoncorrect ? 'correct' : 'fix';
+    if (ANSWERING !== k || MODE !== m) DRAFT = String((ROOM[k] || {}).proposal || '');
+    ANSWERING = k; MODE = m; renderRoom(); const t = $('ansText'); if (t) t.focus(); return;
+  }
+  if (ev.target.closest('[data-ancancel]')) { ANSWERING = ''; DRAFT = ''; MODE = ''; renderRoom(); return; }
   const be = ev.target.closest('[data-benedit]');
   if (be) { EDIT_BEN = be.dataset.benedit === '1'; renderSwitches(); return; }
-  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave],[data-roomclose]');
+  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave],[data-roomclose],[data-lessonok],[data-lessondel]');
   if (!b) return;
   let body;
   if (b.dataset.dismiss) body = { action: 'agent-dismiss', kind: b.dataset.dismiss, key: b.dataset.key, ver: Number(b.dataset.ver) };
@@ -497,7 +525,14 @@ document.addEventListener('click', async ev => {
   else if (b.dataset.ansend) {
     const text = ($('ansText') || {}).value || '';
     if (!text.trim()) { toast('כתוב תשובה קודם', true); return; }
-    body = { action: 'agent-room-answer', key: b.dataset.ansend, text };
+    body = MODE === 'correct' ? { action: 'agent-lesson-correct', key: b.dataset.ansend, text }
+      : MODE === 'fix' ? { action: 'agent-lesson-fix', key: b.dataset.ansend, text }
+      : { action: 'agent-room-answer', key: b.dataset.ansend, text };
+  }
+  else if (b.dataset.lessonok) body = { action: 'agent-lesson-approve', key: b.dataset.lessonok };
+  else if (b.dataset.lessondel) {
+    if (!confirm('למחוק את הכלל? הסוכן ישאל אותך שוב על שאלות כאלה.')) return;
+    body = { action: 'agent-lesson-delete', id: b.dataset.lessondel };
   }
   else if (b.dataset.roomclose) body = { action: 'agent-room-close', key: b.dataset.roomclose };
   else if (b.hasAttribute('data-bensave')) body = { action: 'agent-config-set', escalatePhone: ($('benPick') || {}).value || '' };
@@ -513,9 +548,11 @@ document.addEventListener('click', async ev => {
   if (body.action === 'agent-dismiss') toast('הוסר מהרשימה');
   else if (body.action === 'agent-room-close') toast('נסגר — לא יעלה שוב עד שהבעיה תיעלם');
   //  מה קרה באמת (תיקון סקירה 10/11): נשלח / עדיין בתור / לא נשלח — והשאלה חוזרת לפתוחה
-  else if (body.action === 'agent-room-answer') {
-    ANSWERING = ''; DRAFT = '';
-    if (r.sent) toast('נשלח ללקוח');
+  else if (body.action === 'agent-lesson-delete') toast('הכלל נמחק');
+  else if (['agent-room-answer', 'agent-lesson-approve', 'agent-lesson-correct', 'agent-lesson-fix'].includes(body.action)) {
+    ANSWERING = ''; DRAFT = ''; MODE = '';
+    if (r.auto && body.action === 'agent-lesson-approve') toast('אישרת 3 פעמים ברצף — מעכשיו הסוכן עונה לבד על זה');
+    else if (r.sent) toast('נשלח ללקוח');
     else toast('לא נשלח — ' + (r.sendReason || 'סיבה לא ידועה') + (r.reopened ? '. אפשר לענות שוב.' : ''), r.sendState !== 'pending');
     renderRoom();
   }
@@ -543,6 +580,7 @@ lgRequireAuthAsync('admin').then(session => {
   _lgDb.ref('waMeta/agentDeleteLive').on('value', s => { DEL_LIVE = s.val() === true; later(); }, warn('agentDeleteLive'));
   on(_lgDb.ref('waMeta/agentDash/dismissed'), v => { DIS = v; }, 'agentDash');
   on(_lgDb.ref('waMeta/invoiceWatcher'), v => { WATCHERS = v; }, 'invoiceWatcher');
+  on(_lgDb.ref('waMeta/agentLessons'), v => { LESSONS = v; }, 'agentLessons');
   on(_lgDb.ref('waGroups'), v => { GROUPS = v; }, 'waGroups');
   on(_lgDb.ref('waSenders'), v => { SENDERS = v; }, 'waSenders');
   //  "נקלטה גם כהזמנה" בשורת היומן נשען על רשומות הקליטה

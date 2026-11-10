@@ -40,6 +40,7 @@ const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteN
 const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
 const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute, lgAgentEscalatePhone } = require('./_agent-config');
 const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT } = require('./_agent-room');
+const { lgLessonFind, lgLessonUsed } = require('./_agent-lessons');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -630,6 +631,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
     return q.queued;
   };
   let askKey = '';   // השאלה (תשובה ראשונה) שנכנסה לתור בפועל
+  let lessonInfo = null;   // למידה: מה ההשוואה מצאה (נרשם ברשומה)
   //  תיקון סופי 9: בהחלטה שתלויה בשאול (העברה אליו / בקשת מחיר) התשובות ללקוח
   //  ("העברנו לשאול", "נחזור אליך עם מחיר", "אני בודק") נכנסות לתור רק אחרי —
   //  ורק אם — לפחות הודעה אחת לשאול באמת נכנסה. אחרת היינו מבטיחים משהו שלא יקרה.
@@ -655,8 +657,33 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  "לא יודע → בן": צהוב בחדר + וואטסאפ קצר לבן; ללקוח "קיבלנו" רק אם לפחות
       //  אחד מהם באמת נכתב (אחרת היינו מבטיחים בדיקה שאף אחד לא יודע עליה)
       const line = String(a.question || '').split('\n').map(x => x.trim()).filter(Boolean)[0] || '';
+      //  למידה (שלב ג׳, _agent-lessons): שאלה דומה לכלל שבן אישר? רק טקסט (לא תמונה).
+      //  ⚠️ כאן כבר עברו כל השערים (הסוכן "עונה", לקוח מופעל ומקושר) — אחרת המודל לא נקרא.
+      let lm = null;
+      if (!(a.files && a.files.length) && a.question && a.question !== '(תמונה)') {
+        try {
+          lm = await lgLessonFind(db, { agent, question: a.question, env, fetcher: o.fetchImpl, matcher: o.lessonMatch,
+                                        deadline: o.deadline, clock: o.clock, reserveMs: 2 * PER_ITEM_WORST_MS });
+        } catch (e) { console.warn('agent-act: lessons', e && e.name); lm = null; }
+        if (lm && lm.skipped) lessonInfo = { lessonMatch: { skipped: lm.skipped } };
+        else if (lm && lm.id) lessonInfo = { lessonMatch: { id: lm.id, confidence: lm.confidence, auto: !!lm.lesson.autoAt } };
+        if (lm && lm.usage) lessonInfo = { ...(lessonInfo || {}), lessonUsage: lm.usage };
+      }
+      //  כלל אוטומטי (3 אישורים ברצף): התשובה ישר ללקוח, בלי "קיבלנו" ובלי בן; בחדר שורה עם "תקן".
+      //  נכשל להיכנס לתור → ממשיכים לצהוב הרגיל.
+      if (lm && lm.id && lm.lesson.autoAt) {
+        if (await enq(k, chat, String(lm.lesson.answer || ''), [], 'agent-lesson')) {
+          await lgRoomPost(db, { agent, kind: 'info', text: 'עניתי לפי מה שאישרת: ' + String(lm.lesson.topic || lm.topic || ''),
+            lessonId: lm.id, lessonAuto: true, topic: lm.lesson.topic, proposal: lm.lesson.answer, customerId: cid, customerName: a.who, chat,
+            question: a.question, outboxKey: lgWaInboundKey(k), ref: { customerId: cid, shadowKey: key } }, now);
+          await lgLessonUsed(db, lm.id, now);
+          continue;
+        }
+      }
+      const prop = lm && lm.id ? { lessonId: lm.id, proposal: lm.lesson.answer } : {};
       const rk = await lgRoomPost(db, { agent, kind: 'ask', state: 'open', text: a.note || (String(a.who || '') + ': ' + line.slice(0, 200)),
         customerId: cid, customerName: a.who, chat, question: a.question, suggest: a.suggest, note: a.note,
+        topic: lm && lm.topic ? lm.topic : undefined, ...prop,
         ref: { customerId: cid, shadowKey: key } }, now);
       //  ⚠️ (תיקון סקירה 10/11) הכל תלוי בצהוב: בלעדיו אין על מה לענות בחדר — לא
       //  מציקים לבן ולא מבטיחים ללקוח. ההתראה נושאת את הלקוח (cid): השליחה מתירה
@@ -736,7 +763,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   if (!d.conv) { if (stored) await convRef.set(null); }
   else if (d.conv !== conv && askKey) await convRef.set({ ...d.conv, askKey: lgWaInboundKey(askKey) });
   await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actMode: mode, actQueued: queued, actCancels: cancels,
-                       ...(attRemovals.length ? { actAttRemovals: attRemovals } : {}), ...qUsage });
+                       ...(attRemovals.length ? { actAttRemovals: attRemovals } : {}), ...qUsage, ...(lessonInfo || {}) });
 
   if (queued.length) {
     try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, deadline: o.deadline, clock: o.clock }); }
