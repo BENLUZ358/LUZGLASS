@@ -35,4 +35,16 @@ check('lgBrokenOpen on order without breaks', ctx.lgBrokenOpen({}), []);
 check('returned but not delivered', ctx.lgBrokenReturnedUndelivered(o), [{ idx: 4, track: 'triplex', returnedAt: 9 }]);
 check('Firebase array shape is read too', ctx.lgBrokenOpen({ brokenChisum: [null, { at: 1, track: 'chisum' }] }), [{ idx: 1, track: 'chisum', at: 1 }]);
 
+
+/* ── Task 2: workday ─────────────────────────────────────────────── */
+const WD = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
+const conf = (WD.match(/function confirmResetChisum\(\)\{[\s\S]*?\n\}\r?\n/) || [''])[0];
+check('confirm asks _brokenPlanOf', /_brokenPlanOf\(o, st\)/.test(conf), true);
+check('brokenChisum is written before the lists are cleared',
+      conf.indexOf('brokenChisum: rec') > 0 && conf.indexOf('brokenChisum: rec') < conf.indexOf('chisumArrivedIdxs: null'), true);
+check('a broken order advances down the done path', /if\(st\.done \|\| broken\)\{/.test(conf), true);
+check('dialog has a broken bucket before partial', WD.indexOf('else if(o._broken)') > 0 && WD.indexOf('else if(o._broken)') < WD.indexOf('partialOrds.push(o)'), true);
+check('chisum tab draws the broken box', /function renderChisumTab\(\)\{\s*_renderBrokenChisumBox\(\);/.test(WD), true);
+check('delivery tab draws returned pieces', /function renderDeliveryTab\(\)\{ _renderBrokenReturnBox\(\);/.test(WD), true);
+check('"חזר" asks the server to tell the customer', /kind:'broken-returned', orderIds:\[String\(id\)\], idx/.test(WD), true);
 console.log(fail ? '\n' + fail + ' failed' : '\nall passed'); process.exit(fail ? 1 : 0);
