@@ -37,7 +37,7 @@ const withEnv = async (vars, fn) => {
 const ctx = { console };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'order-attachments.js'), 'utf8'), ctx);
-const B = vm.runInContext('({ lgAttCanMerge, lgAttMergePlan, lgAttSlides, lgAttSuggestText: typeof lgAttSuggestText === "function" ? lgAttSuggestText : null })', ctx);
+const B = vm.runInContext('({ lgAttCanMerge, lgAttMergePlan, lgAttSlides, lgAttSplitPlan, lgAttSuggestText: typeof lgAttSuggestText === "function" ? lgAttSuggestText : null, lgAttByMarkazan: typeof lgAttByMarkazan === "function" ? lgAttByMarkazan : null })', ctx);
 
 const S = require(path.join(ROOT, 'api', '_order-attachments.js'));
 const AS = require(path.join(ROOT, 'api', '_attach-suggest.js'));
@@ -132,7 +132,7 @@ const ord = (id, at, extra) => ({ id, orderNum: 'L' + id.replace(/\D/g, ''), ord
   const g1 = ord('wa_g1', NOW);
   const after = ord('wa_after', NOW + 5000, { sketchName: 'אחרי' });
   for (const o of [old, day, s1, g1, after]) await add(o);
-  check('E1 the latest sketch before it (same batch)', J(await AS.lgAttachTarget(db, g1, NOW)), { id: 'wa_s1', name: 'מקלחון רון', num: 'L1' });
+  check('E1 the latest sketch before it (same batch)', J(await AS.lgAttachTarget(db, g1, NOW)), { id: 'wa_s1', name: 'מקלחון רון', num: 'L1', at: NOW - 60000 });
   await AS.lgAttachRecentKind(db, s1, 'graphic');
   check('E2 one that is itself a graphic is skipped → the last 24h', (await AS.lgAttachTarget(db, g1, NOW)).id, 'wa_day');
   delete db._data.orders.wa_day;
@@ -194,7 +194,7 @@ await withEnv(ENV, async () => {
   const r = await AS.lgAttachSuggestFor(db, g1, { now: NOW, fetcher: kindFetch('graphic'), shrink });
   const a = ((db._data.orders.wa_s1 || {}).attachments || {})[1] || {};
   check('F8 5 in a row → attached on its own', [r.merged, db._data.orders.wa_g1, a.kind, a.attachedBy], [true, undefined, 'graphic', 'markazan']);
-  check('F9 the copy remembers the suggestion (split brings it back with צרף / לא)', (a.from.order.attachSuggest || {}).targetId, 'wa_s1');
+  check('F9 the copy remembers the suggestion (the "yes" answer finds it; split strips it — I14)', (a.from.order.attachSuggest || {}).targetId, 'wa_s1');
   check('F10 the room hears about it', room(db), ["צירפתי לבד גרפיקה חלבי ל'מקלחון רון' (נאור)"]);
   check('F11 the streak is not touched by the auto merge', db._data.waMeta.attachLearn['9117'].streak, 5);
 });
@@ -217,6 +217,63 @@ await withEnv({ ...ENV, ATTACH_SUGGEST_MODEL: 'cheap-1' }, async () => {
   let model = null;
   await AS.lgAttachSuggestFor(db, g1, { now: NOW, shrink, fetcher: async (u, init) => { model = JSON.parse(init.body).model; return { ok: false }; } });
   check('F14 an own model can be set (ATTACH_SUGGEST_MODEL), else AGENT_MODEL', model, 'cheap-1');
+});
+
+// ═══ F'. אף פעם לא מצרף לבד כש… (סקירה 10/11) ═══════════════════════
+await withEnv(ENV, async () => {
+  const { db, s1, g1 } = world({ streak: 9 });
+  await AS.lgAttachRecentNote(db, s1, NOW - 60000);
+  const r = await AS.lgAttachSuggestFor(db, g1, { now: NOW, caption: 'זה לחלבי של המקלחון', fetcher: kindFetch('graphic'), shrink });
+  check('F15 streak >= 5 but the image came with a caption -> only a suggestion', [r.merged, r.suggested, !!db._data.orders.wa_g1], [false, true, true]);
+});
+await withEnv(ENV, async () => {
+  const s1 = ord('wa_s1', NOW - 11 * 60000, { sketchName: 'מקלחון רון' });
+  const g1 = ord('wa_g1', NOW);
+  const db = fakeDb({ orders: { wa_s1: s1, wa_g1: g1 }, sketches: { wa_s1: IMG, wa_g1: IMG }, waMeta: { attachLearn: { '9117': { streak: 9 } } } });
+  await AS.lgAttachRecentNote(db, s1, NOW - 11 * 60000);
+  const r = await AS.lgAttachSuggestFor(db, g1, { now: NOW, fetcher: kindFetch('hardware'), shrink });
+  check('F16 streak >= 5 but more than 10 minutes after its sketch -> only a suggestion', [r.merged, r.suggested, ((db._data.orders.wa_g1 || {}).attachSuggest || {}).targetId], [false, true, 'wa_s1']);
+});
+await withEnv(ENV, async () => {
+  const { db, s1, g1 } = world({ streak: 9 });
+  await AS.lgAttachRecentNote(db, s1, NOW - 60000);
+  const r = await AS.lgAttachSuggestFor(db, g1, { now: NOW, fetcher: kindFetch('unsure'), shrink });
+  check('F17 streak >= 5 but not exactly graphic / hardware -> nothing merged', [r.merged, !!db._data.orders.wa_g1, db._data.orders.wa_s1.attachments], [false, true, undefined]);
+});
+// -- daily cap --
+await withEnv({ ...ENV, ATTACH_SUGGEST_DAILY_MAX: '2' }, async () => {
+  const { db, s1, g1 } = world();
+  const day = new Date(NOW).toISOString().slice(0, 10);
+  db._data.waMeta.attachUsage = { [day]: { calls: 2, inTok: 1, outTok: 1 } };
+  await AS.lgAttachRecentNote(db, s1, NOW - 60000);
+  let called = false;
+  const r = await AS.lgAttachSuggestFor(db, g1, { now: NOW, fetcher: async () => { called = true; }, shrink });
+  check('F18 over ATTACH_SUGGEST_DAILY_MAX -> unsure, no call', [r.kind, r.reason, called, db._data.orders.wa_g1.attachSuggest], ['unsure', 'cap', false, undefined]);
+});
+await withEnv({ ...ENV, ATTACH_SUGGEST_DAILY_MAX: undefined }, async () => {
+  const { db, g1 } = world();
+  const day = new Date(NOW).toISOString().slice(0, 10);
+  db._data.waMeta.attachUsage = { [day]: { calls: 300 } };
+  let called = false;
+  const r = await AS.lgAttachSuggestFor(db, g1, { now: NOW, fetcher: async () => { called = true; return { ok: false }; }, shrink });
+  check('F19 default cap is 300 a day', [r.reason, called], ['cap', false]);
+  db._data.waMeta.attachUsage[day].calls = 299;
+  await AS.lgAttachSuggestFor(db, g1, { now: NOW, fetcher: async () => { called = true; return { ok: false }; }, shrink });
+  check('F19 under it -> called, and a failed call is counted too', [called, db._data.waMeta.attachUsage[day].calls], [true, 300]);
+});
+// -- time --
+await withEnv(ENV, async () => {
+  const { db, s1, g1 } = world();
+  await AS.lgAttachRecentNote(db, s1, NOW - 60000);
+  let called = false;
+  const r = await AS.lgAttachSuggestFor(db, g1, { now: NOW, deadline: Date.now() + 2000, fetcher: async () => { called = true; }, shrink });
+  check('F20 too little time left -> skipped, no call', [r.reason, called], ['no-time', false]);
+  const hang = (u, init) => new Promise((_, rej) => init.signal.addEventListener('abort', () => rej(new Error('aborted'))));
+  const t0 = Date.now();
+  const keepAlive = setTimeout(() => {}, 10000);   // AbortSignal.timeout is unref'd - without this node exits mid-test
+  const r2 = await AS.lgAttachSuggestFor(db, g1, { now: NOW, deadline: Date.now() + 4000, fetcher: hang, shrink });
+  clearTimeout(keepAlive);
+  check('F21 a slow model never runs past the deadline', [r2.kind, Date.now() - t0 < 4000], ['unsure', true]);
 });
 
 // ═══ G. צרף / לא ═════════════════════════════════════════════════════
@@ -245,6 +302,21 @@ await withEnv(ENV, async () => {
   const n2 = await AS.lgAttachAnswer(db, { answer: 'no', orderId: 'wa_g1', by: 'בן' }, NOW + 6);
   check('G6 nothing to answer any more → refused, not counted twice', [n2.ok, db._data.waMeta.attachLearn['9117'].no], [false, 2]);
   check('G7 an unknown answer → refused', (await AS.lgAttachAnswer(db, { answer: 'maybe', orderId: 'wa_g1' }, NOW)).ok, false);
+});
+
+await withEnv(ENV, async () => {
+  //  split of what the markazan attached: the row comes back without attachSuggest, so the "no" carries split
+  const { db } = world({ streak: 6, yes: 6, no: 0 });
+  const n = await AS.lgAttachAnswer(db, { answer: 'no', orderId: 'wa_g1', split: true, by: 'בן' }, NOW + 5);
+  const L = db._data.waMeta.attachLearn['9117'];
+  check('G8 split of an auto-merge -> streak 0 even without a suggestion on the row', [n.ok, L.streak, L.no], [true, 0, 1]);
+  const n2 = await AS.lgAttachAnswer(db, { answer: 'no', orderId: 'wa_g1', split: true, by: 'בן' }, NOW + 6);
+  check('G9 the same split twice is counted once', [n2.ok, db._data.waMeta.attachLearn['9117'].no], [false, 1]);
+  const n3 = await AS.lgAttachAnswer(db, { answer: 'no', orderId: 'wa_s1', by: 'בן' }, NOW + 7);
+  check('G10 without split and without a suggestion -> still refused', n3.ok, false);
+  const adm = require(path.join(ROOT, 'api', 'wa-inbound-drain.js'));
+  const r = await adm.handleAdmin({ action: 'attach-answer', answer: 'no', orderId: 'wa_s1', split: true }, { db, by: 'x', now: NOW + 8 });
+  check('G11 the admin route passes split through', [r.ok, db._data.waMeta.attachLearn['9117'].no], [true, 2]);
 });
 
 // ═══ H. הנתיב לאדמין ═════════════════════════════════════════════════
@@ -279,6 +351,18 @@ await withEnv(ENV, async () => {
   check('I9 splitting what the markazan attached is a "no"', /markazan/.test(flip) && /attach-answer/.test(flip + fn), true);
   const build = (ADMIN.match(/function buildSQItems\(\)[\s\S]*?\r?\n}\r?\n/) || [''])[0];
   check('I10 the queue row keeps the suggestion (buildSQItems whitelist)', /attachSuggest:\s*o\.attachSuggest/.test(build), true);
+  //  review 10/11
+  check('I11 an order with a markazan attachment is marked', B.lgAttByMarkazan ? [B.lgAttByMarkazan({ attachments: { 1: { kind: 'graphic', attachedBy: 'markazan' } } }),
+        B.lgAttByMarkazan({ attachments: { 1: { kind: 'graphic' } } }), B.lgAttByMarkazan({})] : null, [true, false, false]);
+  const attTag = (ADMIN.match(/function _sqAttTag[\s\S]*?\r?\n}\r?\n/) || [''])[0];
+  check('I12 the queue row shows "צורף ע"י המרכזן"', /lgAttByMarkazan\(item\)/.test(attTag) && attTag.includes('צורף ע"י המרכזן'), true);
+  const tag = (ADMIN.match(/function _sqSuggestTag[\s\S]*?\r?\n}\r?\n/) || [''])[0];
+  check('I13 ids in onclick go through lgJsStr, not lgEsc', [/lgJsStr\(String\(item\.id\)\)/.test(tag), /lgEsc\(String\(item\.id\)\)/.test(tag)], [true, false]);
+  const dst = { id: 'wa_1', attachments: { 3: { kind: 'graphic', attachedBy: 'markazan', from: { order: { id: 'wa_2', customerId: '9117',
+                attachSuggest: { kind: 'graphic', targetId: 'wa_1' } } } } } };
+  const up = B.lgAttSplitPlan(dst, 3, IMG);
+  check('I14 split: the restored row has no suggestion (no tag back, no double count)', [up['orders/wa_2'].id, 'attachSuggest' in up['orders/wa_2']], ['wa_2', false]);
+  check('I15 split of a markazan attachment sends "no" with split', /split:\s*true/.test(flip), true);
 }
 
 // ═══ J. מחובר לקליטה ═════════════════════════════════════════════════
@@ -307,6 +391,19 @@ await withEnv(ENV, async () => {
   check('J1 a graphic after a sketch from the same customer → suggestion on it', (on._data.orders.wa_K2_1.attachSuggest || {}).targetId, 'wa_K1_1');
   const off = await run({ ATTACH_SUGGEST_ENABLED: undefined });
   check('J2 switch off → nothing', [off._data.orders.wa_K2_1.attachSuggest, (off._data.waMeta || {}).attachRecent], [undefined, undefined]);
+  //  webhook: classification adds at most ~8s - attachMs; without enough time no call at all
+  let calls = 0;
+  await withEnv(ENV, async () => {
+    const db = fakeDb({ meta: { orderCounter: 1041 }, waSenders: { '0501234567': { customerId: '9117', customerName: 'נאור' } },
+                        hashavshevetAccounts: { '9117': { key: '9117', name: 'נאור' } } });
+    const p = inb.lgWaInboundParse(body('K9', 1762789900, ''));
+    await inb.lgWaInboundRecord(db, p.entry, NOW);
+    await inb.lgWaInboundProcess(db, inb.lgWaInboundKey('K9'), { by: 'test', fetchImpl: okFetch, now: NOW, attachMs: 1000,
+                                                                attach: { fetcher: async (u, i) => { calls++; return kindFetch('graphic')(u, i); }, shrink } });
+  });
+  check('J4 attachMs too short -> the image is kept, classification skipped', calls, 0);
+  const HOOK = fs.readFileSync(path.join(ROOT, 'api', 'wa-inbound.js'), 'utf8');
+  check('J5 the webhook passes an 8s classification budget', /lgWaInboundProcess\([^;]*attachMs:\s*WA_WEBHOOK_ATTACH_MS/.test(HOOK) && /WA_WEBHOOK_ATTACH_MS\s*=\s*8\s*\*\s*1000/.test(HOOK), true);
 }
 
 await withEnv({ ...ENV, EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {

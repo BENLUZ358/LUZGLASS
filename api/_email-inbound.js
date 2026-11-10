@@ -357,7 +357,7 @@ async function lgEmailInboundProcess(db, key, opts) {
         const a = o.attach || {};
         const r = await require('./_attach-suggest').lgAttachSuggestFor(db, { ...upd['orders/' + id] }, { now, caption: entry.subject || '',
           fetcher: a.fetcher, shrink: a.shrink, deadline });
-        if (r.reason === 'off' || r.reason === 'no-time' || r.reason === 'no-model') break;
+        if (r.reason === 'off' || r.reason === 'no-time' || r.reason === 'no-model' || r.reason === 'cap') break;
       } catch (e) { console.warn('email-inbound: attach suggest failed', e && e.name); }
     }
     return { state: 'done', refNum, orderIds, ...(autoHandled ? { autoHandled: true } : {}) };

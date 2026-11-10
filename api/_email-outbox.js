@@ -137,6 +137,17 @@ async function lgEmailClaim(db, limit, now) {
       await _close(db, key, at, 'cancelled', 'הכתובת כבר לא מקושרת לכרטיס — לא נשלח');
       continue;
     }
+    //  "N סקיצות נקלטו" (מרכזן, סקירה 10/11): רגע לפני השליחה — כל ההזמנות כבר טופלו / נמחקו → מבוטל.
+    //  N = רק מה שעוד קיים.
+    let receivedNums = null;
+    if (v.kind === 'sketches-received') {
+      const { lgIntakeAckLive } = require('./_intake-ack');
+      const ids = _ids(_list(v.orderIds));
+      const { live, handled } = await lgIntakeAckLive(db, ids);
+      if (!live.length) { await _close(db, key, at, 'cancelled', 'ההזמנות כבר לא קיימות — "נקלטו" לא נשלח'); continue; }
+      if (handled) { await _close(db, key, at, 'cancelled', 'הסקיצות כבר טופלו — "נקלטו" לא נשלח'); continue; }
+      if (live.length < ids.length) receivedNums = live.map(x => String(x.o.orderNum || x.o.refNum || x.id));
+    }
     //  חשבונית (סקירת צרופות, 10/11): רשימת הקבצים מחושבת פעם אחת כאן ונשמרת עם ההשכרה.
     //  הסקריפט מבקש בדיוק את המספר הזה, ו-outbox-file בודק שהרשימה לא השתנתה בינתיים
     //  (צרופה נוספה / הופרדה) — אחרת 'files-changed', והריצה הבאה תופסת וסופרת מחדש.
@@ -163,7 +174,7 @@ async function lgEmailClaim(db, limit, now) {
     const e = r.committed && r.snapshot.val();
     if (!e || e.state !== 'pending' || e.leaseToken !== token) continue;
     const item = { key, thread: e.thread, messageId: String(e.messageId || (drafter ? 'drafter-' + e.drafterBatch : '')), email: String(e.email), leaseToken: token,
-               text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
+               text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: receivedNums || e.orderNums || [],
                                   sketchNames: e.sketchNames || [], docNumber: e.docNumber,
                                   deliveryTomorrow: e.deliveryTomorrow === true, variant: e.variant || '',
                                   missingSketchNums: e.missingSketchNums || [], extraLines: e.extraLines || [] }),

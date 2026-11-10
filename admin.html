@@ -4140,9 +4140,10 @@ function _sqAttFlip(o){
       const a=(o.attachments||{})[k];
       const back=a && a.from && a.from.order && a.from.order.id;
       const ok=await window.lgAttSplit(o.id, k);
-      // מרכזן: להפריד מה שהמרכזן צירף לבד = "לא" — הלמידה מתאפסת (api/_attach-suggest.js)
+      // מרכזן: להפריד מה שהמרכזן צירף לבד = "לא" — הלמידה מתאפסת (api/_attach-suggest.js).
+      // השורה חוזרת בלי attachSuggest (lgAttSplitPlan), ולכן split:true
       if(ok && back && a.attachedBy==='markazan')
-        _lgAuthPost('/api/wa-inbound-drain', { action:'attach-answer', answer:'no', orderId:String(back) }).catch(()=>{});
+        _lgAuthPost('/api/wa-inbound-drain', { action:'attach-answer', answer:'no', orderId:String(back), split: true }).catch(()=>{});
       return ok;
     } });
 }
@@ -4152,7 +4153,7 @@ function _sqAttFlip(o){
 function _sqSuggestTag(item){
   const t = typeof lgAttSuggestText==='function' ? lgAttSuggestText(item) : '';
   if(!t) return '';
-  const id = lgEsc(String(item.id));
+  const id = lgJsStr(String(item.id));   // בתוך onclick — lgEsc לבד לא מספיק (ר' lgJsStr)
   return `<div class="sq-suggest" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()">
     <span class="sq-suggest-t">${lgEsc(t)}</span>
     <span class="sq-suggest-b">
@@ -4185,7 +4186,11 @@ async function sqSuggestAnswer(id, yes){
 // "📎 2" — לשורה יש צרופות
 function _sqAttTag(item){
   const t = typeof lgAttBadge==='function' ? lgAttBadge(item) : '';
-  return t ? `<span class="sq-tag" title="תמונות שצורפו להזמנה" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">${lgEsc(t)}</span>` : '';
+  if(!t) return '';
+  // מרכזן (סקירה 10/11): צרופה שהמרכזן צירף לבד — לפתוח ולבדוק, ו"הפרד" אם טעה
+  const mk = typeof lgAttByMarkazan==='function' && lgAttByMarkazan(item)
+    ? `<span class="sq-tag" title="המרכזן צירף לבד — פתח את הסקיצה, ואם טעה: הפרד" style="background:rgba(41,128,185,0.15);color:#2c7fb8">צורף ע"י המרכזן</span>` : '';
+  return `<span class="sq-tag" title="תמונות שצורפו להזמנה" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">${lgEsc(t)}</span>` + mk;
 }
 
 function sqSelect(id){

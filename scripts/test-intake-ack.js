@@ -130,7 +130,7 @@ await withEnv(GREEN, async () => {
   delete db._data.orders.wa_a_1;
   await IA.lgIntakeAckFlush(db, NOW + 200000, { drain: async () => ({}) });
   const q = outbox(db);
-  check('D14 N counts every image of the batch, also one merged since', (q[0] || {}).orderNums && q[0].orderNums.length, 2);
+  check('D14 N counts only orders that still exist (merged / deleted ones drop out)', (q[0] || {}).orderNums, ['Lb_1']);
   check('D15 but only existing orders are stamped', (q[0] || {}).orderIds, ['wa_b_1']);
 });
 
@@ -315,6 +315,74 @@ await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }
   check('G4 left for Ben → "received" queued for the email', [!!r2.autoHandled, kinds(b)], [false, ['sketches-received']]);
   check('G4 counting the one sketch', (emq(b)[0] || {}).orderNums, [(b._data.orders[r2.orderIds[0]] || {}).orderNum]);
 });
+
+// ═══ H. לא "נקלטו" אחרי שכבר טופלו (סקירה 10/11) ══════════════════════
+await withEnv(GREEN, async () => {
+  const db = seed();
+  const a = waOrder('wa_a_1'), b = waOrder('wa_b_1');
+  [a, b].forEach(o => put(db, o));
+  await IA.lgIntakeAckNote(db, a, NOW);
+  await IA.lgIntakeAckNote(db, b, NOW + 1000);
+  db._data.orders.wa_a_1.sketchSeenAt = NOW + 2000;
+  db._data.orders.wa_b_1.sketchAck = { sentAt: NOW + 3000 };
+  const f = await IA.lgIntakeAckFlush(db, NOW + 200000, { drain: async () => ({}) });
+  check('H1 every order already seen / acked → nothing sent', [f.queued.length, outbox(db).length], [0, 0]);
+  check('H1 the record is dropped, with the reason', [(db._data.waMeta.intakeAcks || {})[IA.lgIntakeAckChatKey(a)], f.skipped.map(x => x.reason)], [undefined, ['handled']]);
+});
+await withEnv(GREEN, async () => {
+  const db = seed();
+  const a = waOrder('wa_a_1'), b = waOrder('wa_b_1'), c = waOrder('wa_c_1');
+  [a, b, c].forEach(o => put(db, o));
+  for (const o of [a, b, c]) await IA.lgIntakeAckNote(db, o, NOW);
+  db._data.orders.wa_a_1.sketchSeenAt = NOW + 2000;
+  delete db._data.orders.wa_c_1;
+  await IA.lgIntakeAckFlush(db, NOW + 200000, { drain: async () => ({}) });
+  const q = outbox(db);
+  check('H2 one still waiting → sent; the deleted one is not counted', [q.length, (q[0] || {}).orderNums], [1, ['La_1', 'Lb_1']]);
+});
+await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+  const ob = require(path.join(ROOT, 'api', '_email-outbox.js'));
+  const db = emSeed(true);
+  ['em_h_1', 'em_h_2'].forEach((id, i) => put(db, emOrder(id, i + 1)));
+  await IA.lgIntakeAckEmail(db, ['em_h_1', 'em_h_2'], NOW, {});
+  db._data.orders.em_h_1.sketchSeenAt = NOW + 1;
+  db._data.orders.em_h_2.sketchAck = { sentAt: NOW + 2 };
+  const items = await ob.lgEmailClaim(db, 5, NOW + IA.INTAKE_ACK_EMAIL_DELAY_MS + 1);
+  const row = emq(db)[0] || {};
+  check('H3 email: all handled before the claim → not sent, cancelled with a reason',
+        [items.length, row.state, /טופלו/.test(String(row.lastError || ''))], [0, 'cancelled', true]);
+});
+await withEnv({ INTAKE_ACK_ENABLED: 'true', EMAIL_ONLY_TO: 'dana@client.co.il' }, async () => {
+  const ob = require(path.join(ROOT, 'api', '_email-outbox.js'));
+  const db = emSeed(true);
+  ['em_i_1', 'em_i_2', 'em_i_3'].forEach((id, i) => put(db, emOrder(id, i + 1)));
+  await IA.lgIntakeAckEmail(db, ['em_i_1', 'em_i_2', 'em_i_3'], NOW, {});
+  db._data.orders.em_i_1.sketchSeenAt = NOW + 1;
+  delete db._data.orders.em_i_3;
+  const items = await ob.lgEmailClaim(db, 5, NOW + IA.INTAKE_ACK_EMAIL_DELAY_MS + 1);
+  check('H4 email: one still waiting → sent, the deleted one not counted', [items.length, (items[0] || {}).text],
+        [1, 'שלום פלג מקלחונים,\n\n2 סקיצות נקלטו.\n\nלוז זגגות ומראות האחים בע"מ']);
+  const db2 = emSeed(true);
+  put(db2, emOrder('em_j_1', 1));
+  await IA.lgIntakeAckEmail(db2, ['em_j_1'], NOW, {});
+  delete db2._data.orders.em_j_1;
+  const none = await ob.lgEmailClaim(db2, 5, NOW + IA.INTAKE_ACK_EMAIL_DELAY_MS + 1);
+  check('H5 email: every order gone → cancelled', [none.length, (emq(db2)[0] || {}).state], [0, 'cancelled']);
+});
+
+// ═══ I. תפוגה בתור הוואטסאפ — "נקלטו" בן חצי שעה לא יוצא ══════════════
+{
+  const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
+  const t = Date.now();
+  const row = (kind, ageMin) => ({ kind, to: GROUP, orderIds: ['x'], orderNums: ['L1'], state: 'pending', attempts: 0,
+                                   createdAt: t - ageMin * 60000, updatedAt: t - ageMin * 60000, claimedAt: null });
+  const db = fakeDb({ waOutbox: { old: row('sketches-received', 31), fresh: row('sketches-received', 10), ready: row('dispatched', 31) } });
+  const o = await ob.lgWaClaim(db, 'old', 'test');
+  check('I1 sketches-received older than 30 minutes → expired, not claimed',
+        [o.claimed, db._data.waOutbox.old.state, !!db._data.waOutbox.old.lastError], [false, 'expired', true]);
+  check('I2 a fresh one is still claimed', (await ob.lgWaClaim(db, 'fresh', 'test')).claimed, true);
+  check('I3 other kinds keep the 24h limit', (await ob.lgWaClaim(db, 'ready', 'test')).claimed, true);
+}
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll intake-ack checks passed.');

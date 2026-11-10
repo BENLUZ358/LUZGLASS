@@ -28,6 +28,8 @@ const ACKS = 'waMeta/intakeAcks';
 const INTAKE_ACK_WAIT_MS = 2 * 60 * 1000;           // אחרי התמונה האחרונה מאותו צ'אט
 const INTAKE_ACK_STALE_MS = 30 * 60 * 1000;         // השעון לא רץ חצי שעה — "נקלטו" באיחור הוא רעש
 const INTAKE_ACK_EMAIL_DELAY_MS = 60 * 1000;
+//  בתור הוואטסאפ: "נקלטו" שלא יצא תוך חצי שעה (ספק נפל, drain לא רץ) — פג, לא נשלח (lgWaClaim)
+const INTAKE_ACK_OUTBOX_MAX_MS = 30 * 60 * 1000;
 const AGENT = 'מרכזן';
 
 const lgIntakeAckOn = () => process.env.INTAKE_ACK_ENABLED === 'true';
@@ -44,6 +46,18 @@ function lgIntakeAckChatKey(order) {
     return k ? 'p' + k : '';
   }
   return '';
+}
+
+//  ההזמנות של הסבב שעוד קיימות (לא פיקטיביות), ו"כבר טופלו" = לכל אחת מהן sketchSeenAt
+//  (עברה ל"נראה") או sketchAck ("טופלו" יצא). ⚠️ אחרי "טופלו" — "נקלטו" הוא בלבול (סקירה 10/11).
+//  → { live:[{ id, o }], handled }
+async function lgIntakeAckLive(db, orderIds) {
+  const live = [];
+  for (const id of orderIds || []) {
+    const o = (await db.ref('orders/' + id).once('value')).val();
+    if (o && !o.isTest) live.push({ id: String(id), o });
+  }
+  return { live, handled: live.length > 0 && live.every(x => !!(x.o.sketchSeenAt || x.o.sketchAck)) };
 }
 
 //  תמונה שנקלטה בוואטסאפ → נרשמת לסבב של הצ'אט. → { noted, reason }
@@ -107,13 +121,10 @@ async function lgIntakeAckFlush(db, now, deps) {
 
     const ids = _list(taken.orderIds).map(String);
     const nums = _list(taken.orderNums).map(String);
-    //  N = כל התמונות של הסבב, גם כאלה שאוחדו מאז כצרופה; החותמת רק על הזמנות שעוד קיימות
-    const live = [];
-    for (const id of ids) {
-      const o = (await db.ref('orders/' + id).once('value')).val();
-      if (o && !o.isTest) live.push({ id, o });
-    }
+    //  N = רק הזמנות שעוד קיימות (שנמחקה / אוחדה כצרופה — לא נספרת). כולן כבר טופלו → כלום.
+    const { live, handled } = await lgIntakeAckLive(db, ids);
     if (!live.length) { skip('no-orders'); continue; }
+    if (handled) { skip('handled'); continue; }
     const first = live[0].o;
     const who = await resolveRecipientWa(db, first, KIND);
     if (!who.linked || !who.phone || String(who.accountKey || '') !== String(taken.customerId || '')) { skip('unlinked'); continue; }
@@ -122,8 +133,8 @@ async function lgIntakeAckFlush(db, now, deps) {
     const gate = provider.gate({ phone: who.phone, accountKey: who.accountKey, linked: true });
     if (!gate.allowed) { skip(gate.reason || 'gate'); continue; }
 
-    const n = Math.max(nums.length, live.length);
-    const orderNums = nums.length >= live.length ? nums : live.map(x => String(x.o.orderNum || x.id));
+    const orderNums = live.map(x => String(nums[ids.indexOf(x.id)] || x.o.orderNum || x.o.refNum || x.id));
+    const n = orderNums.length;
     const clientName = String(first.orderClient || 'לקוח');
     const q = await lgWaEnqueue(db, { kind: KIND, to: who.phone, clientName, orderNums, sketchNames: [],
                                       orderIds: live.map(x => x.id), queuedBy: 'markazan',
@@ -175,5 +186,5 @@ async function lgIntakeAckEmail(db, orderIds, now, opts) {
   return { queued, reason: queued ? '' : (b.error || b.reason || '') };
 }
 
-module.exports = { lgIntakeAckOn, lgIntakeAckChatKey, lgIntakeAckNote, lgIntakeAckFlush, lgIntakeAckEmail,
-                   INTAKE_ACK_KIND: KIND, INTAKE_ACK_WAIT_MS, INTAKE_ACK_STALE_MS, INTAKE_ACK_EMAIL_DELAY_MS };
+module.exports = { lgIntakeAckOn, lgIntakeAckChatKey, lgIntakeAckLive, lgIntakeAckNote, lgIntakeAckFlush, lgIntakeAckEmail,
+                   INTAKE_ACK_KIND: KIND, INTAKE_ACK_WAIT_MS, INTAKE_ACK_STALE_MS, INTAKE_ACK_EMAIL_DELAY_MS, INTAKE_ACK_OUTBOX_MAX_MS };

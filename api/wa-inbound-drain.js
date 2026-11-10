@@ -166,7 +166,8 @@ async function handleAdmin(body, deps) {
   if (action === 'attach-answer') {
     if (!_keyOk(String(b.orderId || ''))) return { ok: false, code: 'bad-key', message: 'מזהה הזמנה לא תקין' };
     return require('./_attach-suggest').lgAttachAnswer(deps.db,
-      { answer: b.answer, orderId: String(b.orderId), targetId: b.targetId == null ? '' : String(b.targetId), by: String(deps.by || '') }, deps.now);
+      { answer: b.answer, orderId: String(b.orderId), targetId: b.targetId == null ? '' : String(b.targetId), by: String(deps.by || ''),
+        split: b.split === true }, deps.now);
   }
 
   // ─── פיילוט הסוכנים ללקוח (31/10) ─────────────────────────────────────

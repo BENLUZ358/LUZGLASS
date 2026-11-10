@@ -216,8 +216,10 @@ async function _markazan(db, order, entry, now, o) {
   //  הסיווג לוקח כמה שניות — אחרי האישור (שנרשם מיד), ולא כשנגמר הזמן של ה-drain
   try {
     const a = o.attach || {};
+    //  o.attachMs (webhook): הסיווג לא מוסיף יותר מזה לבקשה — הדדליין הקרוב מבין השניים
+    const deadline = o.attachMs != null ? Math.min(o.deadline != null ? o.deadline : Infinity, Date.now() + Number(o.attachMs)) : o.deadline;
     await require('./_attach-suggest').lgAttachSuggestFor(db, order, { now, caption: entry.caption || '', fetcher: a.fetcher,
-                                                                       shrink: a.shrink, deadline: o.deadline });
+                                                                       shrink: a.shrink, deadline });
   } catch (e) { console.warn('wa-inbound: attach suggest failed', e && e.name); }
 }
 
