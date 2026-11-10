@@ -18,7 +18,7 @@ const ROOT = path.join(__dirname, '..');
 const ctx = { console };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'order-attachments.js'), 'utf8'), ctx);
-const A = vm.runInContext('({ LG_ATT_KINDS, lgAttList, lgAttCanMerge, lgAttMergePlan, lgAttSplitPlan, lgAttFindByMsg, lgAttCandidates, lgAttSlides })', ctx);
+const A = vm.runInContext('({ LG_ATT_KINDS, lgAttList, lgAttCanMerge, lgAttMergePlan, lgAttSplitPlan, lgAttFindByMsg, lgAttCandidates, lgAttSlides, lgAttPressMoved, lgAttSwipeDir, lgAttStep, lgAttInvoiced, lgAttBadge })', ctx);
 const J = x => JSON.parse(JSON.stringify(x));
 
 const NOW = 1762790000000;
@@ -83,6 +83,49 @@ check('find none', A.lgAttFindByMsg(orders, 'M0'), null);
 // ── למי אפשר לחבר ──
 const pool = [src, dst, { ...dst, id: 'o2', createdAt: NOW - 1 }, { ...dst, id: 'o3', customerId: '1' }, { ...dst, id: 'o4', stage: 'collected', createdAt: NOW - 2 }];
 check('candidates: same customer, newest first, not itself', A.lgAttCandidates(src, pool).map(o => o.id), ['o2', 'o4', 'wa_0']);
+
+
+// ── לחיצה ארוכה, החלקה, דפדוף (Task 2-3) ──
+check('press: still finger keeps the long-press', A.lgAttPressMoved(3, -4), false);
+check('press: exactly 10px still counts as still', A.lgAttPressMoved(6, 8), false);
+check('press: moved more than 10px cancels', A.lgAttPressMoved(8, 8), true);
+check('swipe: short move is a tap', A.lgAttSwipeDir(20, 0), 0);
+check('swipe: vertical scroll is not a swipe', A.lgAttSwipeDir(60, 80), 0);
+check('swipe: finger to the right = next (RTL)', A.lgAttSwipeDir(60, 5), 1);
+check('swipe: finger to the left = previous', A.lgAttSwipeDir(-60, 5), -1);
+check('step: next', A.lgAttStep(0, 1, 3), 1);
+check('step: stops at the last', A.lgAttStep(2, 1, 3), 2);
+check('step: stops at the first', A.lgAttStep(0, -1, 3), 0);
+check('step: empty', A.lgAttStep(0, 1, 0), 0);
+check('invoiced: doc number', A.lgAttInvoiced({ invoiceDone: { docNumber: '67346' } }), true);
+check('invoiced: partial pieces (raw)', A.lgAttInvoiced({ invoiceDone: { pieces: { 0: '1' } } }), true);
+check('invoiced: partial pieces (normalized)', A.lgAttInvoiced({ invoicePieces: { 2: '1' } }), true);
+check('invoiced: not yet', A.lgAttInvoiced({ stage: 'done' }), false);
+check('badge: none', A.lgAttBadge(dst), '');
+check('badge: count', A.lgAttBadge(withAtt), '📎 2');
+
+// ── חיבור בדפים (בדיקת מקור) ──
+const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+const MOD = read('order-attachments.js');
+check('module: DOM part only in the browser', /if \(typeof window !== 'undefined'\)/.test(MOD), true);
+['lgAttMerge', 'lgAttSplit', 'lgAttPickKind', 'lgAttConnectMenu', 'lgAttFlipper', 'lgAttWireList'].forEach(n =>
+  check('module: exposes ' + n, new RegExp('window\\.' + n + '\\s*=').test(MOD), true));
+check('module: merge is one atomic write', /_lgDb\.ref\(\)\.update\(/.test(MOD), true);
+check('module: invoiced warning text', MOD.includes('החשבונית כבר נשלחה בלי התמונה הזו'), true);
+const PAGES = { 'admin.html': 2, 'drafter.html': 1, 'workday.html': 2, 'check-station.html': 1, 'invoices.html': 1 };
+for (const [f, n] of Object.entries(PAGES)) {
+  const h = read(f);
+  check(f + ': loads order-attachments.js after firebase-db.js',
+    h.indexOf('src="order-attachments.js') > h.indexOf('src="firebase-db.js'), true);
+  check(f + ': flipper wired (' + n + '+)', (h.match(/lgAttFlipper\(/g) || []).length >= n, true);
+}
+check('wa-inbound-panel: flipper in the viewer', /lgAttFlipper\(/.test(read('wa-inbound-panel.js')), true);
+const ADM = read('admin.html');
+check('admin: queue rows carry their id', /data-sq-id="\$\{lgEsc\(String\(item\.id\)\)\}"/.test(ADM), true);
+check('admin: queue wired for long-press / drag', /lgAttWireList\(/.test(ADM), true);
+check('admin: queue row shows the attachment count', /lgAttBadge\(/.test(ADM), true);
+check('admin: queue detail has split', /onSplit/.test(ADM), true);
+check('admin: sqItems keep attachments', /attachments:\s+o\.attachments \|\| null/.test(ADM), true);
 
 // ⚠️ הזמנה שעוברת דרך lgNormalizeOrder ונשמרת שוב — לא מאבדת את הצרופות
 const SRC = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
