@@ -26,8 +26,14 @@ const S = require('./_invoice-send');
 //  ובטקסט — הוא כבר יושב ברשומות התור; לפני 10/11 זו הייתה שורת "מחר" ל-9117/14201.)
 //  מי לקוח הובלות — אותו מקור כמו workday.html (_loadDeliveryClients): users עם isDelivery,
 //  לפי טלפון או מפתח כרטיס, ובנוסף הדגל deliveryClient על ההזמנה עצמה.
+//  לקוח הובלות בלי משתמש בניהול המשתמשים (אין לו 🚚) — לפי מפתח הכרטיס.
+//  ⚠️ העתק של LG_DELIVERY_ACCOUNTS ב-firebase-db.js (שם הוא מעביר להובלות בסיום יום
+//  עבודה); test-invoice-deliver.js נכשל אם הם נפרדים. (בן, 10/11: פלג קיבל חשבונית בלי השורה)
+const LG_DELIVERY_ACCOUNTS = ['07'];   // פלג מקלחונים
 async function lgIsDeliveryInvoice(db, orders, accountKey) {
   if (orders.some(o => o && o.deliveryClient)) return true;
+  if (accountKey && LG_DELIVERY_ACCOUNTS.includes(String(accountKey))) return true;
+  if (orders.some(o => o && LG_DELIVERY_ACCOUNTS.includes(String(o.customerId || '')))) return true;
   let users = {};
   try { users = (await db.ref('users').once('value')).val() || {}; } catch (_) { users = {}; }
   const norm = p => String(p || '').replace(/[-\s]/g, '');
@@ -206,4 +212,4 @@ async function lgInvoiceDeliver(db, key, deps) {
   return { state: res && res.status === 'sent' ? 'sent' : 'queued', channel: 'whatsapp', result: res || null };
 }
 
-module.exports = { lgInvoiceFiles, lgInvoiceDeliver, lgInvoiceEmailFor, lgIsDeliveryInvoice, LG_INVOICE_EMAIL };
+module.exports = { lgInvoiceFiles, lgInvoiceDeliver, lgInvoiceEmailFor, lgIsDeliveryInvoice, LG_INVOICE_EMAIL, LG_DELIVERY_ACCOUNTS };
