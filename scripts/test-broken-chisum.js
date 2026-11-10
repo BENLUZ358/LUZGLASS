@@ -39,7 +39,7 @@ check('Firebase array shape is read too', ctx.lgBrokenOpen({ brokenChisum: [null
 /* ── Task 2: workday ─────────────────────────────────────────────── */
 const WD = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
 const conf = (WD.match(/function confirmResetChisum\(\)\{[\s\S]*?\n\}\r?\n/) || [''])[0];
-check('confirm asks _brokenPlanOf', /_brokenPlanOf\(o, st\)/.test(conf), true);
+check('confirm asks _brokenPlanOf', /_brokenPlanOf\(o, st, _resetTrack\)/.test(conf), true);
 check('brokenChisum is written before the lists are cleared',
       conf.indexOf('brokenChisum: rec') > 0 && conf.indexOf('brokenChisum: rec') < conf.indexOf('chisumArrivedIdxs: null'), true);
 check('a broken order advances down the done path', /if\(st\.done \|\| broken\)\{/.test(conf), true);
@@ -52,4 +52,15 @@ const INV = fs.readFileSync(path.join(ROOT, 'invoices.html'), 'utf8');
 check('invoice station tags a broken order', /\$\{brokenTag\(o\)\}/.test(INV) && /lgBrokenOpen\(o\)/.test(INV), true);
 //  נמצא בבדיקה בדפדפן: הנרמול שמט את השדה, והשבור לא הופיע באף מסך
 check('lgNormalizeOrder keeps brokenChisum', /brokenChisum:\s+o\.brokenChisum\s+\?\? null/.test(SRC), true);
+/* ── בן 10/11: אישור טריפלקס רשם שבר על הזמנות חיסום ──────────────── */
+check('triplex tab button passes its track', /onclick="resetChisumList\('triplex'\)"/.test(WD), true);
+check('chisum tab button passes its track', /onclick="resetChisumList\('chisum'\)"/.test(WD), true);
+const und = (WD.match(/function _ordersUnderCheck\(track\)\{[\s\S]*?\n\}/) || [''])[0];
+check('triplex check lists only orders whose triplex report is back', /track === 'triplex' \? !!o\.triplexArrived/.test(und), true);
+check('chisum check lists only orders whose chisum report is back', /track === 'chisum'  \? !!o\.chisumArrived/.test(und), true);
+const bp = (WD.match(/function _brokenPlanOf\(o, st, track\)\{[\s\S]*?\n\}/) || [''])[0];
+check('no break from the triplex tab', /if\(track === 'triplex'\) return null;/.test(bp), true);
+check('no break for partial-invoice customers (9117 / 14201)', /if\(lgPartialInvoiceOrder\(o\)\) return null;/.test(bp), true);
+check('dialog and confirm use the same tab', (WD.match(/_ordersUnderCheck\(_resetTrack\)/g) || []).length, 2);
+check('both broken calls pass the tab', (WD.match(/_brokenPlanOf\(o, st, _resetTrack\)/g) || []).length, 2);
 console.log(fail ? '\n' + fail + ' failed' : '\nall passed'); process.exit(fail ? 1 : 0);

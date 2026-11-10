@@ -100,7 +100,7 @@ function world(orders, opts = {}) {
   [...DB_FNS.map(n => grab(DB, n)), ...DB_OPT.map(n => grab(DB, n, true)),
    ...WD_FNS.map(n => grab(WD, n)), ...WD_OPT.map(n => grab(WD, n, true))]
     .forEach(src => src && vm.runInContext(src, ctx));
-  vm.runInContext('let _confirmingFinish = false; let _confirmingResetChisum = false;', ctx);
+  vm.runInContext('let _confirmingFinish = false; let _confirmingResetChisum = false; let _resetTrack = "chisum";', ctx);
   return { ctx, log, o: id => orders.find(x => String(x.id) === String(id)) };
 }
 
