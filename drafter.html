@@ -271,9 +271,6 @@ let _showingDoneBanner = false;
 
 // ═══ LOAD ═══
 let _drafterUnsub = null;
-// משלוחים לשרטט (בן, 10/11) — נטען פעם אחת כשהדף עולה
-window.addEventListener('load', () => { if (window.lgDrafterBatchesMount) window.lgDrafterBatchesMount(); });
-
 function load(){
   if(_drafterUnsub) _drafterUnsub();
   _drafterUnsub = listenAllOrders(function(allOrders){
@@ -562,6 +559,8 @@ document.addEventListener('keydown',e=>{
 lgRequireAuthAsync('admin').then(session => {
   if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
   load();
+  // משלוחים לשרטט (בן, 10/11) — רק אחרי הכניסה: השרת דורש טוקן של אדמין
+  if (window.lgDrafterBatchesMount) window.lgDrafterBatchesMount();
 });
 
 function unavOpen(){document.getElementById('unavSidebar').classList.add('open');const ov=document.getElementById('unavOverlay');if(ov)ov.classList.add('open');}
