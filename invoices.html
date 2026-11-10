@@ -82,6 +82,8 @@ html,body{height:100%;overflow:hidden;}
 .ord-num{font-size:var(--fs-lg);font-weight:var(--fw-black);}
 .ord-sketch{margin-top:2px;font-size:var(--fs-base);font-weight:var(--fw-bold);}
 .ord-meta{margin-top:2px;font-size:var(--fs-xs);color:var(--muted);}
+.ord-broken{display:inline-block;margin-top:4px;padding:2px 8px;border-radius:10px;font-size:var(--fs-xs);font-weight:var(--fw-bold);background:#fdecea;color:#c0392b;}
+.ord-broken.back{background:#eaf5ee;color:#1e7e45;}
 @keyframes lgFlashOnce{0%,100%{background:var(--surface)}40%{background:#f6dcd8}}
 
 /* המונים והשער — תמיד גלויים בתחתית עמודת ההזמנות */
@@ -260,7 +262,7 @@ html,body{height:100%;overflow:hidden;}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="firebase-db.js?v=20261110"></script>
+<script src="firebase-db.js?v=20261110b"></script>
 <script src="sku-picker.js?v=20261028"></script>
 <script src="lg-icons.js?v=20261103"></script>
 </head>
@@ -469,6 +471,12 @@ const partLine = o => {
 };
 
 // ═══ עמודה 2 · ההזמנות, המונים והשער ════════════════════════════════════════
+//  שבר בחיסום (בן, 10/11): החשבונית יוצאת על כל ההזמנה גם כשפריט עוד בחיסום
+function brokenTag(o) {
+  const open = lgBrokenOpen(o).length;
+  if (open) return `<span class="ord-broken">${open === 1 ? 'פריט שבור' : open + ' פריטים שבורים'} — עוד בחיסום</span>`;
+  return o.brokenChisum ? '<span class="ord-broken back">פריט שבור חזר</span>' : '';
+}
 function renderOrders() {
   const g = selKey && groupOf(selKey);
   if (!g) {
@@ -484,6 +492,7 @@ function renderOrders() {
       <div class="ord-row"><span class="ord-num">${esc(o.orderNum || o.id)}</span>${stChip(s)}</div>
       ${o.sketchName ? `<div class="ord-sketch">${esc(o.sketchName)}</div>` : ''}
       <div class="ord-meta">${nItems(n)}${o.date ? ' · ' + esc(o.date) : ''}</div>
+      ${brokenTag(o)}
       ${partLine(o)}${hsRef(o)}</button>`;
   }).join('');
 

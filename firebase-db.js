@@ -468,6 +468,40 @@ function lgIdxsObj(idxs) {
 //  הכרטיס בחשבשבת. בסיום יום עבודה / בדיקה הם עוברים להובלות, בלי הודעת
 //  "מוכן לאיסוף". (בן, 9/11: פלג מקלחונים — ההזמנות מגיעות במייל.)
 const LG_DELIVERY_ACCOUNTS = ['07'];   // פלג מקלחונים
+
+// ── שבר בחיסום (בן, 10/11) ──
+//  לקוח הובלות: פריט שלא חזר מהמפעל כשלוחצים "סיום בדיקה" = שבור, לא משנה אם
+//  באמת נשבר או רק מתעכב. ההזמנה ממשיכה להובלה ולחשבונית על כולה; השבור נרשם
+//  ב-brokenChisum/<מספר פריט> = {at, track, returnedAt?, deliveredAt?} ונשאר
+//  בלוח החיסום עד שהוא חוזר. טריפלקס שעוד במפעל — מחכים לו (בן): לא שבור.
+//  מחזיר את השבורים, או null = אין שינוי מהיום (נשארת / ממשיכה כרגיל).
+function lgBrokenPlan(x) {
+  if (!x || !x.isDelivery || x.done || x.waitsPolish) return null;
+  const txPending = x.triplexPending || [];
+  if (txPending.length && !x.triplexBack) return null;
+  const chArr = x.chisumArrived || [], txArr = x.triplexArrived || [];
+  const somethingReady = chArr.length + txArr.length > 0 || !!x.closedAny || (x.itemCount || 0) > (x.factoryCount || 0);
+  if (!somethingReady) return null;
+  const out = [];
+  (x.chisumPending || []).forEach(i => { if (!chArr.includes(i)) out.push({ idx: i, track: 'chisum' }); });
+  txPending.forEach(i => { if (!txArr.includes(i)) out.push({ idx: i, track: 'triplex' }); });
+  return out.length ? out : null;
+}
+function _lgBrokenEntries(o) {
+  const b = (o && o.brokenChisum) || {};
+  return Object.keys(b).filter(k => b[k]).map(k => ({ idx: Number(k), v: b[k] }))
+    .filter(e => Number.isInteger(e.idx) && e.idx >= 0).sort((a, c) => a.idx - c.idx);
+}
+//  שבורים שעוד לא חזרו
+function lgBrokenOpen(o) {
+  return _lgBrokenEntries(o).filter(e => !e.v.returnedAt)
+    .map(e => ({ idx: e.idx, track: e.v.track || 'chisum', at: e.v.at || 0 }));
+}
+//  חזרו מהמפעל ועוד לא נמסרו ללקוח — לשונית ההובלה
+function lgBrokenReturnedUndelivered(o) {
+  return _lgBrokenEntries(o).filter(e => e.v.returnedAt && !e.v.deliveredAt)
+    .map(e => ({ idx: e.idx, track: e.v.track || 'chisum', returnedAt: e.v.returnedAt }));
+}
 function lgNextStage(order, isDelivery) {
   const items      = order.items || [];
   // טריפלקס רגיל אינו מסומן chisum מלכתחילה, ולכן הוא כבר לא נכנס לכאן —
@@ -1148,6 +1182,9 @@ function lgNormalizeOrder(o) {
     // פאנלים שנסגרו ב"סיום בדיקה" — ירדו מהרשימה ולא חוזרים אליה
     chisumClosedIdxs:   o.chisumClosedIdxs   ?? null,
     triplexClosedIdxs:  o.triplexClosedIdxs  ?? null,
+    // שבר בחיסום (בן, 10/11) — גולמי, lgBrokenOpen מפענח. בלעדיו הנרמול היה מעלים
+    // את השבור מכל מסך, והכרטיס בחיסום והתג בתחנת החשבוניות לא היו מופיעים.
+    brokenChisum:       o.brokenChisum       ?? null,
     // מה שיום העבודה כבר סיים או מסר — גולמי, lgWorkdayLeft מפענח.
     // בלעדיו כאן, הזמנה חלקית הייתה נשכחת בכל טעינה ומתקדמת כולה שוב.
     wdDoneIdxs:         o.wdDoneIdxs         ?? null,

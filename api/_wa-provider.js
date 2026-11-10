@@ -84,7 +84,7 @@ function lgWaChatId(to) {
 //  שנרשמו. שורת "לפרטים נוספים ניתן להיכנס למשתמש שלך" הוסרה בינתיים: הפיילוט
 //  עובד רק מוואטסאפ, ולחלק מהלקוחות אין משתמש.
 //  orderNums עדיין מגיע, כי הוא הספירה, והתבנית של Meta (params) נשענת עליו.
-function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliveryTomorrow, variant, missingSketchNums }) {
+function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliveryTomorrow, variant, missingSketchNums, extraLines }) {
   const who  = String(clientName || 'לקוח');
   const n    = (orderNums || []).filter(Boolean).length;
   const one  = n === 1;
@@ -111,6 +111,12 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliv
                     : count + ' אושרו, מתחילים לעבוד עליהן.');
   }
   if (kind === 'dispatched') return wrap('ההובלה יצאה אליך עם ' + count + '.');
+  //  שבר בחיסום (בן, 10/11): השורות מוכנות מ-api/_broken.js
+  const extra = (extraLines || []).map(s => String(s || '').trim()).filter(Boolean);
+  if (kind === 'broken-returned') {
+    const doc = docNumber ? ' (חשבונית ' + String(docNumber) + ')' : '';
+    return `שלום ${who},\n\n${extra.join('\n')}\nהחשבונית כבר יצאה על כל ההזמנה${doc}.\n\n${BUSINESS}`;
+  }
   //  חשבונית (DB-00004, בן 29/10): קובץ החשבונית והסקיצות מצורפים להודעה.
   if (kind === 'invoice') {
     //  בן, 10/11: לקוח הובלות — זו ההודעה היחידה שלו, ובה "ההובלה תצא אליך בקרוב"
@@ -119,8 +125,10 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliv
     const sk = !miss.length ? ', והסקיצות שלהן.'
       : miss.length >= n ? '.'
       : ', והסקיצות שלהן (בלי סקיצה ל' + miss.join(', ') + ').';
-    return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + sk,
-                deliveryTomorrow ? 'ההובלה תצא אליך בקרוב.' : '');
+    const tails = [];
+    if (extra.length) tails.push('שימו לב:\n' + extra.join('\n') + '\nהחשבונית יוצאת על כל ההזמנה, והפריט יגיע בהמשך.');
+    if (deliveryTomorrow) tails.push('ההובלה תצא אליך בקרוב.');
+    return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + sk, tails.join('\n\n'));
   }
   return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'));
 }

@@ -61,9 +61,10 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
                                     queuedBy, accountKey, invoiceKey, docNumber, fileCount, deliveryTomorrow, variant, delayMs, now,
-                                    missingSketchNums, sendTo }) {
+                                    missingSketchNums, sendTo, extraLines, keySuffix }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
-  const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber : kind, thread, orderIds);
+  const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber
+                          : keySuffix != null ? kind + '#' + keySuffix : kind, thread, orderIds);
   const at  = now || Date.now();
   const r = await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {
     if (cur && (cur.state === 'pending' || cur.state === 'sent')) return;   // abort — בתור / נשלחה
@@ -81,7 +82,9 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       missingSketchNums: (missingSketchNums || []).map(String),
       //  מייל חשבוניות של הלקוח (בן, 9/11 — פלג: ההזמנות מכתובת אחת, החשבוניות לכתובת
       //  של מנהלת החשבונות). יש → מייל חדש לכתובת הזו במקום תשובה על מייל ההזמנה.
-      sendTo: (kind === 'invoice' && lgEmailAddr(sendTo)) || null,
+      sendTo: ((kind === 'invoice' || kind === 'broken-returned') && lgEmailAddr(sendTo)) || null,
+      //  שבר בחיסום (בן, 10/11) — שורות מוכנות להודעה (api/_broken.js)
+      extraLines: (extraLines || []).map(String),
       //  כמה קבצים בפועל (מ-2/11 בדרך כלל אחד — חשבונית + סקיצות). חסר (רשומה ישנה) → החשבון הישן
       fileCount: fileCount > 0 ? Number(fileCount) : null,
       //  נוסח אחר לאותו סוג (הזמנת רכש של אביבי, בן 4/11), ו"לא לפני" — דקה עד שהתשובה יוצאת
@@ -146,13 +149,15 @@ async function lgEmailClaim(db, limit, now) {
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
                                   sketchNames: e.sketchNames || [], docNumber: e.docNumber,
                                   deliveryTomorrow: e.deliveryTomorrow === true, variant: e.variant || '',
-                                  missingSketchNums: e.missingSketchNums || [] }),
+                                  missingSketchNums: e.missingSketchNums || [], extraLines: e.extraLines || [] }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
                files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 };
     //  חשבונית למייל החשבוניות של הלקוח — מייל חדש עם נושא, לא תשובה
     if (e.sendTo) {
       item.sendTo = String(e.sendTo);
-      item.subject = 'חשבונית מס ' + (e.docNumber || '') + ' — לוז גלאס' + (e.clientName ? ' — ' + e.clientName : '');
+      item.subject = e.kind === 'broken-returned'
+        ? 'פריט שחזר מחיסום — לוז גלאס' + (e.clientName ? ' — ' + e.clientName : '')
+        : 'חשבונית מס ' + (e.docNumber || '') + ' — לוז גלאס' + (e.clientName ? ' — ' + e.clientName : '');
     }
     //  "טופל" ידני (בן, 4/11): המיילים שכל הסקיצות שלהם טופלו — הסקריפט מוציא את
     //  השרשור לארכיון אחרי שהתשובה יצאה. ריק → אין שדה (כמו קודם).
