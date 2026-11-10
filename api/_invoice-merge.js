@@ -51,50 +51,67 @@ function _fit(font, text, max, min, width) {
   return size;
 }
 
+//  עמוד A4 אחד לסקיצה: פס כותרת (title בגדול, info מתחת, "3 / 6" משמאל) והתמונה.
+//  img = { buf, mime } או null → "אין סקיצה" במקום התמונה (משלוח לשרטט, 10/11).
+//  תמונה פגומה → זורק (החשבונית משמיטה; השרטט — הקורא תופס ומעביר null).
+async function lgAddSketchPage(doc, font, img, head) {
+  const { rgb } = require('pdf-lib');
+  const black = rgb(0, 0, 0), grey = rgb(0.35, 0.35, 0.35);
+  const h0 = head || {};
+  const pic = !img ? null
+            : img.mime === 'image/jpeg' ? await doc.embedJpg(_own(img.buf))
+            : img.mime === 'image/png'  ? await doc.embedPng(_own(img.buf))
+            :                             await doc.embedPng(_own(await _toPng(img.buf)));
+  const page = doc.addPage(A4);
+  const [W, H] = A4;
+  const top = H - MARGIN, right = W - MARGIN - 14;
+  page.drawRectangle({ x: MARGIN, y: top - BAND, width: W - 2 * MARGIN, height: BAND, color: rgb(0.93, 0.93, 0.93) });
+
+  //  שורה 1, מימין: שם הסקיצה בגדול (שם ארוך מוקטן עד שנכנס)
+  const name = _visual(String(h0.title || '').trim() || 'סקיצה');
+  const ns = _fit(font, name, NAME_SIZE, 16, W - 2 * MARGIN - 110);
+  page.drawText(name, { x: right - font.widthOfTextAtSize(name, ns), y: top - 14 - ns, size: ns, font, color: black });
+  //  שורה 1, משמאל: "3 / 6"
+  if (h0.total > 1) {
+    page.drawText((h0.idx + 1) + ' / ' + h0.total, { x: MARGIN + 14, y: top - 14 - INFO_SIZE - 4, size: INFO_SIZE, font, color: grey });
+  }
+  //  שורה 2, מימין: הזמנה · לקוח · ...
+  const info = _visual(String(h0.info || ''));
+  if (info) {
+    const is = _fit(font, info, INFO_SIZE, 11, W - 2 * MARGIN - 28);
+    page.drawText(info, { x: right - font.widthOfTextAtSize(info, is), y: top - BAND + 16, size: is, font, color: black });
+  }
+
+  const boxW = W - 2 * MARGIN, boxH = H - 2 * MARGIN - BAND - 10;
+  if (!pic) {
+    const t = _visual('אין סקיצה');
+    page.drawText(t, { x: (W - font.widthOfTextAtSize(t, 28)) / 2, y: MARGIN + boxH / 2, size: 28, font, color: grey });
+    return page;
+  }
+  const k = Math.min(boxW / pic.width, boxH / pic.height);
+  const w = pic.width * k, h = pic.height * k;
+  page.drawImage(pic, { x: (W - w) / 2, y: MARGIN + (boxH - h) / 2, width: w, height: h });
+  return page;
+}
+
 //  pdf: Buffer של המקור. sketches: [{ buf, mime, num, name }] → Buffer של PDF אחד.
 //  meta (רשות): { docNumber, client } — נכתבים בשורת הפרטים בכל עמוד סקיצה.
 async function lgInvoiceMerge(pdf, sketches, meta) {
-  const { PDFDocument, rgb } = require('pdf-lib');
+  const { PDFDocument } = require('pdf-lib');
   const doc = await PDFDocument.load(_own(pdf));
   if (!doc.getPageCount()) throw new Error('empty invoice pdf');
   doc.registerFontkit(require('@pdf-lib/fontkit'));
   const list = sketches || [];
   const font = list.length ? await doc.embedFont(_fontBytes(), { subset: true }) : null;
   const m = meta || {};
-  const black = rgb(0, 0, 0), grey = rgb(0.35, 0.35, 0.35);
-
   for (let i = 0; i < list.length; i++) {
     const s = list[i];
-    const img = s.mime === 'image/jpeg' ? await doc.embedJpg(_own(s.buf))
-              : s.mime === 'image/png'  ? await doc.embedPng(_own(s.buf))
-              :                           await doc.embedPng(_own(await _toPng(s.buf)));
-    const page = doc.addPage(A4);
-    const [W, H] = A4;
-    const top = H - MARGIN, right = W - MARGIN - 14;
-    page.drawRectangle({ x: MARGIN, y: top - BAND, width: W - 2 * MARGIN, height: BAND, color: rgb(0.93, 0.93, 0.93) });
-
-    //  שורה 1, מימין: שם הסקיצה בגדול (שם ארוך מוקטן עד שנכנס)
-    const name = _visual(String(s.name || '').trim() || 'סקיצה');
-    const ns = _fit(font, name, NAME_SIZE, 16, W - 2 * MARGIN - 110);
-    page.drawText(name, { x: right - font.widthOfTextAtSize(name, ns), y: top - 14 - ns, size: ns, font, color: black });
-    //  שורה 1, משמאל: "3 / 6"
-    if (list.length > 1) {
-      page.drawText((i + 1) + ' / ' + list.length, { x: MARGIN + 14, y: top - 14 - INFO_SIZE - 4, size: INFO_SIZE, font, color: grey });
-    }
-    //  שורה 2, מימין: הזמנה · לקוח · חשבונית
-    const info = _visual([s.num ? 'הזמנה ' + s.num : '', String(m.client || '').trim(),
-                          m.docNumber ? 'חשבונית ' + m.docNumber : ''].filter(Boolean).join('   ·   '));
-    if (info) {
-      const is = _fit(font, info, INFO_SIZE, 11, W - 2 * MARGIN - 28);
-      page.drawText(info, { x: right - font.widthOfTextAtSize(info, is), y: top - BAND + 16, size: is, font, color: black });
-    }
-
-    const boxW = W - 2 * MARGIN, boxH = H - 2 * MARGIN - BAND - 10;
-    const k = Math.min(boxW / img.width, boxH / img.height);
-    const w = img.width * k, h = img.height * k;
-    page.drawImage(img, { x: (W - w) / 2, y: MARGIN + (boxH - h) / 2, width: w, height: h });
+    await lgAddSketchPage(doc, font, { buf: s.buf, mime: s.mime }, {
+      title: String(s.name || '').trim() || 'סקיצה',
+      info: [s.num ? 'הזמנה ' + s.num : '', String(m.client || '').trim(), m.docNumber ? 'חשבונית ' + m.docNumber : ''].filter(Boolean).join('   ·   '),
+      idx: i, total: list.length });
   }
   return Buffer.from(await doc.save());
 }
 
-module.exports = { lgInvoiceMerge, _visual };
+module.exports = { lgInvoiceMerge, lgAddSketchPage, _visual, _fontBytes, A4 };

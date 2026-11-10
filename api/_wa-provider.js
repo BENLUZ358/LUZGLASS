@@ -113,6 +113,8 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliv
   if (kind === 'dispatched') return wrap('ההובלה יצאה אליך עם ' + count + '.');
   //  שבר בחיסום (בן, 10/11): השורות מוכנות מ-api/_broken.js
   const extra = (extraLines || []).map(s => String(s || '').trim()).filter(Boolean);
+  //  משלוח לשרטט (בן, 10/11) — מייל פנימי, השורות מוכנות ב-_drafter-batch.js
+  if (kind === 'drafter-batch') return extra.join('\n');
   if (kind === 'broken-returned') {
     const doc = docNumber ? ' (חשבונית ' + String(docNumber) + ')' : '';
     return `שלום ${who},\n\n${extra.join('\n')}\nהחשבונית כבר יצאה על כל ההזמנה${doc}.\n\n${BUSINESS}`;
