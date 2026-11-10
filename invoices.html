@@ -263,6 +263,7 @@ html,body{height:100%;overflow:hidden;}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261110b"></script>
+<script src="order-attachments.js?v=20261111"></script>
 <script src="sku-picker.js?v=20261028"></script>
 <script src="lg-icons.js?v=20261103"></script>
 </head>
@@ -632,6 +633,10 @@ function renderVerify() {
     if (lgHasSketch(o)) lgSketchIntoImg(img, o);
     else $('skEmpty').querySelector('.empty-state-msg').textContent = 'אין סקיצה להזמנה הזו';
   }
+  // צרופות (גרפיקה חלבי / שרטוט פרזול) — דפדוף בתחתית הסקיצה. גם בעדכון חי:
+  // אותן צרופות → הדפדוף נשאר במקום; בלי צרופות — לא משנה כלום.
+  if ($('skImg') && typeof lgAttFlipper === 'function')
+    lgAttFlipper($('skBox'), lgHasSketch(o) ? o : null, { img: $('skImg'), overlay: 'bottom' });
 
   $('vFoot').hidden = false;
   $('vFoot').innerHTML = s === 'verified'

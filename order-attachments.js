@@ -152,7 +152,7 @@ if (typeof window !== 'undefined') (function () {
     st.id = 'lgAttCss';
     st.textContent = `
 .lg-att-bar{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 8px;direction:rtl;font-family:Heebo,sans-serif;flex-wrap:wrap;box-sizing:border-box;max-width:100%}
-.lg-att-bar.lg-att-ov{position:absolute;left:50%;transform:translateX(-50%);z-index:6;background:rgba(26,23,20,0.85);border-radius:999px;max-width:calc(100% - 16px)}
+.lg-att-bar.lg-att-ov{position:absolute;left:0;right:0;margin:0 auto;width:max-content;flex-wrap:nowrap;z-index:6;background:rgba(26,23,20,0.85);border-radius:999px;max-width:calc(100% - 16px)}
 .lg-att-bar.lg-att-top{top:8px}.lg-att-bar.lg-att-bottom{bottom:8px}
 .lg-att-btn{min-width:44px;min-height:44px;border:1px solid rgba(0,0,0,0.15);background:#fff;color:#1a1714;border-radius:10px;font:700 20px Heebo,sans-serif;cursor:pointer;padding:0}
 .lg-att-btn:disabled{opacity:0.35;cursor:default}
@@ -427,7 +427,8 @@ if (typeof window !== 'undefined') (function () {
       lgGetSketch(key).then(src => {
         if (my !== token || !img.isConnected) return;
         if (src) img.src = src;
-        else toast('התמונה לא נמצאה');
+        else if (typeof showToast === 'function') showToast('התמונה לא נמצאה');
+        else console.warn('[order-attachments] חסרה תמונה:', key);
       }).catch(() => {});
     }
 

@@ -346,6 +346,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20261110b"></script>
+  <script src="order-attachments.js?v=20261111"></script>
   <script src="print-labels.js?v=20261103"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20261103"></script>
@@ -1009,6 +1010,8 @@ function showSketchPopup(orderId){
   const spImg = document.getElementById('spImg');
   spImg.removeAttribute('src');            // לא להראות לרגע את הסקיצה של ההזמנה הקודמת
   lgSketchIntoImg(spImg, o);
+  // צרופות (גרפיקה חלבי / שרטוט פרזול) — דפדוף מתחת לתמונה; בלי צרופות לא משנה כלום
+  if(typeof lgAttFlipper==='function') lgAttFlipper(spImg.parentElement, o, { img: spImg });
   modal.style.display = 'flex';
 }
 
@@ -1526,6 +1529,7 @@ function renderSketchBoard(el){
   // התמונה של הסקיצה הנוכחית בלבד; את הבאה טוענים מראש כדי שהדפדוף יהיה מיידי
   const img = document.getElementById('wdbImg');
   if(img && o) lgSketchIntoImg(img, o);
+  if(img && o && typeof lgAttFlipper==='function') lgAttFlipper(img.parentElement, o, { img });
   const next = list[wdBoardIdx + 1];
   if(next && lgHasSketch(next)) lgLoadSketch(next).catch(() => {});
 }
@@ -2835,6 +2839,7 @@ function _hydrateStageSketches(root){
     const o = allOrders.find(x => String(x.id) === String(id));
     if(!o) return;
     lgSketchIntoImg(el, o, () => el.classList.add('is-loaded'));
+    if(typeof lgAttFlipper==='function') lgAttFlipper(el.parentElement, o, { img: el });
   });
 }
 
