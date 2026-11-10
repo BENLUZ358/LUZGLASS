@@ -13,15 +13,16 @@
 //
 //  ⚠️ הנמען הוא איש צוות: שכבת השליחה מתירה אותו רק אם הוא ב-AGENT_STAFF_PHONES.
 //     מספר ב-AGENT_SUMMARY_TO שאינו שם — מדולג כאן, עם סיבה בתשובה (אחרת
-//     הרשומה הייתה נחסמת בשקט). הסיכום נשלח גם רק כששני המתגים דולקים
-//     (SHADOW + REPLY), כדי שמפתח היום לא יישרף על רשומה חסומה.
+//     הרשומה הייתה נחסמת בשקט). הסיכום נשלח גם רק כשהמנהל "עונה"
+//     (lgAgentMode — המתג העליון + המסך), כדי שמפתח היום לא יישרף על רשומה חסומה.
 //  ⚠️ מפתח התור לפי תאריך+מספר: ריצה שנייה באותו יום לא שולחת שוב.
 //  ⚠️ מספרים מקומיים (0…) בלבד; לא נרשם ללוג ולא מוחזר טקסט הודעות לקוח.
 //  שעון: 13:00 UTC = 15:00 חורף; בשעון קיץ 16:00 — במרץ לעדכן ל-'0 12 * * *'.
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgHookTokenOk } = require('./_hook-token');
-const { lgAgentSendPending, lgAgentEnqueue, lgAgentStaff } = require('./_agent-send');
+const { lgAgentSendPending, lgAgentEnqueue, lgAgentStaffAll } = require('./_agent-send');
+const { lgAgentMode } = require('./_agent-config');
 const { lgAgentShadowPending, lgAgentShadowProcess, SHADOW } = require('./_agent-shadow');
 const { lgWaSenderKey } = require('./_wa-recipient');
 
@@ -121,19 +122,20 @@ async function lgAgentDailyRun(req, deps) {
 
   const shadowOn = env.AGENT_SHADOW_ENABLED === 'true';
   if (shadowOn) {
-    if (env.AGENT_REPLY_ENABLED !== 'true') {
-      body.skipped = [{ reason: 'AGENT_REPLY_ENABLED כבוי — הסיכום לא נשלח' }];
+    //  המתג של המנהל במסך (waMeta/agentConfig; בלעדיו — AGENT_REPLY_ENABLED כמו קודם)
+    if (await lgAgentMode(db, 'manager', env) !== 'reply') {
+      body.skipped = [{ reason: 'המנהל לא במצב "עונה" — הסיכום לא נשלח' }];
     } else {
       try {
         const sum = await lgAgentDailySummary(db, now);
         body.summary = sum.counts;
-        const staff = lgAgentStaff(env);
+        const staff = await lgAgentStaffAll(db, env);
         const date = _jerDate(now).iso;
         const to = String(env.AGENT_SUMMARY_TO || '').split(',').map(s => lgWaSenderKey(s.trim())).filter(Boolean);
         body.skipped = [];
         for (const phone of to) {
           if (!staff.includes(phone)) { body.skipped.push({ to: phone, reason: 'לא ב-AGENT_STAFF_PHONES — לא נשלח' }); continue; }
-          await lgAgentEnqueue(db, { key: 'daily-' + date + '-' + phone, to: phone, customerId: '', text: sum.text, reason: 'סיכום יומי' });
+          await lgAgentEnqueue(db, { key: 'daily-' + date + '-' + phone, to: phone, customerId: '', text: sum.text, reason: 'סיכום יומי', agent: 'manager' });
         }
       } catch (e) { body.failed++; console.warn('agent-daily: summary', e && e.name); }
     }

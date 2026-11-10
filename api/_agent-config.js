@@ -47,6 +47,12 @@ function lgAgentEscalatePhone(cfg) {
   return _phone(cfg && cfg.escalatePhone) || AGENT_ESCALATE_DEFAULT;
 }
 
+//  איזה סוכן אחראי על מסלול של המרכזן ("מי אחראי על מה" באפיון).
+//  'shaul' — מה שאף סוכן לא יודע — של המנהל (צהוב לבן). השאר — המרכזן.
+const LG_ROUTE_AGENT = { okev: 'okev', menu: 'markazan', archive: 'archive', quote: 'price', price: 'price', staff: 'price',
+                         kolet: 'kolet', 'kolet-deleted': 'kolet', shaul: 'manager' };
+const lgAgentOfRoute = route => (_own(LG_ROUTE_AGENT, String(route || '')) ? LG_ROUTE_AGENT[String(route)] : 'markazan');
+
 async function lgAgentConfig(db) {
   try { const v = (await db.ref(AGENT_CONFIG).once('value')).val(); return v && typeof v === 'object' ? v : null; }
   catch (e) { console.warn('agent-config: read', e && e.name); return null; }
@@ -99,4 +105,4 @@ async function lgAgentConfigSet(db, body, ctx) {
 }
 
 module.exports = { AGENT_CONFIG, LG_AGENT_KEYS, LG_AGENT_MODES, AGENT_ESCALATE_DEFAULT,
-                   lgAgentModeOf, lgAgentMode, lgAgentConfig, lgAgentConfigView, lgAgentConfigSet, lgAgentEscalatePhone };
+                   lgAgentModeOf, lgAgentMode, lgAgentConfig, lgAgentConfigView, lgAgentConfigSet, lgAgentEscalatePhone, lgAgentOfRoute };

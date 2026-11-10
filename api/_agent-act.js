@@ -38,6 +38,7 @@ const { lgArchiveFind, lgArchiveActions, ARCHIVE_OK_TEXT } = require('./_agent-a
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
         lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
 const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
+const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute } = require('./_agent-config');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -331,7 +332,8 @@ function lgAgentDecide(p) {
 }
 
 // ─── ביצוע ──────────────────────────────────────────────────────────
-const _switchesOn = env => env.AGENT_SHADOW_ENABLED === 'true' && env.AGENT_REPLY_ENABLED === 'true';
+//  "עונה" — לפי המתג של הסוכן האחראי על המסלול (waMeta/agentConfig, בן 10/11),
+//  דרך lgAgentModeOf בלבד. בלי הגדרות במסך — כמו קודם (AGENT_REPLY_ENABLED).
 
 // ─── ביטול הזמנה (משימה 3) ─────────────────────────────────────────
 //  נשלחה לחשבשבת בפועל (לא סימולציה). ⚠️ בבסיס הנתונים השדה הוא
@@ -542,8 +544,10 @@ async function _act(db, key, rec, recRef, env, now, o) {
   //  תיקון סופי 7: מתגים דולקים → מחפשים רק אחרי שער הפיילוט + הקישור (אחרת ממילא
   //  לא פועלים). מתגים כבויים (צל) → מחפשים, כדי ש-wouldAct יראה מה היה נשלח.
   const _pilotOn = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
+  const agent = lgAgentOfRoute(rec.route);
+  const agentMode = lgAgentModeOf(await lgAgentConfig(db), agent, env);
   let archive;
-  const _archiveGate = async () => !_switchesOn(env)
+  const _archiveGate = async () => agentMode !== 'reply'
     || (await _pilotOn(cid) && (rec.linkVia != null ? ['group', 'sender'].includes(String(rec.linkVia))
                                                    : ['group', 'sender'].includes(await require('./_agent-shadow').lgAgentLinkVia(db, rec))));
   if (rec.route === 'archive' && rec.linked && cid && await _archiveGate()) {
@@ -588,7 +592,9 @@ async function _act(db, key, rec, recRef, env, now, o) {
   let why = '';
   if (!d.actions.length) why = 'no-action';
   else if (rec.linked && rec.route !== 'staff' && !AGENT_SENDABLE_VIA.includes(linkVia)) why = 'not-linked';
-  else if (!_switchesOn(env)) why = 'switches-off';
+  //  כבוי במסך (המתג העליון דולק) → agent-off; שקט / המתג העליון כבוי → switches-off כמו קודם
+  else if (agentMode === 'off' && env.AGENT_SHADOW_ENABLED === 'true') why = 'agent-off';
+  else if (agentMode !== 'reply') why = 'switches-off';
   // תשובת שאול — הנמען הוא הלקוח של הבקשה (לא השולח), ולכן הפיילוט שלו
   else if (rec.route === 'staff') { if (!(await _pilot(staffQuote && staffQuote.customerId))) why = 'not-pilot'; }
   else if (rec.linked && !(cid && (await db.ref(PILOT + '/' + cid).once('value')).val() === true)) why = 'not-pilot';
@@ -615,7 +621,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
 
   const queued = [], cancels = [], quotes = [], attRemovals = [];
   const enq = async (k, to, text, files, reason, forCid) => {
-    const q = await lgAgentEnqueue(db, { key: k, to, customerId: forCid != null ? forCid : cid, text, files, reason });
+    const q = await lgAgentEnqueue(db, { key: k, to, customerId: forCid != null ? forCid : cid, text, files, reason, agent });
     if (q.queued) queued.push(q.key);
     return q.queued;
   };
