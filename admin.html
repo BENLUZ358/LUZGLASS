@@ -3597,6 +3597,7 @@ function sqSeenSplit(items, tab){
 
 function sqSetSeenTab(tab){
   sqSeenTab = tab === 'seen' ? 'seen' : 'unseen';
+  if(window.lgDrafterBarShow) window.lgDrafterBarShow(sqSeenTab === 'seen');   // טיוטה לשרטט רק ב"נראה"
   var u = document.getElementById('sqTabUnseen');
   var s = document.getElementById('sqTabSeen');
   if(u){ u.classList.toggle('sq-seen-on', sqSeenTab === 'unseen');
@@ -3870,7 +3871,8 @@ function makeDemoSketch(title,client,glass,dims,color){
 
 function openSketchQueue(){
   buildSQItems();
-  if(window.lgDrafterBarShow) window.lgDrafterBarShow(true);   // משלוחים לשרטט (בן, 10/11)
+  // טיוטה לשרטט — רק בלשונית "נראה" (בן, 10/11: מה שעוד לא נראה לא נוגע לשרטט)
+  if(window.lgDrafterBarShow) window.lgDrafterBarShow(sqSeenTab === 'seen');
   sqRender();
   const el = document.getElementById('sqOverlay') || document.getElementById('sqEditor');
   if(el) el.style.display = 'flex';
@@ -4590,7 +4592,7 @@ async function sqSendHashavshevet(id, force){
   if((sqStageMap[id] || '') !== 'chash'){
     sqStageMap[id] = 'chash';
     // נכנסה לסל לשרטט — הפס מתעדכן (בן, 10/11)
-    updateStage(id, 'chash').then(() => { if(window.lgDrafterBarShow) window.lgDrafterBarShow(true, true); }).catch(e => console.warn('chash:', e && e.message));
+    updateStage(id, 'chash').then(() => { if(window.lgDrafterBarShow) window.lgDrafterBarShow(sqSeenTab === 'seen', true); }).catch(e => console.warn('chash:', e && e.message));
     sqSaveState();
   }
   const btn   = document.getElementById('sqHbSend') || document.getElementById('sqBtnChash');
