@@ -3014,6 +3014,7 @@ document.addEventListener('visibilitychange', () => {
    44px לכל מה שנוגעים בו, כמו בתחנת הבדיקה. */
 #sqAssignWrap{margin:0 14px 12px;padding:10px 12px;border:1px solid rgba(212,160,23,0.45);border-right:4px solid #d4a017;border-radius:6px;background:#fffaf0;}
 #sqAssignWrap[hidden]{display:none;}
+#sqBtnRead[hidden]{display:none !important;}
 .sqa-msg{font-size:13px;line-height:1.5;color:#1a1714;margin-bottom:8px;}
 .sqa-from{direction:ltr;unicode-bidi:isolate;font-weight:700;}
 .sqa-btn{min-height:44px;padding:0 16px;border-radius:6px;border:2px solid #b8922a;background:#b8922a;color:#1a1714;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;}
@@ -3492,7 +3493,7 @@ document.addEventListener('visibilitychange', () => {
           <div id="sqCheckBadge" style="display:none;margin:0 14px 10px;padding:8px 12px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.2);border-radius:6px;font-size:12px;color:#27ae60;font-weight:700;"></div>
           <!-- actions -->
           <div id="sqActions">
-            <button id="sqBtnRead" class="sq-action-btn sq-action-quiet" onclick="sqReadSketch()" aria-label="קרא סקיצה והכן טיוטת פריטים"><span data-icon="search"></span> קרא סקיצה</button><button id="sqBtnSeen" class="sq-action-btn" onclick="sqMarkSeen()">✓ סקיצה טופלה</button>
+            <button id="sqBtnRead" hidden title="כבוי לבינתיים (בן, 10/11)" class="sq-action-btn sq-action-quiet" onclick="sqReadSketch()" aria-label="קרא סקיצה והכן טיוטת פריטים"><span data-icon="search"></span> קרא סקיצה</button><button id="sqBtnSeen" class="sq-action-btn" onclick="sqMarkSeen()">✓ סקיצה טופלה</button>
             <button id="sqBtnDrafter" class="sq-action-btn" onclick="sqSetStage('drafter')" style="display:none;">✏️ שלח לשרטט</button>
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
             <button id="sqBtnPreview" class="sq-action-btn sq-action-quiet" onclick="sqPreviewChash()" title="מראה בדיוק מה ייכנס למסמך — מק\"טים, מידות, כמויות ומחירים — בלי לשלוח כלום"><span data-icon="search"></span> הצג מה יישלח</button>
