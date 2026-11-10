@@ -76,6 +76,9 @@ check('done one confirm', T2.drafterDoneOneConfirm({ n: 12, count: 2 }), 'השר
 const DRF = fs.readFileSync(path.join(ROOT, 'drafter.html'), 'utf8');
 check('drafter station loads the module', /<script src="drafter-batch\.js\?v=\d+"><\/script>/.test(DRF), true);
 check('drafter station has the batches box', DRF.includes('id="drafterBatches"'), true);
+// ⚠️ 10/11: נטען ב-window load לפני שהכניסה הסתיימה → בלי טוקן → "לא הצלחתי לטעון את המשלוחים"
+check('batches load only after sign-in', /lgRequireAuthAsync\('admin'\)\.then\(session => \{[\s\S]{0,200}lgDrafterBatchesMount/.test(DRF), true);
+check('no mount on window load', /addEventListener\('load'[^\n]*lgDrafterBatchesMount/.test(DRF), false);
 check('drawer has a preview button', fs.readFileSync(path.join(ROOT, 'drafter-batch.js'), 'utf8').includes('id="drbPreview"'), true);
 
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
