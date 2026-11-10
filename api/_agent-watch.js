@@ -65,6 +65,7 @@ const WHO = { archive: 'כלי החשבוניות', kolet: 'משלוחים לש�
 const INTERNAL_NOTE = 'פנימי — ייסגר לבד כשיתוקן';
 const RANK = { info: 1, ask: 2 };
 const SLOW_KEY = /^(printed|deliv|mail|long|stuck|opty)_/;
+const SCAN_ROOM_MAX = 5;                         // שורות חדשות בחדר לכל סריקת orders (השאר — סיכום)
 const SCAN_KEY = /^(stuck|opty)_/;              // נבדק רק בסריקת orders (פעם בשעה)
 const ORDERS_SCAN_GAP_MS = H;              // שומר עלות: orders נקרא לכל היותר פעם בשעה
 const STATS_GAP_MS = DAY;                  // הזמן הרגיל לכל שלב — לכל היותר פעם ביום
@@ -257,13 +258,16 @@ async function lgAgentWatchRun(db, o) {
   const deadline = Number(opt.deadline) || Date.now() + RUN_BUDGET_MS;
   const late = () => Date.now() > deadline;
   if (env.AGENT_SHADOW_ENABLED !== 'true') return { ok: true, skipped: 'off', opened: 0, cleared: 0 };
+  //  שחרור "הכל כבוי" (11/11): בלי waMeta/agentConfig — הבדיקות לא רצות בכלל (לא חדר, לא ניסיון חוזר).
+  //  הדופק עצמו נשמר (_invoice-upload) — זה מה ששורת המצב של הכלי במשרד קוראת.
+  const cfg = await lgAgentConfig(db);
+  if (!cfg) return { ok: true, skipped: 'no-config', opened: 0, cleared: 0 };
   //  פעם בדקה לכל היותר (גם כמה מחשבים / דופק כפול). null-first: הקריאה הראשונה מחזירה ערך
   const gate = (path, gap) => db.ref(WATCH + '/' + path).transaction(cur => (cur != null && Math.abs(now - Number(cur)) < gap ? undefined : now));
   if (!(await gate('lastRun', RUN_GAP_MS)).committed) return { ok: true, skipped: 'throttled', opened: 0, cleared: 0 };
   //  בדיקות החשבוניות והקולט — פעם ב-10 דק' (מפתח נפרד)
   const slow = (await gate('lastRunSlow', SLOW_GAP_MS)).committed;
 
-  const cfg = await lgAgentConfig(db);
   const modeOf = a => lgAgentModeOf(cfg, a, env);
   const on = a => modeOf(a) !== 'off';
   //  פעולה אוטומטית מול לקוח — רק "עונה" שנבחר במסך (בלי הגדרות — אף פעם)
@@ -354,10 +358,23 @@ async function lgAgentWatchRun(db, o) {
   const diff = lgWatchDiff(prev, all);
 
   let retriedNow = false;
+  //  סקירת שחרור 11/11: סריקת orders ראשונה יכולה למצוא עשרות הזמנות — עד SCAN_ROOM_MAX שורות חדשות
+  //  בסריקה, השאר נרשמות (כדי שלא יעלו שוב) ושורת סיכום אחת לכל סוכן "ועוד N הזמנות"
+  let scanPosted = 0;
+  const scanExtra = {};
   for (const k of diff.open) {
     if (late()) break;
     const p = byKey[k];
     const rec = { level: p.level, agent: p.agent, at: now, text: _s(p.text, 300), src: p.src || null, roomKey: null, asked: false };
+    if (SCAN_KEY.test(k)) {
+      if (scanPosted >= SCAN_ROOM_MAX) {
+        scanExtra[p.agent] = (scanExtra[p.agent] || 0) + 1;
+        await setProblem(k, rec);
+        opened++;
+        continue;
+      }
+      scanPosted++;
+    }
     if (p.retry) {
       //  ניסיון אחד לכל ריצה; השאר — בריצה הבאה
       if (retriedNow) continue;
@@ -372,6 +389,10 @@ async function lgAgentWatchRun(db, o) {
     //  נכתב או לא — נרשם, כדי לא לנסות בכל דקה (החדר הוא תיעוד, לא העבודה)
     await setProblem(k, { ...rec, roomKey: r ? r.roomKey : null, asked: !!(r && r.asked) });
     opened++;
+  }
+  for (const [agent, n] of Object.entries(scanExtra)) {
+    const what = agent === 'kolet' ? 'שהגיעו לבנה יום עבודה בלי משלוח לשרטט' : 'תקועות יותר מהרגיל';
+    await lgAgentEvent(db, agent, { kind: 'info', text: `ועוד ${n} הזמנות ${what}` }, { env, now, cfg });
   }
   for (const k of diff.clear) {
     if (late()) break;

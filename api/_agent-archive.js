@@ -54,6 +54,10 @@ function _monthOf(text, now) {
     const n = t.match(_NUM_MONTH);
     if (!n) return null;
     m = Number(n[2]); y = n[3].length === 2 ? 2000 + Number(n[3]) : Number(n[3]);
+    //  סקירת שחרור 11/11: "12/10" / "5/11" — יום/חודש, לא חודש/שנה
+    if (n[3].length === 2 && Number(n[3]) >= 1 && Number(n[3]) <= 12 && m <= 31) return null;
+    //  מספרים: רק שנה בטווח [השנה − 3, השנה]
+    if (y < cur.y - 3 || y > cur.y) return null;
     token = n[0];
   }
   if (!(m >= 1 && m <= 12) || !(y >= 2000 && y <= 2100)) return null;

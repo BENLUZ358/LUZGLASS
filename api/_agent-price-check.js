@@ -11,11 +11,27 @@
 //  ppm2 של כל שורה ב-preview (אותו ערך שנכתב ל-price בשורה).
 //  • רק מק"ט שקיים במחירון של הלקוח נבדק (אין בו → אין "צפוי"). לקוח בלי מחירון — לא נבדק.
 //  • frozenPrices על ההזמנה (מחיר שהוקפא כשבן שינה מחירון אחריה) — מכוון, לא פער.
-//  • פער → שורה אחת בחדר למחירון (lgAgentEvent: כבוי → כלום; בלי הגדרות → אפור).
+//  • פער → שורה אחת בחדר למחירון, פעם אחת להזמנה (עד 5 שורות שגויות בה).
+//  • שחרור "הכל כבוי" (11/11): בלי waMeta/agentConfig או מחירון כבוי → לא רץ בכלל.
 // ═══════════════════════════════════════════════════════════════════
 
 const EPS = 0.005;
-const MAX_LINES = 6;
+const MAX_LINES = 5;
+const CHECKED_PATH = 'waMeta/agentPriceChecked/';   // שורה אחת לכל הזמנה (שליחה חוזרת לא מוסיפה)
+
+//  המחירון של הלקוח — **אותה דרך שהשליחה תמחרה** (clientPricesByName ב-hashavshevet-order.js):
+//  prices/clients/<מפתח> → שם דרך prices/clientKeys → לפי orderClient של ההזמנה.
+//  השם לא ממופה → השליחה לקחה מחירון כללי → אין "צפוי" (סקירת שחרור 11/11: לא לסמן כל שורה).
+//  ⚠️ אם clientPricesByName משתנה — גם כאן.
+function lgPriceClientList(prices, orderClient) {
+  const keyMap = (prices && prices.clientKeys) || {};
+  const name = String(orderClient || '');
+  let out = null;
+  for (const [key, list] of Object.entries((prices && prices.clients) || {})) {
+    if ((keyMap[key] || key) === name) out = list || {};
+  }
+  return out;
+}
 const _pos = v => { const n = Number(v); return v != null && v !== '' && Number.isFinite(n) && n > 0 ? n : 0; };
 
 //  → [{ hsLine, sku, name, expected, sent }]
@@ -45,10 +61,18 @@ async function lgPriceCheckRun(db, p) {
   try {
     const order = x.order || {};
     if (order.isTest === true) return { checked: false, mismatches: 0 };
-    const list = ((x.prices && x.prices.clients) || {})[String(x.accountKey || '')];
+    //  שחרור "הכל כבוי" (11/11): רק עם הגדרות במסך והמחירון לא כבוי (כולל המתג העליון)
+    const C = require('./_agent-config');
+    const cfg = await C.lgAgentConfig(db);
+    if (!cfg || C.lgAgentModeOf(cfg, 'price', x.env || process.env) === 'off') return { checked: false, mismatches: 0 };
+    const list = lgPriceClientList(x.prices, order.orderClient);
     if (!list || typeof list !== 'object' || !Object.keys(list).length) return { checked: false, mismatches: 0 };
     const mm = lgPriceCheckLines({ preview: x.preview, clientList: list, frozen: order.frozenPrices });
-    if (mm.length) {
+    const oid = String(x.orderId || '');
+    if (mm.length && oid && !/[.#$[\]/]/.test(oid)) {
+      const t = Number(x.now) || Date.now();
+      const cl = await db.ref(CHECKED_PATH + oid).transaction(cur => (cur ? undefined : t));
+      if (!cl.committed) return { checked: true, mismatches: mm.length };
       const parts = mm.slice(0, MAX_LINES).map(m => 'שורה ' + m.hsLine + ' ' + m.name + ' (' + m.sku + ') — נשלח ' + m.sent + ', במחירון ' + m.expected);
       const text = _orderLabel(order) + ' נשלחה לחשבשבת במחיר שונה מהמחירון: ' + parts.join('; ')
         + (mm.length > MAX_LINES ? '; ועוד ' + (mm.length - MAX_LINES) + ' שורות' : '');
@@ -62,4 +86,4 @@ async function lgPriceCheckRun(db, p) {
   }
 }
 
-module.exports = { lgPriceCheckLines, lgPriceCheckRun };
+module.exports = { lgPriceCheckLines, lgPriceCheckRun, lgPriceClientList };

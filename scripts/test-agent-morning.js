@@ -40,11 +40,13 @@ const seed = (cfg, now) => fakeDb({
     d1: { orderNum: 'L1', orderClient: 'כהן', stage: 'drafter', createdAt: now - DAY },
     d2: { orderNum: 'L2', orderClient: 'נאור', stage: 'chash', createdAt: now - DAY, drafterBatch: 4 },
     d3: { orderNum: 'L3', stage: 'drafter', createdAt: now - DAY, drafterHold: true },
-    h1: { orderNum: 'L10', stage: 'opty', hashavshevet: { sentAt: now - DAY } },
-    h2: { orderNum: 'L11', stage: 'opty', hsOrder: { sentAt: now - DAY + H } },
-    h3: { orderNum: 'L12', stage: 'opty', hashavshevet: { sentAt: now - DAY, simulated: true } },
-    h4: { orderNum: 'L13', stage: 'opty', hashavshevet: { sentAt: now - 3 * DAY } },
-    h5: { orderNum: 'L14', stage: 'opty', hashavshevet: { sentAt: now - 5 * MIN } },
+    h1: { orderNum: 'L10', stage: 'opty', hashavshevet: { sentAt: now - DAY, httpOk: true } },
+    h2: { orderNum: 'L11', stage: 'opty', hsOrder: { sentAt: now - DAY + H, httpOk: true } },
+    h3: { orderNum: 'L12', stage: 'opty', hashavshevet: { sentAt: now - DAY, simulated: true, httpOk: true } },
+    h4: { orderNum: 'L13', stage: 'opty', hashavshevet: { sentAt: now - 3 * DAY, httpOk: true } },
+    h5: { orderNum: 'L14', stage: 'opty', hashavshevet: { sentAt: now - 5 * MIN, httpOk: true } },
+    h6: { orderNum: 'L15', stage: 'opty', hashavshevet: { sentAt: now - DAY, httpOk: false } },   // ניסיון שנכשל — לא "נשלח"
+    h7: { orderNum: 'L16', stage: 'opty', hashavshevet: { sentAt: now - DAY } },                  // בלי httpOk — לא "נשלח"
   },
   waMeta: {
     ...(cfg ? { agentConfig: cfg } : {}),
@@ -109,6 +111,22 @@ const summaries = d => Object.values(d._data.waMeta.agentRoom || {}).filter(e =>
     const d = seed(cfg, now);
     await M.lgAgentMorningRun(d, { env, now });
     check(name, summaries(d).length, 0);
+  }
+
+  {
+    //  סקירת שחרור 11/11: היום מסומן "בוצע" רק אחרי פרסום מוצלח; ריצה שנכשלה — שוב לכל היותר פעם ב-10 דק'
+    const d = seed(CFG(), SUN_0705);
+    const R = require(path.join(ROOT, 'api', '_agent-room.js'));
+    const post0 = R.lgRoomPost;
+    R.lgRoomPost = async () => null;
+    const r1 = await M.lgAgentMorningRun(d, { env: ENV, now: SUN_0705 });
+    const r2 = await M.lgAgentMorningRun(d, { env: ENV, now: SUN_0705 + 5 * MIN });
+    R.lgRoomPost = post0;
+    check('room post failed → not posted; retry within 10 min → throttled', [r1.posted, r2.skipped], [false, 'retry-wait']);
+    const r3 = await M.lgAgentMorningRun(d, { env: ENV, now: SUN_0705 + 11 * MIN });
+    check('after 10 min → posted', [r3.posted, summaries(d).length], [true, 1]);
+    const r4 = await M.lgAgentMorningRun(d, { env: ENV, now: SUN_0705 + 30 * MIN });
+    check('after success → done for the day', [r4.skipped, summaries(d).length], ['done-today', 1]);
   }
 
   /* ── מהדופק ── */

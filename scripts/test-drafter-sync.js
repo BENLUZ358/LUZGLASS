@@ -58,6 +58,17 @@ const room = d => Object.values((d._data.waMeta || {}).agentRoom || {}).sort((a,
       ['ask', 'השרטט סיים משלוח 1: 0 מתוך 2 בבנה יום עבודה — לבדוק: L1 · אגן · נמחקה; L2 · נאור · הוזזה ידנית (לא אצל שרטט)']);
   }
 
+  /* ── כבר בעבודה (סקירת שחרור 11/11): הזמנה שעברה את opty — תקין, לא "הוזזה ידנית" ── */
+  for (const st of ['workday', 'chisum', 'graphic', 'delivery', 'done', 'collected']) {
+    const db = fakeDb({ orders: twoOrders() });
+    await D.lgDrafterSend(db, { by: 'ben', now: NOW });
+    await D.lgDrafterDone(db, { by: 'ben', now: NOW + MIN });
+    db._data.orders.A2.stage = st;
+    const c = await D.lgDrafterSyncCheck(db, 1);
+    check('beyond opty (' + st + ') → fine, "כבר בעבודה"', [c.kind, c.ok, c.text],
+      ['info', true, 'השרטט סיים משלוח 1: 2 מתוך 2 בבנה יום עבודה (1 כבר בעבודה) ✓']);
+  }
+
   /* ── הקובץ והמשלוח לא תואמים ── */
   {
     const db = fakeDb({ orders: { ...twoOrders(), A3: { id: 'A3', orderNum: 'L3', orderClient: 'כהן', stage: 'opty' } } });
@@ -136,9 +147,21 @@ const room = d => Object.values((d._data.waMeta || {}).agentRoom || {}).sort((a,
     check('watch: left the 24h window → dropped quietly', [k().length, Object.keys(db._data.waMeta.agentWatch.problems || {}).filter(x => x.startsWith('opty_'))], [1, []]);
   }
   {
+    //  סריקה ראשונה (סקירת שחרור 11/11): עד 5 שורות חדשות, השאר — שורת סיכום אחת "ועוד N הזמנות"
+    const orders = {};
+    for (let i = 1; i <= 9; i++) orders['p' + i] = { orderNum: 'L' + (100 + i), stage: 'opty', optyAt: NOW - i * MIN };
+    const CFG = { agents: { markazan: 'shadow', okev: 'off', archive: 'shadow', price: 'shadow', kolet: 'shadow', manager: 'off' } };
+    const db = fakeDb({ orders, waMeta: { agentConfig: CFG } });
+    await W.lgAgentWatchRun(db, { env: ENV, now: NOW });
+    const k = () => Object.values(db._data.waMeta.agentRoom || {}).filter(e => e.agent === 'kolet').map(e => e.text);
+    check('first scan flood: 5 rows + one summary', [k().length, k().filter(t => t.includes('ועוד 4 הזמנות')).length], [6, 1]);
+    await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 61 * MIN });
+    check('first scan flood: next scan adds nothing', k().length, 6);
+  }
+  {
     const db = fakeDb({ orders: { o1: { orderNum: 'L7', stage: 'opty', optyAt: NOW - 2 * H } } });
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW });
-    check('watch no agentConfig: no check (no orders scan)', (db._data.waMeta.agentRoom || null), null);
+    check('watch no agentConfig: no check (no orders scan)', ((db._data.waMeta || {}).agentRoom || null), null);
   }
   delete process.env.EMAIL_ONLY_TO;
   console.log(failed ? `\n${failed} FAILED` : '\nall ok');

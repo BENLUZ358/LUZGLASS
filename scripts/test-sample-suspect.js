@@ -57,7 +57,8 @@ const room = db => Object.entries((db._data.waMeta || {}).agentRoom || {});
   /* ── הטקסט ── */
   for (const t of ['כזאת', 'כזה', 'משהו כזה', 'צריבה כזאת', 'דוגמה', 'לדוגמא', 'רק לדוגמה!', 'כזו בבקשה'])
     check('sample text: ' + t, SS.lgSampleTextIs(t), true);
-  for (const t of ['', 'מתי מוכן?', 'אני צריך 3 מראות 80 על 60 כמו בתמונה שלחתי לך אתמול בערב, כזה עם פינוי באמצע ושני חורים', 'כזאתי מילה', 'תודה'])
+  for (const t of ['', 'מתי מוכן?', 'אני צריך 3 מראות 80 על 60 כמו בתמונה שלחתי לך אתמול בערב, כזה עם פינוי באמצע ושני חורים', 'כזאתי מילה', 'תודה',
+                   'עוד אחד כזה', 'אפשר כזה עד מחר?', 'לא כזה, אחר', 'כזה כזה כזה כזה כזה כזה כזה', '3 כאלה 80 על 60 כזה'])
     check('not sample: ' + t, SS.lgSampleTextIs(t), false);
 
   /* ── webhook: תמונה ואז "כזאת" ── */
@@ -86,11 +87,34 @@ const room = db => Object.entries((db._data.waMeta || {}).agentRoom || {});
     check('ordinary text → not marked', orders(db)[0].sampleSuspect || false, false);
   }
   {
-    // הסוכנים כבויים לגמרי (בלי AGENT_SHADOW_ENABLED) — התג עדיין עובד, בלי חדר
+    // שחרור "הכל כבוי" (11/11): בלי הגדרות במסך / מרכזן כבוי / מתג עליון כבוי — כלום. בלי תג, בלי סימון, בלי חדר
+    for (const [name, cfg, flag] of [['no agentConfig', null, 'true'], ['markazan off', CFG('off'), 'true'], ['shadow flag off', CFG('reply'), 'false']]) {
+      const db = seed(cfg);
+      await send(db, img('I3'), NOW, flag);
+      const before = JSON.stringify(db._data.orders);
+      await send(db, txt('T6', 'דוגמה'), NOW + MIN, flag);
+      check(name + ': order untouched, no record mark, no room',
+        [JSON.stringify(db._data.orders) === before, Object.values(db._data.waInbound || {}).some(r => r.sampleSuspect), room(db).length], [true, false, 0]);
+    }
+    // תמונה עם כיתוב "כזאת" בלי הגדרות → ההזמנה נולדת בלי תג
     const db = seed(null);
-    await send(db, img('I3'), NOW, 'false');
-    await send(db, txt('T6', 'דוגמה'), NOW + MIN, 'false');
-    check('agents off: tag still set, no room post', [orders(db)[0].sampleSuspect, room(db).length], [true, 0]);
+    await send(db, img('I3c', NAOR_CHAT, 'כזאת'), NOW, 'true');
+    check('no agentConfig: caption "כזאת" → no tag', orders(db).map(o => !!o.sampleSuspect), [false]);
+  }
+  {
+    // קבוצה: רק מי ששלח את התמונה. חבר אחר בקבוצה שכותב "כזה" — לא מסמן
+    const G = '120363000000000001@g.us';
+    const db = fakeDb({ waMeta: { agentConfig: CFG('shadow') }, waInbound: {
+      r1: { kind: 'image', state: 'done', chatId: G, groupId: G, sender: '0521111111', createdAt: NOW, orderIds: [] } } });
+    const other = await withEnv({ AGENT_SHADOW_ENABLED: 'true' }, () =>
+      SS.lgSampleSuspectMark(db, { chatId: G, groupId: G, sender: '0522222222', text: 'כזה', now: NOW + MIN }));
+    check('group: other member → not marked', [other.pending.length, !!db._data.waInbound.r1.sampleSuspect], [0, false]);
+    const same = await withEnv({ AGENT_SHADOW_ENABLED: 'true' }, () =>
+      SS.lgSampleSuspectMark(db, { chatId: G, groupId: G, sender: '0521111111', text: 'כזה', now: NOW + MIN }));
+    check('group: same sender → marked', [same.pending.length, !!db._data.waInbound.r1.sampleSuspect], [1, true]);
+    const fb = SS.lgSampleFromBody({ typeWebhook: 'incomingMessageReceived', senderData: { chatId: G, sender: '972521111111@c.us' },
+      messageData: { typeMessage: 'textMessage', textMessageData: { textMessage: 'כזאת' } } });
+    check('body → sender carried', fb && fb.sender, '0521111111');
   }
   {
     // הטקסט הגיע לפני שהתמונה הפכה להזמנה (העיבוד עוד רץ) → מסומן ברשומה, ההזמנה נולדת מסומנת
@@ -104,9 +128,9 @@ const room = db => Object.entries((db._data.waMeta || {}).agentRoom || {});
   }
   {
     // לקוח לא מזוהה (מספר ברשימת Vercel בלי כרטיס) — לא "לקוח מקושר" → לא מסומן
-    const db = seed(null);
+    const db = seed(CFG('shadow'));
     const STR = '972505887576@c.us';
-    await withEnv({ ...ENV }, async () => { await send(db, img('I5', STR), NOW, 'false'); await send(db, txt('T8', 'כזאת', STR), NOW + MIN, 'false'); });
+    await withEnv({ ...ENV }, async () => { await send(db, img('I5', STR), NOW, 'true'); await send(db, txt('T8', 'כזאת', STR), NOW + MIN, 'true'); });
     check('unassigned sender → not marked', orders(db).map(o => !!o.sampleSuspect), [false]);
   }
 

@@ -14,7 +14,8 @@
 //    (sampleSuspectAt בטרנזקציה) → sampleSuspect:true + sampleText. **לא מוחקים** —
 //    ההזמנה נשארת בתור עם התג "אולי דוגמה — לא הזמנה?". שאלה בחדר למרכזן
 //    ("הזמנה או דוגמה?") דרך lgAgentEvent — לפי המתג (כבוי → כלום; בלי הגדרות → אפור).
-//    התג עצמו — תמיד, גם כשהסוכנים כבויים: עזר לאדמין, לא פעולה מול לקוח.
+//    שחרור "הכל כבוי" (11/11): בלי waMeta/agentConfig או מרכזן כבוי → כלום (לא תג, לא חדר).
+//    קבוצה — רק אותו שולח של התמונה. טקסט ≤ 25 תווים שהוא בעיקר מילת דוגמה.
 //  • lgSampleDecide (wa-inbound-drain 'sample-decide', מאחורי verifyAdmin):
 //    'order' → התג יורד; 'sample' → isSample:true — התור מסתיר אותה (buildSQItems),
 //    הנתונים נשארים. השאלה בחדר נסגרת.
@@ -22,14 +23,30 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const SAMPLE_WINDOW_MS = 3 * 60 * 1000;
-const SAMPLE_TEXT_MAX = 40;
-const _WORD = /(^|[^א-ת])(כזאת|כזה|כזו|דוגמה|דוגמא|לדוגמה|לדוגמא)(?![א-ת])/;
+const SAMPLE_TEXT_MAX = 25;
+const _SAMPLE_WORDS = ['כזאת', 'כזה', 'כזו', 'דוגמה', 'דוגמא', 'לדוגמה', 'לדוגמא'];
+//  מילים שמותר שיופיעו ליד מילת הדוגמה ("משהו כזה", "צריבה כזאת", "רק לדוגמה", "כזו בבקשה").
+//  כל מילה אחרת ("עוד אחד כזה", "אפשר כזה עד מחר?", "לא כזה, אחר") → לא דוגמה (סקירת שחרור 11/11)
+const _SAMPLE_FILLER = ['משהו', 'רק', 'בבקשה', 'צריבה', 'בדיוק', 'ממש', 'בערך', 'סתם', 'כמו', 'זה', 'זאת', 'בסגנון'];
 
-//  טקסט קצר שאומר "כזאת" / "דוגמה" — לא הזמנה מפורטת
+//  טקסט קצר (≤ 25) שהוא בעיקר "כזאת" / "דוגמה" — לא הזמנה מפורטת ולא משפט
 function lgSampleTextIs(text) {
   const t = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
   if (!t || t.length > SAMPLE_TEXT_MAX) return false;
-  return _WORD.test(t);
+  const words = t.replace(/[^א-ת0-9a-zA-Z ]+/g, ' ').split(' ').filter(Boolean);
+  const hits = words.filter(w => _SAMPLE_WORDS.includes(w));
+  if (hits.length !== 1) return false;
+  return words.every(w => _SAMPLE_WORDS.includes(w) || _SAMPLE_FILLER.includes(w));
+}
+
+//  שחרור "הכל כבוי" (11/11): רק כשיש waMeta/agentConfig והמרכזן לא כבוי (כולל המתג העליון).
+//  בלי הגדרות → כלום: לא תג, לא סימון רשומה, לא חדר.
+async function _sampleOn(db, env) {
+  try {
+    const C = require('./_agent-config');
+    const cfg = await C.lgAgentConfig(db);
+    return !!cfg && C.lgAgentModeOf(cfg, 'markazan', env || process.env) !== 'off';
+  } catch (e) { console.warn('sample-suspect: config', e && e.name); return false; }
 }
 
 //  גוף ה-webhook → { chatId, groupId, text } כשזו הודעת טקסט "לדוגמה"; אחרת null. טהור.
@@ -40,9 +57,12 @@ function lgSampleFromBody(body) {
   const t = md.typeMessage === 'textMessage' ? (md.textMessageData || {}).textMessage
     : (md.typeMessage === 'extendedTextMessage' || md.typeMessage === 'quotedMessage') ? (md.extendedTextMessageData || {}).text : '';
   if (!lgSampleTextIs(t)) return null;
-  const chatId = String((b.senderData || {}).chatId || '');
+  const sd = b.senderData || {};
+  const chatId = String(sd.chatId || '');
   if (!chatId) return null;
-  return { chatId, groupId: /@g\.us$/.test(chatId) ? chatId : '', text: String(t).trim().slice(0, 120) };
+  const groupId = /@g\.us$/.test(chatId) ? chatId : '';
+  const sender = require('./_wa-recipient').waChatToLocal(groupId ? String(sd.sender || '') : chatId) || '';
+  return { chatId, groupId, sender, text: String(t).trim().slice(0, 120) };
 }
 
 //  הזמנה אחת → מסומנת (פעם אחת) + שאלה בחדר. → true אם סומנה עכשיו. לא זורק.
@@ -50,6 +70,7 @@ async function lgSampleApply(db, orderId, info, now, env) {
   try {
     const id = String(orderId || '');
     if (!id || /[.#$[\]/]/.test(id)) return false;
+    if (!(await _sampleOn(db, env))) return false;
     const o = (await db.ref('orders/' + id).once('value')).val();
     if (!o || (o.stage && o.stage !== '') || !String(o.customerId || '').trim() || o.isSample || o.sampleDecision) return false;
     const t = Number(now) || Date.now();
@@ -75,12 +96,15 @@ async function lgSampleSuspectMark(db, p) {
   const x = p || {}, out = { marked: [], pending: [] };
   try {
     const now = Number(x.now) || Date.now();
-    const chatId = String(x.chatId || ''), groupId = String(x.groupId || '');
+    const chatId = String(x.chatId || ''), groupId = String(x.groupId || ''), sender = String(x.sender || '');
     if (!chatId) return out;
+    if (groupId && !sender) return out;
+    if (!(await _sampleOn(db, x.env))) return out;
     const recs = (await db.ref('waInbound').orderByChild('createdAt').startAt(now - SAMPLE_WINDOW_MS).once('value')).val() || {};
     for (const [k, r] of Object.entries(recs)) {
       if (!r || r.kind !== 'image' || ['rejected', 'closed'].includes(r.state) || (Number(r.createdAt) || 0) > now) continue;
-      const same = groupId ? r.groupId === groupId : (!r.groupId && r.chatId === chatId);
+      //  קבוצה: רק מי ששלח את התמונה — לא כל חבר בקבוצה
+      const same = groupId ? (r.groupId === groupId && String(r.sender || '') === sender) : (!r.groupId && r.chatId === chatId);
       if (!same) continue;
       if (!r.sampleSuspect) await db.ref('waInbound/' + k + '/sampleSuspect').set({ at: now, text: String(x.text || '').slice(0, 120) });
       const ids = Array.isArray(r.orderIds) ? r.orderIds : [];
@@ -95,6 +119,7 @@ async function lgSampleSuspectMark(db, p) {
 async function lgSampleAfterOrder(db, key, entry, orderId, now) {
   try {
     if (!entry || entry.kind !== 'image') return false;
+    if (!(await _sampleOn(db, process.env))) return false;
     const flag = (await db.ref('waInbound/' + key + '/sampleSuspect').once('value')).val() || entry.sampleSuspect;
     const text = flag ? String(flag.text || '') : lgSampleTextIs(entry.caption) ? String(entry.caption) : '';
     if (!text) return false;

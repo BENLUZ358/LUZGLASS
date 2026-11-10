@@ -53,6 +53,14 @@ const stub = async () => ({ sent: 0 });
   check('month: M/YY', ar.lgArchiveMonth('חשבוניות 9/26', NOW), '2026-09');
   check('month: a date is not a month', ar.lgArchiveMonth('חשבונית מ-15/10/2026', NOW), '');
   check('month: none', ar.lgArchiveMonth('חשבונית 34472', NOW), '');
+  //  סקירת שחרור 11/11: "12/10" הוא תאריך (12 באוקטובר), לא דצמבר 2010
+  check('month: 12/10 is a day, not December 2010', ar.lgArchiveMonth('חשבונית מ-12/10', NOW), '');
+  check('month: bare 12/10 is a day too', ar.lgArchiveMonth('חשבונית 12/10', NOW), '');
+  check('month: 5/11 (DD/MM) is not a month', ar.lgArchiveMonth('מה עם 5/11', NOW), '');
+  check('month: MM/YY too old (10/19) → not a month', ar.lgArchiveMonth('חשבוניות 10/19', NOW), '');
+  check('month: MM/YY within 3 years (10/23) → month', ar.lgArchiveMonth('חשבוניות 10/23', NOW), '2023-10');
+  check('month: MM/YYYY too old (10/2015) → not a month', ar.lgArchiveMonth('חשבוניות 10/2015', NOW), '');
+  check('month: next year (1/27) → not a month', ar.lgArchiveMonth('חשבוניות 1/27', NOW), '');
 
   /* ── חיפוש ── */
   const F = (d, text, ref) => ar.lgArchiveFind(d, { customerId: '777', ref: ref || '', text, byMonth: true, now: NOW });

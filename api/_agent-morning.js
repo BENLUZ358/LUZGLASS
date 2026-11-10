@@ -10,16 +10,16 @@
 //    • שאלות שמחכות לבן (waMeta/agentRoomOpen)
 //    • טיוטה לשרטט (כמה הזמנות בסל) + משלוחים פתוחים אצל השרטט
 //    • חשבוניות / קבצים תקועים — בעיות פתוחות של הארכיון (waMeta/agentWatch/problems, לא "סגור")
-//    • הזמנות שנשלחו לחשבשבת אתמול (hashavshevet/hsOrder.sentAt, לא simulated)
+//    • הזמנות שנשלחו לחשבשבת אתמול (hashavshevet/hsOrder.sentAt, httpOk true, לא simulated)
 //    • ביום ראשון בלבד (שבועי): אחוז ✓ לכל סוכן מהסימונים של 7 הימים האחרונים —
 //      verdict { ok, at } על רשומות waMeta/agentShadow (lgAgentShadowVerdict), הסוכן לפי route
 //      (lgAgentOfRoute). ≥95% עם ≥20 סימונים והסוכן ב"שקט" → "אפשר להדליק 'עונה' ל<סוכן>".
-//  פעם ביום: waMeta/agentRoomMorning/<yyyy-mm-dd> נתפס בטרנזקציה (null-first). כשל לא משחרר
-//  (failed נרשם) — כדי שדופק של כל דקה לא יקרא שוב ושוב את orders.
+//  פעם ביום: waMeta/agentRoomMorning/<yyyy-mm-dd> — doneAt רק אחרי פרסום מוצלח; כל ניסיון נתפס
+//  בטרנזקציה (tryAt, null-first) ולא חוזר לפני 10 דק' — כך שדופק של כל דקה לא קורא שוב ושוב את orders.
 // ═══════════════════════════════════════════════════════════════════
 
 const { lgAgentModeOf, lgAgentOfRoute, LG_AGENT_KEYS } = require('./_agent-config');
-const { lgRoomPost, ROOM_OPEN } = require('./_agent-room');
+const { ROOM_OPEN } = require('./_agent-room');
 
 const MORNING = 'waMeta/agentRoomMorning';
 const SHADOW = 'waMeta/agentShadow';
@@ -57,7 +57,9 @@ function lgVerdictRates(shadow, now) {
 }
 
 const _list = (a, n) => (a.length ? ' (' + a.slice(0, n).join(', ') + (a.length > n ? ', …' : '') + ')' : '');
-const _hsAt = o => { const h = o && (o.hashavshevet || o.hsOrder); return h && h.sentAt && !h.simulated ? Number(h.sentAt) || 0 : 0; };
+//  רק שליחה שהתקבלה (httpOk true) — ניסיון שנכשל אינו "נשלח" (סקירת שחרור 11/11)
+const _hsAt = o => { const h = o && (o.hashavshevet || o.hsOrder); return h && h.sentAt && !h.simulated && h.httpOk === true ? Number(h.sentAt) || 0 : 0; };
+const RETRY_GAP_MS = 10 * 60 * 1000;
 
 //  x: { date, open:[name], draft, batches:[{n,count}], archive:[text], hs:[orderNum], rates?, modes }
 function lgMorningText(x) {
@@ -89,8 +91,17 @@ async function lgAgentMorningRun(db, o) {
   if (!cfg) return { posted: false, skipped: 'no-config' };
   if (lgAgentModeOf(cfg, 'manager', env) === 'off') return { posted: false, skipped: 'manager-off' };
   const j = _jer(now);
-  const t = await db.ref(MORNING + '/' + j.iso).transaction(cur => (cur ? undefined : { at: now }));
-  if (!t.committed) return { posted: false, skipped: 'done-today' };
+  //  היום "בוצע" רק אחרי פרסום מוצלח (doneAt). ריצה שנכשלה — ניסיון חוזר לכל היותר פעם ב-10 דק'
+  //  (tryAt), כדי שדופק של כל דקה לא יקרא שוב ושוב את orders. null-first: הקריאה הראשונה מחזירה ערך.
+  let why = '';
+  const t = await db.ref(MORNING + '/' + j.iso).transaction(cur => {
+    if (cur && cur.doneAt) { why = 'done-today'; return undefined; }
+    const last = Number(cur && (cur.tryAt || cur.at)) || 0;
+    if (cur && last && Math.abs(now - last) < RETRY_GAP_MS) { why = 'retry-wait'; return undefined; }
+    why = '';
+    return { ...(cur || {}), tryAt: now };
+  });
+  if (!t.committed) return { posted: false, skipped: why || 'done-today' };
   try {
     const DB = require('./_drafter-batch');
     const open = Object.values((await db.ref(ROOM_OPEN).once('value')).val() || {})
@@ -114,9 +125,10 @@ async function lgAgentMorningRun(db, o) {
     const modes = {};
     LG_AGENT_KEYS.forEach(a => { modes[a] = lgAgentModeOf(cfg, a, env); });
     const text = lgMorningText({ date: j.text, open, draft, batches, archive, hs, rates, modes });
-    const rk = await lgRoomPost(db, { agent: 'manager', kind: 'summary', text }, now);
-    //  ⚠️ כשל לא משחרר את היום: אחרת כל דופק (כל דקה) היה קורא שוב את orders. נרשם וזהו.
+    const rk = await require('./_agent-room').lgRoomPost(db, { agent: 'manager', kind: 'summary', text }, now);
+    //  כשל — נרשם; הניסיון הבא אחרי 10 דק' (tryAt)
     if (!rk) { await db.ref(MORNING + '/' + j.iso).update({ failed: 'room' }); return { posted: false, skipped: 'room-failed' }; }
+    await db.ref(MORNING + '/' + j.iso).update({ doneAt: now, failed: null });
     return { posted: true, roomKey: rk };
   } catch (e) {
     console.warn('agent-morning: run', e && e.name);
