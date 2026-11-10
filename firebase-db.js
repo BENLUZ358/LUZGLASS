@@ -1347,12 +1347,14 @@ function lgInvoiceState(o) {
 }
 
 // מונים לקבוצה של הזמנות (לקוח אחד) — מה שמניע את השער.
-// השער נפתח רק כשאין אף הזמנה ממתינה או משתנה, ויש לפחות אחת מאומתת.
+// השער נפתח כשיש לפחות הזמנה אחת מאומתת. בן, 10/11: מפיקים חשבונית רק על מה
+// שסימן — הזמנות שעוד ממתינות או השתנו לא עוצרות את השאר, הן נשארות לחשבונית
+// הבאה. החלון מציג רק מאומתות, וכל אחת עם תיבת סימון.
 function lgInvoiceCounts(list) {
   const n = { pending: 0, verified: 0, changed: 0, invoiced: 0 };
   (list || []).forEach(o => { const s = lgInvoiceState(o); if (s) n[s]++; });
   n.open = n.pending + n.changed;
-  n.gateOpen = n.open === 0 && n.verified > 0;
+  n.gateOpen = n.verified > 0;
   return n;
 }
 

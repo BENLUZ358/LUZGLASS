@@ -506,9 +506,11 @@ function renderOrders() {
     </div>
     ${c.gateOpen
       ? `<button class="btn btn-primary gate-btn" id="gateBtn" type="button"><span data-icon="receipt"></span>הפק חשבונית בחשבשבת</button>
-         <div class="gate-note ok">${c.verified === 1 ? "ההזמנה אומתה" : "כל " + c.verified + " ההזמנות אומתו"}</div>`
+         <div class="gate-note ok">${c.open
+           ? (c.verified === 1 ? "הזמנה אחת מאומתת" : c.verified + " הזמנות מאומתות") + " — תבחר בחלון אילו להכניס. " + (c.open === 1 ? "הזמנה אחת שעוד לא אומתה נשארת" : c.open + " שעוד לא אומתו נשארות") + " לחשבונית הבאה."
+           : (c.verified === 1 ? "ההזמנה אומתה" : "כל " + c.verified + " ההזמנות אומתו")}</div>`
       : `<button class="btn btn-secondary gate-btn" type="button" aria-disabled="true" aria-describedby="gateWhy"><span data-icon="lock"></span>הפק חשבונית בחשבשבת</button>
-         <div class="gate-note" id="gateWhy">${c.open === 1 ? "נותרה הזמנה אחת לאימות" : "נותרו " + c.open + " הזמנות לאימות"}</div>`}`;
+         <div class="gate-note" id="gateWhy">${c.open === 1 ? "אמת לפחות הזמנה אחת כדי להפיק חשבונית" : "אמת לפחות הזמנה אחת מתוך " + c.open + " כדי להפיק חשבונית"}</div>`}`;
 }
 $('ordList').addEventListener('click', e => {
   const b = e.target.closest('.ord'); if (!b) return;

@@ -122,8 +122,10 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
   const C = order({ id: 'c', invoiceCheck: { verifiedAt: 1, itemsHash: 'stale' } });
   const n = ctx.lgInvoiceCounts([V, P, C]);
   check('counts each state', [n.pending, n.verified, n.changed], [1, 1, 1]);
-  check('the gate is shut while anything is pending or changed', n.gateOpen, false);
-  check('a changed order holds the gate like a pending one', ctx.lgInvoiceCounts([V, C]).gateOpen, false);
+  //  בן, 10/11: מפיקים על מה שמאומת — ממתינות ומשתנות לא עוצרות את השאר
+  check('a verified order opens the gate even with others pending', n.gateOpen, true);
+  check('a changed order does not hold the gate either', ctx.lgInvoiceCounts([V, C]).gateOpen, true);
+  check('only pending / changed → the gate stays shut', ctx.lgInvoiceCounts([P, C]).gateOpen, false);
   check('all verified → the gate opens', ctx.lgInvoiceCounts([V]).gateOpen, true);
   check('nothing to invoice → the gate stays shut', ctx.lgInvoiceCounts([]).gateOpen, false);
 }
