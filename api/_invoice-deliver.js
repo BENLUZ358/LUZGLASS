@@ -111,12 +111,33 @@ async function lgInvoiceFiles(db, key, opts) {
   const order = (rec.orderNums || []).map(String);
   missing.sort((a, b) => order.indexOf(a) - order.indexOf(b));
   if (merged.length > ((opts && opts.maxMergedBytes) || MAX_MERGED_BYTES)) {
-    return { ok: true, rec, files: [sep.files[0], ...sks].map(_plain), missing };
+    const max = opts && opts.maxFileBytes;
+    const files = [sep.files[0]];
+    for (const f of sks) {
+      if (!max || f.buf.length <= max || !/^image\//.test(f.mime)) { files.push(f); continue; }
+      //  תמונה גדולה מדי לקובץ בודד (מייל: תשובה של Vercel) → JPEG קטן יותר, אותו שם עם .jpg
+      try {
+        const s = await M.lgShrinkImage(f.buf, f.mime, max);
+        files.push({ ...f, buf: s.buf, mime: s.mime, name: f.name.replace(/\.[^.]+$/, '') + '.jpg' });
+      } catch (_) { if (!f.att) missing.push(f.num); }
+    }
+    return { ok: true, rec, files: files.map(_plain), missing };
   }
   const name = 'חשבונית ' + rec.docNumber + (rec.client ? ' - ' + _safe(rec.client) : '') + '.pdf';
   return { ok: true, rec, files: [{ name, mime: 'application/pdf', buf: merged }], missing };
 }
 const _plain = f => ({ name: f.name, mime: f.mime, buf: f.buf });
+
+//  מייל (סקירת צרופות, 10/11): הסקריפט מושך כל קובץ כ-base64 בתוך תשובה של Vercel —
+//  תקרה 4.5MB, ו-base64 מוסיף שליש. לכן 3MB: חבילה מאוחדת גדולה → קבצים נפרדים,
+//  ותמונה בודדת גדולה → מוקטנת. וואטסאפ נשאר עם התקרה הרגילה (lgInvoiceFiles).
+const LG_EMAIL_FILE_BYTES = 3 * 1024 * 1024;
+function lgInvoiceEmailFiles(db, key) {
+  return lgInvoiceFiles(db, key, { maxMergedBytes: LG_EMAIL_FILE_BYTES, maxFileBytes: LG_EMAIL_FILE_BYTES });
+}
+//  רשימת הקבצים בקטן — נשמרת בתפיסה, ונבדקת שוב בכל משיכה (_email-outbox.js).
+//  PDF מאוחד נבנה מחדש בכל פעם (תאריך יצירה) — לכן בלי גודל; תמונה — עם גודל.
+const lgInvoiceFilesManifest = files => files.map(f => ({ n: f.name, m: f.mime, b: f.mime === 'application/pdf' ? 0 : f.buf.length }));
 
 //  החשבונית ואחריה סקיצה לכל הזמנה שיש לה סקיצה, כל אחד קובץ משלו (הצורה שלפני 2/11).
 async function _separateFiles(db, key) {
@@ -204,7 +225,9 @@ async function lgInvoiceDeliver(db, key, deps) {
   if (who.channel === 'email') {
     const { lgEmailEnqueue } = require('./_email-outbox');
     const sendTo = await lgInvoiceEmailFor(db, who.accountKey);
-    const q = await lgEmailEnqueue(db, { ...common, fileCount: files.files.length, thread: who.thread, messageId: emOrder.emailMessageId,
+    //  הספירה הסופית נעשית בתפיסה (lgEmailClaim); כאן — כבר בחישוב של המייל
+    const em = await lgInvoiceEmailFiles(db, key);
+    const q = await lgEmailEnqueue(db, { ...common, fileCount: (em.ok ? em.files : files.files).length, thread: who.thread, messageId: emOrder.emailMessageId,
                                          email: who.email, sendTo, now });
     await mark({ state: 'queued', channel: 'email', outboxKey: q.key });
     return { state: 'queued', channel: 'email' };
@@ -223,4 +246,4 @@ async function lgInvoiceDeliver(db, key, deps) {
   return { state: res && res.status === 'sent' ? 'sent' : 'queued', channel: 'whatsapp', result: res || null };
 }
 
-module.exports = { _sketch, _dataUrl, lgInvoiceFiles, lgInvoiceDeliver, lgInvoiceEmailFor, lgIsDeliveryInvoice, LG_INVOICE_EMAIL, LG_DELIVERY_ACCOUNTS };
+module.exports = { _sketch, _dataUrl, lgInvoiceFiles, lgInvoiceEmailFiles, lgInvoiceFilesManifest, LG_EMAIL_FILE_BYTES,lgInvoiceDeliver, lgInvoiceEmailFor, lgIsDeliveryInvoice, LG_INVOICE_EMAIL, LG_DELIVERY_ACCOUNTS };

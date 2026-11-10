@@ -230,6 +230,55 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.match(items[0].subject, /חשבונית מס 67346/);
     assert.equal(items[0].files, 1);
   });
+  //  ── סקירת צרופות (10/11): גודל המייל. כל קובץ חוזר מ-outbox-file כ-base64 בתוך תשובה
+  //  של Vercel (תקרה 4.5MB) — חבילה מאוחדת מעל 3MB → קבצים נפרדים, ותמונה מעל 3MB מוקטנת.
+  const MB3 = 3 * 1024 * 1024;
+  const noisePng = (w, h) => {
+    const c = createCanvas(w, h); const ctx = c.getContext('2d');
+    const im = ctx.createImageData(w, h);
+    for (let i = 0; i < im.data.length; i++) im.data[i] = (i % 4 === 3) ? 255 : (Math.random() * 256) | 0;
+    ctx.putImageData(im, 0, 0);
+    return 'data:image/png;base64,' + c.toBuffer('image/png').toString('base64');
+  };
+  const BIG = noisePng(1100, 1000);
+  await test('email: big package → separate files, each under 3MB (a big image is shrunk to JPEG)', async () => {
+    assert.ok(Buffer.from(BIG.split(',')[1], 'base64').length > MB3, 'fixture must be over 3MB');
+    const db = base({ a: emOrder, b: portal });
+    db._data.sketches.a = BIG;
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [k] = Object.keys(db._data.waMeta.emailOutbox);
+    const items = await ob.lgEmailClaim(db, 5, NOW);
+    assert.equal(items[0].files, 3);   // חשבונית + 2 סקיצות, נפרדים
+    const got = [];
+    for (let i = 0; i < items[0].files; i++) {
+      const f = await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, i, NOW);
+      assert.equal(f.ok, true, 'file ' + i + ' ' + f.code);
+      got.push([f.mime, Buffer.from(f.b64, 'base64').length]);
+    }
+    assert.deepEqual(got.map(g => g[0]), ['application/pdf', 'image/jpeg', 'image/jpeg']);
+    assert.ok(got.every(g => g[1] <= MB3), JSON.stringify(got));
+    //  וואטסאפ — כמו קודם: קובץ אחד מאוחד (התקרה שם 15MB)
+    const wa = await D.lgInvoiceFiles(db, 'k1');
+    assert.equal(wa.files.length, 1);
+  });
+  await test('email: the files served are the ones counted at claim time — a change in between fails cleanly', async () => {
+    const db = base({ a: emOrder, b: portal });
+    db._data.sketches.a = BIG;
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [k] = Object.keys(db._data.waMeta.emailOutbox);
+    const items = await ob.lgEmailClaim(db, 5, NOW);
+    assert.equal(items[0].files, 3);
+    //  בין התפיסה למשיכה: צרופה נוספה להזמנה a → 4 קבצים
+    db._data.orders.a.attachments = { 1: { kind: 'graphic', at: 1 } };
+    db._data.sketches.a__att1 = JPG;
+    const f1 = await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, 1, NOW);
+    assert.deepEqual([f1.ok, f1.code], [false, 'files-changed']);
+    //  הריצה הבאה תופסת מחדש וסופרת מחדש
+    await ob.lgEmailComplete(db, k, items[0].leaseToken, false, NOW);
+    const again = await ob.lgEmailClaim(db, 5, NOW);
+    assert.equal(again[0].files, 4);
+    assert.equal((await ob.lgEmailOutboxFile(db, k, again[0].leaseToken, 3, NOW)).ok, true);
+  });
   await test('no invoice email for the card → plain reply (no sendTo)', async () => {
     const db = base({ a: emOrder, b: portal });
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });

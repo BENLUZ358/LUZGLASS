@@ -39,6 +39,28 @@ async function _toPng(buf) {
   return c.toBuffer('image/png');
 }
 
+//  תמונה מעל maxBytes → JPEG מתחת לזה (רקע לבן; קודם איכות, אחר כך מקטינים).
+//  לקבצים שיוצאים אחד-אחד בתשובה של Vercel (תקרה 4.5MB, ו-base64 מוסיף שליש).
+//  → { buf, mime } — תמונה שכבר קטנה מספיק חוזרת כמו שהיא. לא מצליח → זורק.
+async function lgShrinkImage(buf, mime, maxBytes) {
+  if (buf.length <= maxBytes) return { buf, mime };
+  const { loadImage, createCanvas } = require('@napi-rs/canvas');
+  const img = await loadImage(buf);
+  if (!img.width || !img.height) throw new Error('empty image');
+  let scale = 1;
+  for (let i = 0; i < 12; i++) {
+    const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+    const c = createCanvas(w, h);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    const out = c.toBuffer('image/jpeg', i === 0 ? 85 : 75);
+    if (out.length <= maxBytes) return { buf: out, mime: 'image/jpeg' };
+    scale *= 0.75;
+  }
+  throw new Error('image too large');
+}
+
 //  ⚠️ Buffer מ-base64 (כך מגיעות הסקיצות מ-Firebase) יושב בתוך זיכרון משותף
 //  (byteOffset ≠ 0), ו-pdf-lib קורא מתחילת הזיכרון — "SOI not found in JPEG".
 //  עותק עצמאי לכל קלט.
@@ -114,4 +136,4 @@ async function lgInvoiceMerge(pdf, sketches, meta) {
   return Buffer.from(await doc.save());
 }
 
-module.exports = { lgInvoiceMerge, lgAddSketchPage, _visual, _fontBytes, A4 };
+module.exports = { lgInvoiceMerge, lgAddSketchPage, lgShrinkImage, _visual, _fontBytes, A4 };
