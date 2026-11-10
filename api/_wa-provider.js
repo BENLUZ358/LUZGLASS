@@ -113,14 +113,14 @@ function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliv
   if (kind === 'dispatched') return wrap('ההובלה יצאה אליך עם ' + count + '.');
   //  חשבונית (DB-00004, בן 29/10): קובץ החשבונית והסקיצות מצורפים להודעה.
   if (kind === 'invoice') {
-    //  בן, 3/11: המקום לאמבט ונאור חזקיה — החשבונית יוצאת על מה שנשלח אליהם למחרת
+    //  בן, 10/11: לקוח הובלות — זו ההודעה היחידה שלו, ובה "ההובלה תצא אליך בקרוב"
     //  בן, 4/11: סקיצה חסרה לא עוצרת את החשבונית — יוצאות הסקיצות שיש, ונאמר על מה אין
     const miss = (missingSketchNums || []).filter(Boolean).map(String);
     const sk = !miss.length ? ', והסקיצות שלהן.'
       : miss.length >= n ? '.'
       : ', והסקיצות שלהן (בלי סקיצה ל' + miss.join(', ') + ').';
     return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + sk,
-                deliveryTomorrow ? 'הסחורה תגיע אליך מחר במהלך היום.' : '');
+                deliveryTomorrow ? 'ההובלה תצא אליך בקרוב.' : '');
   }
   return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'));
 }

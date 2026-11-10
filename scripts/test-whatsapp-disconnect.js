@@ -248,10 +248,11 @@ const ERR   = (code, msg) => async () => ({ status: code, text: async () => JSON
 {
   const WD = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8');
   const prompt = (WD.match(/function showClientDeliveryPrompt[\s\S]*?\n}/) || [''])[0];
-  check('the stage is written before the message is even attempted',
-        prompt.indexOf('finalizeDelivery') < prompt.indexOf('_waDispatch'), true);
-  check('and the message is fired, never awaited into the business action',
-        /\.then\(\(\) => \{[\s\S]*_waDispatch\(orderIds, clientName\)/.test(prompt), true);
+  //  בן, 10/11: סיום הובלה לא שולח הודעה בכלל — WhatsApp לא יכול לעצור אותו
+  check('finishing a delivery writes the stage',
+        prompt.indexOf('finalizeDelivery') > -1, true);
+  check('and never touches WhatsApp',
+        /whatsapp-dispatch|_waDispatch|lgWaDrain/.test(prompt), false);
 
   const grp = (WD.match(/async function _waSendReadyGrouped[\s\S]*?\n}/) || [''])[0];
   /* ⚠️ כל קריאה עטופה — שרת שלא עונה לא מפיל את הלולאה ולא את הפעולה */
