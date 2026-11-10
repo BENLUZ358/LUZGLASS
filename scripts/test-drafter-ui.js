@@ -66,5 +66,17 @@ check('item line', T.drafterItemLine({ orderNum: 'L12', client: 'נאור', sket
 check('added toast', T.drafterAddedToast(6), 'נכנסה לטיוטה לשרטט (6)');
 check('lgNormalizeOrder keeps drafterHold', /drafterHold:\s+o\.drafterHold\s+\?\? null/.test(SRC), true);
 
+// תחנת שרטט — משלוחים לפי קובץ (בן, 10/11)
+const T2 = vm.runInContext('({ drafterBatchCard, drafterDoneOneConfirm })', ctx);
+const card = T2.drafterBatchCard({ n: 12, at: AT, count: 2, emailState: 'sent',
+  orders: [{ orderNum: 'L1', client: 'נאור', sketchName: 'מקלחון', stage: 'drafter' }, { orderNum: 'L2', client: 'אגן', sketchName: 'מראה', stage: 'opty' }] });
+check('batch card', [card.title, card.mail, card.lines], ['משלוח 12 · 14:30 · 2 הזמנות', 'המייל נשלח',
+  ['L1 · נאור · מקלחון', 'L2 · אגן · מראה · כבר לא אצל שרטט']]);
+check('done one confirm', T2.drafterDoneOneConfirm({ n: 12, count: 2 }), 'השרטט סיים את משלוח 12 (2 הזמנות)? הן יעברו ל"בנה יום עבודה".');
+const DRF = fs.readFileSync(path.join(ROOT, 'drafter.html'), 'utf8');
+check('drafter station loads the module', /<script src="drafter-batch\.js\?v=\d+"><\/script>/.test(DRF), true);
+check('drafter station has the batches box', DRF.includes('id="drafterBatches"'), true);
+check('drawer has a preview button', fs.readFileSync(path.join(ROOT, 'drafter-batch.js'), 'utf8').includes('id="drbPreview"'), true);
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nAll drafter-ui checks passed.');

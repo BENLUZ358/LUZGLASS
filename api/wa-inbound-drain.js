@@ -183,9 +183,35 @@ async function handleAdmin(body, deps) {
   //  agent-status: אילו משתני סביבה מוגדרים — בוליאנים בלבד, אף ערך לא חוזר לדפדפן.
   // ─── משלוחים לשרטט (בן, 10/11) — api/_drafter-batch.js ───────────────
   //  הנמען קבוע בשרת; שום שדה מהבקשה מלבד action לא נקרא.
-  if (action === 'drafter-status' || action === 'drafter-send' || action === 'drafter-done' || action === 'drafter-resend' || action === 'drafter-hold') {
+  if (['drafter-status', 'drafter-send', 'drafter-done', 'drafter-resend', 'drafter-hold', 'drafter-preview', 'drafter-file'].includes(action)) {
     const DB = require('./_drafter-batch');
     const who = { by: String(deps.by || ''), now: deps.now };
+    const idx = Number(b.idx) || 0;
+    //  הטיוטה כקובץ (לא משנה כלום) / קובץ של משלוח שנשלח — חלק אחד בכל קריאה (≤3MB)
+    if (action === 'drafter-preview') {
+      const p = await DB.lgDrafterPreview(deps.db, who);
+      if (!p.ok) return { ok: false, code: p.code, message: 'הטיוטה ריקה' };
+      const f = p.files[idx];
+      if (!f) return { ok: false, code: 'bad-idx', message: 'אין חלק כזה' };
+      return { ok: true, code: '', parts: p.files.length, name: f.name, b64: f.buf.toString('base64') };
+    }
+    if (action === 'drafter-file') {
+      const n = Number(b.n);
+      if (!Number.isInteger(n) || n < 1) return { ok: false, code: 'bad-n', message: 'מספר משלוח לא תקין' };
+      let f = await DB.lgDrafterStoredFile(deps.db, n, idx);
+      if (!f.ok) {
+        const p = await DB.lgDrafterPdf(deps.db, n);
+        const one = p.ok && p.files[idx];
+        if (!one) return { ok: false, code: p.code || 'bad-idx', message: 'הקובץ לא נמצא' };
+        f = { ok: true, name: one.name, b64: one.buf.toString('base64') };
+      }
+      return { ok: true, code: '', name: f.name, b64: f.b64 };
+    }
+    if (action === 'drafter-done' && b.n != null) {
+      const n = Number(b.n);
+      if (!Number.isInteger(n) || n < 1) return { ok: false, code: 'bad-n', message: 'מספר משלוח לא תקין' };
+      return { code: '', ...(await DB.lgDrafterDone(deps.db, { ...who, n })) };
+    }
     if (action === 'drafter-hold') {
       const r = await DB.lgDrafterHold(deps.db, b.id, b.hold === true);
       return r.ok ? { ok: true, code: '' } : { ok: false, code: r.code, message: 'ההזמנה כבר לא מחכה בטיוטה' };

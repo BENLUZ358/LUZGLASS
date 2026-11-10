@@ -44,6 +44,16 @@ function drafterDoneText(r) {
   held.forEach(n => out.push('משלוח ' + n + ' לא הועבר — המייל שלו לא יצא. לחץ "שלח שוב" ליד המשלוח.'));
   return out.join('\n');
 }
+//  תחנת שרטט — כרטיס לכל משלוח (קובץ) שנשלח ועוד לא "השרטט סיים" (בן, 10/11)
+function drafterBatchCard(b) {
+  return {
+    title: ['משלוח ' + b.n, _dbTime(b.at), _dbCount(b.count)].join(' · '),
+    mail: _DB_MAIL[b.emailState] || '',
+    lines: (b.orders || []).map(o => drafterItemLine(o) + (o.stage && o.stage !== 'drafter' && o.stage !== 'chash' ? ' · כבר לא אצל שרטט' : '')),
+  };
+}
+const drafterDoneOneConfirm = b => 'השרטט סיים את משלוח ' + b.n + ' (' + _dbCount(b.count) + ')? הן יעברו ל"בנה יום עבודה".';
+
 function drafterTag(o) {
   if (!o || (o.stage !== 'drafter' && o.stage !== 'chash')) return '';
   if (o.drafterHold) return 'לא לשלוח עכשיו';
@@ -61,6 +71,18 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
     if (!res.ok) return { ok: false, message: d.error || ('שגיאה ' + res.status) };
     return d;
   }
+  //  קובץ PDF בלשונית חדשה. החלון נפתח לפני ההמתנה — אחרת הדפדפן חוסם אותו.
+  async function openPdf(body) {
+    const win = window.open('', '_blank');
+    if (win) win.document.write('<p dir="rtl" style="font:16px sans-serif;padding:20px">טוען את הקובץ…</p>');
+    const r = await post(body).catch(e => ({ ok: false, message: e.message }));
+    if (!r.ok || !r.b64) { if (win) win.close(); return { ok: false, message: r.message || 'הקובץ לא נטען' }; }
+    const bin = atob(r.b64), arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+    if (win) win.location.href = url; else window.location.href = url;
+    return { ok: true, parts: r.parts || 1 };
+  }
   function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
   function draw(msg) {
@@ -74,6 +96,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       + '<button type="button" class="btn btn-primary drb-btn" id="drbSend"' + (m.canSend && !busy ? '' : ' aria-disabled="true"') + '>' + esc(m.sendLabel) + '</button></div>';
     if (expanded) {
       h += '<div class="drb-body">';
+      if ((st.basket || []).length) h += '<button type="button" class="btn btn-secondary drb-btn drb-preview" id="drbPreview">הצג טיוטה (PDF)</button>';
       h += (st.basket || []).length
         ? '<ul class="drb-list">' + st.basket.map(it => '<li><span>' + esc(drafterItemLine(it)) + '</span>'
             + '<button type="button" class="btn btn-ghost drb-mini" data-hold="' + esc(it.id) + '">לא לשלוח עכשיו</button></li>').join('') + '</ul>'
@@ -110,6 +133,15 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       await refresh(r.ok ? 'משלוח ' + r.n + ' נשלח לתור המיילים — יגיע ל-lozzagagot תוך דקה-שתיים'
                          : (r.code === 'empty' ? 'הטיוטה ריקה' : r.code === 'busy' ? 'שליחה אחרת באמצע — נסה שוב בעוד דקה' : 'השליחה נכשלה: ' + (r.message || '')));
     };
+    const pv = box.querySelector('#drbPreview');
+    if (pv) pv.onclick = async () => {
+      if (busy) return;
+      busy = true;
+      const r = await openPdf({ action: 'drafter-preview', idx: 0 });
+      busy = false;
+      if (!r.ok) draw('לא הצלחתי להציג: ' + r.message);
+      else if (r.parts > 1) draw('הטיוטה גדולה — מוצג חלק 1 מתוך ' + r.parts);
+    };
     box.querySelectorAll('[data-hold],[data-unhold]').forEach(btn => { btn.onclick = async () => {
       if (busy) return;
       const hold = btn.hasAttribute('data-hold');
@@ -144,6 +176,43 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
     draw(msg || (r && r.ok ? '' : 'לא הצלחתי לטעון את הטיוטה לשרטט'));
     return last;
   }
+
+  // ─── תחנת שרטט: המשלוחים לפי קובץ ───────────────────────────────
+  let bOpen = {}, bMsg = '';
+  async function drawBatches() {
+    const box = document.getElementById('drafterBatches'); if (!box) return;
+    const r = await post({ action: 'drafter-status' }).catch(() => null);
+    const open = (r && r.ok && r.open) || [];
+    let h = '<div class="drbs-head">משלוחים לשרטט' + (open.length ? ' (' + open.length + ')' : '') + '</div>';
+    if (!r || !r.ok) h += '<p class="drbs-empty">לא הצלחתי לטעון את המשלוחים</p>';
+    else if (!open.length) h += '<p class="drbs-empty">אין משלוחים שמחכים לשרטט</p>';
+    open.forEach(b => {
+      const c = drafterBatchCard(b);
+      h += '<div class="drbs-card"><button type="button" class="drbs-title" data-toggle="' + b.n + '" aria-expanded="' + !!bOpen[b.n] + '">'
+        + '<span aria-hidden="true">📄</span> ' + esc(c.title) + (c.mail ? ' <span class="drbs-mail">' + esc(c.mail) + '</span>' : '') + '</button>'
+        + (bOpen[b.n] ? '<ul class="drb-list">' + c.lines.map(t => '<li><span>' + esc(t) + '</span></li>').join('') + '</ul>' : '')
+        + '<div class="drbs-actions"><button type="button" class="btn btn-secondary drb-btn" data-file="' + b.n + '">פתח קובץ</button>'
+        + '<button type="button" class="btn btn-primary drb-btn" data-done="' + b.n + '" data-count="' + b.count + '">השרטט סיים</button></div></div>';
+    });
+    if (bMsg) h += '<div class="drb-msg" role="status">' + esc(bMsg).replace(/\n/g, '<br>') + '</div>';
+    box.innerHTML = h;
+    box.querySelectorAll('[data-toggle]').forEach(x => { x.onclick = () => { const n = x.dataset.toggle; bOpen[n] = !bOpen[n]; drawBatches(); }; });
+    box.querySelectorAll('[data-file]').forEach(x => { x.onclick = async () => {
+      const res = await openPdf({ action: 'drafter-file', n: Number(x.dataset.file), idx: 0 });
+      if (!res.ok) { bMsg = 'הקובץ לא נפתח: ' + res.message; drawBatches(); }
+    }; });
+    box.querySelectorAll('[data-done]').forEach(x => { x.onclick = async () => {
+      if (busy) return;
+      const n = Number(x.dataset.done);
+      if (!confirm(drafterDoneOneConfirm({ n, count: Number(x.dataset.count) }))) return;
+      busy = true;
+      const res = await post({ action: 'drafter-done', n }).catch(e => ({ ok: false, message: e.message }));
+      busy = false;
+      bMsg = res.ok ? drafterDoneText(res) : 'לא הצליח: ' + (res.message || '');
+      drawBatches();
+    }; });
+  }
+  window.lgDrafterBatchesMount = drawBatches;
 
   //  נקרא מ-openSketchQueue, ואחרי כל שליחה לחשבשבת (added=true → הודעה קצרה)
   window.lgDrafterBarShow = async function (on, added) {
