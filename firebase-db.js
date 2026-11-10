@@ -1826,9 +1826,13 @@ function lgInvoiceGroups(allOrders, q, opts) {
     const s = lgInvoiceState(o);
     if (!s || s === 'invoiced') return;
     if (scope !== 'all' && lgIsMonthlyOrder(o, phones) !== (scope === 'monthly')) return;
+    // לקוח עם כרטיס בחשבשבת מקובץ לפי הכרטיס: חשבונית יוצאת לכרטיס, ולקוח
+    // כמו פלג (07) שמזמין במייל בלי טלפון נפל קודם להזמנה־לקבוצה (בן, 10/11)
     const phone = lgClientKey(o);
-    const key = phone || ('order:' + o.id);
-    const g = by[key] || (by[key] = { key, phone, name: '', ords: [] });
+    const card  = String((o && o.customerId) || '').trim();
+    const key = card ? ('card:' + card) : (phone || ('order:' + o.id));
+    const g = by[key] || (by[key] = { key, phone, card, name: '', ords: [] });
+    if (!g.phone && phone) g.phone = phone;
     if (!g.name && o.orderClient && o.orderClient !== '—') g.name = o.orderClient;
     g.ords.push(o);
   });

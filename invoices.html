@@ -80,6 +80,7 @@ html,body{height:100%;overflow:hidden;}
 .ord[aria-current="true"]{box-shadow:0 0 0 3px rgba(184,146,42,0.35);}
 .ord-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);}
 .ord-num{font-size:var(--fs-lg);font-weight:var(--fw-black);}
+.ord-sketch{margin-top:2px;font-size:var(--fs-base);font-weight:var(--fw-bold);}
 .ord-meta{margin-top:2px;font-size:var(--fs-xs);color:var(--muted);}
 @keyframes lgFlashOnce{0%,100%{background:var(--surface)}40%{background:#f6dcd8}}
 
@@ -259,7 +260,7 @@ html,body{height:100%;overflow:hidden;}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="firebase-db.js?v=20260928"></script>
+<script src="firebase-db.js?v=20261110"></script>
 <script src="sku-picker.js?v=20261028"></script>
 <script src="lg-icons.js?v=20261103"></script>
 </head>
@@ -418,7 +419,7 @@ function renderCustomers() {
       : c.open ? `<span class="count" aria-label="${c.open} ממתינות לאימות">${c.open}</span>`
       : `<span class="st st-verified" aria-label="הכול מאומת"><span data-icon="check-circle"></span></span>`;
     return `<button class="cust" type="button" data-key="${esc(g.key)}" aria-current="${g.key === selKey}">
-      <span class="cust-name">${esc(g.name)}<span class="cust-sub">${nOrders(g.ords.length)}${g.phone ? ' · ' + esc(g.phone) : ' · בלי טלפון'}</span></span>${badge}</button>`;
+      <span class="cust-name">${esc(g.name)}<span class="cust-sub">${nOrders(g.ords.length)}${g.card ? ' · כרטיס ' + esc(g.card) : g.phone ? ' · ' + esc(g.phone) : ' · בלי טלפון'}</span></span>${badge}</button>`;
   }).join('');
 }
 // המספר על כל טאב הוא הזמנות פתוחות (ממתינות + השתנו), לא לקוחות: זה מה
@@ -481,7 +482,8 @@ function renderOrders() {
     const n = o.items.length;
     return `<button class="ord is-${s}" type="button" data-id="${esc(o.id)}" aria-current="${String(o.id) === String(selId)}">
       <div class="ord-row"><span class="ord-num">${esc(o.orderNum || o.id)}</span>${stChip(s)}</div>
-      <div class="ord-meta">${nItems(n)}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}${o.date ? ' · ' + esc(o.date) : ''}</div>
+      ${o.sketchName ? `<div class="ord-sketch">${esc(o.sketchName)}</div>` : ''}
+      <div class="ord-meta">${nItems(n)}${o.date ? ' · ' + esc(o.date) : ''}</div>
       ${partLine(o)}${hsRef(o)}</button>`;
   }).join('');
 
