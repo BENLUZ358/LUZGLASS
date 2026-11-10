@@ -218,7 +218,8 @@ async function resolveRecipient(db, order, kind) {
 //  (חסום), לעולם לא חזרה לקבוצה.
 async function resolveRecipientWa(db, order, kind) {
   const r = await _resolveWa(db, order);
-  if (kind === 'invoice' && r.linked && r.accountKey && await lgInvoiceToPrivate(db, r.accountKey)) {
+  //  'broken-returned' (בן, 10/11) — הולך לאן שהולכות החשבוניות
+  if ((kind === 'invoice' || kind === 'broken-returned') && r.linked && r.accountKey && await lgInvoiceToPrivate(db, r.accountKey)) {
     const acc = (await db.ref('hashavshevetAccounts/' + r.accountKey).once('value')).val();
     const phone = norm(acc && acc.phone);
     return { phone, source: phone ? 'invoice-private' : 'invoice-private-missing',

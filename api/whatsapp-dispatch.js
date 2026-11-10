@@ -78,6 +78,23 @@ module.exports = async function handler(req, res, deps) {
                  : body.kind === 'sketches-handled' ? 'sketches-handled'
                  : 'dispatched';
 
+  //  שבר בחיסום שחזר (בן, 10/11) — מסלול משלו: הודעה אחת על פריט אחד, לנמען החשבוניות
+  if (body.kind === 'broken-returned') {
+    if (orderIds.length !== 1 || !Number.isInteger(Number(body.idx)) || Number(body.idx) < 0) {
+      res.status(400).json({ error: 'הזמנה אחת ומספר פריט' }); return;
+    }
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT && !(deps && deps.db)) { res.status(500).json({ error: 'server not configured' }); return; }
+    try {
+      const db = (deps && deps.db) || _db();
+      const r = await require('./_broken').lgBrokenReturnedNotify(db, orderIds[0], Number(body.idx), deps);
+      res.status(r.state === 'blocked' ? 409 : 200).json({ ok: r.state !== 'blocked', ...r, error: r.state === 'blocked' ? r.reason : undefined });
+    } catch (e) {
+      console.error('broken-returned:', e && e.name);
+      res.status(500).json({ error: 'שגיאה בשליחה' });
+    }
+    return;
+  }
+
   if (!orderIds.length)             { res.status(400).json({ error: 'orderIds חסר' }); return; }
   if (orderIds.length > MAX_ORDERS) { res.status(400).json({ error: `יותר מדי הזמנות (מקסימום ${MAX_ORDERS})` }); return; }
   if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
