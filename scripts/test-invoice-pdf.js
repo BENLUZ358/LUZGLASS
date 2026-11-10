@@ -494,11 +494,13 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
                 [Buffer.from('%PDF-1.4 copy').toString()]: 'חשבונית מס 77777 תאריך 27/10/2026 מפתח 1231 העתק' };
     const run = async users => {
       const d = mk({ db: fakeDb({ invoicePdf: {}, users }), pageTexts: async buf => [T[buf.toString()] || ''] });
-      return handleUpload(req({ original: ORIG, copy: COPY }), d);
+      return { ...(await handleUpload(req({ original: ORIG, copy: COPY }), d)), db: d.db };
     };
     const unknown = await run({ '050': { customerId: '999' } });
     assert.equal(unknown.status, 202); assert.equal(unknown.body.known, false);
-    assert.equal((await run({ '050': { customerId: '1231' } })).body.known, true);
+    assert.equal(Object.values(unknown.db._data.invoicePdf)[0].known, false, 'known stored on the printed record');
+    const kn = await run({ '050': { customerId: '1231' } });
+    assert.equal(kn.body.known, true); assert.equal(Object.values(kn.db._data.invoicePdf)[0].known, true);
   });
   await test('watcher: customer not in the system → original+copy on paper now, copy archived, print folder empty', async () => {
     const g = paperRig();

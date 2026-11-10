@@ -15,6 +15,7 @@
 //    { action:'agent-config-set', agent, mode } | { escalatePhone }  מתגי הסוכנים במסך
 //                                     (waMeta/agentConfig; בן, 10/11 — בלי Vercel)
 //    { action:'agent-room-answer', key, text }  בן עונה בחדר הסוכנים על שאלה צהובה
+//    { action:'agent-room-close', key }  "סגור" על שאלה פנימית צהובה (בדיקות הדופק; 10/11)
 //    { action:'agent-dismiss', kind, key, ver }  "טופל" על כרטיס בלוח הבקרה
 //                                     (waMeta/agentDash/dismissed/<kind>_<key>; agents.html, 31/10)
 //
@@ -268,6 +269,10 @@ async function handleAdmin(body, deps) {
   if (action === 'agent-room-answer') {
     return require('./_agent-room').lgRoomAnswer(deps.db, { key: b.key, text: b.text },
       { by: String(deps.by || ''), now: deps.now, provider: deps.provider, sendPending: deps.sendPending });
+  }
+  //  "סגור" על שאלה פנימית (בדיקות הדופק) — answeredBy 'ben', והבעיה לא עולה שוב לאותו מפתח
+  if (action === 'agent-room-close') {
+    return require('./_agent-watch').lgWatchDismiss(deps.db, b.key, { by: String(deps.by || ''), now: deps.now });
   }
   // ─── מתגי הסוכנים במסך (בן, 10/11) — waMeta/agentConfig ─────────────────
   //  { agent, mode } או { escalatePhone }. אימות קפדני ב-api/_agent-config.js

@@ -482,7 +482,7 @@ document.addEventListener('click', async ev => {
   if (ev.target.closest('[data-ancancel]')) { ANSWERING = ''; DRAFT = ''; renderRoom(); return; }
   const be = ev.target.closest('[data-benedit]');
   if (be) { EDIT_BEN = be.dataset.benedit === '1'; renderSwitches(); return; }
-  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave]');
+  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave],[data-roomclose]');
   if (!b) return;
   let body;
   if (b.dataset.dismiss) body = { action: 'agent-dismiss', kind: b.dataset.dismiss, key: b.dataset.key, ver: Number(b.dataset.ver) };
@@ -499,6 +499,7 @@ document.addEventListener('click', async ev => {
     if (!text.trim()) { toast('כתוב תשובה קודם', true); return; }
     body = { action: 'agent-room-answer', key: b.dataset.ansend, text };
   }
+  else if (b.dataset.roomclose) body = { action: 'agent-room-close', key: b.dataset.roomclose };
   else if (b.hasAttribute('data-bensave')) body = { action: 'agent-config-set', escalatePhone: ($('benPick') || {}).value || '' };
   else if (b.hasAttribute('data-dellive')) {
     const turnOn = b.dataset.dellive === '1';
@@ -510,6 +511,7 @@ document.addEventListener('click', async ev => {
   const r = await drain(body);   // הרשימות מתעדכנות מההאזנה
   if (!r.ok) { b.disabled = false; toast(r.message, true); return; }
   if (body.action === 'agent-dismiss') toast('הוסר מהרשימה');
+  else if (body.action === 'agent-room-close') toast('נסגר — לא יעלה שוב עד שהבעיה תיעלם');
   //  מה קרה באמת (תיקון סקירה 10/11): נשלח / עדיין בתור / לא נשלח — והשאלה חוזרת לפתוחה
   else if (body.action === 'agent-room-answer') {
     ANSWERING = ''; DRAFT = '';

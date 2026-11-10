@@ -401,7 +401,9 @@ function lgRoomBubbleHtml(e, outbox) {
       <div class="rb-who">${esc(x.customerName || 'לקוח')}${x.note ? ' · ' + esc(x.note) : ''}</div>
       <div class="rb-q">${esc(x.question || x.text || '')}</div>
       ${x.suggest ? `<div class="rb-s">הצעה: ${esc(x.suggest)}</div>` : ''}
-      ${lgRoomIsInternal(x) ? `<div class="rb-st">${open ? 'מחכה לתיקון — ייסגר לבד' : 'תוקן ✓'}</div>`
+      ${lgRoomIsInternal(x) ? (open ? `<div class="rb-st">מחכה לתיקון — ייסגר לבד</div>
+            <div class="rb-acts"><button type="button" class="sbtn" data-roomclose="${esc(x.key)}">סגור</button></div>`
+          : `<div class="rb-st">${x.answeredBy === 'ben' ? 'סגרת ✓' : x.answeredBy === 'stale' ? 'נסגר — המחשב לא שלח דופק שבוע' : 'תוקן ✓'}</div>`)
         : open ? `<div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">ענה</button></div>`
         : retry ? `<div class="rb-st">התשובה לא נשלחה: ${esc(lost.lastError || lost.state)}</div>
             <div class="rb-acts"><button type="button" class="sbtn is-primary" data-roomanswer="${esc(x.key)}">שלח שוב</button></div>`

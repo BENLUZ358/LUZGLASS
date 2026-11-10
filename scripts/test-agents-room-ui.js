@@ -100,6 +100,9 @@ const inOpen = ctx.lgRoomBubbleHtml({ key: 'w1', at: NOW, agent: 'archive', kind
   customerName: 'כלי החשבוניות', note: 'פנימי — ייסגר לבד כשיתוקן', internal: true }, {});
 check('internal question: yellow, no "answer" button (no customer to answer)', [/is-open/.test(inOpen), /data-roomanswer/.test(inOpen), inOpen.includes('מחכה לתיקון')], [true, false, true]);
 const inDone = ctx.lgRoomBubbleHtml({ key: 'w1', at: NOW, agent: 'archive', kind: 'ask', state: 'answered', answeredBy: 'auto', internal: true, text: 'x', question: 'x' }, {});
+check('I4: internal open question has a "סגור" button', [/data-roomclose="w1"/.test(inOpen), inOpen.includes('>סגור<')], [true, true]);
+check('I4: closed by Ben → "סגרת ✓"', ctx.lgRoomBubbleHtml({ key: 'w1', at: NOW, agent: 'archive', kind: 'ask', state: 'answered', answeredBy: 'ben', internal: true, text: 'x' }, {}).includes('סגרת ✓'), true);
+check('I4: agents.html sends agent-room-close on the button', /data-roomclose/.test(fs.readFileSync(path.join(ROOT, 'agents.html'), 'utf8')) && /agent-room-close/.test(fs.readFileSync(path.join(ROOT, 'agents.html'), 'utf8')), true);
 check('internal question closed by itself → "תוקן ✓"', [inDone.includes('תוקן ✓'), inDone.includes('ענית')], [true, false]);
 check('office tool: never heard', J(ctx.lgAdWatcherLine({}, NOW)), { state: 'never', text: 'כלי החשבוניות במשרד: עוד לא שלח דופק' });
 check('office tool: working', J(ctx.lgAdWatcherLine({ OFFICE: { at: NOW - 1 * M, pending: [] } }, NOW)), { state: 'ok', text: 'כלי החשבוניות במשרד: עובד' });

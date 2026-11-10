@@ -125,7 +125,11 @@ async function _handleUpload(req, deps) {
   const hash = _sha(orig);
   //  202 אומר לכלי גם אם הלקוח מחובר למערכת (בן, 10/11): לקוח שלא במערכת →
   //  הכלי מדפיס מקור והעתק על נייר מיד, במקום לחכות לרישום שלא יגיע.
-  const pending = async extra => ({ status: 202, body: { ok: true, pending: true, known: await _knownAccount(db, oText), ...extra } });
+  //  נחשב פעם אחת: גם נשמר על רשומת 'printed' (known) — בדיקת הארכיון (_agent-watch) קוראת
+  //  אותו במקום את כל users (סקירה 10/11)
+  let known;
+  const knownOf = async () => (known === undefined ? (known = await _knownAccount(db, oText)) : known);
+  const pending = async extra => ({ status: 202, body: { ok: true, pending: true, known: await knownOf(), ...extra } });
 
   //  העלאה חוזרת של אותו קובץ (ניסיון חוזר של הכלי) → תשובה זהה, בלי עיבוד שני.
   //  הדפסה שעדיין 'printed' מנסה להשתייך עכשיו (ייתכן שהחשבונית נרשמה בינתיים).
@@ -176,7 +180,7 @@ async function _handleUpload(req, deps) {
     }
     const pk = 'p' + hash.slice(0, 18);
     await db.ref('invoicePdf/' + pk).set({ state: 'printed', docNumber, date, originalHash: hash,
-      text: oText.slice(0, 3000), createdAt: now, uploadedAt: now });
+      text: oText.slice(0, 3000), known: await knownOf(), createdAt: now, uploadedAt: now });
     await db.ref('invoicePdfBlobs/' + pk).set({
       original: orig.toString('base64'), copy: copy.toString('base64') });
     const s = await C.settlePrinted(db, pk, now);

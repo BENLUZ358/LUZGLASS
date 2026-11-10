@@ -189,7 +189,9 @@ async function lgRoomAnswer(db, b, deps) {
 // ─── שאלה פנימית שנסגרת לבד (שלב ב׳, 10/11) ─────────────────────────
 //  שאלה של בדיקות הדופק (_agent-watch) — אין לקוח לענות לו. כשהבעיה תוקנה:
 //  open → answered (answeredBy 'auto') ויורדת מהאינדקס. לא זורק.
-async function lgRoomClose(db, key, now) {
+//  o.by: 'auto' (תוקן) | 'ben' ("סגור" במסך, I4) | 'stale' (המחשב לא שלח דופק שבוע)
+async function lgRoomClose(db, key, now, o) {
+  const by = ['ben', 'stale'].includes(o && o.by) ? o.by : 'auto';
   if (!_keyOk(key)) return false;
   let closed = false;
   try {
@@ -198,7 +200,7 @@ async function lgRoomClose(db, key, now) {
       if (cur === null) return null;   // null-first
       if (cur.kind !== 'ask' || cur.state !== 'open') return;
       closed = true;
-      return { ...cur, state: 'answered', answer: 'תוקן', answeredAt: Number(now) || Date.now(), answeredBy: 'auto' };
+      return { ...cur, state: 'answered', answer: by === 'auto' ? 'תוקן' : 'נסגר', answeredAt: Number(now) || Date.now(), answeredBy: by };
     });
   } catch (e) { console.warn('agent-room: close', e && e.name); closed = false; }
   if (closed) await _openIdx(db, key, null);
