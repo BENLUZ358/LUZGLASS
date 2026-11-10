@@ -650,6 +650,11 @@ if (typeof document !== 'undefined') (function () {
     box.hidden = false;
     // שכבת הסקיצה בלבד — לא קוראים את sketches/ ישירות
     lgSketchIntoImg(img, { id: orderId, hasSketch: true });
+    // צרופות של ההזמנה (order-attachments.js) — דפדוף מתחת לתמונה; בלי צרופות לא משנה כלום
+    if (typeof lgAttFlipper === 'function') {
+      const o = (typeof orders !== 'undefined' && Array.isArray(orders) ? orders : []).find(x => x && String(x.id) === String(orderId));
+      lgAttFlipper(box, o || null, { img });
+    }
   }
 
   //  נפתח על הלשונית שיש בה מה לעשות — WhatsApp קודם

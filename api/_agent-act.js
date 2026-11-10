@@ -22,6 +22,8 @@
 //     ביטול שקט (בלי הודעה); בטיפול → "לבטל אותה?" + confirm-cancel (ה"כן"
 //     עובר במסלול הרגיל); בייצור → הודעה. אין הזמנה → כלום. גם הביטול השקט
 //     הוא פעולה — מתגים + פיילוט כמו כל השאר (בצל רק wouldAct).
+//     אין הזמנה, אבל ההודעה היא של צרופה (בן, 10/11) → אותם כללים לפי השלב של
+//     ההזמנה הראשית, על הצרופה בלבד: att-remove / "להוריד אותו?" + confirm-att-remove.
 //  ⚠️ לא נרשם ללוג: טקסט ההודעה, טוקנים, מפתחות. רק e.name.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -52,6 +54,17 @@ const DELETED_ASK_TEXT = 'הסקיצה שמחקת כבר בטיפול אצלנו
 const DELETED_PROD_TEXT = 'הסקיצה שמחקת כבר בייצור, ואי אפשר לבטל אותה.';
 // עוד לא התחילו לטפל — יורדת מהתור בשקט
 const SILENT_STAGES = ['', 'pending'];
+
+// ── צרופה שנמחקה (בן, 10/11): הודעה של תמונה שאוחדה כצרופה להזמנה ──
+//  אותם כללי שלבים, על הצרופה בלבד — בהזמנה עצמה לא נוגעים.
+const ATT_DELETED_ASK = label => "הקובץ '" + label + "' שמחקת כבר בטיפול. להוריד אותו?";
+const ATT_DELETED_PROD = label => "הקובץ '" + label + "' שמחקת כבר בייצור, ואי אפשר להוריד אותו.";
+const ATT_REMOVED_TEXT = label => "הקובץ '" + label + "' הוסר מההזמנה";
+const ATT_KEPT_TEXT = 'בסדר, הקובץ נשאר בהזמנה';
+const AGENT_ATT_REMOVALS = 'waMeta/agentAttRemovals';
+const { LG_ATT_KINDS, lgAttFindByMsg } = require('./_order-attachments');
+const _attLabel = (o, k) => LG_ATT_KINDS[(((o && o.attachments) || {})[k] || {}).kind] || 'הקובץ';
+const _attMsg = (o, k) => { const a = ((o && o.attachments) || {})[k]; return String((a && a.from && a.from.order && a.from.order.waMessageId) || ''); };
 
 // ── "כן" / "לא" לשאלת "בטוח?": בלי סימני פיסוק, רווחים מכווצים ──
 const YES = ['כן', 'כן תבטל', 'בטוח', 'כן בטוח', 'תבטל', 'יאללה'];
@@ -123,6 +136,15 @@ function _onConv(r, orders, c, now) {
       who: _who(r), order: { orderNum: order.orderNum || '', refNum: order.refNum || '', sketchName: order.sketchName || '' },
       staffText: _who(r) + ': ביקש לבטל את הזמנה ' + (order.orderNum || order.refNum || '') + ' — הביטול לא בוצע, נא לבדוק' }], conv: null };
   }
+  if (c.await === 'confirm-att-remove') {
+    if (_isNo(r.text)) return { actions: [_reply(ATT_KEPT_TEXT)], conv: null };
+    if (!_isYes(r.text)) return null;
+    const order = byId(c.orderId);
+    const k = Number(c.k);
+    if (!order || !_attMsg(order, k)) return { actions: [_reply(NOT_FOUND)], conv: null };
+    if (!lgOkevCanChange(order)) return { actions: [_reply(ATT_DELETED_PROD(_attLabel(order, k)))], conv: null };
+    return { actions: [_attRemoveAction(r, order, k, false)], conv: null };
+  }
   if (c.await === 'change-details') {
     if (!_body(r)) return null;
     const order = byId(c.orderId) || { orderNum: '' };
@@ -142,7 +164,7 @@ function _deleted(r, orders, now) {
   const none = { actions: [], conv: null };
   if (!id || !cid || !r.linked) return none;
   const hit = orders.filter(o => o && String(o.waMessageId || '') === id && String(o.customerId || '') === cid);
-  if (!hit.length) return none;
+  if (!hit.length) return _deletedAtt(r, orders, now);
   const num = o => String(o.orderNum || o.refNum || '');
   const silent = o => SILENT_STAGES.includes(String(o.stage || ''));
   if (hit.every(silent)) {
@@ -159,13 +181,46 @@ function _deleted(r, orders, now) {
                      _reply(AGENT_HANDOFF_TEXT)], conv: null };
 }
 
+//  פעולת הסרה של צרופה (להחלטה ולביצוע). msgId — ההודעה שנמחקה; הביצוע בודק
+//  שבמקום k עדיין יושבת אותה צרופה (k יכול להתמלא מחדש אחרי "הפרד" + איחוד).
+function _attRemoveAction(r, o, k, silent) {
+  const label = _attLabel(o, k), num = String(o.orderNum || o.refNum || '');
+  return { type: 'att-remove', orderId: o.id, k, msgId: _attMsg(o, k), label, silent: !!silent,
+    okText: silent ? '' : ATT_REMOVED_TEXT(label), lateText: ATT_DELETED_PROD(label), who: _who(r),
+    staffText: _who(r) + ": מחק בוואטסאפ את '" + label + "' של הזמנה " + num + ' — הקובץ לא הוסר, נא לבדוק' };
+}
+
+// ── קולט: הלקוח מחק הודעה של צרופה (בן, 10/11) ──
+//  רק כשאין הזמנה עם ההודעה הזו (נבדק ב-_deleted). השלב — של ההזמנה הראשית.
+function _deletedAtt(r, orders, now) {
+  const none = { actions: [], conv: null };
+  const cid = String(r.customerId || '');
+  const mine = orders.filter(o => o && String(o.customerId || '') === cid);
+  const f = lgAttFindByMsg(mine, String(r.deletedId || ''));
+  const o = f && mine.find(x => x.id === f.orderId);
+  if (!o) return none;
+  if (SILENT_STAGES.includes(String(o.stage || ''))) return { actions: [_attRemoveAction(r, o, f.k, true)], conv: null };
+  const label = _attLabel(o, f.k);
+  if (lgOkevCanChange(o)) return { actions: [_reply(ATT_DELETED_ASK(label))], conv: { await: 'confirm-att-remove', orderId: o.id, k: f.k, at: now } };
+  return { actions: [_reply(ATT_DELETED_PROD(label))], conv: null };
+}
+
 // ── "סקיצה שנמחקה — פעיל" בלי שאר הסוכנים (בן, 3/11) ──
 //  ההחלטה הרגילה, בלי שום דבר ללקוח: כולן בתור → אותם ביטולים שקטים (staffOnly —
 //  כשל מגיע לשאול, לא ללקוח). כל השאר (בטיפול / בייצור / מעורב) → הודעה אחת לשאול.
 function lgAgentDeleteOnly(d, r, orders) {
-  const cancels = d.actions.filter(a => a.type === 'cancel');
+  const cancels = d.actions.filter(a => a.type === 'cancel' || a.type === 'att-remove');
   if (cancels.length && cancels.length === d.actions.length) return { actions: cancels.map(a => ({ ...a, staffOnly: true })), conv: null };
   const id = String(r.deletedId || ''), cid = String(r.customerId || '');
+  //  צרופה (בן, 10/11) — כשאין הזמנה עם ההודעה הזו
+  if (!orders.some(o => o && String(o.waMessageId || '') === id && String(o.customerId || '') === cid)) {
+    const mine = orders.filter(o => o && String(o.customerId || '') === cid);
+    const f = lgAttFindByMsg(mine, id);
+    const o = f && mine.find(x => x.id === f.orderId);
+    if (o) return { actions: [{ type: 'staff', reason: AGENT_DELETED_REASON,
+      text: _who(r) + ": מחק בוואטסאפ את '" + _attLabel(o, f.k) + "' של הזמנה " + String(o.orderNum || o.refNum || '')
+        + ' — ההזמנה כבר בטיפול והקובץ לא הוסר. נא לבדוק מולו' }], conv: null };
+  }
   const nums = orders.filter(o => o && String(o.waMessageId || '') === id && String(o.customerId || '') === cid)
     .map(o => String(o.orderNum || o.refNum || '')).join(', ');
   return { actions: [{ type: 'staff', reason: AGENT_DELETED_REASON,
@@ -244,6 +299,16 @@ function lgAgentDecide(p) {
     if (r.linked && c.await === 'confirm-cancel' && _isYes(r.text)) {
       const order = orders.find(o => o.id === c.orderId);
       if (order) return _continue('cancel', order, now, r);
+    }
+    //  צרופה — שואלים מחדש, כמו בביטול
+    if (r.linked && c.await === 'confirm-att-remove' && _isYes(r.text)) {
+      const order = orders.find(o => o.id === c.orderId);
+      const k = Number(c.k);
+      if (order && _attMsg(order, k)) {
+        const label = _attLabel(order, k);
+        if (!lgOkevCanChange(order)) return { actions: [_reply(ATT_DELETED_PROD(label))], conv: null };
+        return { actions: [_reply(ATT_DELETED_ASK(label))], conv: { await: 'confirm-att-remove', orderId: order.id, k, at: now } };
+      }
     }
     c = null;   // פג — מתעלמים (ונמחק)
   }
@@ -363,6 +428,65 @@ async function lgAgentCancel(db, orderId, ctx) {
   return { ok: true, code: '', stage: String(taken.stage || '') };
 }
 
+// ─── הסרת צרופה (בן, 10/11) ─────────────────────────────────────────
+//  { ok, code, stage } — code: '' | 'missing' | 'forbidden' | 'too-late' | 'error'
+//  ההזמנה עצמה נשארת; יורדים רק orders/<id>/attachments/<k> ו-sketches/<id>__att<k>.
+//  ctx: { customerId, chatId, now, waMessageId (חובה — ההודעה שנמחקה), onlyStages? }
+//  לפני ההסרה — עותק (הרשומה + התמונה) ב-waMeta/agentAttRemovals, כדי שאפשר יהיה להחזיר ביד.
+async function lgAgentAttRemove(db, orderId, k, ctx) {
+  const c = ctx || {};
+  const id = String(orderId == null ? '' : orderId);
+  const kk = Number(k);
+  const cid = String(c.customerId || ''), chatId = String(c.chatId || ''), msg = String(c.waMessageId || '');
+  if (!id || id.length > 200 || lgWaInboundKey(id) !== id || !Number.isInteger(kk) || kk < 1 || !msg) return { ok: false, code: 'missing' };
+  if (!cid || !chatId || !(await lgAgentChatOwnedBy(db, chatId, cid))) return { ok: false, code: 'forbidden' };
+  const _stageOk = o => lgOkevCanChange(o) && (!Array.isArray(c.onlyStages) || c.onlyStages.includes(String(o.stage || '')));
+  const ref = db.ref('orders/' + id);
+  const pre = (await ref.once('value')).val();
+  if (!pre) return { ok: false, code: 'missing' };
+  if (String(pre.customerId || '') !== cid) return { ok: false, code: 'forbidden' };
+  if (_attMsg(pre, kk) !== msg) return { ok: false, code: 'missing' };
+  if (!_stageOk(pre)) return { ok: false, code: 'too-late', stage: String(pre.stage || '') };
+
+  const now = c.now || Date.now();
+  const sk = 'sketches/' + id + '__att' + kk;
+  try {
+    const img = (await db.ref(sk).once('value')).val();
+    await db.ref(AGENT_ATT_REMOVALS + '/' + id + '__att' + kk + '_' + now)
+      .set({ orderId: id, k: kk, att: pre.attachments[kk], sketch: img || null, at: now, chatId, customerId: cid });
+  } catch (e) { console.warn('agent-att-remove: record', e && e.name); return { ok: false, code: 'error' }; }
+
+  let why = '', taken = null, lateStage = '';
+  let tx;
+  try {
+    tx = await ref.transaction(cur => {
+      why = ''; taken = null;
+      if (cur === null) return null;   // null-first — פיירבייס יביא את הערך האמיתי
+      if (String(cur.customerId || '') !== cid) { why = 'forbidden'; return; }
+      if (_attMsg(cur, kk) !== msg) { why = 'missing'; return; }
+      if (!_stageOk(cur)) { why = 'too-late'; lateStage = String(cur.stage || ''); return; }
+      const atts = { ...cur.attachments };
+      delete atts[kk];
+      taken = cur;
+      return { ...cur, attachments: Object.keys(atts).length ? atts : null, updatedAt: now };
+    });
+  } catch (e) { console.warn('agent-att-remove: tx', e && e.name); return { ok: false, code: 'error' }; }
+  if (!tx.committed || !taken || !tx.snapshot.val()) {
+    return why === 'too-late' ? { ok: false, code: why, stage: lateStage } : { ok: false, code: why || 'missing' };
+  }
+  try { await db.ref(sk).set(null); }
+  catch (e) { console.warn('agent-att-remove: image', e && e.name); }   // הרשומה ירדה; תמונה יתומה לא מוצגת בשום מקום
+  return { ok: true, code: '', stage: String(taken.stage || '') };
+}
+
+async function _attRemove(db, orderId, k, ctx) {
+  // דרך module.exports — כדי שבדיקות יוכלו להחליף אותה
+  const fn = module.exports.lgAgentAttRemove;
+  if (typeof fn !== 'function') return { ok: false, code: 'unavailable' };
+  try { return (await fn(db, orderId, k, ctx)) || { ok: false, code: 'error' }; }
+  catch (e) { console.warn('agent-act: att-remove', e && e.name); return { ok: false, code: 'error' }; }
+}
+
 async function _cancel(db, orderId, ctx) {
   // דרך module.exports — כדי שבדיקות יוכלו להחליף אותה
   const fn = module.exports.lgAgentCancel;
@@ -471,7 +595,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   else if (!rec.linked && d.actions.some(a => a.type !== 'staff')) why = 'not-pilot';
   // "העברנו לשאול" בלי שאול מוגדר — עדיף לא לענות מאשר לשקר
   //  (הודעה לידיעה — notify — לא נחשבת: בלעדיה התשובה ללקוח עדיין נכונה)
-  else if (d.actions.some(a => (a.type === 'staff' && !a.notify) || a.type === 'cancel' || a.type === 'quote-ask') && !staff.length) why = 'no-staff';
+  else if (d.actions.some(a => (a.type === 'staff' && !a.notify) || a.type === 'cancel' || a.type === 'att-remove' || a.type === 'quote-ask') && !staff.length) why = 'no-staff';
 
   //  "סקיצה שנמחקה — פעיל" (בן, 3/11): תשובות כבויות / לא בפיילוט, אבל המתג הנפרד
   //  דולק → רק המחיקה פועלת, ללקוח לא יוצא כלום. צ'אט מקושר בלבד (נבדק למעלה).
@@ -489,7 +613,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
     return { acted: false, actions: d.actions };
   }
 
-  const queued = [], cancels = [], quotes = [];
+  const queued = [], cancels = [], quotes = [], attRemovals = [];
   const enq = async (k, to, text, files, reason, forCid) => {
     const q = await lgAgentEnqueue(db, { key: k, to, customerId: forCid != null ? forCid : cid, text, files, reason });
     if (q.queued) queued.push(q.key);
@@ -539,6 +663,20 @@ async function _act(db, key, rec, recRef, env, now, o) {
         await lgQuoteDone(db, a.n, key, now);
       }
     }
+    else if (a.type === 'att-remove') {
+      //  צרופה שנמחקה (בן, 10/11) — כמו הביטול, על הצרופה בלבד
+      const res = await _attRemove(db, a.orderId, a.k, { customerId: cid, chatId: chat, now, waMessageId: a.msgId,
+                                                         onlyStages: a.silent ? SILENT_STAGES : undefined });
+      attRemovals.push({ orderId: String(a.orderId), k: Number(a.k), ok: !!res.ok, code: String(res.code || '') });
+      const sReason = a.staffOnly ? AGENT_DELETED_REASON : 'agent-staff';
+      if (res.ok) { if (a.okText && !a.staffOnly) await enq(k, chat, a.okText, [], 'agent-cancel'); }
+      else if (res.code === 'missing') { if (!a.silent && !a.staffOnly) await enq(k, chat, NOT_FOUND, [], 'agent-reply'); }
+      else if (a.staffOnly) {
+        await enq(k + '_s', staff[0], a.staffText + (res.code === 'too-late' ? ' (כבר בייצור)' : ' (' + String(res.code || 'error') + ')'), [], sReason);
+      } else if (res.code === 'too-late') await enq(k, chat, a.lateText, [], 'agent-cancel');
+      else if (await enq(k + '_s', staff[0], a.staffText + ' (' + String(res.code || 'error') + ')', [], 'agent-staff'))
+        await enq(k, chat, AGENT_HANDOFF_TEXT, [], 'agent-reply');
+    }
     else if (a.type === 'cancel') {
       const res = await _cancel(db, a.orderId, { customerId: cid, chatId: chat, now, onlyStages: a.silent ? SILENT_STAGES : undefined });
       cancels.push({ orderId: String(a.orderId), ok: !!res.ok, code: String(res.code || '') });
@@ -572,7 +710,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
   //  (queued:true) — עם askKey, כדי לדעת מתי נשלחה
   if (!d.conv) { if (stored) await convRef.set(null); }
   else if (d.conv !== conv && askKey) await convRef.set({ ...d.conv, askKey: lgWaInboundKey(askKey) });
-  await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actMode: mode, actQueued: queued, actCancels: cancels, ...qUsage });
+  await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actMode: mode, actQueued: queued, actCancels: cancels,
+                       ...(attRemovals.length ? { actAttRemovals: attRemovals } : {}), ...qUsage });
 
   if (queued.length) {
     try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, deadline: o.deadline, clock: o.clock }); }
@@ -586,4 +725,5 @@ async function _act(db, key, rec, recRef, env, now, o) {
 }
 
 module.exports = { CONV, CONV_TTL_MS, AGENT_CANCELS, AGENT_QUOTE_WORST_MS, DELETED_ASK_TEXT, DELETED_PROD_TEXT,
-                   lgAgentDecide, lgAgentAct, lgAgentCancel };
+                   ATT_DELETED_ASK, ATT_DELETED_PROD, ATT_REMOVED_TEXT, ATT_KEPT_TEXT, AGENT_ATT_REMOVALS,
+                   lgAgentDecide, lgAgentAct, lgAgentCancel, lgAgentAttRemove };

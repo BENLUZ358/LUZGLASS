@@ -196,8 +196,10 @@ async function _items(db, b) {
   for (const id of b.orderIds || []) {
     const o = (await db.ref('orders/' + id).once('value')).val() || {};
     const d = _dataUrl(await _sketch(db, id));
+    //  צרופות (בן, 10/11) — עמוד לכל אחת מיד אחרי הסקיצה
+    const atts = (await require('./_order-attachments').lgAttOf(db, id)).map(a => ({ label: a.label, img: a.img }));
     out.push({ id, orderNum: String(o.orderNum || ''), client: String(o.orderClient || o.client || ''),
-               sketchName: String(o.sketchName || ''), img: d && /^image\//.test(d.mime) ? d : null });
+               sketchName: String(o.sketchName || ''), img: d && /^image\//.test(d.mime) ? d : null, atts });
   }
   return out;
 }
@@ -229,6 +231,11 @@ async function _build(cover, items, b) {
                    idx: i, total: items.length };
     try { await M.lgAddSketchPage(doc, font, it.img, head); }
     catch (_) { await M.lgAddSketchPage(doc, font, null, head); }   // תמונה פגומה — עמוד "אין סקיצה"
+    for (const a of it.atts || []) {
+      const ah = { ...head, title: a.label + ' — ' + (it.sketchName || it.orderNum || 'סקיצה'), total: 0 };
+      try { await M.lgAddSketchPage(doc, font, a.img, ah); }
+      catch (_) { await M.lgAddSketchPage(doc, font, null, ah); }
+    }
   }
   return Buffer.from(await doc.save());
 }

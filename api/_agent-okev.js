@@ -67,6 +67,10 @@ function lgOkevFind(orders, q) {
     // ציטוט שלא שייך לאף הזמנה שלו (סתם הודעה בצ'אט) → ממשיכים ל-ref ואז לפתוחות
     const hit = orders.filter(o => o.waMessageId === q.quotedId);
     if (hit.length) return verdict(hit, 'quoted');
+    // ציטוט של תמונה שאוחדה כצרופה (בן, 10/11) → ההזמנה הראשית
+    const att = require('./_order-attachments').lgAttFindByMsg(orders, q.quotedId);
+    const main = att && orders.find(o => o.id === att.orderId);
+    if (main) return verdict([main], 'quoted');
   }
   if (normRef(q.ref)) {
     // קודם בין הפתוחות; אם אין, גם הזמנה שכבר נאספה (כדי לענות "כבר נאספה")

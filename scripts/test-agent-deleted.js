@@ -282,6 +282,112 @@ const D = (r, orders) => act.lgAgentDecide({ rec: R(r), orders: orders || list('
     check('agents page listens to the switch and toggles it', /waMeta\/agentDeleteLive/.test(H) && /'agent-delete-live'/.test(H), true);
   }
 
+  /* ── צרופה שנמחקה (בן, 10/11) ─────────────────────────────────────
+     הלקוח מחק את הודעת התמונה שאוחדה כצרופה להזמנה → פועלים על הצרופה בלבד,
+     לפי השלב של ההזמנה הראשית: בתור → יורדת בשקט; בטיפול → "להוריד?"; בייצור → הודעה. */
+  {
+    const LBL = 'גרפיקה חלבי';
+    const AASK = "הקובץ 'גרפיקה חלבי' שמחקת כבר בטיפול. להוריד אותו?";
+    const APROD = "הקובץ 'גרפיקה חלבי' שמחקת כבר בייצור, ואי אפשר להוריד אותו.";
+    const AOK = "הקובץ 'גרפיקה חלבי' הוסר מההזמנה";
+    const AKEPT = 'בסדר, הקובץ נשאר בהזמנה';
+    check('att texts exported', [act.ATT_DELETED_ASK && act.ATT_DELETED_ASK(LBL), act.ATT_DELETED_PROD && act.ATT_DELETED_PROD(LBL),
+      act.ATT_REMOVED_TEXT && act.ATT_REMOVED_TEXT(LBL), act.ATT_KEPT_TEXT], [AASK, APROD, AOK, AKEPT]);
+    const o8 = stage => ({ customerId: '777', orderNum: 'L1008', sketchName: 'חלון', stage, waMessageId: 'WA8',
+      attachments: { 1: { kind: 'graphic', at: 1, by: 'ben', from: { order: { customerId: '777', waMessageId: 'WAT1', orderNum: 'L1009' } } } } });
+    const aseed = (stage, extra) => { const db = seed(extra); db._data.orders.o8 = o8(stage);
+      db._data.sketches = { o8: 'data:image/png;base64,AAAA', o8__att1: 'data:image/png;base64,BBBB' }; return db; };
+    const DL = (stage, r, more) => D({ deletedId: 'WAT1', ...(r || {}) }, [...list('777'), { ...o8(stage), id: 'o8' }, ...(more || [])]);
+    const att = db => ((db._data.orders.o8 || {}).attachments || {})[1];
+
+    // החלטה
+    const d1 = DL('');
+    check('att decide: order in queue → silent att-remove, nothing to the customer',
+      [d1.actions.map(a => [a.type, a.orderId, a.k, a.silent, a.okText]), d1.conv], [[['att-remove', 'o8', 1, true, '']], null]);
+    check('att decide: pending is also silent', DL('pending').actions.map(a => a.type), ['att-remove']);
+    check('att decide: in treatment → ask about the label + conv confirm-att-remove',
+      DL('chash'), { actions: [{ type: 'reply', text: AASK }], conv: { await: 'confirm-att-remove', orderId: 'o8', k: 1, at: NOW } });
+    check('att decide: production → the production text', DL('workday'), { actions: [{ type: 'reply', text: APROD }], conv: null });
+    check('att decide: attachment on another customer order → nothing', DL('', { customerId: '999' }).actions, []);
+    check('att decide: an ORDER with that message id wins over the attachment',
+      DL('', null, [{ id: 'o9', customerId: '777', stage: 'pending', waMessageId: 'WAT1' }]).actions.map(a => [a.type, a.orderId]), [['cancel', 'o9']]);
+
+    const expired = { await: 'confirm-att-remove', orderId: 'o8', k: 1, at: NOW - 31 * MIN };
+    check('att decide: "כן" after 30 minutes → asked again, nothing removed',
+      act.lgAgentDecide({ rec: R({ route: 'shaul', deletedId: '', text: 'כן' }), orders: [{ ...o8('chash'), id: 'o8' }], conv: expired, now: NOW }),
+      { actions: [{ type: 'reply', text: AASK }], conv: { await: 'confirm-att-remove', orderId: 'o8', k: 1, at: NOW } });
+
+    // ביצוע — בתור: הצרופה יורדת, ההזמנה והסקיצה נשארות
+    const db1 = aseed(''); put(db1, 'G1', R({ idMessage: 'G1', deletedId: 'WAT1' }));
+    const g1 = await run(db1, 'G1');
+    check('att act: queue → attachment + its image removed, order and main sketch kept, nothing queued',
+      [g1.acted, !!db1._data.orders.o8, att(db1), db1._data.sketches.o8__att1, !!db1._data.sketches.o8, Object.keys(outbox(db1)).length, cancels(db1).o8],
+      [true, true, undefined, undefined, true, 0, undefined]);
+    const bk = Object.values((db1._data.waMeta || {}).agentAttRemovals || {});
+    check('att act: a copy is kept in waMeta/agentAttRemovals (record + image)',
+      [bk.length, bk[0] && bk[0].orderId, bk[0] && bk[0].k, bk[0] && bk[0].att && bk[0].att.kind, bk[0] && bk[0].sketch], [1, 'o8', 1, 'graphic', 'data:image/png;base64,BBBB']);
+    check('att act: result recorded', rec(db1, 'G1').actAttRemovals, [{ orderId: 'o8', k: 1, ok: true, code: '' }]);
+
+    // בטיפול → שאלה; "כן" → רק הצרופה יורדת
+    const db2 = aseed('chash'); put(db2, 'G2', R({ idMessage: 'G2', deletedId: 'WAT1' }));
+    await run(db2, 'G2');
+    check('att act: chash → question queued, conv, attachment kept', [outbox(db2).G2_0 && outbox(db2).G2_0.text, conv(db2, PRIV), !!att(db2)],
+      [AASK, { await: 'confirm-att-remove', orderId: 'o8', k: 1, at: NOW, askKey: 'G2_0' }, true]);
+    if (outbox(db2).G2_0) Object.assign(outbox(db2).G2_0, { state: 'sent', sentAt: NOW + MIN });
+    put(db2, 'G3', R({ idMessage: 'G3', route: 'shaul', deletedId: '', text: 'כן', intent: 'unclear', timestamp: NOW + 2 * MIN }));
+    await run(db2, 'G3', ON, NOW + 2 * MIN);
+    check('att act: "כן" → attachment removed, order untouched, "הוסר", conv cleared',
+      [att(db2), db2._data.sketches.o8__att1, db2._data.orders.o8 && db2._data.orders.o8.stage, outbox(db2).G3_0 && outbox(db2).G3_0.text, conv(db2, PRIV)],
+      [undefined, undefined, 'chash', AOK, undefined]);
+    // "לא" → נשאר
+    const db3 = aseed('chash'); put(db3, 'G4', R({ idMessage: 'G4', deletedId: 'WAT1' }));
+    await run(db3, 'G4');
+    if (outbox(db3).G4_0) Object.assign(outbox(db3).G4_0, { state: 'sent', sentAt: NOW + MIN });
+    put(db3, 'G5', R({ idMessage: 'G5', route: 'shaul', deletedId: '', text: 'לא', intent: 'unclear', timestamp: NOW + 2 * MIN }));
+    await run(db3, 'G5', ON, NOW + 2 * MIN);
+    check('att act: "לא" → kept, kept text', [!!att(db3), outbox(db3).G5_0 && outbox(db3).G5_0.text, conv(db3, PRIV)], [true, AKEPT, undefined]);
+    // ירדה לייצור בין השאלה ל"כן"
+    const db4 = aseed('chash'); put(db4, 'G6', R({ idMessage: 'G6', deletedId: 'WAT1' }));
+    await run(db4, 'G6');
+    if (outbox(db4).G6_0) Object.assign(outbox(db4).G6_0, { state: 'sent', sentAt: NOW + MIN });
+    db4._data.orders.o8.stage = 'workday';
+    put(db4, 'G7', R({ idMessage: 'G7', route: 'shaul', deletedId: '', text: 'כן', intent: 'unclear', timestamp: NOW + 2 * MIN }));
+    await run(db4, 'G7', ON, NOW + 2 * MIN);
+    check('att act: moved to production before "כן" → production text, kept', [!!att(db4), outbox(db4).G7_0 && outbox(db4).G7_0.text], [true, APROD]);
+    // בייצור
+    const db5 = aseed('workday'); put(db5, 'G8', R({ idMessage: 'G8', deletedId: 'WAT1' }));
+    await run(db5, 'G8');
+    check('att act: production → production text, kept', [outbox(db5).G8_0 && outbox(db5).G8_0.text, !!att(db5)], [APROD, true]);
+
+    // "סקיצה שנמחקה — פעיל" בלבד
+    const OFF = { ...ON, AGENT_REPLY_ENABLED: 'false' };
+    const live = stage => { const db = aseed(stage, { agentDeleteLive: true }); delete db._data.waMeta.agentPilot; return db; };
+    const db6 = live(''); put(db6, 'H1', R({ idMessage: 'H1', deletedId: 'WAT1' }));
+    const h1 = await run(db6, 'H1', OFF);
+    check('att live: queue → removed, nothing to anyone', [h1.acted, att(db6), rec(db6, 'H1').actMode, Object.keys(outbox(db6)).length], [true, undefined, 'delete-only', 0]);
+    const db7 = live('chash'); put(db7, 'H2', R({ idMessage: 'H2', deletedId: 'WAT1' }));
+    await run(db7, 'H2', OFF);
+    const e7 = Object.values(outbox(db7));
+    check('att live: in treatment → one note to Shaul naming the label and the order, kept',
+      [e7.map(e => [e.to, e.reason]), /גרפיקה חלבי/.test(e7[0] && e7[0].text), /L1008/.test(e7[0] && e7[0].text), !!att(db7)],
+      [[['0501112222', 'agent-deleted-staff']], true, true, true]);
+
+    // מרוצים בפונקציה עצמה
+    if (typeof act.lgAgentAttRemove !== 'function') { failed++; console.error('FAIL  lgAgentAttRemove not exported'); }
+    else {
+      const db8 = aseed('chash');
+      const ctx = { customerId: '777', chatId: PRIV, now: NOW, waMessageId: 'WAT1' };
+      check('att race: silent removal of an order now in treatment → too-late',
+        [(await act.lgAgentAttRemove(db8, 'o8', 1, { ...ctx, onlyStages: ['', 'pending'] })).code, !!att(db8)], ['too-late', true]);
+      check('att race: the slot now holds another message → missing',
+        [(await act.lgAgentAttRemove(db8, 'o8', 1, { ...ctx, waMessageId: 'OTHER' })).code, !!att(db8)], ['missing', true]);
+      check('att race: other customer → forbidden', (await act.lgAgentAttRemove(db8, 'o8', 1, { ...ctx, customerId: '999', chatId: PRIV2 })).code, 'forbidden');
+      const ok8 = await act.lgAgentAttRemove(db8, 'o8', 1, ctx);
+      check('att race: normal removal (yes) allows chash', [ok8.ok, att(db8), db8._data.orders.o8.stage], [true, undefined, 'chash']);
+      check('att race: twice → missing', (await act.lgAgentAttRemove(db8, 'o8', 1, ctx)).code, 'missing');
+    }
+  }
+
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

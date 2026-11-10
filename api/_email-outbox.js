@@ -137,6 +137,18 @@ async function lgEmailClaim(db, limit, now) {
       await _close(db, key, at, 'cancelled', 'הכתובת כבר לא מקושרת לכרטיס — לא נשלח');
       continue;
     }
+    //  חשבונית (סקירת צרופות, 10/11): רשימת הקבצים מחושבת פעם אחת כאן ונשמרת עם ההשכרה.
+    //  הסקריפט מבקש בדיוק את המספר הזה, ו-outbox-file בודק שהרשימה לא השתנתה בינתיים
+    //  (צרופה נוספה / הופרדה) — אחרת 'files-changed', והריצה הבאה תופסת וסופרת מחדש.
+    //  לא מצליח לבנות (חסר PDF וכו') → כמו קודם: הספירה מהתור, והשגיאה תצא ב-outbox-file.
+    let manifest = null;
+    if (v.invoiceKey) {
+      try {
+        const D = require('./_invoice-deliver');
+        const f = await D.lgInvoiceEmailFiles(db, v.invoiceKey);
+        if (f.ok) manifest = D.lgInvoiceFilesManifest(f.files);
+      } catch (err) { console.error('email-outbox: invoice files at claim failed', key, err && err.name); }
+    }
     const token = crypto.randomBytes(16).toString('hex');
     const r = await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {
       if (cur === null) return null;
@@ -146,7 +158,7 @@ async function lgEmailClaim(db, limit, now) {
       if ((at - (cur.createdAt || at)) > MAX_AGE_MS) {
         return { ...cur, state: 'expired', leaseToken: null, leaseUntil: null, updatedAt: at, lastError: 'פג תוקף — לא נשלח' };
       }
-      return { ...cur, leaseToken: token, leaseUntil: at + LEASE_MS, updatedAt: at };
+      return { ...cur, leaseToken: token, leaseUntil: at + LEASE_MS, updatedAt: at, fileManifest: manifest };
     });
     const e = r.committed && r.snapshot.val();
     if (!e || e.state !== 'pending' || e.leaseToken !== token) continue;
@@ -156,7 +168,7 @@ async function lgEmailClaim(db, limit, now) {
                                   deliveryTomorrow: e.deliveryTomorrow === true, variant: e.variant || '',
                                   missingSketchNums: e.missingSketchNums || [], extraLines: e.extraLines || [] }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
-               files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length)
+               files: e.invoiceKey ? (manifest ? manifest.length : e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length)
                     : drafter ? (e.fileCount > 0 ? e.fileCount : 1) : 0 };
     //  חשבונית למייל החשבוניות של הלקוח — מייל חדש עם נושא, לא תשובה
     if (e.sendTo) {
@@ -187,6 +199,13 @@ async function lgEmailDoneMails(db, orderIds) {
   for (const id of orderIds || []) {
     const m = (await db.ref('orders/' + id + '/emailMessageId').once('value')).val();
     if (m && !mids.includes(String(m))) mids.push(String(m));
+    //  צרופות (בן, 10/11): המייל של תמונה שאוחדה לתוך ההזמנה — נשפט כמו כל מייל
+    //  (ההזמנה המקורית נמחקה באיחוד, ולכן לא מחזיקה אותו)
+    const atts = (await db.ref('orders/' + id + '/attachments').once('value')).val() || {};
+    for (const k of Object.keys(atts)) {
+      const am = atts[k] && atts[k].from && atts[k].from.order && atts[k].from.order.emailMessageId;
+      if (am && !mids.includes(String(am))) mids.push(String(am));
+    }
   }
   const out = [];
   for (const mid of mids) {
@@ -274,8 +293,13 @@ async function lgEmailOutboxFile(db, key, leaseToken, idx, now) {
     return require('./_drafter-batch').lgDrafterStoredFile(db, e.drafterBatch, idx);
   }
   if (!e.invoiceKey) return { ok: false, code: 'no-files' };
-  const f = await require('./_invoice-deliver').lgInvoiceFiles(db, e.invoiceKey);
+  const D = require('./_invoice-deliver');
+  const f = await D.lgInvoiceEmailFiles(db, e.invoiceKey);
   if (!f.ok) return { ok: false, code: f.code };
+  //  אותה רשימה שנספרה בתפיסה? אחרת הסקריפט היה שולח חבילה חסרה / מוזזת
+  if (e.fileManifest && JSON.stringify(_list(e.fileManifest)) !== JSON.stringify(D.lgInvoiceFilesManifest(f.files))) {
+    return { ok: false, code: 'files-changed' };
+  }
   const one = f.files[Number(idx)];
   if (!Number.isInteger(Number(idx)) || !one) return { ok: false, code: 'bad-idx' };
   return { ok: true, name: one.name, mime: one.mime, b64: one.buf.toString('base64') };

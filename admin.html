@@ -402,6 +402,7 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20261110"></script>
+  <script src="order-attachments.js?v=20261111"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
   <script src="lg-icons.js?v=20261103"></script>
@@ -996,6 +997,9 @@ function openMod(id) {
   `;
 
   _hydrateSketchImgs(document.getElementById('mbody'));
+  // צרופות — דפדוף מתחת לסקיצה (order-attachments.js)
+  const _mImg = document.querySelector('#mbody img.mimg');
+  if(_mImg && typeof lgAttFlipper==='function') lgAttFlipper(_mImg.parentElement, o, { img: _mImg });
 
   // מלא את שדות המודאל
   const sel = document.getElementById('mst');
@@ -1617,6 +1621,7 @@ function renderAll(){
       // כשהצד השני באמת שונה — אחרת הקלדה נמחקת תוך כדי מהעדכון החוזר.
       if(document.activeElement?.id !== 'sqNameInput')
         sqCurrent.sketchName = _live.sketchName || _live.type || '';
+      _sqAttFlip(sqCurrent);   // צורפה / הופרדה תמונה מההזמנה הפתוחה
     }
     sqRefreshMetrics();
   }
@@ -1686,6 +1691,7 @@ function previewSketch(id){
   ov.onclick=e=>{if(e.target===ov)ov.remove();};
   document.body.appendChild(ov);
   lgSketchIntoImg(ov.querySelector('img'), o);
+  if(typeof lgAttFlipper==='function') lgAttFlipper(ov, o, { img: ov.querySelector('img') });
 }
 
 
@@ -3988,6 +3994,8 @@ function buildSQItems(){
       waUnassigned:    !!o.waUnassigned,
       emailUnassigned: !!o.emailUnassigned,
       emailFrom:       o.emailFrom || '',
+      // צרופות (גרפיקה חלבי / שרטוט פרזול) — "📎 N" בשורה, דפדוף בסקיצה
+      attachments:     o.attachments || null,
     });
   });
 }
@@ -4086,7 +4094,7 @@ function sqRender(){
     const thumb=lgHasSketch(item)
       ?`<div class="sq-thumb"><img data-sketch-for="${lgEsc(String(item.id))}" alt="תצוגה מקדימה של הסקיצה"></div>`
       :`<div class="sq-thumb">${item.source==='upload'?'📎':'📐'}</div>`;
-    return `<div class="sq-item ${isDone?'sq-done':''} ${isActive?'sq-active':''}" onclick="sqSelect('${item.id}')">
+    return `<div class="sq-item ${isDone?'sq-done':''} ${isActive?'sq-active':''}" data-sq-id="${lgEsc(String(item.id))}" onclick="sqSelect('${item.id}')">
       ${thumb}
       <div class="sq-item-info">
         <div class="sq-item-client">${lgEsc(item.client)}</div>
@@ -4097,12 +4105,31 @@ function sqRender(){
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
           ${item.waUnassigned||item.emailUnassigned?'<span class="sq-tag sq-tag-unassigned">לא שויך</span>':''}
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
+          ${_sqAttTag(item)}
           ${item.waDuplicateOf?`<span class="sq-tag" title="אותו מספר הזמנה כבר קיים אצל הלקוח" style="background:rgba(192,57,43,0.18);color:#e57361">כפולה? ${lgEsc(item.waDuplicateOf)}</span>`:''}
         </div>
       </div>
     </div>`;
   }).join('');
   _hydrateSketchImgs(el, true);
+  // לחיצה ארוכה → "חבר אל…"; גרירה בעכבר של שורה על שורה → צרופה (order-attachments.js)
+  if(typeof lgAttWireList==='function') lgAttWireList(el);
+}
+
+// צרופות בסקיצה הפתוחה: דפדוף + "הפרד" (order-attachments.js). בלי צרופות — לא
+// משנה כלום (רק מוריד את הפס של הסקיצה הקודמת). נקרא שוב בכל עדכון חי — אותן
+// צרופות → הדפדוף נשאר איפה שהוא.
+function _sqAttFlip(o){
+  if(typeof lgAttFlipper!=='function' || !o) return;
+  const img=document.getElementById('sqImg');
+  lgAttFlipper(document.getElementById('sqImgWrap'), lgHasSketch(o) ? _sqOrder(o) : null,
+    { img, onSplit: k => window.lgAttSplit(o.id, k) });
+}
+
+// "📎 2" — לשורה יש צרופות
+function _sqAttTag(item){
+  const t = typeof lgAttBadge==='function' ? lgAttBadge(item) : '';
+  return t ? `<span class="sq-tag" title="תמונות שצורפו להזמנה" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">${lgEsc(t)}</span>` : '';
 }
 
 function sqSelect(id){
@@ -4159,6 +4186,7 @@ function sqShowDetail(){
   } else{
     img.style.display='none';noimg.style.display='flex';
   }
+  _sqAttFlip(o);
 
   const nameEl=document.getElementById('sqNameInput');
   if(nameEl){ nameEl.value=o.sketchName||''; sqMarkNameState(); }

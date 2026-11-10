@@ -87,6 +87,47 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual([f.ok, f.missing], [true, ['L1', 'L2']]);
     assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 1);
   });
+  //  צרופות (בן, 10/11): אחרי עמוד הסקיצה של כל הזמנה — עמוד לכל צרופה, עם התווית בכותרת
+  const withAtt = () => {
+    const db = base({ a: { ...waOrder, attachments: { 2: { kind: 'hardware', at: 2 }, 1: { kind: 'graphic', at: 1 } } }, b: portal });
+    db._data.sketches.a__att1 = JPG; db._data.sketches.a__att2 = JPG;
+    return db;
+  };
+  await test('files: attachments → a page each right after their order sketch, label in the title', async () => {
+    const M = require('../api/_invoice-merge');
+    const real = M.lgInvoiceMerge; const seen = [];
+    M.lgInvoiceMerge = async (pdf, sks, meta) => { seen.push(sks.map(s => [s.num, s.name])); return real(pdf, sks, meta); };
+    let f;
+    try { f = await D.lgInvoiceFiles(withAtt(), 'k1'); } finally { M.lgInvoiceMerge = real; }
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 5);
+    assert.deepEqual(seen[0], [['L1', 'מקלחון'], ['L1', 'גרפיקה חלבי — מקלחון'], ['L1', 'שרטוט פרזול — מקלחון'], ['L2', 'מראה']]);
+    assert.deepEqual(f.missing, []);
+  });
+  await test('files: attachment title falls back to the order number; too big → attachments as separate files', async () => {
+    const db = withAtt(); db._data.invoicePdf.k1.sketchNames = ['', 'מראה'];
+    const big = await D.lgInvoiceFiles(db, 'k1', { maxMergedBytes: 10 });
+    assert.deepEqual(big.files.map(x => x.name),
+      ['חשבונית 67346.pdf', 'סקיצה L1.jpg', 'גרפיקה חלבי L1.jpg', 'שרטוט פרזול L1.jpg', 'סקיצה L2 - מראה.jpg']);
+    const M = require('../api/_invoice-merge');
+    const real = M.lgInvoiceMerge; const seen = [];
+    M.lgInvoiceMerge = async (pdf, sks, meta) => { seen.push(sks.map(s => s.name)); return real(pdf, sks, meta); };
+    try { await D.lgInvoiceFiles(db, 'k1'); } finally { M.lgInvoiceMerge = real; }
+    assert.deepEqual(seen[0], ['', 'גרפיקה חלבי — L1', 'שרטוט פרזול — L1', 'מראה']);
+  });
+  await test('files: a broken / missing attachment is left out and does not mark the order as missing', async () => {
+    const db = withAtt();
+    db._data.sketches.a__att1 = 'data:image/jpeg;base64,' + Buffer.from('broken').toString('base64');
+    delete db._data.sketches.a__att2;
+    const f = await D.lgInvoiceFiles(db, 'k1');
+    assert.deepEqual(f.missing, []);
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 3);
+  });
+  await test('files: order without a sketch still sends its attachments', async () => {
+    const db = withAtt(); delete db._data.sketches.a;
+    const f = await D.lgInvoiceFiles(db, 'k1');
+    assert.deepEqual(f.missing, ['L1']);
+    assert.equal((await PDFDocument.load(f.files[0].buf)).getPageCount(), 4);
+  });
   await test('text: says which order has no sketch', () => {
     const f = { kind: 'invoice', clientName: 'אגן ברזל', orderNums: ['L1', 'L2'], sketchNames: [], docNumber: '67346' };
     assert.match(renderText(f), /2 סקיצות, והסקיצות שלהן\./);
@@ -189,6 +230,55 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.match(items[0].subject, /חשבונית מס 67346/);
     assert.equal(items[0].files, 1);
   });
+  //  ── סקירת צרופות (10/11): גודל המייל. כל קובץ חוזר מ-outbox-file כ-base64 בתוך תשובה
+  //  של Vercel (תקרה 4.5MB) — חבילה מאוחדת מעל 3MB → קבצים נפרדים, ותמונה מעל 3MB מוקטנת.
+  const MB3 = 3 * 1024 * 1024;
+  const noisePng = (w, h) => {
+    const c = createCanvas(w, h); const ctx = c.getContext('2d');
+    const im = ctx.createImageData(w, h);
+    for (let i = 0; i < im.data.length; i++) im.data[i] = (i % 4 === 3) ? 255 : (Math.random() * 256) | 0;
+    ctx.putImageData(im, 0, 0);
+    return 'data:image/png;base64,' + c.toBuffer('image/png').toString('base64');
+  };
+  const BIG = noisePng(1100, 1000);
+  await test('email: big package → separate files, each under 3MB (a big image is shrunk to JPEG)', async () => {
+    assert.ok(Buffer.from(BIG.split(',')[1], 'base64').length > MB3, 'fixture must be over 3MB');
+    const db = base({ a: emOrder, b: portal });
+    db._data.sketches.a = BIG;
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [k] = Object.keys(db._data.waMeta.emailOutbox);
+    const items = await ob.lgEmailClaim(db, 5, NOW);
+    assert.equal(items[0].files, 3);   // חשבונית + 2 סקיצות, נפרדים
+    const got = [];
+    for (let i = 0; i < items[0].files; i++) {
+      const f = await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, i, NOW);
+      assert.equal(f.ok, true, 'file ' + i + ' ' + f.code);
+      got.push([f.mime, Buffer.from(f.b64, 'base64').length]);
+    }
+    assert.deepEqual(got.map(g => g[0]), ['application/pdf', 'image/jpeg', 'image/jpeg']);
+    assert.ok(got.every(g => g[1] <= MB3), JSON.stringify(got));
+    //  וואטסאפ — כמו קודם: קובץ אחד מאוחד (התקרה שם 15MB)
+    const wa = await D.lgInvoiceFiles(db, 'k1');
+    assert.equal(wa.files.length, 1);
+  });
+  await test('email: the files served are the ones counted at claim time — a change in between fails cleanly', async () => {
+    const db = base({ a: emOrder, b: portal });
+    db._data.sketches.a = BIG;
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [k] = Object.keys(db._data.waMeta.emailOutbox);
+    const items = await ob.lgEmailClaim(db, 5, NOW);
+    assert.equal(items[0].files, 3);
+    //  בין התפיסה למשיכה: צרופה נוספה להזמנה a → 4 קבצים
+    db._data.orders.a.attachments = { 1: { kind: 'graphic', at: 1 } };
+    db._data.sketches.a__att1 = JPG;
+    const f1 = await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, 1, NOW);
+    assert.deepEqual([f1.ok, f1.code], [false, 'files-changed']);
+    //  הריצה הבאה תופסת מחדש וסופרת מחדש
+    await ob.lgEmailComplete(db, k, items[0].leaseToken, false, NOW);
+    const again = await ob.lgEmailClaim(db, 5, NOW);
+    assert.equal(again[0].files, 4);
+    assert.equal((await ob.lgEmailOutboxFile(db, k, again[0].leaseToken, 3, NOW)).ok, true);
+  });
   await test('no invoice email for the card → plain reply (no sendTo)', async () => {
     const db = base({ a: emOrder, b: portal });
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
@@ -246,6 +336,19 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
   const fileProvider = sent => ({ name: 'fake', configured: true, globalSlot: false, maxPerRun: 5, nextGap: () => 0,
     gate: () => ({ allowed: true }), send: async () => { throw new Error('text send used'); },
     sendFiles: async facts => { sent.push(facts); return { ok: true, messageId: 'id1', httpStatus: 200 }; } });
+  //  סקירת צרופות (10/11): הזמנה שאוחדה לתוך אחרת (נמחקה) בזמן שההודעה בדרך —
+  //  החותמת אחרי השליחה לא מחייה אותה כשורה ריקה
+  await test('drain: stamp after sending never recreates a deleted (merged-away) order', async () => {
+    const db = base({ a: waOrder, b: portal });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [key] = Object.keys(db._data.waOutbox);
+    delete db._data.orders.b;
+    const r = await core.drainKeys(db, fileProvider([]), [key], 'invoice-tool', Date.now());
+    assert.equal(r.results[0].status, 'sent');
+    assert.equal(db._data.orders.b, undefined);
+    assert.ok(db._data.orders.a.whatsappInvoice && db._data.orders.a.whatsappInvoice.outboxKey === key);
+    assert.equal(db._data.orders.a.orderNum, 'L1');   // שאר ההזמנה נשאר
+  });
   await test('invoice: an order marked fake after a real Hashavshevet send does not block the invoice', async () => {
     const db = base({ a: { ...waOrder, isTest: true, hashavshevet: { httpOk: true, accountKey: '3150', reference: '1' } }, b: portal });
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });

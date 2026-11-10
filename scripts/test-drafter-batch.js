@@ -116,6 +116,27 @@ const deps = { enqueue: async (db, n) => { sent.push(n); return { key: 'k' + n, 
     check('pdf: unknown batch → error', (await D.lgDrafterPdf(db, 99)).code, 'no-batch');
   }
 
+  // ── צרופות (בן, 10/11): עמוד לכל צרופה מיד אחרי הסקיצה של ההזמנה ──
+  {
+    const { createCanvas } = require('@napi-rs/canvas');
+    const { PDFDocument } = require('pdf-lib');
+    const M = require(path.join(ROOT, 'api', '_invoice-merge.js'));
+    const img = () => 'data:image/png;base64,' + createCanvas(200, 100).toBuffer('image/png').toString('base64');
+    const atts = { 1: { kind: 'graphic', at: 1 }, 3: { kind: 'hardware', at: 3 } };
+    const db = seed({ A1: o('A1', 'drafter', { attachments: atts }), A2: o('A2', 'chash', { sketchName: '', attachments: { 1: { kind: 'hardware', at: 1 } } }) },
+      { sketches: { A1: img(), A2: img(), A1__att1: img(), A1__att3: img(), A2__att1: 'data:image/png;base64,AAAA' } });
+    const real = M.lgAddSketchPage; const titles = [];
+    M.lgAddSketchPage = (doc, font, im, head) => { titles.push([head.title, !!im]); return real(doc, font, im, head); };
+    let p;
+    try { p = await D.lgDrafterPreview(db, { now: NOW }); } finally { M.lgAddSketchPage = real; }
+    check('attachments: preview = cover + sketch + its attachments, per order',
+      [(await PDFDocument.load(p.files[0].buf)).getPageCount(), [...new Set(titles.map(t => t[0]))]],
+      [6, ['סקיצה A1', 'גרפיקה חלבי — סקיצה A1', 'שרטוט פרזול — סקיצה A1', 'L2', 'שרטוט פרזול — L2']]);
+    check('attachments: a broken attachment image gets a page with the title (no picture)', titles.filter(t => !t[1]).map(t => t[0]).slice(-1), ['שרטוט פרזול — L2']);
+    await D.lgDrafterSend(db, { by: 'ben', now: NOW }, deps);
+    check('attachments: sent batch file has them too', (await PDFDocument.load((await D.lgDrafterPdf(db, 1)).files[0].buf)).getPageCount(), 6);
+  }
+
   // ── המייל דרך תור המיילים הקיים ──
   {
     process.env.EMAIL_ONLY_TO = 'lozzagagot@gmail.com';

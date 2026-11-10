@@ -242,6 +242,7 @@ html,body{height:100%;overflow:hidden;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <script src="order-attachments.js?v=20261111"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20260807"></script>
@@ -893,11 +894,16 @@ function _showSketchImg(el, src, fallbackSrc, readOnly){
   };
   img.src=src;
   el.appendChild(img);
+  // צרופות (גרפיקה חלבי / שרטוט פרזול) — פס דפדוף למעלה, מחוץ לאזור ההזזה/הזום.
+  // בלי החלקה: האצבע כאן מזיזה את הסקיצה. בלי צרופות — לא משנה כלום.
+  if(typeof lgAttFlipper==='function')
+    lgAttFlipper(document.getElementById('skArea'), cur, { img, overlay: 'top', swipe: false });
 }
 
 function renderSketch(){
   const el=document.getElementById('skWrap');
   scl=1;px=0;py=0;el.style.transform='';
+  if(typeof lgAttFlipper==='function') lgAttFlipper(document.getElementById('skArea'), null);   // פס של ההזמנה הקודמת
   // תמיד קרא _editedSketch בזמן אמת — מונע snapshot ישן אחרי rebuild של orders
   const liveEdited = (window._csCheckEdits||{})[String(cur.id)] || cur._editedSketch || null;
   if(liveEdited && liveEdited !== cur._editedSketch) cur._editedSketch = liveEdited;
