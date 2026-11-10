@@ -179,6 +179,13 @@ async function handleAdmin(body, deps) {
         split: b.split === true }, deps.now);
   }
 
+  // ─── מרכזן: "זו הזמנה" / "דוגמה — הוצא מהתור" על תמונה לדוגמה (שיפור 1, 11/11) ───
+  //  כותב להזמנה ב-orders וסוגר את השאלה בחדר (waMeta — רק בשרת). api/_sample-suspect.js
+  if (action === 'sample-decide') {
+    return require('./_sample-suspect').lgSampleDecide(deps.db,
+      { orderId: typeof b.orderId === 'string' ? b.orderId : '', decision: b.decision, by: String(deps.by || '') }, deps.now);
+  }
+
   // ─── פיילוט הסוכנים ללקוח (31/10) ─────────────────────────────────────
   //  waMeta לא נכתב מהדפדפן — ולכן כאן. on:true → true; on:false → מוסר.
   if (action === 'agent-pilot') {

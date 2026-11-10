@@ -1632,8 +1632,8 @@ function renderStats(){
   const inP=f.filter(o=>['ירד לביצוע','נשלח לחיסום','חזר מחיסום','בגרפיקה','ממתין להובלה'].includes(o.status)).length;
   // תור סקיצות ושרטט (בן, 06/10) — במקום כרטיסי הסכום ומוכן-לאיסוף.
   // על כל ההזמנות ולא על המסונן: אלה קיצורי דרך, לא סיכום של הסינון.
-  const inQ=orders.filter(o=>!o.stage).length;
-  const unseen=orders.filter(o=>!o.stage && !o.sketchSeenAt).length;
+  const inQ=orders.filter(o=>!o.stage && !o.isSample).length;
+  const unseen=orders.filter(o=>!o.stage && !o.isSample && !o.sketchSeenAt).length;
   const atD=orders.filter(o=>o.status==='אצל שרטט').length;
   const urg=f.filter(o=>o.urgent).length;
   document.getElementById('stats').innerHTML=`
@@ -3966,6 +3966,8 @@ function buildSQItems(){
 
     // תור סקיצות — רק הזמנות ללא stage (טרם התחילו תהליך)
     if (o.stage && o.stage !== '') return;
+    // מרכזן (שיפור 1): בן סימן "דוגמה — הוצא מהתור" — מוסתרת, לא נמחקת
+    if (o.isSample) return;
 
     sqItems.push({
       id:           o.id,
@@ -3991,6 +3993,9 @@ function buildSQItems(){
       type:         o.type  || '',
       isTest:       !!o.isTest,
       waDuplicateOf: o.waDuplicateOf || '',
+      // מרכזן (שיפור 1): "כזאת" אחרי התמונה — אולי דוגמה, לא הזמנה (api/_sample-suspect.js)
+      sampleSuspect: !!o.sampleSuspect,
+      sampleText:    o.sampleText || '',
       zgagiUpdatedAt: o.zgagiUpdatedAt || 0,
       sketchSeenAt: o.sketchSeenAt || 0,
       // לקוח לא זוהה — "שייך ללקוח" (sq-assign.js) מציג כפתור בסקיצה
@@ -4114,6 +4119,7 @@ function sqRender(){
           ${item.waDuplicateOf?`<span class="sq-tag" title="אותו מספר הזמנה כבר קיים אצל הלקוח" style="background:rgba(192,57,43,0.18);color:#e57361">כפולה? ${lgEsc(item.waDuplicateOf)}</span>`:''}
         </div>
         ${_sqSuggestTag(item)}
+        ${_sqSampleTag(item)}
       </div>
     </div>`;
   }).join('');
@@ -4173,6 +4179,34 @@ async function sqSuggestAnswer(id, yes){
     showToast('שגיאה: ' + ((e && e.message) || e));
   } finally {
     _sqSuggestBusy.delete(id);
+  }
+}
+
+// מרכזן (שיפור 1, 11/11): תמונה ואחריה "כזאת" / "דוגמה" — אולי דוגמה, לא הזמנה.
+// "זו הזמנה" = התג יורד; "דוגמה — הוצא מהתור" = isSample (מוסתרת, לא נמחקת). בשרת — השאלה בחדר נסגרת.
+function _sqSampleTag(item){
+  if(!item.sampleSuspect) return '';
+  const id = lgJsStr(String(item.id));
+  const said = item.sampleText ? ' — "' + item.sampleText + '"' : '';
+  return `<div class="sq-suggest" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()">
+    <span class="sq-suggest-t">${lgEsc('אולי דוגמה — לא הזמנה?' + said)}</span>
+    <span class="sq-suggest-b">
+      <button type="button" class="sq-suggest-yes" onclick="event.stopPropagation();sqSampleDecide('${id}','order')">זו הזמנה</button>
+      <button type="button" class="sq-suggest-no" onclick="event.stopPropagation();sqSampleDecide('${id}','sample')">דוגמה — הוצא מהתור</button>
+    </span></div>`;
+}
+const _sqSampleBusy = new Set();
+async function sqSampleDecide(id, decision){
+  if(_sqSampleBusy.has(id)) return;
+  _sqSampleBusy.add(id);
+  try{
+    const res = await _lgAuthPost('/api/wa-inbound-drain', { action:'sample-decide', orderId: String(id), decision });
+    const d = await res.json().catch(() => ({}));
+    showToast(res.ok && d.ok ? (decision === 'sample' ? 'הוצאה מהתור (נשמרה כדוגמה)' : 'נשארת בתור כהזמנה') : 'לא נשמר: ' + (d.message || d.error || res.status));
+  } catch(e){
+    showToast('שגיאה: ' + ((e && e.message) || e));
+  } finally {
+    _sqSampleBusy.delete(id);
   }
 }
 

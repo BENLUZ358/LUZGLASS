@@ -1114,6 +1114,11 @@ function lgNormalizeOrder(o) {
     // הזמנת טקסט מוואטסאפ (בן, 20/10) — "כפולה?" כשמספר ההזמנה של הלקוח כבר קיים
     waText:        !!o.waText,
     waDuplicateOf: o.waDuplicateOf || '',
+    // מרכזן — תמונה לדוגמה (שיפור 1, 11/11): נכתבים רק בשרת (api/_sample-suspect.js).
+    // sampleSuspect → תג "אולי דוגמה" בתור; isSample → בן סימן "דוגמה" — התור מסתיר אותה
+    sampleSuspect: o.sampleSuspect === true,
+    isSample:      o.isSample === true,
+    sampleText:    typeof o.sampleText === 'string' ? o.sampleText : '',
     // קבוצת WhatsApp שממנה הגיעה הסקיצה — לשם יוצא "הסקיצות טופלו" (06/10)
     waGroup:       o.waGroup      || '',
     waGroupName:   o.waGroupName  || '',
