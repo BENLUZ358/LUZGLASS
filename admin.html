@@ -640,6 +640,10 @@ function load() {
   });
   // השיוך לקוח→מחירון. נשמר אצלנו כי חשבשבת מחזיקים אותו על כרטיס הלקוח
   // ולא בדוח המחירים, ומשיכתו הייתה דורשת דוח שני.
+  firebase.database().ref('prices').on('value', snap => {
+    _pricesRaw = snap.val() || {};
+    if(document.getElementById('pricingOv')?.classList.contains('open')) renderPricing();
+  });
   firebase.database().ref('prices/clientPriceList').on('value', snap => {
     _clientPriceMap = snap.val() || {};
     if(_priceTab === 'clients' && document.getElementById('pricingBody')) renderPricing();
@@ -1751,75 +1755,260 @@ function closePricing(){
   document.getElementById('pricingOv').classList.remove('open');
 }
 
-// מחירון כללי מול מחירוני לקוח. הכללי נמשך מחשבשבת אוטומטית; מחירוני
-// הלקוח מיובאים מייצוא הדוח ומשויכים ידנית, כי חשבשבת מחזיקים את השיוך
-// על כרטיס הלקוח ולא בדוח המחירים.
+// מחירונים — בן קובע את המחירים כאן, לא בחשבשבת (בן, 10/11: "חשבשבת לא
+// קשורה מבחינת המחיר"). כל שורה בהזמנת הסוכן יוצאת עם המחיר שלנו. שינוי חל
+// רק על הזמנות חדשות — lgSavePriceChange שומר להזמנות הפתוחות את המחיר הקודם.
 let _priceTab = 'global';
-let _clientPriceMap = {};   // מפתח חשבון → { list, listName, client }
+let _clientPriceMap = {};   // מפתח חשבון → { list, listName, client } (מהייבוא הישן)
+let _pricesRaw = {};        // הצומת prices כמו שהוא: global, clients (לפי מפתח), clientKeys, log
 function setPriceTab(t){ _priceTab = t; renderPricing(); }
 
 function renderPricing(){
   const el = document.getElementById('pricingBody');
   const tab = (id, label) =>
-    '<button onclick="setPriceTab(\'' + id + '\')" style="flex:1;padding:10px;border:none;cursor:pointer;'
+    '<button onclick="setPriceTab(\'' + id + '\')" style="flex:1;padding:10px 4px;border:none;cursor:pointer;'
     + 'font-family:Heebo,sans-serif;font-size:13px;font-weight:700;'
     + (_priceTab===id ? 'background:var(--gold);color:var(--on-gold);' : 'background:var(--bg2);color:var(--muted);')
     + '">' + label + '</button>';
   el.innerHTML = '<div style="display:flex;gap:2px;margin-bottom:16px;border-radius:6px;overflow:hidden">'
-    + tab('global','מחירון כללי') + tab('clients','מחירוני לקוחות') + '</div><div id="priceTabBody"></div>';
+    + tab('global','כללי') + tab('clients','לקוחות') + tab('bulk','באחוזים') + tab('log','שינויים')
+    + '</div><div id="priceTabBody"></div>';
   const body = document.getElementById('priceTabBody');
   if(_priceTab === 'clients') renderClientPriceTab(body);
+  else if(_priceTab === 'bulk') renderBulkPriceTab(body);
+  else if(_priceTab === 'log') renderPriceLogTab(body);
   else renderGlobalPriceTab(body);
 }
 
-// ─── טאב "מחירוני לקוחות" ─────────────────────────────────────────────────
-function renderClientPriceTab(el){
-  const map  = _clientPriceMap || {};
-  const keys = Object.keys(map);
+const _pInp = 'width:86px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;text-align:left;background:var(--surface);color:var(--text);';
+const _pBtn = 'padding:9px 14px;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;';
+const _pSel = 'width:100%;padding:8px;border:1px solid var(--border);border-radius:4px;font-family:Heebo,sans-serif;font-size:13px;background:var(--surface);color:var(--text);';
 
-  if(!keys.length){
-    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">'
-      + 'אין עדיין מחירוני לקוח.<br><span style="font-size:12px">מיובאים מייצוא דוח המחירונים של חשבשבת.</span></div>';
-    return;
+function _priceClientName(k){ return ((_pricesRaw.clientKeys||{})[k]) || ((_clientPriceMap[k]||{}).client) || ((hashavshevetAccountsMap[k]||{}).name) || k; }
+function _priceClientKeys(){
+  const s = {};
+  Object.keys(_pricesRaw.clients||{}).forEach(k => s[k]=1);
+  Object.keys(_pricesRaw.clientKeys||{}).forEach(k => s[k]=1);
+  return Object.keys(s).sort((a,b)=>_priceClientName(a).localeCompare(_priceClientName(b),'he'));
+}
+
+// שמירה אחת — כל עריכה במסך עוברת כאן
+async function _priceSave(change, okMsg){
+  try{
+    const plan = await lgSavePriceChange(change, _pricesRaw, orders);
+    if(!plan.log.length && !Object.keys(plan.upd).length){ showToast('לא השתנה כלום'); return plan; }
+    showToast('✓ ' + (okMsg||'נשמר') + (plan.frozenOrders ? ' · ' + plan.frozenOrders + ' הזמנות פתוחות נשארו במחיר הקודם' : ''));
+    return plan;
+  }catch(e){
+    console.error('_priceSave:', e);
+    showToast('⚠️ השמירה נכשלה: ' + (e.message||e));
+    renderPricing();
+    return null;
   }
+}
+
+// עריכת מחיר בודד. scope = 'global' או מפתח לקוח. שדה ריק = מחיקה.
+function priceEdit(scope, sku, raw){
+  const v = String(raw).trim();
+  if(v !== '' && !(Number(v) > 0)){ showToast('⚠️ מחיר חייב להיות מספר גדול מאפס'); renderPricing(); return; }
+  if(v === '' && !confirm('למחוק את המחיר של ' + sku + (scope==='global' ? ' מהמחירון הכללי?' : ' אצל ' + _priceClientName(scope) + '?\nהלקוח יחזור למחיר הכללי.'))){ renderPricing(); return; }
+  const val = v === '' ? null : Number(v);
+  const change = scope === 'global'
+    ? { global: { [sku]: val }, note: 'כללי · ' + sku }
+    : { clients: { [scope]: { [sku]: val } }, note: _priceClientName(scope) + ' · ' + sku };
+  _priceSave(change, val==null ? 'נמחק' : 'המחיר עודכן');
+}
+
+// ─── טאב "מחירוני לקוחות" ─────────────────────────────────────────────────
+let _clientPriceOpen = null;
+function togglePriceClient(k){ _clientPriceOpen = (_clientPriceOpen===k?null:k); renderPricing(); }
+
+function renderClientPriceTab(el){
+  const keys = _priceClientKeys();
+  const gp   = _pricesRaw.global || {};
+  const accs = Object.values(hashavshevetAccountsMap||{}).filter(a => a && a.key && !keys.includes(String(a.key)))
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'he'));
+
+  const newBox = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px">'
+    + '<div style="font-size:13px;font-weight:900;margin-bottom:8px">＋ מחירון ללקוח חדש</div>'
+    + '<select id="npClient" style="' + _pSel + 'margin-bottom:8px">'
+    +   '<option value="">בחר לקוח (כרטיס בחשבשבת)…</option>'
+    +   accs.map(a => '<option value="' + lgEsc(String(a.key)) + '">' + lgEsc(a.name||'') + ' · ' + lgEsc(String(a.key)) + '</option>').join('')
+    + '</select>'
+    + '<select id="npFrom" style="' + _pSel + 'margin-bottom:8px">'
+    +   '<option value="empty">להתחיל ריק (מה שלא ייכתב — לפי הכללי)</option>'
+    +   '<option value="global">להתחיל מהמחירון הכללי ולשנות</option>'
+    +   keys.map(k => '<option value="c:' + lgEsc(k) + '">להעתיק מ־' + lgEsc(_priceClientName(k)) + '</option>').join('')
+    + '</select>'
+    + '<button onclick="createClientPriceList()" style="' + _pBtn + 'width:100%;background:var(--gold);color:var(--on-gold);border:none">צור מחירון</button>'
+    + (accs.length ? '' : '<div style="font-size:12px;color:var(--muted);margin-top:6px">אין כרטיסים ברשימה — לחץ "סנכרן לקוחות מחשבשבת" בלשונית "כללי".</div>')
+    + '</div>';
 
   const rows = keys.map(function(k){
-    const m = map[k] || {};
-    const prices = (clientPrices[m.client] || {});
-    const n = Object.keys(prices).length;
+    const prices = (_pricesRaw.clients||{})[k] || {};
+    const n   = Object.keys(prices).length;
     const sel = _clientPriceOpen === k;
+    const m   = _clientPriceMap[k] || {};
+    let inner = '';
+    if(sel){
+      const avail = Object.values(skuCatalogMap).filter(c => c && c.code && prices[c.code]==null && c.active!==false)
+        .sort((a,b)=>String(a.code).localeCompare(String(b.code)));
+      inner = '<div style="border-top:1px solid var(--border)">'
+        + (n ? '' : '<div style="padding:12px 14px;font-size:12px;color:var(--muted)">אין עדיין מחירים מיוחדים — הלקוח משלם לפי הכללי.</div>')
+        + '<div style="max-height:360px;overflow-y:auto">'
+        + Object.keys(prices).sort().map(function(sku){
+            const cat = skuCatalogMap[sku];
+            const g   = gp[sku];
+            const diff = (g != null && Number(g) !== Number(prices[sku]));
+            return '<div class="cp-row">'
+              + '<span class="cp-sku">' + lgEsc(sku) + '</span>'
+              + '<span class="cp-name">' + lgEsc((cat&&cat.name)||'') + '</span>'
+              + '<span class="cp-money">'
+              +   (diff ? '<span class="cp-old" title="המחירון הכללי">₪' + lgEsc(String(g)) + '</span>' : '')
+              +   '<input type="number" min="0" step="0.5" inputmode="decimal" value="' + lgEsc(String(prices[sku])) + '" style="' + _pInp + '"'
+              +   ' onchange="priceEdit(\'' + lgJsStr(k) + '\',\'' + lgJsStr(sku) + '\',this.value)">'
+              +   '<button title="מחק — יחזור למחיר הכללי" onclick="priceEdit(\'' + lgJsStr(k) + '\',\'' + lgJsStr(sku) + '\',\'\')" style="padding:4px 8px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:12px">✕</button>'
+              + '</span></div>';
+          }).join('')
+        + '</div>'
+        + '<div style="display:flex;gap:6px;padding:10px 14px;border-top:1px solid var(--border);flex-wrap:wrap">'
+        +   '<select id="cpAddSku" style="' + _pSel + 'flex:1;width:auto;min-width:160px">'
+        +     '<option value="">הוסף מק"ט…</option>'
+        +     avail.map(c => '<option value="' + lgEsc(c.code) + '">' + lgEsc(c.code) + ' · ' + lgEsc(c.name||'') + (gp[c.code]!=null ? ' (כללי ₪' + lgEsc(String(gp[c.code])) + ')' : '') + '</option>').join('')
+        +   '</select>'
+        +   '<input id="cpAddPrice" type="number" min="0" step="0.5" inputmode="decimal" placeholder="מחיר ₪" style="' + _pInp + '">'
+        +   '<button onclick="addClientPrice(\'' + lgJsStr(k) + '\')" style="' + _pBtn + 'background:var(--gold);color:var(--on-gold);border:none">הוסף</button>'
+        + '</div>'
+        + '<div style="padding:0 14px 12px;text-align:left">'
+        +   '<button onclick="deleteClientPriceList(\'' + lgJsStr(k) + '\')" style="padding:5px 10px;background:none;border:1px solid rgba(192,57,43,0.3);color:#c0392b;border-radius:4px;cursor:pointer;font-size:12px">מחק את כל המחירון של הלקוח</button>'
+        + '</div></div>';
+    }
     return '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">'
       + '<div onclick="togglePriceClient(\'' + lgJsStr(k) + '\')" style="padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;background:' + (sel?'var(--bg2)':'var(--surface)') + '">'
-      + '<div style="flex:1"><div style="font-size:13px;font-weight:900">' + lgEsc(m.client||k) + '</div>'
-      + '<div style="font-size:12px;color:var(--muted);margin-top:2px">מפתח ' + lgEsc(k) + ' · מחירון ' + lgEsc(String(m.list||'—')) + ' · ' + lgEsc(m.listName||'') + '</div></div>'
+      + '<div style="flex:1"><div style="font-size:13px;font-weight:900">' + lgEsc(_priceClientName(k)) + '</div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-top:2px">כרטיס ' + lgEsc(k) + (m.list ? ' · מחירון חשבשבת ' + lgEsc(String(m.list)) : '') + '</div></div>'
       + '<span style="font-size:12px;font-weight:700;color:var(--gold-text);white-space:nowrap">' + n + ' מחירים</span>'
       + '<span style="font-size:15px;color:var(--muted);transform:rotate(' + (sel?'180':'0') + 'deg)">▾</span>'
-      + '</div>'
-      + (sel ? '<div style="max-height:320px;overflow-y:auto;border-top:1px solid var(--border)">'
-          + Object.keys(prices).sort().map(function(sku){
-              const cat = skuCatalogMap[sku];
-              const g   = globalPrices[sku];
-              const diff = (g != null && Number(g) !== Number(prices[sku]));
-              return '<div class="cp-row">'
-                + '<span class="cp-sku">' + lgEsc(sku) + '</span>'
-                + '<span class="cp-name">' + lgEsc((cat&&cat.name)||'') + '</span>'
-                + '<span class="cp-money">'
-                +   (diff ? '<span class="cp-old">₪' + lgEsc(String(g)) + '</span>' : '')
-                +   '<span class="cp-new' + (diff?' cp-diff':'') + '">₪' + lgEsc(String(prices[sku])) + '</span>'
-                + '</span></div>';
-            }).join('')
-          + '</div>' : '')
-      + '</div>';
+      + '</div>' + inner + '</div>';
   }).join('');
 
   el.innerHTML = '<p style="font-size:12px;color:var(--muted);margin-bottom:14px">'
-    + 'מחיר של לקוח גובר על המחירון הכללי. מחיר שמסומן בזהב שונה מהכללי — הכללי מוצג לידו מחוק.<br>'
-    + 'המחירים מיובאים מייצוא דוח המחירונים של חשבשבת, והשיוך לקוח→מחירון נשמר כאן.'
-    + '</p>' + rows;
+    + 'מחיר של לקוח גובר על המחירון הכללי. מה שלא רשום כאן — הלקוח משלם לפי הכללי. '
+    + 'המחיר הכללי מוצג מחוק ליד מחיר ששונה ממנו. שינוי חל על הזמנות חדשות בלבד.'
+    + '</p>' + newBox + (rows || '<div style="padding:16px;text-align:center;color:var(--muted);font-size:13px">אין עדיין מחירוני לקוחות.</div>');
 }
 
-let _clientPriceOpen = null;
-function togglePriceClient(k){ _clientPriceOpen = (_clientPriceOpen===k?null:k); renderPricing(); }
+function addClientPrice(k){
+  const sku = (document.getElementById('cpAddSku')||{}).value || '';
+  const v   = (document.getElementById('cpAddPrice')||{}).value || '';
+  if(!sku){ showToast('בחר מק"ט'); return; }
+  if(!(Number(v) > 0)){ showToast('הכנס מחיר'); return; }
+  _priceSave({ clients: { [k]: { [sku]: Number(v) } }, note: _priceClientName(k) + ' · הוספת ' + sku }, 'נוסף');
+}
+
+function createClientPriceList(){
+  const k    = (document.getElementById('npClient')||{}).value || '';
+  const from = (document.getElementById('npFrom')||{}).value || 'empty';
+  if(!k){ showToast('בחר לקוח'); return; }
+  const acc  = hashavshevetAccountsMap[k] || {};
+  const name = String(acc.name || k).trim();
+  const used = (orders||[]).some(o => (o.orderClient||'') === name);
+  if(!used && !confirm('אין במערכת הזמנות על השם "' + name + '".\nהמחירון נמצא לפי השם שעל ההזמנה — אם ההזמנות שלו נכנסות בשם אחר, המחירון לא ייתפס.\nליצור בכל זאת?')) return;
+  let list = {};
+  if(from === 'global') list = Object.assign({}, _pricesRaw.global || {});
+  else if(from.startsWith('c:')) list = Object.assign({}, (_pricesRaw.clients||{})[from.slice(2)] || {});
+  // רשימה ריקה לא נשמרת ב-Firebase — clientKeys לבד מחזיק את הלקוח ברשימה
+  _clientPriceOpen = k;
+  _priceSave({ clientKeys: { [k]: name }, clients: Object.keys(list).length ? { [k]: list } : {},
+               note: 'מחירון חדש · ' + name + (from==='global' ? ' (מהכללי)' : from.startsWith('c:') ? ' (הועתק מ־' + _priceClientName(from.slice(2)) + ')' : '') },
+             'נוצר מחירון ל־' + name);
+}
+
+function deleteClientPriceList(k){
+  if(!confirm('למחוק את כל המחירון של ' + _priceClientName(k) + '?\nמהזמנה הבאה הוא ישלם לפי המחירון הכללי. הזמנות פתוחות נשארות במחיר שלהן.')) return;
+  _clientPriceOpen = null;
+  _priceSave({ removeClients: [k], note: 'מחיקת מחירון · ' + _priceClientName(k) }, 'המחירון נמחק');
+}
+
+// ─── טאב "שינוי באחוזים" ──────────────────────────────────────────────────
+// בן, 10/11: "גם וגם" — כל פעם בוחרים: רק הכללי / הכללי וכל הלקוחות / לקוח אחד.
+// עיגול לשקל שלם (החלטה של Claude, באפיון).
+function renderBulkPriceTab(el){
+  const keys = _priceClientKeys();
+  el.innerHTML = '<p style="font-size:12px;color:var(--muted);margin-bottom:14px">'
+    + 'מעלה או מוריד מחירים באחוזים, מעוגל לשקל שלם. לפני השמירה תראה כמה מחירים ישתנו. הזמנות שכבר נכנסו נשארות במחיר שלהן.</p>'
+    + '<div style="display:flex;flex-direction:column;gap:10px;max-width:420px">'
+    + '<label style="font-size:13px;font-weight:700">כמה אחוז? <span style="font-weight:400;color:var(--muted)">(מינוס = הורדה, למשל ‎-5)</span>'
+    +   '<input id="bkPct" type="number" step="0.5" inputmode="decimal" placeholder="5" style="' + _pInp + 'width:100%;margin-top:4px"></label>'
+    + '<label style="font-size:13px;font-weight:700">על מה?'
+    +   '<select id="bkScope" style="' + _pSel + 'margin-top:4px">'
+    +     '<option value="global">רק המחירון הכללי</option>'
+    +     '<option value="all">המחירון הכללי וכל מחירוני הלקוחות</option>'
+    +     '<option value="clients">רק כל מחירוני הלקוחות</option>'
+    +     keys.map(k => '<option value="c:' + lgEsc(k) + '">רק ' + lgEsc(_priceClientName(k)) + '</option>').join('')
+    +   '</select></label>'
+    + '<button onclick="applyBulkPrice()" style="' + _pBtn + 'background:var(--gold);color:var(--on-gold);border:none">הצג ושמור</button>'
+    + '</div>';
+}
+
+// בונה את השינוי בלי לשמור — נפרד כדי שאפשר לבדוק אותו
+function lgBulkPriceChange(raw, pct, scope){
+  const f   = 1 + pct/100;
+  const adj = v => Math.max(1, Math.round(Number(v) * f));
+  const change = { global: {}, clients: {} };
+  const sample = [];
+  let n = 0;
+  if(scope === 'global' || scope === 'all'){
+    Object.entries(raw.global||{}).forEach(([sku,v]) => {
+      const to = adj(v); if(to === Number(v)) return;
+      change.global[sku] = to; n++; if(sample.length<4) sample.push('כללי ' + sku + ': ₪' + v + ' ← ₪' + to);
+    });
+  }
+  const ck = (scope === 'all' || scope === 'clients') ? Object.keys(raw.clients||{})
+           : scope.startsWith('c:') ? [scope.slice(2)] : [];
+  ck.forEach(k => {
+    Object.entries((raw.clients||{})[k]||{}).forEach(([sku,v]) => {
+      const to = adj(v); if(to === Number(v)) return;
+      (change.clients[k] = change.clients[k] || {})[sku] = to; n++;
+      if(sample.length<6) sample.push(_priceClientName(k) + ' ' + sku + ': ₪' + v + ' ← ₪' + to);
+    });
+  });
+  return { change, n, sample };
+}
+
+function applyBulkPrice(){
+  const pct   = Number((document.getElementById('bkPct')||{}).value);
+  const sel   = document.getElementById('bkScope');
+  const scope = (sel||{}).value || 'global';
+  if(!pct || !isFinite(pct)){ showToast('הכנס אחוז'); return; }
+  if(pct <= -100){ showToast('⚠️ אי אפשר להוריד 100% או יותר'); return; }
+  const { change, n, sample } = lgBulkPriceChange(_pricesRaw, pct, scope);
+  if(!n){ showToast('אין מחירים שישתנו'); return; }
+  const scopeTxt = (sel.selectedOptions[0]||{}).textContent || '';
+  if(!confirm((pct>0?'העלאה':'הורדה') + ' של ' + Math.abs(pct) + '% — ' + scopeTxt + '\nישתנו ' + n + ' מחירים. לדוגמה:\n' + sample.join('\n') + '\n\nלשמור?')) return;
+  change.note = (pct>0?'העלאה ':'הורדה ') + Math.abs(pct) + '% · ' + scopeTxt;
+  _priceSave(change, n + ' מחירים עודכנו');
+}
+
+// ─── טאב "שינויים" — יומן prices/log ──────────────────────────────────────
+function renderPriceLogTab(el){
+  const entries = Object.values(_pricesRaw.log||{}).filter(Boolean).sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,40);
+  if(!entries.length){ el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">עוד לא שונו מחירים מהמסך הזה.</div>'; return; }
+  const money = v => v==null ? '—' : '₪' + v;
+  el.innerHTML = entries.map(e => {
+    const d = new Date(e.at||0);
+    const when = d.toLocaleDateString('he-IL') + ' ' + d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+    const ch = Array.isArray(e.changes) ? e.changes : Object.values(e.changes||{});
+    return '<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:8px">'
+      + '<div style="display:flex;gap:8px;align-items:baseline"><div style="flex:1;font-size:13px;font-weight:900">' + lgEsc(e.note||'') + '</div>'
+      + '<div style="font-size:12px;color:var(--muted);white-space:nowrap">' + lgEsc(when) + '</div></div>'
+      + '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + (e.count||ch.length) + ' מחירים'
+      + (e.frozenOrders ? ' · ' + e.frozenOrders + ' הזמנות פתוחות נשארו במחיר הקודם' : '') + '</div>'
+      + (ch.length && ch.length <= 6 ? '<div style="font-size:12px;margin-top:6px">' + ch.map(c =>
+          lgEsc((c.scope==='global'?'כללי':(c.name||c.scope)) + ' · ' + c.sku + ': ' + money(c.from) + ' ← ' + money(c.to))).join('<br>') + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
 
 // ─── טאב "מחירון כללי" — קטלוג מק"טים מחשבשבת, מחיר תצוגה בלבד ────────────
 function renderGlobalPriceTab(el){
@@ -1828,9 +2017,8 @@ function renderGlobalPriceTab(el){
   const ed   = _skuEditCode ? skuCatalogMap[_skuEditCode] : null;
   el.innerHTML = `
     <p style="font-size:12px;color:var(--muted);margin-bottom:14px">
-      מחירון כללי — קטלוג המק"טים שנמשך מחשבשבת. שם/מחיר מוצגים בלבד ומתעדכנים אוטומטית עם כל סנכרון —
-      עריכה שלהם נעשית רק בחשבשבת עצמה. שדה "תפעולי" (סוג עיבוד/גרפיקה) אין לו מקבילה בחשבשבת ולכן
-      נשאר בעריכה מזערית כאן בלבד.
+      המחירים נקבעים כאן — לא בחשבשבת. כל הזמנה שנשלחת לחשבשבת יוצאת עם המחיר מהמסך הזה.
+      שינוי חל על הזמנות חדשות בלבד; הזמנה שכבר נכנסה נשארת במחיר שלה. הסנכרון מחשבשבת מביא מק"טים ושמות בלבד.
     </p>
     <button onclick="syncFromHashavshevetNow()" ${_hbSyncing?'disabled':''} style="width:100%;padding:11px;margin-bottom:8px;background:var(--gold);color:var(--on-gold);border:none;border-radius:8px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer;${_hbSyncing?'opacity:0.6;':''}">
       ${_hbSyncing?'⏳ מסנכרן מק"טים...':'🔄 סנכרן מק"טים מחשבשבת עכשיו (API)'}
@@ -1879,7 +2067,7 @@ function renderGlobalPriceTab(el){
           <tr style="${e.active===false?'opacity:0.5;':''}${e.opAuto?'background:rgba(184,146,42,0.06);':''}">
             <td style="font-weight:700">${lgEsc(e.code)}</td>
             <td>${lgEsc(e.name||'—')}</td>
-            <td style="color:var(--gold-text);font-weight:700">${globalPrices[e.code]?'₪'+globalPrices[e.code]+'<span style="font-size:12px;font-weight:400;color:var(--muted)">'+(e.kind==='hardware'?'/יח׳':'/מ"ר')+'</span>':'—'}</td>
+            <td style="white-space:nowrap"><input type="number" min="0" step="0.5" inputmode="decimal" placeholder="—" value="${globalPrices[e.code]!=null?lgEsc(String(globalPrices[e.code])):''}" style="${_pInp}" onchange="priceEdit('global','${lgJsStr(e.code)}',this.value)"><span style="font-size:12px;font-weight:400;color:var(--muted)"> ${e.kind==='hardware'?'/יח׳':'/מ"ר'}</span></td>
             <td style="font-size:12px;color:var(--muted)">${e.kind==='hardware'?'🔩 פרזול':`${lgEsc(e.glass||'')} ${e.mm||''}מ"מ · ${e.proc==='chisum'?'🔥':'✂️'}${e.graphic?' 🖼':''}${e.opAuto?' <span title="זוהה אוטומטית משם הפריט — טרם אומת ידנית" style="color:#c0392b;font-weight:700;cursor:help;">⚠ לא מאומת</span>':''}`}</td>
             <td>${e.source==='hashavshevet'?'<span style="font-size:12px;background:rgba(184,146,42,0.12);color:var(--gold-text);padding:1px 6px;border-radius:3px">חשבשבת</span>':'<span style="font-size:12px;color:var(--muted)">ידני</span>'}</td>
             <td style="white-space:nowrap">
@@ -1965,26 +2153,21 @@ async function syncFromHashavshevetNow(){
 
     const rows = lgHbItemsForCatalog(data.items);
     const BATCH = 20;
-    let created=0, priced=0;
-    const priceUpdates = {};
+    let created=0;
     for(let i=0;i<rows.length;i+=BATCH){
       const batch = rows.slice(i,i+BATCH);
       await Promise.all(batch.map(async it=>{
         try{
           await syncSkuCatalogFromHashavshevet(it.code, it.fields);
           created++;
-          if(it.price > 0) priceUpdates[it.code] = it.price; // 0 = טרם הוזן מחיר בחשבשבת, לא דורס מחיר קיים
         }catch(e){ console.error('syncFromHashavshevetNow item failed:', it.code, e); }
       }));
     }
-    if(Object.keys(priceUpdates).length){
-      priced = Object.keys(priceUpdates).length;
-      await savePricesGlobal({...globalPrices, ...priceUpdates}).catch(e=>console.error('syncFromHashavshevetNow prices:',e));
-    }
+    // מחירים לא נמשכים מחשבשבת — בן קובע אותם במסך המחירונים (בן, 10/11)
     // כמה מהם פרזול — ואם אף אחד, אילו סוגים חשבשבת החזירה (data.types), כדי לראות למה
     const hwN = rows.filter(r => r.fields.kind === 'hardware').length;
     const typesTxt = Object.entries(data.types || {}).map(([k, n]) => `${k}: ${n}`).join(', ');
-    showToast(`✓ סונכרנו ${created} מק"טים (${hwN} פרזול, ${priced} עם מחיר)`);
+    showToast(`✓ סונכרנו ${created} מק"טים (${hwN} פרזול) — המחירים לא השתנו`);
     if (!hwN) alert('לא נמצא פרזול בדוח של חשבשבת.\nהסוגים שחזרו: ' + (typesTxt || '(אין)'));
   }catch(e){
     console.error('syncFromHashavshevetNow:', e);
@@ -3718,6 +3901,7 @@ function buildSQItems(){
       area:         o.area || '',
       total:        o.total || 0,
       totalFinal:   o.totalFinal || 0,
+      frozenPrices: o.frozenPrices || null,
       date:         o.date || '',
       panels:       o.panels || [],
       notes:        o.notes || '',

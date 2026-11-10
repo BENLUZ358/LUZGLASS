@@ -528,7 +528,7 @@ function init(){
     _portalClientPrices = Object.assign({}, cp, _portalClientPrices);
     ORDERS.forEach(o => {
       // העבר totalFinal כדי ש-lgCalcOrderTotal יחזיר מחיר נעול לנאספות
-      const calc = lgCalcOrderTotal({items: o.items, orderClient: o.orderClient, totalFinal: o._totalFinal}, gp, cp);
+      const calc = lgCalcOrderTotal({items: o.items, orderClient: o.orderClient, totalFinal: o._totalFinal, frozenPrices: o._frozenPrices}, gp, cp);
       o.total = calc || o._rawTotal || 0;
     });
     renderAll();
@@ -562,6 +562,7 @@ function _subscribePortalOrders(clientPhone) {
         total:      lgCalcOrderTotal(o, _portalGlobalPrices, _portalClientPrices) || Number(o.total) || 0,
         _rawTotal:  Number(o.total) || 0,
         _totalFinal:o.totalFinal   || 0,
+        _frozenPrices:o.frozenPrices || null,
         invoice:    o.invoice    || null,
         orderClient:o.orderClient || clientName,
         date:       o.date      || '',

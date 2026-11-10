@@ -1172,6 +1172,7 @@ function lgNormalizeOrder(o) {
     totalM2:       o.totalM2      || 0,
     pricesLockedAt:o.pricesLockedAt || null,
     lockedItems:   Array.isArray(o.lockedItems) ? o.lockedItems : [],
+    frozenPrices:  (o.frozenPrices && typeof o.frozenPrices === 'object') ? o.frozenPrices : null,
     customerId:    o.customerId   || '',
     businessName:  o.businessName || '',
     clientPhone:   o.clientPhone  || '',
@@ -2817,6 +2818,16 @@ function lgCalcOrderM2(order){
 
 // globalP = { 'mir-5-pol': 200, ... }
 // clientP = { 'clientName': { 'mir-5-pol': 180, ... }, ... }
+// המחיר למ"ר של מק"ט אחד בהזמנה אחת. frozenPrices גובר: זה המחיר שהיה
+// ביום שההזמנה נכנסה, ונכתב ברגע שבן שינה מחיר במסך המחירונים
+// (lgSavePriceChange). בן, 10/11: "שינוי מחיר — על הזמנות חדשות מעכשיו".
+// אחריו מחירון הלקוח, ואחריו הכללי. אותו סדר בדיוק ב-api/hashavshevet-order.js.
+function lgOrderPpm2(order, pid, cp, gp){
+  const fz = (order && order.frozenPrices) || {};
+  if (fz[pid] != null && Number(fz[pid]) > 0) return Number(fz[pid]);
+  return parseFloat((cp||{})[pid]||(gp||{})[pid]||0) || 0;
+}
+
 function lgCalcOrderTotal(order, globalP, clientP){
   // מחיר נעול — ההזמנה כבר עברה ל-done/delivery/collected, המחיר קבוע
   if(order.totalFinal) return order.totalFinal;
@@ -2831,7 +2842,7 @@ function lgCalcOrderTotal(order, globalP, clientP){
     // בלי sku (כל פריט קיים/ישן) — ממשיך בדיוק כמו היום, ניחוש קטגוריה לפי שם חופשי.
     const pid  = item.sku || lgFindPriceItem(name);
     if(!pid) return;
-    const ppm2 = parseFloat(cp[pid]||gp[pid]||0);
+    const ppm2 = lgOrderPpm2(order, pid, cp, gp);
     if(!ppm2) return;
     priced++;
     const area = lgBillAreaM2(item, order.customerId);
@@ -2873,7 +2884,7 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
       const qty  = items.length;
       const name = rep.glassFullName||rep.name||'';
       const pid  = rep.sku || lgFindPriceItem(name); // item.sku (מ-skuCatalog) גובר כשקיים
-      const ppm2 = pid ? parseFloat(cp[pid]||gp[pid]||0) : 0;
+      const ppm2 = pid ? lgOrderPpm2(order, pid, cp, gp) : 0;
       if(!pid || !ppm2){ result.unpricedNames.push(name||'(ללא שם)'); return; }
       priced++;
       const area      = lgCalcAreaM2(rep.w||0, rep.h||0);
@@ -2910,6 +2921,116 @@ function lgReadyUnsentIds(orders, now){
     if(o.emailNotices && o.emailNotices.ready) return false;
     return true;
   }).map(o => String(o.id));
+}
+
+// ── עריכת מחירונים במערכת (בן, 10/11) ─────────────────────────────────
+// המחירים נקבעים כאן ולא בחשבשבת: כל שורה בהזמנת הסוכן יוצאת עם המחיר
+// שלנו, וחשבשבת לא מחשבת אותו מחדש. שינוי חל רק על הזמנות חדשות: לפני
+// הכתיבה, כל הזמנה פתוחה (לא נעולה) שהמחיר שלה למק"ט היה זז מקבלת את
+// המחיר הישן ב-frozenPrices — באותה כתיבה אטומית, כך שאין רגע שבו הזמנה
+// קיימת רואה מחיר חדש.
+//
+// change = {
+//   global:     { SKU: מחיר | null },             null = מחיקה
+//   clients:    { מפתח: { SKU: מחיר | null } },
+//   clientKeys: { מפתח: שם }                      מחירון לקוח חדש
+//   removeClients: [מפתח]                          מחיקת מחירון לקוח שלם
+//   note:       'תיאור קצר ליומן'
+// }
+// prices = הצומת prices כפי שהוא עכשיו (global, clients, clientKeys).
+function lgPlanPriceChange(change, prices, orders){
+  const P   = prices || {};
+  const gp0 = Object.assign({}, P.global || {});
+  const cl0 = JSON.parse(JSON.stringify(P.clients || {}));
+  const ck0 = Object.assign({}, P.clientKeys || {});
+  const gp1 = Object.assign({}, gp0);
+  const cl1 = JSON.parse(JSON.stringify(cl0));
+  const ck1 = Object.assign({}, ck0);
+  const upd = {};
+  const log = [];
+  const num = v => (v == null || v === '' ? null : Math.round(Number(v) * 100) / 100);
+
+  Object.entries(change.global || {}).forEach(([sku, v]) => {
+    const to = num(v), from = gp0[sku] != null ? Number(gp0[sku]) : null;
+    if (to === from) return;
+    if (to == null) delete gp1[sku]; else gp1[sku] = to;
+    upd['prices/global/' + sku] = to;
+    log.push({ scope: 'global', sku, from, to });
+  });
+  Object.entries(change.clientKeys || {}).forEach(([k, name]) => {
+    if (ck0[k] === name) return;
+    ck1[k] = name;
+    upd['prices/clientKeys/' + k] = name;
+  });
+  Object.entries(change.clients || {}).forEach(([k, list]) => {
+    Object.entries(list || {}).forEach(([sku, v]) => {
+      const cur = (cl0[k] || {})[sku];
+      const to = num(v), from = cur != null ? Number(cur) : null;
+      if (to === from) return;
+      if (!cl1[k]) cl1[k] = {};
+      if (to == null) delete cl1[k][sku]; else cl1[k][sku] = to;
+      upd['prices/clients/' + k + '/' + sku] = to;
+      log.push({ scope: k, name: ck1[k] || k, sku, from, to });
+    });
+  });
+  (change.removeClients || []).forEach(k => {
+    Object.entries(cl0[k] || {}).forEach(([sku, v]) =>
+      log.push({ scope: k, name: ck0[k] || k, sku, from: Number(v), to: null }));
+    delete cl1[k]; delete ck1[k];
+    upd['prices/clients/' + k] = null;
+    upd['prices/clientKeys/' + k] = null;
+    upd['prices/clientPriceList/' + k] = null;
+  });
+  // כתיבה לשורש עם prices/clients/K ו-prices/clients/K/SKU יחד נדחית ב-Firebase
+  // (נתיב חופף) — מחיקת לקוח שלם גוברת.
+  Object.keys(upd).forEach(path => {
+    const m = path.match(/^prices\/clients\/([^/]+)\/.+/);
+    if (m && upd.hasOwnProperty('prices/clients/' + m[1])) delete upd[path];
+  });
+
+  const cpOld = _buildClientP(cl0, ck0);
+  const cpNew = _buildClientP(cl1, ck1);
+  let frozenOrders = 0;
+  (orders || []).forEach(o => {
+    if (!o || !o.id || o.pricesLockedAt) return;
+    const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+    const cOld = cpOld[o.orderClient || ''] || {};
+    const cNew = cpNew[o.orderClient || ''] || {};
+    const fz   = o.frozenPrices || {};
+    let touched = false;
+    const seen = {};
+    items.forEach(it => {
+      if (!it) return;
+      const pid = it.sku || lgFindPriceItem(it.glassFullName || it.name || '');
+      if (!pid || seen[pid] || (fz[pid] != null && Number(fz[pid]) > 0)) return;
+      seen[pid] = 1;
+      const before = parseFloat(cOld[pid] || gp0[pid] || 0) || 0;
+      const after  = parseFloat(cNew[pid] || gp1[pid] || 0) || 0;
+      if (!before || before === after) return;
+      upd['orders/' + o.id + '/frozenPrices/' + pid] = before;
+      touched = true;
+    });
+    if (touched) frozenOrders++;
+  });
+  return { upd, log, frozenOrders };
+}
+
+async function lgSavePriceChange(change, prices, orders){
+  const plan = lgPlanPriceChange(change, prices, orders);
+  if (!plan.log.length && !Object.keys(plan.upd).length) return plan;
+  const u = (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) || null;
+  const key = _lgDb.ref('prices/log').push().key;
+  plan.upd['prices/log/' + key] = {
+    at: Date.now(),
+    by: (u && u.email) || '',
+    note: String(change.note || '').slice(0, 200),
+    count: plan.log.length,
+    frozenOrders: plan.frozenOrders,
+    // יומן מלא עד 300 שורות; שינוי גורף גדול יותר נרשם בתיאור ובספירה בלבד
+    changes: plan.log.slice(0, 300),
+  };
+  await _lgDb.ref().update(plan.upd);
+  return plan;
 }
 
 async function savePricesGlobal(prices){
