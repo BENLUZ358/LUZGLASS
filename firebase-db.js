@@ -1094,6 +1094,8 @@ function lgNormalizeOrder(o) {
     sketchSeenAt:  o.sketchSeenAt || 0,
     // צרופות — "גרפיקה חלבי" / "שרטוט פרזול" (בן, 10/11, order-attachments.js)
     attachments:   o.attachments || null,
+    //  המספר הבא לצרופה — לא חוזר אחורה גם אחרי "הפרד" (מוקצה בטרנזקציה, order-attachments.js)
+    attNext:       o.attNext ?? null,
     // משלוח לשרטט (בן, 10/11) — נכתב רק בשרת (api/_drafter-batch.js)
     drafterBatch:  o.drafterBatch ?? null,
     drafterHold:   o.drafterHold ?? null,

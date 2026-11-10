@@ -131,5 +131,107 @@ check('admin: sqItems keep attachments', /attachments:\s+o\.attachments \|\| nul
 const SRC = fs.readFileSync(path.join(ROOT, 'firebase-db.js'), 'utf8');
 check('lgNormalizeOrder keeps attachments', /attachments:\s+o\.attachments\s+\|\| null/.test(SRC), true);
 
-if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
-console.log('\nAll order-attachments checks passed.');
+check('lgNormalizeOrder keeps attNext', /attNext:\s+o\.attNext\s+\?\?\s+null/.test(SRC), true);
+
+// ── סקירה 10/11 ──
+// 1. תמונה שכבר יש לה צרופות לא נכנסת לתוך הזמנה אחרת (הצרופות שלה היו נעלמות)
+const srcWithAtt = { ...src, attachments: { 1: { kind: 'graphic', at: 1 } } };
+check('review: source that already has attachments is refused', J(A.lgAttCanMerge(srcWithAtt, dst)),
+  { ok: false, why: 'לתמונה הזו יש כבר תמונות נוספות — קודם הפרד אותן' });
+// 6. העותק ב-from בלי השדות הכבדים (התמונה כבר עוברת ל-sketches/<dst>__att<k>)
+const heavy = A.lgAttMergePlan({ ...src, sketch: 'data:image/png;base64,BIG', files: { 0: 'data:x' } }, dst, 'graphic', 'img', {}, NOW, 'ben');
+const fromCopy = heavy.upd['orders/wa_0/attachments/1'].from.order;
+check('review: from.order has no inline sketch / files', ['sketch' in fromCopy, 'files' in fromCopy], [false, false]);
+check('review: from.order keeps the rest', fromCopy.waMessageId, 'M1');
+// 2. lgAttMergePlan מקבל את k שהוקצה
+check('review: plan uses the allocated k', A.lgAttMergePlan(src, dst, 'graphic', 'img', {}, NOW, 'ben', 7).k, 7);
+check('review: plan writes the allocated slot', Object.keys(A.lgAttMergePlan(src, dst, 'graphic', 'img', {}, NOW, 'ben', 7).upd)
+  .filter(k => /attachments|__att/.test(k)).sort(), ['orders/wa_0/attachments/7', 'sketches/wa_0__att7']);
+
+// ── החלק של הדפדפן, על בסיס נתונים מדומה ──
+const { fakeDb } = require(path.join(__dirname, '_fake-db.js'));
+function el(tag) {
+  return {
+    tagName: tag, dataset: {}, style: {}, isConnected: true, parentElement: null, _q: {}, _src: '',
+    classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+    get src() { return this._src; }, set src(v) { this._src = String(v); },
+    getAttribute(k) { return k === 'src' ? (this._src || null) : null; }, setAttribute() {},
+    addEventListener() {}, removeEventListener() {},
+    querySelector(s) { return this._q[s] || (this._q[s] = el('x')); }, querySelectorAll: () => [],
+    insertAdjacentElement(p, x) { x.isConnected = true; return x; }, appendChild() {}, remove() { this.isConnected = false; },
+  };
+}
+function browser(db, over) {
+  const c = { console, setTimeout, Promise, JSON, Object, Math, Number, String, Date,
+    document: { createElement: el, getElementById: () => null, head: { appendChild() {} } },
+    getComputedStyle: () => ({ position: 'relative' }),
+    toasts: [],
+    _lgDb: db,
+    lgLoadSketch: async o => (db._data.sketches && db._data.sketches[o.id]) || null,
+    lgGetSketch: async k => (db._data.sketches && db._data.sketches[k]) || null,
+    ...(over || {}) };
+  c.showToast = m => c.toasts.push(m);
+  c.window = c;
+  vm.createContext(c);
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'order-attachments.js'), 'utf8'), c);
+  return c;
+}
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+(async () => {
+  // 2. שני איחודים לאותה הזמנה בבת אחת — אף פעם לא אותו k
+  {
+    const db = fakeDb({ orders: { wa_0: { ...dst }, wa_1: { ...src }, wa_2: { ...src, id: 'wa_2', waMessageId: 'M2' } },
+      sketches: { wa_1: 'data:one', wa_2: 'data:two' } });
+    const W = browser(db);
+    const r = await Promise.all([W.lgAttMerge('wa_1', 'wa_0', 'graphic'), W.lgAttMerge('wa_2', 'wa_0', 'hardware')]);
+    check('review: two merges at once both succeed', r, [true, true]);
+    check('review: two merges at once → two different slots', Object.keys(db._data.orders.wa_0.attachments || {}).sort(), ['1', '2']);
+    check('review: both images kept', [db._data.sketches.wa_0__att1, db._data.sketches.wa_0__att2].sort(), ['data:one', 'data:two']);
+    check('review: counter advanced', db._data.orders.wa_0.attNext, 3);
+  }
+  // 2. k לא חוזר לשימוש אחרי הפרדה
+  {
+    const db = fakeDb({ orders: { wa_0: { ...dst }, wa_1: { ...src }, wa_2: { ...src, id: 'wa_2', waMessageId: 'M2' } },
+      sketches: { wa_1: 'data:one', wa_2: 'data:two' } });
+    const W = browser(db);
+    await W.lgAttMerge('wa_1', 'wa_0', 'graphic');
+    await W.lgAttSplit('wa_0', 1);
+    check('review: split brought the source back', !!db._data.orders.wa_1, true);
+    await W.lgAttMerge('wa_2', 'wa_0', 'hardware');
+    check('review: slot 1 is never reused after split', Object.keys(db._data.orders.wa_0.attachments || {}), ['2']);
+  }
+  // 2. הזמנה עם צרופות מלפני המונה — k אחרי הגדול הקיים
+  {
+    const db = fakeDb({ orders: { wa_0: { ...dst, attachments: { 4: { kind: 'graphic' } } }, wa_1: { ...src } }, sketches: { wa_1: 'data:one' } });
+    await browser(db).lgAttMerge('wa_1', 'wa_0', 'graphic');
+    check('review: no counter yet → after the largest existing k', Object.keys(db._data.orders.wa_0.attachments).sort(), ['4', '5']);
+  }
+  // 5. טעינה מאחרת של צרופה לא נצבעת על תמונה שהדף כבר החליף
+  {
+    let resolveAtt;
+    const W = browser(fakeDb({}), { lgGetSketch: () => new Promise(r => { resolveAtt = r; }) });
+    const order = { ...dst, attachments: { 1: { kind: 'graphic' } } };
+    const img = el('img'); img.parentElement = el('div'); img.dataset.lgFor = 'wa_0'; img.src = 'data:main';
+    const api = W.lgAttFlipper(el('div'), order, { img, swipe: false });
+    api.go(1);
+    img.dataset.lgFor = 'other'; img.src = 'data:other';   // הדף טען הזמנה אחרת לאותו <img>
+    resolveAtt('data:att'); await tick(); await tick();
+    check('review: late attachment load does not paint over another order', img.src, 'data:other');
+  }
+  // 5. חזרה לסקיצה כשהסקיצה הראשית לא סיימה להיטען → טוענים שוב, לא נשארים עם ממלא המקום
+  {
+    const calls = [];
+    const W = browser(fakeDb({}), { lgGetSketch: async () => 'data:att', lgSketchIntoImg: (im, o) => calls.push(o.id) });
+    const order = { ...dst, attachments: { 1: { kind: 'graphic' } } };
+    const img = el('img'); img.parentElement = el('div'); img.dataset.lgFor = 'wa_0'; img.src = 'placeholder.gif';
+    const api = W.lgAttFlipper(el('div'), order, { img, swipe: false });
+    api.go(1); await tick();
+    api.go(0);
+    check('review: back to the sketch reloads it through lgSketchIntoImg', calls, ['wa_0']);
+    check('review: back to the sketch → lgFor is the order', img.dataset.lgFor, 'wa_0');
+  }
+
+  if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
+  console.log('\nAll order-attachments checks passed.');
+})().catch(e => { console.error(e); process.exit(1); });

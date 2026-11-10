@@ -33,6 +33,8 @@ function lgAttCanMerge(src, dst) {
   if (src.id === dst.id) return { ok: false, why: 'אי אפשר לחבר הזמנה לעצמה' };
   if (src.stage) return { ok: false, why: 'אפשר לחבר רק תמונה שעוד בתור הסקיצות' };
   if (src.items && Object.keys(src.items).length) return { ok: false, why: 'לתמונה הזו כבר הוזנו פריטים — היא הזמנה, לא צרופה' };
+  //  הצרופות של המקור היו נעלמות (רק העותק ב-from היה זוכר אותן)
+  if (lgAttList(src).length) return { ok: false, why: 'לתמונה הזו יש כבר תמונות נוספות — קודם הפרד אותן' };
   if (src.hashavshevet && Object.keys(src.hashavshevet).length) return { ok: false, why: 'התמונה הזו כבר נשלחה לחשבשבת' };
   const sc = String(src.customerId || ''), dc = String(dst.customerId || '');
   if (sc || dc) {
@@ -51,21 +53,29 @@ function lgAttCandidates(src, orders) {
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 12);
 }
 
-function _attNextK(dst) {
+//  k הבא: אחרי המונה orders/<dst>/attNext ואחרי הגדול שקיים (הזמנות מלפני המונה).
+//  ⚠️ k לא חוזר לשימוש — גם לא אחרי "הפרד" — כי הודעות ומטמונים כבר מכירים את <dst>__att<k>.
+function _attNextK(dst, attNext) {
   const ks = Object.keys((dst && dst.attachments) || {}).map(Number).filter(Number.isInteger);
-  return (ks.length ? Math.max(...ks) : 0) + 1;
+  const n = Number(attNext);
+  return Math.max((ks.length ? Math.max(...ks) : 0) + 1, Number.isInteger(n) && n > 0 ? n : 1);
 }
 
 //  src/dst = רשומות ההזמנה. srcSketch = data URL של התמונה. extra = { layer, base } של עורך הסקיצות.
+//  k = המספר שהוקצה בטרנזקציה על attNext (lgAttMerge); בלי k — החישוב מהרשומה (בדיקות).
 //  → { k, upd } — עדכון רב-נתיבי אחד (אטומי)
-function lgAttMergePlan(src, dst, kind, srcSketch, extra, now, by) {
+function lgAttMergePlan(src, dst, kind, srcSketch, extra, now, by, kAlloc) {
   if (!LG_ATT_KINDS[kind]) throw new Error('סוג צרופה לא מוכר');
-  const k = _attNextK(dst);
+  const k = Number.isInteger(kAlloc) && kAlloc > 0 ? kAlloc : _attNextK(dst, dst && dst.attNext);
   const e = extra || {};
+  //  העותק בלי השדות הכבדים: התמונה עצמה כבר עוברת ל-sketches/<dst>__att<k>,
+  //  ו"הפרד" מחזיר אותה ל-sketches/<srcId>
+  const copy = JSON.parse(JSON.stringify(src));
+  delete copy.sketch; delete copy.files;
   const upd = {};
   upd['sketches/' + dst.id + '__att' + k] = srcSketch;
   upd['orders/' + dst.id + '/attachments/' + k] = { kind, at: now, by: String(by || ''),
-    from: { order: JSON.parse(JSON.stringify(src)), layer: e.layer || null, base: e.base || null } };
+    from: { order: copy, layer: e.layer || null, base: e.base || null } };
   upd['orders/' + dst.id + '/updatedAt'] = now;
   upd['orders/' + src.id] = null;
   upd['sketches/' + src.id] = null;
@@ -242,7 +252,14 @@ if (typeof window !== 'undefined') (function () {
         _lgDb.ref('sketches/' + srcId + '__layer').once('value'),
         _lgDb.ref('sketches/' + srcId + '__base').once('value'),
       ]);
-      const plan = lgAttMergePlan(src, dst, kind, img, { layer: l.val(), base: b.val() }, Date.now(), who());
+      //  ⚠️ k מוקצה בטרנזקציה על המונה, לפני הכתיבה — שני איחודים לאותה הזמנה בבת אחת
+      //  לא יקבלו אותו k (ואחד היה דורס את התמונה של השני). פיירבייס קוראת קודם עם null.
+      const minK = _attNextK(dst, dst.attNext);
+      const tx = await _lgDb.ref('orders/' + dst.id + '/attNext')
+        .transaction(cur => _attNextK(null, Math.max(Number(cur) || 0, minK)) + 1);
+      if (!tx || !tx.committed) throw new Error('לא הוקצה מקום לצרופה');
+      const k = Number(tx.snapshot.val()) - 1;
+      const plan = lgAttMergePlan(src, dst, kind, img, { layer: l.val(), base: b.val() }, Date.now(), who(), k);
       await _lgDb.ref().update(plan.upd);
       const c = cache();
       if (c) { c.set(dst.id + '__att' + plan.k, img); c.delete(String(src.id)); }
@@ -418,14 +435,17 @@ if (typeof window !== 'undefined') (function () {
       if (i === 0) {
         img.dataset.lgFor = mainFor;
         if (mainSrc) img.src = mainSrc;
-        else if (typeof lgSketchIntoImg === 'function') lgSketchIntoImg(img, order);
+        // ⚠️ הסקיצה אולי לא סיימה להיטען כשדפדפנו ממנה (הטעינה ראתה lgFor של צרופה ונזרקה),
+        // ו-mainSrc הוא ממלא מקום. טוענים שוב — מהמטמון; אם כבר נטענה, lgSketchIntoImg לא משנה כלום.
+        if ((!mainSrc || !mainFor || mainFor === String(order.id)) && typeof lgSketchIntoImg === 'function') lgSketchIntoImg(img, order);
         return;
       }
       const key = slides[i].key;
       // טעינה מאחרת של הסקיצה הראשית (lgSketchIntoImg) לא תדרוס את הצרופה
       img.dataset.lgFor = key;
       lgGetSketch(key).then(src => {
-        if (my !== token || !img.isConnected) return;
+        // ⚠️ גם lgFor: הדף אולי כבר טען לאותו <img> הזמנה אחרת
+        if (my !== token || !img.isConnected || img.dataset.lgFor !== key) return;
         if (src) img.src = src;
         else if (typeof showToast === 'function') showToast('התמונה לא נמצאה');
         else console.warn('[order-attachments] חסרה תמונה:', key);
