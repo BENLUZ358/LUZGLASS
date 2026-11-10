@@ -30,6 +30,9 @@
 //    בעיה של סוכן כבוי / מחשב שלא ענה — לא נפתחת ולא "מתוקנת". מחשב שלא ענה 7 ימים —
 //    נמחק מ-invoiceWatcher יחד עם הבעיות שלו.
 //
+//  עוקב (שיפורים 2+3, 11/11) — בריצה האיטית, כשהעוקב לא כבוי: קורא את orders, מחשב כמה זמן
+//    לוקח כל שלב (_agent-stats.js) → waMeta/agentStats/stageDays (לתשובת "מתי יהיה מוכן"),
+//
 //  מתגים (lgAgentMode): כבוי → כלום. שקט/עונה → לחדר. התראה לבן — רק "עונה".
 //  בלי waMeta/agentConfig בכלל (פרודקשן היום) → הכל לחדר כאפור, אף פעם לא לבן ולא ניסיון חוזר.
 // ═══════════════════════════════════════════════════════════════════
@@ -292,7 +295,16 @@ async function lgAgentWatchRun(db, o) {
     }
   }
 
-  const all = lgWatchProblems({ now, watchers, invoices, retried, reply, noRetry, batches, mail }).filter(p => on(p.agent));
+  let stuck = [];
+  if (slow && on('okev')) {
+    try {
+      const ST = require('./_agent-stats');
+      const orders = (await db.ref('orders').once('value')).val() || {};
+      const stats = ST.lgStageStats(orders, now);
+      await db.ref(ST.AGENT_STATS).set(stats);
+    } catch (e) { console.warn('agent-watch: stage stats', e && e.name); }
+  }
+  const all = lgWatchProblems({ now, watchers, invoices, retried, reply, noRetry, batches, mail }).concat(stuck).filter(p => on(p.agent));
   const byKey = {};
   all.forEach(p => { byKey[p.key] = p; });
   //  לא "מתוקן": בעיה של סוכן כבוי, או של מחשב שלא שלח דופק עדכני, או בדיקה איטית שלא רצה עכשיו
