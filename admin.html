@@ -3015,18 +3015,23 @@ document.addEventListener('visibilitychange', () => {
    44px לכל מה שנוגעים בו, כמו בתחנת הבדיקה. */
 #sqAssignWrap{margin:0 14px 12px;padding:10px 12px;border:1px solid rgba(212,160,23,0.45);border-right:4px solid #d4a017;border-radius:6px;background:#fffaf0;}
 #sqAssignWrap[hidden]{display:none;}
-/* משלוחים לשרטט (בן, 10/11) */
+/* מגירת "טיוטה לשרטט" (בן, 10/11) — drafter-batch.js */
 #drafterBar[hidden]{display:none;}
-.drb{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 0 12px;}
-.drb-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
-.drb-basket{font-weight:600;flex:1 1 100%;}
-.drb-btn{min-height:44px;flex:1 1 140px;}
-.drb-open{list-style:none;margin:10px 0 0;padding:0;font-size:14px;color:var(--muted);}
-.drb-open li{padding:3px 0;}
-.drb-msg{margin-top:10px;font-size:14px;}
-.drb-resend{min-height:44px;margin-inline-start:8px;padding:4px 12px;}
-.drb-tag{display:inline-block;margin-top:3px;font-size:12px;color:var(--muted);}
-@media(min-width:600px){.drb-basket{flex:1 1 auto;}}
+.drb{position:sticky;bottom:0;z-index:5;background:var(--surface);border-top:2px solid var(--gold);box-shadow:0 -4px 14px rgba(0,0,0,.12);padding:10px 12px;}
+.drb-head{display:flex;align-items:center;gap:8px;}
+.drb-toggle{flex:1;min-height:44px;text-align:start;background:none;border:0;font:inherit;font-weight:600;color:var(--text);cursor:pointer;padding:0 4px;}
+.drb-caret{color:var(--muted);font-size:12px;}
+.drb-btn{min-height:44px;}
+.drb-body{max-height:50vh;overflow:auto;margin-top:8px;}
+.drb-list{list-style:none;margin:0;padding:0;font-size:14px;}
+.drb-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);}
+.drb-held li span{color:var(--muted);}
+.drb-mini{min-height:44px;padding:4px 10px;font-size:13px;white-space:nowrap;}
+.drb-sub{margin:12px 0 4px;font-size:13px;font-weight:600;color:var(--muted);}
+.drb-empty{margin:4px 0;font-size:14px;color:var(--muted);}
+.drb-done{width:100%;margin-top:10px;}
+.drb-peek{font-size:13px;color:var(--muted);padding:2px 4px 0;}
+.drb-msg{margin-top:8px;font-size:14px;}
 #sqBtnRead[hidden]{display:none !important;}
 .sqa-msg{font-size:13px;line-height:1.5;color:#1a1714;margin-bottom:8px;}
 .sqa-from{direction:ltr;unicode-bidi:isolate;font-weight:700;}
@@ -3462,12 +3467,12 @@ document.addEventListener('visibilitychange', () => {
 
       <!-- LIST -->
       <div id="sqListPanel">
-        <!-- משלוחים לשרטט (בן, 10/11) — drafter-batch.js. כאן ולא במסך הראשי: בן פותח הזמנות
-             ברצף מהתור, כל אחת שנשלחת לחשבשבת נכנסת לסל, ואחרי שהתור ריק — "שלח לשרטט". -->
-        <div id="drafterBar" class="drb" hidden></div>
         <!-- שלב 6: טופלו וממתינים לעדכון ללקוח — רשת ביטחון. _sqRenderAckPending -->
         <div id="sqAckPending" hidden></div>
         <div id="sqList"></div>
+        <!-- מגירת "טיוטה לשרטט" (בן, 10/11) — drafter-batch.js. בתחתית התור: כל הזמנה שנשלחת
+             לחשבשבת נכנסת לטיוטה, ורואים תמיד מה מחכה. כשהתור ריק — "שלח לשרטט". -->
+        <div id="drafterBar" class="drb" hidden></div>
       </div>
 
       <!-- DETAIL -->
@@ -4585,7 +4590,7 @@ async function sqSendHashavshevet(id, force){
   if((sqStageMap[id] || '') !== 'chash'){
     sqStageMap[id] = 'chash';
     // נכנסה לסל לשרטט — הפס מתעדכן (בן, 10/11)
-    updateStage(id, 'chash').then(() => { if(window.lgDrafterBarShow) window.lgDrafterBarShow(true); }).catch(e => console.warn('chash:', e && e.message));
+    updateStage(id, 'chash').then(() => { if(window.lgDrafterBarShow) window.lgDrafterBarShow(true, true); }).catch(e => console.warn('chash:', e && e.message));
     sqSaveState();
   }
   const btn   = document.getElementById('sqHbSend') || document.getElementById('sqBtnChash');

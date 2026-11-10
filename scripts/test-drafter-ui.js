@@ -17,7 +17,7 @@ const ROOT = path.join(__dirname, '..');
 const ctx = { console };
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'drafter-batch.js'), 'utf8'), ctx);
-const T = vm.runInContext('({ drafterBarModel, drafterDoneText, drafterTag, drafterSendConfirm, drafterDoneConfirm })', ctx);
+const T = vm.runInContext('({ drafterBarModel, drafterDoneText, drafterTag, drafterSendConfirm, drafterDoneConfirm, drafterTrayTitle, drafterItemLine, drafterAddedToast })', ctx);
 
 const AT = Date.UTC(2026, 10, 10, 12, 30);   // 14:30 בישראל
 check('empty basket', T.drafterBarModel({ basket: [], open: [] }),
@@ -39,8 +39,9 @@ check('done text with held batch', T.drafterDoneText({ moved: [], skipped: [], h
 check('failed batch can be resent', T.drafterBarModel({ basket: [], open: [{ n: 5, at: AT, count: 2, emailState: 'failed' }, { n: 6, at: AT, count: 1, emailState: 'sent' }] }).resend, [5]);
 check('done text nothing', T.drafterDoneText({ moved: [], skipped: [] }), 'אין הזמנות שנשלחו לשרטט ומחכות');
 
-check('tag basket', T.drafterTag({ stage: 'drafter' }), 'בסל');
-check('tag chash basket', T.drafterTag({ stage: 'chash' }), 'בסל');
+check('tag basket', T.drafterTag({ stage: 'drafter' }), 'בטיוטה לשרטט');
+check('tag held', T.drafterTag({ stage: 'drafter', drafterHold: true }), 'לא לשלוח עכשיו');
+check('tag chash basket', T.drafterTag({ stage: 'chash' }), 'בטיוטה לשרטט');
 check('tag sent', T.drafterTag({ stage: 'drafter', drafterBatch: 7 }), 'נשלח · משלוח 7');
 check('tag other stage', T.drafterTag({ stage: 'opty', drafterBatch: 7 }), '');
 
@@ -51,11 +52,19 @@ check('lgNormalizeOrder keeps drafterBatch', /drafterBatch:\s+o\.drafterBatch\s+
 // בן, 10/11: הפס בתור הסקיצות (שם הוא פותח הזמנות ברצף ושולח לחשבשבת), לא במסך הראשי
 const ADM = fs.readFileSync(path.join(ROOT, 'admin.html'), 'utf8');
 const lp = ADM.indexOf('<div id="sqListPanel">');
-check('bar sits at the top of the sketch-queue list', lp > 0 && ADM.indexOf('id="drafterBar"') > lp && ADM.indexOf('id="drafterBar"') < ADM.indexOf('<div id="sqList">'), true);
+check('tray sits at the bottom of the sketch-queue list', lp > 0 && ADM.indexOf('id="drafterBar"') > ADM.indexOf('<div id="sqList">'), true);
+check('tray is sticky at the bottom', /\.drb\{[^}]*position:sticky;[^}]*bottom:0/.test(ADM), true);
 check('only one bar on the page', ADM.split('id="drafterBar"').length - 1, 1);
 check('opening the queue shows the bar', /function openSketchQueue\(\)\{[\s\S]*?lgDrafterBarShow\(true\)[\s\S]*?\n\}/.test(ADM), true);
 check('sending to Hashavshevet refreshes the basket', /updateStage\(id, 'chash'\)\.then\([\s\S]{0,80}lgDrafterBarShow/.test(ADM), true);
 check('status filter no longer drives the bar', /lgDrafterBarShow\(s === 'אצל שרטט'\)/.test(ADM), false);
+
+// מגירת "טיוטה לשרטט" (בן, 10/11)
+check('tray title', [T.drafterTrayTitle({ basket: [1, 2, 3, 4, 5] }), T.drafterTrayTitle({ basket: [1] }), T.drafterTrayTitle({ basket: [] })],
+  ['טיוטה לשרטט · 5 הזמנות', 'טיוטה לשרטט · הזמנה אחת', 'טיוטה לשרטט · ריקה']);
+check('item line', T.drafterItemLine({ orderNum: 'L12', client: 'נאור', sketchName: 'מקלחון רון' }), 'L12 · נאור · מקלחון רון');
+check('added toast', T.drafterAddedToast(6), 'נכנסה לטיוטה לשרטט (6)');
+check('lgNormalizeOrder keeps drafterHold', /drafterHold:\s+o\.drafterHold\s+\?\? null/.test(SRC), true);
 
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nAll drafter-ui checks passed.');

@@ -183,9 +183,13 @@ async function handleAdmin(body, deps) {
   //  agent-status: אילו משתני סביבה מוגדרים — בוליאנים בלבד, אף ערך לא חוזר לדפדפן.
   // ─── משלוחים לשרטט (בן, 10/11) — api/_drafter-batch.js ───────────────
   //  הנמען קבוע בשרת; שום שדה מהבקשה מלבד action לא נקרא.
-  if (action === 'drafter-status' || action === 'drafter-send' || action === 'drafter-done' || action === 'drafter-resend') {
+  if (action === 'drafter-status' || action === 'drafter-send' || action === 'drafter-done' || action === 'drafter-resend' || action === 'drafter-hold') {
     const DB = require('./_drafter-batch');
     const who = { by: String(deps.by || ''), now: deps.now };
+    if (action === 'drafter-hold') {
+      const r = await DB.lgDrafterHold(deps.db, b.id, b.hold === true);
+      return r.ok ? { ok: true, code: '' } : { ok: false, code: r.code, message: 'ההזמנה כבר לא מחכה בטיוטה' };
+    }
     if (action === 'drafter-resend') {
       const n = Number(b.n);
       if (!Number.isInteger(n) || n < 1) return { ok: false, code: 'bad-n', message: 'מספר משלוח לא תקין' };
