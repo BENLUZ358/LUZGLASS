@@ -181,6 +181,54 @@ async function handleAdmin(body, deps) {
 
   // ─── לוח הבקרה לסוכנים (agents.html, 31/10) ────────────────────────────
   //  agent-status: אילו משתני סביבה מוגדרים — בוליאנים בלבד, אף ערך לא חוזר לדפדפן.
+  // ─── משלוחים לשרטט (בן, 10/11) — api/_drafter-batch.js ───────────────
+  //  הנמען קבוע בשרת; שום שדה מהבקשה מלבד action לא נקרא.
+  if (['drafter-status', 'drafter-send', 'drafter-done', 'drafter-resend', 'drafter-hold', 'drafter-preview', 'drafter-file'].includes(action)) {
+    const DB = require('./_drafter-batch');
+    const who = { by: String(deps.by || ''), now: deps.now };
+    const idx = Number(b.idx) || 0;
+    //  הטיוטה כקובץ (לא משנה כלום) / קובץ של משלוח שנשלח — חלק אחד בכל קריאה (≤3MB)
+    if (action === 'drafter-preview') {
+      const p = await DB.lgDrafterPreview(deps.db, who);
+      if (!p.ok) return { ok: false, code: p.code, message: 'הטיוטה ריקה' };
+      const f = p.files[idx];
+      if (!f) return { ok: false, code: 'bad-idx', message: 'אין חלק כזה' };
+      return { ok: true, code: '', parts: p.files.length, name: f.name, b64: f.buf.toString('base64') };
+    }
+    if (action === 'drafter-file') {
+      const n = Number(b.n);
+      if (!Number.isInteger(n) || n < 1) return { ok: false, code: 'bad-n', message: 'מספר משלוח לא תקין' };
+      let f = await DB.lgDrafterStoredFile(deps.db, n, idx);
+      if (!f.ok) {
+        const p = await DB.lgDrafterPdf(deps.db, n);
+        const one = p.ok && p.files[idx];
+        if (!one) return { ok: false, code: p.code || 'bad-idx', message: 'הקובץ לא נמצא' };
+        f = { ok: true, name: one.name, b64: one.buf.toString('base64') };
+      }
+      return { ok: true, code: '', name: f.name, b64: f.b64 };
+    }
+    if (action === 'drafter-done' && b.n != null) {
+      const n = Number(b.n);
+      if (!Number.isInteger(n) || n < 1) return { ok: false, code: 'bad-n', message: 'מספר משלוח לא תקין' };
+      return { code: '', ...(await DB.lgDrafterDone(deps.db, { ...who, n })) };
+    }
+    if (action === 'drafter-hold') {
+      const r = await DB.lgDrafterHold(deps.db, b.id, b.hold === true);
+      return r.ok ? { ok: true, code: '' } : { ok: false, code: r.code, message: 'ההזמנה כבר לא מחכה בטיוטה' };
+    }
+    if (action === 'drafter-resend') {
+      const n = Number(b.n);
+      if (!Number.isInteger(n) || n < 1) return { ok: false, code: 'bad-n', message: 'מספר משלוח לא תקין' };
+      const r = await DB.lgDrafterResend(deps.db, n, who);
+      return r.ok ? { ok: true, code: '' } : { ok: false, code: r.code || 'failed', message: 'השליחה החוזרת נכשלה' };
+    }
+    if (action === 'drafter-status') return { ok: true, code: '', ...(await DB.lgDrafterStatus(deps.db)) };
+    if (action === 'drafter-done') return { code: '', ...(await DB.lgDrafterDone(deps.db, who)) };
+    const r = await DB.lgDrafterSend(deps.db, who);
+    if (!r.ok) return { ok: false, code: r.code, message: 'הסל ריק' };
+    const st = r.email && r.email.key ? ((await deps.db.ref('waMeta/emailOutbox/' + r.email.key + '/state').once('value')).val() || '') : '';
+    return { ok: true, code: '', n: r.n, orderIds: r.orderIds, emailState: st };
+  }
   if (action === 'agent-status') {
     const e = process.env;
     return { ok: true, code: '', status: {

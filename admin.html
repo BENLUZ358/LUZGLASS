@@ -412,6 +412,7 @@ label.msec-t{display:block;}
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
   <script src="sketch-reader-ui.js?v=20261023h"></script>
+  <script src="drafter-batch.js?v=20261111"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -1717,7 +1718,7 @@ function renderTable(){
       <td class="ot-finish"><span class="tag tf">${lgEsc(o.finish)}</span></td>
       <td class="ot-area" style="font-size:12px">${o.area ? o.area + ' מ״ר' : ''}</td>
       <td class="ot-price" style="font-weight:700;color:var(--gold-text)">₪${(lgCalcOrderTotal(o,globalPrices,clientPrices)||o.total||0).toLocaleString()}</td>
-      <td class="ot-status"><span class="badge" style="background:${s.c}">${lgEsc(o.status)}</span></td>
+      <td class="ot-status"><span class="badge" style="background:${s.c}">${lgEsc(o.status)}</span>${(window.drafterTag && window.drafterTag(o)) ? `<br><span class="drb-tag">${lgEsc(window.drafterTag(o))}</span>` : ''}</td>
       <td class="ot-date" style="font-size:12px;color:var(--muted)">${lgEsc(o.date||'')}</td>
       <td class="ot-act"><button class="cb-btn" style="padding:5px 8px" onclick="openMod('${o.id}')">פרטים</button></td>
     </tr>`;
@@ -3020,6 +3021,23 @@ document.addEventListener('visibilitychange', () => {
    44px לכל מה שנוגעים בו, כמו בתחנת הבדיקה. */
 #sqAssignWrap{margin:0 14px 12px;padding:10px 12px;border:1px solid rgba(212,160,23,0.45);border-right:4px solid #d4a017;border-radius:6px;background:#fffaf0;}
 #sqAssignWrap[hidden]{display:none;}
+/* מגירת "טיוטה לשרטט" (בן, 10/11) — drafter-batch.js */
+#drafterBar[hidden]{display:none;}
+.drb{position:sticky;bottom:0;z-index:5;background:var(--surface);border-top:2px solid var(--gold);box-shadow:0 -4px 14px rgba(0,0,0,.12);padding:10px 12px;}
+.drb-head{display:flex;align-items:center;gap:8px;}
+.drb-toggle{flex:1;min-height:44px;text-align:start;background:none;border:0;font:inherit;font-weight:600;color:var(--text);cursor:pointer;padding:0 4px;}
+.drb-caret{color:var(--muted);font-size:12px;}
+.drb-btn{min-height:44px;}
+.drb-body{max-height:50vh;overflow:auto;margin-top:8px;}
+.drb-list{list-style:none;margin:0;padding:0;font-size:14px;}
+.drb-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);}
+.drb-held li span{color:var(--muted);}
+.drb-mini{min-height:44px;padding:4px 10px;font-size:13px;white-space:nowrap;}
+.drb-sub{margin:12px 0 4px;font-size:13px;font-weight:600;color:var(--muted);}
+.drb-empty{margin:4px 0;font-size:14px;color:var(--muted);}
+.drb-done{width:100%;margin-top:10px;}
+.drb-peek{font-size:13px;color:var(--muted);padding:2px 4px 0;}
+.drb-msg{margin-top:8px;font-size:14px;}
 #sqBtnRead[hidden]{display:none !important;}
 .sqa-msg{font-size:13px;line-height:1.5;color:#1a1714;margin-bottom:8px;}
 .sqa-from{direction:ltr;unicode-bidi:isolate;font-weight:700;}
@@ -3458,6 +3476,9 @@ document.addEventListener('visibilitychange', () => {
         <!-- שלב 6: טופלו וממתינים לעדכון ללקוח — רשת ביטחון. _sqRenderAckPending -->
         <div id="sqAckPending" hidden></div>
         <div id="sqList"></div>
+        <!-- מגירת "טיוטה לשרטט" (בן, 10/11) — drafter-batch.js. בתחתית התור: כל הזמנה שנשלחת
+             לחשבשבת נכנסת לטיוטה, ורואים תמיד מה מחכה. כשהתור ריק — "שלח לשרטט". -->
+        <div id="drafterBar" class="drb" hidden></div>
       </div>
 
       <!-- DETAIL -->
@@ -3855,6 +3876,7 @@ function makeDemoSketch(title,client,glass,dims,color){
 
 function openSketchQueue(){
   buildSQItems();
+  if(window.lgDrafterBarShow) window.lgDrafterBarShow(true);   // משלוחים לשרטט (בן, 10/11)
   sqRender();
   const el = document.getElementById('sqOverlay') || document.getElementById('sqEditor');
   if(el) el.style.display = 'flex';
@@ -4595,7 +4617,8 @@ async function sqSendHashavshevet(id, force){
   // אותה הזמנה נשלחת שוב מחר. שליחה משמעה chash, מאיפה שלא באה.
   if((sqStageMap[id] || '') !== 'chash'){
     sqStageMap[id] = 'chash';
-    updateStage(id, 'chash');
+    // נכנסה לסל לשרטט — הפס מתעדכן (בן, 10/11)
+    updateStage(id, 'chash').then(() => { if(window.lgDrafterBarShow) window.lgDrafterBarShow(true, true); }).catch(e => console.warn('chash:', e && e.message));
     sqSaveState();
   }
   const btn   = document.getElementById('sqHbSend') || document.getElementById('sqBtnChash');

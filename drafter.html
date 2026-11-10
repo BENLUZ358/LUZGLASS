@@ -31,6 +31,18 @@ html,body{height:100%;overflow:hidden;}
 
 /* MAIN LAYOUT */
 .main{flex:1;display:flex;overflow:hidden;}
+/* משלוחים לשרטט לפי קובץ (בן, 10/11) — drafter-batch.js */
+.drbs{background:var(--surface);border-bottom:2px solid var(--gold);padding:10px 14px;max-height:40vh;overflow:auto;color:var(--text);}
+.drbs-head{font-weight:600;margin-bottom:6px;}
+.drbs-empty{margin:0;font-size:14px;color:var(--muted);}
+.drbs-card{border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px;}
+.drbs-title{width:100%;min-height:44px;text-align:start;background:none;border:0;font:inherit;font-weight:600;color:var(--text);cursor:pointer;padding:0;}
+.drbs-mail{font-weight:400;font-size:13px;color:var(--muted);}
+.drbs-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+.drbs .drb-btn{min-height:44px;flex:1 1 140px;}
+.drbs .drb-list{list-style:none;margin:4px 0 0;padding:0;font-size:14px;}
+.drbs .drb-list li{padding:5px 0;border-bottom:1px solid var(--border);}
+.drbs .drb-msg{margin-top:8px;font-size:14px;}
 
 /* SIDEBAR - list of queued sketches */
 .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
@@ -153,6 +165,7 @@ html,body{height:100%;overflow:hidden;}
   <!-- ערכת האייקונים המשותפת. הדף היה היחיד שלא טען אותה, ולכן תפריט
        המשתמש שלו — אותו תפריט בדיוק כמו בשאר הדפים — הוצג באמוג'י. -->
   <script src="lg-icons.js?v=20260807"></script>
+  <script src="drafter-batch.js?v=20261111"></script>
 </head>
 <body>
 <a href="#drMain" class="skip-link">דלג לתוכן</a>
@@ -188,6 +201,9 @@ html,body{height:100%;overflow:hidden;}
     <div class="logo">Luz<span>Glass</span></div>
   </div>
 </div>
+
+<!-- משלוחים לשרטט לפי קובץ (בן, 10/11) — drafter-batch.js -->
+<div id="drafterBatches" class="drbs"></div>
 
 <div class="main" id="drMain">
 
@@ -255,6 +271,9 @@ let _showingDoneBanner = false;
 
 // ═══ LOAD ═══
 let _drafterUnsub = null;
+// משלוחים לשרטט (בן, 10/11) — נטען פעם אחת כשהדף עולה
+window.addEventListener('load', () => { if (window.lgDrafterBatchesMount) window.lgDrafterBatchesMount(); });
+
 function load(){
   if(_drafterUnsub) _drafterUnsub();
   _drafterUnsub = listenAllOrders(function(allOrders){

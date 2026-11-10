@@ -212,4 +212,4 @@ async function lgInvoiceDeliver(db, key, deps) {
   return { state: res && res.status === 'sent' ? 'sent' : 'queued', channel: 'whatsapp', result: res || null };
 }
 
-module.exports = { lgInvoiceFiles, lgInvoiceDeliver, lgInvoiceEmailFor, lgIsDeliveryInvoice, LG_INVOICE_EMAIL, LG_DELIVERY_ACCOUNTS };
+module.exports = { _sketch, _dataUrl, lgInvoiceFiles, lgInvoiceDeliver, lgInvoiceEmailFor, lgIsDeliveryInvoice, LG_INVOICE_EMAIL, LG_DELIVERY_ACCOUNTS };
