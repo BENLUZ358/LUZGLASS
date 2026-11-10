@@ -39,8 +39,8 @@ const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteN
         lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
 const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
 const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute, lgAgentEscalatePhone } = require('./_agent-config');
-const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT } = require('./_agent-room');
-const { lgLessonFind, lgLessonUsed } = require('./_agent-lessons');
+const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM } = require('./_agent-room');
+const { lgLessonFind, lgLessonUsed, lgLessonAutoOk } = require('./_agent-lessons');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -666,21 +666,29 @@ async function _act(db, key, rec, recRef, env, now, o) {
                                         deadline: o.deadline, clock: o.clock, reserveMs: 2 * PER_ITEM_WORST_MS });
         } catch (e) { console.warn('agent-act: lessons', e && e.name); lm = null; }
         if (lm && lm.skipped) lessonInfo = { lessonMatch: { skipped: lm.skipped } };
-        else if (lm && lm.id) lessonInfo = { lessonMatch: { id: lm.id, confidence: lm.confidence, auto: !!lm.lesson.autoAt } };
+        else if (lm && lm.id) lessonInfo = { lessonMatch: { id: lm.id, confidence: lm.confidence, auto: lgLessonAutoOk(lm.lesson, cid, lm.confidence) } };
         if (lm && lm.usage) lessonInfo = { ...(lessonInfo || {}), lessonUsage: lm.usage };
       }
+      const from = lm && lm.id ? String(lm.lesson.customerName || lm.lesson.customerId || '') : '';
       //  כלל אוטומטי (3 אישורים ברצף): התשובה ישר ללקוח, בלי "קיבלנו" ובלי בן; בחדר שורה עם "תקן".
-      //  נכשל להיכנס לתור → ממשיכים לצהוב הרגיל.
-      if (lm && lm.id && lm.lesson.autoAt) {
-        if (await enq(k, chat, String(lm.lesson.answer || ''), [], 'agent-lesson')) {
-          await lgRoomPost(db, { agent, kind: 'info', text: 'עניתי לפי מה שאישרת: ' + String(lm.lesson.topic || lm.topic || ''),
-            lessonId: lm.id, lessonAuto: true, topic: lm.lesson.topic, proposal: lm.lesson.answer, customerId: cid, customerName: a.who, chat,
-            question: a.question, outboxKey: lgWaInboundKey(k), ref: { customerId: cid, shadowKey: key } }, now);
-          await lgLessonUsed(db, lm.id, now);
-          continue;
+      //  ⚠️ (תיקון סקירה 11/11) רק לאותו לקוח (או כלל "כללי" בלי ספרה/מחיר/תאריך), ביטחון ≥0.9.
+      //  השורה בחדר נכתבת קודם — בלעדיה אין "תקן", ולכן לא עונים לבד. נכשל להיכנס לתור →
+      //  השורה יורדת וממשיכים לצהוב הרגיל.
+      if (lm && lm.id && lgLessonAutoOk(lm.lesson, cid, lm.confidence)) {
+        const ik = await lgRoomPost(db, { agent, kind: 'info', text: 'עניתי לפי מה שאישרת: ' + String(lm.lesson.topic || lm.topic || ''),
+          lessonId: lm.id, lessonAuto: true, topic: lm.lesson.topic, proposal: lm.lesson.answer, lessonFrom: from, customerId: cid, customerName: a.who, chat,
+          question: a.question, outboxKey: lgWaInboundKey(k), ref: { customerId: cid, shadowKey: key } }, now);
+        if (ik) {
+          if (await enq(k, chat, String(lm.lesson.answer || ''), [], 'agent-lesson')) {
+            if (!askKey) askKey = k;
+            await lgLessonUsed(db, lm.id, now);
+            continue;
+          }
+          try { await db.ref(ROOM + '/' + ik).set(null); } catch (e) { console.warn('agent-act: lesson room undo', e && e.name); }
         }
+        if (lessonInfo && lessonInfo.lessonMatch) lessonInfo.lessonMatch.auto = false;
       }
-      const prop = lm && lm.id ? { lessonId: lm.id, proposal: lm.lesson.answer } : {};
+      const prop = lm && lm.id ? { lessonId: lm.id, proposal: lm.lesson.answer, lessonFrom: from } : {};
       const rk = await lgRoomPost(db, { agent, kind: 'ask', state: 'open', text: a.note || (String(a.who || '') + ': ' + line.slice(0, 200)),
         customerId: cid, customerName: a.who, chat, question: a.question, suggest: a.suggest, note: a.note,
         topic: lm && lm.topic ? lm.topic : undefined, ...prop,

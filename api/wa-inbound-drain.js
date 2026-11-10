@@ -20,6 +20,7 @@
 //                                     אשר / תקן על "אני מציע לענות" (למידה, 11/11)
 //    { action:'agent-lesson-fix', key, text }  "תקן" על תשובה שהסוכן נתן לבד לפי כלל
 //    { action:'agent-lesson-delete', id }  מחיקת כלל (waMeta/agentLessons)
+//    { action:'agent-lesson-general', id, on }  "כללי" — מותר לענות לבד גם ללקוחות אחרים
 //    { action:'agent-dismiss', kind, key, ver }  "טופל" על כרטיס בלוח הבקרה
 //                                     (waMeta/agentDash/dismissed/<kind>_<key>; agents.html, 31/10)
 //
@@ -272,10 +273,9 @@ async function handleAdmin(body, deps) {
   //  התשובה יוצאת ללקוח דרך שכבת השליחה של הסוכנים (אותן הגנות). api/_agent-room.js
   //  למידה (שלב ג׳): כל תשובה שיצאה לתור נשמרת ככלל (גם "ענה אחרת" על צהוב עם הצעה)
   if (action === 'agent-room-answer') {
-    const r = await require('./_agent-room').lgRoomAnswer(deps.db, { key: b.key, text: b.text },
+    //  lgLessonRoomAnswer = lgRoomAnswer + הלמידה ("ענה אחרת" → rejected על הכלל המוצע; "שלח שוב" — בלי כלל כפול)
+    return require('./_agent-lessons').lgLessonRoomAnswer(deps.db, { key: b.key, text: b.text },
       { by: String(deps.by || ''), now: deps.now, provider: deps.provider, sendPending: deps.sendPending });
-    if (r && r.ok) await require('./_agent-lessons').lgLessonFromAnswer(deps.db, b.key, b.text, { by: String(deps.by || ''), now: deps.now });
-    return r;
   }
   // ─── למידה (שלב ג׳, 11/11) — api/_agent-lessons.js ───────────────────────
   //  אשר / תקן על צהוב עם "אני מציע לענות"; "תקן" על תשובה שהסוכן נתן לבד; מחק כלל
@@ -286,6 +286,8 @@ async function handleAdmin(body, deps) {
       { by: String(deps.by || ''), now: deps.now, provider: deps.provider, sendPending: deps.sendPending });
   }
   if (action === 'agent-lesson-delete') return require('./_agent-lessons').lgLessonDelete(deps.db, { id: b.id });
+  //  "כללי" — הכלל רשאי לענות לבד גם ללקוחות אחרים (בלי ספרה/מחיר/תאריך). מאחורי verifyAdmin כמו כל השאר
+  if (action === 'agent-lesson-general') return require('./_agent-lessons').lgLessonGeneral(deps.db, { id: b.id, on: b.on === true });
   //  "סגור" על שאלה פנימית (בדיקות הדופק) — answeredBy 'ben', והבעיה לא עולה שוב לאותו מפתח
   if (action === 'agent-room-close') {
     return require('./_agent-watch').lgWatchDismiss(deps.db, b.key, { by: String(deps.by || ''), now: deps.now });

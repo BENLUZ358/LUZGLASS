@@ -26,6 +26,8 @@ check('proposal shown, escaped', [h.includes('אני מציע לענות: לא &
 check('three buttons: אשר / תקן / ענה אחרת',
   [/<button[^>]*data-lessonok="k1"[^>]*>אשר<\/button>/.test(h), /<button[^>]*data-lessoncorrect="k1"[^>]*>תקן<\/button>/.test(h),
    /<button[^>]*data-roomanswer="k1"[^>]*>ענה אחרת<\/button>/.test(h)], [true, true, true]);
+const from = ctx.lgRoomBubbleHtml(Object.assign({}, prop, { lessonFrom: 'אחר <x>' }), {});
+check('C1: proposal names the source customer', [from.includes('נלמד מ: אחר &lt;x&gt;'), h.includes('נלמד מ')], [true, false]);
 const plain = ctx.lgRoomBubbleHtml(Object.assign({}, prop, { lessonId: undefined, proposal: undefined }), {});
 check('no proposal → the plain ענה button only', [/data-roomanswer="k1"[^>]*>ענה<\/button>/.test(plain), plain.includes('data-lessonok')], [true, false]);
 const answered = ctx.lgRoomBubbleHtml(Object.assign({}, prop, { state: 'answered', outboxKey: 'room_k1' }), { room_k1: { state: 'sent' } });
@@ -46,25 +48,29 @@ check('fixed auto line says so, no button', [fixed.includes('data-autofix'), fix
 
 // ─── מה הסוכנים למדו ───────────────────────────────────────────────────
 const lessons = {
-  L1: { agent: 'markazan', topic: 'זכוכית חכמה', answer: 'לא', approvals: 3, corrections: 0, autoAt: NOW, createdAt: NOW - 2 },
+  L1: { agent: 'markazan', topic: 'זכוכית חכמה', answer: 'לא', approvals: 3, corrections: 0, autoAt: NOW, createdAt: NOW - 2, customerName: 'כהן', general: true },
   L2: { agent: 'markazan', topic: 'שעות', answer: 'עד 16', approvals: 1, corrections: 1, createdAt: NOW - 1 },
   L3: { agent: 'archive', topic: '<b>חשבוניות</b>', answer: 'במייל', approvals: 0, corrections: 0, createdAt: NOW },
   bad: null,
 };
 const rows = J(ctx.lgLessonRows(lessons));
 check('rows grouped by agent order, newest first inside', rows.map(r => [r.agent, r.id]), [['markazan', 'L2'], ['markazan', 'L1'], ['archive', 'L3']]);
-check('row fields', rows[1], { id: 'L1', agent: 'markazan', agentName: 'מרכזן', topic: 'זכוכית חכמה', answer: 'לא', approvals: 3, corrections: 0, auto: true });
+check('row fields', rows[1], { id: 'L1', agent: 'markazan', agentName: 'מרכזן', topic: 'זכוכית חכמה', answer: 'לא', approvals: 3, corrections: 0, auto: true,
+  customerName: 'כהן', general: true });
 const lh = ctx.lgLessonsHtml(lessons);
 check('list: per-agent headings, auto yes/no, approvals, מחק', [lh.includes('מרכזן'), lh.includes('ארכיון'), lh.includes('עונה לבד'), lh.includes('מציע ושואל'),
   /<button[^>]*data-lessondel="L1"[^>]*>מחק<\/button>/.test(lh), lh.includes('&lt;b&gt;חשבוניות')], [true, true, true, true, true, true]);
+check('C1: list shows the source customer + a "כללי" toggle',
+  [lh.includes('נלמד מ: כהן'), /<button[^>]*data-lessongen="L1"[^>]*data-on="0"[^>]*>[^<]*כללי/.test(lh), /<button[^>]*data-lessongen="L2"[^>]*data-on="1"[^>]*>[^<]*כללי/.test(lh)],
+  [true, true, true]);
 check('empty list', ctx.lgLessonsHtml({}).includes('עוד לא'), true);
 check('count', [ctx.lgLessonCount(lessons), ctx.lgLessonCount(null)], [3, 0]);
 
 // ─── הדף ───────────────────────────────────────────────────────────────
 check('folded section "מה הסוכנים למדו"', /<details[^>]*id="secLessons"[\s\S]{0,300}מה הסוכנים למדו/.test(P), true);
 check('reads waMeta/agentLessons', /waMeta\/agentLessons/.test(P), true);
-check('every lesson write goes through the drain', ['agent-lesson-approve', 'agent-lesson-correct', 'agent-lesson-fix', 'agent-lesson-delete']
-  .map(a => new RegExp("action:\\s*'" + a + "'").test(P)), [true, true, true, true]);
+check('every lesson write goes through the drain', ['agent-lesson-approve', 'agent-lesson-correct', 'agent-lesson-fix', 'agent-lesson-delete', 'agent-lesson-general']
+  .map(a => new RegExp("action:\\s*'" + a + "'").test(P)), [true, true, true, true, true]);
 check('delete asks first', /dataset\.lessondel\) \{[\s\S]{0,40}confirm\(/.test(P), true);
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

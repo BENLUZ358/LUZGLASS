@@ -510,7 +510,7 @@ document.addEventListener('click', async ev => {
   if (ev.target.closest('[data-ancancel]')) { ANSWERING = ''; DRAFT = ''; MODE = ''; renderRoom(); return; }
   const be = ev.target.closest('[data-benedit]');
   if (be) { EDIT_BEN = be.dataset.benedit === '1'; renderSwitches(); return; }
-  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave],[data-roomclose],[data-lessonok],[data-lessondel]');
+  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave],[data-roomclose],[data-lessonok],[data-lessondel],[data-lessongen]');
   if (!b) return;
   let body;
   if (b.dataset.dismiss) body = { action: 'agent-dismiss', kind: b.dataset.dismiss, key: b.dataset.key, ver: Number(b.dataset.ver) };
@@ -534,6 +534,11 @@ document.addEventListener('click', async ev => {
     if (!confirm('למחוק את הכלל? הסוכן ישאל אותך שוב על שאלות כאלה.')) return;
     body = { action: 'agent-lesson-delete', id: b.dataset.lessondel };
   }
+  else if (b.dataset.lessongen) {
+    const on = b.dataset.on === '1';
+    if (on && !confirm('לסמן ככללי? הסוכן יוכל לענות לבד גם ללקוחות אחרים (רק כשאין בתשובה מספר, מחיר או תאריך).')) return;
+    body = { action: 'agent-lesson-general', id: b.dataset.lessongen, on };
+  }
   else if (b.dataset.roomclose) body = { action: 'agent-room-close', key: b.dataset.roomclose };
   else if (b.hasAttribute('data-bensave')) body = { action: 'agent-config-set', escalatePhone: ($('benPick') || {}).value || '' };
   else if (b.hasAttribute('data-dellive')) {
@@ -549,6 +554,7 @@ document.addEventListener('click', async ev => {
   else if (body.action === 'agent-room-close') toast('נסגר — לא יעלה שוב עד שהבעיה תיעלם');
   //  מה קרה באמת (תיקון סקירה 10/11): נשלח / עדיין בתור / לא נשלח — והשאלה חוזרת לפתוחה
   else if (body.action === 'agent-lesson-delete') toast('הכלל נמחק');
+  else if (body.action === 'agent-lesson-general') toast(body.on ? 'סומן ככללי' : 'עכשיו רק ללקוח שממנו נלמד');
   else if (['agent-room-answer', 'agent-lesson-approve', 'agent-lesson-correct', 'agent-lesson-fix'].includes(body.action)) {
     ANSWERING = ''; DRAFT = ''; MODE = '';
     if (r.auto && body.action === 'agent-lesson-approve') toast('אישרת 3 פעמים ברצף — מעכשיו הסוכן עונה לבד על זה');

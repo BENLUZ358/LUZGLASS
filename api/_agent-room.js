@@ -12,7 +12,7 @@
 //      suggest?, note? — ו-answeredAt/By, outboxKey אחרי שבן ענה.
 //    ⚠️ ask בלי state (הצעת צרופה בתור, _attach-suggest) — לא שאלה לבן; נענית בתור.
 //    ask עם internal:true (בדיקות הדופק, _agent-watch) — אין לקוח לענות לו; נסגר לבד (lgRoomClose).
-//    למידה (שלב ג׳, _agent-lessons.js): ask עם lessonId + proposal ("אני מציע לענות"), topic;
+//    למידה (שלב ג׳, _agent-lessons.js): ask עם lessonId + proposal ("אני מציע לענות"), topic, lessonFrom (נלמד מ);
 //      info עם lessonAuto:true + lessonId ("עניתי לפי מה שאישרת") — ואחרי "תקן" fixOutboxKey.
 //  waMeta/agentRoomOpen/<מפתח> = { at, agent, customer } — אינדקס קטן של השאלות הפתוחות
 //    (תיקון סקירה 10/11): נכתב כשנפתחת שאלה, יורד כשבן עונה, חוזר אם התשובה לא יצאה.
@@ -71,7 +71,8 @@ async function lgRoomPost(db, e, now) {
       internal: x.internal === true ? true : null,
       //  למידה (שלב ג׳, _agent-lessons): הצעה מכלל / תשובה אוטומטית לפי כלל
       lessonId: _keyOk(x.lessonId) ? x.lessonId : null, proposal: _s(x.proposal, 1000), topic: _s(x.topic, 80),
-      lessonAuto: x.lessonAuto === true ? true : null };
+      lessonAuto: x.lessonAuto === true ? true : null,
+      lessonFrom: _s(x.lessonFrom, 120) };   // הלקוח שממנו הכלל נלמד ("נלמד מ: …")
     Object.keys(extra).forEach(k => { if (extra[k] != null) rec[k] = extra[k]; });
     await db.ref(ROOM + '/' + key).set(rec);
     if (rec.kind === 'ask' && rec.state === 'open') await _openIdx(db, key, rec);
