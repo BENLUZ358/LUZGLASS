@@ -527,7 +527,7 @@
           <strong style="color:var(--chisum)">הגיע חיסום!</strong><br>
           <span id="chisumArrivedCount" style="font-size:12px;color:var(--muted)"></span>
         </div>
-        <button class="btn btn-purple" onclick="resetChisumList()" style="white-space:nowrap">✓ סיום בדיקה ואיפוס רשימה</button>
+        <button class="btn btn-purple" onclick="resetChisumList('chisum')" style="white-space:nowrap">✓ סיום בדיקה ואיפוס רשימה</button>
       </div>
       <div class="available-section">
         <div class="avail-title">רשימת חיסום</div>
@@ -546,7 +546,7 @@
           <strong style="color:#0e7490">טריפלקס חזר!</strong><br>
           <span id="triplexArrivedCount" style="font-size:12px;color:var(--muted)"></span>
         </div>
-        <button class="btn" style="background:#0e7490;color:#fff;white-space:nowrap" onclick="resetChisumList()">✓ סיום בדיקה ואיפוס רשימה</button>
+        <button class="btn" style="background:#0e7490;color:#fff;white-space:nowrap" onclick="resetChisumList('triplex')">✓ סיום בדיקה ואיפוס רשימה</button>
       </div>
       <div class="available-section">
         <div class="avail-title">טריפלקס במפעל</div>
@@ -3351,10 +3351,18 @@ async function _confirmChisumReportArrived(ids, reportNum, ov){
 // מטאב הטריפלקס ענתה "אין הזמנות בבדיקה" בזמן שהרשימה מלאה.
 //
 // הגדרה אחת לשני הקוראים — הדיאלוג והפעולה — כדי שלא יסתרו שוב.
-function _ordersUnderCheck(){
-  return allOrders.filter(o =>
-    (o.stage||'') === 'chisum' && (!!o.chisumArrived || !!o.triplexArrived));
+//  track: מאיזו לשונית לחצו "סיום בדיקה". בן, 10/11: דוח טריפלקס הוא דוח
+//  נפרד — הכפתור בלשונית הטריפלקס עבר גם על כל הזמנות החיסום, ושלוש הזמנות
+//  חיסום (L1182, L1199, L1174) נרשמו כשבורות כשאישר טריפלקס. עכשיו כל לשונית
+//  מטפלת רק בהזמנות שהדוח שלה חזר. בלי track (קריאות אחרות) — כמו קודם, שתיהן.
+function _ordersUnderCheck(track){
+  return allOrders.filter(o => (o.stage||'') === 'chisum' && (
+    track === 'chisum'  ? !!o.chisumArrived :
+    track === 'triplex' ? !!o.triplexArrived :
+                          (!!o.chisumArrived || !!o.triplexArrived)));
 }
+//  הלשונית של הדיאלוג הפתוח — האישור עובד על אותה רשימה שהדיאלוג הציג
+let _resetTrack = 'chisum';
 
 function _factoryDoneState(o){
   const sid         = String(o.id);
@@ -3393,8 +3401,9 @@ function _closeArrived(sid, idxs, track){
                   showToast('⚠️ הסגירה לא נשמרה — בדוק חיבור'); });
 }
 
-function resetChisumList(){
-  const chisumOrds = _ordersUnderCheck();
+function resetChisumList(track){
+  _resetTrack = track === 'triplex' ? 'triplex' : 'chisum';
+  const chisumOrds = _ordersUnderCheck(_resetTrack);
   if(!chisumOrds.length){ showToast('אין הזמנות בבדיקה'); return; }
 
   const doneOrds = [], partialOrds = [], waitingTriplex = [], unchangedOrds = [], waitPolish = [], brokenOrds = [];
@@ -3409,7 +3418,7 @@ function resetChisumList(){
 
     // allArrivedNow ולא sessionArrived — הסימונים נשמרים ל-Firebase מיד,
     // אז אחרי רענון הם קיימים ב-existingArrived והסשן ריק.
-    o._broken = _brokenPlanOf(o, st);
+    o._broken = _brokenPlanOf(o, st, _resetTrack);
     if(st.done && _waitsForPolish(o))      waitPolish.push(o);
     else if(st.done)                       doneOrds.push(o);
     else if(o._broken)                     brokenOrds.push(o);
@@ -3500,7 +3509,7 @@ function confirmResetChisum(){
   _confirmingResetChisum = true;
   try {
   document.querySelectorAll('[style*=fixed]').forEach(el => el.remove());
-  const chisumOrds  = _ordersUnderCheck();
+  const chisumOrds  = _ordersUnderCheck(_resetTrack);
   let doneCount     = 0;
   let partialCount  = 0;
   let msgCount      = 0;
@@ -3528,7 +3537,7 @@ function confirmResetChisum(){
     // שבר בחיסום (בן, 10/11): לקוח הובלות — מה שלא חזר נרשם שבור, וההזמנה
     // ממשיכה בדיוק כמו הזמנה שהושלמה. הרישום נכתב לפני ההתקדמות, כי ההתקדמות
     // מוחקת את רשימות הסימון — ובלעדיו השבור היה נעלם.
-    const broken = st.done ? null : _brokenPlanOf(o, st);
+    const broken = st.done ? null : _brokenPlanOf(o, st, _resetTrack);
     if(broken){
       brokenCount++;
       const at = Date.now(), rec = {};
@@ -3747,7 +3756,12 @@ function _finishPlan(){
 //  null = אין שינוי מהיום. אחרת [{idx, track}] — מה שלא חזר ויירשם שבור.
 //  ההחלטה עצמה ב-lgBrokenPlan (firebase-db.js, test-broken-chisum); כאן רק
 //  איסוף הנתונים מהמסך.
-function _brokenPlanOf(o, st){
+function _brokenPlanOf(o, st, track){
+  //  שבר נרשם רק מ"סיום בדיקה" של לשונית החיסום — לא מאישור טריפלקס (בן, 10/11)
+  if(track === 'triplex') return null;
+  //  נאור חזקיה והמקום לאמבט: יש להם חשבונית חלקית — מה שחזר יוצא ומחויב, ומה
+  //  שלא חזר מחכה בחיסום. שבר לא חל עליהם (בן, 10/11).
+  if(lgPartialInvoiceOrder(o)) return null;
   st = st || _factoryDoneState(o);
   const cid = String(o.customerId || '');
   const isDel = !!o.deliveryClient || _isDeliveryClient(o.orderClient, o.phone, o.customerId)

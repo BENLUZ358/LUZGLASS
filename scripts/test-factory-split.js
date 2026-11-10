@@ -349,8 +349,10 @@ check('the waiting breakdown counts the report, not every item in the orders',
    second flow that could disagree with the first. */
 check('the triplex tab has a finish button',
       /id="triplexArrivedBar"/.test(workday), true);
-check('and it opens the same dialog as chisum',
-      /triplexArrivedBar[\s\S]{0,700}?onclick="resetChisumList\(\)"/.test(workday), true);
+//  בן, 10/11: אותו דיאלוג, אבל רק על הזמנות שדוח הטריפלקס שלהן חזר — אישור
+//  טריפלקס רשם שבר על הזמנות חיסום שלא היו קשורות אליו.
+check('and it opens the same dialog, for the triplex report only',
+      /triplexArrivedBar[\s\S]{0,700}?onclick="resetChisumList\('triplex'\)"/.test(workday), true);
 check('the bar appears only while something is open to mark',
       /_pendingIdxsOf\(o, 'triplex'\)\.length/.test(workday), true);
 
@@ -363,12 +365,12 @@ check('the bar appears only while something is open to mark',
 
    One definition, shared, so the two cannot disagree again. */
 check('there is a single definition of what is under check',
-      /function _ordersUnderCheck\(\)/.test(workday), true);
+      /function _ordersUnderCheck\(track\)/.test(workday), true);
 check('it accepts either report having come back',
       /!!o\.chisumArrived \|\| !!o\.triplexArrived/.test(workday), true);
 for (const fn of ['resetChisumList', 'confirmResetChisum']) {
   const body = (workday.match(new RegExp('function ' + fn + '\\([\\s\\S]*?\\n}')) || [''])[0];
-  check(fn + ' uses it', /_ordersUnderCheck\(\)/.test(body), true);
+  check(fn + ' uses it', /_ordersUnderCheck\(_resetTrack\)/.test(body), true);
 }
 check('neither selects on chisumArrived alone any more',
       /allOrders\.filter\(o => \(o\.stage\|\|''\) === 'chisum' && !!o\.chisumArrived\);/.test(workday), false);
