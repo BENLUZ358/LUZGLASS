@@ -55,7 +55,9 @@ const lp = ADM.indexOf('<div id="sqListPanel">');
 check('tray sits at the bottom of the sketch-queue list', lp > 0 && ADM.indexOf('id="drafterBar"') > ADM.indexOf('<div id="sqList">'), true);
 check('tray is sticky at the bottom', /\.drb\{[^}]*position:sticky;[^}]*bottom:0/.test(ADM), true);
 check('only one bar on the page', ADM.split('id="drafterBar"').length - 1, 1);
-check('opening the queue shows the bar', /function openSketchQueue\(\)\{[\s\S]*?lgDrafterBarShow\(true\)[\s\S]*?\n\}/.test(ADM), true);
+// בן, 10/11: הטיוטה רק בלשונית "נראה" — ב"עוד לא נראה" לא מתעסקים בשרטט
+check('opening the queue shows the drawer only in "נראה"', /function openSketchQueue\(\)\{[\s\S]*?lgDrafterBarShow\(sqSeenTab === 'seen'\)[\s\S]*?\n\}/.test(ADM), true);
+check('switching tabs shows/hides the drawer', /function sqSetSeenTab\(tab\)\{[\s\S]{0,900}lgDrafterBarShow\(sqSeenTab === 'seen'\)/.test(ADM), true);
 check('sending to Hashavshevet refreshes the basket', /updateStage\(id, 'chash'\)\.then\([\s\S]{0,80}lgDrafterBarShow/.test(ADM), true);
 check('status filter no longer drives the bar', /lgDrafterBarShow\(s === 'אצל שרטט'\)/.test(ADM), false);
 
