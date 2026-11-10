@@ -23,6 +23,7 @@
 const { lgHookTokenOk } = require('./_hook-token');
 const { lgAgentSendPending, lgAgentEnqueue, lgAgentStaffAll } = require('./_agent-send');
 const { lgAgentMode } = require('./_agent-config');
+const { lgRoomPost } = require('./_agent-room');
 const { lgAgentShadowPending, lgAgentShadowProcess, SHADOW } = require('./_agent-shadow');
 const { lgWaSenderKey } = require('./_wa-recipient');
 
@@ -62,10 +63,13 @@ async function lgAgentDailySummary(db, now) {
   const cancels = _vals(await db.ref(CANCELS).once('value'));
   //  תיקון סופי 2: הודעות שנחסמו בשליחה ב-24 השעות האחרונות (לפי updatedAt)
   const blocked = _vals(await db.ref(OUTBOX).once('value')).filter(r => r.v.state === 'blocked' && (r.v.updatedAt || 0) >= since);
+  //  חדר הסוכנים (10/11): שאלות לבן שעוד מחכות (ask עם state — לא הצעות הצרופה)
+  const benOpen = _vals(await db.ref('waMeta/agentRoom').once('value')).filter(r => r.v.kind === 'ask' && r.v.state === 'open');
 
   const acted = shadow.filter(r => r.v.acted === true);
   const toShaul = acted.filter(r => (r.v.wouldAct || []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask')));
-  const toShaulKeys = new Set(toShaul.map(r => r.key));
+  const toBen = acted.filter(r => (r.v.wouldAct || []).some(a => a && a.type === 'ask'));
+  const toShaulKeys = new Set([...toShaul, ...toBen].map(r => r.key));
   const waiting = quotes.filter(r => r.v.state === 'waiting');
   const stuck = quotes.filter(r => (r.v.state === 'waiting' || r.v.state === 'relaying') && r.v.at && now - r.v.at > STUCK_MS);
   const hsWait = cancels.filter(r => r.v.confirmed === true && r.v.hsSent === true && !r.v.done);
@@ -73,6 +77,8 @@ async function lgAgentDailySummary(db, now) {
     incoming: shadow.length,
     selfClosed: acted.filter(r => r.v.route !== 'shaul' && !toShaulKeys.has(r.key)).length,
     toShaul: toShaul.length,
+    toBen: toBen.length,
+    benOpen: benOpen.length,
     quotesWaiting: waiting.length,
     cancelsWaitingHs: hsWait.length,
     markedWrong: shadow.filter(r => r.v.verdict && r.v.verdict.ok === false).length,
@@ -87,6 +93,7 @@ async function lgAgentDailySummary(db, now) {
     'הודעות שנכנסו: ' + counts.incoming,
     'נסגרו לבד: ' + counts.selfClosed,
     'הועברו לשאול: ' + counts.toShaul,
+    'שאלות לבן: ' + counts.toBen + ' (מחכות לתשובה: ' + counts.benOpen + ')',
     'הצעות מחיר שמחכות לשאול: ' + counts.quotesWaiting + _list(waiting.map(num)),
     'ביטולים שמחכים לחשבשבת: ' + counts.cancelsWaitingHs + _list(hsWait.map(orderNum)),
     'סומנו ✗ בפאנל: ' + counts.markedWrong,
@@ -123,12 +130,17 @@ async function lgAgentDailyRun(req, deps) {
   const shadowOn = env.AGENT_SHADOW_ENABLED === 'true';
   if (shadowOn) {
     //  המתג של המנהל במסך (waMeta/agentConfig; בלעדיו — AGENT_REPLY_ENABLED כמו קודם)
+    //  הסיכום תמיד גם בחדר (מוצמד במסך הסוכנים); בוואטסאפ — רק כשהמנהל "עונה"
+    let sum = null;
+    try {
+      sum = await lgAgentDailySummary(db, now);
+      body.summary = sum.counts;
+      await lgRoomPost(db, { agent: 'manager', kind: 'summary', text: sum.text }, now);
+    } catch (e) { body.failed++; console.warn('agent-daily: summary', e && e.name); }
     if (await lgAgentMode(db, 'manager', env) !== 'reply') {
       body.skipped = [{ reason: 'המנהל לא במצב "עונה" — הסיכום לא נשלח' }];
-    } else {
+    } else if (sum) {
       try {
-        const sum = await lgAgentDailySummary(db, now);
-        body.summary = sum.counts;
         const staff = await lgAgentStaffAll(db, env);
         const date = _jerDate(now).iso;
         const to = String(env.AGENT_SUMMARY_TO || '').split(',').map(s => lgWaSenderKey(s.trim())).filter(Boolean);

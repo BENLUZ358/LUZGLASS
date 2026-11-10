@@ -70,9 +70,9 @@ const F = (db, ref, text) => ar.lgArchiveFind(db, { customerId: '777', ref, text
   /* ── lgArchiveActions (טהור) ── */
   const r = { customerName: 'כהן זכוכית', text: 'חשבונית 99999', ref: '99999' };
   check('actions: not found', ar.lgArchiveActions(r, { kind: 'none' }, NOW).actions,
-    [{ type: 'staff', text: 'ביקשו חשבונית 99999 — לא נמצא אצל כהן זכוכית' }, { type: 'reply', text: 'אני בודק ואחזור אליך' }]);
-  check('actions: sketch not found wording', ar.lgArchiveActions({ ...r, text: 'סקיצה כהן', ref: 'כהן' }, { kind: 'none' }, NOW).actions[0].text,
-    'ביקשו סקיצה כהן — לא נמצא אצל כהן זכוכית');
+    [{ type: 'ask', who: 'כהן זכוכית', question: 'חשבונית 99999', note: 'ביקשו חשבונית 99999 — לא נמצא' }]);
+  check('actions: sketch not found wording', ar.lgArchiveActions({ ...r, text: 'סקיצה כהן', ref: 'כהן' }, { kind: 'none' }, NOW).actions[0].note,
+    'ביקשו סקיצה כהן — לא נמצא');
   check('actions: invoice + sketches',
     ar.lgArchiveActions(r, { kind: 'invoice', invoiceKey: 'k1', orderIds: ['o1'] }, NOW).actions,
     [{ type: 'files', text: 'מצורף', files: [{ kind: 'invoice-copy', invoiceKey: 'k1' }, { kind: 'sketch', orderId: 'o1' }] }]);
@@ -87,7 +87,7 @@ const F = (db, ref, text) => ar.lgArchiveFind(db, { customerId: '777', ref, text
   const dw = act.lgAgentDecide({ rec: { ...base, timestamp: NOW + 1000, text: '2', route: 'shaul', intent: 'unclear' }, orders, conv: dm.conv, now: NOW + 1000 });
   check('which "2" -> sketch of 2nd', dw, { actions: [{ type: 'files', text: 'מצורף', files: [{ kind: 'sketch', orderId: 'o4' }] }], conv: null });
   const dn = act.lgAgentDecide({ rec: { ...base, text: 'חשבונית 5' }, orders: [], conv: null, now: NOW });
-  check('decide without archive result -> shaul handoff', dn.actions.map(a => a.type), ['staff', 'reply']);
+  check('decide without archive result -> ask Ben', dn.actions.map(a => a.type), ['ask']);
 
   /* ── lgAgentAct מקצה לקצה ── */
   const put = (d, k, rr) => { d._data.waMeta.agentShadow = d._data.waMeta.agentShadow || {}; d._data.waMeta.agentShadow[k] = { idMessage: 'M', chatId: PRIV, groupId: '', sender: '0501234567',
@@ -111,8 +111,8 @@ const F = (db, ref, text) => ar.lgArchiveFind(db, { customerId: '777', ref, text
     const d = seed(); put(d, 'a2', { text: 'חשבונית 55555', ref: '55555' });
     await act.lgAgentAct(d, 'a2', { env: ON, now: NOW, sendPending: stub });
     const o = outbox(d);
-    check('act: other customer invoice -> staff + hold only', o.map(e => [e.to, e.text, e.files || []]).sort(),
-      [[SHAUL, 'ביקשו חשבונית 55555 — לא נמצא אצל כהן זכוכית', []], [PRIV, 'אני בודק ואחזור אליך', []]].sort());
+    check('act: other customer invoice -> Ben + hold only', o.map(e => [e.to, e.text.split('\n')[0], e.files || []]).sort(),
+      [['0547725552', 'יש שאלה שמחכה לך בחדר הסוכנים: כהן זכוכית — חשבונית 55555', []], [PRIV, 'קיבלנו, אנחנו בודקים ונחזור אליך בהקדם.', []]].sort());
     check('act: no invoice-copy file queued', JSON.stringify(o).includes('invoice-copy'), false);
   }
   {

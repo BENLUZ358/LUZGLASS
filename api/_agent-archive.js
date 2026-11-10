@@ -127,8 +127,9 @@ function lgArchiveActions(r, found, now) {
   }
   const w = lgArchiveWants(r.text);
   const what = w.want === 'sketch' || (w.want === 'any' && !/^\s*\d+\s*$/.test(String(r.ref || ''))) ? 'סקיצה' : 'חשבונית';
-  return { actions: [{ type: 'staff', text: 'ביקשו ' + what + ' ' + String(r.ref || '') + ' — לא נמצא אצל ' + who },
-                     { type: 'reply', text: ARCHIVE_HOLD_TEXT }], archived: true };
+  //  לא נמצא → "לא יודע → בן" (חדר הסוכנים, בן 10/11): צהוב בחדר + "קיבלנו" ללקוח (הביצוע ב-_agent-act)
+  const note = ['ביקשו', what, String(r.ref || '').trim()].filter(Boolean).join(' ') + ' — לא נמצא';
+  return { actions: [{ type: 'ask', who, question: String(r.text || '').trim(), note }], archived: true };
 }
 
 module.exports = { ARCHIVE_OK_TEXT, ARCHIVE_HOLD_TEXT, lgArchiveWants, lgArchiveFind, lgArchiveActions };

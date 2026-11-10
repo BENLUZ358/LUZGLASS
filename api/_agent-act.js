@@ -38,7 +38,8 @@ const { lgArchiveFind, lgArchiveActions, ARCHIVE_OK_TEXT } = require('./_agent-a
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
         lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
 const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
-const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute } = require('./_agent-config');
+const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute, lgAgentEscalatePhone } = require('./_agent-config');
+const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT } = require('./_agent-room');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -86,12 +87,13 @@ const _who = r => String(r.customerName || r.sender || '');
 const _forward = r => ({ type: 'staff', text: '', files: [{ kind: 'forward', fromChat: String(r.chatId || ''), idMessage: String(r.idMessage || '') }] });
 const _body = r => String(r.text || '').trim() || (r.hasImage ? '(תמונה)' : '');
 
-// ── שאול: כל מה שהסוכנים לא מטפלים בו ──
-//  R5: לא מקושר → כלום, גם לא לשאול (הטלפון של המפעל כבר מראה אותם; סכנת
-//  ספאם). נספרים בסיכום היומי (משימה 8).
-function _handoff(r) {
+// ── "לא יודע → בן" (חדר הסוכנים, בן 10/11): שאלת לקוח שאף סוכן לא יודע ──
+//  במקום שאול: ללקוח "קיבלנו, בודקים", בחדר הודעה צהובה, ולבן וואטסאפ קצר
+//  (הביצוע ב-_act). הודעות לרצפה (שינוי / ביטול מאוחר) נשארות אצל שאול.
+//  R5: לא מקושר → כלום (הטלפון של המפעל כבר מראה אותם; סכנת ספאם).
+function _ask(r, extra) {
   if (!r.linked) return [];
-  return [_staff(_who(r) + ': ' + _body(r)), ...(r.hasImage ? [_forward(r)] : []), _reply(AGENT_HANDOFF_TEXT)];
+  return [{ type: 'ask', who: _who(r), question: _body(r), ...(extra || {}), ...(r.hasImage ? { files: [_forward(r).files[0]] } : {}) }];
 }
 
 // ── מאוחר מדי לביטול/שינוי: התשובה ללקוח + שאול לידיעה (תיקון סופי 3) ──
@@ -249,7 +251,7 @@ function _route(r, orders, now, keep, archive, quote, price) {
     // ארכיון: תוצאת החיפוש (lgArchiveFind, בשכבה הלא-טהורה) מגיעה ב-p.archive.
     // לא סופקה (אין חיפוש) → שאול, כמו קודם. 'many' מחליף conv בשאלת "על איזו".
     case 'archive': {
-      if (!archive) return { actions: _handoff(r), conv: keep };
+      if (!archive) return { actions: _ask(r), conv: keep };
       const a = lgArchiveActions(r, archive, now);
       return { actions: a.actions, conv: a.conv || keep };
     }
@@ -260,7 +262,7 @@ function _route(r, orders, now, keep, archive, quote, price) {
       if (r.hasImage) return { actions: [_reply(QUOTE_HOLD_TEXT), { type: 'quote-ask', who: _who(r), files: [_forward(r).files[0]] }], conv: keep };
       const pr = quote && quote.ok ? quote.priced : null;
       if (pr && pr.lines.length && !pr.missing.length) return { actions: [_reply(lgQuoteText(pr))], conv: keep };
-      return { actions: _handoff(r), conv: keep };
+      return { actions: _ask(r), conv: keep };
     }
     // טענת מחיר / זיכוי (בן, 5/11): תמיד לשאול, עם הבדיקה מול המחירון של הלקוח
     //  (p.price מהשכבה הלא-טהורה; אין — 'לא זוהה'). ללקוח: "קיבלנו, בודקים".
@@ -270,7 +272,7 @@ function _route(r, orders, now, keep, archive, quote, price) {
       return { actions: [_staff(lgPriceStaffText(check, _who(r), _body(r))), ...(r.hasImage ? [_forward(r)] : []),
                          _reply(PRICE_HOLD_TEXT)], conv: keep };
     }
-    case 'shaul': return { actions: _handoff(r), conv: keep };
+    case 'shaul': return { actions: _ask(r), conv: keep };
     // קולט — סקיצה שנמחקה. conv חדש (שאלת "לבטל?") מחליף; אחרת נשאר
     case 'kolet-deleted': { const x = _deleted(r, orders, now); return { actions: x.actions, conv: x.conv || keep }; }
     default: return { actions: [], conv: keep };   // kolet (הקליטה הקיימת), none, ignore
@@ -545,7 +547,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
   //  לא פועלים). מתגים כבויים (צל) → מחפשים, כדי ש-wouldAct יראה מה היה נשלח.
   const _pilotOn = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
   const agent = lgAgentOfRoute(rec.route);
-  const agentMode = lgAgentModeOf(await lgAgentConfig(db), agent, env);
+  const cfg = await lgAgentConfig(db);
+  const agentMode = lgAgentModeOf(cfg, agent, env);
   let archive;
   const _archiveGate = async () => agentMode !== 'reply'
     || (await _pilotOn(cid) && (rec.linkVia != null ? ['group', 'sender'].includes(String(rec.linkVia))
@@ -646,6 +649,16 @@ async function _act(db, key, rec, recRef, env, now, o) {
       const fl = a.files || [];
       for (let j = 0; j < fl.length; j++) await enq(k + '_f' + j, chat, j === 0 ? (a.text || '') : '', [fl[j]], 'agent-files');
       if (!fl.length && a.text) await enq(k, chat, a.text, [], 'agent-files');
+    }
+    else if (a.type === 'ask') {
+      //  "לא יודע → בן": צהוב בחדר + וואטסאפ קצר לבן; ללקוח "קיבלנו" רק אם לפחות
+      //  אחד מהם באמת נכתב (אחרת היינו מבטיחים בדיקה שאף אחד לא יודע עליה)
+      const line = String(a.question || '').split('\n').map(x => x.trim()).filter(Boolean)[0] || '';
+      const rk = await lgRoomPost(db, { agent, kind: 'ask', state: 'open', text: a.note || (String(a.who || '') + ': ' + line.slice(0, 200)),
+        customerId: cid, customerName: a.who, chat, question: a.question, suggest: a.suggest, note: a.note,
+        ref: { customerId: cid, shadowKey: key } }, now);
+      const benOk = await enq(k + '_b', lgAgentEscalatePhone(cfg), lgRoomAskBenText(a.who, a.question, env), a.files || [], 'agent-ask', '');
+      if (rk || benOk) await enq(k, chat, ASK_HOLD_TEXT, [], 'agent-reply');
     }
     else if (a.type === 'quote-ask') {
       // t6-3: הבקשה נשמרת רק אחרי שהודעה לשאול נכנסה לתור (ועוד לפני השליחה,

@@ -251,6 +251,12 @@ async function handleAdmin(body, deps) {
       summary: !!e.AGENT_SUMMARY_TO, cron: !!e.CRON_SECRET },
       config: AC.lgAgentConfigView(await AC.lgAgentConfig(deps.db), e) };
   }
+  // ─── חדר הסוכנים: בן עונה על שאלה צהובה (בן, 10/11) ─────────────────────
+  //  התשובה יוצאת ללקוח דרך שכבת השליחה של הסוכנים (אותן הגנות). api/_agent-room.js
+  if (action === 'agent-room-answer') {
+    return require('./_agent-room').lgRoomAnswer(deps.db, { key: b.key, text: b.text },
+      { by: String(deps.by || ''), now: deps.now, provider: deps.provider, sendPending: deps.sendPending });
+  }
   // ─── מתגי הסוכנים במסך (בן, 10/11) — waMeta/agentConfig ─────────────────
   //  { agent, mode } או { escalatePhone }. אימות קפדני ב-api/_agent-config.js
   if (action === 'agent-config-set') {

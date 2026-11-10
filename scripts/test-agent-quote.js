@@ -23,6 +23,7 @@ const SHAUL = '0501112222';
 const SHAUL_CHAT = '972501112222@c.us';
 const ON = { AGENT_SHADOW_ENABLED: 'true', AGENT_REPLY_ENABLED: 'true', AGENT_STAFF_PHONES: '050-1112222', AGENT_MODEL: 'm', OPENAI_API_KEY: 'k' };
 const HANDOFF = 'העברנו לשאול, הוא יחזור אליך';
+const HOLD = 'קיבלנו, אנחנו בודקים ונחזור אליך בהקדם.';   // "לא יודע → בן" (10/11)
 
 const CAT = {
   G8: { name: 'זכוכית 8 שקוף', glass: 'שקוף', mm: 8, proc: '', active: true },
@@ -116,9 +117,9 @@ const it = (sku, w, h, qty = 1, holes = 0, cutouts = 0) => ({ sku, w, h, qty, ho
     const d1 = act.lgAgentDecide({ rec: base, orders: [], conv: null, now: NOW, quote: { ok: true, priced: ok } });
     check('decide: priced → reply with the quote', d1.actions, [{ type: 'reply', text: q.lgQuoteText(ok) }]);
     const d2 = act.lgAgentDecide({ rec: base, orders: [], conv: null, now: NOW, quote: { ok: true, priced: P([it('NOPRICE', 100, 100)]) } });
-    check('decide: missing price → Shaul', d2.actions.map(a => [a.type, a.text]), [['staff', 'כהן זכוכית: כמה?'], ['reply', HANDOFF]]);
+    check('decide: missing price → ask Ben', d2.actions.map(a => [a.type, a.question]), [['ask', 'כמה?']]);
     const d3 = act.lgAgentDecide({ rec: base, orders: [], conv: null, now: NOW, quote: { ok: false, priced: null } });
-    check('decide: ok:false → Shaul', d3.actions.map(a => a.type), ['staff', 'reply']);
+    check('decide: ok:false → ask Ben', d3.actions.map(a => a.type), ['ask']);
     const d4 = act.lgAgentDecide({ rec: { ...base, hasImage: true }, orders: [], conv: null, now: NOW });
     check('decide: sketch → hold reply + quote request to Shaul', d4.actions,
       [{ type: 'reply', text: 'קיבלנו, נחזור אליך עם מחיר' },
@@ -155,8 +156,8 @@ const it = (sku, w, h, qty = 1, holes = 0, cutouts = 0) => ({ sku, w, h, qty, ho
   {
     const d = seed(); put(d, 't2', { text: 'כמה זכוכית 12?' });
     await act.lgAgentAct(d, 't2', { env: ON, now: NOW, sendPending: stub, fetchImpl: model({ ok: true, items: [it('NOPRICE', 100, 100)] }).fetcher });
-    check('act text quote, no price → Shaul + handoff', Object.values(outbox(d)).map(e => [e.to, e.text]).sort(),
-      [[PRIV, HANDOFF], [SHAUL, 'כהן זכוכית: כמה זכוכית 12?']].sort());
+    check('act text quote, no price → hold + Ben (not Shaul)', Object.values(outbox(d)).map(e => [e.to, e.text.split('\n')[0]]).sort(),
+      [[PRIV, HOLD], ['0547725552', 'יש שאלה שמחכה לך בחדר הסוכנים: כהן זכוכית — כמה זכוכית 12?']].sort());
   }
   {
     const d = seed(); put(d, 't3', { text: 'כמה?' });
