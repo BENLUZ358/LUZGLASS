@@ -193,7 +193,11 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
 
     // מחירון הלקוח קודם, ואחריו הגלובלי — אותו סדר בדיוק שבו lgCalcOrderTotal
     // מחשב את הסכום שעל המסך, כדי שהמסמך בחשבשבת והמסך לא יגידו שני דברים.
-    const ppm2 = parseFloat(cp[sku] || gp[sku] || 0);
+    // frozenPrices קודם: המחיר שנשמר להזמנה כשבן שינה מחירון אחריה
+    // (lgOrderPpm2 ב-firebase-db.js — אותו סדר).
+    const fz   = order.frozenPrices || {};
+    const ppm2 = (fz[sku] != null && Number(fz[sku]) > 0) ? Number(fz[sku])
+               : parseFloat(cp[sku] || gp[sku] || 0);
     // בלי מחיר — השורה **נשלחת ב-0**, ומסומנת (בן, 19/10/2026: "אפשר לעלות
     // אותו עם מחיר 0 אבל עם אזהרה שאין מחיר למק"ט, כי בחשבונית מתקנים מחיר;
     // עכשיו זה תוקע אותי"). קודם היא דולגה, כי שורת אפס נראית כמו מתנה;

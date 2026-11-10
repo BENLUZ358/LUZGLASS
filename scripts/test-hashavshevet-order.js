@@ -100,7 +100,7 @@ check('an item with no price anywhere is not skipped',
 check('it is flagged as unpriced instead',
       /unpriced\.push\(/.test(SRC), 'every zero line must be named in the warning');
 check('and the client list is preferred over the global one',
-      /const ppm2 = parseFloat\(cp\[sku\] \|\| gp\[sku\] \|\| 0\);/.test(SRC),
+      /parseFloat\(cp\[sku\] \|\| gp\[sku\] \|\| 0\)/.test(SRC),
       'the global price overcharges every client who has a list of their own');
 
 /* ── 4. dry run stays the default ──────────────────────────────────────── */
