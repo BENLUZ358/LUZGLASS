@@ -61,7 +61,10 @@ const lgEmailOutboxKeyOk = k => typeof k === 'string' && /^[0-9a-f]{20}$/.test(k
 //  אחרת From) הוא בדיוק email — הכתובת המקושרת.
 async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, orderNums, sketchNames, orderIds,
                                     queuedBy, accountKey, invoiceKey, docNumber, fileCount, deliveryTomorrow, variant, delayMs, now,
-                                    missingSketchNums, sendTo, extraLines, keySuffix }) {
+                                    missingSketchNums, sendTo, extraLines, keySuffix, drafterBatch }) {
+  //  משלוח לשרטט (בן, 10/11): מייל פנימי חדש לכתובת קבועה — אף פעם לא כתובת מהקורא
+  const drafter = kind === 'drafter-batch';
+  if (drafter) { email = require('./_drafter-batch').LG_DRAFTER_EMAIL; sendTo = email; }
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber
                           : keySuffix != null ? kind + '#' + keySuffix : kind, thread, orderIds);
@@ -82,7 +85,8 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       missingSketchNums: (missingSketchNums || []).map(String),
       //  מייל חשבוניות של הלקוח (בן, 9/11 — פלג: ההזמנות מכתובת אחת, החשבוניות לכתובת
       //  של מנהלת החשבונות). יש → מייל חדש לכתובת הזו במקום תשובה על מייל ההזמנה.
-      sendTo: ((kind === 'invoice' || kind === 'broken-returned') && lgEmailAddr(sendTo)) || null,
+      sendTo: ((kind === 'invoice' || kind === 'broken-returned' || drafter) && lgEmailAddr(sendTo)) || null,
+      drafterBatch: drafter ? Number(drafterBatch) : null,
       //  שבר בחיסום (בן, 10/11) — שורות מוכנות להודעה (api/_broken.js)
       extraLines: (extraLines || []).map(String),
       //  כמה קבצים בפועל (מ-2/11 בדרך כלל אחד — חשבונית + סקיצות). חסר (רשומה ישנה) → החשבון הישן
@@ -124,11 +128,12 @@ async function lgEmailClaim(db, limit, now) {
     //  ⚠️ הגיל לפני הנעילה והקישור — אחרת הודעה חסומה הייתה נשארת בתור לנצח
     if ((at - (v.createdAt || at)) > MAX_AGE_MS) { await _close(db, key, at, 'expired', 'פג תוקף — לא נשלח'); continue; }
     //  בלי מזהה המייל של הלקוח אין על מה לענות בבטחה — לא מחכירים לנצח, סוגרים
-    if (!v.messageId) { await _close(db, key, at, 'cancelled', 'אין מזהה מייל של הלקוח — לא נשלח'); continue; }
+    const drafter = v.kind === 'drafter-batch';   // מייל פנימי לשרטט — אין לקוח, אין שרשור
+    if (!drafter && !v.messageId) { await _close(db, key, at, 'cancelled', 'אין מזהה מייל של הלקוח — לא נשלח'); continue; }
     if (!lgEmailSendGate(v.email).allowed) continue;                     // נעילת הסביבה — לא נוגעים
     if (v.sendTo && !lgEmailSendGate(v.sendTo).allowed) continue;       // גם הכתובת שהחשבונית יוצאת אליה
-    const link = await lgEmailSenderLink(db, v.email);
-    if (!link || !v.accountKey || link.customerId !== String(v.accountKey)) {
+    const link = drafter ? null : await lgEmailSenderLink(db, v.email);
+    if (!drafter && (!link || !v.accountKey || link.customerId !== String(v.accountKey))) {
       await _close(db, key, at, 'cancelled', 'הכתובת כבר לא מקושרת לכרטיס — לא נשלח');
       continue;
     }
@@ -145,17 +150,19 @@ async function lgEmailClaim(db, limit, now) {
     });
     const e = r.committed && r.snapshot.val();
     if (!e || e.state !== 'pending' || e.leaseToken !== token) continue;
-    const item = { key, thread: e.thread, messageId: String(e.messageId), email: String(e.email), leaseToken: token,
+    const item = { key, thread: e.thread, messageId: String(e.messageId || (drafter ? 'drafter-' + e.drafterBatch : '')), email: String(e.email), leaseToken: token,
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: e.orderNums || [],
                                   sketchNames: e.sketchNames || [], docNumber: e.docNumber,
                                   deliveryTomorrow: e.deliveryTomorrow === true, variant: e.variant || '',
                                   missingSketchNums: e.missingSketchNums || [], extraLines: e.extraLines || [] }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
-               files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length) : 0 };
+               files: e.invoiceKey ? (e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length)
+                    : drafter ? (e.fileCount > 0 ? e.fileCount : 1) : 0 };
     //  חשבונית למייל החשבוניות של הלקוח — מייל חדש עם נושא, לא תשובה
     if (e.sendTo) {
       item.sendTo = String(e.sendTo);
-      item.subject = e.kind === 'broken-returned'
+      item.subject = drafter ? 'הזמנות לשרטוט — משלוח ' + e.drafterBatch + ' (' + (e.orderIds || []).length + ')'
+        : e.kind === 'broken-returned'
         ? 'פריט שחזר מחיסום — לוז גלאס' + (e.clientName ? ' — ' + e.clientName : '')
         : 'חשבונית מס ' + (e.docNumber || '') + ' — לוז גלאס' + (e.clientName ? ' — ' + e.clientName : '');
     }
@@ -262,6 +269,13 @@ async function lgEmailOutboxFile(db, key, leaseToken, idx, now) {
   const at = now || Date.now();
   const e = (await db.ref(EM_OUTBOX + '/' + key).once('value')).val();
   if (!e || e.state !== 'pending' || e.leaseToken !== leaseToken || !(e.leaseUntil > at)) return { ok: false, code: 'stale' };
+  if (e.kind === 'drafter-batch' && e.drafterBatch) {
+    const p = await require('./_drafter-batch').lgDrafterPdf(db, e.drafterBatch);
+    if (!p.ok) return { ok: false, code: p.code };
+    const f = p.files[Number(idx)];
+    if (!Number.isInteger(Number(idx)) || !f) return { ok: false, code: 'bad-idx' };
+    return { ok: true, name: f.name, mime: f.mime, b64: f.buf.toString('base64') };
+  }
   if (!e.invoiceKey) return { ok: false, code: 'no-files' };
   const f = await require('./_invoice-deliver').lgInvoiceFiles(db, e.invoiceKey);
   if (!f.ok) return { ok: false, code: f.code };

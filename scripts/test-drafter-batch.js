@@ -116,6 +116,42 @@ const deps = { enqueue: async (db, n) => { sent.push(n); return { key: 'k' + n, 
     check('pdf: unknown batch → error', (await D.lgDrafterPdf(db, 99)).code, 'no-batch');
   }
 
+  // ── המייל דרך תור המיילים הקיים ──
+  {
+    process.env.EMAIL_ONLY_TO = 'lozzagagot@gmail.com';
+    const ob = require(path.join(ROOT, 'api', '_email-outbox.js'));
+    const { renderText } = require(path.join(ROOT, 'api', '_wa-provider.js'));
+    const db = seed({ sketches: {} });
+    const r = await D.lgDrafterSend(db, { by: 'ben', now: NOW });          // בלי הזרקה — המייל האמיתי
+    check('send queues a real outbox record', [r.ok, r.email && r.email.queued], [true, true]);
+    const rec = db._data.waMeta.emailOutbox[r.email.key];
+    check('outbox record', [rec.kind, rec.drafterBatch, rec.sendTo, rec.fileCount, rec.state],
+      ['drafter-batch', 1, 'lozzagagot@gmail.com', 1, 'pending']);
+    check('batch remembers its email', db._data.waMeta.drafterBatches['1'].emailKey, r.email.key);
+    const items = await ob.lgEmailClaim(db, 5, NOW + 1000);
+    const it = items.find(x => x.key === r.email.key);
+    check('claim keeps it (no customer messageId / link needed)', !!it, true);
+    check('claim item passes the Gmail script filter + new-mail branch',
+      it && [!!it.thread, !!it.messageId, it.email, it.sendTo, it.subject, it.files],
+      [true, true, 'lozzagagot@gmail.com', 'lozzagagot@gmail.com', 'הזמנות לשרטוט — משלוח 1 (2)', 1]);
+    check('mail body', it && it.text.split('\n')[0], 'משלוח 1 · ' + new Date(NOW).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + ' · 2 הזמנות');
+    check('mail body lists orders', it && it.text.split('\n').length, 3);
+    const f = await ob.lgEmailOutboxFile(db, it.key, it.leaseToken, 0, NOW + 2000);
+    check('outbox-file returns the PDF', [f.ok, f.mime, f.name], [true, 'application/pdf', 'משלוח 1.pdf']);
+    check('renderText drafter-batch = the lines', renderText({ kind: 'drafter-batch', extraLines: ['א', 'ב'] }), 'א\nב');
+    // רגרסיה: רשומת לקוח בלי messageId עדיין מבוטלת
+    await db.ref('waMeta/emailOutbox/aaaaaaaaaaaaaaaaaaaa').set({ kind: 'sketches-handled', thread: 'T', messageId: '', email: 'lozzagagot@gmail.com',
+      accountKey: '1', orderIds: [], state: 'pending', createdAt: NOW, attempts: 0 });
+    await ob.lgEmailClaim(db, 5, NOW + 3000);
+    check('customer record without messageId still cancelled', db._data.waMeta.emailOutbox.aaaaaaaaaaaaaaaaaaaa.state, 'cancelled');
+    // כתובת אחרת בבקשה — לא משנה כלום
+    const r9 = await ob.lgEmailEnqueue(db, { kind: 'drafter-batch', thread: 'drafter', messageId: 'drafter-9', email: 'evil@x.com',
+      sendTo: 'evil@x.com', keySuffix: 9, drafterBatch: 9, extraLines: ['x'], orderIds: [] });
+    check('drafter-batch always goes to the fixed address', [db._data.waMeta.emailOutbox[r9.key].email, db._data.waMeta.emailOutbox[r9.key].sendTo],
+      ['lozzagagot@gmail.com', 'lozzagagot@gmail.com']);
+    delete process.env.EMAIL_ONLY_TO;
+  }
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nAll drafter-batch checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });

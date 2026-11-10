@@ -176,8 +176,20 @@ async function lgDrafterPdf(db, n, opts) {
 }
 
 //  המייל — משימה 3
-async function lgDrafterEnqueueEmail(db, n) {
-  throw new Error('lgDrafterEnqueueEmail: not implemented');
+//  → { key, queued, reason } — ומסמן במשלוח את מפתח המייל (emailKey)
+async function lgDrafterEnqueueEmail(db, n, now) {
+  const b = (await db.ref(BATCHES + '/' + n).once('value')).val();
+  if (!b) return { key: null, queued: false, reason: 'no-batch' };
+  const items = await _items(db, b);
+  const pdf = await lgDrafterPdf(db, n);
+  const lines = ['משלוח ' + b.n + ' · ' + _ilTime(b.at) + ' · ' + b.count + ' הזמנות',
+                 ...items.map(it => [it.orderNum, it.client, it.sketchName].filter(Boolean).join(' · '))];
+  const { lgEmailEnqueue } = require('./_email-outbox');
+  const r = await lgEmailEnqueue(db, { kind: 'drafter-batch', thread: 'drafter', messageId: 'drafter-' + b.n,
+    email: LG_DRAFTER_EMAIL, sendTo: LG_DRAFTER_EMAIL, keySuffix: b.n, drafterBatch: b.n, extraLines: lines,
+    orderIds: b.orderIds || [], fileCount: pdf.ok ? pdf.files.length : 1, queuedBy: 'drafter', now });
+  await db.ref(BATCHES + '/' + n + '/emailKey').set(r.key);
+  return r;
 }
 
 module.exports = { lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
