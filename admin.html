@@ -329,6 +329,9 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .msum-tel{color:var(--gold-text);font-weight:700;text-decoration:none;}
 .mit{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:9px 10px;margin-bottom:6px;background:var(--bg2);border-radius:4px;font-size:13px;}
 .mit-n{font-weight:700;flex:1 1 auto;min-width:0;}
+/* 🏷 מדבקה מכל מקום (בן, 11/11) — order-labels.js */
+.mit-lbl{min-width:44px;min-height:44px;margin-inline-start:auto;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:18px;cursor:pointer;}
+.mit-lbl-all{font-size:12px;padding:4px 10px;min-height:36px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;}
 .mit-d{color:var(--muted);white-space:nowrap;}
 .mit-t{font-size:12px;font-weight:700;padding:1px 7px;border-radius:3px;white-space:nowrap;}
 .mit-chis{background:rgba(142,68,173,0.12);color:#8e44ad;}
@@ -413,6 +416,8 @@ label.msec-t{display:block;}
   <script src="lg-health.js?v=20261020"></script>
   <script src="sketch-reader-ui.js?v=20261023h"></script>
   <script src="drafter-batch.js?v=20261111"></script>
+  <script src="print-labels.js?v=20261103"></script>
+  <script src="order-labels.js?v=20261111"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -975,7 +980,8 @@ function openMod(id) {
     </div>
     <div class="msec">
       <div class="msec-t" style="display:flex;align-items:center;gap:8px">פריטים
-        ${_modCanEditItems(o) ? `<button type="button" id="modEditItemsBtn" class="mit-edit-btn" onclick="modEditItems()"><span data-icon="pencil"></span> ערוך פריטים</button>` : ''}</div>
+        ${_modCanEditItems(o) ? `<button type="button" id="modEditItemsBtn" class="mit-edit-btn" onclick="modEditItems()"><span data-icon="pencil"></span> ערוך פריטים</button>` : ''}
+        ${items.some(i => i && i.w && i.h) ? `<button type="button" class="mit-lbl-all" onclick="modLabelAll()">🏷 מדבקות לכל הפריטים</button>` : ''}</div>
       <div id="itemsPreview">${_modItemsHtml(items)}</div>
     </div>
     ${lgHasSketch(o) ? `
@@ -1063,12 +1069,13 @@ function openMod(id) {
 // ו"ראה עוד" צייר את כולם מחדש בפורמט אחר — זה מה שנראה כ"משתנה".
 function _modItemsHtml(items){
   if(!items || !items.length) return '<div class="mit-empty">אין פריטים</div>';
-  return items.map(i => `
+  return items.map((i, idx) => `
     <div class="mit">
       <span class="mit-n">${lgEsc(i.name||'פריט')}</span>
       ${i.w ? `<span class="mit-d">${lgDimsText(i.w, i.h)} מ"מ</span>` : ''}
       ${i.chisum ? '<span class="mit-t mit-chis">חיסום</span>' : i.litush ? '<span class="mit-t mit-lit">ליטוש</span>' : ''}
       ${i.graphic ? '<span class="mit-t mit-gr">גרפיקה</span>' : ''}
+      ${i.w && i.h ? `<button type="button" class="mit-lbl" title="הדפס מדבקה" aria-label="הדפס מדבקה לפריט ${idx+1}" onclick="modLabel(${idx})">🏷</button>` : ''}
     </div>`).join('');
 }
 // ── עריכת פריטים מחלון "פרטים" (בן, 28/10) ─────────────────────────────
@@ -1145,6 +1152,15 @@ async function _modSaveItems(o, items, okMsg){
   if(eid === o.id) document.getElementById('itemsPreview').innerHTML = _modEditHtml(o);
 }
 function _modItemsCopy(o){ return (o.items || []).map(it => ({...it})); }
+// 🏷 מדבקה מכל מקום (בן, 11/11) — order-labels.js; בכל שלב, גם אחרי חשבונית
+function modLabel(i){
+  const o = orders.find(x => x.id === eid); if(!o || !window.lgPrintOrderLabels) return;
+  window.lgPrintOrderLabels(o, [i]);
+}
+function modLabelAll(){
+  const o = orders.find(x => x.id === eid); if(!o || !window.lgPrintOrderLabels) return;
+  window.lgPrintOrderLabels(o);
+}
 function modItemDims(i, field, val){
   const o = orders.find(x => x.id === eid); if(!o) return;
   const r = lgParseDimensionInput(val);
