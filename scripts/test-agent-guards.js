@@ -305,11 +305,27 @@ const wa = (extra) => ({ kind: 'ready', to: '0501', clientName: 'מאור', orde
     const db = mk({ waMeta: { emailOutbox: { e1: em() } } }, CFG('reply'));
     await run(db, CFG('reply'));
     const e = db._data.waMeta.emailOutbox.e1;
-    check('row 6 reply: same row starts again (pending, attempts 0, fresh createdAt)', [e.state, e.attempts, e.createdAt, e.firstCreatedAt], ['pending', 0, NOW, NOW - 3 * H]);
+    check('row 6 reply: same row starts again (pending, attempts 0, original createdAt kept, requeuedAt now)', [e.state, e.attempts, e.createdAt, e.requeuedAt], ['pending', 0, NOW - 3 * H, NOW]);
     e.state = 'sent';
     await run(db, CFG('reply'), { now: NOW + 10 * MIN });
     check('row 6: sent → "נפתר ✓"', room(db).map(e2 => e2.step), ['found', 'done']);
   }
+  // row 6 (תיקון סקירה סופית I4): מייל "מוכן" בן 23 שעות נשלח שוב → פג בזמנו (24ש׳ מהיצירה), לא 47 שעות אחרי
+  {
+    const EO = require(path.join(__dirname, '..', 'api', '_email-outbox.js'));
+    const db = mk({ waMeta: { emailOutbox: { e1: em({ kind: 'ready', variant: null, state: 'failed', attempts: 0, createdAt: NOW - 23 * H }) } } }, CFG('reply'));
+    await run(db, CFG('reply'));
+    const e = db._data.waMeta.emailOutbox.e1;
+    check('I4: 23h-old ready mail requeued, createdAt unchanged', [e.state, e.createdAt, e.requeuedAt], ['pending', NOW - 23 * H, NOW]);
+    await EO.lgEmailClaim(db, 5, NOW + 2 * H);
+    check('I4: claim 25h after creation → expired on schedule', db._data.waMeta.emailOutbox.e1.state, 'expired');
+    //  ועכשיו השומר לא שולח שוב — 25 שעות מהיצירה
+    check('I4: guard freshness counts from the original createdAt', G.lgGuardResendOk({ ...db._data.waMeta.emailOutbox.e1, attempts: 0 }, NOW + 2 * H).ok, false);
+    check('I4: legacy row with firstCreatedAt → age from firstCreatedAt',
+      G.lgGuardResendOk({ kind: 'ready', state: 'failed', attempts: 0, createdAt: NOW, firstCreatedAt: NOW - 25 * H }, NOW).ok, false);
+  }
+  // T3: סיבות שהיו "לא ידועה"
+  check('T3: reasons "פג בתור המייל" / "שגיאה" have short Hebrew', [G._reason ? G._reason(null, 'פג בתור המייל') : null, G._reason ? G._reason(null, 'שגיאה') : null], ['פג בתור המייל', 'תקלה בשליחה']);
   // row 7 in reply: retry + process; failure → Ben
   {
     const db = mk({ waInbound: { m1: win() } }, CFG('reply'));

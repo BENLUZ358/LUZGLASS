@@ -146,8 +146,12 @@ async function lgReadyNetRun(db, o) {
       catch (e) { console.warn('ready-net: room', e && e.name); }
     }
   }
-  if (keys.length) {
-    try { await (opt.drain || require('./_wa-drain-core').drainNow)(db, keys, 'ready-net'); }
+  //  budgetMs (מהדופק — מה שנשאר עד t0+55ש׳, תיקון סקירה סופית I3): 0 → לא שולחים עכשיו, השורות
+  //  נשארות ממתינות לשליחה הבאה (דף פתוח / השרת). בלי budgetMs — התקציב הרגיל של drainNow.
+  const hasBudget = opt.budgetMs !== undefined && opt.budgetMs !== null;
+  const budgetMs = hasBudget ? Math.max(0, Number(opt.budgetMs) || 0) : 0;
+  if (keys.length && (!hasBudget || budgetMs > 0)) {
+    try { await (opt.drain || require('./_wa-drain-core').drainNow)(db, keys, 'ready-net', hasBudget ? { budgetMs } : {}); }
     catch (e) { console.warn('ready-net: drain', e && e.name); }
   }
   return { ok: true, sent: keys.length, groups: done };

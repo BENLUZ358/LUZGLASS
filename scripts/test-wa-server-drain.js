@@ -160,6 +160,38 @@ const OK = async () => ({ ok: true, httpStatus: 200, messageId: 'm' });
     check('heartbeat: watch deadline is absolute t0+48s (not shifted by the drain)', [dl >= t0 + 48000, dl <= Date.now() - 50 + 48000 + 5], [true, true]);
   }
 
+  // 13. מצב החיבור נרשם גם כשהתור ריק — לכל היותר פעם ב-10 דק' (תיקון סקירה סופית I1)
+  {
+    const db = fakeDb({}); const env = { WA_SERVER_DRAIN: 'true' };
+    let calls = 0;
+    const p = provider(OK, { checksState: true, getState: async () => { calls++; return { state: 'notAuthorized', reason: 'x' }; } });
+    const t = Date.now();
+    const a = await SD.lgWaServerDrain(db, { env, now: NOW, provider: p });
+    const st = db._data.waMeta && db._data.waMeta.whatsapp;
+    check('empty queue → state checked and recorded with checkedAt', [a.skipped, a.state, calls, st && st.state, st && st.checkedAt >= t], ['empty', 'notAuthorized', 1, 'notAuthorized', true]);
+    await SD.lgWaServerDrain(db, { env, now: NOW + 2 * 60000, provider: p });
+    await SD.lgWaServerDrain(db, { env, now: NOW + 9 * 60000, provider: p });
+    check('empty queue → no second state check within 10 min', calls, 1);
+    await SD.lgWaServerDrain(db, { env, now: NOW + 10 * 60000 + 1000, provider: p });
+    check('empty queue → state checked again after 10 min', calls, 2);
+    const db2 = fakeDb({}); let c2 = 0;
+    await SD.lgWaServerDrain(db2, { env: {}, now: NOW, provider: provider(OK, { getState: async () => { c2++; return { state: 'authorized' }; } }) });
+    check('switch off → no state check, nothing written', [c2, !!db2._data.waMeta], [0, false]);
+  }
+
+  // 14. תור לא ריק ומנותק → המצב נרשם בכל דופק; מחובר → "מחובר" לכל היותר פעם ב-10 דק'
+  {
+    const db = mk(2); const env = { WA_SERVER_DRAIN: 'true' };
+    await SD.lgWaServerDrain(db, { env, now: NOW, drain: async () => ({ results: [], processed: 0, state: 'notAuthorized' }) });
+    const st = db._data.waMeta.whatsapp;
+    check('queue + disconnected → state recorded', [st.state, st.pending, st.checkedAt > 0], ['notAuthorized', 2, true]);
+    await SD.lgWaServerDrain(db, { env, now: NOW + 60000, drain: async () => ({ results: [], processed: 2, state: null }) });
+    check('queue + connected → authorized recorded', db._data.waMeta.whatsapp.state, 'authorized');
+    db._data.waMeta.whatsapp.state = 'x';
+    await SD.lgWaServerDrain(db, { env, now: NOW + 2 * 60000, drain: async () => ({ results: [], processed: 2, state: null }) });
+    check('queue + connected → not recorded again within 10 min', db._data.waMeta.whatsapp.state, 'x');
+  }
+
   console.log(failed ? `\n${failed} failed` : '\nall passed');
   process.exit(failed ? 1 : 0);
 })();

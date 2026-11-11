@@ -41,6 +41,9 @@ const LEASE_MS     = 5 * 60 * 1000;
 const MAX_CLAIM    = 5;
 const MAX_ATTEMPTS = 3;
 const MAX_AGE_MS   = 24 * 60 * 60 * 1000;   // "מוכן לאיסוף" של שלשום — לא שולחים
+//  גיל השורה — מזמן היצירה המקורי. שליחה חוזרת של השומר (requeuedAt) לא מאריכה אותו (תיקון סקירה סופית I4);
+//  firstCreatedAt — רק בשורות שנכתבו לפני התיקון.
+const _bornAt = (v, at) => Number(v && v.firstCreatedAt) || Number(v && v.createdAt) || at;
 
 const _ids = ids => [...new Set((ids || []).map(String))].sort();
 //  RTDB מחזירה מערך כאובייקט כשיש בו חורים
@@ -134,7 +137,7 @@ async function lgEmailClaim(db, limit, now) {
     if (v.leaseUntil && v.leaseUntil > at) continue;                    // באוויר אצל ריצה אחרת
     if (v.notBefore && v.notBefore > at) continue;                      // עוד לא הגיע הזמן — ריצה הבאה
     //  ⚠️ הגיל לפני הנעילה והקישור — אחרת הודעה חסומה הייתה נשארת בתור לנצח
-    if ((at - (v.createdAt || at)) > MAX_AGE_MS) { await _close(db, key, at, 'expired', 'פג תוקף — לא נשלח'); continue; }
+    if ((at - _bornAt(v, at)) > MAX_AGE_MS) { await _close(db, key, at, 'expired', 'פג תוקף — לא נשלח'); continue; }
     //  בלי מזהה המייל של הלקוח אין על מה לענות בבטחה — לא מחכירים לנצח, סוגרים
     //  מייל פנימי לשרטט / התראה לבן — אין לקוח, אין שרשור
     const drafter = v.kind === 'drafter-batch' || v.kind === 'agent-alarm';
@@ -175,7 +178,7 @@ async function lgEmailClaim(db, limit, now) {
       if (cur.state !== 'pending') return;                               // abort
       if (cur.leaseUntil && cur.leaseUntil > at) return;                 // abort — נתפסה בינתיים
       if (cur.notBefore && cur.notBefore > at) return;                   // abort — עוד לא הגיע הזמן
-      if ((at - (cur.createdAt || at)) > MAX_AGE_MS) {
+      if ((at - _bornAt(cur, at)) > MAX_AGE_MS) {
         return { ...cur, state: 'expired', leaseToken: null, leaseUntil: null, updatedAt: at, lastError: 'פג תוקף — לא נשלח' };
       }
       return { ...cur, leaseToken: token, leaseUntil: at + LEASE_MS, updatedAt: at, fileManifest: manifest };

@@ -97,8 +97,9 @@ async function heartbeat(body, deps) {
     await (deps.watchRun || W.lgAgentWatchRun)(deps.db, { env: deps.env || process.env, now, deadline: t0 + 48 * 1000 });
   } catch (e) { console.error('invoice-pdf-upload: watch failed', e && e.name); }
   //  "מוכן לאיסוף" שלא יצא מהדף (בן, 11/11) — לא תלוי במתגי הסוכנים. ר' api/_ready-net.js
+  //  השליחה שלו מקבלת רק מה שנשאר עד t0+55ש׳ (0 → לא שולחת, השורות ממתינות) — הבקשה < 60ש׳ (תיקון סקירה סופית I3)
   try {
-    await (deps.readyNet || require('./_ready-net').lgReadyNetRun)(deps.db, { now });
+    await (deps.readyNet || require('./_ready-net').lgReadyNetRun)(deps.db, { now, budgetMs: Math.max(0, t0 + 55 * 1000 - Date.now()) });
   } catch (e) { console.error('invoice-pdf-upload: ready-net failed', e && e.name); }
   return { status: 200, body: { ok: true, heartbeat: true } };
 }

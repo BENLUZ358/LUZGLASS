@@ -329,6 +329,7 @@ function lgAdWaLink(phone) {
 //  ששת הסוכנים — id = המפתח בשרת (waMeta/agentConfig, api/_agent-config.js).
 //  does — "מי אחראי על מה" באפיון חדר הסוכנים (10/11). routes: אילו מסלולים ביומן שייכים לו.
 //  heb — השם שסוכנים ישנים כותבים בחדר (agent:'מרכזן').
+//  ⚠️ שמות הסוכנים בעברית — שלושה עותקים, לעדכן יחד: api/_agent-room.js (AGENT_HEB), api/_agent-guards.js (AGENT_HEB), agents-dash.js (LG_AD_AGENTS, קובץ דפדפן)
 const LG_AD_AGENTS = [
   //  ⚠️ (תיקון סקירה 10/11) רק מה שהמתג הזה שולט בו. "נקלטו" והצעת צרופות — מתגים נפרדים.
   { id: 'markazan', name: 'מרכזן', does: 'תפריט ללקוח, ומה שאף סוכן לא יודע — שאלה אליך ("נקלטו" והצעת צרופות — לא במתג הזה)', routes: ['menu', 'shaul'] },

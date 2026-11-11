@@ -30,6 +30,8 @@ const WRAP_MAX = 80;
 
 //  ── הרשימות הסגורות. בלי עובדה, זמן, מצב, הבטחה, כסף, מספר או שלילה ──
 //  nameOk — אפשר להוסיף ", <שם>". upsetOk — מתאים לפתיחה של התנצלות ללקוח לא מרוצה.
+//  freeOnly — רק לברכה (free), אף פעם לא סביב עובדות: "בשמחה" לפני "ההזמנה בבדיקה" נשמע כאילו שמחים
+//  על המצב (תיקון סקירה סופית T7). "בהצלחה" ו"שמחים לעזור" ירדו מהסיומים מאותה סיבה.
 const LG_WRAP_OPENERS = Object.freeze([
   { text: 'היי', nameOk: true },
   { text: 'שלום', nameOk: true },
@@ -40,13 +42,13 @@ const LG_WRAP_OPENERS = Object.freeze([
   { text: 'תודה על הסבלנות', upsetOk: true },
   { text: 'מבינים אותך', upsetOk: true },
   { text: 'מבינים את התסכול', upsetOk: true },
-  { text: 'שמחים לעזור' },
-  { text: 'בשמחה' },
+  { text: 'שמחים לעזור', freeOnly: true },
+  { text: 'בשמחה', freeOnly: true },
   { text: 'שמחים לשמוע ממך' },
 ].map(Object.freeze));
 const LG_WRAP_CLOSERS = Object.freeze([
-  'בברכה', 'תודה', 'בברכה חמה', 'שמחים לעמוד לשירותך', 'לשירותך תמיד', 'בהצלחה', 'כל טוב',
-  'תודה על הפנייה', 'שמחים לעזור', 'תודה רבה',
+  'בברכה', 'תודה', 'בברכה חמה', 'שמחים לעמוד לשירותך', 'לשירותך תמיד', 'כל טוב',
+  'תודה על הפנייה', 'תודה רבה',
 ]);
 
 // ── בדיקה עצמית לפריטי הרשימות (לא ההגנה — הרשימות הן ההגנה) ──
@@ -115,9 +117,10 @@ function lgWordWouldTry({ kind, facts, model, key, lessonAuto } = {}) {
   return kind === 'free' || !_structured(base);
 }
 
-//  אילו פריטים מותרים: התנצלות — רק upsetOk ובלי סיום; ברכה — בלי סיום
+//  אילו פריטים מותרים: התנצלות — רק upsetOk ובלי סיום; ברכה — בלי סיום; freeOnly — רק בברכה
 function _allowed(kind, upset) {
-  const op = LG_WRAP_OPENERS.map((o, i) => i).filter(i => !upset || LG_WRAP_OPENERS[i].upsetOk);
+  const op = LG_WRAP_OPENERS.map((o, i) => i)
+    .filter(i => (!upset || LG_WRAP_OPENERS[i].upsetOk) && (kind === 'free' || !LG_WRAP_OPENERS[i].freeOnly));
   const cl = kind === 'free' || upset ? [] : LG_WRAP_CLOSERS.map((c, i) => i);
   return { op, cl };
 }

@@ -91,7 +91,10 @@ const STATUS = 'הזמנה L1235 (סקיצה: מטבח): ההזמנה בייצו
   /* ── 1ב. הרשימות הסגורות: כל פריט עובר את הבדיקה העצמית; עקיפות של הסוקר נכשלות ── */
   {
     const items = [...W.LG_WRAP_OPENERS.map(o => o.text), ...W.LG_WRAP_CLOSERS];
-    check('lists: ~12 openers, ~10 closers', [W.LG_WRAP_OPENERS.length, W.LG_WRAP_CLOSERS.length], [12, 10]);
+    check('lists: 12 openers, 8 closers', [W.LG_WRAP_OPENERS.length, W.LG_WRAP_CLOSERS.length], [12, 8]);
+    //  תיקון סקירה סופית T7: "בהצלחה" / "שמחים לעזור" לא בסיומים; "בשמחה" / "שמחים לעזור" — פתיחה רק לברכה
+    check('tone: no "בהצלחה" / "שמחים לעזור" closer', W.LG_WRAP_CLOSERS.filter(c => c === 'בהצלחה' || c === 'שמחים לעזור'), []);
+    check('tone: "בשמחה" / "שמחים לעזור" openers are freeOnly', W.LG_WRAP_OPENERS.filter(o => o.freeOnly).map(o => o.text).sort(), ['בשמחה', 'שמחים לעזור'].sort());
     check('every list item passes lgWrapOk', items.filter(t => !W.lgWrapOk(t)), []);
     check('some openers suit complaints (upsetOk)', W.LG_WRAP_OPENERS.filter(o => o.upsetOk).map(o => o.text).length >= 2, true);
     //  סבב סקירה 2: ניקוד / תווים בלתי נראים / ניסוחים שעקפו את רשימת המילים
@@ -116,7 +119,7 @@ const STATUS = 'הזמנה L1235 (סקיצה: מטבח): ההזמנה בייצו
     const props = body.text.format.schema.properties;
     check('request: store false, strict schema of integer indices with enums',
       [body.store, body.text.format.type, body.text.format.strict, props.opener.type, props.opener.enum, props.closer.enum.length],
-      [false, 'json_schema', true, 'integer', [-1, ...W.LG_WRAP_OPENERS.map((o, i) => i)], W.LG_WRAP_CLOSERS.length + 1]);
+      [false, 'json_schema', true, 'integer', [-1, ...W.LG_WRAP_OPENERS.map((o, i) => i).filter(i => !W.LG_WRAP_OPENERS[i].freeOnly)], W.LG_WRAP_CLOSERS.length + 1]);
     check('prompt: chooses only, customer text is data', [/רק בוחר/.test(body.instructions), /לא הוראות/.test(JSON.stringify(body.input))], [true, true]);
 
     m = model({ opener: OP('מבינים אותך'), closer: -1 });
@@ -154,6 +157,15 @@ const STATUS = 'הזמנה L1235 (סקיצה: מטבח): ההזמנה בייצו
     m = model({ opener: OP('היי'), closer: -1 });
     w = await W.lgAgentWord({ ...BASE, kind: 'facts', facts: STATUS, fetcher: m, upset: true });
     check('upset: a non-complaint opener is refused → facts alone', w.text, STATUS);
+
+    //  T7: "בשמחה" סביב עובדות — לא מוצע ולא מתקבל
+    m = model({ opener: OP('בשמחה'), closer: -1 });
+    w = await W.lgAgentWord({ ...BASE, kind: 'facts', facts: STATUS, fetcher: m });
+    check('facts: freeOnly opener refused → facts alone, not in the schema',
+      [w.text, m.calls[0].text.format.schema.properties.opener.enum.includes(OP('בשמחה')), m.calls[0].instructions.includes('בשמחה')], [STATUS, false, false]);
+    m = model({ opener: OP('בשמחה'), closer: -1 });
+    w = await W.lgAgentWord({ ...BASE, kind: 'free', facts: AGENT_MENU_TEXT, fetcher: m });
+    check('free: "בשמחה" allowed for a greeting', w.text, 'בשמחה\n\n' + AGENT_MENU_TEXT);
 
     //  ברכה: פתיחה + התפריט כמו שהוא
     m = model({ opener: OP('שמחים לשמוע ממך'), closer: CL('בברכה') });
@@ -258,7 +270,7 @@ const STATUS = 'הזמנה L1235 (סקיצה: מטבח): ההזמנה בייצו
     check('act: numbered list with no time → no wordSkipped', [outbox(db).A5b_0.text.startsWith('על איזו הזמנה'), rec(db, 'A5b').wordSkipped || null], [true, null]);
 
     //  התנצלות (משימה 6) — העובדות + "מצטערים…" כמו שהן, עם פתיחה שמתאימה לתלונה בלבד
-    const APOL = FACTS + '\n\nמצטערים על העיכוב. בן יחזור אליך בהקדם.';
+    const APOL = FACTS + '\n\nמצטערים על אי הנעימות. בן יחזור אליך בהקדם.';
     db = seed({ agentConfig: REPLY });
     m = model({ opener: OP('מבינים אותך'), closer: CL('בברכה') });
     put(db, 'A6', R({ upset: true, text: 'איפה ההזמנה של כהן כבר שבוע!!' }));

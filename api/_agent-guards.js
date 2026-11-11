@@ -57,6 +57,7 @@ const WA_MAX_BUDGET_MS = 20 * 1000;
 const INBOUND_MIN_LEFT_MS = 15 * 1000;
 const CLEAR_KINDS = ['disconnected', 'rate', 'quota'];
 const GUARD_KEY = /^(wao|deliv|emo|win|ein|hs|hsi|await|pjob|unl)_/;
+//  ⚠️ שמות הסוכנים בעברית — שלושה עותקים, לעדכן יחד: api/_agent-room.js (AGENT_HEB), api/_agent-guards.js (AGENT_HEB), agents-dash.js (LG_AD_AGENTS, קובץ דפדפן)
 const AGENT_HEB = { markazan: 'מרכזן', kolet: 'קולט', archive: 'ארכיון', okev: 'עוקב', price: 'מחירון', manager: 'מנהל' };
 
 const _safeKey = s => String(s == null ? '' : s).replace(/[.#$[\]/\s]/g, '_').slice(0, 60);
@@ -88,6 +89,8 @@ const KNOWN_REASONS = [
   [/אינו תמונה|לא נתמך/, 'הקובץ לא נתמך'],
   [/עברו 24 שעות/, 'עברו 24 שעות'],
   [/כבר נוצרה הזמנה/, 'כבר נקלט'],
+  [/פג בתור המייל/, 'פג בתור המייל'],
+  [/^שגיאה$/, 'תקלה בשליחה'],
 ];
 function _reason(failureKind, text) {
   if (failureKind && KIND_HEB[failureKind]) return KIND_HEB[failureKind];
@@ -104,7 +107,9 @@ function lgGuardResendOk(row, now) {
   if (!row || typeof row !== 'object') return { ok: false, why: 'הרשומה לא נמצאה' };
   if (row.state === 'sent') return { ok: false, why: 'כבר נשלח' };
   if (row.state === 'cancelled') return { ok: false, why: 'בוטל' };
-  const at = Number(row.createdAt) || 0;
+  //  זמן היצירה המקורי — שליחה חוזרת (email-requeue) לא מאפסת אותו (תיקון סקירה סופית I4).
+  //  firstCreatedAt — רק בשורות שנכתבו לפני התיקון.
+  const at = Number(row.firstCreatedAt) || Number(row.createdAt) || 0;
   const kind = String(row.kind || '');
   if (kind === 'sketches-received') return { ok: false, why: '"נקלטו" באיחור לא נשלח' };
   if (kind === 'dispatched') {
@@ -376,11 +381,13 @@ async function _perform(db, p, o) {
     return { out: 'pending' };
   }
   if (f.type === 'email-requeue') {
-    //  "שורה חדשה בתור המייל" — אותה רשומה מתחילה מחדש (כמו לחיצה חוזרת ב-lgEmailEnqueue), רק מ-failed / expired
+    //  "שורה חדשה בתור המייל" — אותה רשומה מתחילה מחדש, רק מ-failed / expired.
+    //  ⚠️ createdAt נשאר המקורי (תיקון סקירה סופית I4): "פג תוקף" בתפיסה (lgEmailClaim, 24ש׳) והחלונות כאן
+    //  נספרים ממנו — מייל בן 23 שעות שנשלח שוב פג בזמנו, לא 47 שעות אחרי. מתי נשלח שוב — requeuedAt.
     const tx = await db.ref('waMeta/emailOutbox/' + f.src).transaction(cur => {
       if (cur === null) return null;
       if (!['failed', 'expired'].includes(cur.state)) return;
-      return { ...cur, state: 'pending', attempts: 0, createdAt: now, firstCreatedAt: cur.firstCreatedAt || cur.createdAt || null,
+      return { ...cur, state: 'pending', attempts: 0, requeuedAt: now,
                updatedAt: now, leaseToken: null, leaseUntil: null, notBefore: null, lastError: null, requeuedBy: 'agent-guard' };
     });
     return tx.committed && tx.snapshot.val() ? { out: 'pending' } : { out: 'skip' };
@@ -664,4 +671,4 @@ async function _notifyBen(db, a) {
   return require('./_agent-ben').lgBenNotify(db, { ...(a || {}), reason: 'agent-guard' });
 }
 
-module.exports = { lgGuardProblems, lgGuardResendOk, lgGuardRun, GUARD_KEY, CLEAR_KINDS, _notifyBen };
+module.exports = { lgGuardProblems, lgGuardResendOk, lgGuardRun, GUARD_KEY, CLEAR_KINDS, _notifyBen, _reason };

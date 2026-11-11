@@ -541,7 +541,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
 
   /* ── לקוח לא מרוצה (משימה 6) ─────────────────────────────────────── */
   {
-    const APOL = 'מצטערים על העיכוב. בן יחזור אליך בהקדם.';
+    const APOL = 'מצטערים על אי הנעימות. בן יחזור אליך בהקדם.';
     const UA = (question, hold, noHold) => ({ type: 'ask', who: 'כהן זכוכית', question, note: 'לקוח לא מרוצה', benReason: 'agent-upset', upset: true, hold, noHold });
     // status + upset → עובדות + התנצלות בהודעה אחת (hold), ובן
     const d = D(R({ intent: 'status', ref: 'כהן', upset: true, text: 'איפה ההזמנה כבר שבוע!!' }));

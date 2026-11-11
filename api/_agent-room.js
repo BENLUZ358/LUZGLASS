@@ -32,7 +32,8 @@ const STATES = ['open', 'answered'];
 const REF_KEYS = ['customerId', 'orderId', 'invoiceKey', 'shadowKey'];
 const ANSWER_MAX = 1000;
 const STEPS = ['found', 'handoff', 'done', 'need-ben', 'would'];
-//  שם הסוכן בעברית — לשאלת שומר בלי לקוח. ⚠️ עותק של LG_AD_AGENTS (agents-dash.js, קובץ דפדפן) — לעדכן את שניהם יחד
+//  שם הסוכן בעברית — לשאלת שומר בלי לקוח.
+//  ⚠️ שמות הסוכנים בעברית — שלושה עותקים, לעדכן יחד: api/_agent-room.js (AGENT_HEB), api/_agent-guards.js (AGENT_HEB), agents-dash.js (LG_AD_AGENTS, קובץ דפדפן)
 const AGENT_HEB = { markazan: 'מרכזן', kolet: 'קולט', archive: 'ארכיון', okev: 'עוקב', price: 'מחירון', manager: 'מנהל' };
 
 //  מפתח שממוין לפי זמן (כמו push של פיירבייס): זמן ב-base36 ברוחב קבוע + אקראי

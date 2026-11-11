@@ -218,16 +218,41 @@ const notify = (db, a, o) => B.lgBenNotify(db, { reason: 'agent-guard', urgent: 
   //  וואטסאפ מנותק → מייל (פעם אחת), חזר → שורת "חזר"
   {
     const cfg = CFG('shadow', { escalateEmail: 'ben@example.com' });
-    const db = mk(cfg, { whatsapp: { state: 'notAuthorized' } }), p = provider();
+    const db = mk(cfg, { whatsapp: { state: 'notAuthorized', checkedAt: NOW } }), p = provider();
     await B.lgClockCheck(db, 'office', { env: ENV, now: NOW, provider: p });
     await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + 30 * 1000, provider: p });
     check('WA down seen by both clocks within 2 min → not yet', emails(db).length, 0);
     await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 2 * MIN, provider: p });
     await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + 2 * MIN + 30 * 1000, provider: p });
     check('WA disconnected → one email alarm (both clocks)', [emails(db).length, p.texts.length], [1, 0]);
-    db._data.waMeta.whatsapp.state = 'authorized';
-    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 4 * MIN, provider: p });
+    db._data.waMeta.whatsapp = { state: 'authorized', checkedAt: NOW + 31 * MIN - 40 * MIN };   // נבדק לפני 40 דק' — לא ידוע
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 31 * MIN, provider: p });
+    check('stale "authorized" (checked 40 min ago) → no back line, alarm stays', [room(db).some(r => r.step === 'done' && /וואטסאפ/.test(r.text)), !!db._data.waMeta.clocks.alarms.alarm_wa], [false, true]);
+    db._data.waMeta.whatsapp = { state: 'authorized', checkedAt: NOW + 33 * MIN };
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 33 * MIN, provider: p });
     check('WA back → done line', room(db).some(r => r.step === 'done' && /וואטסאפ/.test(r.text)), true);
+  }
+  //  מצב וואטסאפ ישן (נבדק לפני יותר מ-30 דק') → לא ידוע: לא מתריעים (תיקון סקירה סופית I1)
+  {
+    const cfg = CFG('shadow', { escalateEmail: 'ben@example.com' });
+    const db = mk(cfg, { whatsapp: { state: 'notAuthorized', checkedAt: NOW - 31 * MIN } }), p = provider();
+    for (let i = 0; i < 4; i++) await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + i * 2 * MIN, provider: p, sendPending: noSend });
+    check('stale "notAuthorized" (checked 31+ min ago) → no alarm', [emails(db).length, p.texts.length, !!(db._data.waMeta.clocks.alarms || {}).alarm_wa], [0, 0, false]);
+    const db2 = mk(cfg, { whatsapp: { state: 'notAuthorized' } }), p2 = provider();
+    for (let i = 0; i < 4; i++) await B.lgClockCheck(db2, 'office', { env: ENV, now: NOW + i * 2 * MIN, provider: p2, sendPending: noSend });
+    check('state with no checkedAt → no alarm', emails(db2).length, 0);
+  }
+  //  המחשב במשרד: כבוי כל הלילה → אין התראה בבוקר; עבד היום ונעצר → התראה (תיקון סקירה סופית I2)
+  {
+    const D = Date.UTC(2026, 10, 10, 5, 2, 0);            // שלישי 07:02 בישראל
+    const db = mk(CFG('shadow'), { clocks: { office: { at: Date.UTC(2026, 10, 9, 16, 0, 0) } } }), p = provider();   // אתמול 18:00
+    for (let i = 0; i < 5; i++) await B.lgClockCheck(db, 'gmail', { env: ENV, now: D + i * 2 * MIN, provider: p, sendPending: noSend });
+    check('office off all night → no alarm at 07:02', [p.texts.length, !!(db._data.waMeta.clocks.alarms || {}).alarm_office], [0, false]);
+    const H8 = Date.UTC(2026, 10, 10, 6, 0, 0);           // 08:00
+    const db2 = mk(CFG('shadow'), { clocks: { office: { at: H8 } } }), p2 = provider();
+    await B.lgClockCheck(db2, 'gmail', { env: ENV, now: H8 + 31 * MIN, provider: p2, sendPending: noSend });
+    await B.lgClockCheck(db2, 'gmail', { env: ENV, now: H8 + 33 * MIN, provider: p2, sendPending: noSend });
+    check('office heartbeat 08:00 then silent 31+ min → alarm', [p2.texts.length, /משרד/.test(p2.texts[0] && p2.texts[0].text)], [1, true]);
   }
   //  תזכורת מהשעון: בעיית שומר שעדיין פתוחה אחרי 3 שעות → תזכורת אחת; שנפתרה → כלום
   {
@@ -259,6 +284,7 @@ const notify = (db, a, o) => B.lgBenNotify(db, { reason: 'agent-guard', urgent: 
     const fires = [];
     for (let t = NIGHT; t < NIGHT + 8 * H; t += MIN) {
       db._data.waMeta.whatsapp.state = Math.floor((t - NIGHT) / (5 * MIN)) % 2 ? 'authorized' : 'notAuthorized';
+      db._data.waMeta.whatsapp.checkedAt = t;
       const n0 = room(db).filter(r => r.step === 'found').length;
       await B.lgClockCheck(db, 'office', { env: ENV, now: t, provider: p, sendPending: noSend });
       if (room(db).filter(r => r.step === 'found').length > n0) fires.push(t);

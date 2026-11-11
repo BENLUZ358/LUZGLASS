@@ -29,8 +29,11 @@
 //    • התקלה צריכה להיראות בשתי בדיקות רצופות בהפרש 2 דק' לפחות (waMeta/clocks/seen/<מפתח>);
 //    • וואטסאפ — רק notAuthorized / blocked (לא starting / sleepMode);
 //    • אותו סוג לכל היותר פעם בשעתיים, גם אם "חזר" בינתיים (waMeta/clocks/alarmLast/<מפתח>).
+//    • וואטסאפ — רק כשהמצב נבדק ב-30 הדק' האחרונות (checkedAt); ישן יותר = לא ידוע: לא התראה ולא "חזר".
+//    • משרד — רק אם המחשב כבר שלח דופק מוקדם יותר באותו יום בישראל: מחשב שכובה בלילה / בסופ"ש לא מתריע
+//      בבוקר; מחשב שנעצר באמצע היום — כן (תיקון סקירה סופית I2).
 //  בסוף כל בדיקה — שליחת תור הסוכנים עד הדדליין (הודעה רגילה לבן שלא יצאה בחלון שלה).
-//  עלות לכל פנייה: agentConfig, waMeta/clocks (צומת קטן), waMeta/whatsapp/state + שער טרנזקציה פעם בדקה.
+//  עלות לכל פנייה: agentConfig, waMeta/clocks (צומת קטן), waMeta/whatsapp (צומת קטן) + שער טרנזקציה פעם בדקה.
 // ═══════════════════════════════════════════════════════════════════
 
 const S = require('./_agent-send');
@@ -40,6 +43,7 @@ const { lgRoomSay, ROOM_OPEN } = require('./_agent-room');
 const BEN = 'waMeta/agentBen';
 const CLOCKS = 'waMeta/clocks';
 const WA_STATE = 'waMeta/whatsapp/state';
+const WA_NODE = 'waMeta/whatsapp';      // { state, reason, pending, checkedAt } — צומת קטן (_wa-drain-core recordState)
 const PROBLEMS = 'waMeta/agentWatch/problems';
 const MIN = 60 * 1000, H = 60 * MIN, DAY = 24 * H;
 const DAY_CAP = 20;
@@ -59,6 +63,8 @@ const ALARM_CONFIRM_MS = 2 * MIN;        // התקלה נראית בשתי בד�
 //  כשל שליחה מסוג disconnected נרשם כ-notAuthorized (_wa-drain-core recordState).
 const WA_DOWN = ['notAuthorized', 'blocked'];
 const SWEEP_MIN_LEFT_MS = 3 * 1000;
+//  מצב וואטסאפ שנבדק לפני יותר מ-30 דק' — לא יודעים מה קורה: לא מתריעים וגם לא "חזר" (תיקון סקירה סופית I1)
+const WA_STATE_FRESH_MS = 30 * MIN;
 
 //  'guard' (השומרים) → agent-guard. השאר — כמו שהם, ורק מתוך AGENT_BEN_REASONS.
 const REASON_MAP = { guard: 'agent-guard' };
@@ -306,8 +312,11 @@ async function lgClockCheck(db, which, o) {
   const g = await db.ref(CLOCKS + '/lastCheck_' + which).transaction(cur => (cur != null && Math.abs(now - Number(cur)) < CHECK_GAP_MS ? undefined : now));
   if (!g.committed) return { skipped: 'throttled' };
 
-  const [clocks, wa] = await Promise.all([db.ref(CLOCKS).once('value').then(s => s.val() || {}),
-                                          db.ref(WA_STATE).once('value').then(s => s.val())]);
+  const [clocks, waNode] = await Promise.all([db.ref(CLOCKS).once('value').then(s => s.val() || {}),
+                                              db.ref(WA_NODE).once('value').then(s => s.val() || {})]);
+  const wa = waNode.state == null ? null : waNode.state;
+  const waAt = Number(waNode.checkedAt) || 0;
+  const waFresh = waAt > 0 && now - waAt <= WA_STATE_FRESH_MS;
   const alarms = clocks.alarms || {};
   const seen = clocks.seen || {};          // מתי התקלה נראתה לראשונה ברצף (נמחק כשהיא לא נראית)
   const last = clocks.alarmLast || {};     // מתי התרענו בפעם האחרונה — לא נמחק ב"חזר" (צינון שעתיים)
@@ -315,12 +324,12 @@ async function lgClockCheck(db, which, o) {
   const otherAt = Number(clocks[other] && clocks[other].at) || 0;
   const limit = other === 'office' ? OFFICE_SILENT_MS : GMAIL_SILENT_MS;
   const silent = otherAt > 0 && now - otherAt > limit
-    && (other !== 'office' || require('./_agent-watch').lgIsWorkingHours(now));
+    && (other !== 'office' || (require('./_agent-watch').lgIsWorkingHours(now) && _il(otherAt).day === _il(now).day));
   //  holds — התקלה נראית עכשיו; back — לסגור. משרד שקט מחוץ לשעות: לא מתריעים ולא סוגרים (רק חזרה אמיתית סוגרת)
   const state = {
     ['alarm_' + which]: { holds: false, back: true },
     ['alarm_' + other]: { holds: silent, back: otherAt > 0 && now - otherAt <= limit },
-    alarm_wa: { holds: WA_DOWN.includes(wa), back: wa === 'authorized' },
+    alarm_wa: { holds: waFresh && WA_DOWN.includes(wa), back: waFresh && wa === 'authorized' },
   };
   const minutes = otherAt ? Math.floor((now - otherAt) / MIN) : 0;
   const res = { fired: [], cleared: [], digest: false, reminders: 0, sent: null };
