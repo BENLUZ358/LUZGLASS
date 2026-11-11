@@ -547,7 +547,7 @@ function lgAgentActivity(agentId, shadow, room, range, outbox) {
       did = sent ? 'ענה ללקוח: ' + sent : would ? 'היה עונה: ' + would
         : _adToShaul(v) ? 'היה מעביר לשאול' : _adToBen(v) ? 'שאל אותך בחדר' : lgAgOutcome(v);
     }
-    out.push({ key, at: Number(v.createdAt) || 0, kind: 'msg', who, what: lgAgSentText(v), did,
+    out.push({ key, at: Number(v.createdAt) || 0, kind: 'msg', who, what: !v.linked && !v.text ? 'שלח הודעה' : lgAgSentText(v), did,
       review: lgAdNeedsReview(v), verdict: v.verdict ? (v.verdict.ok ? 'ok' : 'wrong') : '' });
   });
   _adVals(room).forEach(({ key, v }) => {
@@ -555,7 +555,7 @@ function lgAgentActivity(agentId, shadow, room, range, outbox) {
     const q = String(v.question || '');
     out.push({ key, at: Number(v.at) || 0, kind: v.kind === 'summary' ? 'summary' : 'room',
       who: v.kind === 'summary' ? 'סיכום' : String(v.customerName || ''),
-      what: v.kind === 'summary' ? 'כתב סיכום בחדר' : String(v.text || q),
+      what: String(v.text || q),
       did: lgRoomIsQuestion(v) ? (v.state === 'open' ? 'מחכה לתשובה שלך' : 'ענית ✓') : '',
       review: false, verdict: '' });
   });
