@@ -79,6 +79,21 @@ module.exports = async function handler(req, res, deps) {
                  : body.kind === 'sketches-handled' ? 'sketches-handled'
                  : 'dispatched';
 
+  //  "מוכן" סומן עכשיו — השרת מתחיל לעקוב אחרי ההזמנה (בן, 11/11). הדף שולח את זה
+  //  ברגע המעבר ל-done; אם ההודעה לא יצאה תוך 3 דק', הדופק שולח אותה (api/_ready-net.js).
+  if (body.kind === 'ready-watch') {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT && !(deps && deps.db)) { res.status(500).json({ error: 'server not configured' }); return; }
+    try {
+      const db = (deps && deps.db) || _db();
+      const n = await require('./_ready-net').lgReadyNetWatch(db, orderIds, Date.now());
+      res.status(200).json({ ok: true, watching: n });
+    } catch (e) {
+      console.error('ready-watch:', e && e.name);
+      res.status(500).json({ error: 'שגיאה' });
+    }
+    return;
+  }
+
   //  שבר בחיסום שחזר (בן, 10/11) — מסלול משלו: הודעה אחת על פריט אחד, לנמען החשבוניות
   if (body.kind === 'broken-returned') {
     if (orderIds.length !== 1 || !Number.isInteger(Number(body.idx)) || Number(body.idx) < 0) {
@@ -238,6 +253,12 @@ module.exports = async function handler(req, res, deps) {
       // תיעוד בלבד — ר' lgWaEnqueue
       phoneSource: targets[0].source, accountKey: targets[0].accountKey,
     });
+
+    //  ההודעה בתור — אין יותר מה לעקוב (api/_ready-net.js)
+    if (kind === 'ready') {
+      try { await require('./_ready-net').lgReadyNetUnwatch(db, liveIds); }
+      catch (e) { console.warn('ready-unwatch:', e && e.name); }
+    }
 
     res.status(200).json({
       ok: true, queued: q.queued, outboxKey: q.key, configured: provider.configured, kind,

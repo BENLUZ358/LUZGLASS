@@ -40,53 +40,91 @@ const ord = (id, o) => ({ id, stage: 'done', orderClient: 'א.מ.מראות', or
     assert.equal(N.lgReadyNetHours(Date.UTC(2026, 10, 13, 8, 0)), true);     // שישי 10:00
   });
 
-  const base = () => fakeDb({
-    orders: { a: ord('a'), b: ord('b'), c: ord('c', { orderClient: 'כתר' }) },
+  //  a,b,c סומנו "מוכן" לפני 20 דק' ונרשמו למעקב; c כבר בתור
+  const base = (extra) => fakeDb({
+    orders: { a: ord('a'), b: ord('b'), c: ord('c', { orderClient: 'כתר' }), big: ord('big') },
     waOutbox: { k1: { kind: 'ready', state: 'pending', orderIds: ['c'], createdAt: NOW - 5 * MIN } },
+    waMeta: { readyNet: { watch: { a: NOW - 20 * MIN, b: NOW - 20 * MIN, c: NOW - 20 * MIN, ...(extra || {}) } } },
   });
+  const watchOf = db => ((db._data.waMeta || {}).readyNet || {}).watch || {};
 
-  await test('run: dispatches the lost group once, drains, writes a room line, marks tried', async () => {
+  await test('run: dispatches the lost group once, drains, writes a room line, clears the watch', async () => {
     const db = base();
     const calls = [], drained = [];
     const r = await N.lgReadyNetRun(db, { now: NOW,
       dispatch: async (_db, ids) => { calls.push(ids); return { status: 200, body: { queued: true, outboxKey: 'ok1' } }; },
       drain: async (_db, keys) => { drained.push(...keys); } });
-    assert.deepEqual(calls, [['a', 'b']]);          // c כבר בתור — לא שוב
+    assert.deepEqual(calls, [['a', 'b']]);          // c כבר בתור — לא שוב; big לא במעקב — לא נבדק בכלל
     assert.deepEqual(drained, ['ok1']);
     assert.equal(r.sent, 1);
-    assert.ok(db._data.waMeta.readyNet.tried.a && db._data.waMeta.readyNet.tried.b);
+    assert.deepEqual(Object.keys(watchOf(db)), []);
     const room = Object.values(db._data.waMeta.agentRoom || {});
     assert.equal(room.length, 1);
     assert.equal(room[0].agent, 'okev');
     assert.ok(/א\.מ\.מראות/.test(room[0].text) && /Sa, Sb/.test(room[0].text) && /שלחתי/.test(room[0].text));
   });
 
-  await test('run: throttled for 5 minutes, and a tried order is never sent twice', async () => {
+  await test('run: empty watch list → reads no order at all', async () => {
+    const db = fakeDb({ orders: { a: ord('a') } });
+    const ref = db.ref.bind(db); const paths = [];
+    db.ref = p => { paths.push(p); return ref(p); };
+    const r = await N.lgReadyNetRun(db, { now: NOW, dispatch: async () => { throw new Error('no'); } });
+    assert.equal(r.sent, 0);
+    assert.ok(!paths.some(p => /^orders/.test(p)), paths.join(','));
+  });
+
+  await test('run: marked under 3 minutes ago → waits, stays on the list', async () => {
+    const db = fakeDb({ orders: { a: ord('a', { readyAt: NOW - MIN }) }, waMeta: { readyNet: { watch: { a: NOW - MIN } } } });
+    let n = 0;
+    await N.lgReadyNetRun(db, { now: NOW, dispatch: async () => { n++; return { status: 200, body: { queued: true, outboxKey: 'x' } }; }, drain: async () => {} });
+    assert.equal(n, 0);
+    assert.ok(watchOf(db).a);
+    await N.lgReadyNetRun(db, { now: NOW + 3 * MIN, dispatch: async () => { n++; return { status: 200, body: { queued: true, outboxKey: 'x' } }; }, drain: async () => {} });
+    assert.equal(n, 1);
+  });
+
+  await test('run: an order is tried once — next heartbeat sends nothing', async () => {
     const db = base();
     let n = 0;
     const dispatch = async () => { n++; return { status: 200, body: { queued: true, outboxKey: 'x' } }; };
     await N.lgReadyNetRun(db, { now: NOW, dispatch, drain: async () => {} });
-    assert.equal((await N.lgReadyNetRun(db, { now: NOW + MIN, dispatch, drain: async () => {} })).skipped, 'throttled');
-    await N.lgReadyNetRun(db, { now: NOW + 6 * MIN, dispatch, drain: async () => {} });
+    await N.lgReadyNetRun(db, { now: NOW + 2 * MIN, dispatch, drain: async () => {} });
     assert.equal(n, 1);
   });
 
   await test('run: refused (two recipients) → room line with the reason, no drain, not retried', async () => {
     const db = base();
-    let drained = 0;
-    await N.lgReadyNetRun(db, { now: NOW,
-      dispatch: async () => ({ status: 409, body: { error: 'ההזמנות בקבוצה הזו מובילות למספרי טלפון שונים — לא נשלחה הודעה' } }),
-      drain: async () => { drained++; } });
+    let drained = 0, n = 0;
+    const dispatch = async () => { n++; return { status: 409, body: { error: 'ההזמנות בקבוצה הזו מובילות למספרי טלפון שונים — לא נשלחה הודעה' } }; };
+    await N.lgReadyNetRun(db, { now: NOW, dispatch, drain: async () => { drained++; } });
     assert.equal(drained, 0);
     const room = Object.values(db._data.waMeta.agentRoom || {});
     assert.ok(/מספרי טלפון שונים/.test(room[0].text) && /לא נשלחה/.test(room[0].text));
-    assert.ok(db._data.waMeta.readyNet.tried.a);
+    await N.lgReadyNetRun(db, { now: NOW + 2 * MIN, dispatch, drain: async () => {} });
+    assert.equal(n, 1);
   });
 
   await test('run: outside working hours → nothing', async () => {
     const db = base();
     const r = await N.lgReadyNetRun(db, { now: Date.UTC(2026, 10, 14, 10, 0), dispatch: async () => { throw new Error('no'); } });
     assert.equal(r.skipped, 'hours');
+  });
+
+  await test('watch/unwatch: only valid order ids', async () => {
+    const db = fakeDb({});
+    assert.equal(await N.lgReadyNetWatch(db, ['x1', 'a/b', '', 'y.2', 'z3'], NOW), 2);
+    assert.deepEqual(Object.keys(watchOf(db)).sort(), ['x1', 'z3']);
+    await N.lgReadyNetUnwatch(db, ['x1']);
+    assert.deepEqual(Object.keys(watchOf(db)), ['z3']);
+  });
+
+  await test('page: marking done tells the server to start watching; a queued ready message clears it', async () => {
+    const fs = require('fs'), path = require('path');
+    const fdb = fs.readFileSync(path.join(__dirname, '..', 'firebase-db.js'), 'utf8');
+    assert.ok(/nextStage === 'done' && typeof _lgAuthPost === 'function'[\s\S]{0,200}kind:'ready-watch'/.test(fdb));
+    const d = fs.readFileSync(path.join(__dirname, '..', 'api', 'whatsapp-dispatch.js'), 'utf8');
+    assert.ok(/body\.kind === 'ready-watch'[\s\S]{0,400}lgReadyNetWatch/.test(d));
+    assert.ok(/kind === 'ready'\) \{\s*try \{ await require\('\.\/_ready-net'\)\.lgReadyNetUnwatch\(db, liveIds\)/.test(d));
   });
 
   await test('dispatch: deps.auth only from server code — a request without it still needs an admin', async () => {

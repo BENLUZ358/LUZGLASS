@@ -7,25 +7,26 @@
 //  11/11 דוח 52 — L1204/L1205 של א.מ.מראות). רשת הביטחון בטעינת יום עבודה
 //  (lgReadyUnsentIds) תלויה בכך שמישהו פותח את המסך — וב-11/11 גם היא לא שלחה.
 //
-//  מה: בדופק של כלי החשבוניות (כל דקה, api/_invoice-upload.js), לכל היותר פעם
-//  ב-5 דק' ובשעות העבודה: הזמנות ב-done שה-readyAt שלהן בין 3 דק' ל-24 שעות, בלי
-//  whatsapp.sentAt ובלי emailNotices.ready, לא פיקטיביות, ושלא יושבות כבר בתור
-//  השליחה (waOutbox, kind ready, pending/sent) → אותה שליחה בדיוק כמו מהדף:
-//  whatsapp-dispatch עם kind:'ready' (אותו נמען, אותו נוסח עם שמות הסקיצות, אותו
-//  סירוב לשני נמענים), מקובצות לפי שם הלקוח כמו _waSendReadyGrouped, ואז drain.
-//  כל הזמנה מנוסה פעם אחת בלבד (waMeta/readyNet/tried/<id>) — סירוב לא חוזר כל 5 דק'.
-//  שורה בחדר הסוכנים אצל העוקב (אפור): מה נשלח, או למה לא.
+//  מה (בן, 11/11 — "מהרגע שנעשתה הפעולה, לא כל 5 דק'"): ברגע שהזמנה מסומנת "מוכן"
+//  הדף מודיע לשרת (lgLockAndAdvance → whatsapp-dispatch kind 'ready-watch') והיא
+//  נרשמת ב-waMeta/readyNet/watch/<id>. כשההודעה נכנסת לתור — נמחקת משם. הדופק של
+//  כלי החשבוניות (כל דקה, api/_invoice-upload.js) קורא רק את הרשימה הקטנה הזו;
+//  ריקה → לא עושה כלום ולא קורא אף הזמנה. הזמנה שברשימה יותר מ-3 דק' נבדקת לבד
+//  (orders/<id>): עדיין done, בלי whatsapp.sentAt / emailNotices.ready, לא פיקטיבית,
+//  לא בתור → אותה שליחה בדיוק כמו מהדף: whatsapp-dispatch kind:'ready' (אותו נמען,
+//  אותו נוסח עם שמות הסקיצות, אותו סירוב לשני נמענים), מקובצות לפי שם הלקוח, ואז
+//  drain. אחרי בדיקה ההזמנה יוצאת מהרשימה — ניסיון אחד בלבד, סירוב לא חוזר.
+//  שורה בחדר הסוכנים אצל העוקב (אפור): מה נשלח, או למה לא. שעות: א'–ו' 06–20.
 //
 //  לא תלוי במתגי הסוכנים: זו ההודעה הרגילה של המערכת, לא תשובת סוכן.
-//  עלות: קריאת orders (~0.65MB, 11/11) פעם ב-5 דק' בשעות העבודה בלבד.
+//  עלות: קריאת רשימה קטנה בכל דופק; הזמנות נקראות רק כשיש מה לבדוק.
 // ═══════════════════════════════════════════════════════════════════
 
 const NET = 'waMeta/readyNet';
 const MIN = 60 * 1000, H = 60 * MIN;
-const GAP_MS = 5 * MIN;          // לכל היותר פעם ב-5 דק'
+const GAP_MS = 50 * 1000;        // מנעול קצר — שני מחשבים עם כלי חשבוניות לא בודקים יחד
 const MIN_AGE_MS = 3 * MIN;      // הדף שולח תוך שניות — 3 דק' זה "לא יצא"
 const MAX_AGE_MS = 24 * H;       // כמו lgReadyUnsentIds; הודעה בת יממה פגה ממילא
-const TRIED_KEEP_MS = 3 * 24 * H;
 const MAX_GROUPS = 10;           // לכל ריצה
 
 //  א'–ו', 06:00–20:00 שעון ישראל
@@ -39,13 +40,14 @@ function lgReadyNetHours(now) {
 
 //  טהור. orders = { id: order }, inQueue = Set של מזהי הזמנות שכבר בתור ready, tried = { id: at }
 //  → [{ client, ids:[...] }] מקובץ לפי orderClient, בסדר readyAt
-function lgReadyNetPick(orders, now, inQueue, tried) {
+function lgReadyNetPick(orders, now, inQueue, tried, minAgeMs) {
   const t = Number(now) || Date.now();
   const q = inQueue || new Set(), tr = tried || {};
   const list = Object.entries(orders || {}).filter(([id, o]) => {
     if (!o || o.stage !== 'done' || o.isTest) return false;
     const at = Number(o.readyAt) || 0;
-    if (!at || t - at < MIN_AGE_MS || t - at > MAX_AGE_MS) return false;
+    const minAge = minAgeMs == null ? MIN_AGE_MS : minAgeMs;
+    if (!at || t - at < minAge || t - at > MAX_AGE_MS) return false;
     if (o.whatsapp && o.whatsapp.sentAt) return false;
     if (o.emailNotices && o.emailNotices.ready) return false;
     if (q.has(id) || tr[id]) return false;
@@ -82,29 +84,47 @@ async function _dispatch(db, ids, deps) {
   return out;
 }
 
+//  רישום / מחיקה מרשימת המעקב. מזהה הזמנה תקין בלבד (מפתח RTDB).
+const _okId = id => typeof id === 'string' && id.length > 0 && id.length <= 200 && !/[.#$\[\]\/]/.test(id);
+async function lgReadyNetWatch(db, ids, now) {
+  const up = {};
+  for (const id of (ids || []).map(String).filter(_okId).slice(0, 40)) up[id] = Number(now) || Date.now();
+  if (Object.keys(up).length) await db.ref(NET + '/watch').update(up);
+  return Object.keys(up).length;
+}
+async function lgReadyNetUnwatch(db, ids) {
+  const up = {};
+  for (const id of (ids || []).map(String).filter(_okId)) up['watch/' + id] = null;
+  if (Object.keys(up).length) await db.ref(NET).update(up);
+}
+
 async function lgReadyNetRun(db, o) {
   const opt = o || {};
   const now = Number(opt.now) || Date.now();
   if (!opt.force && !lgReadyNetHours(now)) return { ok: true, skipped: 'hours' };
+
+  //  רק הרשימה הקטנה — ריקה = אין מה לעשות, שום הזמנה לא נקראת
+  const watch = (await db.ref(NET + '/watch').once('value')).val() || {};
+  const due = Object.keys(watch).filter(id => now - (Number(watch[id]) || 0) >= MIN_AGE_MS);
+  if (!due.length) return { ok: true, sent: 0, watching: Object.keys(watch).length };
+
   const g = await db.ref(NET + '/lastRun').transaction(cur => (cur != null && Math.abs(now - Number(cur)) < GAP_MS ? undefined : now));
   if (!g.committed) return { ok: true, skipped: 'throttled' };
 
-  //  ניקוי tried ישן
-  const tried = { ...((await db.ref(NET + '/tried').once('value')).val() || {}) };
-  for (const [k, v] of Object.entries(tried)) {
-    if (now - (Number(v) || 0) > TRIED_KEEP_MS) { await db.ref(NET + '/tried/' + k).set(null); delete tried[k]; }
+  //  כל הזמנה שהגיע זמנה נקראת לבד ויוצאת מהרשימה — ניסיון אחד בלבד
+  const orders = {};
+  for (const id of due) {
+    const v = (await db.ref('orders/' + id).once('value')).val();
+    if (v) orders[id] = v;
   }
-
-  const orders = (await db.ref('orders').once('value')).val() || {};
-  const groups = lgReadyNetPick(orders, now, await _queuedReadyIds(db, now), tried).slice(0, MAX_GROUPS);
+  await lgReadyNetUnwatch(db, due);
+  const groups = lgReadyNetPick(orders, now, await _queuedReadyIds(db, now), {}, 0).slice(0, MAX_GROUPS);
   if (!groups.length) return { ok: true, sent: 0 };
 
   const { lgRoomPost } = require('./_agent-room');
   const keys = [];
   const done = [];
   for (const grp of groups) {
-    //  נרשם לפני השליחה: ריצה שנהרגה באמצע לא תנסה שוב
-    for (const id of grp.ids) await db.ref(NET + '/tried/' + id).set(now);
     const names = grp.ids.map(id => String((orders[id] && (orders[id].sketchName || orders[id].orderNum)) || id)).join(', ');
     let r;
     try { r = await _dispatch(db, grp.ids, opt); }
@@ -133,4 +153,4 @@ async function lgReadyNetRun(db, o) {
   return { ok: true, sent: keys.length, groups: done };
 }
 
-module.exports = { lgReadyNetRun, lgReadyNetPick, lgReadyNetHours, NET };
+module.exports = { lgReadyNetRun, lgReadyNetPick, lgReadyNetHours, lgReadyNetWatch, lgReadyNetUnwatch, NET };

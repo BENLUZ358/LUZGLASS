@@ -2919,6 +2919,11 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
   if(nextStage === 'delivery') update.deliveryAt = update.updatedAt;
   // מתי הגיעה ל"מוכן לאיסוף" — רשת הביטחון של הודעת "מוכן" (lgReadyUnsentIds)
   if(nextStage === 'done') update.readyAt = update.updatedAt;
+  //  השרת מתחיל לעקוב: אם "מוכן" לא ייצא מהדף תוך 3 דק', הוא שולח (api/_ready-net.js, בן 11/11).
+  //  נשלח לפני הכתיבה ובלי לחכות — כדי שגם דף שנסגר מיד אחרי הסימון יספיק לשלוח אותו.
+  if(nextStage === 'done' && typeof _lgAuthPost === 'function'){
+    try { _lgAuthPost('/api/whatsapp-dispatch', { kind:'ready-watch', orderIds:[String(orderId)] }).catch(()=>{}); } catch(e){}
+  }
   const result = { locked: false, unpricedNames: [] };
   // נעל מחיר רק אם עדיין לא נעול. בודקים pricesLockedAt ולא totalFinal —
   // totalFinal יכול להיות באמת 0 (הזמנה שננעלה בלי אף פריט מתומחר), ואז
