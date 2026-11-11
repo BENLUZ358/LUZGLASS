@@ -83,6 +83,10 @@ async function heartbeat(body, deps) {
   try {
     await (deps.watchRun || W.lgAgentWatchRun)(deps.db, { env: deps.env || process.env, now });
   } catch (e) { console.error('invoice-pdf-upload: watch failed', e && e.name); }
+  //  "מוכן לאיסוף" שלא יצא מהדף (בן, 11/11) — לא תלוי במתגי הסוכנים. ר' api/_ready-net.js
+  try {
+    await (deps.readyNet || require('./_ready-net').lgReadyNetRun)(deps.db, { now });
+  } catch (e) { console.error('invoice-pdf-upload: ready-net failed', e && e.name); }
   return { status: 200, body: { ok: true, heartbeat: true } };
 }
 

@@ -63,7 +63,8 @@ function _db() {
 module.exports = async function handler(req, res, deps) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return; }
 
-  const auth = await verifyAdmin(req);
+  //  deps.auth — רק מקוד השרת (_ready-net.js); Vercel קורא ל-handler עם req,res בלבד
+  const auth = (deps && deps.auth && deps.auth.ok === true) ? deps.auth : await verifyAdmin(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
 
   const body     = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
@@ -97,7 +98,7 @@ module.exports = async function handler(req, res, deps) {
 
   if (!orderIds.length)             { res.status(400).json({ error: 'orderIds חסר' }); return; }
   if (orderIds.length > MAX_ORDERS) { res.status(400).json({ error: `יותר מדי הזמנות (מקסימום ${MAX_ORDERS})` }); return; }
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT && !(deps && deps.db)) {
     res.status(500).json({ error: 'server not configured — missing FIREBASE_SERVICE_ACCOUNT' }); return;
   }
 
