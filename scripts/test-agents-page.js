@@ -33,7 +33,7 @@ check('no pilot buttons in the log any more', /lgAgRowHtml\(/.test(live(P)), fal
 check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261111/.test(P), /agents-dash\.js\?v=20261111/.test(A)], [true, true]);
 // ─── עונה לכל הלקוחות + מייל להתראות (משימה 5) ───
 check('all-customers switch above the pilot list, off by default',
-  [/עונה לכל הלקוחות/.test(P), P.indexOf('id="allCust"') > -1 && P.indexOf('id="allCust"') < P.indexOf('id="pilot"'), /allCustomers\s*===\s*true/.test(P)], [true, true, true]);
+  [/עונה לכל הלקוחות/.test(P), P.indexOf('id="allCust"') > -1 && P.indexOf('id="allCust"') < P.indexOf('id="pilot"'), /allCustomers\)\s*===\s*true/.test(P)], [true, true, true]);
 check('email field with the edit/save pattern and its hint',
   [/id="benMail"/.test(P), /data-mailsave/.test(P), /data-mailedit/.test(P), /מייל להתראות כשהוואטסאפ לא עובד/.test(P), /escalateEmail:/.test(live(P)), /allCustomers:\s*/.test(live(P))], [true, true, true, true, true, true]);
 // ─── חדר הסוכנים (בן, 10/11) ───
