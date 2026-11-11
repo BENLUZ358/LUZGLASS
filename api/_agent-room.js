@@ -53,7 +53,9 @@ function _ref(ref) {
 async function _openIdx(db, key, rec) {
   try {
     await db.ref(ROOM_OPEN + '/' + key).set(rec ? { at: Number(rec.at) || 0, agent: String(rec.agent || ''),
-                                                    customer: String(rec.customerName || '').slice(0, 120) } : null);
+                                                    customer: String(rec.customerName || '').slice(0, 120),
+                                                    //  לקוח לא מרוצה (11/11): מי ולמה — כדי למצוא "כבר היה upset היום" בלי לקרוא את כל החדר
+                                                    customerId: String(rec.customerId || '').slice(0, 200), reason: String(rec.reason || '').slice(0, 40) } : null);
   } catch (e) { console.warn('agent-room: open index', e && e.name); }
 }
 
@@ -72,7 +74,7 @@ async function lgRoomPost(db, e, now) {
     //  שדות נוספים — רק כשיש (שורת info נשארת כמו קודם)
     const extra = { to: _s(x.to, 40), state: STATES.includes(x.state) ? x.state : null, customerId: _s(x.customerId, 200),
       customerName: _s(x.customerName, 120), chat: _s(x.chat, 120), question: _s(x.question, 1000), suggest: _s(x.suggest, 1000),
-      note: _s(x.note, 300), replyTo: _s(x.replyTo, 60), by: _s(x.by, 60), outboxKey: _s(x.outboxKey, 200),
+      note: _s(x.note, 300), reason: _s(x.reason, 40), replyTo: _s(x.replyTo, 60), by: _s(x.by, 60), outboxKey: _s(x.outboxKey, 200),
       internal: x.internal === true ? true : null,
       //  שיחה (11/11): thread = מפתח השיחה, step = מקום בשיחה (found|handoff|done|need-ben|would)
       thread: _s(x.thread, 120), step: STEPS.includes(x.step) ? x.step : null,

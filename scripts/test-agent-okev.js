@@ -116,5 +116,7 @@ check('menu', AGENT_MENU_TEXT, [
   '4. לקבל הצעת מחיר', '5. לשלוח הזמנה חדשה', 'לכל דבר אחר — כתבו כאן ונחזור אליך בהקדם',
 ].join('\n'));
 
+check('complaint with ref → okev, without → complaint', [rt('complaint', { ref: 'כהן' }), rt('complaint'), rt('complaint', { linked: false })], ['okev', 'complaint', 'shaul']);
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall ok');

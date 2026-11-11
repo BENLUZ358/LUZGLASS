@@ -243,6 +243,8 @@ function lgAgentDeleteOnly(d, r, orders) {
 //  x: { quoteToBen, … } — שיפורים לכל סוכן (חדר הסוכנים), רק כשיש הגדרות במסך
 function _route(r, orders, now, keep, archive, quote, price, x) {
   const xo = x || {};
+  //  תלונה כשהטיפול ב"לא מרוצה" כבוי (בלי הגדרות במסך): כמו שהיה לפני שהסיווג הכיר אותה — שאלה
+  if (r.intent === 'complaint') return { actions: _ask(r), conv: keep };
   switch (r.route) {
     case 'okev': {
       const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
@@ -292,6 +294,26 @@ function _route(r, orders, now, keep, archive, quote, price, x) {
     case 'kolet-deleted': { const x = _deleted(r, orders, now); return { actions: x.actions, conv: x.conv || keep }; }
     default: return { actions: [], conv: keep };   // kolet (הקליטה הקיימת), none, ignore
   }
+}
+
+// ─── לקוח לא מרוצה (בן, 11/11) ──────────────────────────────────────
+//  upset (בנוסף לכל intent) או complaint: ההחלטה הרגילה נזרקת ובמקומה שאלה צהובה לבן +
+//  ללקוח התנצלות אחת (עם עובדות הסטטוס לפניה, אם יש הזמנה אחת מזוהה) — בלי "קיבלנו, בודקים".
+//  לא נוגעים בהזמנה חדשה (kolet), באדם שעונה, ובהודעות צוות.
+const UPSET_TEXT = 'מצטערים על העיכוב. בן יחזור אליך בהקדם.';
+const UPSET_NOTE = 'לקוח לא מרוצה';
+const UPSET_ROUTES = ['okev', 'complaint', 'menu', 'archive', 'quote', 'price', 'shaul', 'none', 'ignore'];
+function _isUpset(r, on) { return on === true && !!r && r.linked === true && (r.upset === true || r.intent === 'complaint') && UPSET_ROUTES.includes(r.route); }
+function _upset(r, orders, now, keep, xo, today) {
+  let facts = '';
+  if (r.route === 'okev' && (r.intent === 'status' || r.intent === 'complaint')) {
+    const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
+    if (found.match === 'one') facts = _statusText(found.orders[0], xo, now);
+  }
+  //  כבר היה לא מרוצה היום ובן לא ענה — רק לבן, בלי תשובה אוטומטית נוספת
+  const hold = today ? '' : (facts ? facts + '\n\n' : '') + UPSET_TEXT;
+  const ask = _ask(r, { note: UPSET_NOTE, benReason: 'agent-upset', upset: true, hold, noHold: !hold });
+  return { actions: ask, conv: keep };
 }
 
 // ─── החלטה — טהור ───────────────────────────────────────────────────
@@ -344,8 +366,9 @@ function lgAgentDecide(p) {
   }
   if (c && r.linked && r.route !== 'kolet' && msgAt > askedAt) {
     const h = _onConv(r, orders, c, now, xo);
-    if (h) return h;
+    if (h) return _isUpset(r, p.upsetOn) ? _upset(r, orders, now, c, xo, !!(p && p.upsetToday)) : h;
   }
+  if (_isUpset(r, p && p.upsetOn)) return _upset(r, orders, now, c, xo, !!(p && p.upsetToday));
   return _route(r, orders, now, c, p && p.archive, p && p.quote, p && p.price, xo);
 }
 
@@ -540,6 +563,16 @@ async function lgAgentAct(db, key, opts) {
   }
 }
 
+const _ilDay = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
+//  שאלה פתוחה בחדר, סיבה agent-upset, אותו customerId, מהיום. האינדקס הפתוח קטן; רשומות ישנות בלי customerId לא נספרות.
+async function _upsetToday(db, cid, now) {
+  try {
+    const open = (await db.ref(ROOM_OPEN).once('value')).val() || {};
+    const day = _ilDay(now);
+    return Object.values(open).some(e => e && e.reason === 'agent-upset' && String(e.customerId || '') === cid && _ilDay(Number(e.at) || 0) === day);
+  } catch (e) { console.warn('agent-act: upset-today', e && e.name); return false; }
+}
+
 async function _act(db, key, rec, recRef, env, now, o) {
 
   const chat = String(rec.groupId || rec.chatId || '');
@@ -603,7 +636,10 @@ async function _act(db, key, rec, recRef, env, now, o) {
     try { stageDays = (await db.ref(require('./_agent-stats').AGENT_STATS).once('value')).val() || null; }
     catch (e) { console.warn('agent-act: stage stats', e && e.name); stageDays = null; }
   }
-  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price, quoteToBen: !!cfg, stageDays });
+  //  לקוח לא מרוצה: האם כבר יש שאלה פתוחה כזו מהיום (שעון ישראל) לאותו לקוח
+  let upsetToday = false;
+  if (cfg && rec.linked && cid && (rec.upset === true || rec.intent === 'complaint')) upsetToday = await _upsetToday(db, cid, now);
+  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price, quoteToBen: !!cfg, stageDays, upsetToday, upsetOn: !!cfg });
   // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
   const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null }
     : priceSkipped ? { priceSkipped: 'deadline' } : price ? { priceUsage: price.usage || null } : {};
@@ -684,7 +720,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  ⚠️ כאן כבר עברו כל השערים (הסוכן "עונה", לקוח מופעל ומקושר) — אחרת המודל לא נקרא.
       let lm = null;
       //  hold משלו (שיפורים 4, 6 — כמות חשבוניות / בקשת מחיר) — בלי למידה: ההודעה ללקוח קבועה
-      if (!(a.files && a.files.length) && !a.hold && a.question && a.question !== '(תמונה)') {
+      if (!(a.files && a.files.length) && !a.hold && !a.upset && a.question && a.question !== '(תמונה)') {
         try {
           lm = await lgLessonFind(db, { agent, question: a.question, env, fetcher: o.fetchImpl, matcher: o.lessonMatch,
                                         deadline: o.deadline, clock: o.clock, reserveMs: 2 * PER_ITEM_WORST_MS });
@@ -715,6 +751,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
       const prop = lm && lm.id ? { lessonId: lm.id, proposal: lm.lesson.answer, lessonFrom: from } : {};
       const rk = await lgRoomPost(db, { agent, kind: 'ask', state: 'open', text: a.note || (String(a.who || '') + ': ' + line.slice(0, 200)),
         customerId: cid, customerName: a.who, chat, question: a.question, suggest: a.suggest, note: a.note,
+        reason: a.benReason || undefined,
         topic: lm && lm.topic ? lm.topic : undefined, ...prop,
         ref: { customerId: cid, shadowKey: key } }, now);
       //  ⚠️ (תיקון סקירה 10/11) הכל תלוי בצהוב: בלעדיו אין על מה לענות בחדר — לא
@@ -724,10 +761,10 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  הבוקר), עד 20 ביום. השליחה עצמה — כאן למטה עם שאר התור (flush:false).
       if (rk) {
         const bn = await require('./_agent-ben').lgBenNotify(db, { key: k + '_b', outboxKey: k + '_b',
-          text: lgRoomAskBenText(a.who, a.question, env), reason: AGENT_ASK_REASON, urgent: false, env, now, cfg, agent,
+          text: lgRoomAskBenText(a.who, a.upset ? UPSET_NOTE + ': ' + a.question : a.question, env), reason: a.benReason || AGENT_ASK_REASON, urgent: false, env, now, cfg, agent,
           customerId: cid, files: a.files || [], open: ROOM_OPEN + '/' + rk, flush: false });
         if (bn.queued) queued.push(bn.key);
-        await enq(k, chat, a.hold || ASK_HOLD_TEXT, [], 'agent-reply');
+        if (!a.noHold) await enq(k, chat, a.hold || ASK_HOLD_TEXT, [], 'agent-reply');
       }
     }
     else if (a.type === 'quote-ask') {

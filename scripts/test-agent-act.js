@@ -59,7 +59,7 @@ const run = (db, k, env, now) => {
   return act.lgAgentAct(db, k, { env: env || ON, now: now || NOW, sendPending: sendStub });
 };
 
-const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: now_ || NOW, ...rec_ }, orders: orders_ || list('777'), conv: conv_ || null, now: now_ || NOW });
+const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: now_ || NOW, ...rec_ }, orders: orders_ || list('777'), conv: conv_ || null, now: now_ || NOW, upsetOn: true });
 
 (async () => {
   check('constants', [act.CONV, act.CONV_TTL_MS], ['waMeta/agentConv', 30 * 60 * 1000]);
@@ -526,6 +526,68 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     put(db, 'Q3', R({ idMessage: 'Q3', route: 'menu', text: 'היי', timestamp: NOW }));
     await act.lgAgentAct(db, 'Q3', { env: ON, now: NOW, sendPending: spy, clock });
     check('F1 act without deadline → clock + 50s', calls[0] && calls[0].deadline, t + 50000);
+  }
+
+  /* ── לקוח לא מרוצה (משימה 6) ─────────────────────────────────────── */
+  {
+    const APOL = 'מצטערים על העיכוב. בן יחזור אליך בהקדם.';
+    const UA = (question, hold, noHold) => ({ type: 'ask', who: 'כהן זכוכית', question, note: 'לקוח לא מרוצה', benReason: 'agent-upset', upset: true, hold, noHold });
+    // status + upset → עובדות + התנצלות בהודעה אחת (hold), ובן
+    const d = D(R({ intent: 'status', ref: 'כהן', upset: true, text: 'איפה ההזמנה כבר שבוע!!' }));
+    check('U1 status+upset → facts then apology, one ask', d, { actions: [UA('איפה ההזמנה כבר שבוע!!', 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור\n\n' + APOL, false)], conv: null });
+    // complaint בלי הזמנה → התנצלות + בן
+    const d2 = D(R({ intent: 'complaint', route: 'complaint', upset: true, text: 'אתם לא עונים לי' }));
+    check('U2 complaint without order → apology + ask', d2, { actions: [UA('אתם לא עונים לי', APOL, false)], conv: null });
+    // אותו יום, עוד לא נענה → רק בן
+    const d3 = act.lgAgentDecide({ rec: { timestamp: NOW, ...R({ intent: 'complaint', route: 'complaint', upset: true, text: 'שוב!!' }) },
+      orders: list('777'), conv: null, now: NOW, upsetToday: true, upsetOn: true });
+    check('U3 second upset same day → ask only, no auto reply', d3, { actions: [UA('שוב!!', '', true)], conv: null });
+    // רשומה ישנה בלי upset — ההחלטה הרגילה
+    const d4 = D(R({ intent: 'status', ref: 'כהן' }));
+    check('U4 old record without upset → unchanged', d4.actions.map(a => a.type), ['reply']);
+    // הזמנה חדשה עם upset — לא נבלעת
+    const d5 = D(R({ intent: 'order', route: 'kolet', upset: true, hasImage: true }));
+    check('U5 order+upset keeps kolet (no actions)', d5.actions, []);
+    // לא מקושר — לא נוגעים
+    check('U6 unlinked upset → no upset ask', D(R({ linked: false, intent: 'complaint', route: 'shaul', upset: true })).actions.every(a => !a.upset), true);
+
+    // ביצוע: ללקוח הודעה אחת (עובדות+התנצלות), לא "קיבלנו"; בן — agent-upset; בחדר הערה
+    const CFGU = { agents: { okev: 'reply', markazan: 'reply' }, allCustomers: true };
+    let db = seed({ agentConfig: CFGU });
+    put(db, 'U7', R({ idMessage: 'U7', intent: 'status', ref: 'כהן', upset: true, text: 'איפה ההזמנה כבר שבוע!!' }));
+    await run(db, 'U7');
+    const ob = outbox(db);
+    check('U7 one customer message with facts+apology, no hold', [ob.U7_0.text, Object.keys(ob).filter(k => !k.endsWith('_b')).length],
+      ['הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור\n\n' + APOL, 1]);
+    check('U7 Ben pinged with reason agent-upset', [ob.U7_0_b.to, ob.U7_0_b.reason, ob.U7_0_b.text.includes('לקוח לא מרוצה')], ['0547725552', 'agent-upset', true]);
+    const roomRows = Object.values((db._data.waMeta || {}).agentRoom || {});
+    check('U7 room ask shows message + note', [roomRows[0].kind, roomRows[0].note, roomRows[0].question, roomRows[0].reason],
+      ['ask', 'לקוח לא מרוצה', 'איפה ההזמנה כבר שבוע!!', 'agent-upset']);
+    const idx = Object.values((db._data.waMeta || {}).agentRoomOpen || {})[0];
+    check('U7 open index carries customerId + reason', [idx.customerId, idx.reason], ['777', 'agent-upset']);
+
+    // ההודעה השנייה באותו יום — רק שאלה לבן, ללקוח לא יוצא כלום
+    put(db, 'U8', R({ idMessage: 'U8', intent: 'complaint', route: 'complaint', upset: true, text: 'שוב אין תשובה!!' }));
+    await run(db, 'U8', ON, NOW + MIN);
+    check('U8 same-day upset → no customer message, Ben ask exists', [!!outbox(db).U8_0, !!outbox(db).U8_0_b], [false, true]);
+    // אתמול נשארה פתוחה — לא נחשבת
+    db = seed({ agentConfig: CFGU });
+    db._data.waMeta.agentRoomOpen = { Y1: { at: NOW - 30 * 3600 * 1000, agent: 'markazan', customer: 'כהן', customerId: '777', reason: 'agent-upset' },
+                                      Y2: { at: NOW - MIN, agent: 'markazan', customer: 'כהן' } };   // ישנה בלי customerId
+    put(db, 'U9', R({ idMessage: 'U9', intent: 'complaint', route: 'complaint', upset: true, text: 'מתלונן' }));
+    await run(db, 'U9');
+    check('U9 yesterday / old-format index entries do not count → apology sent', outbox(db).U9_0.text, APOL);
+    // בלי הגדרות במסך: כמו קודם — תלונה = שאלה רגילה (קיבלנו), בלי התנצלות
+    db = seed();
+    put(db, 'U11', R({ idMessage: 'U11', intent: 'complaint', route: 'complaint', upset: true, text: 'מתלונן' }));
+    await run(db, 'U11');
+    check('U11 no agentConfig → plain hold, old ask', [outbox(db).U11_0.text, Object.keys((db._data.waMeta||{}).agentBen||{}).length], [HOLD, 0]);
+    // מצב שקט: רק wouldAct
+    db = seed({ agentConfig: { agents: { okev: 'shadow', markazan: 'shadow' }, allCustomers: true } });
+    put(db, 'U10', R({ idMessage: 'U10', intent: 'complaint', route: 'complaint', upset: true, text: 'מתלונן' }));
+    await run(db, 'U10', { ...ON, AGENT_REPLY_ENABLED: 'false' });
+    const rr = db._data.waMeta.agentShadow.U10;
+    check('U10 shadow mode → wouldAct only', [rr.acted, rr.wouldAct[0].type, Object.keys(outbox(db)).length], [false, 'ask', 0]);
   }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');

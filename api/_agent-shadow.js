@@ -212,11 +212,11 @@ async function lgAgentShadowProcess(db, key, opts) {
           : await lgAgentClassify({ text: e.text, hasImage: !!e.hasImage,
               model: env.AGENT_MODEL, key: env.OPENAI_API_KEY, fetcher: o.fetchImpl });
         if (skip) out.classifySkipped = 'deadline';
-        out.intent = cls.intent; out.ref = cls.ref || ''; out.usage = cls.usage || null;
+        out.intent = cls.intent; out.ref = cls.ref || ''; out.upset = cls.upset === true; out.usage = cls.usage || null;
         // המודל נקרא רק כשיש טקסט (תמונה בלבד = order בלי קריאה)
         out.model = needsModel && !skip ? String(env.AGENT_MODEL || '') : '';
         const humanQuiet = await _humanQuiet(db, e, now);
-        out.route = lgOkevRoute({ intent: out.intent, isGroup: !!e.groupId, linked: true, humanQuiet });
+        out.route = lgOkevRoute({ intent: out.intent, isGroup: !!e.groupId, linked: true, humanQuiet, ref: out.ref });
         if (out.route === 'okev') {
           // ⚠️ קורא את כל orders ומסנן כאן — מקובל כל עוד יש מעט הזמנות בפרודקשן.
           //    לפני הפעלה חיה צריך אינדקס על customerId (orderByChild + equalTo)
@@ -226,7 +226,7 @@ async function lgAgentShadowProcess(db, key, opts) {
             .filter(([, x]) => x && String(x.customerId || '') === out.customerId)
             .map(([id, x]) => ({ ...x, id }));
           const found = lgOkevFind(mine, { quotedId: e.quotedId || '', ref: out.ref });
-          out.wouldReply = lgOkevReply(out.intent, found);
+          out.wouldReply = lgOkevReply(out.intent === 'complaint' ? 'status' : out.intent, found);
           out.matchedOrderIds = found.orders.map(x => x.id);
         } else if (out.route === 'menu') {
           out.wouldReply = AGENT_MENU_TEXT;
