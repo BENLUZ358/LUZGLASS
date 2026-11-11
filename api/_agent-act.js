@@ -700,14 +700,14 @@ async function _act(db, key, rec, recRef, env, now, o) {
   const needsStaff = d.actions.some(a => (a.type === 'staff' && !a.notify) || a.type === 'quote-ask');
   let staffQueued = false;
   const deferred = [];
-  //  תשובות בשילוב (spec ג; תיקון סקירה 12/11): העובדות יוצאות **כמו שהן**. המודל כותב רק
-  //  עטיפה — פתיחה וסיום קצרים, כל אחד נבדק לבד (_agent-wording.lgWrapOk) ונזרק בספק.
+  //  תשובות בשילוב (spec ג; תיקון סקירה 12/11): העובדות יוצאות **כמו שהן**. המודל לא כותב
+  //  טקסט — רק בוחר פתיחה / סיום מרשימות סגורות (_agent-wording: LG_WRAP_OPENERS / CLOSERS).
   //  רק עם הגדרות במסך והסוכן "עונה" — בשקט לעולם לא קוראים למודל. אין זמן לעטיפה + שליחה
   //  → העובדות לבד (wordSkipped נרשם רק כשבאמת היינו מנסים).
   //  ⚠️ לא נעטפים: הודעות לשאול / לבן, "קיבלנו, אנחנו בודקים", שיעור שנלמד, תשובת בן
   //     מהחדר, תוצאות ביטול, כיתוב קבצים, ושליחה חוזרת של שומר (אלה לא עוברים כאן).
-  //  ברכה (chitchat → תפריט): kind 'free' — פתיחה חופשית לבד; אין פתיחה תקינה → התפריט.
-  //  התנצלות "לא מרוצה": העובדות + "מצטערים…" כמו שהן, עם פתיחה בלבד (noCloser).
+  //  ברכה (chitchat → תפריט): kind 'free' — פתיחה מהרשימה + התפריט כמו שהוא; אין פתיחה → התפריט לבד.
+  //  התנצלות "לא מרוצה": העובדות + "מצטערים…" כמו שהן, עם פתיחה בלבד מהפריטים שמתאימים לתלונה (upset).
   const wordOn = !!cfg && agentMode === 'reply' && mode !== 'delete-only';
   const replyWords = [];   //  כל תשובה שנעטפה: { original, sent } — מוצג ב"מה X עשה"
   let wordSkipped = '';
@@ -716,7 +716,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
     if (!wordOn || !text || (text === AGENT_MENU_TEXT && !menu)) return text;
     const args = { kind: menu ? 'free' : 'facts', customerText: rec.text, customerName: rec.customerName, facts: text,
                    model: env.AGENT_MODEL, key: env.OPENAI_API_KEY, fetcher: o.fetchImpl, timeoutMs: WORD_TIMEOUT_MS,
-                   noCloser: !!(opt && opt.noCloser) };
+                   upset: !!(opt && opt.upset) };
     if (!lgWordWouldTry(args)) return text;
     if (o.deadline - o.clock() < WORD_TIMEOUT_MS + PER_ITEM_WORST_MS) { wordSkipped = 'deadline'; return text; }
     let w = null;
@@ -794,7 +794,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
           customerId: cid, files: a.files || [], open: ROOM_OPEN + '/' + rk, flush: false });
         if (bn.queued) queued.push(bn.key);
         //  ההתנצלות של "לא מרוצה" (עובדות + "מצטערים…") — נעטפת בפתיחה בלבד; "קיבלנו" הקבוע — לא
-        if (!a.noHold) await enq(k, chat, a.upset && a.hold ? await _word(a.hold, { noCloser: true }) : (a.hold || ASK_HOLD_TEXT), [], 'agent-reply');
+        if (!a.noHold) await enq(k, chat, a.upset && a.hold ? await _word(a.hold, { upset: true }) : (a.hold || ASK_HOLD_TEXT), [], 'agent-reply');
       }
     }
     else if (a.type === 'quote-ask') {

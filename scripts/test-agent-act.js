@@ -11,12 +11,17 @@ const act = require(path.join(ROOT, 'api', '_agent-act.js'));
 const sh = require(path.join(ROOT, 'api', '_agent-shadow.js'));
 const { AGENT_MENU_TEXT } = require(path.join(ROOT, 'api', '_agent-okev.js'));
 let failed = 0;
-//  תשובות בשילוב (11/11): עם הגדרות "עונה" תשובה ללקוח נעטפת בפתיחה של המודל — בבדיקה אסור
-//  לצאת לרשת. המודל המדומה תמיד מחזיר פתיחה "היי": כל טקסט שעובר בטעות בעטיפה משתנה ונופל
-//  בבדיקות הקיימות; מסלולים שאמורים להיעטף — מצפים ל-WRAP(...)
-global.fetch = async (url, init) => ({ ok: true, json: async () => ({ status: 'completed', usage: null,
-  output: [{ content: [{ type: 'output_text', text: JSON.stringify({ opener: 'היי', closer: '' }) }] }] }) });
-const WRAP = t => 'היי\n' + t;
+//  תשובות בשילוב (11/11): עם הגדרות "עונה" תשובה ללקוח נעטפת בפתיחה שהמודל בוחר מרשימה סגורה — בבדיקה
+//  אסור לצאת לרשת. המודל המדומה תמיד בוחר את הפתיחה המותרת הראשונה (מהסכמה בבקשה): כל טקסט שעובר
+//  בטעות בעטיפה משתנה ונופל בבדיקות הקיימות; מסלולים שאמורים להיעטף — מצפים ל-WRAP(...) / WRAP_UPSET(...)
+global.fetch = async (url, init) => {
+  const sc = JSON.parse(init.body).text.format.schema.properties;
+  const pick = { opener: sc.opener.enum.find(i => i >= 0), closer: -1 };
+  return { ok: true, json: async () => ({ status: 'completed', usage: null,
+    output: [{ content: [{ type: 'output_text', text: JSON.stringify(pick) }] }] }) };
+};
+const WRAP = t => 'היי, כהן זכוכית\n' + t;          // פתיחה 0 ("היי") + שם הלקוח
+const WRAP_UPSET = t => 'תודה על הסבלנות\n' + t;     // הפתיחה הראשונה שמתאימה לתלונה
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
   ? console.log('ok    ' + name)
   : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
@@ -564,7 +569,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     await run(db, 'U7');
     const ob = outbox(db);
     check('U7 one customer message with facts+apology, no hold', [ob.U7_0.text, Object.keys(ob).filter(k => !k.endsWith('_b')).length],
-      [WRAP('הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור\n\n' + APOL), 1]);
+      [WRAP_UPSET('הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור\n\n' + APOL), 1]);
     check('U7 Ben pinged with reason agent-upset', [ob.U7_0_b.to, ob.U7_0_b.reason, ob.U7_0_b.text.includes('לקוח לא מרוצה')], ['0547725552', 'agent-upset', true]);
     const roomRows = Object.values((db._data.waMeta || {}).agentRoom || {});
     check('U7 room ask shows message + note', [roomRows[0].kind, roomRows[0].note, roomRows[0].question, roomRows[0].reason],
@@ -582,7 +587,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
                                       Y2: { at: NOW - MIN, agent: 'markazan', customer: 'כהן' } };   // ישנה בלי customerId
     put(db, 'U9', R({ idMessage: 'U9', intent: 'complaint', route: 'complaint', upset: true, text: 'מתלונן' }));
     await run(db, 'U9');
-    check('U9 yesterday / old-format index entries do not count → apology sent', outbox(db).U9_0.text, WRAP(APOL));
+    check('U9 yesterday / old-format index entries do not count → apology sent', outbox(db).U9_0.text, WRAP_UPSET(APOL));
     // תודה / ברכה בקבוצה עם upset — בלי התנצלות ובלי בן
     check('U12 thanks+upset → no apology', D(R({ intent: 'thanks', route: 'none', upset: true, text: 'תודה!!' })).actions, []);
     check('U12 group chitchat+upset → no reply', D(R({ intent: 'chitchat', route: 'ignore', upset: true, text: 'וואו איזה יופי!!!' })).actions, []);
