@@ -25,7 +25,11 @@
 //  (email-inbound outbox-claim, כל דקה). כל אחד רושם waMeta/clocks/<שלו> = { at } ובודק את השני:
 //    משרד שקט > 30 דק' בשעות עבודה (lgIsWorkingHours) · סקריפט המייל שקט > 15 דק' · וואטסאפ מנותק.
 //  התראה אחת לכל מפתח (alarm_office / alarm_gmail / alarm_wa) כל עוד המצב נמשך — waMeta/clocks/alarms/<מפתח>;
-//  חזר לעבוד → שורת "חזר" בחדר והמפתח נמחק (יכול להתריע שוב בפעם הבאה).
+//  חזר לעבוד → שורת "חזר" בחדר והמפתח נמחק. נגד הצפה (תיקון סקירה I1):
+//    • התקלה צריכה להיראות בשתי בדיקות רצופות בהפרש 2 דק' לפחות (waMeta/clocks/seen/<מפתח>);
+//    • וואטסאפ — רק notAuthorized / blocked (לא starting / sleepMode);
+//    • אותו סוג לכל היותר פעם בשעתיים, גם אם "חזר" בינתיים (waMeta/clocks/alarmLast/<מפתח>).
+//  בסוף כל בדיקה — שליחת תור הסוכנים עד הדדליין (הודעה רגילה לבן שלא יצאה בחלון שלה).
 //  עלות לכל פנייה: agentConfig, waMeta/clocks (צומת קטן), waMeta/whatsapp/state + שער טרנזקציה פעם בדקה.
 // ═══════════════════════════════════════════════════════════════════
 
@@ -49,6 +53,12 @@ const URGENT_MIN_LEFT_MS = 16 * 1000;    // שליחה ישירה אחת בגר�
 const SEND_WINDOW_MS = 20 * 1000;        // ניסיון שליחה מהתור אחרי הכנסה — כמו ב-lgAgentEvent
 const DIGEST_LINES = 10;
 const SWEEP_MAX = 5;
+const ALARM_COOLDOWN_MS = 2 * H;         // התראה מאותו סוג — לכל היותר פעם בשעתיים, גם אם "חזר" בינתיים
+const ALARM_CONFIRM_MS = 2 * MIN;        // התקלה נראית בשתי בדיקות רצופות, בהפרש של 2 דק' לפחות
+//  רק מצבים שבאמת אומרים "מנותק". starting / sleepMode וכו' — מעבר, לא התראה.
+//  כשל שליחה מסוג disconnected נרשם כ-notAuthorized (_wa-drain-core recordState).
+const WA_DOWN = ['notAuthorized', 'blocked'];
+const SWEEP_MIN_LEFT_MS = 3 * 1000;
 
 //  'guard' (השומרים) → agent-guard. השאר — כמו שהם, ורק מתוך AGENT_BEN_REASONS.
 const REASON_MAP = { guard: 'agent-guard' };
@@ -163,8 +173,9 @@ async function lgBenNotify(db, a) {
     return skip(first.over ? 'cap' : 'dup');
   }
   //  תפיסה: שתי ריצות יחד על אותו מפתח → הודעה אחת
-  let pol = null;
+  let pol = null, prev = null;
   const t = await sentRef.transaction(x => {
+    prev = x;
     pol = lgBenPolicy({ now, key, urgent, sentLog: { [key]: x }, dayCount: n });
     if (pol.send === 'skip') return;
     const base = x && Number(x.at) ? x : { at: now, reason, agent: String(o.agent || ''), customerId: String(o.customerId || ''),
@@ -178,7 +189,17 @@ async function lgBenNotify(db, a) {
     await db.ref(BEN + '/night/' + key).set({ at: now, text: body.slice(0, 400), reason });
     return { sent: 'night' };
   }
-  await db.ref(BEN + '/day/' + today + '/n').transaction(x => (Number(x) || 0) + 1);
+  //  התקרה נספרת בטרנזקציה, לפני השליחה (תיקון סקירה M2). מלא → המפתח חוזר למה שהיה, ורק בחדר.
+  //  התראה — תמיד נספרת, אף פעם לא נחסמת.
+  const c = await db.ref(BEN + '/day/' + today + '/n').transaction(x => {
+    const v = Number(x) || 0;
+    return !urgent && v >= DAY_CAP ? undefined : v + 1;
+  });
+  if (!c.committed) {
+    await sentRef.set(prev || null);
+    await db.ref(BEN + '/day/' + today + '/over').transaction(x => (Number(x) || 0) + 1);
+    return skip('cap');
+  }
   if (urgent) return { sent: 'now', channel: await _urgent(db, o, { key, text: body, cfg, now }) };
   return _queue(db, o, { key, text: body, reason, cfg, env, reminder: !!pol.reminder });
 }
@@ -219,9 +240,15 @@ async function lgBenDigestRun(db, o) {
   if (over) lines.push('אתמול עוד ' + over + ' הודעות נשארו רק בחדר הסוכנים (יותר מ-' + DAY_CAP + ' ביום).');
   const r = await lgBenNotify(db, { key: 'digest_' + today, text: lines.join('\n'), reason: 'agent-digest', urgent: false, env, now, cfg,
     deadline: opt.deadline, sendPending: opt.sendPending, provider: opt.provider });
-  //  לא יצא (למשל כבר 20 היום) — הרשימה נשארת להודעה של מחר
-  if (r.sent === 'now') await db.ref(BEN + '/night').set(null);
-  return { sent: r.sent === 'now' };
+  //  לא יצא (כבר 20 היום / שכבת השליחה חסמה — למשל כל הסוכנים "שקט") — הרשימה נשארת להודעה של מחר.
+  //  נמחקת רק כשהשורה בתור נשלחה או עדיין ממתינה (תיקון סקירה M3).
+  let ok = r.sent === 'now' && !!r.key;
+  if (ok) {
+    const row = (await db.ref(S.AGENT_OUTBOX + '/' + r.key).once('value')).val();
+    ok = !!row && (row.state === 'sent' || row.state === 'pending');
+  }
+  if (ok) await db.ref(BEN + '/night').set(null);
+  return { sent: ok };
 }
 
 // ─── תזכורות ─────────────────────────────────────────────────────────
@@ -238,6 +265,7 @@ async function _remindSweep(db, o) {
   let done = 0;
   for (const [k, r] of Object.entries(sent)) {
     if (done >= SWEEP_MAX) break;
+    if (o.deadline && Number(o.deadline) - Date.now() < SWEEP_MIN_LEFT_MS) break;   // תיקון סקירה M7
     if (!r || r.reminded || r.urgent || !_openOk(r.open) || now - (Number(r.at) || 0) < REMIND_MS) continue;
     const v = (await db.ref(r.open).once('value')).val();
     const open = r.open.startsWith(ROOM_OPEN + '/') ? !!v : !!v && !v.resolved && !v.dismissed;
@@ -281,34 +309,43 @@ async function lgClockCheck(db, which, o) {
   const [clocks, wa] = await Promise.all([db.ref(CLOCKS).once('value').then(s => s.val() || {}),
                                           db.ref(WA_STATE).once('value').then(s => s.val())]);
   const alarms = clocks.alarms || {};
+  const seen = clocks.seen || {};          // מתי התקלה נראתה לראשונה ברצף (נמחק כשהיא לא נראית)
+  const last = clocks.alarmLast || {};     // מתי התרענו בפעם האחרונה — לא נמחק ב"חזר" (צינון שעתיים)
   const other = which === 'office' ? 'gmail' : 'office';
   const otherAt = Number(clocks[other] && clocks[other].at) || 0;
   const limit = other === 'office' ? OFFICE_SILENT_MS : GMAIL_SILENT_MS;
   const silent = otherAt > 0 && now - otherAt > limit
     && (other !== 'office' || require('./_agent-watch').lgIsWorkingHours(now));
-  //  holds — להתריע; back — לסגור. משרד שקט מחוץ לשעות: לא מתריעים ולא סוגרים (רק חזרה אמיתית סוגרת)
+  //  holds — התקלה נראית עכשיו; back — לסגור. משרד שקט מחוץ לשעות: לא מתריעים ולא סוגרים (רק חזרה אמיתית סוגרת)
   const state = {
     ['alarm_' + which]: { holds: false, back: true },
     ['alarm_' + other]: { holds: silent, back: otherAt > 0 && now - otherAt <= limit },
-    alarm_wa: { holds: !!wa && wa !== 'authorized', back: wa === 'authorized' },
+    alarm_wa: { holds: WA_DOWN.includes(wa), back: wa === 'authorized' },
   };
   const minutes = otherAt ? Math.floor((now - otherAt) / MIN) : 0;
-  const res = { fired: [], cleared: [], digest: false, reminders: 0 };
-  const base = { env, now, cfg, provider: opt.provider, waState: wa, deadline };
+  const res = { fired: [], cleared: [], digest: false, reminders: 0, sent: null };
+  //  ⚠️ בלי deadline להתראות: הזמן נבדק כאן לפני התפיסה, ו-lgBenNotify לא ידלג אחריה (תיקון סקירה M1)
+  const base = { env, now, cfg, provider: opt.provider, waState: wa };
+  const seenUpd = {};
 
   for (const [key, s] of Object.entries(state)) {
     const cur = alarms[key];
     try {
+      //  רצף: נראתה עכשיו → נשמר זמן הפעם הראשונה; לא נראתה → הרצף נשבר (תיקון סקירה I1)
+      if (!s.holds) { if (seen[key] != null) seenUpd[key] = null; }
+      else if (seen[key] == null) seenUpd[key] = now;
       if (s.holds) {
+        const confirmed = seen[key] != null && now - Number(seen[key]) >= ALARM_CONFIRM_MS;
         //  אין זמן לשליחה ישירה אחת — בפעם הבאה (לא תופסים את המפתח בלי לשלוח)
-        if (deadline - Date.now() < URGENT_MIN_LEFT_MS) continue;
+        if (!confirmed || deadline - Date.now() < URGENT_MIN_LEFT_MS) continue;
         const text = ALARM_TEXT[key](key === 'alarm_wa' ? 0 : minutes);
         if (!cur) {
+          if (now - (Number(last[key]) || 0) < ALARM_COOLDOWN_MS) continue;   // צינון — גם אם "חזר" בינתיים
           const thread = key + '_' + now;
           const c = await db.ref(CLOCKS + '/alarms/' + key).transaction(x => (x ? undefined : { at: now, thread }));
           if (!c.committed) continue;
+          await db.ref(CLOCKS + '/alarmLast/' + key).set(now);
           await lgRoomSay(db, { thread, from: 'manager', step: 'found', text: 'התראה: ' + text }, now);
-          //  מפתח ההודעה לבן — לכל הופעה של התקלה (אחרי "חזר" אפשר להתריע שוב)
           await lgBenNotify(db, { ...base, key: thread, text: 'התראה: ' + text, reason: 'agent-alarm', urgent: true });
           res.fired.push(key);
         } else if (!cur.reminded && now - (Number(cur.at) || 0) >= REMIND_MS) {
@@ -329,11 +366,22 @@ async function lgClockCheck(db, which, o) {
       }
     } catch (e) { console.warn('agent-ben: alarm', key, e && e.name); }
   }
+  if (Object.keys(seenUpd).length) {
+    const u = {};
+    Object.entries(seenUpd).forEach(([k, v]) => { u['seen/' + k] = v; });
+    await db.ref(CLOCKS).update(u);
+  }
 
-  try { res.digest = (await lgBenDigestRun(db, { ...base, sendPending: opt.sendPending })).sent; }
+  const more = { ...base, deadline, sendPending: opt.sendPending };
+  try { res.digest = (await lgBenDigestRun(db, more)).sent; }
   catch (e) { console.warn('agent-ben: digest', e && e.name); }
-  try { res.reminders = await _remindSweep(db, { ...base, sendPending: opt.sendPending }); }
+  try { res.reminders = await _remindSweep(db, more); }
   catch (e) { console.warn('agent-ben: remind', e && e.name); }
+  //  הודעה רגילה לבן שנכנסה לתור ולא יצאה בחלון שלה — יוצאת מכאן, לכל היותר פעם בדקה (שער lastCheck).
+  //  lgAgentSendPending לא מתחיל בלי מספיק זמן עד הדדליין (תיקון סקירה I2).
+  try {
+    res.sent = await (opt.sendPending || S.lgAgentSendPending)(db, { env, provider: opt.provider, deadline });
+  } catch (e) { console.warn('agent-ben: send', e && e.name); }
   return res;
 }
 

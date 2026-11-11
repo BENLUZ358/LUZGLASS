@@ -220,7 +220,8 @@ function lgGuardProblems(input) {
 
   // ── 6: מייל ללקוח שנכשל / פג (לא חשבונית — שורה 3; לא משלוח לשרטט — בדיקת הקולט הקיימת) ──
   for (const [k, r] of Object.entries(x.emailOutbox || {})) {
-    if (!r || r.kind === 'invoice' || r.kind === 'drafter-batch' || !['failed', 'expired'].includes(r.state) || !inWin(r.createdAt)) continue;
+    //  agent-alarm — התראת תקלה לבן (_agent-ben.js), לא מייל ללקוח
+    if (!r || r.kind === 'invoice' || r.kind === 'drafter-batch' || r.kind === 'agent-alarm' || !['failed', 'expired'].includes(r.state) || !inWin(r.createdAt)) continue;
     const key = 'emo_' + _safeKey(k);
     const owner = r.kind === 'sketches-handled' ? 'kolet' : _ownerOf(r);
     const base = { key, finder: owner, owner, src: k, rkey: key, group: 'email' };

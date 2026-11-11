@@ -196,15 +196,23 @@ const notify = (db, a, o) => B.lgBenNotify(db, { reason: 'agent-guard', urgent: 
     await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + 3 * MIN, provider: p });
     check('gmail back → room done line, alarm cleared', [room(db).some(r => r.step === 'done' && /מייל/.test(r.text)), !!(db._data.waMeta.clocks.alarms || {}).alarm_gmail], [true, false]);
     await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 20 * MIN, provider: p });
-    check('gmail silent again → alarms again', p.texts.length, 2);
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 23 * MIN, provider: p });
+    check('gmail silent again within 2h → no second alarm (cooldown)', p.texts.length, 1);
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 2 * H + 5 * MIN, provider: p });
+    check('after 2h, still silent → alarms again', p.texts.length, 2);
   }
   //  המחשב במשרד שקט > 30 דק' בשעות עבודה → השעון של המייל מתריע; מחוץ לשעות — לא
   {
     const db = mk(CFG('shadow'), { clocks: { office: { at: NOW - 31 * MIN } } }), p = provider();
     await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW, provider: p });
+    check('office silent seen once → not yet', p.texts.length, 0);
+    await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + MIN, provider: p });
+    check('second check only 1 min later → not yet', p.texts.length, 0);
+    await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + 2 * MIN, provider: p });
     check('office silent 31 min in working hours → alarm from the gmail clock', [p.texts.length, /משרד/.test(p.texts[0] && p.texts[0].text)], [1, true]);
     const db2 = mk(CFG('shadow'), { clocks: { office: { at: NIGHT - 2 * H } } }), p2 = provider();
     await B.lgClockCheck(db2, 'gmail', { env: ENV, now: NIGHT, provider: p2 });
+    await B.lgClockCheck(db2, 'gmail', { env: ENV, now: NIGHT + 3 * MIN, provider: p2 });
     check('office silent at night → no alarm', p2.texts.length, 0);
   }
   //  וואטסאפ מנותק → מייל (פעם אחת), חזר → שורת "חזר"
@@ -213,9 +221,12 @@ const notify = (db, a, o) => B.lgBenNotify(db, { reason: 'agent-guard', urgent: 
     const db = mk(cfg, { whatsapp: { state: 'notAuthorized' } }), p = provider();
     await B.lgClockCheck(db, 'office', { env: ENV, now: NOW, provider: p });
     await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + 30 * 1000, provider: p });
+    check('WA down seen by both clocks within 2 min → not yet', emails(db).length, 0);
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 2 * MIN, provider: p });
+    await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + 2 * MIN + 30 * 1000, provider: p });
     check('WA disconnected → one email alarm (both clocks)', [emails(db).length, p.texts.length], [1, 0]);
     db._data.waMeta.whatsapp.state = 'authorized';
-    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 2 * MIN, provider: p });
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 4 * MIN, provider: p });
     check('WA back → done line', room(db).some(r => r.step === 'done' && /וואטסאפ/.test(r.text)), true);
   }
   //  תזכורת מהשעון: בעיית שומר שעדיין פתוחה אחרי 3 שעות → תזכורת אחת; שנפתרה → כלום
@@ -235,10 +246,65 @@ const notify = (db, a, o) => B.lgBenNotify(db, { reason: 'agent-guard', urgent: 
   //  התראה בלי זמן לשליחה ישירה → לא נתפסת עכשיו (תנסה בדופק הבא)
   {
     const db = mk(CFG('shadow'), { clocks: { gmail: { at: NOW - 16 * MIN } } }), p = provider();
-    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW, provider: p, deadline: Date.now() + 5000 });
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW, provider: p });
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 2 * MIN, provider: p, deadline: Date.now() + 5000 });
     check('no time left → alarm not claimed, nothing sent', [p.texts.length, !!(db._data.waMeta.clocks.alarms || {}).alarm_gmail], [0, false]);
-    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + MIN, provider: p });
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + 3 * MIN, provider: p });
     check('next beat with time → alarm sent', p.texts.length, 1);
+  }
+  //  וואטסאפ קופץ כל הלילה (מנותק / מחובר כל 5 דק') → לכל היותר התראה אחת בשעתיים
+  {
+    const cfg = CFG('shadow');
+    const db = mk(cfg), p = provider();
+    const fires = [];
+    for (let t = NIGHT; t < NIGHT + 8 * H; t += MIN) {
+      db._data.waMeta.whatsapp.state = Math.floor((t - NIGHT) / (5 * MIN)) % 2 ? 'authorized' : 'notAuthorized';
+      const n0 = room(db).filter(r => r.step === 'found').length;
+      await B.lgClockCheck(db, 'office', { env: ENV, now: t, provider: p, sendPending: noSend });
+      if (room(db).filter(r => r.step === 'found').length > n0) fires.push(t);
+    }
+    const gaps = fires.slice(1).map((t, i) => t - fires[i]);
+    check('flapping WA over one night → at most one alarm per 2h', [fires.length >= 1, fires.length <= 4, gaps.every(g => g >= 2 * H)], [true, true, true]);
+  }
+  {
+    const db = mk(CFG('shadow'), { whatsapp: { state: 'starting' } }), p = provider();
+    for (let i = 0; i < 6; i++) await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + i * 2 * MIN, provider: p, sendPending: noSend });
+    db._data.waMeta.whatsapp.state = 'sleepMode';
+    for (let i = 6; i < 10; i++) await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + i * 2 * MIN, provider: p, sendPending: noSend });
+    check('passing starting / sleepMode → no alarm', [p.texts.length, emails(db).length, !!(db._data.waMeta.clocks.alarms || {}).alarm_wa], [0, 0, false]);
+  }
+  //  הודעה לבן שנכנסה לתור ולא יצאה → הבדיקה הבאה של השעון שולחת אותה (תיקון סקירה I2)
+  {
+    const db = mk(CFG('reply')), p = provider();
+    await G._notifyBen(db, { key: 'wao_7', text: 'שומר שואל', reason: 'guard', urgent: false, env: ENV, now: NOW, cfg: CFG('reply'), agent: 'okev', sendPending: noSend });
+    check('guard ping queued, not sent yet', outbox(db).map(o => o.state), ['pending']);
+    await B.lgClockCheck(db, 'office', { env: ENV, now: NOW + MIN, provider: p });
+    check('next clock tick sends it', [outbox(db).map(o => o.state), p.texts.map(t => t.to)], [['sent'], [BEN]]);
+  }
+  //  הודעת הבוקר שנחסמה בשכבת השליחה (כל הסוכנים "שקט") → רשימת הלילה נשמרת
+  {
+    const db = mk(CFG('reply'));
+    await notify(db, { key: 'n1', text: 'בעיה בלילה', now: NIGHT });
+    db._data.waMeta.agentConfig = CFG('shadow');
+    const d = await B.lgBenDigestRun(db, { env: ENV, now: MORNING, cfg: CFG('shadow'), provider: provider() });
+    check('digest blocked by the send layer → night list kept', [d.sent, Object.keys(ben(db).night || {})], [false, ['n1']]);
+  }
+  //  התקרה נספרת בטרנזקציה: ריצה שראתה 19 ואז מישהו אחר הגיע ל-20 → לא נשלח, המפתח חוזר
+  {
+    const db = mk(CFG('reply'), { agentBen: { day: { 20261110: { n: 19 } } } });
+    const orig = db.ref.bind(db);
+    let bumped = false;
+    db.ref = p => {
+      const r = orig(p);
+      if (p === 'waMeta/agentBen/sent/race' && !bumped) {
+        const t0 = r.transaction;
+        r.transaction = async fn => { bumped = true; db._data.waMeta.agentBen.day['20261110'].n = 20; return t0(fn); };
+      }
+      return r;
+    };
+    const r = await notify(db, { key: 'race', text: 'x', now: NOW });
+    check('cap counted inside a transaction → 21st not sent, key released', [r.sent, outbox(db).length, ben(db).sent && ben(db).sent.race || null, ben(db).day['20261110'].n],
+          ['skip', 0, null, 20]);
   }
   //  תפיסת המייל רושמת את השעון — ברקע (waitUntil), לא מעכבת את התשובה
   {
