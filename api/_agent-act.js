@@ -42,6 +42,7 @@ const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent
 const { lgAgentConfig, lgAgentCustomerOn, lgAgentModeOf, lgAgentOfRoute } = require('./_agent-config');
 const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN } = require('./_agent-room');
 const { lgLessonFind, lgLessonUsed, lgLessonAutoOk } = require('./_agent-lessons');
+const { WORD_TIMEOUT_MS, lgAgentWord } = require('./_agent-wording');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -699,10 +700,34 @@ async function _act(db, key, rec, recRef, env, now, o) {
   const needsStaff = d.actions.some(a => (a.type === 'staff' && !a.notify) || a.type === 'quote-ask');
   let staffQueued = false;
   const deferred = [];
+  //  תשובות בשילוב (spec ג, 11/11): תשובה ללקוח (reply, וההתנצלות של "לא מרוצה") מנוסחת
+  //  מחדש במודל + בדיקת אמת (_agent-wording). רק עם הגדרות במסך והסוכן "עונה" — בשקט
+  //  לעולם לא קוראים למודל לניסוח. אין זמן לניסוח + שליחה → המשפט הקבוע.
+  //  ⚠️ לא מנוסחים: הודעות לשאול / לבן, "קיבלנו, אנחנו בודקים", שיעור שנלמד, תשובת בן
+  //     מהחדר, תוצאות ביטול, כיתוב קבצים, ושליחה חוזרת של שומר (אלה לא עוברים כאן).
+  //  ברכה (chitchat → תפריט): שורת פתיחה חופשית לפני התפריט, התפריט עצמו כמו שהוא.
+  const wordOn = !!cfg && agentMode === 'reply' && mode !== 'delete-only';
+  let wordInfo = null;
+  const _word = async (text) => {
+    const menu = text === AGENT_MENU_TEXT && rec.intent === 'chitchat';
+    if (!wordOn || !text || (text === AGENT_MENU_TEXT && !menu)) return text;
+    //  ההודעה הראשונה ללקוח היא זו שמוצגת ב"מה X עשה"
+    const note = x => { if (!wordInfo) wordInfo = { replyOriginal: text, ...x }; };
+    if (o.deadline - o.clock() < WORD_TIMEOUT_MS + PER_ITEM_WORST_MS) { note({ replyReworded: false, wordSkipped: 'deadline' }); return text; }
+    let w = null;
+    try {
+      w = await lgAgentWord({ kind: menu ? 'free' : 'facts', customerText: rec.text, customerName: rec.customerName, facts: text,
+                              model: env.AGENT_MODEL, key: env.OPENAI_API_KEY, fetcher: o.fetchImpl, timeoutMs: WORD_TIMEOUT_MS });
+    } catch (e) { console.warn('agent-act: wording', e && e.name); w = null; }
+    const ok = !!(w && w.reworded && w.text);
+    note({ replyReworded: ok, wordUsage: (w && w.usage) || null });
+    if (!ok) return text;
+    return menu ? w.text + '\n\n' + AGENT_MENU_TEXT : w.text;
+  };
   for (let i = 0; i < d.actions.length; i++) {
     const a = d.actions[i], k = key + '_' + i;
     if (a.type === 'reply' && needsStaff) deferred.push([k, a]);
-    else if (a.type === 'reply') { if (await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k; }
+    else if (a.type === 'reply') { if (await enq(k, chat, await _word(a.text), [], 'agent-reply') && !askKey) askKey = k; }
     else if (a.type === 'staff') {
       if (a.notify && !staff[0]) continue;   // לידיעה, ואין שאול — מדלגים
       if (await enq(k, staff[0], a.text, a.files || [], a.reason || 'agent-staff') && !a.notify) staffQueued = true;
@@ -766,7 +791,8 @@ async function _act(db, key, rec, recRef, env, now, o) {
           text: lgRoomAskBenText(a.who, a.upset ? UPSET_NOTE + ': ' + a.question : a.question, env), reason: a.benReason || AGENT_ASK_REASON, urgent: false, env, now, cfg, agent,
           customerId: cid, files: a.files || [], open: ROOM_OPEN + '/' + rk, flush: false });
         if (bn.queued) queued.push(bn.key);
-        if (!a.noHold) await enq(k, chat, a.hold || ASK_HOLD_TEXT, [], 'agent-reply');
+        //  ההתנצלות של "לא מרוצה" (עובדות + "מצטערים…") — מנוסחת כמו כל תשובה; "קיבלנו" הקבוע — לא
+        if (!a.noHold) await enq(k, chat, a.upset && a.hold ? await _word(a.hold) : (a.hold || ASK_HOLD_TEXT), [], 'agent-reply');
       }
     }
     else if (a.type === 'quote-ask') {
@@ -833,13 +859,13 @@ async function _act(db, key, rec, recRef, env, now, o) {
       }
     }
   }
-  for (const [k, a] of deferred) if (staffQueued && await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k;
+  for (const [k, a] of deferred) if (staffQueued && await enq(k, chat, await _word(a.text), [], 'agent-reply') && !askKey) askKey = k;
   // conv אחרי התור ולפני השליחה. conv חדש נשמר רק אם השאלה באמת נכנסה לתור
   //  (queued:true) — עם askKey, כדי לדעת מתי נשלחה
   if (!d.conv) { if (stored) await convRef.set(null); }
   else if (d.conv !== conv && askKey) await convRef.set({ ...d.conv, askKey: lgWaInboundKey(askKey) });
   await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actMode: mode, actQueued: queued, actCancels: cancels,
-                       ...(attRemovals.length ? { actAttRemovals: attRemovals } : {}), ...qUsage, ...(lessonInfo || {}) });
+                       ...(attRemovals.length ? { actAttRemovals: attRemovals } : {}), ...qUsage, ...(lessonInfo || {}), ...(wordInfo || {}) });
 
   if (queued.length) {
     try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, deadline: o.deadline, clock: o.clock }); }

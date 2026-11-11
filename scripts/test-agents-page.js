@@ -45,7 +45,7 @@ check('reads the room and the switches', [/waMeta\/agentRoom/.test(P), /waMeta\/
 // ─── שיחות בחדר (11/11) ───
 check('room renders threads: open first, closed folded per day',
   [P.includes('lgRoomThreads('), P.includes('lgRoomThreadHtml('), P.includes('lgRoomDayGroups('), /<details class="room-day"/.test(P)], [true, true, true, true]);
-check('script version bumped to 20261111b in the page and in admin', [P.includes('agents-dash.js?v=20261111b'), A.includes('agents-dash.js?v=20261111b')], [true, true]);
+check('script version bumped to 20261111c in the page and in admin', [P.includes('agents-dash.js?v=20261111c'), A.includes('agents-dash.js?v=20261111c')], [true, true]);
 check('threads built from all rows (filter only passed to lgRoomThreads), window by threads, opened days kept',
   [P.includes("lgRoomThreads(ROOM, { agent: FILTER })"), P.includes('lgRoomThreadWindow('), P.includes('OPEN_DAYS')], [true, true, true]);
 check('no Vercel switch names left in the texts', /AGENT_REPLY_ENABLED|AGENT_SHADOW_ENABLED/.test(P), false);

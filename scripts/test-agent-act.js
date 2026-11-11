@@ -11,6 +11,9 @@ const act = require(path.join(ROOT, 'api', '_agent-act.js'));
 const sh = require(path.join(ROOT, 'api', '_agent-shadow.js'));
 const { AGENT_MENU_TEXT } = require(path.join(ROOT, 'api', '_agent-okev.js'));
 let failed = 0;
+//  תשובות בשילוב (11/11): עם הגדרות "עונה" התשובה עוברת ניסוח במודל — בבדיקה אסור לצאת לרשת;
+//  בלי fetcher מדומה הקריאה נכשלת מיד והמשפט הקבוע יוצא (כמו כשל אמיתי)
+global.fetch = async () => { throw new Error('no network in tests'); };
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
   ? console.log('ok    ' + name)
   : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));

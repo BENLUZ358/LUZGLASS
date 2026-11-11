@@ -232,6 +232,22 @@ check('row escapes customer text',
   check('7 days reaches 2 days back', J(ctx.lgAgentActivity('okev', shA, {}, ctx.lgActRange('7d', NOW))).map(x => x.key), ['m1', 'm5']);
   const html = ctx.lgActRowHtml({ key: 'k"1', at: NOW, kind: 'msg', who: '<b>x</b>', what: '<img onerror=1>', did: 'd', review: true, verdict: '' }, R.from);
   check('activity row escapes text', [html.includes('<img'), html.includes('<b>x'), html.includes('data-agv="1"')], [false, false, true]);
+
+  //  תשובות בשילוב (spec ג): נשלח נוסח אחר מהמשפט הקבוע → "נוסח מקורי" מתחת
+  const FACTS = 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור';
+  const shW = {
+    w1: { createdAt: NOW - H, linked: true, customerName: 'כהן', text: 'מה עם ההזמנה?', route: 'okev', state: 'done', acted: true,
+          wouldAct: [{ type: 'reply', text: FACTS }], replyOriginal: FACTS, replyReworded: true },
+    w2: { createdAt: NOW - 2 * H, linked: true, customerName: 'כהן', text: 'מה עם ההזמנה?', route: 'okev', state: 'done', acted: true,
+          wouldAct: [{ type: 'reply', text: FACTS }], replyOriginal: FACTS, replyReworded: false },
+  };
+  const obW = { w1_0: { state: 'sent', reason: 'agent-reply', text: 'היי, הזמנה L1001 של כהן בייצור.' }, w2_0: { state: 'sent', reason: 'agent-reply', text: FACTS } };
+  const aw = J(ctx.lgAgentActivity('okev', shW, {}, R, obW));
+  check('reworded reply: sent text + the original', aw.map(x => [x.did, x.orig || '']),
+    [['ענה ללקוח: היי, הזמנה L1001 של כהן בייצור.', FACTS], ['ענה ללקוח: ' + FACTS, '']]);
+  const hw = ctx.lgActRowHtml({ key: 'w', at: NOW, kind: 'msg', who: 'כהן', what: 'x', did: 'ענה', orig: '<i>מקור</i>', review: false, verdict: '' }, R.from);
+  check('row shows "נוסח מקורי", escaped', [hw.includes('נוסח מקורי'), hw.includes('<i>'), hw.includes('&lt;i&gt;מקור')], [true, false, true]);
+  check('row without original has no such line', ctx.lgActRowHtml({ key: 'w', at: NOW, kind: 'msg', who: 'כהן', what: 'x', did: 'ענה', review: false, verdict: '' }, R.from).includes('נוסח מקורי'), false);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

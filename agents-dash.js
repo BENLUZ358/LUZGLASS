@@ -598,7 +598,7 @@ function lgAgentActivity(agentId, shadow, room, range, outbox) {
     if (!inR(v.createdAt) || v.staff === true || v.route === 'staff') return;
     if (agentId !== 'markazan' && !a.routes.includes(v.route)) return;
     const who = v.linked ? String(v.customerName || 'לקוח') : 'מספר לא מקושר';
-    let did;
+    let did, orig = '';
     if (v.state && v.state !== 'done') did = LG_AG_STATE[v.state] || String(v.state);
     else if (agentId === 'markazan') did = !v.linked ? 'רק נספר — לא עונים למספר לא מקושר' : (LG_ACT_ROUTE[v.route] || lgAgRouteLabel(v.route));
     else {
@@ -606,9 +606,11 @@ function lgAgentActivity(agentId, shadow, room, range, outbox) {
       const would = _adWould(v);
       did = sent ? 'ענה ללקוח: ' + sent : would ? 'היה עונה: ' + would
         : _adToShaul(v) ? 'היה מעביר לשאול' : _adToBen(v) ? 'שאל אותך בחדר' : lgAgOutcome(v);
+      //  תשובות בשילוב (spec ג): נשלח נוסח של המודל — המשפט הקבוע מוצג מתחת
+      if (sent && v.replyReworded === true && v.replyOriginal && String(v.replyOriginal) !== String(sent)) orig = String(v.replyOriginal);
     }
     out.push({ key, at: Number(v.createdAt) || 0, kind: 'msg', who, what: !v.linked && !v.text ? 'שלח הודעה' : lgAgSentText(v), did,
-      review: lgAdNeedsReview(v), verdict: v.verdict ? (v.verdict.ok ? 'ok' : 'wrong') : '' });
+      ...(orig ? { orig } : {}), review: lgAdNeedsReview(v), verdict: v.verdict ? (v.verdict.ok ? 'ok' : 'wrong') : '' });
   });
   _adVals(room).forEach(({ key, v }) => {
     if (!inR(v.at) || v.kind === 'answer' || lgRoomAgentKey(v.agent) !== agentId) return;
@@ -636,5 +638,5 @@ function lgActRowHtml(x, today) {
       ${x.verdict ? `<span class="wain-chip">סימנת: ${x.verdict === 'ok' ? 'נכון ✓' : 'לא נכון ✗'}</span>` : ''}</div>` : '';
   return `<div class="act act-${e(x.kind)}"><span class="act-t">${e(_adHm(x.at, today))}</span><div class="act-b">
       <div class="act-w">${x.who ? `<b>${e(x.who)}</b> · ` : ''}${e(x.what)}</div>
-      ${x.did ? `<div class="act-d">← ${e(x.did)}</div>` : ''}${marks}</div></div>`;
+      ${x.did ? `<div class="act-d">← ${e(x.did)}</div>` : ''}${x.orig ? `<div class="act-d act-o">נוסח מקורי: ${e(x.orig)}</div>` : ''}${marks}</div></div>`;
 }
