@@ -223,7 +223,7 @@ check('row escapes customer text',
   check('okev: only its messages + its room rows (not Ben\'s answer)', ok.map(x => x.key), ['m1', 'r1']);
   check('okev row says what it would answer, and can be marked', [ok[0].did, ok[0].review], ['היה עונה: בחיסום, תצא מחר', true]);
   check('marked row keeps its mark', J(ctx.lgAgentActivity('price', shA, room, R)).map(x => x.verdict), ['wrong']);
-  check('manager: the summary', J(ctx.lgAgentActivity('manager', shA, room, R)).map(x => [x.key, x.what]), [['r2', 'כתב סיכום בחדר']]);
+  check('manager: the summary', J(ctx.lgAgentActivity('manager', shA, room, R)).map(x => [x.key, x.what]), [['r2', 'סיכום בוקר']]);
   check('unknown agent → nothing', J(ctx.lgAgentActivity('nobody', shA, room, R)), []);
   const Y = ctx.lgActRange('yesterday', NOW);
   check('yesterday = the Israel day before today', [Y.to === R.from, Y.from < Y.to, R.from - Y.from], [true, true, D]);
