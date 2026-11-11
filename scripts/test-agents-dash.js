@@ -196,5 +196,43 @@ check('row escapes customer text',
   check('split: filtering by a mark keeps marked rows in the main list (the filter already chose them)', S('ok'), [['a', 'b', 'c'], [], ['d']]);
 }
 
+// ─── מה כל סוכן עשה (בן, 11/11) ──────────────────────────────────────
+{
+  const R = ctx.lgActRange('today', NOW);
+  const shA = {
+    m1: { createdAt: NOW - H, linked: true, customerName: 'נאור', text: 'איפה ההזמנה?', route: 'okev', state: 'done', wouldReply: 'בחיסום, תצא מחר' },
+    m2: { createdAt: NOW - 2 * H, linked: true, customerName: 'אגן', hasImage: true, route: 'kolet', state: 'done' },
+    m3: { createdAt: NOW - 3 * H, linked: false, route: 'shaul', state: 'done' },
+    m4: { createdAt: NOW - H, staff: true, route: 'staff', state: 'done' },                       // צוות — לא מוצג
+    m5: { createdAt: NOW - 2 * D, linked: true, customerName: 'ישן', text: 'x', route: 'okev', state: 'done' }, // לא היום
+    m6: { createdAt: NOW - 30 * 60 * 1000, linked: true, customerName: 'פלג', text: 'כמה עולה?', route: 'quote', state: 'done', verdict: { ok: false } },
+  };
+  const room = {
+    r1: { at: NOW - 90 * 60 * 1000, agent: 'okev', kind: 'info', text: 'L1235 תקועה בחיסום 3 ימים' },
+    r2: { at: NOW - 10 * 60 * 1000, agent: 'מנהל', kind: 'summary', text: 'סיכום בוקר' },
+    r3: { at: NOW - 5 * 60 * 1000, agent: 'okev', kind: 'answer', text: 'תשובה של בן' },              // תשובה שלך — לא של הסוכן
+    r4: { at: NOW - 20 * 60 * 1000, agent: 'markazan', kind: 'ask', state: 'open', customerName: 'נאור', question: 'מה זה?' },
+  };
+  const mk = J(ctx.lgAgentActivity('markazan', shA, room, R));
+  check('markazan: every incoming message today + its room rows, newest first, no staff, no old',
+    mk.map(x => x.key), ['r4', 'm6', 'm1', 'm2', 'm3']);
+  check('markazan says where it routed', mk.filter(x => x.kind === 'msg').map(x => x.did),
+    ['העביר למחירון', 'העביר לעוקב', 'נכנס לתור הסקיצות', 'רק נספר — לא עונים למספר לא מקושר']);
+  check('open question shows waiting', mk[0].did, 'מחכה לתשובה שלך');
+  const ok = J(ctx.lgAgentActivity('okev', shA, room, R));
+  check('okev: only its messages + its room rows (not Ben\'s answer)', ok.map(x => x.key), ['m1', 'r1']);
+  check('okev row says what it would answer, and can be marked', [ok[0].did, ok[0].review], ['היה עונה: בחיסום, תצא מחר', true]);
+  check('marked row keeps its mark', J(ctx.lgAgentActivity('price', shA, room, R)).map(x => x.verdict), ['wrong']);
+  check('manager: the summary', J(ctx.lgAgentActivity('manager', shA, room, R)).map(x => [x.key, x.what]), [['r2', 'כתב סיכום בחדר']]);
+  check('unknown agent → nothing', J(ctx.lgAgentActivity('nobody', shA, room, R)), []);
+  const Y = ctx.lgActRange('yesterday', NOW);
+  check('yesterday = the Israel day before today', [Y.to === R.from, Y.from < Y.to, R.from - Y.from], [true, true, D]);
+  const yo = J(ctx.lgAgentActivity('okev', { y: { createdAt: R.from - H, linked: true, customerName: 'א', text: 't', route: 'okev', state: 'done' } }, {}, Y));
+  check('yesterday shows yesterday only', yo.map(x => x.key), ['y']);
+  check('7 days reaches 2 days back', J(ctx.lgAgentActivity('okev', shA, {}, ctx.lgActRange('7d', NOW))).map(x => x.key), ['m1', 'm5']);
+  const html = ctx.lgActRowHtml({ key: 'k"1', at: NOW, kind: 'msg', who: '<b>x</b>', what: '<img onerror=1>', did: 'd', review: true, verdict: '' }, R.from);
+  check('activity row escapes text', [html.includes('<img'), html.includes('<b>x'), html.includes('data-agv="1"')], [false, false, true]);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll agents-dashboard checks passed.');
