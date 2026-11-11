@@ -232,6 +232,24 @@ check('row escapes customer text',
   check('7 days reaches 2 days back', J(ctx.lgAgentActivity('okev', shA, {}, ctx.lgActRange('7d', NOW))).map(x => x.key), ['m1', 'm5']);
   const html = ctx.lgActRowHtml({ key: 'k"1', at: NOW, kind: 'msg', who: '<b>x</b>', what: '<img onerror=1>', did: 'd', review: true, verdict: '' }, R.from);
   check('activity row escapes text', [html.includes('<img'), html.includes('<b>x'), html.includes('data-agv="1"')], [false, false, true]);
+
+  //  תשובות בשילוב (spec ג): כל תשובה שנעטפה → "נוסח מקורי" מתחת, לכל אחת
+  const FACTS = 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור';
+  const F2 = 'לא מצאתי את ההזמנה. אפשר לכתוב את שם הסקיצה?';
+  const shW = {
+    w1: { createdAt: NOW - H, linked: true, customerName: 'כהן', text: 'מה עם ההזמנה?', route: 'okev', state: 'done', acted: true,
+          wouldAct: [{ type: 'reply', text: FACTS }, { type: 'reply', text: F2 }],
+          replyWords: [{ original: FACTS, sent: 'היי\n' + FACTS }, { original: F2, sent: 'היי\n' + F2 }] },
+    w2: { createdAt: NOW - 2 * H, linked: true, customerName: 'כהן', text: 'מה עם ההזמנה?', route: 'okev', state: 'done', acted: true,
+          wouldAct: [{ type: 'reply', text: FACTS }] },
+  };
+  const obW = { w1_0: { state: 'sent', reason: 'agent-reply', text: 'היי\n' + FACTS }, w2_0: { state: 'sent', reason: 'agent-reply', text: FACTS } };
+  const aw = J(ctx.lgAgentActivity('okev', shW, {}, R, obW));
+  check('wrapped replies: sent text + every original', aw.map(x => [x.did, x.origs || []]),
+    [['ענה ללקוח: היי\n' + FACTS, [FACTS, F2]], ['ענה ללקוח: ' + FACTS, []]]);
+  const hw = ctx.lgActRowHtml({ key: 'w', at: NOW, kind: 'msg', who: 'כהן', what: 'x', did: 'ענה', origs: ['<i>מקור</i>', 'שני'], review: false, verdict: '' }, R.from);
+  check('row shows a "נוסח מקורי" line per reply, escaped', [hw.split('נוסח מקורי').length - 1, hw.includes('<i>'), hw.includes('&lt;i&gt;מקור')], [2, false, true]);
+  check('row without original has no such line', ctx.lgActRowHtml({ key: 'w', at: NOW, kind: 'msg', who: 'כהן', what: 'x', did: 'ענה', review: false, verdict: '' }, R.from).includes('נוסח מקורי'), false);
 }
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }

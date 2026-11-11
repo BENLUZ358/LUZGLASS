@@ -79,10 +79,28 @@ async function heartbeat(body, deps) {
   const hb = W.lgWatchHeartbeatClean(body);
   if (!hb) return _fail(400, 'bad-heartbeat');
   const now = deps.now || Date.now();
+  const t0 = Date.now();   // שעון אמיתי (now עשוי להיות מוזרק) — הדדליין מוחלט מתחילת הבקשה
   await deps.db.ref(W.WATCHERS + '/' + hb.pc).set({ at: now, pending: hb.pending, lastPrintError: hb.lastPrintError, version: hb.version });
+  //  סדר: שליחת התור → השעון → בדיקות (דדליין מוחלט t0+48ש׳) → רשת "מוכן".
+  //  תור הוואטסאפ מהשרת — ראשון, כדי שהודעה שנתקעה תצא גם בלי דף פתוח (מתג WA_SERVER_DRAIN). ר' api/_wa-server-drain.js
   try {
-    await (deps.watchRun || W.lgAgentWatchRun)(deps.db, { env: deps.env || process.env, now });
+    await (deps.waDrain || require('./_wa-server-drain').lgWaServerDrain)(deps.db, { env: deps.env || process.env, now });
+  } catch (e) { console.error('invoice-pdf-upload: wa server drain failed', e && e.name); }
+  //  השעון של המשרד (בן, 11/11): רושם waMeta/clocks/office ובודק את סקריפט המייל + חיבור הוואטסאפ.
+  //  זול (כמה קריאות, פעם בדקה); שליחה ישירה רק כשיש התראה. רק עם הגדרות במסך. ר' api/_agent-ben.js
+  try {
+    await (deps.clockCheck || require('./_agent-ben').lgClockCheck)(deps.db, 'office',
+      { env: deps.env || process.env, now, deadline: t0 + 40 * 1000, provider: deps.provider });
+  } catch (e) { console.error('invoice-pdf-upload: clock check failed', e && e.name); }
+  //  הבקשה כולה מתחת ל-60ש׳: שליחה עד 18ש׳, ובדיקות עד t0+48ש׳ (דדליין מוחלט, לא 30ש׳ אחרי השליחה)
+  try {
+    await (deps.watchRun || W.lgAgentWatchRun)(deps.db, { env: deps.env || process.env, now, deadline: t0 + 48 * 1000 });
   } catch (e) { console.error('invoice-pdf-upload: watch failed', e && e.name); }
+  //  "מוכן לאיסוף" שלא יצא מהדף (בן, 11/11) — לא תלוי במתגי הסוכנים. ר' api/_ready-net.js
+  //  השליחה שלו מקבלת רק מה שנשאר עד t0+55ש׳ (0 → לא שולחת, השורות ממתינות) — הבקשה < 60ש׳ (תיקון סקירה סופית I3)
+  try {
+    await (deps.readyNet || require('./_ready-net').lgReadyNetRun)(deps.db, { now, budgetMs: Math.max(0, t0 + 55 * 1000 - Date.now()) });
+  } catch (e) { console.error('invoice-pdf-upload: ready-net failed', e && e.name); }
   return { status: 200, body: { ok: true, heartbeat: true } };
 }
 

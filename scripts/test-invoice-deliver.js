@@ -165,6 +165,20 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     const live = await R.resolveRecipientWa(db, waOrder, 'invoice');   // ה-drain פותר שוב — אותה תשובה
     assert.deepEqual([live.phone, live.accountKey, live.linked], ['0501112222', '3150', true]);
   });
+  //  בן, 11/11: כתר מקלחונים שייך להמקום לאמבט — החשבונית למספר הפרטי של המקום לאמבט
+  await test('private with its own phone → that phone wins over the card phone', async () => {
+    const db = privDb(true, '050-111-2222');
+    db._data.waMeta.invoiceToPrivate[3150].phone = '050-588-7576';
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    assert.equal(Object.values(db._data.waOutbox)[0].to, '0505887576');
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'invoice')).phone, '0505887576');
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'ready')).phone, GROUP);   // רק חשבונית
+  });
+  await test('private with its own phone and no card phone → still sent', async () => {
+    const db = privDb(true, '');
+    db._data.waMeta.invoiceToPrivate[3150].phone = '0505887576';
+    assert.equal((await R.resolveRecipientWa(db, waOrder, 'invoice')).phone, '0505887576');
+  });
   await test('private: switch off → the group, as today', async () => {
     const db = privDb(false, '0501112222');
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });

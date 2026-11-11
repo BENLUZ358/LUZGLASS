@@ -329,6 +329,7 @@ function lgAdWaLink(phone) {
 //  ששת הסוכנים — id = המפתח בשרת (waMeta/agentConfig, api/_agent-config.js).
 //  does — "מי אחראי על מה" באפיון חדר הסוכנים (10/11). routes: אילו מסלולים ביומן שייכים לו.
 //  heb — השם שסוכנים ישנים כותבים בחדר (agent:'מרכזן').
+//  ⚠️ שמות הסוכנים בעברית — שלושה עותקים, לעדכן יחד: api/_agent-room.js (AGENT_HEB), api/_agent-guards.js (AGENT_HEB), agents-dash.js (LG_AD_AGENTS, קובץ דפדפן)
 const LG_AD_AGENTS = [
   //  ⚠️ (תיקון סקירה 10/11) רק מה שהמתג הזה שולט בו. "נקלטו" והצעת צרופות — מתגים נפרדים.
   { id: 'markazan', name: 'מרכזן', does: 'תפריט ללקוח, ומה שאף סוכן לא יודע — שאלה אליך ("נקלטו" והצעת צרופות — לא במתג הזה)', routes: ['menu', 'shaul'] },
@@ -385,6 +386,65 @@ function lgRoomRows(room, o) {
     .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   return rows.slice(Math.max(0, rows.length - lim));
 }
+// ─── שיחות בחדר (11/11) ───────────────────────────────────────────────
+//  שורות עם אותו thread = שיחה אחת. שורה בלי thread = שיחה של שורה אחת (שורות ישנות ממשיכות להופיע).
+//  state לפי השורה האחרונה: done → 'done' · need-ben → 'ben' · would → 'would' · אחרת 'open'
+//  (found / handoff משאירים פתוחה). isOpen: שיחה פתוחה, או שאלה צהובה שבן עוד לא סגר — למעלה במסך.
+//  o: { agent } — שיחות שהסוכן הזה לקח בהן חלק.
+function lgRoomThreads(room, o) {
+  const f = o || {};
+  const rows = _adVals(room).map(r => Object.assign({ key: r.key }, r.v)).filter(r => r.kind !== 'summary')
+    .sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const map = {}, list = [];
+  rows.forEach(r => {
+    const id = r.thread ? 't:' + r.thread : 'r:' + r.key;
+    if (!map[id]) { map[id] = { thread: r.thread ? String(r.thread) : '', rows: [] }; list.push(map[id]); }
+    map[id].rows.push(r);
+  });
+  list.forEach(t => {
+    const last = t.rows[t.rows.length - 1];
+    t.lastAt = Number(last.at) || 0;
+    t.state = last.step === 'done' ? 'done' : last.step === 'need-ben' ? 'ben' : last.step === 'would' ? 'would'
+      : t.thread ? 'open' : (last.kind === 'ask' && last.state === 'open' ? 'open' : 'done');
+    t.isOpen = t.state === 'open' || t.rows.some(r => r.kind === 'ask' && r.state === 'open');
+  });
+  const out = list.filter(t => !f.agent || t.rows.some(r => lgRoomAgentKey(r.agent) === f.agent));
+  return out.sort((a, b) => (a.isOpen === b.isOpen ? 0 : a.isOpen ? -1 : 1) || b.lastAt - a.lastAt);
+}
+//  חלון "הצג ישנות": n שיחות ראשונות (פתוחות קודם, אחר כך החדשות) — שיחה לא נחתכת באמצע
+function lgRoomThreadWindow(threads, n) { return (threads || []).slice(0, Math.max(0, Number(n) || 0)); }
+const LG_ROOM_END = { done: '✓ נפתר', ben: '⚠ צריך את בן', would: '⏸ על &quot;שקט&quot; — הייתי עושה את זה', open: '' };
+//  שיחה כקבוצת בועות. after(row) — HTML שנדבק אחרי בועה (שדה התשובה בדף). שיחה בת שורה בלי thread = הבועה לבד.
+function lgRoomThreadHtml(th, outbox, after) {
+  const t = th || { rows: [] }, rows = t.rows || [], aft = after || (() => '');
+  if (!t.thread) return rows.map(r => lgRoomBubbleHtml(r, outbox) + aft(r)).join('');
+  const esc = _adEsc;
+  let body;
+  //  המוצא והמטפל אותו סוכן — שורה אחת, לא שיחה עם עצמו
+  if (rows.length === 2 && rows[0].step === 'found' && rows[1].step === 'done' && lgRoomAgentKey(rows[0].agent) === lgRoomAgentKey(rows[1].agent)) {
+    body = `<div class="rb rb-info" data-roomkey="${esc(rows[1].key)}"><div class="rb-h"><b>${esc(lgRoomAgentName(rows[1].agent))}</b><span>${esc(_adWhen(rows[1].at))}</span></div>
+      <div class="rb-q"><b>מצאתי → עשיתי</b> · ${esc(rows[0].text || '')} → ${esc(rows[1].text || '')}</div></div>` + aft(rows[1]);
+  } else body = rows.map(r => lgRoomBubbleHtml(r, outbox) + aft(r)).join('');
+  const st = t.state === 'ben' && !t.isOpen ? 'done' : t.state;
+  return `<div class="rt rt-${esc(st)}" data-thread="${esc(t.thread)}">${body}${LG_ROOM_END[st] ? '<div class="rt-end">' + LG_ROOM_END[st] + '</div>' : ''}</div>`;
+}
+//  שיחות סגורות מקופלות לפי יום (שעון ישראל), היום החדש קודם. [{ day, label, threads }]
+function lgRoomDayGroups(threads, now) {
+  const dayOf = ms => { try { return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }); } catch (_) { return new Date(ms).toISOString().slice(0, 10); } };
+  const today = dayOf(Number(now) || Date.now()), yest = dayOf((Number(now) || Date.now()) - 24 * 3600 * 1000);
+  const map = {}, out = [];
+  (threads || []).forEach(t => {
+    const d = dayOf(t.lastAt);
+    if (!map[d]) {
+      let nice = d;
+      try { nice = new Date(t.lastAt).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', day: 'numeric', month: 'numeric' }); } catch (_) { /* תאריך גולמי */ }
+      map[d] = { day: d, label: d === today ? 'היום · ' + nice : d === yest ? 'אתמול · ' + nice : nice, threads: [] };
+      out.push(map[d]);
+    }
+    map[d].threads.push(t);
+  });
+  return out.sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
+}
 function lgRoomLatestSummary(room) {
   const s = _adVals(room).filter(r => r.v.kind === 'summary').sort((a, b) => (Number(b.v.at) || 0) - (Number(a.v.at) || 0))[0];
   return s ? Object.assign({ key: s.key }, s.v) : null;
@@ -393,7 +453,8 @@ const LG_ROOM_OB = { sent: 'נשלח ✓', pending: 'בתור', failed: 'נכש�
 //  בועה אחת. outbox — waMeta/agentOutbox (למצב השליחה של תשובת בן)
 function lgRoomBubbleHtml(e, outbox) {
   const x = e || {}, esc = _adEsc;
-  const head = `<div class="rb-h"><b>${esc(x.kind === 'answer' ? 'אתה' : lgRoomAgentName(x.agent))}</b><span>${esc(_adWhen(x.at))}</span></div>`;
+  const to = x.to && x.kind !== 'answer' ? ' <span class="rb-to">← ' + esc(lgRoomAgentName(x.to)) + '</span>' : '';
+  const head = `<div class="rb-h"><b>${esc(x.kind === 'answer' ? 'אתה' : lgRoomAgentName(x.agent))}</b>${to}<span>${esc(_adWhen(x.at))}</span></div>`;
   if (lgRoomIsQuestion(x)) {
     const open = x.state === 'open', retry = !open && lgRoomCanAnswer(x, outbox);
     const lost = retry ? (outbox || {})[x.outboxKey] : null;
@@ -538,7 +599,7 @@ function lgAgentActivity(agentId, shadow, room, range, outbox) {
     if (!inR(v.createdAt) || v.staff === true || v.route === 'staff') return;
     if (agentId !== 'markazan' && !a.routes.includes(v.route)) return;
     const who = v.linked ? String(v.customerName || 'לקוח') : 'מספר לא מקושר';
-    let did;
+    let did, origs = [];
     if (v.state && v.state !== 'done') did = LG_AG_STATE[v.state] || String(v.state);
     else if (agentId === 'markazan') did = !v.linked ? 'רק נספר — לא עונים למספר לא מקושר' : (LG_ACT_ROUTE[v.route] || lgAgRouteLabel(v.route));
     else {
@@ -546,9 +607,12 @@ function lgAgentActivity(agentId, shadow, room, range, outbox) {
       const would = _adWould(v);
       did = sent ? 'ענה ללקוח: ' + sent : would ? 'היה עונה: ' + would
         : _adToShaul(v) ? 'היה מעביר לשאול' : _adToBen(v) ? 'שאל אותך בחדר' : lgAgOutcome(v);
+      //  תשובות בשילוב (spec ג): כל תשובה שנעטפה (פתיחה / סיום של המודל) — המשפט הקבוע מוצג מתחת
+      if (sent && Array.isArray(v.replyWords))
+        origs = v.replyWords.filter(w => w && w.original && String(w.original) !== String(w.sent || '')).map(w => String(w.original));
     }
     out.push({ key, at: Number(v.createdAt) || 0, kind: 'msg', who, what: !v.linked && !v.text ? 'שלח הודעה' : lgAgSentText(v), did,
-      review: lgAdNeedsReview(v), verdict: v.verdict ? (v.verdict.ok ? 'ok' : 'wrong') : '' });
+      ...(origs.length ? { origs } : {}), review: lgAdNeedsReview(v), verdict: v.verdict ? (v.verdict.ok ? 'ok' : 'wrong') : '' });
   });
   _adVals(room).forEach(({ key, v }) => {
     if (!inR(v.at) || v.kind === 'answer' || lgRoomAgentKey(v.agent) !== agentId) return;
@@ -576,5 +640,5 @@ function lgActRowHtml(x, today) {
       ${x.verdict ? `<span class="wain-chip">סימנת: ${x.verdict === 'ok' ? 'נכון ✓' : 'לא נכון ✗'}</span>` : ''}</div>` : '';
   return `<div class="act act-${e(x.kind)}"><span class="act-t">${e(_adHm(x.at, today))}</span><div class="act-b">
       <div class="act-w">${x.who ? `<b>${e(x.who)}</b> · ` : ''}${e(x.what)}</div>
-      ${x.did ? `<div class="act-d">← ${e(x.did)}</div>` : ''}${marks}</div></div>`;
+      ${x.did ? `<div class="act-d">← ${e(x.did)}</div>` : ''}${(Array.isArray(x.origs) ? x.origs : []).map(t => `<div class="act-d act-o">נוסח מקורי: ${e(t)}</div>`).join('')}${marks}</div></div>`;
 }

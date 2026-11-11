@@ -39,9 +39,10 @@ const { lgOkevEta, lgOkevEtaText } = require('./_agent-stats');
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
         lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
 const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
-const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute, lgAgentEscalatePhone } = require('./_agent-config');
-const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM } = require('./_agent-room');
+const { lgAgentConfig, lgAgentCustomerOn, lgAgentModeOf, lgAgentOfRoute } = require('./_agent-config');
+const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN } = require('./_agent-room');
 const { lgLessonFind, lgLessonUsed, lgLessonAutoOk } = require('./_agent-lessons');
+const { WORD_TIMEOUT_MS, lgAgentWord, lgWordWouldTry } = require('./_agent-wording');
 
 const CONV = 'waMeta/agentConv';
 const CONV_TTL_MS = 30 * 60 * 1000;
@@ -243,6 +244,8 @@ function lgAgentDeleteOnly(d, r, orders) {
 //  x: { quoteToBen, … } — שיפורים לכל סוכן (חדר הסוכנים), רק כשיש הגדרות במסך
 function _route(r, orders, now, keep, archive, quote, price, x) {
   const xo = x || {};
+  //  תלונה כשהטיפול ב"לא מרוצה" כבוי (בלי הגדרות במסך): כמו שהיה לפני שהסיווג הכיר אותה — שאלה
+  if (r.intent === 'complaint') return { actions: _ask(r), conv: keep };
   switch (r.route) {
     case 'okev': {
       const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
@@ -292,6 +295,29 @@ function _route(r, orders, now, keep, archive, quote, price, x) {
     case 'kolet-deleted': { const x = _deleted(r, orders, now); return { actions: x.actions, conv: x.conv || keep }; }
     default: return { actions: [], conv: keep };   // kolet (הקליטה הקיימת), none, ignore
   }
+}
+
+// ─── לקוח לא מרוצה (בן, 11/11) ──────────────────────────────────────
+//  upset (בנוסף לכל intent) או complaint: ההחלטה הרגילה נזרקת ובמקומה שאלה צהובה לבן +
+//  ללקוח התנצלות אחת (עם עובדות הסטטוס לפניה, אם יש הזמנה אחת מזוהה) — בלי "קיבלנו, בודקים".
+//  לא נוגעים בהזמנה חדשה (kolet), באדם שעונה, ובהודעות צוות.
+//  "אי הנעימות" ולא "העיכוב" — מתאים גם לתלונה על מחיר / איכות (תיקון סקירה סופית M3)
+const UPSET_TEXT = 'מצטערים על אי הנעימות. בן יחזור אליך בהקדם.';
+const UPSET_NOTE = 'לקוח לא מרוצה';
+const UPSET_ROUTES = ['okev', 'complaint', 'menu', 'archive', 'quote', 'price', 'shaul'];
+//  תודה / ברכה עם סימני קריאה אינן כעס — מתעלמים מ-upset בהן
+function _isUpset(r, on) { return on === true && !!r && r.linked === true && r.intent !== 'thanks' && r.intent !== 'chitchat' && (r.upset === true || r.intent === 'complaint') && UPSET_ROUTES.includes(r.route); }
+function _upset(r, orders, now, keep, xo, today) {
+  let facts = '';
+  if (r.route === 'okev' && (r.intent === 'status' || r.intent === 'complaint')) {
+    const found = lgOkevFind(orders, { quotedId: r.quotedId || '', ref: r.ref || '' });
+    if (found.match === 'one') facts = _statusText(found.orders[0], xo, now);
+  }
+  //  כבר היה לא מרוצה היום ובן לא ענה — רק לבן, בלי תשובה אוטומטית נוספת
+  const hold = today ? '' : (facts ? facts + '\n\n' : '') + UPSET_TEXT;
+  const ask = _ask(r, { note: UPSET_NOTE, benReason: 'agent-upset', upset: true, hold, noHold: !hold });
+  //  בן לוקח את השיחה: שאלה פתוחה (למשל "בטוח לבטל?") נמחקת, כדי ש"כן" מאוחר לא יבטל לבד
+  return { actions: ask, conv: null };
 }
 
 // ─── החלטה — טהור ───────────────────────────────────────────────────
@@ -344,8 +370,9 @@ function lgAgentDecide(p) {
   }
   if (c && r.linked && r.route !== 'kolet' && msgAt > askedAt) {
     const h = _onConv(r, orders, c, now, xo);
-    if (h) return h;
+    if (h) return _isUpset(r, p.upsetOn) ? _upset(r, orders, now, c, xo, !!(p && p.upsetToday)) : h;
   }
+  if (_isUpset(r, p && p.upsetOn)) return _upset(r, orders, now, c, xo, !!(p && p.upsetToday));
   return _route(r, orders, now, c, p && p.archive, p && p.quote, p && p.price, xo);
 }
 
@@ -540,6 +567,16 @@ async function lgAgentAct(db, key, opts) {
   }
 }
 
+const _ilDay = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
+//  שאלה פתוחה בחדר, סיבה agent-upset, אותו customerId, מהיום. האינדקס הפתוח קטן; רשומות ישנות בלי customerId לא נספרות.
+async function _upsetToday(db, cid, now) {
+  try {
+    const open = (await db.ref(ROOM_OPEN).once('value')).val() || {};
+    const day = _ilDay(now);
+    return Object.values(open).some(e => e && e.reason === 'agent-upset' && String(e.customerId || '') === cid && _ilDay(Number(e.at) || 0) === day);
+  } catch (e) { console.warn('agent-act: upset-today', e && e.name); return false; }
+}
+
 async function _act(db, key, rec, recRef, env, now, o) {
 
   const chat = String(rec.groupId || rec.chatId || '');
@@ -561,9 +598,9 @@ async function _act(db, key, rec, recRef, env, now, o) {
   // ארכיון: החיפוש ב-DB כאן (decide נשאר טהור). כשל בחיפוש → 'none' (שאול + "אני בודק")
   //  תיקון סופי 7: מתגים דולקים → מחפשים רק אחרי שער הפיילוט + הקישור (אחרת ממילא
   //  לא פועלים). מתגים כבויים (צל) → מחפשים, כדי ש-wouldAct יראה מה היה נשלח.
-  const _pilotOn = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
   const agent = lgAgentOfRoute(rec.route);
   const cfg = await lgAgentConfig(db);
+  const _pilotOn = id => lgAgentCustomerOn(db, id, cfg);
   const agentMode = lgAgentModeOf(cfg, agent, env);
   let archive;
   const _archiveGate = async () => agentMode !== 'reply'
@@ -603,12 +640,15 @@ async function _act(db, key, rec, recRef, env, now, o) {
     try { stageDays = (await db.ref(require('./_agent-stats').AGENT_STATS).once('value')).val() || null; }
     catch (e) { console.warn('agent-act: stage stats', e && e.name); stageDays = null; }
   }
-  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price, quoteToBen: !!cfg, stageDays });
+  //  לקוח לא מרוצה: האם כבר יש שאלה פתוחה כזו מהיום (שעון ישראל) לאותו לקוח
+  let upsetToday = false;
+  if (cfg && rec.linked && cid && (rec.upset === true || rec.intent === 'complaint')) upsetToday = await _upsetToday(db, cid, now);
+  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price, quoteToBen: !!cfg, stageDays, upsetToday, upsetOn: !!cfg });
   // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
   const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null }
     : priceSkipped ? { priceSkipped: 'deadline' } : price ? { priceUsage: price.usage || null } : {};
   const staff = lgAgentStaff(env);
-  const _pilot = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
+  const _pilot = _pilotOn;
 
   // תיקון סופי 2: "בפיילוט" = אותו קישור שהשליחה בודקת (waGroups / waSenders).
   //  רשומה בלי linkVia (נרשמה לפני התיקון) — נבדק עכשיו. תשובת שאול (staff) —
@@ -624,7 +664,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   else if (agentMode !== 'reply') why = 'switches-off';
   // תשובת שאול — הנמען הוא הלקוח של הבקשה (לא השולח), ולכן הפיילוט שלו
   else if (rec.route === 'staff') { if (!(await _pilot(staffQuote && staffQuote.customerId))) why = 'not-pilot'; }
-  else if (rec.linked && !(cid && (await db.ref(PILOT + '/' + cid).once('value')).val() === true)) why = 'not-pilot';
+  else if (rec.linked && !(await _pilotOn(cid))) why = 'not-pilot';
   else if (!rec.linked && d.actions.some(a => a.type !== 'staff')) why = 'not-pilot';
   // "העברנו לשאול" בלי שאול מוגדר — עדיף לא לענות מאשר לשקר
   //  (הודעה לידיעה — notify — לא נחשבת: בלעדיה התשובה ללקוח עדיין נכונה)
@@ -661,10 +701,36 @@ async function _act(db, key, rec, recRef, env, now, o) {
   const needsStaff = d.actions.some(a => (a.type === 'staff' && !a.notify) || a.type === 'quote-ask');
   let staffQueued = false;
   const deferred = [];
+  //  תשובות בשילוב (spec ג; תיקון סקירה 12/11): העובדות יוצאות **כמו שהן**. המודל לא כותב
+  //  טקסט — רק בוחר פתיחה / סיום מרשימות סגורות (_agent-wording: LG_WRAP_OPENERS / CLOSERS).
+  //  רק עם הגדרות במסך והסוכן "עונה" — בשקט לעולם לא קוראים למודל. אין זמן לעטיפה + שליחה
+  //  → העובדות לבד (wordSkipped נרשם רק כשבאמת היינו מנסים).
+  //  ⚠️ לא נעטפים: הודעות לשאול / לבן, "קיבלנו, אנחנו בודקים", שיעור שנלמד, תשובת בן
+  //     מהחדר, תוצאות ביטול, כיתוב קבצים, ושליחה חוזרת של שומר (אלה לא עוברים כאן).
+  //  ברכה (chitchat → תפריט): kind 'free' — פתיחה מהרשימה + התפריט כמו שהוא; אין פתיחה → התפריט לבד.
+  //  התנצלות "לא מרוצה": העובדות + "מצטערים…" כמו שהן, עם פתיחה בלבד מהפריטים שמתאימים לתלונה (upset).
+  const wordOn = !!cfg && agentMode === 'reply' && mode !== 'delete-only';
+  const replyWords = [];   //  כל תשובה שנעטפה: { original, sent } — מוצג ב"מה X עשה"
+  let wordSkipped = '';
+  const _word = async (text, opt) => {
+    const menu = text === AGENT_MENU_TEXT && rec.intent === 'chitchat';
+    if (!wordOn || !text || (text === AGENT_MENU_TEXT && !menu)) return text;
+    const args = { kind: menu ? 'free' : 'facts', customerText: rec.text, customerName: rec.customerName, facts: text,
+                   model: env.AGENT_MODEL, key: env.OPENAI_API_KEY, fetcher: o.fetchImpl, timeoutMs: WORD_TIMEOUT_MS,
+                   upset: !!(opt && opt.upset) };
+    if (!lgWordWouldTry(args)) return text;
+    if (o.deadline - o.clock() < WORD_TIMEOUT_MS + PER_ITEM_WORST_MS) { wordSkipped = 'deadline'; return text; }
+    let w = null;
+    try { w = await lgAgentWord(args); }
+    catch (e) { console.warn('agent-act: wording', e && e.name); w = null; }
+    if (!(w && w.reworded && w.text)) return text;
+    replyWords.push({ original: text, sent: w.text, usage: w.usage || null });
+    return w.text;
+  };
   for (let i = 0; i < d.actions.length; i++) {
     const a = d.actions[i], k = key + '_' + i;
     if (a.type === 'reply' && needsStaff) deferred.push([k, a]);
-    else if (a.type === 'reply') { if (await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k; }
+    else if (a.type === 'reply') { if (await enq(k, chat, await _word(a.text), [], 'agent-reply') && !askKey) askKey = k; }
     else if (a.type === 'staff') {
       if (a.notify && !staff[0]) continue;   // לידיעה, ואין שאול — מדלגים
       if (await enq(k, staff[0], a.text, a.files || [], a.reason || 'agent-staff') && !a.notify) staffQueued = true;
@@ -684,7 +750,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  ⚠️ כאן כבר עברו כל השערים (הסוכן "עונה", לקוח מופעל ומקושר) — אחרת המודל לא נקרא.
       let lm = null;
       //  hold משלו (שיפורים 4, 6 — כמות חשבוניות / בקשת מחיר) — בלי למידה: ההודעה ללקוח קבועה
-      if (!(a.files && a.files.length) && !a.hold && a.question && a.question !== '(תמונה)') {
+      if (!(a.files && a.files.length) && !a.hold && !a.upset && a.question && a.question !== '(תמונה)') {
         try {
           lm = await lgLessonFind(db, { agent, question: a.question, env, fetcher: o.fetchImpl, matcher: o.lessonMatch,
                                         deadline: o.deadline, clock: o.clock, reserveMs: 2 * PER_ITEM_WORST_MS });
@@ -715,14 +781,21 @@ async function _act(db, key, rec, recRef, env, now, o) {
       const prop = lm && lm.id ? { lessonId: lm.id, proposal: lm.lesson.answer, lessonFrom: from } : {};
       const rk = await lgRoomPost(db, { agent, kind: 'ask', state: 'open', text: a.note || (String(a.who || '') + ': ' + line.slice(0, 200)),
         customerId: cid, customerName: a.who, chat, question: a.question, suggest: a.suggest, note: a.note,
+        reason: a.benReason || undefined,
         topic: lm && lm.topic ? lm.topic : undefined, ...prop,
         ref: { customerId: cid, shadowKey: key } }, now);
       //  ⚠️ (תיקון סקירה 10/11) הכל תלוי בצהוב: בלעדיו אין על מה לענות בחדר — לא
       //  מציקים לבן ולא מבטיחים ללקוח. ההתראה נושאת את הלקוח (cid): השליחה מתירה
       //  העברת תמונה למספר של בן רק מהצ'אט של הלקוח הזה.
+      //  ההתראה לבן — דרך lgBenNotify (_agent-ben.js, בן 11/11): אחת למפתח, לא בלילה (נכנסת להודעת
+      //  הבוקר), עד 20 ביום. השליחה עצמה — כאן למטה עם שאר התור (flush:false).
       if (rk) {
-        await enq(k + '_b', lgAgentEscalatePhone(cfg), lgRoomAskBenText(a.who, a.question, env), a.files || [], AGENT_ASK_REASON, cid);
-        await enq(k, chat, a.hold || ASK_HOLD_TEXT, [], 'agent-reply');
+        const bn = await require('./_agent-ben').lgBenNotify(db, { key: k + '_b', outboxKey: k + '_b',
+          text: lgRoomAskBenText(a.who, a.upset ? UPSET_NOTE + ': ' + a.question : a.question, env), reason: a.benReason || AGENT_ASK_REASON, urgent: false, env, now, cfg, agent,
+          customerId: cid, files: a.files || [], open: ROOM_OPEN + '/' + rk, flush: false });
+        if (bn.queued) queued.push(bn.key);
+        //  ההתנצלות של "לא מרוצה" (עובדות + "מצטערים…") — נעטפת בפתיחה בלבד; "קיבלנו" הקבוע — לא
+        if (!a.noHold) await enq(k, chat, a.upset && a.hold ? await _word(a.hold, { upset: true }) : (a.hold || ASK_HOLD_TEXT), [], 'agent-reply');
       }
     }
     else if (a.type === 'quote-ask') {
@@ -789,13 +862,14 @@ async function _act(db, key, rec, recRef, env, now, o) {
       }
     }
   }
-  for (const [k, a] of deferred) if (staffQueued && await enq(k, chat, a.text, [], 'agent-reply') && !askKey) askKey = k;
+  for (const [k, a] of deferred) if (staffQueued && await enq(k, chat, await _word(a.text), [], 'agent-reply') && !askKey) askKey = k;
   // conv אחרי התור ולפני השליחה. conv חדש נשמר רק אם השאלה באמת נכנסה לתור
   //  (queued:true) — עם askKey, כדי לדעת מתי נשלחה
   if (!d.conv) { if (stored) await convRef.set(null); }
   else if (d.conv !== conv && askKey) await convRef.set({ ...d.conv, askKey: lgWaInboundKey(askKey) });
   await recRef.update({ wouldAct: d.actions, acted: true, actReason: null, actMode: mode, actQueued: queued, actCancels: cancels,
-                       ...(attRemovals.length ? { actAttRemovals: attRemovals } : {}), ...qUsage, ...(lessonInfo || {}) });
+                       ...(attRemovals.length ? { actAttRemovals: attRemovals } : {}), ...qUsage, ...(lessonInfo || {}),
+                       ...(replyWords.length ? { replyWords } : {}), ...(wordSkipped ? { wordSkipped } : {}) });
 
   if (queued.length) {
     try { await (o.sendPending || lgAgentSendPending)(db, { env, provider: o.provider, deadline: o.deadline, clock: o.clock }); }

@@ -125,7 +125,7 @@ function lgOkevReply(intent, found) {
 
 // ── ניתוב לפי כוונה. לא מקושר → שאול; אדם עונה עכשיו → שקט ──
 function lgOkevRoute(p) {
-  const { intent, isGroup, linked, humanQuiet } = p || {};
+  const { intent, isGroup, linked, humanQuiet, ref } = p || {};
   if (!linked) return 'shaul';
   if (humanQuiet) return 'silent-human';
   switch (intent) {
@@ -136,6 +136,8 @@ function lgOkevRoute(p) {
     case 'price': return 'price';
     case 'chitchat': return isGroup ? 'ignore' : 'menu';
     case 'thanks': return 'none';
+    //  תלונה: עם הפניה להזמנה — עוקב ההזמנות (עובדות), בלי — המרכזן
+    case 'complaint': return String(ref || '').trim() ? 'okev' : 'complaint';
     default: return 'shaul';
   }
 }

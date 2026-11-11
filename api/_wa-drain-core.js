@@ -18,6 +18,10 @@ const BUDGET_MS = 45 * 1000;
 //  וגדול מספיק כדי שדילוג על חלון לא יהפוך לשגרה. gap אחד ועוד מרווח.
 const SLOT_MAX_WAIT_MS = 15 * 1000;
 
+//  הגרוע ביותר של שליחה אחת: AbortSignal.timeout(15000) בספק. תקציב קטן (השרת, 18ש׳) לא מתחיל
+//  סבב שהמתנה לחלון + שליחה כזו עלולים לחרוג ממנו.
+const SEND_WORST_MS = 15 * 1000;
+
 //  מצב החיבור, כדי שמסך יוכל להראות אותו בלי לשאול את GREEN API בעצמו.
 //  ⚠️ waMeta כבר קיים בחוקים — קריאה לאדמין, כתיבה חסומה. אין שינוי rules.
 const WA_STATE = 'waMeta/whatsapp';
@@ -98,14 +102,15 @@ async function _invoiceDelivery(db, invoiceKey, outboxKey, out) {
 }
 
 //  פרוסה אחת של התור. מחזיר { results, processed, state? }.
-async function drainKeys(db, provider, keys, by, started) {
+//  budgetMs — תקציב אחר מ-BUDGET_MS (השליחה מהדופק, api/_wa-server-drain.js, מקבלת פחות).
+async function drainKeys(db, provider, keys, by, started, budgetMs = BUDGET_MS) {
   let state = null;
   const results = [];
   let processed = 0;
 
   for (const key of keys) {
     if (processed >= provider.maxPerRun)         break;
-    if (Date.now() - started > BUDGET_MS)        break;
+    if (Date.now() - started > budgetMs)         break;
 
     // ── חלון השליחה, לפני התפיסה ──
     //
@@ -116,7 +121,11 @@ async function drainKeys(db, provider, keys, by, started) {
     //  המחיר: אם החלון התקבל והתפיסה נכשלה (drain אחר הקדים), החלון
     //  מתבזבז — gap אחד של שקט. מחיר סביר על קוד פשוט יותר.
     if (provider.globalSlot) {
-      const slot = await lgWaReserveSlot(db, provider.nextGap(), SLOT_MAX_WAIT_MS);
+      //  ⚠️ לא ממתינים לחלון יותר ממה שנשאר אחרי שליחה בגרוע ביותר — התקציב הוא תקרה קשה.
+      //  בתקציב ברירת המחדל (45ש׳) זה משנה רק סבב שמתחיל אחרי 30ש׳.
+      const maxWait = Math.min(SLOT_MAX_WAIT_MS, budgetMs - (Date.now() - started) - SEND_WORST_MS);
+      if (maxWait <= 0) break;
+      const slot = await lgWaReserveSlot(db, provider.nextGap(), maxWait);
       if (!slot.ok) {
         // העתיד הקרוב תפוס על ידי drain אחר. לא ממתינים — חוזרים אחר כך.
         results.push({ key, status: 'deferred', reason: 'חלון השליחה תפוס' });
@@ -258,7 +267,7 @@ async function drainKeys(db, provider, keys, by, started) {
     //  נשאר בדיוק כפי שהיה. אצל green ההמתנה כבר קרתה לפני השליחה,
     //  והמתנה נוספת כאן הייתה מכפילה את המרווח.
     if (!provider.globalSlot &&
-        processed < provider.maxPerRun && Date.now() - started < BUDGET_MS) {
+        processed < provider.maxPerRun && Date.now() - started < budgetMs) {
       await sleep(provider.nextGap());
     }
   }
@@ -267,14 +276,16 @@ async function drainKeys(db, provider, keys, by, started) {
 
 //  שליחה מיידית מהשרת, בלי מסך אדמין (חשבונית שהודפסה). בודק חיבור כמו
 //  ה-handler; מנותק → ההודעות נשארות בתור ל-drain הבא.
-async function drainNow(db, keys, by) {
+async function drainNow(db, keys, by, opts = {}) {
   const provider = lgWaProvider();
   if (!provider.configured) return { results: [], processed: 0, state: 'not-configured' };
+  //  ⚠️ התקציב נספר מלפני בדיקת החיבור (getState עד 10ש׳), לא אחריה
+  const started = Date.now();
   if (provider.checksState) {
     const st = await provider.getState();
     if (!isLive(st.state)) return { results: [], processed: 0, state: st.state };
   }
-  return drainKeys(db, provider, keys, by, Date.now());
+  return drainKeys(db, provider, keys, by, started, opts.budgetMs > 0 ? opts.budgetMs : BUDGET_MS);
 }
 
-module.exports = { drainKeys, drainNow, recordState, isLive, BUDGET_MS, WA_STATE };
+module.exports = { drainKeys, drainNow, recordState, isLive, BUDGET_MS, SEND_WORST_MS, WA_STATE };

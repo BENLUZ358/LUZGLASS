@@ -14,7 +14,8 @@
 //    אין agentConfig (או ערך לא תקין) → כמו היום: 'reply' רק אם
 //      AGENT_REPLY_ENABLED==='true', אחרת 'shadow' — כך שהפריסה לא משנה כלום.
 //  ⚠️ escalatePhone — המספר של בן לשאלות "לא יודע". **לא** איש צוות: שכבת השליחה
-//     מתירה אליו רק את ההתראה על שאלה (reason 'agent-ask'), והעברת תמונה רק מהצ'אט
+//     מתירה אליו רק AGENT_BEN_REASONS (שאלה, לקוח לא מרוצה, שומר, הבוקר, תקלה — דרך
+//     lgBenNotify ב-_agent-ben.js), והעברת תמונה רק מהצ'אט
 //     של הלקוח של אותה שאלה (תיקון סקירה 10/11). בלי הגדרות — AGENT_ESCALATE_DEFAULT
 //     הוא רק היעד של ההתראה, לא צוות.
 //  אפיון: docs/superpowers/specs/2026-11-10-agents-room-design.md
@@ -54,7 +55,7 @@ function lgAgentEscalatePhone(cfg) {
 //  "כתבו כאן ונחזור אליך", ולכן ההמשך הולך לפי המתג שלו — אחרת הובטחה תשובה שאף
 //  אחד לא ייתן (תיקון סקירה 10/11). השאר — המרכזן.
 const LG_ROUTE_AGENT = { okev: 'okev', menu: 'markazan', archive: 'archive', quote: 'price', price: 'price', staff: 'price',
-                         kolet: 'kolet', 'kolet-deleted': 'kolet', shaul: 'markazan' };
+                         kolet: 'kolet', 'kolet-deleted': 'kolet', shaul: 'markazan', complaint: 'markazan' };
 const lgAgentOfRoute = route => (_own(LG_ROUTE_AGENT, String(route || '')) ? LG_ROUTE_AGENT[String(route)] : 'markazan');
 
 async function lgAgentConfig(db) {
@@ -68,27 +69,48 @@ async function lgAgentMode(db, key, env) {
   return lgAgentModeOf(await lgAgentConfig(db), key, e);
 }
 
+//  מייל להתראות לבן: ריק = אין; תקין = באותיות קטנות בלי רווחים
+const _email = raw => { const e = String(raw == null ? '' : raw).trim().toLowerCase(); return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : ''; };
+
+//  האם הסוכן עונה ללקוח: "עונה לכל הלקוחות" דולק, או הלקוח ברשימת הפיילוט.
+//  ⚠️ לא בודק קישור — מספר לא מקושר נשאר בלי תשובה (הבדיקות waGroups / waSenders נשארות במקומן).
+async function lgAgentCustomerOn(db, cid, cfg) {
+  if (!cid) return false;
+  if (cfg && cfg.allCustomers === true) return true;
+  return (await db.ref('waMeta/agentPilot/' + cid).once('value')).val() === true;
+}
+
 //  מה שהמסך מקבל: המצב של כל סוכן (שמור או ישן), המספר, והאם נשמר אי-פעם
 function lgAgentConfigView(cfg, env) {
   const agents = {};
   LG_AGENT_KEYS.forEach(k => { agents[k] = _stored(cfg, k, env); });
   return { agents, escalatePhone: lgAgentEscalatePhone(cfg), saved: !!cfg,
+           allCustomers: !!cfg && cfg.allCustomers === true, escalateEmail: _email(cfg && cfg.escalateEmail),
            updatedAt: Number(cfg && cfg.updatedAt) || 0 };
 }
 
-//  agent-config-set: { agent, mode } או { escalatePhone }. אימות קפדני.
+//  agent-config-set: { agent, mode } או { escalatePhone } או { allCustomers } או { escalateEmail }. אימות קפדני.
 //  כתיבה ראשונה — כל הסוכנים מקבלים את מה שהם עושים היום, ורק אז השינוי,
 //  כדי שהדלקה של סוכן אחד לא תשנה בשקט את האחרים.
 async function lgAgentConfigSet(db, body, ctx) {
   const b = body || {}, c = ctx || {};
   const hasAgent = _own(b, 'agent'), hasPhone = _own(b, 'escalatePhone');
-  if (!hasAgent && !hasPhone) return { ok: false, code: 'bad-request', message: 'אין מה לשנות' };
+  const hasAll = _own(b, 'allCustomers'), hasEmail = _own(b, 'escalateEmail');
+  if (!hasAgent && !hasPhone && !hasAll && !hasEmail) return { ok: false, code: 'bad-request', message: 'אין מה לשנות' };
   if (hasAgent && (typeof b.agent !== 'string' || !LG_AGENT_KEYS.includes(b.agent))) return { ok: false, code: 'bad-agent', message: 'סוכן לא מוכר' };
   if (hasAgent && !LG_AGENT_MODES.includes(b.mode)) return { ok: false, code: 'bad-mode', message: 'מצב לא מוכר' };
   let phone = '';
   if (hasPhone) {
     phone = typeof b.escalatePhone === 'string' ? _phone(b.escalatePhone) : '';
     if (!phone) return { ok: false, code: 'bad-phone', message: 'מספר טלפון לא תקין' };
+  }
+  if (hasAll && typeof b.allCustomers !== 'boolean') return { ok: false, code: 'bad-all', message: 'ערך לא תקין' };
+  let email = '';
+  if (hasEmail) {
+    const raw = typeof b.escalateEmail === 'string' ? b.escalateEmail.trim() : null;
+    if (raw === null) return { ok: false, code: 'bad-email', message: 'כתובת מייל לא תקינה' };
+    email = raw === '' ? '' : _email(raw);
+    if (raw !== '' && !email) return { ok: false, code: 'bad-email', message: 'כתובת מייל לא תקינה' };
   }
   const env = c.env || process.env;
   const now = Number(c.now) || Date.now();
@@ -99,7 +121,9 @@ async function lgAgentConfigSet(db, body, ctx) {
       const base = lgAgentConfigView(cur && typeof cur === 'object' ? cur : null, env);
       const agents = { ...base.agents };
       if (hasAgent) agents[b.agent] = b.mode;
-      return { agents, escalatePhone: hasPhone ? phone : base.escalatePhone, updatedAt: now, by };
+      return { agents, escalatePhone: hasPhone ? phone : base.escalatePhone,
+               allCustomers: hasAll ? b.allCustomers : base.allCustomers,
+               escalateEmail: hasEmail ? email : base.escalateEmail, updatedAt: now, by };
     });
   } catch (e) {
     console.warn('agent-config: write', e && e.name);
@@ -109,4 +133,4 @@ async function lgAgentConfigSet(db, body, ctx) {
 }
 
 module.exports = { AGENT_CONFIG, LG_AGENT_KEYS, LG_AGENT_MODES, AGENT_ESCALATE_DEFAULT,
-                   lgAgentModeOf, lgAgentMode, lgAgentConfig, lgAgentConfigView, lgAgentConfigSet, lgAgentEscalatePhone, lgAgentOfRoute };
+                   lgAgentModeOf, lgAgentMode, lgAgentConfig, lgAgentConfigView, lgAgentConfigSet, lgAgentCustomerOn, lgAgentEscalatePhone, lgAgentOfRoute };

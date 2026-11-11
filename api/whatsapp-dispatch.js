@@ -63,7 +63,8 @@ function _db() {
 module.exports = async function handler(req, res, deps) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'method not allowed' }); return; }
 
-  const auth = await verifyAdmin(req);
+  //  deps.auth — רק מקוד השרת (_ready-net.js); Vercel קורא ל-handler עם req,res בלבד
+  const auth = (deps && deps.auth && deps.auth.ok === true) ? deps.auth : await verifyAdmin(req);
   if (!auth.ok) { res.status(auth.status).json({ error: auth.error }); return; }
 
   const body     = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
@@ -77,6 +78,21 @@ module.exports = async function handler(req, res, deps) {
   const kind     = body.kind === 'ready' ? 'ready'
                  : body.kind === 'sketches-handled' ? 'sketches-handled'
                  : 'dispatched';
+
+  //  "מוכן" סומן עכשיו — השרת מתחיל לעקוב אחרי ההזמנה (בן, 11/11). הדף שולח את זה
+  //  ברגע המעבר ל-done; אם ההודעה לא יצאה תוך 3 דק', הדופק שולח אותה (api/_ready-net.js).
+  if (body.kind === 'ready-watch') {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT && !(deps && deps.db)) { res.status(500).json({ error: 'server not configured' }); return; }
+    try {
+      const db = (deps && deps.db) || _db();
+      const n = await require('./_ready-net').lgReadyNetWatch(db, orderIds, Date.now());
+      res.status(200).json({ ok: true, watching: n });
+    } catch (e) {
+      console.error('ready-watch:', e && e.name);
+      res.status(500).json({ error: 'שגיאה' });
+    }
+    return;
+  }
 
   //  שבר בחיסום שחזר (בן, 10/11) — מסלול משלו: הודעה אחת על פריט אחד, לנמען החשבוניות
   if (body.kind === 'broken-returned') {
@@ -97,7 +113,7 @@ module.exports = async function handler(req, res, deps) {
 
   if (!orderIds.length)             { res.status(400).json({ error: 'orderIds חסר' }); return; }
   if (orderIds.length > MAX_ORDERS) { res.status(400).json({ error: `יותר מדי הזמנות (מקסימום ${MAX_ORDERS})` }); return; }
-  if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
+  if (!process.env.FIREBASE_SERVICE_ACCOUNT && !(deps && deps.db)) {
     res.status(500).json({ error: 'server not configured — missing FIREBASE_SERVICE_ACCOUNT' }); return;
   }
 
@@ -237,6 +253,12 @@ module.exports = async function handler(req, res, deps) {
       // תיעוד בלבד — ר' lgWaEnqueue
       phoneSource: targets[0].source, accountKey: targets[0].accountKey,
     });
+
+    //  ההודעה בתור — אין יותר מה לעקוב (api/_ready-net.js)
+    if (kind === 'ready') {
+      try { await require('./_ready-net').lgReadyNetUnwatch(db, liveIds); }
+      catch (e) { console.warn('ready-unwatch:', e && e.name); }
+    }
 
     res.status(200).json({
       ok: true, queued: q.queued, outboxKey: q.key, configured: provider.configured, kind,

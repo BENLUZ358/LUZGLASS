@@ -104,6 +104,17 @@ const run = (db, provider, env) => A.lgAgentSendPending(db, { provider, env: env
     check('staff gate linked', [p.gates[0].linked, p.gates[0].phone], [true, '0501112222']);
   }
 
+  /* עונה לכל הלקוחות: מקושר שלא בפיילוט נשלח; לא מקושר — לא */
+  {
+    const db = seed(), p = fakeProvider();
+    await db.ref('waMeta/agentConfig').set({ agents: { okev: 'reply' }, allCustomers: true });
+    await A.lgAgentEnqueue(db, { key: 'ac1', to: '0507777777', customerId: '999', text: 'לא בפיילוט' });
+    await A.lgAgentEnqueue(db, { key: 'ac2', to: '0549999999', customerId: '999', text: 'לא מקושר' });
+    await run(db, p);
+    check('allCustomers → linked customer outside the pilot is sent', ob(db, 'ac1').state, 'sent');
+    check('allCustomers → unlinked number still blocked', ob(db, 'ac2').state, 'blocked');
+  }
+
   /* פרטי: לא-צוות לא-מקושר / מקושר / לא בפיילוט / מתגים כבויים */
   {
     const db = seed(), p = fakeProvider();

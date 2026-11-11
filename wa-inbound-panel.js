@@ -381,7 +381,9 @@ function lgWaInTextCustomersHtml(map) {
 function lgWaInInvoicePrivateHtml(map) {
   const m = map || {};
   const rows = Object.keys(m).sort((a, b) => String(m[a].customerName || a).localeCompare(String(m[b].customerName || b), 'he'))
-    .map(k => _waInLine(`data-ikey="${_waInEsc(k)}"`, '🧾', m[k].customerName || k, 'מפתח ' + _waInEsc(k), 'data-iact="remove"', 'הסר')).join('');
+    .map(k => _waInLine(`data-ikey="${_waInEsc(k)}"`, '🧾', m[k].customerName || k,
+      'מפתח ' + _waInEsc(k) + (m[k].phone ? ' · נשלח ל-' + _waInEsc(m[k].phone) + (m[k].phoneNote ? ' (' + _waInEsc(m[k].phoneNote) + ')' : '') : ''),
+      'data-iact="remove"', 'הסר')).join('');
   return `<div class="wain-note">החשבונית של הלקוחות האלה נשלחת למספר הפרטי שבכרטיס, לא לקבוצה. "מוכן לאיסוף" ושאר ההודעות — לקבוצה כרגיל.</div>
       ${rows ? `<div class="wain-lines">${rows}</div>` : ''}
       <div data-ikey=""><button type="button" class="wain-addbtn" data-iact="add">＋ הוסף לקוח שמקבל חשבונית לפרטי</button></div>`;

@@ -182,6 +182,26 @@ const run = (db, k, env, extra) => act.lgAgentAct(db, k, { env: env || ENV, now:
     check('drain agent-room-answer', [r.ok, outbox(db)['room_' + ask.key].text, db._data.waMeta.agentRoom[ask.key].state], [true, 'תשובה', 'answered']);
   }
 
+  /* ── שיחות בחדר (thread): lgRoomSay ── */
+  {
+    const db = fakeDb({});
+    const k1 = await ROOMJS.lgRoomSay(db, { thread: 'ob:L1', from: 'okev', to: 'archive', step: 'handoff', text: 'חשבונית לא נשלחה' }, NOW);
+    const e1 = db._data.waMeta.agentRoom[k1];
+    check('lgRoomSay stores thread/to/step on an info row', [e1.kind, e1.agent, e1.thread, e1.to, e1.step, e1.text], ['info', 'okev', 'ob:L1', 'archive', 'handoff', 'חשבונית לא נשלחה']);
+    const k0 = await ROOMJS.lgRoomPost(db, { agent: 'okev', kind: 'info', text: 'ישן' }, NOW);
+    const e0 = db._data.waMeta.agentRoom[k0];
+    check('old rows stay unchanged (no thread/step keys)', ['thread' in e0, 'step' in e0, 'to' in e0], [false, false, false]);
+    check('bad step / missing thread → nothing written', [await ROOMJS.lgRoomSay(db, { thread: 'a', from: 'okev', step: 'zzz', text: 'x' }, NOW),
+      await ROOMJS.lgRoomSay(db, { thread: '', from: 'okev', step: 'done', text: 'x' }, NOW)], [null, null]);
+    const kb = await ROOMJS.lgRoomSay(db, { thread: 'wa:7', from: 'okev', step: 'need-ben', text: 'חסר טלפון ללקוח X' }, NOW);
+    const eb = db._data.waMeta.agentRoom[kb];
+    check('need-ben opens an internal ask with the agent name', [eb.kind, eb.state, eb.internal, eb.customerName, eb.step, eb.thread], ['ask', 'open', true, 'עוקב', 'need-ben', 'wa:7']);
+    check('need-ben is in the open index', db._data.waMeta.agentRoomOpen[kb] && db._data.waMeta.agentRoomOpen[kb].agent, 'okev');
+    check('closing it works (existing machinery)', [await ROOMJS.lgRoomClose(db, kb, NOW, { by: 'ben' }), db._data.waMeta.agentRoomOpen[kb] == null], [true, true]);
+    const kd = await ROOMJS.lgRoomSay(db, { thread: 'wa:7', from: 'okev', step: 'done', text: 'שלחתי ✓' }, NOW);
+    check('done / would stay plain info rows', [db._data.waMeta.agentRoom[kd].kind, db._data.waMeta.agentRoom[kd].state === undefined], ['info', true]);
+  }
+
   /* ── סיכום המנהל בחדר ── */
   {
     const db = seed();

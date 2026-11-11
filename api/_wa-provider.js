@@ -124,6 +124,8 @@ ${BUSINESS}`;
   const extra = (extraLines || []).map(s => String(s || '').trim()).filter(Boolean);
   //  משלוח לשרטט (בן, 10/11) — מייל פנימי, השורות מוכנות ב-_drafter-batch.js
   if (kind === 'drafter-batch') return extra.join('\n');
+  //  התראת תקלה לבן (_agent-ben.js) — מייל פנימי, הטקסט קבוע של המערכת
+  if (kind === 'agent-alarm') return extra.join('\n');
   if (kind === 'broken-returned') {
     const doc = docNumber ? ' (חשבונית ' + String(docNumber) + ')' : '';
     return `שלום ${who},\n\n${extra.join('\n')}\nהחשבונית כבר יצאה על כל ההזמנה${doc}.\n\n${BUSINESS}`;

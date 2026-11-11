@@ -26,12 +26,12 @@ const payload = (id, md, chatId, sender, typeWebhook) => ({
 const textMd = t => ({ typeMessage: 'textMessage', textMessageData: { textMessage: t } });
 
 // מודל מזויף: מחזיר intent קבוע וסופר קריאות
-const model = (intent, ref, ok = true, status = 200) => {
+const model = (intent, ref, ok = true, status = 200, upset) => {
   const m = { calls: 0 };
   m.fetchImpl = async () => {
     m.calls++;
     return { ok, status, json: async () => ({ status: 'completed', usage: { input_tokens: 10, output_tokens: 5 },
-      output: [{ content: [{ type: 'output_text', text: JSON.stringify({ intent, ref: ref || '' }) }] }] }) };
+      output: [{ content: [{ type: 'output_text', text: JSON.stringify({ intent, ref: ref || '', upset: upset === true }) }] }] }) };
   };
   return m;
 };
@@ -242,6 +242,27 @@ const shadowCount = db => Object.keys((db._data.waMeta || {}).agentShadow || {})
       await sh.lgAgentShadowProcess(db, r.key, { now: NOW + 1, fetchImpl: m.fetchImpl, env: ENV, clock });
       check('F1 no deadline → clock + 50s', seen[0].deadline, t + 50000);
     } finally { actMod.lgAgentAct = origAct; }
+  }
+
+  /* לקוח לא מרוצה (משימה 6): upset נשמר ברשומה; תלונה עם הפניה → עוקב, בלי → מרכזן */
+  {
+    const db = seed(); const m = model('status', 'כהן', true, 200, true);
+    const r = await sh.lgAgentShadowRecord(db, payload('UP1', textMd('איפה ההזמנה של כהן כבר שבוע!!')), NOW);
+    await sh.lgAgentShadowProcess(db, r.key, { now: NOW + 100, fetchImpl: m.fetchImpl, env: ENV });
+    const e = rec(db, r.key);
+    check('upset stored; route stays okev', [e.upset, e.intent, e.route], [true, 'status', 'okev']);
+    const db2 = seed(); const m2 = model('complaint', '', true, 200, true);
+    const r2 = await sh.lgAgentShadowRecord(db2, payload('UP2', textMd('אתם לא עונים לי')), NOW);
+    await sh.lgAgentShadowProcess(db2, r2.key, { now: NOW + 100, fetchImpl: m2.fetchImpl, env: ENV });
+    check('complaint without ref → route complaint', [rec(db2, r2.key).intent, rec(db2, r2.key).route, rec(db2, r2.key).upset], ['complaint', 'complaint', true]);
+    const db3 = seed(); const m3 = model('complaint', 'כהן', true, 200, true);
+    const r3 = await sh.lgAgentShadowRecord(db3, payload('UP3', textMd('כהן עדיין לא מוכן!!')), NOW);
+    await sh.lgAgentShadowProcess(db3, r3.key, { now: NOW + 100, fetchImpl: m3.fetchImpl, env: ENV });
+    check('complaint with ref → route okev', [rec(db3, r3.key).route, rec(db3, r3.key).matchedOrderIds], ['okev', ['o1']]);
+    const db4 = seed(); const m4 = model('status', 'כהן');
+    const r4 = await sh.lgAgentShadowRecord(db4, payload('UP4', textMd('מה עם כהן?')), NOW);
+    await sh.lgAgentShadowProcess(db4, r4.key, { now: NOW + 100, fetchImpl: m4.fetchImpl, env: ENV });
+    check('not upset → false', rec(db4, r4.key).upset, false);
   }
 
   console.log(failed ? `\n${failed} FAILED` : '\nall passed');

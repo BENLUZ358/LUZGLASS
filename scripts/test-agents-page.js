@@ -31,12 +31,23 @@ check('log shows review rows as questions, the rest folded',
   [true, true, true, true]);
 check('no pilot buttons in the log any more', /lgAgRowHtml\(/.test(live(P)), false);
 check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261111/.test(P), /agents-dash\.js\?v=20261111/.test(A)], [true, true]);
+// ─── עונה לכל הלקוחות + מייל להתראות (משימה 5) ───
+check('all-customers switch above the pilot list, off by default',
+  [/עונה לכל הלקוחות/.test(P), P.indexOf('id="allCust"') > -1 && P.indexOf('id="allCust"') < P.indexOf('id="pilot"'), /allCustomers\)\s*===\s*true/.test(P)], [true, true, true]);
+check('email field with the edit/save pattern and its hint',
+  [/id="benMail"/.test(P), /data-mailsave/.test(P), /data-mailedit/.test(P), /מייל להתראות כשהוואטסאפ לא עובד/.test(P), /escalateEmail:/.test(live(P)), /allCustomers:\s*/.test(live(P))], [true, true, true, true, true, true]);
 // ─── חדר הסוכנים (בן, 10/11) ───
 check('room screen: switches, summary, cards, room on top; the old sections folded',
   [['id="secSwitches"', 'id="secSummary"', 'id="secCards"', 'id="secRoom"'].every(x => P.includes(x)),
    ['secTodo', 'secNums', 'secLog', 'secCancels', 'secState'].every(id => new RegExp('<details[^>]*id="' + id + '"').test(P))], [true, true]);
 check('switches and answers go through the drain', ['agent-config-set', 'agent-room-answer'].map(a => new RegExp("action:\\s*'" + a + "'").test(P)), [true, true]);
 check('reads the room and the switches', [/waMeta\/agentRoom/.test(P), /waMeta\/agentConfig/.test(P)], [true, true]);
+// ─── שיחות בחדר (11/11) ───
+check('room renders threads: open first, closed folded per day',
+  [P.includes('lgRoomThreads('), P.includes('lgRoomThreadHtml('), P.includes('lgRoomDayGroups('), /<details class="room-day"/.test(P)], [true, true, true, true]);
+check('script version bumped to 20261111c in the page and in admin', [P.includes('agents-dash.js?v=20261111c'), A.includes('agents-dash.js?v=20261111c')], [true, true]);
+check('threads built from all rows (filter only passed to lgRoomThreads), window by threads, opened days kept',
+  [P.includes("lgRoomThreads(ROOM, { agent: FILTER })"), P.includes('lgRoomThreadWindow('), P.includes('OPEN_DAYS')], [true, true, true]);
 check('no Vercel switch names left in the texts', /AGENT_REPLY_ENABLED|AGENT_SHADOW_ENABLED/.test(P), false);
 check('only the allowed breakpoints', (P.match(/@media[^{]*/g) || []).every(m => /\((min|max)-width:\s*(600|768|900|1200)px\)/.test(m)), true);
 check('no font below 12px', /font-size:\s*(\d|1[01])px/.test(P), false);

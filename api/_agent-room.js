@@ -14,6 +14,8 @@
 //    ask עם internal:true (בדיקות הדופק, _agent-watch) — אין לקוח לענות לו; נסגר לבד (lgRoomClose).
 //    למידה (שלב ג׳, _agent-lessons.js): ask עם lessonId + proposal ("אני מציע לענות"), topic, lessonFrom (נלמד מ);
 //      info עם lessonAuto:true + lessonId ("עניתי לפי מה שאישרת") — ואחרי "תקן" fixOutboxKey.
+//    שיחה (11/11): thread (≤120) + step + to (מי אמור לטפל). step done / need-ben / would סוגרים שיחה; found / handoff משאירים פתוחה.
+//      שורות בלי thread = שיחה של שורה אחת (כמו תמיד).
 //  waMeta/agentRoomOpen/<מפתח> = { at, agent, customer } — אינדקס קטן של השאלות הפתוחות
 //    (תיקון סקירה 10/11): נכתב כשנפתחת שאלה, יורד כשבן עונה, חוזר אם התשובה לא יצאה.
 //    המונה בתפריט והרשימה בחדר קוראים אותו — לא את 500 האירועים האחרונים.
@@ -29,6 +31,10 @@ const KINDS = ['info', 'ask', 'answer', 'summary'];
 const STATES = ['open', 'answered'];
 const REF_KEYS = ['customerId', 'orderId', 'invoiceKey', 'shadowKey'];
 const ANSWER_MAX = 1000;
+const STEPS = ['found', 'handoff', 'done', 'need-ben', 'would'];
+//  שם הסוכן בעברית — לשאלת שומר בלי לקוח.
+//  ⚠️ שמות הסוכנים בעברית — שלושה עותקים, לעדכן יחד: api/_agent-room.js (AGENT_HEB), api/_agent-guards.js (AGENT_HEB), agents-dash.js (LG_AD_AGENTS, קובץ דפדפן)
+const AGENT_HEB = { markazan: 'מרכזן', kolet: 'קולט', archive: 'ארכיון', okev: 'עוקב', price: 'מחירון', manager: 'מנהל' };
 
 //  מפתח שממוין לפי זמן (כמו push של פיירבייס): זמן ב-base36 ברוחב קבוע + אקראי
 const _key = at => String(Math.max(0, Math.floor(at))).padStart(13, '0').replace(/\d+/, d => Number(d).toString(36).padStart(9, '0'))
@@ -48,7 +54,9 @@ function _ref(ref) {
 async function _openIdx(db, key, rec) {
   try {
     await db.ref(ROOM_OPEN + '/' + key).set(rec ? { at: Number(rec.at) || 0, agent: String(rec.agent || ''),
-                                                    customer: String(rec.customerName || '').slice(0, 120) } : null);
+                                                    customer: String(rec.customerName || '').slice(0, 120),
+                                                    //  לקוח לא מרוצה (11/11): מי ולמה — כדי למצוא "כבר היה upset היום" בלי לקרוא את כל החדר
+                                                    customerId: String(rec.customerId || '').slice(0, 200), reason: String(rec.reason || '').slice(0, 40) } : null);
   } catch (e) { console.warn('agent-room: open index', e && e.name); }
 }
 
@@ -67,8 +75,10 @@ async function lgRoomPost(db, e, now) {
     //  שדות נוספים — רק כשיש (שורת info נשארת כמו קודם)
     const extra = { to: _s(x.to, 40), state: STATES.includes(x.state) ? x.state : null, customerId: _s(x.customerId, 200),
       customerName: _s(x.customerName, 120), chat: _s(x.chat, 120), question: _s(x.question, 1000), suggest: _s(x.suggest, 1000),
-      note: _s(x.note, 300), replyTo: _s(x.replyTo, 60), by: _s(x.by, 60), outboxKey: _s(x.outboxKey, 200),
+      note: _s(x.note, 300), reason: _s(x.reason, 40), replyTo: _s(x.replyTo, 60), by: _s(x.by, 60), outboxKey: _s(x.outboxKey, 200),
       internal: x.internal === true ? true : null,
+      //  שיחה (11/11): thread = מפתח השיחה, step = מקום בשיחה (found|handoff|done|need-ben|would)
+      thread: _s(x.thread, 120), step: STEPS.includes(x.step) ? x.step : null,
       //  למידה (שלב ג׳, _agent-lessons): הצעה מכלל / תשובה אוטומטית לפי כלל
       lessonId: _keyOk(x.lessonId) ? x.lessonId : null, proposal: _s(x.proposal, 1000), topic: _s(x.topic, 80),
       lessonAuto: x.lessonAuto === true ? true : null,
@@ -213,4 +223,19 @@ async function lgRoomClose(db, key, now, o) {
   return closed;
 }
 
-module.exports = { lgRoomPost, lgRoomAnswer, lgRoomClose, lgRoomLink, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN, SEND_FINAL };
+// ─── שיחה בחדר (11/11) ───────────────────────────────────────────────
+//  e: { thread, from, to?, step, text, ref? }. step 'need-ben' → שאלה פנימית פתוחה (אין לקוח):
+//  ask + state open + internal, כך שהסגירה / כפתור "סגור" / האינדקס הקיימים חלים עליה.
+//  thread חסר או step לא מוכר → null (לא כותב). לא זורק.
+async function lgRoomSay(db, e, now) {
+  const x = e || {};
+  if (!_s(x.thread, 120) || !STEPS.includes(x.step)) return null;
+  const rec = { agent: x.from, to: x.to, thread: x.thread, step: x.step, text: x.text, ref: x.ref, kind: 'info' };
+  if (x.step === 'need-ben') {
+    Object.assign(rec, { kind: 'ask', state: 'open', internal: true, question: x.text,
+      customerName: AGENT_HEB[x.from] || String(x.from || 'סוכן') });
+  }
+  return lgRoomPost(db, rec, now);
+}
+
+module.exports = { lgRoomPost, lgRoomSay, STEPS, lgRoomAnswer, lgRoomClose, lgRoomLink, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN, SEND_FINAL };

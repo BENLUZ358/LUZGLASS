@@ -56,9 +56,10 @@ const seed = cfg => spyDb({
     check('no agentConfig: no stats written', !!(d._data.waMeta.agentStats), false);
   }
   {
-    const d = seed(CFG('off'));
+    //  ארכיון מפעיל גם הוא את סריקת השעה (חשבשבת דחה חשבונית — השומרים, 11/11) → כבוי גם הוא כאן
+    const d = seed({ agents: { ...CFG('off').agents, archive: 'off' } });
     await W.lgAgentWatchRun(d, { env: ENV, now: NOW });
-    check('okev off (and kolet off): orders never read', ordersReads(d), 0);
+    check('okev, kolet and archive off: orders never read', ordersReads(d), 0);
   }
   {
     const d = seed(CFG('shadow'));

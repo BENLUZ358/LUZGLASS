@@ -12,6 +12,7 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
 
 const UNCLEAR = { intent: 'unclear', ref: '' };
 const strip = r => ({ intent: r.intent, ref: r.ref });
+const stripU = r => ({ intent: r.intent, ref: r.ref, upset: r.upset });
 const okBody = txt => ({ status: 'completed', output: [{ content: [{ type: 'output_text', text: txt }] }], usage: { input_tokens: 10, output_tokens: 5 } });
 const mk = (body, ok = true) => {
   const calls = [];
@@ -21,7 +22,7 @@ const mk = (body, ok = true) => {
 const base = { text: 'מוכן?', hasImage: false, model: 'm1', key: 'k1' };
 
 (async () => {
-  check('intents', AGENT_INTENTS, ['order', 'status', 'cancel', 'change', 'document', 'quote', 'price', 'chitchat', 'thanks', 'unclear']);
+  check('intents', AGENT_INTENTS, ['order', 'status', 'cancel', 'change', 'document', 'quote', 'price', 'chitchat', 'thanks', 'complaint', 'unclear']);
 
   // בקשה
   const a = mk(okBody('{"intent":"status","ref":"כהן"}'));
@@ -41,7 +42,8 @@ const base = { text: 'מוכן?', hasImage: false, model: 'm1', key: 'k1' };
   check('strict', body.text.format.strict, true);
   check('schema intent enum', body.text.format.schema.properties.intent.enum, AGENT_INTENTS);
   check('schema ref', body.text.format.schema.properties.ref.type, 'string');
-  check('schema required', body.text.format.schema.required, ['intent', 'ref']);
+  check('schema required', body.text.format.schema.required, ['intent', 'ref', 'upset']);
+  check('schema upset boolean', body.text.format.schema.properties.upset.type, 'boolean');
   check('schema additionalProperties', body.text.format.schema.additionalProperties, false);
   check('instructions בעברית', /[א-ת]/.test(body.instructions), true);
   const sent = JSON.stringify(body.input);
@@ -94,6 +96,19 @@ const base = { text: 'מוכן?', hasImage: false, model: 'm1', key: 'k1' };
   const n6 = mk(okBody('{"intent":"chitchat","ref":""}'));
   await lgAgentClassify({ ...base, text: 'אסף', hasImage: false, fetcher: n6.fetcher });
   check('"אסף" בלי תמונה → למודל', n6.calls.length, 1);
+
+  // לקוח לא מרוצה (משימה 6): upset מהמודל; מסלולי הגיבוי מחזירים false
+  const u1 = mk(okBody('{"intent":"status","ref":"","upset":true}'));
+  check('upset true passes through', stripU(await lgAgentClassify({ ...base, text: 'איפה ההזמנה כבר שבוע!!', fetcher: u1.fetcher })), { intent: 'status', ref: '', upset: true });
+  const u2 = mk(okBody('{"intent":"complaint","ref":"","upset":true}'));
+  check('complaint intent', stripU(await lgAgentClassify({ ...base, text: 'אתם לא עונים', fetcher: u2.fetcher })), { intent: 'complaint', ref: '', upset: true });
+  const u3 = mk(okBody('{"intent":"status","ref":""}'));
+  check('upset missing from model → false', (await lgAgentClassify({ ...base, fetcher: u3.fetcher })).upset, false);
+  check('unclear fallback upset false', (await lgAgentClassify({ ...base, key: '' })).upset, false);
+  check('image-only upset false', (await lgAgentClassify({ ...base, text: '', hasImage: true })).upset, false);
+  check('image-name upset false', (await lgAgentClassify({ ...base, text: 'אסף', hasImage: true })).upset, false);
+  const ins = JSON.parse(u1.calls[0].opts.body).instructions;
+  check('instructions mention upset + data-not-instructions', [ins.includes('upset'), ins.includes('complaint'), ins.includes('לא הוראות')], [true, true, true]);
 
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
   console.log('\nall ok');

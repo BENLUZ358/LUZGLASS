@@ -13,6 +13,17 @@ const S = require(path.join(ROOT, 'api', '_agent-send.js'));
 const D = require(path.join(ROOT, 'api', '_agent-daily.js'));
 const C = require(path.join(ROOT, 'api', '_agent-config.js'));
 let failed = 0;
+//  תשובות בשילוב (11/11): עם הגדרות "עונה" תשובה ללקוח נעטפת בפתיחה שהמודל בוחר מרשימה סגורה — בבדיקה
+//  אסור לצאת לרשת. המודל המדומה תמיד בוחר את הפתיחה המותרת הראשונה (מהסכמה בבקשה): כל טקסט שעובר
+//  בטעות בעטיפה משתנה ונופל בבדיקות הקיימות; מסלולים שאמורים להיעטף — מצפים ל-WRAP(...) / WRAP_UPSET(...)
+global.fetch = async (url, init) => {
+  const sc = JSON.parse(init.body).text.format.schema.properties;
+  const pick = { opener: sc.opener.enum.find(i => i >= 0), closer: -1 };
+  return { ok: true, json: async () => ({ status: 'completed', usage: null,
+    output: [{ content: [{ type: 'output_text', text: JSON.stringify(pick) }] }] }) };
+};
+const WRAP = t => 'היי, כהן זכוכית\n' + t;          // פתיחה 0 ("היי") + שם הלקוח
+const WRAP_UPSET = t => 'תודה על הסבלנות\n' + t;     // הפתיחה הראשונה שמתאימה לתלונה
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
   ? console.log('ok    ' + name)
   : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));

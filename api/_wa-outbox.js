@@ -177,6 +177,8 @@ async function lgWaComplete(db, key, result, base) {
     claimedAt: ok ? now : null,
     messageId: (result && result.messageId) || null,
     httpStatus: (result && result.httpStatus) || null,
+    //  סוג הכשל מהספק (disconnected / rate / quota / recipient / network / other) — החלטות שליחה חוזרת נשענות עליו
+    failureKind: ok ? null : ((result && result.failureKind) || null),
     lastError: ok ? null : String((result && result.reason) || 'שליחה נכשלה').slice(0, 300),
     updatedAt: now,
   });

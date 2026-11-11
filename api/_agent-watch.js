@@ -13,12 +13,11 @@
 //  פעם ב-10 דק' (מפתח lastRunSlow נפרד — עלות קריאה, סקירה 10/11):
 //    • הדפסה ('printed') שלא נרשמה בתחנה > שעה, ללקוח שבמערכת — known שנשמר
 //      ברשומה בהעלאה (_invoice-upload.js); לא קוראים את users. שאילתה: state==='printed'.
-//    • שליחה ללקוח נכשלה (invoicePdf/<key>/delivery failed), רק חשבוניות מ-48 השעות האחרונות.
-//      ⚠️ פעולה אוטומטית מול לקוח — רק כשהארכיון "עונה" (החלטת בן): ניסיון חוזר אחד
-//      (lgInvoiceDeliver הקיים), רק לכשל מהשעתיים האחרונות, אף פעם לא לרשומת תור שפג
-//      תוקפה, ואף פעם לא פעמיים לאותה חשבונית (retried נשמר 14 יום). אחרת — צהוב.
-//      סדר: retried + רשומת הבעיה נכתבים **לפני** השליחה; ניסיון אחד לכל ריצה; ריצה
-//      שנהרגה לא חוזרת על הניסיון. הריצה עוצרת אחרי ~40ש׳ (deadline).
+//    • שליחה ללקוח שנכשלה / נתקעה — עברה לשומרים (_agent-guards.js, 11/11): שם הניסיון החוזר
+//      (פעם אחת, עד 48 שעות, רק על כשל ברור), בפורמט שיחה. מסלול אחד בלבד — כאן כבר לא נוגעים ב-deliv_.
+//      retried (14 יום) נשאר משותף, ומנוקה כאן.
+//    • השומרים (lgGuardRun) — אחרי הבדיקות של כאן, לפני סיכום הבוקר. הבעיות שלהם (GUARD_KEY)
+//      לא עוברות ב-diff של כאן.
 //    • קולט: המייל של משלוח נכשל / פג → צהוב; משלוח פתוח > 30 שעות → אפור.
 //      waMeta/drafterBatches נקרא כולו: אין אינדקס על doneAt (waMeta בלי indexOn, ובן
 //      מעדיף בלי שינוי חוקים) — הצומת קטן.
@@ -43,8 +42,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const crypto = require('crypto');
-const { LG_AGENT_KEYS, lgAgentConfig, lgAgentModeOf, lgAgentEscalatePhone } = require('./_agent-config');
-const { lgRoomPost, lgRoomClose, lgRoomAskBenText, ROOM } = require('./_agent-room');
+const { LG_AGENT_KEYS, lgAgentConfig, lgAgentModeOf } = require('./_agent-config');
+const { lgRoomPost, lgRoomClose, lgRoomAskBenText, ROOM, ROOM_OPEN } = require('./_agent-room');
 
 const WATCHERS = 'waMeta/invoiceWatcher';
 const WATCH = 'waMeta/agentWatch';
@@ -58,13 +57,13 @@ const FILE_INFO_MS = 10 * MIN, FILE_ASK_MS = 30 * MIN;
 const PRINTED_MS = H;
 const BATCH_LONG_MS = 30 * H;
 const FAILED_LOOKBACK_MS = 48 * H;         // שליחות שנכשלו — רק חשבוניות מ-48 השעות האחרונות
-const RETRY_WINDOW_MS = 2 * H;             // ניסיון חוזר — רק לכשל מהשעתיים האחרונות
 const RETRIED_KEEP_MS = 14 * DAY;
 const MAIL_FAILED = ['failed', 'expired', 'cancelled'];   // כמו _drafter-batch.js
 const WHO = { archive: 'כלי החשבוניות', kolet: 'משלוחים לשרטט' };
 const INTERNAL_NOTE = 'פנימי — ייסגר לבד כשיתוקן';
-const RANK = { info: 1, ask: 2 };
-const SLOW_KEY = /^(printed|deliv|mail|long|stuck|opty)_/;
+//  fix / ben — דרגות השומרים (_agent-guards.js): בעיה שעלתה מ"מתקן" ל"בן" נפתחת שוב באותה שיחה
+const RANK = { info: 1, ask: 2, fix: 1, ben: 2 };
+const SLOW_KEY = /^(printed|mail|long|stuck|opty)_/;
 const SCAN_ROOM_MAX = 5;                         // שורות חדשות בחדר לכל סריקת orders (השאר — סיכום)
 const SCAN_KEY = /^(stuck|opty)_/;              // נבדק רק בסריקת orders (פעם בשעה)
 const ORDERS_SCAN_GAP_MS = H;              // שומר עלות: orders נקרא לכל היותר פעם בשעה
@@ -101,10 +100,9 @@ function lgWatchHeartbeatClean(body) {
   return { pc, pending, lastPrintError, version: _s(b.version, 40) };
 }
 
-//  הבעיות עכשיו. in: { now, watchers, invoices?, retried?, reply?, noRetry?, batches?, mail? }
-//    invoices — רשומות invoicePdf (printed עם known; ready עם delivery). reply — הארכיון "עונה"
-//    (ויש הגדרות). noRetry — { key: true } לרשומת תור שפג תוקפה.
-//  → [{ key, agent, level:'info'|'ask', text, src?, retry? }]
+//  הבעיות עכשיו. in: { now, watchers, invoices?, batches?, mail? }
+//    invoices — רשומות invoicePdf (printed עם known). שליחה שנכשלה — בשומרים (_agent-guards.js).
+//  → [{ key, agent, level:'info'|'ask', text, src? }]
 function lgWatchProblems(input) {
   const x = input || {}, now = Number(x.now) || 0, out = [];
   for (const [pc, w] of Object.entries(x.watchers || {})) {
@@ -124,25 +122,12 @@ function lgWatchProblems(input) {
                        + ' — נשאר פתוח עד ההדפסה המוצלחת הבאה' });
     }
   }
-  const retried = x.retried || {}, noRetry = x.noRetry || {};
   for (const [k, r] of Object.entries(x.invoices || {})) {
     if (!r) continue;
     const doc = String(r.docNumber || k);
     if (r.state === 'printed' && now - (Number(r.createdAt) || now) > PRINTED_MS && r.known === true) {
       out.push({ key: 'printed_' + _safeKey(k), src: k, agent: 'archive', level: 'ask',
                  text: `חשבונית ${doc} הודפסה לפני יותר משעה ועדיין לא נרשמה בתחנת החשבוניות` });
-    }
-    const dv = r.delivery;
-    if (r.state === 'ready' && !r.simulated && dv && dv.state === 'failed') {
-      const why = dv.reason ? ' (' + _s(dv.reason, 120) + ')' : '';
-      const to = r.client ? ' ל' + _s(r.client, 60) : '';
-      const key = 'deliv_' + _safeKey(k);
-      const canRetry = x.reply === true && !noRetry[k] && now - (Number(dv.at) || 0) <= RETRY_WINDOW_MS;
-      out.push(retried[k]
-        ? { key, src: k, agent: 'archive', level: 'ask', text: `שליחת חשבונית ${doc}${to} נכשלה גם אחרי ניסיון חוזר${why}` }
-        : canRetry
-          ? { key, src: k, agent: 'archive', level: 'info', retry: k, text: `שליחת חשבונית ${doc}${to} נכשלה${why} — מנסה שוב פעם אחת` }
-          : { key, src: k, agent: 'archive', level: 'ask', text: `שליחת חשבונית ${doc}${to} נכשלה${why}` });
     }
   }
   for (const [k, b] of Object.entries(x.batches || {})) {
@@ -197,7 +182,7 @@ function lgWatcherSilentLine(watchers, now) {
 }
 
 // ─── אירוע לחדר לפי המתג ────────────────────────────────────────────
-//  ev: { kind:'info'|'ask', text, ref? }. o: { env, now, cfg? (undefined → נקרא), sendPending? }
+//  ev: { kind:'info'|'ask', text, ref? }. o: { env, now, cfg? (undefined → נקרא), sendPending?, deadline? }
 //  → { roomKey, asked, pinged } או null (כבוי / לא נכתב)
 async function lgAgentEvent(db, agent, ev, o) {
   const opt = o || {}, env = opt.env || process.env, now = Number(opt.now) || Date.now();
@@ -214,12 +199,14 @@ async function lgAgentEvent(db, agent, ev, o) {
   if (!roomKey) return null;
   let pinged = false;
   if (ask && mode === 'reply') {
+    //  דרך lgBenNotify (_agent-ben.js): הודעה אחת למפתח, לא בלילה (נכנס להודעת הבוקר), עד 20 ביום.
+    //  הניסיון לשלוח — שם, ⚠️ לא אחרי הדדליין של הריצה (הדופק חייב להיגמר < 60ש׳)
     try {
       const S = require('./_agent-send');
-      const q = await S.lgAgentEnqueue(db, { key: 'watch_' + roomKey, to: lgAgentEscalatePhone(cfg), customerId: '',
-        text: lgRoomAskBenText(WHO[agent] || 'סוכן', text, env), reason: S.AGENT_ASK_REASON, agent });
-      pinged = !!q.queued;
-      if (pinged) await (opt.sendPending || S.lgAgentSendPending)(db, { env, deadline: Date.now() + 20 * 1000 });
+      const n = await require('./_agent-ben').lgBenNotify(db, { key: 'watch_' + roomKey, outboxKey: 'watch_' + roomKey,
+        text: lgRoomAskBenText(WHO[agent] || 'סוכן', text, env), reason: S.AGENT_ASK_REASON, urgent: false, env, now, cfg, agent,
+        open: ROOM_OPEN + '/' + roomKey, sendPending: opt.sendPending, deadline: opt.deadline });
+      pinged = n.sent === 'now' && !!n.queued;
     } catch (e) { console.warn('agent-watch: ping', e && e.name); }
   }
   return { roomKey, asked: ask, pinged };
@@ -235,12 +222,6 @@ async function _gone(db, k, p) {
     const r = (await db.ref('invoicePdf/' + src).once('value')).val();
     return r && r.state === 'printed' ? { act: 'keep' } : { act: 'fixed' };
   }
-  if (k.startsWith('deliv_')) {
-    const r = (await db.ref('invoicePdf/' + src).once('value')).val();
-    if (!r) return { act: 'drop' };
-    //  'queued' עוד לא אומר שהלקוח קיבל — רק 'sent' (סקירה I1)
-    return r.delivery && r.delivery.state === 'sent' ? { act: 'fixed' } : { act: 'keep' };
-  }
   //  הזמנה תקועה שזזה / נמחקה — בלי "תוקן" (זה דיווח, לא תקלה שמישהו תיקן)
   if (k.startsWith('stuck_') || k.startsWith('opty_')) return { act: 'drop' };
   if (k.startsWith('mail_') || k.startsWith('long_')) {
@@ -252,7 +233,8 @@ async function _gone(db, k, p) {
 }
 
 // ─── ההרצה מהדופק ───────────────────────────────────────────────────
-//  o: { env, now, deadline?, deliver?(db, key, {now}), sendPending? } → { ok, skipped?, opened, cleared }
+//  o: { env, now, deadline?, deliver?(db, key, {now, drain}), drain?, sendPending? } → { ok, skipped?, opened, cleared }
+//  deliver / drain — עוברים לשומרים (בדיקות)
 async function lgAgentWatchRun(db, o) {
   const opt = o || {}, env = opt.env || process.env, now = Number(opt.now) || Date.now();
   const deadline = Number(opt.deadline) || Date.now() + RUN_BUDGET_MS;
@@ -270,10 +252,11 @@ async function lgAgentWatchRun(db, o) {
 
   const modeOf = a => lgAgentModeOf(cfg, a, env);
   const on = a => modeOf(a) !== 'off';
-  //  פעולה אוטומטית מול לקוח — רק "עונה" שנבחר במסך (בלי הגדרות — אף פעם)
-  const reply = !!cfg && modeOf('archive') === 'reply';
   const state = (await db.ref(WATCH).once('value')).val() || {};
-  const prev = { ...(state.problems || {}) };
+  //  בעיות השומרים (wao_ / deliv_ / …) — שלהם; לא נפתחות ולא נסגרות כאן
+  const { GUARD_KEY } = require('./_agent-guards');
+  const prev = {};
+  Object.entries(state.problems || {}).forEach(([k, v]) => { if (!GUARD_KEY.test(k)) prev[k] = v; });
   const retried = { ...(state.retried || {}) };
   const setProblem = (k, v) => db.ref(WATCH + '/problems/' + k).set(v);
   let opened = 0, cleared = 0;
@@ -292,8 +275,8 @@ async function lgAgentWatchRun(db, o) {
     delete watchers[pc];
   }
 
-  let invoices = {}, batches = {};
-  const mail = {}, noRetry = {};
+  let invoices = {}, batches = {}, recent = null;
+  const mail = {};
   if (slow) {
     //  retried — נשמר 14 יום לכל חשבונית, ואז נשכח
     for (const [k, v] of Object.entries(retried)) {
@@ -302,19 +285,9 @@ async function lgAgentWatchRun(db, o) {
   }
   if (slow && on('archive')) {
     const printed = (await db.ref('invoicePdf').orderByChild('state').equalTo('printed').once('value')).val() || {};
-    const recent = (await db.ref('invoicePdf').orderByChild('createdAt').startAt(now - FAILED_LOOKBACK_MS).once('value')).val() || {};
-    invoices = { ...recent, ...printed };
-    //  רשומת תור שפג תוקפה — לא מאפסים ולא שולחים שוב (lgInvoiceDeliver היה מאפס אותה)
-    if (reply) {
-      for (const [k, r] of Object.entries(recent)) {
-        const dv = r && r.delivery;
-        if (!dv || r.state !== 'ready' || dv.state !== 'failed' || retried[k] || !dv.outboxKey) continue;
-        if (now - (Number(dv.at) || 0) > RETRY_WINDOW_MS) continue;
-        if (!_keyOk(String(dv.outboxKey))) { noRetry[k] = true; continue; }
-        const st = (await db.ref((dv.channel === 'email' ? 'waMeta/emailOutbox/' : 'waOutbox/') + dv.outboxKey + '/state').once('value')).val();
-        if (st === 'expired') noRetry[k] = true;
-      }
-    }
+    //  48 השעות האחרונות — לשומרים (שליחה שלא יצאה), באותה קריאה כמו קודם
+    recent = (await db.ref('invoicePdf').orderByChild('createdAt').startAt(now - FAILED_LOOKBACK_MS).once('value')).val() || {};
+    invoices = { ...printed };
   }
   if (slow && on('kolet')) {
     //  כל הצומת: אין אינדקס על doneAt ב-waMeta (בלי שינוי חוקים) — והוא קטן
@@ -328,11 +301,12 @@ async function lgAgentWatchRun(db, o) {
   //  ⚠️ שומר עלות (11/11): orders נקרא רק כשיש הגדרות במסך, והעוקב לא כבוי — לכל היותר
   //  פעם בשעה (מפתח lastOrdersScan); הזמן הרגיל לכל שלב מחושב מחדש לכל היותר פעם ביום (computedAt).
   //  בלי waMeta/agentConfig (פרודקשן היום) — אף פעם לא קוראים את orders.
-  let stuck = [], scanned = false;
-  if (slow && cfg && (on('okev') || on('kolet'))) {
+  let stuck = [], scanned = false, orders = null;
+  //  ארכיון — בשביל חשבשבת שדחה חשבונית (השומרים, שורה 10)
+  if (slow && cfg && (on('okev') || on('kolet') || on('archive'))) {
     if ((await gate('lastOrdersScan', ORDERS_SCAN_GAP_MS)).committed) {
       try {
-        const orders = (await db.ref('orders').once('value')).val() || {};
+        orders = (await db.ref('orders').once('value')).val() || {};
         if (on('okev')) {
           const ST = require('./_agent-stats');
           let stats = (await db.ref(ST.AGENT_STATS).once('value')).val();
@@ -348,7 +322,7 @@ async function lgAgentWatchRun(db, o) {
       } catch (e) { console.warn('agent-watch: orders scan', e && e.name); }
     }
   }
-  const all = lgWatchProblems({ now, watchers, invoices, retried, reply, noRetry, batches, mail }).concat(stuck).filter(p => on(p.agent));
+  const all = lgWatchProblems({ now, watchers, invoices, batches, mail }).concat(stuck).filter(p => on(p.agent));
   const byKey = {};
   all.forEach(p => { byKey[p.key] = p; });
   //  לא "מתוקן": בעיה של סוכן כבוי, או של מחשב שלא שלח דופק עדכני, או בדיקה איטית שלא רצה עכשיו
@@ -357,7 +331,6 @@ async function lgAgentWatchRun(db, o) {
     && !Object.keys(watchers).some(pc => freshPc(pc) && (k === 'print_' + _safeKey(pc) || k.startsWith('file_' + _safeKey(pc) + '_'))));
   const diff = lgWatchDiff(prev, all);
 
-  let retriedNow = false;
   //  סקירת שחרור 11/11: סריקת orders ראשונה יכולה למצוא עשרות הזמנות — עד SCAN_ROOM_MAX שורות חדשות
   //  בסריקה, השאר נרשמות (כדי שלא יעלו שוב) ושורת סיכום אחת לכל סוכן "ועוד N הזמנות"
   let scanPosted = 0;
@@ -375,17 +348,7 @@ async function lgAgentWatchRun(db, o) {
       }
       scanPosted++;
     }
-    if (p.retry) {
-      //  ניסיון אחד לכל ריצה; השאר — בריצה הבאה
-      if (retriedNow) continue;
-      retriedNow = true;
-      //  נרשם לפני השליחה: ריצה שנהרגה באמצע לא תנסה שוב
-      await db.ref(WATCH + '/retried/' + p.retry).set({ at: now });
-      await setProblem(k, rec);
-      try { await (opt.deliver || require('./_invoice-deliver').lgInvoiceDeliver)(db, p.retry, { now }); }
-      catch (e) { console.warn('agent-watch: deliver retry', e && e.name); }
-    }
-    const r = await lgAgentEvent(db, p.agent, { kind: p.level, text: p.text }, { env, now, cfg, sendPending: opt.sendPending });
+    const r = await lgAgentEvent(db, p.agent, { kind: p.level, text: p.text }, { env, now, cfg, sendPending: opt.sendPending, deadline });
     //  נכתב או לא — נרשם, כדי לא לנסות בכל דקה (החדר הוא תיעוד, לא העבודה)
     await setProblem(k, { ...rec, roomKey: r ? r.roomKey : null, asked: !!(r && r.asked) });
     opened++;
@@ -406,6 +369,15 @@ async function lgAgentWatchRun(db, o) {
     }
     await setProblem(k, null);
     cleared++;
+  }
+  //  השומרים (11/11): מה נתקע ללקוח / בקליטה — מוצאים, מעבירים, שולחים שוב או שואלים את בן.
+  //  רק בסבב האיטי. orders — רק כשסריקת השעה רצה עכשיו (חשבשבת, שורה 10). תקלה לא נוגעת בבדיקות.
+  if (slow && !late()) {
+    try {
+      await require('./_agent-guards').lgGuardRun(db, { env, now, cfg, deadline, invoices: recent || undefined,
+        orders: scanned ? orders : undefined, watchState: { problems: state.problems || {}, retried },
+        deps: { deliver: opt.deliver, drain: opt.drain } });
+    } catch (e) { console.warn('agent-watch: guards', e && e.name); }
   }
   //  מנהל (פריט 8, 11/11): סיכום בוקר בחדר — פעם ביום, בדופק הראשון אחרי 07:00 (א'–ו').
   //  רק עם הגדרות במסך והמנהל לא כבוי (_agent-morning.js). תקלה לא נוגעת בבדיקות.
