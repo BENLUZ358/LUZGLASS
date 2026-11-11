@@ -138,6 +138,38 @@ const ord = (id, o) => ({ id, stage: 'done', orderClient: 'א.מ.מראות', or
     assert.ok(/catch \(e\) \{ console\.error\('invoice-pdf-upload: ready-net failed'/.test(src));
   });
 
+  //  תיקון סקירה סופית I3: הדופק מעביר את מה שנשאר עד t0+55ש׳; 0 → לא שולחים (השורות ממתינות)
+  await test('run: budgetMs passed to drain; budget 0 → no drain, rows stay pending', async () => {
+    const disp = async () => ({ status: 200, body: { queued: true, outboxKey: 'ok1' } });
+    let got = null;
+    await N.lgReadyNetRun(base(), { now: NOW, budgetMs: 7000, dispatch: disp, drain: async (_d, keys, by, o) => { got = o; } });
+    assert.deepEqual(got, { budgetMs: 7000 });
+    let drained = 0;
+    const r = await N.lgReadyNetRun(base(), { now: NOW, budgetMs: 0, dispatch: disp, drain: async () => { drained++; } });
+    assert.equal(drained, 0);
+    assert.equal(r.sent, 1);   // נכנסה לתור — תצא בשליחה הבאה
+    let def = 'unset';
+    await N.lgReadyNetRun(base(), { now: NOW, dispatch: disp, drain: async (_d, keys, by, o) => { def = o; } });
+    assert.deepEqual(def, {});   // בלי budgetMs — התקציב הרגיל של drainNow
+  });
+
+  await test('heartbeat: ready-net gets budget = t0+55s − now (≤ 55s, shrinks with elapsed time)', async () => {
+    const { handleUpload } = require('../api/_invoice-upload.js');
+    const beat = async (slowMs) => {
+      let budget = null;
+      await handleUpload({ method: 'POST', headers: { authorization: 'Bearer T' }, body: { op: 'heartbeat', pc: 'OFFICE', pending: [] } }, {
+        db: fakeDb({}), env: { INVOICE_UPLOAD_TOKEN: 'T' }, now: NOW,
+        waDrain: async () => {}, clockCheck: async () => {},
+        watchRun: async () => { if (slowMs) await new Promise(r => setTimeout(r, slowMs)); },
+        readyNet: async (_d, o) => { budget = o.budgetMs; } });
+      return budget;
+    };
+    const a = await beat(0);
+    assert.ok(a > 54000 && a <= 55000, 'fast beat budget ' + a);
+    const b = await beat(300);
+    assert.ok(b <= 55000 - 300 + 5 && b > 50000, 'slow beat budget ' + b);
+  });
+
   console.log(`\n${pass} passed${fail ? ', ' + fail + ' FAILED' : ''}`);
   process.exit(fail ? 1 : 0);
 })();
