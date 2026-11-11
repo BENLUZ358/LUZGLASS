@@ -510,3 +510,71 @@ function lgAdModeChip(status, cfg) {
   const n = LG_AD_AGENTS.filter(a => ag[a.id] === 'reply').length;
   return n ? { text: n + ' עונים', mode: 'live' } : { text: 'מצב שקט', mode: 'shadow' };
 }
+
+// ─── מה כל סוכן עשה (בן, 11/11: "מרכזן ניתב לפה בשעה ככה") ─────────────
+//  לחיצה על כרטיס → רשימת פעולות של הסוכן הזה, החדש למעלה, שורה לכל פעולה.
+//  מקורות: waMeta/agentShadow (כל הודעה ומה הוחלט עליה) + waMeta/agentRoom
+//  (מה שהסוכן כתב בחדר). מרכזן — כל הודעה שנכנסה (הוא זה שמנתב); השאר —
+//  ההודעות שנותבו אליו (routes ב-LG_AD_AGENTS) + השורות שלו בחדר.
+//  טהור, קריאה בלבד.
+const LG_ACT_ROUTE = { okev: 'העביר לעוקב', quote: 'העביר למחירון', price: 'העביר למחירון (טענת מחיר)', archive: 'העביר לארכיון',
+  kolet: 'נכנס לתור הסקיצות', 'kolet-deleted': 'העביר לקולט (סקיצה נמחקה)', menu: 'שלח תפריט', none: 'לא צריך לענות',
+  ignore: 'לא צריך לענות', shaul: 'לא ידע — שאל אותך', 'silent-human': 'שתק — מישהו מכם כבר ענה' };
+//  טווח: today | yesterday | 7d → { from, to }
+function lgActRange(period, now) {
+  const t = Number(now) || Date.now(), today = lgAdPeriodStart('today', t);
+  if (period === 'yesterday') return { from: lgAdPeriodStart('today', today - _AD_H), to: today };
+  if (period === '7d') return { from: t - 7 * _AD_D, to: Infinity };
+  return { from: today, to: Infinity };
+}
+//  → [{ key, at, who, what, did, review, verdict, kind }]  חדש למעלה
+function lgAgentActivity(agentId, shadow, room, range, outbox) {
+  const a = LG_AD_AGENTS.find(x => x.id === agentId);
+  if (!a) return [];
+  const r = range || {}, from = Number(r.from) || 0, to = r.to == null ? Infinity : Number(r.to);
+  const inR = at => (Number(at) || 0) >= from && (Number(at) || 0) < to;
+  const out = [];
+  _adVals(shadow).forEach(({ key, v }) => {
+    if (!inR(v.createdAt) || v.staff === true || v.route === 'staff') return;
+    if (agentId !== 'markazan' && !a.routes.includes(v.route)) return;
+    const who = v.linked ? String(v.customerName || 'לקוח') : 'מספר לא מקושר';
+    let did;
+    if (v.state && v.state !== 'done') did = LG_AG_STATE[v.state] || String(v.state);
+    else if (agentId === 'markazan') did = !v.linked ? 'רק נספר — לא עונים למספר לא מקושר' : (LG_ACT_ROUTE[v.route] || lgAgRouteLabel(v.route));
+    else {
+      const sent = lgAgOutboxOf(key, outbox).filter(o => o.state === 'sent' && o.reason !== 'agent-staff' && o.reason !== 'agent-ask').map(o => o.text)[0];
+      const would = _adWould(v);
+      did = sent ? 'ענה ללקוח: ' + sent : would ? 'היה עונה: ' + would
+        : _adToShaul(v) ? 'היה מעביר לשאול' : _adToBen(v) ? 'שאל אותך בחדר' : lgAgOutcome(v);
+    }
+    out.push({ key, at: Number(v.createdAt) || 0, kind: 'msg', who, what: lgAgSentText(v), did,
+      review: lgAdNeedsReview(v), verdict: v.verdict ? (v.verdict.ok ? 'ok' : 'wrong') : '' });
+  });
+  _adVals(room).forEach(({ key, v }) => {
+    if (!inR(v.at) || v.kind === 'answer' || lgRoomAgentKey(v.agent) !== agentId) return;
+    const q = String(v.question || '');
+    out.push({ key, at: Number(v.at) || 0, kind: v.kind === 'summary' ? 'summary' : 'room',
+      who: v.kind === 'summary' ? 'סיכום' : String(v.customerName || ''),
+      what: v.kind === 'summary' ? 'כתב סיכום בחדר' : String(v.text || q),
+      did: lgRoomIsQuestion(v) ? (v.state === 'open' ? 'מחכה לתשובה שלך' : 'ענית ✓') : '',
+      review: false, verdict: '' });
+  });
+  return out.sort((x, y) => y.at - x.at || (x.key < y.key ? 1 : x.key > y.key ? -1 : 0));
+}
+//  שעה בלבד להיום, אחרת תאריך + שעה
+function _adHm(ms, today) {
+  if (!ms) return '';
+  if (ms < today) return _adWhen(ms);
+  try { return new Date(ms).toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' }); }
+  catch (_) { return _adWhen(ms); }
+}
+function lgActRowHtml(x, today) {
+  const e = _adEsc, k = e(x.key);
+  const marks = x.review ? `<div class="wain-acts"><b class="wain-q">צדק?</b>
+      <button type="button" class="wain-btn" data-agv="1" data-key="${k}" aria-pressed="${x.verdict === 'ok'}">✓</button>
+      <button type="button" class="wain-btn" data-agv="0" data-key="${k}" aria-pressed="${x.verdict === 'wrong'}">✗</button>
+      ${x.verdict ? `<span class="wain-chip">סימנת: ${x.verdict === 'ok' ? 'נכון ✓' : 'לא נכון ✗'}</span>` : ''}</div>` : '';
+  return `<div class="act act-${e(x.kind)}"><span class="act-t">${e(_adHm(x.at, today))}</span><div class="act-b">
+      <div class="act-w">${x.who ? `<b>${e(x.who)}</b> · ` : ''}${e(x.what)}</div>
+      ${x.did ? `<div class="act-d">← ${e(x.did)}</div>` : ''}${marks}</div></div>`;
+}

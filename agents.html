@@ -91,6 +91,19 @@ body{background:var(--bg);}
 .rb-ask.is-open{border-width:2px;}
 .rb-answer{align-self:flex-start;background:var(--ben-bg);border-color:var(--green);border-end-end-radius:var(--radius-lg);border-end-start-radius:4px;}
 .compose{margin-top:var(--space-2);}
+/* מה הסוכן עשה (בן, 11/11) — שורה לכל פעולה, שעה בצד */
+.acts-box{margin-top:var(--space-4);border-top:1px solid var(--border);padding-top:var(--space-3);}
+.acts-h{display:flex;align-items:center;gap:var(--space-2);font-size:var(--fs-base);font-weight:var(--fw-black);margin-bottom:var(--space-2);}
+.acts-h .sbtn{margin-inline-start:auto;}
+.act{display:flex;gap:var(--space-3);padding:var(--space-2) 0;border-bottom:1px solid var(--border);}
+.act:last-child{border-bottom:0;}
+.act-t{flex:0 0 auto;min-width:44px;font-size:var(--fs-sm);font-weight:var(--fw-bold);color:var(--muted);font-variant-numeric:tabular-nums;}
+.act-b{flex:1;min-width:0;}
+.act-w{font-size:var(--fs-sm);line-height:1.5;overflow-wrap:anywhere;}
+.act-d{font-size:var(--fs-sm);line-height:1.5;color:var(--muted);overflow-wrap:anywhere;}
+.act-summary .act-w,.act-room .act-w{white-space:pre-wrap;}
+.act .wain-acts{margin-top:4px;}
+.act .wain-btn[aria-pressed="true"]{border-color:var(--gold);box-shadow:var(--ring);}
 /* מה הסוכנים למדו (למידה, 11/11) */
 .ls-h{font-size:var(--fs-base);font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-2);}
 .ls-row{border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-2) var(--space-3);margin-bottom:var(--space-2);background:var(--bg);}
@@ -174,7 +187,7 @@ body{background:var(--bg);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261031"></script>
 <script src="lg-icons.js?v=20260807"></script>
-<script src="agents-dash.js?v=20261110c"></script>
+<script src="agents-dash.js?v=20261111a"></script>
 </head>
 <body>
 <div class="wrap">
@@ -202,6 +215,7 @@ body{background:var(--bg);}
     <section id="secCards" class="sec" aria-labelledby="hCards">
       <h2 id="hCards"><span data-icon="users"></span>הסוכנים</h2>
       <div id="cards" class="cards"></div>
+      <div id="activity"></div>
       <div id="watcherLine" class="wline" role="status"></div>
     </section>
    </div>
@@ -289,6 +303,9 @@ function mergeRoom() {
 let period = 'today', shown = PAGE, roomShown = ROOM_PAGE, FILTER = '', ANSWERING = '', DRAFT = '', EDIT_BEN = false;
 //  MODE — מה תיבת הכתיבה שולחת: '' ענה / 'correct' תקן הצעה / 'fix' תקן תשובה שהסוכן נתן לבד
 let MODE = '';
+//  מה הסוכן עשה — התקופה (היום / אתמול / 7 ימים) והכמות שמוצגת
+const ACT_PAGE = 60;
+let ACT_PERIOD = 'today', actShown = ACT_PAGE;
 
 function toast(msg, err) {
   const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : '');
@@ -348,6 +365,23 @@ function renderCards() {
   $('cards').innerHTML = lgAgentCards(ROOM, SH, Date.now()).map(c => `<button type="button" class="card" data-cardagent="${E(c.id)}" aria-pressed="${FILTER === c.id}">
       <b>${E(c.name)}</b><small>${E(c.does)}</small>
       <span class="nums"><span>היום: ${E(c.today)}</span><span>בחדר היום: ${E(c.room)}</span>${c.waiting ? `<span class="w">מחכה לך: ${E(c.waiting)}</span>` : ''}</span></button>`).join('');
+}
+
+//  מה הסוכן שנבחר עשה — מתחת לכרטיסים (בן, 11/11)
+function renderActivity() {
+  if (!FILTER) { $('activity').innerHTML = ''; return; }
+  const now = Date.now(), rows = lgAgentActivity(FILTER, SH, ROOM, lgActRange(ACT_PERIOD, now), OB);
+  const today = lgAdPeriodStart('today', now);
+  const per = [['today', 'היום'], ['yesterday', 'אתמול'], ['7d', '7 ימים']];
+  $('activity').innerHTML = `<div class="acts-box" id="actBox">
+      <div class="acts-h">מה ${E(lgRoomAgentName(FILTER))} עשה <span class="n">${E(rows.length)}</span>
+        <button type="button" class="sbtn" data-cardagent="">סגור</button></div>
+      <div class="seg" role="group" aria-label="תקופה" style="margin-bottom:var(--space-2)">
+        ${per.map(([k, t]) => `<button type="button" data-actper="${k}" aria-pressed="${ACT_PERIOD === k}">${t}</button>`).join('')}</div>
+      ${rows.length ? rows.slice(0, actShown).map(x => lgActRowHtml(x, today)).join('')
+        + (rows.length > actShown ? `<button type="button" class="sbtn more" data-actmore>הצג עוד (${E(rows.length - actShown)})</button>` : '')
+        : '<div class="hint">' + E(ACT_PERIOD === 'yesterday' ? 'אתמול הסוכן הזה לא עשה כלום.' : ACT_PERIOD === '7d' ? 'בשבוע האחרון הסוכן הזה לא עשה כלום.' : 'היום הסוכן הזה עוד לא עשה כלום.') + '</div>'}
+    </div>`;
 }
 
 // ─── 4. החדר ─────────────────────────────────────────────────────────
@@ -479,7 +513,7 @@ function renderLessons() {
   $('nLessons').textContent = lgLessonCount(LESSONS) || '';
   $('lessons').innerHTML = lgLessonsHtml(LESSONS);
 }
-function renderAll() { renderLessons(); renderSwitches(); renderSummary(); renderCards(); renderWatcher(); renderRoom(); renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderCancels(); renderState(); }
+function renderAll() { renderLessons(); renderSwitches(); renderSummary(); renderCards(); renderActivity(); renderWatcher(); renderRoom(); renderTodo(); renderNums(); fillRouteFilter(); renderLog(); renderCancels(); renderState(); }
 let _t = null;
 const later = () => { clearTimeout(_t); _t = setTimeout(renderAll, 50); };   // כמה מאזינים בבת אחת → ציור אחד
 
@@ -488,14 +522,17 @@ document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'an
 document.addEventListener('click', async ev => {
   const per = ev.target.closest('[data-period]');
   if (per) { period = per.dataset.period; renderNums(); return; }
+  const ap = ev.target.closest('[data-actper]');
+  if (ap) { ACT_PERIOD = ap.dataset.actper; actShown = ACT_PAGE; renderActivity(); return; }
+  if (ev.target.closest('[data-actmore]')) { actShown += ACT_PAGE; renderActivity(); return; }
   if (ev.target.closest('[data-more]')) { shown += PAGE; renderLog(); return; }
   if (ev.target.closest('[data-roommore]')) { roomShown += ROOM_PAGE; renderRoom(); return; }
   const card = ev.target.closest('[data-cardagent]');
   if (card) {
     const id = card.dataset.cardagent;
-    FILTER = id && FILTER !== id ? id : ''; roomShown = ROOM_PAGE;
-    renderCards(); renderRoom();
-    if (FILTER) $('secRoom').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    FILTER = id && FILTER !== id ? id : ''; roomShown = ROOM_PAGE; actShown = ACT_PAGE;
+    renderCards(); renderActivity(); renderRoom();
+    if (FILTER && $('actBox')) $('actBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
     return;
   }
   const ans = ev.target.closest('[data-roomanswer]');
@@ -567,7 +604,7 @@ document.addEventListener('click', async ev => {
 });
 ['fQ', 'fRoute', 'fVerdict'].forEach(id => $(id).addEventListener(id === 'fQ' ? 'input' : 'change', () => { shown = PAGE; renderLog(); }));
 // "היום" ו"מחכה יותר מ-3 שעות" משתנים עם הזמן, גם בלי שינוי בנתונים
-setInterval(() => { renderTodo(); renderNums(); renderCards(); renderWatcher(); }, 60 * 1000);
+setInterval(() => { renderTodo(); renderNums(); renderCards(); renderActivity(); renderWatcher(); }, 60 * 1000);
 
 lgRequireAuthAsync('admin').then(session => {
   if (!session) return;

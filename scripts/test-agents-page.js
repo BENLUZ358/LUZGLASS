@@ -30,7 +30,7 @@ check('log shows review rows as questions, the rest folded',
   [/lgAdSplitLog\(/.test(P), /lgAdReviewRowHtml\(r\.key,\s*r,\s*intake/.test(P), /<details[^>]*>[\s\S]{0,200}לא צריך לבדוק/.test(P), /lgAdOtherRowHtml\(/.test(P)],
   [true, true, true, true]);
 check('no pilot buttons in the log any more', /lgAgRowHtml\(/.test(live(P)), false);
-check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261110/.test(P), /agents-dash\.js\?v=20261110/.test(A)], [true, true]);
+check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261111/.test(P), /agents-dash\.js\?v=20261111/.test(A)], [true, true]);
 // ─── חדר הסוכנים (בן, 10/11) ───
 check('room screen: switches, summary, cards, room on top; the old sections folded',
   [['id="secSwitches"', 'id="secSummary"', 'id="secCards"', 'id="secRoom"'].every(x => P.includes(x)),
