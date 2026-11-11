@@ -216,22 +216,35 @@ async function resolveRecipient(db, order, kind) {
 //  יוצאת למספר שבכרטיס הלקוח במקום לקבוצה. רק חשבונית, ורק לצ'אט מקושר של אותו
 //  לקוח — הקישור והסימון של המנהל הם ההרשאה. אין מספר בכרטיס → phone ריק
 //  (חסום), לעולם לא חזרה לקבוצה.
+//  מספר אחר מזה שבכרטיס (בן, 11/11: "כתר מקלחונים זה גם של המקום לאמבט, אז
+//  החשבוניות בפרטי אותו הדבר") — waMeta/invoiceToPrivate/<מפתח>/phone גובר על
+//  המספר שבכרטיס. נכתב רק בידי מנהל (waMeta), ולכן גם הוא הרשאה.
 async function resolveRecipientWa(db, order, kind) {
   const r = await _resolveWa(db, order);
   //  'broken-returned' (בן, 10/11) — הולך לאן שהולכות החשבוניות
-  if ((kind === 'invoice' || kind === 'broken-returned') && r.linked && r.accountKey && await lgInvoiceToPrivate(db, r.accountKey)) {
-    const acc = (await db.ref('hashavshevetAccounts/' + r.accountKey).once('value')).val();
-    const phone = norm(acc && acc.phone);
+  const priv = (kind === 'invoice' || kind === 'broken-returned') && r.linked && r.accountKey
+    ? await _invoicePrivateRec(db, r.accountKey) : null;
+  if (priv) {
+    let phone = norm(priv.phone);
+    if (!phone) {
+      const acc = (await db.ref('hashavshevetAccounts/' + r.accountKey).once('value')).val();
+      phone = norm(acc && acc.phone);
+    }
     return { phone, source: phone ? 'invoice-private' : 'invoice-private-missing',
              accountKey: r.accountKey, linked: true, channel: 'whatsapp' };
   }
   return { ...r, channel: 'whatsapp' };
 }
 
-async function lgInvoiceToPrivate(db, accountKey) {
+async function _invoicePrivateRec(db, accountKey) {
   const k = String(accountKey || '').trim();
-  if (!/^[A-Za-z0-9_-]{1,40}$/.test(k)) return false;
-  return !!(await db.ref('waMeta/invoiceToPrivate/' + k).once('value')).val();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(k)) return null;
+  const v = (await db.ref('waMeta/invoiceToPrivate/' + k).once('value')).val();
+  return v ? (typeof v === 'object' ? v : {}) : null;
+}
+
+async function lgInvoiceToPrivate(db, accountKey) {
+  return !!(await _invoicePrivateRec(db, accountKey));
 }
 
 async function _resolveWa(db, order) {
