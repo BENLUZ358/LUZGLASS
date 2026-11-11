@@ -577,6 +577,38 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     put(db, 'U9', R({ idMessage: 'U9', intent: 'complaint', route: 'complaint', upset: true, text: 'מתלונן' }));
     await run(db, 'U9');
     check('U9 yesterday / old-format index entries do not count → apology sent', outbox(db).U9_0.text, APOL);
+    // תודה / ברכה בקבוצה עם upset — בלי התנצלות ובלי בן
+    check('U12 thanks+upset → no apology', D(R({ intent: 'thanks', route: 'none', upset: true, text: 'תודה!!' })).actions, []);
+    check('U12 group chitchat+upset → no reply', D(R({ intent: 'chitchat', route: 'ignore', upset: true, text: 'וואו איזה יופי!!!' })).actions, []);
+    // upset מגיע על אישור ביטול ממתין → conv נמחק, "כן" מאוחר לא מבטל
+    {
+      const cv = { await: 'confirm-cancel', orderId: 'o3', at: NOW };
+      const dd = D(R({ intent: 'status', ref: 'מטבח', upset: true, text: 'למה לא עונים!!' }), cv);
+      check('U13 upset on pending cancel → conv cleared', [dd.conv, dd.actions[0].upset], [null, true]);
+      const db13 = seed({ agentConfig: CFGU });
+      db13._data.waMeta.agentConv = { [key(PRIV)]: cv };
+      put(db13, 'U13', R({ idMessage: 'U13', intent: 'status', ref: 'מטבח', upset: true, text: 'למה לא עונים!!' }));
+      await run(db13, 'U13');
+      put(db13, 'U13b', R({ idMessage: 'U13b', intent: 'cancel', route: 'okev', text: 'כן' }));
+      await run(db13, 'U13b', ON, NOW + MIN);
+      check('U13 later yes cancels nothing', [!!db13._data.orders.o3, ((db13._data.waMeta.agentConv || {})[key(PRIV)] || {}).await !== 'confirm-cancel'], [true, true]);
+    }
+    // סוכן כבוי: בלי תור ובלי הודעה לבן
+    {
+      const db14 = seed({ agentConfig: { agents: { okev: 'off', markazan: 'off' }, allCustomers: true } });
+      put(db14, 'U14', R({ idMessage: 'U14', intent: 'status', ref: 'כהן', upset: true, text: 'כועס!!' }));
+      await run(db14, 'U14');
+      check('U14 agent off → no queue, no ping', [Object.keys(outbox(db14)).length, (db14._data.waMeta.agentBen || null)], [0, null]);
+    }
+    // upset עם ביטול: לבן, הטקסט המלא בחדר, שום דבר לא בוטל
+    {
+      const db15 = seed({ agentConfig: CFGU });
+      put(db15, 'U15', R({ idMessage: 'U15', intent: 'cancel', ref: 'מטבח', upset: true, text: 'תבטלו את מטבח כבר, נמאס לי מכם!!' }));
+      await run(db15, 'U15');
+      const rr15 = Object.values(db15._data.waMeta.agentRoom || {})[0];
+      check('U15 upset+cancel → Ben, full text in room, order kept', [rr15.question, !!db15._data.orders.o3, Object.keys((db15._data.waMeta || {}).agentCancels || {}).length, !!outbox(db15).U15_0_b],
+        ['תבטלו את מטבח כבר, נמאס לי מכם!!', true, 0, true]);
+    }
     // בלי הגדרות במסך: כמו קודם — תלונה = שאלה רגילה (קיבלנו), בלי התנצלות
     db = seed();
     put(db, 'U11', R({ idMessage: 'U11', intent: 'complaint', route: 'complaint', upset: true, text: 'מתלונן' }));

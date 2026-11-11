@@ -302,8 +302,9 @@ function _route(r, orders, now, keep, archive, quote, price, x) {
 //  לא נוגעים בהזמנה חדשה (kolet), באדם שעונה, ובהודעות צוות.
 const UPSET_TEXT = 'מצטערים על העיכוב. בן יחזור אליך בהקדם.';
 const UPSET_NOTE = 'לקוח לא מרוצה';
-const UPSET_ROUTES = ['okev', 'complaint', 'menu', 'archive', 'quote', 'price', 'shaul', 'none', 'ignore'];
-function _isUpset(r, on) { return on === true && !!r && r.linked === true && (r.upset === true || r.intent === 'complaint') && UPSET_ROUTES.includes(r.route); }
+const UPSET_ROUTES = ['okev', 'complaint', 'menu', 'archive', 'quote', 'price', 'shaul'];
+//  תודה / ברכה עם סימני קריאה אינן כעס — מתעלמים מ-upset בהן
+function _isUpset(r, on) { return on === true && !!r && r.linked === true && r.intent !== 'thanks' && r.intent !== 'chitchat' && (r.upset === true || r.intent === 'complaint') && UPSET_ROUTES.includes(r.route); }
 function _upset(r, orders, now, keep, xo, today) {
   let facts = '';
   if (r.route === 'okev' && (r.intent === 'status' || r.intent === 'complaint')) {
@@ -313,7 +314,8 @@ function _upset(r, orders, now, keep, xo, today) {
   //  כבר היה לא מרוצה היום ובן לא ענה — רק לבן, בלי תשובה אוטומטית נוספת
   const hold = today ? '' : (facts ? facts + '\n\n' : '') + UPSET_TEXT;
   const ask = _ask(r, { note: UPSET_NOTE, benReason: 'agent-upset', upset: true, hold, noHold: !hold });
-  return { actions: ask, conv: keep };
+  //  בן לוקח את השיחה: שאלה פתוחה (למשל "בטוח לבטל?") נמחקת, כדי ש"כן" מאוחר לא יבטל לבד
+  return { actions: ask, conv: null };
 }
 
 // ─── החלטה — טהור ───────────────────────────────────────────────────
