@@ -65,6 +65,14 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
   //  משלוח לשרטט (בן, 10/11): מייל פנימי חדש לכתובת קבועה — אף פעם לא כתובת מהקורא
   const drafter = kind === 'drafter-batch';
   if (drafter) { email = require('./_drafter-batch').LG_DRAFTER_EMAIL; sendTo = email; }
+  //  התראת תקלה לבן (בן, 11/11 — _agent-ben.js): מייל פנימי למייל ההתראות של בן (agentConfig.escalateEmail),
+  //  רק כשהוואטסאפ לא עובד. בלי כתובת תקינה — לא נכנס לתור.
+  const alarm = kind === 'agent-alarm';
+  if (alarm) {
+    email = lgEmailAddr(sendTo);
+    if (!email) return { key: '', queued: false, reason: 'אין מייל להתראות' };
+    sendTo = email;
+  }
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber
                           : keySuffix != null ? kind + '#' + keySuffix : kind, thread, orderIds);
@@ -85,7 +93,7 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
       missingSketchNums: (missingSketchNums || []).map(String),
       //  מייל חשבוניות של הלקוח (בן, 9/11 — פלג: ההזמנות מכתובת אחת, החשבוניות לכתובת
       //  של מנהלת החשבונות). יש → מייל חדש לכתובת הזו במקום תשובה על מייל ההזמנה.
-      sendTo: ((kind === 'invoice' || kind === 'broken-returned' || drafter) && lgEmailAddr(sendTo)) || null,
+      sendTo: ((kind === 'invoice' || kind === 'broken-returned' || drafter || alarm) && lgEmailAddr(sendTo)) || null,
       drafterBatch: drafter ? Number(drafterBatch) : null,
       //  שבר בחיסום (בן, 10/11) — שורות מוכנות להודעה (api/_broken.js)
       extraLines: (extraLines || []).map(String),
@@ -128,7 +136,8 @@ async function lgEmailClaim(db, limit, now) {
     //  ⚠️ הגיל לפני הנעילה והקישור — אחרת הודעה חסומה הייתה נשארת בתור לנצח
     if ((at - (v.createdAt || at)) > MAX_AGE_MS) { await _close(db, key, at, 'expired', 'פג תוקף — לא נשלח'); continue; }
     //  בלי מזהה המייל של הלקוח אין על מה לענות בבטחה — לא מחכירים לנצח, סוגרים
-    const drafter = v.kind === 'drafter-batch';   // מייל פנימי לשרטט — אין לקוח, אין שרשור
+    //  מייל פנימי לשרטט / התראה לבן — אין לקוח, אין שרשור
+    const drafter = v.kind === 'drafter-batch' || v.kind === 'agent-alarm';
     if (!drafter && !v.messageId) { await _close(db, key, at, 'cancelled', 'אין מזהה מייל של הלקוח — לא נשלח'); continue; }
     if (!lgEmailSendGate(v.email).allowed) continue;                     // נעילת הסביבה — לא נוגעים
     if (v.sendTo && !lgEmailSendGate(v.sendTo).allowed) continue;       // גם הכתובת שהחשבונית יוצאת אליה
@@ -173,18 +182,19 @@ async function lgEmailClaim(db, limit, now) {
     });
     const e = r.committed && r.snapshot.val();
     if (!e || e.state !== 'pending' || e.leaseToken !== token) continue;
-    const item = { key, thread: e.thread, messageId: String(e.messageId || (drafter ? 'drafter-' + e.drafterBatch : '')), email: String(e.email), leaseToken: token,
+    const item = { key, thread: e.thread, messageId: String(e.messageId || (v.kind === 'drafter-batch' ? 'drafter-' + e.drafterBatch : drafter ? 'alarm-' + key : '')), email: String(e.email), leaseToken: token,
                text: renderText({ kind: e.kind, clientName: e.clientName, orderNums: receivedNums || e.orderNums || [],
                                   sketchNames: e.sketchNames || [], docNumber: e.docNumber,
                                   deliveryTomorrow: e.deliveryTomorrow === true, variant: e.variant || '',
                                   missingSketchNums: e.missingSketchNums || [], extraLines: e.extraLines || [] }),
                //  כמה קבצים לצרף (חשבונית + סקיצה לכל הזמנה). הסקריפט מושך כל אחד ב-outbox-file.
                files: e.invoiceKey ? (manifest ? manifest.length : e.fileCount > 0 ? e.fileCount : 1 + (e.orderIds || []).length)
-                    : drafter ? (e.fileCount > 0 ? e.fileCount : 1) : 0 };
+                    : v.kind === 'drafter-batch' ? (e.fileCount > 0 ? e.fileCount : 1) : 0 };
     //  חשבונית למייל החשבוניות של הלקוח — מייל חדש עם נושא, לא תשובה
     if (e.sendTo) {
       item.sendTo = String(e.sendTo);
-      item.subject = drafter ? 'הזמנות לשרטוט — משלוח ' + e.drafterBatch + ' (' + (e.orderIds || []).length + ')'
+      item.subject = e.kind === 'agent-alarm' ? 'התראה ממערכת לוז גלאס'
+        : drafter ? 'הזמנות לשרטוט — משלוח ' + e.drafterBatch + ' (' + (e.orderIds || []).length + ')'
         : e.kind === 'broken-returned'
         ? 'פריט שחזר מחיסום — לוז גלאס' + (e.clientName ? ' — ' + e.clientName : '')
         : 'חשבונית מס ' + (e.docNumber || '') + ' — לוז גלאס' + (e.clientName ? ' — ' + e.clientName : '');

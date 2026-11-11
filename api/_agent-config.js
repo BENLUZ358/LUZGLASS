@@ -14,7 +14,8 @@
 //    אין agentConfig (או ערך לא תקין) → כמו היום: 'reply' רק אם
 //      AGENT_REPLY_ENABLED==='true', אחרת 'shadow' — כך שהפריסה לא משנה כלום.
 //  ⚠️ escalatePhone — המספר של בן לשאלות "לא יודע". **לא** איש צוות: שכבת השליחה
-//     מתירה אליו רק את ההתראה על שאלה (reason 'agent-ask'), והעברת תמונה רק מהצ'אט
+//     מתירה אליו רק AGENT_BEN_REASONS (שאלה, לקוח לא מרוצה, שומר, הבוקר, תקלה — דרך
+//     lgBenNotify ב-_agent-ben.js), והעברת תמונה רק מהצ'אט
 //     של הלקוח של אותה שאלה (תיקון סקירה 10/11). בלי הגדרות — AGENT_ESCALATE_DEFAULT
 //     הוא רק היעד של ההתראה, לא צוות.
 //  אפיון: docs/superpowers/specs/2026-11-10-agents-room-design.md

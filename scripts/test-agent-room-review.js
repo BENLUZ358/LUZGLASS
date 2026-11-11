@@ -71,9 +71,14 @@ const send = (db, env, p) => S.lgAgentSendPending(db, { provider: p || provider(
       files: [{ kind: 'forward', fromChat: PRIV, idMessage: 'X2' }] });
     await S.lgAgentEnqueue(db, { key: 'b6', to: BEN, customerId: '', text: 'העברה', reason: 'agent-staff', agent: 'okev',
       files: [{ kind: 'forward', fromChat: PRIV, idMessage: 'X3' }] });
+    //  בן, 11/11 (אפיון יא): גם שומר / התראה / לקוח לא מרוצה — רק AGENT_BEN_REASONS
+    await S.lgAgentEnqueue(db, { key: 'b7', to: BEN, customerId: '', text: 'שומר', reason: 'agent-guard', agent: 'okev' });
+    await S.lgAgentEnqueue(db, { key: 'b8', to: BEN, customerId: '777', text: 'לקוח לא מרוצה', reason: 'agent-upset', agent: 'markazan' });
+    await S.lgAgentEnqueue(db, { key: 'b9', to: BEN, customerId: '', text: 'x', reason: 'agent-files', agent: 'okev' });
     await send(db, SH, p);
     const ob = outbox(db);
     check('1: Ben gets the ask ping only', [ob.b1.state, ob.b2.state, ob.b3.state, ob.b6.state], ['blocked', 'sent', 'blocked', 'blocked']);
+    check('1: Ben number takes AGENT_BEN_REASONS, nothing else', [ob.b7.state, ob.b8.state, ob.b9.state], ['sent', 'sent', 'blocked']);
     check('1: forwarded image only from that customer\'s own chat', [ob.b4.state, ob.b5.state, p.fwds.map(f => f.fromChat)], ['blocked', 'sent', [PRIV]]);
     check('1: staff list is the Vercel list only', S.lgAgentStaff(SH), ['0501112222']);
   }

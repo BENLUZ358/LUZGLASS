@@ -75,6 +75,18 @@ function _intakeTick(deps) {
     .catch(e => console.error('email-inbound: intake ack flush failed', e && e.name)));
 }
 
+//  השעון של סקריפט המייל (בן, 11/11): רושם waMeta/clocks/gmail ובודק את המחשב במשרד + חיבור הוואטסאפ.
+//  אחרי התפיסה, ברקע (waitUntil) — התשובה לסקריפט לא מחכה. לעולם לא מפיל את התפיסה. ר' api/_agent-ben.js
+function _clockTick(deps) {
+  const env = deps.env || process.env;
+  if (env.AGENT_SHADOW_ENABLED !== 'true') return;   // מתג עליון כבוי — אין עבודת רקע בכלל
+  const p = Promise.resolve()
+    .then(() => require('./_agent-ben').lgClockCheck(deps.db, 'gmail',
+      { env, now: deps.now, deadline: Date.now() + 40 * 1000, provider: deps.provider }))
+    .catch(e => console.error('email-inbound: clock check failed', e && e.name));
+  if (typeof deps.waitUntil === 'function') deps.waitUntil(p);
+}
+
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
 //  deps: { db, now? }. מחזיר { status, body }.
 async function handleEmailInbound(req, deps) {
@@ -94,8 +106,11 @@ async function handleEmailInbound(req, deps) {
     //  מרכזן (10/11): הסקריפט קורא לכאן כל דקה — זה השעון של "N סקיצות נקלטו" בוואטסאפ.
     //  ברקע (waitUntil), כדי שהסקריפט לא יחכה ל-drain. ר' api/_intake-ack.js
     _intakeTick(deps);
-    try { return { status: 200, body: { ok: true, items: await lgEmailClaim(deps.db, 5, deps.now) } }; }
+    let items;
+    try { items = await lgEmailClaim(deps.db, 5, deps.now); }
     catch (e) { console.error('email-inbound: outbox claim failed', e && e.name); return { status: 500, body: { error: 'claim failed' } }; }
+    _clockTick(deps);
+    return { status: 200, body: { ok: true, items } };
   }
   if (b.op === 'outbox-file') {
     try { return { status: 200, body: await lgEmailOutboxFile(deps.db, b.key, b.leaseToken, b.idx, deps.now) }; }

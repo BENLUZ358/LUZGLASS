@@ -42,8 +42,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const crypto = require('crypto');
-const { LG_AGENT_KEYS, lgAgentConfig, lgAgentModeOf, lgAgentEscalatePhone } = require('./_agent-config');
-const { lgRoomPost, lgRoomClose, lgRoomAskBenText, ROOM } = require('./_agent-room');
+const { LG_AGENT_KEYS, lgAgentConfig, lgAgentModeOf } = require('./_agent-config');
+const { lgRoomPost, lgRoomClose, lgRoomAskBenText, ROOM, ROOM_OPEN } = require('./_agent-room');
 
 const WATCHERS = 'waMeta/invoiceWatcher';
 const WATCH = 'waMeta/agentWatch';
@@ -199,13 +199,14 @@ async function lgAgentEvent(db, agent, ev, o) {
   if (!roomKey) return null;
   let pinged = false;
   if (ask && mode === 'reply') {
+    //  דרך lgBenNotify (_agent-ben.js): הודעה אחת למפתח, לא בלילה (נכנס להודעת הבוקר), עד 20 ביום.
+    //  הניסיון לשלוח — שם, ⚠️ לא אחרי הדדליין של הריצה (הדופק חייב להיגמר < 60ש׳)
     try {
       const S = require('./_agent-send');
-      const q = await S.lgAgentEnqueue(db, { key: 'watch_' + roomKey, to: lgAgentEscalatePhone(cfg), customerId: '',
-        text: lgRoomAskBenText(WHO[agent] || 'סוכן', text, env), reason: S.AGENT_ASK_REASON, agent });
-      pinged = !!q.queued;
-      //  ⚠️ לא אחרי הדדליין של הריצה (הדופק חייב להיגמר < 60ש׳)
-      if (pinged) await (opt.sendPending || S.lgAgentSendPending)(db, { env, deadline: Math.min(Date.now() + 20 * 1000, Number(opt.deadline) || Infinity) });
+      const n = await require('./_agent-ben').lgBenNotify(db, { key: 'watch_' + roomKey, outboxKey: 'watch_' + roomKey,
+        text: lgRoomAskBenText(WHO[agent] || 'סוכן', text, env), reason: S.AGENT_ASK_REASON, urgent: false, env, now, cfg, agent,
+        open: ROOM_OPEN + '/' + roomKey, sendPending: opt.sendPending, deadline: opt.deadline });
+      pinged = n.sent === 'now' && !!n.queued;
     } catch (e) { console.warn('agent-watch: ping', e && e.name); }
   }
   return { roomKey, asked: ask, pinged };

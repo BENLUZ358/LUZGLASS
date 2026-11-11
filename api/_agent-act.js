@@ -39,8 +39,8 @@ const { lgOkevEta, lgOkevEtaText } = require('./_agent-stats');
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
         lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
 const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
-const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute, lgAgentEscalatePhone } = require('./_agent-config');
-const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM } = require('./_agent-room');
+const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute } = require('./_agent-config');
+const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN } = require('./_agent-room');
 const { lgLessonFind, lgLessonUsed, lgLessonAutoOk } = require('./_agent-lessons');
 
 const CONV = 'waMeta/agentConv';
@@ -720,8 +720,13 @@ async function _act(db, key, rec, recRef, env, now, o) {
       //  ⚠️ (תיקון סקירה 10/11) הכל תלוי בצהוב: בלעדיו אין על מה לענות בחדר — לא
       //  מציקים לבן ולא מבטיחים ללקוח. ההתראה נושאת את הלקוח (cid): השליחה מתירה
       //  העברת תמונה למספר של בן רק מהצ'אט של הלקוח הזה.
+      //  ההתראה לבן — דרך lgBenNotify (_agent-ben.js, בן 11/11): אחת למפתח, לא בלילה (נכנסת להודעת
+      //  הבוקר), עד 20 ביום. השליחה עצמה — כאן למטה עם שאר התור (flush:false).
       if (rk) {
-        await enq(k + '_b', lgAgentEscalatePhone(cfg), lgRoomAskBenText(a.who, a.question, env), a.files || [], AGENT_ASK_REASON, cid);
+        const bn = await require('./_agent-ben').lgBenNotify(db, { key: k + '_b', outboxKey: k + '_b',
+          text: lgRoomAskBenText(a.who, a.question, env), reason: AGENT_ASK_REASON, urgent: false, env, now, cfg, agent,
+          customerId: cid, files: a.files || [], open: ROOM_OPEN + '/' + rk, flush: false });
+        if (bn.queued) queued.push(bn.key);
         await enq(k, chat, a.hold || ASK_HOLD_TEXT, [], 'agent-reply');
       }
     }

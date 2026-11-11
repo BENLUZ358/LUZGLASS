@@ -135,7 +135,8 @@ const summaries = d => Object.values(d._data.waMeta.agentRoom || {}).filter(e =>
     await W.lgAgentWatchRun(d, { env: ENV, now: SUN_0705 });
     await W.lgAgentWatchRun(d, { env: ENV, now: SUN_0705 + 2 * MIN });
     check('heartbeat posts the morning summary once', summaries(d).length, 1);
-    const outbox = Object.keys(d._data.waMeta.agentOutbox || {}).length;
+    //  הסיכום עצמו — רק בחדר. (הודעת שומר לבן, agent-guard, היא של השומרים — שלב 4, _agent-ben.js)
+    const outbox = Object.values(d._data.waMeta.agentOutbox || {}).filter(x => x.reason !== 'agent-guard').length;
     check('room only — nothing queued to WhatsApp', outbox, 0);
   }
   console.log(failed ? `\n${failed} FAILED` : '\nall ok');

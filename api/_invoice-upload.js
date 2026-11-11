@@ -81,10 +81,17 @@ async function heartbeat(body, deps) {
   const now = deps.now || Date.now();
   const t0 = Date.now();   // שעון אמיתי (now עשוי להיות מוזרק) — הדדליין מוחלט מתחילת הבקשה
   await deps.db.ref(W.WATCHERS + '/' + hb.pc).set({ at: now, pending: hb.pending, lastPrintError: hb.lastPrintError, version: hb.version });
+  //  סדר: שליחת התור → השעון → בדיקות (דדליין מוחלט t0+48ש׳) → רשת "מוכן".
   //  תור הוואטסאפ מהשרת — ראשון, כדי שהודעה שנתקעה תצא גם בלי דף פתוח (מתג WA_SERVER_DRAIN). ר' api/_wa-server-drain.js
   try {
     await (deps.waDrain || require('./_wa-server-drain').lgWaServerDrain)(deps.db, { env: deps.env || process.env, now });
   } catch (e) { console.error('invoice-pdf-upload: wa server drain failed', e && e.name); }
+  //  השעון של המשרד (בן, 11/11): רושם waMeta/clocks/office ובודק את סקריפט המייל + חיבור הוואטסאפ.
+  //  זול (כמה קריאות, פעם בדקה); שליחה ישירה רק כשיש התראה. רק עם הגדרות במסך. ר' api/_agent-ben.js
+  try {
+    await (deps.clockCheck || require('./_agent-ben').lgClockCheck)(deps.db, 'office',
+      { env: deps.env || process.env, now, deadline: t0 + 40 * 1000, provider: deps.provider });
+  } catch (e) { console.error('invoice-pdf-upload: clock check failed', e && e.name); }
   //  הבקשה כולה מתחת ל-60ש׳: שליחה עד 18ש׳, ובדיקות עד t0+48ש׳ (דדליין מוחלט, לא 30ש׳ אחרי השליחה)
   try {
     await (deps.watchRun || W.lgAgentWatchRun)(deps.db, { env: deps.env || process.env, now, deadline: t0 + 48 * 1000 });

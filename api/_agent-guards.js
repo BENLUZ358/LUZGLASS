@@ -22,7 +22,7 @@
 //  ⚠️ פעולת שליחה אחת לכל ערוץ בכל סבב, ותמיד לפני הדדליין של הדופק.
 //
 //  מתגים לפי הסוכן המטפל: כבוי → כלום · שקט → רק החדר, "הייתי שולח שוב" · עונה → פועל.
-//  הודעה לבן — רק כשהמטפל "עונה" (דרך module.exports._notifyBen; שלב 4 מחליף אותו).
+//  הודעה לבן — רק כשהמטפל "עונה" (דרך module.exports._notifyBen → lgBenNotify ב-_agent-ben.js).
 //
 //  עלות (סבב של 10 דק'): waOutbox לפי state (pending / failed / expired), waMeta/emailOutbox (קטן),
 //  invoicePdf לפי createdAt 48 שעות (מגיע מהבדיקות של הארכיון) + state awaiting, waInbound / emailInbound
@@ -523,7 +523,10 @@ async function lgGuardRun(db, o) {
     await setProblem(p.key, next);
     res.asked++;
     if (key && modeOf(p.owner) === 'reply' && !(o2 && o2.noPing)) {
-      try { await module.exports._notifyBen(db, { key: p.key, text: _s(text, 400), reason: 'guard', urgent: false, env, now, cfg }); }
+      try {
+        await module.exports._notifyBen(db, { key: p.key, text: _s(text, 400), reason: 'guard', urgent: false, env, now, cfg,
+          agent: p.owner, open: WATCH + '/problems/' + p.key, deadline });
+      }
       catch (e) { console.warn('agent-guards: notify', e && e.name); }
     }
     return next;
@@ -654,7 +657,10 @@ async function _gone(db, k, p, now) {
   return 'keep';
 }
 
-//  הודעה לבן — שלב 4 (lgBenNotify) מחליף. עד אז: רק השורה הצהובה בחדר.
-async function _notifyBen(db, a) { return { sent: 'skip' }; }   // eslint-disable-line no-unused-vars
+//  הודעה לבן — דרך lgBenNotify (_agent-ben.js): אחת למפתח, תזכורת אחת אחרי 3 שעות, לא בלילה, עד 20 ביום.
+//  'guard' → agent-guard. נשאר module.exports._notifyBen כדי שהבדיקות יוכלו להחליף.
+async function _notifyBen(db, a) {
+  return require('./_agent-ben').lgBenNotify(db, { ...(a || {}), reason: 'agent-guard' });
+}
 
 module.exports = { lgGuardProblems, lgGuardResendOk, lgGuardRun, GUARD_KEY, CLEAR_KINDS, _notifyBen };
