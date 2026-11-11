@@ -68,6 +68,35 @@ const _ilDay = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem
 
 // ─── טהור ─────────────────────────────────────────────────────────────
 
+//  סיבה קצרה בעברית לחדר / לבן. ⚠️ לעולם לא טקסט גולמי מהספק (lastError / delivery.reason) —
+//  רק סוג הכשל או משפט מוכר של המערכת; אחרת "סיבה לא ידועה".
+const UNCLEAR = 'לא ברור אם יצאה';
+const UNKNOWN_REASON = 'סיבה לא ידועה';
+const KIND_HEB = { disconnected: 'הוואטסאפ היה מנותק', quota: 'נגמרה המכסה אצל ספק הוואטסאפ', rate: 'יותר מדי הודעות בבת אחת',
+                   recipient: 'בעיה במספר של הלקוח', network: 'תקלת תקשורת', other: 'תקלה אצל ספק הוואטסאפ' };
+const KNOWN_REASONS = [
+  [/אין מספר טלפון|אין נמען/, 'אין מספר טלפון ללקוח'],
+  [/חשבוניות לפרטי/, 'סומן "חשבוניות לפרטי" בלי מספר פרטי'],
+  [/ההזמנה לא נמצאה|הזמנה חסרה|ההזמנות כבר לא קיימות/, 'ההזמנה לא נמצאה'],
+  [/פיקטיבית/, 'ההזמנה סומנה פיקטיבית'],
+  [/קובץ החשבונית חסר|קבצי החשבונית לא זמינים/, 'קובץ החשבונית חסר'],
+  [/פג תוקף/, 'פג תוקף בתור'],
+  [/לא מקושרת/, 'הכתובת כבר לא מקושרת'],
+  [/הסקריפט דיווח/, 'סקריפט המייל דיווח על כישלון'],
+  [/מנותק/, 'הוואטסאפ היה מנותק'],
+  [/ניסיונות נכשלו/, 'נכשל 3 פעמים'],
+  [/אינו תמונה|לא נתמך/, 'הקובץ לא נתמך'],
+  [/עברו 24 שעות/, 'עברו 24 שעות'],
+  [/כבר נוצרה הזמנה/, 'כבר נקלט'],
+];
+function _reason(failureKind, text) {
+  if (failureKind && KIND_HEB[failureKind]) return KIND_HEB[failureKind];
+  const t = String(text || '');
+  for (const [re, heb] of KNOWN_REASONS) if (re.test(t)) return heb;
+  return UNKNOWN_REASON;
+}
+const _paren = (fk, text) => ' (' + _reason(fk, text) + ')';
+
 //  מותר לשלוח שוב את השורה הזו (waOutbox / emailOutbox)? → { ok, why }
 //  טריות לפי סוג, ואחר כך כשל ברור בלבד. why — בעברית, לחדר.
 function lgGuardResendOk(row, now) {
@@ -86,8 +115,8 @@ function lgGuardResendOk(row, now) {
   }
   if (row.state === 'pending') return { ok: true, why: 'לא נשלחה בכלל' };
   if ((Number(row.attempts) || 0) === 0) return { ok: true, why: 'לא נוסתה בכלל' };
-  if (CLEAR_KINDS.includes(row.failureKind)) return { ok: true, why: 'לא יצאה (' + row.failureKind + ')' };
-  return { ok: false, why: 'לא ברור אם יצאה' };
+  if (CLEAR_KINDS.includes(row.failureKind)) return { ok: true, why: 'לא יצאה — ' + KIND_HEB[row.failureKind] };
+  return { ok: false, why: UNCLEAR };
 }
 
 const WA_LABEL = { ready: '"מוכן"', dispatched: '"ההובלה"', 'sketches-handled': '"הסקיצות טופלו"', 'sketches-received': '"נקלטו"',
@@ -140,7 +169,8 @@ function lgGuardProblems(input) {
       const ok = lgGuardResendOk(r, now);
       if (r.state === 'pending') {
         if (r.claimedAt && now - r.claimedAt < CLAIM_TTL_MS) continue;          // באוויר
-        const age = now - (Number(r.createdAt) || now);
+        //  שורה שהשומר איפס (wa-resend) — הזמן נספר מהאיפוס, לא "תקועה יותר משעה" מיד אחריו
+        const age = now - (Math.max(Number(r.createdAt) || 0, Number(r.guardResendAt) || 0) || now);
         if (age <= PENDING_MS) continue;
         if (!ok.ok) { _stale(out, { ...base, group: 'wa-stale' }, r, ok.why, stages); continue; }
         if (age > PENDING_BEN_MS) {
@@ -151,12 +181,12 @@ function lgGuardProblems(input) {
                    fix: { type: 'wa-drain', src: k, channel: 'wa' } });
       } else if (r.state === 'failed') {
         if ((Number(r.attempts) || 0) < WA_MAX_ATTEMPTS) continue;              // התור עוד מנסה לבד
-        const err = r.lastError ? ' (' + _s(r.lastError, 120) + ')' : '';
+        const err = _paren(r.failureKind, r.lastError);
         if (retried[key]) { out.push({ ...base, group: 'wa-failed', level: 'ben', text: `הודעת ${_label(r)} ל${_who(r)} נכשלה גם אחרי ששלחתי שוב${err}` }); continue; }
         if (ok.ok) {
           out.push({ ...base, group: 'wa-failed', level: 'fix', text: `הודעת ${_label(r)} ל${_who(r)} נכשלה ${r.attempts} פעמים${err}`,
                      fix: { type: 'wa-resend', src: k, channel: 'wa' } });
-        } else if (ok.why === 'לא ברור אם יצאה') {
+        } else if (ok.why === UNCLEAR) {
           out.push({ ...base, group: 'wa-failed', level: 'ben', text: `הודעת ${_label(r)} ל${_who(r)} נכשלה${err}. לא ברור אם יצאה — לשלוח שוב?` });
         } else _stale(out, { ...base, group: 'wa-stale' }, r, ok.why, stages);
       } else if (r.state === 'expired') {
@@ -172,7 +202,7 @@ function lgGuardProblems(input) {
     if (!dv || !['queued', 'failed', 'blocked'].includes(dv.state)) continue;
     const key = 'deliv_' + _safeKey(k), doc = _s(inv.docNumber || k, 20);
     const to = inv.client ? ' ל' + _s(inv.client, 60) : '';
-    const why = dv.reason ? ' (' + _s(dv.reason, 120) + ')' : '';
+    const why = dv.state === 'queued' ? '' : _paren(null, dv.reason);
     const base = { key, finder: 'archive', owner: 'archive', src: k, rkey: k, group: 'invoice', ref: { invoiceKey: k } };
     if (dv.state === 'blocked') { out.push({ ...base, level: 'ben', text: `חשבונית ${doc}${to} לא נשלחה${why} — חסר נתון` }); continue; }
     if (dv.state === 'queued' && now - (Number(dv.at) || now) <= INV_QUEUED_MS) continue;
@@ -183,9 +213,9 @@ function lgGuardProblems(input) {
     const what = dv.state === 'queued' ? `חשבונית ${doc}${to} מחכה לשליחה יותר משעה` : `שליחת חשבונית ${doc}${to} נכשלה${why}`;
     if (retried[k]) { out.push({ ...base, level: 'ben', text: `שליחת חשבונית ${doc}${to} נכשלה גם אחרי ניסיון חוזר${why}` }); continue; }
     const ok = row ? lgGuardResendOk({ ...row, kind: 'invoice', createdAt: Number(inv.createdAt) || row.createdAt }, now)
-                   : { ok: false, why: 'לא ברור אם יצאה' };
+                   : { ok: false, why: UNCLEAR };
     if (ok.ok) out.push({ ...base, level: 'fix', text: what, fix: { type: 'invoice-redeliver', src: k, channel: dv.channel === 'email' ? 'email' : 'wa' } });
-    else out.push({ ...base, level: 'ben', text: what + ' — ' + ok.why + (ok.why === 'לא ברור אם יצאה' ? ', לשלוח שוב?' : '') });
+    else out.push({ ...base, level: 'ben', text: what + ' — ' + ok.why + (ok.why === UNCLEAR ? ', לשלוח שוב?' : '') });
   }
 
   // ── 6: מייל ללקוח שנכשל / פג (לא חשבונית — שורה 3; לא משלוח לשרטט — בדיקת הקולט הקיימת) ──
@@ -198,7 +228,7 @@ function lgGuardProblems(input) {
     if (retried[key]) { out.push({ ...base, level: 'ben', text: `מייל ${_label(r)} ל${_who(r)} נכשל גם אחרי ששלחתי שוב` }); continue; }
     const ok = lgGuardResendOk(r, now);
     if (ok.ok) out.push({ ...base, level: 'fix', text: what, fix: { type: 'email-requeue', src: k, channel: 'email' } });
-    else if (ok.why === 'לא ברור אם יצאה') out.push({ ...base, level: 'ben', text: what + ' — לא ברור אם יצא, לשלוח שוב?' });
+    else if (ok.why === UNCLEAR) out.push({ ...base, level: 'ben', text: what + ' — לא ברור אם יצא, לשלוח שוב?' });
     else if (r.kind === 'sketches-received') continue;
     else if (r.kind === 'dispatched') out.push({ ...base, level: 'info', text: what + ' — ' + ok.why, doneText: 'רק רושם — לא שולח' });
     else if (r.kind === 'ready' && _collected(stages, r)) continue;
@@ -217,7 +247,7 @@ function lgGuardProblems(input) {
       const key = (ch === 'email' ? 'ein_' : 'win_') + _safeKey(k);
       const from = ch === 'email' ? _s(r.from, 80) : _s(r.groupName || r.sender || r.chatId, 60);
       const what = ch === 'email' ? `מייל נכנס מ${from || 'לקוח'} נתקע בקליטה` : `תמונה מ${from || 'לקוח'} נתקעה בקליטה`;
-      const why = r.reason ? ' (' + _s(r.reason, 120) + ')' : '';
+      const why = st === 'received' || st === 'processing' ? '' : _paren(null, r.reason);
       const base = { key, finder: 'kolet', owner: 'kolet', src: k, rkey: key, group: ch === 'email' ? 'in-email' : 'in-wa' };
       if (ch === 'whatsapp' && now - (Number(r.createdAt) || 0) >= INBOUND_FRESH_MS) {
         out.push({ ...base, level: 'ben', text: what + why + ' — עברו 24 שעות, צריך לבקש מהלקוח לשלוח שוב' });
@@ -297,9 +327,12 @@ const RESEND = ['wa-resend', 'invoice-redeliver', 'email-requeue', 'inbound-retr
 // ─── ההרצה ──────────────────────────────────────────────────────────
 
 const _val = async (db, p) => (await db.ref(p).once('value')).val();
-const _byState = async (db, path, states) => {
+//  ⚠️ לפי createdAt (אינדקס קיים), 48 שעות, והמצב מסונן בזיכרון — expired / dead / failed סופיים נשארים
+//  לנצח, ושאילתה לפי state הייתה גדלה בלי סוף. החלון חסום בכמות התנועה של יומיים.
+const _recent = async (db, path, now, states) => {
+  const all = (await db.ref(path).orderByChild('createdAt').startAt(now - ROW_WINDOW_MS).once('value')).val() || {};
   const out = {};
-  for (const st of states) Object.assign(out, (await db.ref(path).orderByChild('state').equalTo(st).once('value')).val() || {});
+  for (const [k, v] of Object.entries(all)) if (v && states.includes(v.state)) out[k] = v;
   return out;
 };
 
@@ -372,7 +405,7 @@ async function _perform(db, p, o) {
 
 const DONE_TEXT = { 'wa-drain': 'שלחתי ✓', 'inbound-retry': 'נקלט ✓' };
 
-//  o: { env, now, cfg, deadline, invoices?, orders?, deps? } → { found, fixed, asked }
+//  o: { env, now, cfg, deadline, invoices?, orders?, watchState?, deps? } → { found, fixed, asked }
 async function lgGuardRun(db, o) {
   const opt = o || {}, env = opt.env || process.env, now = Number(opt.now) || Date.now(), cfg = opt.cfg;
   const deadline = Number(opt.deadline) || Date.now() + 30 * 1000;
@@ -386,7 +419,7 @@ async function lgGuardRun(db, o) {
   // ── קריאה — רק למה שיש לו סוכן פעיל ──
   const waState = String((await _val(db, 'waMeta/whatsapp/state')) || '');
   const waOutbox = any('okev', 'kolet', 'markazan', 'manager') && waState === 'authorized'
-    ? await _byState(db, 'waOutbox', ['pending', 'failed', 'expired']) : {};
+    ? await _recent(db, 'waOutbox', now, ['pending', 'failed', 'expired']) : {};
   const emailOutbox = any('okev', 'kolet', 'markazan', 'manager') ? (await _val(db, 'waMeta/emailOutbox')) || {} : {};
   let invoices = {}, awaiting = {};
   const invOutbox = {};
@@ -401,8 +434,8 @@ async function lgGuardRun(db, o) {
   }
   let waInbound = {}, emailInbound = {}, printJobs = {};
   if (on('kolet')) {
-    waInbound = await _byState(db, 'waInbound', ['received', 'processing', 'failed', 'dead']);
-    emailInbound = await _byState(db, 'emailInbound', ['failed', 'dead']);
+    waInbound = await _recent(db, 'waInbound', now, ['received', 'processing', 'failed', 'dead']);
+    emailInbound = await _recent(db, 'emailInbound', now, ['failed', 'dead']);
     //  רק 48 השעות האחרונות: המפתח מתחיל בזמן היצירה (base36, _print-jobs.js) — orderByKey בלי אינדקס
     printJobs = (await db.ref('waMeta/printJobs').orderByKey().startAt((now - PRINT_WINDOW_MS).toString(36)).once('value')).val() || {};
   }
@@ -418,12 +451,14 @@ async function lgGuardRun(db, o) {
       if (g && !g.ignored && now - (Number(g.lastAt) || 0) <= UNLINKED_WINDOW_MS && _keyOk(k)) linkedGroups[k] = !!(await _val(db, 'waGroups/' + k));
     }
   }
-  const st = (await _val(db, WATCH)) || {};
+  //  waMeta/agentWatch — מה שהדופק כבר קרא (retried אחרי הניקוי), בלי קריאה שנייה
+  const st = opt.watchState || (await _val(db, WATCH)) || {};
   const retried = { ...(st.retried || {}) };
   //  "מוכן" שלא יצא — נאסף כבר? (קריאה אחת להזמנה, רק לשורות כאלה)
   const orderStages = {};
   for (const r of [...Object.values(waOutbox), ...Object.values(emailOutbox)]) {
-    const final = r && (r.state === 'expired' || (r.state === 'failed' && (Number(r.attempts) || 0) >= WA_MAX_ATTEMPTS));
+    const inWin = r && now - (Number(r.createdAt) || 0) <= ROW_WINDOW_MS;   // מחוץ לחלון — לא נבדק, לא נקרא
+    const final = inWin && (r.state === 'expired' || (r.state === 'failed' && (Number(r.attempts) || 0) >= WA_MAX_ATTEMPTS));
     const id = final && r.kind === 'ready' ? _list(r.orderIds)[0] : null;
     if (id != null && _keyOk(String(id)) && !(id in orderStages)) orderStages[id] = await _val(db, 'orders/' + id + '/stage');
   }
@@ -450,7 +485,7 @@ async function lgGuardRun(db, o) {
       return setProblem(p.key, { ...rec, acted: true, resolved: true });
     }
     if (p.level === 'ben') return askBen(p, rec, p.text);
-    if (p.level !== 'fix' || !p.fix) return null;
+    if (p.level !== 'fix' || !p.fix || rec.asked === true) return null;   // כבר אצל בן — לא שולחים לבד
     if (mode !== 'reply') {
       if (rec.acted === 'would') return null;
       await say({ thread, from: p.owner, step: 'would', text: (WOULD[p.fix.type] || 'הייתי שולח שוב') + ' (מצב שקט)', ref: p.ref });
@@ -476,22 +511,45 @@ async function lgGuardRun(db, o) {
       return setProblem(p.key, { ...base, resolved: true });
     }
     if (r.out === 'failed' && resend) {
-      return askBen(p, base, 'ניסיתי שוב ולא הצליח' + (r.reason ? ' (' + _s(r.reason, 120) + ')' : '') + ' — ' + p.text);
+      return askBen(p, base, 'ניסיתי שוב ולא הצליח' + _paren(null, r.reason) + ' — ' + p.text);
     }
     return null;   // עוד בתור / לא נתפס — הסבב הבא יראה מה קרה
   }
 
-  async function askBen(p, rec, text) {
+  async function askBen(p, rec, text, o2) {
     if (rec.asked) return null;
     const key = await say({ thread: rec.thread, from: p.owner, step: 'need-ben', text: 'בן, צריך אותך — ' + _s(text, 400), ref: p.ref });
     const next = { ...rec, level: 'ben', asked: !!key, roomKey: key || rec.roomKey };
     await setProblem(p.key, next);
     res.asked++;
-    if (key && modeOf(p.owner) === 'reply') {
+    if (key && modeOf(p.owner) === 'reply' && !(o2 && o2.noPing)) {
       try { await module.exports._notifyBen(db, { key: p.key, text: _s(text, 400), reason: 'guard', urgent: false, env, now, cfg }); }
       catch (e) { console.warn('agent-guards: notify', e && e.name); }
     }
     return next;
+  }
+
+  //  ⚠️ רשומה שכבר עלתה לבן (asked / ask / ben) — לעולם לא שולחים שוב לבד: אולי בן כבר טיפל ביד.
+  //  רשומה ישנה של _agent-watch (בלי thread, שאלה צהובה פתוחה) → שיחה חדשה: מוצא + צריך את בן,
+  //  והשאלה הישנה נסגרת — כדי שבן לא יראה שתיים. בלי הודעה נוספת לבן (הוא כבר קיבל).
+  const escalated = r => !!r && (r.asked === true || r.level === 'ask' || r.level === 'ben');
+  const legacy = [];
+  for (const [k, r] of Object.entries(prev)) {
+    if (!byKey[k] || !escalated(r)) continue;
+    if (byKey[k].level === 'fix') byKey[k] = { ...byKey[k], level: 'ben', fix: undefined };
+    if (!r.thread && !r.dismissed) legacy.push(k);
+  }
+  for (let i = 0; i < problems.length; i++) problems[i] = byKey[problems[i].key];
+  for (const k of legacy) {
+    if (late()) break;
+    const p = byKey[k], r = prev[k];
+    const thread = k + '_' + now.toString(36);
+    const foundKey = await say({ thread, from: p.finder, to: p.owner !== p.finder ? p.owner : undefined, step: 'found', text: _s(p.text, 500), ref: p.ref });
+    if (r.roomKey) await lgRoomClose(db, r.roomKey, now, { by: 'stale' });   // רק שאלה פתוחה נסגרת; שורת info לא נוגעים
+    const rec = { ...r, level: 'ben', agent: p.owner, finder: p.finder, text: _s(p.text, 300), thread, roomKey: foundKey || null, asked: false, acted: true };
+    await setProblem(k, rec);
+    await askBen(p, rec, p.text, { noPing: true });
+    prev[k] = { ...rec, level: 'ben', asked: true };
   }
 
   const diff = W.lgWatchDiff(prev, problems);
@@ -508,7 +566,7 @@ async function lgGuardRun(db, o) {
   for (const items of groups.values()) {
     if (late()) break;
     const p0 = items[0];
-    const thread = items.length > 1 ? 'grp_' + p0.group + '_' + now.toString(36) : p0.key + '_' + now.toString(36);
+    const thread = items.length > 1 ? 'grp_' + p0.finder + '_' + p0.group + '_' + now.toString(36) : p0.key + '_' + now.toString(36);
     const owners = [...new Set(items.map(p => p.owner))];
     const text = items.length > 1 ? (GROUP_TEXT[p0.group] || (n => n + ' בעיות'))(items.length) + ': '
       + items.slice(0, 5).map(p => p.text).join(' · ') + (items.length > 5 ? ' …' : '') : p0.text;
@@ -543,7 +601,7 @@ async function lgGuardRun(db, o) {
   for (const p of problems) {
     if (late()) break;
     const rec = prev[p.key];
-    if (!rec || rec.dismissed || p.level !== 'fix' || !p.fix || upgraded.includes(p.key)) continue;
+    if (!rec || rec.dismissed || escalated(rec) || p.level !== 'fix' || !p.fix || upgraded.includes(p.key)) continue;
     const same = rec.fixType === p.fix.type;
     const due = p.fix.type === 'wa-drain' ? !rec.resolved
       : modeOf(p.owner) === 'reply' ? !(rec.acted === true && same) : rec.acted !== 'would';

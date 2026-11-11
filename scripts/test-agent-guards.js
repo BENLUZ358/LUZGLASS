@@ -261,7 +261,7 @@ const wa = (extra) => ({ kind: 'ready', to: '0501', clientName: 'מאור', orde
     check('ready 30h old → not resent; dispatched yesterday → not resent', drain.calls.length, 0);
     check('ready 30h → need-ben; dispatched yesterday → done "רק רושם"',
       [steps.includes('need-ben'), room(db).filter(e => e.step === 'done').map(e => e.text)], [true, ['רק רושם — לא שולח']]);
-    check('both are WA status messages → one grouped "stale" thread', [room(db).filter(e => e.step === 'found').length, /^grp_wa-stale_/.test(room(db)[0].thread)], [1, true]);
+    check('both are WA status messages → one grouped "stale" thread', [room(db).filter(e => e.step === 'found').length, /^grp_manager_wa-stale_/.test(room(db)[0].thread)], [1, true]);
   }
   // grouping: 3 pending messages of the same kind in one run → ONE thread, handoff per owner; one send per run
   {
@@ -269,8 +269,8 @@ const wa = (extra) => ({ kind: 'ready', to: '0501', clientName: 'מאור', orde
     const drain = drainSpy();
     await run(db, CFG('reply'), { deps: { drain } });
     const rows = room(db);
-    check('grouping: one thread grp_wa-pending_*, text "3 הודעות…"',
-      [new Set(rows.map(e => e.thread)).size, /^grp_wa-pending_/.test(rows[0].thread), /^3 הודעות וואטסאפ מחכות/.test(rows[0].text)], [1, true, true]);
+    check('grouping: one thread grp_<finder>_wa-pending_*, text "3 הודעות…"',
+      [new Set(rows.map(e => e.thread)).size, /^grp_manager_wa-pending_/.test(rows[0].thread), /^3 הודעות וואטסאפ מחכות/.test(rows[0].text)], [1, true, true]);
     check('grouping: handoffs "עוקב, 2 שלך" + "קולט, אחת שלך"', rows.filter(e => e.step === 'handoff').map(e => e.text).sort(), ['עוקב, 2 שלך', 'קולט, אחת שלך']);
     check('grouping: one send action this run; per-item problem records share the thread',
       [drain.calls.length, new Set(Object.values(probs(db)).map(p => p.thread)).size, Object.keys(probs(db)).sort()], [1, 1, ['wao_a', 'wao_b', 'wao_c']]);
@@ -341,16 +341,80 @@ const wa = (extra) => ({ kind: 'ready', to: '0501', clientName: 'מאור', orde
     check('row 12 run: only the recent job → one Ben question (kolet), never a reprint',
       room(db).map(e => [e.agent, e.step]), [['kolet', 'found'], ['kolet', 'need-ben']]);
   }
-  // a record from before threads (old _agent-watch deliv_) → gets a thread when acted on
+  // a record from before threads (old _agent-watch deliv_), not escalated → may be resent once, "done" in a new thread
   {
     const db = mk({ invoicePdf: { k1: inv({ state: 'failed', channel: 'whatsapp', outboxKey: 'w1', at: NOW - 3 * H }) },
                     waOutbox: { w1: { kind: 'invoice', state: 'failed', attempts: 3, failureKind: 'disconnected', createdAt: NOW - 3 * H } },
-                    waMeta: { agentWatch: { problems: { deliv_k1: { level: 'ask', agent: 'archive', at: NOW - 3 * H, text: 'x', src: 'k1', roomKey: null, asked: false } } } } },
+                    waMeta: { agentWatch: { problems: { deliv_k1: { level: 'info', agent: 'archive', at: NOW - 3 * H, text: 'x', src: 'k1', roomKey: null, asked: false } } } } },
                   CFG('reply'));
     const tries = [];
     await run(db, CFG('reply'), { deps: { deliver: async (d, key) => { tries.push(key); return { state: 'sent' }; } } });
-    check('old record without a thread → resent once, "done" written into a new thread',
+    check('old grey record without a thread → resent once, "done" written into a new thread',
       [tries, room(db).map(e => e.step), !!(room(db)[0] || {}).thread], [['k1'], ['done'], true]);
+  }
+  // IMPORTANT (review 1): an old yellow question to Ben (asked:true, no thread) → never resent; new thread found + need-ben; old question closed
+  for (const [name, legacyRec] of [['asked:true', { level: 'ask', asked: true }], ['level ask only', { level: 'ask', asked: false }]]) {
+    pings.length = 0;
+    const db = mk({ invoicePdf: { k1: inv({ state: 'failed', channel: 'whatsapp', outboxKey: 'w1', at: NOW - 3 * H }) },
+                    waOutbox: { w1: { kind: 'invoice', state: 'failed', attempts: 3, failureKind: 'disconnected', createdAt: NOW - 3 * H } },
+                    waMeta: { agentRoom: { old1: { at: NOW - 3 * H, agent: 'archive', kind: 'ask', state: 'open', internal: true, text: 'x', question: 'x' } },
+                              agentRoomOpen: { old1: { at: NOW - 3 * H, agent: 'archive', customer: '' } },
+                              agentWatch: { problems: { deliv_k1: { agent: 'archive', at: NOW - 3 * H, text: 'x', src: 'k1', roomKey: 'old1', ...legacyRec } } } } },
+                  CFG('reply'));
+    const tries = [];
+    const deps = { deliver: async (d, key) => { tries.push(key); return { state: 'sent' }; } };
+    await run(db, CFG('reply'), { deps });
+    await run(db, CFG('reply'), { now: NOW + 10 * MIN, deps });
+    const rows = room(db).filter(e => e.thread);
+    const opens = Object.keys(db._data.waMeta.agentRoomOpen || {});
+    check('old yellow (' + name + ') → never resent automatically (two runs)', tries, []);
+    check('old yellow (' + name + ') → new thread: found + need-ben, once', [rows.map(e => e.step), new Set(rows.map(e => e.thread)).size], [['found', 'need-ben'], 1]);
+    check('old yellow (' + name + ') → Ben sees one open question, not two; no second ping',
+      [opens.length, opens[0] !== 'old1', db._data.waMeta.agentRoom.old1.state === 'answered', pings.length], [1, true, true, 0]);
+  }
+  // escalated record (with a thread) is never resent, even if the row later looks clear
+  {
+    const db = mk({ waOutbox: { a: wa({ state: 'failed', attempts: 3, failureKind: 'disconnected' }) },
+                    waMeta: { agentWatch: { problems: { wao_a: { level: 'ben', agent: 'okev', finder: 'manager', at: NOW - H, src: 'a', thread: 't1', roomKey: 'q1', asked: true, acted: true } } } } },
+                  CFG('reply'));
+    const drain = drainSpy();
+    await run(db, CFG('reply'), { deps: { drain } });
+    check('already with Ben (thread) → no resend, no new rows', [drain.calls.length, room(db).length], [0, 0]);
+  }
+  // IMPORTANT (review 2): rows older than 48h cause no reads of orders and are not even fetched
+  {
+    const db = mk({ waOutbox: { old: wa({ state: 'expired', createdAt: NOW - 30 * 24 * H, orderIds: ['oOld'] }),
+                                old2: wa({ state: 'failed', attempts: 3, failureKind: 'network', createdAt: NOW - 5 * 24 * H, orderIds: ['oOld2'] }) },
+                    waInbound: { d1: win({ createdAt: NOW - 10 * 24 * H }) }, emailInbound: { d2: { state: 'dead', createdAt: NOW - 10 * 24 * H } },
+                    waMeta: { emailOutbox: { e1: em({ kind: 'ready', variant: null, state: 'failed', attempts: 3, createdAt: NOW - 9 * 24 * H, orderIds: ['oOld3'] }) } } },
+                  CFG('shadow'));
+    const reads = [];
+    const real = db.ref.bind(db);
+    db.ref = p => { const r = real(p), q = [], o = { ...r };
+      for (const n of ['orderByChild', 'orderByKey', 'equalTo', 'startAt']) o[n] = (...a) => { q.push(n + ':' + a.join(',')); r[n](...a); return o; };
+      o.once = async () => { reads.push(String(p) + (q.length ? '?' + q.join('&') : '')); return r.once(); };
+      return o; };
+    await run(db, CFG('shadow'));
+    check('rows older than 48h → no orders/<id>/stage reads, nothing in the room', [reads.filter(r => r.startsWith('orders/')), room(db).length], [[], 0]);
+    check('waOutbox / waInbound / emailInbound read by createdAt from 48h only (never all expired / dead by state)',
+      reads.filter(r => /^(waOutbox|waInbound|emailInbound)/.test(r)).sort(),
+      ['emailInbound?orderByChild:createdAt&startAt:' + (NOW - 48 * H), 'waInbound?orderByChild:createdAt&startAt:' + (NOW - 48 * H),
+       'waOutbox?orderByChild:createdAt&startAt:' + (NOW - 48 * H)]);
+  }
+  // minor (b): a row the guard reset counts its age from the reset — not "stuck >1h" right after it
+  check('reset row: age from guardResendAt → still a drain fix, not Ben',
+    one({ waOutbox: { a: wa({ createdAt: NOW - 3 * H, guardResendAt: NOW - 15 * MIN }) } }).map(p => [p[3], p[4]]), [['fix', 'wa-drain']]);
+  // minor (c): no raw provider text in the room / Ben text
+  {
+    const t = P({ waOutbox: { a: wa({ state: 'failed', attempts: 3, failureKind: 'network', lastError: 'AbortError: https://api.green-api.com/waInstance7100/x?token=SECRET' }),
+                              b: wa({ state: 'failed', attempts: 3, failureKind: null, lastError: 'Error 466 something', orderIds: ['o2'] }) },
+                  invoices: { k1: inv({ state: 'failed', channel: 'whatsapp', outboxKey: 'w1', reason: 'HTTP 500 {"error":"x"}', at: NOW - 10 * MIN }) },
+                  invOutbox: { k1: { state: 'failed', attempts: 3, failureKind: 'other', createdAt: NOW - H } } }).map(p => p.text);
+    check('no raw provider text: failureKind → Hebrew, unknown → "סיבה לא ידועה"',
+      [t.some(x => /green-api|SECRET|AbortError|466|HTTP|error/.test(x)), /תקלת תקשורת/.test(t[0]), /סיבה לא ידועה/.test(t[1]), /סיבה לא ידועה/.test(t[2])],
+      [false, true, true, true]);
+    check('known system reason kept as a short phrase', /אין מספר טלפון ללקוח/.test(P({ invoices: { k1: inv({ state: 'blocked', reason: 'אין נמען בוואטסאפ' }) } })[0].text), true);
+    check('resendOk why is Hebrew', [R(wa({ state: 'failed', attempts: 3, failureKind: 'rate' })).why], ['לא יצאה — יותר מדי הודעות בבת אחת']);
   }
   // inbound: changed meanwhile (already done) → not reported as a failure
   {
@@ -404,6 +468,13 @@ const wa = (extra) => ({ kind: 'ready', to: '0501', clientName: 'מאור', orde
     db = mk({ invoicePdf: { k1: inv({ state: 'failed', channel: 'whatsapp', at: NOW - 10 * MIN }) }, waMeta: { invoiceWatcher: { A: { ...hb } } } }, CFG('reply'));
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW, deliver: async (d, k) => { tries.push(k); }, sendPending: async () => {} });
     check('one path only: watch itself never retries an invoice (guards stubbed → nothing)', [tries, room(db).length], [[], 0]);
+    //  (d): ארכיון לבד → סריקת השעה רצה, ו-orders עובר לשומרים (חשבשבת דחה חשבונית)
+    calls.length = 0;
+    db = mk({ orders: { o2: { orderNum: 'L1', hashavshevetInvoice: { httpOk: false, sentAt: NOW - H } } }, waMeta: { invoiceWatcher: { A: { ...hb } } } },
+            { agents: { archive: 'shadow', okev: 'off', kolet: 'off' } });
+    await W.lgAgentWatchRun(db, { env: ENV, now: NOW });
+    check('only archive on → hourly orders scan runs and reaches the guards', [calls.length, !!(calls[0] && calls[0].orders && calls[0].orders.o2)], [1, true]);
+    check('(e) the agentWatch node is passed in (no second read)', !!(calls[0] && calls[0].watchState && calls[0].watchState.problems), true);
     G.lgGuardRun = real;
   }
 

@@ -144,9 +144,9 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
     check('I1: same invoice fails again → never retried twice, straight to yellow', [tries.length, room(db).slice(-1)[0].kind], [1, 'ask']);
     db._data.invoicePdf.k1.createdAt = NOW + 15 * 24 * H;   // שתישאר בחלון
     await W.lgAgentWatchRun(db, at(15 * 24 * 60));
-    //  הזיכרון נמחק אחרי 14 יום (כאן החשבונית "הוזזה" לחלון, ולכן אותה ריצה מנסה שוב ורושמת זיכרון חדש)
-    check('I1: retried forgotten after 14 days (the old memory is gone; a new one is written by this run)',
-      [((db._data.waMeta.agentWatch || {}).retried || {}).k1.at, tries.length], [NOW + 15 * 24 * H, 2]);
+    //  הזיכרון נמחק אחרי 14 יום; והבעיה כבר אצל בן — אף פעם לא שולחים שוב לבד (סקירה 1)
+    check('I1: retried forgotten after 14 days; escalated to Ben → still no second retry',
+      [((db._data.waMeta.agentWatch || {}).retried || {}).k1, tries.length], [undefined, 1]);
   }
 
   // 4b. C1 (עודכן 11/11): ניסיון חוזר רק ב"עונה", רק על כשל ברור, עד 48 שעות; לא לשורה שאולי יצאה
@@ -187,7 +187,7 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
       seen.push([k, !!(w.retried && w.retried[k] && w.retried[k].at), !!(w.problems && w.problems['deliv_' + k])]); };
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW, deliver, sendPending: async () => {} });
     check('C2: retried + problem written before deliver; one retry per run', seen, [['k1', true, true]]);
-    check('C2: both invoices in one grouped thread', [room(db).length, /^grp_invoice_/.test(room(db)[0].thread)], [1, true]);
+    check('C2: both invoices in one grouped thread', [room(db).length, /^grp_archive_invoice_/.test(room(db)[0].thread)], [1, true]);
     db._data.waMeta.invoiceWatcher.A.at = NOW + 11 * MIN;
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 11 * MIN, deliver, sendPending: async () => {} });
     check('C2: the other invoice is retried on the next run', seen.map(x => x[0]), ['k1', 'k2']);

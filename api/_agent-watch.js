@@ -301,7 +301,8 @@ async function lgAgentWatchRun(db, o) {
   //  פעם בשעה (מפתח lastOrdersScan); הזמן הרגיל לכל שלב מחושב מחדש לכל היותר פעם ביום (computedAt).
   //  בלי waMeta/agentConfig (פרודקשן היום) — אף פעם לא קוראים את orders.
   let stuck = [], scanned = false, orders = null;
-  if (slow && cfg && (on('okev') || on('kolet'))) {
+  //  ארכיון — בשביל חשבשבת שדחה חשבונית (השומרים, שורה 10)
+  if (slow && cfg && (on('okev') || on('kolet') || on('archive'))) {
     if ((await gate('lastOrdersScan', ORDERS_SCAN_GAP_MS)).committed) {
       try {
         orders = (await db.ref('orders').once('value')).val() || {};
@@ -373,7 +374,8 @@ async function lgAgentWatchRun(db, o) {
   if (slow && !late()) {
     try {
       await require('./_agent-guards').lgGuardRun(db, { env, now, cfg, deadline, invoices: recent || undefined,
-        orders: scanned ? orders : undefined, deps: { deliver: opt.deliver, drain: opt.drain } });
+        orders: scanned ? orders : undefined, watchState: { problems: state.problems || {}, retried },
+        deps: { deliver: opt.deliver, drain: opt.drain } });
     } catch (e) { console.warn('agent-watch: guards', e && e.name); }
   }
   //  מנהל (פריט 8, 11/11): סיכום בוקר בחדר — פעם ביום, בדופק הראשון אחרי 07:00 (א'–ו').
