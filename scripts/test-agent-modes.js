@@ -13,9 +13,12 @@ const S = require(path.join(ROOT, 'api', '_agent-send.js'));
 const D = require(path.join(ROOT, 'api', '_agent-daily.js'));
 const C = require(path.join(ROOT, 'api', '_agent-config.js'));
 let failed = 0;
-//  תשובות בשילוב (11/11): עם הגדרות "עונה" התשובה עוברת ניסוח במודל — בבדיקה אסור לצאת לרשת;
-//  בלי fetcher מדומה הקריאה נכשלת מיד והמשפט הקבוע יוצא (כמו כשל אמיתי)
-global.fetch = async () => { throw new Error('no network in tests'); };
+//  תשובות בשילוב (11/11): עם הגדרות "עונה" תשובה ללקוח נעטפת בפתיחה של המודל — בבדיקה אסור
+//  לצאת לרשת. המודל המדומה תמיד מחזיר פתיחה "היי": כל טקסט שעובר בטעות בעטיפה משתנה ונופל
+//  בבדיקות הקיימות; מסלולים שאמורים להיעטף — מצפים ל-WRAP(...)
+global.fetch = async (url, init) => ({ ok: true, json: async () => ({ status: 'completed', usage: null,
+  output: [{ content: [{ type: 'output_text', text: JSON.stringify({ opener: 'היי', closer: '' }) }] }] }) });
+const WRAP = t => 'היי\n' + t;
 const check = (name, actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
   ? console.log('ok    ' + name)
   : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
