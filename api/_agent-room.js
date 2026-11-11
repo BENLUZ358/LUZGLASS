@@ -32,7 +32,7 @@ const STATES = ['open', 'answered'];
 const REF_KEYS = ['customerId', 'orderId', 'invoiceKey', 'shadowKey'];
 const ANSWER_MAX = 1000;
 const STEPS = ['found', 'handoff', 'done', 'need-ben', 'would'];
-//  שם הסוכן בעברית — לשאלת שומר בלי לקוח (כמו LG_AD_AGENTS בדף)
+//  שם הסוכן בעברית — לשאלת שומר בלי לקוח. ⚠️ עותק של LG_AD_AGENTS (agents-dash.js, קובץ דפדפן) — לעדכן את שניהם יחד
 const AGENT_HEB = { markazan: 'מרכזן', kolet: 'קולט', archive: 'ארכיון', okev: 'עוקב', price: 'מחירון', manager: 'מנהל' };
 
 //  מפתח שממוין לפי זמן (כמו push של פיירבייס): זמן ב-base36 ברוחב קבוע + אקראי

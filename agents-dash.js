@@ -410,6 +410,8 @@ function lgRoomThreads(room, o) {
   const out = list.filter(t => !f.agent || t.rows.some(r => lgRoomAgentKey(r.agent) === f.agent));
   return out.sort((a, b) => (a.isOpen === b.isOpen ? 0 : a.isOpen ? -1 : 1) || b.lastAt - a.lastAt);
 }
+//  חלון "הצג ישנות": n שיחות ראשונות (פתוחות קודם, אחר כך החדשות) — שיחה לא נחתכת באמצע
+function lgRoomThreadWindow(threads, n) { return (threads || []).slice(0, Math.max(0, Number(n) || 0)); }
 const LG_ROOM_END = { done: '✓ נפתר', ben: '⚠ צריך את בן', would: '⏸ על &quot;שקט&quot; — הייתי עושה את זה', open: '' };
 //  שיחה כקבוצת בועות. after(row) — HTML שנדבק אחרי בועה (שדה התשובה בדף). שיחה בת שורה בלי thread = הבועה לבד.
 function lgRoomThreadHtml(th, outbox, after) {

@@ -99,6 +99,19 @@ const days = J(ctx.lgRoomDayGroups(ths.filter(t => !t.isOpen), NOW));
 check('closed threads folded per day', days.length >= 1 && days.every(d => d.label && d.threads.length), true);
 check('today labelled "היום"', days[0].label.includes('היום'), true);
 
+// ─── תיקון סקירה: סינון לפי סוכן לא שובר מצב שיחה ───────────────────────
+const fth = J(ctx.lgRoomThreads(mix, { agent: 'okev' })).find(t => t.thread === 'ob:1');
+check('filtered handoff thread keeps ALL rows and stays closed', [fth.rows.length, fth.state, fth.isOpen], [2, 'done', false]);
+check('filtered handoff thread still shows ✓ נפתר', ctx.lgRoomThreadHtml(fth, {}).includes('נפתר'), true);
+const fself = J(ctx.lgRoomThreads(mix, { agent: 'kolet' })).find(t => t.thread === 'self:1');
+check('filtered found+done keeps the one-line form', ctx.lgRoomThreadHtml(fself, {}).includes('מצאתי → עשיתי'), true);
+const closedBen = J(ctx.lgRoomThreads({ a: TH.t3, b: Object.assign({}, TH.t4, { state: 'answered', answeredBy: 'ben' }) }))[0];
+const cbH = ctx.lgRoomThreadHtml(closedBen, {});
+check('closed need-ben thread: ✓ נפתר, not ⚠', [closedBen.isOpen, cbH.includes('נפתר'), cbH.includes('צריך את בן')], [false, true, false]);
+const manyT = J(ctx.lgRoomThreads(mix));
+const win = ctx.lgRoomThreadWindow(manyT, 2);
+check('window counts threads, never splits one', [win.length, win.every(t => t.rows.length === manyT.find(x => x.thread === t.thread && x.rows[0].key === t.rows[0].key).rows.length)], [2, true]);
+
 // ─── כרטיסים ───────────────────────────────────────────────────────────
 const shadow = {
   s1: { createdAt: NOW - H, linked: true, route: 'okev', state: 'done' },

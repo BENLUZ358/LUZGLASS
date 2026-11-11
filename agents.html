@@ -308,6 +308,7 @@ function mergeRoom() {
   });
   ROOM = Object.assign({}, OLD_OPEN, ROOM_WIN);
 }
+const OPEN_DAYS = new Set();
 let period = 'today', shown = PAGE, roomShown = ROOM_PAGE, FILTER = '', ANSWERING = '', DRAFT = '', EDIT_BEN = false;
 //  MODE — מה תיבת הכתיבה שולחת: '' ענה / 'correct' תקן הצעה / 'fix' תקן תשובה שהסוכן נתן לבד
 let MODE = '';
@@ -396,16 +397,14 @@ function renderActivity() {
 function renderRoom() {
   const ta = $('ansText'), focused = ta && document.activeElement === ta;
   if (ta) DRAFT = ta.value;
-  const all = lgRoomRows(ROOM, { agent: FILTER, limit: 100000 });
-  const rows = all.slice(Math.max(0, all.length - roomShown));
   const open = lgRoomOpenIndexCount(OPEN_IDX);
   $('nRoom').textContent = open ? open + ' מחכות לך' : '';
   $('roomFlt').innerHTML = FILTER ? `<div class="flt-line">מציג רק: <b>${E(lgRoomAgentName(FILTER))}</b>
       <button type="button" class="sbtn" data-cardagent="">הצג הכל</button></div>` : '';
   //  שיחות: פתוחות למעלה, סגורות מקופלות לפי יום (11/11). "הצג ישנות" מגביל לפי מספר שורות, כמו קודם.
-  const shownRoom = {};
-  rows.forEach(r => { shownRoom[r.key] = ROOM[r.key]; });
-  const threads = lgRoomThreads(shownRoom, { agent: FILTER });
+  //  השיחות נבנות מכל השורות; הסינון רק בוחר שיחות שהסוכן לקח בהן חלק, והחלון סופר שיחות — לא חותך שיחה
+  const allT = lgRoomThreads(ROOM, { agent: FILTER });
+  const threads = lgRoomThreadWindow(allT, roomShown);
   const compose = e => ANSWERING === e.key && (MODE === 'fix' ? lgRoomCanFix(e, OB) : lgRoomCanAnswer(e, OB)) ? `<div class="compose">
         <textarea id="ansText" maxlength="1000" placeholder="מה לענות ללקוח?" aria-label="התשובה ללקוח">${E(DRAFT)}</textarea>
         <p class="hint" style="margin:4px 0 0">${MODE ? 'התיקון יוצא ללקוח בוואטסאפ, והסוכן לומד אותו (ושוב שואל אותך לפני שהוא עונה לבד).' : 'התשובה יוצאת ללקוח בוואטסאפ כמו שכתבת.'}</p>
@@ -413,9 +412,9 @@ function renderRoom() {
           <button type="button" class="sbtn" data-ancancel>ביטול</button></div></div>` : '';
   const openT = threads.filter(t => t.isOpen), closedT = threads.filter(t => !t.isOpen);
   const days = lgRoomDayGroups(closedT, Date.now());
-  $('room').innerHTML = (all.length > rows.length ? `<button type="button" class="sbtn more" data-roommore>הצג ישנות יותר (${E(all.length - rows.length)})</button>` : '')
+  $('room').innerHTML = (allT.length > threads.length ? `<button type="button" class="sbtn more" data-roommore>הצג ישנות יותר (${E(allT.length - threads.length)})</button>` : '')
     + (threads.length ? openT.map(t => lgRoomThreadHtml(t, OB, compose)).join('')
-      + days.map((d, i) => `<details class="room-day"${i === 0 || d.threads.some(t => t.rows.some(r => r.key === ANSWERING)) ? ' open' : ''}><summary>${E(d.label)} · ${E(d.threads.length)}</summary>
+      + days.map((d, i) => `<details class="room-day" data-day="${E(d.day)}"${i === 0 || OPEN_DAYS.has(d.day) || d.threads.some(t => t.rows.some(r => r.key === ANSWERING)) ? ' open' : ''}><summary>${E(d.label)} · ${E(d.threads.length)}</summary>
           <div class="room">${d.threads.map(t => lgRoomThreadHtml(t, OB, compose)).join('')}</div></details>`).join('')
       : '<div class="hint">אין עדיין הודעות בחדר.</div>');
   const nt = $('ansText');
@@ -535,6 +534,8 @@ let _t = null;
 const later = () => { clearTimeout(_t); _t = setTimeout(renderAll, 50); };   // כמה מאזינים בבת אחת → ציור אחד
 
 // ─── לחיצות ──────────────────────────────────────────────────────────
+//  toggle לא עולה למעלה — מאזינים בשלב הלכידה; ימים שבן פתח / סגר נשארים כך אחרי רענון חי
+document.addEventListener('toggle', ev => { const d = ev.target; if (d && d.classList && d.classList.contains('room-day')) { if (d.open) OPEN_DAYS.add(d.dataset.day); else OPEN_DAYS.delete(d.dataset.day); } }, true);
 document.addEventListener('input', ev => { if (ev.target && ev.target.id === 'ansText') DRAFT = ev.target.value; });
 document.addEventListener('click', async ev => {
   const per = ev.target.closest('[data-period]');
