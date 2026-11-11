@@ -29,7 +29,7 @@
 const { lgWaProvider } = require('./_wa-provider');
 const { lgWaClaim, lgWaComplete, lgWaRelease, lgWaPending, lgWaReserveSlot, MAX_ATTEMPTS } = require('./_wa-outbox');
 const { lgWaSenderKey, lgWaSenderLink } = require('./_wa-recipient');
-const { LG_AGENT_KEYS, lgAgentConfig, lgAgentModeOf, lgAgentEscalatePhone } = require('./_agent-config');
+const { LG_AGENT_KEYS, lgAgentConfig, lgAgentCustomerOn, lgAgentModeOf, lgAgentEscalatePhone } = require('./_agent-config');
 
 const AGENT_OUTBOX = 'waMeta/agentOutbox';
 //  "סקיצה שנמחקה — פעיל" (בן, 3/11): מתג נפרד מ-AGENT_REPLY_ENABLED. דולק →
@@ -100,13 +100,13 @@ async function lgAgentEnqueue(db, { key, to, customerId, text, files, reason, ag
 //  מי הנמען **עכשיו**. { ok, phone, accountKey, reason }.
 //  קבוצה → עדיין ב-waGroups לאותו customerId. טלפון → צוות, או עדיין ב-waSenders
 //  לאותו customerId. לקוח (לא צוות) → גם בפיילוט.
-async function _liveRecipient(db, entry, staff, ben) {
+async function _liveRecipient(db, entry, staff, ben, cfg) {
   const cid = String(entry.customerId || '');
   if (_isGroup(entry.to)) {
     const link = (await db.ref('waGroups/' + _key(entry.to)).once('value')).val();
     if (!link || !link.customerId || String(link.customerId) !== cid || !cid)
       return { ok: false, reason: 'הקבוצה אינה מקושרת עוד ללקוח — לא נשלח' };
-    if ((await db.ref(PILOT + '/' + cid).once('value')).val() !== true)
+    if (!(await lgAgentCustomerOn(db, cid, cfg)))
       return { ok: false, reason: 'הלקוח אינו בפיילוט הסוכנים' };
     return { ok: true, phone: String(entry.to), accountKey: cid };
   }
@@ -121,7 +121,7 @@ async function _liveRecipient(db, entry, staff, ben) {
   }
   const link = await lgWaSenderLink(db, phone);
   if (!link || link.customerId !== cid || !cid) return { ok: false, reason: 'המספר אינו מקושר ללקוח — לא נשלח' };
-  if ((await db.ref(PILOT + '/' + cid).once('value')).val() !== true)
+  if (!(await lgAgentCustomerOn(db, cid, cfg)))
     return { ok: false, reason: 'הלקוח אינו בפיילוט הסוכנים' };
   return { ok: true, phone, accountKey: cid };
 }
@@ -295,7 +295,7 @@ async function lgAgentSendPending(db, opts) {
 
     let live, gate, loaded;
     try {
-      live = await _liveRecipient(db, entry, staff, ben);
+      live = await _liveRecipient(db, entry, staff, ben, cfg);
       if (live.ok) gate = provider.gate({ phone: live.phone, accountKey: live.accountKey, linked: true });
       if (live.ok && gate.allowed) loaded = await _loadFiles(db, entry, live);
     } catch (e) {

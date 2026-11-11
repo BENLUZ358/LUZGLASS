@@ -39,7 +39,7 @@ const { lgOkevEta, lgOkevEtaText } = require('./_agent-stats');
 const { QUOTE_HOLD_TEXT, lgQuoteText, lgQuoteStaffText, lgQuoteForText, lgQuoteNext, lgQuoteSync,
         lgQuoteFindWaiting, lgQuoteClaim, lgQuoteDone, lgQuoteRelease, AGENT_QUOTES } = require('./_agent-quote');
 const { PRICE_HOLD_TEXT, lgPriceStaffText, lgPriceClaimFor } = require('./_agent-price');
-const { lgAgentConfig, lgAgentModeOf, lgAgentOfRoute } = require('./_agent-config');
+const { lgAgentConfig, lgAgentCustomerOn, lgAgentModeOf, lgAgentOfRoute } = require('./_agent-config');
 const { lgRoomPost, lgRoomAskBenText, ASK_HOLD_TEXT, ROOM, ROOM_OPEN } = require('./_agent-room');
 const { lgLessonFind, lgLessonUsed, lgLessonAutoOk } = require('./_agent-lessons');
 
@@ -561,9 +561,9 @@ async function _act(db, key, rec, recRef, env, now, o) {
   // ארכיון: החיפוש ב-DB כאן (decide נשאר טהור). כשל בחיפוש → 'none' (שאול + "אני בודק")
   //  תיקון סופי 7: מתגים דולקים → מחפשים רק אחרי שער הפיילוט + הקישור (אחרת ממילא
   //  לא פועלים). מתגים כבויים (צל) → מחפשים, כדי ש-wouldAct יראה מה היה נשלח.
-  const _pilotOn = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
   const agent = lgAgentOfRoute(rec.route);
   const cfg = await lgAgentConfig(db);
+  const _pilotOn = id => lgAgentCustomerOn(db, id, cfg);
   const agentMode = lgAgentModeOf(cfg, agent, env);
   let archive;
   const _archiveGate = async () => agentMode !== 'reply'
@@ -608,7 +608,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null }
     : priceSkipped ? { priceSkipped: 'deadline' } : price ? { priceUsage: price.usage || null } : {};
   const staff = lgAgentStaff(env);
-  const _pilot = async id => !!id && (await db.ref(PILOT + '/' + id).once('value')).val() === true;
+  const _pilot = _pilotOn;
 
   // תיקון סופי 2: "בפיילוט" = אותו קישור שהשליחה בודקת (waGroups / waSenders).
   //  רשומה בלי linkVia (נרשמה לפני התיקון) — נבדק עכשיו. תשובת שאול (staff) —
@@ -624,7 +624,7 @@ async function _act(db, key, rec, recRef, env, now, o) {
   else if (agentMode !== 'reply') why = 'switches-off';
   // תשובת שאול — הנמען הוא הלקוח של הבקשה (לא השולח), ולכן הפיילוט שלו
   else if (rec.route === 'staff') { if (!(await _pilot(staffQuote && staffQuote.customerId))) why = 'not-pilot'; }
-  else if (rec.linked && !(cid && (await db.ref(PILOT + '/' + cid).once('value')).val() === true)) why = 'not-pilot';
+  else if (rec.linked && !(await _pilotOn(cid))) why = 'not-pilot';
   else if (!rec.linked && d.actions.some(a => a.type !== 'staff')) why = 'not-pilot';
   // "העברנו לשאול" בלי שאול מוגדר — עדיף לא לענות מאשר לשקר
   //  (הודעה לידיעה — notify — לא נחשבת: בלעדיה התשובה ללקוח עדיין נכונה)

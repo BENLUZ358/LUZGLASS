@@ -195,6 +195,16 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
       [r.acted, rec(db, 'K2').acted, rec(db, 'K2').wouldAct, Object.keys(outbox(db)).length],
       [false, false, [{ type: 'reply', text: 'הזמנה L1002 (סקיצה: כהן): קיבלנו, ההזמנה בבדיקה' }], 0]);
   }
+  {
+    //  עונה לכל הלקוחות: מקושר שלא בפיילוט → עונה; לא מקושר → לא
+    const db = seed(); await db.ref('waMeta/agentConfig').set({ agents: { okev: 'reply', markazan: 'reply' }, allCustomers: true });
+    put(db, 'K2a', R({ customerId: '999', chatId: PRIV2, sender: '0507777777', customerName: '', intent: 'status', ref: 'כהן' }));
+    const r = await run(db, 'K2a');
+    check('allCustomers → linked customer outside the pilot gets a reply', [r.acted, Object.keys(outbox(db)).length], [true, 1]);
+    put(db, 'K2b', R({ linked: false, customerId: '', intent: 'status', ref: 'כהן' }));
+    const r2 = await run(db, 'K2b');
+    check('allCustomers → unlinked number still not answered', [r2.acted, Object.keys(outbox(db)).length], [false, 1]);
+  }
   for (const env of [{ ...ON, AGENT_REPLY_ENABLED: 'false' }, { ...ON, AGENT_SHADOW_ENABLED: '' }]) {
     const db = seed(); put(db, 'K3', R({ intent: 'status', ref: 'כהן' }));
     const r = await run(db, 'K3', env);

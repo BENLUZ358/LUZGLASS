@@ -87,6 +87,50 @@ const ALL = { AGENT_SHADOW_ENABLED: 'true', AGENT_REPLY_ENABLED: 'true' };
     if (saved === undefined) delete process.env.AGENT_SHADOW_ENABLED; else process.env.AGENT_SHADOW_ENABLED = saved;
   }
 
+  /* ── עונה לכל הלקוחות + מייל להתראות (משימה 5) ── */
+  {
+    const run = (db, b) => C.lgAgentConfigSet(db, b, { by: 'x', now: NOW, env: SH });
+    const cfgOf = db => db._data.waMeta.agentConfig;
+    check('view defaults: allCustomers false, escalateEmail empty', [C.lgAgentConfigView(null, SH).allCustomers, C.lgAgentConfigView(null, SH).escalateEmail], [false, '']);
+    // כל צירופי מה שנשמר קודם / מה שנשמר עכשיו
+    for (const [before, step] of [
+      [{ allCustomers: true }, { agent: 'okev', mode: 'reply' }],
+      [{ escalateEmail: 'ben@x.co' }, { agent: 'okev', mode: 'reply' }],
+      [{ allCustomers: true, escalateEmail: 'ben@x.co' }, { escalatePhone: '0521234567' }],
+      [{ allCustomers: true }, { escalateEmail: 'ben@x.co' }],
+      [{ escalateEmail: 'ben@x.co' }, { allCustomers: true }],
+      [{ allCustomers: true, escalateEmail: 'ben@x.co' }, { agent: 'price', mode: 'off' }],
+    ]) {
+      const db = fakeDb({});
+      for (const k of Object.keys(before)) await run(db, { [k]: before[k] });
+      await run(db, step);
+      const exp = { allCustomers: !!(before.allCustomers || step.allCustomers), escalateEmail: step.escalateEmail || before.escalateEmail || '' };
+      check('saving ' + JSON.stringify(step) + ' keeps ' + JSON.stringify(before),
+        [!!cfgOf(db).allCustomers, cfgOf(db).escalateEmail || ''], [exp.allCustomers, exp.escalateEmail]);
+    }
+    const db = fakeDb({});
+    await run(db, { allCustomers: true });
+    check('saving an agent mode keeps allCustomers and escalateEmail', (await run(db, { escalateEmail: ' Ben@Luz.CO.il ' })).ok && (await run(db, { agent: 'okev', mode: 'reply' })).ok
+      && [cfgOf(db).allCustomers, cfgOf(db).escalateEmail, cfgOf(db).agents.okev], [true, 'ben@luz.co.il', 'reply']);
+    check('empty email clears it', (await run(db, { escalateEmail: '' })).ok && cfgOf(db).escalateEmail, '');
+    for (const [why, b] of [['bad email', { escalateEmail: 'ben@' }], ['email with space', { escalateEmail: 'a b@c.d' }],
+      ['email not a string', { escalateEmail: 5 }], ['allCustomers not boolean', { allCustomers: 'yes' }]]) {
+      const d = fakeDb({}); const r = await run(d, b);
+      check('rejects ' + why, [r.ok, !!r.code, d._data.waMeta], [false, true, undefined]);
+    }
+    check('view shows both fields', [C.lgAgentConfigView(cfgOf(db), SH).allCustomers, (await run(db, { escalateEmail: 'a@b.co' })).ok && C.lgAgentConfigView(cfgOf(db), SH).escalateEmail], [true, 'a@b.co']);
+    const pdb = fakeDb({ waMeta: { agentPilot: { 5: true } } });
+    check('lgAgentCustomerOn', [await C.lgAgentCustomerOn(pdb, '5', null), await C.lgAgentCustomerOn(pdb, '6', null), await C.lgAgentCustomerOn(pdb, '6', { allCustomers: true }),
+      await C.lgAgentCustomerOn(pdb, '', { allCustomers: true }), await C.lgAgentCustomerOn(pdb, '6', { allCustomers: 'true' })], [true, false, true, false, false]);
+    const sv = process.env.AGENT_SHADOW_ENABLED; process.env.AGENT_SHADOW_ENABLED = 'true';
+    const ddb = fakeDb({});
+    const r1 = await handleAdmin({ action: 'agent-config-set', allCustomers: true }, { db: ddb, by: 'x', now: NOW });
+    const r2 = await handleAdmin({ action: 'agent-config-set', escalateEmail: 'ben@luz.co.il' }, { db: ddb, by: 'x', now: NOW });
+    const st = await handleAdmin({ action: 'agent-status' }, { db: ddb, by: 'x', now: NOW });
+    check('drain: both new bodies + status returns them', [r1.ok, r2.ok, st.config.allCustomers, st.config.escalateEmail], [true, true, true, 'ben@luz.co.il']);
+    if (sv === undefined) delete process.env.AGENT_SHADOW_ENABLED; else process.env.AGENT_SHADOW_ENABLED = sv;
+  }
+
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll agent-config checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });

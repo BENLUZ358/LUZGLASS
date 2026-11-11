@@ -211,6 +211,7 @@ body{background:var(--bg);}
       <h2 id="hSw"><span data-icon="settings"></span>מתגים</h2>
       <p class="hint">כבוי — לא עושה כלום. שקט — רק רושם מה היה עונה. עונה — עונה באמת, רק ללקוחות שברשימה למטה.</p>
       <div id="switches"><div class="hint">טוען…</div></div>
+      <div id="allCust"></div>
       <div id="pilot"></div>
       <div id="benLine"></div>
     </section>
@@ -309,7 +310,7 @@ function mergeRoom() {
   ROOM = Object.assign({}, OLD_OPEN, ROOM_WIN);
 }
 const OPEN_DAYS = new Set();
-let period = 'today', shown = PAGE, roomShown = ROOM_PAGE, FILTER = '', ANSWERING = '', DRAFT = '', EDIT_BEN = false;
+let period = 'today', shown = PAGE, roomShown = ROOM_PAGE, FILTER = '', ANSWERING = '', DRAFT = '', EDIT_BEN = false, EDIT_MAIL = false;
 //  MODE — מה תיבת הכתיבה שולחת: '' ענה / 'correct' תקן הצעה / 'fix' תקן תשובה שהסוכן נתן לבד
 let MODE = '';
 //  מה הסוכן עשה — התקופה (היום / אתמול / 7 ימים) והכמות שמוצגת
@@ -332,6 +333,8 @@ async function drain(body) {
 }
 //  המתגים: מה שנשמר במסך; עוד לא נשמר — מה שהשרת אומר שהסוכנים עושים היום
 const cfgView = () => CFG && CFG.agents ? CFG : (STATUS && STATUS.config) || null;
+const allCustomersOn = () => ((CFG && CFG.agents ? CFG : (STATUS && STATUS.config) || {}).allCustomers) === true;
+const benMail = () => String((CFG && CFG.escalateEmail) || (STATUS && STATUS.config && STATUS.config.escalateEmail) || '');
 const benPhone = () => String((CFG && CFG.escalatePhone) || (STATUS && STATUS.config && STATUS.config.escalatePhone) || '0547725552');
 
 //  לקוחות מקושרים (קבוצה / מספר) — לשמות ולבחירת לקוח
@@ -351,6 +354,8 @@ function renderSwitches() {
   $('switches').innerHTML = STATUS || CFG ? lgAdSwitchesHtml(cfgView(), !STATUS || STATUS.shadow === true) : '<div class="hint">לא הצלחתי לקרוא את ההגדרות.</div>';
   const linked = linkedCustomers();
   const free = Object.keys(linked).filter(id => PILOT[id] !== true).sort((a, b) => linked[a].localeCompare(linked[b], 'he'));
+  $('allCust').innerHTML = `<label class="ben"><input type="checkbox" id="allCustBox" data-allcust ${allCustomersOn() ? 'checked' : ''}> <b>עונה לכל הלקוחות</b></label>
+    ${allCustomersOn() ? '<div class="hint">הסוכנים עונים לכל לקוח מקושר, גם מי שלא ברשימה. מספר שלא מקושר — לא עונים לו. אפשר להמשיך לערוך את הרשימה.</div>' : ''}`;
   $('pilot').innerHTML = `<div class="sub">"עונה" חל על ${E(lgAgPilotCount(PILOT))} לקוחות</div>
     ${lgAgPilotListHtml(PILOT, nameOf) || '<div class="hint">אין עדיין לקוחות ברשימה — "עונה" לא יענה לאף אחד.</div>'}
     ${free.length ? `<div class="addp"><select id="pilotPick" aria-label="לקוח להוספה">
@@ -359,7 +364,11 @@ function renderSwitches() {
   $('benLine').innerHTML = `<div class="sub">שאלות שהסוכנים לא יודעים</div>
     ${EDIT_BEN ? `<div class="addp"><input id="benPick" type="tel" inputmode="tel" dir="ltr" value="${E(benPhone())}" aria-label="מספר לשאלות">
         <button type="button" class="sbtn is-primary" data-bensave>שמור</button><button type="button" class="sbtn" data-benedit="0">ביטול</button></div>`
-      : `<div class="ben">נשלחות אליך בוואטסאפ למספר <b>${E(benPhone())}</b><button type="button" class="sbtn" data-benedit="1">שנה</button></div>`}`;
+      : `<div class="ben">נשלחות אליך בוואטסאפ למספר <b>${E(benPhone())}</b><button type="button" class="sbtn" data-benedit="1">שנה</button></div>`}
+    <div class="sub">מייל להתראות כשהוואטסאפ לא עובד</div>
+    <div id="benMail">${EDIT_MAIL ? `<div class="addp"><input id="mailPick" type="email" dir="ltr" value="${E(benMail())}" aria-label="מייל להתראות">
+        <button type="button" class="sbtn is-primary" data-mailsave>שמור</button><button type="button" class="sbtn" data-mailedit="0">ביטול</button></div>`
+      : `<div class="ben">${benMail() ? `ההתראות יגיעו גם למייל <b dir="ltr">${E(benMail())}</b>` : 'עוד לא הוגדר מייל'}<button type="button" class="sbtn" data-mailedit="1">${benMail() ? 'שנה' : 'הוסף'}</button></div>`}</div>`;
 }
 
 // ─── 2. סיכום המנהל ──────────────────────────────────────────────────
@@ -565,7 +574,9 @@ document.addEventListener('click', async ev => {
   if (ev.target.closest('[data-ancancel]')) { ANSWERING = ''; DRAFT = ''; MODE = ''; renderRoom(); return; }
   const be = ev.target.closest('[data-benedit]');
   if (be) { EDIT_BEN = be.dataset.benedit === '1'; renderSwitches(); return; }
-  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave],[data-roomclose],[data-lessonok],[data-lessondel],[data-lessongen]');
+  const me = ev.target.closest('[data-mailedit]');
+  if (me) { EDIT_MAIL = me.dataset.mailedit === '1'; renderSwitches(); return; }
+  const b = ev.target.closest('[data-dismiss],[data-agv],[data-agpilot],[data-addpilot],[data-dellive],[data-agmode],[data-ansend],[data-bensave],[data-mailsave],[data-allcust],[data-roomclose],[data-lessonok],[data-lessondel],[data-lessongen]');
   if (!b) return;
   let body;
   if (b.dataset.dismiss) body = { action: 'agent-dismiss', kind: b.dataset.dismiss, key: b.dataset.key, ver: Number(b.dataset.ver) };
@@ -595,6 +606,12 @@ document.addEventListener('click', async ev => {
     body = { action: 'agent-lesson-general', id: b.dataset.lessongen, on };
   }
   else if (b.dataset.roomclose) body = { action: 'agent-room-close', key: b.dataset.roomclose };
+  else if (b.hasAttribute('data-allcust')) {
+    const turnOn = !!b.checked;
+    if (turnOn && !confirm('הסוכנים יענו לכל לקוח מקושר, לא רק לרשימה. להדליק?')) { b.checked = false; return; }
+    body = { action: 'agent-config-set', allCustomers: turnOn };
+  }
+  else if (b.hasAttribute('data-mailsave')) body = { action: 'agent-config-set', escalateEmail: (($('mailPick') || {}).value || '').trim() };
   else if (b.hasAttribute('data-bensave')) body = { action: 'agent-config-set', escalatePhone: ($('benPick') || {}).value || '' };
   else if (b.hasAttribute('data-dellive')) {
     const turnOn = b.dataset.dellive === '1';
@@ -604,7 +621,7 @@ document.addEventListener('click', async ev => {
   else { const pick = $('pilotPick'); if (!pick || !pick.value) return; body = { action: 'agent-pilot', customerId: pick.value, on: true }; }
   b.disabled = true;
   const r = await drain(body);   // הרשימות מתעדכנות מההאזנה
-  if (!r.ok) { b.disabled = false; toast(r.message, true); return; }
+  if (!r.ok) { b.disabled = false; if (b.type === 'checkbox') b.checked = !b.checked; toast(r.message, true); return; }
   if (body.action === 'agent-dismiss') toast('הוסר מהרשימה');
   else if (body.action === 'agent-room-close') toast('נסגר — לא יעלה שוב עד שהבעיה תיעלם');
   //  מה קרה באמת (תיקון סקירה 10/11): נשלח / עדיין בתור / לא נשלח — והשאלה חוזרת לפתוחה
@@ -618,6 +635,8 @@ document.addEventListener('click', async ev => {
     renderRoom();
   }
   else if (body.action === 'agent-config-set' && body.escalatePhone != null) { EDIT_BEN = false; toast('נשמר'); }
+  else if (body.action === 'agent-config-set' && body.escalateEmail != null) { EDIT_MAIL = false; renderSwitches(); toast(body.escalateEmail ? 'נשמר' : 'המייל הוסר'); }
+  else if (body.action === 'agent-config-set' && body.allCustomers != null) toast(body.allCustomers ? 'עונה לכל הלקוחות' : 'עונה רק ללקוחות ברשימה');
   else if (body.action === 'agent-config-set') toast(lgRoomAgentName(body.agent) + ': ' + ({ off: 'כבוי', shadow: 'שקט', reply: 'עונה' }[body.mode]));
 });
 ['fQ', 'fRoute', 'fVerdict'].forEach(id => $(id).addEventListener(id === 'fQ' ? 'input' : 'change', () => { shown = PAGE; renderLog(); }));

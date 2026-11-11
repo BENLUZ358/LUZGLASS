@@ -326,6 +326,8 @@ async function handleAdmin(body, deps) {
     const body2 = {};
     if (Object.prototype.hasOwnProperty.call(b, 'agent')) { body2.agent = b.agent; body2.mode = b.mode; }
     if (Object.prototype.hasOwnProperty.call(b, 'escalatePhone')) body2.escalatePhone = b.escalatePhone;
+    if (Object.prototype.hasOwnProperty.call(b, 'allCustomers')) body2.allCustomers = b.allCustomers;
+    if (Object.prototype.hasOwnProperty.call(b, 'escalateEmail')) body2.escalateEmail = b.escalateEmail;
     return require('./_agent-config').lgAgentConfigSet(deps.db, body2, { by: String(deps.by || ''), now: deps.now });
   }
   //  agent-dismiss: "טופל" על כרטיס ב"דורש טיפול" — הסתרה בלבד, הרשומה עצמה לא
