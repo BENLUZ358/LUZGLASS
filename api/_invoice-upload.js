@@ -80,8 +80,13 @@ async function heartbeat(body, deps) {
   if (!hb) return _fail(400, 'bad-heartbeat');
   const now = deps.now || Date.now();
   await deps.db.ref(W.WATCHERS + '/' + hb.pc).set({ at: now, pending: hb.pending, lastPrintError: hb.lastPrintError, version: hb.version });
+  //  תור הוואטסאפ מהשרת — ראשון, כדי שהודעה שנתקעה תצא גם בלי דף פתוח (מתג WA_SERVER_DRAIN). ר' api/_wa-server-drain.js
   try {
-    await (deps.watchRun || W.lgAgentWatchRun)(deps.db, { env: deps.env || process.env, now });
+    await (deps.waDrain || require('./_wa-server-drain').lgWaServerDrain)(deps.db, { env: deps.env || process.env, now });
+  } catch (e) { console.error('invoice-pdf-upload: wa server drain failed', e && e.name); }
+  //  הבקשה כולה מתחת ל-60ש׳: שליחה עד 18ש׳, בדיקות עד 30ש׳
+  try {
+    await (deps.watchRun || W.lgAgentWatchRun)(deps.db, { env: deps.env || process.env, now, deadline: Date.now() + 30 * 1000 });
   } catch (e) { console.error('invoice-pdf-upload: watch failed', e && e.name); }
   //  "מוכן לאיסוף" שלא יצא מהדף (בן, 11/11) — לא תלוי במתגי הסוכנים. ר' api/_ready-net.js
   try {

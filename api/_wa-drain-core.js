@@ -98,14 +98,15 @@ async function _invoiceDelivery(db, invoiceKey, outboxKey, out) {
 }
 
 //  פרוסה אחת של התור. מחזיר { results, processed, state? }.
-async function drainKeys(db, provider, keys, by, started) {
+//  budgetMs — תקציב אחר מ-BUDGET_MS (השליחה מהדופק, api/_wa-server-drain.js, מקבלת פחות).
+async function drainKeys(db, provider, keys, by, started, budgetMs = BUDGET_MS) {
   let state = null;
   const results = [];
   let processed = 0;
 
   for (const key of keys) {
     if (processed >= provider.maxPerRun)         break;
-    if (Date.now() - started > BUDGET_MS)        break;
+    if (Date.now() - started > budgetMs)         break;
 
     // ── חלון השליחה, לפני התפיסה ──
     //
@@ -258,7 +259,7 @@ async function drainKeys(db, provider, keys, by, started) {
     //  נשאר בדיוק כפי שהיה. אצל green ההמתנה כבר קרתה לפני השליחה,
     //  והמתנה נוספת כאן הייתה מכפילה את המרווח.
     if (!provider.globalSlot &&
-        processed < provider.maxPerRun && Date.now() - started < BUDGET_MS) {
+        processed < provider.maxPerRun && Date.now() - started < budgetMs) {
       await sleep(provider.nextGap());
     }
   }
@@ -267,14 +268,14 @@ async function drainKeys(db, provider, keys, by, started) {
 
 //  שליחה מיידית מהשרת, בלי מסך אדמין (חשבונית שהודפסה). בודק חיבור כמו
 //  ה-handler; מנותק → ההודעות נשארות בתור ל-drain הבא.
-async function drainNow(db, keys, by) {
+async function drainNow(db, keys, by, opts = {}) {
   const provider = lgWaProvider();
   if (!provider.configured) return { results: [], processed: 0, state: 'not-configured' };
   if (provider.checksState) {
     const st = await provider.getState();
     if (!isLive(st.state)) return { results: [], processed: 0, state: st.state };
   }
-  return drainKeys(db, provider, keys, by, Date.now());
+  return drainKeys(db, provider, keys, by, Date.now(), opts.budgetMs > 0 ? opts.budgetMs : BUDGET_MS);
 }
 
 module.exports = { drainKeys, drainNow, recordState, isLive, BUDGET_MS, WA_STATE };
