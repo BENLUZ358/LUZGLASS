@@ -33,6 +33,15 @@ function fakeDb(initial) {
   //  סמנטיקה כמו RTDB: orderByChild ממיין לפי ערך הילד ואז לפי המפתח,
   //  equalTo מסנן, limitToFirst חותך אחרי הסינון.
   function runQuery(v, q) {
+    if (v != null && typeof v === 'object' && q.byKey) {
+      //  orderByKey: לפי המפתח בלבד (RTDB — בלי אינדקס)
+      let ks = Object.keys(v).sort();
+      if ('start' in q) ks = ks.filter(k => k >= String(q.start));
+      if ('end' in q) ks = ks.filter(k => k <= String(q.end));
+      if (q.limit != null) ks = ks.slice(0, q.limit);
+      const o = {}; ks.forEach(k => { o[k] = v[k]; });
+      return snapOf(ks.length ? o : undefined, ks);
+    }
     if (v == null || typeof v !== 'object' || !q.by) return snapOf(v);
     const cv = k => (v[k] || {})[q.by];
     const rank = x => x == null ? 0 : typeof x === 'boolean' ? 1 : typeof x === 'number' ? 2 : 3;
@@ -56,6 +65,7 @@ function fakeDb(initial) {
       const q = {};
       const self = {
         orderByChild: c => { q.by = c; return self; },
+        orderByKey:   () => { q.byKey = true; return self; },
         equalTo:      x => { q.eq = x; return self; },
         startAt:      x => { q.start = x; return self; },
         endAt:        x => { q.end = x; return self; },

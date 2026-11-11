@@ -112,68 +112,82 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
     check('master switch off: nothing', room(db).length, 0);
   }
 
-  // 4. שליחה ללקוח שנכשלה, ארכיון "עונה": ניסיון חוזר אחד, ואז צהוב (בדיקות החשבוניות — פעם ב-10 דק')
+  // 4. שליחה ללקוח שנכשלה, ארכיון "עונה" — עבר לשומרים (_agent-guards.js, 11/11): ניסיון חוזר אחד רק על כשל ברור
+  //    (כאן: וואטסאפ מנותק בזמן השליחה), בשיחה אחת בחדר; נכשל שוב → בן (צהוב). בדיקות החשבוניות — פעם ב-10 דק'.
+  //    ⚠️ שורה ישנה בלי failureKind / נמען / רשת → לא ברור אם יצאה → ישר לבן (ר' 4b).
+  const WA_OK = { state: 'authorized' };
+  const failedRow = extra => ({ kind: 'invoice', state: 'failed', attempts: 3, failureKind: 'disconnected', createdAt: NOW - H, ...extra });
   {
     const inv = { k1: { state: 'ready', client: 'פלג', docNumber: '67600', createdAt: NOW - H, orderIds: ['o1'],
-                        delivery: { state: 'failed', channel: 'whatsapp', reason: 'מנותק', at: NOW - 10 * MIN } } };
-    const db = mk({ invoicePdf: inv, waMeta: { invoiceWatcher: { A: hb([]) } } }, CFG('reply'));
+                        delivery: { state: 'failed', channel: 'whatsapp', outboxKey: 'w1', reason: 'מנותק', at: NOW - 10 * MIN } } };
+    const db = mk({ invoicePdf: inv, waOutbox: { w1: failedRow() }, waMeta: { whatsapp: WA_OK, invoiceWatcher: { A: hb([]) } } }, CFG('reply'));
     const tries = [];
     const deliver = async (d, key) => { tries.push(key); };
     const at = m => { db._data.waMeta.invoiceWatcher.A.at = NOW + m * MIN; return { env: ENV, now: NOW + m * MIN, deliver, sendPending: async () => {} }; };
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW, deliver, sendPending: async () => {} });
-    check('delivery failed: retried once via deliver, grey line', [tries, room(db).map(e => e.kind)], [['k1'], ['info']]);
+    check('delivery failed (clear failure): retried once via deliver, one "found" line in a thread',
+      [tries, room(db).map(e => e.kind + '/' + e.step), !!room(db)[0].thread], [['k1'], ['info/found'], true]);
     await W.lgAgentWatchRun(db, at(2));
     check('invoice checks wait 10 minutes: nothing new a minute later', [tries.length, room(db).length], [1, 1]);
     await W.lgAgentWatchRun(db, at(11));
-    check('still failing: no second retry, yellow now', [tries.length, room(db).map(e => e.kind + '/' + (e.state || ''))], [1, ['info/', 'ask/open']]);
+    check('still failing: no second retry, yellow now — same thread',
+      [tries.length, room(db).map(e => e.kind + '/' + (e.state || '')), room(db)[1].thread === room(db)[0].thread], [1, ['info/', 'ask/open'], true]);
     db._data.invoicePdf.k1.delivery = { state: 'queued', channel: 'email', at: NOW + 12 * MIN };
     await W.lgAgentWatchRun(db, at(22));
     check('I1: delivery only queued → not "תוקן", problem kept', [room(db).length, !!db._data.waMeta.agentWatch.problems.deliv_k1], [2, true]);
     db._data.invoicePdf.k1.delivery = { state: 'sent', at: NOW + 25 * MIN };
     await W.lgAgentWatchRun(db, at(33));
-    check('sent later: question closed, "תוקן"', [room(db)[1].state, /תוקן/.test(room(db)[2].text)], ['answered', true]);
+    check('sent later: question closed, "נפתר ✓" in the thread', [room(db)[1].state, room(db)[2].step, /✓/.test(room(db)[2].text)], ['answered', 'done', true]);
     check('I1: retried kept after the fix', !!db._data.waMeta.agentWatch.retried.k1, true);
-    db._data.invoicePdf.k1.delivery = { state: 'failed', channel: 'whatsapp', reason: 'שוב', at: NOW + 40 * MIN };
+    db._data.invoicePdf.k1.delivery = { state: 'failed', channel: 'whatsapp', outboxKey: 'w1', reason: 'שוב', at: NOW + 40 * MIN };
     await W.lgAgentWatchRun(db, at(44));
     check('I1: same invoice fails again → never retried twice, straight to yellow', [tries.length, room(db).slice(-1)[0].kind], [1, 'ask']);
     db._data.invoicePdf.k1.createdAt = NOW + 15 * 24 * H;   // שתישאר בחלון
     await W.lgAgentWatchRun(db, at(15 * 24 * 60));
-    check('I1: retried forgotten after 14 days', ((db._data.waMeta.agentWatch || {}).retried || {}).k1, undefined);
+    //  הזיכרון נמחק אחרי 14 יום (כאן החשבונית "הוזזה" לחלון, ולכן אותה ריצה מנסה שוב ורושמת זיכרון חדש)
+    check('I1: retried forgotten after 14 days (the old memory is gone; a new one is written by this run)',
+      [((db._data.waMeta.agentWatch || {}).retried || {}).k1.at, tries.length], [NOW + 15 * 24 * H, 2]);
   }
 
-  // 4b. C1: ניסיון חוזר רק ב"עונה", רק לכשל מהשעתיים האחרונות, לא לרשומה שפג תוקפה
+  // 4b. C1 (עודכן 11/11): ניסיון חוזר רק ב"עונה", רק על כשל ברור, עד 48 שעות; לא לשורה שאולי יצאה
   {
-    const fail = (extra, dv) => ({ invoicePdf: { k1: { state: 'ready', client: 'פלג', docNumber: '67600', createdAt: NOW - H, orderIds: ['o1'],
-      delivery: { state: 'failed', channel: 'whatsapp', reason: 'מנותק', at: NOW - 10 * MIN, ...dv } } },
-      waMeta: { invoiceWatcher: { A: hb([]) } }, ...extra });
-    for (const [name, cfg, dv, extra, kind] of [
-      ['C1: no agentConfig → no deliver, no room line (release all-off)', null, {}, {}, null],
-      ['C1: shadow → no deliver, yellow', CFG('shadow'), {}, {}, 'ask'],
-      ['C1: reply but failed 3h ago → no deliver, yellow', CFG('reply'), { at: NOW - 3 * H }, {}, 'ask'],
-      ['C1: reply but outbox entry expired → no deliver (never reset), yellow', CFG('reply'), { outboxKey: 'w1' }, { waOutbox: { w1: { state: 'expired' } } }, 'ask'],
+    const fail = (extra, dv, row, inv) => ({ invoicePdf: { k1: { state: 'ready', client: 'פלג', docNumber: '67600', createdAt: NOW - H, orderIds: ['o1'],
+      delivery: { state: 'failed', channel: 'whatsapp', outboxKey: 'w1', reason: 'מנותק', at: NOW - 10 * MIN, ...dv }, ...inv } },
+      waOutbox: { w1: failedRow(row) }, waMeta: { whatsapp: WA_OK, invoiceWatcher: { A: hb([]) } }, ...extra });
+    for (const [name, cfg, dv, row, inv, steps, n] of [
+      ['C1: no agentConfig → no deliver, no room line (release all-off)', null, {}, {}, {}, [], 0],
+      ['C1: shadow → no deliver, "הייתי שולח שוב"', CFG('shadow'), {}, {}, {}, ['found', 'would'], 0],
+      ['C1: reply, failed 3h ago (was: too late) → now resent (window 48h)', CFG('reply'), { at: NOW - 3 * H }, {}, {}, ['found', 'need-ben'], 1],
+      ['C1: reply, invoice older than 48h → not looked at', CFG('reply'), {}, {}, { createdAt: NOW - 50 * H }, [], 0],
+      ['C1: reply, provider timed out (network) → no deliver, yellow', CFG('reply'), {}, { failureKind: 'network' }, {}, ['found', 'need-ben'], 0],
+      ['C1: reply, old row without failureKind → no deliver, yellow', CFG('reply'), {}, { failureKind: null }, {}, ['found', 'need-ben'], 0],
+      ['C1: reply, row expired after an unclear attempt → no deliver (never reset), yellow', CFG('reply'), {},
+        { state: 'expired', attempts: 2, failureKind: 'network' }, {}, ['found', 'need-ben'], 0],
     ]) {
-      const db = mk(fail(extra, dv), cfg);
+      const db = mk(fail({}, dv, row, inv), cfg);
       const tries = [];
       await W.lgAgentWatchRun(db, { env: ENV, now: NOW, deliver: async (d, k) => { tries.push(k); }, sendPending: async () => {} });
       db._data.waMeta.invoiceWatcher.A.at = NOW + 11 * MIN;
       await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 11 * MIN, deliver: async (d, k) => { tries.push(k); }, sendPending: async () => {} });
-      check(name, [tries.length, room(db).map(e => e.kind), ((db._data.waOutbox || {}).w1 || {}).state || null],
-        [0, kind ? [kind] : [], extra.waOutbox ? 'expired' : null]);
+      check(name, [tries.length, room(db).map(e => e.step), n ? null : db._data.waOutbox.w1.state],
+        [n, steps, n ? null : (row.state || 'failed')]);
     }
   }
 
   // 4c. C2: נרשם לפני שפועלים; ניסיון אחד לכל ריצה; עצירה בזמן; ריצה שנהרגה לא חוזרת על הניסיון
   {
     const two = { invoicePdf: {
-      k1: { state: 'ready', docNumber: '1', createdAt: NOW - H, delivery: { state: 'failed', at: NOW - 5 * MIN } },
-      k2: { state: 'ready', docNumber: '2', createdAt: NOW - H, delivery: { state: 'failed', at: NOW - 5 * MIN } } },
-      waMeta: { invoiceWatcher: { A: hb([]) } } };
+      k1: { state: 'ready', docNumber: '1', createdAt: NOW - H, delivery: { state: 'failed', channel: 'whatsapp', outboxKey: 'w1', at: NOW - 5 * MIN } },
+      k2: { state: 'ready', docNumber: '2', createdAt: NOW - H, delivery: { state: 'failed', channel: 'whatsapp', outboxKey: 'w2', at: NOW - 5 * MIN } } },
+      waOutbox: { w1: failedRow({ failureKind: 'rate' }), w2: failedRow({ failureKind: 'rate' }) },
+      waMeta: { whatsapp: WA_OK, invoiceWatcher: { A: hb([]) } } };
     let db = mk(two, CFG('reply'));
     const seen = [];
     const deliver = async (d, k) => { const w = d._data.waMeta.agentWatch || {};
       seen.push([k, !!(w.retried && w.retried[k] && w.retried[k].at), !!(w.problems && w.problems['deliv_' + k])]); };
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW, deliver, sendPending: async () => {} });
     check('C2: retried + problem written before deliver; one retry per run', seen, [['k1', true, true]]);
+    check('C2: both invoices in one grouped thread', [room(db).length, /^grp_invoice_/.test(room(db)[0].thread)], [1, true]);
     db._data.waMeta.invoiceWatcher.A.at = NOW + 11 * MIN;
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 11 * MIN, deliver, sendPending: async () => {} });
     check('C2: the other invoice is retried on the next run', seen.map(x => x[0]), ['k1', 'k2']);
@@ -183,17 +197,17 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW, deliver, deadline: Date.now() - 1, sendPending: async () => {} });
     check('C2: past the deadline → stops, nothing done', [seen.length - n0, room(db).length], [0, 0]);
 
-    //  ריצה שנהרגה אחרי כתיבת retried (כאן: הכתיבה הבאה — רשומת הבעיה — זורקת)
-    db = mk({ invoicePdf: { k1: two.invoicePdf.k1 }, waMeta: two.waMeta }, CFG('reply'));
+    //  ריצה שנהרגה אחרי כתיבת retried (כאן: הכתיבה הבאה לרשומת הבעיה — זו שאחרי retried — זורקת).
+    //  השומרים רצים בתוך try של הדופק — הריצה לא נופלת, אבל הניסיון לא חוזר.
+    db = mk({ invoicePdf: { k1: two.invoicePdf.k1 }, waOutbox: { w1: two.waOutbox.w1 }, waMeta: two.waMeta }, CFG('reply'));
     const real = db.ref.bind(db);
-    let armed = true;
-    db.ref = p => { const r = real(p); if (armed && /agentWatch\/problems\//.test(String(p))) r.set = async () => { armed = false; throw new Error('killed'); }; return r; };
+    let n = 0;
+    db.ref = p => { const r = real(p); if (/agentWatch\/problems\/deliv_/.test(String(p))) { const s0 = r.set; r.set = async v => { if (++n === 2) throw new Error('killed'); return s0(v); }; } return r; };
     const tries = [];
-    let threw = false;
-    try { await W.lgAgentWatchRun(db, { env: ENV, now: NOW, deliver: async (d, k) => { tries.push(k); }, sendPending: async () => {} }); } catch (_) { threw = true; }
+    await W.lgAgentWatchRun(db, { env: ENV, now: NOW, deliver: async (d, k) => { tries.push(k); }, sendPending: async () => {} });
     db._data.waMeta.invoiceWatcher.A.at = NOW + 11 * MIN;
     await W.lgAgentWatchRun(db, { env: ENV, now: NOW + 11 * MIN, deliver: async (d, k) => { tries.push(k); }, sendPending: async () => {} });
-    check('C2: killed run after the retried write → next run does not retry', [threw, tries], [true, []]);
+    check('C2: killed run after the retried write → next run does not retry', [!!db._data.waMeta.agentWatch.retried.k1, tries], [true, []]);
   }
 
   // 5. הדפסה שמחכה לרישום יותר משעה — רק ללקוח שיש לו משתמש (known נשמר בהעלאה)
@@ -216,8 +230,9 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
     check('printed >1h, known customer → yellow (even old); unknown / fresh → nothing; failure older than 48h → not looked at',
       room(db).map(e => [e.kind, (/677\d\d/.exec(e.text) || [])[0]]).sort(), [['ask', '67700'], ['ask', '67703']]);
     check('I2: users never read', reads.filter(r => r.startsWith('users')), []);
-    check('I2: invoicePdf read only by state=printed and createdAt from 48h',
-      reads.filter(r => r.startsWith('invoicePdf?')).sort(), ['invoicePdf?orderByChild:createdAt&startAt:' + (NOW - 48 * H), 'invoicePdf?orderByChild:state&equalTo:printed']);
+    check('I2: invoicePdf read only by state=printed / awaiting (guards, row 11) and createdAt from 48h — once each',
+      reads.filter(r => r.startsWith('invoicePdf?')).sort(), ['invoicePdf?orderByChild:createdAt&startAt:' + (NOW - 48 * H),
+                                                            'invoicePdf?orderByChild:state&equalTo:awaiting', 'invoicePdf?orderByChild:state&equalTo:printed']);
     //  I2: בדיקות החשבוניות פעם ב-10 דק'; I3: נעלמה מהשאילתה ≠ תוקנה
     db._data.invoicePdf.p1.state = 'ready';
     db._data.waMeta.invoiceWatcher.A.at = NOW + 2 * MIN;
@@ -236,8 +251,8 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
     const T = NOW + 49 * H;
     db._data.waMeta.invoiceWatcher.A.at = T;
     await W.lgAgentWatchRun(db, { env: ENV, now: T });
-    check('I3: fell out of the window, still failing → kept, no "תוקן"',
-      [room(db).length, room(db)[0].state, !!db._data.waMeta.agentWatch.problems.deliv_k1], [1, 'open', true]);
+    check('I3: fell out of the window, still failing → kept, no "תוקן" (unclear failure → Ben)',
+      [room(db).map(e => e.step), room(db)[1].state, !!db._data.waMeta.agentWatch.problems.deliv_k1], [['found', 'need-ben'], 'open', true]);
   }
 
   // 6. קולט: מייל שנכשל → צהוב פעם אחת; משלוח פתוח יותר מ-30 שעות → אפור פעם אחת
