@@ -63,6 +63,42 @@ check('answer that was blocked says why', blocked.includes('לא נשלח: הס�
 const att = ctx.lgRoomBubbleHtml(Object.assign({ key: 'k7' }, room.k7), ob);
 check('attach suggestion (ask without state): not a question for Ben', [att.includes('data-roomanswer'), /rb-info/.test(att)], [false, true]);
 
+// ─── שיחות (thread) ───────────────────────────────────────────────────
+const TH = {
+  t1: { at: NOW - 5 * H, agent: 'okev', kind: 'info', thread: 'ob:1', to: 'archive', step: 'handoff', text: 'חשבונית 67550 לא נשלחה' },
+  t2: { at: NOW - 4 * H, agent: 'archive', kind: 'info', thread: 'ob:1', step: 'done', text: 'נשלח ✓' },
+  t3: { at: NOW - 3 * H, agent: 'okev', kind: 'info', thread: 'wa:7', step: 'found', text: 'מוכן ל-L1240 נכשל פעמיים' },
+  t4: { at: NOW - 2 * H, agent: 'okev', kind: 'ask', state: 'open', internal: true, thread: 'wa:7', step: 'need-ben', text: 'חסר טלפון', customerName: 'עוקב', question: 'חסר טלפון' },
+  t5: { at: NOW - 1 * H, agent: 'price', kind: 'info', thread: 'sh:1', step: 'would', text: 'הייתי שולח שוב' },
+  t6: { at: NOW - 30 * 60000, agent: 'kolet', kind: 'info', thread: 'self:1', step: 'found', text: 'סקיצה תקועה' },
+  t7: { at: NOW - 29 * 60000, agent: 'kolet', kind: 'info', thread: 'self:1', step: 'done', text: 'שחררתי' },
+};
+const mix = Object.assign({}, room, TH);
+const ths = J(ctx.lgRoomThreads(mix));
+const tOf = id => ths.find(t => t.thread === id);
+check('threads: rows grouped by thread, oldest first inside', tOf('ob:1').rows.map(r => r.key), ['t1', 't2']);
+check('thread states', [tOf('wa:7').state, tOf('sh:1').state, tOf('self:1').state, tOf('ob:1').state], ['ben', 'would', 'done', 'done']);
+check('a handoff-only thread is still open', J(ctx.lgRoomThreads({ t1: TH.t1 }))[0].state, 'open');
+check('thread lastAt = newest row', tOf('wa:7').lastAt, TH.t4.at);
+check('open threads (incl. open ask) come first, then newest first',
+  ths.map(t => t.isOpen).join('') === ths.map(t => t.isOpen).sort().reverse().join('') && ths.every((t, i, a) => !a[i + 1] || a[i + 1].isOpen !== t.isOpen || a[i + 1].lastAt <= t.lastAt), true);
+check('old rows without a thread: each its own thread', J(ctx.lgRoomThreads(room)).map(t => t.rows.length + t.rows[0].key).sort(), ['1k1', '1k2', '1k3', '1k4', '1k7']);
+check('old open question is an open thread, old info is closed', [J(ctx.lgRoomThreads(room)).find(t => t.rows[0].key === 'k2').isOpen, J(ctx.lgRoomThreads(room)).find(t => t.rows[0].key === 'k1').isOpen], [true, false]);
+check('filter by agent keeps threads that agent took part in', J(ctx.lgRoomThreads(mix, { agent: 'archive' })).map(t => t.thread).includes('ob:1'), true);
+const one = ctx.lgRoomThreadHtml(ths.find(t => t.thread === 'self:1'), {});
+check('same finder and owner → one line "מצאתי → עשיתי" joining both texts', [one.includes('מצאתי → עשיתי'), one.includes('סקיצה תקועה'), one.includes('שחררתי'), (one.match(/class="rb /g) || []).length], [true, true, true, 1]);
+const hand = ctx.lgRoomThreadHtml(ths.find(t => t.thread === 'ob:1'), {});
+check('handoff between agents: two bubbles, "← ארכיון" on the sender, ✓ נפתר', [(hand.match(/class="rb /g) || []).length, hand.includes('← ארכיון'), hand.includes('נפתר')], [2, true, true]);
+const ben = ctx.lgRoomThreadHtml(ths.find(t => t.thread === 'wa:7'), {});
+check('need-ben thread: ⚠ label and the close button', [ben.includes('צריך את בן'), /data-roomclose="t4"/.test(ben)], [true, true]);
+check('would thread: ⏸ label', ctx.lgRoomThreadHtml(ths.find(t => t.thread === 'sh:1'), {}).includes('הייתי עושה'), true);
+check('single old row renders as its plain bubble (no thread chrome)', ctx.lgRoomThreadHtml(J(ctx.lgRoomThreads({ k1: room.k1 }))[0], {}).includes('class="rt'), false);
+check('after-bubble hook is called per row', ctx.lgRoomThreadHtml(ths.find(t => t.thread === 'ob:1'), {}, r => '<i>' + r.key + '</i>').includes('<i>t2</i>'), true);
+check('bubble shows "← name" only when to is set', [ctx.lgRoomBubbleHtml(Object.assign({ key: 'a' }, TH.t1), {}).includes('← ארכיון'), ctx.lgRoomBubbleHtml(Object.assign({ key: 'a' }, TH.t2), {}).includes('←')], [true, false]);
+const days = J(ctx.lgRoomDayGroups(ths.filter(t => !t.isOpen), NOW));
+check('closed threads folded per day', days.length >= 1 && days.every(d => d.label && d.threads.length), true);
+check('today labelled "היום"', days[0].label.includes('היום'), true);
+
 // ─── כרטיסים ───────────────────────────────────────────────────────────
 const shadow = {
   s1: { createdAt: NOW - H, linked: true, route: 'okev', state: 'done' },

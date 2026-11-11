@@ -87,6 +87,14 @@ body{background:var(--bg);}
 .rb-s{font-size:var(--fs-sm);color:var(--muted);border-inline-start:3px solid var(--ask-line);padding-inline-start:8px;margin-top:4px;}
 .rb-st{font-size:var(--fs-xs);color:var(--muted);margin-top:4px;}
 .rb-acts{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-2);}
+.rb-to{color:var(--muted);font-size:var(--fs-xs);}
+.rt{display:flex;flex-direction:column;gap:var(--space-2);border-inline-start:3px solid var(--border);padding-inline-start:var(--space-2);}
+.rt-ben{border-inline-start-color:var(--ask-line);}
+.rt-done{border-inline-start-color:var(--green);}
+.rt-end{font-size:var(--fs-xs);color:var(--muted);font-weight:var(--fw-bold);}
+.room-day{margin-top:var(--space-2);}
+.room-day>summary{cursor:pointer;font-size:var(--fs-sm);color:var(--muted);font-weight:var(--fw-bold);padding:var(--space-1) 0;}
+.room-day .room{margin-top:var(--space-2);}
 .rb-ask{background:var(--ask-bg);border-color:var(--ask-line);}
 .rb-ask.is-open{border-width:2px;}
 .rb-answer{align-self:flex-start;background:var(--ben-bg);border-color:var(--green);border-end-end-radius:var(--radius-lg);border-end-start-radius:4px;}
@@ -187,7 +195,7 @@ body{background:var(--bg);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261031"></script>
 <script src="lg-icons.js?v=20260807"></script>
-<script src="agents-dash.js?v=20261111a"></script>
+<script src="agents-dash.js?v=20261111b"></script>
 </head>
 <body>
 <div class="wrap">
@@ -394,12 +402,21 @@ function renderRoom() {
   $('nRoom').textContent = open ? open + ' מחכות לך' : '';
   $('roomFlt').innerHTML = FILTER ? `<div class="flt-line">מציג רק: <b>${E(lgRoomAgentName(FILTER))}</b>
       <button type="button" class="sbtn" data-cardagent="">הצג הכל</button></div>` : '';
-  $('room').innerHTML = (all.length > rows.length ? `<button type="button" class="sbtn more" data-roommore>הצג ישנות יותר (${E(all.length - rows.length)})</button>` : '')
-    + (rows.length ? rows.map(e => lgRoomBubbleHtml(e, OB) + (ANSWERING === e.key && (MODE === 'fix' ? lgRoomCanFix(e, OB) : lgRoomCanAnswer(e, OB)) ? `<div class="compose">
+  //  שיחות: פתוחות למעלה, סגורות מקופלות לפי יום (11/11). "הצג ישנות" מגביל לפי מספר שורות, כמו קודם.
+  const shownRoom = {};
+  rows.forEach(r => { shownRoom[r.key] = ROOM[r.key]; });
+  const threads = lgRoomThreads(shownRoom, { agent: FILTER });
+  const compose = e => ANSWERING === e.key && (MODE === 'fix' ? lgRoomCanFix(e, OB) : lgRoomCanAnswer(e, OB)) ? `<div class="compose">
         <textarea id="ansText" maxlength="1000" placeholder="מה לענות ללקוח?" aria-label="התשובה ללקוח">${E(DRAFT)}</textarea>
         <p class="hint" style="margin:4px 0 0">${MODE ? 'התיקון יוצא ללקוח בוואטסאפ, והסוכן לומד אותו (ושוב שואל אותך לפני שהוא עונה לבד).' : 'התשובה יוצאת ללקוח בוואטסאפ כמו שכתבת.'}</p>
         <div class="rb-acts"><button type="button" class="sbtn is-primary" data-ansend="${E(e.key)}">שלח ללקוח</button>
-          <button type="button" class="sbtn" data-ancancel>ביטול</button></div></div>` : '')).join('')
+          <button type="button" class="sbtn" data-ancancel>ביטול</button></div></div>` : '';
+  const openT = threads.filter(t => t.isOpen), closedT = threads.filter(t => !t.isOpen);
+  const days = lgRoomDayGroups(closedT, Date.now());
+  $('room').innerHTML = (all.length > rows.length ? `<button type="button" class="sbtn more" data-roommore>הצג ישנות יותר (${E(all.length - rows.length)})</button>` : '')
+    + (threads.length ? openT.map(t => lgRoomThreadHtml(t, OB, compose)).join('')
+      + days.map((d, i) => `<details class="room-day"${i === 0 || d.threads.some(t => t.rows.some(r => r.key === ANSWERING)) ? ' open' : ''}><summary>${E(d.label)} · ${E(d.threads.length)}</summary>
+          <div class="room">${d.threads.map(t => lgRoomThreadHtml(t, OB, compose)).join('')}</div></details>`).join('')
       : '<div class="hint">אין עדיין הודעות בחדר.</div>');
   const nt = $('ansText');
   if (nt && focused) { nt.focus(); nt.setSelectionRange(nt.value.length, nt.value.length); }

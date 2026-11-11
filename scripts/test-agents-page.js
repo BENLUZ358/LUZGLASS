@@ -37,6 +37,10 @@ check('room screen: switches, summary, cards, room on top; the old sections fold
    ['secTodo', 'secNums', 'secLog', 'secCancels', 'secState'].every(id => new RegExp('<details[^>]*id="' + id + '"').test(P))], [true, true]);
 check('switches and answers go through the drain', ['agent-config-set', 'agent-room-answer'].map(a => new RegExp("action:\\s*'" + a + "'").test(P)), [true, true]);
 check('reads the room and the switches', [/waMeta\/agentRoom/.test(P), /waMeta\/agentConfig/.test(P)], [true, true]);
+// ─── שיחות בחדר (11/11) ───
+check('room renders threads: open first, closed folded per day',
+  [P.includes('lgRoomThreads('), P.includes('lgRoomThreadHtml('), P.includes('lgRoomDayGroups('), /<details class="room-day"/.test(P)], [true, true, true, true]);
+check('script version bumped to 20261111b in the page and in admin', [P.includes('agents-dash.js?v=20261111b'), A.includes('agents-dash.js?v=20261111b')], [true, true]);
 check('no Vercel switch names left in the texts', /AGENT_REPLY_ENABLED|AGENT_SHADOW_ENABLED/.test(P), false);
 check('only the allowed breakpoints', (P.match(/@media[^{]*/g) || []).every(m => /\((min|max)-width:\s*(600|768|900|1200)px\)/.test(m)), true);
 check('no font below 12px', /font-size:\s*(\d|1[01])px/.test(P), false);
