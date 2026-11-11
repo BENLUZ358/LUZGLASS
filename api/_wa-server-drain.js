@@ -9,7 +9,8 @@
 //  ⚠️ אין כאן מנגנון נגד שליחה כפולה משלו: lgWaClaim (טרנזקציה) הוא זה. דף פתוח,
 //     _ready-net והשרת על אותה שורה → בדיוק שליחה אחת, השאר מדלגים.
 //  ⚠️ מנותק → לא נוגעים בכלום (drainNow בודק חיבור לפני תפיסה).
-//  ⚠️ הבקשה כולה < 60ש׳: תקציב 18ש׳ כאן, ו-45ש׳ ברירת המחדל לא חלה.
+//  ⚠️ הבקשה כולה < 60ש׳: תקציב 18ש׳ כאן במקום BUDGET_MS (45ש׳) של _wa-drain-core; drainKeys לא מתחיל
+//     סבב שהמתנה לחלון + שליחה בגרוע ביותר (15ש׳) חורגים ממנו, ו-drainNow סופר מלפני בדיקת החיבור.
 // ═══════════════════════════════════════════════════════════════════
 'use strict';
 
@@ -18,7 +19,7 @@ const GATE_GAP_MS = 55 * 1000;
 const DEFAULT_BUDGET_MS = 18 * 1000;
 
 //  o: { env, now, budgetMs?, drain?(db, keys, by, {budgetMs}) }
-//  → { ok, skipped?: 'off'|'throttled'|'empty'|'disconnected', processed }
+//  → { ok, skipped?: 'off'|'throttled'|'empty'|'disconnected'|'not-configured', processed }
 async function lgWaServerDrain(db, o) {
   const opt = o || {};
   const env = opt.env || process.env;
@@ -36,6 +37,7 @@ async function lgWaServerDrain(db, o) {
   const budgetMs = opt.budgetMs > 0 ? opt.budgetMs : DEFAULT_BUDGET_MS;
   const r = await drain(db, keys, 'server', { budgetMs });
   //  state מלא = לא מחובר / לא מוגדר / ניתוק באמצע — ההודעות נשארות ממתינות
+  if (r && r.state === 'not-configured') return { ok: true, skipped: 'not-configured', processed: 0 };
   if (r && r.state) return { ok: true, skipped: 'disconnected', processed: r.processed || 0 };
   return { ok: true, processed: (r && r.processed) || 0 };
 }

@@ -103,6 +103,63 @@ const OK = async () => ({ ok: true, httpStatus: 200, messageId: 'm' });
     check('no double send: row claimed by page is skipped', [c.claimed, sent, r.results.find(x => x.key === 'ready_o1').status, db._data.waOutbox.ready_o1.claimedBy], [true, 1, 'skipped', 'page']);
   }
 
+  // 9. ספק עם חלון גלובלי: המתנה לחלון + שליחה לא חורגות מהתקציב
+  {
+    //  חלון תפוס 5ש׳ קדימה, תקציב 18ש׳ → מותר להמתין עד 3ש׳ בלבד (18 - 15 לשליחה) → לא מתחילים
+    const db = mk(2); let sent = 0;
+    db._data.waMeta = { sendSlot: { nextAllowedAt: Date.now() + 5000 } };
+    const send = async () => { sent++; return { ok: true, httpStatus: 200, messageId: 'm' }; };
+    const t = Date.now();
+    const r = await drainKeys(db, provider(send, { globalSlot: true, nextGap: () => 100 }), Object.keys(db._data.waOutbox), 'server', Date.now(), 18000);
+    check('globalSlot: slot wait beyond what budget allows → deferred at once, nothing sent',
+      [Date.now() - t < 1000, sent, r.results[0].status, db._data.waOutbox.ready_o1.state], [true, 0, 'deferred', 'pending']);
+    //  חלון תפוס 1ש׳ קדימה → ממתינים ושולחים; סה״כ בתוך התקציב
+    const db2 = mk(1); db2._data.waMeta = { sendSlot: { nextAllowedAt: Date.now() + 1000 } };
+    const t2 = Date.now();
+    const r2 = await drainKeys(db2, provider(send, { globalSlot: true, nextGap: () => 100 }), ['ready_o1'], 'server', Date.now(), 18000);
+    const took = Date.now() - t2;
+    check('globalSlot: 1s slot wait → sent, within budget', [r2.processed, took >= 900, took < 18000], [1, true, true]);
+    //  תקציב שכבר לא משאיר מקום לשליחה בגרוע ביותר → לא מתחילים בכלל
+    const db3 = mk(1); sent = 0;
+    const r3 = await drainKeys(db3, provider(send, { globalSlot: true, nextGap: () => 100 }), ['ready_o1'], 'server', Date.now() - 4000, 18000);
+    check('globalSlot: elapsed 4s of 18s (< worst send 15s left) → no pass started', [r3.processed, sent], [0, 0]);
+  }
+
+  // 10. drainNow סופר את התקציב מלפני בדיקת החיבור
+  {
+    const core = require(path.join(__dirname, '..', 'api', '_wa-drain-core.js'));
+    const pmod = require(path.join(__dirname, '..', 'api', '_wa-provider.js'));
+    const orig = pmod.lgWaProvider;
+    pmod.lgWaProvider = () => provider(OK, { checksState: true, getState: async () => { await new Promise(r => setTimeout(r, 300)); return { state: 'authorized' }; } });
+    delete require.cache[require.resolve(path.join(__dirname, '..', 'api', '_wa-drain-core.js'))];
+    const core2 = require(path.join(__dirname, '..', 'api', '_wa-drain-core.js'));
+    const db = mk(1);
+    const r = await core2.drainNow(db, Object.keys(db._data.waOutbox), 'server', { budgetMs: 200 });
+    pmod.lgWaProvider = orig;
+    check('drainNow: budget counted from before getState (300ms state check > 200ms budget → nothing sent)', [r.processed, db._data.waOutbox.ready_o1.state], [0, 'pending']);
+  }
+
+  // 11. לא מוגדר ≠ מנותק
+  {
+    const r = await SD.lgWaServerDrain(mk(1), { env: { WA_SERVER_DRAIN: 'true' }, now: NOW,
+      drain: async () => ({ results: [], processed: 0, state: 'not-configured' }) });
+    check('not-configured reported separately', r.skipped, 'not-configured');
+  }
+
+  // 12. סדר הדופק: שליחה → בדיקות (דדליין ≤ t0+48ש׳) → רשת "מוכן"
+  {
+    const { handleUpload } = require(path.join(__dirname, '..', 'api', '_invoice-upload.js'));
+    const order = []; let dl;
+    const t0 = Date.now();
+    const r = await handleUpload({ method: 'POST', headers: { authorization: 'Bearer T' }, body: { op: 'heartbeat', pc: 'OFFICE', pending: [] } }, {
+      db: fakeDb({}), env: { INVOICE_UPLOAD_TOKEN: 'T' }, now: 1000,
+      waDrain: async () => { order.push('drain'); await new Promise(r => setTimeout(r, 50)); },
+      watchRun: async (d, o) => { order.push('watch'); dl = o.deadline; },
+      readyNet: async () => { order.push('net'); } });
+    check('heartbeat order: drain → watch → ready-net', [r.status, order], [200, ['drain', 'watch', 'net']]);
+    check('heartbeat: watch deadline is absolute t0+48s (not shifted by the drain)', [dl >= t0 + 48000, dl <= Date.now() - 50 + 48000 + 5], [true, true]);
+  }
+
   console.log(failed ? `\n${failed} failed` : '\nall passed');
   process.exit(failed ? 1 : 0);
 })();

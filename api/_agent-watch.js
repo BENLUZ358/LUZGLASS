@@ -197,7 +197,7 @@ function lgWatcherSilentLine(watchers, now) {
 }
 
 // ─── אירוע לחדר לפי המתג ────────────────────────────────────────────
-//  ev: { kind:'info'|'ask', text, ref? }. o: { env, now, cfg? (undefined → נקרא), sendPending? }
+//  ev: { kind:'info'|'ask', text, ref? }. o: { env, now, cfg? (undefined → נקרא), sendPending?, deadline? }
 //  → { roomKey, asked, pinged } או null (כבוי / לא נכתב)
 async function lgAgentEvent(db, agent, ev, o) {
   const opt = o || {}, env = opt.env || process.env, now = Number(opt.now) || Date.now();
@@ -219,7 +219,8 @@ async function lgAgentEvent(db, agent, ev, o) {
       const q = await S.lgAgentEnqueue(db, { key: 'watch_' + roomKey, to: lgAgentEscalatePhone(cfg), customerId: '',
         text: lgRoomAskBenText(WHO[agent] || 'סוכן', text, env), reason: S.AGENT_ASK_REASON, agent });
       pinged = !!q.queued;
-      if (pinged) await (opt.sendPending || S.lgAgentSendPending)(db, { env, deadline: Date.now() + 20 * 1000 });
+      //  ⚠️ לא אחרי הדדליין של הריצה (הדופק חייב להיגמר < 60ש׳)
+      if (pinged) await (opt.sendPending || S.lgAgentSendPending)(db, { env, deadline: Math.min(Date.now() + 20 * 1000, Number(opt.deadline) || Infinity) });
     } catch (e) { console.warn('agent-watch: ping', e && e.name); }
   }
   return { roomKey, asked: ask, pinged };
@@ -385,7 +386,7 @@ async function lgAgentWatchRun(db, o) {
       try { await (opt.deliver || require('./_invoice-deliver').lgInvoiceDeliver)(db, p.retry, { now }); }
       catch (e) { console.warn('agent-watch: deliver retry', e && e.name); }
     }
-    const r = await lgAgentEvent(db, p.agent, { kind: p.level, text: p.text }, { env, now, cfg, sendPending: opt.sendPending });
+    const r = await lgAgentEvent(db, p.agent, { kind: p.level, text: p.text }, { env, now, cfg, sendPending: opt.sendPending, deadline });
     //  נכתב או לא — נרשם, כדי לא לנסות בכל דקה (החדר הוא תיעוד, לא העבודה)
     await setProblem(k, { ...rec, roomKey: r ? r.roomKey : null, asked: !!(r && r.asked) });
     opened++;
