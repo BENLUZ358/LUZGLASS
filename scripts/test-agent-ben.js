@@ -149,6 +149,47 @@ const notify = (db, a, o) => B.lgBenNotify(db, { reason: 'agent-guard', urgent: 
     check('WA down and no email → room only', [r.sent, r.channel, p.texts.length, emails(db).length], ['now', 'room', 0, 0]);
   }
 
+  // ═══ התראה על סקריפט המייל — אף פעם לא במייל (בן, 12/11: התזכורת של 16:10 יצאה רק ב-17:32) ═══
+  {
+    const cfg = CFG('shadow', { escalateEmail: 'ben@example.com' });
+    //  ניסיון ראשון נכשל → ניסיון שני מצליח
+    const db = mk(cfg); let n = 0;
+    const p = provider({ async sendText(f) { n++; p.texts.push(f); return n === 1 ? { ok: false, httpStatus: 500 } : { ok: true, httpStatus: 200 }; } });
+    const r = await B.lgBenNotify(db, { key: 'alarm_gmail_1', text: 'התראה: סקריפט המייל לא פנה', reason: 'agent-alarm', urgent: true, env: ENV, now: NOW, cfg, provider: p, retryGapMs: 0 });
+    check('mail-script alarm: WA fails once → second try goes out on WA, no email', [r.channel, p.texts.length, emails(db).length], ['wa', 2, 0]);
+  }
+  {
+    const cfg = CFG('shadow', { escalateEmail: 'ben@example.com' });
+    const db = mk(cfg);
+    const p = provider({ async sendText(f) { p.texts.push(f); return { ok: false, httpStatus: 500 }; } });
+    const r = await B.lgBenNotify(db, { key: 'alarm_gmail_2', text: 'התראה: סקריפט המייל לא פנה', reason: 'agent-alarm', urgent: true, env: ENV, now: NOW, cfg, provider: p, retryGapMs: 0 });
+    check('mail-script alarm: WA fails twice → room only, never email', [r.channel, p.texts.length, emails(db).length], ['room', 2, 0]);
+  }
+  {
+    //  המצב השמור "מנותק" — עדיין מנסים וואטסאפ (ולא מייל)
+    const cfg = CFG('shadow', { escalateEmail: 'ben@example.com' });
+    const db = mk(cfg, { whatsapp: { state: 'notAuthorized' } }), p = provider();
+    const r = await B.lgBenNotify(db, { key: 'alarm_gmail_3', text: 'התראה: סקריפט המייל לא פנה', reason: 'agent-alarm', urgent: true, env: ENV, now: NOW, cfg, provider: p, retryGapMs: 0 });
+    check('mail-script alarm: stored WA state not authorized → still tries WA, no email', [r.channel, p.texts.length, emails(db).length], ['wa', 1, 0]);
+  }
+  {
+    //  תזכורת אחרי 3 שעות — גם היא בוואטסאפ, לא במייל
+    const cfg = CFG('shadow', { escalateEmail: 'ben@example.com' });
+    const db = mk(cfg); let n = 0;
+    const p = provider({ async sendText(f) { n++; p.texts.push(f); return n === 2 ? { ok: false } : { ok: true }; } });
+    await B.lgBenNotify(db, { key: 'alarm_gmail_4', text: 'התראה: x', reason: 'agent-alarm', urgent: true, env: ENV, now: NOW, cfg, provider: p, retryGapMs: 0 });
+    const r = await B.lgBenNotify(db, { key: 'alarm_gmail_4', text: 'התראה: x', reason: 'agent-alarm', urgent: true, env: ENV, now: NOW + 3 * H + MIN, cfg, provider: p, retryGapMs: 0 });
+    check('mail-script reminder after 3h: WA (with retry), no email', [r.channel, p.texts.length, /^תזכורת: /.test(p.texts[2].text), emails(db).length], ['wa', 3, true, 0]);
+  }
+  {
+    //  התראה אחרת (וואטסאפ מנותק) — ניסיון אחד בלבד, כמו קודם
+    const cfg = CFG('shadow', { escalateEmail: 'ben@example.com' });
+    const db = mk(cfg);
+    const p = provider({ async sendText(f) { p.texts.push(f); return { ok: false }; } });
+    const r = await B.lgBenNotify(db, { key: 'alarm_office_1', text: 'המחשב', reason: 'agent-alarm', urgent: true, env: ENV, now: NOW, cfg, provider: p, retryGapMs: 0 });
+    check('office alarm unchanged: one WA try, then email', [r.channel, p.texts.length, emails(db).length], ['email', 1, 1]);
+  }
+
   // ═══ המספר של בן בשכבת השליחה ═══
   {
     const db = mk(CFG('reply')), p = provider();

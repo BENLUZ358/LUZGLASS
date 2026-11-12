@@ -78,16 +78,16 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
   /* ── lgAgentDecide: טבלה ─────────────────────────────────────────── */
   {
     const d = D(R({ intent: 'status', ref: 'כהן' }));
-    check('status, one match → reply עוקב, no conv', d, { actions: [{ type: 'reply', text: 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור' }], conv: null });
+    check('status, one match → reply עוקב, no conv', d, { actions: [{ type: 'reply', text: 'סקיצה כהן: ההזמנה בייצור' }], conv: null });
 
     const m = D(R({ intent: 'status', ref: '' }));
-    check('many → list reply', m.actions, [{ type: 'reply', text: 'על איזו הזמנה מדובר?\n1. L1001 — כהן\n2. L1003 — מטבח\n3. L1004 — אמבטיה' }]);
+    check('many → list reply', m.actions, [{ type: 'reply', text: 'על איזו הזמנה מדובר?\n1. סקיצה כהן\n2. סקיצה מטבח\n3. סקיצה אמבטיה' }]);
     check('many → conv which', m.conv, { await: 'which', intent: 'status', orderIds: ['o1', 'o3', 'o4'], at: NOW });
 
     const w1 = D(R({ text: '3', intent: 'unclear', route: 'shaul' }), m.conv, null, NOW + MIN);
-    check('which + "3" → status of the 3rd, conv cleared', w1, { actions: [{ type: 'reply', text: 'הזמנה L1004 (סקיצה: אמבטיה): ההזמנה בהכנה' }], conv: null });
+    check('which + "3" → status of the 3rd, conv cleared', w1, { actions: [{ type: 'reply', text: 'סקיצה אמבטיה: ההזמנה בהכנה' }], conv: null });
     const w2 = D(R({ text: 'מטבח', intent: 'unclear', route: 'shaul' }), m.conv, null, NOW + MIN);
-    check('which + name → that order', w2.actions[0].text, 'הזמנה L1003 (סקיצה: מטבח): קיבלנו, ההזמנה בבדיקה');
+    check('which + name → that order', w2.actions[0].text, 'סקיצה מטבח: קיבלנו, ההזמנה בבדיקה');
     const w3 = D(R({ text: '7', intent: 'unclear', route: 'shaul' }), m.conv, null, NOW + MIN);
     check('which + out-of-range number → normal routing (ask Ben), conv kept',
       [w3.actions.map(a => a.type), w3.conv], [['ask'], m.conv]);
@@ -95,11 +95,11 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     const mc = D(R({ intent: 'cancel', ref: '' }));
     const wc = D(R({ text: '2', intent: 'unclear', route: 'shaul' }), mc.conv, null, NOW + MIN);
     check('which (cancel) + "2" → confirm question + conv confirm-cancel',
-      wc, { actions: [{ type: 'reply', text: 'בטוח לבטל את הזמנה L1003 (סקיצה: מטבח)?' }], conv: { await: 'confirm-cancel', orderId: 'o3', at: NOW + MIN } });
+      wc, { actions: [{ type: 'reply', text: 'בטוח לבטל את סקיצה מטבח?' }], conv: { await: 'confirm-cancel', orderId: 'o3', at: NOW + MIN } });
 
     const c = D(R({ intent: 'cancel', ref: 'מטבח' }));
     check('cancel allowed → "בטוח?" + conv confirm-cancel',
-      c, { actions: [{ type: 'reply', text: 'בטוח לבטל את הזמנה L1003 (סקיצה: מטבח)?' }], conv: { await: 'confirm-cancel', orderId: 'o3', at: NOW } });
+      c, { actions: [{ type: 'reply', text: 'בטוח לבטל את סקיצה מטבח?' }], conv: { await: 'confirm-cancel', orderId: 'o3', at: NOW } });
 
     for (const yes of ['כן', 'כן תבטל', 'בטוח', 'כן בטוח', 'תבטל', 'יאללה', ' כן!! ', 'כן, תבטל.']) {
       const y = D(R({ text: yes, intent: 'unclear', route: 'shaul' }), c.conv, null, NOW + 10 * MIN);
@@ -108,41 +108,41 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     }
     const y = D(R({ text: 'כן', intent: 'unclear', route: 'shaul' }), c.conv, null, NOW + 10 * MIN);
     check('cancel action carries the texts', [y.actions[0].okText, y.actions[0].lateText],
-      ['ההזמנה בוטלה', 'הזמנה L1003 כבר בייצור ואי אפשר לבטל או לשנות אותה']);
+      ['ההזמנה בוטלה', 'סקיצה מטבח כבר בייצור ואי אפשר לבטל או לשנות אותה']);
     for (const no of ['לא', 'לא תבטל', 'עזוב', 'תשאיר']) {
       const n = D(R({ text: no, intent: 'unclear', route: 'shaul' }), c.conv, null, NOW + MIN);
       check('confirm + "' + no + '" → "בסדר, ההזמנה ממשיכה", conv cleared', n, { actions: [{ type: 'reply', text: 'בסדר, ההזמנה ממשיכה' }], conv: null });
     }
     const other = D(R({ text: 'מה עם כהן?', intent: 'status', ref: 'כהן' }), c.conv, null, NOW + MIN);
     check('confirm + something else → normal routing, conv kept',
-      [other.actions, other.conv], [[{ type: 'reply', text: 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור' }], c.conv]);
+      [other.actions, other.conv], [[{ type: 'reply', text: 'סקיצה כהן: ההזמנה בייצור' }], c.conv]);
 
     // Review Focus 2: "כן" אחרי יותר מ-30 דקות → לא מבטל; שואל מחדש
     const late = D(R({ text: 'כן', intent: 'unclear', route: 'shaul' }), c.conv, null, NOW + 31 * MIN);
     check('focus 2: "כן" after 31 min → no cancel, asks again with a fresh conv',
-      late, { actions: [{ type: 'reply', text: 'בטוח לבטל את הזמנה L1003 (סקיצה: מטבח)?' }], conv: { await: 'confirm-cancel', orderId: 'o3', at: NOW + 31 * MIN } });
+      late, { actions: [{ type: 'reply', text: 'בטוח לבטל את סקיצה מטבח?' }], conv: { await: 'confirm-cancel', orderId: 'o3', at: NOW + 31 * MIN } });
     const lateNo = D(R({ text: 'מה עם כהן?', intent: 'status', ref: 'כהן' }), c.conv, null, NOW + 31 * MIN);
     check('expired conv + other message → normal routing, conv deleted', [lateNo.actions.length, lateNo.conv], [1, null]);
     // הזמנה שירדה לייצור בין השאלה ל"כן"
     const moved = list('777').map(o => o.id === 'o3' ? { ...o, stage: 'workday' } : o);
     const y2 = D(R({ text: 'כן', intent: 'unclear', route: 'shaul' }), c.conv, moved, NOW + MIN);
     check('confirm "כן" but order now in workday → too-late text, no cancel',
-      y2, { actions: [{ type: 'reply', text: 'הזמנה L1003 כבר בייצור ואי אפשר לבטל או לשנות אותה' },
+      y2, { actions: [{ type: 'reply', text: 'סקיצה מטבח כבר בייצור ואי אפשר לבטל או לשנות אותה' },
                       { type: 'staff', notify: true, text: 'כהן זכוכית ביקש לבטל את הזמנה L1003 (מטבח) — כבר בשלב ייצור' }], conv: null });
 
     const ch = D(R({ intent: 'change', ref: 'מטבח' }));
     check('change allowed → "מה בדיוק לשנות?" + conv change-details',
-      ch, { actions: [{ type: 'reply', text: 'מה בדיוק לשנות בהזמנה L1003 (סקיצה: מטבח)?' }], conv: { await: 'change-details', orderId: 'o3', at: NOW } });
+      ch, { actions: [{ type: 'reply', text: 'מה לשנות בסקיצה מטבח? כל הסקיצה, או זכוכית מסוימת? אם זכוכית מסוימת — כתוב את המידה שלה.' }], conv: { await: 'change-details', orderId: 'o3', at: NOW } });
     const det = D(R({ text: 'הרוחב 90 ולא 80', intent: 'change', route: 'okev' }), ch.conv, null, NOW + MIN);
     check('change-details + answer → staff with details + handoff reply, conv cleared', det, { actions: [
       { type: 'staff', text: 'שינוי בהזמנה L1003 (מטבח) של כהן זכוכית: הרוחב 90 ולא 80' },
       { type: 'reply', text: HANDOFF }], conv: null });
 
     check('cancel not allowed (workday) → עוקב text, no conv',
-      D(R({ intent: 'cancel', ref: 'כהן' })), { actions: [{ type: 'reply', text: 'הזמנה L1001 כבר בייצור ואי אפשר לבטל או לשנות אותה' },
+      D(R({ intent: 'cancel', ref: 'כהן' })), { actions: [{ type: 'reply', text: 'סקיצה כהן כבר בייצור ואי אפשר לבטל או לשנות אותה' },
         { type: 'staff', notify: true, text: 'כהן זכוכית ביקש לבטל את הזמנה L1001 (כהן) — כבר בשלב ייצור' }], conv: null });
     check('change not allowed (workday) → עוקב text',
-      D(R({ intent: 'change', ref: 'L1001' })).actions, [{ type: 'reply', text: 'הזמנה L1001 כבר בייצור ואי אפשר לבטל או לשנות אותה' },
+      D(R({ intent: 'change', ref: 'L1001' })).actions, [{ type: 'reply', text: 'סקיצה כהן כבר בייצור ואי אפשר לבטל או לשנות אותה' },
         { type: 'staff', notify: true, text: 'כהן זכוכית ביקש לשנות את הזמנה L1001 (כהן) — כבר בשלב ייצור' }]);
     check('F3 status on a production order → no staff notify', D(R({ intent: 'status', ref: 'L1001' })).actions.map(a => a.type), ['reply']);
 
@@ -193,7 +193,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     check('pilot customer → acted:true', r.acted, true);
     check('queued once, key <rec>_0, to the private chat',
       [Object.keys(outbox(db)), outbox(db).K1_0.to, outbox(db).K1_0.customerId, outbox(db).K1_0.text, outbox(db).K1_0.state],
-      [['K1_0'], PRIV, '777', 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור', 'pending']);
+      [['K1_0'], PRIV, '777', 'סקיצה כהן: ההזמנה בייצור', 'pending']);
     check('record: wouldAct + acted', [rec(db, 'K1').wouldAct, rec(db, 'K1').acted], [r.actions, true]);
     check('sendPending triggered after enqueue', noSend.calls, 1);
     const again = await run(db, 'K1');
@@ -204,7 +204,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     const r = await run(db, 'K2');
     check('not in pilot → acted:false, wouldAct full, no queue',
       [r.acted, rec(db, 'K2').acted, rec(db, 'K2').wouldAct, Object.keys(outbox(db)).length],
-      [false, false, [{ type: 'reply', text: 'הזמנה L1002 (סקיצה: כהן): קיבלנו, ההזמנה בבדיקה' }], 0]);
+      [false, false, [{ type: 'reply', text: 'סקיצה כהן: קיבלנו, ההזמנה בבדיקה' }], 0]);
   }
   {
     //  עונה לכל הלקוחות: מקושר שלא בפיילוט → עונה; לא מקושר → לא
@@ -302,7 +302,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     db._data.waMeta.agentConv = { [key(PRIV)]: { await: 'confirm-cancel', orderId: 'o4', at: NOW } };
     put(db, 'C3', R({ text: 'בטוח', intent: 'unclear', route: 'shaul', idMessage: 'C3' }));
     await run(db, 'C3', ON, NOW + MIN);
-    check('cancel → too-late → "already in production" text', outbox(db).C3_0.text, 'הזמנה L1004 כבר בייצור ואי אפשר לבטל או לשנות אותה');
+    check('cancel → too-late → "already in production" text', outbox(db).C3_0.text, 'סקיצה אמבטיה כבר בייצור ואי אפשר לבטל או לשנות אותה');
     check('F3 runtime too-late → also Shaul', [outbox(db).C3_0_s && outbox(db).C3_0_s.to, outbox(db).C3_0_s && outbox(db).C3_0_s.text],
       ['0501112222', 'כהן זכוכית ביקש לבטל את הזמנה L1004 (אמבטיה) — כבר בשלב ייצור']);
 
@@ -341,7 +341,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
       await run(db2, 'E3', ON, NOW + 3 * MIN);
       check('e2e focus 3: moved to workday at the last moment → not deleted, "already in production"',
         [db2._data.orders.o4.stage, (db2._data.waMeta.agentCancels || {}).o4, outbox(db2).E3_0.text, rec(db2, 'E3').actCancels[0].code],
-        ['workday', undefined, 'הזמנה L1004 כבר בייצור ואי אפשר לבטל או לשנות אותה', 'too-late']);
+        ['workday', undefined, 'סקיצה אמבטיה כבר בייצור ואי אפשר לבטל או לשנות אותה', 'too-late']);
     }
 
     // conv שפג — נמחק גם כשלא פועלים
@@ -369,7 +369,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     const r = await sh.lgAgentShadowRecord(db, payload('A1', 'מה עם כהן?'), NOW, { env: ON });
     const p = await sh.lgAgentShadowProcess(db, r.key, { now: NOW, fetchImpl: m.fetchImpl, env: ON, provider });
     check('shadow → act → sent to the pilot customer', [p.ok, rec(db, r.key).acted, sent.map(s => [s.to, s.text])],
-      [true, true, [['0501234567', 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור']]]);
+      [true, true, [['0501234567', 'סקיצה כהן: ההזמנה בייצור']]]);
     check('outbox entry sent', outbox(db)[r.key + '_0'].state, 'sent');
     // Review Focus 4: webhook + drain על אותה הודעה
     await sh.lgAgentShadowRecord(db, payload('A1', 'מה עם כהן?'), NOW + 1, { env: ON });
@@ -415,7 +415,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     put(db, 'N1', R({ idMessage: 'N1', route: 'okev', intent: 'cancel', ref: 'כהן' }));
     let r = await run(db, 'N1', { ...ON, AGENT_STAFF_PHONES: '' });
     check('F3 too-late without staff → customer still answered, no staff entry',
-      [r.acted, outbox(db).N1_0 && outbox(db).N1_0.text, !!outbox(db).N1_1], [true, 'הזמנה L1001 כבר בייצור ואי אפשר לבטל או לשנות אותה', false]);
+      [r.acted, outbox(db).N1_0 && outbox(db).N1_0.text, !!outbox(db).N1_1], [true, 'סקיצה כהן כבר בייצור ואי אפשר לבטל או לשנות אותה', false]);
     db = seed();
     put(db, 'N2', R({ idMessage: 'N2', route: 'okev', intent: 'cancel', ref: 'כהן' }));
     await run(db, 'N2');
@@ -545,7 +545,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     const UA = (question, hold, noHold) => ({ type: 'ask', who: 'כהן זכוכית', question, note: 'לקוח לא מרוצה', benReason: 'agent-upset', upset: true, hold, noHold });
     // status + upset → עובדות + התנצלות בהודעה אחת (hold), ובן
     const d = D(R({ intent: 'status', ref: 'כהן', upset: true, text: 'איפה ההזמנה כבר שבוע!!' }));
-    check('U1 status+upset → facts then apology, one ask', d, { actions: [UA('איפה ההזמנה כבר שבוע!!', 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור\n\n' + APOL, false)], conv: null });
+    check('U1 status+upset → facts then apology, one ask', d, { actions: [UA('איפה ההזמנה כבר שבוע!!', 'סקיצה כהן: ההזמנה בייצור\n\n' + APOL, false)], conv: null });
     // complaint בלי הזמנה → התנצלות + בן
     const d2 = D(R({ intent: 'complaint', route: 'complaint', upset: true, text: 'אתם לא עונים לי' }));
     check('U2 complaint without order → apology + ask', d2, { actions: [UA('אתם לא עונים לי', APOL, false)], conv: null });
@@ -569,7 +569,7 @@ const D = (rec_, conv_, orders_, now_) => act.lgAgentDecide({ rec: { timestamp: 
     await run(db, 'U7');
     const ob = outbox(db);
     check('U7 one customer message with facts+apology, no hold', [ob.U7_0.text, Object.keys(ob).filter(k => !k.endsWith('_b')).length],
-      [WRAP_UPSET('הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור\n\n' + APOL), 1]);
+      [WRAP_UPSET('סקיצה כהן: ההזמנה בייצור\n\n' + APOL), 1]);
     check('U7 Ben pinged with reason agent-upset', [ob.U7_0_b.to, ob.U7_0_b.reason, ob.U7_0_b.text.includes('לקוח לא מרוצה')], ['0547725552', 'agent-upset', true]);
     const roomRows = Object.values((db._data.waMeta || {}).agentRoom || {});
     check('U7 room ask shows message + note', [roomRows[0].kind, roomRows[0].note, roomRows[0].question, roomRows[0].reason],

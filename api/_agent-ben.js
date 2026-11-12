@@ -13,6 +13,7 @@
 //    • התראת תקלה (urgent) — גם בלילה, גם מעבר ל-20, וגם כשהסוכנים "שקט": לא בתור, ישר דרך ספק
 //      הוואטסאפ; וואטסאפ לא מחובר (waMeta/whatsapp.state) / השליחה נכשלה → מייל ל-agentConfig.escalateEmail
 //      דרך תור המייל (הסקריפט בג'ימייל); אין מייל → רק השורה בחדר.
+//      ⚠️ התראה על סקריפט המייל (alarm_gmail) — וואטסאפ בלבד, ניסיון שני, אף פעם לא מייל (בן, 12/11).
 //  ⚠️ רק טקסט קבוע של המערכת יוצא לבן — אף פעם לא פלט של המודל. הקוראים בונים את הטקסט בקוד.
 //  ⚠️ המתג העליון AGENT_SHADOW_ENABLED + waMeta/agentConfig קיים — אחרת כלום חדש לא רץ ולא נכתב.
 //     בלי הגדרות: רק ההתראה הישנה על שאלה (agent-ask) עוברת, כמו קודם — בלי מדיניות ובלי רשומות.
@@ -121,22 +122,39 @@ async function _queue(db, o, { key, text, reason, cfg, env, reminder }) {
   return { sent: 'now', channel: 'queue', queued: q.queued, key: q.key };
 }
 
+//  התראה על סקריפט המייל — לעולם לא במייל: המייל יוצא דרך אותו סקריפט שעומד, והתראה כזו
+//  מגיעה רק כשהוא חוזר (12/11: התזכורת של 16:10 יצאה ב-17:32). רק וואטסאפ, עם ניסיון שני.
+const _mailDownAlarm = key => /^alarm_gmail(_|$)/.test(String(key || ''));
+const WA_RETRY_GAP_MS = 3 * 1000;
+//  ניסיון שני רק אם הראשון נכשל מהר — שליחה שנתקעה עד 15ש׳ לא מוכפלת (תקציב הפונקציה)
+const WA_RETRY_IF_FAILED_WITHIN_MS = 12 * 1000;
+
 //  התראה: ישר דרך הספק לבן; לא מחובר / נכשל → מייל; אין מייל → רק החדר. → 'wa'|'email'|'room'
+//  התראה על סקריפט המייל: וואטסאפ בלבד (גם כשהמצב השמור לא "מחובר" — מנסים), ניסיון שני → אחרת רק החדר.
 async function _urgent(db, o, { key, text, cfg, now }) {
   const st = o.waState !== undefined ? o.waState : (await db.ref(WA_STATE).once('value')).val();
-  if (st === 'authorized') {
+  const mailDown = _mailDownAlarm(key);
+  if (st === 'authorized' || mailDown) {
     const p = o.provider || require('./_wa-provider').lgWaProvider();
     const to = lgAgentEscalatePhone(cfg);
     if (p && p.configured && typeof p.sendText === 'function') {
       //  השער של הספק (נעילת סביבת הבדיקות) חל גם כאן
       const g = typeof p.gate === 'function' ? p.gate({ phone: to, accountKey: 'staff', linked: true }) : { allowed: true };
       if (g && g.allowed) {
-        let out;
-        try { out = await p.sendText({ to, text }); } catch (e) { out = { ok: false }; console.warn('agent-ben: alarm send', e && e.name); }
-        if (out && out.ok) return 'wa';
+        const t0 = Date.now();
+        for (let i = 0; i < (mailDown ? 2 : 1); i++) {
+          if (i) {
+            if (Date.now() - t0 > WA_RETRY_IF_FAILED_WITHIN_MS) break;
+            await new Promise(r => setTimeout(r, o.retryGapMs != null ? Number(o.retryGapMs) : WA_RETRY_GAP_MS));
+          }
+          let out;
+          try { out = await p.sendText({ to, text }); } catch (e) { out = { ok: false }; console.warn('agent-ben: alarm send', e && e.name); }
+          if (out && out.ok) return 'wa';
+        }
       }
     }
   }
+  if (mailDown) return 'room';
   const { lgEmailAddr } = require('./_email-recipient');
   const email = lgEmailAddr(cfg && cfg.escalateEmail);
   if (email) {

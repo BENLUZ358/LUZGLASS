@@ -84,17 +84,20 @@ check('quoted ו-ref לא תואמים → none', [f.match, f.via], ['none', '']
 
 // ── lgOkevReply ──
 const one = st => ({ match: 'one', orders: [o('1', 'L1234', 'כהן', st)], via: 'ref' });
-check('reply status chisum', lgOkevReply('status', one('chisum')), 'הזמנה L1234 (סקיצה: כהן): ההזמנה בחיסום');
-check('reply status done', lgOkevReply('status', one('done')), 'הזמנה L1234 (סקיצה: כהן): מוכן, אפשר לבוא לאסוף');
+// בלי שם סקיצה → מספר ההזמנה; שינוי שואל "כל הסקיצה או זכוכית מסוימת" (בן, 12/11)
+check('reply status no sketch name → order number', lgOkevReply('status', { match: 'one', orders: [o('1', 'L1234', '', 'chisum')], via: 'ref' }), 'הזמנה L1234: ההזמנה בחיסום');
+check('reply change asks whole sketch or one glass', lgOkevReply('change', one('drafter')), 'מה לשנות בסקיצה כהן? כל הסקיצה, או זכוכית מסוימת? אם זכוכית מסוימת — כתוב את המידה שלה.');
+check('reply status chisum', lgOkevReply('status', one('chisum')), 'סקיצה כהן: ההזמנה בחיסום');
+check('reply status done', lgOkevReply('status', one('done')), 'סקיצה כהן: מוכן, אפשר לבוא לאסוף');
 const many = { match: 'many', orders: [o('1', 'L1234', 'כהן', 'opty'), o('2', 'L5678', 'לוי', 'pending')], via: 'open' };
-check('reply status many', lgOkevReply('status', many), 'על איזו הזמנה מדובר?\n1. L1234 — כהן\n2. L5678 — לוי');
+check('reply status many', lgOkevReply('status', many), 'על איזו הזמנה מדובר?\n1. סקיצה כהן\n2. סקיצה לוי');
 check('reply status none', lgOkevReply('status', { match: 'none', orders: [], via: '' }), 'לא מצאתי את ההזמנה. אפשר לכתוב את שם הסקיצה?');
 check('reply cancel none', lgOkevReply('cancel', { match: 'none', orders: [], via: '' }), 'לא מצאתי את ההזמנה. אפשר לכתוב את שם הסקיצה?');
 check('reply cancel many מתחיל בשאלה', lgOkevReply('cancel', many).startsWith('על איזו הזמנה מדובר?'), true);
-check('reply cancel opty', lgOkevReply('cancel', one('opty')), 'בטוח לבטל את הזמנה L1234 (סקיצה: כהן)?');
-check('reply cancel workday', lgOkevReply('cancel', one('workday')), 'הזמנה L1234 כבר בייצור ואי אפשר לבטל או לשנות אותה');
-check('reply change drafter', lgOkevReply('change', one('drafter')), 'מה בדיוק לשנות בהזמנה L1234 (סקיצה: כהן)?');
-check('reply change done', lgOkevReply('change', one('done')), 'הזמנה L1234 כבר בייצור ואי אפשר לבטל או לשנות אותה');
+check('reply cancel opty', lgOkevReply('cancel', one('opty')), 'בטוח לבטל את סקיצה כהן?');
+check('reply cancel workday', lgOkevReply('cancel', one('workday')), 'סקיצה כהן כבר בייצור ואי אפשר לבטל או לשנות אותה');
+check('reply change drafter', lgOkevReply('change', one('drafter')), 'מה לשנות בסקיצה כהן? כל הסקיצה, או זכוכית מסוימת? אם זכוכית מסוימת — כתוב את המידה שלה.');
+check('reply change done', lgOkevReply('change', one('done')), 'סקיצה כהן כבר בייצור ואי אפשר לבטל או לשנות אותה');
 
 // ── lgOkevRoute ──
 const rt = (intent, extra) => lgOkevRoute(Object.assign({ intent, isGroup: false, linked: true, humanQuiet: false }, extra || {}));
