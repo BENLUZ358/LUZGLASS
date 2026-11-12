@@ -75,7 +75,7 @@ const shadowCount = db => Object.keys((db._data.waMeta || {}).agentShadow || {})
     const e = rec(db, r.key);
     check('process ok', res.ok, true);
     check('intent/route', [e.state, e.intent, e.ref, e.route], ['done', 'status', 'כהן', 'okev']);
-    check('wouldReply by עוקב', e.wouldReply, 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור');
+    check('wouldReply by עוקב', e.wouldReply, 'סקיצה כהן: ההזמנה בייצור');
     check('matchedOrderIds: only the same customer\'s order', e.matchedOrderIds, ['o1']);
     check('customer + model + usage', [e.customerId, e.customerName, e.model, e.usage], ['777', 'כהן זכוכית', 'm1', { input_tokens: 10, output_tokens: 5 }]);
     check('doneAt, claim cleared', [e.doneAt, e.claimToken], [NOW + 100, undefined]);

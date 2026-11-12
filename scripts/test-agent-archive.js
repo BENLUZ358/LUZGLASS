@@ -81,7 +81,7 @@ const F = (db, ref, text) => ar.lgArchiveFind(db, { customerId: '777', ref, text
   const base = { timestamp: NOW, linked: true, route: 'archive', intent: 'document', customerName: 'כהן זכוכית', chatId: PRIV };
   const dm = act.lgAgentDecide({ rec: { ...base, text: 'סקיצה כהן', ref: 'כהן' }, orders: [], conv: null, now: NOW,
     archive: { kind: 'many', orders: [{ id: 'o1', orderNum: 'L1001', sketchName: 'כהן' }, { id: 'o4', orderNum: 'L1004', sketchName: 'כהן' }] } });
-  check('decide many -> which list', [dm.actions[0].text, dm.conv], ['על איזו הזמנה מדובר?\n1. L1001 — כהן\n2. L1004 — כהן',
+  check('decide many -> which list', [dm.actions[0].text, dm.conv], ['על איזו הזמנה מדובר?\n1. סקיצה כהן (L1001)\n2. סקיצה כהן (L1004)',
     { await: 'which', intent: 'document', orderIds: ['o1', 'o4'], at: NOW }]);
   const orders = [{ id: 'o1', customerId: '777', orderNum: 'L1001', sketchName: 'כהן' }, { id: 'o4', customerId: '777', orderNum: 'L1004', sketchName: 'כהן' }];
   const dw = act.lgAgentDecide({ rec: { ...base, timestamp: NOW + 1000, text: '2', route: 'shaul', intent: 'unclear' }, orders, conv: dm.conv, now: NOW + 1000 });

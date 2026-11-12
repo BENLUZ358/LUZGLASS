@@ -128,17 +128,17 @@ const hist = (n, extra) => {
   {
     const d = seedAct(CFG('reply')); put(d, 'k1');
     await act.lgAgentAct(d, 'k1', { env: ON, now: NOW, sendPending: stub });
-    check('okev reply: status + usual time', said(d), ['הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור. בדרך כלל זה לוקח עוד בערך 2 ימים']);
+    check('okev reply: status + usual time', said(d), ['סקיצה כהן: ההזמנה בייצור. בדרך כלל זה לוקח עוד בערך 2 ימים']);
   }
   {
     const d = seedAct(null); put(d, 'k2');
     await act.lgAgentAct(d, 'k2', { env: ON, now: NOW, sendPending: stub });
-    check('okev no agentConfig: unchanged text', said(d), ['הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור']);
+    check('okev no agentConfig: unchanged text', said(d), ['סקיצה כהן: ההזמנה בייצור']);
   }
   {
     const d = seedAct(CFG('reply')); d._data.waMeta.agentStats.stageDays = ST.lgStageStats(hist(9), NOW); put(d, 'k3');
     await act.lgAgentAct(d, 'k3', { env: ON, now: NOW, sendPending: stub });
-    check('okev <10 samples: nothing added', said(d), ['הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור']);
+    check('okev <10 samples: nothing added', said(d), ['סקיצה כהן: ההזמנה בייצור']);
   }
   console.log(failed ? `\n${failed} FAILED` : '\nall ok');
   process.exit(failed ? 1 : 0);

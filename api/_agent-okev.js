@@ -82,7 +82,8 @@ function lgOkevFind(orders, q) {
   return verdict(orders.filter(isOpen), 'open');
 }
 
-const label = o => 'הזמנה ' + (o.orderNum || o.refNum || '') + (o.sketchName ? ' (סקיצה: ' + o.sketchName + ')' : '');
+// ללקוח מדברים בשם הסקיצה שלו (הוא לא מכיר את מספר ההזמנה של המערכת); בלי שם סקיצה → מספר ההזמנה (בן, 12/11)
+const label = o => o.sketchName ? 'סקיצה ' + o.sketchName : 'הזמנה ' + (o.orderNum || o.refNum || '');
 const NOT_FOUND = 'לא מצאתי את ההזמנה. אפשר לכתוב את שם הסקיצה?';
 
 // ── נוסחים קבועים של שלב 2 (הסוכנים עונים בפועל) ──
@@ -90,7 +91,7 @@ const AGENT_HANDOFF_TEXT = 'העברנו לשאול, הוא יחזור אליך'
 const CANCEL_DONE_TEXT = 'ההזמנה בוטלה';
 const CANCEL_KEPT_TEXT = 'בסדר, ההזמנה ממשיכה';
 // ההזמנה כבר בייצור — גם כשהביטול נדחה בזמן הביצוע (too-late)
-const lgOkevTooLate = o => 'הזמנה ' + (o.orderNum || o.refNum || '') + ' כבר בייצור ואי אפשר לבטל או לשנות אותה';
+const lgOkevTooLate = o => label(o) + ' כבר בייצור ואי אפשר לבטל או לשנות אותה';
 // הודעה לשאול על שינוי: "שינוי בהזמנה L1003 (מטבח) של כהן: <טקסט>"
 const lgOkevChangeStaffText = (o, who, text) => 'שינוי בהזמנה ' + (o.orderNum || o.refNum || '')
   + (o.sketchName ? ' (' + o.sketchName + ')' : '') + ' של ' + who + ': ' + text;
@@ -110,7 +111,10 @@ function lgOkevReply(intent, found) {
   if (!found || found.match === 'none') return NOT_FOUND;
   if (found.match === 'many') {
     return 'על איזו הזמנה מדובר?\n' + found.orders.map((o, i) =>
-      (i + 1) + '. ' + (o.orderNum || o.refNum || '') + (o.sketchName ? ' — ' + o.sketchName : '')).join('\n');
+      (i + 1) + '. ' + label(o)
+      // שתי הזמנות עם אותו שם סקיצה → מספר ההזמנה בסוגריים, כדי שאפשר יהיה להבדיל
+      + (o.sketchName && found.orders.some(x => x !== o && x.sketchName === o.sketchName)
+        ? ' (' + (o.orderNum || o.refNum || '') + ')' : '')).join('\n');
   }
   const o = found.orders[0];
   if (intent === 'status') {
@@ -119,7 +123,8 @@ function lgOkevReply(intent, found) {
   }
   if (!lgOkevCanChange(o)) return lgOkevTooLate(o);
   if (intent === 'cancel') return 'בטוח לבטל את ' + label(o) + '?';
-  if (intent === 'change') return 'מה בדיוק לשנות ב' + label(o) + '?';
+  // שינוי: לברר אם זה כל הסקיצה או זכוכית אחת (בן, 12/11)
+  if (intent === 'change') return 'מה לשנות ב' + label(o) + '? כל הסקיצה, או זכוכית מסוימת? אם זכוכית מסוימת — כתוב את המידה שלה.';
   return NOT_FOUND;
 }
 

@@ -37,7 +37,7 @@ const model = (out) => {
   return f;
 };
 const BASE = { model: 'm1', key: 'k1', customerName: 'כהן זכוכית', customerText: 'מה עם ההזמנה?' };
-const STATUS = 'הזמנה L1235 (סקיצה: מטבח): ההזמנה בייצור. בדרך כלל זה לוקח עוד בערך 3 ימים';
+const STATUS = 'סקיצה מטבח: ההזמנה בייצור. בדרך כלל זה לוקח עוד בערך 3 ימים';
 
 (async () => {
   /* ── 1. חלק עטיפה (טהור) ── */
@@ -197,7 +197,7 @@ const STATUS = 'הזמנה L1235 (סקיצה: מטבח): ההזמנה בייצו
     //  שיעור שנלמד / רשימה ממוספרת / הצעת מחיר — לא נעטפים, בלי מודל
     w = await W.lgAgentWord({ ...BASE, kind: 'facts', facts: 'לא, אנחנו לא מייצרים זכוכית חכמה.', lessonAuto: true, fetcher: m });
     check('lesson auto answer not wrapped', [w.text, w.reworded, m.calls.length], ['לא, אנחנו לא מייצרים זכוכית חכמה.', false, 0]);
-    const LIST = 'על איזו הזמנה מדובר?\n1. L1001 — כהן\n2. L1003 — מטבח';
+    const LIST = 'על איזו הזמנה מדובר?\n1. סקיצה כהן\n2. סקיצה מטבח';
     w = await W.lgAgentWord({ ...BASE, kind: 'facts', facts: LIST, fetcher: m });
     check('numbered list → not wrapped, no call', [w.text, w.reworded, m.calls.length], [LIST, false, 0]);
     const QUOTE = 'מראה 50×70 × 1 — 114 ₪\nסה"כ לפני מע"מ: 114 ₪\nמע"מ 18%: 21 ₪\nסה"כ: 135 ₪';
@@ -229,7 +229,7 @@ const STATUS = 'הזמנה L1235 (סקיצה: מטבח): ההזמנה בייצו
     const rec = (db, k) => db._data.waMeta.agentShadow[k];
     const outbox = db => (db._data.waMeta || {}).agentOutbox || {};
     const run = (db, k, extra, env) => act.lgAgentAct(db, k, { env: env || ON, now: NOW, sendPending: async () => ({ sent: 0 }), ...(extra || {}) });
-    const FACTS = 'הזמנה L1001 (סקיצה: כהן): ההזמנה בייצור';
+    const FACTS = 'סקיצה כהן: ההזמנה בייצור';
     const words = r => (r.replyWords || []).map(x => [x.original, x.sent]);
     const OP = t => W.LG_WRAP_OPENERS.findIndex(o => o.text === t);
     const CL = t => W.LG_WRAP_CLOSERS.indexOf(t);
