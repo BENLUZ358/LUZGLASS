@@ -270,7 +270,7 @@ const STATUS = 'הזמנה L1235 (סקיצה: מטבח): ההזמנה בייצו
     check('act: numbered list with no time → no wordSkipped', [outbox(db).A5b_0.text.startsWith('על איזו הזמנה'), rec(db, 'A5b').wordSkipped || null], [true, null]);
 
     //  התנצלות (משימה 6) — העובדות + "מצטערים…" כמו שהן, עם פתיחה שמתאימה לתלונה בלבד
-    const APOL = FACTS + '\n\nמצטערים על אי הנעימות. בן יחזור אליך בהקדם.';
+    const APOL = FACTS + '\n\nמצטערים על אי הנעימות. נחזור אליך בהקדם.';
     db = seed({ agentConfig: REPLY });
     m = model({ opener: OP('מבינים אותך'), closer: CL('בברכה') });
     put(db, 'A6', R({ upset: true, text: 'איפה ההזמנה של כהן כבר שבוע!!' }));
