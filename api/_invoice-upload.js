@@ -109,7 +109,7 @@ async function printFlag(db, ids) {
   try {
     const orders = await Promise.all((ids || []).map(async id => { const o = (await db.ref('orders/' + id).once('value')).val(); return o ? { ...o, id } : o; }));
     return (await require('./_manual-order').lgManualInvoiceMode(db, orders)) === 'paper' ? { printOriginal: true } : {};
-  } catch (_) { return {}; }
+  } catch (_) { return { printOriginal: true }; }   //  לא ידוע → נייר (הבטוח: המקור לא נשלח ללקוח בטעות)
 }
 
 async function _handleUpload(req, deps) {
@@ -168,7 +168,7 @@ async function _handleUpload(req, deps) {
       k = s.key; r = s.rec;
     }
     return { status: 200, body: { ok: true, duplicate: true, key: k, docNumber: r.docNumber,
-      date: r.date, archivePath: r.archivePath, sendAfter: r.sendAfter } };
+      date: r.date, archivePath: r.archivePath, sendAfter: r.sendAfter, ...(await printFlag(db, r.orderIds)) } };
   }
 
   const docNumber = M.extractDocNumber(oText);
@@ -212,7 +212,7 @@ async function _handleUpload(req, deps) {
     const s = await C.settlePrinted(db, pk, now);
     if (!s.settled) return pending({ key: pk });
     return { status: 200, body: { ok: true, key: s.key, docNumber, date,
-      archivePath: s.rec.archivePath, sendAfter: s.rec.sendAfter } };
+      archivePath: s.rec.archivePath, sendAfter: s.rec.sendAfter, ...(await printFlag(db, s.rec.orderIds)) } };
   }
 
   const rec = (pend[pick.key]);
@@ -243,3 +243,4 @@ module.exports = async function handler(req, res) {
 };
 module.exports.handleUpload = handleUpload;
 module.exports.deliverSafe = deliverSafe;
+module.exports.printFlag = printFlag;

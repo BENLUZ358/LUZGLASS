@@ -168,9 +168,9 @@ const run = (db, body) => handleAdmin({ action: 'manual-order-set', ...body }, {
   const TOKEN = 't'.repeat(40);
   const PRINT = role => 'חשבונית מס 67400  תאריך 13/11/2026  מפתח 99  מזהה 348049  מזדמן  '
     + `8 מ''מ שקוף מחוסם 1115.00 0.00 120.00   1115 1.00 1.00   1.00   1  ` + role;
-  const upl = async original => {
+  const upl = async (original, db0) => {
     const t = { [Buffer.from('%PDF-1.4 o').toString()]: PRINT('מקור'), [Buffer.from('%PDF-1.4 c').toString()]: PRINT('העתק 1') };
-    const db = fakeDb({ orders: { m1: { source: 'manual', customerId: '99', orderNum: 'L1115', orderClient: 'מזדמן', clientPhone: '',
+    const db = db0 || fakeDb({ orders: { m1: { source: 'manual', customerId: '99', orderNum: 'L1115', orderClient: 'מזדמן', clientPhone: '',
         hashavshevet: { httpOk: true, accountKey: '99', reference: '1115' } } },
       waMeta: { manualOrders: { m1: { phone: '0548000775', original, customerId: '99' } } } });
     return handleUpload({ method: 'POST', headers: { authorization: 'Bearer ' + TOKEN }, body: {
@@ -180,6 +180,19 @@ const run = (db, body) => handleAdmin({ action: 'manual-order-set', ...body }, {
   await test('upload byOrders: printOriginal true only for paper', async () => {
     const a = await upl('paper'); assert.equal(a.status, 200); assert.equal(a.body.byOrders, true); assert.equal(a.body.printOriginal, true);
     const b = await upl('send'); assert.equal(b.status, 200); assert.ok(!b.body.printOriginal);
+  });
+  await test('upload retry (same file) keeps printOriginal; flag on read error', async () => {
+    const first = await upl('paper');
+    assert.equal(first.body.printOriginal, true);
+    //  אותו קובץ שוב על אותו db: מסלול ההעלאה החוזרת
+    const db = fakeDb({ orders: { m1: { source: 'manual', customerId: '99', orderNum: 'L1115', orderClient: 'מזדמן', clientPhone: '',
+        hashavshevet: { httpOk: true, accountKey: '99', reference: '1115' } } },
+      waMeta: { manualOrders: { m1: { phone: '0548000775', original: 'paper', customerId: '99' } } } });
+    const a = await upl('paper', db), b = await upl('paper', db);
+    assert.equal(a.body.byOrders, true); assert.equal(b.body.duplicate, true); assert.equal(b.body.printOriginal, true);
+    const bad = { ref: () => ({ once: async () => { throw new Error('boom'); } }) };
+    assert.deepEqual(await require('../api/_invoice-upload').printFlag(bad, ['m1']), { printOriginal: true });
+    assert.deepEqual(await require('../api/_invoice-upload').printFlag(db, []), {});
   });
   console.log(passed + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });
