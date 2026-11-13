@@ -55,7 +55,7 @@ function lgAgentEscalatePhone(cfg) {
 //  "כתבו כאן ונחזור אליך", ולכן ההמשך הולך לפי המתג שלו — אחרת הובטחה תשובה שאף
 //  אחד לא ייתן (תיקון סקירה 10/11). השאר — המרכזן.
 const LG_ROUTE_AGENT = { okev: 'okev', menu: 'markazan', archive: 'archive', quote: 'price', price: 'price', staff: 'price',
-                         kolet: 'kolet', 'kolet-deleted': 'kolet', shaul: 'markazan', complaint: 'markazan' };
+                         kolet: 'kolet', 'kolet-deleted': 'kolet', 'kolet-howto': 'kolet', shaul: 'markazan', complaint: 'markazan' };
 const lgAgentOfRoute = route => (_own(LG_ROUTE_AGENT, String(route || '')) ? LG_ROUTE_AGENT[String(route)] : 'markazan');
 
 async function lgAgentConfig(db) {
