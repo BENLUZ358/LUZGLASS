@@ -29,6 +29,16 @@ check('card group keeps a phone if one order has it', peleg && peleg.phone, '054
 check('phone customers still grouped by phone', gs.filter(g => g.name === 'טל').map(g => g.ords.length), [2]);
 check('no card and no phone → each order alone', gs.filter(g => g.name === 'בלי כלום').length, 2);
 check('search by name finds the card group', ctx.G([o(1, { customerId: '07' }), o(2, { customerId: '07' })], 'פלג').length, 1);
+//  הזמנה ידנית (בן, 13/11): כל לקוח מזדמן על כרטיס 99 בקבוצה משלו, עם השם שלו
+const walk = ctx.G([
+  o('m1', { customerId: '99', source: 'manual', orderClient: 'יוסי כהן' }),
+  o('m2', { customerId: '99', source: 'manual', orderClient: 'דנה לוי' }),
+  o('n1', { customerId: '99', orderClient: 'מזדמן' }), o('n2', { customerId: '99', orderClient: 'מזדמן' }),
+], '');
+check('manual card-99 orders: one group each, own name',
+  walk.filter(g => g.key.startsWith('card:99:')).map(g => [g.key, g.name, g.ords.length]).sort(),
+  [['card:99:m1', 'יוסי כהן', 1], ['card:99:m2', 'דנה לוי', 1]]);
+check('non-manual card-99 orders still share card:99', walk.filter(g => g.key === 'card:99').map(g => g.ords.length), [2]);
 check('the list shows the card number', /כרטיס ' \+ esc\(g\.card\)/.test(HTML), true);
 check('the sketch name gets its own bold line', /class="ord-sketch"/.test(HTML) && /\.ord-sketch\{/.test(HTML), true);
 console.log(fail ? '\n' + fail + ' failed' : '\nall passed'); process.exit(fail ? 1 : 0);

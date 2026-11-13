@@ -29,7 +29,7 @@ const { lgExternal, lgDatabaseUrl } = require('./_env');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 const { lgEmailOrderAccount } = require('./_email-recipient');
-const { lgManualOrderRec } = require('./_manual-order');
+const { lgManualRecFor } = require('./_manual-order');
 
 const ENDPOINT     = 'https://ws.wizground.com/api';
 // נגזרת ממפתח השירות — ר' lgDatabaseUrl ב-_env.js. הייתה קשיחה כאן, וזה
@@ -130,8 +130,9 @@ function lgPriceClientName(order) {
 // כל השאר — כמו תמיד: משתמש הפורטל, ואז הכרטיס שנבחר בקליטות.
 async function pickAccountKey(db, order) {
   if (order && order.source === 'manual') {
-    const rec = await lgManualOrderRec(db, order.id);
-    if (rec && order.customerId) {
+    //  רשומה של כרטיס אחר = כאילו אין רשומה (הגנה כפולה)
+    const rec = await lgManualRecFor(db, order);
+    if (rec) {
       const acc = (await db.ref('hashavshevetAccounts/' + order.customerId).once('value')).val();
       if (acc) return String(order.customerId);
     }
@@ -140,6 +141,13 @@ async function pickAccountKey(db, order) {
   const phone = String((order && (order.clientPhone || order.phone)) || '').replace(/[-\s]/g, '');
   const user  = phone ? (await db.ref('users/' + phone).once('value')).val() : null;
   return (user && user.customerId) || await lgEmailOrderAccount(db, order);
+}
+
+// הזמנה ידנית בלי מפתח חשבון — הסבר אמיתי במקום "אין טלפון לקוח"
+async function manualAccountError(db, order) {
+  return (await lgManualRecFor(db, order))
+    ? { error: 'כרטיס הלקוח של ההזמנה הידנית לא נמצא — סנכרן לקוחות', code: 'manual-unknown-card' }
+    : { error: 'הטלפון של ההזמנה הידנית לא נשמר — שמור אותו בשורה האדומה בתור הסקיצות', code: 'manual-missing' };
 }
 
 // ── המידה על השורה: SM_Extratext1 ─────────────────────────────────────
@@ -374,7 +382,12 @@ module.exports = async function handler(req, res) {
     const phone = String(order.clientPhone || order.phone || '').replace(/[-\s]/g, '');
     // הזמנה ממייל של לקוח בלי משתמש פורטל (אביבי, פלג) — לפי הכרטיס שבחרת בקליטות
     // הזמנה ידנית — לפי הכרטיס שבהזמנה. ר' pickAccountKey
-    const accountKey = await pickAccountKey(db, order);
+    //  המזהה מהנתיב — הרשומה הידנית נמצאת לפיו, לא לפי שדה שנשמר בתוך ההזמנה
+    const accountKey = await pickAccountKey(db, { ...order, id: orderId });
+    if (!accountKey && order.source === 'manual') {
+      res.status(422).json(await manualAccountError(db, { ...order, id: orderId }));
+      return;
+    }
     if (!accountKey && !phone) { res.status(422).json({ error: 'להזמנה אין טלפון לקוח, ולכן אין דרך למצוא מפתח חשבון' }); return; }
     if (!accountKey) {
       res.status(422).json({
@@ -576,6 +589,7 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.pickAccountKey = pickAccountKey;
+module.exports.manualAccountError = manualAccountError;
 module.exports.buildLines = buildLines;
 module.exports.clientPricesByName = clientPricesByName;
 module.exports.lgPriceClientName = lgPriceClientName;

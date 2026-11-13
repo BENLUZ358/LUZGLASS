@@ -3459,7 +3459,11 @@ function resetChisumList(track){
               // המספר מוצג לפני השליחה, ולא רק נבחר בשקט. הודעה יוצאת החוצה
               // ואי אפשר להחזיר אותה, ולכן צריך לראות לאן היא הולכת ולפי מה.
               const t = _waTarget(o);
-              const tag = t.source==='hashavshevet'
+              const tag = t.source==='manual'
+                ? '<span style="color:#27ae60;font-weight:700">הנייד שנשמר להזמנה הידנית</span>'
+                : t.source==='manual-missing'
+                ? '<span style="color:var(--red);font-weight:700">⚠ לא נשמר — לא יישלח</span>'
+                : t.source==='hashavshevet'
                 ? '<span style="color:#27ae60;font-weight:700">כרטיס חשבשבת</span>'
                 : (t.phone ? '<span style="color:var(--gold-text);font-weight:700">⚠ מההזמנה — אין טלפון בכרטיס</span>'
                            : '<span style="color:var(--red);font-weight:700">⚠ אין מספר — לא תישלח</span>');

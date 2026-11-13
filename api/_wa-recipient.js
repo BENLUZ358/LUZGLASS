@@ -227,7 +227,8 @@ async function resolveRecipientWa(db, order, kind) {
     const acct = order.customerId ? String(order.customerId) : null;
     if (!M.LG_MANUAL_KINDS.includes(kind))
       return { phone: '', source: 'manual-kind-blocked', accountKey: acct, linked: false, channel: 'whatsapp' };
-    const rec = await M.lgManualOrderRec(db, order.id);
+    //  רשומה של כרטיס אחר = כאילו אין רשומה (הגנה כפולה)
+    const rec = await M.lgManualRecFor(db, order);
     if (!rec) return { phone: '', source: 'manual-missing', accountKey: acct, linked: false, channel: 'whatsapp' };
     return { phone: rec.phone, source: 'manual-phone', accountKey: acct, linked: true, channel: 'whatsapp' };
   }

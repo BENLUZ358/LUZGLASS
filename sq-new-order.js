@@ -75,6 +75,7 @@ function sqManualLine(order) {
 
 //  "מוכן" ביום עבודה: הודעה אחת לכל קבוצה. הזמנה ידנית נפרדת לפי הנייד —
 //  שני לקוחות מזדמנים בשם "יוסי" עם ניידים שונים לא יתאחדו.
+//  ⚠️ תאום של הקיבוץ ב-lgReadyNetPick (api/_ready-net.js) — אם אחד משתנה, גם השני.
 function wdReadyGroupKey(o) {
   o = o || {};
   return (o.orderClient || '') + '|' + (o.source === 'manual' && o.manualNotify ? (o.manualNotify.phone || '') : '');

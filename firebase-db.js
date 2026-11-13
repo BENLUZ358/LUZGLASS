@@ -1896,7 +1896,9 @@ function lgInvoiceGroups(allOrders, q, opts) {
     // כמו פלג (07) שמזמין במייל בלי טלפון נפל קודם להזמנה־לקבוצה (בן, 10/11)
     const phone = lgClientKey(o);
     const card  = String((o && o.customerId) || '').trim();
-    const key = card ? ('card:' + card) : (phone || ('order:' + o.id));
+    // הזמנה ידנית על כרטיס מזדמן (99): כל לקוח מזדמן הוא קבוצה משלו, עם השם שלו
+    const walkIn = card === '99' && o.source === 'manual';
+    const key = walkIn ? ('card:99:' + o.id) : card ? ('card:' + card) : (phone || ('order:' + o.id));
     const g = by[key] || (by[key] = { key, phone, card, name: '', ords: [] });
     if (!g.phone && phone) g.phone = phone;
     if (!g.name && o.orderClient && o.orderClient !== '—') g.name = o.orderClient;
@@ -2836,6 +2838,13 @@ async function lgWaDrain(onProgress){
 function lgResolveClientPhone(order, accountsMap, customerIdByPhone) {
   const normalize = p => String(p || '').replace(/[-\s]/g, '');
   const account   = k => (accountsMap || {})[String(k || '').trim()];
+
+  // 0. הזמנה ידנית (בן, 13/11): רק הנייד שבן שמר — לעולם לא הטלפון של הכרטיס.
+  //    לתצוגה בלבד; השרת קובע לפי waMeta/manualOrders (api/_wa-recipient.js).
+  if (order && order.source === 'manual') {
+    const mp = order.manualNotifySaved && order.manualNotify ? normalize(order.manualNotify.phone) : '';
+    return { phone: mp, source: mp ? 'manual' : 'manual-missing', accountKey: null };
+  }
 
   // 1. מפתח החשבון שרשום על ההזמנה עצמה
   let acc = account(order && order.customerId);

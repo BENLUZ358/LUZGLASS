@@ -222,7 +222,7 @@ async function _handleUpload(req, deps) {
   const done = await C.markReady(db, pick.key, { docNumber, date, hash, original: orig, copy }, now);
   if (!done) return _fail(409, 'already-processed');
   return { status: 200, body: { ok: true, key: pick.key, docNumber, date,
-    archivePath: done.archivePath, sendAfter: done.sendAfter } };
+    archivePath: done.archivePath, sendAfter: done.sendAfter, ...(await printFlag(db, rec.orderIds)) } };
 }
 
 module.exports = async function handler(req, res) {

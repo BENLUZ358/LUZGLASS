@@ -65,7 +65,9 @@ async function lgPriceCheckRun(db, p) {
     const C = require('./_agent-config');
     const cfg = await C.lgAgentConfig(db);
     if (!cfg || C.lgAgentModeOf(cfg, 'price', x.env || process.env) === 'off') return { checked: false, mismatches: 0 };
-    const list = lgPriceClientList(x.prices, order.orderClient);
+    //  הזמנה ידנית על כרטיס מזדמן: המחירון לפי שם הכרטיס (priceClient), לא שם הלקוח הפרטי.
+    //  אותו כלל כמו lgPriceClientName (hashavshevet-order.js / firebase-db.js) — אם אחד משתנה, גם זה.
+    const list = lgPriceClientList(x.prices, order.priceClient || order.orderClient);
     if (!list || typeof list !== 'object' || !Object.keys(list).length) return { checked: false, mismatches: 0 };
     const mm = lgPriceCheckLines({ preview: x.preview, clientList: list, frozen: order.frozenPrices });
     const oid = String(x.orderId || '');

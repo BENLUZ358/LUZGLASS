@@ -88,6 +88,12 @@ const withFlag = async (v, fn) => { const k = process.env.AGENT_SHADOW_ENABLED; 
     check('run: up to 5 lines listed + "ועוד 3 שורות"', [(t.match(/שורה \d/g) || []).length, t.includes('ועוד 3 שורות')], [5, true]);
   }
   {
+    // הזמנה ידנית על כרטיס מזדמן (בן, 13/11): המחירון לפי priceClient (שם הכרטיס), לא שם הלקוח הפרטי
+    const d = seed(CFG('shadow'));
+    const r = await run(d, { order: { ...order, source: 'manual', orderClient: 'יוסי כהן', priceClient: 'כהן זכוכית' } });
+    check('run: manual order → price list by priceClient', [r.checked, r.mismatches], [true, 2]);
+  }
+  {
     const d = seed(CFG('off')); await run(d);
     check('run price off: nothing', room(d).length, 0);
   }

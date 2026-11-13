@@ -98,6 +98,17 @@ check('dashes and spaces are stripped',
   check('no number anywhere returns empty', r.phone, '');
   check('and is flagged so nothing is sent', r.source, 'none');
 }
+/* ── manual order (Ben, 13/11): only the saved manual phone, never the card ── */
+{
+  const ACC99 = { ...ACCOUNTS, '99': { key: '99', name: 'מזדמן', phone: '0501111111' } };
+  const m = { source: 'manual', customerId: '99', phone: '', manualNotify: { phone: '054-800-0775', original: 'send' } };
+  const a = resolve({ ...m, manualNotifySaved: true }, ACC99, BY_PHONE);
+  check('manual saved → the manual phone, not card 99', [a.phone, a.source], ['0548000775', 'manual']);
+  const b = resolve(m, ACC99, BY_PHONE);
+  check('manual not saved → no number, never the card', [b.phone, b.source], ['', 'manual-missing']);
+  const c = resolve({ source: 'manual', customerId: '14201', manualNotifySaved: true }, ACCOUNTS, BY_PHONE);
+  check('manual saved flag without a phone → no number', [c.phone, c.source], ['', 'manual-missing']);
+}
 check('missing maps do not throw', resolve({ phone: '0521234567' }).phone, '0521234567');
 check('a null order does not throw', resolve(null, ACCOUNTS, BY_PHONE).source, 'none');
 
@@ -110,6 +121,8 @@ check('a null order does not throw', resolve(null, ACCOUNTS, BY_PHONE).source, '
         /lgResolveClientPhone\(o, _wdAccounts, _customerIdByPhone\)/.test(workday), true);
   check('no send site builds the link from order.phone any more',
         /wa\.me\/972\$\{cleanPhone\(o\.phone\)\}/.test(workday), false);
+  check('the confirm dialog says a manual order without a saved phone will not be sent',
+        /t\.source==='manual-missing'[\s\S]{0,120}לא נשמר — לא יישלח/.test(workday), true);
   check('the confirm dialog shows the number before sending',
         /const t = _waTarget\(o\);/.test(workday), true);
 

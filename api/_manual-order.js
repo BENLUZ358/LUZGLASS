@@ -24,17 +24,27 @@ async function lgManualOrderRec(db, orderId) {
            customerId: String(r.customerId || ''), privateName: String(r.privateName || '') };
 }
 
+//  הרשומה רק אם היא שייכת לכרטיס שבהזמנה (הגנה כפולה): כרטיס אחר = כאילו אין רשומה
+async function lgManualRecFor(db, order) {
+  if (!order || !order.customerId) return null;
+  const r = await lgManualOrderRec(db, order.id);
+  return r && r.customerId === String(order.customerId) ? r : null;
+}
+
 //  מה עושים עם מקור החשבונית של הזמנה ידנית (orders: אובייקטים עם id).
 //  null — אין הזמנה ידנית. 'paper' — מקור על נייר (גם כשאין רשומה / יש הזמנה אחת כזו).
 //  'send' — כל ההזמנות הידניות נשלחות לנייד שבן רשם.
+//  כמה הזמנות ידניות עם ניידים שונים באותה חשבונית → 'paper' (אין נמען אחד בטוח).
 async function lgManualInvoiceMode(db, orders) {
   const man = (orders || []).filter(o => o && o.source === 'manual');
   if (!man.length) return null;
+  const phones = new Set();
   for (const o of man) {
-    const r = await lgManualOrderRec(db, o.id);
+    const r = await lgManualRecFor(db, o);
     if (!r || r.original === 'paper') return 'paper';
+    phones.add(r.phone);
   }
-  return 'send';
+  return phones.size > 1 ? 'paper' : 'send';
 }
 
-module.exports = { lgManualPhone, lgManualOrderRec, lgManualInvoiceMode, LG_MANUAL_KINDS };
+module.exports = { lgManualPhone, lgManualOrderRec, lgManualRecFor, lgManualInvoiceMode, LG_MANUAL_KINDS };

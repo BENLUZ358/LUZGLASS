@@ -114,6 +114,12 @@ module.exports = async function handler(req, res) {
         continue;
       }
 
+      // הזמנה ידנית יוצאת רק דרך התור, לנייד שבן רשם — לעולם לא לטלפון הכרטיס
+      if (order.source === 'manual') {
+        results.push({ orderId, status: 'skipped', reason: 'הזמנה ידנית — רק דרך התור' });
+        continue;
+      }
+
       const target = await resolvePhone(db, order);
       if (!target.phone) {
         results.push({ orderId, status: 'error', reason: 'אין מספר טלפון ללקוח, לא בכרטיס ולא בהזמנה' });
