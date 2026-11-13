@@ -491,6 +491,26 @@ async function handleAdmin(body, deps) {
     return { ok: true, code: '', message: '' };
   }
 
+  // ─── הזמנה ידנית עם טלפון לעדכונים: רשומה מהימנה בצד השרת ───
+  if (chName === 'whatsapp' && action === 'manual-order-set') {
+    const db = deps.db, t = deps.now || Date.now(), by = String(deps.by || '');
+    const M = require('./_manual-order');
+    const oid = String(b.orderId || '');
+    const order = _keyOk(oid) ? (await db.ref('orders/' + oid).once('value')).val() : null;
+    if (!order || order.source !== 'manual') return { ok: false, code: 'bad-order', message: 'ההזמנה לא נמצאה או שאינה הזמנה ידנית' };
+    const phone = M.lgManualPhone(b.phone);
+    if (!phone) return { ok: false, code: 'bad-phone', message: 'מספר הטלפון לא תקין — צריך נייד שמתחיל ב-05' };
+    const original = b.original == null || b.original === '' ? 'send' : b.original;
+    if (original !== 'send' && original !== 'paper') return { ok: false, code: 'bad-original', message: 'צריך לבחור: לשלוח את המקור או נייר' };
+    const cid = String(order.customerId || '');
+    const acc = cid && _keyOk(cid) ? (await db.ref('hashavshevetAccounts/' + cid).once('value')).val() : null;
+    if (!acc) return { ok: false, code: 'unknown-customer', message: 'כרטיס הלקוח לא נמצא' };
+    const privateName = String(b.privateName || '').trim().slice(0, 80);
+    if (cid === '99' && !privateName) return { ok: false, code: 'need-name', message: 'ללקוח מזדמן צריך לכתוב שם' };
+    await db.ref('waMeta/manualOrders/' + oid).set({ phone, original, customerId: cid, privateName, at: t, by });
+    return { ok: true, code: '', message: '' };
+  }
+
   return { ok: false, code: 'bad-action', message: 'פעולה לא מוכרת' };
 }
 
