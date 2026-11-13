@@ -53,6 +53,10 @@ check('variants 70 x 120', rows('מראה 70 x 120'), [[700, 1200, 1, '5MIRM']])
 check('variants x 3 at the end', rows('מראה 5 70 120 x 3'), [[700, 1200, 3, '5MIRM']]);
 check("variants 2 יח'", rows("מראה 70 120 2 יח'"), [[700, 1200, 2, '5MIRM']]);
 check('variants decimal cm', rows('מראה 70.5 120'), [[705, 1200, 1, '5MIRM']]);
+//  טום גלאס, 13/11: הכמות לפני הסימן ("1×", "2x"), והמידות בשורה מתחת לסוג
+check('qty before the sign: 1× on the line under the heading', rows('מראה 5 ממ מלוטש\n89.7 על 178.6 1×'), [[897, 1786, 1, '5MIRM']]);
+check('qty before the sign: 2x', rows('מראה 5 80 על 60 2x'), [[800, 600, 2, '5MIRM']]);
+check('"70 X 120" is still a size pair, not a quantity', rows('מראה 5 70 X 120'), [[700, 1200, 1, '5MIRM']]);
 
 // ═══ 3. צבע ועיבוד ════════════════════════════════════════════════════
 check('bronze mirror', rows('מראה ברונזה 60 80'), [[600, 800, 1, '5MIRBM']]);

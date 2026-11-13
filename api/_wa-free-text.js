@@ -59,7 +59,8 @@ function _line(raw) {
   // "X2" / "x 3" בסוף: כמות — רק אם לפניו כבר שתי מידות, בלי לספור עובי מוביל.
   // אחרת "מראה 5 70 X 120" היה הופך ל-120 יחידות של 50×700 (סקירה, 26/10).
   const lead = !!desc && mm == null && THICK.includes(nums[0]);
-  const tail = s.match(/[xX×]\s*(\d{1,3})\s*$/);
+  //  הכמות גם לפני הסימן: "89.7 על 178.6 1×" (טום גלאס, 13/11)
+  const tail = s.match(/[xX×]\s*(\d{1,3})\s*$/) || s.match(/\s(\d{1,3})\s*[xX×]\s*$/);
   if (tail && !u && (nums.length - 1) - (lead ? 1 : 0) >= 2) { qty = parseInt(tail[1], 10); nums = nums.slice(0, -1); }
   // עובי בלי יחידה: המספר הראשון אחרי המוצר, כשנשארות אחריו עוד שתי מידות
   if (lead && nums.length >= 3) mm = nums.shift();
