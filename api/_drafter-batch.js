@@ -269,7 +269,10 @@ async function _build(cover, items, b) {
     let y = H - 165;
     for (const it of cover) {
       if (y < 50) break;
-      line([it.orderNum, it.client, it.sketchName].filter(Boolean).join('   ·   '), y, 13);
+      //  "הזמנה" לפני המספר (בן, 13/11: "העברית פה הפוכה"). fontkit קובע את כיוון
+      //  השורה לפי האות הראשונה; שורה שמתחילה ב-"L9902" יצאה משמאל לימין והעברית
+      //  בה הפוכה. כך היא מתחילה בעברית — כמו בעמודי הסקיצות, שיוצאים נכון.
+      line([it.orderNum ? 'הזמנה ' + it.orderNum : '', it.client, it.sketchName].filter(Boolean).join('   ·   '), y, 13);
       y -= 22;
     }
   }
@@ -363,4 +366,4 @@ async function lgDrafterEnqueueEmail(db, n, now) {
   return r;
 }
 
-module.exports = { lgDrafterSyncCheck, lgDrafterInBasket: _inBasket, lgDrafterDoneSet: _doneSet, lgDrafterPreview, lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail };
+module.exports = { lgDrafterSyncCheck, lgDrafterInBasket: _inBasket, lgDrafterDoneSet: _doneSet, lgDrafterPreview, lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail, _build };   // _build — לבדיקות
