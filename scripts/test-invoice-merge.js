@@ -63,6 +63,13 @@ function image(mime, w, h) {
     assert.equal(_visual('אחיעד'), 'אחיעד');
     assert.equal(_visual('הזמנה L1135'), 'הזמנה 5311L');
     assert.equal(_visual('L1135'), 'L1135');
+    //  בן 13/11: fontkit לא מחליף סוגריים כשהוא הופך שורה שמתחילה בעברית
+    assert.equal(_visual('גרפיקה (לחבר)'), 'גרפיקה )לחבר(');
+    //  שורה שמתחילה בלועזית לא מתהפכת — אין מה להחליף
+    assert.equal(_visual('LG (לחבר)'), 'GL (לחבר)');
+    //  שער "טיוטה לשרטט": כל שורה מתחילה ב"הזמנה" כדי שהעברית לא תצא הפוכה
+    const DB = require('fs').readFileSync(require('path').join(__dirname, '../api/_drafter-batch.js'), 'utf8');
+    assert.match(DB, /it\.orderNum \? 'הזמנה ' \+ it\.orderNum : ''/);
     const out = await lgInvoiceMerge(await invoicePdf(1), [{ buf: image('image/png', 300, 400), mime: 'image/png', num: 'L1135', name: 'אחיעד דירה 12' }],
                                      { docNumber: '67450', client: 'המקום לאמבט' });
     const { lgPdfToJpegs } = require('../api/_pdf-pages');
