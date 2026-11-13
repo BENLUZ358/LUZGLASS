@@ -345,9 +345,11 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261110b"></script>
+  <script src="firebase-db.js?v=20261113"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="print-labels.js?v=20261103"></script>
+  <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
+  <script src="sq-new-order.js?v=20261113"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20261103"></script>
 </head>
@@ -2946,16 +2948,20 @@ async function _waSendReadyGrouped(orderIds){
 
   // קיבוץ לפי שם הלקוח — בדיוק כמו מסך ההובלות. השרת פותר את הנמען
   // בעצמו ומסרב אם קבוצה מובילה לשני מספרים, ולכן השם כאן אינו מזהה.
-  const byClient = new Map();
+  // הזמנה ידנית (13/11) מקובצת גם לפי הנייד שבן רשם — שני לקוחות מזדמנים
+  // באותו שם עם ניידים שונים הם שתי הודעות (wdReadyGroupKey, sq-new-order.js).
+  // ההודעות על המסך עדיין בשם הלקוח, לא במפתח.
+  const byClient = new Map(), nameOf = new Map();
   ids.forEach(id => {
     const o = allOrders.find(x => String(x.id) === id);
-    const c = (o && o.orderClient) || '—';
-    if(!byClient.has(c)) byClient.set(c, []);
-    byClient.get(c).push(id);
+    const k = wdReadyGroupKey(o || { orderClient: '—' });
+    if(!byClient.has(k)) { byClient.set(k, []); nameOf.set(k, (o && o.orderClient) || '—'); }
+    byClient.get(k).push(id);
   });
 
   let queued = 0, notConfigured = false;
   for(const [client, group] of byClient){
+    const name = nameOf.get(client) || '—';
     try {
       const res  = await _lgAuthPost('/api/whatsapp-dispatch',
                                      { kind:'ready', orderIds: group, dryRun:false });
@@ -2964,13 +2970,13 @@ async function _waSendReadyGrouped(orderIds){
       if(res.status === 409){
         // ממצא בנתונים ולא תקלה טכנית — שני כרטיסים עם אותו שם
         //  הטקסט מהשרת — הוא יודע את הסיבה (מספרים שונים / מייל+וואטסאפ / כרטיסים)
-        showToast('⚠️ ' + client + ' — ' + (data.error || 'ההזמנות מובילות למספרים שונים, לא נשלחה הודעה'));
+        showToast('⚠️ ' + name + ' — ' + (data.error || 'ההזמנות מובילות למספרים שונים, לא נשלחה הודעה'));
         continue;
       }
-      if(!res.ok){ showToast('⚠️ הודעה ל' + client + ' נכשלה: ' + (data.error||res.status)); continue; }
+      if(!res.ok){ showToast('⚠️ הודעה ל' + name + ' נכשלה: ' + (data.error||res.status)); continue; }
       if(data.preview){
         if(!data.configured) notConfigured = true;
-        else showToast('📱 ' + client + ' — ' + (data.reason || 'לא נשלחה'));
+        else showToast('📱 ' + name + ' — ' + (data.reason || 'לא נשלחה'));
         continue;
       }
       if(data.queued) queued++;

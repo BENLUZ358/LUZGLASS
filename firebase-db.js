@@ -1226,6 +1226,18 @@ function lgNormalizeOrder(o) {
     frozenPrices:  (o.frozenPrices && typeof o.frozenPrices === 'object') ? o.frozenPrices : null,
     customerId:    o.customerId   || '',
     businessName:  o.businessName || '',
+    // הזמנה ידנית (sq-new-order.js, 13/11). priceClient — שם הכרטיס למחירון
+    // (lgPriceClientName) כשהלקוח מזדמן ו-orderClient הוא השם הפרטי.
+    // manualNotify — הנייד לתצוגה בלבד; הרשומה המהימנה ב-waMeta/manualOrders.
+    // manualNotifySaved — השרת אישר את הרשומה. ⚠️ בלי השורות האלה הנרמול
+    // מוחק אותם בדרך לכל מסך, ו"מוכן" ביום עבודה לא היה רואה את הנייד.
+    priceClient:   o.priceClient  || '',
+    privateName:   o.privateName  || '',
+    manualNotify:  (o.manualNotify && typeof o.manualNotify === 'object') ? {
+      phone:    String(o.manualNotify.phone || ''),
+      original: o.manualNotify.original === 'paper' ? 'paper' : 'send',
+    } : null,
+    manualNotifySaved: !!o.manualNotifySaved,
     clientPhone:   o.clientPhone  || '',
     vatId:         o.vatId        || '',
     paymentStatus: o.paymentStatus|| 'unpaid',
