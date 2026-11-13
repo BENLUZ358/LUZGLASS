@@ -286,7 +286,7 @@ async function upload(cfg, parts, files, post, opts = {}) {
   //  ההעתק לנייר — רק בפעם הראשונה שהוא מתויק (הדפסה חוזרת מחשבשבת לא מוציאה דף נוסף)
   const print = !!cfg.printCopyTo && !r.body.reprint && !fs.existsSync(dest.copy);
   //  הזמנה ידנית שרוצה מקור על נייר (השרת מבקש): פעם אחת בלבד — רק אם המקור עוד לא תויק
-  const printOrig = !!cfg.printCopyTo && !r.body.reprint && r.body.printOriginal === true && !fs.existsSync(dest.original);
+  const printOrig = !!cfg.printCopyTo && !r.body.reprint && r.body.printOriginal === true && !fs.existsSync(dest.copy);
   try {
     fs.mkdirSync(path.dirname(dest.original), { recursive: true });
     fs.writeFileSync(dest.original, parts.original);

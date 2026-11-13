@@ -436,6 +436,10 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
       fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '67395 נאור חזקיה העתק 02-11-2026.pdf'), 'COPY');
       if (cfgOver._alreadyFiledOriginal) fs.writeFileSync(path.join(d, '67395 נאור חזקיה מקור 02-11-2026.pdf'), 'ORIG');
     }
+    if (cfgOver && cfgOver._origOnly) {
+      const d = path.join(cfg.sharedRoot, 'נאור חזקיה', '2026-11');
+      fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '67395 נאור חזקיה מקור 02-11-2026.pdf'), 'ORIG');
+    }
     const out = await W.processPair(cfg, { original: o, copies: [c] },
       async () => ({ status: 200, body: { ok: true, docNumber: '67395', archivePath: '2026/11/נאור חזקיה/2026-11-02_67395.pdf', ...body } }));
     fs.rmSync(top, { recursive: true, force: true });
@@ -466,6 +470,10 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual((await printRun({ printOriginal: true, reprint: true })).printed, []);
     assert.deepEqual((await printRun({ printOriginal: true, duplicate: true }, { _alreadyFiled: true, _alreadyFiledOriginal: true })).printed, []);
     assert.deepEqual((await printRun({ printOriginal: true }, { printCopyTo: '' })).printed, []);
+  });
+  await test('watcher: filing that died after the original (copy missing) still prints original then copy', async () => {
+    const { printed } = await printRun({ printOriginal: true, duplicate: true }, { _origOnly: true });
+    assert.deepEqual(printed.map(p => p[2]), ['ORIG', 'COPY']);
   });
   await test('watcher: a failed original print does not stop the copy print', async () => {
     const seen = [];
