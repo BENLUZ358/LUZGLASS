@@ -121,7 +121,13 @@ check('H2 the button text', />\s*\+ הזמנה חדשה\s*</.test(A), true);
 check('H3 the queue items carry the manual fields',
       /manualNotify:\s*o\.manualNotify/.test(A) && /manualNotifySaved:\s*!!o\.manualNotifySaved/.test(A), true);
 check('H3 and the price card name', /priceClient:\s*o\.priceClient/.test(A), true);
-check('H4 a "ידנית" tag in the list', /source==='manual'[^\n]*ידנית/.test(A), true);
+{
+  // תגית המקור היא "ידנית" — במקום "מערכת", לא בנוסף לה
+  const srcTag = (A.match(/<span class="sq-tag \$\{[^\n]*sq-tag-upload[^\n]*/) || [''])[0];
+  check('H4 the source tag says "ידנית" for source:\'manual\'',
+        /source==='manual'\?'sq-tag-manual'/.test(srcTag) && /source==='manual'\?'ידנית'/.test(srcTag), true);
+  check('H4 and there is no second "ידנית" tag beside "מערכת"', (A.match(/>ידנית<\/span>/g) || []).length, 0);
+}
 check('H5 a place for the status line under the assign box', /id="sqAssignWrap"[^\n]*\n[^\n]*\n?\s*<div id="sqManualWrap" hidden><\/div>/.test(A), true);
 check('H5 and the detail view fills it', /sqManualShow\(o\)/.test(A), true);
 

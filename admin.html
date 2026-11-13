@@ -4187,10 +4187,9 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':(item.source==='whatsapp'||item.source==='zgagi')?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':(item.source==='whatsapp'||item.source==='zgagi')?'WhatsApp':item.source==='email'?'מייל':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':(item.source==='whatsapp'||item.source==='zgagi')?'sq-tag-wa':item.source==='email'?'sq-tag-email':item.source==='manual'?'sq-tag-manual':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':(item.source==='whatsapp'||item.source==='zgagi')?'WhatsApp':item.source==='email'?'מייל':item.source==='manual'?'ידנית':'מערכת'}</span>
           ${lgZgagiUpdatedTag(item)}
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
-          ${item.source==='manual'?'<span class="sq-tag sq-tag-manual">ידנית</span>':''}
           ${item.waUnassigned||item.emailUnassigned?'<span class="sq-tag sq-tag-unassigned">לא שויך</span>':''}
           ${item.isTest?'<span class="sq-tag" style="background:rgba(184,146,42,0.18);color:var(--gold-text)">🧪 פיקטיבית</span>':''}
           ${_sqAttTag(item)}
