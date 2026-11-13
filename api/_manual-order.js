@@ -24,4 +24,17 @@ async function lgManualOrderRec(db, orderId) {
            customerId: String(r.customerId || ''), privateName: String(r.privateName || '') };
 }
 
-module.exports = { lgManualPhone, lgManualOrderRec, LG_MANUAL_KINDS };
+//  מה עושים עם מקור החשבונית של הזמנה ידנית (orders: אובייקטים עם id).
+//  null — אין הזמנה ידנית. 'paper' — מקור על נייר (גם כשאין רשומה / יש הזמנה אחת כזו).
+//  'send' — כל ההזמנות הידניות נשלחות לנייד שבן רשם.
+async function lgManualInvoiceMode(db, orders) {
+  const man = (orders || []).filter(o => o && o.source === 'manual');
+  if (!man.length) return null;
+  for (const o of man) {
+    const r = await lgManualOrderRec(db, o.id);
+    if (!r || r.original === 'paper') return 'paper';
+  }
+  return 'send';
+}
+
+module.exports = { lgManualPhone, lgManualOrderRec, lgManualInvoiceMode, LG_MANUAL_KINDS };

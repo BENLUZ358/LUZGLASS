@@ -107,5 +107,79 @@ const run = (db, body) => handleAdmin({ action: 'manual-order-set', ...body }, {
     const r3 = H.buildLines({ ...ord, source: 'whatsapp', privateName: '', sketchName: '' }, '99', '1', '31', '1', prices.global, cp);
     assert.equal(r3.lines[0].itemname, undefined);
   });
+  //  ── חשבונית: נייד או מקור על נייר ──
+  const { PDFDocument } = require('pdf-lib');
+  const { createCanvas } = require('@napi-rs/canvas');
+  const D = require('../api/_invoice-deliver');
+  const { handleUpload } = require('../api/_invoice-upload');
+  const d0 = await PDFDocument.create(); d0.addPage([595, 842]);
+  const PDF = Buffer.from(await d0.save()).toString('base64');
+  const cv = createCanvas(40, 30); cv.getContext('2d').fillRect(0, 0, 40, 30);
+  const JPG = 'data:image/jpeg;base64,' + cv.toBuffer('image/jpeg').toString('base64');
+  const GROUP = '120363000000000001@g.us';
+  const invDb = (orders, manual) => fakeDb({
+    invoicePdf: { k1: { state: 'ready', docNumber: '67346', date: '2026-11-13', client: 'מזדמן', accountKey: '99',
+      orderIds: Object.keys(orders), orderNums: Object.keys(orders).map((_, i) => 'L' + (i + 1)), sketchNames: [],
+      archivePath: '2026/11/x/f.pdf' } },
+    invoicePdfBlobs: { k1: { original: PDF, copy: PDF } },
+    orders, sketches: { m99: JPG, g1: JPG },
+    waGroups: { [GROUP.replace(/[.#$[\]/]/g, '_')]: { customerId: '99' } },
+    waMeta: { manualOrders: manual },
+  });
+  const MAN = { m99: { source: 'manual', customerId: '99', orderNum: 'L1' } };
+  const noDrain = async () => ({ results: [] });
+  const noQueue = db => assert.ok(!db._data.waOutbox || !Object.keys(db._data.waOutbox).length);
+  await test('manual send: queued to the trusted phone, deliveryTomorrow false', async () => {
+    const db = invDb(MAN, { m99: { phone: '0548000775', original: 'send', customerId: '99' } });
+    const r = await D.lgInvoiceDeliver(db, 'k1', { now: 5, drain: noDrain });
+    assert.equal(r.state, 'queued');
+    const q = Object.values(db._data.waOutbox);
+    assert.equal(q.length, 1);
+    assert.equal(q[0].to, '0548000775'); assert.equal(q[0].kind, 'invoice'); assert.equal(q[0].deliveryTomorrow, false);
+  });
+  await test('manual paper: state paper, nothing queued, reprint does not send', async () => {
+    const db = invDb(MAN, { m99: { phone: '0548000775', original: 'paper', customerId: '99' } });
+    const r = await D.lgInvoiceDeliver(db, 'k1', { now: 5, drain: noDrain });
+    assert.equal(r.state, 'paper'); assert.equal(db._data.invoicePdf.k1.delivery.state, 'paper');
+    noQueue(db);
+    db._data.waMeta.manualOrders.m99.original = 'send';
+    const r2 = await D.lgInvoiceDeliver(db, 'k1', { now: 6, drain: noDrain });
+    assert.equal(r2.state, 'paper'); noQueue(db);
+  });
+  await test('manual without a record: paper', async () => {
+    const db = invDb(MAN, {});
+    assert.equal((await D.lgInvoiceDeliver(db, 'k1', { now: 5, drain: noDrain })).state, 'paper');
+    noQueue(db);
+  });
+  await test('manual send + whatsapp group order on one invoice: only the trusted phone', async () => {
+    const db = invDb({ ...MAN, g1: { source: 'whatsapp', waGroup: GROUP, waMessageId: 'w1', customerId: '99', orderNum: 'L2' } },
+      { m99: { phone: '0548000775', original: 'send', customerId: '99' } });
+    await D.lgInvoiceDeliver(db, 'k1', { now: 5, drain: noDrain });
+    const q = Object.values(db._data.waOutbox);
+    assert.equal(q.length, 1); assert.equal(q[0].to, '0548000775');
+  });
+  await test('lgManualInvoiceMode', async () => {
+    const db = invDb(MAN, { m99: { phone: '0548000775', original: 'send', customerId: '99' }, p: { phone: '0548000775', original: 'paper' } });
+    assert.equal(await M.lgManualInvoiceMode(db, [{ source: 'whatsapp' }]), null);
+    assert.equal(await M.lgManualInvoiceMode(db, [{ id: 'm99', source: 'manual' }]), 'send');
+    assert.equal(await M.lgManualInvoiceMode(db, [{ id: 'm99', source: 'manual' }, { id: 'p', source: 'manual' }]), 'paper');
+    assert.equal(await M.lgManualInvoiceMode(db, [{ id: 'zz', source: 'manual' }]), 'paper');
+  });
+  const TOKEN = 't'.repeat(40);
+  const PRINT = role => 'חשבונית מס 67400  תאריך 13/11/2026  מפתח 99  מזהה 348049  מזדמן  '
+    + `8 מ''מ שקוף מחוסם 1115.00 0.00 120.00   1115 1.00 1.00   1.00   1  ` + role;
+  const upl = async original => {
+    const t = { [Buffer.from('%PDF-1.4 o').toString()]: PRINT('מקור'), [Buffer.from('%PDF-1.4 c').toString()]: PRINT('העתק 1') };
+    const db = fakeDb({ orders: { m1: { source: 'manual', customerId: '99', orderNum: 'L1115', orderClient: 'מזדמן', clientPhone: '',
+        hashavshevet: { httpOk: true, accountKey: '99', reference: '1115' } } },
+      waMeta: { manualOrders: { m1: { phone: '0548000775', original, customerId: '99' } } } });
+    return handleUpload({ method: 'POST', headers: { authorization: 'Bearer ' + TOKEN }, body: {
+      original: Buffer.from('%PDF-1.4 o').toString('base64'), copy: Buffer.from('%PDF-1.4 c').toString('base64') } },
+      { db, env: { INVOICE_UPLOAD_TOKEN: TOKEN }, now: 1000, deliver: async () => {}, pageTexts: async b => [t[b.toString()] || ''] });
+  };
+  await test('upload byOrders: printOriginal true only for paper', async () => {
+    const a = await upl('paper'); assert.equal(a.status, 200); assert.equal(a.body.byOrders, true); assert.equal(a.body.printOriginal, true);
+    const b = await upl('send'); assert.equal(b.status, 200); assert.ok(!b.body.printOriginal);
+  });
   console.log(passed + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });

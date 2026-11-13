@@ -104,6 +104,14 @@ async function heartbeat(body, deps) {
   return { status: 200, body: { ok: true, heartbeat: true } };
 }
 
+//  הזמנה ידנית שהמקור שלה על נייר (בן, 13/11) → הכלי מדפיס את המקור
+async function printFlag(db, ids) {
+  try {
+    const orders = await Promise.all((ids || []).map(async id => { const o = (await db.ref('orders/' + id).once('value')).val(); return o ? { ...o, id } : o; }));
+    return (await require('./_manual-order').lgManualInvoiceMode(db, orders)) === 'paper' ? { printOriginal: true } : {};
+  } catch (_) { return {}; }
+}
+
 async function _handleUpload(req, deps) {
   if (req.method !== 'POST') return _fail(405, 'method');
   const env = deps.env || process.env;
@@ -183,7 +191,7 @@ async function _handleUpload(req, deps) {
     if (settled) {
       const r = same[settled];
       return { status: 200, body: { ok: true, reprint: true, key: settled, docNumber, date: r.date,
-        archivePath: r.archivePath, sendAfter: r.sendAfter } };
+        archivePath: r.archivePath, sendAfter: r.sendAfter, ...(await printFlag(db, r.orderIds)) } };
     }
     if (sk.some(k => same[k].state === 'printed')) return pending({ reprint: true });
     //  הופקה ישירות בחשבשבת מהזמנות סוכן (בן, 29/10): מספרי ההזמנות שלנו
@@ -194,7 +202,7 @@ async function _handleUpload(req, deps) {
       const key = await C.openFromOrders(db, ids, docNumber, acct, now);
       const done = key && await C.markReady(db, key, { docNumber, date, hash, original: orig, copy }, now);
       if (done) return { status: 200, body: { ok: true, key, docNumber, date, byOrders: true,
-        archivePath: done.archivePath, sendAfter: done.sendAfter } };
+        archivePath: done.archivePath, sendAfter: done.sendAfter, ...(await printFlag(db, ids)) } };
     }
     const pk = 'p' + hash.slice(0, 18);
     await db.ref('invoicePdf/' + pk).set({ state: 'printed', docNumber, date, originalHash: hash,
