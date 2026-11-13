@@ -31,6 +31,15 @@ const AGENT_MENU_TEXT = [
   'לכל דבר אחר — כתבו כאן ונחזור אליך בהקדם',
 ].join('\n');
 
+//  איך שולחים הזמנה בטקסט (בן, 13/11): רק ללקוח שמסומן ב"הזמנות מטקסט חופשי"
+//  וכותב בצ'אט פרטי — שם הטקסט באמת נקלט כהזמנה. אחרת — שאלה לבן.
+const KOLET_HOWTO_TEXT = [
+  'אפשר לשלוח הזמנה בטקסט. שורה לכל זכוכית: סוג, עובי, רוחב על גובה בס"מ, וכמות.',
+  'לדוגמה:',
+  'מראה 5 80 על 60 X2',
+  'ההזמנה תיקלט אוטומטית.',
+].join('\n');
+
 // ביטול/שינוי מותר רק לפני שההזמנה נכנסה לייצור
 const CHANGEABLE = ['', 'pending', 'chash', 'drafter', 'opty'];
 function lgOkevCanChange(order) {
@@ -141,12 +150,14 @@ function lgOkevRoute(p) {
     case 'price': return 'price';
     case 'chitchat': return isGroup ? 'ignore' : 'menu';
     case 'thanks': return 'none';
+    //  איך שולחים הזמנה בטקסט (בן, 13/11) — של הקולט
+    case 'howto': return 'kolet-howto';
     //  תלונה: עם הפניה להזמנה — עוקב ההזמנות (עובדות), בלי — המרכזן
     case 'complaint': return String(ref || '').trim() ? 'okev' : 'complaint';
     default: return 'shaul';
   }
 }
 
-module.exports = { OKEV_STATUS_TEXT, AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
+module.exports = { OKEV_STATUS_TEXT, AGENT_MENU_TEXT, KOLET_HOWTO_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
                    lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevRoute, lgOkevTooLate, lgOkevChangeStaffText,
                    lgOkevStageName, lgOkevTooLateStaffText, lgOkevCancelledStaffText };

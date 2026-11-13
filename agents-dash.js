@@ -28,9 +28,9 @@ function _adWhen(ms) {
 //  לא נשלח ללקוח. הקריאה מ-waMeta/agentShadow; הסימון ✓/✗ עובר דרך
 //  /api/wa-inbound-drain (agent-verdict) — הפאנל לא כותב ל-Firebase.
 const LG_AG_INTENT = { status: 'איפה ההזמנה', cancel: 'ביטול', change: 'שינוי', document: 'מסמך', quote: 'הצעת מחיר', price: 'טענת מחיר',
-  order: 'הזמנה', chitchat: 'שיחה', thanks: 'תודה', unclear: 'לא ברור' };
+  order: 'הזמנה', howto: 'איך מזמינים', chitchat: 'שיחה', thanks: 'תודה', unclear: 'לא ברור' };
 const LG_AG_ROUTE = { okev: 'עוקב', kolet: 'קולט', archive: 'ארכיון', quote: 'מחירון', price: 'מחירון — טענת מחיר', menu: 'תפריט', none: 'בלי תשובה',
-  ignore: 'מתעלם', shaul: 'שאלה לבן', 'silent-human': 'שותק (ענו ידנית)', 'kolet-deleted': 'קולט — סקיצה נמחקה' };
+  ignore: 'מתעלם', shaul: 'שאלה לבן', 'silent-human': 'שותק (ענו ידנית)', 'kolet-deleted': 'קולט — סקיצה נמחקה', 'kolet-howto': 'קולט — איך מזמינים בטקסט' };
 function lgAgIntentLabel(i) { return LG_AG_INTENT[i] || String(i == null ? '' : i); }
 function lgAgRouteLabel(r) { return LG_AG_ROUTE[r] || String(r == null ? '' : r); }
 //  שלב 2: כמה לקוחות בפיילוט
@@ -54,6 +54,7 @@ const LG_AG_WHY = { 'not-pilot': 'לא נשלח — הלקוח לא בפיילו
 //  "מה קורה" בשורת היומן — משפט במקום שם המסלול (בן, 31/10)
 const LG_AG_OUTCOME = { okev: 'עוקב עונה ללקוח', quote: 'מחירון מטפל בבקשת המחיר', price: 'מחירון בודק את המחיר ומעביר לשאול', archive: 'ארכיון שולח את המסמך',
   kolet: 'נכנסה לתור הסקיצות כרגיל — אין צורך לענות', 'kolet-deleted': 'קולט בודק אם לבטל את הסקיצה',
+  'kolet-howto': 'קולט מסביר איך שולחים הזמנה בטקסט (רק ללקוח שמסומן בקליטות)',
   menu: 'שולח ללקוח את התפריט', none: 'לא צריך לענות', ignore: 'לא צריך לענות',
   shaul: 'הסוכן לא יודע — שואל אותך בחדר הסוכנים', 'silent-human': 'לא עונה — מישהו מכם כבר ענה בשעתיים האחרונות' };
 //  מה הלקוח שלח, במילים
@@ -143,7 +144,7 @@ function lgAgRowHtml(key, r, intake, c) {
 //  ביומן מוצגות רק הודעות שיש מה לבדוק בהן — הסוכן היה עונה ללקוח או מעביר
 //  לשאול — וכל אחת כשאלה אחת "זה נכון?". השאר (תמונה שנכנסת לתור כרגיל, מספר
 //  לא מקושר, מישהו כבר ענה, אין מה לענות) — שורה קצרה במקטע מקופל.
-const AD_REVIEW_ROUTES = ['okev', 'quote', 'price', 'archive', 'menu', 'shaul', 'kolet-deleted'];
+const AD_REVIEW_ROUTES = ['okev', 'quote', 'price', 'archive', 'menu', 'shaul', 'kolet-deleted', 'kolet-howto'];
 function _adWould(r) {
   return String(r.wouldReply || ((Array.isArray(r.wouldAct) ? r.wouldAct : []).filter(a => a && a.text && a.type !== 'staff' && a.type !== 'quote-ask').map(a => a.text)[0]) || '');
 }
@@ -333,7 +334,7 @@ function lgAdWaLink(phone) {
 const LG_AD_AGENTS = [
   //  ⚠️ (תיקון סקירה 10/11) רק מה שהמתג הזה שולט בו. "נקלטו" והצעת צרופות — מתגים נפרדים.
   { id: 'markazan', name: 'מרכזן', does: 'תפריט ללקוח, ומה שאף סוכן לא יודע — שאלה אליך ("נקלטו" והצעת צרופות — לא במתג הזה)', routes: ['menu', 'shaul'] },
-  { id: 'kolet', name: 'קולט', does: 'מתור הסקיצות עד "השרטט סיים", וסקיצה שהלקוח מחק', routes: ['kolet', 'kolet-deleted'] },
+  { id: 'kolet', name: 'קולט', does: 'מתור הסקיצות עד "השרטט סיים", סקיצה שהלקוח מחק, ואיך שולחים הזמנה בטקסט', routes: ['kolet', 'kolet-deleted', 'kolet-howto'] },
   { id: 'archive', name: 'ארכיון', does: 'חשבוניות, והעתק חשבונית או סקיצה ללקוח', routes: ['archive'] },
   { id: 'okev', name: 'עוקב', does: '"איפה ההזמנה" ללקוח, ביטול ושינוי לפני ייצור', routes: ['okev'] },
   { id: 'price', name: 'מחירון', does: 'מחירים, הצעות מחיר וטענות מחיר', routes: ['quote', 'price'] },
@@ -579,7 +580,7 @@ function lgAdModeChip(status, cfg) {
 //  ההודעות שנותבו אליו (routes ב-LG_AD_AGENTS) + השורות שלו בחדר.
 //  טהור, קריאה בלבד.
 const LG_ACT_ROUTE = { okev: 'העביר לעוקב', quote: 'העביר למחירון', price: 'העביר למחירון (טענת מחיר)', archive: 'העביר לארכיון',
-  kolet: 'נכנס לתור הסקיצות', 'kolet-deleted': 'העביר לקולט (סקיצה נמחקה)', menu: 'שלח תפריט', none: 'לא צריך לענות',
+  kolet: 'נכנס לתור הסקיצות', 'kolet-deleted': 'העביר לקולט (סקיצה נמחקה)', 'kolet-howto': 'הסביר איך מזמינים בטקסט', menu: 'שלח תפריט', none: 'לא צריך לענות',
   ignore: 'לא צריך לענות', shaul: 'לא ידע — שאל אותך', 'silent-human': 'שתק — מישהו מכם כבר ענה' };
 //  טווח: today | yesterday | 7d → { from, to }
 function lgActRange(period, now) {

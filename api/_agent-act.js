@@ -30,7 +30,7 @@
 const crypto = require('crypto');
 const { lgWaInboundKey } = require('./_wa-inbound');
 const { AGENT_OUTBOX, AGENT_DELETE_LIVE, AGENT_DELETED_REASON, AGENT_ASK_REASON, PER_ITEM_WORST_MS, lgAgentStaff, lgAgentEnqueue, lgAgentSendPending, lgAgentChatOwnedBy } = require('./_agent-send');
-const { AGENT_MENU_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
+const { AGENT_MENU_TEXT, KOLET_HOWTO_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
         lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevTooLate, lgOkevChangeStaffText,
         lgOkevTooLateStaffText, lgOkevCancelledStaffText } = require('./_agent-okev');
 
@@ -293,6 +293,10 @@ function _route(r, orders, now, keep, archive, quote, price, x) {
     case 'shaul': return { actions: _ask(r), conv: keep };
     // קולט — סקיצה שנמחקה. conv חדש (שאלת "לבטל?") מחליף; אחרת נשאר
     case 'kolet-deleted': { const x = _deleted(r, orders, now); return { actions: x.actions, conv: x.conv || keep }; }
+    //  איך שולחים הזמנה בטקסט (בן, 13/11): מסומן + צ'אט פרטי → ההסבר; אחרת שאלה לבן
+    case 'kolet-howto':
+      if (r.linked && xo.textOn && !r.groupId) return { actions: [_reply(KOLET_HOWTO_TEXT)], conv: keep };
+      return { actions: _ask(r), conv: keep };
     default: return { actions: [], conv: keep };   // kolet (הקליטה הקיימת), none, ignore
   }
 }
@@ -327,7 +331,7 @@ function lgAgentDecide(p) {
   const r = rec || {};
   const orders = (p && p.orders) || [];
   const now = Number(p && p.now) || Date.now();
-  const xo = { quoteToBen: !!(p && p.quoteToBen), stageDays: (p && p.stageDays) || null };
+  const xo = { quoteToBen: !!(p && p.quoteToBen), stageDays: (p && p.stageDays) || null, textOn: !!(p && p.textOn) };
   let c = conv && conv.await ? conv : null;
   // אדם עונה עכשיו — שום פעולה, conv לא נוגעים
   if (r.route === 'silent-human') return { actions: [], conv: c };
@@ -643,7 +647,13 @@ async function _act(db, key, rec, recRef, env, now, o) {
   //  לקוח לא מרוצה: האם כבר יש שאלה פתוחה כזו מהיום (שעון ישראל) לאותו לקוח
   let upsetToday = false;
   if (cfg && rec.linked && cid && (rec.upset === true || rec.intent === 'complaint')) upsetToday = await _upsetToday(db, cid, now);
-  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price, quoteToBen: !!cfg, stageDays, upsetToday, upsetOn: !!cfg });
+  //  איך שולחים בטקסט: האם הלקוח מסומן ב"הזמנות מטקסט חופשי" (כשל בקריאה → לא, ואז שאלה לבן)
+  let textOn = false;
+  if (rec.route === 'kolet-howto' && rec.linked && cid) {
+    try { textOn = !!(await db.ref('waMeta/textCustomers/' + cid).once('value')).val(); }
+    catch (e) { console.warn('agent-act: text-customer', e && e.name); textOn = false; }
+  }
+  let d = lgAgentDecide({ rec, orders, conv, now, archive, quote, staffQuote, price, quoteToBen: !!cfg, stageDays, upsetToday, upsetOn: !!cfg, textOn });
   // t6-4: עלות החילוץ נשמרת ברשומה (רק כשהמודל נקרא למחירון)
   const qUsage = quoteSkipped ? { quoteSkipped: 'deadline' } : quote ? { quoteUsage: quote.usage || null }
     : priceSkipped ? { priceSkipped: 'deadline' } : price ? { priceUsage: price.usage || null } : {};

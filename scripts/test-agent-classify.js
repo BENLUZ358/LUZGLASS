@@ -22,7 +22,7 @@ const mk = (body, ok = true) => {
 const base = { text: 'מוכן?', hasImage: false, model: 'm1', key: 'k1' };
 
 (async () => {
-  check('intents', AGENT_INTENTS, ['order', 'status', 'cancel', 'change', 'document', 'quote', 'price', 'chitchat', 'thanks', 'complaint', 'unclear']);
+  check('intents', AGENT_INTENTS, ['order', 'status', 'cancel', 'change', 'document', 'quote', 'price', 'chitchat', 'thanks', 'complaint', 'howto', 'unclear']);
 
   // בקשה
   const a = mk(okBody('{"intent":"status","ref":"כהן"}'));

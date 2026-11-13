@@ -30,7 +30,7 @@ check('log shows review rows as questions, the rest folded',
   [/lgAdSplitLog\(/.test(P), /lgAdReviewRowHtml\(r\.key,\s*r,\s*intake/.test(P), /<details[^>]*>[\s\S]{0,200}לא צריך לבדוק/.test(P), /lgAdOtherRowHtml\(/.test(P)],
   [true, true, true, true]);
 check('no pilot buttons in the log any more', /lgAgRowHtml\(/.test(live(P)), false);
-check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261111/.test(P), /agents-dash\.js\?v=20261111/.test(A)], [true, true]);
+check('new script version so phones do not keep the old one', [/agents-dash\.js\?v=20261113/.test(P), /agents-dash\.js\?v=20261111/.test(A)], [true, true]);
 // ─── עונה לכל הלקוחות + מייל להתראות (משימה 5) ───
 check('all-customers switch above the pilot list, off by default',
   [/עונה לכל הלקוחות/.test(P), P.indexOf('id="allCust"') > -1 && P.indexOf('id="allCust"') < P.indexOf('id="pilot"'), /allCustomers\)\s*===\s*true/.test(P)], [true, true, true]);
@@ -45,7 +45,7 @@ check('reads the room and the switches', [/waMeta\/agentRoom/.test(P), /waMeta\/
 // ─── שיחות בחדר (11/11) ───
 check('room renders threads: open first, closed folded per day',
   [P.includes('lgRoomThreads('), P.includes('lgRoomThreadHtml('), P.includes('lgRoomDayGroups('), /<details class="room-day"/.test(P)], [true, true, true, true]);
-check('script version bumped to 20261111c in the page and in admin', [P.includes('agents-dash.js?v=20261111c'), A.includes('agents-dash.js?v=20261111c')], [true, true]);
+check('script version: page 20261113a (how-to), admin still 20261111c', [P.includes('agents-dash.js?v=20261113a'), A.includes('agents-dash.js?v=20261111c')], [true, true]);
 check('threads built from all rows (filter only passed to lgRoomThreads), window by threads, opened days kept',
   [P.includes("lgRoomThreads(ROOM, { agent: FILTER })"), P.includes('lgRoomThreadWindow('), P.includes('OPEN_DAYS')], [true, true, true]);
 check('no Vercel switch names left in the texts', /AGENT_REPLY_ENABLED|AGENT_SHADOW_ENABLED/.test(P), false);
