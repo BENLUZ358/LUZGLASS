@@ -232,8 +232,9 @@ const bodyOf = (name, src = ADMIN) =>
  * Ben asked for a way in on a healthy order (2026-09-29).
  */
 {
-  check('the card offers a preview that does not send',
-        /id="sqBtnPreview"[^>]*onclick="sqPreviewChash\(\)"/.test(ADMIN), true);
+  /* Ben removed the card button on 2026-11-13; the function stays for the error window. */
+  check('the card no longer shows the preview button',
+        /id="sqBtnPreview"/.test(ADMIN), false);
   const prev = bodyOf('sqPreviewChash');
   check('and it previews rather than sending',
         /sqPreviewHashavshevet\(id\)/.test(prev) && !/sqSendHashavshevet/.test(prev), true);

@@ -3006,6 +3006,8 @@ document.addEventListener('visibilitychange', () => {
 .sq-action-quiet{background:none;border-style:dashed;color:#8a8278;flex:0 1 auto;}
 .sq-action-quiet:hover{background:#f5f2ed;color:#555;}
 .sq-action-quiet [data-icon]{width:14px;height:14px;vertical-align:-2px;}
+/* כפתור צדדי — קטן, לא מתחרה בכפתורי השלבים (בן, 13/11: "הזמנה פיקטיבית בקטן") */
+.sq-action-small{flex:0 0 auto;min-width:0;padding:5px 9px;font-size:11px;font-weight:600;border-width:1px;}
 .sq-dl-btn{
   width:36px;height:38px;background:#f5f2ed;border:1px solid rgba(0,0,0,0.1);
   cursor:pointer;border-radius:6px;font-size:14px;flex-shrink:0;
@@ -3540,8 +3542,8 @@ document.addEventListener('visibilitychange', () => {
             <button id="sqBtnRead" hidden title="כבוי לבינתיים (בן, 10/11)" class="sq-action-btn sq-action-quiet" onclick="sqReadSketch()" aria-label="קרא סקיצה והכן טיוטת פריטים"><span data-icon="search"></span> קרא סקיצה</button><button id="sqBtnSeen" class="sq-action-btn" onclick="sqMarkSeen()">✓ סקיצה טופלה</button>
             <button id="sqBtnDrafter" class="sq-action-btn" onclick="sqSetStage('drafter')" style="display:none;">✏️ שלח לשרטט</button>
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
-            <button id="sqBtnPreview" class="sq-action-btn sq-action-quiet" onclick="sqPreviewChash()" title="מראה בדיוק מה ייכנס למסמך — מק\"טים, מידות, כמויות ומחירים — בלי לשלוח כלום"><span data-icon="search"></span> הצג מה יישלח</button>
-            <button id="sqBtnTest"    class="sq-action-btn" onclick="sqMarkTestOrder()" title="אותו תהליך בדיוק, רק שלא ייפתח מסמך בחשבשבת">🧪 הזמנה פיקטיבית</button>
+            <!-- "הצג מה יישלח" הוסר מהכרטיס (בן, 13/11). הבדיקה עדיין זמינה מחלון השגיאה. -->
+            <button id="sqBtnTest"    class="sq-action-btn sq-action-small" onclick="sqMarkTestOrder()" title="אותו תהליך בדיוק, רק שלא ייפתח מסמך בחשבשבת">🧪 הזמנה פיקטיבית</button>
             <button id="sqBtnOpty"    class="sq-action-btn" onclick="sqSetStage('opty')"><span data-icon="settings"></span> הוכנס ל-OptyWay</button>
             <button class="sq-dl-btn" onclick="sqDownload()" title="הורד" aria-label="הורד"><span data-icon="download"></span></button>
             <button class="sq-dl-btn" id="sqEditBtn" onclick="sqOpenEditor()" title="ערוך סקיצה" aria-label="ערוך סקיצה" style="display:none;"><span data-icon="pencil"></span></button>
