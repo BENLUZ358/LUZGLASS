@@ -434,6 +434,7 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     if (cfgOver && cfgOver._alreadyFiled) {
       const d = path.join(cfg.sharedRoot, 'נאור חזקיה', '2026-11');
       fs.mkdirSync(d, { recursive: true }); fs.writeFileSync(path.join(d, '67395 נאור חזקיה העתק 02-11-2026.pdf'), 'COPY');
+      if (cfgOver._alreadyFiledOriginal) fs.writeFileSync(path.join(d, '67395 נאור חזקיה מקור 02-11-2026.pdf'), 'ORIG');
     }
     const out = await W.processPair(cfg, { original: o, copies: [c] },
       async () => ({ status: 200, body: { ok: true, docNumber: '67395', archivePath: '2026/11/נאור חזקיה/2026-11-02_67395.pdf', ...body } }));
@@ -451,6 +452,27 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
   });
   await test('watcher: a retry after a failed filing still prints (copy was never filed)', async () => {
     assert.equal((await printRun({ duplicate: true })).printed.length, 1);
+  });
+  await test('watcher: printOriginal from the server prints the ORIGINAL first, then the copy', async () => {
+    const { out, printed } = await printRun({ printOriginal: true });
+    assert.equal(out, 'ok');
+    assert.deepEqual(printed, [['67395 נאור חזקיה מקור 02-11-2026.pdf', 'iR-ADV 525 III', 'ORIG'],
+                               ['67395 נאור חזקיה העתק 02-11-2026.pdf', 'iR-ADV 525 III', 'COPY']]);
+  });
+  await test('watcher: no printOriginal flag → only the copy is printed', async () => {
+    assert.deepEqual((await printRun({})).printed.map(p => p[2]), ['COPY']);
+  });
+  await test('watcher: printOriginal on a reprint, an already-filed original, or no printer → no original', async () => {
+    assert.deepEqual((await printRun({ printOriginal: true, reprint: true })).printed, []);
+    assert.deepEqual((await printRun({ printOriginal: true, duplicate: true }, { _alreadyFiled: true, _alreadyFiledOriginal: true })).printed, []);
+    assert.deepEqual((await printRun({ printOriginal: true }, { printCopyTo: '' })).printed, []);
+  });
+  await test('watcher: a failed original print does not stop the copy print', async () => {
+    const seen = [];
+    const { out } = await printRun({ printOriginal: true }, { printFn: async f => { seen.push(path.basename(f)); if (/מקור/.test(f)) throw new Error('jam'); } });
+    assert.equal(out, 'ok');
+    assert.equal(seen.length, 2);
+    assert.ok(/העתק/.test(seen[1]));
   });
   await test('watcher: no printer configured → nothing printed', async () => {
     assert.deepEqual((await printRun({}, { printCopyTo: '' })).printed, []);

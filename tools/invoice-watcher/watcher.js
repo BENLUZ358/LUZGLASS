@@ -285,6 +285,8 @@ async function upload(cfg, parts, files, post, opts = {}) {
   }
   //  ההעתק לנייר — רק בפעם הראשונה שהוא מתויק (הדפסה חוזרת מחשבשבת לא מוציאה דף נוסף)
   const print = !!cfg.printCopyTo && !r.body.reprint && !fs.existsSync(dest.copy);
+  //  הזמנה ידנית שרוצה מקור על נייר (השרת מבקש): פעם אחת בלבד — רק אם המקור עוד לא תויק
+  const printOrig = !!cfg.printCopyTo && !r.body.reprint && r.body.printOriginal === true && !fs.existsSync(dest.original);
   try {
     fs.mkdirSync(path.dirname(dest.original), { recursive: true });
     fs.writeFileSync(dest.original, parts.original);
@@ -297,6 +299,11 @@ async function upload(cfg, parts, files, post, opts = {}) {
   }
   moveAll('done');
   console.log('ok', r.body.docNumber, '→', path.dirname(dest.original));
+  if (printOrig) {
+    //  המקור קודם, וכשל בו לא עוצר את ההעתק
+    try { await (cfg.printFn || printWithGs)(dest.original, cfg.printCopyTo, cfg); console.log('printed original', r.body.docNumber); notePrint(null); }
+    catch (e) { console.error('print failed (file is filed):', r.body.docNumber, e.message); notePrint(e, dest.original); }
+  }
   if (print) {
     //  מדפסת כבויה / תקועה — החשבונית כבר תויקה ונשלחה; מדפיסים ידנית מהתיקייה
     try { await (cfg.printFn || printWithGs)(dest.copy, cfg.printCopyTo, cfg); console.log('printed copy', r.body.docNumber); notePrint(null); }
