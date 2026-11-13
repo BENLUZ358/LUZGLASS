@@ -62,5 +62,24 @@ const run = (db, body) => handleAdmin({ action: 'manual-order-set', ...body }, {
     assert.equal(await M.lgManualOrderRec(db, 'm31'), null);
     assert.deepEqual(M.LG_MANUAL_KINDS, ['ready', 'invoice']);
   });
+  await test('recipient for manual orders', async () => {
+    const R = require('../api/_wa-recipient');
+    const db = fakeDb({
+      hashavshevetAccounts: { '99': { name: 'מזדמן', phone: '0501111111' } },
+      waMeta: { manualOrders: { m99: { phone: '0548000775', original: 'send', customerId: '99', privateName: 'יוסי' } },
+                invoiceToPrivate: { '99': { phone: '0522222222' } } },
+    });
+    const o = { id: 'm99', source: 'manual', customerId: '99' };
+    for (const fn of [R.resolveRecipientWa, R.resolveRecipient]) {
+      const a = await fn(db, o, 'ready');
+      assert.equal(a.phone, '0548000775'); assert.equal(a.source, 'manual-phone');
+      assert.equal(a.accountKey, '99'); assert.equal(a.linked, true); assert.equal(a.channel, 'whatsapp');
+      assert.equal((await fn(db, o, 'invoice')).phone, '0548000775');
+      const b = await fn(db, o, 'received');
+      assert.equal(b.phone, ''); assert.equal(b.source, 'manual-kind-blocked'); assert.equal(b.linked, false);
+      const c = await fn(db, { id: 'nr', source: 'manual', customerId: '99' }, 'ready');
+      assert.equal(c.phone, ''); assert.equal(c.source, 'manual-missing'); assert.equal(c.linked, false);
+    }
+  });
   console.log(passed + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });
