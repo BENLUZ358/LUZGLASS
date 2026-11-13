@@ -1628,7 +1628,7 @@ async function lgSaveOrderItemsEdit(order, newItems, opts) {
   let newTotal = null;
   if (order.pricesLockedAt && Array.isArray(order.lockedItems) && order.lockedItems.length) {
     const had = new Set(before.map(it => it && it.sku).filter(Boolean));
-    const cp = ((opts.clientP || {})[order.orderClient || '']) || {};
+    const cp = ((opts.clientP || {})[lgPriceClientName(order)]) || {};
     const extra = [];
     items.forEach(it => {
       if (!it.sku || had.has(it.sku) || extra.some(x => x.sku === it.sku)) return;
@@ -1739,7 +1739,7 @@ function lgPlanSkuChange(order, index, newSku, opts) {
   const res = { changed: true, items, update, fromSku: oldSku, fromName: oldName, toSku: code, toName: r.label,
                 oldTotal: null, newTotal: null };
   if (order.pricesLockedAt && Array.isArray(order.lockedItems) && order.lockedItems.length) {
-    const cp  = ((opts.clientP || {})[order.orderClient || '']) || {};
+    const cp  = ((opts.clientP || {})[lgPriceClientName(order)]) || {};
     const ppm = parseFloat(cp[code] || (opts.globalP || {})[code] || 0);
     if (!ppm) throw new Error('אין מחיר למק"ט ' + code + ' במחירון — אי אפשר לחשב מחדש');
     const rp = lgRepriceLockedItems(items, order.lockedItems.concat([{ sku: code, pricePerM2: ppm }]));
@@ -2885,7 +2885,7 @@ function lgCalcOrderTotal(order, globalP, clientP){
   // מחיר נעול — ההזמנה כבר עברה ל-done/delivery/collected, המחיר קבוע
   if(order.totalFinal) return order.totalFinal;
   if(!(order.items||[]).length) return order.total||0;
-  const cp = (clientP||{})[order.orderClient||'']||{};
+  const cp = (clientP||{})[lgPriceClientName(order)]||{};
   const gp = globalP||{};
   let total = 0;
   let priced = 0;
@@ -2930,7 +2930,7 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
   // בדיקת !order.totalFinal הייתה מזהה זאת בטעות כ"עדיין לא ננעל" ונועלת שוב.
   if(!order.pricesLockedAt){
     result.locked = true;
-    const cp = (clientP||{})[order.orderClient||'']||{};
+    const cp = (clientP||{})[lgPriceClientName(order)]||{};
     const gp = globalP||{};
     let total=0, priced=0;
     // מקבצים לפי quantityGroupId — כך שהזמנת "3 יחידות" (3 שורות זהות
@@ -3052,8 +3052,8 @@ function lgPlanPriceChange(change, prices, orders){
   (orders || []).forEach(o => {
     if (!o || !o.id || o.pricesLockedAt) return;
     const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
-    const cOld = cpOld[o.orderClient || ''] || {};
-    const cNew = cpNew[o.orderClient || ''] || {};
+    const cOld = cpOld[lgPriceClientName(o)] || {};
+    const cNew = cpNew[lgPriceClientName(o)] || {};
     const fz   = o.frozenPrices || {};
     let touched = false;
     const seen = {};
@@ -3093,6 +3093,12 @@ async function lgSavePriceChange(change, prices, orders){
 
 async function savePricesGlobal(prices){
   await _lgDb.ref('prices/global').set(prices||{});
+}
+
+// שם הלקוח לחיפוש מחירון: הזמנה ידנית על כרטיס מזדמן נושאת priceClient (שם הכרטיס),
+// ו-orderClient הוא שם הלקוח הפרטי. תאומה ב-api/hashavshevet-order.js — אם אחד משתנה, גם השני.
+function lgPriceClientName(order) {
+  return (order && (order.priceClient || order.orderClient)) || '';
 }
 
 function _buildClientP(rawClients, keyMap){

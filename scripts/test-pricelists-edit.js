@@ -29,6 +29,7 @@ const load = (src, re) => {
   if (!m) { console.error('FAIL  could not find ' + re); process.exit(1); }
   vm.runInContext(m[0].replace(/^const /, 'var '), ctx);
 };
+load(DB, /function lgPriceClientName[\s\S]*?\n}/);
 load(DB, /function _buildClientP[\s\S]*?\n}/);
 load(DB, /function lgCalcAreaM2[\s\S]*?\n}/);
 load(DB, /const LG_MIN_AREA = \{[\s\S]*?\n\};/);

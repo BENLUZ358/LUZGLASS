@@ -81,5 +81,31 @@ const run = (db, body) => handleAdmin({ action: 'manual-order-set', ...body }, {
       assert.equal(c.phone, ''); assert.equal(c.source, 'manual-missing'); assert.equal(c.linked, false);
     }
   });
+  await test('hashavshevet: account key + price key + private name', async () => {
+    const H = require('../api/hashavshevet-order');
+    const db = fakeDb({
+      hashavshevetAccounts: { '99': { name: 'מזדמן' } },
+      users: { '0548000775': { customerId: '14201' } },
+      waMeta: { manualOrders: { m99: { phone: '0548000775', original: 'send', customerId: '99', privateName: 'יוסי כהן' } } },
+    });
+    const o = { id: 'm99', source: 'manual', customerId: '99', phone: '' };
+    assert.equal(await H.pickAccountKey(db, o), '99');
+    assert.equal(await H.pickAccountKey(db, { id: 'nr', source: 'manual', customerId: '99', phone: '' }), null);
+    assert.equal(await H.pickAccountKey(db, { id: 'w', phone: '0548000775' }), '14201');
+    assert.equal(H.lgPriceClientName({ priceClient: 'א', orderClient: 'ב' }), 'א');
+    assert.equal(H.lgPriceClientName({ orderClient: 'ב' }), 'ב');
+    const prices = { global: { '8SMH': 190 }, clients: { '99': { '8SMH': 111 } }, clientKeys: { '99': 'מזדמן' } };
+    const cp = H.clientPricesByName(prices);
+    const ord = { source: 'manual', priceClient: 'מזדמן', orderClient: 'יוסי כהן', privateName: 'יוסי כהן',
+      sketchName: 'א'.repeat(45), items: [{ sku: '8SMH', w: 1000, h: 1000, glassFullName: '8 מ"מ שקוף מחוסם' }] };
+    const r = H.buildLines(ord, '99', '1', '31', '1', prices.global, cp);
+    assert.equal(r.lines[0].price, '111.000');
+    assert.ok(r.lines[0].itemname.includes('יוסי כהן'));
+    assert.ok(r.lines[0].itemname.length <= 50, r.lines[0].itemname);
+    const r2 = H.buildLines({ ...ord, sketchName: '' }, '99', '1', '31', '1', prices.global, cp);
+    assert.equal(r2.lines[0].itemname, '8 מ"מ שקוף מחוסם יוסי כהן');
+    const r3 = H.buildLines({ ...ord, source: 'whatsapp', privateName: '', sketchName: '' }, '99', '1', '31', '1', prices.global, cp);
+    assert.equal(r3.lines[0].itemname, undefined);
+  });
   console.log(passed + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });
