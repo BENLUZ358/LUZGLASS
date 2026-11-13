@@ -27,6 +27,7 @@ const pick = re => { const m = FB.match(re); if (!m) { console.error('FAIL  coul
 vm.runInContext([
   pick(/function _lgClean[\s\S]*?\n}/),
   pick(/function lgNormalizeOrder[\s\S]*?\n}/),
+  pick(/function lgPriceClientName[\s\S]*?\n}/),
   pick(/\/\/ ─── 9א\.[\s\S]*?\nasync function lgMarkInvoiced[\s\S]*?\n}/),
   pick(/function lgCalcAreaM2[\s\S]*?\n}/),
   pick(/function lgCalcOrderM2[\s\S]*?\n}/),

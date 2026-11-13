@@ -29,6 +29,6 @@ check('ids are strings', ctx.f([o(7)], NOW), ['7']);
 check('lgLockAndAdvance stamps readyAt on done', /if\(nextStage === 'done'\) update\.readyAt = update\.updatedAt;/.test(SRC), true);
 check('workday runs the net on load', /lgReadyUnsentIds\(allOrders, Date\.now\(\)\)/.test(WD) && /_waSendReadyGrouped\(_readyLost\)/.test(WD), true);
 check('chisum finish waits for the writes, not a fixed delay', /Promise\.allSettled\(_advWrites\)\.then\(\(\) => _waSendReadyGrouped\(_waPending\)\)/.test(WD), true);
-check('workday loads the new firebase-db', /firebase-db\.js\?v=20261110/.test(WD), true);
+check('workday loads the new firebase-db', /firebase-db\.js\?v=20261113/.test(WD), true);
 console.log(fail ? '\n' + fail + ' failed' : '\nall passed');
 process.exit(fail ? 1 : 0);

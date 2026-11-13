@@ -1226,6 +1226,18 @@ function lgNormalizeOrder(o) {
     frozenPrices:  (o.frozenPrices && typeof o.frozenPrices === 'object') ? o.frozenPrices : null,
     customerId:    o.customerId   || '',
     businessName:  o.businessName || '',
+    // הזמנה ידנית (sq-new-order.js, 13/11). priceClient — שם הכרטיס למחירון
+    // (lgPriceClientName) כשהלקוח מזדמן ו-orderClient הוא השם הפרטי.
+    // manualNotify — הנייד לתצוגה בלבד; הרשומה המהימנה ב-waMeta/manualOrders.
+    // manualNotifySaved — השרת אישר את הרשומה. ⚠️ בלי השורות האלה הנרמול
+    // מוחק אותם בדרך לכל מסך, ו"מוכן" ביום עבודה לא היה רואה את הנייד.
+    priceClient:   o.priceClient  || '',
+    privateName:   o.privateName  || '',
+    manualNotify:  (o.manualNotify && typeof o.manualNotify === 'object') ? {
+      phone:    String(o.manualNotify.phone || ''),
+      original: o.manualNotify.original === 'paper' ? 'paper' : 'send',
+    } : null,
+    manualNotifySaved: !!o.manualNotifySaved,
     clientPhone:   o.clientPhone  || '',
     vatId:         o.vatId        || '',
     paymentStatus: o.paymentStatus|| 'unpaid',
@@ -1628,7 +1640,7 @@ async function lgSaveOrderItemsEdit(order, newItems, opts) {
   let newTotal = null;
   if (order.pricesLockedAt && Array.isArray(order.lockedItems) && order.lockedItems.length) {
     const had = new Set(before.map(it => it && it.sku).filter(Boolean));
-    const cp = ((opts.clientP || {})[order.orderClient || '']) || {};
+    const cp = ((opts.clientP || {})[lgPriceClientName(order)]) || {};
     const extra = [];
     items.forEach(it => {
       if (!it.sku || had.has(it.sku) || extra.some(x => x.sku === it.sku)) return;
@@ -1739,7 +1751,7 @@ function lgPlanSkuChange(order, index, newSku, opts) {
   const res = { changed: true, items, update, fromSku: oldSku, fromName: oldName, toSku: code, toName: r.label,
                 oldTotal: null, newTotal: null };
   if (order.pricesLockedAt && Array.isArray(order.lockedItems) && order.lockedItems.length) {
-    const cp  = ((opts.clientP || {})[order.orderClient || '']) || {};
+    const cp  = ((opts.clientP || {})[lgPriceClientName(order)]) || {};
     const ppm = parseFloat(cp[code] || (opts.globalP || {})[code] || 0);
     if (!ppm) throw new Error('אין מחיר למק"ט ' + code + ' במחירון — אי אפשר לחשב מחדש');
     const rp = lgRepriceLockedItems(items, order.lockedItems.concat([{ sku: code, pricePerM2: ppm }]));
@@ -1884,7 +1896,9 @@ function lgInvoiceGroups(allOrders, q, opts) {
     // כמו פלג (07) שמזמין במייל בלי טלפון נפל קודם להזמנה־לקבוצה (בן, 10/11)
     const phone = lgClientKey(o);
     const card  = String((o && o.customerId) || '').trim();
-    const key = card ? ('card:' + card) : (phone || ('order:' + o.id));
+    // הזמנה ידנית על כרטיס מזדמן (99): כל לקוח מזדמן הוא קבוצה משלו, עם השם שלו
+    const walkIn = card === '99' && o.source === 'manual';
+    const key = walkIn ? ('card:99:' + o.id) : card ? ('card:' + card) : (phone || ('order:' + o.id));
     const g = by[key] || (by[key] = { key, phone, card, name: '', ords: [] });
     if (!g.phone && phone) g.phone = phone;
     if (!g.name && o.orderClient && o.orderClient !== '—') g.name = o.orderClient;
@@ -2825,6 +2839,13 @@ function lgResolveClientPhone(order, accountsMap, customerIdByPhone) {
   const normalize = p => String(p || '').replace(/[-\s]/g, '');
   const account   = k => (accountsMap || {})[String(k || '').trim()];
 
+  // 0. הזמנה ידנית (בן, 13/11): רק הנייד שבן שמר — לעולם לא הטלפון של הכרטיס.
+  //    לתצוגה בלבד; השרת קובע לפי waMeta/manualOrders (api/_wa-recipient.js).
+  if (order && order.source === 'manual') {
+    const mp = order.manualNotifySaved && order.manualNotify ? normalize(order.manualNotify.phone) : '';
+    return { phone: mp, source: mp ? 'manual' : 'manual-missing', accountKey: null };
+  }
+
   // 1. מפתח החשבון שרשום על ההזמנה עצמה
   let acc = account(order && order.customerId);
 
@@ -2885,7 +2906,7 @@ function lgCalcOrderTotal(order, globalP, clientP){
   // מחיר נעול — ההזמנה כבר עברה ל-done/delivery/collected, המחיר קבוע
   if(order.totalFinal) return order.totalFinal;
   if(!(order.items||[]).length) return order.total||0;
-  const cp = (clientP||{})[order.orderClient||'']||{};
+  const cp = (clientP||{})[lgPriceClientName(order)]||{};
   const gp = globalP||{};
   let total = 0;
   let priced = 0;
@@ -2930,7 +2951,7 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
   // בדיקת !order.totalFinal הייתה מזהה זאת בטעות כ"עדיין לא ננעל" ונועלת שוב.
   if(!order.pricesLockedAt){
     result.locked = true;
-    const cp = (clientP||{})[order.orderClient||'']||{};
+    const cp = (clientP||{})[lgPriceClientName(order)]||{};
     const gp = globalP||{};
     let total=0, priced=0;
     // מקבצים לפי quantityGroupId — כך שהזמנת "3 יחידות" (3 שורות זהות
@@ -3052,8 +3073,8 @@ function lgPlanPriceChange(change, prices, orders){
   (orders || []).forEach(o => {
     if (!o || !o.id || o.pricesLockedAt) return;
     const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
-    const cOld = cpOld[o.orderClient || ''] || {};
-    const cNew = cpNew[o.orderClient || ''] || {};
+    const cOld = cpOld[lgPriceClientName(o)] || {};
+    const cNew = cpNew[lgPriceClientName(o)] || {};
     const fz   = o.frozenPrices || {};
     let touched = false;
     const seen = {};
@@ -3093,6 +3114,12 @@ async function lgSavePriceChange(change, prices, orders){
 
 async function savePricesGlobal(prices){
   await _lgDb.ref('prices/global').set(prices||{});
+}
+
+// שם הלקוח לחיפוש מחירון: הזמנה ידנית על כרטיס מזדמן נושאת priceClient (שם הכרטיס),
+// ו-orderClient הוא שם הלקוח הפרטי. תאומה ב-api/hashavshevet-order.js — אם אחד משתנה, גם השני.
+function lgPriceClientName(order) {
+  return (order && (order.priceClient || order.orderClient)) || '';
 }
 
 function _buildClientP(rawClients, keyMap){

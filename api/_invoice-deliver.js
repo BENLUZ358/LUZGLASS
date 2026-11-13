@@ -194,15 +194,20 @@ async function lgInvoiceDeliver(db, key, deps) {
     const res = (r && r.results || []).find(x => x.key === dv.outboxKey);
     return { state: res && res.status === 'sent' ? 'sent' : dv.state, channel: 'whatsapp', result: res || null, retried: true };
   }
-  if (dv && dv.state === 'queued') return dv;
+  if (dv && (dv.state === 'queued' || dv.state === 'paper')) return dv;
   if (rec.simulated) { await mark({ state: 'skipped', reason: 'חשבונית ניסיון' }); return { state: 'skipped' }; }
 
   const ids = rec.orderIds || [];
-  const orders = await Promise.all(ids.map(async id => (await db.ref('orders/' + id).once('value')).val()));
+  const orders = await Promise.all(ids.map(async id => { const o = (await db.ref('orders/' + id).once('value')).val(); return o ? { ...o, id } : o; }));
   if (!ids.length || orders.some(o => !o)) { await mark({ state: 'blocked', reason: 'הזמנה חסרה' }); return { state: 'blocked' }; }
 
-  const waOrder = orders.find(o => o.source === 'whatsapp');
-  const emOrder = orders.find(o => o.source === 'email');
+  //  הזמנה ידנית (בן, 13/11): מקור על נייר, או וואטסאפ לנייד שבן רשם — לעולם לא פורטל
+  //  ולא קבוצה/מייל של הזמנה אחרת באותה חשבונית
+  const manualMode = await require('./_manual-order').lgManualInvoiceMode(db, orders);
+  if (manualMode === 'paper') { await mark({ state: 'paper' }); return { state: 'paper' }; }
+  const manOrder = manualMode === 'send' ? orders.find(o => o.source === 'manual') : null;
+  const waOrder = manOrder || orders.find(o => o.source === 'whatsapp');
+  const emOrder = manOrder ? null : orders.find(o => o.source === 'email');
   if (!waOrder && !emOrder) { await mark({ state: 'portal' }); return { state: 'portal' }; }
 
   const files = await lgInvoiceFiles(db, key);
@@ -220,7 +225,7 @@ async function lgInvoiceDeliver(db, key, deps) {
                    missingSketchNums: files.missing || [],
                    //  שבר בחיסום (בן, 10/11): מה שעוד לא חזר מהמפעל — נאמר עם החשבונית
                    extraLines: require('./_broken').brokenInvoiceLines(orders),
-                   deliveryTomorrow: await lgIsDeliveryInvoice(db, orders, who.accountKey) };
+                   deliveryTomorrow: manOrder ? false : await lgIsDeliveryInvoice(db, orders, who.accountKey) };
 
   if (who.channel === 'email') {
     const { lgEmailEnqueue } = require('./_email-outbox');

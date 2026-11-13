@@ -227,6 +227,18 @@ async function resolveRecipient(db, order, kind) {
 //  החשבוניות בפרטי אותו הדבר") — waMeta/invoiceToPrivate/<מפתח>/phone גובר על
 //  המספר שבכרטיס. נכתב רק בידי מנהל (waMeta), ולכן גם הוא הרשאה.
 async function resolveRecipientWa(db, order, kind) {
+  //  הזמנה ידנית (source:'manual'): רק 'מוכן' ו'חשבונית', ורק לטלפון שבן רשם ב-
+  //  waMeta/manualOrders/<id>. לעולם לא לטלפון הכרטיס, ולא ל-invoiceToPrivate.
+  if (order && order.source === 'manual') {
+    const M = require('./_manual-order');
+    const acct = order.customerId ? String(order.customerId) : null;
+    if (!M.LG_MANUAL_KINDS.includes(kind))
+      return { phone: '', source: 'manual-kind-blocked', accountKey: acct, linked: false, channel: 'whatsapp' };
+    //  רשומה של כרטיס אחר = כאילו אין רשומה (הגנה כפולה)
+    const rec = await M.lgManualRecFor(db, order);
+    if (!rec) return { phone: '', source: 'manual-missing', accountKey: acct, linked: false, channel: 'whatsapp' };
+    return { phone: rec.phone, source: 'manual-phone', accountKey: acct, linked: true, channel: 'whatsapp' };
+  }
   const r = await _resolveWa(db, order);
   //  'broken-returned' (בן, 10/11) — הולך לאן שהולכות החשבוניות
   const priv = (kind === 'invoice' || kind === 'broken-returned') && r.linked && r.accountKey

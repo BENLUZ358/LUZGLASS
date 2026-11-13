@@ -436,7 +436,8 @@ const GREEN_ENV = {
         /setTimeout\(\(\) => _waSendBulk\(/.test(WD), false);
 
   const grp = (WD.match(/async function _waSendReadyGrouped[\s\S]*?\n}/) || [''])[0];
-  check('it groups by client name',        /const c = \(o && o\.orderClient\) \|\| '—';/.test(grp), true);
+  /* 13/11: by client name, and a manual order also by the phone Ben typed (wdReadyGroupKey, sq-new-order.js) */
+  check('it groups by client name',        /const k = wdReadyGroupKey\(o \|\| \{ orderClient: '—' \}\);/.test(grp), true);
   check('and calls the proven endpoint',   /'\/api\/whatsapp-dispatch'/.test(grp), true);
   check('with kind=ready',                 /kind:'ready'/.test(grp), true);
   /* ⚠️ קריאה אחת לכל לקוח — לא אחת לכל הזמנה */

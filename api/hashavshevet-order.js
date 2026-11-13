@@ -29,6 +29,7 @@ const { lgExternal, lgDatabaseUrl } = require('./_env');
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
 const { lgEmailOrderAccount } = require('./_email-recipient');
+const { lgManualRecFor } = require('./_manual-order');
 
 const ENDPOINT     = 'https://ws.wizground.com/api';
 // נגזרת ממפתח השירות — ר' lgDatabaseUrl ב-_env.js. הייתה קשיחה כאן, וזה
@@ -118,6 +119,37 @@ function clientPricesByName(prices) {
   return out;
 }
 
+// שם הלקוח לחיפוש מחירון: הזמנה ידנית על כרטיס מזדמן (99) נושאת priceClient = שם הכרטיס,
+// ו-orderClient = שם הלקוח הפרטי. זו תאומה של lgPriceClientName ב-firebase-db.js —
+// אם אחד מהם משתנה, גם השני.
+function lgPriceClientName(order) {
+  return (order && (order.priceClient || order.orderClient)) || '';
+}
+
+// מפתח החשבון. הזמנה ידנית: הכרטיס שבן בחר (רק אם יש רשומה מהימנה והכרטיס קיים בחשבשבת);
+// כל השאר — כמו תמיד: משתמש הפורטל, ואז הכרטיס שנבחר בקליטות.
+async function pickAccountKey(db, order) {
+  if (order && order.source === 'manual') {
+    //  רשומה של כרטיס אחר = כאילו אין רשומה (הגנה כפולה)
+    const rec = await lgManualRecFor(db, order);
+    if (rec) {
+      const acc = (await db.ref('hashavshevetAccounts/' + order.customerId).once('value')).val();
+      if (acc) return String(order.customerId);
+    }
+    return null;
+  }
+  const phone = String((order && (order.clientPhone || order.phone)) || '').replace(/[-\s]/g, '');
+  const user  = phone ? (await db.ref('users/' + phone).once('value')).val() : null;
+  return (user && user.customerId) || await lgEmailOrderAccount(db, order);
+}
+
+// הזמנה ידנית בלי מפתח חשבון — הסבר אמיתי במקום "אין טלפון לקוח"
+async function manualAccountError(db, order) {
+  return (await lgManualRecFor(db, order))
+    ? { error: 'כרטיס הלקוח של ההזמנה הידנית לא נמצא — סנכרן לקוחות', code: 'manual-unknown-card' }
+    : { error: 'הטלפון של ההזמנה הידנית לא נשמר — שמור אותו בשורה האדומה בתור הסקיצות', code: 'manual-missing' };
+}
+
 // ── המידה על השורה: SM_Extratext1 ─────────────────────────────────────
 //
 //  "3) 550x1885" — מספר השורה ורוחב×גובה במ"מ. 50 תווים מותרים.
@@ -162,7 +194,7 @@ function lineText(n, w, h, seq, total) {
 // hsLines ממפה מפתח פריט (אינדקס במערך, או המפתח ב-Firebase) למספר השורה
 // שלו בחשבשבת, ו-null לפריט שדולג — כדי ששליחה חוזרת תנקה מספר ישן.
 function buildLines(order, accountKey, reference, documentId, agent, globalPrices, clientPrices) {
-  const cp    = (clientPrices || {})[order.orderClient || ''] || {};
+  const cp    = (clientPrices || {})[lgPriceClientName(order)] || {};
   const gp    = globalPrices || {};
   // שם הסקיצה, כפי שנרשם בתור. בן, 19/10/2026: בחשבשבת "שם פריט" נושא אותו ליד
   // הזכוכית ("8 מ"מ שקוף מחוסם לימור") — כך מזהים בהזמנה לאיזו עבודה כל שורה שייכת.
@@ -248,11 +280,30 @@ function buildLines(order, accountKey, reference, documentId, agent, globalPrice
     // התהפכה (L1079). 21/10: בלי הקו, על L1098 — "8 מ"מ שקוף מחוסם 3515" יצא נכון.
     // לכן: זכוכית + רווח + שם הסקיצה, ותווים שחשבשבת לא מציגים (—, –, ״, ׳) מוחלפים
     // ברגילים — גם כשהם בתוך שם הסקיצה ("שירה — התבור 6").
-    if (LG_HS_SEND_ITEMNAME && sketchName) {
+    const privateName = order.source === 'manual' ? String(order.privateName || '').trim() : '';
+    if (LG_HS_SEND_ITEMNAME && (sketchName || privateName)) {
       const plain = s => String(s || '').replace(/[—–]/g, ' ').replace(/״/g, '"').replace(/׳/g, "'").replace(/\s+/g, ' ').trim();
       const glass = plain(item.glassFullName || item.name || '');
       const name  = plain(sketchName);
-      if (name) line.itemname = (glass ? glass + ' ' + name : name).slice(0, LG_LINE_TEXT_MAX);
+      const priv  = plain(privateName);
+      if (priv) {
+        // השם הפרטי לא נחתך לעולם: מקצרים קודם את שם הסקיצה, אחר כך (אם צריך) את הזכוכית
+        const MAX = LG_LINE_TEXT_MAX;
+        const base = [glass, priv].filter(Boolean).join(' ');
+        let nm = name;
+        if (nm) {
+          const room = MAX - base.length - 1;
+          nm = room >= 1 ? nm.slice(0, room).trim() : '';
+        }
+        let text2 = [glass, nm, priv].filter(Boolean).join(' ');
+        if (text2.length > MAX) {
+          const gRoom = MAX - priv.length - 1;
+          text2 = (gRoom >= 1 ? glass.slice(0, gRoom).trim() + ' ' + priv : priv).slice(0, MAX);
+        }
+        line.itemname = text2;
+      } else if (name) {
+        line.itemname = (glass ? glass + ' ' + name : name).slice(0, LG_LINE_TEXT_MAX);
+      }
     }
     lines.push(line);
     hsLines[key] = n;
@@ -329,9 +380,14 @@ module.exports = async function handler(req, res) {
 
     // ── accountKey: מפתח החשבון של הלקוח ──
     const phone = String(order.clientPhone || order.phone || '').replace(/[-\s]/g, '');
-    const user  = phone ? (await db.ref('users/' + phone).once('value')).val() : null;
     // הזמנה ממייל של לקוח בלי משתמש פורטל (אביבי, פלג) — לפי הכרטיס שבחרת בקליטות
-    const accountKey = (user && user.customerId) || await lgEmailOrderAccount(db, order);
+    // הזמנה ידנית — לפי הכרטיס שבהזמנה. ר' pickAccountKey
+    //  המזהה מהנתיב — הרשומה הידנית נמצאת לפיו, לא לפי שדה שנשמר בתוך ההזמנה
+    const accountKey = await pickAccountKey(db, { ...order, id: orderId });
+    if (!accountKey && order.source === 'manual') {
+      res.status(422).json(await manualAccountError(db, { ...order, id: orderId }));
+      return;
+    }
     if (!accountKey && !phone) { res.status(422).json({ error: 'להזמנה אין טלפון לקוח, ולכן אין דרך למצוא מפתח חשבון' }); return; }
     if (!accountKey) {
       res.status(422).json({
@@ -531,3 +587,9 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: 'internal error' });
   }
 };
+
+module.exports.pickAccountKey = pickAccountKey;
+module.exports.manualAccountError = manualAccountError;
+module.exports.buildLines = buildLines;
+module.exports.clientPricesByName = clientPricesByName;
+module.exports.lgPriceClientName = lgPriceClientName;

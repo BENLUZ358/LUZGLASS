@@ -39,7 +39,7 @@ function lgReadyNetHours(now) {
 }
 
 //  טהור. orders = { id: order }, inQueue = Set של מזהי הזמנות שכבר בתור ready, tried = { id: at }
-//  → [{ client, ids:[...] }] מקובץ לפי orderClient, בסדר readyAt
+//  → [{ client, ids:[...] }] מקובץ לפי orderClient (+ הנייד של הזמנה ידנית), בסדר readyAt
 function lgReadyNetPick(orders, now, inQueue, tried, minAgeMs) {
   const t = Number(now) || Date.now();
   const q = inQueue || new Set(), tr = tried || {};
@@ -53,13 +53,17 @@ function lgReadyNetPick(orders, now, inQueue, tried, minAgeMs) {
     if (q.has(id) || tr[id]) return false;
     return true;
   }).sort((a, b) => (Number(a[1].readyAt) || 0) - (Number(b[1].readyAt) || 0));
+  //  ⚠️ תאום של wdReadyGroupKey (sq-new-order.js) — אם אחד משתנה, גם השני.
+  //  הזמנה ידנית נפרדת לפי הנייד שלה: לא מתאחדת עם הזמנה רגילה של אותו כרטיס,
+  //  ושני לקוחות מזדמנים באותו שם עם ניידים שונים לא מתאחדים.
   const by = new Map();
   for (const [id, o] of list) {
     const c = String(o.orderClient || '—');
-    if (!by.has(c)) by.set(c, []);
-    by.get(c).push(id);
+    const k = c + '|' + (o.source === 'manual' && o.manualNotify ? String(o.manualNotify.phone || '') : '');
+    if (!by.has(k)) by.set(k, { client: c, ids: [] });
+    by.get(k).ids.push(id);
   }
-  return [...by].map(([client, ids]) => ({ client, ids }));
+  return [...by.values()];
 }
 
 //  מזהי הזמנות שכבר יושבות בתור כ-ready (ממתינה / נשלחה / בשליחה) — כדי לא לשלוח פעמיים

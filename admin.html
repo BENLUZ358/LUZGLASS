@@ -404,7 +404,7 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261112"></script>
+  <script src="firebase-db.js?v=20261113"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
@@ -412,6 +412,7 @@ label.msec-t{display:block;}
   <script src="wa-inbound-panel.js"></script>
   <script src="agents-dash.js?v=20261111c"></script>
   <script src="sq-assign.js?v=20261023h"></script>
+  <script src="sq-new-order.js?v=20261113"></script>
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
   <script src="sketch-reader-ui.js?v=20261023h"></script>
@@ -2934,6 +2935,7 @@ document.addEventListener('visibilitychange', () => {
 .sq-tag-upload{background:rgba(142,68,173,0.25);color:#bb8fce;}
 .sq-tag-wa{background:rgba(37,211,102,0.18);color:#5fe08f;}
 .sq-tag-email{background:rgba(233,30,99,0.18);color:#f48fb1;}
+.sq-tag-manual{background:rgba(184,146,42,0.22);color:#e0c068;}
 .sq-tag-unassigned{background:rgba(212,160,23,0.2);color:#f3c74f;}
 .sq-tag-pending{background:rgba(184,146,42,0.25);color:#d4ac0d;}
 .sq-tag-drafter{background:rgba(192,57,43,0.25);color:#ec7063;}
@@ -3006,6 +3008,8 @@ document.addEventListener('visibilitychange', () => {
 .sq-action-quiet{background:none;border-style:dashed;color:#8a8278;flex:0 1 auto;}
 .sq-action-quiet:hover{background:#f5f2ed;color:#555;}
 .sq-action-quiet [data-icon]{width:14px;height:14px;vertical-align:-2px;}
+/* כפתור צדדי — קטן, לא מתחרה בכפתורי השלבים (בן, 13/11: "הזמנה פיקטיבית בקטן") */
+.sq-action-small{flex:0 0 auto;min-width:0;padding:5px 9px;font-size:11px;font-weight:600;border-width:1px;}
 .sq-dl-btn{
   width:36px;height:38px;background:#f5f2ed;border:1px solid rgba(0,0,0,0.1);
   cursor:pointer;border-radius:6px;font-size:14px;flex-shrink:0;
@@ -3038,6 +3042,54 @@ document.addEventListener('visibilitychange', () => {
    44px לכל מה שנוגעים בו, כמו בתחנת הבדיקה. */
 #sqAssignWrap{margin:0 14px 12px;padding:10px 12px;border:1px solid rgba(212,160,23,0.45);border-right:4px solid #d4a017;border-radius:6px;background:#fffaf0;}
 #sqAssignWrap[hidden]{display:none;}
+/* הזמנה ידנית (sq-new-order.js, 13/11) — כפתור, חלון ושורת מצב. 44px לכל מגע. */
+.sq-new-wrap{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);}
+.sq-new-btn{width:100%;min-height:44px;background:var(--gold);color:var(--on-gold);border-color:var(--gold);font-size:14px;}
+.sq-new-btn:hover{filter:brightness(0.95);}
+.sqn-modal{max-width:480px;font-family:Heebo,sans-serif;direction:rtl;}
+.sqn-modal .mbody{overflow-x:hidden;}
+.sqn-modal .mcl{min-width:44px;min-height:44px;}
+.sqn-f{margin:0 0 14px;min-width:0;}
+.sqn-fs{border:0;padding:0;margin:0 0 14px;min-width:0;}
+.sqn-l{display:block;font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;padding:0;}
+.sqn-opt{font-weight:400;color:var(--muted);}
+.sqn-in{width:100%;box-sizing:border-box;min-height:44px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-family:Heebo,sans-serif;font-size:16px;color:var(--text);outline:none;}
+.sqn-in:focus{border-color:var(--gold-text);box-shadow:0 0 0 2px rgba(184,146,42,0.25);}
+.sqn-hide{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;}
+.sqn-file{display:flex;align-items:center;justify-content:center;min-height:56px;border:2px dashed var(--border);border-radius:6px;background:var(--bg);font-size:14px;font-weight:700;color:var(--text);cursor:pointer;}
+.sqn-file:focus-within,.sqn-file:hover{border-color:var(--gold-text);}
+.sqn-prev{display:block;max-width:100%;max-height:200px;margin-top:8px;border:1px solid var(--border);border-radius:6px;object-fit:contain;}
+.sqn-prev[hidden]{display:none;}
+.sqn-row{display:flex;gap:8px;align-items:stretch;}
+.sqn-row .sqn-in{flex:1 1 auto;min-width:0;}
+.sqn-btn{min-height:44px;padding:0 14px;border:1px solid var(--gold-text);border-radius:6px;background:var(--surface);color:var(--text);font:700 14px Heebo,sans-serif;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.sqn-quiet{border-color:var(--border);color:var(--muted);font-weight:600;}
+.sqn-list{display:flex;flex-direction:column;gap:4px;margin-top:6px;max-height:220px;overflow-y:auto;}
+.sqn-list .sqa-opt{display:flex;justify-content:space-between;gap:8px;min-height:44px;align-items:center;padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font:500 14px Heebo,sans-serif;color:var(--text);cursor:pointer;text-align:right;}
+.sqn-list .sqa-opt:hover{border-color:var(--gold-text);}
+.sqn-list .sqa-key,.sqn-key{color:var(--muted);font-size:13px;}
+.sqn-list .sqa-none{font-size:13px;color:var(--muted);padding:6px 2px;}
+.sqn-chosen{display:flex;align-items:center;gap:8px;min-height:44px;padding:4px 4px 4px 12px;border:1px solid var(--gold-text);border-radius:6px;background:rgba(184,146,42,0.08);}
+.sqn-chosen-n{flex:1;min-width:0;font-weight:700;font-size:15px;overflow-wrap:anywhere;padding-right:8px;}
+.sqn-radios{display:flex;gap:8px;flex-wrap:wrap;}
+.sqn-radio{flex:1 1 140px;display:flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);font-size:14px;font-weight:600;cursor:pointer;}
+.sqn-radio:has(input:checked){border-color:var(--gold-text);background:rgba(184,146,42,0.1);}
+.sqn-radio input{width:18px;height:18px;margin:0;accent-color:var(--gold);}
+.sqn-hint{font-size:12px;color:var(--muted);margin-top:4px;}
+.sqn-err{font-size:13px;font-weight:700;color:var(--red);margin-top:4px;}
+.sqn-err:empty{display:none;}
+.sqn-modal .mfoot .btn-save,.sqn-modal .mfoot .btn-cancel{min-height:44px;}
+.sqn-modal .btn-save:disabled{opacity:0.6;cursor:wait;}
+#sqManualWrap{margin:0 14px 12px;padding:8px 12px;border:1px solid rgba(39,174,96,0.3);border-right:4px solid #27ae60;border-radius:6px;background:#f2fbf5;font-family:Heebo,sans-serif;}
+#sqManualWrap[hidden]{display:none;}
+#sqManualWrap.sqm-bad{border-color:rgba(169,50,38,0.4);border-right-color:var(--red);background:#fdf1ef;}
+#sqManualWrap.sqm-bad .sqm-t{color:var(--red);}
+.sqm-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.sqm-t{flex:1 1 180px;min-width:0;font-size:14px;font-weight:700;color:#1a1714;overflow-wrap:anywhere;}
+.sqm-btn{min-height:44px;min-width:44px;padding:0 12px;border:1px solid rgba(0,0,0,0.15);border-radius:6px;background:#fff;color:#1a1714;font:700 14px Heebo,sans-serif;cursor:pointer;}
+.sqm-retry,.sqm-save{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.sqm-btn:disabled{opacity:0.5;cursor:wait;}
+.sqm-edit .sqn-fs{margin:10px 0 6px;}
 /* מגירת "טיוטה לשרטט" (בן, 10/11) — drafter-batch.js */
 #drafterBar[hidden]{display:none;}
 .drb{position:sticky;bottom:0;z-index:5;background:var(--surface);border-top:2px solid var(--gold);box-shadow:0 -4px 14px rgba(0,0,0,.12);padding:10px 12px;}
@@ -3428,6 +3480,7 @@ document.addEventListener('visibilitychange', () => {
         <option value="upload">העלאות</option>
         <option value="whatsapp">WhatsApp</option>
         <option value="email">מייל</option>
+        <option value="manual">ידנית</option>
       </select>
       <select id="sqFStatus" class="sq-filter-sel" onchange="sqRender()" aria-label="סטטוס">
         <option value="">הכל</option>
@@ -3490,6 +3543,8 @@ document.addEventListener('visibilitychange', () => {
 
       <!-- LIST -->
       <div id="sqListPanel">
+        <!-- הזמנה ידנית עם נייד לעדכונים (13/11) — sq-new-order.js -->
+        <div class="sq-new-wrap"><button type="button" id="sqBtnNewOrder" class="sq-action-btn sq-new-btn" onclick="sqNewOrderOpen()">+ הזמנה חדשה</button></div>
         <!-- שלב 6: טופלו וממתינים לעדכון ללקוח — רשת ביטחון. _sqRenderAckPending -->
         <div id="sqAckPending" hidden></div>
         <div id="sqList"></div>
@@ -3533,6 +3588,7 @@ document.addEventListener('visibilitychange', () => {
           </div>
           <!-- "שייך ללקוח" — רק כשהלקוח לא זוהה (מייל/וואטסאפ). ממולא ע"י sq-assign.js -->
           <div id="sqAssignWrap" hidden></div>
+          <div id="sqManualWrap" hidden></div>
           <!-- check-station status badge -->
           <div id="sqCheckBadge" style="display:none;margin:0 14px 10px;padding:8px 12px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.2);border-radius:6px;font-size:12px;color:#27ae60;font-weight:700;"></div>
           <!-- actions -->
@@ -3540,8 +3596,8 @@ document.addEventListener('visibilitychange', () => {
             <button id="sqBtnRead" hidden title="כבוי לבינתיים (בן, 10/11)" class="sq-action-btn sq-action-quiet" onclick="sqReadSketch()" aria-label="קרא סקיצה והכן טיוטת פריטים"><span data-icon="search"></span> קרא סקיצה</button><button id="sqBtnSeen" class="sq-action-btn" onclick="sqMarkSeen()">✓ סקיצה טופלה</button>
             <button id="sqBtnDrafter" class="sq-action-btn" onclick="sqSetStage('drafter')" style="display:none;">✏️ שלח לשרטט</button>
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
-            <button id="sqBtnPreview" class="sq-action-btn sq-action-quiet" onclick="sqPreviewChash()" title="מראה בדיוק מה ייכנס למסמך — מק\"טים, מידות, כמויות ומחירים — בלי לשלוח כלום"><span data-icon="search"></span> הצג מה יישלח</button>
-            <button id="sqBtnTest"    class="sq-action-btn" onclick="sqMarkTestOrder()" title="אותו תהליך בדיוק, רק שלא ייפתח מסמך בחשבשבת">🧪 הזמנה פיקטיבית</button>
+            <!-- "הצג מה יישלח" הוסר מהכרטיס (בן, 13/11). הבדיקה עדיין זמינה מחלון השגיאה. -->
+            <button id="sqBtnTest"    class="sq-action-btn sq-action-small" onclick="sqMarkTestOrder()" title="אותו תהליך בדיוק, רק שלא ייפתח מסמך בחשבשבת">🧪 הזמנה פיקטיבית</button>
             <button id="sqBtnOpty"    class="sq-action-btn" onclick="sqSetStage('opty')"><span data-icon="settings"></span> הוכנס ל-OptyWay</button>
             <button class="sq-dl-btn" onclick="sqDownload()" title="הורד" aria-label="הורד"><span data-icon="download"></span></button>
             <button class="sq-dl-btn" id="sqEditBtn" onclick="sqOpenEditor()" title="ערוך סקיצה" aria-label="ערוך סקיצה" style="display:none;"><span data-icon="pencil"></span></button>
@@ -4022,6 +4078,11 @@ function buildSQItems(){
       attachments:     o.attachments || null,
       // מרכזן (10/11): "נראה כמו גרפיקה חלבי — לצרף?" (api/_attach-suggest.js)
       attachSuggest:   o.attachSuggest || null,
+      // הזמנה ידנית (sq-new-order.js): שורת המצב, ושם הכרטיס למחירון של לקוח מזדמן
+      manualNotify:      o.manualNotify || null,
+      manualNotifySaved: !!o.manualNotifySaved,
+      privateName:       o.privateName || '',
+      priceClient:       o.priceClient || '',
     });
   });
 }
@@ -4126,7 +4187,7 @@ function sqRender(){
         <div class="sq-item-client">${lgEsc(item.client)}</div>
         <div class="sq-item-sub">${item.sketchName?lgEsc(item.sketchName):'<span class="sq-unnamed">ללא שם</span>'}${item.orderNum?' · '+lgEsc(item.orderNum):''}</div>
         <div class="sq-item-tags">
-          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':(item.source==='whatsapp'||item.source==='zgagi')?'sq-tag-wa':item.source==='email'?'sq-tag-email':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':(item.source==='whatsapp'||item.source==='zgagi')?'WhatsApp':item.source==='email'?'מייל':'מערכת'}</span>
+          <span class="sq-tag ${item.source==='upload'?'sq-tag-upload':(item.source==='whatsapp'||item.source==='zgagi')?'sq-tag-wa':item.source==='email'?'sq-tag-email':item.source==='manual'?'sq-tag-manual':'sq-tag-sketch'}">${item.source==='upload'?'העלאה':(item.source==='whatsapp'||item.source==='zgagi')?'WhatsApp':item.source==='email'?'מייל':item.source==='manual'?'ידנית':'מערכת'}</span>
           ${lgZgagiUpdatedTag(item)}
           <span class="sq-tag ${tagClass}">${tagLabel}</span>
           ${item.waUnassigned||item.emailUnassigned?'<span class="sq-tag sq-tag-unassigned">לא שויך</span>':''}
@@ -4296,6 +4357,8 @@ function sqShowDetail(){
   if(nameEl){ nameEl.value=o.sketchName||''; sqMarkNameState(); }
   // לקוח לא זוהה → כפתור "שייך ללקוח" (sq-assign.js)
   if(typeof sqAssignShow==='function') sqAssignShow(o);
+  // הזמנה ידנית → "📱 עדכונים ל-…" או "הטלפון לא נשמר" (sq-new-order.js)
+  if(typeof sqManualShow==='function') sqManualShow(o);
 
   sqUpdateBtns(o.id);
 

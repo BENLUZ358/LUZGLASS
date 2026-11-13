@@ -146,9 +146,19 @@ async function drainKeys(db, provider, keys, by, started, budgetMs = BUDGET_MS) 
     //
     //  לכן פותרים מחדש מההזמנה עצמה, ומה שחוזר הוא שקובע — גם את
     //  ההרשאה וגם את הנמען.
-    const firstId = (entry.orderIds || [])[0];
-    const snap    = firstId ? await db.ref('orders/' + firstId).once('value') : null;
-    const order   = snap && snap.val();
+    //  ⚠️ orderIds ממוינים בתור, ולכן "הראשונה" היא מקרית. חשבונית עם הזמנה ידנית
+    //  (בן, 13/11) נפתרת תמיד דרך ההזמנה הידנית — אחרת חשבונית מעורבת (ידנית + הזמנת
+    //  קבוצה ישנה של אותו כרטיס) הייתה יוצאת לקבוצה במקום לנייד שבן רשם.
+    let firstId = (entry.orderIds || [])[0];
+    let order   = firstId ? (await db.ref('orders/' + firstId).once('value')).val() : null;
+    if (entry.kind === 'invoice' && !(order && order.source === 'manual')) {
+      for (const id of (entry.orderIds || []).slice(1)) {
+        const o = (await db.ref('orders/' + id).once('value')).val();
+        if (o && o.source === 'manual') { firstId = id; order = o; break; }
+      }
+    }
+    //  המזהה מהנתיב (הרשומה הידנית נמצאת לפיו)
+    if (order) order = { ...order, id: firstId };
 
     if (!order) {
       const why = 'ההזמנה לא נמצאה — לא נשלחה הודעה';
