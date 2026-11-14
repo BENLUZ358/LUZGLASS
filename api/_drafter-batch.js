@@ -239,16 +239,31 @@ const MAX_PDF_BYTES = 3 * 1024 * 1024;
 const _ilTime = t => new Date(t).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit',
                                                           year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+//  הזמנת טקסט — מתחת להודעה: מה המערכת הבינה ממנה, שורה לכל מידה (הפריטים פרוסים ליחידות;
+//  מקובצים לפי quantityGroupId). כך השרטט רואה גם מה הלקוח כתב וגם מה נקלט (בן, 14/11).
+function lgTextItemsLines(items) {
+  const its = (Array.isArray(items) ? items : Object.values(items || {})).filter(Boolean);
+  const g = new Map();
+  its.forEach((it, i) => { const k = it.quantityGroupId || ('i' + i); const c = g.get(k); if (c) c.n++; else g.set(k, { it, n: 1 }); });
+  if (!g.size) return [];
+  return [{ text: '', kind: 'gap' }, { text: 'מה נקלט במערכת:', kind: 'head' }].concat([...g.values()].map(({ it, n }) => ({
+    text: [String(it.name || '').trim(), 'רוחב ' + it.w + ' × גובה ' + it.h + ' מ"מ', 'כמות ' + n].filter(Boolean).join('   ·   '),
+    kind: 'size' })));
+}
+
 async function _items(db, b) {
   const { _sketch, _dataUrl } = require('./_invoice-deliver');
   const out = [];
   for (const id of b.orderIds || []) {
     const o = (await db.ref('orders/' + id).once('value')).val() || {};
-    const d = _dataUrl(await _sketch(db, id));
+    const raw = await _sketch(db, id);
+    const d = _dataUrl(raw);
+    //  הזמנה מהודעת טקסט: "הסקיצה" היא SVG, ש-pdf-lib לא מצייר — עמוד עם שורות ההודעה (בן, 14/11)
+    const lines = d ? null : require('./_wa-text-order').lgWaTextSvgLines(raw);
     //  צרופות (בן, 10/11) — עמוד לכל אחת מיד אחרי הסקיצה
     const atts = (await require('./_order-attachments').lgAttOf(db, id)).map(a => ({ label: a.label, img: a.img }));
     out.push({ id, orderNum: String(o.orderNum || ''), client: String(o.orderClient || o.client || ''),
-               sketchName: String(o.sketchName || ''), img: d && /^image\//.test(d.mime) ? d : null, atts });
+               sketchName: String(o.sketchName || ''), img: lines ? { lines: lines.concat(lgTextItemsLines(o.items)) } : d && /^image\//.test(d.mime) ? d : null, atts });
   }
   return out;
 }
@@ -366,4 +381,4 @@ async function lgDrafterEnqueueEmail(db, n, now) {
   return r;
 }
 
-module.exports = { lgDrafterSyncCheck, lgDrafterInBasket: _inBasket, lgDrafterDoneSet: _doneSet, lgDrafterPreview, lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail, _build };   // _build — לבדיקות
+module.exports = { lgDrafterSyncCheck, lgDrafterInBasket: _inBasket, lgDrafterDoneSet: _doneSet, lgDrafterPreview, lgDrafterHold, lgDrafterResend, lgDrafterStoredFile, lgDrafterPdf, MAX_PDF_BYTES, LG_DRAFTER_EMAIL, lgDrafterBasket, lgDrafterSend, lgDrafterDone, lgDrafterStatus, lgDrafterEnqueueEmail, _build, lgTextItemsLines };   // _build — לבדיקות

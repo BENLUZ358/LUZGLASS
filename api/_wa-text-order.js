@@ -118,4 +118,21 @@ function lgWaTextSvg(text, meta) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
-module.exports = { lgWaTextParse, lgWaTextIsOrder, lgWaTextSvg, lgWaTextItems, LG_WA_TEXT_SKU_RULES, _norm };
+//  הפוך מ-lgWaTextSvg: "הסקיצה" של הזמנת טקסט → השורות שלה, כדי לצייר אותן ב-PDF
+//  (pdf-lib לא מצייר SVG — בלי זה השרטט קיבל "אין סקיצה", בן 14/11). לא SVG של הודעה → null.
+//  → [{ text, kind:'head'|'size'|'line' }]
+function lgWaTextSvgLines(dataUrl) {
+  const m = String(dataUrl || '').match(/^data:image\/svg\+xml;charset=utf-8,([\s\S]+)$/);
+  if (!m) return null;
+  let svg;
+  try { svg = decodeURIComponent(m[1]); } catch (_) { return null; }
+  const un = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
+  const out = [];
+  svg.replace(/<text([^>]*)>([^<]*)<\/text>/g, (_, attrs, t) => {
+    out.push({ text: un(t), kind: !out.length && !/font-weight=/.test(attrs) ? 'head' : /font-weight="700"/.test(attrs) ? 'size' : 'line' });
+    return '';
+  });
+  return out.length ? out : null;
+}
+
+module.exports = { lgWaTextSvgLines, lgWaTextParse, lgWaTextIsOrder, lgWaTextSvg, lgWaTextItems, LG_WA_TEXT_SKU_RULES, _norm };
