@@ -208,7 +208,8 @@ await withEnv({ ...GREEN, EMAIL_INBOUND_TOKEN: 'mail-secret' }, async () => {
   check('E2 the due WhatsApp ack went out in the background', [outbox(db).length, drained.length], [1, 1]);
 });
 
-await withEnv({ ...GREEN, EMAIL_INBOUND_TOKEN: 'mail-secret', INTAKE_ACK_ENABLED: undefined }, async () => {
+//  WORKDAY_REMIND_ENABLED — תזכורת 'סיים יום עבודה' (14/11) רצה מאותו שעון; NOW כאן הוא שני 17:53
+await withEnv({ ...GREEN, EMAIL_INBOUND_TOKEN: 'mail-secret', INTAKE_ACK_ENABLED: undefined, WORKDAY_REMIND_ENABLED: 'false' }, async () => {
   const route = require(path.join(ROOT, 'api', 'email-inbound.js'));
   const db = seed();
   const waits = [];
