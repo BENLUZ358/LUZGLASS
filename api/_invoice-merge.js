@@ -88,7 +88,7 @@ async function lgAddSketchPage(doc, font, img, head) {
   const { rgb } = require('pdf-lib');
   const black = rgb(0, 0, 0), grey = rgb(0.35, 0.35, 0.35);
   const h0 = head || {};
-  const pic = !img ? null
+  const pic = !img || img.lines ? null
             : img.mime === 'image/jpeg' ? await doc.embedJpg(_own(img.buf))
             : img.mime === 'image/png'  ? await doc.embedPng(_own(img.buf))
             :                             await doc.embedPng(_own(await _toPng(img.buf)));
@@ -113,6 +113,22 @@ async function lgAddSketchPage(doc, font, img, head) {
   }
 
   const boxW = W - 2 * MARGIN, boxH = H - 2 * MARGIN - BAND - 10;
+  //  הזמנה מהודעת טקסט (בן, 14/11): השורות שהלקוח כתב, מיושרות לימין — במקום תמונה
+  if (img && Array.isArray(img.lines)) {
+    const n = img.lines.length;
+    const lh = Math.max(16, Math.min(44, Math.floor((boxH - 20) / Math.max(1, n))));
+    let y = top - BAND - 20 - lh * 0.8;
+    for (const l of img.lines) {
+      if (y < MARGIN) break;
+      const t = _visual(String(l.text || ''));
+      if (l.kind === 'gap') { y -= lh * 0.6; continue; }
+      const max = l.kind === 'head' ? Math.min(15, lh * 0.6) : Math.min(26, lh * 0.7);
+      const sz = _fit(font, t, max, 9, boxW - 28);
+      page.drawText(t, { x: right - font.widthOfTextAtSize(t, sz), y, size: sz, font, color: l.kind === 'head' ? grey : black });
+      y -= l.kind === 'head' ? lh * 1.3 : lh;
+    }
+    return page;
+  }
   if (!pic) {
     const t = _visual('אין סקיצה');
     page.drawText(t, { x: (W - font.widthOfTextAtSize(t, 28)) / 2, y: MARGIN + boxH / 2, size: 28, font, color: grey });
