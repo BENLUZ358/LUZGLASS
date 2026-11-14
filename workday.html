@@ -346,6 +346,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20261113"></script>
+  <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="print-labels.js?v=20261103"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
@@ -828,7 +829,8 @@ let workDay = {
   selected:      [],
   inWork:        [],
   inChisum:      [],
-  itemsSel:      {}
+  itemsSel:      {},
+  inWorkSince:   null    // מתי נכנסה ההזמנה הראשונה שעוד לא סוימה (בן, 14/11 — workday-remind.js)
 };
 // הערה: pendingChisum הוסר. הוא תועד ב-BUG_LOG כתור המתנה לתחנה, אבל בפועל
 // אף שורת קוד מעולם לא דחפה אליו — כל הזמנות החיסום נכנסות לתחנה יחד
@@ -845,6 +847,7 @@ async function initWorkDay(){
     workDay.inWork   = objToArr(wd.inWork);
     workDay.inChisum = objToArr(wd.inChisum);
     workDay.itemsSel = (wd.itemsSel && !Array.isArray(wd.itemsSel)) ? wd.itemsSel : {};
+    workDay.inWorkSince = Number(wd.inWorkSince) || null;
   } catch(e) {
     console.warn('initWorkDay:', e.message);
   }
@@ -1021,8 +1024,12 @@ function saveWorkDay(){
   // Firebase לא שומר arrays ריקים — המר ל-object עם keys מספריים
   function arrToObj(arr){ const o={}; (arr||[]).forEach((v,i)=>{ o[i]=v; }); return o; }
 
+  // "שכחת ללחוץ סיים יום עבודה" (בן, 14/11): מתי נכנסה ההזמנה הראשונה. מתאפס כשהרשימה מתרוקנת.
+  if(!workDay.inWork.length) workDay.inWorkSince = null;
+  else if(!workDay.inWorkSince) workDay.inWorkSince = Date.now();
   const toSave = {
     date:      workDay.date     || '',
+    inWorkSince: workDay.inWorkSince || null,
     inWork:        arrToObj(workDay.inWork),
     inChisum:      arrToObj(workDay.inChisum),
     itemsSel:      workDay.itemsSel || {},
@@ -1353,7 +1360,18 @@ function wdShowIncomplete(inc){
       return `<button type="button" class="wdb-inc-row" onclick="wdBoardJump('${lgJsStr(r.id)}')">${lgEsc(wdOptyName(o.orderClient, wdOptyNames))} · <span dir="ltr">${lgEsc(o.orderNum || '')}</span> · חסר: ${lgEsc(r.missing)}</button>`;
     }).join('') +
     `<div class="wdb-actions"><button type="button" class="wdb-btn" onclick="wdBoardJump('${lgJsStr(inc[0].id)}')">חזור להשלים</button>
-      <button type="button" class="wdb-btn" onclick="commitDraftToWork(true)">הורד בכל זאת</button></div>`;
+      <button type="button" class="wdb-btn" onclick="commitDraftToWork(true, true)">הורד בכל זאת</button></div>`;
+  box.style.display = 'flex';
+}
+
+// יום עבודה מיום קודם שלא סוים (בן, 14/11) — אותה תיבה של "סקיצה לא הושלמה"
+function wdShowOldWork(){
+  const box = document.getElementById('draftIncomplete');
+  if(!box) return;
+  const n = workDay.inWork.length;
+  box.innerHTML = `<div class="wdb-inc-h">⚠ ${lgEsc(lgWorkdayForgotText('old', n, workDay.inWorkSince))}</div>` +
+    `<div class="wdb-actions"><button type="button" class="wdb-btn" onclick="closeDraftPreview(); finishDay();">סיים את הקודם קודם</button>
+      <button type="button" class="wdb-btn" onclick="commitDraftToWork(false, true)">הורד בכל זאת</button></div>`;
   box.style.display = 'flex';
 }
 
@@ -4464,8 +4482,13 @@ function clearDraft(){
 }
 
 // "הורד לעבודה" מתוך הטיוטה — מכין את הפריטים ואז מפעיל handleWorkdayStart
-function commitDraftToWork(force){
+function commitDraftToWork(force, oldOk){
   if(!draftItems.length){ showToast('הטיוטה ריקה'); return; }
+  // נשארו הזמנות מיום קודם שלא נלחץ עליהן "סיים יום עבודה" (בן, 14/11) — שואלים לפני שמוסיפים
+  if(!oldOk && typeof lgWorkdayForgot === 'function'
+     && lgWorkdayForgot({ count: workDay.inWork.length, since: workDay.inWorkSince, now: Date.now() }) === 'old'){
+    wdShowOldWork(); return;
+  }
   // סקיצה לא יורדת חלקית (בן, 19/10) — עוצרים ואומרים מה חסר; "הורד בכל זאת" עוקף
   if(!force){
     const inc = wdDraftIncomplete();

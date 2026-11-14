@@ -87,6 +87,17 @@ function _clockTick(deps) {
   if (typeof deps.waitUntil === 'function') deps.waitUntil(p);
 }
 
+//  תזכורת "סיים יום עבודה" (בן, 14/11): א׳–ה׳ מ-17:00, לבן ולשאול. לא תלוי במתגי הסוכנים.
+//  ברקע, לעולם לא מפיל את התפיסה. ר' api/_workday-remind.js
+function _workdayTick(deps) {
+  if (typeof deps.waitUntil !== 'function') return;
+  const WR = require('./_workday-remind');
+  if (!WR.lgWorkdayRemindWanted(deps.env || process.env, deps.now || Date.now())) return;   // כבוי / לא בשעה — בלי עבודת רקע
+  deps.waitUntil(Promise.resolve()
+    .then(() => WR.lgWorkdayRemindRun(deps.db, { env: deps.env || process.env, now: deps.now, provider: deps.provider }))
+    .catch(e => console.error('email-inbound: workday remind failed', e && e.name)));
+}
+
 //  הליבה, בלי Vercel ובלי Firebase — כדי שאפשר לבדוק אותה.
 //  deps: { db, now? }. מחזיר { status, body }.
 async function handleEmailInbound(req, deps) {
@@ -110,6 +121,7 @@ async function handleEmailInbound(req, deps) {
     try { items = await lgEmailClaim(deps.db, 5, deps.now); }
     catch (e) { console.error('email-inbound: outbox claim failed', e && e.name); return { status: 500, body: { error: 'claim failed' } }; }
     _clockTick(deps);
+    _workdayTick(deps);
     return { status: 200, body: { ok: true, items } };
   }
   if (b.op === 'outbox-file') {

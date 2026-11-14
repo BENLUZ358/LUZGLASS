@@ -405,6 +405,7 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20261113"></script>
+  <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי רוב הממשק כאן נבנה מ-JS. -->
@@ -488,6 +489,8 @@ label.msec-t{display:block;}
   </div>
 
   <div id="waStatusBar" style="display:none"></div>
+  <!-- "שכחת ללחוץ סיים יום עבודה" (בן, 14/11) — workday-remind.js -->
+  <a id="wdForgotBar" href="workday.html" role="alert" style="display:none;margin:10px 20px 0;padding:12px 16px;border-radius:6px;background:#fdf0e3;border:1px solid var(--orange);color:#7a3f08;font-size:14px;font-weight:600;text-decoration:none;line-height:1.5"></a>
 
   <div class="stats" id="stats"></div>
 
@@ -627,11 +630,34 @@ function lgAgentsNavCount() {
   });
 }
 
+// "שכחת ללחוץ סיים יום עבודה" (בן, 14/11): פס כתום מעל הטבלה כשנשארו הזמנות ביום העבודה —
+// מיום קודם, או א׳–ה׳ מ-17:00. סופרים רק הזמנות שעדיין בשלב עבודה (inWork נשמר רק כשהדף פתוח).
+// הלוגיקה ב-workday-remind.js; הוואטסאפ לבן ולשאול — api/_workday-remind.js.
+let _wdRemind = { inWork: null, since: null }, _wdRemindOn = false;
+function lgWdForgotRender() {
+  const el = document.getElementById('wdForgotBar');
+  if (!el || typeof lgWorkdayForgot !== 'function') return;
+  const live = new Set(['opty', 'workday', 'chisum']);
+  const ids = Object.values(_wdRemind.inWork || {}).filter(Boolean).map(String);
+  const count = ids.filter(id => { const o = orders.find(x => String(x.id) === id); return o && live.has(o.stage || ''); }).length;
+  const kind = lgWorkdayForgot({ count, since: _wdRemind.since, now: Date.now() });
+  el.style.display = kind ? 'block' : 'none';
+  if (kind) el.textContent = '⚠ ' + lgWorkdayForgotText(kind, count, _wdRemind.since) + ' ← לחץ כאן ליום העבודה';
+}
+function lgWdForgotInit() {
+  if (_wdRemindOn) return; _wdRemindOn = true;
+  _lgDb.ref('workday/inWork').on('value', s => { _wdRemind.inWork = s.val(); lgWdForgotRender(); }, () => {});
+  _lgDb.ref('workday/inWorkSince').on('value', s => { _wdRemind.since = Number(s.val()) || null; lgWdForgotRender(); }, () => {});
+  setInterval(lgWdForgotRender, 60 * 1000);   // 17:00 מגיעה גם בלי שינוי בנתונים
+}
+
 function load() {
   if (_unsubscribe) _unsubscribe();
   lgAgentsNavCount();
+  lgWdForgotInit();
   _unsubscribe = listenAllOrders(remoteOrders => {
     orders = remoteOrders;
+    lgWdForgotRender();
     const hsc = document.getElementById('navHsCorr');
     if (hsc) { const n = lgHsCorrectionQueue(orders, 'pending').length; hsc.textContent = n || ''; hsc.className = n ? 'count alert' : ''; }
     renderAll();
