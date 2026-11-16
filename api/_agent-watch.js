@@ -172,13 +172,38 @@ function lgWatchDiff(prev, problems) {
   return { open, clear: Object.keys(p).filter(k => !now.has(k)) };
 }
 
-//  שורה לסיכום היומי: אין דופק 30 דק' בשעות עבודה. '' כשהכל בסדר / מחוץ לשעות.
+const _ilDay = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
+
+//  כמה מחשבים עם כלי חשבוניות (בן, 16/11): המחשב שהכי הרבה זמן לא ענה, מבין אלה שענו היום.
+//  → { pc, at } או null (אף מחשב לא ענה היום). מחשב שלא עבד היום בכלל — לא נחשב "נפל".
+function lgWatcherStalest(watchers, now) {
+  const today = _ilDay(now);
+  let worst = null;
+  for (const [pc, w] of Object.entries(watchers || {})) {
+    const at = Number(w && w.at) || 0;
+    if (!at || _ilDay(at) !== today) continue;
+    if (!worst || at < worst.at) worst = { pc, at };
+  }
+  return worst;
+}
+
+const LG_PC_PLACE = { 'DESKTOP-F4LG4AV': 'במשרד', NUCBOXM3: 'במחשב של חשבשבת' };
+//  מחשב יחיד — "במשרד" כמו תמיד; כמה מחשבים — לפי השם
+const _pcPlace = (pc, count) => (count <= 1 ? 'במשרד' : LG_PC_PLACE[String(pc || '').toUpperCase()] || 'במחשב ' + pc);
+
+//  שורה לסיכום היומי: אין דופק 30 דק' בשעות עבודה — לכל מחשב שעבד היום. '' כשהכל בסדר / מחוץ לשעות.
 function lgWatcherSilentLine(watchers, now) {
   if (!lgIsWorkingHours(now)) return '';
   const last = Math.max(0, ...Object.values(watchers || {}).map(w => Number(w && w.at) || 0));
   if (!last) return 'כלי החשבוניות במשרד עוד לא שלח דופק';
-  const m = Math.floor((now - last) / MIN);
-  return m > 30 ? `כלי החשבוניות במשרד לא ענה ${m} דקות` : '';
+  const today = _ilDay(now);
+  const lines = Object.entries(watchers || {})
+    .map(([pc, w]) => ({ pc, at: Number(w && w.at) || 0 }))
+    .filter(x => x.at && (_ilDay(x.at) === today || x.at === last))
+    .map(x => ({ ...x, m: Math.floor((now - x.at) / MIN) }))
+    .filter(x => x.m > 30)
+    .map(x => `כלי החשבוניות ${_pcPlace(x.pc, Object.keys(watchers || {}).length)} לא ענה ${x.m} דקות`);
+  return lines.join(' · ');
 }
 
 // ─── אירוע לחדר לפי המתג ────────────────────────────────────────────
@@ -408,4 +433,4 @@ async function lgWatchDismiss(db, key, deps) {
 }
 
 module.exports = { WATCHERS, WATCH, LG_AGENT_KEYS, lgOptyWithoutBatch, lgIsWorkingHours, lgWatchHeartbeatClean, lgWatchProblems, lgWatchDiff,
-                   lgWatcherSilentLine, lgAgentEvent, lgAgentWatchRun, lgWatchDismiss };
+                   lgWatcherSilentLine, lgWatcherStalest, lgAgentEvent, lgAgentWatchRun, lgWatchDismiss };

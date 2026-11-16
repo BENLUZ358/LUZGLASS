@@ -271,7 +271,7 @@ const run = (db, body) => handleAdmin({ action: 'manual-order-set', ...body }, {
   });
   const TOKEN = 't'.repeat(40);
   const PRINT = role => 'חשבונית מס 67400  תאריך 13/11/2026  מפתח 99  מזהה 348049  מזדמן  '
-    + `8 מ''מ שקוף מחוסם 1115.00 0.00 120.00   1115 1.00 1.00   1.00   1  ` + role;
+    + `8 מ''מ שקוף מחוסם 1115.00 0.00 120.00   1115   1 1) 400x1900  ` + role;
   const upl = async (original, db0) => {
     const t = { [Buffer.from('%PDF-1.4 o').toString()]: PRINT('מקור'), [Buffer.from('%PDF-1.4 c').toString()]: PRINT('העתק 1') };
     const db = db0 || fakeDb({ orders: { m1: { source: 'manual', customerId: '99', orderNum: 'L1115', orderClient: 'מזדמן', clientPhone: '',

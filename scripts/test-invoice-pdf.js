@@ -255,7 +255,7 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
   const HS = (ref, acct, extra) => ({ orderNum: 'L' + ref, orderClient: 'א.מ.מראות', clientPhone: '054-8000775',
     sketchName: 'מראה ' + ref, hashavshevet: { httpOk: true, accountKey: acct, reference: String(ref) }, ...(extra || {}) });
   const PRINT = (role, refs) => 'חשבונית מס 67400  תאריך 29/10/2026  מפתח 509  מזהה 348049  א.מ.מראות  '
-    + refs.map(r => `8 מ''מ שקוף מחוסם 1115.00 0.00 120.00   ${r} 1.00 1.00   1.00   1`).join('  ') + '  ' + role;
+    + refs.map(r => `8 מ''מ שקוף מחוסם 1115.00 0.00 120.00   ${r}   1 1) 400x1900`).join('  ') + '  ' + role;
   const byOrders = (orders, refs) => {
     const t = { [Buffer.from('%PDF-1.4 o').toString()]: PRINT('מקור', refs), [Buffer.from('%PDF-1.4 c').toString()]: PRINT('העתק 1', refs) };
     return { db: fakeDb({ orders }), env: { INVOICE_UPLOAD_TOKEN: TOKEN }, now: 1000, deliver: async () => {},
@@ -275,6 +275,46 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual([rec.state, rec.docNumber, rec.accountKey, rec.orderIds, rec.client],
       ['ready', '67400', '509', ['a', 'b'], 'א.מ.מראות']);
     assert.equal(r.body.archivePath, '2026/10/א.מ.מראות/2026-10-29_67400.pdf');
+  });
+  //  בן, 16/11 — לפני הכלי במחשב של חשבשבת: רק טור "מ.מקור" של שורת פריט, לא כל מספר
+  const REALROW = 'חשבונית מס 67715  תאריך 16/11/2026  מפתח 14201  מזהה 350394  המקום לאמבט  1259  ע.מ. 040787467  '
+    + "שם פריט סה\"כ מ\"ר מחיר סה\"כ   מ.מקור אורך רוחב   יחידות   מס הערה נוספת 1  8 מ''מ אפור מחוסם מ.ג 1.293 270.00 349.11   1251   1 1) 648x1996  "
+    + "8 מ''מ שקוף מחוסם אריאל 1 0.760 171.00 129.96   1250   2 1) 400x1900  "
+    + "8 מ''מ שקוף גרפיקה פסים  מחוסם  0.750 271.00 203.25   0 1.500 0.500   1.00   3  "
+    + 'סה"כ: 3,399.37  הנחה:   0.01  יתרת חוב : -17,141.14  513020198 : .מ.ע  מקור';
+  await test('item refs: only the "מ.מקור" value after each line total — not sizes, ids, header or footer', () => {
+    assert.deepEqual(M.extractItemRefs(REALROW).sort(), ['1250', '1251']);
+    assert.ok(M.extractRefs(REALROW).includes('1259'), 'the old reader took the header number too');
+    assert.deepEqual(M.extractItemRefs('8 מ\'\'מ 1.0 120.00   L1115   1 1) 400x1900'), ['1115']);
+  });
+  await test('agent-order invoice: a size/other number equal to an order of the same card is not a link', async () => {
+    //  1900 מופיע כמידה בלבד — הזמנה L1900 של אותו כרטיס לא מתחברת
+    const t = 'חשבונית מס 67400  תאריך 29/10/2026  מפתח 509  מזהה 348049  1900  '
+      + "8 מ''מ שקוף מחוסם 1.0 120.00 120.00   0 1.900 0.500   1.00   1  400x1900  מקור";
+    const d = byOrders({ a: HS(1900, '509') }, []);
+    d.pageTexts = async buf => [buf.toString().endsWith('o') ? t : t.replace('מקור', 'העתק 1')];
+    const r = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(r.status, 202);
+    assert.equal(d.db._data.invoicePdf[r.body.key].state, 'printed');
+  });
+  const walkIn = (orders, refs) => {
+    const d = byOrders(orders, refs);
+    d.pageTexts = async buf => [(buf.toString().endsWith('o') ? PRINT('מקור', refs) : PRINT('העתק 1', refs)).replace('מפתח 509', 'מפתח 99')];
+    return d;
+  };
+  await test('walk-in card 99: only our manual order, and only when every invoice line is ours', async () => {
+    //  הזמנה רגילה על 99 — לא
+    let d = walkIn({ a: HS(1115, '99') }, [1115]);
+    let r = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(r.status, 202);
+    //  הזמנה ידנית, אבל בחשבונית עוד שורה שאינה שלנו — לא
+    d = walkIn({ a: HS(1115, '99', { source: 'manual' }) }, [1115, 1300]);
+    r = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(r.status, 202);
+    //  הזמנה ידנית וכל השורות שלה — כן
+    d = walkIn({ a: HS(1115, '99', { source: 'manual' }) }, [1115]);
+    r = await handleUpload(req({ original: PO, copy: PC }), d);
+    assert.equal(r.status, 200); assert.deepEqual(d.db._data.invoicePdf[r.body.key].orderIds, ['a']);
   });
   await test('agent-order invoice: another customer\'s order with the same number is never taken', async () => {
     const d = byOrders({ a: HS(1115, '14201') }, [1115]);
@@ -387,8 +427,8 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
   //  נפרד של 2 עמודים. מספרי ההזמנות יכולים להופיע רק בעמוד השני. ──
   await test('upload: a 2-page original + 2-page copy is accepted; order numbers on page 2 count', async () => {
     const P1 = role => 'חשבונית מס 67400  תאריך 29/10/2026  מפתח 509  א.מ.מראות  מ.מקור  שם פריט  '
-      + `8 מ''מ שקוף 1.00 120.00   1115 1.00 1.00   1   ${role}`;
-    const P2 = role => `8 מ''מ שקוף 1.00 120.00   1116 1.00 1.00   1  סה"כ  ${role}`;
+      + `8 מ''מ שקוף 1.00 120.00   1115   1 1) 400x1900   ${role}`;
+    const P2 = role => `8 מ''מ שקוף 1.00 120.00   1116   2 1) 400x1900  סה"כ  ${role}`;
     const t = { [Buffer.from('%PDF-1.4 o').toString()]: [P1('מקור'), P2('מקור')],
                 [Buffer.from('%PDF-1.4 c').toString()]: [P1('העתק 1'), P2('העתק 1')] };
     const d = { db: fakeDb({ orders: { a: HS(1115, '509'), b: HS(1116, '509') } }), env: { INVOICE_UPLOAD_TOKEN: TOKEN },
@@ -551,6 +591,50 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal(await W2.processPair(g.cfg, pair, post, Date.now()), 'retry');
     assert.equal(g.printed.length, 0);
     assert.equal(await W2.processPair(g.cfg, pair, post, Date.now() - 11 * 60000), 'paper');
+    assert.equal(g.printed.length, 2);
+    g.done();
+  });
+  //  המחשב של חשבשבת (בן, 16/11): quietUnmatched — לא שומרים ולא מתריעים על מה שלא שייך למערכת
+  await test('quiet PC: customer not in the system → nothing stored; office PC unchanged', async () => {
+    const T = { [Buffer.from('%PDF-1.4 orig').toString()]: 'חשבונית מס 77777 תאריך 27/10/2026 מפתח 1231 מקור',
+                [Buffer.from('%PDF-1.4 copy').toString()]: 'חשבונית מס 77777 תאריך 27/10/2026 מפתח 1231 העתק' };
+    const run = async quiet => {
+      const d = mk({ db: fakeDb({ invoicePdf: {}, users: { '050': { customerId: '999' } } }), pageTexts: async buf => [T[buf.toString()] || ''] });
+      const r = await handleUpload(req({ original: ORIG, copy: COPY, ...(quiet ? { quiet: true } : {}) }), d);
+      return { r, recs: Object.keys(d.db._data.invoicePdf || {}).length, blobs: Object.keys(d.db._data.invoicePdfBlobs || {}).length };
+    };
+    const q = await run(true);
+    assert.equal(q.r.status, 202); assert.equal(q.r.body.known, false);
+    assert.deepEqual([q.recs, q.blobs], [0, 0]);
+    const office = await run(false);
+    assert.deepEqual([office.recs, office.blobs], [1, 1]);
+  });
+  await test('quiet PC: gave up after the wait → the printed record and its PDFs are removed; a linked one never is', async () => {
+    const T = { [Buffer.from('%PDF-1.4 orig').toString()]: 'חשבונית מס 77777 תאריך 27/10/2026 מפתח 1231 מקור',
+                [Buffer.from('%PDF-1.4 copy').toString()]: 'חשבונית מס 77777 תאריך 27/10/2026 מפתח 1231 העתק' };
+    const d = mk({ db: fakeDb({ invoicePdf: {}, users: { '050': { customerId: '1231' } } }), pageTexts: async buf => [T[buf.toString()] || ''] });
+    const first = await handleUpload(req({ original: ORIG, copy: COPY, quiet: true }), d);
+    assert.equal(first.status, 202); assert.equal(first.body.known, true);
+    assert.equal(Object.keys(d.db._data.invoicePdf).length, 1, 'kept while waiting for the station');
+    const gave = await handleUpload(req({ original: ORIG, copy: COPY, quiet: true, gaveUp: true }), d);
+    assert.equal(gave.body.dropped, true);
+    assert.deepEqual(Object.keys(d.db._data.invoicePdf || {}).filter(k => d.db._data.invoicePdf[k]), []);
+    assert.deepEqual(Object.keys(d.db._data.invoicePdfBlobs || {}).filter(k => d.db._data.invoicePdfBlobs[k]), []);
+    //  רשומה שכבר שויכה (ready) — לא נמחקת גם אם מגיע gaveUp
+    const k = 'r1';
+    d.db._data.invoicePdf = { [k]: { state: 'ready', originalHash: require('crypto').createHash('sha1').update(Buffer.from('%PDF-1.4 orig')).digest('hex') } };
+    const g2 = await handleUpload(req({ original: ORIG, copy: COPY, gaveUp: true }), d);
+    assert.equal(g2.body.dropped, false); assert.equal(d.db._data.invoicePdf[k].state, 'ready');
+  });
+  await test('quiet watcher: says quiet on every upload, and tells the server when it gives up', async () => {
+    const g = paperRig();
+    const sent = [];
+    const post = async b => { sent.push({ quiet: b.quiet, gaveUp: b.gaveUp }); return { status: 202, body: { ok: true, pending: true, known: true } }; };
+    const cfg = { ...g.cfg, quietUnmatched: true };
+    const pair = { doc: '1', original: g.f['a.pdf'], copies: [g.f['b.pdf']] };
+    assert.equal(await W2.processPair(cfg, pair, post, Date.now()), 'retry');
+    assert.equal(await W2.processPair(cfg, pair, post, Date.now() - 11 * 60000), 'paper');
+    assert.deepEqual(sent, [{ quiet: true, gaveUp: undefined }, { quiet: true, gaveUp: undefined }, { quiet: true, gaveUp: true }]);
     assert.equal(g.printed.length, 2);
     g.done();
   });

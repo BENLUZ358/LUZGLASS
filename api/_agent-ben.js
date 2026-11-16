@@ -73,6 +73,13 @@ const REASON_MAP = { guard: 'agent-guard' };
 const _safeKey = s => String(s == null ? '' : s).replace(/[.#$[\]/\s]/g, '_').slice(0, 120);
 const _oneLine = (s, n) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n);
 
+//  שם המחשב בהתראה (בן, 16/11 — שני מחשבים עם כלי חשבוניות)
+const LG_PC_LABELS = { 'DESKTOP-F4LG4AV': 'המחשב במשרד', NUCBOXM3: 'המחשב של חשבשבת' };
+function lgPcLabel(pc) {
+  const k = String(pc || '').toUpperCase();
+  return LG_PC_LABELS[k] || (k ? 'המחשב ' + k : 'המחשב במשרד');
+}
+
 //  שעה ותאריך בישראל — אותה גישת Intl כמו lgIsWorkingHours
 function _il(now) {
   const p = {};
@@ -306,7 +313,7 @@ async function _remindSweep(db, o) {
 // ─── השעונים ─────────────────────────────────────────────────────────
 
 const ALARM_TEXT = {
-  alarm_office: m => 'המחשב במשרד לא עונה כבר ' + m + ' דקות — כלי החשבוניות כנראה כבוי או בלי אינטרנט. בדיקות והודעות שתלויות בו לא רצות.',
+  alarm_office: (m, pc) => lgPcLabel(pc) + ' לא עונה כבר ' + m + ' דקות — כלי החשבוניות כנראה כבוי או בלי אינטרנט. בדיקות והודעות שתלויות בו לא רצות.',
   alarm_gmail: m => 'סקריפט המייל לא פנה למערכת כבר ' + m + ' דקות — מיילים לא נקלטים ולא נשלחים.',
   alarm_wa: () => 'הוואטסאפ של המערכת מנותק — הודעות ללקוחות לא יוצאות. צריך לחבר אותו מחדש.',
 };
@@ -326,7 +333,11 @@ async function lgClockCheck(db, which, o) {
   if (!cfg) return { skipped: 'no-config' };
   const deadline = Number(opt.deadline) || Date.now() + 40 * 1000;
 
-  await db.ref(CLOCKS + '/' + which).set({ at: now });
+  //  כמה מחשבים עם כלי חשבוניות (בן, 16/11 — גם המחשב של חשבשבת): השעון של המשרד הוא
+  //  של המחשב שהכי הרבה זמן לא ענה מבין אלה שעבדו היום (officeAt/officePc מהדופק). כך מחשב
+  //  אחד שעובד לא מסתיר מחשב אחר שנפל.
+  const officeAt = which === 'office' && Number(opt.officeAt) > 0 ? Math.min(Number(opt.officeAt), now) : now;
+  await db.ref(CLOCKS + '/' + which).set(which === 'office' && opt.officePc ? { at: officeAt, pc: String(opt.officePc) } : { at: now });
   const g = await db.ref(CLOCKS + '/lastCheck_' + which).transaction(cur => (cur != null && Math.abs(now - Number(cur)) < CHECK_GAP_MS ? undefined : now));
   if (!g.committed) return { skipped: 'throttled' };
 
@@ -344,12 +355,21 @@ async function lgClockCheck(db, which, o) {
   const silent = otherAt > 0 && now - otherAt > limit
     && (other !== 'office' || (require('./_agent-watch').lgIsWorkingHours(now) && _il(otherAt).day === _il(now).day));
   //  holds — התקלה נראית עכשיו; back — לסגור. משרד שקט מחוץ לשעות: לא מתריעים ולא סוגרים (רק חזרה אמיתית סוגרת)
+  const officeStale = which === 'office' && now - officeAt > OFFICE_SILENT_MS
+    && require('./_agent-watch').lgIsWorkingHours(now) && _il(officeAt).day === _il(now).day;
   const state = {
-    ['alarm_' + which]: { holds: false, back: true },
+    //  השעון של המשרד עצמו: מחשב אחד עונה ומחשב אחר שעבד היום שותק (officeAt ישן) → גם הוא רואה
+    //  את התקלה, כדי שהדופק של המחשב שעובד לא ישבור את הרצף ולא יסגור את ההתראה (בן, 16/11)
+    ['alarm_' + which]: which === 'office'
+      ? { holds: officeStale, back: now - officeAt <= OFFICE_SILENT_MS }
+      : { holds: false, back: true },
     ['alarm_' + other]: { holds: silent, back: otherAt > 0 && now - otherAt <= limit },
     alarm_wa: { holds: waFresh && WA_DOWN.includes(wa), back: waFresh && wa === 'authorized' },
   };
   const minutes = otherAt ? Math.floor((now - otherAt) / MIN) : 0;
+  //  התראת המשרד: כמה זמן ואיזה מחשב — מהשעון של המשרד (גם כשהמשרד עצמו בודק)
+  const officeMin = which === 'office' ? Math.floor((now - officeAt) / MIN) : minutes;
+  const officePc = which === 'office' ? opt.officePc : clocks.office && clocks.office.pc;
   const res = { fired: [], cleared: [], digest: false, reminders: 0, sent: null };
   //  ⚠️ בלי deadline להתראות: הזמן נבדק כאן לפני התפיסה, ו-lgBenNotify לא ידלג אחריה (תיקון סקירה M1)
   const base = { env, now, cfg, provider: opt.provider, waState: wa };
@@ -365,7 +385,7 @@ async function lgClockCheck(db, which, o) {
         const confirmed = seen[key] != null && now - Number(seen[key]) >= ALARM_CONFIRM_MS;
         //  אין זמן לשליחה ישירה אחת — בפעם הבאה (לא תופסים את המפתח בלי לשלוח)
         if (!confirmed || deadline - Date.now() < URGENT_MIN_LEFT_MS) continue;
-        const text = ALARM_TEXT[key](key === 'alarm_wa' ? 0 : minutes);
+        const text = key === 'alarm_office' ? ALARM_TEXT.alarm_office(officeMin, officePc) : ALARM_TEXT[key](key === 'alarm_wa' ? 0 : minutes);
         if (!cur) {
           if (now - (Number(last[key]) || 0) < ALARM_COOLDOWN_MS) continue;   // צינון — גם אם "חזר" בינתיים
           const thread = key + '_' + now;
@@ -412,4 +432,4 @@ async function lgClockCheck(db, which, o) {
   return res;
 }
 
-module.exports = { BEN, CLOCKS, DAY_CAP, REMIND_MS, lgBenIsNight, lgBenPolicy, lgBenNotify, lgBenDigestRun, lgClockCheck };
+module.exports = { lgPcLabel, BEN, CLOCKS, DAY_CAP, REMIND_MS, lgBenIsNight, lgBenPolicy, lgBenNotify, lgBenDigestRun, lgClockCheck };

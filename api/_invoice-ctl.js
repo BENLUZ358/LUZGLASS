@@ -71,16 +71,26 @@ async function settlePrinted(db, printedKey, now) {
 //  (בן, 2/11: 1117 ו-1121 של נאור יצאו בלי סקיצות).
 //  ⚠️ קורא את כל ההזמנות: אין אינדקס על hashavshevet/accountKey (ובלי שינוי
 //  חוקים). מספר ההזמנות בייצור קטן; אם יגדל — אינדקס על customerId.
+//  כרטיס 99 (לקוח מזדמן, בן 16/11): הרבה אנשים שונים על אותו כרטיס. מחברים רק
+//  הזמנה ידנית שלנו, ורק כשכל שורות החשבונית הן של הזמנות כאלה — חשבונית של מזדמן
+//  אחר עם מספר שנראה כמו הזמנה לא יוצאת למי שרשום על ההזמנה הידנית.
+const LG_WALKIN_ACCOUNTS = ['99'];
 async function ordersFromPrint(db, text, accountKey, docNumber) {
-  const refs = new Set(M.extractRefs(text));
+  if (!accountKey) return [];
+  const refs = new Set(M.extractItemRefs(text));
   refs.delete(String(docNumber)); refs.delete(String(accountKey));
-  if (!refs.size || !accountKey) return [];
+  if (!refs.size) return [];
   const all = (await db.ref('orders').once('value')).val() || {};
-  return Object.keys(all).filter(id => {
+  const ids = Object.keys(all).filter(id => {
     const o = all[id] || {}, h = o.hashavshevet;
     return h && h.httpOk && !h.simulated &&
       String(h.accountKey) === String(accountKey) && refs.has(String(Number(h.reference)));
   }).sort();
+  if (LG_WALKIN_ACCOUNTS.includes(String(Number(accountKey)))) {
+    const got = new Set(ids.map(id => String(Number(all[id].hashavshevet.reference))));
+    if (ids.some(id => all[id].source !== 'manual') || [...refs].some(r => !got.has(r))) return [];
+  }
+  return ids;
 }
 
 //  רשומה 'awaiting' להזמנות שנמצאו בהדפסה, עם מספר המסמך והכרטיס מהחשבונית.

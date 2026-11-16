@@ -250,7 +250,8 @@ async function upload(cfg, parts, files, post, opts = {}) {
   const waitedTooLong = () => opts.firstAt && Date.now() - opts.firstAt > (cfg.pendingPaperMs || 10 * 60000);
   let r;
   try { r = await post({ original: parts.original.toString('base64'), copy: parts.copy.toString('base64'),
-                         ...(opts.restored ? { restored: true } : {}) }); }
+                         ...(opts.restored ? { restored: true } : {}),
+                         ...(cfg.quietUnmatched ? { quiet: true } : {}) }); }
   catch (e) {
     console.error('retry later (network):', e.message);
     return waitedTooLong() ? paper(cfg, files, 'review', 'no server') : 'retry';
@@ -264,7 +265,14 @@ async function upload(cfg, parts, files, post, opts = {}) {
     if (r.body.known === false) {
       return paper(cfg, files, 'done', 'not in system', paperArchivePath(cfg.sharedRoot, opts.doc || docFromName(file)));
     }
-    if (waitedTooLong()) return paper(cfg, files, 'done', 'no match after wait');
+    if (waitedTooLong()) {
+      //  מחשב חשבשבת (quietUnmatched, בן 16/11): השרת מוחק את ההדפסה — בלי התראה ובלי לשמור לתמיד
+      if (cfg.quietUnmatched) {
+        try { await post({ original: parts.original.toString('base64'), copy: parts.copy.toString('base64'), quiet: true, gaveUp: true }); }
+        catch (e) { console.error('gave-up note failed:', e.message); }
+      }
+      return paper(cfg, files, 'done', 'no match after wait');
+    }
     console.log('waiting for registration:', path.basename(file)); return 'retry';
   }
   if (!r.body || !r.body.ok) {
@@ -390,7 +398,7 @@ async function loop(cfg) {
 //  כתובת ואותו טוקן של ההעלאה. השרת שומר אותו ומריץ את הבדיקות של הארכיון והקולט
 //  (קובץ שתקוע בתיקייה, שגיאת הדפסה...). ⚠️ לולאה נפרדת: דופק שנכשל (אין רשת, השרת
 //  נפל) לא נוגע בטיפול בחשבוניות — רק נרשם ביומן, וינסה שוב בעוד דקה.
-const WATCHER_VERSION = '2026-11-10';
+const WATCHER_VERSION = '2026-11-16';
 let lastPrintError = null;   // ההדפסה האחרונה שנכשלה; הדפסה שהצליחה מנקה
 function notePrint(err, file) {
   lastPrintError = err ? { at: Date.now(), message: String((err && err.message) || err).slice(0, 300), file: path.basename(String(file || '')) } : null;

@@ -89,8 +89,11 @@ async function heartbeat(body, deps) {
   //  השעון של המשרד (בן, 11/11): רושם waMeta/clocks/office ובודק את סקריפט המייל + חיבור הוואטסאפ.
   //  זול (כמה קריאות, פעם בדקה); שליחה ישירה רק כשיש התראה. רק עם הגדרות במסך. ר' api/_agent-ben.js
   try {
+    //  כמה מחשבים (בן, 16/11): השעון הולך לפי המחשב שהכי הרבה זמן לא ענה היום
+    const st = W.lgWatcherStalest((await deps.db.ref(W.WATCHERS).once('value')).val() || {}, now);
     await (deps.clockCheck || require('./_agent-ben').lgClockCheck)(deps.db, 'office',
-      { env: deps.env || process.env, now, deadline: t0 + 40 * 1000, provider: deps.provider });
+      { env: deps.env || process.env, now, deadline: t0 + 40 * 1000, provider: deps.provider,
+        officeAt: st ? st.at : now, officePc: st ? st.pc : hb.pc });
   } catch (e) { console.error('invoice-pdf-upload: clock check failed', e && e.name); }
   //  הבקשה כולה מתחת ל-60ש׳: שליחה עד 18ש׳, ובדיקות עד t0+48ש׳ (דדליין מוחלט, לא 30ש׳ אחרי השליחה)
   try {
@@ -157,6 +160,21 @@ async function _handleUpload(req, deps) {
   const knownOf = async () => (known === undefined ? (known = await _knownAccount(db, oText)) : known);
   const pending = async extra => ({ status: 202, body: { ok: true, pending: true, known: await knownOf(), ...extra } });
 
+  //  מחשב שמפיקים בו הרבה חשבוניות שלא דרך המערכת (בן, 16/11 — המחשב של חשבשבת, כלי עם
+  //  quietUnmatched): הכלי ויתר אחרי ההמתנה והדפיס על נייר → ההדפסה נמחקת. לא נשמרת לתמיד
+  //  ולא מקפיצה התראה "לא נרשמה". רק רשומה שעדיין 'printed' — שום דבר ששויך לא נוגע.
+  if (body.gaveUp === true) {
+    const d = (await db.ref('invoicePdf').orderByChild('originalHash').equalTo(hash).limitToFirst(1).once('value')).val() || {};
+    let dropped = false;
+    for (const k of Object.keys(d)) {
+      if (!d[k] || d[k].state !== 'printed') continue;
+      await db.ref('invoicePdf/' + k).set(null);
+      await db.ref('invoicePdfBlobs/' + k).set(null);
+      dropped = true;
+    }
+    return { status: 202, body: { ok: true, pending: true, dropped } };
+  }
+
   //  העלאה חוזרת של אותו קובץ (ניסיון חוזר של הכלי) → תשובה זהה, בלי עיבוד שני.
   //  הדפסה שעדיין 'printed' מנסה להשתייך עכשיו (ייתכן שהחשבונית נרשמה בינתיים).
   const dup = (await db.ref('invoicePdf').orderByChild('originalHash').equalTo(hash).limitToFirst(1).once('value')).val();
@@ -204,6 +222,8 @@ async function _handleUpload(req, deps) {
       if (done) return { status: 200, body: { ok: true, key, docNumber, date, byOrders: true,
         archivePath: done.archivePath, sendAfter: done.sendAfter, ...(await printFlag(db, ids)) } };
     }
+    //  אותו מחשב (quiet): לקוח שלא במערכת — לא שומרים בכלל, הכלי מדפיס על נייר מיד
+    if (body.quiet === true && (await knownOf()) === false) return pending({});
     const pk = 'p' + hash.slice(0, 18);
     await db.ref('invoicePdf/' + pk).set({ state: 'printed', docNumber, date, originalHash: hash,
       text: oText.slice(0, 3000), known: await knownOf(), createdAt: now, uploadedAt: now });
