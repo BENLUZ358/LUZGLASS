@@ -74,4 +74,15 @@ check('אריאל 2 never goes to אריאל 1 automatically',
   M.lgOptyMatch([P('274133', 'BathPlace', 'אריאל 2', 402, 1902)], [{ id: 'L1250', orderClient: 'המקום לאמבט', sketchName: 'אריאל 1', items: [{ w: 400, h: 1900 }] }]).auto.length, 0);
 check('חווה 2 ↔ חווה סוגרים1/2',
   auto(M.lgOptyMatch([P('274417', 'א.א.פנדה', 'חווה 2', 492, 1902)], [{ id: 'L1273', orderClient: 'נאור חזקיה', sketchName: 'חווה סוגרים1/2', items: [{ w: 490, h: 1900 }] }])), [['274417', 'L1273', 0]]);
+//  צורות שלא חוברו אבל ידוע לאיזו הזמנה הן שייכות → נשמרות על ההזמנה, לחיבור בחיסום (בן, 16/11)
+{
+  const two = [{ id: 'L1232', orderClient: 'נאור חזקיה', sketchName: 'זבולון 1/2/3', items: [{ w: 680, h: 1885 }, { w: 680, h: 1885 }, { w: 675, h: 1885 }] }];
+  const r = M.lgOptyMatch([P('274256', 'א.א.פנדה', 'זבולון 1', 682, 1887)], two);
+  const pend = M.lgOptyPendingByOrder(r.review);
+  check('one OptyWay piece, two same-size items in one order → kept on that order',
+    [Object.keys(pend), pend.L1232 && pend.L1232['274256'] && [pend.L1232['274256'].w, pend.L1232['274256'].h, pend.L1232['274256'].job]], [['L1232'], [682, 1887, 'M00291']]);
+  const r2 = M.lgOptyMatch([P('274300', 'א.א.פנדה', '', 500, 2000)], [{ id: 'A', orderClient: 'נאור חזקיה', sketchName: 'x', items: [{ w: 500, h: 2000 }] }, { id: 'B', orderClient: 'נאור חזקיה', sketchName: 'y', items: [{ w: 500, h: 2000 }] }]);
+  check('candidates in two different orders → not kept (unknown order)', M.lgOptyPendingByOrder(r2.review), {});
+  check('nothing to review → empty', M.lgOptyPendingByOrder([]), {});
+}
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');

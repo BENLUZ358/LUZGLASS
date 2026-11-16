@@ -104,7 +104,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
 const ORDER_DAYS = 30;                         // הזמנות מ-30 הימים האחרונים
-let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null;
+let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null, PEND = {};
 
 const st = (t, cls) => { $('st').textContent = t; $('st').className = cls || ''; };
 const dims = p => Math.round(p.w) + ' × ' + Math.round(p.h);
@@ -164,6 +164,8 @@ async function check() {
 
 function render() {
   const r = RES;
+  PEND = lgOptyPendingByOrder(r.review);
+  const pendN = Object.values(PEND).reduce((n, o) => n + Object.keys(o).length, 0);
   const byClient = {};
   r.notFound.forEach(p => { (byClient[p.client] = byClient[p.client] || []).push(p); });
   const clients = [...new Set(ORDERS.map(o => o.orderClient))].sort((a, b) => a.localeCompare(b, 'he'));
@@ -174,8 +176,9 @@ function render() {
       <div class="r"><b>${r.notFound.length}</b><span>לא נמצא פריט</span></div>
       <div><b>${r.already.length}</b><span>כבר מחובר</span></div>
     </div>
+    ${r.auto.length || pendN ? `<button class="go" id="btnSave" type="button">💾 שמור${r.auto.length ? ' ' + r.auto.length + ' מספרי צורה' : ''}${pendN ? (r.auto.length ? ' +' : '') + ' ' + pendN + ' לחיבור בחיסום' : ''}</button>
+      ${pendN ? `<p class="note">${pendN} מה"לבדיקה" ידועים לאיזו הזמנה הם שייכים — הם יופיעו בחיסום, באותה הזמנה, לחיבור לפריט.</p>` : ''}` : ''}
     ${r.auto.length ? `<section class="card"><h2>ודאי (${r.auto.length})</h2>
-      <button class="go" id="btnSave" type="button">💾 שמור ${r.auto.length} מספרי צורה</button>
       <details><summary>הצג את הרשימה</summary>
       ${r.auto.map(a => `<div class="row">${geoSvg(a.shape)}<span class="shape">${esc(a.shape)}</span>
         <span class="who">${esc(ordTitle(a.orderId))}<br><small>${esc(itemText(a.orderId, a.idx))}</small></span></div>`).join('')}
@@ -195,13 +198,19 @@ function render() {
         <select class="sm" data-pair="${esc(c)}"><option value="">זה הלקוח אצלנו…</option>${clients.map(x => `<option>${esc(x)}</option>`).join('')}</select>
         <button class="sm" type="button" data-pairgo="${esc(c)}">שייך</button></div>`).join('')}
       </section>` : ''}`;
-  const sv = $('btnSave'); if (sv) sv.addEventListener('click', () => save(RES.auto, sv));
+  const sv = $('btnSave'); if (sv) sv.addEventListener('click', () => save(RES.auto, sv, PEND));
 }
 
 //  כתיבה אחת: מספר הצורה + פקודת החיתוך על הפריט, והצורה ב-meta/optyGeo
-async function save(list, btn) {
-  if (!list.length) return;
+//  pend (לא חובה): צורות שידועה ההזמנה שלהן אבל לא הפריט → meta/optyPending/<הזמנה>/<צורה>, לחיבור בחיסום
+async function save(list, btn, pend) {
+  const pendN = Object.values(pend || {}).reduce((n, o) => n + Object.keys(o).length, 0);
+  if (!list.length && !pendN) return;
   const up = {};
+  Object.entries(pend || {}).forEach(([oid, shapes]) => Object.entries(shapes).forEach(([sh, v]) => {
+    up['meta/optyPending/' + oid + '/' + sh] = Object.assign({ at: Date.now() }, v);
+    if (DAT[sh]) up['meta/optyGeo/' + sh] = DAT[sh];
+  }));
   list.forEach(a => {
     const key = (KEYS[a.orderId] || [])[a.idx];
     if (key == null) return;
@@ -209,11 +218,12 @@ async function save(list, btn) {
     up['orders/' + a.orderId + '/items/' + key + '/optyJob'] = a.job || '';
     up['orders/' + a.orderId + '/updatedAt'] = Date.now();
     if (DAT[a.shape]) up['meta/optyGeo/' + a.shape] = DAT[a.shape];
+    up['meta/optyPending/' + a.orderId + '/' + a.shape] = null;          // חובר → יורד מהרשימה בחיסום
   });
   if (btn) btn.disabled = true;
   try {
     await _lgDb.ref().update(up);
-    st('✓ נשמרו ' + list.length + ' מספרי צורה', 'ok');
+    st('✓ נשמרו ' + list.length + ' מספרי צורה' + (pendN ? ' + ' + pendN + ' לחיבור בחיסום' : ''), 'ok');
     return true;
   } catch (e) {
     console.error(e); st('✗ השמירה נכשלה: ' + (e.message || '') + ' — נסה שוב', 'bad');
