@@ -307,7 +307,14 @@ const GREEN_ENV = {
   check('ready counts the sketch and lists its name', /סקיצה אחת מוכנה לאיסוף\.\n• מקלחון/.test(ready1), true);
   check('and never shows our order number', /L1234/.test(ready1), false);
   check('and greets the client',                /^שלום דני,\n\n/.test(ready1), true);
-  check('and no longer points at the portal',   /לפרטים נוספים/.test(ready1), false);
+  //  בן, 16/11: בכל הודעת "מוכן" — קישור לפורטל, ישר לטאב "מוכן"
+  check('and links to the portal, straight to the ready tab', /\n\nלפרטים נוספים בפורטל:\nhttps:\/\/[a-z0-9.-]+\/portal\.html\?tab=ready\n\n/.test(ready1), true);
+  {
+    const keep = process.env.LG_PORTAL_HOST; process.env.LG_PORTAL_HOST = 'luzglass-test.vercel.app';
+    check('the link follows the site it runs on (test → test portal)', /https:\/\/luzglass-test\.vercel\.app\/portal\.html\?tab=ready/.test(R('ready', ['L1'], ['x'])), true);
+    if (keep === undefined) delete process.env.LG_PORTAL_HOST; else process.env.LG_PORTAL_HOST = keep;
+  }
+  check('only the ready message carries the link', [R('dispatched', ['L1'], ['x']), R('sketches-handled', ['L1'], ['x'])].some(t => /portal\.html/.test(t)), false);
   check('and signs off',                        /לוז זגגות ומראות האחים בע"מ$/.test(ready1), true);
 
   /* ⚠️ בלי שם — בלי רשימה בכלל, ובלי מקף או נקודה תלויים באוויר */
