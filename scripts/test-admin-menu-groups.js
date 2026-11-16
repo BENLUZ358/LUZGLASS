@@ -14,7 +14,7 @@ check('three groups in order', Object.keys(groups), ['משרד', 'ייצור', '
 check('office', groups['משרד'], ['לוח הזמנות', 'תור סקיצות', 'תחנת חשבוניות', 'תיקון הזמנות', 'סוכנים']);
 check('production', groups['ייצור'], ['שרטט', 'תחנת בדיקה', 'יום עבודה']);
 check('pickup board is out of the menu (Ben 9/11: not in use)', /openPickupBoard/.test(nav), false);
-check('settings', groups['הגדרות'], ['מחירונים', 'סיכום יום', 'הדפסות', 'משתמשים', 'בונה סקיצות']);
+check('settings', groups['הגדרות'], ['מחירונים', 'סיכום יום', 'הדפסות', 'קליטה מאופטי-ווי', 'משתמשים', 'בונה סקיצות']);
 check('ids the code looks for are still there', ['sqNav', 'navHsCorr', 'navAgents', 'navUsers', 'navBuilder'].every(id => nav.includes('id="' + id + '"')), true);
 check('users / builder still hidden until main admin', /id="navUsers"[^>]*display:none/.test(nav) && /id="navBuilder"[^>]*display:none/.test(nav), true);
 check('red counter style exists', /\.unav-a \.count\.alert\{[^}]*background:#d64545/.test(A), true);
