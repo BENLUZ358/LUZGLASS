@@ -186,6 +186,7 @@ const END_DEF = { hinge: LG_CUT.hinge.end, open: LG_CUT.open.end, closed: LG_CUT
 const byEnd = (list, end, h) => list.filter(c => (c.y < h / 2) === (end === 'bottom')).sort((a, b) => end === 'bottom' ? a.y - b.y : b.y - a.y);
 
 //  בנייה: קוראים מהקובץ את החריגות לפריט (מרחק מהקצה לכל קבוצה, ידית, מרחק חורי הרמוניקה מהצלע) ומזינים לתבנית
+const EDGE_CAP = 25;
 function fitOverrides(tpl, spec, cuts) {
   const T = LG_CUT_TEMPLATES[tpl], h = spec.h, into = e => e === 'left' ? 1 : -1;
   const edgeOf = k => T[k] === 'side' ? spec.side : (spec.side === 'left' ? 'right' : 'left');
@@ -212,7 +213,11 @@ function fitOverrides(tpl, spec, cuts) {
       spec.harmEdge = r2((spec.harmEdge != null ? spec.harmEdge : LG_CUT.harm.edge) + into(edgeOf('harm')) * (gx('harm', cuts) - gx('harm', t.cuts)));
     if (spec.handle) spec.handle.edge = r2(spec.handle.edge + into(edgeOf('handle')) * (gx('handle', cuts) - gx('handle', t.cuts)));
   }
-  return spec;
+  //  תקרה: מרחק מהצלע שזז יותר מ-25 מ"מ מברירת המחדל = לא חריגה לפריט אלא חיתוך בצלע הלא נכונה
+  const capped = [];
+  if (spec.harmEdge != null && Math.abs(spec.harmEdge - LG_CUT.harm.edge) > EDGE_CAP) capped.push('harmEdge=' + spec.harmEdge);
+  if (spec.handle && Math.abs(spec.handle.edge - LG_CUT.handle.edge) > EDGE_CAP) capped.push('handle.edge=' + spec.handle.edge);
+  return { spec, capped };
 }
 //  השוואה: כמות + מיקום (עד 1.0 מ"מ) רק לסוגים שבתבנית
 function compare(t, cuts) {
@@ -249,6 +254,25 @@ function fmtOv(spec, tpl) {
   return out;
 }
 
+// spec שגוי — זורק (לא מראה זכוכית בשקט)
+{
+  const throws = sp => { try { lgCutTemplate('door', sp); return false; } catch (e) { return /lgCutTemplate/.test(e.message); } };
+  const ok = { w: 600, h: 1900, side: 'left' };
+  check('valid spec does not throw', throws(ok), false);
+  check('throws: side missing / "Right" / typo', [throws({ ...ok, side: undefined }), throws({ ...ok, side: 'Right' }), throws({ ...ok, side: 'rigth' })], [true, true, true]);
+  check('throws: w/h missing, NaN, 0, negative', [throws({ ...ok, w: undefined }), throws({ ...ok, h: NaN }), throws({ ...ok, w: 0 }), throws({ ...ok, h: -5 })], [true, true, true, true]);
+  check('throws: unknown slope edge', [throws({ ...ok, slope: { edge: 'Left', a: 1, b: 2 } }), throws({ ...ok, slope: [{ edge: 'right', a: 1, b: 2 }, { edge: 'up', a: 1, b: 2 }] })], [true, true]);
+  check('throws: unknown handle type', [throws({ ...ok, handle: { type: 'pull' } }), throws({ ...ok, handle: { type: 'towel', spacing: 100 } })], [true, false]);
+  check('throws: unknown template', (() => { try { lgCutTemplate('dor', ok); return false; } catch (e) { return true; } })(), true);
+}
+// התקרה תופסת ידית בצלע הלא נכונה (במקום לבלוע אותה כ-edge ≈ w−61)
+{
+  const wrong = [{ kind: 'hinge', x: 29.5, y: 201 }, { kind: 'hinge', x: 29.5, y: 1699 }, { kind: 'handle', x: 61, y: 950 }];
+  check('cap: handle on the hinge edge is flagged', fitOverrides('door', { w: 600, h: 1900, side: 'left' }, wrong).capped.length, 1);
+  const right = [{ kind: 'hinge', x: 29.5, y: 201 }, { kind: 'hinge', x: 29.5, y: 1699 }, { kind: 'handle', x: 519, y: 950 }];
+  check('cap: handle 81 from its edge is a normal override', fitOverrides('door', { w: 600, h: 1900, side: 'left' }, right).capped.length, 0);
+}
+
 const index = JSON.parse(fs.readFileSync(path.join(FIX, 'index.json'), 'utf8'));
 const excluded = index.filter(e => e.exclude), used = index.filter(e => !e.exclude);
 const build = {}, dflt = {}, misses = [], variantLines = [], ovLines = [];
@@ -260,8 +284,9 @@ for (const e of used) {
   const base = () => { const s = { w: shape.w, h: shape.h, side }; if (slopes.length) s.slope = slopes; return s; };
   const tag = e.shape + (shape.rotated ? '(rot)' : '') + (slopes.length ? '(slope:' + slopes.map(s => s.edge).join('+') + ')' : '');
   //  (א) בנייה — עם החריגות מהקובץ
-  const spec = fitOverrides(e.template, base(), cuts);
+  const { spec, capped } = fitOverrides(e.template, base(), cuts);
   const res = compare(lgCutTemplate(e.template, spec), cuts);
+  capped.forEach(c => res.bad.push('edge override over the ' + EDGE_CAP + ' mm cap: ' + c));
   const b = build[e.template] || (build[e.template] = [0, 0]); b[1]++;
   if (res.bad.length) res.bad.forEach(x => misses.push(`${tag} ${e.template} → ${x}`)); else b[0]++;
   const ov = fmtOv(spec, e.template);
