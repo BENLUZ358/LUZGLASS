@@ -120,6 +120,8 @@ html,body{height:100%;overflow:hidden;}
 .si.on .si-chk{background:var(--green);border-color:var(--green);color:#fff;}
 .si-name{font-size:13px;font-weight:700;flex:1;}.si-dim{font-size:12px;color:var(--muted);}
 .si-tag{font-size:12px;padding:2px 7px;border-radius:2px;font-weight:700;}
+/* הצורה מאופטי-ווי (בן, 16/11) */
+.si-shape{min-height:44px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface,#fff);color:var(--text);font:700 13px Heebo,sans-serif;cursor:pointer;white-space:nowrap;}
 .grp-hdr{padding:6px 14px;background:rgba(201,168,76,0.1);border-bottom:1px solid rgba(201,168,76,0.2);font-size:12px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;align-items:center;}
 .note-area{padding:12px 14px;background:var(--bg2);}
 .note-area textarea{width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:13px;color:var(--text);outline:none;border-radius:4px;resize:vertical;min-height:64px;}
@@ -244,6 +246,10 @@ html,body{height:100%;overflow:hidden;}
   <script src="firebase-db.js?v=20261113"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
+  <!-- הצורה מאופטי-ווי + מדבקה (בן, 16/11) -->
+  <script src="opty-shape.js?v=20261116b"></script>
+  <script src="print-labels.js?v=20261116"></script>
+  <script src="order-labels.js?v=20261116"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20260807"></script>
 </head>
@@ -1299,6 +1305,7 @@ function renderSheet(){
             <div class="si-dim">${(item?.w && item?.h) ? lgDimsText(item.w, item.h) : ((item?.w||'') + (item?.h||''))} מ"מ</div>
           </div>
           <div class="si-tag tc">🔥 חיסום</div>
+          ${item?.optyShape ? `<button type="button" class="si-shape" aria-label="פתח את הצורה מאופטי-ווי" onclick="event.stopPropagation();csOpenShape(${origIdx})">📐 ${lgEsc(item.optyShape)}</button>` : ''}
         </div>`;
       }).join('');
       return g;
@@ -1312,6 +1319,9 @@ function renderSheet(){
 
   document.getElementById('shBody').innerHTML=html;
 }
+//  📐 הצורה מאופטי-ווי — ציור, מספר, מדבקה (opty-shape.js)
+function csOpenShape(idx){ if(cur && typeof lgOptyShapeView==='function') lgOptyShapeView(cur, idx); }
+if(typeof window.showToast!=='function') window.showToast = m => toast(m);   // order-labels.js מדווח דרך showToast
 function saveSkNote(){if(!cur)return;const txt=document.getElementById('skNoteTA')?.value.trim();if(txt)notes[cur.id]=txt;else delete notes[cur.id];saveNotes();updateOrder(cur.id,{notes:txt}).catch(e=>console.error('saveSkNote:',e));renderList();closeSheet();toast('הערה נשמרה ✓');}
 
 // ZOOM/PAN
