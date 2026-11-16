@@ -1,0 +1,955 @@
+[
+ {
+  "shape": "272122",
+  "template": "door-harm",
+  "slope": true,
+  "w": 431,
+  "h": 1939
+ },
+ {
+  "shape": "272123",
+  "template": "harm-handle",
+  "slope": false,
+  "w": 409,
+  "h": 1939
+ },
+ {
+  "shape": "272124",
+  "template": "harm-handle",
+  "slope": false,
+  "w": 382,
+  "h": 1939
+ },
+ {
+  "shape": "272125",
+  "template": "door-harm",
+  "slope": true,
+  "w": 404,
+  "h": 1939
+ },
+ {
+  "shape": "272126",
+  "template": "fixed-closed",
+  "slope": true,
+  "w": 674,
+  "h": 1502
+ },
+ {
+  "shape": "272127",
+  "template": "fixed-closed-door",
+  "slope": false,
+  "w": 342,
+  "h": 2102
+ },
+ {
+  "shape": "272146",
+  "template": "harm",
+  "slope": true,
+  "w": 622,
+  "h": 1602
+ },
+ {
+  "shape": "272147",
+  "template": "harm-handle",
+  "slope": false,
+  "w": 572,
+  "h": 1592
+ },
+ {
+  "shape": "272149",
+  "template": "door",
+  "slope": false,
+  "w": 652,
+  "h": 1912
+ },
+ {
+  "shape": "272151",
+  "template": "door",
+  "slope": false,
+  "w": 432,
+  "h": 1987
+ },
+ {
+  "shape": "272152",
+  "template": "door-harm",
+  "slope": false,
+  "w": 392,
+  "h": 1972
+ },
+ {
+  "shape": "272153",
+  "template": "harm-handle",
+  "slope": false,
+  "w": 342,
+  "h": 1972
+ },
+ {
+  "shape": "272154",
+  "template": "harm-handle",
+  "slope": false,
+  "w": 402,
+  "h": 1972
+ },
+ {
+  "shape": "272155",
+  "template": "door-harm",
+  "slope": false,
+  "w": 442,
+  "h": 1972
+ },
+ {
+  "shape": "272156",
+  "template": "door",
+  "slope": false,
+  "w": 666,
+  "h": 1902
+ },
+ {
+  "shape": "272157",
+  "template": "door",
+  "slope": true,
+  "w": 686.01,
+  "h": 1902
+ },
+ {
+  "shape": "272174",
+  "template": "fixed-open-door",
+  "slope": false,
+  "w": 532,
+  "h": 2002
+ },
+ {
+  "shape": "272176",
+  "template": "door",
+  "slope": false,
+  "w": 462,
+  "h": 1992
+ },
+ {
+  "shape": "272179",
+  "template": "door-harm",
+  "slope": false,
+  "w": 379,
+  "h": 1902
+ },
+ {
+  "shape": "272180",
+  "template": "harm-handle",
+  "slope": false,
+  "w": 379,
+  "h": 1902
+ },
+ {
+  "shape": "272181",
+  "template": "harm-handle",
+  "slope": false,
+  "w": 294,
+  "h": 1902
+ },
+ {
+  "shape": "272182",
+  "template": "door-harm",
+  "slope": false,
+  "w": 294,
+  "h": 1902
+ },
+ {
+  "shape": "272184",
+  "template": "fixed-open-door",
+  "slope": false,
+  "w": 472,
+  "h": 2102
+ },
+ {
+  "shape": "272185",
+  "template": "door",
+  "slope": false,
+  "w": 269,
+  "h": 2092
+ },
+ {
+  "shape": "272186",
+  "template": "door",
+  "slope": false,
+  "w": 459,
+  "h": 2092
+ },
+ {
+  "shape": "272187",
+  "template": "fixed-open-door",
+  "slope": true,
+  "w": 422,
+  "h": 2122.01
+ },
+ {
+  "shape": "272188",
+  "template": "fixed-open-door",
+  "slope": true,
+  "w": 502,
+  "h": 1522
+ },
+ {
+  "shape": "272190",
+  "template": "fixed-open",
+  "slope": true,
+  "w": 922,
+  "h": 1812
+ },
+ {
+  "shape": "272191",
+  "template": "fixed-closed",
+  "slope": true,
+  "w": 581,
+  "h": 1802
+ },
+ {
+  "shape": "272192",
+  "template": "door",
+  "slope": false,
+  "w": 652,
+  "h": 1787
+ },
+ {
+  "shape": "272194",
+  "template": "fixed-closed",
+  "slope": false,
+  "w": 403,
+  "h": 1802
+ },
+ {
+  "shape": "272195",
+  "template": "door",
+  "slope": true,
+  "w": 622,
+  "h": 1982
+ },
+ {
+  "shape": "272201",
+  "template": "fixed-closed",
+  "slope": true,
+  "w": 637.58,
+  "h": 426.78
+ },
+ {
+  "shape": "272202",
+  "template": "fixed-open-door",
+  "slope": false,
+  "w": 312,
+  "h": 1902
+ },
+ {
+  "shape": "272203",
+  "template": "door",
+  "slope": false,
+  "w": 477,
+  "h": 1892
+ },
+ {
+  "shape": "272205",
+  "template": "fixed-open-door",
+  "slope": false,
+  "w": 532,
+  "h": 1902
+ },
+ {
+  "shape": "272206",
+  "template": "fixed-open-door",
+  "slope": false,
+  "w": 402,
+  "h": 2002
+ },
+ {
+  "shape": "272209",
+  "template": "fixed-open-door",
+  "slope": false,
+  "w": 487,
+  "h": 2002
+ },
+ {
+  "shape": "272210",
+  "template": "fixed-open-door",
+  "slope": false,
+  "w": 402,
+  "h": 2002
+ },
+ {
+  "shape": "272213",
+  "template": "door-harm-handle",
+  "slope": false,
+  "w": 382,
+  "h": 1942
+ },
+ {
+  "shape": "272214",
+  "template": "harm-handle",
+  "slope": false,
+  "w": 382,
+  "h": 1942
+ },
+ {
+  "shape": "272216",
+  "template": "door-harm-handle",
+  "slope": false,
+  "w": 388,
+  "h": 1942
+ },
+ {
+  "shape": "272217",
+  "template": "fixed-open-door",
+  "slope": false,
+  "w": 502,
+  "h": 1452
+ },
+ {
+  "shape": "272219",
+  "template": "door-harm-handle",
+  "slope": false,
+  "w": 416,
+  "h": 1889
+ },
+ {
+  "shape": "272228",
+  "template": "fixed-closed",
+  "slope": false,
+  "w": 1502,
+  "h": 602
+ },
+ {
+  "shape": "272230",
+  "template": "fixed-closed",
+  "slope": false,
+  "w": 632,
+  "h": 2004
+ },
+ {
+  "shape": "272231",
+  "template": "fixed-closed",
+  "slope": false,
+  "w": 738,
+  "h": 2004
+ },
+ {
+  "shape": "272232",
+  "template": "fixed-closed",
+  "slope": false,
+  "w": 702,
+  "h": 1602
+ },
+ {
+  "shape": "272233",
+  "template": "fixed-closed",
+  "slope": false,
+  "w": 289,
+  "h": 1902
+ },
+ {
+  "shape": "272235",
+  "template": "fixed-closed-door",
+  "slope": false,
+  "w": 637,
+  "h": 1902
+ },
+ {
+  "shape": "272236",
+  "template": "fixed-closed-door",
+  "slope": true,
+  "w": 236,
+  "h": 2002
+ },
+ {
+  "shape": "272238",
+  "template": "fixed-closed-door",
+  "slope": true,
+  "w": 235,
+  "h": 2002
+ },
+ {
+  "shape": "272239",
+  "template": "fixed-closed-door",
+  "slope": true,
+  "w": 502,
+  "h": 1902
+ },
+ {
+  "shape": "272244",
+  "template": "door-harm",
+  "slope": false,
+  "w": 432,
+  "h": 1887
+ },
+ {
+  "shape": "272247",
+  "template": "door-harm",
+  "slope": false,
+  "w": 377,
+  "h": 1887
+ },
+ {
+  "shape": "272248",
+  "template": "fixed-closed-door",
+  "slope": false,
+  "w": 203,
+  "h": 1402
+ },
+ {
+  "shape": "272250",
+  "template": "fixed-closed-door",
+  "slope": false,
+  "w": 766,
+  "h": 1402
+ },
+ {
+  "shape": "272253",
+  "template": "fixed-closed-door",
+  "slope": false,
+  "w": 852,
+  "h": 1902
+ },
+ {
+  "shape": "272255",
+  "template": "fixed-closed-door",
+  "slope": false,
+  "w": 502,
+  "h": 1612
+ },
+ {
+  "shape": "272258",
+  "template": "door-harm",
+  "slope": false,
+  "w": 332,
+  "h": 1887
+ },
+ {
+  "shape": "272259",
+  "template": "fixed-closed-door",
+  "slope": false,
+  "w": 732,
+  "h": 1902
+ },
+ {
+  "shape": "272264",
+  "template": "fixed-closed-door",
+  "slope": false,
+  "w": 487,
+  "h": 1902
+ },
+ {
+  "shape": "272267",
+  "template": "fixed-open-door",
+  "slope": true,
+  "w": 507,
+  "h": 1902
+ },
+ {
+  "shape": "272274",
+  "template": "door",
+  "slope": true,
+  "w": 591,
+  "h": 1887
+ },
+ {
+  "shape": "272276",
+  "template": "door-harm-handle",
+  "slope": false,
+  "w": 487,
+  "h": 1887
+ },
+ {
+  "shape": "272286",
+  "template": "door-harm",
+  "slope": true,
+  "w": 436,
+  "h": 1882
+ },
+ {
+  "shape": "272288",
+  "template": "door-harm",
+  "slope": false,
+  "w": 412,
+  "h": 1882
+ },
+ {
+  "shape": "272292",
+  "template": "fixed-open-door",
+  "slope": true,
+  "w": 326,
+  "h": 1902
+ },
+ {
+  "shape": "272293",
+  "template": "fixed-closed",
+  "slope": false,
+  "w": 1902,
+  "h": 602
+ },
+ {
+  "shape": "272300",
+  "template": "fixed-closed",
+  "slope": true,
+  "w": 685,
+  "h": 1902
+ },
+ {
+  "shape": "272302",
+  "template": "fixed-open-door",
+  "slope": true,
+  "w": 626,
+  "h": 1452
+ },
+ {
+  "shape": "272306",
+  "template": "fixed-open-door",
+  "slope": true,
+  "w": 327,
+  "h": 1902
+ },
+ {
+  "shape": "272310",
+  "template": "door",
+  "slope": true,
+  "w": 702,
+  "h": 1887
+ },
+ {
+  "shape": "272311",
+  "template": "fixed-closed",
+  "slope": false,
+  "w": 737,
+  "h": 1902
+ },
+ {
+  "shape": "272334",
+  "template": "fixed-open-door",
+  "slope": true,
+  "w": 525,
+  "h": 1902
+ },
+ {
+  "shape": "272341",
+  "template": "fixed-open",
+  "slope": true,
+  "w": 647,
+  "h": 1452
+ },
+ {
+  "shape": "272382",
+  "template": "fixed-closed",
+  "slope": true,
+  "w": 903,
+  "h": 2002
+ },
+ {
+  "shape": "272386",
+  "template": "door",
+  "slope": true,
+  "w": 820,
+  "h": 2475
+ },
+ {
+  "shape": "272407",
+  "template": "fixed-open-door",
+  "slope": true,
+  "w": 332.01,
+  "h": 1952
+ },
+ {
+  "shape": "272428",
+  "template": "fixed-open",
+  "slope": false,
+  "w": 420,
+  "h": 2002
+ },
+ {
+  "shape": "272438",
+  "template": "fixed-open",
+  "slope": false,
+  "w": 1902,
+  "h": 1002
+ },
+ {
+  "shape": "272439",
+  "template": "fixed-open",
+  "slope": false,
+  "w": 1902,
+  "h": 802
+ },
+ {
+  "shape": "272440",
+  "template": "harm",
+  "slope": false,
+  "w": 452,
+  "h": 1462
+ },
+ {
+  "shape": "272441",
+  "template": "harm",
+  "slope": false,
+  "w": 502,
+  "h": 1502
+ },
+ {
+  "shape": "272454",
+  "template": "door-harm-handle",
+  "slope": false,
+  "w": 393,
+  "h": 1992
+ },
+ {
+  "shape": "272462",
+  "template": "door",
+  "slope": true,
+  "w": 727,
+  "h": 1987
+ },
+ {
+  "shape": "272464",
+  "template": "door",
+  "slope": true,
+  "w": 677,
+  "h": 1887
+ },
+ {
+  "shape": "272465",
+  "template": "door",
+  "slope": true,
+  "w": 677,
+  "h": 1887
+ },
+ {
+  "shape": "272476",
+  "template": "fixed-closed",
+  "slope": true,
+  "w": 622.01,
+  "h": 1502
+ },
+ {
+  "shape": "272480",
+  "template": "fixed-open",
+  "slope": false,
+  "w": 482,
+  "h": 1982
+ },
+ {
+  "shape": "272501",
+  "template": "fixed-closed-door",
+  "slope": true,
+  "w": 562,
+  "h": 2102
+ },
+ {
+  "shape": "272516",
+  "template": "fixed-closed-door",
+  "slope": true,
+  "w": 1922.01,
+  "h": 522
+ },
+ {
+  "shape": "272521",
+  "template": "fixed-open",
+  "slope": true,
+  "w": 944,
+  "h": 2002
+ },
+ {
+  "shape": "272522",
+  "template": "door-harm",
+  "slope": true,
+  "w": 432,
+  "h": 1882
+ },
+ {
+  "shape": "272550",
+  "template": "fixed-open",
+  "slope": true,
+  "w": 927.01,
+  "h": 2002
+ },
+ {
+  "shape": "272566",
+  "template": "fixed-closed-door",
+  "slope": true,
+  "w": 472,
+  "h": 1703
+ },
+ {
+  "shape": "272567",
+  "template": "fixed-closed",
+  "slope": true,
+  "w": 349,
+  "h": 2053
+ },
+ {
+  "shape": "272569",
+  "template": "door-harm-handle",
+  "slope": true,
+  "w": 407,
+  "h": 2102
+ },
+ {
+  "shape": "272570",
+  "template": "harm-handle",
+  "slope": true,
+  "w": 371,
+  "h": 2123
+ },
+ {
+  "shape": "272572",
+  "template": "door-harm-handle",
+  "slope": true,
+  "w": 427,
+  "h": 2123
+ },
+ {
+  "shape": "272594",
+  "template": "fixed-closed-door",
+  "slope": true,
+  "w": 507,
+  "h": 1852
+ },
+ {
+  "shape": "272597",
+  "template": "door-harm-handle",
+  "slope": true,
+  "w": 365,
+  "h": 1922
+ },
+ {
+  "shape": "272602",
+  "template": "fixed-open",
+  "slope": false,
+  "w": 852,
+  "h": 1902
+ },
+ {
+  "shape": "272604",
+  "template": "fixed-open",
+  "slope": false,
+  "w": 1392,
+  "h": 2002
+ },
+ {
+  "shape": "272619",
+  "template": "harm",
+  "slope": false,
+  "w": 602,
+  "h": 1502
+ },
+ {
+  "shape": "272627",
+  "template": "door-harm-handle",
+  "slope": false,
+  "w": 417,
+  "h": 1992
+ },
+ {
+  "shape": "272635",
+  "template": "fixed-open",
+  "slope": false,
+  "w": 632,
+  "h": 1502
+ },
+ {
+  "shape": "272652",
+  "template": "fixed-closed",
+  "slope": true,
+  "w": 392,
+  "h": 2102
+ },
+ {
+  "shape": "272654",
+  "template": "fixed-closed-door",
+  "slope": true,
+  "w": 840,
+  "h": 2102
+ },
+ {
+  "shape": "272661",
+  "template": "fixed-open",
+  "slope": false,
+  "w": 742,
+  "h": 1902
+ },
+ {
+  "shape": "272681",
+  "template": "fixed-open",
+  "slope": true,
+  "w": 956,
+  "h": 2122
+ },
+ {
+  "shape": "272685",
+  "template": "door-harm",
+  "slope": true,
+  "w": 1987,
+  "h": 480
+ },
+ {
+  "shape": "272694",
+  "template": "fixed-open",
+  "slope": true,
+  "w": 539,
+  "h": 2002
+ },
+ {
+  "shape": "272701",
+  "template": "fixed-open",
+  "slope": true,
+  "w": 928,
+  "h": 2002
+ },
+ {
+  "shape": "272724",
+  "template": "door-harm",
+  "slope": true,
+  "w": 427,
+  "h": 1887
+ },
+ {
+  "shape": "272768",
+  "template": "fixed-open",
+  "slope": true,
+  "w": 602.01,
+  "h": 1952
+ },
+ {
+  "shape": "272769",
+  "template": "door-harm",
+  "slope": true,
+  "w": 405.01,
+  "h": 1902
+ },
+ {
+  "shape": "272863",
+  "template": "door-harm",
+  "slope": true,
+  "w": 360,
+  "h": 2002
+ },
+ {
+  "shape": "272969",
+  "template": "door-harm-handle",
+  "slope": false,
+  "w": 452,
+  "h": 1823
+ },
+ {
+  "shape": "273010",
+  "template": "harm",
+  "slope": false,
+  "w": 552,
+  "h": 1502
+ },
+ {
+  "shape": "273011",
+  "template": "harm",
+  "slope": false,
+  "w": 502,
+  "h": 1492
+ },
+ {
+  "shape": "273041",
+  "template": "door-harm-handle",
+  "slope": false,
+  "w": 402,
+  "h": 2092
+ },
+ {
+  "shape": "273173",
+  "template": "harm",
+  "slope": false,
+  "w": 352,
+  "h": 1670
+ },
+ {
+  "shape": "273350",
+  "template": "harm",
+  "slope": false,
+  "w": 402,
+  "h": 1592
+ },
+ {
+  "shape": "273438",
+  "template": "harm-handle",
+  "slope": true,
+  "w": 426.01,
+  "h": 1987
+ },
+ {
+  "shape": "273439",
+  "template": "door-harm-handle",
+  "slope": true,
+  "w": 426,
+  "h": 1987
+ },
+ {
+  "shape": "273440",
+  "template": "harm",
+  "slope": true,
+  "w": 552,
+  "h": 1674
+ },
+ {
+  "shape": "273441",
+  "template": "harm",
+  "slope": false,
+  "w": 472,
+  "h": 1664
+ },
+ {
+  "shape": "273970",
+  "template": "door-harm-handle",
+  "slope": true,
+  "w": 367.01,
+  "h": 1892
+ },
+ {
+  "shape": "273990",
+  "template": "harm",
+  "slope": true,
+  "w": 522,
+  "h": 1422.01
+ },
+ {
+  "shape": "274052",
+  "template": "harm",
+  "slope": true,
+  "w": 537,
+  "h": 1957
+ },
+ {
+  "shape": "274107",
+  "template": "door-harm-handle",
+  "slope": true,
+  "w": 408,
+  "h": 1840
+ },
+ {
+  "shape": "274411",
+  "template": "harm-handle",
+  "slope": true,
+  "w": 358,
+  "h": 1992
+ },
+ {
+  "shape": "274553",
+  "template": "door-harm-handle",
+  "slope": true,
+  "w": 520,
+  "h": 2124
+ },
+ {
+  "shape": "274554",
+  "template": "harm-handle",
+  "slope": true,
+  "w": 497,
+  "h": 2127.01
+ },
+ {
+  "shape": "274378",
+  "template": "door",
+  "slope": false,
+  "w": 427,
+  "h": 1992,
+  "note": "hinge-window contour source"
+ }
+]
