@@ -2814,8 +2814,10 @@ function renderGeoWarn(panels,pss){
   // ‏רק למנהל: אלה הערות למפעל ("לבדוק ביד"); הלקוח רואה רק את הציור.
   if(typeof _sess!=='undefined' && _sess && _sess.role==='admin') try{
     const sh=_lgShowerOf(panels,pss);
-    (engCutsOf(sh)||[]).forEach(g=>(g.issues||[]).forEach(msg=>list.push({
-      idx:g.idx, code:'cut', msg:(typeof _lgGlassName==='function'?_lgGlassName(sh.shapes,g.idx):'')+msg })));
+    // ‏בעיות הצורה של המנוע נכנסות גם ל-issues של החיתוך (כדי לחסום DXF) — כבר ברשימה, לא פעמיים
+    const seen=new Set(list.map(g=>g.msg));
+    (engCutsOf(sh)||[]).forEach(g=>(g.issues||[]).forEach(msg=>{ if(!seen.has(msg)) list.push({
+      idx:g.idx, code:'cut', msg:(typeof _lgGlassName==='function'?_lgGlassName(sh.shapes,g.idx):'')+msg }); }));
   }catch(e){}
   try{ renderDxfBar(panels,pss); }catch(e){}
   if(!list.length){ el.hidden=true; el.innerHTML=''; return; }
@@ -2850,9 +2852,11 @@ function dxfDownload(idx){
   const {cuts,base}=_dxfState;
   const files=cuts.filter(g=>(idx<0||g.idx===idx)&&g.key&&!(g.issues&&g.issues.length))
     .map(g=>({cut:g,name:lgDxfName(base,g.idx+1,g,1)}));
+  if(!files.length) return;
+  // ‏זכוכית אחת → DXF; "כל ה-DXF" → zip אחד (Chrome חוסם הורדה שנייה). הכול נכתב לפני ההורדה.
   try{
-    files.forEach(f=>lgDxf(f.cut)); // כל הקבצים נבדקים לפני שמורידים אחד
-    lgDxfSaveAll(files,undefined,errs=>{ if(errs.length) alert(errs.join(' | ')); });
+    if(idx>=0) lgDxfSave(files[0].name,lgDxf(files[0].cut));
+    else lgDxfSaveZip(base+'_DXF.zip',files);
   }catch(e){ alert(e.message); }
 }
 function geoWarnOpen(idx){
@@ -3090,7 +3094,7 @@ function engPaintFolded(L,tf,pfx,uprightText,effScale,pushSpec,cuts){
   // אין קליק על מידה בתצוגה נעולה (תצוגה בלבד) — משחזרים את dimHits
   // למה שהיה, כדי ש-engDim לא ישאיר שם יעדים על קואורדינטות מוטות.
   const before=dimHits.length;
-  L.dims.forEach(d=>{
+  (cuts ? engCutDims(L,cuts) : L.dims).forEach(d=>{
     // ‏'total' הוא הרוחב הכולל של הזרוע כמקשה אחת — לא רלוונטי כשהזרוע
     // מוטה, ורק עומס נוסף על שרטוט שכבר מלא (בן, 2026-09-20).
     if(d.kind==='total') return;
@@ -3752,9 +3756,38 @@ const ENG_CUT_COLOR={ hinge:'#2b2620', harm:'#9a4f2b', closed:'#8a6a2a', open:'#
                       handle:'#3a3128', hole:'#3a3128' };
 // ‏חור קטן מאוד בפלאפון מקבל רדיוס מינימלי כדי שייראה — רק בתמונה, לא ב-DXF
 const ENG_CUT_MIN_R=1.5;
+// ‏פעם אחת לכל ציור: הציור, רצועת האזהרות וכפתורי ה-DXF שואלים על אותו מקלחון —
+// ‏התשובה האחרונה נשמרת לפי המקלחון עצמו (JSON), ועריכה כלשהי מחשבת מחדש.
 function engCutsOf(shower){
   if(typeof lgCuts!=='function') return null;
-  try{ return lgCuts(shower); }catch(e){ return null; }
+  let k=null; try{ k=JSON.stringify(shower); }catch(e){}
+  const m=engCutsOf._m;
+  if(k!=null && m && m.k===k) return m.v;
+  let v=null; try{ v=lgCuts(shower); }catch(e){ v=null; }
+  engCutsOf._m={k:k,v:v};
+  return v;
+}
+// ‏I5: בזכוכית עם תבנית, מידת הידית נגזרת מהחיתוך (חצי גובה הזכוכית החתוכה, במידת הסקיצה) —
+// ‏לא מתקרת המטר של המנוע. אחרת דלת של 2200 הייתה מראה 1000 וחותכת ב-1100.
+// ‏הקו מסתיים בחור שמצויר (החיתוך), והמספר = המרחק ממנו לקצה שאליו נמדד.
+function engCutDims(L,cuts){
+  const byIdx={};
+  (cuts||[]).forEach(g=>{ if(g && g.key && L.shapes[g.idx]) byIdx[g.idx]=g; });
+  return L.dims.map(d=>{
+    const g=d.kind==='handle-dist' && byIdx[d.idx];
+    if(!g) return d;
+    const s=L.shapes[d.idx], sc=L.scale;
+    const hy=L.hardware.filter(h=>h.idx===d.idx && h.role==='handle').map(h=>h.y).sort((a,b)=>a-b);
+    const cy=g.cuts.filter(c=>c.kind==='handle').map(c=>s.y+s.h-(c.y-1)*sc).sort((a,b)=>a-b);
+    if(!hy.length || hy.length!==cy.length) return d;
+    for(const e of ['y1','y2']){
+      const k=hy.findIndex(y=>Math.abs(y-d[e])<0.5);
+      if(k<0) continue;
+      const o=e==='y1'?'y2':'y1', ny=cy[k];
+      return Object.assign({},d,{[e]:ny, text:String(Math.round(Math.abs(d[o]-ny)/sc))});
+    }
+    return d;
+  });
 }
 // ‏האם החיתוכים מחליפים את הסימן הזה. ציר בצומת שייך לשתי הזכוכיות —
 // הוא יורד רק כששתיהן מצוירות כחיתוך; אחרת הזכוכית שבלי תבנית מאבדת אותו.
@@ -3876,7 +3909,7 @@ function engPaint(L,pfx,dy,idxOf,opts){
   if(!inFullEdit) engHingeLegend(L);
 
   const before=dimHits.length;
-  L.dims.forEach(d=>engDim(d,pfx));
+  (_o.cuts ? engCutDims(L,_o.cuts) : L.dims).forEach(d=>engDim(d,pfx));
   for(let i=before;i<dimHits.length;i++){
     dimHits[i].y+=dy;
     if(idxOf && dimHits[i].t) dimHits[i].t.idx=idxOf(dimHits[i].t.idx);
