@@ -30,6 +30,8 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
   const ov = w.document.getElementById('lgOptyView');
   check('viewer shows shape number and work order', /צורה 274328 · פקודה M00291/.test(ov.textContent), true);
   check('viewer draws the shape', !!ov.querySelector('#lgOptyViewGeo svg'), true);
+  check('viewer: numbered drawing + measurement list (hole Ø12, 251 from the left, 951 from the bottom)',
+    [ov.querySelectorAll('.lg-opty-tag').length, [...ov.querySelectorAll('.lg-opty-feats li')].map(li => li.textContent)], [1, ['1חור Ø12 · 251 משמאל · 951 מלמטה']]);
   ov.querySelector('#lgOptyLbl').click(); ov.querySelector('#lgOptyLblSh').click();
   check('label buttons: plain, then with the drawing', calls, [['o1', [0], false], ['o1', [0], true]]);
   w.lgOptyShapeView(order, 1);

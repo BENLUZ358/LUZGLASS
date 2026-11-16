@@ -27,6 +27,65 @@ function lgOptyShapeParse(text) {
   return { w: r2(lines[0][0]), h: r2(lines[0][1]), c };
 }
 
+//  מידות לכל דבר בצורה (בן, 16/11: "שייראו בדיוק את הנתונים") — כל קו מתאר הופך לפריט עם מספר:
+//    חור (עיגול שלם): קוטר + מרכז מהקצוות הקרובים · פינה מעוגלת: רדיוס + איזו פינה
+//    חריץ (קו פתוח שיוצא מקצה אחד): מאיזה צד, עומק, רוחב, ומרחק מהקצה הקרוב
+//    חיתוך פינה (קו פתוח בין שני קצוות): רוחב × גובה מהפינה · שקע (כל השאר): גודל + מרחק מהקצוות
+//  הכל במסגרת של אופטי-ווי (המידה שם, לרוב שלנו +2), מהקצה הקרוב — "מלמטה/מלמעלה", "משמאל/מימין".
+const LG_OPTY_EDGE = 12;     // נקודת קצה של חריץ עד 12 מ"מ מקצה הזכוכית = יוצא מהקצה (צירים מתחילים ב-10)
+function lgOptyFeatures(geo) {
+  if (!geo || !(geo.w > 0) || !(geo.h > 0)) return [];
+  const W = geo.w, H = geo.h, TAU = 2 * Math.PI;
+  const n1 = v => String(Math.round(v * 10) / 10);
+  const fx = x => x <= W - x ? [x, 'משמאל'] : [W - x, 'מימין'];
+  const fy = y => y <= H - y ? [y, 'מלמטה'] : [H - y, 'מלמעלה'];
+  const ends = s => s[0] === 0 ? [[s[1], s[2]], [s[3], s[4]]]
+    : [[s[1] + s[3] * Math.cos(s[4]), s[2] + s[3] * Math.sin(s[4])], [s[1] + s[3] * Math.cos(s[5]), s[2] + s[3] * Math.sin(s[5])]];
+  const edgeOf = p => { const d = [[p[0], 'L'], [W - p[0], 'R'], [p[1], 'B'], [H - p[1], 'T']].sort((a, b) => a[0] - b[0])[0]; return d[0] <= LG_OPTY_EDGE ? d[1] : ''; };
+  const SIDE = { L: 'משמאל', R: 'מימין', B: 'מלמטה', T: 'מלמעלה' };
+  const corner = (x, y) => (x < W / 2 ? 'שמאל' : 'ימין') + ' ' + (y < H / 2 ? 'למטה' : 'למעלה');
+  const out = [];
+  (geo.c || []).forEach(segs => {
+    if (!segs || !segs.length) return;
+    //  תיבה סביב הקו: קצוות + נקודות לאורך כל קשת
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const add = (x, y) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
+    segs.forEach(s => {
+      if (s[0] === 0) { add(s[1], s[2]); add(s[3], s[4]); return; }
+      const sw = s[5] - s[4], k = Math.max(8, Math.ceil(Math.abs(sw) / 0.05));
+      for (let i = 0; i <= k; i++) { const a = s[4] + sw * i / k; add(s[1] + s[3] * Math.cos(a), s[2] + s[3] * Math.sin(a)); }
+    });
+    const r2 = v => Math.round(v * 100) / 100;
+    const box = { x: r2(x0), y: r2(y0), w: r2(x1 - x0), h: r2(y1 - y0) };
+    const f = { n: out.length + 1, box };
+    const s0 = segs[0];
+    const first = ends(s0)[0], last = ends(segs[segs.length - 1])[1];
+    const closed = Math.hypot(first[0] - last[0], first[1] - last[1]) < 0.5;
+    if (segs.length === 1 && s0[0] === 1 && Math.abs(Math.abs(s0[5] - s0[4]) - TAU) < 0.01) {
+      const [dx, sx] = fx(s0[1]), [dy, sy] = fy(s0[2]);
+      Object.assign(f, { kind: 'hole', d: r2(s0[3] * 2), cx: s0[1], cy: s0[2],
+        text: `חור Ø${n1(s0[3] * 2)} · ${n1(dx)} ${sx} · ${n1(dy)} ${sy}` });
+    } else if (segs.length === 1 && s0[0] === 1 && edgeOf(first) && edgeOf(last) && edgeOf(first) !== edgeOf(last)) {
+      Object.assign(f, { kind: 'corner', r: s0[3], text: `פינה מעוגלת R${n1(s0[3])} · ${corner(s0[1], s0[2])}` });
+    } else if (!closed && edgeOf(first) && edgeOf(last) && edgeOf(first) !== edgeOf(last)) {
+      const cx = edgeOf(first) === 'L' || edgeOf(last) === 'L' ? 0 : W, cy = edgeOf(first) === 'B' || edgeOf(last) === 'B' ? 0 : H;
+      const ww = cx === 0 ? x1 : W - x0, hh = cy === 0 ? y1 : H - y0;
+      Object.assign(f, { kind: 'cornercut', text: `חיתוך פינה ${corner(cx, cy)} · ${n1(ww)} × ${n1(hh)}` });
+    } else if (!closed && edgeOf(first) && edgeOf(first) === edgeOf(last)) {
+      const e = edgeOf(first), vert = e === 'L' || e === 'R';
+      const depth = e === 'L' ? x1 : e === 'R' ? W - x0 : e === 'B' ? y1 : H - y0;
+      const width = vert ? y1 - y0 : x1 - x0;
+      const [dp, sp] = vert ? fy(y0 + (y1 - y0) / 2 <= H / 2 ? y0 : y1) : fx(x0 + (x1 - x0) / 2 <= W / 2 ? x0 : x1);
+      Object.assign(f, { kind: 'notch', side: e, text: `חריץ ${SIDE[e]} · עומק ${n1(depth)} · רוחב ${n1(width)} · ${n1(dp)} ${sp}` });
+    } else {
+      const [dx, sx] = fx((x0 + x1) / 2 <= W / 2 ? x0 : x1), [dy, sy] = fy((y0 + y1) / 2 <= H / 2 ? y0 : y1);
+      Object.assign(f, { kind: 'cut', text: `שקע ${n1(x1 - x0)} × ${n1(y1 - y0)} · ${n1(dx)} ${sx} · ${n1(dy)} ${sy}` });
+    }
+    out.push(f);
+  });
+  return out;
+}
+
 //  geo → נתיב SVG בתוך מלבן ‎0..w × 0..h, הפוך ב-y (0 למטה, כמו באופטי-ווי)
 function lgOptyShapeSvg(geo, opts) {
   if (!geo) return '';
@@ -53,11 +112,38 @@ function lgOptyShapeSvg(geo, opts) {
     });
   });
   const sw = Math.max(W, H) / (o.px || 160) * 1.6;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${-pad} ${-pad} ${W + 2 * pad} ${H + 2 * pad}"`
+  //  dims: מידה כוללת (רוחב למטה, גובה משמאל) + עיגול ממוספר על כל פריט — הטבלה מתחת (lgOptyFeatures)
+  let dims = '', vb = [-pad, -pad, W + 2 * pad, H + 2 * pad];
+  if (o.dims) {
+    const fs = +(Math.max(W, H) * 0.034).toFixed(1), g = fs * 1.2, t = fs * 0.35;
+    const ln = (a, b, c, e) => `<line x1="${a}" y1="${b}" x2="${c}" y2="${e}"/>`;
+    const yb = H + g;                                   // קו הרוחב מתחת לזכוכית
+    dims += `<g stroke="#555" stroke-width="${sw * 0.7}" fill="none">`
+      + ln(0, H + t, 0, yb + t) + ln(W, H + t, W, yb + t) + ln(0, yb, W, yb)
+      + ln(-t, 0, -g - t, 0) + ln(-t, H, -g - t, H) + ln(-g, 0, -g, H) + `</g>`
+      + `<g fill="#222" font-family="Heebo,Arial,sans-serif" font-weight="700" font-size="${fs}" text-anchor="middle">`
+      + `<text x="${W / 2}" y="${yb + fs * 1.05}">${W}</text>`
+      + `<text transform="translate(${-g - fs * 0.35} ${H / 2}) rotate(-90)">${H}</text></g>`;
+    //  העיגול ליד הפריט, לכיוון פנים הזכוכית (לא עליו); אם נוגע בעיגול קודם — זז עוד פנימה
+    const r = fs * 0.55, placed = [];
+    lgOptyFeatures(geo).forEach(f => {
+      const left = f.box.x + f.box.w / 2 <= W / 2, step = (left ? 1 : -1) * r * 2.3;
+      let tx = left ? f.box.x + f.box.w + r * 1.4 : f.box.x - r * 1.4;
+      const ty = f.box.y + f.box.h / 2;
+      if (f.kind === 'cornercut') tx = f.box.x + f.box.w / 2;
+      for (let k = 0; k < 6 && placed.some(p => Math.hypot(p[0] - tx, p[1] - ty) < r * 2.1); k++) tx += step;
+      tx = Math.min(W - r, Math.max(r, tx)); placed.push([tx, ty]);
+      const cx = X(tx), cy = Y(ty);
+      dims += `<g class="lg-opty-tag"><circle cx="${cx}" cy="${cy}" r="${r}" fill="#a93226" stroke="#fff" stroke-width="${sw * 0.6}"/>`
+        + `<text x="${cx}" y="${+(cy + fs * 0.3).toFixed(2)}" fill="#fff" font-family="Heebo,Arial,sans-serif" font-weight="900" font-size="${fs * 0.8}" text-anchor="middle">${f.n}</text></g>`;
+    });
+    vb = [-pad - g - fs, -pad, W + 2 * pad + g + fs, H + 2 * pad + g + fs * 1.2];
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb.map(v => +v.toFixed(2)).join(' ')}"`
     + (o.cls ? ` class="${o.cls}"` : '') + ` role="img" aria-label="צורה ${W}×${H}">`
     + `<rect x="0" y="0" width="${W}" height="${H}" fill="${o.fill || '#eef5f8'}" stroke="currentColor" stroke-width="${sw}"/>`
     + (d ? `<path d="${d}" fill="none" stroke="${o.cut || '#c0392b'}" stroke-width="${sw * 1.4}" stroke-linecap="round" stroke-linejoin="round"/>` : '')
-    + `</svg>`;
+    + dims + `</svg>`;
 }
 
 //  ציור על canvas בתוך תיבה (bx,by,bw,bh) — למדבקה. שחור על לבן.
@@ -131,8 +217,16 @@ function lgOptyShapeView(order, idx) {
   if (it.optyShape && typeof _lgDb !== 'undefined') {
     _lgDb.ref('meta/optyGeo/' + it.optyShape).once('value').then(v => {
       const g = v.val(), box = document.getElementById('lgOptyViewGeo'); if (!box) return;
-      box.innerHTML = g ? lgOptyShapeSvg(g, { px: 420 }).replace('<svg ', '<svg style="width:100%;max-height:62vh;color:#222;" ')
-        : 'הציור של הצורה עוד לא נקלט — "קליטה מאופטי-ווי" עם קבצי הצורות מהדיסק-און-קי';
+      const fl = g ? lgOptyFeatures(g) : [];
+      box.style.display = 'block';
+      box.innerHTML = g ? `<div style="display:flex;justify-content:center;">${lgOptyShapeSvg(g, { px: 420, dims: true }).replace('<svg ', '<svg style="width:100%;max-height:58vh;color:#222;" ')}</div>`
+        + `<div style="font-size:12px;color:#666;margin:6px 0 4px;">מידות מאופטי-ווי: <b dir="ltr">${e(g.w)} × ${e(g.h)}</b> · כל מרחק נמדד מהקצה הקרוב</div>`
+        + (fl.length ? `<ol class="lg-opty-feats" style="margin:0;padding:0;list-style:none;display:grid;gap:4px;">`
+          + fl.map(f => `<li style="display:flex;gap:8px;align-items:center;font-size:15px;color:#222;padding:6px 8px;background:#f6f6f6;border-radius:6px;">`
+            + `<span style="flex:none;width:26px;height:26px;border-radius:50%;background:#a93226;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;">${f.n}</span>`
+            + `<span>${e(f.text)}</span></li>`).join('') + `</ol>`
+          : `<div style="font-size:14px;color:#666;">בלי חורים או חיתוכים — מלבן נקי</div>`)
+        :'הציור של הצורה עוד לא נקלט — "קליטה מאופטי-ווי" עם קבצי הצורות מהדיסק-און-קי';
     }).catch(() => { const box = document.getElementById('lgOptyViewGeo'); if (box) box.textContent = 'הציור לא נטען — בדוק חיבור'; });
   }
 }
@@ -153,4 +247,4 @@ function lgOptyChip(order, idx) {
 }
 function lgOptyShapeViewById(id, idx) { const o = _lgOptyOrders[id]; if (o) lgOptyShapeView(o, idx); }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { lgOptyShapeParse, lgOptyShapeSvg, lgOptyShapeDraw, lgOptyChip };
+if (typeof module !== 'undefined' && module.exports) module.exports = { lgOptyShapeParse, lgOptyFeatures, lgOptyShapeSvg, lgOptyShapeDraw, lgOptyChip };
