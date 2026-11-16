@@ -204,7 +204,7 @@ function lgOptyShapeView(order, idx) {
       <div style="flex:1;font-weight:900;font-size:17px;">${e(order.orderClient || '')}${order.sketchName ? ' — ' + e(order.sketchName) : ''}</div>
       <button type="button" data-ov-close aria-label="סגור" style="${btn}min-width:48px;padding:0;">✕</button></div>
     <div style="font-size:14px;margin-bottom:4px;">${e(it.name || 'פריט')} · <b dir="ltr">${dims}</b> מ"מ</div>
-    <div style="font-size:15px;font-weight:900;color:#a93226;margin-bottom:10px;">${it.optyShape ? 'צורה ' + e(it.optyShape) + (it.optyJob ? ' · פקודה ' + e(it.optyJob) : '') : 'לפריט הזה עוד אין מספר צורה מאופטי-ווי'}</div>
+    <div style="font-size:15px;font-weight:900;color:#a93226;margin-bottom:10px;">${it.optyShape ? 'צורה ' + e(it.optyShape) + (it.optyJob ? ' · אופטימיזציה ' + e(it.optyJob) : '') : 'לפריט הזה עוד אין מספר צורה מאופטי-ווי'}</div>
     <div id="lgOptyViewGeo" style="display:flex;justify-content:center;min-height:120px;align-items:center;color:#777;font-size:13px;">${it.optyShape ? 'טוען את הצורה…' : ''}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
       ${it.w && it.h ? `<button type="button" id="lgOptyLbl" style="${btn}flex:1;">🏷 מדבקה</button>` : ''}

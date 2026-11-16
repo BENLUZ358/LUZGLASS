@@ -24,6 +24,7 @@ function lgLabelsForClient(entries) {
         sketchName: String(order.sketchName || ''),
         orderNum: String(order.orderNum || ''),
         shape: String(it.optyShape || ''),          // מספר הצורה באופטי-ווי (opty.html, בן 16/11)
+        job: String(it.optyJob || ''),              // מספר אופטימיזציה M00xxx (בן, 16/11)
         orderId: String(order.id || ''), idx: i,
       });
     });
@@ -83,6 +84,10 @@ function lgLabelDraw(ctx, label, W) {
     ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'rtl'; ctx.textAlign = 'right';
     ctx.fillText('צורה ' + l.shape, W - M, 535);
     ctx.textAlign = 'center';
+  }
+  if (l.job) {                                                       // מספר אופטימיזציה (M00272) — באמצע, בין ההזמנה לצורה
+    ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'ltr'; ctx.textAlign = 'center';
+    ctx.fillText(String(l.job).slice(0, 10), W / 2, 535);
   }
   return out;
 }

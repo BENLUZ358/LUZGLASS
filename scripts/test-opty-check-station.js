@@ -28,7 +28,7 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
   w.lgOptyShapeView(order, 0);
   await new Promise(r => setTimeout(r, 20));
   const ov = w.document.getElementById('lgOptyView');
-  check('viewer shows shape number and work order', /צורה 274328 · פקודה M00291/.test(ov.textContent), true);
+  check('viewer shows shape number and work order', /צורה 274328 · אופטימיזציה M00291/.test(ov.textContent), true);
   check('viewer draws the shape', !!ov.querySelector('#lgOptyViewGeo svg'), true);
   check('viewer: numbered drawing + measurement list (hole Ø12, 251 from the left, 951 from the bottom)',
     [ov.querySelectorAll('.lg-opty-tag').length, [...ov.querySelectorAll('.lg-opty-feats li')].map(li => li.textContent)], [1, ['1חור Ø12 · 251 משמאל · 951 מלמטה']]);

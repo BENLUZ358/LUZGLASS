@@ -24,7 +24,7 @@ const O2 = { id: 'o2', orderNum: 'L1201', orderClient: 'המקום לאמבט', 
 /* A + B */
 const labels = PL.lgLabelsForClient([{ order: O1, idxs: [0, 1, 3] }, { order: O2, idxs: [] }]);
 check('A1 one label per arrived glass, none for the rest', labels.length, 3);
-check('B1 content', labels[0], { title: 'המקום לאמבט', dims: '500 × 2000', sketchName: 'אסף', orderNum: 'L1200', shape: '', orderId: 'o1', idx: 0 });
+check('B1 content', labels[0], { title: 'המקום לאמבט', dims: '500 × 2000', sketchName: 'אסף', orderNum: 'L1200', shape: '', job: '', orderId: 'o1', idx: 0 });
 check('A2 in item order', labels.map(l => l.idx), [0, 1, 3]);
 check('B2 no sketch name → empty, not "undefined"', PL.lgLabelsForClient([{ order: O2, idxs: [0] }])[0].sketchName, '');
 
@@ -60,6 +60,14 @@ global.lgOptyShapeDraw = require(path.join(__dirname, '..', 'opty-shape.js')).lg
 const box = l => { const cc = createCanvas(W, W), x = cc.getContext('2d'); const r = PL.lgLabelDraw(x, l);
   const d = x.getImageData(20, 160, 230, 230).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return [n > 100, r.every(s => s.width <= W - 40)]; };
 check('E3 label with shape: drawing on the left, size still fits', box({ ...labels[0], geo: { w: 427, h: 1992, c: [[[1, 366, 996, 6, 0, 6.2832]]] } }), [true, true]);
+
+/* E4 — מספר אופטימיזציה (M00272) על המדבקה, באמצע השורה התחתונה (בן, 16/11) */
+const O4 = { ...O1, items: [{ ...it(502, 1902), optyShape: '274328', optyJob: 'M00272' }] };
+check('E4a optimisation number travels from the item to the label', PL.lgLabelsForClient([{ order: O4, idxs: [0] }])[0].job, 'M00272');
+const mid = l => { const cc = createCanvas(W, W), x = cc.getContext('2d'); PL.lgLabelDraw(x, l);
+  const d = x.getImageData(200, 512, 160, 34).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return n; };
+check('E4b printed in the middle of the bottom row; no number → empty', [mid({ ...labels[0], shape: '274328', job: 'M00272' }) > 50, mid({ ...labels[0], shape: '274328' })], [true, 0]);
+check('E4c does not run into the order number or the shape number', ink({ ...labels[0], shape: '274328', job: 'M00272' }) === ink({ ...labels[0], shape: '274328' }), true);
 
 if (failed) { console.error('\n' + failed + ' failed'); process.exit(1); }
 console.log('\nall passed');
