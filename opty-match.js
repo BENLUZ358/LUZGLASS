@@ -13,6 +13,7 @@ const LG_OPTY_CLIENTS_DEFAULT = [
   { ours: 'טום גלאס', opty: 'טום גלאס' },
   { ours: 'אביעד נחום', opty: 'אביעד נחום' },
   { ours: 'מורדי', opty: 'אור המראות' },
+  { ours: 'אור המראות', opty: 'אור המראות' },   // כך הלקוח רשום אצלנו בפועל (16/11)
   { ours: 'המקום לאמבט', opty: 'BathPlace' },
   { ours: 'יצחק אביבי', opty: 'אביבי' },
   { ours: 'פלג מקלחונים', opty: 'פלג' },
@@ -83,7 +84,8 @@ function lgOptyMatch(pieces, orders, pairs) {
   groups.forEach(list => {
     const p0 = list[0];
     const keys = _lgOptyClientKeys(p0.client, allPairs);
-    const sameClientSize = rows.filter(r => keys.includes(r.client) && !r.it.optyShape && !taken.has(r.key) && _lgOptyDimOk(p0, r.it));
+    //  השם אצלנו מתחיל בשם שבזוג — 'פלג מקלחונים בע"מ', 'טום גלאס  25701384'
+    const sameClientSize = rows.filter(r => keys.some(k => r.client.startsWith(k)) && !r.it.optyShape && !taken.has(r.key) && _lgOptyDimOk(p0, r.it));
     const named = p0.name ? sameClientSize.filter(r => _lgOptyNameOk(p0.name, r.o.sketchName || r.o.type)) : [];
     const units = list.reduce((s, p) => s + p.qty, 0);
     if (named.length && named.length === units && new Set(named.map(r => r.o.id)).size === 1) {
