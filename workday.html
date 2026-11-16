@@ -4123,6 +4123,11 @@ function handleWorkdayStart(){
 
     // כל הזמנות החיסום נכנסות לתחנת הבדיקה יחד (לא תור אחד-אחד)
     if(hasChisum && !workDay.inChisum.map(String).includes(_sid)){
+      // "ממתינה לייבוא" (בן, 16/11): עבודה חדשה לא קופצת לתחנה באמצע בדיקה
+      // ומתערבבת עם הסחורה שעוד לא נבדקה — הבודק לוחץ "ייבא עבודה" כשהוא מוכן.
+      // נכתב לפני saveWorkDay (שכותב את inChisum), אז ההזמנה לא נראית שם אף רגע.
+      firebase.database().ref('workday/csNew/' + _sid).set(Date.now())
+        .catch(e => console.error('csNew:', e));
       workDay.inChisum.push(_sid);
       _newToChisum++;   // מה שההעברה הזו הוסיפה, ר' ההערה ליד ההודעה
     }
@@ -4167,7 +4172,7 @@ function handleWorkdayStart(){
 
   if(_chisumSent > 0 && _litushCount === 0){
     // רק חיסום — הסבר ברור למשתמש
-    showToast('✓ ' + _chisumSent + (_chisumSent === 1 ? ' הזמנת חיסום נשלחה' : ' הזמנות חיסום נשלחו') + ' לתחנת הבדיקה' + _alsoTxt);
+    showToast('✓ ' + _chisumSent + (_chisumSent === 1 ? ' הזמנת חיסום נשלחה' : ' הזמנות חיסום נשלחו') + ' לתחנת הבדיקה — מחכות שם ל"ייבא עבודה"' + _alsoTxt);
     setTab('build');
     // הבאנר מוביל לתחנה, ולכן מציג את מה שמחכה שם — לא את מה שזז עכשיו
     _showChisumBanner(_chisumTotal);

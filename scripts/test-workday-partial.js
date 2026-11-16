@@ -94,6 +94,8 @@ function world(orders, opts = {}) {
       return { done: d === 'all', marked: d === 'all' || d === 'some' ? 1 : 0, chisumMissing: d === 'all' ? 0 : 1, chisumTotal: 1, triplexMissing: 0 }; },
     _chisumIdxsOf: o => (o.items || []).map((it, i) => it.chisum ? i : -1).filter(i => i >= 0),
     _closeArrived() { return Promise.resolve(); },
+    // סימון "ממתינה לייבוא" בתחנה (בן, 16/11) — לא רלוונטי לבדיקה הזו
+    firebase: { database: () => ({ ref: () => ({ set: () => Promise.resolve() }) }) },
   };
   vm.createContext(ctx);
   vm.runInContext(STAGE_MAP + '\n' + DELIV_LIST, ctx);
