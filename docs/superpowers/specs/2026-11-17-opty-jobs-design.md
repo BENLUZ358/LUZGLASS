@@ -42,7 +42,7 @@ All cutting goes through OptyWay. Ben wants the system to know for certain what 
 
 ## Approaches considered
 
-1. **Chosen (Ben). Import = cut.** The import marks linked items cut, dated by the R01 file's date. Mistakes (a broken piece, a sheet left for tomorrow) are undone by hand.
+1. **Chosen (Ben). Import = cut.** The import marks linked items cut, dated by the work day Ben picks at import. Mistakes (a broken piece, a sheet left for tomorrow) are undone by hand.
 2. End-of-day button "היום נחתך". Rejected: an extra daily step, and nothing gets marked if it's forgotten.
 
 ## Decoded file format
@@ -77,7 +77,7 @@ The file picker for `.dat` also accepts `.R01`; Ben selects all files in the sti
 
 - Find its pieces in Pezzi by CODCOM.
 - Save `meta/optyJobs/<M00xxx>` with:
-  - `date` (YYYY-MM-DD of `File.lastModified`, Israel time)
+  - `day` (the work day Ben chose at import; the default is suggested from `File.lastModified`)
   - `mat` (COD_MAT_COMP)
   - `matName` (DESCR_MAT_COMP)
   - `sheets` (parsed, without waste)
@@ -90,7 +90,7 @@ The file picker for `.dat` also accepts `.R01`; Ben selects all files in the sti
 
 After the existing shape matching and saving runs:
 
-- Every order item whose `optyJob` + `optyShape` is in a saved job gets `items[k].optyCut = { at: <job date>, job }`, if the item has none yet.
+- Every order item whose `optyJob` + `optyShape` is in a saved job gets `items[k].optyCut = { at: <job day>, job }`, if the item has none yet.
 - `optyCut` is written in the same place and with the same access as `optyShape` today. No rules change.
 - Pieces without a shape, or not linked, stay unmarked.
 - Later, when a pending shape is linked (`linkOne` / `wdLinkPending`) and its job is stored, it gets `optyCut` too.
@@ -123,9 +123,30 @@ After the existing shape matching and saving runs:
 - **Order board → order details window (admin.html) only**: per linked item "אופטימיזציה M00xxx · ✂ נחתך dd/mm" (or "לחיתוך dd/mm" before the cut day ends). Nothing new in chisum/workday.
 - **Job view**: a piece marked cut shows ✂. A "בטל נחתך" button clears `optyCut` on that item (for a broken piece or one left for tomorrow).
 
-## Cut date rule (Ben 17/11: "מה שיצא ב16.11 זה של מחר")
+## Work day: Ben chooses (Ben 17/11, replaces an automatic rule)
 
-An optimisation is made the day before or the same morning. Cut day = R01 file time before 12:00 → same day; 12:00 or later → next work day (Sun–Thu, Israel time). `optyCut.at` = the cut day. The window shows "לחיתוך dd/mm" until that day ends, then "✂ נחתך dd/mm". (Claude's call from file times: ~260 files 06–08, ~35 after noon; Ben didn't object, correctable.)
+"שיהיה לי אופציה לייבא את האופטמזציה בממשק, ולהחליט לאיזה יום עבודה זה".
+
+- The import screen lists the optimisations found, each with a work-day picker. All of them share one picker at the top ("יום עבודה לכל האופטימיזציות"), and each row can be changed on its own.
+- The default is suggested from the R01 file time: before 12:00 → that day; 12:00 or later → the next work day (Sun–Thu). Ben confirms or changes it before saving.
+- The chosen day is stored as the job's `day`, and every cut stamp uses it (`optyCut.at`).
+- In the jobs tab, "שנה יום עבודה" changes `day` and updates `at` on that job's items that are stamped and not undone.
+- Order window: "לחיתוך dd/mm" until that day ends, then "✂ נחתך dd/mm".
+
+## The optimisation is its own source (Ben 17/11)
+
+"שהאופטמזציה יהיה עוד מקור חוץ מהפרטים של הממשק".
+
+- `meta/optyJobs` is a full, separate record of what OptyWay cut: the job, day, sheets, pieces, OptyWay client, short name, sizes and shapes. It is kept whether or not a piece is linked to our orders, and it never overwrites order details.
+- Order items only carry the link (`optyShape`, `optyJob`) and the stamp (`optyCut`).
+
+## Agents learn it (Ben 17/11: "צריך ללמד את הסוכנים")
+
+The order tracker (`api/_agent-okev.js`) uses the cut stamp:
+
+- **Status.** An order whose items are all stamped cut (`at` ≤ today, not undone) answers "הזכוכיות נחתכו, ההזמנה בייצור". If only some are, it answers "חלק מהזכוכיות כבר נחתכו, ההזמנה בייצור". This applies when the stage is still pre-production (`'', pending, chash, drafter, opty`). Later stages keep their existing wording.
+- **Cancel / change.** Once any item has a cut stamp with `at` ≤ today that is not undone, the order is too late to change (`lgOkevCanChange` → false), even if its stage is still early.
+- **Ben's evening review.** The daily agent summary for Ben lists today's cut count: "נחתכו היום N זכוכיות ב-M אופטימיזציות".
 
 ## Calls made after the builder check (Claude, 17/11)
 
@@ -143,7 +164,7 @@ These are open for Ben to correct.
 3. **Quantity.** An item is marked cut when the first job containing its shape is imported.
    - OptyWay keeps all copies of a piece in one job.
    - A rare split across days is accepted, and the date shown is the first one.
-4. **Days window.** It filters by the R01 file date only, not by DATACONS.
+4. **Days window.** It filters by the suggested work day (from the R01 file time) only, not by DATACONS.
 5. **Order window (admin.html).** It gets "אופטימיזציה M00xxx" and "✂ נחתך dd/mm" next to the existing "צורה N".
 
 ## Left to the builder
@@ -155,4 +176,4 @@ These are open for Ben to correct.
 ## Open / unverified
 
 - Whether OptyWay's own screen uses the same origin and rotation direction for drawings.
-- The R01 date is the time the file was written to the stick, which is assumed to be the cut day.
+- Default work-day suggestion from file time; Ben confirms it at every import.
