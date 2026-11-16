@@ -307,6 +307,22 @@ if (variantLines.length) { console.log(`\n── variants (${variantLines.length
 console.log(`\n── excluded (${excluded.length}) ──`); excluded.forEach(e => console.log(`  ${e.shape} ${e.template}: ${e.exclude}`));
 if (misses.length) { console.log(`\n── misses (${misses.length}) ──`); misses.forEach(l => console.log('  ' + l)); }
 check('fixtures: every non-excluded shape is built within 1.0 mm', [used.length + excluded.length, misses.length], [136, 0]);
+//  I7 (סקירה סופית): כלל 10 המ"מ מהקצה לא חוסם אף צורה אמיתית — לא בברירת המחדל ולא עם החריגות מהקובץ
+{
+  const { lgCutIssues, LG_CUT_ISSUE } = require(path.join(__dirname, '..', 'lg-cuts.js'));
+  const edgeHits = [];
+  for (const e of used) {
+    const shape = readShape(e.shape), { cuts, slopes } = classify(shape);
+    const prim = cuts.filter(c => c.kind === PRIMARY[e.template]);
+    const side = prim.length && prim.reduce((s, c) => s + c.x, 0) / prim.length > shape.w / 2 ? 'right' : 'left';
+    const base = { w: shape.w, h: shape.h, side }; if (slopes.length) base.slope = slopes;
+    for (const [tag, sp] of [['default', base], ['file', fitOverrides(e.template, Object.assign({}, base), cuts).spec]]) {
+      const g = lgCutTemplate(e.template, sp);
+      if (lgCutIssues(g.outline, g.cuts).includes(LG_CUT_ISSUE.edge)) edgeHits.push(e.shape + ' ' + tag);
+    }
+  }
+  check('I7 fixtures: no real shape is blocked by the 10 mm edge rule (default + file overrides)', edgeHits, []);
+}
 
 if (failed) { console.error(failed + ' failed'); process.exit(1); }
 console.log('all passed');
