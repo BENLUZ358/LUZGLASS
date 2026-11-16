@@ -48,5 +48,14 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
   check('workday: shape button in build list, work table, work cards, order items, today list, chisum (single + group)', (WD.match(/lgOptyChip\(/g) || []).length, 7);
   check('workday + invoices load the shape and label scripts', [WD, INV].map(h => /opty-shape\.js/.test(h) && /order-labels\.js/.test(h)), [true, true]);
   check('invoice station: shape button by each item size', INV.includes('<div class="item-dim">${w} × ${h} ${lgOptyChip(o, i)}</div>'), true);
+  //  🏷 ליד כל פריט בחיסום (בן, 16/11): עם צורה → מדבקה עם צורה; קבוצה → מדבקה לכל יחידה
+  const fnSrc = n => { const i = WD.indexOf('function ' + n + '('); let d = 0, j = WD.indexOf('{', i); for (; j < WD.length; j++) { if (WD[j] === '{') d++; else if (WD[j] === '}' && !--d) break; } return WD.slice(i, j + 1); };
+  const lw = new JSDOM('<!doctype html><body></body>', { runScripts: 'dangerously' }).window, got = [];
+  lw.allOrders = [order]; lw.lgPrintOrderLabels = (o, idxs, opts) => got.push([o.id, idxs, !!(opts && opts.withShape)]);
+  lw.eval(fnSrc('wdLabelBtn') + ';' + fnSrc('wdItemLabel'));
+  lw.document.body.innerHTML = lw.wdLabelBtn(order, [0]) + lw.wdLabelBtn(order, [1]);
+  [...lw.document.querySelectorAll('.wd-item-lbl')].forEach(b => b.click());
+  check('chisum: a label button by every item — with shape for 274328, plain for the other', [lw.document.querySelectorAll('.wd-item-lbl').length, got], [2, [['o1', [0], true], ['o1', [1], false]]]);
+  check('chisum: button in the single row and in the ×N group row', (WD.match(/\$\{wdLabelBtn\(o, /g) || []).length, 2);
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })();
