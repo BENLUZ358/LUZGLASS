@@ -331,6 +331,12 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .mit-n{font-weight:700;flex:1 1 auto;min-width:0;}
 /* 🏷 מדבקה מכל מקום (בן, 11/11) — order-labels.js */
 .mit-lbl{min-width:44px;min-height:44px;margin-inline-start:auto;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:18px;cursor:pointer;}
+/* הצורה מאופטי-ווי (בן, 16/11) — opty.html קולט, opty-shape.js מצייר */
+.mit-sh{font-size:12px;font-weight:700;padding:1px 7px;border-radius:3px;white-space:nowrap;background:rgba(192,57,43,0.10);color:#a93226;}
+.mit-geo{flex:1 0 100%;display:flex;justify-content:center;}
+.mit-geo:empty{display:none;}
+.mit-geo svg{height:150px;max-width:100%;color:var(--text);}
+.mit-lbl-sh{min-height:44px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:13px;font-weight:700;cursor:pointer;}
 .mit-lbl-all{font-size:12px;padding:4px 10px;min-height:36px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;}
 .mit-d{color:var(--muted);white-space:nowrap;}
 .mit-t{font-size:12px;font-weight:700;padding:1px 7px;border-radius:3px;white-space:nowrap;}
@@ -418,8 +424,9 @@ label.msec-t{display:block;}
   <script src="lg-health.js?v=20261020"></script>
   <script src="sketch-reader-ui.js?v=20261023h"></script>
   <script src="drafter-batch.js?v=20261111"></script>
-  <script src="print-labels.js?v=20261103"></script>
-  <script src="order-labels.js?v=20261111"></script>
+  <script src="print-labels.js?v=20261116"></script>
+  <script src="opty-shape.js?v=20261116"></script>
+  <script src="order-labels.js?v=20261116"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -1102,8 +1109,21 @@ function _modItemsHtml(items){
       ${i.w ? `<span class="mit-d">${lgDimsText(i.w, i.h)} מ"מ</span>` : ''}
       ${i.chisum ? '<span class="mit-t mit-chis">חיסום</span>' : i.litush ? '<span class="mit-t mit-lit">ליטוש</span>' : ''}
       ${i.graphic ? '<span class="mit-t mit-gr">גרפיקה</span>' : ''}
+      ${i.optyShape ? `<span class="mit-sh" title="מספר הצורה באופטי-ווי">צורה ${lgEsc(i.optyShape)}</span>` : ''}
       ${i.w && i.h ? `<button type="button" class="mit-lbl" title="הדפס מדבקה" aria-label="הדפס מדבקה לפריט ${idx+1}" onclick="modLabel(${idx})">🏷</button>` : ''}
-    </div>`).join('');
+      ${i.optyShape && i.w && i.h ? `<button type="button" class="mit-lbl-sh" title="מדבקה עם ציור הצורה" aria-label="הדפס מדבקה עם הצורה לפריט ${idx+1}" onclick="modLabel(${idx}, true)">🏷 עם צורה</button>` : ''}
+      ${i.optyShape ? `<div class="mit-geo" data-shape="${lgEsc(i.optyShape)}"></div>` : ''}
+    </div>`).join('') + (setTimeout(_modFillGeos, 0), '');
+}
+//  ציור הצורה מאופטי-ווי מתחת לפריט — meta/optyGeo/<מספר>, נטען פעם אחת לכל צורה
+const _modGeo = {};
+function _modFillGeos(){
+  document.querySelectorAll('#itemsPreview .mit-geo[data-shape]').forEach(el => {
+    const s = el.dataset.shape;
+    const draw = g => { if (g && typeof lgOptyShapeSvg === 'function' && el.isConnected) el.innerHTML = lgOptyShapeSvg(g, { px: 150 }); };
+    if (s in _modGeo) return draw(_modGeo[s]);
+    _lgDb.ref('meta/optyGeo/' + s).once('value').then(v => { _modGeo[s] = v.val(); draw(_modGeo[s]); }).catch(() => {});
+  });
 }
 // ── עריכת פריטים מחלון "פרטים" (בן, 28/10) ─────────────────────────────
 // בכל שלב עד החשבונית — גם הזמנה שכבר בתחנת הבדיקה. כל פעולה נשמרת מיד
@@ -1180,9 +1200,9 @@ async function _modSaveItems(o, items, okMsg){
 }
 function _modItemsCopy(o){ return (o.items || []).map(it => ({...it})); }
 // 🏷 מדבקה מכל מקום (בן, 11/11) — order-labels.js; בכל שלב, גם אחרי חשבונית
-function modLabel(i){
+function modLabel(i, withShape){
   const o = orders.find(x => x.id === eid); if(!o || !window.lgPrintOrderLabels) return;
-  window.lgPrintOrderLabels(o, [i]);
+  window.lgPrintOrderLabels(o, [i], withShape ? { withShape: true } : undefined);
 }
 function modLabelAll(){
   const o = orders.find(x => x.id === eid); if(!o || !window.lgPrintOrderLabels) return;

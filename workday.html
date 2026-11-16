@@ -348,7 +348,7 @@
   <script src="firebase-db.js?v=20261113"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
-  <script src="print-labels.js?v=20261103"></script>
+  <script src="print-labels.js?v=20261116"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
@@ -2709,7 +2709,7 @@ async function _lblPrint(){
   b.disabled = true; st.textContent = 'שולח…';
   try {
     await _lblFonts();
-    const labels = _lbl.labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum }));
+    const labels = _lbl.labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape || '' }));
     const bitmaps = labels.map(l => lgLabelRender(l).bitmap);
     const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels',
       client: _lbl.client, orderIds: _lbl.orderIds, labels, bitmaps });
