@@ -58,4 +58,16 @@ check('dots and spaces ignored (א.מ מראות = א.מ.מראות)',
 }
 check('pieces: only rows with a shape, from the date on',
   M.lgOptyPieces([{ SAGOMA: '1', DATACONS: '2026-11-15', QTAPZ: 2 }, { SAGOMA: '', DATACONS: '2026-11-15' }, { SAGOMA: '3', DATACONS: '2026-11-10' }], '2026-11-13').map(p => [p.shape, p.qty]), [['1', 2]]);
+check('real data 16/11: OptyWay adds 2 mm and our sketch name is longer (מאיה ↔ מאיה פיין)',
+  auto(M.lgOptyMatch([P('274253', 'א.א.פנדה', 'מאיה', 332, 1887), P('274251', 'א.א.פנדה', 'מאיה', 302, 1902)],
+    [{ id: 'L1234', orderClient: 'נאור חזקיה', sketchName: 'מאיה פיין', items: [{ w: 300, h: 1900 }, { w: 330, h: 1885 }] }])), [['274253', 'L1234', 1], ['274251', 'L1234', 0]]);
+check('זבולון 2 ↔ זבולון 1/2/3 (size picks the item)',
+  auto(M.lgOptyMatch([P('274264', 'א.א.פנדה', 'זבולון 2', 412, 1887)],
+    [{ id: 'L1232', orderClient: 'נאור חזקיה', sketchName: 'זבולון 1/2/3', items: [{ w: 680, h: 1885 }, { w: 410, h: 1885 }] }])), [['274264', 'L1232', 1]]);
+{
+  const r = M.lgOptyMatch([P('274282', 'פלג', 'ערן', 739.1, 2122)], [{ id: 'L1245', orderClient: 'פלג מקלחונים בע"מ', sketchName: 'ערן טבריה', items: [{ w: 717, h: 2120 }, { w: 1025, h: 2120 }] }]);
+  check('name matches but size far off (drafter changed it) → review with all items of that order', [r.auto.length, r.review.length, r.review[0] && r.review[0].cands.length], [0, 1, 2]);
+}
+check('a short number is not a name prefix (2741 never matches 27410)',
+  M.lgOptyMatch([P('1', 'מאור', '274', 500, 2000)], [{ id: 'x', orderClient: 'א.מ.מראות', sketchName: '2741', items: [{ w: 500, h: 2000 }] }]).auto.length, 0);
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
