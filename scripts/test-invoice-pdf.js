@@ -286,6 +286,9 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual(M.extractItemRefs(REALROW).sort(), ['1250', '1251']);
     assert.ok(M.extractRefs(REALROW).includes('1259'), 'the old reader took the header number too');
     assert.deepEqual(M.extractItemRefs('8 מ\'\'מ 1.0 120.00   L1115   1 1) 400x1900'), ['1115']);
+    //  אחרי המספר כמות (1.00) — כמו בהזמנה ידנית; וסדר ויזואלי הפוך מ-pdfjs (סקירה 16/11)
+    assert.deepEqual(M.extractItemRefs("8 מ''מ 1115.00 0.00 120.00   1115 1.00 1.00   1.00   1"), ['1115']);
+    assert.deepEqual(M.extractItemRefs('2 1250 129.96 171.00 0.760 1 אריאל'), ['1250']);
   });
   await test('agent-order invoice: a size/other number equal to an order of the same card is not a link', async () => {
     //  1900 מופיע כמידה בלבד — הזמנה L1900 של אותו כרטיס לא מתחברת
