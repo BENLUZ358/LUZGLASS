@@ -97,7 +97,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261103"></script>
 <script src="opty-paradox.js?v=20261116c"></script>
-<script src="opty-match.js?v=20261116d"></script>
+<script src="opty-match.js?v=20261116e"></script>
 <script src="opty-shape.js?v=20261116c"></script>
 <script src="lg-icons.js?v=20261103"></script>
 <script>
@@ -151,6 +151,8 @@ async function check() {
     const days = Math.max(1, Math.min(45, Number($('days').value) || 3));
     const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
     const pieces = lgOptyPieces(rows, since);
+    //  שיפוע: המידה אחרי החיתוך מהשרטוט (צריך את קבצי ה-.dat) — ר' lgOptyCutSize
+    pieces.forEach(p => { const c = lgOptyCutSize(DAT[p.shape]); if (c) { p.cw = c.w; p.ch = c.h; } });
     st('טוען הזמנות…');
     await loadOrders();
     RES = lgOptyMatch(pieces, ORDERS, PAIRS);

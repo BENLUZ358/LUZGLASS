@@ -91,4 +91,24 @@ check('our order number written in OptyWay (L1281) = name match',
   auto(M.lgOptyMatch([P('274390', 'מאור', 'L1281', 1154, 744)], [{ id: 'o81', orderNum: 'L1281', orderClient: 'א.מ.מראות', sketchName: 'מראה1', items: [{ w: 1152, h: 742 }] }])), [['274390', 'o81', 0]]);
 {
 }
+
+//  שיפוע (בן, 16/11) — שרטוטים אמיתיים מ-16/11
+{
+  const g579 = { w: 624, h: 2002, c: [[[0, 604, 0, 601, 2002]], [[0, 602.72, 191, 576.72, 190.96], [1, 576.7, 200.96, 10, 4.7139, 1.5723], [0, 576.69, 210.96, 602.68, 211]]] };
+  const g582 = { w: 402, h: 1912.01, c: [[[1, 61, 968.01, 6, -4.783, 1.5002]], [[0, 0, 24.02, 402, 20]], [[1, 374, 1731.01, 9, -4.9332, 1.35]]] };
+  const g584 = { w: 376, h: 1872, c: [[[1, 27, 181, 9, -4.9098, 1.3734]], [[1, 315, 936, 6, -5.0428, 1.2404]]] };
+  const g415 = { w: 440, h: 1902, c: [[[0, 412, 0, 420, 1902]]] };
+  check('slope cut down the full height → width after the cut (624 → 604)', M.lgOptyCutSize(g579), { w: 604, h: 2002 });
+  check('slope cut across the full width at the top → height after the cut (1912 → 1892)', M.lgOptyCutSize(g582), { w: 402, h: 1892 });
+  check('wider side of a slanted line wins (412→420 ⇒ 420)', M.lgOptyCutSize(g415), { w: 420, h: 1902 });
+  check('holes only → no cut', M.lgOptyCutSize(g584), null);
+  check('no drawing → no cut', [M.lgOptyCutSize(null), M.lgOptyCutSize({ w: 1, h: 1 })], [null, null]);
+  const o = { id: 'L1290', orderNum: 'L1290', orderClient: 'א.מ.מראות', sketchName: '3543', items: [{ w: 602, h: 2000 }, { w: 688, h: 2250 }] };
+  const p = P('274579', 'מאור', '3543', 624.1, 2002);
+  check('without the cut size → not automatic (624 vs 602)', M.lgOptyMatch([p], [o]).auto.length, 0);
+  check('with the cut size → automatic to the 602 glass', auto(M.lgOptyMatch([{ ...p, cw: 604, ch: 2002 }], [o])), [['274579', 'L1290', 0]]);
+  const two = { ...o, items: [{ w: 602, h: 2000 }, { w: 602, h: 2000 }] };
+  const pend = M.lgOptyPendingByOrder(M.lgOptyMatch([{ ...p, cw: 604, ch: 2002 }], [two]).review);
+  check('waiting for chisum keeps the size after the cut (✓ there matches our glass)', [pend.L1290['274579'].w, pend.L1290['274579'].h], [604, 2002]);
+}
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
