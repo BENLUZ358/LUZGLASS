@@ -348,7 +348,9 @@
   <script src="firebase-db.js?v=20261113"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
+  <script src="opty-shape.js?v=20261116b"></script>
   <script src="print-labels.js?v=20261116"></script>
+  <script src="order-labels.js?v=20261116"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
@@ -1711,7 +1713,7 @@ function orderCardHTML(o){
         <div style="font-size:12px;color:var(--muted);margin-top:2px">
           <span style="color:var(--gold-text);font-weight:600">${lgEsc(o.orderClient)}</span>
           · ${lgEsc(o.sketchName||o.orderNum||'—')}
-          · ${lgDimsText(it.w, it.h, '?')} מ"מ
+          · ${lgDimsText(it.w, it.h, '?')} מ"מ ${lgOptyChip(o, availIdx[0])}
         </div>
       </div>
       <span style="font-size:12px;font-weight:700;padding:2px 7px;background:${processBg};color:${processColor};flex-shrink:0">${processLabel}</span>
@@ -2150,7 +2152,7 @@ function renderWorkActive(){
         ${filtered.map(({o,item,idx})=>`
         <tr style="border-bottom:1px solid var(--border)">
           <td style="padding:9px 12px;font-weight:700">${lgEsc(item.glassFullName||item.name||'—')}</td>
-          <td style="padding:9px 12px">${lgDimsText(item.w, item.h, '?')} מ"מ</td>
+          <td style="padding:9px 12px">${lgDimsText(item.w, item.h, '?')} מ"מ ${lgOptyChip(o, idx)}</td>
           <td style="padding:9px 12px">
             <span style="font-size:12px;font-weight:700;padding:2px 7px;background:${item.chisum?'rgba(142,68,173,0.12)':'rgba(41,128,185,0.12)'};color:${item.chisum?'#8e44ad':'#2980b9'}">
               ${item.chisum?'מחוסם':'מלוטש'}
@@ -2176,7 +2178,7 @@ function renderWorkActive(){
             <div style="font-size:12px;font-weight:700;color:var(--text);margin-top:1px">${lgEsc(item.glassFullName||item.name||'—')}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:2px">
               <span style="background:rgba(184,146,42,0.15);color:var(--gold-text);padding:1px 6px;font-weight:700;font-size:12px">${lgEsc(o.sketchName||o.refNum||o.orderNum||o.sketchNumber||'—')}</span>
-              &nbsp;·&nbsp;${lgDimsText(item.w, item.h, '?')} מ"מ
+              &nbsp;·&nbsp;${lgDimsText(item.w, item.h, '?')} מ"מ ${lgOptyChip(o, idx)}
             </div>
           </div>
           <span style="font-size:12px;font-weight:700;padding:3px 7px;background:${item.chisum?'rgba(142,68,173,0.12)':'rgba(41,128,185,0.12)'};color:${item.chisum?'#8e44ad':'#2980b9'};flex-shrink:0">
@@ -2197,7 +2199,7 @@ function renderWorkActive(){
           ${(o.items||[]).map((it,j)=>`
             <div style="display:flex;gap:8px;padding:4px 8px;font-size:12px;${j===idx?'background:rgba(184,146,42,0.1);font-weight:700;border-right:3px solid var(--gold)':''}">
               <span style="flex:1">${lgEsc(it.glassFullName||it.name||'—')}</span>
-              <span>${lgDimsText(it.w, it.h, '?')} מ"מ</span>
+              <span>${lgDimsText(it.w, it.h, '?')} מ"מ</span>${lgOptyChip(o, j)}
               <span style="color:${it.chisum?'#8e44ad':'#2980b9'}">${it.chisum?'מחוסם':'מלוטש'}</span>
             </div>`).join('')}
           ${lgHasSketch(o)?`<button onclick="showSketchPopup('${o.id}')" style="margin-top:12px;padding:8px 18px;background:var(--text);color:#fff;border:none;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer">🖼 פתח סקיצה</button>`:''}
@@ -2259,7 +2261,7 @@ function colItems(orders, color){
       <div class="wi-dot" style="background:${color}"></div>
       <div class="wi-info">
         <div class="wi-client">${lgEsc(o.orderClient)}</div>
-        <div class="wi-desc">${lgEsc(name)}${dims?' · '+dims:''} · ${lgEsc(o.orderNum||'')}</div>
+        <div class="wi-desc">${lgEsc(name)}${dims?' · '+dims:''} · ${lgEsc(o.orderNum||'')} ${lgOptyChip(o, idx)}</div>
       </div>
       <button aria-label="הסר מיום העבודה" class="wi-remove" onclick="removeFromWork('${o.id}')" title="הסר">✕</button>
     </div>`);
@@ -2528,7 +2530,7 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
         <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${isChecked?'rgba(39,174,96,0.04)':'#fff'}">
           <div style="flex:1">
             <div style="font-size:12px;font-weight:700;color:${isChecked?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')}</div>
-            <div style="font-size:12px;color:#8a8278">${lgDimsText(it.w, it.h)} מ"מ</div>
+            <div style="font-size:12px;color:#8a8278">${lgDimsText(it.w, it.h)} מ"מ ${lgOptyChip(o, it.globalIdx)}</div>
           </div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${isChecked?'#27ae60':'rgba(0,0,0,0.12)'};background:${isChecked?'rgba(39,174,96,0.08)':'rgba(0,0,0,0.02)'}">
             <input type="checkbox" style="width:15px;height:15px;accent-color:#27ae60;cursor:pointer;"
@@ -2546,7 +2548,7 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
       <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${allArrived?'rgba(39,174,96,0.04)':'#fff'}">
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:${allArrived?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')} <span style="color:${T.color}">×${idxs.length}</span></div>
-          <div style="font-size:12px;color:#8a8278">${lgDimsText(it.w, it.h)} מ"מ</div>
+          <div style="font-size:12px;color:#8a8278">${lgDimsText(it.w, it.h)} מ"מ ${lgOptyChip(o, it.globalIdx)}</div>
         </div>
         <div style="display:flex;align-items:center;gap:6px;">
           <input type="number" min="0" max="${idxs.length}" value="${arrivedCount}" inputmode="numeric"

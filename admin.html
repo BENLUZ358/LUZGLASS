@@ -2596,7 +2596,7 @@ function _renderBillClient(el){
   document.getElementById('billRows').innerHTML = ords.map(o => {
     const total = lgCalcOrderTotal(o, globalPrices, clientPrices) || o.total || 0;
     const items = (o.items||[]).map(it =>
-      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + lgDimsText(it.w, it.h) + ' מ"מ</div>').join('');
+      '<div class="bill-item">• ' + lgEsc(it.name||'') + ' ' + lgDimsText(it.w, it.h) + ' מ"מ' + (it.optyShape ? ' · צורה ' + lgEsc(it.optyShape) : '') + '</div>').join('');
     const sk = lgHasSketch(o)
       ? '<img class="bill-sk" data-sketch-for="' + lgEsc(String(o.id)) + '"' +
         ' alt="סקיצה — ' + lgEsc(o.orderNum||'') + '" onclick="if(this.src)previewSketchSrc(this.src)">'
