@@ -230,16 +230,77 @@ const DH_P = [{ type: 'door', hingeSide: 'left', harmonicaSide: 'right' }, { typ
   check('a_hzaza: the slider reaches the engine as fixed, marked sliding', [sh.shapes[si].kind, sh.shapes[si].sliding], ['fixed', true]);
   const G = lgCuts(sh);
   check('a_hzaza slider: key null, no cuts, blocking issue',
-        [G[si].key, G[si].cuts.length, G[si].issues], [null, 0, ['זכוכית הזזה — עדיין אין תבנית, לבדוק ביד']]);
+        [G[si].key, G[si].cuts.length, G[si].issues.includes('זכוכית הזזה — עדיין אין תבנית, לבדוק ביד')], [null, 0, true]);  // (+ זווית זכוכית-זכוכית, סקירה סופית)
   check('a_hzaza slider: lgTemplateOf null', lgTemplateOf(sh, si), null);
   //  גם עם זווית פתוחה, וגם כשהיא בצד השני
   S[si].bracketType = 'open';
   check('a_hzaza slider, open angle: still blocked', lgCuts(shower(combo.panels, S))[si].key, null);
   const flipped = combo.panels.slice().reverse(), FS = {}; flipped.forEach((p, n) => { FS[n] = ui.mkPS(p); });
   const fi = flipped.findIndex(p => p.type === 'slider');
-  check('slider on the other side: still blocked', lgCuts(shower(flipped, FS))[fi].issues, ['זכוכית הזזה — עדיין אין תבנית, לבדוק ביד']);
+  check('slider on the other side: still blocked', lgCuts(shower(flipped, FS))[fi].issues.includes('זכוכית הזזה — עדיין אין תבנית, לבדוק ביד'), true);
   //  a fixed glass is not marked sliding
   check('a plain fixed panel is not marked sliding', 'sliding' in shower([{ type: 'fixed', wallSide: 'left' }], { 0: { w: 900, h: 2000 } }).shapes[0], false);
+}
+
+// ═══ סקירה סופית (16/11): "עדיף בלי קובץ מקובץ שגוי" ═══
+const geoOf = sh => { eng.SH = sh; return vm.runInContext('lgGeometryIssues(SH)', eng); };
+const FDS = (s0, s1) => shower(FD_P, { 0: Object.assign({ w: 500, h: 2000 }, s0), 1: Object.assign({ w: 700, h: 1985 }, s1) });
+const GG = 'זווית זכוכית-זכוכית — עדיין אין תבנית, לבדוק ביד';
+// C1 — זווית בין שתי זכוכיות: קודחים את שתיהן, אבל אין תבנית. חוסמים את שתיהן (גם את המארחת)
+{
+  const G = lgCuts(shower([{ type: 'fixed', wallSide: 'left' }, { type: 'fixed', wallSide: 'right' }], { 0: { w: 500, h: 2000 }, 1: { w: 500, h: 2000 } }));
+  check('C1 two-fixed corner: both glasses blocked', G.map(g => [g.key, g.cuts.length]), [[null, 0], [null, 0]]);
+  check('C1 two-fixed corner: both carry the glass-glass issue', G.map(g => g.issues.includes(GG)), [true, true]);
+  const G3 = lgCuts(shower([{ type: 'fixed', wallSide: 'left' }, { type: 'fixed' }, { type: 'fixed', wallSide: 'right' }],
+    { 0: { w: 500, h: 2000 }, 1: { w: 500, h: 2000 }, 2: { w: 500, h: 2000 } }));
+  check('C1 three fixed glasses: all blocked', G3.map(g => [g.key, g.issues.includes(GG)]), [[null, true], [null, true], [null, true]]);
+  check('C1 fixed+door (wall angle only) still has templates', lgCuts(FDS()).map(g => g.key), ['fixed-closed-door', 'door']);
+}
+// C2 — פינוי חופשי עוד לא נכתב לקובץ → חסום
+{
+  const G = lgCuts(FDS({ cutouts: [{ w: 100, h: 60, x: { from: 'left', mm: 150 }, y: { from: 'bottom', mm: 300 } }] }));
+  check('C2 glass with a 100×60 cut-out: key null, blocked', [G[0].key, G[0].cuts.length, G[0].issues], [null, 0, ['חיתוך חופשי — עדיין לא בקובץ, לבדוק ביד']]);
+  check('C2 the door next to it is unaffected', [G[1].key, G[1].issues], ['door', []]);
+}
+// C3 — שיפוע בצלע הפרזול + מדרגה בצלע השנייה: קו המתאר לא מרובע → אין שיפוע לתבנית → חסום
+{
+  const W = [{ type: 'fixed', wallSide: 'left' }];
+  const g = lgCuts(shower(W, { 0: { w: 500, h: 2000, hasSlopeW: true, slopeW1: 505, slopeW2: 520, slopeSideV: 'right', notchW: 100, notchH: 150, notchSide: 'left' } }))[0];
+  check('C3 walk-in, wall slope 505→520 + notch 100×150 on the free side: blocked', [g.key, g.cuts.length, g.issues], [null, 0, ['שיפוע יחד עם מדרגה — עדיין אין תבנית, לבדוק ביד']]);
+  const s = lgCuts(shower(W, { 0: { w: 500, h: 2000, hasSlopeW: true, slopeW1: 505, slopeW2: 520, slopeSideV: 'right' } }))[0];
+  check('C3 same slope without the notch: keyed', [s.key, s.issues], ['fixed-closed', []]);
+  const n = lgCuts(shower(W, { 0: { w: 500, h: 2000, notchW: 100, notchH: 150, notchSide: 'left' } }))[0];
+  check('C3 notch on the free side, no slope: keyed', [n.key, n.issues], ['fixed-closed', []]);
+}
+// C4 — בעיות הצורה של המנוע (lgGeometryIssues) נכנסות ל-issues של הזכוכית
+{
+  const has = (sh, code) => { const msg = geoOf(sh).find(q => q.code === code); const g = msg && lgCuts(sh)[msg.idx];
+    return !!msg && g.issues.includes(msg.msg); };
+  const W = [{ type: 'fixed', wallSide: 'left' }];
+  check('C4 poly-cross (notch wider than the glass) → issue', has(shower(W, { 0: { w: 500, h: 2000, notchW: 600, notchH: 150, notchSide: 'left' } }), 'poly-cross'), true);
+  check('C4 notch-open (100 + 300 ≠ 500) → issue', has(shower(W, { 0: { w: 500, h: 2000, notchW: 100, notchH: 150, notchSide: 'left', notchRest: 300 } }), 'notch-open'), true);
+  check('C4 cut-out outside the glass → issue', has(FDS({ cutouts: [{ w: 100, h: 60, x: { from: 'left', mm: 450 }, y: { from: 'bottom', mm: 300 } }] }), 'cut-out'), true);
+  check('C4 free hole outside → issue', has(FDS({ holes: [{ role: 'hole', dia: 30, x: { from: 'left', mm: 600 }, y: { from: 'bottom', mm: 900 } }] }), 'hole-out'), true);
+  check('C4 free hole across the edge → issue', has(FDS({ holes: [{ role: 'hole', dia: 30, x: { from: 'left', mm: 250 }, y: { from: 'bottom', mm: 10 } }] }), 'hole-edge'), true);
+}
+// M1 — מספר שלא נקרא (bracketInset / handleEdge) → בעיה חוסמת, לא רק זריקה ב-DXF
+{
+  const BAD = 'מספר לא תקין — לבדוק ביד';
+  const a = FDS(); a.shapes[0].bracketInset = 'x';
+  check('M1 bracketInset "x" → blocking issue', lgCuts(a)[0].issues.includes(BAD), true);
+  const b = FDS(); b.shapes[1].handleEdge = 'abc';
+  check('M1 handleEdge "abc" → blocking issue', lgCuts(b)[1].issues.includes(BAD), true);
+}
+// I7 — לפחות 10 מ"מ זכוכית מכל חיתוך לכל קצה שהוא לא אמור לגעת בו
+{
+  const EDGE = 'חיתוך קרוב מדי לקצה הזכוכית — לבדוק ביד';
+  const t45 = lgCuts(FDS({}, { hingeTop: 45 }));
+  check('I7 hingeTop 45 (window 6 mm from the top) → blocked on both glasses', t45.map(g => g.issues.includes(EDGE)), [true, true]);
+  check('I7 bracketTop 12 (Ø20 3 mm from the top) → blocked', lgCuts(FDS({ bracketTop: 12 }))[0].issues.includes(EDGE), true);
+  check('I7 bracketTop 30 → fine', lgCuts(FDS({ bracketTop: 30 }))[0].issues, []);
+  check('I7 hinge window designed 10 mm from its edge passes', lgCuts(FDS()).map(g => g.issues), [[], []]);
+  const op = FDS(); op.shapes[0].bracketType = 'open';
+  check('I7 open notch is exempt on its own edge', lgCuts(op)[0].issues, []);
 }
 
 if (failed) { console.error(failed + ' failed'); process.exit(1); }
