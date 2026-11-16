@@ -60,27 +60,7 @@ function _lgOptyNameOk(pieceName, sketchName) {
   return !n || !ours || ours.includes(n) || b.slice(base.length).replace(/\D/g, '').includes(n);
 }
 
-//  זכוכית עם שיפוע (בן, 16/11): אופטי-ווי שומר את המלבן שלפני החיתוך — רחב בכ-20 מ"מ (602 אצלנו ↔ 624),
-//  ובשרטוט יש קו חיתוך ישר אחד לכל הגובה (או לכל הרוחב). המידה "אחרי השיפוע" = הצד הרחב של הקו
-//  (604→601 ⇒ 604 = 602+2 כרגיל). מחזיר { w, h } או null כשאין קו כזה. בדיקה על 16/11: 11 מ-12 תאמו.
-function lgOptyCutSize(geo) {
-  if (!geo || !Array.isArray(geo.c)) return null;
-  const W = Number(geo.w) || 0, H = Number(geo.h) || 0, e = 2;
-  if (!W || !H) return null;
-  let w = W, h = H, hit = false;
-  geo.c.forEach(ct => {
-    if (!Array.isArray(ct) || ct.length !== 1 || !Array.isArray(ct[0]) || ct[0][0] !== 0) return;   // קו בודד, לא חור/קשת
-    const [, x1, y1, x2, y2] = ct[0].map(Number);
-    const xs = [x1, x2].sort((a, b) => a - b), ys = [y1, y2].sort((a, b) => a - b);
-    if (ys[0] <= e && ys[1] >= H - e && xs[1] - xs[0] < W / 4) {          // לכל הגובה → רוחב
-      hit = true; w = Math.min(w, xs[0] > W / 2 ? xs[1] : W - xs[0]);
-    } else if (xs[0] <= e && xs[1] >= W - e && ys[1] - ys[0] < H / 4) {   // לכל הרוחב → גובה
-      hit = true; h = Math.min(h, ys[0] > H / 2 ? ys[1] : H - ys[0]);
-    }
-  });
-  return hit ? { w: Math.round(w * 10) / 10, h: Math.round(h * 10) / 10 } : null;
-}
-
+//  שיפוע: p.cw/p.ch = המידה אחרי קו החיתוך (lgOptyCutSize ב-opty-shape.js — הדף מוסיף מהשרטוט)
 const _lgOptyDimFit = (w, h, pw, ph, t) => (Math.abs(w - pw) <= t && Math.abs(h - ph) <= t) || (Math.abs(w - ph) <= t && Math.abs(h - pw) <= t);
 //  המידה של אופטי-ווי, או המידה אחרי השיפוע (p.cw/p.ch — הדף מוסיף מהשרטוט)
 const _lgOptyDimOk = (p, it) => {
@@ -155,5 +135,5 @@ function lgOptyPendingByOrder(review) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_OPTY_CLIENTS_DEFAULT, lgOptyNorm, lgOptyPieces, lgOptyMatch, lgOptyPendingByOrder, lgOptyCutSize };
+  module.exports = { LG_OPTY_CLIENTS_DEFAULT, lgOptyNorm, lgOptyPieces, lgOptyMatch, lgOptyPendingByOrder };
 }

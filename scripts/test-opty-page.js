@@ -87,7 +87,47 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   sel.value = 'דוקטור זכוכית';
   doc.querySelector('[data-pairgo]').click();
   await tick();
-  check('pair saved', pushed.map(([p, v]) => [p, v.ours, v.opty]), [['meta/optyClients', 'דוקטור זכוכית', 'ד"ר']]);
+  check('pair saved', pushed.filter(([p]) => p === 'meta/optyClients').map(([p, v]) => [p, v.ours, v.opty]), [['meta/optyClients', 'דוקטור זכוכית', 'ד"ר']]);
+  const hist = pushed.filter(([p]) => p === 'meta/optyImports').map(([, v]) => [v.auto, v.wait, v.notFound, v.shapes.slice().sort()]);
+  check('import history: one line per save (2 linked, the shapes listed)', hist, [[2, 0, 0, ['274325', '274328']]]);
+
+  //  ─── לחיבור (בן, 16/11: לחבר לפני החיסום) ───
+  d.o1.items = [{ ...it(502, 1902), optyShape: '274328' }, it(499, 1887), it(499, 1887)];
+  db._data.meta.optyPending = { o1: { '900': { shape: '900', job: 'M1', w: 501, h: 1889, qty: 1, name: 'איציק' } } };
+  db._data.meta.optyReview = { '901': { shape: '901', job: 'M2', w: 520, h: 1941, qty: 1, client: 'ד"ר', name: '', cands: [{ orderId: 'o1', idx: 2 }, { orderId: 'o2', idx: 0 }] } };
+  db._data.meta.optyGeo = Object.assign(db._data.meta.optyGeo || {}, { '900': { w: 501, h: 1889, c: [] } });
+  doc.querySelector('[data-tab="link"]').click();
+  for (let i = 0; i < 30 && !doc.querySelector('[data-go]'); i++) await tick();
+  check('link tab: the order shape + the unknown-order shape', [...doc.querySelectorAll('[data-go]')].map(b => b.dataset.go), ['p|o1|900', 'r||901']);
+  check('net size shown (501×1889 → 499×1887)', doc.querySelector('#linkOut .net').textContent.replace(/[⁦⁩]/g, ''), '499×1887');
+  const pick = doc.querySelector('select[data-pick="p|o1|900"]');
+  check('the matching glass first, with ✓, already chosen', [pick.value, pick.options[0].textContent.trim().startsWith('✓')], ['o1|1', true]);
+  check('a glass that already has a shape is not offered', [...pick.options].map(o => o.value).includes('o1|0'), false);
+  doc.querySelector('[data-go="p|o1|900"]').click();
+  for (let i = 0; i < 30 && !(db._data.orders.o1.items[1].optyShape); i++) await tick();
+  for (let i = 0; i < 10; i++) await tick();
+  check('link writes the shape + job, and the shape leaves the list', [d.o1.items[1].optyShape, d.o1.items[1].optyJob, (db._data.meta.optyPending.o1 || {})['900']], ['900', 'M1', undefined]);
+  const rp = doc.querySelector('select[data-pick="r||901"]');
+  check('unknown order: the candidates from both orders, closest first (o2 518×1939)', rp && [...rp.options].map(o => o.value), ['o2|0', 'o1|2']);
+  w.confirm = () => true;
+  doc.querySelector('[data-drop="r||901"]').click();
+  for (let i = 0; i < 20 && db._data.meta.optyReview && db._data.meta.optyReview['901']; i++) await tick();
+  check('"לא שייך" removes it from the list', (db._data.meta.optyReview || {})['901'], undefined);
+
+  //  ─── חיפוש + נתק ───
+  doc.querySelector('[data-tab="find"]').click();
+  doc.getElementById('q').value = '900';
+  doc.getElementById('btnFind').click();
+  for (let i = 0; i < 30 && !doc.querySelector('[data-cut]'); i++) await tick();
+  check('search by shape number finds the linked glass', doc.querySelector('#findOut .shape') && doc.querySelector('#findOut .shape').textContent, '900');
+  doc.querySelector('[data-cut]').click();
+  for (let i = 0; i < 30 && d.o1.items[1].optyShape; i++) await tick();
+  check('"נתק" clears the glass and puts the shape back to link (size from the drawing)', [d.o1.items[1].optyShape, db._data.meta.optyPending.o1['900'].w, db._data.meta.optyPending.o1['900'].h], [undefined, 501, 1889]);
+
+  //  ─── הגדרות ───
+  doc.querySelector('[data-tab="set"]').click();
+  for (let i = 0; i < 30 && !doc.querySelector('[data-unpair]'); i++) await tick();
+  check('settings: fixed pairs + saved pairs (with remove)', [doc.querySelectorAll('#pairsOut .row').length > 10, !!doc.querySelector('[data-unpair="k1"]')], [true, true]);
 
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

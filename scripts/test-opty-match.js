@@ -4,6 +4,7 @@
  * Run: node scripts/test-opty-match.js
  */
 const M = require('../opty-match.js');
+const SH = require('../opty-shape.js');
 let failed = 0;
 const check = (name, a, e) => JSON.stringify(a) === JSON.stringify(e) ? console.log('ok    ' + name)
   : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(e)}, got ${JSON.stringify(a)}`));
@@ -98,11 +99,11 @@ check('our order number written in OptyWay (L1281) = name match',
   const g582 = { w: 402, h: 1912.01, c: [[[1, 61, 968.01, 6, -4.783, 1.5002]], [[0, 0, 24.02, 402, 20]], [[1, 374, 1731.01, 9, -4.9332, 1.35]]] };
   const g584 = { w: 376, h: 1872, c: [[[1, 27, 181, 9, -4.9098, 1.3734]], [[1, 315, 936, 6, -5.0428, 1.2404]]] };
   const g415 = { w: 440, h: 1902, c: [[[0, 412, 0, 420, 1902]]] };
-  check('slope cut down the full height → width after the cut (624 → 604)', M.lgOptyCutSize(g579), { w: 604, h: 2002 });
-  check('slope cut across the full width at the top → height after the cut (1912 → 1892)', M.lgOptyCutSize(g582), { w: 402, h: 1892 });
-  check('wider side of a slanted line wins (412→420 ⇒ 420)', M.lgOptyCutSize(g415), { w: 420, h: 1902 });
-  check('holes only → no cut', M.lgOptyCutSize(g584), null);
-  check('no drawing → no cut', [M.lgOptyCutSize(null), M.lgOptyCutSize({ w: 1, h: 1 })], [null, null]);
+  check('slope cut down the full height → width after the cut (624 → 604)', SH.lgOptyCutSize(g579), { w: 604, h: 2002 });
+  check('slope cut across the full width at the top → height after the cut (1912 → 1892)', SH.lgOptyCutSize(g582), { w: 402, h: 1892 });
+  check('wider side of a slanted line wins (412→420 ⇒ 420)', SH.lgOptyCutSize(g415), { w: 420, h: 1902 });
+  check('holes only → no cut', SH.lgOptyCutSize(g584), null);
+  check('no drawing → no cut', [SH.lgOptyCutSize(null), SH.lgOptyCutSize({ w: 1, h: 1 })], [null, null]);
   const o = { id: 'L1290', orderNum: 'L1290', orderClient: 'א.מ.מראות', sketchName: '3543', items: [{ w: 602, h: 2000 }, { w: 688, h: 2250 }] };
   const p = P('274579', 'מאור', '3543', 624.1, 2002);
   check('without the cut size → not automatic (624 vs 602)', M.lgOptyMatch([p], [o]).auto.length, 0);
