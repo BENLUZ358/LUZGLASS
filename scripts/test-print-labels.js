@@ -24,8 +24,16 @@ const O2 = { id: 'o2', orderNum: 'L1201', orderClient: 'המקום לאמבט', 
 /* A + B */
 const labels = PL.lgLabelsForClient([{ order: O1, idxs: [0, 1, 3] }, { order: O2, idxs: [] }]);
 check('A1 one label per arrived glass, none for the rest', labels.length, 3);
-check('B1 content', labels[0], { title: 'המקום לאמבט', dims: '500 × 2000', sketchName: 'אסף', orderNum: 'L1200', shape: '', job: '', orderId: 'o1', idx: 0 });
+check('B1 content', labels[0], { title: 'המקום לאמבט', dims: '500 × 2000', sketchName: 'אסף', glass: 'שקוף 8', orderNum: 'L1200', shape: '', job: '', orderId: 'o1', idx: 0 });
 check('A2 in item order', labels.map(l => l.idx), [0, 1, 3]);
+{   //  סוג הזכוכית + "שבר" (בן, 16/11) — נכתבים על המדבקה
+  const texts = [];
+  const rec = new Proxy({ measureText: t => ({ width: String(t).length * 10 }), fillText: t => texts.push(String(t)) }, { get: (o, k) => k in o ? o[k] : () => {}, set: () => true });
+  PL.lgLabelDraw(rec, { title: 'נאור', dims: '1 × 2', sketchName: 'ז', glass: 'שקוף 8', orderNum: 'L1', broken: true });
+  check('B3 glass type and "שבר" are drawn', [texts.includes('שקוף 8'), texts.includes('שבר')], [true, true]);
+  texts.length = 0; PL.lgLabelDraw(rec, { title: 'נאור', dims: '1 × 2', sketchName: 'ז', orderNum: 'L1' });
+  check('B4 no flag → no "שבר"', texts.includes('שבר'), false);
+}
 check('B2 no sketch name → empty, not "undefined"', PL.lgLabelsForClient([{ order: O2, idxs: [0] }])[0].sketchName, '');
 
 /* C */

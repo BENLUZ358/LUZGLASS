@@ -22,6 +22,7 @@ function lgLabelsForClient(entries) {
         title: String(order.orderClient || order.client || ''),
         dims: Math.round(Number(it.w) || 0) + ' × ' + Math.round(Number(it.h) || 0),
         sketchName: String(order.sketchName || ''),
+        glass: String(it.name || '').trim(),        // סוג הזכוכית — כדי שיידעו מה לחתוך (בן, 16/11)
         orderNum: String(order.orderNum || ''),
         shape: String(it.optyShape || ''),          // מספר הצורה באופטי-ווי (opty.html, בן 16/11)
         job: String(it.optyJob || ''),              // מספר אופטימיזציה M00xxx (בן, 16/11)
@@ -62,19 +63,43 @@ function lgLabelDraw(ctx, label, W) {
     ctx.fillText(f.text, W / 2, y);
     out.push({ size: f.size, width: ctx.measureText(f.text).width, cut: f.cut });
   };
-  line(l.title, 80, 64, 28, '700', 'rtl');                       // שם הלקוח
-  ctx.fillRect(M, 140, maxW, 4);
-  //  רוחב × גובה — משמאל לימין, כמו בכל המסכים (lgDimsText)
-  //  "מדבקה עם צורה" (בן, 16/11): הצורה מאופטי-ווי משמאל, המידה מימין וקטנה יותר
-  if (l.geo && typeof lgOptyShapeDraw === 'function') {
-    lgOptyShapeDraw(ctx, l.geo, M, 158, 230, 230);
-    const f = _fit(ctx, l.dims, maxW - 250, 84, 36, '700');
-    ctx.font = '700 ' + f.size + 'px Heebo, Arial, sans-serif'; ctx.direction = 'ltr';
-    ctx.fillText(f.text, M + 250 + (maxW - 250) / 2, 275);
+  //  "מדבקה עם צורה" (בן, 16/11): הצורה מאופטי-ווי משמאל, מימין המידה ושם הסקיצה; סוג הזכוכית
+  //  גדול לכל הרוחב מתחת — "כדי שיידעו מה לחתוך". רוחב × גובה משמאל לימין, כמו בכל המסכים.
+  const at = (text, x, y, w, max, min, dir) => {
+    if (!text) return;
+    const f = _fit(ctx, text, w, max, min, '700');
+    ctx.font = '700 ' + f.size + 'px Heebo, Arial, sans-serif'; ctx.direction = dir;
+    ctx.fillText(f.text, x, y);
     out.push({ size: f.size, width: ctx.measureText(f.text).width, cut: f.cut });
-  } else line(l.dims, 275, 130, 48, '700', 'ltr');
-  ctx.fillRect(M, 400, maxW, 4);
-  line(l.sketchName, 465, 64, 28, '700', 'rtl');                     // שם הסקיצה
+  };
+  //  שם הלקוח; "שבר" (בן, 16/11 — כל מדבקה שמודפסת מהחיסום) = מלבן שחור בפינה השמאלית, השם לידו
+  const head = (y, max) => {
+    if (!l.broken) { line(l.title, y, max, 28, '700', 'rtl'); return; }
+    ctx.fillRect(M, y - 34, 124, 68);
+    ctx.fillStyle = '#fff'; ctx.font = '700 46px Heebo, Arial, sans-serif'; ctx.direction = 'rtl';
+    ctx.fillText('שבר', M + 62, y + 2);
+    ctx.fillStyle = '#000';
+    at(l.title, (M + 136 + W - M) / 2, y, maxW - 136, max, 24, 'rtl');
+  };
+  if (l.geo && typeof lgOptyShapeDraw === 'function') {
+    head(52, 56);
+    ctx.fillRect(M, 100, maxW, 4);
+    lgOptyShapeDraw(ctx, l.geo, M, 114, 250, 250);                     // הצורה — משמאל
+    const cx = M + 266, cw = maxW - 266;                               // עמודה ימנית
+    at(l.dims, cx + cw / 2, 190, cw, 64, 30, 'ltr');
+    at(l.sketchName, cx + cw / 2, 300, cw, 44, 22, 'rtl');
+    ctx.fillRect(M, 376, maxW, 4);
+    if (l.glass) line(l.glass, 432, 58, 26, '700', 'rtl');            // סוג הזכוכית — גדול
+  } else {
+    head(70, 60);
+    ctx.fillRect(M, 124, maxW, 4);
+    line(l.dims, 228, 104, 48, '700', 'ltr');                          // המידה — קצת קטנה יותר מבעבר
+    ctx.fillRect(M, 326, maxW, 4);
+    if (l.glass) {
+      line(l.sketchName, 372, 44, 24, '700', 'rtl');                   // שם הסקיצה
+      line(l.glass, 442, 58, 26, '700', 'rtl');                        // סוג הזכוכית — גדול
+    } else line(l.sketchName, 420, 64, 28, '700', 'rtl');
+  }
   //  שורה תחתונה: מספר ההזמנה משמאל · מספר אופטימיזציה באמצע · "צורה N" מימין — הצורה והאופטימיזציה
   //  גדולות יותר (בן, 16/11); האופטימיזציה מתכווצת אם אין מקום ביניהם
   let left = M, right = W - M;
