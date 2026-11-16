@@ -31,8 +31,15 @@ check('two shapes, two identical rows → one each, never the same row twice',
   const r2 = M.lgOptyMatch([P('999', 'BathPlace', 'איציק', 502, 1902)], [done]);
   check('item that already has another shape is never overwritten', [r2.auto.length, r2.notFound.length], [0, 1]);
 }
-check('client cut at 12 letters matches the start of our name',
-  auto(M.lgOptyMatch([P('5', 'אומנות הזכוכ', '513', 500, 600)], [{ id: 'o2', orderClient: 'אומנות הזכוכית', sketchName: '513', items: [{ w: 500, h: 600 }] }])), [['5', 'o2', 0]]);
+check('client cut at 12 letters matches a pair whose OptyWay name starts with it',
+  auto(M.lgOptyMatch([P('5', 'אומנות הזכוכ', '513', 500, 600)], [{ id: 'o2', orderClient: 'אומנות הזכוכית', sketchName: '513', items: [{ w: 500, h: 600 }] }],
+    [{ ours: 'אומנות הזכוכית', opty: 'אומנות הזכוכית' }])), [['5', 'o2', 0]]);
+{
+  const r = M.lgOptyMatch([P('5', 'ד"ר', '56891', 500, 600)], [{ id: 'o5', orderClient: 'ד"ר', sketchName: '56891', items: [{ w: 500, h: 600 }] }]);
+  check('same name but not in the pairs → not found (Ben: only the names he gave)', [r.auto.length, r.notFound.length], [0, 1]);
+}
+check('פלג ↔ פלג מקלחונים',
+  auto(M.lgOptyMatch([P('9', 'פלג', 'אילן', 600, 1900)], [{ id: 'o6', orderClient: 'פלג מקלחונים', sketchName: 'אילן', items: [{ w: 600, h: 1900 }] }])), [['9', 'o6', 0]]);
 check('Avivi: OptyWay keeps the last digits of the PO number',
   auto(M.lgOptyMatch([P('6', 'אביבי', '16095', 400, 800)], [{ id: 'o3', orderClient: 'יצחק אביבי', sketchName: 'PO4372716095', items: [{ w: 400, h: 800 }] }], [{ ours: 'יצחק אביבי', opty: 'אביבי' }])), [['6', 'o3', 0]]);
 check('dots and spaces ignored (א.מ מראות = א.מ.מראות)',

@@ -15,6 +15,7 @@ const LG_OPTY_CLIENTS_DEFAULT = [
   { ours: 'מורדי', opty: 'אור המראות' },
   { ours: 'המקום לאמבט', opty: 'BathPlace' },
   { ours: 'יצחק אביבי', opty: 'אביבי' },
+  { ours: 'פלג מקלחונים', opty: 'פלג' },
 ];
 const LG_OPTY_DIM_TOL = 2;          // מ"מ — השרטט כותב לפעמים 222.1 במקום 222
 const LG_OPTY_CLIENT_MAX = 12;      // אופטי-ווי חותך את שם הלקוח אחרי 12 תווים
@@ -33,13 +34,15 @@ function lgOptyPieces(rows, sinceISO) {
     }));
 }
 
-//  שם לקוח באופטי-ווי → שמות הלקוח אצלנו (מנורמלים). קודם הזוגות, אחר כך אותו שם / תחילת שם.
-function _lgOptyClientKeys(optyClient, pairs, ourClients) {
+//  שם לקוח באופטי-ווי → שמות הלקוח אצלנו (מנורמלים) — **רק** לפי הזוגות (בן, 16/11:
+//  "תחבר את השמות רק שאמרתי לך" — באופטי-ווי יש הרבה לקוחות שלא במערכת). לקוח שאינו
+//  בזוגות → "לא נמצא", ובדף משייכים אותו ידנית (meta/optyClients).
+function _lgOptyClientKeys(optyClient, pairs) {
   const n = lgOptyNorm(optyClient); if (!n) return [];
-  const fromPairs = (pairs || []).filter(p => lgOptyNorm(p.opty) === n).map(p => lgOptyNorm(p.ours));
-  if (fromPairs.length) return [...new Set(fromPairs)];
+  //  אופטי-ווי חותך אחרי 12 תווים — שם חתוך מתאים לזוג שהשם שלו מתחיל בו
   const cut = String(optyClient).trim().length >= LG_OPTY_CLIENT_MAX;
-  return [...new Set((ourClients || []).map(lgOptyNorm).filter(c => c === n || (cut && c.startsWith(n))))];
+  return [...new Set((pairs || []).filter(p => { const o = lgOptyNorm(p.opty); return o === n || (cut && o.startsWith(n)); })
+    .map(p => lgOptyNorm(p.ours)))];
 }
 
 //  שם סקיצה: שווה אחרי ניקוי, או (מספר של 4+ ספרות) סוף מספר ה-PO (אביבי)
@@ -59,7 +62,6 @@ const _lgOptyDimOk = (p, it) => {
 //  orders: [{id, orderClient, sketchName, items:[{w,h,optyShape?}]}] — הקורא כבר סינן לפי תאריך.
 function lgOptyMatch(pieces, orders, pairs) {
   const allPairs = LG_OPTY_CLIENTS_DEFAULT.concat(pairs || []);
-  const ourClients = [...new Set((orders || []).map(o => o.orderClient || o.client || ''))];
   const out = { auto: [], review: [], notFound: [], already: [] };
   const taken = new Set();                                    // 'orderId#idx' שכבר קיבל צורה בריצה הזו
   const rows = [];                                             // כל הפריטים, עם מפתח לקוח
@@ -80,7 +82,7 @@ function lgOptyMatch(pieces, orders, pairs) {
 
   groups.forEach(list => {
     const p0 = list[0];
-    const keys = _lgOptyClientKeys(p0.client, allPairs, ourClients);
+    const keys = _lgOptyClientKeys(p0.client, allPairs);
     const sameClientSize = rows.filter(r => keys.includes(r.client) && !r.it.optyShape && !taken.has(r.key) && _lgOptyDimOk(p0, r.it));
     const named = p0.name ? sameClientSize.filter(r => _lgOptyNameOk(p0.name, r.o.sketchName || r.o.type)) : [];
     const units = list.reduce((s, p) => s + p.qty, 0);

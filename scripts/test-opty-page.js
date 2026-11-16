@@ -22,7 +22,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
     o1: { id: 'o1', orderNum: '1240', orderClient: 'המקום לאמבט', sketchName: 'איציק', createdAt: now, items: [it(502, 1902), it(499, 1887)] },
     o2: { id: 'o2', orderNum: '1241', orderClient: 'ד"ר', sketchName: '56891', createdAt: now, items: { a: it(518, 1939) } },
     old: { id: 'old', orderNum: '1100', orderClient: 'המקום לאמבט', sketchName: 'איציק', createdAt: now - 60 * 86400000, items: [it(502, 1902)] },
-  } });
+  }, meta: { optyClients: { k1: { ours: 'ד"ר', opty: 'ד"ר' } } } });
   const pushed = [];
   const ref0 = db.ref.bind(db);
   db.ref = p => Object.assign(ref0(p), { push: async v => { pushed.push([p, v]); } });
