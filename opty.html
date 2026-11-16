@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<title>LuzGlass — קליטה מאופטי-ווי</title>
+<title>LuzGlass — אופטי-ווי</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="lg-ui.css?v=20260807">
 <style>
@@ -57,16 +57,41 @@ select.sm{max-width:220px;}
 details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;display:flex;align-items:center;}
 #st{font-size:var(--fs-sm);font-weight:var(--fw-bold);margin-top:var(--space-2);}
 #st.bad{color:#7c241b;} #st.ok{color:#155d33;}
+/* לשוניות (בן, 16/11: "שאני אכנס לאופטי-ווי ושם יהיה הכל") */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:var(--space-3);}
+.tabs button{min-height:44px;padding:0 var(--space-4);border:1px solid var(--border);background:var(--surface);color:var(--text);
+  border-radius:999px;font:var(--fw-bold) var(--fs-sm) Heebo,sans-serif;cursor:pointer;}
+.tabs button[aria-selected="true"]{background:var(--text);color:var(--surface);border-color:var(--text);}
+.tabs .cnt{display:inline-block;min-width:20px;padding:0 6px;margin-inline-start:6px;border-radius:999px;background:var(--gold);color:var(--on-gold);font-size:12px;}
+.pane[hidden]{display:none;}
+.ord{font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-1);}
+.row select.sm{max-width:none;flex:1;min-width:180px;}
+.row .net{font-weight:var(--fw-bold);direction:ltr;white-space:nowrap;}
+.sm.quiet{color:var(--muted);}
+.srch{display:flex;gap:var(--space-2);margin-bottom:var(--space-3);}
+.srch input{flex:1;min-height:48px;padding:0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius);font-size:16px;font-family:inherit;}
+.hist{font-size:var(--fs-sm);}
+.hist .row b{min-width:110px;}
+.pairs input{min-height:40px;padding:0 var(--space-2);border:1px solid var(--border);border-radius:var(--radius);font-family:inherit;font-size:16px;}
 @media (max-width:600px){ .cands{padding-inline-start:0;} .tb-btn span:not([data-icon]){display:none;} }
 </style>
 </head>
 <body>
 <header class="topbar">
   <a class="tb-btn" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
-  <div class="tb-title">קליטה מאופטי-ווי<small>מספר הצורה וציור הצורה לכל פריט — מהדיסק-און-קי, בלי לשנות בו כלום</small></div>
+  <div class="tb-title">אופטי-ווי<small>מספר הצורה וציור הצורה לכל זכוכית — קליטה, חיבור, חיפוש והגדרות</small></div>
 </header>
 
 <main class="wrap">
+  <nav class="tabs" role="tablist" aria-label="אופטי-ווי">
+    <button type="button" role="tab" data-tab="imp" aria-selected="true">קליטה</button>
+    <button type="button" role="tab" data-tab="link" aria-selected="false">לחיבור<span class="cnt" id="cntLink" hidden></span></button>
+    <button type="button" role="tab" data-tab="find" aria-selected="false">חיפוש</button>
+    <button type="button" role="tab" data-tab="set" aria-selected="false">הגדרות</button>
+  </nav>
+  <div id="st" role="status"></div>
+
+  <div class="pane" id="pane-imp">
   <section class="card">
     <h2>1. בחר מהדיסק-און-קי</h2>
     <div class="step">
@@ -86,10 +111,39 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
       <span class="days">חלקים מ-<input type="number" id="days" min="1" max="45" value="3">הימים האחרונים</span>
       <button class="go" id="btnCheck" type="button" disabled>🔍 בדוק מול ההזמנות</button>
     </div>
-    <div id="st" role="status"></div>
   </section>
 
   <div id="out"></div>
+
+  <section class="card hist"><h2>קליטות קודמות</h2><div id="hist"><p class="note">טוען…</p></div></section>
+  </div>
+
+  <div class="pane" id="pane-link" hidden>
+    <p class="note" style="margin-bottom:var(--space-3)">צורות שנקלטו ולא התחברו לבד. בוחרים את הזכוכית (✓ = המידה מתאימה) ולוחצים "חבר" — לא צריך לחכות לחיסום. המידות נטו.</p>
+    <div id="linkOut"><p class="note">טוען…</p></div>
+  </div>
+
+  <div class="pane" id="pane-find" hidden>
+    <div class="srch"><input id="q" type="search" placeholder="מספר צורה / מספר הזמנה / לקוח / שם סקיצה / M00…" enterkeyhint="search" aria-label="חיפוש">
+      <button class="sm gold" id="btnFind" type="button">חפש</button></div>
+    <div id="findOut"></div>
+  </div>
+
+  <div class="pane" id="pane-set" hidden>
+    <section class="card pairs"><h2>שמות לקוחות — אצלנו ↔ באופטי-ווי</h2>
+      <p class="note">לקוח מתחבר רק לפי הזוגות האלה. באופטי-ווי השם נחתך אחרי 12 תווים — מספיקה תחילת השם.</p>
+      <div id="pairsOut"></div>
+      <div class="step" style="margin-top:var(--space-3)">
+        <select class="sm" id="pOurs" aria-label="הלקוח אצלנו"><option value="">הלקוח אצלנו…</option></select>
+        <input id="pOpty" placeholder="השם באופטי-ווי" aria-label="השם באופטי-ווי">
+        <button class="sm gold" id="btnPair" type="button">הוסף</button>
+      </div>
+    </section>
+    <section class="card"><h2>מידות</h2>
+      <p class="note">אופטי-ווי מוסיף 1 מ"מ ליטוש מכל צד (852 שם = 850 אצלנו). בחלון הצורה מוצגת המידה נטו, וכל המרחקים נטו.
+      בזכוכית עם שיפוע — המידה אחרי קו השיפוע; בשיפוע אופטי-ווי מוסיף לפעמים יותר, וזה עוד נלמד.</p>
+    </section>
+  </div>
 </main>
 
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -97,21 +151,45 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261103"></script>
 <script src="opty-paradox.js?v=20261116c"></script>
-<script src="opty-match.js?v=20261116d"></script>
-<script src="opty-shape.js?v=20261116c"></script>
+<script src="opty-match.js?v=20261116e"></script>
+<script src="opty-shape.js?v=20261116d"></script>
+<script src="print-labels.js?v=20261116e"></script>
+<script src="order-labels.js?v=20261116e"></script>
 <script src="lg-icons.js?v=20261103"></script>
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
 const ORDER_DAYS = 30;                         // הזמנות מ-30 הימים האחרונים
-let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null, PEND = {};
+const DIM_OK = 3;                              // ✓ — המידה (עם הליטוש) עד 3 מ"מ מהזכוכית שלנו, כמו בחיבור האוטומטי
+let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null, PEND = {}, REVIEW = {};
+let PENDING = {}, REVQ = {}, GEOS = {};       // מה שמחכה לחיבור (meta/optyPending, meta/optyReview) + ציורים
 
 const st = (t, cls) => { $('st').textContent = t; $('st').className = cls || ''; };
-const dims = p => Math.round(p.w) + ' × ' + Math.round(p.h);
-const geoSvg = shape => DAT[shape] ? lgOptyShapeSvg(DAT[shape], { px: 40 }) : '';
-const ordTitle = id => { const o = ORDERS.find(x => x.id === id); return o ? (o.orderNum || '') + ' · ' + (o.orderClient || '') + ' · ' + (o.sketchName || 'ללא שם') : id; };
-const itemText = (id, idx) => { const o = ORDERS.find(x => x.id === id), it = o && o.items[idx];
-  return it ? (it.name || 'פריט') + ' · ' + Math.round(it.w) + ' × ' + Math.round(it.h) : ''; };
+//  מידה בכיוון הנכון גם בתוך טקסט עברי (lgDimsText — רוחב קודם)
+const dimT = (w, h) => { const a = Math.round(Number(w) || 0), b = Math.round(Number(h) || 0); return typeof lgDimsText === 'function' ? lgDimsText(a, b) : a + '×' + b; };
+const net = (w, h) => dimT(Number(w) - 2, Number(h) - 2);   // נטו — בלי 1 מ"מ ליטוש מכל צד
+const geoSvg = shape => { const g = DAT[shape] || GEOS[shape]; return g ? lgOptyShapeSvg(lgOptyNetGeo(g), { px: 40 }) : ''; };
+const ordOf = id => ORDERS.find(x => x.id === id);
+const ordTitle = id => { const o = ordOf(id); return o ? (o.orderNum || '') + ' · ' + (o.orderClient || '') + ' · ' + (o.sketchName || 'ללא שם') : id; };
+const itemText = (id, idx) => { const o = ordOf(id), it = o && o.items[idx];
+  return it ? (it.name || 'פריט') + ' · ' + dimT(it.w, it.h) : ''; };
+const when = t => { const d = new Date(Number(t) || 0); return d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' }) + ' ' + d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }); };
+const fit = (p, it) => { const w = Number(it.w) || 0, h = Number(it.h) || 0, a = Number(p.w) || 0, b = Number(p.h) || 0;
+  return (Math.abs(w - a) <= DIM_OK && Math.abs(h - b) <= DIM_OK) || (Math.abs(w - b) <= DIM_OK && Math.abs(h - a) <= DIM_OK); };
+const gap = (p, it) => { const w = Number(it.w) || 0, h = Number(it.h) || 0, a = Number(p.w) || 0, b = Number(p.h) || 0;
+  return Math.min(Math.abs(w - a) + Math.abs(h - b), Math.abs(w - b) + Math.abs(h - a)); };
+const countWait = (pend, rev) => Object.values(pend || {}).reduce((n, o) => n + Object.keys(o || {}).length, 0) + Object.keys(rev || {}).length;
+
+//  ─── לשוניות (בן, 16/11: "שאני אכנס לאופטי-ווי ושם יהיה הכל") ───
+function showTab(t) {
+  document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+  document.querySelectorAll('.pane').forEach(p => { p.hidden = p.id !== 'pane-' + t; });
+  st('');
+  if (t === 'link') loadLink();
+  if (t === 'find') $('q').focus();
+  if (t === 'set') loadPairs();
+}
+document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); });
 
 $('inDb').addEventListener('change', e => {
   DB = [...e.target.files].filter(f => /^(pezzi|pezzican)\.db$/i.test(f.name));
@@ -140,7 +218,7 @@ async function loadOrders() {
     ORDERS.push({ id: o.id, orderNum: o.orderNum || '', orderClient: o.orderClient || o.client || '',
       sketchName: o.sketchName || o.type || '', items: keys.map(k => (o.items || {})[k] || {}) });
   });
-  PAIRS = Object.values(pairs.val() || {}).filter(p => p && p.ours && p.opty);
+  PAIRS = Object.entries(pairs.val() || {}).filter(([, p]) => p && p.ours && p.opty).map(([k, p]) => ({ ...p, key: k }));
 }
 
 async function check() {
@@ -151,10 +229,12 @@ async function check() {
     const days = Math.max(1, Math.min(45, Number($('days').value) || 3));
     const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
     const pieces = lgOptyPieces(rows, since);
+    //  שיפוע: המידה אחרי החיתוך מהשרטוט (צריך את קבצי ה-.dat) — ר' lgOptyCutSize
+    pieces.forEach(p => { const c = lgOptyCutSize(DAT[p.shape]); if (c) { p.cw = c.w; p.ch = c.h; } });
     st('טוען הזמנות…');
     await loadOrders();
     RES = lgOptyMatch(pieces, ORDERS, PAIRS);
-    RES.pieces = pieces.length;
+    RES.pieces = pieces.length; RES.since = since; RES.days = days;
     st('נקראו ' + pieces.length + ' חלקים עם מספר צורה מ-' + since.split('-').reverse().join('/') + ' · ' + ORDERS.length + ' הזמנות', 'ok');
     render();
   } catch (e) {
@@ -162,35 +242,42 @@ async function check() {
   } finally { $('btnCheck').disabled = !DB.length; }
 }
 
+//  "לבדיקה" שלא ידועה ההזמנה שלו (מועמדים בכמה הזמנות, או רק לפי מידה) → meta/optyReview/<צורה> עם המועמדים
+function reviewByShape(review, pend) {
+  const inPend = new Set(Object.values(pend).flatMap(o => Object.keys(o)));
+  const out = {};
+  (review || []).forEach(v => {
+    const p = v.piece; if (!p || !p.shape || inPend.has(p.shape)) return;
+    const cut = p.cw > 0 && p.ch > 0;
+    out[p.shape] = { shape: String(p.shape), job: String(p.job || ''), w: Number(cut ? p.cw : p.w) || 0, h: Number(cut ? p.ch : p.h) || 0,
+      qty: Number(p.qty) || 1, client: String(p.client || ''), name: String(p.name || ''), note: String(p.note || ''),
+      cands: (v.cands || []).slice(0, 12).map(c => ({ orderId: c.orderId, idx: c.idx })) };
+  });
+  return out;
+}
+
 function render() {
   const r = RES;
   PEND = lgOptyPendingByOrder(r.review);
-  const pendN = Object.values(PEND).reduce((n, o) => n + Object.keys(o).length, 0);
+  REVIEW = reviewByShape(r.review, PEND);
+  const waitN = countWait(PEND, REVIEW);
   const byClient = {};
   r.notFound.forEach(p => { (byClient[p.client] = byClient[p.client] || []).push(p); });
   const clients = [...new Set(ORDERS.map(o => o.orderClient))].sort((a, b) => a.localeCompare(b, 'he'));
   $('out').innerHTML = `
     <div class="sum">
       <div class="g"><b>${r.auto.length}</b><span>ודאי — מוכן לשמירה</span></div>
-      <div class="y"><b>${r.review.length}</b><span>לבדיקה שלך</span></div>
+      <div class="y"><b>${r.review.length}</b><span>לבחירה שלך</span></div>
       <div class="r"><b>${r.notFound.length}</b><span>לא נמצא פריט</span></div>
       <div><b>${r.already.length}</b><span>כבר מחובר</span></div>
     </div>
-    ${r.auto.length || pendN ? `<button class="go" id="btnSave" type="button">💾 שמור${r.auto.length ? ' ' + r.auto.length + ' מספרי צורה' : ''}${pendN ? (r.auto.length ? ' +' : '') + ' ' + pendN + ' לחיבור בחיסום' : ''}</button>
-      ${pendN ? `<p class="note">${pendN} מה"לבדיקה" ידועים לאיזו הזמנה הם שייכים — הם יופיעו בחיסום, באותה הזמנה, לחיבור לפריט.</p>` : ''}` : ''}
+    ${r.auto.length || waitN ? `<button class="go" id="btnSave" type="button">💾 שמור${r.auto.length ? ' ' + r.auto.length + ' מספרי צורה' : ''}${waitN ? (r.auto.length ? ' +' : '') + ' ' + waitN + ' לחיבור' : ''}</button>
+      ${waitN ? `<p class="note">${waitN} שלא התחברו לבד יעברו ללשונית "לחיבור" — שם בוחרים את הזכוכית, מתי שנוח (גם לפני החיסום).</p>` : ''}` : ''}
     ${r.auto.length ? `<section class="card"><h2>ודאי (${r.auto.length})</h2>
       <details><summary>הצג את הרשימה</summary>
       ${r.auto.map(a => `<div class="row">${geoSvg(a.shape)}<span class="shape">${esc(a.shape)}</span>
         <span class="who">${esc(ordTitle(a.orderId))}<br><small>${esc(itemText(a.orderId, a.idx))}</small></span></div>`).join('')}
       </details></section>` : ''}
-    ${r.review.length ? `<section class="card"><h2>לבדיקה (${r.review.length}) — בחר לאיזה פריט שייך</h2>
-      ${r.review.map((v, n) => `<div class="row" data-rv="${n}">${geoSvg(v.piece.shape)}<span class="shape">${esc(v.piece.shape)}</span>
-        <span class="who">${esc(v.piece.client)} · ${esc(v.piece.name || 'בלי שם באופטי-ווי')}${v.piece.note ? ' · ' + esc(v.piece.note) : ''}</span>
-        <span class="dim">${dims(v.piece)}</span>
-        <div class="cands">${v.cands.slice(0, 8).map((c, k) => `<label><input type="radio" name="rv${n}" value="${k}">
-          ${esc(ordTitle(c.orderId))} — ${esc(itemText(c.orderId, c.idx))}</label>`).join('')}
-          <button class="sm gold" type="button" data-link="${n}">חבר</button></div></div>`).join('')}
-      </section>` : ''}
     ${r.notFound.length ? `<section class="card"><h2>לא נמצא פריט (${r.notFound.length})</h2>
       <p class="note">אם הלקוח באופטי-ווי כתוב אחרת מאצלנו — בחר את הלקוח שלנו ולחץ "שייך", ואז "בדוק" שוב.</p>
       ${Object.entries(byClient).map(([c, list]) => `<div class="row"><span class="who"><b>${esc(c)}</b> · ${list.length} חלקים
@@ -198,32 +285,37 @@ function render() {
         <select class="sm" data-pair="${esc(c)}"><option value="">זה הלקוח אצלנו…</option>${clients.map(x => `<option>${esc(x)}</option>`).join('')}</select>
         <button class="sm" type="button" data-pairgo="${esc(c)}">שייך</button></div>`).join('')}
       </section>` : ''}`;
-  const sv = $('btnSave'); if (sv) sv.addEventListener('click', () => save(RES.auto, sv, PEND));
+  const sv = $('btnSave'); if (sv) sv.addEventListener('click', () => saveImport(sv));
 }
 
-//  כתיבה אחת: מספר הצורה + פקודת החיתוך על הפריט, והצורה ב-meta/optyGeo
-//  pend (לא חובה): צורות שידועה ההזמנה שלהן אבל לא הפריט → meta/optyPending/<הזמנה>/<צורה>, לחיבור בחיסום
-async function save(list, btn, pend) {
-  const pendN = Object.values(pend || {}).reduce((n, o) => n + Object.keys(o).length, 0);
-  if (!list.length && !pendN) return;
-  const up = {};
+//  כתיבה אחת: מספר הצורה + פקודת החיתוך על הפריט, והצורה ב-meta/optyGeo.
+//  pend: ידועה ההזמנה → meta/optyPending/<הזמנה>/<צורה> (גם בפס בחיסום); rev: ידועים רק המועמדים → meta/optyReview/<צורה>
+async function save(list, btn, pend, rev) {
+  const waitN = countWait(pend, rev);
+  if (!list.length && !waitN) return;
+  const up = {}, now = Date.now();
   Object.entries(pend || {}).forEach(([oid, shapes]) => Object.entries(shapes).forEach(([sh, v]) => {
-    up['meta/optyPending/' + oid + '/' + sh] = Object.assign({ at: Date.now() }, v);
+    up['meta/optyPending/' + oid + '/' + sh] = Object.assign({ at: now }, v);
     if (DAT[sh]) up['meta/optyGeo/' + sh] = DAT[sh];
   }));
+  Object.entries(rev || {}).forEach(([sh, v]) => {
+    up['meta/optyReview/' + sh] = Object.assign({ at: now }, v);
+    if (DAT[sh]) up['meta/optyGeo/' + sh] = DAT[sh];
+  });
   list.forEach(a => {
     const key = (KEYS[a.orderId] || [])[a.idx];
     if (key == null) return;
     up['orders/' + a.orderId + '/items/' + key + '/optyShape'] = a.shape;
     up['orders/' + a.orderId + '/items/' + key + '/optyJob'] = a.job || '';
-    up['orders/' + a.orderId + '/updatedAt'] = Date.now();
+    up['orders/' + a.orderId + '/updatedAt'] = now;
     if (DAT[a.shape]) up['meta/optyGeo/' + a.shape] = DAT[a.shape];
     up['meta/optyPending/' + a.orderId + '/' + a.shape] = null;          // חובר → יורד מהרשימה בחיסום
+    up['meta/optyReview/' + a.shape] = null;
   });
   if (btn) btn.disabled = true;
   try {
     await _lgDb.ref().update(up);
-    st('✓ נשמרו ' + list.length + ' מספרי צורה' + (pendN ? ' + ' + pendN + ' לחיבור בחיסום' : ''), 'ok');
+    st('✓ נשמרו ' + list.length + ' מספרי צורה' + (waitN ? ' + ' + waitN + ' לחיבור' : ''), 'ok');
     return true;
   } catch (e) {
     console.error(e); st('✗ השמירה נכשלה: ' + (e.message || '') + ' — נסה שוב', 'bad');
@@ -232,18 +324,186 @@ async function save(list, btn, pend) {
   }
 }
 
-$('out').addEventListener('click', async e => {
-  const link = e.target.closest('[data-link]');
-  if (link) {
-    const n = Number(link.dataset.link), v = RES.review[n];
-    const pick = document.querySelector(`input[name="rv${n}"]:checked`);
-    if (!pick) { st('בחר קודם פריט', 'bad'); return; }
-    const c = v.cands[Number(pick.value)];
-    if (await save([{ shape: v.piece.shape, job: v.piece.job, orderId: c.orderId, idx: c.idx }], link)) {
-      link.closest('.row').remove();
-    }
-    return;
+//  "שמור" של קליטה + שורה בהיסטוריה (meta/optyImports)
+async function saveImport(btn) {
+  const r = RES;
+  if (!(await save(r.auto, btn, PEND, REVIEW))) return;
+  try {
+    const u = typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser;
+    await _lgDb.ref('meta/optyImports').push({ at: Date.now(), by: String((u && u.email) || '').replace('@luzglass.local', ''),
+      since: r.since || '', days: r.days || 0, pieces: r.pieces || 0, auto: r.auto.length, wait: countWait(PEND, REVIEW),
+      notFound: r.notFound.length, already: r.already.length, shapes: r.auto.map(a => a.shape).slice(0, 300) });
+  } catch (e) { console.warn('history', e); }
+  loadHistory(); updateCount();
+}
+
+async function loadHistory() {
+  try {
+    const v = (await _lgDb.ref('meta/optyImports').once('value')).val() || {};
+    const list = Object.values(v).filter(Boolean).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 30);
+    $('hist').innerHTML = list.length ? list.map(h => `<div class="row"><b>${esc(when(h.at))}</b>
+      <span class="who">${h.pieces || 0} חלקים מ-${esc(String(h.since || '').split('-').reverse().join('/'))} · <b>${h.auto || 0}</b> חוברו · ${h.wait || 0} לחיבור · ${h.notFound || 0} לא נמצאו${h.by ? ' · ' + esc(h.by) : ''}</span></div>`).join('')
+      : '<p class="note">עוד לא נשמרה קליטה מאז שנוספה ההיסטוריה.</p>';
+  } catch (e) { $('hist').innerHTML = '<p class="note">ההיסטוריה לא נטענה</p>'; }
+}
+
+//  ─── לחיבור ───
+async function loadWaiting() {
+  const [p, r] = await Promise.all([_lgDb.ref('meta/optyPending').once('value'), _lgDb.ref('meta/optyReview').once('value')]);
+  PENDING = p.val() || {}; REVQ = r.val() || {};
+  const shapes = [...new Set(Object.values(PENDING).flatMap(o => Object.keys(o || {})).concat(Object.keys(REVQ)))].filter(s => !GEOS[s] && !DAT[s]);
+  await Promise.all(shapes.map(async s => { try { const g = (await _lgDb.ref('meta/optyGeo/' + s).once('value')).val(); if (g) GEOS[s] = g; } catch (_) {} }));
+}
+async function updateCount() {
+  try {
+    const [p, r] = await Promise.all([_lgDb.ref('meta/optyPending').once('value'), _lgDb.ref('meta/optyReview').once('value')]);
+    const n = countWait(p.val(), r.val());
+    $('cntLink').hidden = !n; $('cntLink').textContent = n;
+  } catch (_) {}
+}
+//  בחירה: הזכוכיות שעוד בלי צורה; ✓ = המידה מתאימה; הקרוב במידה ראשון ומסומן מראש
+function pickHtml(p, cands, key) {
+  const opts = cands.map(c => { const o = ordOf(c.orderId), it = o && o.items[c.idx]; return it && !it.optyShape ? { ...c, it } : null; }).filter(Boolean)
+    .sort((a, b) => (fit(p, b.it) - fit(p, a.it)) || (gap(p, a.it) - gap(p, b.it)));
+  if (!opts.length) return '<span class="note">אין זכוכית פנויה</span>';
+  return `<select class="sm" data-pick="${esc(key)}" aria-label="לאיזו זכוכית">${opts.map((c, i) => `<option value="${esc(c.orderId)}|${c.idx}"${i ? '' : ' selected'}>${fit(p, c.it) ? '✓ ' : ''}${dimT(c.it.w, c.it.h)} · ${esc((ordOf(c.orderId) || {}).orderNum || '')} · ${esc(c.it.name || 'פריט')}</option>`).join('')}</select>`;
+}
+const waitRow = (p, k, who, cands) => `<div class="row">${geoSvg(p.shape)}<span class="shape">${esc(p.shape)}</span>
+  <span class="net" title="מידה נטו">${net(p.w, p.h)}</span><span class="who">${who}</span>
+  ${pickHtml(p, cands, k)}<button class="sm gold" type="button" data-go="${esc(k)}">חבר</button>
+  <button class="sm quiet" type="button" data-drop="${esc(k)}">לא שייך</button></div>`;
+async function loadLink() {
+  $('linkOut').innerHTML = '<p class="note">טוען…</p>';
+  try {
+    await loadOrders();                        // טרי — אולי חיברו בינתיים בחיסום
+    await loadWaiting();
+    const blocks = [];
+    Object.entries(PENDING).forEach(([oid, shapes]) => {
+      const o = ordOf(oid); if (!o || !shapes) return;
+      const all = o.items.map((_, idx) => ({ orderId: oid, idx }));
+      blocks.push(`<div class="ord">${esc(ordTitle(oid))}</div>` + Object.values(shapes).filter(Boolean).map(p =>
+        waitRow(p, 'p|' + oid + '|' + p.shape, esc(p.name || '') + (p.qty > 1 ? ' · ×' + p.qty : '') + (p.job ? ' · ' + esc(p.job) : ''), all)).join(''));
+    });
+    const rq = Object.values(REVQ).filter(Boolean);
+    if (rq.length) blocks.push(`<div class="ord">לא ידוע לאיזו הזמנה (${rq.length})</div>` + rq.map(p =>
+      waitRow(p, 'r||' + p.shape, esc(p.client) + ' · ' + esc(p.name || 'בלי שם') + (p.job ? ' · ' + esc(p.job) : ''), p.cands || [])).join(''));
+    $('linkOut').innerHTML = blocks.length ? `<section class="card">${blocks.join('')}</section>` : '<p class="note">✓ אין צורות שמחכות לחיבור</p>';
+    updateCount();
+  } catch (e) { console.error(e); $('linkOut').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור</p>'; }
+}
+const waitOf = k => { const [t, oid, sh] = k.split('|'); return { t, oid, sh, p: t === 'p' ? (PENDING[oid] || {})[sh] : REVQ[sh] }; };
+//  חיבור אחד. יורד מהרשימה כשחוברו כל היחידות (qty) — כמו בפס בחיסום
+async function linkOne(shape, job, orderId, idx, qty) {
+  const key = (KEYS[orderId] || [])[idx], o = ordOf(orderId);
+  if (key == null || !o) { st('✗ הזכוכית לא נמצאה — רענן', 'bad'); return false; }
+  const cur = (await _lgDb.ref('orders/' + orderId + '/items/' + key + '/optyShape').once('value')).val();
+  if (cur) { st('✗ לזכוכית הזו כבר יש צורה ' + cur, 'bad'); return false; }
+  const linked = ORDERS.reduce((n, x) => n + x.items.filter(it => String(it.optyShape || '') === String(shape)).length, 0) + 1;
+  const up = { ['orders/' + orderId + '/items/' + key + '/optyShape']: String(shape), ['orders/' + orderId + '/items/' + key + '/optyJob']: String(job || ''),
+    ['orders/' + orderId + '/updatedAt']: Date.now() };
+  if (linked >= (Number(qty) || 1)) {
+    Object.keys(PENDING).forEach(oid => { if ((PENDING[oid] || {})[shape]) up['meta/optyPending/' + oid + '/' + shape] = null; });
+    up['meta/optyReview/' + shape] = null;
   }
+  await _lgDb.ref().update(up);
+  o.items[idx].optyShape = String(shape); o.items[idx].optyJob = String(job || '');
+  return true;
+}
+$('linkOut').addEventListener('click', async e => {
+  const go = e.target.closest('[data-go]'), drop = e.target.closest('[data-drop]');
+  if (go) {
+    const w = waitOf(go.dataset.go), sel = document.querySelector(`select[data-pick="${CSS.escape(go.dataset.go)}"]`);
+    if (!w.p || !sel || !sel.value) { st('בחר זכוכית', 'bad'); return; }
+    const [oid, idx] = sel.value.split('|');
+    go.disabled = true;
+    try { if (await linkOne(w.sh, w.p.job, oid, Number(idx), w.p.qty)) { st('✓ צורה ' + w.sh + ' חוברה ל-' + ordTitle(oid), 'ok'); await loadLink(); } else go.disabled = false; }
+    catch (err) { console.error(err); st('✗ לא נשמר: ' + (err.message || ''), 'bad'); go.disabled = false; }
+  }
+  if (drop) {
+    const w = waitOf(drop.dataset.drop);
+    if (!confirm('להוריד את צורה ' + w.sh + ' מהרשימה? היא לא תתחבר לשום זכוכית (אפשר לקלוט שוב מהדיסק-און-קי).')) return;
+    try {
+      await _lgDb.ref(w.t === 'p' ? 'meta/optyPending/' + w.oid + '/' + w.sh : 'meta/optyReview/' + w.sh).set(null);
+      st('הוסרה מהרשימה: ' + w.sh, 'ok'); await loadLink();
+    } catch (err) { st('✗ לא נמחק: ' + (err.message || ''), 'bad'); }
+  }
+});
+
+//  ─── חיפוש ───
+async function find() {
+  const q = lgOptyNorm($('q').value);
+  if (!q) { $('findOut').innerHTML = ''; return; }
+  $('findOut').innerHTML = '<p class="note">מחפש…</p>';
+  try {
+    await loadOrders();                        // טרי — אולי חיברו בינתיים בחיסום
+    await loadWaiting();
+    const hit = s => lgOptyNorm(s).includes(q);
+    const rows = [];
+    ORDERS.forEach(o => o.items.forEach((it, idx) => {
+      if (it.optyShape && [it.optyShape, it.optyJob, o.orderNum, o.orderClient, o.sketchName].some(hit)) rows.push({ o, it, idx });
+    }));
+    const waits = [];
+    Object.entries(PENDING).forEach(([oid, sh]) => Object.values(sh || {}).forEach(p => { if (p && [p.shape, p.job, p.name, ordTitle(oid)].some(hit)) waits.push({ p, where: ordTitle(oid) }); }));
+    Object.values(REVQ).forEach(p => { if (p && [p.shape, p.job, p.name, p.client].some(hit)) waits.push({ p, where: p.client + ' · ' + (p.name || '') }); });
+    $('findOut').innerHTML = (rows.length ? `<section class="card"><h2>מחוברות (${rows.length})</h2>${rows.slice(0, 200).map(r => `<div class="row">
+        <span class="shape">${esc(r.it.optyShape)}</span><span class="who">${esc(ordTitle(r.o.id))}<br><small>${esc(r.it.name || 'פריט')} · ${dimT(r.it.w, r.it.h)}${r.it.optyJob ? ' · ' + esc(r.it.optyJob) : ''}</small></span>
+        <button class="sm" type="button" data-view="${esc(r.o.id)}|${r.idx}">📐 צורה</button>
+        <button class="sm quiet" type="button" data-cut="${esc(r.o.id)}|${r.idx}">נתק</button></div>`).join('')}</section>` : '')
+      + (waits.length ? `<section class="card"><h2>מחכות לחיבור (${waits.length})</h2>${waits.map(w => `<div class="row">${geoSvg(w.p.shape)}<span class="shape">${esc(w.p.shape)}</span>
+        <span class="who">${esc(w.where)}</span><span class="net">${net(w.p.w, w.p.h)}</span></div>`).join('')}
+        <p class="note">מחברים בלשונית "לחיבור".</p></section>` : '')
+      || '<p class="note">לא נמצא — מחפש בהזמנות מ-30 הימים האחרונים</p>';
+  } catch (e) { console.error(e); $('findOut').innerHTML = '<p class="note">✗ החיפוש נכשל</p>'; }
+}
+$('btnFind').addEventListener('click', find);
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
+$('findOut').addEventListener('click', async e => {
+  const v = e.target.closest('[data-view]'), c = e.target.closest('[data-cut]');
+  if (v) { const [oid, idx] = v.dataset.view.split('|'); const o = ordOf(oid); if (o) lgOptyShapeView(o, Number(idx)); }
+  if (c) {
+    const [oid, idxS] = c.dataset.cut.split('|'), idx = Number(idxS), o = ordOf(oid), it = o && o.items[idx], key = (KEYS[oid] || [])[idx];
+    if (!it || key == null || !it.optyShape) return;
+    if (!confirm('לנתק את צורה ' + it.optyShape + ' מהזכוכית ' + Math.round(it.w) + ' × ' + Math.round(it.h) + '? היא תחזור ל"לחיבור".')) return;
+    const sh = String(it.optyShape);
+    try {
+      const g = GEOS[sh] || (await _lgDb.ref('meta/optyGeo/' + sh).once('value')).val(), cut = g && lgOptyCutSize(g);
+      const prev = ((PENDING[oid] || {})[sh]) || {};
+      await _lgDb.ref().update({ ['orders/' + oid + '/items/' + key + '/optyShape']: null, ['orders/' + oid + '/items/' + key + '/optyJob']: null,
+        ['orders/' + oid + '/updatedAt']: Date.now(),
+        ['meta/optyPending/' + oid + '/' + sh]: { shape: sh, job: String(it.optyJob || ''),
+          w: Number(cut ? cut.w : g ? g.w : (Number(it.w) || 0) + 2), h: Number(cut ? cut.h : g ? g.h : (Number(it.h) || 0) + 2),
+          qty: Number(prev.qty) || 1, name: String(prev.name || o.sketchName || ''), note: String(prev.note || ''), at: Date.now() } });
+      delete it.optyShape; delete it.optyJob;
+      st('נותק: ' + sh + ' — מחכה בלשונית "לחיבור"', 'ok'); find(); updateCount();
+    } catch (err) { st('✗ לא נותק: ' + (err.message || ''), 'bad'); }
+  }
+});
+
+//  ─── הגדרות: זוגות שמות ───
+async function loadPairs() {
+  try {
+    await loadOrders();
+    const clients = [...new Set(ORDERS.map(o => o.orderClient))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'he'));
+    $('pOurs').innerHTML = '<option value="">הלקוח אצלנו…</option>' + clients.map(x => `<option>${esc(x)}</option>`).join('');
+    const def = typeof LG_OPTY_CLIENTS_DEFAULT !== 'undefined' ? LG_OPTY_CLIENTS_DEFAULT : [];
+    $('pairsOut').innerHTML = def.map(p => `<div class="row"><span class="who"><b>${esc(p.ours)}</b> ↔ ${esc(p.opty)}</span><span class="note">קבוע</span></div>`).join('')
+      + PAIRS.map(p => `<div class="row"><span class="who"><b>${esc(p.ours)}</b> ↔ ${esc(p.opty)}</span>
+        <button class="sm quiet" type="button" data-unpair="${esc(p.key)}">הסר</button></div>`).join('');
+  } catch (e) { $('pairsOut').innerHTML = '<p class="note">✗ לא נטען</p>'; }
+}
+$('btnPair').addEventListener('click', async () => {
+  const ours = $('pOurs').value, opty = $('pOpty').value.trim();
+  if (!ours || !opty) { st('בחר לקוח וכתוב את השם באופטי-ווי', 'bad'); return; }
+  try { await _lgDb.ref('meta/optyClients').push({ ours, opty, at: Date.now() }); $('pOpty').value = ''; st('✓ ' + opty + ' ↔ ' + ours, 'ok'); loadPairs(); }
+  catch (e) { st('✗ לא נשמר: ' + e.message, 'bad'); }
+});
+$('pairsOut').addEventListener('click', async e => {
+  const b = e.target.closest('[data-unpair]'); if (!b) return;
+  if (!confirm('להסיר את הזוג?')) return;
+  try { await _lgDb.ref('meta/optyClients/' + b.dataset.unpair).set(null); loadPairs(); } catch (err) { st('✗ ' + err.message, 'bad'); }
+});
+
+$('out').addEventListener('click', async e => {
   const pg = e.target.closest('[data-pairgo]');
   if (pg) {
     const opty = pg.dataset.pairgo, sel = document.querySelector(`select[data-pair="${CSS.escape(opty)}"]`);
@@ -257,7 +517,10 @@ $('out').addEventListener('click', async e => {
 });
 $('btnCheck').addEventListener('click', check);
 
-lgRequireAuthAsync('admin');
+Promise.resolve(lgRequireAuthAsync('admin')).then(() => {
+  loadHistory(); updateCount();
+  if (/[#&?]tab=link/.test(location.href)) showTab('link');
+});
 </script>
 </body>
 </html>

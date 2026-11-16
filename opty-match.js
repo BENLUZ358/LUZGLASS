@@ -60,9 +60,12 @@ function _lgOptyNameOk(pieceName, sketchName) {
   return !n || !ours || ours.includes(n) || b.slice(base.length).replace(/\D/g, '').includes(n);
 }
 
+//  שיפוע: p.cw/p.ch = המידה אחרי קו החיתוך (lgOptyCutSize ב-opty-shape.js — הדף מוסיף מהשרטוט)
+const _lgOptyDimFit = (w, h, pw, ph, t) => (Math.abs(w - pw) <= t && Math.abs(h - ph) <= t) || (Math.abs(w - ph) <= t && Math.abs(h - pw) <= t);
+//  המידה של אופטי-ווי, או המידה אחרי השיפוע (p.cw/p.ch — הדף מוסיף מהשרטוט)
 const _lgOptyDimOk = (p, it) => {
   const w = Number(it.w) || 0, h = Number(it.h) || 0, t = LG_OPTY_DIM_TOL;
-  return (Math.abs(w - p.w) <= t && Math.abs(h - p.h) <= t) || (Math.abs(w - p.h) <= t && Math.abs(h - p.w) <= t);
+  return _lgOptyDimFit(w, h, p.w, p.h, t) || (p.cw > 0 && p.ch > 0 && _lgOptyDimFit(w, h, p.cw, p.ch, t));
 };
 
 //  pieces × orders → { auto:[{shape,job,orderId,idx}], review:[{piece,cands:[{orderId,idx}]}], notFound:[piece], already:[piece] }
@@ -123,7 +126,9 @@ function lgOptyPendingByOrder(review) {
     const ids = [...new Set((v.cands || []).map(c => c.orderId))];
     if (ids.length !== 1 || v.by !== 'name' || !v.piece || !v.piece.shape) return;
     const p = v.piece;
-    (out[ids[0]] = out[ids[0]] || {})[p.shape] = { shape: String(p.shape), job: String(p.job || ''), w: Number(p.w) || 0, h: Number(p.h) || 0,
+    //  שיפוע → המידה אחרי החיתוך, כדי שה-✓ בחיסום יתאים לפריט שלנו
+    const cut = p.cw > 0 && p.ch > 0;
+    (out[ids[0]] = out[ids[0]] || {})[p.shape] = { shape: String(p.shape), job: String(p.job || ''), w: Number(cut ? p.cw : p.w) || 0, h: Number(cut ? p.ch : p.h) || 0,
       qty: Number(p.qty) || 1, name: String(p.name || ''), note: String(p.note || '') };
   });
   return out;
