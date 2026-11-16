@@ -429,8 +429,8 @@ label.msec-t{display:block;}
   <script src="print-labels.js?v=20261116d"></script>
   <script src="lg-shapes.js?v=20261116"></script>
   <script src="lg-layout.js?v=20261116"></script>
-  <script src="lg-cuts.js?v=20261116"></script>
-  <script src="lg-dxf.js?v=20261116"></script>
+  <script src="lg-cuts.js?v=2026111602"></script>
+  <script src="lg-dxf.js?v=2026111602"></script>
   <script src="opty-shape.js?v=20261116c"></script>
   <script src="order-labels.js?v=20261116c"></script>
 </head>
@@ -1152,9 +1152,11 @@ function modDxf(idx){
   const o = orders.find(x => x.id === eid); const cuts = _modDxfCuts(o); if(!cuts) return;
   const base = lgDxfSafe(o.orderNum) || 'הזמנה';   // אותו מספר שהרשימה מציגה
   const files = _modDxfReady(o, idx).map(k => ({ cut: cuts[k], name: lgDxfName(base, k + 1, cuts[k], 1) }));
+  if(!files.length) return;
+  // זכוכית אחת → קובץ DXF; "כל ה-DXF" → zip אחד (Chrome חוסם הורדה שנייה). הכול נכתב לפני ההורדה.
   try {
-    files.forEach(f => lgDxf(f.cut));  // הכול נבדק לפני שמורידים קובץ אחד
-    lgDxfSaveAll(files, undefined, errs => { if(errs.length) showToast(errs.join(' | ')); });
+    if(idx >= 0) lgDxfSave(files[0].name, lgDxf(files[0].cut));
+    else lgDxfSaveZip(base + '_DXF.zip', files);
   } catch(e) { showToast(e.message); }
 }
 function _modItemsHtml(items){

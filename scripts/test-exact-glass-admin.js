@@ -31,6 +31,11 @@ const grab = n => {
 for (const f of ['lg-shapes.js', 'lg-layout.js', 'lg-cuts.js', 'lg-dxf.js'])
   check('admin.html loads ' + f, A.includes('<script src="' + f), true);
 
+//  שמות הקבצים בתוך zip (store) — קורא את ה-central directory
+const zipNames = blob => { const B = Buffer.from(blob.parts[0]), e = B.length - 22, n = B.readUInt16LE(e + 10), out = [];
+  for (let k = 0, o = B.readUInt32LE(e + 16); k < n; k++) { const nl = B.readUInt16LE(o + 28);
+    out.push(B.slice(o + 46, o + 46 + nl).toString('utf8')); o += 46 + nl + B.readUInt16LE(o + 30) + B.readUInt16LE(o + 32); } return out; };
+const lastZip = saved => { const b = saved.filter(x => x.blob).pop(); return b && b.blob.type === 'application/zip' ? zipNames(b.blob) : null; };
 const FD = {
   panels: [{ type: 'fixed', wallSide: 'left', carriesDoor: true }, { type: 'door', hingeSide: 'left', hingeOnFixed: 'prev' }],
   ps: { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } },
@@ -41,7 +46,7 @@ function setup(orderOf) {
   ['lg-shapes.js', 'lg-layout.js', 'lg-cuts.js', 'lg-dxf.js'].forEach(f =>
     vm.runInContext(fs.readFileSync(path.join(ROOT, f), 'utf8'), ctx));
   ctx.document = { createElement: () => ({ click() { saved.push(this); }, remove() {} }), body: {} };
-  ctx.Blob = function (parts) { this.text = parts.join(''); };
+  ctx.Blob = function (parts, o) { this.parts = parts; this.type = o && o.type; this.text = typeof parts[0] === 'string' ? parts.join('') : ''; };
   ctx.URL = { createObjectURL: b => { saved.push({ blob: b }); return 'blob:x'; }, revokeObjectURL() {} };
   ctx.setTimeout = f => f();
   ctx.showToast = m => toasts.push(m);
@@ -80,7 +85,8 @@ const mk = (version, extra) => ctx => Object.assign({
   check('v2: one file, named order-itemNo_WxH', saved.filter(x => x.download).map(x => x.download.replace(/\d+x\d+/, 'WxH')), ['L1290-2_WxH.dxf']);
   check('v2: content starts with a DXF section', saved.some(x => x.blob && x.blob.text.startsWith('0\nSECTION')), true);
   vm.runInContext('modDxf(-1)', ctx);
-  check('v2: all → one file per glass', saved.filter(x => x.download).length, 3);
+  check('v2: all → one download (1 + 1), a .zip named after the order', [saved.filter(x => x.download).length, saved.filter(x => x.download).pop().download], [2, 'L1290_DXF.zip']);
+  check('v2: the zip holds one DXF per glass', (lastZip(saved) || []).map(n => n.replace(/\d+x\d+/, 'WxH')), ['L1290-1_WxH.dxf', 'L1290-2_WxH.dxf']);
 }
 /* version 1 / missing: nothing */
 for (const [label, v] of [['version 1', 1], ['no builder', null]]) {
@@ -98,7 +104,7 @@ for (const [label, v] of [['version 1', 1], ['no builder', null]]) {
 {
   const { ctx, saved } = setup(ctx => { const o = mk(2)(ctx); o.items[0].w = 123; return o; });
   vm.runInContext('modDxf(-1)', ctx);
-  check('edited item: "all" gives one file, not two', saved.filter(x => x.download).length, 1);
+  check('edited item: "all" gives one zip with one file, not two', [saved.filter(x => x.download).length, (lastZip(saved) || []).length], [1, 1]);
 }
 /* match is by paneId and exact size */
 {
@@ -125,7 +131,7 @@ for (const [label, v] of [['version 1', 1], ['no builder', null]]) {
   vm.runInContext('modDxf(0)', ctx);
   check('issues: modDxf on the blocked glass downloads nothing', saved.filter(x => x.download).length, 0);
   vm.runInContext('modDxf(-1)', ctx);
-  check('issues: "all" skips the blocked glass', saved.filter(x => x.download).length, 1);
+  check('issues: "all" skips the blocked glass', [saved.filter(x => x.download).length, (lastZip(saved) || []).map(n => n.slice(0, 5))], [1, ['L1-2_']]);
 }
 /* the file name uses the order number the admin list shows (orderNum) */
 {

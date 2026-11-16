@@ -26,7 +26,8 @@ const PAGES = ['workday.html', 'check-station.html', 'admin.html', 'portal.html'
                'drafter.html', 'upload.html', 'new-order.html', 'login.html',
                'mekhlahon.html', 'opty.html'];
 const SHARED = ['firebase-db.js', 'lg-icons.js', 'lg-sketch-editor.js', 'lg-health.js', 'print-labels.js', 'sq-new-order.js', 'workday-remind.js',
-                'opty-paradox.js', 'opty-match.js', 'opty-shape.js'];
+                'opty-paradox.js', 'opty-match.js', 'opty-shape.js',
+                'lg-shapes.js', 'lg-layout.js', 'lg-cuts.js', 'lg-dxf.js'];
 
 /* Anything the browser, Firebase or our own shared scripts provide. */
 const GLOBALS = new Set([

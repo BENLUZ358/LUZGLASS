@@ -13,6 +13,7 @@ const _dxfDeg = r => { let d = (r * 180 / Math.PI) % 360; if (d < 0) d += 360; r
 
 function lgDxf(g) {
   if (!g || !g.outline || !g.outline.length) throw new Error('DXF: אין מתאר לזכוכית');
+  if (g.key == null) throw new Error('DXF: לזכוכית אין תבנית חיתוך — לבדוק ביד');
   if (g.issues && g.issues.length) throw new Error('DXF: בזכוכית יש בעיות — ' + g.issues.join('; '));
   const N = _dxfNum, ents = [];
   const ent = (type, layer, items) => {
@@ -63,14 +64,68 @@ function lgDxfSave(name, text) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-// כל הקבצים אחד אחרי השני (בלי ספריית zip). done(errs) נקרא אחרי הקובץ האחרון; ריק = הכול ירד.
-function lgDxfSaveAll(files, gapMs, done) {
-  const errs = [], gap = gapMs == null ? 350 : gapMs;
-  if (!files.length) { if (done) done(errs); return; }
-  files.forEach((f, i) => setTimeout(() => {
-    try { lgDxfSave(f.name, lgDxf(f.cut)); } catch (e) { errs.push(e.message); }
-    if (i === files.length - 1 && done) done(errs);
-  }, i * gap));
+// ── zip מינימלי (store, בלי דחיסה, בלי תלות) ─────────────────────────
+// Chrome חוסם הורדה שנייה מאותו לחיצה, ולכן "כל ה-DXF" = קובץ zip אחד.
+// שמות בעברית: UTF-8 + ביט 11 בדגלים, כדי ש-Windows יפתח אותם נכון.
+function _zipUtf8(s) {
+  const out = [];
+  for (const ch of String(s)) {
+    const c = ch.codePointAt(0);
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | c >> 6, 0x80 | c & 63);
+    else if (c < 0x10000) out.push(0xe0 | c >> 12, 0x80 | c >> 6 & 63, 0x80 | c & 63);
+    else out.push(0xf0 | c >> 18, 0x80 | c >> 12 & 63, 0x80 | c >> 6 & 63, 0x80 | c & 63);
+  }
+  return out;
+}
+let _zipCrcT = null;
+function _zipCrc(b) {
+  if (!_zipCrcT) {
+    _zipCrcT = [];
+    for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; _zipCrcT[n] = c >>> 0; }
+  }
+  let c = 0xffffffff;
+  for (let i = 0; i < b.length; i++) c = _zipCrcT[(c ^ b[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+// entries: [{ name, data: string | bytes }] → Uint8Array של קובץ zip
+function lgZip(entries) {
+  const out = [], cd = [];
+  const u16 = (a, v) => a.push(v & 255, v >>> 8 & 255), u32 = (a, v) => a.push(v & 255, v >>> 8 & 255, v >>> 16 & 255, v >>> 24 & 255);
+  const d = new Date(), time = d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1;
+  const date = (Math.max(1980, d.getFullYear()) - 1980) << 9 | (d.getMonth() + 1) << 5 | d.getDate();
+  for (const e of entries) {
+    const name = _zipUtf8(e.name), data = typeof e.data === 'string' ? _zipUtf8(e.data) : Array.from(e.data);
+    const crc = _zipCrc(data), off = out.length;
+    //  local file header
+    u32(out, 0x04034b50); u16(out, 20); u16(out, 0x0800); u16(out, 0); u16(out, time); u16(out, date);
+    u32(out, crc); u32(out, data.length); u32(out, data.length); u16(out, name.length); u16(out, 0);
+    for (const x of name) out.push(x);
+    for (const x of data) out.push(x);
+    //  central directory entry
+    u32(cd, 0x02014b50); u16(cd, 20); u16(cd, 20); u16(cd, 0x0800); u16(cd, 0); u16(cd, time); u16(cd, date);
+    u32(cd, crc); u32(cd, data.length); u32(cd, data.length); u16(cd, name.length); u16(cd, 0); u16(cd, 0);
+    u16(cd, 0); u16(cd, 0); u32(cd, 0); u32(cd, off);
+    for (const x of name) cd.push(x);
+  }
+  const cdOff = out.length;
+  for (const x of cd) out.push(x);
+  u32(out, 0x06054b50); u16(out, 0); u16(out, 0); u16(out, entries.length); u16(out, entries.length);
+  u32(out, cd.length); u32(out, cdOff); u16(out, 0);
+  return new Uint8Array(out);
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { lgDxf, lgDxfName, lgDxfSafe, lgDxfSave, lgDxfSaveAll };
+// הורדה בדפדפן של הרבה קבצי DXF בקובץ zip אחד. כל הקבצים נכתבים לפני ההורדה — שגיאה באחד זורקת ולא יורד כלום.
+// files: [{ name, cut }]
+function lgDxfSaveZip(zipName, files) {
+  const entries = files.map(f => ({ name: f.name, data: lgDxf(f.cut) }));
+  const url = URL.createObjectURL(new Blob([lgZip(entries)], { type: 'application/zip' }));
+  const a = document.createElement('a');
+  a.download = zipName; a.href = url;
+  if (document.body && document.body.appendChild) document.body.appendChild(a);
+  a.click();
+  if (a.remove) a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { lgDxf, lgDxfName, lgDxfSafe, lgDxfSave, lgZip, lgDxfSaveZip };
