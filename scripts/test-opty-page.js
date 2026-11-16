@@ -29,7 +29,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
 
   let html = fs.readFileSync(path.join(ROOT, 'opty.html'), 'utf8')
     .replace(/<script src="https:[^"]*"><\/script>/g, '').replace(/<script src="(firebase-db|lg-icons)\.js[^"]*"><\/script>/g, '');
-  for (const f of ['opty-paradox.js', 'opty-match.js', 'opty-shape.js'])
+  for (const f of ['opty-paradox.js', 'opty-match.js', 'opty-shape.js', 'opty-layout.js'])
     html = html.replace(new RegExp(`<script src="${f.replace('.', '\\.')}[^"]*"></script>`), `<script>${fs.readFileSync(path.join(ROOT, f), 'utf8')}</script>`);
   const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://luzglass-test.vercel.app/opty.html',
     beforeParse(w) {
@@ -40,8 +40,8 @@ const tick = () => new Promise(r => setTimeout(r, 30));
     } });
   const w = dom.window, doc = w.document;
   const setFiles = (id, list) => {
-    const files = list.map(([name, buf]) => {
-      const f = new w.File([buf], name);
+    const files = list.map(([name, buf, lastModified]) => {
+      const f = new w.File([buf], name, lastModified ? { lastModified } : {});
       f.arrayBuffer = async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
       f.text = async () => buf.toString('utf8');
       return f;
@@ -52,10 +52,13 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   const fx = f => fs.readFileSync(path.join(__dirname, 'fixtures', f));
   setFiles('inDb', [['Pezzi.DB', fx('opty-Pezzi-sample.DB')], ['other.txt', Buffer.from('x')]]);
   const dat = fs.readFileSync(path.join(__dirname, 'fixtures', 'opty-shapes', '274378.dat'), 'utf8').replace(/^427\.000000 1992\.000000/, '502.000000 1902.000000');
-  setFiles('inDat', [['274328.dat', Buffer.from(dat)], ['M00288.R01', Buffer.from('x')]]);
+  //  קובצי חיתוך (בן, 17/11): M00291 ירד 12/11 17:10 → 13/11 שישי → יום מוצע 15/11; M00200 ישן — לא מוצג
+  const R291 = '[P1H1R7D64R639Cx190y190X1F54Y5410S<n=274328>N18X1F54Y5410S<n=274325>N17]' + String.fromCharCode(13, 10) + 'N23 B';
+  setFiles('inDat', [['274328.dat', Buffer.from(dat)], ['M00291.R01', Buffer.from(R291), Date.parse('2026-11-12T17:10:00+02:00')],
+    ['M00200.R01', Buffer.from(R291), Date.parse('2026-10-01T10:00:00+03:00')], ['notes.txt', Buffer.from('x')]]);
   await tick();
   check('picks Pezzi.DB out of the folder', doc.getElementById('gotDb').textContent, '✓ Pezzi.DB');
-  check('reads only .dat shape files', doc.getElementById('gotDat').textContent, '✓ 1 צורות');
+  check('reads .dat shape files and cutting files', doc.getElementById('gotDat').textContent, '✓ 1 צורות · 2 קובצי חיתוך');
   check('check button enabled', doc.getElementById('btnCheck').disabled, false);
 
   doc.getElementById('days').value = '3';
@@ -65,9 +68,19 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   check('summary: 2 sure (BathPlace/איציק, ד"ר/56891), 0 review, 0 not found, 0 already', nums, ['2', '0', '0', '0']);
   check('the sure list shows the shape drawing', !!doc.querySelector('.card .row svg'), true);
 
+  //  אופטימיזציות שנמצאו + יום עבודה (בן, 17/11: "להחליט לאיזה יום עבודה זה")
+  check('found optimisations: only the recent one, day suggested', [...doc.querySelectorAll('[data-jobday]')].map(i => [i.dataset.jobday, i.value]), [['M00291', '2026-11-15']]);
+  const all = doc.getElementById('jobDayAll');
+  all.value = '2026-11-16'; all.dispatchEvent(new w.Event('change'));
+  check('one picker sets the day for all', doc.querySelector('[data-jobday="M00291"]').value, '2026-11-16');
+
   doc.getElementById('btnSave').click();
-  for (let i = 0; i < 20 && !/נשמרו/.test(doc.getElementById('st').textContent); i++) await tick();
+  for (let i = 0; i < 40 && !/אופטימיזציות/.test(doc.getElementById('st').textContent); i++) await tick();
   const d = db._data.orders;
+  const J = (db._data.meta.optyJobs || {});
+  check('optimisation saved with the chosen day, its sheet and pieces', [Object.keys(J), J.M00291 && J.M00291.day, J.M00291 && J.M00291.sheets.length, J.M00291 && J.M00291.pieces[24].shape], [['M00291'], '2026-11-16', 1, '274328']);
+  check('linked item stamped for that work day', d.o1.items[0].optyCut, { at: '2026-11-16', job: 'M00291' });
+  check('status line counts optimisations and stamped glasses', /1 אופטימיזציות.*2 זכוכיות סומנו לחיתוך/.test(doc.getElementById('st').textContent), true);
   check('shape written on the right item (array)', [d.o1.items[0].optyShape, d.o1.items[0].optyJob, d.o1.items[1].optyShape], ['274328', 'M00291', undefined]);
   check('shape written on the right item (object-keyed items)', d.o2.items.a.optyShape, '274325');
   check('an order older than 30 days is not touched', d.old.items[0].optyShape, undefined);

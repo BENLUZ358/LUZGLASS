@@ -122,10 +122,10 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
       <span class="got" id="gotDb">לא נבחר</span>
     </div>
     <div class="step">
-      <label class="pick">📐 קבצי הצורות (.dat)<input type="file" id="inDat" accept=".dat" multiple></label>
+      <label class="pick">📐 קבצי הצורות והחיתוך (.dat, .R01)<input type="file" id="inDat" accept=".dat,.R01,.r01" multiple></label>
       <span class="got" id="gotDat">לא נבחרו — בלי זה יהיה רק מספר צורה, בלי ציור</span>
     </div>
-    <p class="note">בקבצי הצורות: פותחים את הדיסק-און-קי, לוחצים Ctrl+A ו"פתח". רק הקבצים שמסתיימים ב-.dat נקלטים.</p>
+    <p class="note">בקבצי הצורות: פותחים את הדיסק-און-קי, לוחצים Ctrl+A ו"פתח". נקלטים קבצי הצורות (.dat) וקבצי החיתוך של האופטימיזציות (M00…R01).</p>
   </section>
 
   <section class="card">
@@ -176,6 +176,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-paradox.js?v=20261116c"></script>
 <script src="opty-match.js?v=20261116e"></script>
 <script src="opty-shape.js?v=20261116d"></script>
+<script src="opty-layout.js?v=20261117a"></script>
 <script src="print-labels.js?v=20261117a"></script>
 <script src="order-labels.js?v=20261116e"></script>
 <script src="lg-icons.js?v=20261103"></script>
@@ -184,6 +185,7 @@ const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
 const ORDER_DAYS = 30;                         // הזמנות מ-30 הימים האחרונים
 const DIM_OK = 3;                              // ✓ — המידה (עם הליטוש) עד 3 מ"מ מהזכוכית שלנו, כמו בחיבור האוטומטי
+let R01S = [], ROWS = [], FOUND = [];   // קובצי חיתוך שנבחרו · שורות Pezzi · אופטימיזציות שנמצאו (בן, 17/11)
 let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null, PEND = {}, REVIEW = {};
 let PENDING = {}, REVQ = {}, GEOS = {}, SK = {};   // SK: סקיצה לכל הזמנה (data URL / null)       // מה שמחכה לחיבור (meta/optyPending, meta/optyReview) + ציורים
 
@@ -222,10 +224,14 @@ $('inDb').addEventListener('change', e => {
 });
 $('inDat').addEventListener('change', async e => {
   const fs = [...e.target.files].filter(f => /^\d+\.dat$/i.test(f.name));
-  DAT = {};
+  const rs = [...e.target.files].filter(f => /^M\d+\.R01$/i.test(f.name));
+  DAT = {}; R01S = [];
   await Promise.all(fs.map(async f => { const g = lgOptyShapeParse(await f.text()); if (g) DAT[f.name.replace(/\.dat$/i, '')] = g; }));
-  $('gotDat').textContent = fs.length ? '✓ ' + Object.keys(DAT).length + ' צורות' : 'לא נבחרו קבצי .dat';
-  $('gotDat').className = 'got' + (fs.length ? ' ok' : '');
+  await Promise.all(rs.map(async f => { R01S.push({ job: f.name.replace(/\.R01$/i, '').toUpperCase(), text: await f.text(), ms: Number(f.lastModified) || 0 }); }));
+  R01S.sort((a, b) => a.job.localeCompare(b.job));
+  const any = fs.length || rs.length;
+  $('gotDat').textContent = any ? '✓ ' + Object.keys(DAT).length + ' צורות' + (rs.length ? ' · ' + rs.length + ' קובצי חיתוך' : '') : 'לא נבחרו קבצי .dat';
+  $('gotDat').className = 'got' + (any ? ' ok' : '');
 });
 
 //  ההזמנות הגולמיות — כי צריך את מפתח הפריט האמיתי (מערך או אובייקט) לכתיבה
@@ -249,6 +255,7 @@ async function check() {
   try {
     const rows = [];
     for (const f of DB) rows.push(...lgOptyReadTable(await f.arrayBuffer()).rows);
+    ROWS = rows;
     const days = Math.max(1, Math.min(45, Number($('days').value) || 3));
     const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
     const pieces = lgOptyPieces(rows, since);
@@ -258,6 +265,14 @@ async function check() {
     await loadOrders();
     RES = lgOptyMatch(pieces, ORDERS, PAIRS);
     RES.pieces = pieces.length; RES.since = since; RES.days = days;
+    //  אופטימיזציות (בן, 17/11): כל קובץ חיתוך שהיום המוצע שלו בטווח; בן בוחר את יום העבודה לפני השמירה
+    FOUND = [];
+    R01S.forEach(r => {
+      const day = lgOptyCutDay(r.ms || Date.now());
+      if (day < since) return;
+      try { FOUND.push(Object.assign({ day, sheets: lgOptyLayoutParse(r.text) }, r)); }
+      catch (err) { console.warn(r.job, err); }
+    });
     st('נקראו ' + pieces.length + ' חלקים עם מספר צורה מ-' + since.split('-').reverse().join('/') + ' · ' + ORDERS.length + ' הזמנות', 'ok');
     render();
   } catch (e) {
@@ -294,7 +309,14 @@ function render() {
       <div class="r"><b>${r.notFound.length}</b><span>לא נמצא פריט</span></div>
       <div><b>${r.already.length}</b><span>כבר מחובר</span></div>
     </div>
-    ${r.auto.length || waitN ? `<button class="go" id="btnSave" type="button">💾 שמור${r.auto.length ? ' ' + r.auto.length + ' מספרי צורה' : ''}${waitN ? (r.auto.length ? ' +' : '') + ' ' + waitN + ' לחיבור' : ''}</button>
+    ${FOUND.length ? `<section class="card jobs-found"><h2>אופטימיזציות שנמצאו (${FOUND.length})</h2>
+      <p class="note">לאיזה יום עבודה כל אחת? המערכת הציעה: לפני 12:00 — אותו יום, אחרי — יום העבודה הבא.</p>
+      <div class="step"><label>יום עבודה לכל האופטימיזציות <input type="date" id="jobDayAll" value="${esc(FOUND[0].day)}"></label></div>
+      ${FOUND.map(j => `<div class="row"><b class="shape">${esc(j.job)}</b>
+        <span class="who">${lgOptySheetSeq(j.sheets).length} לוחות · ${j.sheets.reduce((n, s) => n + s.pieces.length * (s.count || 1), 0)} זכוכיות</span>
+        <input type="date" data-jobday="${esc(j.job)}" value="${esc(j.day)}" aria-label="יום עבודה ל-${esc(j.job)}"></div>`).join('')}
+    </section>` : ''}
+    ${r.auto.length || waitN || FOUND.length ? `<button class="go" id="btnSave" type="button">💾 שמור${r.auto.length ? ' ' + r.auto.length + ' מספרי צורה' : ''}${waitN ? (r.auto.length ? ' +' : '') + ' ' + waitN + ' לחיבור' : ''}${FOUND.length ? ((r.auto.length || waitN) ? ' +' : '') + ' ' + FOUND.length + ' אופטימיזציות' : ''}</button>
       ${waitN ? `<p class="note">${waitN} שלא התחברו לבד יעברו ללשונית "לחיבור" — שם בוחרים את הזכוכית, מתי שנוח (גם לפני החיסום).</p>` : ''}` : ''}
     ${r.auto.length ? `<section class="card"><h2>ודאי (${r.auto.length})</h2>
       <details><summary>הצג את הרשימה</summary>
@@ -309,13 +331,15 @@ function render() {
         <button class="sm" type="button" data-pairgo="${esc(c)}">שייך</button></div>`).join('')}
       </section>` : ''}`;
   const sv = $('btnSave'); if (sv) sv.addEventListener('click', () => saveImport(sv));
+  const all = $('jobDayAll');
+  if (all) all.addEventListener('change', () => { document.querySelectorAll('[data-jobday]').forEach(i => { i.value = all.value; }); });
 }
 
 //  כתיבה אחת: מספר הצורה + פקודת החיתוך על הפריט, והצורה ב-meta/optyGeo.
 //  pend: ידועה ההזמנה → meta/optyPending/<הזמנה>/<צורה> (גם בפס בחיסום); rev: ידועים רק המועמדים → meta/optyReview/<צורה>
 async function save(list, btn, pend, rev) {
   const waitN = countWait(pend, rev);
-  if (!list.length && !waitN) return;
+  if (!list.length && !waitN) return true;
   const up = {}, now = Date.now();
   Object.entries(pend || {}).forEach(([oid, shapes]) => Object.entries(shapes).forEach(([sh, v]) => {
     up['meta/optyPending/' + oid + '/' + sh] = Object.assign({ at: now }, v);
@@ -351,6 +375,11 @@ async function save(list, btn, pend, rev) {
 async function saveImport(btn) {
   const r = RES;
   if (!(await save(r.auto, btn, PEND, REVIEW))) return;
+  const msg = $('st').textContent;
+  if (FOUND.length) {
+    try { const j = await saveJobs(); st((r.auto.length || countWait(PEND, REVIEW) ? msg + ' · ' : '✓ ') + j.jobs + ' אופטימיזציות נשמרו · ' + j.stamped + ' זכוכיות סומנו לחיתוך', 'ok'); }
+    catch (e) { console.error(e); st('✗ שמירת האופטימיזציות נכשלה: ' + (e.message || '') + ' — נסה שוב', 'bad'); if (btn) btn.disabled = false; return; }
+  }
   try {
     const u = typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser;
     await _lgDb.ref('meta/optyImports').push({ at: Date.now(), by: String((u && u.email) || '').replace('@luzglass.local', ''),
@@ -358,6 +387,27 @@ async function saveImport(btn) {
       notFound: r.notFound.length, already: r.already.length, shapes: r.auto.map(a => a.shape).slice(0, 300) });
   } catch (e) { console.warn('history', e); }
   loadHistory(); updateCount();
+}
+
+//  אופטימיזציות → meta/optyJobs/<job> (מקור מידע נפרד — לא נוגע בפרטי ההזמנה), ציורי הצורות שעל הלוחות,
+//  ו"נחתך" על הזכוכיות שמחוברות (optyCut — רק לפריט שאין לו עדיין; "בוטל" נשאר בוטל). בן, 17/11.
+async function saveJobs() {
+  const now = Date.now(), up = {}, recs = {};
+  FOUND.forEach(f => {
+    const inp = document.querySelector(`[data-jobday="${f.job}"]`);
+    const day = (inp && /^\d{4}-\d{2}-\d{2}$/.test(inp.value)) ? inp.value : f.day;
+    const rec = lgOptyJobRecord(f.job, f.text, day, ROWS, now);
+    recs[f.job] = rec;
+    ['job', 'day', 'mat', 'matName', 'importedAt', 'sheets', 'pieces'].forEach(k => { up['meta/optyJobs/' + f.job + '/' + k] = rec[k]; });
+    rec.sheets.forEach(s => s.pieces.forEach(p => { if (p.shape && DAT[p.shape]) up['meta/optyGeo/' + p.shape] = DAT[p.shape]; }));
+  });
+  await _lgDb.ref().update(up);
+  await loadOrders();
+  const orders = ORDERS.map(o => ({ id: o.id, items: Object.fromEntries((KEYS[o.id] || []).map((k, i) => [k, o.items[i]])) }));
+  const stamps = lgOptyCutStamps(orders, recs), up2 = {};
+  stamps.forEach(s => { up2['orders/' + s.orderId + '/items/' + s.key + '/optyCut'] = s.value; up2['orders/' + s.orderId + '/updatedAt'] = now; });
+  if (stamps.length) await _lgDb.ref().update(up2);
+  return { jobs: FOUND.length, stamped: stamps.length };
 }
 
 async function loadHistory() {
