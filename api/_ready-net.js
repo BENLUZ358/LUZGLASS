@@ -102,9 +102,51 @@ async function lgReadyNetUnwatch(db, ids) {
   if (Object.keys(up).length) await db.ref(NET).update(up);
 }
 
+//  ─── "שלחתי" רק כשבאמת יצאה (בן, 16/11 — T-0009) ───────────────────────────
+//  16/11 13:12 שלוש הודעות נכנסו לתור, GREEN API לא ענה עד 13:28 — והחדר כבר אמר "שלחתי".
+//  עכשיו: אחרי ה-drain בודקים את waOutbox/<key>. יצאה → "שלחתי". עוד לא → "נכנסה לתור,
+//  מחכה לוואטסאפ", והמפתח נרשם ב-waMeta/readyNet/follow. כל דופק (גם בלילה) בודק את
+//  הרשימה הקטנה הזו: יצאה → שורה "יצאה (שעה)"; נכשלה → שורה עם הסיבה (פעם אחת לכל מצב);
+//  15 דק' בתור → שורה אחת "עדיין מחכה"; פג תוקף / נעלמה / יממה → יוצאת מהרשימה.
+const STUCK_MS = 15 * MIN;
+const _hm = t => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+const _who = v => `הודעת "מוכן לאיסוף" ל${v.client} (${v.names})`;
+async function lgReadyNetFollow(db, now) {
+  const f = (await db.ref(NET + '/follow').once('value')).val();
+  if (!f) return 0;
+  const { lgRoomPost } = require('./_agent-room');
+  const up = {};
+  let posted = 0;
+  for (const [key, v] of Object.entries(f)) {
+    if (!_okId(key) || !v) { up['follow/' + key] = null; continue; }
+    const m = (await db.ref('waOutbox/' + key).once('value')).val();
+    const age = now - (Number(v.at) || now);
+    let text = null, drop = false, said = null;
+    if (!m) drop = true;
+    else if (m.state === 'sent') { text = `${_who(v)} יצאה עכשיו מהשרת (${_hm(Number(m.sentAt) || now)}).`; drop = true; }
+    else if (m.state === 'expired' || m.state === 'cancelled') { text = `${_who(v)} לא יצאה, ופג תוקפה: ${m.lastError || m.state}`; drop = true; }
+    else if (m.state === 'failed') { if (v.said !== 'failed') { text = `${_who(v)} לא יצאה: ${m.lastError || 'שליחה נכשלה'}`; said = 'failed'; } }
+    else if (age >= STUCK_MS && v.said !== 'stuck' && v.said !== 'failed') {
+      text = `${_who(v)} עדיין מחכה בתור ${Math.round(age / MIN)} דק' — וואטסאפ לא שולח${m.lastError ? ': ' + m.lastError : ''}.`;
+      said = 'stuck';
+    }
+    if (!drop && age > MAX_AGE_MS) drop = true;
+    if (drop) up['follow/' + key] = null;
+    else if (said) up['follow/' + key + '/said'] = said;
+    if (text) {
+      try { await lgRoomPost(db, { agent: 'okev', kind: 'info', text, ref: { orderId: v.orderId } }, now); posted++; }
+      catch (e) { console.warn('ready-net: follow room', e && e.name); }
+    }
+  }
+  if (Object.keys(up).length) await db.ref(NET).update(up);
+  return posted;
+}
+
 async function lgReadyNetRun(db, o) {
   const opt = o || {};
   const now = Number(opt.now) || Date.now();
+  //  מעקב אחרי מה שכבר בתור — לפני בדיקת השעות: שורת "יצאה" שייכת לרגע שיצאה
+  try { await lgReadyNetFollow(db, now); } catch (e) { console.warn('ready-net: follow', e && e.name); }
   if (!opt.force && !lgReadyNetHours(now)) return { ok: true, skipped: 'hours' };
 
   //  רק הרשימה הקטנה — ריקה = אין מה לעשות, שום הזמנה לא נקראת
@@ -128,6 +170,7 @@ async function lgReadyNetRun(db, o) {
   const { lgRoomPost } = require('./_agent-room');
   const keys = [];
   const done = [];
+  const queuedPosts = [];          // נכתבות אחרי ה-drain, לפי מה שבאמת קרה בתור
   for (const grp of groups) {
     const names = grp.ids.map(id => String((orders[id] && (orders[id].sketchName || orders[id].orderNum)) || id)).join(', ');
     let r;
@@ -137,7 +180,8 @@ async function lgReadyNetRun(db, o) {
     let text;
     if (r && r.status === 200 && b.queued) {
       keys.push(b.outboxKey);
-      text = `הודעת "מוכן לאיסוף" ל${grp.client} (${names}) לא יצאה מהדף — שלחתי אותה מהשרת.`;
+      queuedPosts.push({ key: String(b.outboxKey), client: grp.client, names, orderId: grp.ids[0] });
+      text = null;
     } else if (r && r.status === 200 && b.preview && !b.configured) {
       text = null;   // סביבת בדיקות בלי וואטסאפ — אין מה לדווח
     } else {
@@ -158,6 +202,19 @@ async function lgReadyNetRun(db, o) {
     try { await (opt.drain || require('./_wa-drain-core').drainNow)(db, keys, 'ready-net', hasBudget ? { budgetMs } : {}); }
     catch (e) { console.warn('ready-net: drain', e && e.name); }
   }
+  //  "שלחתי" רק אם waOutbox אומר sent; אחרת "נכנסה לתור" + מעקב (lgReadyNetFollow)
+  const follow = {};
+  for (const q of queuedPosts) {
+    let st = null;
+    try { st = ((await db.ref('waOutbox/' + q.key).once('value')).val() || {}).state || null; } catch (e) {}
+    const text = st === 'sent'
+      ? `${_who(q)} לא יצאה מהדף — שלחתי אותה מהשרת.`
+      : `${_who(q)} לא יצאה מהדף — נכנסה לתור בשרת, מחכה לוואטסאפ. אכתוב כאן כשתצא.`;
+    if (st !== 'sent' && _okId(q.key)) follow['follow/' + q.key] = { client: q.client, names: q.names, orderId: q.orderId, at: now, said: 'queued' };
+    try { await lgRoomPost(db, { agent: 'okev', kind: 'info', text, ref: { orderId: q.orderId } }, now); }
+    catch (e) { console.warn('ready-net: room', e && e.name); }
+  }
+  if (Object.keys(follow).length) { try { await db.ref(NET).update(follow); } catch (e) { console.warn('ready-net: follow save', e && e.name); } }
   return { ok: true, sent: keys.length, groups: done };
 }
 
