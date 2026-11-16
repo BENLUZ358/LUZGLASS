@@ -12,6 +12,7 @@
 <script src="lg-shapes.js"></script>
 <script src="lg-layout.js"></script>
 <script src="lg-cuts.js"></script>
+<script src="lg-dxf.js"></script>
 <script src="lg-catalog.js"></script>
 <!-- הספרייה יושבת ב-RTDB. הדף עבד עד היום בלי Firebase, ולכן כל שימוש
      בו מוגן: בלי חיבור הגלריה עדיין מציגה את הצורות המשוגרות. -->
@@ -204,6 +205,8 @@ lgRequireAuthAsync('admin');
 body.sketch-full .geo-warn{position:sticky;top:0;left:0;}
 .geo-warn button{display:block;width:100%;text-align:right;background:none;border:none;padding:4px 0;
   min-height:32px;font:inherit;color:inherit;cursor:pointer;}
+.dxf-bar button{display:inline-block;width:auto;margin:2px 0 2px 6px;padding:6px 12px;min-height:36px;border:1px solid var(--gold-text);border-radius:6px;cursor:pointer;}
+.dxf-bar button:disabled{opacity:.7;cursor:not-allowed;border-style:dashed;}
 .geo-warn button:focus-visible{outline:2px solid var(--gold-text);outline-offset:2px;}
 .sh-ask{border:1px solid #f0c890;background:#fff8ee;border-radius:8px;padding:10px;margin:8px 0;}
 .sh-ask p{margin:0 0 8px;font-size:13px;line-height:1.5;color:#5a3a10;}
@@ -535,6 +538,8 @@ body.sketch-editing .edit-bar{display:none;}
   <!-- בעיות בגאומטריה עצמה — קדח מחוץ לזכוכית, פינוי שחורג, מדרגה שאינה
        נסגרת. יושב בתוך המעטפת כדי שיראו אותו גם במסך מלא. -->
   <div id="geoWarn" class="geo-warn" role="status" aria-live="polite" hidden></div>
+  <!-- DXF לחיתוך — מנהל בלבד (רצועה נפרדת, לא מוצגת ללקוח) -->
+  <div id="dxfBar" class="geo-warn dxf-bar" hidden></div>
   <canvas id="sk"></canvas>
   <!-- כפתורי ההוספה. הם יושבים מעל הקנבס במקום הפאה שאליה יתחבר השייף
        הבא, ומופיעים רק בצד שמנוע החוקיות מתיר. -->
@@ -2812,11 +2817,44 @@ function renderGeoWarn(panels,pss){
     (engCutsOf(sh)||[]).forEach(g=>(g.issues||[]).forEach(msg=>list.push({
       idx:g.idx, code:'cut', msg:(typeof _lgGlassName==='function'?_lgGlassName(sh.shapes,g.idx):'')+msg })));
   }catch(e){}
+  try{ renderDxfBar(panels,pss); }catch(e){}
   if(!list.length){ el.hidden=true; el.innerHTML=''; return; }
   el.hidden=false;
   el.innerHTML=list.map(g=>
     '<button type="button" onclick="geoWarnOpen('+g.idx+')">⚠ '+_shEsc(g.msg)+
     (g.code==='notch-open'?' <u>לחץ כדי לענות</u>':'')+'</button>').join('');
+}
+// ‏כפתורי DXF — מנהל בלבד. שם הקובץ: שם הסקיצה (או 'סקיצה'), מספר זכוכית, מידות.
+let _dxfState=null;
+function renderDxfBar(panels,pss){
+  const el=document.getElementById('dxfBar'); if(!el) return;
+  _dxfState=null;
+  const admin=typeof _sess!=='undefined' && _sess && _sess.role==='admin';
+  let cuts=null;
+  if(admin) try{ cuts=engCutsOf(_lgShowerOf(panels,pss)); }catch(e){}
+  if(!cuts||!cuts.length||typeof lgDxf!=='function'){ el.hidden=true; el.innerHTML=''; return; }
+  const sn=document.getElementById('sketchName')?.value;
+  const base=lgDxfSafe(sn)||'סקיצה';
+  _dxfState={cuts,base};
+  const ok=cuts.filter(g=>g.key&&!(g.issues&&g.issues.length));
+  el.hidden=false;
+  el.innerHTML=cuts.map(g=>{
+    const bad=!g.key||(g.issues&&g.issues.length);
+    return bad
+      ? '<button type="button" disabled title="'+_shEsc('לבדוק ביד: '+(g.issues||[]).join('; '))+'">DXF זכוכית '+(g.idx+1)+' — לבדוק ביד: '+_shEsc((g.issues||[]).join('; ')||'אין תבנית')+'</button>'
+      : '<button type="button" onclick="dxfDownload('+g.idx+')">DXF זכוכית '+(g.idx+1)+'</button>';
+  }).join('')+(ok.length>1?'<button type="button" onclick="dxfDownload(-1)">כל ה-DXF</button>':'');
+}
+function dxfDownload(idx){
+  if(!_dxfState) return;
+  const {cuts,base}=_dxfState;
+  const files=cuts.filter(g=>(idx<0||g.idx===idx)&&g.key&&!(g.issues&&g.issues.length))
+    .map(g=>({cut:g,name:lgDxfName(base,g.idx+1,g,1)}));
+  try{
+    files.forEach(f=>lgDxf(f.cut)); // כל הקבצים נבדקים לפני שמורידים אחד
+    const errs=lgDxfSaveAll(files);
+    if(errs.length) alert(errs.join(' | '));
+  }catch(e){ alert(e.message); }
 }
 function geoWarnOpen(idx){
   if(appMode==='shape'){ const s=shapeList[idx]; if(s) openShapeSheet(s.id,'shape'); }

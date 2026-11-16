@@ -337,6 +337,8 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .mit-geo:empty{display:none;}
 .mit-geo svg{height:150px;max-width:100%;color:var(--text);}
 .mit-lbl-sh{min-height:44px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:13px;font-weight:700;cursor:pointer;}
+.mit-dxf{min-height:44px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:13px;font-weight:700;cursor:pointer;}
+.mit-dxf:disabled{opacity:.7;cursor:not-allowed;border-style:dashed;font-weight:400;}
 .mit-lbl-all{font-size:12px;padding:4px 10px;min-height:36px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer;}
 .mit-d{color:var(--muted);white-space:nowrap;}
 .mit-t{font-size:12px;font-weight:700;padding:1px 7px;border-radius:3px;white-space:nowrap;}
@@ -425,6 +427,10 @@ label.msec-t{display:block;}
   <script src="sketch-reader-ui.js?v=20261023h"></script>
   <script src="drafter-batch.js?v=20261111"></script>
   <script src="print-labels.js?v=20261116"></script>
+  <script src="lg-shapes.js"></script>
+  <script src="lg-layout.js"></script>
+  <script src="lg-cuts.js"></script>
+  <script src="lg-dxf.js"></script>
   <script src="opty-shape.js?v=20261116"></script>
   <script src="order-labels.js?v=20261116"></script>
 </head>
@@ -1016,6 +1022,7 @@ function openMod(id) {
     <div class="msec">
       <div class="msec-t" style="display:flex;align-items:center;gap:8px">פריטים
         ${_modCanEditItems(o) ? `<button type="button" id="modEditItemsBtn" class="mit-edit-btn" onclick="modEditItems()"><span data-icon="pencil"></span> ערוך פריטים</button>` : ''}
+        ${_modDxfCuts(o) && _modDxfCuts(o).some(g => g.key && !(g.issues && g.issues.length)) ? `<button type="button" class="mit-lbl-all" onclick="modDxf(-1)">כל ה-DXF</button>` : ''}
         ${items.some(i => i && i.w && i.h) ? `<button type="button" class="mit-lbl-all" onclick="modLabelAll()">🏷 מדבקות לכל הפריטים</button>` : ''}</div>
       <div id="itemsPreview">${_modItemsHtml(items)}</div>
     </div>
@@ -1102,8 +1109,38 @@ function openMod(id) {
 
 // הפריטים בחלון — פורמט אחד לכולם. קודם 3 הראשונים היו שורות פשוטות
 // ו"ראה עוד" צייר את כולם מחדש בפורמט אחר — זה מה שנראה כ"משתנה".
+// ‏DXF לכל זכוכית (בן, 16/11) — רק להזמנה מהבונה (builder.version >= 2) שיש בה
+// builder.shower. ממפים זכוכית לפריט לפי המקום ברשימה (lgGlass ו-lgCuts נותנים
+// אחד לכל זכוכית, באותו סדר) ומוודאים שהמידה זהה; פריט שנערך — בלי כפתור.
+// הזמנה עם כמה סקיצות אין לה builder, ולכן גם אין כפתור.
+function _modDxfCuts(o){
+  const b = o && o.builder;
+  if(!b || !(b.version >= 2) || !b.shower || typeof lgCuts !== 'function' || typeof lgDxf !== 'function') return null;
+  try { return lgCuts(b.shower); } catch(e) { return null; }
+}
+function _modDxfBtn(o, cuts, i, idx){
+  const g = cuts && cuts[idx];
+  if(!g || !i || Math.abs((i.w||0) - g.w) > 2 || Math.abs((i.h||0) - g.h) > 2) return '';
+  if(!g.key || (g.issues && g.issues.length)){
+    const why = 'לבדוק ביד: ' + ((g.issues||[]).join('; ') || 'אין תבנית חיתוך');
+    return `<button type="button" class="mit-dxf" disabled title="${lgEsc(why)}">DXF — ${lgEsc(why)}</button>`;
+  }
+  return `<button type="button" class="mit-dxf" onclick="modDxf(${idx})">DXF</button>`;
+}
+function modDxf(idx){
+  const o = orders.find(x => x.id === eid); const cuts = _modDxfCuts(o); if(!cuts) return;
+  const list = (idx < 0 ? cuts.map((g, k) => k) : [idx]).filter(k => cuts[k] && cuts[k].key && !(cuts[k].issues && cuts[k].issues.length));
+  const base = lgDxfSafe(o.orderNum) || 'הזמנה';
+  const files = list.map(k => ({ cut: cuts[k], name: lgDxfName(base, k + 1, cuts[k], 1) }));
+  try {
+    files.forEach(f => lgDxf(f.cut));  // הכול נבדק לפני שמורידים קובץ אחד
+    const errs = lgDxfSaveAll(files);
+    if(errs.length) showToast(errs.join(' | '));
+  } catch(e) { showToast(e.message); }
+}
 function _modItemsHtml(items){
   if(!items || !items.length) return '<div class="mit-empty">אין פריטים</div>';
+  const _o = orders.find(x => x.id === eid), _cuts = _modDxfCuts(_o);
   return items.map((i, idx) => `
     <div class="mit">
       <span class="mit-n">${lgEsc(i.name||'פריט')}</span>
@@ -1113,6 +1150,7 @@ function _modItemsHtml(items){
       ${i.optyShape ? `<span class="mit-sh" title="מספר הצורה באופטי-ווי">צורה ${lgEsc(i.optyShape)}</span>` : ''}
       ${i.w && i.h ? `<button type="button" class="mit-lbl" title="הדפס מדבקה" aria-label="הדפס מדבקה לפריט ${idx+1}" onclick="modLabel(${idx})">🏷</button>` : ''}
       ${i.optyShape && i.w && i.h ? `<button type="button" class="mit-lbl-sh" title="מדבקה עם ציור הצורה" aria-label="הדפס מדבקה עם הצורה לפריט ${idx+1}" onclick="modLabel(${idx}, true)">🏷 עם צורה</button>` : ''}
+      ${_modDxfBtn(_o, _cuts, i, idx)}
       ${i.optyShape ? `<div class="mit-geo" data-shape="${lgEsc(i.optyShape)}"></div>` : ''}
     </div>`).join('') + (setTimeout(_modFillGeos, 0), '');
 }
