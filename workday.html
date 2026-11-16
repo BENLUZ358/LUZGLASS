@@ -2711,7 +2711,7 @@ async function _lblPrint(){
   b.disabled = true; st.textContent = 'שולח…';
   try {
     await _lblFonts();
-    const labels = _lbl.labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape || '' }));
+    const labels = _lbl.labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape || '', job: l.job || '' }));
     const bitmaps = labels.map(l => lgLabelRender(l).bitmap);
     const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels',
       client: _lbl.client, orderIds: _lbl.orderIds, labels, bitmaps });

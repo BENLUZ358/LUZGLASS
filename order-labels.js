@@ -39,7 +39,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
     busy = true;
     try {
       try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
-      const plain = labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape, withShape: !!l.withShape }));
+      const plain = labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape, job: l.job || '', withShape: !!l.withShape }));
       const bitmaps = labels.map(l => lgLabelRender(l).bitmap);   // labels — עם הצורה (geo), שלא נשמרת בתור
       const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels',
         client: String(order.orderClient || ''), orderIds: [String(order.id)], labels: plain, bitmaps });

@@ -38,7 +38,7 @@ const fail = (status, code) => ({ status, body: { ok: false, code } });
 const _str = (v, n) => String(v == null ? '' : v).slice(0, n);
 const _label = l => ({ title: _str(l && l.title, 80), dims: _str(l && l.dims, 40),
                        sketchName: _str(l && l.sketchName, 80), orderNum: _str(l && l.orderNum, 30),
-                       shape: _str(l && l.shape, 12), withShape: !!(l && l.withShape) });   // אופטי-ווי (בן, 16/11)
+                       shape: _str(l && l.shape, 12), job: _str(l && l.job, 12), withShape: !!(l && l.withShape) });   // אופטי-ווי (בן, 16/11)
 const _b64 = s => typeof s === 'string' && s.length === BITMAP_B64 && /^[A-Za-z0-9+/]+=*$/.test(s);
 
 //  שדות לתצוגה — בלי תמונות

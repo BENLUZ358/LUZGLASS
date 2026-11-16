@@ -195,7 +195,7 @@ async function reprint() {
   $('boxGo').disabled = true; $('boxSt').textContent = 'שולח…';
   try {
     try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
-    const labels = pick.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape || '', withShape: !!l.withShape }));
+    const labels = pick.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape || '', job: l.job || '', withShape: !!l.withShape }));
     const bitmaps = pick.map(l => lgLabelRender(l).bitmap);   // pick — עם הצורה שנטענה בפתיחה
     await post({ action: 'create', kind: OPEN.job.kind, printer: OPEN.job.printer, client: OPEN.job.client,
                  orderIds: OPEN.job.orderIds, labels, bitmaps, reprintOf: OPEN.id });
