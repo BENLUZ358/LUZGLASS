@@ -48,6 +48,15 @@ const B = n => Array.from({ length: n }, () => BM);
   check('A7 a customer cannot create', (await call({ action: 'create', kind: 'labels', printer: 'labels', client: 'x', orderIds: [], labels: L(1), bitmaps: B(1) }, client)).status, 403);
   const g = await call({ action: 'get', id: c1.body.id });
   check('A8 get returns the label text', g.body.job.labels.length, 3);
+  {   //  מדבקת לוח i/N (בן, 17/11) — השדות נשמרים; כמות לא חוקית → 0
+    const mk = await call({ action: 'create', kind: 'labels', printer: 'labels', client: 'אופטי-ווי', orderIds: [],
+      labels: [{ marker: 'לוח 1/4', mat: '10S · 10 שקוף', pieces: 7, job: 'M00337' }, { marker: 'לוח 2/4', pieces: -3 }, { marker: 'x', pieces: 'x' }], bitmaps: B(3) });
+    const gm = await call({ action: 'get', id: mk.body.id });
+    const lb = gm.body.job.labels;
+    await db.ref('waMeta/printQueue/' + mk.body.id).set(null);   // לא להפריע לבדיקות התור שאחרי
+    check('A9 marker label fields kept', [lb[0].marker, lb[0].mat, lb[0].pieces, lb[0].job], ['לוח 1/4', '10S · 10 שקוף', 7, 'M00337']);
+    check('A10 bad piece count → 0', [lb[1].pieces, lb[2].pieces], [0, 0]);
+  }
 
   /* E */
   check('E1 wrong token → 401', (await call({ action: 'agent-claim' }, admin, 'Bearer nope')).status, 401);

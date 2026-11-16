@@ -34,6 +34,12 @@ check('A2 in item order', labels.map(l => l.idx), [0, 1, 3]);
   texts.length = 0; PL.lgLabelDraw(rec, { title: 'נאור', dims: '1 × 2', sketchName: 'ז', orderNum: 'L1' });
   check('B4 no flag → no "שבר"', texts.includes('שבר'), false);
 }
+{   //  מדבקת לוח (בן, 17/11): "לוח 1/4", האופטימיזציה, סוג הזכוכית, כמה זכוכיות — בלי מידה
+  const texts = [];
+  const rec = new Proxy({ measureText: t => ({ width: String(t).length * 10 }), fillText: t => texts.push(String(t)) }, { get: (o, k) => k in o ? o[k] : () => {}, set: () => true });
+  PL.lgLabelDraw(rec, { marker: 'לוח 1/4', job: 'M00337', mat: '10S · 10 שקוף', pieces: 7, dims: '1 × 2' });
+  check('B5 marker label: sheet, job, glass, count; no size', [texts.includes('לוח 1/4'), texts.includes('M00337'), texts.includes('10S · 10 שקוף'), texts.includes('7 זכוכיות'), texts.includes('1 × 2')], [true, true, true, true, false]);
+}
 check('B2 no sketch name → empty, not "undefined"', PL.lgLabelsForClient([{ order: O2, idxs: [0] }])[0].sketchName, '');
 
 /* C */

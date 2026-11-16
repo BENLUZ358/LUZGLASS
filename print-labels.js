@@ -63,6 +63,15 @@ function lgLabelDraw(ctx, label, W) {
     ctx.fillText(f.text, W / 2, y);
     out.push({ size: f.size, width: ctx.measureText(f.text).width, cut: f.cut });
   };
+  //  מדבקת לוח (בן, 17/11): לפני הזכוכיות של כל לוח — "לוח 3/10" גדול, האופטימיזציה, סוג הזכוכית, כמה זכוכיות
+  if (l.marker) {
+    ctx.fillRect(0, 0, W, 14); ctx.fillRect(0, W - 14, W, 14); ctx.fillRect(0, 0, 14, W); ctx.fillRect(W - 14, 0, 14, W);
+    line(String(l.marker), 190, 150, 60, '900', 'rtl');
+    line(String(l.job || ''), 320, 70, 30, '700', 'ltr');
+    line(String(l.mat || ''), 405, 60, 26, '700', 'rtl');
+    if (l.pieces) line(l.pieces + ' זכוכיות', 490, 46, 24, '700', 'rtl');
+    return out;
+  }
   //  "מדבקה עם צורה" (בן, 16/11): הצורה מאופטי-ווי משמאל, מימין המידה ושם הסקיצה; סוג הזכוכית
   //  גדול לכל הרוחב מתחת — "כדי שיידעו מה לחתוך". רוחב × גובה משמאל לימין, כמו בכל המסכים.
   const at = (text, x, y, w, max, min, dir) => {
