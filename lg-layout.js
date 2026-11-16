@@ -600,6 +600,9 @@ function lgFromPanels(panels,pStates,opts){
       if(p&&p.carriesDoor!=null) s.carriesDoor=p.carriesDoor;
       // זווית רגילה (סגורה) או פתוחה — קובעת את החיתוך בזכוכית (lg-cuts.js). חסר = רגילה.
       if(st.bracketType==='open'||st.bracketType==='normal') s.bracketType=st.bracketType;
+      // ‏זכוכית הזזה מגיעה למנוע כקבוע (הפריסה והפרזול שלה כמו קבוע), אבל אין לה
+      // עדיין תבנית חיתוך — הסימון עובר כדי ש-lg-cuts יחסום אותה ולא ינחש.
+      if(t==='slider') s.sliding=true;
 
       // ⚠️ מוסכמת הציר הפוכה בין השניים, וזה כבר היה באג: אצל המנוע
       // 'right' פונה לשייף הקודם במערך — שהוא **שמאל** על הקנבס.

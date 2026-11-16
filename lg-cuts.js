@@ -190,7 +190,8 @@ const LG_CUT_ISSUE = Object.freeze({
   notTwo: 'לא שני חיתוכים בצלע — לבדוק ביד',
   notch: 'פינוי מדרגה בצלע עם פרזול — אין תבנית, לבדוק ביד',
   openInset: 'זווית פתוחה עם מרחק מהפאה שהוקלד — לבדוק ביד',
-  handleEdge: 'הידית במנוע בצלע אחרת מהתבנית — לבדוק ביד'
+  handleEdge: 'הידית במנוע בצלע אחרת מהתבנית — לבדוק ביד',
+  sliding: 'זכוכית הזזה — עדיין אין תבנית, לבדוק ביד'
 });
 const LG_CUT_MIN_GAP = 5;   // מ"מ בין שני חיתוכים (החלטה #5)
 
@@ -367,6 +368,9 @@ function _lgAnalyse(shower) {
     //  בשום תבנית. חוסמים כל צלע כזו (גם 'shoulder'), לא רק כשהחור יוצא מהזכוכית.
     const nt = ol && ol.notch, ne = nt && (nt.side === 'right' ? 'right' : 'left');
     if (pick && ne && ['angle', 'hinge', 'harm'].some(k => F[i][ne][k])) { pick = null; block = LG_CUT_ISSUE.notch; }
+    //  זכוכית הזזה (s.sliding מ-lgFromPanels, פאנל type:'slider') — מחוץ לשלב הזה; המנוע מצייר אותה
+    //  כקבוע, אבל תבנית של קבוע עליה היא קובץ שגוי. עדיף בלי קובץ.
+    if (isShower && s && s.sliding) { pick = null; block = LG_CUT_ISSUE.sliding; }
     return { s: s || {}, sh: L.shapes[i], ol, f: F[i], sc: L.scale, isShower, pick, block };
   });
 }

@@ -199,6 +199,16 @@ const DH_P = [{ type: 'door', hingeSide: 'left', harmonicaSide: 'right' }, { typ
   vm.runInContext('var L=lgLayout(_lgShowerOf(P,S),{canvasW:1200}); engPaint(L,"combo",0,null);', ctx);
   check('mirror: drawing identical to the drawing without cuts', JSON.stringify(a), JSON.stringify(ctx.cx.log));
 }
+/* a sliding glass (out of scope) keeps its old drawing — the whole a_hzaza-like shower is unchanged */
+{
+  const P = [{ type: 'fixed', label: 'קבוע', wallSide: 'right' }, { type: 'slider', label: 'הזזה', dir: 'left' }];
+  const S = { 0: { w: 500, h: 2000 }, 1: { w: 800, h: 2000 } };
+  const r = paint(P, S);
+  check('slider: no template', r.cuts[1].key, null);
+  const ctx = sandbox(); ctx.P = P; ctx.S = S;
+  vm.runInContext('var L=lgLayout(_lgShowerOf(P,S),{canvasW:1200}); engPaint(L,"combo",0,null);', ctx);
+  check('slider: drawing identical to the drawing without cuts', JSON.stringify(r.log), JSON.stringify(ctx.cx.log));
+}
 /* and a shower glass with no template keeps its markers */
 {
   const P = [{ type: 'fixed', wallSide: 'both' }], S = { 0: { w: 600, h: 2000 } };
