@@ -2163,7 +2163,7 @@ function lgSketchHardware(shower){
 // להיגזר מחדש גם מהזמנות שנשמרו היום. אילו היינו שומרים רק את
 // הפלט, כל כלל חדש היה משאיר את ההזמנות הישנות מאחור — וזה
 // בדיוק הדבר שלא רוצים לזרוק לפח אחר כך.
-var LG_BUILDER_VERSION = 1;
+var LG_BUILDER_VERSION = 2;   // 2 — הציור מראה את החיתוכים האמיתיים (lg-cuts.js) + זווית פתוחה/רגילה
 
 function lgSketchOrder(shower, skuOf){
   return {

@@ -202,8 +202,8 @@ const CUT = (over) => Object.assign({ w: 200, h: 100, ref: 'edge',
   check('before the hardware, because it is part of the cutting',
         // שני הצדדים חייבים להיות קיימים: indexOf מחזיר ‎-1‎ על מה שנעלם,
         // ו‎-1‎ קטן מכל דבר — כלומר הבדיקה הייתה עוברת בלי לשמור על כלום
-        DEMO.includes('(L.cutouts||[]).forEach') && DEMO.includes('L.hardware.forEach(h=>engHardware') &&
-        DEMO.indexOf('(L.cutouts||[]).forEach') < DEMO.indexOf('L.hardware.forEach(h=>engHardware'), true);
+        DEMO.includes('(L.cutouts||[]).forEach') && DEMO.includes('engHardware(h,L.scale,_o.hwMin)') &&
+        DEMO.indexOf('(L.cutouts||[]).forEach') < DEMO.indexOf('engHardware(h,L.scale,_o.hwMin)'), true);
 }
 
 /* ── the round trip ───────────────────────────────────────────────────── */
