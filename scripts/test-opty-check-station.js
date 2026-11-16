@@ -49,7 +49,7 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
   check('workday + invoices load the shape and label scripts', [WD, INV].map(h => /opty-shape\.js/.test(h) && /order-labels\.js/.test(h)), [true, true]);
   check('invoice station: shape button by each item size', INV.includes('<div class="item-dim">${w} × ${h} ${lgOptyChip(o, i)}</div>'), true);
   //  🏷 ליד כל פריט בחיסום (בן, 16/11): עם צורה → מדבקה עם צורה; קבוצה → מדבקה לכל יחידה
-  const fnSrc = n => { const i = WD.indexOf('function ' + n + '('); let d = 0, j = WD.indexOf('{', i); for (; j < WD.length; j++) { if (WD[j] === '{') d++; else if (WD[j] === '}' && !--d) break; } return WD.slice(i, j + 1); };
+  const fnSrc = n => { const i = WD.indexOf('function ' + n + '('); let d = 0, j = WD.indexOf('{', i); for (; j < WD.length; j++) { if (WD[j] === '{') d++; else if (WD[j] === '}' && !--d) break; } return (WD.slice(i - 6, i) === 'async ' ? 'async ' : '') + WD.slice(i, j + 1); };
   const lw = new JSDOM('<!doctype html><body></body>', { runScripts: 'dangerously' }).window, got = [];
   lw.allOrders = [order]; lw.lgPrintOrderLabels = (o, idxs, opts) => got.push([o.id, idxs, !!(opts && opts.withShape)]);
   lw.eval(fnSrc('wdLabelBtn') + ';' + fnSrc('wdItemLabel'));
@@ -57,5 +57,36 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
   [...lw.document.querySelectorAll('.wd-item-lbl')].forEach(b => b.click());
   check('chisum: a label button by every item — with shape for 274328, plain for the other', [lw.document.querySelectorAll('.wd-item-lbl').length, got], [2, [['o1', [0], true], ['o1', [1], false]]]);
   check('chisum: button in the single row and in the ×N group row', (WD.match(/\$\{wdLabelBtn\(o, /g) || []).length, 2);
+  //  חיסום: מספר אופטימיזציה ליד הפריט + צורות של ההזמנה שלא חוברו, וחיבור לפריט (בן, 16/11)
+  {
+    const pw = new JSDOM('<!doctype html><body></body>', { runScripts: 'dangerously' }).window, writes = [], toasts = [];
+    pw.lgEsc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    pw.lgDimsText = (w, h) => w + '×' + h; pw.lgJsStr = s => String(s); pw.showToast = m => toasts.push(m);
+    const raw = { a: { name: 'שקוף 8', w: 680, h: 1885 }, b: { name: 'שקוף 8', w: 680, h: 1885 }, c: { name: 'שקוף 8', w: 410, h: 1885, optyShape: '274264', optyJob: 'M00290' } };
+    pw.firebase = { database: () => ({ ref: p => ({ once: async () => ({ val: () => (p === 'orders/L1232/items' ? raw : null) }), update: async u => writes.push(u) }) }) };
+    const addScript = code => { const sc = pw.document.createElement('script'); sc.textContent = code; pw.document.head.appendChild(sc); };   // כמו בדפדפן: קבצים חולקים const
+    addScript(fs.readFileSync(path.join(ROOT, 'opty-shape.js'), 'utf8'));
+    const wdSrc = ['wdJobTag', '_wdPendOpen', 'wdPendingStrip', 'wdLinkPending'].map(fnSrc).join(';');
+    addScript('let wdOptyPending = {};' + wdSrc + ';window.setPend = v => { wdOptyPending = v; };');
+    const o = { id: 'L1232', orderNum: 'L1232', orderClient: 'נאור חזקיה', sketchName: 'זבולון 1/2/3', items: Object.values(raw) };
+    check('chisum: optimisation number beside an item that has one', [/אופטימיזציה M00290/.test(pw.wdJobTag(o, 2)), pw.wdJobTag(o, 0)], [true, '']);
+    check('no unlinked shapes → no strip', pw.wdPendingStrip(o), '');
+    pw.setPend({ L1232: { '274256': { shape: '274256', job: 'M00291', w: 682, h: 1887, qty: 1 }, '274264': { shape: '274264', job: 'M00290', w: 412, h: 1887, qty: 1 } } });
+    pw.document.body.innerHTML = pw.wdPendingStrip(o);
+    const opts = [...pw.document.querySelectorAll('#wdPend_L1232_274256 option')].map(x => x.textContent.trim());
+    check('strip: only the shape not yet on an item; items without a shape offered, size match marked ✓',
+      [pw.document.querySelectorAll('.wd-opty-pend').length, /אופטימיזציה M00291/.test(pw.document.body.textContent), opts], [1, true, ['✓ 1 · שקוף 8 · 680×1885', '✓ 2 · שקוף 8 · 680×1885']]);
+    pw.document.querySelector('.wd-opty-pend button').click();
+    check('📐 in the strip opens the shape window', /צורה 274256/.test((pw.document.getElementById('lgOptyView') || {}).textContent || ''), true);
+    pw.document.getElementById('lgOptyView').remove();
+    pw.document.getElementById('wdPend_L1232_274256').value = '1';
+    await pw.wdLinkPending('L1232', '274256');
+    check('"חבר" writes the shape + optimisation number on the chosen item (object key b) and clears the pending entry',
+      writes[0] && [writes[0]['orders/L1232/items/b/optyShape'], writes[0]['orders/L1232/items/b/optyJob'], writes[0]['meta/optyPending/L1232/274256'], 'orders/L1232/items/a/optyShape' in writes[0]], ['274256', 'M00291', null, false]);
+    raw.a.optyShape = '1'; pw.document.getElementById('wdPend_L1232_274256').value = '0';
+    await pw.wdLinkPending('L1232', '274256');
+    check('an item that already has a shape is never overwritten', [writes.length, toasts.pop()], [1, 'לפריט הזה כבר יש צורה']);
+    check('chisum rows show the optimisation number (single + group)', (WD.match(/\$\{wdJobTag\(o, it\.globalIdx\)\}/g) || []).length, 2);
+  }
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })();

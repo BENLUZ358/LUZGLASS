@@ -111,6 +111,20 @@ function lgOptyMatch(pieces, orders, pairs) {
   return out;
 }
 
+//  "לבדיקה" שכל המועמדים שלו באותה הזמנה → ידוע של איזו הזמנה, רק לא לאיזה פריט (שני פריטים באותה
+//  מידה וכו'). נשמר על ההזמנה (meta/optyPending/<orderId>/<shape>) ומחובר ביד בחיסום (בן, 16/11).
+function lgOptyPendingByOrder(review) {
+  const out = {};
+  (review || []).forEach(v => {
+    const ids = [...new Set((v.cands || []).map(c => c.orderId))];
+    if (ids.length !== 1 || !v.piece || !v.piece.shape) return;
+    const p = v.piece;
+    (out[ids[0]] = out[ids[0]] || {})[p.shape] = { shape: String(p.shape), job: String(p.job || ''), w: Number(p.w) || 0, h: Number(p.h) || 0,
+      qty: Number(p.qty) || 1, name: String(p.name || ''), note: String(p.note || '') };
+  });
+  return out;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_OPTY_CLIENTS_DEFAULT, lgOptyNorm, lgOptyPieces, lgOptyMatch };
+  module.exports = { LG_OPTY_CLIENTS_DEFAULT, lgOptyNorm, lgOptyPieces, lgOptyMatch, lgOptyPendingByOrder };
 }
