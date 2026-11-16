@@ -1224,7 +1224,7 @@ function _csReportSection(title, reportNum, orders, pick){
   <div class="report-title">${lgEsc(title)}</div>
   <div class="report-meta">${new Date().toLocaleDateString('he-IL')} · ${items.length} פריטים · ${orders.length} הזמנות</div>
   <table><thead><tr><th>#</th><th>זכוכית</th><th>מידות (מ"מ)</th><th>לקוח</th><th>הזמנה</th></tr></thead>
-  <tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${lgEsc(item.name||'—')}</td><td>${lgDimsText(item.w, item.h)}</td><td>${lgEsc(item.client)}</td><td>${lgEsc(item.orderNum||'')}</td></tr>`).join('')}</tbody></table>
+  <tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${lgEsc(item.name||'—')}</td><td>${lgDimsText(item.w, item.h)}${item.optyShape ? ' · צורה ' + lgEsc(item.optyShape) : ''}</td><td>${lgEsc(item.client)}</td><td>${lgEsc(item.orderNum||'')}</td></tr>`).join('')}</tbody></table>
 </section>`;
 }
 

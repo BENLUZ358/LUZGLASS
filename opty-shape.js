@@ -137,4 +137,20 @@ function lgOptyShapeView(order, idx) {
   }
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { lgOptyShapeParse, lgOptyShapeSvg, lgOptyShapeDraw };
+//  📐 כפתור קטן "צורה N" ליד פריט, בכל מסך (בן, 16/11: "בכל שלב הצגה של השייפ") —
+//  פותח את lgOptyShapeView. ההזמנה נשמרת ברשימה לפי id כדי שה-onclick יהיה מחרוזת פשוטה.
+const _lgOptyOrders = {};
+function lgOptyChip(order, idx) {
+  if (!order) return '';
+  const items = Array.isArray(order.items) ? order.items : Object.values(order.items || {});
+  const it = items[idx];
+  if (!it || !it.optyShape) return '';
+  const id = String(order.id || '').replace(/[^\w-]/g, ''); _lgOptyOrders[id] = order;
+  const s = String(it.optyShape).replace(/[^0-9A-Za-z]/g, '');
+  return `<button type="button" class="lg-opty-chip" aria-label="הצורה מאופטי-ווי ${s}" title="הצורה מאופטי-ווי"`
+    + ` style="display:inline-flex;align-items:center;gap:3px;min-height:36px;padding:0 9px;margin:0 4px;border:1px solid rgba(169,50,38,.35);border-radius:6px;background:rgba(192,57,43,.08);color:#a93226;font:700 12px Heebo,sans-serif;cursor:pointer;white-space:nowrap;vertical-align:middle"`
+    + ` onclick="event.stopPropagation();lgOptyShapeViewById('${id}',${Number(idx) | 0})">📐 ${s}</button>`;
+}
+function lgOptyShapeViewById(id, idx) { const o = _lgOptyOrders[id]; if (o) lgOptyShapeView(o, idx); }
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { lgOptyShapeParse, lgOptyShapeSvg, lgOptyShapeDraw, lgOptyChip };

@@ -265,6 +265,9 @@ html,body{height:100%;overflow:hidden;}
 <script src="firebase-db.js?v=20261113"></script>
 <script src="order-attachments.js?v=20261112"></script>
 <script src="sku-picker.js?v=20261028"></script>
+<script src="opty-shape.js?v=20261116b"></script>
+<script src="print-labels.js?v=20261116"></script>
+<script src="order-labels.js?v=20261116"></script>
 <script src="lg-icons.js?v=20261103"></script>
 </head>
 <body data-view="customers">
@@ -595,7 +598,7 @@ function renderVerify() {
     const canEd = lgCanEditInvoiceItems(o, i);
     return `<div class="item${out ? ' item-out' : ''}">
       <span class="item-n">${esc(n)}</span>
-      <div class="item-main"><div class="item-dim">${w} × ${h}</div>
+      <div class="item-main"><div class="item-dim">${w} × ${h} ${lgOptyChip(o, i)}</div>
         <div class="item-sub">${sub}</div>${was}</div>${tag}
       ${canEd ? `<button class="edit" type="button" data-edit="${i}" aria-label="תקן את המידה של שורה ${esc(n)}"><span data-icon="pencil"></span></button>
       <button class="edit" type="button" data-glass="${i}" aria-label="החלף סוג זכוכית בשורה ${esc(n)}"><span data-icon="refresh"></span></button>` : ''}

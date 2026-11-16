@@ -16,7 +16,7 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
   /class="si-shape"[^>]*onclick="event\.stopPropagation\(\);csOpenShape\(\$\{origIdx\}\)"/.test(CS), true);
 
 (async () => {
-  const dom = new JSDOM('<!doctype html><body></body>', { runScripts: 'outside-only' });
+  const dom = new JSDOM('<!doctype html><body></body>', { runScripts: 'dangerously' });
   const w = dom.window;
   const calls = [];
   w._lgDb = { ref: p => ({ once: async () => ({ val: () => (p === 'meta/optyGeo/274328' ? { w: 502, h: 1902, c: [[[1, 251, 951, 6, 0, 6.2832]]] } : null) }) }) };
@@ -35,5 +35,14 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
   check('item without a shape: says so, no "with shape" button', [/עוד אין מספר צורה/.test(ov2.textContent), !!ov2.querySelector('#lgOptyLblSh')], [true, false]);
   ov2.querySelector('[data-ov-close]').click();
   check('closes', w.document.getElementById('lgOptyView'), null);
+  //  📐 בכל שלב — אותו כפתור ביום העבודה, בתחנת החשבוניות ובתחנת הבדיקה
+  w.document.body.innerHTML = w.lgOptyChip(order, 0) + '|' + w.lgOptyChip(order, 1);
+  check('chip only for an item with a shape', [w.document.querySelectorAll('.lg-opty-chip').length, /📐 274328/.test(w.document.body.textContent)], [1, true]);
+  w.document.querySelector('.lg-opty-chip').click();
+  check('chip opens the shape window', /צורה 274328/.test((w.document.getElementById('lgOptyView') || {}).textContent || ''), true);
+  const WD = fs.readFileSync(path.join(ROOT, 'workday.html'), 'utf8'), INV = fs.readFileSync(path.join(ROOT, 'invoices.html'), 'utf8');
+  check('workday: shape button in build list, work table, work cards, order items, today list, chisum (single + group)', (WD.match(/lgOptyChip\(/g) || []).length, 7);
+  check('workday + invoices load the shape and label scripts', [WD, INV].map(h => /opty-shape\.js/.test(h) && /order-labels\.js/.test(h)), [true, true]);
+  check('invoice station: shape button by each item size', INV.includes('<div class="item-dim">${w} × ${h} ${lgOptyChip(o, i)}</div>'), true);
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })();
