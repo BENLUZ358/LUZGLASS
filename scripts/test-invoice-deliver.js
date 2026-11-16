@@ -293,6 +293,20 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.equal(again[0].files, 4);
     assert.equal((await ob.lgEmailOutboxFile(db, k, again[0].leaseToken, 3, NOW)).ok, true);
   });
+  //  פיירבייס שומרת מפתחות של אובייקט בסדר אלפביתי ({b,m,n}) — הכפיל שומר בסדר הכתיבה ({n,m,b}).
+  //  לפני התיקון כל משיכה בייצור החזירה 'files-changed' → כל חשבונית במייל נכשלה (67618, 67716 של פלג, 16/11).
+  await test('email: the stored file list with its keys re-ordered (as Firebase stores it) still matches', async () => {
+    const db = base({ a: emOrder, b: portal });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });
+    const [k] = Object.keys(db._data.waMeta.emailOutbox);
+    const items = await ob.lgEmailClaim(db, 5, NOW);
+    const row = db._data.waMeta.emailOutbox[k];
+    row.fileManifest = row.fileManifest.map(f => Object.fromEntries(Object.keys(f).sort().map(x => [x, f[x]])));
+    for (let i = 0; i < items[0].files; i++) {
+      const f = await ob.lgEmailOutboxFile(db, k, items[0].leaseToken, i, NOW);
+      assert.equal(f.ok, true, 'file ' + i + ' ' + f.code);
+    }
+  });
   await test('no invoice email for the card → plain reply (no sendTo)', async () => {
     const db = base({ a: emOrder, b: portal });
     await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain: noDrain });

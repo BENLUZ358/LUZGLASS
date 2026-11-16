@@ -321,7 +321,10 @@ async function lgEmailOutboxFile(db, key, leaseToken, idx, now) {
   const f = await D.lgInvoiceEmailFiles(db, e.invoiceKey);
   if (!f.ok) return { ok: false, code: f.code };
   //  אותה רשימה שנספרה בתפיסה? אחרת הסקריפט היה שולח חבילה חסרה / מוזזת
-  if (e.fileManifest && JSON.stringify(_list(e.fileManifest)) !== JSON.stringify(D.lgInvoiceFilesManifest(f.files))) {
+  //  ⚠️ השוואה לפי ערכים, לא JSON של האובייקט: פיירבייס מחזירה את המפתחות בסדר אלפביתי
+  //  ({b,m,n}) ולא בסדר שנכתבו ({n,m,b}) — ההשוואה הקודמת נכשלה תמיד בייצור (פלג, 16/11)
+  const _mf = l => JSON.stringify(_list(l).map(x => [String((x && x.n) || ''), String((x && x.m) || ''), Number((x && x.b) || 0)]));
+  if (e.fileManifest && _mf(e.fileManifest) !== _mf(D.lgInvoiceFilesManifest(f.files))) {
     return { ok: false, code: 'files-changed' };
   }
   const one = f.files[Number(idx)];
