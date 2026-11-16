@@ -598,6 +598,8 @@ function lgFromPanels(panels,pStates,opts){
       // כמו שהיא. ‏undefined אינו "לא": פאנל שלא הצהיר כלום ממשיך
       // להתנהג כפי שהתנהג תמיד.
       if(p&&p.carriesDoor!=null) s.carriesDoor=p.carriesDoor;
+      // זווית רגילה (סגורה) או פתוחה — קובעת את החיתוך בזכוכית (lg-cuts.js). חסר = רגילה.
+      if(st.bracketType==='open'||st.bracketType==='normal') s.bracketType=st.bracketType;
 
       // ⚠️ מוסכמת הציר הפוכה בין השניים, וזה כבר היה באג: אצל המנוע
       // 'right' פונה לשייף הקודם במערך — שהוא **שמאל** על הקנבס.

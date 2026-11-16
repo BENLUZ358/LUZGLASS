@@ -396,13 +396,16 @@ function lgCuts(shower) {
       spec[_LG_END_FIELD[kind]] = { bottom: _lgSolveEnd(spec, kind, edge, 'bottom', yCut(bot)),
                                     top: _lgSolveEnd(spec, kind, edge, 'top', yCut(top)) };
     }
-    //  ידית: הגובה מהמנוע; המרחק מהצלע מהתבנית (61), אלא אם הוזן ביד (handleEdge בס"מ)
+    //  ידית: בדיוק בחצי גובה הזכוכית החתוכה (נתוני המפעל, 547/589) — **בלי** תקרת המטר של המנוע;
+    //  רק מרחק שהלקוח הקליד (handleDist) גובר, ואז הגובה מהמנוע. המרחק מהצלע — 61, או handleEdge (ס"מ).
     const ht = s.handleType, H = f.handle;
     const edgeOff = s.handleEdge != null ? Number(s.handleEdge) * 10 + half : LG_CUT.handle.edge;
     let extra = [];
     if (T.handle && H.length) {
       const hEdge = T.handle === 'side' ? pick.side : other;
-      const y = _r2(yCut(H.reduce((t, x) => t + x.y, 0) / H.length));
+      const y = s.handleDist != null && s.handleDist !== ''
+        ? _r2(yCut(H.reduce((t, x) => t + x.y, 0) / H.length))
+        : _lgHandle(Object.assign({}, spec, { handle: { type: 'knob', edge: edgeOff } }), hEdge)[0].y;
       if (ht === 'vertical' && H.length === 2) {
         spec.handle = { type: 'towel', y, spacing: _r2(Math.abs(H[0].y - H[1].y) / sc), edge: edgeOff };
       } else {

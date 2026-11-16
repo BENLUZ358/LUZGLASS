@@ -51,7 +51,7 @@ const FD_S = { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } };
   check('fixed: bottom window 176 from its end, top 161 (real files)', [fh[0].y - 40, G[0].h - fh[1].y - 40], [176, 161]);
   check('door: windows at template 161', [dh[0].y - 40, G[1].h - dh[1].y - 40], [161, 161]);
   const hd = of(G[1], 'handle');
-  check('door: knob opposite the hinges, 61 from the edge, at the engine height + 1', hd.map(c => [c.x, c.y, c.dia]), [[641, 994, 12]]);
+  check('door: knob opposite the hinges, 61 from the edge, at half the cut height', hd.map(c => [c.x, c.y, c.dia]), [[641, 993.5, 12]]);
 }
 // ‏bracketType 'open' → שקע פתוח
 {
@@ -62,6 +62,19 @@ const FD_S = { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } };
   check('open: open cuts, no closed', [of(G[0], 'open').map(c => [c.x, c.y]), of(G[0], 'closed').length], [[[26, 201], [26, 1801]], 0]);
   sh.shapes[0].bracketType = 'normal';
   check('normal → closed', lgCuts(sh)[0].key, 'fixed-closed-door');
+}
+// ‏bracketType מגיע מהמסך (מצב הלוח) דרך lgFromPanels
+{
+  const G = lgCuts(shower(FD_P, { 0: { w: 500, h: 2000, bracketType: 'open' }, 1: { w: 700, h: 1985 } }));
+  check('panel state bracketType open → lgFromPanels → open cuts', [G[0].key, of(G[0], 'open').length, of(G[0], 'closed').length], ['fixed-open-door', 2, 0]);
+  const N = lgCuts(shower(FD_P, { 0: { w: 500, h: 2000, bracketType: 'normal' }, 1: { w: 700, h: 1985 } }));
+  check('panel state bracketType normal → closed', [N[0].key, of(N[0], 'closed').length], ['fixed-closed-door', 2]);
+}
+// ‏ידית בדיוק בחצי גובה החיתוך (נתוני המפעל) — בלי תקרת המטר של המנוע; מרחק שהוזן ביד גובר
+{
+  const P2 = (d) => lgCuts(shower(FD_P, { 0: { w: 500, h: 2215 }, 1: Object.assign({ w: 700, h: 2200 }, d) }))[1];
+  check('2200-high door: knob at (2200+2)/2', of(P2({}), 'handle').map(c => c.y), [1101]);
+  check('typed handleDist 1200 → engine height + 1', of(P2({ handleDist: 1200 }), 'handle').map(c => c.y), [1201]);
 }
 // ‏קבוע לבד בין שני קירות → זוויות בשני הצדדים, אין תבנית — חסום עם הסבר
 {
@@ -79,11 +92,11 @@ const FD_S = { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } };
 // ‏ידית ורטיקל = זוג חורים זה מעל זה (תבנית towel); מגבת = זוג באותו גובה
 {
   const v = lgCuts(shower(FD_P, { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985, handleType: 'vertical', towelSpacing: 30 } }))[1];
-  check('vertical → two holes, same x, 300 apart', of(v, 'handle').map(c => [c.x, c.y]), [[641, 844], [641, 1144]]);
+  check('vertical → two holes, same x, 300 apart', of(v, 'handle').map(c => [c.x, c.y]), [[641, 843.5], [641, 1143.5]]);
   const t = lgCuts(shower(FD_P, { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985, handleType: 'towel', towelSpacing: 30 } }))[1];
-  check('towel → two holes, same height, 300 apart inward', of(t, 'handle').map(c => [c.x, c.y]).sort((a, b) => a[0] - b[0]), [[341, 994], [641, 994]]);
+  check('towel → two holes, same height, 300 apart inward', of(t, 'handle').map(c => [c.x, c.y]).sort((a, b) => a[0] - b[0]), [[341, 993.5], [641, 993.5]]);
   const c = lgCuts(shower(FD_P, { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985, handleType: 'towel-center' } }))[1];
-  check('towel-center → one hole 61 from each edge', of(c, 'handle').map(c => [c.x, c.y]).sort((a, b) => a[0] - b[0]), [[61, 994], [641, 994]]);
+  check('towel-center → one hole 61 from each edge', of(c, 'handle').map(c => [c.x, c.y]).sort((a, b) => a[0] - b[0]), [[61, 993.5], [641, 993.5]]);
 }
 // ‏דלת צרה של 200 עם מגבת של 55 ס"מ — החור השני מחוץ לזכוכית
 {
