@@ -25,7 +25,7 @@ All cutting goes through OptyWay. Ben wants the system to know for certain what 
 - Store every optimisation found on the stick: its sheets and its pieces with positions.
 - Show those in the new tab, with filters and a sheet viewer.
 - Print labels in cut order on the existing TSC label printer, through the existing print queue.
-- Mark every item that is linked to an OptyWay piece as cut, with the date and the optimisation number. Show it wherever optyJob shows today (chisum, order window).
+- Mark every item that is linked to an OptyWay piece as cut, with the cut date and the optimisation number. Show it only in the order details window of the order board (admin.html).
 
 ## Non-goals
 
@@ -118,10 +118,14 @@ After the existing shape matching and saving runs:
   - For identical sheets (H5-6) there is one marker per physical sheet, each followed by its pieces.
 - Printing goes through the existing print queue (`api/_print-jobs` → the watcher on the office PC → TSC), the same as prints.html.
 
-### Cut status shown
+### Cut status shown (Ben 17/11: NOT in chisum — only the order details window)
 
-- **Chisum and the order window**: beside "אופטימיזציה M00xxx" show "✂ נחתך dd/mm".
+- **Order board → order details window (admin.html) only**: per linked item "אופטימיזציה M00xxx · ✂ נחתך dd/mm" (or "לחיתוך dd/mm" before the cut day ends). Nothing new in chisum/workday.
 - **Job view**: a piece marked cut shows ✂. A "בטל נחתך" button clears `optyCut` on that item (for a broken piece or one left for tomorrow).
+
+## Cut date rule (Ben 17/11: "מה שיצא ב16.11 זה של מחר")
+
+An optimisation is made the day before or the same morning. Cut day = R01 file time before 12:00 → same day; 12:00 or later → next work day (Sun–Thu, Israel time). `optyCut.at` = the cut day. The window shows "לחיתוך dd/mm" until that day ends, then "✂ נחתך dd/mm". (Claude's call from file times: ~260 files 06–08, ~35 after noon; Ben didn't object, correctable.)
 
 ## Calls made after the builder check (Claude, 17/11)
 
