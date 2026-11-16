@@ -96,4 +96,45 @@ async function lgOptyLoadGeos(labels) {
   return labels;
 }
 
+//  דפדפן: חלון "הצורה מאופטי-ווי" לפריט — תחנת הבדיקה (בן, 16/11). ציור גדול, מספר צורה,
+//  פקודת חיתוך, ומדבקה רגילה / עם צורה (order-labels.js). order = הזמנה, idx = מספר הפריט.
+function lgOptyShapeView(order, idx) {
+  if (typeof document === 'undefined' || !order) return;
+  const items = Array.isArray(order.items) ? order.items : Object.values(order.items || {});
+  const it = items[idx]; if (!it) return;
+  const e = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  let ov = document.getElementById('lgOptyView');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'lgOptyView';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:12px;';
+    ov.addEventListener('click', ev => { if (ev.target === ov || ev.target.closest('[data-ov-close]')) ov.remove(); });
+    document.body.appendChild(ov);
+  }
+  const dims = Math.round(Number(it.w) || 0) + ' × ' + Math.round(Number(it.h) || 0);
+  const btn = 'min-height:48px;padding:0 16px;border-radius:8px;font:700 15px Heebo,sans-serif;cursor:pointer;border:1px solid #ccc;background:#fff;color:#222;';
+  ov.innerHTML = `<div style="background:#fff;color:#222;border-radius:12px;width:100%;max-width:520px;max-height:94vh;overflow:auto;padding:16px;direction:rtl;font-family:Heebo,sans-serif;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="flex:1;font-weight:900;font-size:17px;">${e(order.orderClient || '')}${order.sketchName ? ' — ' + e(order.sketchName) : ''}</div>
+      <button type="button" data-ov-close aria-label="סגור" style="${btn}min-width:48px;padding:0;">✕</button></div>
+    <div style="font-size:14px;margin-bottom:4px;">${e(it.name || 'פריט')} · <b dir="ltr">${dims}</b> מ"מ</div>
+    <div style="font-size:15px;font-weight:900;color:#a93226;margin-bottom:10px;">${it.optyShape ? 'צורה ' + e(it.optyShape) + (it.optyJob ? ' · פקודה ' + e(it.optyJob) : '') : 'לפריט הזה עוד אין מספר צורה מאופטי-ווי'}</div>
+    <div id="lgOptyViewGeo" style="display:flex;justify-content:center;min-height:120px;align-items:center;color:#777;font-size:13px;">${it.optyShape ? 'טוען את הצורה…' : ''}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+      ${it.w && it.h ? `<button type="button" id="lgOptyLbl" style="${btn}flex:1;">🏷 מדבקה</button>` : ''}
+      ${it.optyShape && it.w && it.h ? `<button type="button" id="lgOptyLblSh" style="${btn}flex:1;background:#b8922a;border-color:#b8922a;color:#fff;">🏷 מדבקה עם צורה</button>` : ''}
+    </div></div>`;
+  const print = withShape => { if (window.lgPrintOrderLabels) window.lgPrintOrderLabels(order, [idx], withShape ? { withShape: true } : undefined); };
+  const l1 = ov.querySelector('#lgOptyLbl'), l2 = ov.querySelector('#lgOptyLblSh');
+  if (l1) l1.onclick = () => print(false);
+  if (l2) l2.onclick = () => print(true);
+  if (it.optyShape && typeof _lgDb !== 'undefined') {
+    _lgDb.ref('meta/optyGeo/' + it.optyShape).once('value').then(v => {
+      const g = v.val(), box = document.getElementById('lgOptyViewGeo'); if (!box) return;
+      box.innerHTML = g ? lgOptyShapeSvg(g, { px: 420 }).replace('<svg ', '<svg style="width:100%;max-height:62vh;color:#222;" ')
+        : 'הציור של הצורה עוד לא נקלט — "קליטה מאופטי-ווי" עם קבצי הצורות מהדיסק-און-קי';
+    }).catch(() => { const box = document.getElementById('lgOptyViewGeo'); if (box) box.textContent = 'הציור לא נטען — בדוק חיבור'; });
+  }
+}
+
 if (typeof module !== 'undefined' && module.exports) module.exports = { lgOptyShapeParse, lgOptyShapeSvg, lgOptyShapeDraw };
