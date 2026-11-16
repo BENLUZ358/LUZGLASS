@@ -74,8 +74,8 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
     pw.firebase = { database: () => ({ ref: p => ({ once: async () => ({ val: () => (p === 'orders/L1232/items' ? raw : null) }), update: async u => writes.push(u) }) }) };
     const addScript = code => { const sc = pw.document.createElement('script'); sc.textContent = code; pw.document.head.appendChild(sc); };   // כמו בדפדפן: קבצים חולקים const
     addScript(fs.readFileSync(path.join(ROOT, 'opty-shape.js'), 'utf8'));
-    const wdSrc = ['wdJobTag', '_wdPendOpen', 'wdPendingStrip', 'wdLinkPending', 'wdUnlinkShape'].map(fnSrc).join(';');
-    addScript('let wdOptyPending = {};' + wdSrc + ';window.setPend = v => { wdOptyPending = v; };');
+    const wdSrc = ['wdJobTag', '_wdPendOpen', 'wdPendingStrip', 'wdTogglePendQuiet', 'wdDropPending', 'wdLinkPending', 'wdUnlinkShape'].map(fnSrc).join(';');
+    addScript('let wdOptyPending = {}, wdPendShow = {};' + wdSrc + ';window.setPend = v => { wdOptyPending = v; };');
     const o = { id: 'L1232', orderNum: 'L1232', orderClient: 'נאור חזקיה', sketchName: 'זבולון 1/2/3', items: Object.values(raw) };
     check('chisum: optimisation number beside an item that has one', [/אופטימיזציה M00290/.test(pw.wdJobTag(o, 2)), pw.wdJobTag(o, 0)], [true, '']);
     check('no unlinked shapes → no strip', pw.wdPendingStrip(o), '');
@@ -110,6 +110,7 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
       await pw.wdLinkPending('L9', '274259');
       check('after "חבר": item marked locally, shape gone from pending, screen redrawn', [o2.items[1].optyShape, renders, w2[0]['meta/optyPending/L9/274259']], ['274259', 1, null]);
       pw.document.body.innerHTML = pw.wdPendingStrip(o2);
+      pw.wdTogglePendQuiet('L9'); pw.document.body.innerHTML = pw.wdPendingStrip(o2);
       check('the other shape now offers only the free item', [...pw.document.querySelectorAll('#wdPend_L9_274258 option')].map(x => x.value), ['0']);
       check('linked item shows "נתק"', /wdUnlinkShape\('L9',1\)/.test(pw.wdJobTag(o2, 1)), true);
       raw2.b.optyShape = '274259'; raw2.b.optyJob = 'M00271';
@@ -118,6 +119,31 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
       check('"נתק" clears the item and puts the shape back with the drawing size',
         [u['orders/L9/items/b/optyShape'], u['orders/L9/items/b/optyJob'], u['meta/optyPending/L9/274259'] && [u['meta/optyPending/L9/274259'].w, u['meta/optyPending/L9/274259'].h, u['meta/optyPending/L9/274259'].qty, u['meta/optyPending/L9/274259'].job], o2.items[1].optyShape],
         [null, null, [677, 1887, 1, 'M00271'], undefined]);
+    }
+    //  בן 16/11 — L1259: צורה אחת חוברה, ושתי צורות 2002×606 / 2002×322 לא מתאימות לפריט הפנוי 575×2000
+    //  → אין פס אדום, רק שורה קטנה "הצג"; "הצג" פותח אותן עם "לא שייך"; "לא שייך" מוחק מהרשימה
+    {
+      const o3 = { id: 'L1259', orderNum: 'L1259', items: [{ name: 'שקוף 8', w: 547, h: 1550, optyShape: '274138' }, { name: 'שקוף 8', w: 547, h: 1550, optyShape: 'x' }, { name: 'מאסטר ליין 8', w: 575, h: 2000 }] };
+      const w3 = [];
+      let renders = 0;
+      pw.renderChisumTab = () => { renders++; }; pw.confirm = () => true;
+      pw.firebase = { database: () => ({ ref: () => ({ update: async u => { w3.push(u); } }) }) };
+      pw.setPend({ L1259: { '274140': { shape: '274140', job: 'M00281', w: 606, h: 2002, qty: 1 }, '274142': { shape: '274142', job: 'M00281', w: 322, h: 2002, qty: 1 } } });
+      pw.document.body.innerHTML = pw.wdPendingStrip(o3);
+      const b = pw.document.body;
+      check('L1259: shapes that fit no free item → no red strip, one quiet line, rows hidden',
+        [/עוד לא חוברו/.test(b.textContent), b.querySelectorAll('.wd-opty-quiet').length, /2 צורות מאופטי-ווי לא מתאימות/.test(b.textContent), b.querySelectorAll('.wd-opty-pend').length], [false, 1, true, 0]);
+      pw.wdTogglePendQuiet('L1259'); b.innerHTML = pw.wdPendingStrip(o3);
+      check('"הצג" opens them, each with "לא שייך"', [b.querySelectorAll('.wd-opty-pend').length, b.querySelectorAll('.wd-opty-drop').length, renders], [2, 2, 1]);
+      await pw.wdDropPending('L1259', '274140');
+      b.innerHTML = pw.wdPendingStrip(o3);
+      check('"לא שייך" deletes the pending entry and it leaves the screen',
+        [w3[0] && Object.keys(w3[0]), w3[0] && w3[0]['meta/optyPending/L1259/274140'], b.querySelectorAll('.wd-opty-pend').length, /צורה אחת מאופטי-ווי לא מתאימה/.test(b.textContent)], [['meta/optyPending/L1259/274140'], null, 1, true]);
+      pw.setPend({ L1259: { '274150': { shape: '274150', w: 577, h: 2002, qty: 1 }, '274142': { shape: '274142', w: 322, h: 2002, qty: 1 } } });
+      pw.wdPendShow = undefined; pw.wdTogglePendQuiet('L1259');
+      b.innerHTML = pw.wdPendingStrip(o3);
+      check('a shape that fits stays in the red strip; the unfitting one is under the quiet line',
+        [/עוד לא חוברו/.test(b.textContent), !!b.querySelector('#wdPend_L1259_274150'), !!b.querySelector('#wdPend_L1259_274142')], [true, true, false]);
     }
     check('chisum rows show the optimisation number (single + group)', (WD.match(/\$\{wdJobTag\(o, it\.globalIdx\)\}/g) || []).length, 2);
   }
