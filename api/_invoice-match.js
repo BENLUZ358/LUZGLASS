@@ -74,6 +74,21 @@ function extractRefs(text) {
   return [...out];
 }
 
+//  רק הערך שבטור "מ.מקור" של שורת פריט (בן, 16/11 — לפני הכלי במחשב של חשבשבת):
+//  extractRefs לוקח כל מספר בחשבונית — מידה, מק"ט, מספר הזמנה של חשבשבת — וחשבונית
+//  שלא קשורה למערכת יכלה להתחבר להזמנה של לקוח אחר. בשורת פריט הטור בא מיד אחרי
+//  הסה"כ של השורה (מספר עם 2 ספרות אחרי הנקודה):
+//    "... 171.00 129.96   1250   2 1) 400x1900"   (הזמנת סוכן — 1250)
+//    "... 271.00 203.25   0 1.500 0.500   1.00   1" (שורה ידנית — 0, אין הזמנה)
+function extractItemRefs(text) {
+  const out = new Set();
+  //  ואחריו מספר השורה (1–3 ספרות) או אורך בשורה ידנית (1.500) — כך יתרת חוב או
+  //  מספר עוסק שבאים אחרי סכום בתחתית לא נספרים
+  const re = /(?:^|\s)-?[\d,]*\d\.\d{2} l?(\d{3,9})(?= (?:\d{1,3}|\d+\.\d{3})(?:\s|$))/g;
+  for (let m; (m = re.exec(norm(text)));) { out.add(String(Number(m[1]))); re.lastIndex = m.index + 1; }
+  return [...out];
+}
+
 //  האם החשבונית המודפסת שייכת לחשבונית ממתינה.
 //  מספר מסמך רשום שאינו תואם → false.
 //  יש כרטיס לקוח ברשומה → חייב להופיע זהה ב"מפתח".
@@ -130,4 +145,4 @@ function isRestoredCopy(text) {
   return pageRole(text) === 'copy' && _has(text, 'משוחזר');
 }
 
-module.exports = { norm, pageRole, isRestoredCopy,extractDocNumber, extractDate, extractAccountKey, extractRefs, matchesPending, pickPending, lgPdfPageTexts };
+module.exports = { norm, pageRole, isRestoredCopy,extractDocNumber, extractDate, extractAccountKey, extractRefs, extractItemRefs, matchesPending, pickPending, lgPdfPageTexts };

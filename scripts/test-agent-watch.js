@@ -330,6 +330,18 @@ const hb = (pending, extra) => ({ at: NOW, pending, lastPrintError: null, versio
   check('silent line: 45 min in working hours', W.lgWatcherSilentLine({ A: { at: NOW - 45 * MIN } }, NOW), 'כלי החשבוניות במשרד לא ענה 45 דקות');
   check('silent line: never heard', W.lgWatcherSilentLine({}, NOW), 'כלי החשבוניות במשרד עוד לא שלח דופק');
   check('silent line: outside working hours → none', W.lgWatcherSilentLine({}, Date.UTC(2026, 10, 13, 8, 0)), '');
+  //  שני מחשבים (בן, 16/11): מחשב שעובד לא מסתיר מחשב שנפל; מחשב שלא עבד היום בכלל — לא נחשב
+  check('two PCs: the office PC died, the Hashavshevet PC still beats → line names the office',
+    W.lgWatcherSilentLine({ 'DESKTOP-F4LG4AV': { at: NOW - 45 * MIN }, NUCBOXM3: { at: NOW - 1 * MIN } }, NOW),
+    'כלי החשבוניות במשרד לא ענה 45 דקות');
+  check('two PCs: the Hashavshevet PC died → line names it',
+    W.lgWatcherSilentLine({ 'DESKTOP-F4LG4AV': { at: NOW - 1 * MIN }, NucBoxM3: { at: NOW - 40 * MIN } }, NOW),
+    'כלי החשבוניות במחשב של חשבשבת לא ענה 40 דקות');
+  check('two PCs: one that did not work today at all is not "silent"',
+    W.lgWatcherSilentLine({ 'DESKTOP-F4LG4AV': { at: NOW - 1 * MIN }, NUCBOXM3: { at: NOW - 30 * 60 * MIN } }, NOW), '');
+  check('stalest: the longest-silent PC among those that worked today',
+    W.lgWatcherStalest({ A: { at: NOW - 2 * MIN }, B: { at: NOW - 50 * MIN }, C: { at: NOW - 30 * 60 * MIN } }, NOW), { pc: 'B', at: NOW - 50 * MIN });
+  check('stalest: none today → null', W.lgWatcherStalest({ C: { at: NOW - 30 * 60 * MIN } }, NOW), null);
 
   if (failed) { console.error(`\n${failed} FAILED`); process.exit(1); }
   console.log('\nAll agent-watch checks passed.');

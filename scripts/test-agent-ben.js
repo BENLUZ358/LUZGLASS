@@ -256,6 +256,27 @@ const notify = (db, a, o) => B.lgBenNotify(db, { reason: 'agent-guard', urgent: 
     await B.lgClockCheck(db2, 'gmail', { env: ENV, now: NIGHT + 3 * MIN, provider: p2 });
     check('office silent at night → no alarm', p2.texts.length, 0);
   }
+  //  שני מחשבים עם כלי חשבוניות (בן, 16/11): המחשב של חשבשבת ממשיך לענות, המחשב במשרד נפל
+  //  לפני 40 דק' → השעון של המשרד נשאר על 40 דק', והמייל מתריע עם שם המחשב שנפל
+  {
+    const { handleUpload } = require(path.join(ROOT, 'api', '_invoice-upload.js'));
+    const db = mk(CFG('shadow'), { invoiceWatcher: { 'DESKTOP-F4LG4AV': { at: NOW - 40 * MIN } } }), p = provider();
+    const beat = now => handleUpload({ method: 'POST', headers: { authorization: 'Bearer T' }, body: { op: 'heartbeat', pc: 'NUCBOXM3', pending: [] } }, {
+      db, env: { ...ENV, INVOICE_UPLOAD_TOKEN: 'T' }, now, provider: p,
+      waDrain: async () => ({}), watchRun: async () => ({}), readyNet: async () => ({}) });
+    await beat(NOW);
+    check('two PCs: office clock stays on the silent PC', db._data.waMeta.clocks.office, { at: NOW - 40 * MIN, pc: 'DESKTOP-F4LG4AV' });
+    await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + MIN, provider: p });
+    await beat(NOW + 3 * MIN);
+    await B.lgClockCheck(db, 'gmail', { env: ENV, now: NOW + 4 * MIN, provider: p });
+    check('two PCs: the gmail clock alarms about the office PC by name',
+      [p.texts.length, /^התראה: המחשב במשרד לא עונה/.test((room(db).find(r => /לא עונה/.test(r.text)) || {}).text || '') || /המחשב במשרד לא עונה/.test(p.texts[0] && p.texts[0].text)], [1, true]);
+    check('two PCs: the working PC does not clear the alarm', !!db._data.waMeta.clocks.alarms.alarm_office, true);
+    db._data.waMeta.invoiceWatcher['DESKTOP-F4LG4AV'] = { at: NOW + 5 * MIN };
+    await beat(NOW + 5 * MIN);
+    check('two PCs: office PC back → alarm cleared', !!(db._data.waMeta.clocks.alarms || {}).alarm_office, false);
+    check('label: Hashavshevet PC', B.lgPcLabel('NucBoxM3'), 'המחשב של חשבשבת');
+  }
   //  וואטסאפ מנותק → מייל (פעם אחת), חזר → שורת "חזר"
   {
     const cfg = CFG('shadow', { escalateEmail: 'ben@example.com' });
