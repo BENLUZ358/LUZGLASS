@@ -71,7 +71,7 @@ function sandbox() {
     DEMO.match(/const LG_LEGEND_LH=\d+;/)[0], DEMO.match(/const ENG_CUT_MIN_R=[\d.]+;/)[0],
     grabConst('ENG_CUT_COLOR'),
     ['mkPS', '_lgShowerOf', 'engDim', 'engHardware', 'engHingeLegend', 'engTag', 'engLegendRows',
-     'engLegendHeight', 'engLegend', 'engCutsOf', '_engCutReplaces', '_engCutPts', 'engPaintCuts',
+     'engLegendHeight', 'engLegend', 'engCutsOf', 'engCutDims', '_engCutReplaces', '_engCutPts', 'engPaintCuts',
      'engPaint', 'drawFromEngine'].map(grab).join('\n'),
   ].join('\n'), ctx);
   return ctx;
@@ -367,6 +367,11 @@ function sameAsFile(label, P, S, corner) {
   const inset = warn(...INSET, 'admin');
   check('admin: open angle with a typed distance — warned, with the glass name',
         inset.innerHTML.includes('זכוכית 1: זווית פתוחה עם מרחק מהפאה שהוקלד'), true);
+  //  C4: a shape problem is now also a cut issue — the strip names it once, not twice
+  const NOTCH = [[{ type: 'fixed', wallSide: 'left' }], { 0: { w: 500, h: 2000, notchW: 100, notchH: 150, notchSide: 'left', notchRest: 300 } }];
+  const nt = warn(...NOTCH, 'admin');
+  check('admin: a shape problem appears once in the strip (not again as a cut issue)',
+        (nt.innerHTML.match(/המדרגה לא נסגרת/g) || []).length, 1);
   //  the customer sees the drawing only
   for (const role of ['client', null]) {
     const who = role || 'no session';
@@ -381,7 +386,7 @@ function sameAsFile(label, P, S, corner) {
     const ctx = sandbox(), el = { hidden: true, innerHTML: '' }, saved = [], alerts = [];
     ctx.document.getElementById = id => (id === 'dxfBar' ? el : id === 'sketchName' ? { value: name || '' } : null);
     ctx.document.createElement = () => ({ click() { saved.push(this); }, remove() {} });
-    ctx.Blob = function (parts) { this.text = parts.join(''); };
+    ctx.Blob = function (parts, o) { this.parts = parts; this.type = o && o.type; this.text = typeof parts[0] === 'string' ? parts.join('') : ''; };
     ctx.URL = { createObjectURL: b => { saved.push({ blob: b }); return 'blob:x'; }, revokeObjectURL() {} };
     ctx.setTimeout = f => f();
     ctx.alert = m => alerts.push(m);
@@ -396,10 +401,25 @@ function sameAsFile(label, P, S, corner) {
   const a = bar(FD_P, S2, 'admin', 'L1290/א');
   check('admin: a DXF button for each glass', (a.el.innerHTML.match(/dxfDownload\(\d\)/g) || []).length, 2);
   check('admin: "כל ה-DXF" button', a.el.innerHTML.includes('כל ה-DXF'), true);
+  //  I6: "all" → ONE .zip (Chrome blocks a second download); its entries are the DXF files
+  const zipEntries = blob => { const B = Buffer.from(blob.parts[0]), e = B.length - 22, n = B.readUInt16LE(e + 10), out = [];
+    for (let k = 0, o = B.readUInt32LE(e + 16); k < n; k++) {
+      const nl = B.readUInt16LE(o + 28), cs = B.readUInt32LE(o + 20), lo = B.readUInt32LE(o + 42);
+      const ds = lo + 30 + B.readUInt16LE(lo + 26) + B.readUInt16LE(lo + 28);
+      out.push({ name: B.slice(o + 46, o + 46 + nl).toString('utf8'), text: B.slice(ds, ds + cs).toString('utf8') });
+      o += 46 + nl + B.readUInt16LE(o + 30) + B.readUInt16LE(o + 32); }
+    return out; };
   vm.runInContext('dxfDownload(-1)', a.ctx);
   const names = a.saved.filter(x => x.download).map(x => x.download);
-  check('admin: all → one file per glass, safe names', names.length === 2 && names.every(n => /^L1290א-\d_\d+x\d+\.dxf$/.test(n)), true);
-  check('admin: file content is a DXF', a.saved.filter(x => x.blob).length === 2 && a.saved.filter(x => x.blob).every(x => x.blob.text.startsWith('0\nSECTION')), true);
+  check('admin: all → one download, a safe-named .zip', names, ['L1290א_DXF.zip']);
+  const zb = a.saved.filter(x => x.blob).map(x => x.blob);
+  check('admin: the download is a zip blob', zb.map(b => b.type), ['application/zip']);
+  const ze = zb.length ? zipEntries(zb[0]) : [];
+  check('admin: the zip holds one DXF per glass, safe names', ze.length === 2 && ze.every(z => /^L1290א-\d_\d+x\d+\.dxf$/.test(z.name)), true);
+  check('admin: each entry is a DXF', ze.length === 2 && ze.every(z => z.text.startsWith('0\nSECTION')), true);
+  vm.runInContext('dxfDownload(1)', a.ctx);
+  const one = a.saved.filter(x => x.blob).pop().blob;
+  check('admin: one glass → a plain .dxf', [a.saved.filter(x => x.download).pop().download.endsWith('.dxf'), one.text.startsWith('0\nSECTION')], [true, true]);
   check('customer: no DXF buttons', bar(FD_P, S2, 'client').el.hidden, true);
   check('no session: no DXF buttons', bar(FD_P, S2, null).el.hidden, true);
   const lone = bar([{ type: 'fixed', wallSide: 'both' }], { 0: { w: 600, h: 2000 } }, 'admin');
@@ -412,7 +432,47 @@ function sameAsFile(label, P, S, corner) {
   vm.runInContext('dxfDownload(0)', blockedBtn.ctx);
   check('dxfDownload on a blocked glass downloads nothing', blockedBtn.saved.length + blockedBtn.alerts.length, 0);
   vm.runInContext('dxfDownload(-1)', a.ctx);
-  check('"all" twice: still only ready glasses (2 + 2 files)', a.saved.filter(x => x.download).length, 4);
+  check('"all" again: one more zip, still only the ready glasses', [a.saved.filter(x => x.download).length, zipEntries(a.saved.filter(x => x.blob).pop().blob).length], [3, 2]);
+}
+
+/* ── I5: on a keyed door the handle label is the cut's height (h/2), not the engine's 1000 cap ── */
+{
+  const D = [{ type: 'door', hingeSide: 'left', wallSide: 'left' }];
+  const r = paint(D, { 0: { w: 700, h: 2200 } });
+  const hd = r.cuts[0].cuts.find(c => c.kind === 'handle');
+  check('2200 door: the cut puts the handle at h/2 (1101 cut = 1100 sketch)', [r.cuts[0].key, hd.y], ['door', 1101]);
+  const texts = r.log.filter(e => e[0] === 'fillText').map(e => String(e[1]));
+  check('2200 door: the handle label shows 1100 (from the cut)', texts.includes('1100'), true);
+  check('2200 door: no stale 1000 label', texts.includes('1000'), false);
+  //  the dimension line ends at the drawn hole, not at the engine's 1000
+  const ctx = r.ctx, L = r.L, s = L.shapes[0];
+  const dims = vm.runInContext('engCutDims', ctx)(L, r.cuts);
+  const d = dims.find(q => q.kind === 'handle-dist'), holeY = s.y + s.h - (hd.y - 1) * L.scale;
+  check('2200 door: handle dimension ends at the cut hole', [d.text, near(Math.min(d.y1, d.y2), holeY, 0.01)], ['1100', true]);
+  //  a short door (cut h/2 under the cap) keeps the same number as before
+  const r2 = paint(D, { 0: { w: 700, h: 1985 } });
+  check('1985 door: label unchanged (993 = engine)', r2.log.filter(e => e[0] === 'fillText').map(e => String(e[1])).includes('993'), true);
+  //  the customer's typed distance wins in both the cut and the label
+  const r3 = paint(D, { 0: { w: 700, h: 2200, handleDist: 900 } });
+  check('typed handleDist 900: label 900', r3.log.filter(e => e[0] === 'fillText').map(e => String(e[1])).includes('900'), true);
+  //  a glass with no template keeps the engine label
+  const r4 = paint([{ type: 'fixed', wallSide: 'both' }], { 0: { w: 600, h: 2000 } });
+  check('no template: dims untouched', JSON.stringify(vm.runInContext('engCutDims', r4.ctx)(r4.L, r4.cuts)), JSON.stringify(r4.L.dims));
+}
+
+/* ── lgCuts runs once per redraw (drawing, warnings, DXF bar share it) ── */
+{
+  const ctx = sandbox(), el = { hidden: true, innerHTML: '' };
+  ctx.document.getElementById = id => (id === 'geoWarn' || id === 'dxfBar' ? el : null);
+  vm.runInContext('var _sess={role:"admin"}; function _shEsc(s){ return String(s); }\nlet _dxfState=null;\n' +
+    grab('renderGeoWarn') + '\n' + grab('renderDxfBar') + '\n' +
+    'var N=0, _realCuts=lgCuts; lgCuts=function(s){ N++; return _realCuts(s); };', ctx);
+  ctx.P = FD_P; ctx.S = { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } };
+  vm.runInContext('drawFromEngine(P,S,1,1200,"combo"); renderGeoWarn(P,S);', ctx);
+  check('one redraw (drawing + warnings + DXF bar): lgCuts runs once', ctx.N, 1);
+  ctx.S[0].w = 520;
+  vm.runInContext('drawFromEngine(P,S,1,1200,"combo"); renderGeoWarn(P,S);', ctx);
+  check('after an edit: computed again (once)', ctx.N, 2);
 }
 
 console.log('');
