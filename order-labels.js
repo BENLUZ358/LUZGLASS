@@ -25,15 +25,22 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
   let busy = false;
 
   //  order + idxs → נשלח למרכז ההדפסות, ועוקב 30 שניות אחרי המצב
-  window.lgPrintOrderLabels = async function (order, idxs) {
+  //  opts.withShape (בן, 16/11) — "מדבקה עם צורה": מצייר את הצורה מאופטי-ווי במדבקה
+  window.lgPrintOrderLabels = async function (order, idxs, opts) {
     if (busy) return;
     const labels = lgOrderLabels(order, idxs);
+    if (opts && opts.withShape) {
+      const withNum = labels.filter(l => l.shape);
+      if (!withNum.length) { toast('לפריט הזה עוד אין מספר צורה מאופטי-ווי'); return; }
+      labels.forEach(l => { if (l.shape) l.withShape = true; });
+      if (typeof lgOptyLoadGeos === 'function') await lgOptyLoadGeos(labels);
+    }
     if (!labels.length) { toast('אין פריט עם מידות להדפסה'); return; }
     busy = true;
     try {
       try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
-      const plain = labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum }));
-      const bitmaps = plain.map(l => lgLabelRender(l).bitmap);
+      const plain = labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape, withShape: !!l.withShape }));
+      const bitmaps = labels.map(l => lgLabelRender(l).bitmap);   // labels — עם הצורה (geo), שלא נשמרת בתור
       const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels',
         client: String(order.orderClient || ''), orderIds: [String(order.id)], labels: plain, bitmaps });
       const d = await res.json().catch(() => ({}));

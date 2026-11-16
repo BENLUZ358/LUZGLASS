@@ -86,4 +86,14 @@ function lgOptyShapeDraw(ctx, geo, bx, by, bw, bh) {
   return true;
 }
 
+//  דפדפן: מדבקות עם withShape → טוען את הצורה מ-meta/optyGeo/<מספר> (נשמרה בקליטה, opty.html)
+async function lgOptyLoadGeos(labels) {
+  if (typeof _lgDb === 'undefined') return labels;
+  const want = [...new Set((labels || []).filter(l => l && l.withShape && l.shape && !l.geo).map(l => l.shape))];
+  const got = {};
+  await Promise.all(want.map(s => _lgDb.ref('meta/optyGeo/' + s).once('value').then(v => { got[s] = v.val(); }).catch(() => {})));
+  (labels || []).forEach(l => { if (l && l.withShape && got[l.shape]) l.geo = got[l.shape]; });
+  return labels;
+}
+
 if (typeof module !== 'undefined' && module.exports) module.exports = { lgOptyShapeParse, lgOptyShapeSvg, lgOptyShapeDraw };

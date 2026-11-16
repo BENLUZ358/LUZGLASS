@@ -103,7 +103,8 @@ body{background:var(--bg);color:var(--text);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261103"></script>
-<script src="print-labels.js?v=20261103"></script>
+<script src="opty-shape.js?v=20261116"></script>
+<script src="print-labels.js?v=20261116"></script>
 <script src="lg-icons.js?v=20261103"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -156,6 +157,7 @@ async function openJob(id) {
   let d;
   try { d = await post({ action: 'get', id }); } catch (e) { alert('לא נפתח: ' + e.message); return; }
   OPEN = { id, job: d.job, labels: d.job.labels.map(l => Object.assign({ on: true }, l)) };
+  await lgOptyLoadGeos(OPEN.labels);   // מדבקה עם צורה מאופטי-ווי — הצורה נטענת שוב
   $('boxTitle').textContent = (KIND[d.job.kind] || '') + ' · ' + (d.job.client || '') + ' · ' + when(d.job.createdAt);
   $('boxSt').textContent = '';
   $('ov').hidden = false;
@@ -193,8 +195,8 @@ async function reprint() {
   $('boxGo').disabled = true; $('boxSt').textContent = 'שולח…';
   try {
     try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
-    const labels = pick.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum }));
-    const bitmaps = labels.map(l => lgLabelRender(l).bitmap);
+    const labels = pick.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape || '', withShape: !!l.withShape }));
+    const bitmaps = pick.map(l => lgLabelRender(l).bitmap);   // pick — עם הצורה שנטענה בפתיחה
     await post({ action: 'create', kind: OPEN.job.kind, printer: OPEN.job.printer, client: OPEN.job.client,
                  orderIds: OPEN.job.orderIds, labels, bitmaps, reprintOf: OPEN.id });
     $('boxSt').textContent = '⏳ בתור — יודפס תוך כמה שניות. המצב ברשימה.';
