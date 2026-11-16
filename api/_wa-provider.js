@@ -81,8 +81,8 @@ function lgWaChatId(to) {
 
 //  הנוסח (בן, 19/10/2026): "מבחינת הלקוח מספרי ההזמנה של המערכת לא מעניינים".
 //  ההודעה אומרת **כמה סקיצות**, ומתחת — שמות הסקיצות שנרשמו בתור, רק אלה
-//  שנרשמו. שורת "לפרטים נוספים ניתן להיכנס למשתמש שלך" הוסרה בינתיים: הפיילוט
-//  עובד רק מוואטסאפ, ולחלק מהלקוחות אין משתמש.
+//  שנרשמו. שורת "לפרטים נוספים ניתן להיכנס למשתמש שלך" הוסרה ב-19/10 (לחלק מהלקוחות
+//  אין משתמש) — ובן החזיר אותה ב-16/11 כקישור ישיר לטאב "מוכן" בהודעת "מוכן" בלבד.
 //  orderNums עדיין מגיע, כי הוא הספירה, והתבנית של Meta (params) נשענת עליו.
 function renderText({ kind, clientName, orderNums, sketchNames, docNumber, deliveryTomorrow, variant, missingSketchNums, extraLines }) {
   const who  = String(clientName || 'לקוח');
@@ -143,7 +143,16 @@ ${BUSINESS}`;
     if (deliveryTomorrow) tails.push('ההובלה תצא אליך בקרוב.');
     return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + sk, tails.join('\n\n'));
   }
-  return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'));
+  return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'), 'לפרטים נוספים בפורטל:\n' + lgPortalReadyUrl());
+}
+
+//  בן, 16/11: בכל הודעת "מוכן" — קישור לפורטל הלקוח, ישר לטאב "מוכן" (portal.html?tab=ready).
+//  הכתובת לפי האתר שהקוד רץ בו: Vercel נותן לכל פרויקט את הכתובת הקבועה שלו, כך שאתר
+//  הבדיקה שולח לפורטל של הבדיקה. LG_PORTAL_HOST גובר (אם יחליפו דומיין).
+function lgPortalReadyUrl() {
+  const host = String(process.env.LG_PORTAL_HOST || process.env.VERCEL_PROJECT_PRODUCTION_URL || 'luzglass.vercel.app')
+    .replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  return 'https://' + host + '/portal.html?tab=ready';
 }
 
 //  ─── סיווג כשל ──────────────────────────────────────────────────────

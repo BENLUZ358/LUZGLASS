@@ -1241,9 +1241,26 @@ function sendQuoteWA(){
 }
 
 // שער הרשאה אמיתי — רק אחרי שFirebase מאשר משתמש client/admin מחובר בפועל מתחילים
+//  בן, 16/11: הקישור בהודעת "מוכן" (portal.html?tab=ready) פותח ישר את הטאב "מוכן".
+//  לקוח שלא מחובר עובר ל-login.html, שמחזיר ל-portal.html בלי ה-?tab — לכן הטאב
+//  נשמר בצד לאותה לשונית בדפדפן, ונמחק אחרי שנפתח.
+function lgPortalWantedTab(){
+  try{
+    const q = new URLSearchParams(location.search).get('tab');
+    if(q && PORTAL_TABS.includes(q)){ sessionStorage.setItem('lgPortalTab', q); return q; }
+    const s = sessionStorage.getItem('lgPortalTab');
+    return s && PORTAL_TABS.includes(s) ? s : null;
+  }catch(e){ return null; }
+}
+const _lgWantTab = lgPortalWantedTab();
+
 lgRequireAuthAsync('client').then(session => {
   if(!session) return; // כבר הופנה ל-login.html בתוך lgRequireAuthAsync
   init();
+  if(_lgWantTab){
+    setTab(_lgWantTab);
+    try{ sessionStorage.removeItem('lgPortalTab'); }catch(e){}
+  }
 });
 
 // כשהטאב חוזר לפורגראונד — כפה re-subscribe למנע sync gaps בטאבים ברקע

@@ -114,5 +114,26 @@ check('search still looks at every order, not just the open tab',
         /secActive\s*&&|if\s*\(\s*secActive\s*\)|secActive\?\./.test(fn), true);
 }
 
+/* ── הקישור מהודעת "מוכן" (בן, 16/11): portal.html?tab=ready פותח את הטאב "מוכן",
+      גם אחרי מעבר דרך login.html (שמחזיר ל-portal.html בלי ?tab) ── */
+{
+  const fn = (PORTAL.match(/function lgPortalWantedTab\(\)\{[\s\S]*?\n\}/) || [''])[0];
+  const run = (search, stored) => {
+    const store = new Map(stored ? [['lgPortalTab', stored]] : []);
+    const ctx = { location: { search }, URLSearchParams,
+      PORTAL_TABS: ['quote', 'orders', 'ready', 'collected', 'invoices', 'chat', 'price'],
+      sessionStorage: { getItem: k => store.has(k) ? store.get(k) : null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) } };
+    vm.createContext(ctx); vm.runInContext(fn + ';this.r = lgPortalWantedTab();', ctx);
+    return [ctx.r, store.get('lgPortalTab') || null];
+  };
+  check('?tab=ready opens the ready tab and remembers it for after login', run('?tab=ready'), ['ready', 'ready']);
+  check('back from login.html (no ?tab): the remembered tab still opens', run('', 'ready'), ['ready', 'ready']);
+  check('an unknown tab is ignored', run('?tab=evil', null), [null, null]);
+  check('a plain visit opens the default tab', run('', null), [null, null]);
+  const gate = (PORTAL.match(/lgRequireAuthAsync\('client'\)\.then[\s\S]*?\n\}\);/) || [''])[0];
+  check('after login: init, then the wanted tab, then it is forgotten',
+        /init\(\);\s*if\(_lgWantTab\)\{\s*setTab\(_lgWantTab\);\s*try\{ sessionStorage\.removeItem\('lgPortalTab'\)/.test(gate), true);
+}
+
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll portal-tab checks passed.');
