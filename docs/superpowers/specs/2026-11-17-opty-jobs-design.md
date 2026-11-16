@@ -148,6 +148,48 @@ The order tracker (`api/_agent-okev.js`) uses the cut stamp:
 - **Cancel / change.** Once any item has a cut stamp with `at` ≤ today that is not undone, the order is too late to change (`lgOkevCanChange` → false), even if its stage is still early.
 - **Ben's evening review.** The daily agent summary for Ben lists today's cut count: "נחתכו היום N זכוכיות ב-M אופטימיזציות".
 
+## Glass names in Hebrew (Ben 17/11: "08S 8 שקוף")
+
+- The import also reads `Magaz.DB` from DBLITE. It has 54 materials: CODMAT and an English DESCMAT such as "8 mm clear".
+- Each code gets a Hebrew name, built from thickness plus translated words.
+  - Default dictionary (Claude's call, Ben corrects): clear שקוף · extra clear שקוף אקסטרה · mirror מראה · acid חלבי · acid clear חלבי שקוף · bronze ברונזה · gray אפור · black שחור · mat מט · silk משי · lacobel לקובל · reflective מחזיר אור · granit גרניט · chinchilla צ'ינצ'ילה · pepitte פפיט · master carre מאסטר קרה · master line מאסטר ליין · savta סבתא.
+  - Laminated names keep their own form, e.g. "3+3 שקוף".
+- Names are stored in `meta/optyMats/<code>` as `{ he, en }`. They can be edited in the הגדרות tab.
+- Hebrew names are used everywhere glass type shows: list, filters, sheet header, marker label, and the work screen. The code is shown beside the name, e.g. "08S · 8 שקוף".
+
+## Work estimate (Ben 17/11: "הערכת עבודה")
+
+For each work day, the system sums the jobs assigned to it:
+
+- sheets (physical), pieces, m² (sum of piece w×h), and features;
+- features = holes + notches + shape cuts, counted from `.dat` contours with the existing `lgOptyFeatures`. Pieces without a shape count 0.
+
+**Work units per sheet:**
+- Initial weights: `1·sheet + 0.15·piece + 0.02·m² + 0.3·feature`. These are Claude's call, and they are only a starting point.
+- The weights are re-fitted nightly from timed sheet marks (below), using least squares on gaps between consecutive marks. The fit runs only once there are at least 30 usable gaps, and Ben's first days of rough marking are allowed for:
+  - gaps over 45 minutes, or under 30 seconds, are dropped;
+  - bulk marks (glass-type "הכל נחתך") give no timing.
+- **Day verdict:** the day's units compared with the median of the last 20 work days. Below 0.8× = "יום קל", 0.8–1.2× = "יום רגיל", above 1.2× = "יום עמוס" (with the ×).
+- **Hours:** once the timing fit exists, also show "בערך N שעות חיתוך".
+- Stored at `meta/optyDays/<day>`: `{ sheets, pieces, m2, features, units }`. The model is stored at `meta/optyModel`: `{ weights, n, fittedAt }`.
+
+## Sheet marking and progress (Ben 17/11)
+
+The marking can be done on a phone, tablet or computer. Timing may be rough on the first days, and that's fine.
+
+**Screen "עבודת היום":**
+- It is a new tab in opty.html, and also reachable by a direct link `opty.html#today`. It is responsive and has big buttons.
+- It picks the work day (default today) and groups the day's sheets by glass type, in job and sheet order.
+- Each sheet has a big "נחתך" button, and tapping it again undoes the mark.
+- Each glass-type group has a "כל ה-<08S · 8 שקוף> נחתך" button that marks all its sheets at once.
+- The progress bar is weighted by work units: "ביצעת 30%, נשאר 70%". It shows per type and for the whole day.
+
+**Storage and effects:**
+- Marks are stored at `meta/optyJobs/<job>/marks/<sheetNo>` as `{ at: ms, by, bulk: bool }`.
+- Marking a sheet stamps that sheet's linked items `optyCut` immediately, with `at` = the work day.
+- At the end of the work day, unmarked sheets count as cut anyway, as before.
+- "נחתך" status for the order window and the agents follows the same rule: a stamped item is cut, and so is any job on a day that has ended.
+
 ## Calls made after the builder check (Claude, 17/11)
 
 These are open for Ben to correct.
