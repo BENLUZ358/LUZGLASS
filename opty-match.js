@@ -18,7 +18,7 @@ const LG_OPTY_CLIENTS_DEFAULT = [
   { ours: 'יצחק אביבי', opty: 'אביבי' },
   { ours: 'פלג מקלחונים', opty: 'פלג' },
 ];
-const LG_OPTY_DIM_TOL = 2;          // מ"מ — השרטט כותב לפעמים 222.1 במקום 222
+const LG_OPTY_DIM_TOL = 3;          // מ"מ — השרטט מוסיף בדרך כלל 2 (405→407, 1885→1887) ולפעמים 222.1
 const LG_OPTY_CLIENT_MAX = 12;      // אופטי-ווי חותך את שם הלקוח אחרי 12 תווים
 
 //  בלי רווחים, גרשיים, נקודות ומקפים; אותיות לטיניות קטנות
@@ -47,11 +47,14 @@ function _lgOptyClientKeys(optyClient, pairs) {
 }
 
 //  שם סקיצה: שווה אחרי ניקוי, או (מספר של 4+ ספרות) סוף מספר ה-PO (אביבי)
+//  וגם (16/11, נתונים אמיתיים): השם אצלנו ארוך יותר — 'מאיה' ↔ 'מאיה פיין', 'זבולון 2' ↔ 'זבולון 1/2/3'
 function _lgOptyNameOk(pieceName, sketchName) {
   const a = lgOptyNorm(pieceName), b = lgOptyNorm(sketchName);
   if (!a || !b) return false;
   if (a === b) return true;
-  return /^\d{4,}$/.test(a) && b.replace(/\D/g, '').endsWith(a);
+  if (/^\d+$/.test(a)) return a.length >= 4 && b.replace(/\D/g, '').endsWith(a);
+  const base = a.replace(/\d+$/, '');
+  return base.length >= 2 && b.startsWith(base);
 }
 
 const _lgOptyDimOk = (p, it) => {
@@ -96,7 +99,10 @@ function lgOptyMatch(pieces, orders, pairs) {
       } });
       return;
     }
-    const cands = (named.length ? named : sameClientSize).map(r => ({ orderId: r.o.id, idx: r.idx }));
+    //  שם תואם אבל המידה רחוקה (השרטט שינה, 717→739) → לבדיקה עם כל הפריטים של אותה הזמנה
+    const nameOnly = !named.length && p0.name ? rows.filter(r => keys.some(k => r.client.startsWith(k)) && !r.it.optyShape && !taken.has(r.key)
+      && _lgOptyNameOk(p0.name, r.o.sketchName || r.o.type)) : [];
+    const cands = (named.length ? named : nameOnly.length ? nameOnly : sameClientSize).map(r => ({ orderId: r.o.id, idx: r.idx }));
     list.forEach(p => cands.length ? out.review.push({ piece: p, cands }) : out.notFound.push(p));
   });
   return out;
