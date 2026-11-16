@@ -48,6 +48,29 @@ body{background:var(--bg);color:var(--text);}
 .row .who{flex:1;min-width:160px;}
 .row .dim{direction:ltr;white-space:nowrap;color:var(--muted);}
 .row svg{height:56px;width:40px;color:var(--text);}
+/* לחיבור (בן, 16/11): צורה גדולה עם מידות + הסקיצה של ההזמנה שהמערכת משערת — להשוות לפני "חבר" */
+.wrow{padding:var(--space-3) 0;border-bottom:1px solid var(--border);}
+.wrow:last-child{border-bottom:none;}
+.wvis{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-bottom:var(--space-2);}
+.wvis button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:200px;padding:6px;
+  border:1px solid var(--border);border-radius:var(--radius);background:#fff;cursor:zoom-in;font:var(--fw-bold) 12px Heebo,sans-serif;color:var(--muted);}
+.wvis svg{width:100%;height:220px;color:#222;}
+.wvis img{max-width:100%;max-height:220px;object-fit:contain;}
+.wvis .cap{font-size:12px;color:var(--muted);}
+.winfo{display:flex;align-items:center;gap:var(--space-2) var(--space-3);flex-wrap:wrap;font-size:var(--fs-sm);}
+.winfo .shape{font-weight:var(--fw-black);}
+.winfo .who{flex:1;min-width:140px;}
+.winfo select.sm{flex:1 1 100%;max-width:none;min-height:44px;}
+.winfo .sm{min-height:44px;}
+#big{position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.75);display:flex;align-items:flex-start;justify-content:center;padding:10px;overflow:auto;}
+#big .in{background:#fff;color:#222;border-radius:12px;width:100%;max-width:900px;padding:12px;direction:rtl;}
+#big .in svg{width:100%;max-height:70vh;color:#222;}
+#big .in img{width:100%;height:auto;display:block;border:1px solid #ddd;border-radius:6px;}
+#big .hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:900;}
+#big .hd b{flex:1;}
+#big ol{margin:6px 0 10px;padding:0;list-style:none;display:grid;gap:4px;font-size:15px;}
+#big ol li{padding:6px 8px;background:#f6f6f6;border-radius:6px;}
+@media (min-width:900px){ .wvis{grid-template-columns:260px 1fr;} }
 .cands{display:flex;flex-direction:column;gap:4px;width:100%;padding-inline-start:72px;}
 .cands label{display:flex;align-items:center;gap:var(--space-2);min-height:36px;cursor:pointer;}
 .sm{min-height:40px;padding:0 var(--space-3);border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);
@@ -162,7 +185,7 @@ const esc = s => lgEsc(s);
 const ORDER_DAYS = 30;                         // הזמנות מ-30 הימים האחרונים
 const DIM_OK = 3;                              // ✓ — המידה (עם הליטוש) עד 3 מ"מ מהזכוכית שלנו, כמו בחיבור האוטומטי
 let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null, PEND = {}, REVIEW = {};
-let PENDING = {}, REVQ = {}, GEOS = {};       // מה שמחכה לחיבור (meta/optyPending, meta/optyReview) + ציורים
+let PENDING = {}, REVQ = {}, GEOS = {}, SK = {};   // SK: סקיצה לכל הזמנה (data URL / null)       // מה שמחכה לחיבור (meta/optyPending, meta/optyReview) + ציורים
 
 const st = (t, cls) => { $('st').textContent = t; $('st').className = cls || ''; };
 //  מידה בכיוון הנכון גם בתוך טקסט עברי (lgDimsText — רוחב קודם)
@@ -368,10 +391,57 @@ function pickHtml(p, cands, key) {
   if (!opts.length) return '<span class="note">אין זכוכית פנויה</span>';
   return `<select class="sm" data-pick="${esc(key)}" aria-label="לאיזו זכוכית">${opts.map((c, i) => `<option value="${esc(c.orderId)}|${c.idx}"${i ? '' : ' selected'}>${fit(p, c.it) ? '✓ ' : ''}${dimT(c.it.w, c.it.h)} · ${esc((ordOf(c.orderId) || {}).orderNum || '')} · ${esc(c.it.name || 'פריט')}</option>`).join('')}</select>`;
 }
-const waitRow = (p, k, who, cands) => `<div class="row">${geoSvg(p.shape)}<span class="shape">${esc(p.shape)}</span>
-  <span class="net" title="מידה נטו">${net(p.w, p.h)}</span><span class="who">${who}</span>
+//  הצורה גדולה, נטו ועם מידות (בן, 16/11: "שייראו את הצורה יותר גדול")
+const bigSvg = (shape, px) => { const g = DAT[shape] || GEOS[shape]; return g ? lgOptyShapeSvg(lgOptyNetGeo(g), { px: px || 220, dims: true }) : ''; };
+//  ההזמנה שהמערכת משערת: הידועה (מחכה בהזמנה), או המועמד שנבחר ברשימה
+function guessOf(k) {
+  const w = waitOf(k); if (w.t === 'p') return w.oid;
+  const sel = document.querySelector(`select[data-pick="${CSS.escape(k)}"]`);
+  return sel && sel.value ? sel.value.split('|')[0] : (((w.p && w.p.cands) || [])[0] || {}).orderId || '';
+}
+function skBox(oid) {
+  const o = ordOf(oid), d = SK[oid];
+  return (d ? `<img src="${esc(d)}" alt="סקיצה ${esc((o || {}).orderNum || '')}" loading="lazy">` : `<span>${d === null ? 'אין סקיצה להזמנה' : 'טוען סקיצה…'}</span>`)
+    + `<span class="cap">סקיצה ${esc((o || {}).orderNum || '')}${o && o.sketchName ? ' · ' + esc(o.sketchName) : ''}</span>`;
+}
+function waitRow(p, k, who, cands, guess) {
+  return `<div class="wrow" data-row="${esc(k)}">
+  <div class="wvis"><button type="button" data-big="${esc(k)}" aria-label="הצורה בגדול">${bigSvg(p.shape) || '<span>אין ציור לצורה</span>'}<span class="cap">צורה ${esc(p.shape)} · נטו ${net(p.w, p.h)}</span></button>
+    <button type="button" data-big="${esc(k)}" data-skbox aria-label="הסקיצה בגדול">${skBox(guess)}</button></div>
+  <div class="winfo"><span class="shape">${esc(p.shape)}</span><span class="net" title="מידה נטו">${net(p.w, p.h)}</span><span class="who">${who}</span>
   ${pickHtml(p, cands, k)}<button class="sm gold" type="button" data-go="${esc(k)}">חבר</button>
-  <button class="sm quiet" type="button" data-drop="${esc(k)}">לא שייך</button></div>`;
+  <button class="sm quiet" type="button" data-drop="${esc(k)}">לא שייך</button></div></div>`;
+}
+//  "הסקיצה של ההזמנה שהמערכת משערת" (בן, 16/11) — פעם אחת לכל הזמנה, במקביל; ממלא את הקופסאות כשמגיעות
+async function loadSketches(ids) {
+  await Promise.all([...new Set(ids)].filter(id => id && !(id in SK)).map(async id => {
+    try {
+      let v = (await _lgDb.ref('sketches/' + id).once('value')).val();
+      if (!v) v = (await _lgDb.ref('orders/' + id + '/sketch').once('value')).val();
+      SK[id] = typeof v === 'string' && /^data:image[/]/.test(v) ? v : null;
+    } catch (_) { SK[id] = null; }
+  }));
+  document.querySelectorAll('[data-skbox]').forEach(b => { b.innerHTML = skBox(guessOf(b.dataset.big)); });
+}
+//  חלון גדול: הצורה (עם המידות והרשימה) ומתחתיה הסקיצה — להשוות לפני "חבר"
+function openBig(k) {
+  const w = waitOf(k); if (!w.p) return;
+  const g = DAT[w.sh] || GEOS[w.sh], n = g ? lgOptyNetGeo(g) : null, oid = guessOf(k), o = ordOf(oid);
+  const fl = n ? lgOptySlopeText(n).map(t => ({ n: '∠', text: t })).concat(lgOptyFeatures(n)) : [];
+  let ov = $('big');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'big'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-close]')) ov.remove(); });
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = `<div class="in"><div class="hd"><b>צורה ${esc(w.sh)} · נטו ${net(w.p.w, w.p.h)}${w.p.job ? ' · ' + esc(w.p.job) : ''}</b>
+    <button class="sm" type="button" data-close aria-label="סגור">✕</button></div>
+    ${n ? bigSvg(w.sh, 520) : '<p class="note">אין ציור לצורה</p>'}
+    ${fl.length ? `<ol>${fl.map(f => `<li><b>${esc(String(f.n))}</b> · ${esc(f.text)}</li>`).join('')}</ol>` : ''}
+    <div class="hd" style="margin-top:12px"><b>הסקיצה — ${esc(o ? ordTitle(oid) : 'לא נבחרה הזמנה')}</b></div>
+    ${SK[oid] ? `<img src="${esc(SK[oid])}" alt="סקיצה">` : `<p class="note">${SK[oid] === null ? 'אין סקיצה להזמנה' : 'הסקיצה עוד נטענת'}</p>`}
+    ${o ? `<p class="note" style="margin-top:8px">הזכוכיות בהזמנה: ${o.items.map(it => dimT(it.w, it.h) + (it.optyShape ? ' (' + esc(it.optyShape) + ')' : '')).join(' · ')}</p>` : ''}</div>`;
+}
 async function loadLink() {
   $('linkOut').innerHTML = '<p class="note">טוען…</p>';
   try {
@@ -382,13 +452,16 @@ async function loadLink() {
       const o = ordOf(oid); if (!o || !shapes) return;
       const all = o.items.map((_, idx) => ({ orderId: oid, idx }));
       blocks.push(`<div class="ord">${esc(ordTitle(oid))}</div>` + Object.values(shapes).filter(Boolean).map(p =>
-        waitRow(p, 'p|' + oid + '|' + p.shape, esc(p.name || '') + (p.qty > 1 ? ' · ×' + p.qty : '') + (p.job ? ' · ' + esc(p.job) : ''), all)).join(''));
+        waitRow(p, 'p|' + oid + '|' + p.shape, esc(p.name || '') + (p.qty > 1 ? ' · ×' + p.qty : '') + (p.job ? ' · ' + esc(p.job) : ''), all, oid)).join(''));
     });
     const rq = Object.values(REVQ).filter(Boolean);
     if (rq.length) blocks.push(`<div class="ord">לא ידוע לאיזו הזמנה (${rq.length})</div>` + rq.map(p =>
-      waitRow(p, 'r||' + p.shape, esc(p.client) + ' · ' + esc(p.name || 'בלי שם') + (p.job ? ' · ' + esc(p.job) : ''), p.cands || [])).join(''));
+      waitRow(p, 'r||' + p.shape, esc(p.client) + ' · ' + esc(p.name || 'בלי שם') + (p.job ? ' · ' + esc(p.job) : ''), p.cands || [], ((p.cands || [])[0] || {}).orderId)).join(''));
     $('linkOut').innerHTML = blocks.length ? `<section class="card">${blocks.join('')}</section>` : '<p class="note">✓ אין צורות שמחכות לחיבור</p>';
+    //  הבחירה ברשימה של "לא ידוע לאיזו הזמנה" קובעת איזו סקיצה מוצגת
+    document.querySelectorAll('[data-skbox]').forEach(b => { b.innerHTML = skBox(guessOf(b.dataset.big)); });
     updateCount();
+    loadSketches(Object.keys(PENDING).concat(rq.flatMap(p => (p.cands || []).map(c => c.orderId))));
   } catch (e) { console.error(e); $('linkOut').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור</p>'; }
 }
 const waitOf = k => { const [t, oid, sh] = k.split('|'); return { t, oid, sh, p: t === 'p' ? (PENDING[oid] || {})[sh] : REVQ[sh] }; };
@@ -409,7 +482,13 @@ async function linkOne(shape, job, orderId, idx, qty) {
   o.items[idx].optyShape = String(shape); o.items[idx].optyJob = String(job || '');
   return true;
 }
+$('linkOut').addEventListener('change', e => {
+  const sel = e.target.closest('select[data-pick]'); if (!sel) return;
+  const b = document.querySelector(`[data-skbox][data-big="${CSS.escape(sel.dataset.pick)}"]`);
+  if (b) { const oid = guessOf(sel.dataset.pick); b.innerHTML = skBox(oid); if (!(oid in SK)) loadSketches([oid]); }
+});
 $('linkOut').addEventListener('click', async e => {
+  const big = e.target.closest('[data-big]'); if (big) { openBig(big.dataset.big); return; }
   const go = e.target.closest('[data-go]'), drop = e.target.closest('[data-drop]');
   if (go) {
     const w = waitOf(go.dataset.go), sel = document.querySelector(`select[data-pick="${CSS.escape(go.dataset.go)}"]`);
