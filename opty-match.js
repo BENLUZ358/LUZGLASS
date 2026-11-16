@@ -53,8 +53,11 @@ function _lgOptyNameOk(pieceName, sketchName) {
   if (!a || !b) return false;
   if (a === b) return true;
   if (/^\d+$/.test(a)) return a.length >= 4 && b.replace(/\D/g, '').endsWith(a);
-  const base = a.replace(/\d+$/, '');
-  return base.length >= 2 && b.startsWith(base);
+  const base = a.replace(/\d+$/, ''), n = a.slice(base.length);
+  if (base.length < 2 || !b.startsWith(base)) return false;
+  //  'אריאל 2' ≠ 'אריאל 1' — מספר באופטי-ווי חייב להופיע בשם אצלנו אם יש בו מספרים ('זבולון 1/2/3' ✓)
+  const ours = String(sketchName).match(/\d+/g);
+  return !n || !ours || ours.includes(n) || b.slice(base.length).replace(/\D/g, '').includes(n);
 }
 
 const _lgOptyDimOk = (p, it) => {
