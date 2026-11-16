@@ -45,4 +45,22 @@ check('svg with dims: overall size + a numbered tag per feature', [/>809</.test(
 check('svg without dims: no tags (label/order window stay clean)', /lg-opty-tag/.test(S.lgOptyShapeSvg(g388)), false);
 check('no features → empty list', S.lgOptyFeatures({ w: 500, h: 500, c: [] }), []);
 
+
+//  מידה נטו (בן, 16/11): 1 מ"מ ליטוש מכל צד, ושיפוע = הצד הרחב של קו החיתוך
+{
+  const g593 = { w: 852, h: 2092, c: [[[1, 801, 951, 5, -5.4157, 0.8675]]] };
+  const n = S.lgOptyNetGeo(g593);
+  check('net size = OptyWay − 2 (852×2092 → 850×2090)', [n.w, n.h, n.opty], [850, 2090, { w: 852, h: 2092 }]);
+  check('holes move 1 mm with the polish (801,951 → 800,950)', [n.c[0][0][1], n.c[0][0][2]], [800, 950]);
+  check('net hole distance from the right edge = 50 (was 51)', S.lgOptyFeatures(n)[0].text.includes('50 מימין'), true);
+  const g579 = { w: 624, h: 2002, c: [[[0, 604, 0, 601, 2002]], [[1, 590, 200, 10, 0, 6.2832]]] };
+  const s = S.lgOptyNetGeo(g579);
+  check('slope on the right → net width 602, line kept out of the list', [s.w, s.h, s.c.length, s.slopes.length], [602, 2000, 1, 1]);
+  check('slope text: width at the bottom 602, at the top 599', S.lgOptySlopeText(s), ['שיפוע מימין · רוחב למטה 602 · למעלה 599']);
+  check('cut size keeps the polish (604×2002) — for matching', S.lgOptyCutSize(g579), { w: 604, h: 2002 });
+  const top = S.lgOptyNetGeo({ w: 402, h: 1912.01, c: [[[0, 0, 24.02, 402, 20]]] });
+  check('slope at the bottom edge → net height 1890 (wide side), 1886 at the low side', [top.w, top.h, S.lgOptySlopeText(top)], [400, 1890, ['שיפוע למטה · גובה משמאל 1886 · מימין 1890']]);
+  check('net of net = same (no double −2)', S.lgOptyNetGeo(n), n);
+  check('slope line is drawn on the net edge (602 at the bottom → 599 at the top)', S.lgOptyShapeSvg(s).includes('M602 2000L599 0'), true);
+}
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');

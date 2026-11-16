@@ -103,8 +103,8 @@ body{background:var(--bg);color:var(--text);}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261103"></script>
-<script src="opty-shape.js?v=20261116c"></script>
-<script src="print-labels.js?v=20261116d"></script>
+<script src="opty-shape.js?v=20261116d"></script>
+<script src="print-labels.js?v=20261116e"></script>
 <script src="lg-icons.js?v=20261103"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -195,7 +195,7 @@ async function reprint() {
   $('boxGo').disabled = true; $('boxSt').textContent = 'שולח…';
   try {
     try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
-    const labels = pick.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape || '', job: l.job || '', withShape: !!l.withShape }));
+    const labels = pick.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, glass: l.glass || '', orderNum: l.orderNum, shape: l.shape || '', job: l.job || '', withShape: !!l.withShape, broken: !!l.broken }));
     const bitmaps = pick.map(l => lgLabelRender(l).bitmap);   // pick — עם הצורה שנטענה בפתיחה
     await post({ action: 'create', kind: OPEN.job.kind, printer: OPEN.job.printer, client: OPEN.job.client,
                  orderIds: OPEN.job.orderIds, labels, bitmaps, reprintOf: OPEN.id });

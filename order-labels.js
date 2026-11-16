@@ -35,11 +35,12 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       labels.forEach(l => { if (l.shape) l.withShape = true; });
       if (typeof lgOptyLoadGeos === 'function') await lgOptyLoadGeos(labels);
     }
+    if (opts && opts.broken) labels.forEach(l => { l.broken = true; });   // "שבר" — מהחיסום (בן, 16/11)
     if (!labels.length) { toast('אין פריט עם מידות להדפסה'); return; }
     busy = true;
     try {
       try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
-      const plain = labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, orderNum: l.orderNum, shape: l.shape, job: l.job || '', withShape: !!l.withShape }));
+      const plain = labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, glass: l.glass || '', orderNum: l.orderNum, shape: l.shape, job: l.job || '', withShape: !!l.withShape, broken: !!l.broken }));
       const bitmaps = labels.map(l => lgLabelRender(l).bitmap);   // labels — עם הצורה (geo), שלא נשמרת בתור
       const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels',
         client: String(order.orderClient || ''), orderIds: [String(order.id)], labels: plain, bitmaps });

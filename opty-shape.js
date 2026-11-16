@@ -27,6 +27,69 @@ function lgOptyShapeParse(text) {
   return { w: r2(lines[0][0]), h: r2(lines[0][1]), c };
 }
 
+//  ─── שיפוע ומידה נטו (בן, 16/11) ───
+//  אופטי-ווי מוסיף 2 מ"מ לליטוש — 1 מכל צד (852 באופטי-ווי = 850 אצלנו). בזכוכית עם שיפוע הוא שומר
+//  את המלבן שלפני החיתוך (624 ↔ 602), ובשרטוט יש קו ישר אחד לכל הגובה (או לכל הרוחב) = קו השיפוע.
+//  ⚠️ בשיפוע אופטי-ווי מוסיף לפעמים יותר מ-2 (בן: "צריך ללמוד את זה עדיין") — המידות שם הן הטוב ביותר שידוע.
+//  קו מתאר → קו שיפוע { v:true (לכל הגובה)|false, far: בצד הרחוק (ימין/למעלה), lo, hi (טווח הקו בציר שלו), a, b (קצוות) } או null
+function _lgOptySlope(ct, W, H) {
+  if (!Array.isArray(ct) || ct.length !== 1 || !Array.isArray(ct[0]) || ct[0][0] !== 0) return null;   // קו בודד, לא חור/קשת
+  const [, x1, y1, x2, y2] = ct[0].map(Number), e = 2;
+  const xs = [x1, x2].sort((a, b) => a - b), ys = [y1, y2].sort((a, b) => a - b);
+  if (ys[0] <= e && ys[1] >= H - e && xs[1] - xs[0] < W / 4) return { v: true, far: xs[0] > W / 2, lo: xs[0], hi: xs[1], a: [x1, y1], b: [x2, y2] };
+  if (xs[0] <= e && xs[1] >= W - e && ys[1] - ys[0] < H / 4) return { v: false, far: ys[0] > H / 2, lo: ys[0], hi: ys[1], a: [x1, y1], b: [x2, y2] };
+  return null;
+}
+//  המסגרת אחרי קווי השיפוע: { L, R, B, T, slopes } — הצד הרחב של כל קו
+function _lgOptyFrame(geo) {
+  const W = Number(geo.w) || 0, H = Number(geo.h) || 0;
+  let L = 0, R = W, B = 0, T = H; const slopes = [], rest = [];
+  (geo.c || []).forEach(ct => {
+    const s = _lgOptySlope(ct, W, H);
+    if (!s) { rest.push(ct); return; }
+    slopes.push(s);
+    if (s.v) { if (s.far) R = Math.min(R, s.hi); else L = Math.max(L, s.lo); }
+    else { if (s.far) T = Math.min(T, s.hi); else B = Math.max(B, s.lo); }
+  });
+  return { L, R, B, T, slopes, rest };
+}
+const _r1 = v => Math.round(v * 10) / 10, _r2 = v => Math.round(v * 100) / 100;
+
+//  המידה אחרי השיפוע (עדיין עם הליטוש — כמו המידות באופטי-ווי) → { w, h }, או null כשאין קו שיפוע.
+//  לחיבור לפריט (opty-match.js: p.cw/p.ch). בדיקה על 16/11: 11 מ-12 תאמו.
+function lgOptyCutSize(geo) {
+  if (!geo || !Array.isArray(geo.c) || !(geo.w > 0) || !(geo.h > 0)) return null;
+  const f = _lgOptyFrame(geo);
+  return f.slopes.length ? { w: _r1(f.R - f.L), h: _r1(f.T - f.B) } : null;
+}
+
+//  הצורה במידה נטו — בלי הליטוש ואחרי השיפוע: { w, h, c (בלי קווי השיפוע, מוזז ב-1 מ"מ), slopes:[{v, far, from, to, a, b}], opty:{w,h} }.
+//  from/to = הרוחב (או הגובה) נטו בשני קצוות השיפוע: למטה/למעלה (או משמאל/מימין).
+function lgOptyNetGeo(geo) {
+  if (!geo || !(geo.w > 0) || !(geo.h > 0) || geo.opty) return geo;
+  const f = _lgOptyFrame(geo), dx = f.L + 1, dy = f.B + 1;
+  const mv = ct => ct.map(s => s[0] === 0 ? [0, _r2(s[1] - dx), _r2(s[2] - dy), _r2(s[3] - dx), _r2(s[4] - dy)] : [1, _r2(s[1] - dx), _r2(s[2] - dy), s[3], s[4], s[5]]);
+  const slopes = f.slopes.map(s => {
+    //  לאורך הקו: הקצה בתחתית/שמאל ובראש/ימין, ורוחב הזכוכית נטו בכל אחד
+    const [p, q] = s.v ? (s.a[1] <= s.b[1] ? [s.a, s.b] : [s.b, s.a]) : (s.a[0] <= s.b[0] ? [s.a, s.b] : [s.b, s.a]);
+    const size = pt => s.v ? (s.far ? pt[0] - f.L : f.R - pt[0]) - 2 : (s.far ? pt[1] - f.B : f.T - pt[1]) - 2;
+    return { v: s.v, far: s.far, from: _r1(size(p)), to: _r1(size(q)) };
+  });
+  const w = _r1(f.R - f.L - 2), h = _r1(f.T - f.B - 2);
+  //  לציור: הקו על קצה הזכוכית נטו, מהרוחב (גובה) בקצה אחד לשני
+  slopes.forEach(s => {
+    if (s.v) { const x = v => s.far ? v : w - v; s.a = [x(s.from), 0]; s.b = [x(s.to), h]; }
+    else { const y = v => s.far ? v : h - v; s.a = [0, y(s.from)]; s.b = [w, y(s.to)]; }
+  });
+  return { w, h, c: f.rest.map(mv), slopes, opty: { w: geo.w, h: geo.h } };
+}
+//  שורת טקסט לכל שיפוע: "שיפוע מימין · למטה 602 · למעלה 599"
+function lgOptySlopeText(net) {
+  return ((net && net.slopes) || []).map(s => s.v
+    ? `שיפוע ${s.far ? 'מימין' : 'משמאל'} · רוחב למטה ${s.from} · למעלה ${s.to}`
+    : `שיפוע ${s.far ? 'למעלה' : 'למטה'} · גובה משמאל ${s.from} · מימין ${s.to}`);
+}
+
 //  מידות לכל דבר בצורה (בן, 16/11: "שייראו בדיוק את הנתונים") — כל קו מתאר הופך לפריט עם מספר:
 //    חור (עיגול שלם): קוטר + מרכז מהקצוות הקרובים · פינה מעוגלת: רדיוס + איזו פינה
 //    חריץ (קו פתוח שיוצא מקצה אחד): מאיזה צד, עומק, רוחב, ומרחק מהקצה הקרוב
@@ -93,7 +156,8 @@ function lgOptyShapeSvg(geo, opts) {
   const Y = y => +(H - y).toFixed(2), X = x => +x.toFixed(2);
   const pt = (cx, cy, r, a) => [X(cx + r * Math.cos(a)), Y(cy + r * Math.sin(a))];
   let d = '';
-  (geo.c || []).forEach(segs => {
+  //  קווי השיפוע (צורה נטו, lgOptyNetGeo) — מצוירים, אבל לא מספרים ברשימה
+  (geo.c || []).concat((geo.slopes || []).map(s => [[0, s.a[0], s.a[1], s.b[0], s.b[1]]])).forEach(segs => {
     let last = null;
     segs.forEach(s => {
       let a, b;
@@ -216,17 +280,19 @@ function lgOptyShapeView(order, idx) {
   if (l2) l2.onclick = () => print(true);
   if (it.optyShape && typeof _lgDb !== 'undefined') {
     _lgDb.ref('meta/optyGeo/' + it.optyShape).once('value').then(v => {
-      const g = v.val(), box = document.getElementById('lgOptyViewGeo'); if (!box) return;
-      const fl = g ? lgOptyFeatures(g) : [];
+      const raw = v.val(), box = document.getElementById('lgOptyViewGeo'); if (!box) return;
+      //  מידה נטו (בן, 16/11): בלי 1 מ"מ ליטוש מכל צד, ואחרי השיפוע — המידה האמיתית של הזכוכית
+      const g = raw ? lgOptyNetGeo(raw) : null;
+      const fl = g ? lgOptySlopeText(g).map(t => ({ n: '∠', text: t })).concat(lgOptyFeatures(g)) : [];
       box.style.display = 'block';
       box.innerHTML = g ? `<div style="display:flex;justify-content:center;">${lgOptyShapeSvg(g, { px: 420, dims: true }).replace('<svg ', '<svg style="width:100%;max-height:58vh;color:#222;" ')}</div>`
-        + `<div style="font-size:12px;color:#666;margin:6px 0 4px;">מידות מאופטי-ווי: <b dir="ltr">${e(g.w)} × ${e(g.h)}</b> · כל מרחק נמדד מהקצה הקרוב</div>`
+        + `<div style="font-size:12px;color:#666;margin:6px 0 4px;">מידה נטו: <b dir="ltr">${e(g.w)} × ${e(g.h)}</b> · באופטי-ווי <span dir="ltr">${e(raw.w)} × ${e(raw.h)}</span> (עם ליטוש${g.slopes && g.slopes.length ? ' ושיפוע' : ''}) · כל מרחק נמדד מהקצה הקרוב, נטו</div>`
         + (fl.length ? `<ol class="lg-opty-feats" style="margin:0;padding:0;list-style:none;display:grid;gap:4px;">`
           + fl.map(f => `<li style="display:flex;gap:8px;align-items:center;font-size:15px;color:#222;padding:6px 8px;background:#f6f6f6;border-radius:6px;">`
             + `<span style="flex:none;width:26px;height:26px;border-radius:50%;background:#a93226;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;">${f.n}</span>`
             + `<span>${e(f.text)}</span></li>`).join('') + `</ol>`
           : `<div style="font-size:14px;color:#666;">בלי חורים או חיתוכים — מלבן נקי</div>`)
-        :'הציור של הצורה עוד לא נקלט — "קליטה מאופטי-ווי" עם קבצי הצורות מהדיסק-און-קי';
+        :'הציור של הצורה עוד לא נקלט — "אופטי-ווי" ← קליטה, עם קבצי הצורות מהדיסק-און-קי';
     }).catch(() => { const box = document.getElementById('lgOptyViewGeo'); if (box) box.textContent = 'הציור לא נטען — בדוק חיבור'; });
   }
 }
@@ -247,4 +313,4 @@ function lgOptyChip(order, idx) {
 }
 function lgOptyShapeViewById(id, idx) { const o = _lgOptyOrders[id]; if (o) lgOptyShapeView(o, idx); }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { lgOptyShapeParse, lgOptyFeatures, lgOptyShapeSvg, lgOptyShapeDraw, lgOptyChip };
+if (typeof module !== 'undefined' && module.exports) module.exports = { lgOptyShapeParse, lgOptyFeatures, lgOptyShapeSvg, lgOptyShapeDraw, lgOptyChip, lgOptyCutSize, lgOptyNetGeo, lgOptySlopeText };
