@@ -82,10 +82,14 @@ function extractRefs(text) {
 //    "... 271.00 203.25   0 1.500 0.500   1.00   1" (שורה ידנית — 0, אין הזמנה)
 function extractItemRefs(text) {
   const out = new Set();
-  //  ואחריו מספר השורה (1–3 ספרות) או אורך בשורה ידנית (1.500) — כך יתרת חוב או
-  //  מספר עוסק שבאים אחרי סכום בתחתית לא נספרים
-  const re = /(?:^|\s)-?[\d,]*\d\.\d{2} l?(\d{3,9})(?= (?:\d{1,3}|\d+\.\d{3})(?:\s|$))/g;
-  for (let m; (m = re.exec(norm(text)));) { out.add(String(Number(m[1]))); re.lastIndex = m.index + 1; }
+  const t = norm(text);
+  //  סה"כ השורה → מ.מקור → מספר השורה / כמות / אורך (סדר לוגי)
+  const fwd = /(?:^|\s)-?[\d,]*\d\.\d{2} l?(\d{3,9})(?= (?:\d{1,3}|\d+\.\d{2,3})(?:\s|$))/g;
+  //  אותו דבר הפוך — pdfjs מחזיר לפעמים סדר ויזואלי (ר' _hay)
+  const rev = /(?:^|\s)(?:\d{1,3}|\d+\.\d{2,3}) l?(\d{3,9}) -?[\d,]*\d\.\d{2}(?=\s|$)/g;
+  for (const re of [fwd, rev]) {
+    for (let m; (m = re.exec(t));) { out.add(String(Number(m[1]))); re.lastIndex = m.index + 1; }
+  }
   return [...out];
 }
 
