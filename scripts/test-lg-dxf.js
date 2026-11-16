@@ -76,5 +76,15 @@ check('throws on issues', thr(Object.assign({}, glass, { issues: ['x'] })), true
 check('throws on NaN', thr(Object.assign({}, glass, { cuts: [{ kind: 'handle', x: NaN, y: 5, dia: 12 }] })), true);
 check('throws on Infinity', thr(Object.assign({}, glass, { cuts: [{ kind: 'handle', x: 5, y: 5, dia: Infinity }] })), true);
 check('3 decimals max', /\d\.\d{4,}/.test(dxf), false);
+{
+  // lgDxfSaveAll reports errors through its callback, after the last file
+  const vm = require('vm'), fs = require('fs');
+  const ctx = vm.createContext({ setTimeout: f => f(), URL: { createObjectURL: () => 'x', revokeObjectURL() {} },
+    Blob: function () {}, document: { createElement: () => ({ click() {} }), body: {} }, Math, String, Number, Array, Error });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'lg-dxf.js'), 'utf8'), ctx);
+  let got = null;
+  vm.runInContext('lgDxfSaveAll', ctx)([{ name: 'a.dxf', cut: Object.assign({}, glass, { issues: ['x'] }) }], 0, e => { got = e; });
+  check('lgDxfSaveAll: errors arrive in the callback', Array.isArray(got) && got.length === 1, true);
+}
 if (failed) { console.error(failed + ' failed'); process.exit(1); }
 console.log('all passed');

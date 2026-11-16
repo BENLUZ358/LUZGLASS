@@ -63,13 +63,14 @@ function lgDxfSave(name, text) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-// כל הקבצים אחד אחרי השני (בלי ספריית zip). מחזיר הודעות שגיאה, ריק = הכול ירד.
-function lgDxfSaveAll(files, gapMs) {
-  const errs = [];
+// כל הקבצים אחד אחרי השני (בלי ספריית zip). done(errs) נקרא אחרי הקובץ האחרון; ריק = הכול ירד.
+function lgDxfSaveAll(files, gapMs, done) {
+  const errs = [], gap = gapMs == null ? 350 : gapMs;
+  if (!files.length) { if (done) done(errs); return; }
   files.forEach((f, i) => setTimeout(() => {
     try { lgDxfSave(f.name, lgDxf(f.cut)); } catch (e) { errs.push(e.message); }
-  }, i * (gapMs == null ? 350 : gapMs)));
-  return errs;
+    if (i === files.length - 1 && done) done(errs);
+  }, i * gap));
 }
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { lgDxf, lgDxfName, lgDxfSafe, lgDxfSave, lgDxfSaveAll };

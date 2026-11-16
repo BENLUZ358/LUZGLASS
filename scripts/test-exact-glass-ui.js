@@ -405,6 +405,14 @@ function sameAsFile(label, P, S, corner) {
   const lone = bar([{ type: 'fixed', wallSide: 'both' }], { 0: { w: 600, h: 2000 } }, 'admin');
   check('admin: glass with issues → disabled button with the issue text',
         /disabled[^>]*title="לבדוק ביד: [^"]+"/.test(lone.el.innerHTML) && !/dxfDownload/.test(lone.el.innerHTML), true);
+  const none = { type: 'fixed', wallSide: 'both' };
+  const blockedBtn = bar([none], { 0: { w: 600, h: 2000 } }, 'admin');
+  check('keyless glass with no issue text: title says לבדוק ביד: אין תבנית',
+        blockedBtn.el.innerHTML.includes('לבדוק ביד:'), true);
+  vm.runInContext('dxfDownload(0)', blockedBtn.ctx);
+  check('dxfDownload on a blocked glass downloads nothing', blockedBtn.saved.length + blockedBtn.alerts.length, 0);
+  vm.runInContext('dxfDownload(-1)', a.ctx);
+  check('"all" twice: still only ready glasses (2 + 2 files)', a.saved.filter(x => x.download).length, 4);
 }
 
 console.log('');
