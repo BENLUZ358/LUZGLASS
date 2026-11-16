@@ -23,6 +23,7 @@ function lgLabelsForClient(entries) {
         dims: Math.round(Number(it.w) || 0) + ' × ' + Math.round(Number(it.h) || 0),
         sketchName: String(order.sketchName || ''),
         orderNum: String(order.orderNum || ''),
+        shape: String(it.optyShape || ''),          // מספר הצורה באופטי-ווי (opty.html, בן 16/11)
         orderId: String(order.id || ''), idx: i,
       });
     });
@@ -63,12 +64,24 @@ function lgLabelDraw(ctx, label, W) {
   line(l.title, 80, 64, 28, '700', 'rtl');                       // שם הלקוח
   ctx.fillRect(M, 140, maxW, 4);
   //  רוחב × גובה — משמאל לימין, כמו בכל המסכים (lgDimsText)
-  line(l.dims, 275, 130, 48, '700', 'ltr');
+  //  "מדבקה עם צורה" (בן, 16/11): הצורה מאופטי-ווי משמאל, המידה מימין וקטנה יותר
+  if (l.geo && typeof lgOptyShapeDraw === 'function') {
+    lgOptyShapeDraw(ctx, l.geo, M, 158, 230, 230);
+    const f = _fit(ctx, l.dims, maxW - 250, 84, 36, '700');
+    ctx.font = '700 ' + f.size + 'px Heebo, Arial, sans-serif'; ctx.direction = 'ltr';
+    ctx.fillText(f.text, M + 250 + (maxW - 250) / 2, 275);
+    out.push({ size: f.size, width: ctx.measureText(f.text).width, cut: f.cut });
+  } else line(l.dims, 275, 130, 48, '700', 'ltr');
   ctx.fillRect(M, 400, maxW, 4);
   line(l.sketchName, 465, 64, 28, '700', 'rtl');                     // שם הסקיצה
   if (l.orderNum) {
     ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'ltr'; ctx.textAlign = 'left';
     ctx.fillText(String(l.orderNum), M, 535);
+    ctx.textAlign = 'center';
+  }
+  if (l.shape) {                                                     // מספר הצורה באופטי-ווי — בפינה הימנית
+    ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'rtl'; ctx.textAlign = 'right';
+    ctx.fillText('צורה ' + l.shape, W - M, 535);
     ctx.textAlign = 'center';
   }
   return out;

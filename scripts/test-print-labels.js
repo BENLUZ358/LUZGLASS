@@ -24,7 +24,7 @@ const O2 = { id: 'o2', orderNum: 'L1201', orderClient: 'המקום לאמבט', 
 /* A + B */
 const labels = PL.lgLabelsForClient([{ order: O1, idxs: [0, 1, 3] }, { order: O2, idxs: [] }]);
 check('A1 one label per arrived glass, none for the rest', labels.length, 3);
-check('B1 content', labels[0], { title: 'המקום לאמבט', dims: '500 × 2000', sketchName: 'אסף', orderNum: 'L1200', orderId: 'o1', idx: 0 });
+check('B1 content', labels[0], { title: 'המקום לאמבט', dims: '500 × 2000', sketchName: 'אסף', orderNum: 'L1200', shape: '', orderId: 'o1', idx: 0 });
 check('A2 in item order', labels.map(l => l.idx), [0, 1, 3]);
 check('B2 no sketch name → empty, not "undefined"', PL.lgLabelsForClient([{ order: O2, idxs: [0] }])[0].sketchName, '');
 
@@ -49,6 +49,17 @@ const long = { ...labels[0], sketchName: 'מקלחון פינתי גדול עם 
 const sizes = PL.lgLabelDraw(ctx, long);
 check('D2 long lines are shrunk to fit the width', sizes.every(s => s.width <= W - 40), true);
 check('D3 and the text is kept (ellipsis only if even the smallest size cannot fit)', sizes.filter(s => s.cut).length <= 1, true);
+
+/* E — מספר צורה מאופטי-ווי (בן, 16/11) */
+const O3 = { ...O1, items: [{ ...it(502, 1902), optyShape: '274328' }] };
+check('E1 shape number travels from the item to the label', PL.lgLabelsForClient([{ order: O3, idxs: [0] }])[0].shape, '274328');
+const ink = l => { const cc = createCanvas(W, W), x = cc.getContext('2d'); PL.lgLabelDraw(x, l);
+  const d = x.getImageData(W - 200, 515, 180, 40).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return n; };
+check('E2 shape number printed bottom-right; no shape → corner stays empty', [ink({ ...labels[0], shape: '274328' }) > 50, ink(labels[0])], [true, 0]);
+global.lgOptyShapeDraw = require(path.join(__dirname, '..', 'opty-shape.js')).lgOptyShapeDraw;
+const box = l => { const cc = createCanvas(W, W), x = cc.getContext('2d'); const r = PL.lgLabelDraw(x, l);
+  const d = x.getImageData(20, 160, 230, 230).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return [n > 100, r.every(s => s.width <= W - 40)]; };
+check('E3 label with shape: drawing on the left, size still fits', box({ ...labels[0], geo: { w: 427, h: 1992, c: [[[1, 366, 996, 6, 0, 6.2832]]] } }), [true, true]);
 
 if (failed) { console.error('\n' + failed + ' failed'); process.exit(1); }
 console.log('\nall passed');
