@@ -70,4 +70,8 @@ check('זבולון 2 ↔ זבולון 1/2/3 (size picks the item)',
 }
 check('a short number is not a name prefix (2741 never matches 27410)',
   M.lgOptyMatch([P('1', 'מאור', '274', 500, 2000)], [{ id: 'x', orderClient: 'א.מ.מראות', sketchName: '2741', items: [{ w: 500, h: 2000 }] }]).auto.length, 0);
+check('אריאל 2 never goes to אריאל 1 automatically',
+  M.lgOptyMatch([P('274133', 'BathPlace', 'אריאל 2', 402, 1902)], [{ id: 'L1250', orderClient: 'המקום לאמבט', sketchName: 'אריאל 1', items: [{ w: 400, h: 1900 }] }]).auto.length, 0);
+check('חווה 2 ↔ חווה סוגרים1/2',
+  auto(M.lgOptyMatch([P('274417', 'א.א.פנדה', 'חווה 2', 492, 1902)], [{ id: 'L1273', orderClient: 'נאור חזקיה', sketchName: 'חווה סוגרים1/2', items: [{ w: 490, h: 1900 }] }])), [['274417', 'L1273', 0]]);
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
