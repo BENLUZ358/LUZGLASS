@@ -12,6 +12,8 @@ const check = (name, a, e) => JSON.stringify(a) === JSON.stringify(e) ? console.
 const CS = fs.readFileSync(path.join(ROOT, 'check-station.html'), 'utf8');
 check('check station loads the shape, label and print scripts',
   ['opty-shape.js', 'print-labels.js', 'order-labels.js'].map(f => new RegExp(`<script src="${f.replace('.', '\.')}`).test(CS)), [true, true, true]);
+check('a visible 📐 strip under the client name, filled when the sketch opens',
+  [CS.includes('<div id="shOpty" class="sh-opty" hidden></div>'), CS.replace(/\r/g, '').includes('function renderSketch(){\n  csRenderOptyStrip();')], [true, true]);
 check('the 📐 button does not tick the item (stopPropagation) and opens the shape',
   /class="si-shape"[^>]*onclick="event\.stopPropagation\(\);csOpenShape\(\$\{origIdx\}\)"/.test(CS), true);
 
