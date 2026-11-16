@@ -53,7 +53,7 @@ const ord = (id, o) => ({ id, stage: 'done', orderClient: 'א.מ.מראות', or
     const calls = [], drained = [];
     const r = await N.lgReadyNetRun(db, { now: NOW,
       dispatch: async (_db, ids) => { calls.push(ids); return { status: 200, body: { queued: true, outboxKey: 'ok1' } }; },
-      drain: async (_db, keys) => { drained.push(...keys); } });
+      drain: async (_db, keys) => { drained.push(...keys); keys.forEach(k => { _db._data.waOutbox[k] = { kind: 'ready', state: 'sent', sentAt: NOW }; }); } });
     assert.deepEqual(calls, [['a', 'b']]);          // c כבר בתור — לא שוב; big לא במעקב — לא נבדק בכלל
     assert.deepEqual(drained, ['ok1']);
     assert.equal(r.sent, 1);
@@ -168,6 +168,65 @@ const ord = (id, o) => ({ id, stage: 'done', orderClient: 'א.מ.מראות', or
     assert.ok(a > 54000 && a <= 55000, 'fast beat budget ' + a);
     const b = await beat(300);
     assert.ok(b <= 55000 - 300 + 5 && b > 50000, 'slow beat budget ' + b);
+  });
+
+  //  בן, 16/11 (T-0009): "שלחתי" רק כשההודעה באמת יצאה. 13:12 שלוש הודעות נכנסו לתור, וואטסאפ
+  //  לא ענה עד 13:28 — והחדר כבר אמר "שלחתי".
+  const roomOf = db => Object.values((db._data.waMeta || {}).agentRoom || {}).map(r => r.text);
+  const queuedOnly = async (_db, ids) => { _db._data.waOutbox.q1 = { kind: 'ready', state: 'pending', orderIds: ids, createdAt: NOW }; return { status: 200, body: { queued: true, outboxKey: 'q1' } }; };
+  await test('run: WhatsApp did not send yet → "נכנסה לתור", never "שלחתי"', async () => {
+    const db = base();
+    await N.lgReadyNetRun(db, { now: NOW, dispatch: queuedOnly, drain: async () => {} });
+    const t = roomOf(db);
+    assert.equal(t.length, 1);
+    assert.ok(/נכנסה לתור/.test(t[0]) && /מחכה לוואטסאפ/.test(t[0]) && !/שלחתי/.test(t[0]), t[0]);
+    assert.ok(((db._data.waMeta.readyNet || {}).follow || {}).q1, 'followed');
+  });
+  await test('follow-up: a line when it really goes out, then stops following', async () => {
+    const db = base();
+    await N.lgReadyNetRun(db, { now: NOW, dispatch: queuedOnly, drain: async () => {} });
+    await N.lgReadyNetRun(db, { now: NOW + MIN });                          // עדיין בתור — שקט
+    assert.equal(roomOf(db).length, 1);
+    db._data.waOutbox.q1.state = 'sent'; db._data.waOutbox.q1.sentAt = NOW + 16 * MIN;
+    await N.lgReadyNetRun(db, { now: NOW + 17 * MIN });
+    const t = roomOf(db);
+    assert.equal(t.length, 2, t.join(' | '));
+    assert.ok(/יצאה/.test(t[1]) && /א\.מ\.מראות/.test(t[1]) && /12:46/.test(t[1]), t[1]);
+    assert.ok(!((db._data.waMeta.readyNet || {}).follow || {}).q1, 'no longer followed');
+    await N.lgReadyNetRun(db, { now: NOW + 18 * MIN });
+    assert.equal(roomOf(db).length, 2);
+  });
+  await test('follow-up: stuck 15 minutes → one warning with the reason, not repeated', async () => {
+    const db = base();
+    await N.lgReadyNetRun(db, { now: NOW, dispatch: queuedOnly, drain: async () => {} });
+    db._data.waOutbox.q1.lastError = 'שגיאת רשת (TimeoutError)';
+    await N.lgReadyNetRun(db, { now: NOW + 16 * MIN });
+    await N.lgReadyNetRun(db, { now: NOW + 17 * MIN });
+    const t = roomOf(db);
+    assert.equal(t.length, 2, t.join(' | '));
+    assert.ok(/עדיין/.test(t[1]) && /16 דק/.test(t[1]) && /TimeoutError/.test(t[1]), t[1]);
+  });
+  await test('follow-up: failed → says so with the reason; expired → says so and stops', async () => {
+    const db = base();
+    await N.lgReadyNetRun(db, { now: NOW, dispatch: queuedOnly, drain: async () => {} });
+    Object.assign(db._data.waOutbox.q1, { state: 'failed', lastError: 'המספר לא בוואטסאפ' });
+    await N.lgReadyNetRun(db, { now: NOW + 2 * MIN });
+    await N.lgReadyNetRun(db, { now: NOW + 3 * MIN });
+    let t = roomOf(db);
+    assert.equal(t.length, 2, t.join(' | '));
+    assert.ok(/לא יצאה/.test(t[1]) && /המספר לא בוואטסאפ/.test(t[1]), t[1]);
+    Object.assign(db._data.waOutbox.q1, { state: 'expired', lastError: 'פג תוקף — לא נשלחה' });
+    await N.lgReadyNetRun(db, { now: NOW + 4 * MIN });
+    t = roomOf(db);
+    assert.equal(t.length, 3, t.join(' | '));
+    assert.ok(!((db._data.waMeta.readyNet || {}).follow || {}).q1, 'no longer followed');
+  });
+  await test('follow-up runs even at night and with nothing new to watch', async () => {
+    const db = base();
+    await N.lgReadyNetRun(db, { now: NOW, dispatch: queuedOnly, drain: async () => {} });
+    db._data.waOutbox.q1.state = 'sent'; db._data.waOutbox.q1.sentAt = NOW + 60 * MIN;
+    await N.lgReadyNetRun(db, { now: Date.UTC(2026, 10, 11, 20, 0) });       // 22:00
+    assert.equal(roomOf(db).length, 2);
   });
 
   console.log(`\n${pass} passed${fail ? ', ' + fail + ' FAILED' : ''}`);
