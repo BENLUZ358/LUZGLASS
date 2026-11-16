@@ -75,19 +75,27 @@ function lgLabelDraw(ctx, label, W) {
   } else line(l.dims, 275, 130, 48, '700', 'ltr');
   ctx.fillRect(M, 400, maxW, 4);
   line(l.sketchName, 465, 64, 28, '700', 'rtl');                     // שם הסקיצה
+  //  שורה תחתונה: מספר ההזמנה משמאל · מספר אופטימיזציה באמצע · "צורה N" מימין — הצורה והאופטימיזציה
+  //  גדולות יותר (בן, 16/11); האופטימיזציה מתכווצת אם אין מקום ביניהם
+  let left = M, right = W - M;
   if (l.orderNum) {
     ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'ltr'; ctx.textAlign = 'left';
     ctx.fillText(String(l.orderNum), M, 535);
+    left = M + ctx.measureText(String(l.orderNum)).width + 16;
     ctx.textAlign = 'center';
   }
   if (l.shape) {                                                     // מספר הצורה באופטי-ווי — בפינה הימנית
-    ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'rtl'; ctx.textAlign = 'right';
-    ctx.fillText('צורה ' + l.shape, W - M, 535);
+    ctx.font = '700 34px Heebo, Arial, sans-serif'; ctx.direction = 'rtl'; ctx.textAlign = 'right';
+    ctx.fillText('צורה ' + l.shape, W - M, 537);
+    right = W - M - ctx.measureText('צורה ' + l.shape).width - 16;
     ctx.textAlign = 'center';
   }
   if (l.job) {                                                       // מספר אופטימיזציה (M00272) — באמצע, בין ההזמנה לצורה
-    ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'ltr'; ctx.textAlign = 'center';
-    ctx.fillText(String(l.job).slice(0, 10), W / 2, 535);
+    const t = String(l.job).slice(0, 10);
+    let fz = 34;
+    for (; fz > 18; fz -= 2) { ctx.font = '700 ' + fz + 'px Heebo, Arial, sans-serif'; if (ctx.measureText(t).width <= right - left) break; }
+    ctx.font = '700 ' + fz + 'px Heebo, Arial, sans-serif'; ctx.direction = 'ltr'; ctx.textAlign = 'center';
+    ctx.fillText(t, (left + right) / 2, 537);
   }
   return out;
 }

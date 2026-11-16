@@ -65,7 +65,7 @@ check('E3 label with shape: drawing on the left, size still fits', box({ ...labe
 const O4 = { ...O1, items: [{ ...it(502, 1902), optyShape: '274328', optyJob: 'M00272' }] };
 check('E4a optimisation number travels from the item to the label', PL.lgLabelsForClient([{ order: O4, idxs: [0] }])[0].job, 'M00272');
 const mid = l => { const cc = createCanvas(W, W), x = cc.getContext('2d'); PL.lgLabelDraw(x, l);
-  const d = x.getImageData(200, 512, 160, 34).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return n; };
+  const d = x.getImageData(140, 508, 180, 38).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return n; };
 check('E4b printed in the middle of the bottom row; no number → empty', [mid({ ...labels[0], shape: '274328', job: 'M00272' }) > 50, mid({ ...labels[0], shape: '274328' })], [true, 0]);
 check('E4c does not run into the order number or the shape number', ink({ ...labels[0], shape: '274328', job: 'M00272' }) === ink({ ...labels[0], shape: '274328' }), true);
 
