@@ -44,6 +44,29 @@ check('svg without shapes: labels, no cut path', [plain.includes('שייפ 27438
 const withGeo = L.lgOptyLayoutSvg(sh[0], { 4: { client: 'אומנות הזכוכ', name: '510', w: 302, h: 2002 } }, { 274378: geoOf('274378') });
 check('svg with a shape: cut path, thin stroke, client shown', [withGeo.includes('<path'), withGeo.includes('vector-effect'), withGeo.includes('אומנות הזכוכ')], [true, false, true]);
 
+// ── Task 3: job record, cut stamps, cut state ──
+const ROWS = [
+  { CODCOM: 'M00290', POSPZ: 4, QTAPZ: 1, SAGOMA: '274380', DIMXPZ: 302, DIMYPZ: 2002, MOLATURA: 0, CLIENTE: 'אומנות הזכוכ', ORDINE: '510', COD_MAT_COMP: '08S', DESCR_MAT_COMP: '8 mm clear' },
+  { CODCOM: 'M00290', POSPZ: 1, QTAPZ: 1, SAGOMA: '274381', DIMXPZ: 252, DIMYPZ: 2002, CLIENTE: 'אומנות הזכוכ', ORDINE: '510', COD_MAT_COMP: '08S', DESCR_MAT_COMP: '8 mm clear' },
+  { CODCOM: 'M00291', POSPZ: 1, QTAPZ: 1, SAGOMA: '274328', DIMXPZ: 502, DIMYPZ: 1902, CLIENTE: 'BathPlace', ORDINE: 'איציק', COD_MAT_COMP: '08S' },
+];
+const rec = L.lgOptyJobRecord('M00290', M290, '2026-11-17', ROWS, 123);
+check('record: day, mat, 1 sheet with 4 pieces', [rec.job, rec.day, rec.mat, rec.matName, rec.sheets.length, rec.sheets[0].pieces.length, rec.importedAt], ['M00290', '2026-11-17', '08S', '8 mm clear', 1, 4, 123]);
+check('record: piece info from Pezzi (only this job)', rec.pieces[4], { client: 'אומנות הזכוכ', name: '510', w: 302, h: 2002, qty: 1, shape: '274380', grind: 0 });
+check('record: other job rows ignored', Object.keys(rec.pieces).sort(), ['1', '4']);
+const bare = L.lgOptyJobRecord('M00290', M290, '2026-11-17', [], 1);
+check('record without Pezzi rows: still the sheet', [bare.sheets.length, bare.pieces, bare.mat], [1, {}, '']);
+const ORD = [
+  { id: 'o1', items: { 0: { optyJob: 'M00290', optyShape: '274380' }, 1: { optyJob: 'M00290', optyShape: '274380', optyCut: { undone: true, at: '2026-11-17', job: 'M00290' } }, 2: { optyJob: 'M00999', optyShape: '1' }, 3: { w: 1 } } },
+  { id: 'o2', items: [{ optyJob: 'M00290', optyShape: '999999' }] },
+];
+check('stamps: linked item only; undone, unknown job, shape not in job → none', L.lgOptyCutStamps(ORD, { M00290: rec }), [{ orderId: 'o1', key: '0', value: { at: '2026-11-17', job: 'M00290' } }]);
+check('cut state: future → לחיתוך', L.lgOptyCutState({ at: '2026-11-19', job: 'M1' }, '2026-11-18'), { label: 'לחיתוך 19/11', cut: false });
+check('cut state: today → לחיתוך היום', L.lgOptyCutState({ at: '2026-11-18', job: 'M1' }, '2026-11-18'), { label: 'לחיתוך היום', cut: false });
+check('cut state: past → נחתך', L.lgOptyCutState({ at: '2026-11-17', job: 'M1' }, '2026-11-18'), { label: '✂ נחתך 17/11', cut: true });
+check('cut state: sheet marked today → נחתך', L.lgOptyCutState({ at: '2026-11-18', job: 'M1', marked: true }, '2026-11-18'), { label: '✂ נחתך 18/11', cut: true });
+check('cut state: undone / none → null', [L.lgOptyCutState({ at: '2026-11-17', undone: true }, '2026-11-18'), L.lgOptyCutState(null, '2026-11-18')], [null, null]);
+
 module.exports = { check, M290, il, geoOf, L, done: () => failed };
 if (require.main === module) {
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');

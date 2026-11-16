@@ -145,6 +145,53 @@ function lgOptyLayoutSvg(sheet, info, geos, opts) {
   return g + '</svg>';
 }
 
+//  ─── רשומת אופטימיזציה (meta/optyJobs/<job>) — מקור מידע נפרד על מה שנחתך (בן, 17/11) ───
+//  day = יום העבודה שבן בחר. pieces[pos] מ-Pezzi (מה שרשום באופטי-ווי), גם לזכוכית שלא מחוברת להזמנה.
+function lgOptyJobRecord(job, r01Text, day, pezziRows, nowMs) {
+  const rows = (pezziRows || []).filter(r => r && String(r.CODCOM || '').trim() === job);
+  const pieces = {};
+  rows.forEach(r => {
+    const pos = Number(r.POSPZ); if (!(pos > 0)) return;
+    pieces[pos] = { client: String(r.CLIENTE || '').trim(), name: String(r.ORDINE || '').trim(),
+      w: Number(r.DIMXPZ) || 0, h: Number(r.DIMYPZ) || 0, qty: Number(r.QTAPZ) || 1,
+      shape: String(r.SAGOMA || '').trim(), grind: Number(r.MOLATURA) || 0 };
+  });
+  const first = rows[0] || {};
+  return { job, day, mat: String(first.COD_MAT_COMP || '').trim(), matName: String(first.DESCR_MAT_COMP || '').trim(),
+    importedAt: nowMs || 0, sheets: lgOptyLayoutParse(r01Text), pieces };
+}
+
+//  ─── סימון "נחתך" על פריטים מחוברים ───
+//  פריט עם optyJob שנשמר + optyShape שמופיע בלוחות של העבודה + עוד בלי optyCut → חותמת.
+//  פריט עם optyCut כלשהו (גם "בוטל") — לא נוגעים (בן מבטל ביד; קליטה חוזרת לא מחזירה).
+function lgOptyCutStamps(orders, jobsByNo) {
+  const out = [];
+  (orders || []).forEach(o => {
+    const items = (o && o.items) || {};
+    Object.keys(items).forEach(k => {
+      const it = items[k];
+      if (!it || it.optyCut || !it.optyJob || !it.optyShape) return;
+      const rec = (jobsByNo || {})[it.optyJob];
+      if (!rec) return;
+      const has = (rec.sheets || []).some(s => (s.pieces || []).some(p => String(p.shape || '') === String(it.optyShape)));
+      if (has) out.push({ orderId: o.id, key: String(k), value: { at: rec.day, job: rec.job } });
+    });
+  });
+  return out;
+}
+
+//  מצב לתצוגה: null (אין/בוטל) | { label, cut }. נחתך = היום שלו עבר, או שהלוח סומן "נחתך".
+function lgOptyCutState(c, todayIso) {
+  if (!c || c.undone || !c.at) return null;
+  const dm = String(c.at).slice(8, 10) + '/' + String(c.at).slice(5, 7);
+  if (c.marked || c.at < todayIso) return { label: '✂ נחתך ' + dm, cut: true };
+  if (c.at === todayIso) return { label: 'לחיתוך היום', cut: false };
+  return { label: 'לחיתוך ' + dm, cut: false };
+}
+
+//  היום בישראל, 'YYYY-MM-DD'
+function lgOptyTodayIso(ms) { const p = _lgIlParts(ms == null ? Date.now() : ms); return `${p.year}-${p.month}-${p.day}`; }
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg };
+  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso };
 }
