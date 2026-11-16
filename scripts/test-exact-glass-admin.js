@@ -29,7 +29,7 @@ const grab = n => {
 };
 
 for (const f of ['lg-shapes.js', 'lg-layout.js', 'lg-cuts.js', 'lg-dxf.js'])
-  check('admin.html loads ' + f, A.includes('<script src="' + f + '"></script>'), true);
+  check('admin.html loads ' + f, A.includes('<script src="' + f), true);
 
 const FD = {
   panels: [{ type: 'fixed', wallSide: 'left', carriesDoor: true }, { type: 'door', hingeSide: 'left', hingeOnFixed: 'prev' }],
@@ -46,8 +46,8 @@ function setup(orderOf) {
   ctx.setTimeout = f => f();
   ctx.showToast = m => toasts.push(m);
   vm.runInContext('function lgEsc(s){ return String(s).replace(/"/g,"&quot;"); }\n' +
-    'function lgDimsText(w,h){ return w+"x"+h; }\nfunction _modFillGeos(){}\nvar eid="7", orders=[];', ctx);
-  vm.runInContext(['_modDxfCuts', '_modDxfBtn', 'modDxf', '_modItemsHtml'].map(grab).join('\n'), ctx);
+    'function lgDimsText(w,h){ return w+"x"+h; }\nfunction _modFillGeos(){}\nvar eid="7", orders=[], _modDxfMemo=null;', ctx);
+  vm.runInContext(['_modDxfCuts', '_modDxfMatch', '_modDxfBtn', '_modDxfReady', 'modDxf', '_modItemsHtml'].map(grab).join('\n'), ctx);
   const order = orderOf(ctx);
   ctx.orders = [order];
   return { ctx, order, saved, toasts };
@@ -94,23 +94,48 @@ for (const [label, v] of [['version 1', 1], ['no builder', null]]) {
   const html = vm.runInContext('_modItemsHtml', ctx)(order.items);
   check('edited item: no button on it, the other keeps one', (html.match(/class="mit-dxf"/g) || []).length, 1);
 }
-/* a glass with issues → disabled, with the text */
+/* edited item + "all" → only matching items get a file */
 {
-  const { ctx, order } = setup(ctx => {
-    const sh = JSON.parse(JSON.stringify(SHOWER));
-    const cuts = vm.runInContext('lgCuts', ctx)(sh);
-    return { id: '7', orderNum: 'L1', items: itemsOf(ctx), builder: { version: 2, shower: sh } };
-  });
-  // force an issue by making the builder shower unusable for one glass
+  const { ctx, saved } = setup(ctx => { const o = mk(2)(ctx); o.items[0].w = 123; return o; });
+  vm.runInContext('modDxf(-1)', ctx);
+  check('edited item: "all" gives one file, not two', saved.filter(x => x.download).length, 1);
+}
+/* match is by paneId and exact size */
+{
+  let r = setup(ctx => { const o = mk(2)(ctx); delete o.items[0].paneId; return o; });
+  check('no paneId: no button on that item', (vm.runInContext('_modItemsHtml', r.ctx)(r.order.items).match(/class="mit-dxf"/g) || []).length, 1);
+  r = setup(ctx => { const o = mk(2)(ctx); o.items[0].paneId = 'other'; return o; });
+  check('paneId of another glass: no button', (vm.runInContext('_modItemsHtml', r.ctx)(r.order.items).match(/class="mit-dxf"/g) || []).length, 1);
+  r = setup(ctx => { const o = mk(2)(ctx); o.items[0].w += 1; return o; });
+  check('1 mm off: no button (exact match only)', (vm.runInContext('_modItemsHtml', r.ctx)(r.order.items).match(/class="mit-dxf"/g) || []).length, 1);
+  //  two same-size glasses, items swapped → each DXF must come from its own glass
+  r = setup(ctx => { const o = mk(2)(ctx); o.items.reverse(); return o; });
+  const h = vm.runInContext('_modItemsHtml', r.ctx)(r.order.items);
+  check('reordered items: no cross-matched button', (h.match(/class="mit-dxf"/g) || []).length, 0);
+}
+/* a glass with issues → disabled, with the text; no download by any route */
+{
   const bad = JSON.parse(JSON.stringify(SHOWER));
   bad.shapes[0].bracketType = 'open'; bad.shapes[0].bracketInset = 40;
-  ctx.orders = [Object.assign({}, order, { builder: { version: 2, shower: bad } })];
+  const { ctx, order, saved } = setup(ctx => ({ id: '7', orderNum: 'L1', items: itemsOf(ctx), builder: { version: 2, shower: bad } }));
   const cuts = vm.runInContext('lgCuts', ctx)(bad);
+  check('issues: the test shower really blocks glass 1', cuts[0].issues.length > 0, true);
   const html = vm.runInContext('_modItemsHtml', ctx)(order.items);
-  if (cuts[0].issues.length)
-    check('issues: disabled button with "לבדוק ביד: …"', /<button[^>]*class="mit-dxf" disabled title="לבדוק ביד: [^"]+"/.test(html), true);
-  else check('issues: test shower really produces an issue', false, true);
+  check('issues: disabled button with "לבדוק ביד: …"', /<button[^>]*class="mit-dxf" disabled title="לבדוק ביד: [^"]+"/.test(html), true);
+  vm.runInContext('modDxf(0)', ctx);
+  check('issues: modDxf on the blocked glass downloads nothing', saved.filter(x => x.download).length, 0);
+  vm.runInContext('modDxf(-1)', ctx);
+  check('issues: "all" skips the blocked glass', saved.filter(x => x.download).length, 1);
 }
+/* the file name uses the order number the admin list shows (orderNum) */
+{
+  const { ctx, saved } = setup(mk(2, { orderNum: '2026-0042' }));
+  vm.runInContext('modDxf(1)', ctx);
+  check('file name starts with the displayed orderNum', /^2026-0042-2_/.test((saved.find(x => x.download) || {}).download), true);
+}
+/* new script tags carry a cache-buster like their neighbours */
+check('admin.html: lg-*.js script tags have ?v=', ['lg-shapes.js', 'lg-layout.js', 'lg-cuts.js', 'lg-dxf.js']
+  .every(f => new RegExp('<script src="' + f.replace('.', '\\.') + '\\?v=\\d+"></script>').test(A)), true);
 
 if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
 console.log('\nAll admin DXF checks passed.');

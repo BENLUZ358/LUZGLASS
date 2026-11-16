@@ -427,10 +427,10 @@ label.msec-t{display:block;}
   <script src="sketch-reader-ui.js?v=20261023h"></script>
   <script src="drafter-batch.js?v=20261111"></script>
   <script src="print-labels.js?v=20261116"></script>
-  <script src="lg-shapes.js"></script>
-  <script src="lg-layout.js"></script>
-  <script src="lg-cuts.js"></script>
-  <script src="lg-dxf.js"></script>
+  <script src="lg-shapes.js?v=20261116"></script>
+  <script src="lg-layout.js?v=20261116"></script>
+  <script src="lg-cuts.js?v=20261116"></script>
+  <script src="lg-dxf.js?v=20261116"></script>
   <script src="opty-shape.js?v=20261116"></script>
   <script src="order-labels.js?v=20261116"></script>
 </head>
@@ -1022,7 +1022,7 @@ function openMod(id) {
     <div class="msec">
       <div class="msec-t" style="display:flex;align-items:center;gap:8px">פריטים
         ${_modCanEditItems(o) ? `<button type="button" id="modEditItemsBtn" class="mit-edit-btn" onclick="modEditItems()"><span data-icon="pencil"></span> ערוך פריטים</button>` : ''}
-        ${_modDxfCuts(o) && _modDxfCuts(o).some(g => g.key && !(g.issues && g.issues.length)) ? `<button type="button" class="mit-lbl-all" onclick="modDxf(-1)">כל ה-DXF</button>` : ''}
+        ${_modDxfReady(o, -1).length > 1 ? `<button type="button" class="mit-lbl-all" onclick="modDxf(-1)">כל ה-DXF</button>` : ''}
         ${items.some(i => i && i.w && i.h) ? `<button type="button" class="mit-lbl-all" onclick="modLabelAll()">🏷 מדבקות לכל הפריטים</button>` : ''}</div>
       <div id="itemsPreview">${_modItemsHtml(items)}</div>
     </div>
@@ -1113,29 +1113,48 @@ function openMod(id) {
 // builder.shower. ממפים זכוכית לפריט לפי המקום ברשימה (lgGlass ו-lgCuts נותנים
 // אחד לכל זכוכית, באותו סדר) ומוודאים שהמידה זהה; פריט שנערך — בלי כפתור.
 // הזמנה עם כמה סקיצות אין לה builder, ולכן גם אין כפתור.
+let _modDxfMemo = null;
 function _modDxfCuts(o){
   const b = o && o.builder;
   if(!b || !(b.version >= 2) || !b.shower || typeof lgCuts !== 'function' || typeof lgDxf !== 'function') return null;
-  try { return lgCuts(b.shower); } catch(e) { return null; }
+  if(_modDxfMemo && _modDxfMemo.b === b) return _modDxfMemo.cuts;   // פעם אחת לכל פתיחה
+  let cuts = null, glass = null;
+  try { cuts = lgCuts(b.shower); glass = lgGlass(b.shower); } catch(e) { cuts = null; }
+  _modDxfMemo = { b, cuts, glass };
+  return cuts;
+}
+// הפריט מתאים לזכוכית רק אם ה-paneId שלו הוא של הזכוכית הזו והמידות זהות בדיוק.
+// מי שנערך (מידה אחרת) או שאין לו paneId — בלי כפתור.
+function _modDxfMatch(o, cuts, i, idx){
+  const g = cuts && cuts[idx], gl = _modDxfMemo && _modDxfMemo.glass && _modDxfMemo.glass[idx];
+  if(!g || !gl || !i || !i.paneId || i.paneId !== gl.id) return null;
+  const a = LG_CUT.allowance, same = (x, y) => Math.abs(Number(x) - y) < 0.05;
+  return same(i.w, g.w - a) && same(i.h, g.h - a) ? g : null;
 }
 function _modDxfBtn(o, cuts, i, idx){
-  const g = cuts && cuts[idx];
-  if(!g || !i || Math.abs((i.w||0) - g.w) > 2 || Math.abs((i.h||0) - g.h) > 2) return '';
+  const g = _modDxfMatch(o, cuts, i, idx);
+  if(!g) return '';
   if(!g.key || (g.issues && g.issues.length)){
-    const why = 'לבדוק ביד: ' + ((g.issues||[]).join('; ') || 'אין תבנית חיתוך');
+    const why = 'לבדוק ביד: ' + ((g.issues||[]).join('; ') || 'אין תבנית');
     return `<button type="button" class="mit-dxf" disabled title="${lgEsc(why)}">DXF — ${lgEsc(why)}</button>`;
   }
   return `<button type="button" class="mit-dxf" onclick="modDxf(${idx})">DXF</button>`;
 }
+function _modDxfReady(o, idx){
+  const cuts = _modDxfCuts(o); if(!cuts) return [];
+  const it = o.items || [];
+  return (idx < 0 ? cuts.map((g, k) => k) : [idx]).filter(k => {
+    const g = _modDxfMatch(o, cuts, it[k], k);
+    return g && g.key && !(g.issues && g.issues.length);
+  });
+}
 function modDxf(idx){
   const o = orders.find(x => x.id === eid); const cuts = _modDxfCuts(o); if(!cuts) return;
-  const list = (idx < 0 ? cuts.map((g, k) => k) : [idx]).filter(k => cuts[k] && cuts[k].key && !(cuts[k].issues && cuts[k].issues.length));
-  const base = lgDxfSafe(o.orderNum) || 'הזמנה';
-  const files = list.map(k => ({ cut: cuts[k], name: lgDxfName(base, k + 1, cuts[k], 1) }));
+  const base = lgDxfSafe(o.orderNum) || 'הזמנה';   // אותו מספר שהרשימה מציגה
+  const files = _modDxfReady(o, idx).map(k => ({ cut: cuts[k], name: lgDxfName(base, k + 1, cuts[k], 1) }));
   try {
     files.forEach(f => lgDxf(f.cut));  // הכול נבדק לפני שמורידים קובץ אחד
-    const errs = lgDxfSaveAll(files);
-    if(errs.length) showToast(errs.join(' | '));
+    lgDxfSaveAll(files, undefined, errs => { if(errs.length) showToast(errs.join(' | ')); });
   } catch(e) { showToast(e.message); }
 }
 function _modItemsHtml(items){

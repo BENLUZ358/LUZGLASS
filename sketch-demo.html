@@ -2841,7 +2841,7 @@ function renderDxfBar(panels,pss){
   el.innerHTML=cuts.map(g=>{
     const bad=!g.key||(g.issues&&g.issues.length);
     return bad
-      ? '<button type="button" disabled title="'+_shEsc('לבדוק ביד: '+(g.issues||[]).join('; '))+'">DXF זכוכית '+(g.idx+1)+' — לבדוק ביד: '+_shEsc((g.issues||[]).join('; ')||'אין תבנית')+'</button>'
+      ? '<button type="button" disabled title="'+_shEsc('לבדוק ביד: '+((g.issues||[]).join('; ')||'אין תבנית'))+'">DXF זכוכית '+(g.idx+1)+' — לבדוק ביד: '+_shEsc((g.issues||[]).join('; ')||'אין תבנית')+'</button>'
       : '<button type="button" onclick="dxfDownload('+g.idx+')">DXF זכוכית '+(g.idx+1)+'</button>';
   }).join('')+(ok.length>1?'<button type="button" onclick="dxfDownload(-1)">כל ה-DXF</button>':'');
 }
@@ -2852,8 +2852,7 @@ function dxfDownload(idx){
     .map(g=>({cut:g,name:lgDxfName(base,g.idx+1,g,1)}));
   try{
     files.forEach(f=>lgDxf(f.cut)); // כל הקבצים נבדקים לפני שמורידים אחד
-    const errs=lgDxfSaveAll(files);
-    if(errs.length) alert(errs.join(' | '));
+    lgDxfSaveAll(files,undefined,errs=>{ if(errs.length) alert(errs.join(' | ')); });
   }catch(e){ alert(e.message); }
 }
 function geoWarnOpen(idx){
