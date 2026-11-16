@@ -1,0 +1,103 @@
+// ═══════════════════════════════════════════════════════════════════
+//  opty-match.js — מחבר חלק מאופטי-ווי (מספר צורה) לפריט אצלנו (בן, 16/11).
+//  לקוח + שם סקיצה + מידה. ודאי → נרשם לבד; ספק → "לבדיקה"; אין → "לא נמצא".
+//  טהור: דפדפן וגם Node (scripts/test-opty-match.js).
+//  אפיון: docs/superpowers/specs/2026-11-16-optyway-shape-link-design.md
+// ═══════════════════════════════════════════════════════════════════
+
+//  זוגות שבן נתן (16/11) — שם אצלנו ↔ שם באופטי-ווי. meta/optyClients מוסיף עליהם.
+const LG_OPTY_CLIENTS_DEFAULT = [
+  { ours: 'א.מ.מראות', opty: 'מאור' },
+  { ours: 'נאור חזקיה', opty: 'א.א.פנדה' },
+  { ours: 'טום גלאס', opty: 'טום גלס' },
+  { ours: 'טום גלאס', opty: 'טום גלאס' },
+  { ours: 'אביעד נחום', opty: 'אביעד נחום' },
+  { ours: 'מורדי', opty: 'אור המראות' },
+  { ours: 'המקום לאמבט', opty: 'BathPlace' },
+  { ours: 'יצחק אביבי', opty: 'אביבי' },
+];
+const LG_OPTY_DIM_TOL = 2;          // מ"מ — השרטט כותב לפעמים 222.1 במקום 222
+const LG_OPTY_CLIENT_MAX = 12;      // אופטי-ווי חותך את שם הלקוח אחרי 12 תווים
+
+//  בלי רווחים, גרשיים, נקודות ומקפים; אותיות לטיניות קטנות
+const lgOptyNorm = s => String(s || '').toLowerCase().replace(/[\s"'`׳״.\-_/\\,]+/g, '');
+
+//  שורות הטבלה → חלקים עם מספר צורה, מתאריך sinceISO ('YYYY-MM-DD') והלאה
+function lgOptyPieces(rows, sinceISO) {
+  return (rows || []).filter(r => r && String(r.SAGOMA || '').trim() && (!sinceISO || String(r.DATACONS || '') >= sinceISO))
+    .map(r => ({
+      shape: String(r.SAGOMA).trim(), client: String(r.CLIENTE || '').trim(), name: String(r.ORDINE || '').trim(),
+      w: Number(r.DIMXPZ) || 0, h: Number(r.DIMYPZ) || 0, qty: Math.max(1, Number(r.QTAPZ) || 1),
+      note: String(r.NOTE || '').trim(), mat: String(r.COD_MAT_COMP || '').trim(),
+      job: String(r.CODCOM || '').trim(), date: String(r.DATACONS || ''),
+    }));
+}
+
+//  שם לקוח באופטי-ווי → שמות הלקוח אצלנו (מנורמלים). קודם הזוגות, אחר כך אותו שם / תחילת שם.
+function _lgOptyClientKeys(optyClient, pairs, ourClients) {
+  const n = lgOptyNorm(optyClient); if (!n) return [];
+  const fromPairs = (pairs || []).filter(p => lgOptyNorm(p.opty) === n).map(p => lgOptyNorm(p.ours));
+  if (fromPairs.length) return [...new Set(fromPairs)];
+  const cut = String(optyClient).trim().length >= LG_OPTY_CLIENT_MAX;
+  return [...new Set((ourClients || []).map(lgOptyNorm).filter(c => c === n || (cut && c.startsWith(n))))];
+}
+
+//  שם סקיצה: שווה אחרי ניקוי, או (מספר של 4+ ספרות) סוף מספר ה-PO (אביבי)
+function _lgOptyNameOk(pieceName, sketchName) {
+  const a = lgOptyNorm(pieceName), b = lgOptyNorm(sketchName);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return /^\d{4,}$/.test(a) && b.replace(/\D/g, '').endsWith(a);
+}
+
+const _lgOptyDimOk = (p, it) => {
+  const w = Number(it.w) || 0, h = Number(it.h) || 0, t = LG_OPTY_DIM_TOL;
+  return (Math.abs(w - p.w) <= t && Math.abs(h - p.h) <= t) || (Math.abs(w - p.h) <= t && Math.abs(h - p.w) <= t);
+};
+
+//  pieces × orders → { auto:[{shape,job,orderId,idx}], review:[{piece,cands:[{orderId,idx}]}], notFound:[piece], already:[piece] }
+//  orders: [{id, orderClient, sketchName, items:[{w,h,optyShape?}]}] — הקורא כבר סינן לפי תאריך.
+function lgOptyMatch(pieces, orders, pairs) {
+  const allPairs = LG_OPTY_CLIENTS_DEFAULT.concat(pairs || []);
+  const ourClients = [...new Set((orders || []).map(o => o.orderClient || o.client || ''))];
+  const out = { auto: [], review: [], notFound: [], already: [] };
+  const taken = new Set();                                    // 'orderId#idx' שכבר קיבל צורה בריצה הזו
+  const rows = [];                                             // כל הפריטים, עם מפתח לקוח
+  (orders || []).forEach(o => {
+    const items = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+    items.forEach((it, idx) => it && rows.push({ o, it, idx, key: o.id + '#' + idx, client: lgOptyNorm(o.orderClient || o.client) }));
+  });
+  const shapeAt = new Map(rows.filter(r => r.it.optyShape).map(r => [String(r.it.optyShape), r.key]));
+
+  //  קבוצה = אותו לקוח+שם+מידה; שתי צורות שונות באותה מידה מתחלקות בין השורות לפי הסדר
+  const groups = new Map();
+  (pieces || []).forEach(p => {
+    if (shapeAt.has(p.shape)) { out.already.push(p); return; }
+    const k = [lgOptyNorm(p.client), lgOptyNorm(p.name), Math.round(Math.min(p.w, p.h)), Math.round(Math.max(p.w, p.h))].join('|');
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(p);
+  });
+
+  groups.forEach(list => {
+    const p0 = list[0];
+    const keys = _lgOptyClientKeys(p0.client, allPairs, ourClients);
+    const sameClientSize = rows.filter(r => keys.includes(r.client) && !r.it.optyShape && !taken.has(r.key) && _lgOptyDimOk(p0, r.it));
+    const named = p0.name ? sameClientSize.filter(r => _lgOptyNameOk(p0.name, r.o.sketchName || r.o.type)) : [];
+    const units = list.reduce((s, p) => s + p.qty, 0);
+    if (named.length && named.length === units && new Set(named.map(r => r.o.id)).size === 1) {
+      let i = 0;                                                // מספיק שורות, כולן מאותה הזמנה → ודאי
+      list.forEach(p => { for (let q = 0; q < p.qty; q++, i++) {
+        const r = named[i]; taken.add(r.key);
+        out.auto.push({ shape: p.shape, job: p.job, orderId: r.o.id, idx: r.idx });
+      } });
+      return;
+    }
+    const cands = (named.length ? named : sameClientSize).map(r => ({ orderId: r.o.id, idx: r.idx }));
+    list.forEach(p => cands.length ? out.review.push({ piece: p, cands }) : out.notFound.push(p));
+  });
+  return out;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { LG_OPTY_CLIENTS_DEFAULT, lgOptyNorm, lgOptyPieces, lgOptyMatch };
+}
