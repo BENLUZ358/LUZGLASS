@@ -23,4 +23,26 @@ check('svg: full circle drawn as two half arcs', (S.lgOptyShapeSvg(read('274122'
 // מסלול רציף: נקודת הסוף של כל מקטע = ההתחלה של הבא (אחרי ההיפוך) → M אחד לכל קו מתאר
 check('notch outline is continuous (one M per outline)', (S.lgOptyShapeSvg({ w: g.w, h: g.h, c: [g.c[0]] }).match(/M/g) || []).length, 1);
 check('no shape → empty', S.lgOptyShapeSvg(null), '');
+//  מידות לכל דבר בצורה (בן, 16/11: "שייראו בדיוק את הנתונים") — במסגרת של אופטי-ווי, מהקצה הקרוב
+const F = g2 => S.lgOptyFeatures(g2).map(f => [f.kind, f.text]);
+check('hinge cuts + hole (274378)', F(g), [
+  ['notch', 'חריץ משמאל · עומק 49 · רוחב 80 · 161 מלמטה'],
+  ['hole', 'חור Ø12 · 61 מימין · 996 מלמטה'],
+  ['notch', 'חריץ משמאל · עומק 49 · רוחב 80 · 161 מלמעלה']]);
+check('round holes: diameter and centre from the near edges (274122)', F(read('274122')).map(x => x[1].split(' · ')[0]), ['חור Ø18', 'חור Ø18', 'חור Ø18', 'חור Ø18']);
+check('rounded corners (274347)', F(read('274347')), [
+  ['corner', 'פינה מעוגלת R50 · שמאל למעלה'], ['corner', 'פינה מעוגלת R50 · שמאל למטה'],
+  ['corner', 'פינה מעוגלת R50 · ימין למטה'], ['corner', 'פינה מעוגלת R50 · ימין למעלה']]);
+const g388 = read('274388');
+check('corner cut-out + slots (274388)', F(g388), [
+  ['cornercut', 'חיתוך פינה שמאל למטה · 145 × 1216'],
+  ['cut', 'שקע 36 × 20 · 145 משמאל · 876 מלמעלה'],
+  ['notch', 'חריץ משמאל · עומק 37 · רוחב 20 · 191 מלמעלה'],
+  ['cut', 'שקע 36 × 20 · 145 משמאל · 191 מלמטה']]);
+check('features numbered 1..n', S.lgOptyFeatures(g388).map(f => f.n), [1, 2, 3, 4]);
+const sd = S.lgOptyShapeSvg(g388, { dims: true });
+check('svg with dims: overall size + a numbered tag per feature', [/>809</.test(sd), />1902</.test(sd), (sd.match(/class="lg-opty-tag"/g) || []).length], [true, true, 4]);
+check('svg without dims: no tags (label/order window stay clean)', /lg-opty-tag/.test(S.lgOptyShapeSvg(g388)), false);
+check('no features → empty list', S.lgOptyFeatures({ w: 500, h: 500, c: [] }), []);
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
