@@ -105,7 +105,8 @@ function _lgCutAt(spec, kind, edge, end) {
       [0, u1, e + K.w, uc, e + K.w], [1, uc, vc, K.r, Math.PI / 2, -Math.PI / 2], [0, uc, e, u1, e]].map(F.seg) }];
   }
   if (kind === 'closed') {
-    const vc = _lgOv(spec.angleEnd, end, K.end) + K.dia / 2, c = _lgFrameAt(spec, edge, end, K.edge, vc).pt(K.edge, vc);
+    const u = spec.angleEdge != null ? spec.angleEdge : K.edge;   // מרחק שהוקלד לפריט (bracketInset)
+    const vc = _lgOv(spec.angleEnd, end, K.end) + K.dia / 2, c = _lgFrameAt(spec, edge, end, u, vc).pt(u, vc);
     return [_lgCircle(kind, c[0], c[1], K.dia)];
   }
   if (kind === 'harm') {   // זוג חורים: הראשון ב-harmEnd מהקצה, השני 40 אחריו
@@ -142,7 +143,7 @@ function _lgCheckSpec(spec) {
 }
 
 //  lgCutTemplate(key, spec) → { w, h, outline, cuts } — מ"מ במידת החיתוך, ראשית שמאל-למטה.
-//  spec: { w, h, side, slope?, hingeEnd?, angleEnd?, harmEnd?, harmEdge?, handle? }
+//  spec: { w, h, side, slope?, hingeEnd?, angleEnd?, angleEdge? /* זווית סגורה בלבד */, harmEnd?, harmEdge?, handle? }
 //  שימו לב: hingeEnd / angleEnd = מהקצה עד שפת התיבה של החיתוך; harmEnd = מהקצה עד מרכז החור הראשון.
 //  spec שגוי זורק שגיאה — עדיף בלי קובץ מאשר זכוכית הפוכה או חיתוך במקום אקראי.
 //  התבנית = ברירת המחדל שנמדדה; כל שדה חריג הוא שינוי ידני לפריט בודד (top/bottom לכל קצה).
@@ -186,7 +187,10 @@ const LG_CUT_ISSUE = Object.freeze({
   outside: 'חיתוך יוצא מהזכוכית',
   close: 'חיתוכים קרובים מדי',
   noTemplate: 'אין תבנית חיתוך לזכוכית הזו — לבדוק ביד',
-  notTwo: 'לא שני חיתוכים בצלע — לבדוק ביד'
+  notTwo: 'לא שני חיתוכים בצלע — לבדוק ביד',
+  notch: 'פינוי מדרגה בצלע עם פרזול — אין תבנית, לבדוק ביד',
+  openInset: 'זווית פתוחה עם מרחק מהפאה שהוקלד — לבדוק ביד',
+  handleEdge: 'הידית במנוע בצלע אחרת מהתבנית — לבדוק ביד'
 });
 const LG_CUT_MIN_GAP = 5;   // מ"מ בין שני חיתוכים (החלטה #5)
 
@@ -357,9 +361,13 @@ function _lgAnalyse(shower) {
   const L = E.lgLayout(shower, { canvasW: 2000 }), O = E.lgOutline(shower);
   const F = _lgFeatures(L, shapes.length);
   return shapes.map((s, i) => {
-    const isShower = !!(s && _LG_SHOWER_KIND[s.kind]);
-    return { s: s || {}, sh: L.shapes[i], ol: O[i], f: F[i], sc: L.scale, isShower,
-             pick: isShower ? _lgPickTemplate(s, F[i]) : null };
+    const isShower = !!(s && _LG_SHOWER_KIND[s.kind]), ol = O[i];
+    let pick = isShower ? _lgPickTemplate(s, F[i]) : null, block = null;
+    //  פינוי מדרגה בצלע שיש בה פרזול: המנוע מזיז את הזווית לפאה הפנימית / מודד מהכתף — לא נמדד
+    //  בשום תבנית. חוסמים כל צלע כזו (גם 'shoulder'), לא רק כשהחור יוצא מהזכוכית.
+    const nt = ol && ol.notch, ne = nt && (nt.side === 'right' ? 'right' : 'left');
+    if (pick && ne && ['angle', 'hinge', 'harm'].some(k => F[i][ne][k])) { pick = null; block = LG_CUT_ISSUE.notch; }
+    return { s: s || {}, sh: L.shapes[i], ol, f: F[i], sc: L.scale, isShower, pick, block };
   });
 }
 
@@ -379,7 +387,7 @@ function lgCuts(shower) {
     const outline = _lgCutOutline(ol.poly, ol.mmH);
     const base = { idx, key: null, side: null, w, h, outline, cuts: [], issues: [] };
     if (!A.isShower) return base;
-    if (!pick) return Object.assign(base, { issues: [LG_CUT_ISSUE.noTemplate] });
+    if (!pick) return Object.assign(base, { issues: [A.block || LG_CUT_ISSUE.noTemplate] });
     //  קנבס → מ"מ במידת החיתוך: מתחתית / משמאל תיבת הזכוכית, +1
     const half = LG_CUT.allowance / 2;
     const yCut = y => (sh.y + sh.h - y) / sc + half, xCut = x => (x - sh.x) / sc + half;
@@ -400,9 +408,18 @@ function lgCuts(shower) {
     //  רק מרחק שהלקוח הקליד (handleDist) גובר, ואז הגובה מהמנוע. המרחק מהצלע — 61, או handleEdge (ס"מ).
     const ht = s.handleType, H = f.handle;
     const edgeOff = s.handleEdge != null ? Number(s.handleEdge) * 10 + half : LG_CUT.handle.edge;
-    let extra = [];
+    let extra = [], handleMismatch = false;
+    //  מרחק זווית שהוקלד (bracketInset — מ"מ, כמו במנוע): בסגורה עובר לחיתוך; בפתוחה אין לו משמעות → חסום
+    const inset = s.bracketInset != null && s.bracketInset !== '' ? Number(s.bracketInset) : null;
+    if (inset != null && T.closed) spec.angleEdge = inset + half;
     if (T.handle && H.length) {
       const hEdge = T.handle === 'side' ? pick.side : other;
+      //  הצלע שבה המנוע שם את הידית (החור הקרוב ביותר לצלע) חייבת להיות צלע התבנית
+      if (ht !== 'towel-center') {
+        const fromL = x => x.x - sh.x, fromR = x => sh.x + sh.w - x.x, dist = x => Math.min(fromL(x), fromR(x));
+        const hn = H.reduce((a, b) => (dist(b) < dist(a) ? b : a));
+        if ((fromL(hn) <= fromR(hn) ? 'left' : 'right') !== hEdge) handleMismatch = true;
+      }
       const y = s.handleDist != null && s.handleDist !== ''
         ? _r2(yCut(H.reduce((t, x) => t + x.y, 0) / H.length))
         : _lgHandle(Object.assign({}, spec, { handle: { type: 'knob', edge: edgeOff } }), hEdge)[0].y;
@@ -420,9 +437,12 @@ function lgCuts(shower) {
     let cuts = lgCutTemplate(pick.key, spec).cuts.concat(extra);
     //  'none' בדלת רגילה: אין מפתח 'door' בלי ידית — מורידים את חור הידית מהתבנית
     if (T.handle && !H.length) cuts = cuts.filter(c => c.kind !== 'handle');
+    const pre = [];
+    if (inset != null && T.open) pre.push(LG_CUT_ISSUE.openInset);
+    if (handleMismatch) pre.push(LG_CUT_ISSUE.handleEdge);
     //  קדח חופשי / זווית רצפה — עיגול בדיוק איפה שהמנוע שם אותו
     for (const hl of f.holes) cuts.push(_lgCircle('hole', xCut(hl.x), yCut(hl.y), hl.dia));
-    return Object.assign(base, { key: pick.key, side: pick.side, cuts, issues: _lgIssues(outline, cuts) });
+    return Object.assign(base, { key: pick.key, side: pick.side, cuts, issues: pre.concat(_lgIssues(outline, cuts)) });
   });
 }
 

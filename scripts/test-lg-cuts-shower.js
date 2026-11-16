@@ -76,6 +76,34 @@ const FD_S = { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } };
   check('2200-high door: knob at (2200+2)/2', of(P2({}), 'handle').map(c => c.y), [1101]);
   check('typed handleDist 1200 → engine height + 1', of(P2({ handleDist: 1200 }), 'handle').map(c => c.y), [1201]);
 }
+// ‏פינוי מדרגה בצלע הזוויות — המנוע מעביר את הזווית לפאה הפנימית; אין תבנית → חסום
+{
+  const NOTCH = 'פינוי מדרגה בצלע עם פרזול — אין תבנית, לבדוק ביד';
+  for (const nb of [undefined, 'shoulder']) {
+    const g = lgCuts(shower(FD_P, { 0: { w: 500, h: 2000, notchW: 15, notchH: 300, notchSide: 'left', notchBracket: nb }, 1: { w: 700, h: 1985 } }))[0];
+    check('shallow notch on the bracket edge (' + (nb || 'floor') + '): key null + issue, no cuts', [g.key, g.issues, g.cuts.length], [null, [NOTCH], 0]);
+  }
+  const sh = shower(FD_P, { 0: { w: 500, h: 2000, notchW: 15, notchH: 300, notchSide: 'left' }, 1: { w: 700, h: 1985 } });
+  check('notch: lgTemplateOf null too', lgTemplateOf(sh, 0), null);
+}
+// ‏מרחק זווית שהוקלד (bracketInset, מ"מ כמו במנוע): סגורה — עובר לחיתוך (+1); פתוחה — חסום
+{
+  const g = lgCuts(shower(FD_P, { 0: { w: 500, h: 2000, bracketInset: 40 }, 1: { w: 700, h: 1985 } }))[0];
+  check('closed angle + typed bracketInset 40 → 41 from the edge, no issue', [of(g, 'closed').map(c => c.x), g.issues], [[41, 41], []]);
+  const o = lgCuts(shower(FD_P, { 0: { w: 500, h: 2000, bracketInset: 40, bracketType: 'open' }, 1: { w: 700, h: 1985 } }))[0];
+  check('open angle + typed bracketInset → blocking issue', o.issues, ['זווית פתוחה עם מרחק מהפאה שהוקלד — לבדוק ביד']);
+}
+// ‏ידית: הצלע של המנוע חייבת להיות הצלע של התבנית (מנוע מזויף שמעביר את הידית לצד הציר)
+{
+  const real = { lgLayout: eng.lgLayout, lgOutline: eng.lgOutline, lgJunctions: eng.lgJunctions };
+  Object.assign(global, real, { lgLayout: (sh, o) => { const L = real.lgLayout(sh, o);
+    L.hardware.forEach(hw => { if (hw.role === 'handle') { const s = L.shapes[hw.idx]; hw.x = 2 * s.x + s.w - hw.x; } }); return L; } });
+  try {
+    const g = lgCuts(shower(FD_P, FD_S))[1];
+    check('engine handle on the other edge → blocking issue', g.issues.includes('הידית במנוע בצלע אחרת מהתבנית — לבדוק ביד'), true);
+  } finally { delete global.lgLayout; delete global.lgOutline; delete global.lgJunctions; }
+  check('real engine: handle edge agrees, no issue', lgCuts(shower(FD_P, FD_S))[1].issues, []);
+}
 // ‏קבוע לבד בין שני קירות → זוויות בשני הצדדים, אין תבנית — חסום עם הסבר
 {
   const sh = shower([{ type: 'fixed', wallSide: 'both' }], { 0: { w: 800, h: 2000 } });
