@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>LuzGlass — קליטה מאופטי-ווי</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+<style>
+/* ═══ קליטה מאופטי-ווי (בן, 16/11) ═════════════════════════════════════════
+   בוחרים מהדיסק-און-קי את תיקיית DBLITE ואת קבצי הצורות (.dat). הדף רק קורא
+   אותם — לא כותב לדיסק-און-קי. כל חלק מתחבר לפריט לפי לקוח + שם סקיצה + מידה
+   (opty-match.js): ודאי → "שמור", ספק → בוחרים שורה. נשמר: items[i].optyShape
+   ו-meta/optyGeo/<מספר>. אפיון: docs/superpowers/specs/2026-11-16-optyway-shape-link-design.md
+   ═════════════════════════════════════════════════════════════════════════ */
+body{background:var(--bg);color:var(--text);}
+.topbar{position:sticky;top:0;z-index:10;min-height:56px;background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 var(--space-3);padding-top:env(safe-area-inset-top);display:flex;align-items:center;gap:var(--space-2);}
+.tb-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);min-width:44px;min-height:44px;
+  padding:0 var(--space-3);border:1px solid var(--border);background:var(--surface);color:var(--text);
+  border-radius:var(--radius);font-size:var(--fs-sm);font-weight:var(--fw-bold);cursor:pointer;text-decoration:none;}
+.tb-title{flex:1;min-width:0;font-size:var(--fs-lg);font-weight:var(--fw-black);}
+.tb-title small{display:block;font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--muted);}
+.wrap{max-width:960px;margin:0 auto;padding:var(--space-4) 16px 80px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-4);margin-bottom:var(--space-3);}
+.card h2{font-size:var(--fs-base);font-weight:var(--fw-black);margin:0 0 var(--space-2);}
+.step{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;margin-bottom:var(--space-3);}
+.step label.pick{display:inline-flex;align-items:center;gap:var(--space-2);min-height:48px;padding:0 var(--space-4);border:2px dashed var(--border);
+  border-radius:var(--radius);cursor:pointer;font-weight:var(--fw-bold);background:var(--bg);}
+.step label.pick input{position:absolute;opacity:0;width:1px;height:1px;}
+.step .got{font-size:var(--fs-sm);color:var(--muted);}
+.step .got.ok{color:#155d33;font-weight:var(--fw-bold);}
+.days{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--fs-sm);}
+.days input{width:64px;min-height:44px;text-align:center;border:1px solid var(--border);border-radius:var(--radius);font-size:var(--fs-base);}
+.go{min-height:48px;padding:0 var(--space-5);background:var(--gold);color:var(--on-gold);border:none;border-radius:8px;
+  font-size:var(--fs-base);font-weight:var(--fw-black);cursor:pointer;font-family:inherit;}
+.go:disabled{opacity:.5;cursor:default;}
+.note{font-size:var(--fs-sm);color:var(--muted);margin:0;}
+.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:var(--space-2);margin-bottom:var(--space-3);}
+.sum div{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-3);text-align:center;}
+.sum b{display:block;font-size:24px;font-weight:var(--fw-black);}
+.sum span{font-size:var(--fs-xs);color:var(--muted);}
+.sum .g{border-color:var(--green);} .sum .y{border-color:var(--gold);} .sum .r{border-color:var(--red);}
+.row{display:flex;align-items:center;gap:var(--space-2) var(--space-3);flex-wrap:wrap;padding:var(--space-2) 0;border-bottom:1px solid var(--border);font-size:var(--fs-sm);}
+.row:last-child{border-bottom:none;}
+.row .shape{font-weight:var(--fw-black);min-width:64px;}
+.row .who{flex:1;min-width:160px;}
+.row .dim{direction:ltr;white-space:nowrap;color:var(--muted);}
+.row svg{height:56px;width:40px;color:var(--text);}
+.cands{display:flex;flex-direction:column;gap:4px;width:100%;padding-inline-start:72px;}
+.cands label{display:flex;align-items:center;gap:var(--space-2);min-height:36px;cursor:pointer;}
+.sm{min-height:40px;padding:0 var(--space-3);border:1px solid var(--border);background:var(--surface);border-radius:var(--radius);
+  font-size:var(--fs-sm);font-weight:var(--fw-bold);cursor:pointer;font-family:inherit;color:var(--text);}
+.sm.gold{background:var(--gold);border-color:var(--gold);color:var(--on-gold);}
+select.sm{max-width:220px;}
+details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;display:flex;align-items:center;}
+#st{font-size:var(--fs-sm);font-weight:var(--fw-bold);margin-top:var(--space-2);}
+#st.bad{color:#7c241b;} #st.ok{color:#155d33;}
+@media (max-width:600px){ .cands{padding-inline-start:0;} .tb-btn span:not([data-icon]){display:none;} }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="tb-btn" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
+  <div class="tb-title">קליטה מאופטי-ווי<small>מספר הצורה וציור הצורה לכל פריט — מהדיסק-און-קי, בלי לשנות בו כלום</small></div>
+</header>
+
+<main class="wrap">
+  <section class="card">
+    <h2>1. בחר מהדיסק-און-קי</h2>
+    <div class="step">
+      <label class="pick">📁 תיקיית DBLITE<input type="file" id="inDb" webkitdirectory multiple></label>
+      <span class="got" id="gotDb">לא נבחר</span>
+    </div>
+    <div class="step">
+      <label class="pick">📐 קבצי הצורות (.dat)<input type="file" id="inDat" accept=".dat" multiple></label>
+      <span class="got" id="gotDat">לא נבחרו — בלי זה יהיה רק מספר צורה, בלי ציור</span>
+    </div>
+    <p class="note">בקבצי הצורות: פותחים את הדיסק-און-קי, לוחצים Ctrl+A ו"פתח". רק הקבצים שמסתיימים ב-.dat נקלטים.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. בדוק</h2>
+    <div class="step">
+      <span class="days">חלקים מ-<input type="number" id="days" min="1" max="45" value="3">הימים האחרונים</span>
+      <button class="go" id="btnCheck" type="button" disabled>🔍 בדוק מול ההזמנות</button>
+    </div>
+    <div id="st" role="status"></div>
+  </section>
+
+  <div id="out"></div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="firebase-db.js?v=20261103"></script>
+<script src="opty-paradox.js?v=20261116"></script>
+<script src="opty-match.js?v=20261116"></script>
+<script src="opty-shape.js?v=20261116"></script>
+<script src="lg-icons.js?v=20261103"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => lgEsc(s);
+const ORDER_DAYS = 30;                         // הזמנות מ-30 הימים האחרונים
+let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null;
+
+const st = (t, cls) => { $('st').textContent = t; $('st').className = cls || ''; };
+const dims = p => Math.round(p.w) + ' × ' + Math.round(p.h);
+const geoSvg = shape => DAT[shape] ? lgOptyShapeSvg(DAT[shape], { px: 40 }) : '';
+const ordTitle = id => { const o = ORDERS.find(x => x.id === id); return o ? (o.orderNum || '') + ' · ' + (o.orderClient || '') + ' · ' + (o.sketchName || 'ללא שם') : id; };
+const itemText = (id, idx) => { const o = ORDERS.find(x => x.id === id), it = o && o.items[idx];
+  return it ? (it.name || 'פריט') + ' · ' + Math.round(it.w) + ' × ' + Math.round(it.h) : ''; };
+
+$('inDb').addEventListener('change', e => {
+  DB = [...e.target.files].filter(f => /^(pezzi|pezzican)\.db$/i.test(f.name));
+  $('gotDb').textContent = DB.length ? '✓ ' + DB.map(f => f.name).join(' + ') : 'לא נמצאו Pezzi.DB / PezziCan.DB — בחר את תיקיית DBLITE';
+  $('gotDb').className = 'got' + (DB.length ? ' ok' : '');
+  $('btnCheck').disabled = !DB.length;
+});
+$('inDat').addEventListener('change', async e => {
+  const fs = [...e.target.files].filter(f => /^\d+\.dat$/i.test(f.name));
+  DAT = {};
+  await Promise.all(fs.map(async f => { const g = lgOptyShapeParse(await f.text()); if (g) DAT[f.name.replace(/\.dat$/i, '')] = g; }));
+  $('gotDat').textContent = fs.length ? '✓ ' + Object.keys(DAT).length + ' צורות' : 'לא נבחרו קבצי .dat';
+  $('gotDat').className = 'got' + (fs.length ? ' ok' : '');
+});
+
+//  ההזמנות הגולמיות — כי צריך את מפתח הפריט האמיתי (מערך או אובייקט) לכתיבה
+async function loadOrders() {
+  const [snap, pairs] = await Promise.all([_lgDb.ref('orders').once('value'), _lgDb.ref('meta/optyClients').once('value')]);
+  const from = Date.now() - ORDER_DAYS * 86400000;
+  ORDERS = []; KEYS = {};
+  Object.values(snap.val() || {}).forEach(o => {
+    if (!o || !o.id || o.isSample || o.isTest) return;
+    if (Number(o.createdAt || o.updatedAt || 0) < from) return;
+    const keys = Array.isArray(o.items) ? o.items.map((_, i) => i) : Object.keys(o.items || {});
+    KEYS[o.id] = keys;
+    ORDERS.push({ id: o.id, orderNum: o.orderNum || '', orderClient: o.orderClient || o.client || '',
+      sketchName: o.sketchName || o.type || '', items: keys.map(k => (o.items || {})[k] || {}) });
+  });
+  PAIRS = Object.values(pairs.val() || {}).filter(p => p && p.ours && p.opty);
+}
+
+async function check() {
+  $('btnCheck').disabled = true; $('out').innerHTML = ''; st('קורא את הקבצים…');
+  try {
+    const rows = [];
+    for (const f of DB) rows.push(...lgOptyReadTable(await f.arrayBuffer()).rows);
+    const days = Math.max(1, Math.min(45, Number($('days').value) || 3));
+    const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+    const pieces = lgOptyPieces(rows, since);
+    st('טוען הזמנות…');
+    await loadOrders();
+    RES = lgOptyMatch(pieces, ORDERS, PAIRS);
+    RES.pieces = pieces.length;
+    st('נקראו ' + pieces.length + ' חלקים עם מספר צורה מ-' + since.split('-').reverse().join('/') + ' · ' + ORDERS.length + ' הזמנות', 'ok');
+    render();
+  } catch (e) {
+    console.error(e); st('✗ ' + (e.message || 'הקריאה נכשלה'), 'bad');
+  } finally { $('btnCheck').disabled = !DB.length; }
+}
+
+function render() {
+  const r = RES;
+  const byClient = {};
+  r.notFound.forEach(p => { (byClient[p.client] = byClient[p.client] || []).push(p); });
+  const clients = [...new Set(ORDERS.map(o => o.orderClient))].sort((a, b) => a.localeCompare(b, 'he'));
+  $('out').innerHTML = `
+    <div class="sum">
+      <div class="g"><b>${r.auto.length}</b><span>ודאי — מוכן לשמירה</span></div>
+      <div class="y"><b>${r.review.length}</b><span>לבדיקה שלך</span></div>
+      <div class="r"><b>${r.notFound.length}</b><span>לא נמצא פריט</span></div>
+      <div><b>${r.already.length}</b><span>כבר מחובר</span></div>
+    </div>
+    ${r.auto.length ? `<section class="card"><h2>ודאי (${r.auto.length})</h2>
+      <button class="go" id="btnSave" type="button">💾 שמור ${r.auto.length} מספרי צורה</button>
+      <details><summary>הצג את הרשימה</summary>
+      ${r.auto.map(a => `<div class="row">${geoSvg(a.shape)}<span class="shape">${esc(a.shape)}</span>
+        <span class="who">${esc(ordTitle(a.orderId))}<br><small>${esc(itemText(a.orderId, a.idx))}</small></span></div>`).join('')}
+      </details></section>` : ''}
+    ${r.review.length ? `<section class="card"><h2>לבדיקה (${r.review.length}) — בחר לאיזה פריט שייך</h2>
+      ${r.review.map((v, n) => `<div class="row" data-rv="${n}">${geoSvg(v.piece.shape)}<span class="shape">${esc(v.piece.shape)}</span>
+        <span class="who">${esc(v.piece.client)} · ${esc(v.piece.name || 'בלי שם באופטי-ווי')}${v.piece.note ? ' · ' + esc(v.piece.note) : ''}</span>
+        <span class="dim">${dims(v.piece)}</span>
+        <div class="cands">${v.cands.slice(0, 8).map((c, k) => `<label><input type="radio" name="rv${n}" value="${k}">
+          ${esc(ordTitle(c.orderId))} — ${esc(itemText(c.orderId, c.idx))}</label>`).join('')}
+          <button class="sm gold" type="button" data-link="${n}">חבר</button></div></div>`).join('')}
+      </section>` : ''}
+    ${r.notFound.length ? `<section class="card"><h2>לא נמצא פריט (${r.notFound.length})</h2>
+      <p class="note">אם הלקוח באופטי-ווי כתוב אחרת מאצלנו — בחר את הלקוח שלנו ולחץ "שייך", ואז "בדוק" שוב.</p>
+      ${Object.entries(byClient).map(([c, list]) => `<div class="row"><span class="who"><b>${esc(c)}</b> · ${list.length} חלקים
+        <br><small>${esc([...new Set(list.map(p => p.name || 'בלי שם'))].slice(0, 6).join(', '))}</small></span>
+        <select class="sm" data-pair="${esc(c)}"><option value="">זה הלקוח אצלנו…</option>${clients.map(x => `<option>${esc(x)}</option>`).join('')}</select>
+        <button class="sm" type="button" data-pairgo="${esc(c)}">שייך</button></div>`).join('')}
+      </section>` : ''}`;
+  const sv = $('btnSave'); if (sv) sv.addEventListener('click', () => save(RES.auto, sv));
+}
+
+//  כתיבה אחת: מספר הצורה + פקודת החיתוך על הפריט, והצורה ב-meta/optyGeo
+async function save(list, btn) {
+  if (!list.length) return;
+  const up = {};
+  list.forEach(a => {
+    const key = (KEYS[a.orderId] || [])[a.idx];
+    if (key == null) return;
+    up['orders/' + a.orderId + '/items/' + key + '/optyShape'] = a.shape;
+    up['orders/' + a.orderId + '/items/' + key + '/optyJob'] = a.job || '';
+    up['orders/' + a.orderId + '/updatedAt'] = Date.now();
+    if (DAT[a.shape]) up['meta/optyGeo/' + a.shape] = DAT[a.shape];
+  });
+  if (btn) btn.disabled = true;
+  try {
+    await _lgDb.ref().update(up);
+    st('✓ נשמרו ' + list.length + ' מספרי צורה', 'ok');
+    return true;
+  } catch (e) {
+    console.error(e); st('✗ השמירה נכשלה: ' + (e.message || '') + ' — נסה שוב', 'bad');
+    if (btn) btn.disabled = false;
+    return false;
+  }
+}
+
+$('out').addEventListener('click', async e => {
+  const link = e.target.closest('[data-link]');
+  if (link) {
+    const n = Number(link.dataset.link), v = RES.review[n];
+    const pick = document.querySelector(`input[name="rv${n}"]:checked`);
+    if (!pick) { st('בחר קודם פריט', 'bad'); return; }
+    const c = v.cands[Number(pick.value)];
+    if (await save([{ shape: v.piece.shape, job: v.piece.job, orderId: c.orderId, idx: c.idx }], link)) {
+      link.closest('.row').remove();
+    }
+    return;
+  }
+  const pg = e.target.closest('[data-pairgo]');
+  if (pg) {
+    const opty = pg.dataset.pairgo, sel = document.querySelector(`select[data-pair="${CSS.escape(opty)}"]`);
+    if (!sel || !sel.value) { st('בחר את הלקוח שלנו', 'bad'); return; }
+    try {
+      await _lgDb.ref('meta/optyClients').push({ ours: sel.value, opty, at: Date.now() });
+      st('✓ ' + opty + ' ↔ ' + sel.value + ' — לחץ "בדוק" שוב', 'ok');
+      pg.disabled = true;
+    } catch (err) { st('✗ לא נשמר: ' + err.message, 'bad'); }
+  }
+});
+$('btnCheck').addEventListener('click', check);
+
+lgRequireAuthAsync('admin');
+</script>
+</body>
+</html>
