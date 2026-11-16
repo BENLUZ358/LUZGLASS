@@ -313,6 +313,16 @@ html,body{height:100%;overflow:hidden;}
   </button>
 </div>
 
+<!-- עבודה חדשה שמחכה לייבוא (בן, 16/11) -->
+<div id="csImportBar" style="display:none;align-items:center;gap:12px;padding:10px 14px;background:rgba(201,168,76,0.12);border-bottom:2px solid var(--gold);flex-shrink:0;font-family:Heebo,sans-serif;">
+  <span style="font-size:22px">📥</span>
+  <div style="flex:1;min-width:0">
+    <div id="csImportTxt" style="font-size:14px;font-weight:900;color:var(--gold)"></div>
+    <div id="csImportSub" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
+  </div>
+  <button id="csImportBtn" onclick="csImportWork()" style="padding:11px 18px;background:var(--gold);color:#111;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;white-space:nowrap;">📥 ייבא עבודה</button>
+</div>
+
 <!-- LIST VIEW -->
 <div class="list-view" id="listView"></div>
 
@@ -400,6 +410,9 @@ const safeStorage = {
 let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[],chTriplex=[];
 let activeTab='active'; // 'active' | 'done'
 let wdInChisum=[];
+// עבודה שנשלחה לתחנה ועוד לא יובאה (workday/csNew/<id> = מתי). לא מוצגת ולא
+// נשלחת למפעל עד "ייבא עבודה" — כדי שלא תתערבב בסחורה שבאמצע בדיקה (בן, 16/11).
+let wdCsNew={}, csHeld=[];
 let _csUnsub=null, _wdRef=null, _checkEditsRef=null;
 let _wdReady=false, _ordersReady=false; // דגלי טעינה — מונעים render לפני שהכל מוכן
 let _sendingToFactory=false; // מונע double-tap על "שלח למפעל"
@@ -509,6 +522,7 @@ function load(){
     const wd = snap.val()||{};
     function objToArr(v){ return v ? Object.values(v).map(String) : []; }
     wdInChisum = objToArr(wd.inChisum);
+    wdCsNew = (wd.csNew && typeof wd.csNew === 'object') ? wd.csNew : {};
 
     // Firebase הוא מקור האמת לסימוני הבדיקה. localStorage הוא מטמון תצוגה בלבד.
     // קודם היה כאן ענף "שחזור" שדחף את התוכן המקומי בחזרה לענן כשהצומת היה ריק —
@@ -555,7 +569,10 @@ function load(){
 
 function _filterOrders(){
   const fbOrders = window._allCsOrders || [];
-  orders = fbOrders.filter(o=>wdInChisum.includes(String(o.id))).map(mapFirebaseOrder);
+  const _inSt = fbOrders.filter(o=>wdInChisum.includes(String(o.id)));
+  csHeld = _inSt.filter(o => wdCsNew[String(o.id)]);
+  orders = _inSt.filter(o => !wdCsNew[String(o.id)]).map(mapFirebaseOrder);
+  renderImportBar();
   // אם יש הזמנה פתוחה — עדכן cur לאובייקט החדש אבל שמר _editedSketch אם כבר טעון
   if(cur){
     const rebuilt = orders.find(o => o.id === cur.id);
@@ -1009,11 +1026,52 @@ function checkItem(i){
   }
 }
 
+// ── ייבא עבודה (בן, 16/11) ──
+// הזמנות שיום העבודה שלח לתחנה מחכות כאן עד שהבודק מייבא אותן. הבודק מסיים
+// את הסחורה שלפניו, שולח למפעל, ואז לוחץ — כך שני משלוחים לא מתערבבים.
+function renderImportBar(){
+  const bar = document.getElementById('csImportBar');
+  if(!bar) return;
+  const n = csHeld.length;
+  bar.style.display = n ? 'flex' : 'none';
+  if(!n) return;
+  const items = csHeld.reduce((s, o) => {
+    const its = Array.isArray(o.items) ? o.items : Object.values(o.items || {});
+    return s + its.filter(it => it && it.chisum).length;
+  }, 0);
+  document.getElementById('csImportTxt').textContent =
+    'נכנסה עבודה חדשה: ' + n + (n === 1 ? ' הזמנה' : ' הזמנות') + ' · ' + items + ' פריטים';
+  const left = orders.filter(o => !isDone(o)).length;
+  document.getElementById('csImportSub').textContent = left
+    ? 'קודם סיים את ' + left + ' ההזמנות שלפניך, ואז ייבא'
+    : 'אפשר לייבא';
+}
+
+async function csImportWork(){
+  const ids = csHeld.map(o => String(o.id));
+  if(!ids.length) return;
+  const left = orders.filter(o => !isDone(o)).length;
+  if(left && !confirm('יש עוד ' + left + ' הזמנות שלא סיימת לבדוק.\nאם תייבא עכשיו, העבודה החדשה תתערבב איתן.\n\nלייבא בכל זאת?')) return;
+  const btn = document.getElementById('csImportBtn');
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ מייבא...'; }
+  try{
+    const patch = {}; ids.forEach(id => { patch[id] = null; });
+    await firebase.database().ref('workday/csNew').update(patch);
+    toast('✓ יובאו ' + ids.length + (ids.length === 1 ? ' הזמנה' : ' הזמנות'));
+  }catch(e){
+    console.error('[CS] import:', e);
+    toast('הייבוא נכשל — נסה שוב');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '📥 ייבא עבודה'; }
+  }
+}
+
 function updateTabCounts(){
   const active=orders.filter(o=>!isDone(o)).length;
   const done=orders.filter(o=>isDone(o)).length;
   document.getElementById('tabActive').textContent=`🔍 לבדיקה (${active})`;
   document.getElementById('tabDone').textContent=`✅ הושלמו (${done})`;
+  renderImportBar();   // "קודם סיים את N" משתנה עם כל סקיצה שנגמרת
 }
 
 function updateProg(){
