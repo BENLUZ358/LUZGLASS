@@ -11,6 +11,7 @@
 <script src="lg-parse.js"></script>
 <script src="lg-shapes.js"></script>
 <script src="lg-layout.js"></script>
+<script src="lg-cuts.js"></script>
 <script src="lg-catalog.js"></script>
 <!-- הספרייה יושבת ב-RTDB. הדף עבד עד היום בלי Firebase, ולכן כל שימוש
      בו מוגן: בלי חיבור הגלריה עדיין מציגה את הצורות המשוגרות. -->
@@ -2417,6 +2418,10 @@ function renderShapeSheet(){
           'מהפאה החופשית — זו שאינה נשענת על קיר.</p>':'')+
         _shNum('bracketInset','מרחק הזווית מהפאה',ps.bracketInset,'25')+
         '<p class="sh-note">2.5 ס"מ כברירת מחדל, ואז המידה לא מופיעה בשרטוט.</p>'+
+        // ‏זווית רגילה = חור Ø20; פתוחה = שקע פתוח לצלע. ברירת המחדל רגילה,
+        // וגם סקיצה ישנה בלי ערך (בן, 16/11).
+        '<label class="sh-tog"><input type="checkbox" '+(ps.bracketType==='open'?'checked':'')+
+          ' onchange="sheetSet(\'bracketType\',this.checked?\'open\':\'normal\')">זווית פתוחה</label>'+
       '</div>')+
 
   // קדחים שהצורה נושאת בעצמה — גם על זכוכית חופשית, שהרי היא
@@ -2787,6 +2792,12 @@ function renderGeoWarn(panels,pss){
   let list=[];
   try{ list=(typeof lgGeometryIssues==='function') ? lgGeometryIssues(_lgShowerOf(panels,pss)) : []; }
   catch(e){ list=[]; }
+  // ‏בעיות בחיתוך (lg-cuts.js) — באותה רצועה, שורה לכל זכוכית ובעיה
+  try{
+    const sh=_lgShowerOf(panels,pss);
+    (engCutsOf(sh)||[]).forEach(g=>(g.issues||[]).forEach(msg=>list.push({
+      idx:g.idx, code:'cut', msg:(typeof _lgGlassName==='function'?_lgGlassName(sh.shapes,g.idx):'')+msg })));
+  }catch(e){}
   if(!list.length){ el.hidden=true; el.innerHTML=''; return; }
   el.hidden=false;
   el.innerHTML=list.map(g=>
@@ -2977,7 +2988,7 @@ function _lgFoldedPushSpec(L,i,N,signs){
     last:  i<N-1 ? {push:46, sign: -signs[i+1]}  : null,
   };
 }
-function engPaintFolded(L,tf,pfx,uprightText,effScale,pushSpec){
+function engPaintFolded(L,tf,pfx,uprightText,effScale,pushSpec,cuts){
   L.shapes.forEach(s=>{
     const poly=s.poly.map(p=>tf(p[0],p[1]));
     cx.save();
@@ -3013,7 +3024,13 @@ function engPaintFolded(L,tf,pfx,uprightText,effScale,pushSpec){
     cx.restore();
   });
 
+  // ‏החיתוכים של הזרוע — דרך אותו טרנספורם; הנקודות בקנה המידה של הזרוע
+  // (לפני scaleFix), והרדיוס בקנה המידה האמיתי על המסך, כמו הפרזול.
+  const keyed={};
+  (cuts||[]).forEach(g=>{ if(g && g.key && L.shapes[g.idx]) keyed[g.idx]=1; });
+  (cuts||[]).forEach(g=>{ if(keyed[g.idx]) engPaintCuts(g,L.shapes[g.idx],L.scale,tf,effScale||L.scale); });
   (L.hardware||[]).forEach(h=>{
+    if(cuts && _engCutReplaces(h,keyed,L.shapes.length)) return;
     const p=tf(h.x,h.y);
     engHardware(Object.assign({},h,{x:p[0],y:p[1]}), effScale||L.scale, undefined);
   });
@@ -3073,6 +3090,7 @@ function drawFoldedMode(panels,pss,DPR,cW){
 
   const real=_lgShowerOf(panels,pss).boundary;
   const fullJ=(typeof lgJunctions==='function') ? lgJunctions(_lgShowerOf(panels,pss)) : [];
+  const armCuts=[];
   const layouts=ranges.map(([a,b],i)=>{
     const armPanels=panels.slice(a,b);
     const armPss=_sliceP(pss,a,b);
@@ -3084,6 +3102,8 @@ function drawFoldedMode(panels,pss,DPR,cW){
     };
     const SH=_lgShowerOf(armPanels,armPss);
     SH.boundary=bnd;
+    // ‏החיתוכים מאותו מקלחון-זרוע שמצויר — כך הם יושבים על אותם צירים וזוויות
+    armCuts[i]=engCutsOf(SH);
     return lgLayout(SH,{canvasW:600});
   });
 
@@ -3149,7 +3169,7 @@ function drawFoldedMode(panels,pss,DPR,cW){
   const refScale=layouts[0].scale;
   layouts.forEach((L,i)=>{
     const tf=(x,y)=>{ const p=tfs[i](x,y); return [p[0]+ox,p[1]+oy]; };
-    engPaintFolded(L,tf,'combo',i>0,refScale,_lgFoldedPushSpec(L,i,layouts.length,signs));
+    engPaintFolded(L,tf,'combo',i>0,refScale,_lgFoldedPushSpec(L,i,layouts.length,signs),armCuts[i]);
   });
   engLegend(lgRows,cwFull,chArt-28);
   drawTitleBar(cwFull,chFull);
@@ -3665,11 +3685,87 @@ function engLegend(rows,cW,y0){
   cx.restore();
 }
 
+// ─── הזכוכית כמו שהיא נחתכת (lg-cuts.js, 16/11) ─────────────────────
+//
+// ‏לכל זכוכית מקלחון שיש לה תבנית חיתוך, הציור מראה את החיתוכים
+// האמיתיים — חלון הציר, הזווית (חור Ø20 או שקע פתוח), זוגות ההרמוניקה,
+// חור הידית — במקום ובגודל, מאותה רשימה שה-DXF נכתב ממנה. הסימנים
+// הישנים (מלבן ציר, עיגול זווית, הרמוניקה ב-36) יורדים מהזכוכית הזו
+// בלבד. מראה, יחידה, או זכוכית בלי תבנית — נשארות בדיוק כמו שהיו.
+const ENG_CUT_COLOR={ hinge:'#2b2620', harm:'#9a4f2b', closed:'#8a6a2a', open:'#8a6a2a',
+                      handle:'#3a3128', hole:'#3a3128' };
+// ‏חור קטן מאוד בפלאפון מקבל רדיוס מינימלי כדי שייראה — רק בתמונה, לא ב-DXF
+const ENG_CUT_MIN_R=1.5;
+function engCutsOf(shower){
+  if(typeof lgCuts!=='function') return null;
+  try{ return lgCuts(shower); }catch(e){ return null; }
+}
+// ‏האם החיתוכים מחליפים את הסימן הזה. ציר בצומת שייך לשתי הזכוכיות —
+// הוא יורד רק כששתיהן מצוירות כחיתוך; אחרת הזכוכית שבלי תבנית מאבדת אותו.
+function _engCutReplaces(h,keyed,n){
+  if(!keyed[h.idx]) return false;
+  if(h.kind==='hinge' && h.junction!=null)
+    return [h.junction-1,h.junction].every(m=>m<0||m>=n||keyed[m]);
+  return true;
+}
+// קונטור (קווים וקשתות במ"מ) → נקודות ברצף אחד. קשת נדגמת מהזווית
+// הקטנה לגדולה (כמו ב-DXF) ומתהפכת אם הקצה שלה הוא שממשיך את הקודם.
+function _engCutPts(contour){
+  const pts=[];
+  (contour||[]).forEach(s=>{
+    let seg;
+    if(s[0]===0) seg=[[s[1],s[2]],[s[3],s[4]]];
+    else {
+      const a0=Math.min(s[4],s[5]), a1=Math.max(s[4],s[5]);
+      const k=Math.max(4,Math.ceil((a1-a0)*s[3]/1.5));
+      seg=[]; for(let i=0;i<=k;i++){ const a=a0+(a1-a0)*i/k; seg.push([s[1]+s[3]*Math.cos(a), s[2]+s[3]*Math.sin(a)]); }
+    }
+    const last=pts[pts.length-1];
+    if(last){
+      const d=p=>Math.hypot(p[0]-last[0],p[1]-last[1]);
+      if(d(seg[seg.length-1])<d(seg[0])) seg.reverse();
+    }
+    seg.forEach(p=>pts.push(p));
+  });
+  return pts;
+}
+// ‏g — שורה אחת של lgCuts; s — הזכוכית בפריסה; sc — קנה המידה של הפריסה;
+// ‏tf — טרנספורם (תצוגת פינה); rsc — קנה המידה על המסך לרדיוס (ברירת מחדל sc).
+// מ"מ החיתוך גדולים ב-1 מכל צד ממידת הסקיצה, ולכן −1 לפני ההמרה.
+function engPaintCuts(g,s,sc,tf,rsc){
+  const half=1;
+  const P=(x,y)=>{ const p=[s.x+(x-half)*sc, s.y+s.h-(y-half)*sc]; return tf?tf(p[0],p[1]):p; };
+  const R=rsc||sc;
+  (g.cuts||[]).forEach(c=>{
+    cx.save();
+    cx.strokeStyle=ENG_CUT_COLOR[c.kind]||'#3a3128'; cx.fillStyle='#fff'; cx.lineWidth=1.2;
+    const full=c.dia && c.contour && c.contour.length===1 && c.contour[0][0]===1;
+    if(full || (c.dia && !c.contour)){
+      const p=P(c.x,c.y);
+      cx.beginPath(); cx.arc(p[0],p[1],Math.max(c.dia*R/2,ENG_CUT_MIN_R),0,Math.PI*2);
+      cx.fill(); cx.stroke();
+    } else {
+      const pts=_engCutPts(c.contour).map(p=>P(p[0],p[1]));
+      if(pts.length>1){
+        // מילוי לבן — חור בזכוכית; שקע פתוח לא נסגר בקו לאורך הצלע
+        cx.beginPath(); pts.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1])); cx.closePath(); cx.fill();
+        cx.beginPath(); pts.forEach((p,i)=>i?cx.lineTo(p[0],p[1]):cx.moveTo(p[0],p[1]));
+        if(c.kind!=='open') cx.closePath();
+        cx.stroke();
+      }
+    }
+    cx.restore();
+  });
+}
+
 // מצייר פריסה אחת בהיסט נתון. ההיסט הוא מה שמאפשר לערום כמה פריטים על
 // קנבס אחד בלי שכל אחד יחשב מיקומים אחרים — הוא מקבל את אותן קואורדינטות
 // ורק מוזז.
+// ‏opts.cuts — הפלט של lgCuts לאותו מקלחון: זכוכית עם תבנית מצוירת כחיתוך.
 function engPaint(L,pfx,dy,idxOf,opts){
   const _o=opts||{};
+  const keyed={};
+  (_o.cuts||[]).forEach(g=>{ if(g && g.key && L.shapes[g.idx]) keyed[g.idx]=1; });
   cx.save(); cx.translate(0,dy);
 
   L.shapes.forEach(s=>{
@@ -3710,7 +3806,9 @@ function engPaint(L,pfx,dy,idxOf,opts){
     cx.restore();
   });
 
-  L.hardware.forEach(h=>engHardware(h,L.scale,_o.hwMin));
+  (_o.cuts||[]).forEach(g=>{ if(keyed[g.idx]) engPaintCuts(g,L.shapes[g.idx],L.scale); });
+  // בלי חיתוכים (כרטיס גלריה, מראה) — בדיוק הציור הישן
+  L.hardware.forEach(h=>{ if(!_o.cuts || !_engCutReplaces(h,keyed,L.shapes.length)) engHardware(h,L.scale,_o.hwMin); });
   (L.tags||[]).forEach(engTag);
 
   // אזורי המגע נרשמים בקואורדינטות הקנבס ולא בקואורדינטות המוזזות: הם
@@ -3868,7 +3966,7 @@ function drawFromEngine(panels,pss,DPR,cW,pfx){
   drawGrid(L.canvas.w,L.canvas.h+lgH+28);
   dimHits=[];
   paintPick(L);            // ההדגשה מתחת למספרים, כדי שיישארו קריאים
-  engPaint(L,pfx||'combo',0,null);
+  engPaint(L,pfx||'combo',0,null,{cuts:engCutsOf(_lgShowerOf(panels,pss))});
   engLegend(lgRows,L.canvas.w,L.canvas.h+lgPad);
   drawTitleBar(L.canvas.w,L.canvas.h+lgH+28);
   updateSpecs();
