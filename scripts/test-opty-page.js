@@ -29,7 +29,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
 
   let html = fs.readFileSync(path.join(ROOT, 'opty.html'), 'utf8')
     .replace(/<script src="https:[^"]*"><\/script>/g, '').replace(/<script src="(firebase-db|lg-icons)\.js[^"]*"><\/script>/g, '');
-  for (const f of ['opty-paradox.js', 'opty-match.js', 'opty-shape.js', 'opty-layout.js'])
+  for (const f of ['opty-paradox.js', 'opty-match.js', 'opty-shape.js', 'opty-layout.js', 'print-labels.js', 'order-labels.js'])
     html = html.replace(new RegExp(`<script src="${f.replace('.', '\\.')}[^"]*"></script>`), `<script>${fs.readFileSync(path.join(ROOT, f), 'utf8')}</script>`);
   const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://luzglass-test.vercel.app/opty.html',
     beforeParse(w) {
@@ -151,6 +151,42 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   doc.querySelector('[data-tab="set"]').click();
   for (let i = 0; i < 30 && !doc.querySelector('[data-unpair]'); i++) await tick();
   check('settings: fixed pairs + saved pairs (with remove)', [doc.querySelectorAll('#pairsOut .row').length > 10, !!doc.querySelector('[data-unpair="k1"]')], [true, true]);
+
+  //  ─── אופטימיזציות (בן, 17/11) ───
+  db._data.meta.optyJobs.M00337 = { job: 'M00337', day: '2026-11-13', mat: '10S', matName: '10 mm clear',
+    sheets: [w.lgOptyLayoutParse('[P1H1R7D64R639CX1F54Y5410S<n=500>N1X1F54Y5410N2]')[0]],
+    pieces: { 1: { client: 'נאור', name: 'דני', w: 800, h: 2150, shape: '500' }, 2: { client: 'אגן ברזל', name: 'PHR#26083', w: 800, h: 2150, shape: '' } } };
+  d.o1.items[0] = Object.assign(it(502, 1902), { optyShape: '274328', optyJob: 'M00291', optyCut: { at: '2026-11-16', job: 'M00291' } });
+  const posts = [];
+  w._lgAuthPost = async (url, body) => { posts.push([url, body]); return { ok: true, json: async () => ({ ok: true, id: 'j' + posts.length, job: { state: 'printed' } }) }; };
+  w.lgLabelRender = () => ({ bitmap: 'B' });
+  doc.querySelector('[data-tab="jobs"]').click();
+  for (let i = 0; i < 30 && doc.querySelectorAll('[data-job]').length < 2; i++) await tick();
+  check('jobs tab lists the saved optimisations, newest day first', [...doc.querySelectorAll('[data-job]')].map(b => b.dataset.job), ['M00291', 'M00337']);
+  const mat = doc.getElementById('jMat');
+  check('glass filter lists the glass types', [...mat.options].map(o => o.value).filter(Boolean).sort(), ['08S', '10S']);
+  mat.value = '10S'; mat.dispatchEvent(new w.Event('change'));
+  check('glass filter hides the others', [...doc.querySelectorAll('[data-job]')].map(b => b.dataset.job), ['M00337']);
+  mat.value = ''; mat.dispatchEvent(new w.Event('change'));
+  const jq = doc.getElementById('jQ');
+  jq.value = 'אגן'; jq.dispatchEvent(new w.Event('input'));
+  check('shape search finds an unlinked client', [...doc.querySelectorAll('[data-hit]')].map(b => b.dataset.hit), ['M00337|1|2']);
+  jq.value = ''; jq.dispatchEvent(new w.Event('input'));
+  doc.querySelector('[data-job="M00291"]').click();
+  for (let i = 0; i < 30 && !doc.querySelector('#jobView svg'); i++) await tick();
+  check('job view: sheet i/N and the drawing', [/לוח 1\/1/.test(doc.getElementById('jobView').textContent), !!doc.querySelector('#jobView svg')], [true, true]);
+  check('linked piece shows its cut status', /לחיתוך|נחתך/.test(doc.querySelector('[data-pc="24"]') ? doc.querySelector('[data-pc="24"]').textContent : ''), true);
+  doc.getElementById('jPrintAll').click();
+  for (let i = 0; i < 30 && !posts.length; i++) await tick();
+  check('print all: one queue job, marker + 2 pieces', posts.length && [posts[0][1].labels.length, posts[0][1].labels[0].marker], [3, 'לוח 1/1']);
+  const sd = doc.getElementById('jDay');
+  sd.value = '2026-11-19'; doc.getElementById('jDayGo').click();
+  for (let i = 0; i < 30 && db._data.meta.optyJobs.M00291.day !== '2026-11-19'; i++) await tick();
+  for (let i = 0; i < 5; i++) await tick();
+  check('change work day: job and the stamped glass move', [db._data.meta.optyJobs.M00291.day, d.o1.items[0].optyCut.at], ['2026-11-19', '2026-11-19']);
+  doc.querySelector('[data-undo="o1|0"]').click();
+  for (let i = 0; i < 30 && !d.o1.items[0].optyCut.undone; i++) await tick();
+  check('"בטל נחתך" keeps the mark but as undone', [d.o1.items[0].optyCut.undone, d.o1.items[0].optyCut.job], [true, 'M00291']);
 
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

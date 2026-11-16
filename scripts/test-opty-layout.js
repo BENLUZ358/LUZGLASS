@@ -67,6 +67,32 @@ check('cut state: past → נחתך', L.lgOptyCutState({ at: '2026-11-17', job: 
 check('cut state: sheet marked today → נחתך', L.lgOptyCutState({ at: '2026-11-18', job: 'M1', marked: true }, '2026-11-18'), { label: '✂ נחתך 18/11', cut: true });
 check('cut state: undone / none → null', [L.lgOptyCutState({ at: '2026-11-17', undone: true }, '2026-11-18'), L.lgOptyCutState(null, '2026-11-18')], [null, null]);
 
+// ── Task 5: labels in cut order, chunks, shape search ──
+{
+  const two = { job: 'M00337', day: '2026-11-17', mat: '10S', matName: '10 mm clear',
+    sheets: [L.lgOptyLayoutParse('[P1H1R7D64R639CX1F54Y5410S<n=500>N1X1F54Y5410N2]')[0], L.lgOptyLayoutParse('[P1H2-3R7D64R639CX1F54Y5410S<n=501>N3]')[0]],
+    pieces: { 1: { client: 'נאור', name: 'דני', w: 800, h: 2150, shape: '500' }, 2: { client: 'אגן ברזל', name: 'PHR#1', w: 800, h: 2150, shape: '' }, 3: { client: 'נאור', name: 'רון', w: 800, h: 2150, shape: '501' } } };
+  const ours = { '500': { title: 'נאור חזקיה', dims: '800 × 2150', sketchName: 'דני כהן', glass: 'שקוף 10', orderNum: 'L1300', shape: '500', job: 'M00337', orderId: 'o9', idx: 0 } };
+  const all = L.lgOptyJobLabels(two, ours, {}, 'M 10S · 10 שקוף');
+  check('job labels: marker before every physical sheet, then its pieces in cut order', all.map(l => l.marker || l.sketchName), ['לוח 1/3', 'דני כהן', 'PHR#1', 'לוח 2/3', 'רון', 'לוח 3/3', 'רון']);
+  check('marker carries job, glass, piece count', (({ marker, job, mat, pieces }) => ({ marker, job, mat, pieces }))(all[0]), { marker: 'לוח 1/3', job: 'M00337', mat: 'M 10S · 10 שקוף', pieces: 2 });
+  check('linked piece: our order label + shape drawing', [all[1].title, all[1].orderNum, all[1].withShape, all[1].job], ['נאור חזקיה', 'L1300', true, 'M00337']);
+  check('unlinked piece: OptyWay data, no drawing without a shape', [all[2].title, all[2].dims, all[2].withShape, all[2].glass], ['אגן ברזל', '800 × 2150', false, 'M 10S · 10 שקוף']);
+  check('one sheet only', L.lgOptyJobLabels(two, ours, { sheet: 2 }, '').map(l => l.marker || l.sketchName), ['לוח 2/3', 'רון']);
+  check('one piece: no marker', L.lgOptyJobLabels(two, ours, { sheet: 1, order: 2 }, '').map(l => l.marker || l.sketchName), ['PHR#1']);
+  const big = Array.from({ length: 75 }, (_, i) => (i === 69 ? { marker: 'לוח 2/2' } : { title: 'x' + i }));
+  check('chunks of 70 never end on a marker', L.lgOptyChunks(big, 70).map(c => c.length), [69, 6]);
+  check('chunk: marker as the last of 70 moves to the next', L.lgOptyChunks(Array.from({ length: 71 }, (_, i) => (i === 69 ? { marker: 'm' } : {})), 70).map(c => c.length), [69, 2]);
+  const jobs = { M00337: two, M00290: Object.assign({}, rec, { mat: '08S' }) };
+  const hit = q => L.lgOptyPieceSearch(jobs, q, {}).map(h => h.job + ':' + h.pos);
+  check('shape search by client (also unlinked)', hit('אגן'), ['M00337:2']);
+  check('shape search by sketch name', hit('רון'), ['M00337:3']);
+  check('shape search by shape number', hit('274380'), ['M00290:4']);
+  check('shape search: glass filter', L.lgOptyPieceSearch(jobs, '', { mat: '08S' }).length, 4);
+  check('shape search: result has sheet + day', (({ sheetNo, day, client, w, h }) => ({ sheetNo, day, client, w, h }))(L.lgOptyPieceSearch(jobs, 'דני', {})[0]), { sheetNo: 1, day: '2026-11-17', client: 'נאור', w: 800, h: 2150 });
+  check('shape search: repeated sheet listed once', hit('נאור'), ['M00337:1', 'M00337:3']);
+}
+
 module.exports = { check, M290, il, geoOf, L, done: () => failed };
 if (require.main === module) {
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');

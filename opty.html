@@ -87,6 +87,29 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .tabs button[aria-selected="true"]{background:var(--text);color:var(--surface);border-color:var(--text);}
 .tabs .cnt{display:inline-block;min-width:20px;padding:0 6px;margin-inline-start:6px;border-radius:999px;background:var(--gold);color:var(--on-gold);font-size:12px;}
 .pane[hidden]{display:none;}
+/* אופטימיזציות (בן, 17/11) */
+.jflt{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-bottom:var(--space-3);}
+.jflt label{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-sm);}
+.jflt input[type=date]{min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 6px;background:var(--surface);color:var(--text);}
+.jflt #jQ{flex:1 1 260px;min-height:48px;padding:0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);}
+.jcard{display:flex;flex-wrap:wrap;align-items:center;gap:4px var(--space-3);width:100%;text-align:start;padding:var(--space-3);margin-bottom:var(--space-2);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);cursor:pointer;color:var(--text);font:inherit;}
+.jcard b{font-size:var(--fs-lg);font-weight:var(--fw-black);}
+.jcard .mat{font-weight:var(--fw-bold);}
+.jcard .meta{color:var(--muted);font-size:var(--fs-sm);flex:1 1 100%;}
+.jhit{display:flex;align-items:center;gap:var(--space-3);width:100%;text-align:start;padding:var(--space-2);border:none;border-bottom:1px solid var(--border);background:none;color:var(--text);font:inherit;cursor:pointer;}
+.jhit svg{height:64px;width:48px;flex:none;}
+.jhit .who{flex:1;}
+.jv{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-top:var(--space-3);}
+.jv .nav{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);margin:var(--space-2) 0;}
+.jv .nav b{font-size:var(--fs-lg);}
+.jv .nav button{min-width:56px;min-height:48px;font-size:22px;}
+.jv svg.lg-opty-sheet{width:100%;height:auto;border:1px solid var(--border);}
+.jv .acts{display:flex;flex-wrap:wrap;gap:var(--space-2);margin:var(--space-2) 0;align-items:center;}
+.jv table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);}
+.jv td,.jv th{border-bottom:1px solid var(--border);padding:6px 4px;text-align:start;}
+.jv tr.sel{background:rgba(201,162,39,.15);}
+.cutok{color:#1e7d32;font-weight:var(--fw-bold);}
+.cutwait{color:var(--muted);}
 .ord{font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-1);}
 .row select.sm{max-width:none;flex:1;min-width:180px;}
 .row .net{font-weight:var(--fw-bold);direction:ltr;white-space:nowrap;}
@@ -108,6 +131,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <main class="wrap">
   <nav class="tabs" role="tablist" aria-label="אופטי-ווי">
     <button type="button" role="tab" data-tab="imp" aria-selected="true">קליטה</button>
+    <button type="button" role="tab" data-tab="jobs" aria-selected="false">אופטימיזציות</button>
     <button type="button" role="tab" data-tab="link" aria-selected="false">לחיבור<span class="cnt" id="cntLink" hidden></span></button>
     <button type="button" role="tab" data-tab="find" aria-selected="false">חיפוש</button>
     <button type="button" role="tab" data-tab="set" aria-selected="false">הגדרות</button>
@@ -139,6 +163,18 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
   <div id="out"></div>
 
   <section class="card hist"><h2>קליטות קודמות</h2><div id="hist"><p class="note">טוען…</p></div></section>
+  </div>
+
+  <div class="pane" id="pane-jobs" hidden>
+    <div class="jflt">
+      <label>מ-<input type="date" id="jFrom"></label>
+      <label>עד <input type="date" id="jTo"></label>
+      <select class="sm" id="jMat" aria-label="סוג זכוכית"><option value="">כל סוגי הזכוכית</option></select>
+      <input id="jQ" type="search" placeholder="חיפוש שייפ: לקוח / שם סקיצה / מספר שייפ / M00…" aria-label="חיפוש שייפ">
+    </div>
+    <div id="jHits"></div>
+    <div id="jList"><p class="note">טוען…</p></div>
+    <div id="jobView"></div>
   </div>
 
   <div class="pane" id="pane-link" hidden>
@@ -211,6 +247,7 @@ function showTab(t) {
   document.querySelectorAll('.pane').forEach(p => { p.hidden = p.id !== 'pane-' + t; });
   st('');
   if (t === 'link') loadLink();
+  if (t === 'jobs') jobsLoad();
   if (t === 'find') $('q').focus();
   if (t === 'set') loadPairs();
 }
@@ -556,6 +593,147 @@ $('linkOut').addEventListener('click', async e => {
       st('הוסרה מהרשימה: ' + w.sh, 'ok'); await loadLink();
     } catch (err) { st('✗ לא נמחק: ' + (err.message || ''), 'bad'); }
   }
+});
+
+//  ─── אופטימיזציות (בן, 17/11): רשימה, סינון, חיפוש שייפ, לוחות, מדבקות לפי סדר החיתוך, נחתך ───
+let JOBS = {}, JV = null;              // JV: { job, i (אינדקס לוח פיזי), sel (סדר זכוכית מסומנת) }
+const dmy = iso => String(iso || '').split('-').reverse().slice(0, 2).join('/');
+const matLbl = rec => rec ? (typeof lgOptyMatLabel === 'function' ? lgOptyMatLabel(rec.mat, MATS) : (rec.mat || '')) : '';
+let MATS = {};
+async function jobsLoad() {
+  try {
+    const [j, m] = await Promise.all([_lgDb.ref('meta/optyJobs').once('value'), _lgDb.ref('meta/optyMats').once('value')]);
+    JOBS = j.val() || {}; MATS = m.val() || {};
+    await loadOrders();
+    if (!$('jFrom').value) $('jFrom').value = lgOptyTodayIso(Date.now() - 2 * 86400000);
+    const mats = [...new Set(Object.values(JOBS).map(r => r && r.mat).filter(Boolean))].sort();
+    const cur = $('jMat').value;
+    $('jMat').innerHTML = '<option value="">כל סוגי הזכוכית</option>' + mats.map(m => `<option value="${esc(m)}">${esc(lgOptyMatLabel(m, MATS))}</option>`).join('');
+    $('jMat').value = cur;
+    jobsRender();
+  } catch (e) { console.error(e); $('jList').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור</p>'; }
+}
+const jFilter = () => ({ from: $('jFrom').value || '', to: $('jTo').value || '', mat: $('jMat').value || '' });
+//  זכוכיות מחוברות: צורה → { order, idx } (רק הזמנות שנטענו — 30 יום)
+function linkedOf(job) {
+  const m = {};
+  ORDERS.forEach(o => o.items.forEach((it, idx) => { if (it && it.optyJob === job && it.optyShape) m[it.optyShape] = { o, idx, it }; }));
+  return m;
+}
+function jobsRender() {
+  const f = jFilter(), q = $('jQ').value.trim();
+  const list = Object.values(JOBS).filter(r => r && r.sheets && (!f.mat || r.mat === f.mat) && (!f.from || r.day >= f.from) && (!f.to || r.day <= f.to))
+    .sort((a, b) => (b.day || '').localeCompare(a.day || '') || a.job.localeCompare(b.job));
+  const hits = q ? lgOptyPieceSearch(JOBS, q, f).slice(0, 60) : [];
+  $('jHits').innerHTML = q ? `<section class="card"><h2>שייפים שנמצאו (${hits.length})</h2>${hits.map(h => `<button type="button" class="jhit" data-hit="${esc(h.job + '|' + h.sheetNo + '|' + h.order)}">
+      ${h.shape && GEOS[h.shape] ? lgOptyShapeSvg(GEOS[h.shape], { px: 40 }) : ''}
+      <span class="who"><b>${h.shape ? 'שייפ ' + esc(h.shape) : 'בלי שייפ'}</b> · ${esc(h.client)} · ${esc(h.name)}<br><small>${esc(Math.round(h.w) + '×' + Math.round(h.h))} · ${esc(h.job)} · לוח ${h.sheetNo} · ${esc(dmy(h.day))} · ${esc(matLbl(JOBS[h.job]))}</small></span></button>`).join('') || '<p class="note">לא נמצא</p>'}</section>` : '';
+  if (q) loadGeos(hits.map(h => h.shape).filter(Boolean)).then(n => { if (n) jobsRender(); });
+  $('jList').innerHTML = list.length ? list.map(r => {
+    const seq = lgOptySheetSeq(r.sheets), pcs = seq.reduce((n, x) => n + x.sheet.pieces.length, 0);
+    const lk = linkedOf(r.job), lkN = Object.keys(lk).length, cutN = Object.values(lk).filter(x => { const c = lgOptyCutState(x.it.optyCut, lgOptyTodayIso()); return c && c.cut; }).length;
+    return `<button type="button" class="jcard" data-job="${esc(r.job)}"><b>${esc(r.job)}</b><span class="mat">${esc(matLbl(r))}</span><span>${esc(dmy(r.day))}</span>
+      <span class="meta">${seq.length} לוחות · ${pcs} זכוכיות · ${lkN} מחוברות להזמנות${lkN ? ' · ' + cutN + ' נחתכו' : ''}${r.marks ? ' · ' + Object.keys(r.marks).length + '/' + seq.length + ' לוחות סומנו' : ''}</span></button>`;
+  }).join('') : '<p class="note">אין אופטימיזציות בטווח הזה. קולטים אותן בלשונית "קליטה" (קבצי M00…R01 מהדיסק-און-קי).</p>';
+}
+//  ציורי צורות מ-meta/optyGeo (פעם אחת לכל צורה); מחזיר כמה נטענו עכשיו
+async function loadGeos(shapes) {
+  const need = [...new Set(shapes)].filter(s => !(s in GEOS));
+  await Promise.all(need.map(async s => { try { GEOS[s] = (await _lgDb.ref('meta/optyGeo/' + s).once('value')).val() || null; } catch (_) { GEOS[s] = null; } }));
+  return need.filter(s => GEOS[s]).length;
+}
+async function jobOpen(job, sheetNo, order) {
+  const rec = JOBS[job]; if (!rec) return;
+  JV = { job, i: Math.max(0, (sheetNo || 1) - 1), sel: order || 0 };
+  await loadGeos(rec.sheets.flatMap(s => s.pieces.map(p => p.shape)).filter(Boolean));
+  jobSheet();
+  const v = $('jobView'); if (v.scrollIntoView) v.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function jobSheet() {
+  const rec = JOBS[JV.job], seq = lgOptySheetSeq(rec.sheets), cur = seq[JV.i] || seq[0];
+  const lk = linkedOf(rec.job), today = lgOptyTodayIso();
+  const info = {}; Object.entries(rec.pieces || {}).forEach(([pos, r]) => { info[pos] = r; });
+  const cut = {}; cur.sheet.pieces.forEach(p => { const x = p.shape && lk[p.shape]; const c = x && lgOptyCutState(x.it.optyCut, today); if (c && c.cut) cut[p.order] = 1; });
+  const mark = (rec.marks || {})[cur.sheetNo];
+  $('jobView').innerHTML = `<section class="jv">
+    <h2>${esc(rec.job)} · ${esc(matLbl(rec))} · יום עבודה ${esc(dmy(rec.day))}</h2>
+    <div class="acts"><label>יום עבודה <input type="date" id="jDay" value="${esc(rec.day)}"></label><button class="sm" id="jDayGo" type="button">שנה יום עבודה</button>
+      <button class="sm gold" id="jPrintAll" type="button">🏷 הדפס את כל המדבקות</button><button class="sm" id="jPrintSheet" type="button">🏷 הדפס לוח זה</button></div>
+    <div class="nav"><button class="sm" type="button" data-jnav="-1" aria-label="הלוח הקודם" ${JV.i ? '' : 'disabled'}>‹</button>
+      <b>לוח ${cur.sheetNo}/${cur.total}${mark ? ' · ✓ סומן נחתך' : ''}</b>
+      <button class="sm" type="button" data-jnav="1" aria-label="הלוח הבא" ${JV.i < seq.length - 1 ? '' : 'disabled'}>›</button></div>
+    ${lgOptyLayoutSvg(cur.sheet, info, GEOS, { selected: JV.sel, cut })}
+    <table><thead><tr><th>#</th><th>שייפ</th><th>לקוח</th><th>סקיצה</th><th>מידה</th><th>מצב</th><th></th></tr></thead><tbody>
+    ${cur.sheet.pieces.map(p => {
+      const r = info[p.pos] || {}, x = p.shape && lk[p.shape], c = x && lgOptyCutState(x.it.optyCut, today);
+      const k = x ? x.o.id + '|' + x.idx : '';
+      const state = !x ? '<span class="cutwait">לא מחובר</span>'
+        : c ? `<span class="${c.cut ? 'cutok' : 'cutwait'}">${esc(c.label)}</span> <button class="sm quiet" type="button" data-undo="${esc(k)}">בטל נחתך</button>`
+        : `<span class="cutwait">${x.it.optyCut && x.it.optyCut.undone ? 'בוטל' : '—'}</span> <button class="sm quiet" type="button" data-redo="${esc(k)}">סמן נחתך</button>`;
+      return `<tr data-pc="${p.pos}" class="${p.order === JV.sel ? 'sel' : ''}"><td>${p.order}</td><td>${esc(p.shape || '—')}</td><td>${esc(x ? x.o.orderClient : r.client || '')}</td>
+        <td>${esc(x ? x.o.sketchName : r.name || '')}</td><td dir="ltr">${esc(Math.round(r.w || p.w) + '×' + Math.round(r.h || p.h))}</td><td>${state}</td>
+        <td><button class="sm" type="button" data-plabel="${p.order}" aria-label="מדבקה לזכוכית ${p.order}">🏷</button></td></tr>`;
+    }).join('')}</tbody></table></section>`;
+}
+//  מדבקות → מרכז ההדפסות, בחלקים של עד 70 (לא נגמר במדבקת לוח)
+async function jobPrint(opts) {
+  const rec = JOBS[JV.job], lk = linkedOf(rec.job), ours = {};
+  Object.entries(lk).forEach(([sh, x]) => { const l = lgLabelsForClient([{ order: x.o, idxs: [x.idx] }])[0]; if (l) ours[sh] = l; });
+  const labels = lgOptyJobLabels(rec, ours, opts, matLbl(rec));
+  if (!labels.length) { st('אין מה להדפיס', 'bad'); return; }
+  st('שולח ' + labels.length + ' מדבקות…');
+  try {
+    if (typeof lgOptyLoadGeos === 'function') await lgOptyLoadGeos(labels);
+    try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (_) {}
+    const chunks = lgOptyChunks(labels, 70);
+    for (const part of chunks) {
+      const plain = part.map(l => { const o = {}; ['title', 'dims', 'sketchName', 'glass', 'orderNum', 'shape', 'job', 'withShape', 'marker', 'mat', 'pieces'].forEach(k => { if (l[k] != null && l[k] !== '') o[k] = l[k]; }); return o; });
+      const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels', client: 'אופטי-ווי ' + rec.job,
+        orderIds: [...new Set(Object.values(lk).map(x => String(x.o.id)))], labels: plain, bitmaps: part.map(l => lgLabelRender(l).bitmap) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) throw new Error(d.code || ('HTTP ' + res.status));
+    }
+    st('✓ ' + labels.length + ' מדבקות נשלחו למדפסת המדבקות' + (chunks.length > 1 ? ' (ב-' + chunks.length + ' חלקים)' : ''), 'ok');
+  } catch (e) { console.error(e); st('✗ ההדפסה לא נשלחה: ' + (e.message || ''), 'bad'); }
+}
+async function jobSetDay(day) {
+  const rec = JOBS[JV.job];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !rec) { st('בחר תאריך', 'bad'); return; }
+  const up = { ['meta/optyJobs/' + rec.job + '/day']: day }, now = Date.now();
+  Object.values(linkedOf(rec.job)).forEach(x => {
+    const c = x.it.optyCut; if (!c || c.undone || c.job !== rec.job) return;
+    const key = (KEYS[x.o.id] || [])[x.idx]; if (key == null) return;
+    up['orders/' + x.o.id + '/items/' + key + '/optyCut/at'] = day; up['orders/' + x.o.id + '/updatedAt'] = now;
+    c.at = day;
+  });
+  try { await _lgDb.ref().update(up); rec.day = day; st('✓ יום העבודה של ' + rec.job + ' הוא ' + dmy(day), 'ok'); jobSheet(); jobsRender(); }
+  catch (e) { st('✗ לא נשמר: ' + (e.message || ''), 'bad'); }
+}
+//  "בטל נחתך" — נשאר כ"בוטל" כדי שקליטה חוזרת לא תסמן שוב; "סמן נחתך" — מחזיר
+async function jobCut(k, on) {
+  const [oid, idx] = k.split('|'), o = ordOf(oid), key = (KEYS[oid] || [])[Number(idx)];
+  if (!o || key == null) return;
+  const it = o.items[Number(idx)], rec = JOBS[JV.job];
+  const v = on ? { at: rec.day, job: rec.job } : Object.assign({}, it.optyCut || { at: rec.day, job: rec.job }, { undone: true });
+  try {
+    await _lgDb.ref().update({ ['orders/' + oid + '/items/' + key + '/optyCut']: v, ['orders/' + oid + '/updatedAt']: Date.now() });
+    it.optyCut = v; st(on ? '✓ סומן נחתך' : '✓ בוטל "נחתך"', 'ok'); jobSheet(); jobsRender();
+  } catch (e) { st('✗ לא נשמר: ' + (e.message || ''), 'bad'); }
+}
+['jFrom', 'jTo', 'jMat'].forEach(id => $(id).addEventListener('change', jobsRender));
+$('jQ').addEventListener('input', jobsRender);
+$('pane-jobs').addEventListener('click', e => {
+  const t = e.target;
+  const card = t.closest('[data-job]'); if (card) { jobOpen(card.dataset.job); return; }
+  const hit = t.closest('[data-hit]'); if (hit) { const [j, sn, ord] = hit.dataset.hit.split('|'); jobOpen(j, Number(sn), Number(ord)); return; }
+  const nav = t.closest('[data-jnav]'); if (nav && JV) { JV.i += Number(nav.dataset.jnav); JV.sel = 0; jobSheet(); return; }
+  const pc = t.closest('.lg-opty-pc'); if (pc && JV) { JV.sel = Number(pc.dataset.order); jobSheet(); return; }
+  if (t.closest('#jPrintAll')) { jobPrint({}); return; }
+  if (t.closest('#jPrintSheet')) { jobPrint({ sheet: JV.i + 1 }); return; }
+  const pl = t.closest('[data-plabel]'); if (pl) { jobPrint({ sheet: JV.i + 1, order: Number(pl.dataset.plabel) }); return; }
+  if (t.closest('#jDayGo')) { jobSetDay($('jDay').value); return; }
+  const u = t.closest('[data-undo]'); if (u) { jobCut(u.dataset.undo, false); return; }
+  const r = t.closest('[data-redo]'); if (r) { jobCut(r.dataset.redo, true); return; }
 });
 
 //  ─── חיפוש ───

@@ -192,6 +192,83 @@ function lgOptyCutState(c, todayIso) {
 //  היום בישראל, 'YYYY-MM-DD'
 function lgOptyTodayIso(ms) { const p = _lgIlParts(ms == null ? Date.now() : ms); return `${p.year}-${p.month}-${p.day}`; }
 
+//  ─── שמות זכוכית בעברית (בן, 17/11: "08S 8 שקוף") ───
+//  מהשם באנגלית של אופטי-ווי (Magaz.DB: "8 mm clear") → "8 שקוף". מילה לא מוכרת נשארת באנגלית; בן מתקן בהגדרות.
+const LG_OPTY_WORDS = [['extra clear', 'שקוף אקסטרה'], ['acid clear', 'חלבי שקוף'], ['master carre', 'מאסטר קרה'], ['master line', 'מאסטר ליין'],
+  ['clear', 'שקוף'], ['mirror', 'מראה'], ['acid', 'חלבי'], ['bronze', 'ברונזה'], ['gray', 'אפור'], ['grey', 'אפור'], ['black', 'שחור'],
+  ['mat', 'מט'], ['silk', 'משי'], ['lacobel', 'לקובל'], ['reflective', 'מחזיר אור'], ['granit', 'גרניט'], ['chinchilla', "צ'ינצ'ילה"],
+  ['pepitte', 'פפיט'], ['savta', 'סבתא']];
+function lgOptyMatHe(code, en) {
+  let t = String(en || '').toLowerCase().replace(/\bmm\b/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!t) return String(code || '');
+  LG_OPTY_WORDS.forEach(([e, h]) => { t = t.replace(new RegExp('\\b' + e + '\\b', 'g'), h); });
+  return t.replace(/\s+/g, ' ').trim();
+}
+//  "08S · 8 שקוף" — שם שבן שמר בהגדרות (meta/optyMats/<code>.he) גובר
+function lgOptyMatLabel(code, mats) {
+  const c = String(code || ''); if (!c) return '';
+  const m = (mats || {})[c] || {};
+  const he = m.he || (m.en ? lgOptyMatHe(c, m.en) : '');
+  return he ? c + ' · ' + he : c;
+}
+
+//  ─── מדבקות לפי סדר החיתוך (בן, 17/11) ───
+//  לפני כל לוח פיזי: מדבקת "לוח i/N" (האופטימיזציה, סוג הזכוכית, כמה זכוכיות), ואחריה הזכוכיות שלו לפי הסדר.
+//  linked[shape] = מדבקה מההזמנה שלנו (lgLabelsForClient) כשהזכוכית מחוברת; אחרת — מה שרשום באופטי-ווי.
+//  opts.sheet = רק לוח פיזי אחד · opts.order (עם sheet) = רק זכוכית אחת, בלי מדבקת לוח.
+function lgOptyJobLabels(rec, linked, opts, matLabel) {
+  const o = opts || {}, out = [], lk = linked || {}, info = (rec && rec.pieces) || {};
+  lgOptySheetSeq((rec && rec.sheets) || []).forEach(({ sheetNo, total, sheet }) => {
+    if (o.sheet && o.sheet !== sheetNo) return;
+    const ps = (sheet.pieces || []).filter(p => !o.order || p.order === o.order);
+    if (!o.order) out.push({ marker: 'לוח ' + sheetNo + '/' + total, job: rec.job, mat: matLabel || rec.mat || '', pieces: ps.length });
+    ps.forEach(p => {
+      const r = info[p.pos] || {}, ours = p.shape ? lk[p.shape] : null;
+      if (ours) out.push(Object.assign({}, ours, { shape: p.shape, job: rec.job, withShape: true }));
+      else out.push({ title: r.client || '', sketchName: r.name || '', dims: Math.round(r.w || p.w) + ' × ' + Math.round(r.h || p.h),
+        glass: matLabel || rec.mat || '', orderNum: '', shape: p.shape || '', job: rec.job, withShape: !!p.shape });
+    });
+  });
+  return out;
+}
+
+//  חלוקה לעבודות הדפסה (עד 70 בתור) — חלק אף פעם לא נגמר במדבקת לוח (היא עוברת לחלק הבא)
+function lgOptyChunks(labels, max) {
+  const out = []; let cur = [];
+  (labels || []).forEach(l => {
+    if (cur.length === max) {
+      const carry = cur[cur.length - 1] && cur[cur.length - 1].marker ? [cur.pop()] : [];
+      out.push(cur); cur = carry;
+    }
+    cur.push(l);
+  });
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+//  ─── חיפוש שייפ (בן, 17/11: "אם ארצה לחפש שייפ של צורה שנשברה") ───
+//  בכל האופטימיזציות שנשמרו — גם לקוחות שלא מחוברים. q: מספר שייפ / לקוח / שם סקיצה / M00…
+function lgOptyPieceSearch(jobs, q, f) {
+  const flt = f || {}, n = s => String(s == null ? '' : s).toLowerCase().replace(/\s+/g, ' ').trim();
+  const words = n(q).split(' ').filter(Boolean), out = [];
+  Object.values(jobs || {}).forEach(rec => {
+    if (!rec || !rec.sheets) return;
+    if (flt.mat && rec.mat !== flt.mat) return;
+    if (flt.from && rec.day < flt.from) return;
+    if (flt.to && rec.day > flt.to) return;
+    const seen = {};
+    lgOptySheetSeq(rec.sheets).forEach(({ sheetNo, sheet }) => (sheet.pieces || []).forEach(p => {
+      if (seen[p.pos]) return; seen[p.pos] = 1;
+      const r = (rec.pieces || {})[p.pos] || {};
+      const hay = n([p.shape, r.client, r.name, rec.job].join(' '));
+      if (!words.every(w => hay.includes(w))) return;
+      out.push({ job: rec.job, day: rec.day || '', mat: rec.mat || '', sheetNo, order: p.order, pos: p.pos, shape: p.shape || '',
+        client: r.client || '', name: r.name || '', w: r.w || p.w, h: r.h || p.h });
+    }));
+  });
+  return out.sort((a, b) => (b.day || '').localeCompare(a.day || ''));
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso };
+  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyMatHe, lgOptyMatLabel };
 }
