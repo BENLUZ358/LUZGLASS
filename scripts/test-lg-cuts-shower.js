@@ -213,5 +213,34 @@ const DH_P = [{ type: 'door', hingeSide: 'left', harmonicaSide: 'right' }, { typ
   check('fixed between two walls: still no template (blocked)', [both.key, both.issues.length], [null, 1]);
 }
 
+// ── זכוכית הזזה: מחוץ לשלב הזה — בלי תבנית, חסום (עדיף בלי קובץ מקובץ שגוי) ──
+//  הקומבינציה a_hzaza כמו שהיא במסך (COMBOS + mkPS מ-sketch-demo.html). ההזזה מגיעה למנוע כ-kind 'fixed';
+//  הסימון האמין הוא type:'slider' של הפאנל → s.sliding ב-lgFromPanels.
+{
+  const D = fs.readFileSync(path.join(ROOT, 'sketch-demo.html'), 'utf8');
+  const body = (start, open) => { const i = D.indexOf(start); let d = 0, j = D.indexOf(open, i);
+    for (; j < D.length; j++) { if (D[j] === '{') d++; else if (D[j] === '}') { d--; if (!d) break; } } return D.slice(i, j + 1); };
+  const ui = vm.createContext({ Math, JSON, Object, Array, String, Number, console });
+  vm.runInContext('var DOOR_H_MM=1985,HANDLE_EDGE_CM=6,TOWEL_SPACING_CM=40;' + body('const COMBOS={', '{') + ';' +
+                  body('function mkPS(', '{') + ';this.COMBOS=COMBOS;', ui);
+  const combo = ui.COMBOS.ambatyon.find(c => c.id === 'a_hzaza');
+  const S = {}; combo.panels.forEach((p, n) => { S[n] = ui.mkPS(p); });
+  const sh = shower(combo.panels, S);
+  const si = combo.panels.findIndex(p => p.type === 'slider');
+  check('a_hzaza: the slider reaches the engine as fixed, marked sliding', [sh.shapes[si].kind, sh.shapes[si].sliding], ['fixed', true]);
+  const G = lgCuts(sh);
+  check('a_hzaza slider: key null, no cuts, blocking issue',
+        [G[si].key, G[si].cuts.length, G[si].issues], [null, 0, ['זכוכית הזזה — עדיין אין תבנית, לבדוק ביד']]);
+  check('a_hzaza slider: lgTemplateOf null', lgTemplateOf(sh, si), null);
+  //  גם עם זווית פתוחה, וגם כשהיא בצד השני
+  S[si].bracketType = 'open';
+  check('a_hzaza slider, open angle: still blocked', lgCuts(shower(combo.panels, S))[si].key, null);
+  const flipped = combo.panels.slice().reverse(), FS = {}; flipped.forEach((p, n) => { FS[n] = ui.mkPS(p); });
+  const fi = flipped.findIndex(p => p.type === 'slider');
+  check('slider on the other side: still blocked', lgCuts(shower(flipped, FS))[fi].issues, ['זכוכית הזזה — עדיין אין תבנית, לבדוק ביד']);
+  //  a fixed glass is not marked sliding
+  check('a plain fixed panel is not marked sliding', 'sliding' in shower([{ type: 'fixed', wallSide: 'left' }], { 0: { w: 900, h: 2000 } }).shapes[0], false);
+}
+
 if (failed) { console.error(failed + ' failed'); process.exit(1); }
 console.log('all passed');
