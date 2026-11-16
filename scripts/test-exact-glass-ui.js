@@ -375,6 +375,38 @@ function sameAsFile(label, P, S, corner) {
   }
 }
 
+/* ── DXF buttons: admin only (Task 6) ────────────────────────────────── */
+{
+  const bar = (P, S, role, name) => {
+    const ctx = sandbox(), el = { hidden: true, innerHTML: '' }, saved = [], alerts = [];
+    ctx.document.getElementById = id => (id === 'dxfBar' ? el : id === 'sketchName' ? { value: name || '' } : null);
+    ctx.document.createElement = () => ({ click() { saved.push(this); }, remove() {} });
+    ctx.Blob = function (parts) { this.text = parts.join(''); };
+    ctx.URL = { createObjectURL: b => { saved.push({ blob: b }); return 'blob:x'; }, revokeObjectURL() {} };
+    ctx.setTimeout = f => f();
+    ctx.alert = m => alerts.push(m);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'lg-dxf.js'), 'utf8'), ctx);
+    vm.runInContext('var _sess=' + JSON.stringify(role ? { role } : {}) + ';' +
+      'function _shEsc(s){ return String(s); }\nlet _dxfState=null;\n' + grab('renderDxfBar') + '\n' + grab('dxfDownload'), ctx);
+    ctx.P = P; ctx.S = S;
+    vm.runInContext('renderDxfBar(P,S)', ctx);
+    return { el, ctx, saved, alerts };
+  };
+  const S2 = { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } };
+  const a = bar(FD_P, S2, 'admin', 'L1290/א');
+  check('admin: a DXF button for each glass', (a.el.innerHTML.match(/dxfDownload\(\d\)/g) || []).length, 2);
+  check('admin: "כל ה-DXF" button', a.el.innerHTML.includes('כל ה-DXF'), true);
+  vm.runInContext('dxfDownload(-1)', a.ctx);
+  const names = a.saved.filter(x => x.download).map(x => x.download);
+  check('admin: all → one file per glass, safe names', names.length === 2 && names.every(n => /^L1290א-\d_\d+x\d+\.dxf$/.test(n)), true);
+  check('admin: file content is a DXF', a.saved.filter(x => x.blob).length === 2 && a.saved.filter(x => x.blob).every(x => x.blob.text.startsWith('0\nSECTION')), true);
+  check('customer: no DXF buttons', bar(FD_P, S2, 'client').el.hidden, true);
+  check('no session: no DXF buttons', bar(FD_P, S2, null).el.hidden, true);
+  const lone = bar([{ type: 'fixed', wallSide: 'both' }], { 0: { w: 600, h: 2000 } }, 'admin');
+  check('admin: glass with issues → disabled button with the issue text',
+        /disabled[^>]*title="לבדוק ביד: [^"]+"/.test(lone.el.innerHTML) && !/dxfDownload/.test(lone.el.innerHTML), true);
+}
+
 console.log('');
 if (failed) { console.error(failed + ' failed'); process.exit(1); }
 console.log('all passed');

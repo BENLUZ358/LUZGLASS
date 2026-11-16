@@ -49,4 +49,27 @@ function lgDxfName(orderNum, itemNo, g, qty) {
   return orderNum + '-' + itemNo + '_' + Math.round(g.w) + 'x' + Math.round(g.h) + (qty > 1 ? '_x' + qty : '') + '.dxf';
 }
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { lgDxf, lgDxfName };
+// שם בטוח למערכת הקבצים: בלי / \ : * ? " < > |
+function lgDxfSafe(s) { return String(s == null ? '' : s).replace(/[\/\\:*?"<>|\u0000-\u001f]/g, '').trim(); }
+
+// הורדה בדפדפן (אין תלות חיצונית). זורק אם אין דפדפן.
+function lgDxfSave(name, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/dxf' }));
+  const a = document.createElement('a');
+  a.download = name; a.href = url;
+  if (document.body && document.body.appendChild) document.body.appendChild(a);
+  a.click();
+  if (a.remove) a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+// כל הקבצים אחד אחרי השני (בלי ספריית zip). מחזיר הודעות שגיאה, ריק = הכול ירד.
+function lgDxfSaveAll(files, gapMs) {
+  const errs = [];
+  files.forEach((f, i) => setTimeout(() => {
+    try { lgDxfSave(f.name, lgDxf(f.cut)); } catch (e) { errs.push(e.message); }
+  }, i * (gapMs == null ? 350 : gapMs)));
+  return errs;
+}
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { lgDxf, lgDxfName, lgDxfSafe, lgDxfSave, lgDxfSaveAll };
