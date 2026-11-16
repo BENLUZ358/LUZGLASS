@@ -84,5 +84,11 @@ check('חווה 2 ↔ חווה סוגרים1/2',
   const r2 = M.lgOptyMatch([P('274300', 'א.א.פנדה', '', 500, 2000)], [{ id: 'A', orderClient: 'נאור חזקיה', sketchName: 'x', items: [{ w: 500, h: 2000 }] }, { id: 'B', orderClient: 'נאור חזקיה', sketchName: 'y', items: [{ w: 500, h: 2000 }] }]);
   check('candidates in two different orders → not kept (unknown order)', M.lgOptyPendingByOrder(r2.review), {});
   check('nothing to review → empty', M.lgOptyPendingByOrder([]), {});
+  const r3 = M.lgOptyMatch([P('274147', 'אור המראות', '1126', 690, 2014)], [{ id: 'L1255', orderClient: 'אור המראות', sketchName: '1106', items: [{ w: 688, h: 2012 }, { w: 688, h: 2012 }] }]);
+  check('only size matches (1126 ≠ 1106) → stays for review, not kept on that order', [r3.review.length, M.lgOptyPendingByOrder(r3.review)], [1, {}]);
+}
+check('our order number written in OptyWay (L1281) = name match',
+  auto(M.lgOptyMatch([P('274390', 'מאור', 'L1281', 1154, 744)], [{ id: 'o81', orderNum: 'L1281', orderClient: 'א.מ.מראות', sketchName: 'מראה1', items: [{ w: 1152, h: 742 }] }])), [['274390', 'o81', 0]]);
+{
 }
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');

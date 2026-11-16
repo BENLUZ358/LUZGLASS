@@ -92,7 +92,10 @@ function lgOptyMatch(pieces, orders, pairs) {
     const keys = _lgOptyClientKeys(p0.client, allPairs);
     //  השם אצלנו מתחיל בשם שבזוג — 'פלג מקלחונים בע"מ', 'טום גלאס  25701384'
     const sameClientSize = rows.filter(r => keys.some(k => r.client.startsWith(k)) && !r.it.optyShape && !taken.has(r.key) && _lgOptyDimOk(p0, r.it));
-    const named = p0.name ? sameClientSize.filter(r => _lgOptyNameOk(p0.name, r.o.sketchName || r.o.type)) : [];
+    //  שם תואם = שם הסקיצה, או מספר ההזמנה שלנו כתוב באופטי-ווי (L1281 — בן: מעכשיו נרשם שם)
+    const nameOk = r => _lgOptyNameOk(p0.name, r.o.sketchName || r.o.type)
+      || (!!r.o.orderNum && lgOptyNorm(p0.name).replace(/\s/g, '') === lgOptyNorm(r.o.orderNum).replace(/\s/g, ''));
+    const named = p0.name ? sameClientSize.filter(nameOk) : [];
     const units = list.reduce((s, p) => s + p.qty, 0);
     if (named.length && named.length === units && new Set(named.map(r => r.o.id)).size === 1) {
       let i = 0;                                                // מספיק שורות, כולן מאותה הזמנה → ודאי
@@ -104,20 +107,21 @@ function lgOptyMatch(pieces, orders, pairs) {
     }
     //  שם תואם אבל המידה רחוקה (השרטט שינה, 717→739) → לבדיקה עם כל הפריטים של אותה הזמנה
     const nameOnly = !named.length && p0.name ? rows.filter(r => keys.some(k => r.client.startsWith(k)) && !r.it.optyShape && !taken.has(r.key)
-      && _lgOptyNameOk(p0.name, r.o.sketchName || r.o.type)) : [];
+      && nameOk(r)) : [];
     const cands = (named.length ? named : nameOnly.length ? nameOnly : sameClientSize).map(r => ({ orderId: r.o.id, idx: r.idx }));
-    list.forEach(p => cands.length ? out.review.push({ piece: p, cands }) : out.notFound.push(p));
+    const by = named.length || nameOnly.length ? 'name' : 'size';      // 'size' = רק לקוח+מידה, ההזמנה לא ידועה
+    list.forEach(p => cands.length ? out.review.push({ piece: p, cands, by }) : out.notFound.push(p));
   });
   return out;
 }
 
-//  "לבדיקה" שכל המועמדים שלו באותה הזמנה → ידוע של איזו הזמנה, רק לא לאיזה פריט (שני פריטים באותה
+//  "לבדיקה" שהשם תאם (by:'name') וכל המועמדים שלו באותה הזמנה → ידוע של איזו הזמנה, רק לא לאיזה פריט (שני פריטים באותה
 //  מידה וכו'). נשמר על ההזמנה (meta/optyPending/<orderId>/<shape>) ומחובר ביד בחיסום (בן, 16/11).
 function lgOptyPendingByOrder(review) {
   const out = {};
   (review || []).forEach(v => {
     const ids = [...new Set((v.cands || []).map(c => c.orderId))];
-    if (ids.length !== 1 || !v.piece || !v.piece.shape) return;
+    if (ids.length !== 1 || v.by !== 'name' || !v.piece || !v.piece.shape) return;
     const p = v.piece;
     (out[ids[0]] = out[ids[0]] || {})[p.shape] = { shape: String(p.shape), job: String(p.job || ''), w: Number(p.w) || 0, h: Number(p.h) || 0,
       qty: Number(p.qty) || 1, name: String(p.name || ''), note: String(p.note || '') };
