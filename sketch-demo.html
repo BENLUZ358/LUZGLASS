@@ -2792,8 +2792,9 @@ function renderGeoWarn(panels,pss){
   let list=[];
   try{ list=(typeof lgGeometryIssues==='function') ? lgGeometryIssues(_lgShowerOf(panels,pss)) : []; }
   catch(e){ list=[]; }
-  // ‏בעיות בחיתוך (lg-cuts.js) — באותה רצועה, שורה לכל זכוכית ובעיה
-  try{
+  // ‏בעיות בחיתוך (lg-cuts.js) — באותה רצועה, שורה לכל זכוכית ובעיה.
+  // ‏רק למנהל: אלה הערות למפעל ("לבדוק ביד"); הלקוח רואה רק את הציור.
+  if(typeof _sess!=='undefined' && _sess && _sess.role==='admin') try{
     const sh=_lgShowerOf(panels,pss);
     (engCutsOf(sh)||[]).forEach(g=>(g.issues||[]).forEach(msg=>list.push({
       idx:g.idx, code:'cut', msg:(typeof _lgGlassName==='function'?_lgGlassName(sh.shapes,g.idx):'')+msg })));

@@ -277,24 +277,33 @@ const toggleOf = html => {
   check('folded view without cuts: old markers as before', paths(ctx.cx.log).some(q => q.rr.some(r => near(r[2], 24))), true);
 }
 
-/* ── issues show in the warnings strip ──────────────────────────────────── */
+/* ── issues show in the warnings strip — to the admin only ─────────────── */
 {
-  const warn = (P, S) => {
+  const warn = (P, S, role) => {
     const ctx = sandbox(), el = { hidden: true, innerHTML: '' };
     ctx.document.getElementById = id => (id === 'geoWarn' ? el : null);
-    vm.runInContext('function _shEsc(s){ return String(s); }\n' + grab('renderGeoWarn'), ctx);
+    vm.runInContext('var _sess=' + JSON.stringify(role ? { role } : {}) + ';' +
+                    'function _shEsc(s){ return String(s); }\n' + grab('renderGeoWarn'), ctx);
     ctx.P = P; ctx.S = S;
     vm.runInContext('renderGeoWarn(P,S)', ctx);
     return el;
   };
-  const lone = warn([{ type: 'fixed', wallSide: 'both' }], { 0: { w: 600, h: 2000 } });
-  check('a glass with no template is named in the warnings strip',
+  const LONE = [[{ type: 'fixed', wallSide: 'both' }], { 0: { w: 600, h: 2000 } }];
+  const INSET = [FD_P, { 0: { w: 500, h: 2000, bracketType: 'open', bracketInset: 40 }, 1: { w: 700, h: 1985 } }];
+  const lone = warn(...LONE, 'admin');
+  check('admin: a glass with no template is named in the warnings strip',
         !lone.hidden && lone.innerHTML.includes('אין תבנית חיתוך לזכוכית הזו'), true);
-  const ok = warn(FD_P, { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } });
-  check('fixed+door: no cut warning', ok.hidden, true);
-  const inset = warn(FD_P, { 0: { w: 500, h: 2000, bracketType: 'open', bracketInset: 40 }, 1: { w: 700, h: 1985 } });
-  check('open angle with a typed distance: warned, with the glass name',
+  const ok = warn(FD_P, { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } }, 'admin');
+  check('admin: fixed+door — no cut warning', ok.hidden, true);
+  const inset = warn(...INSET, 'admin');
+  check('admin: open angle with a typed distance — warned, with the glass name',
         inset.innerHTML.includes('זכוכית 1: זווית פתוחה עם מרחק מהפאה שהוקלד'), true);
+  //  the customer sees the drawing only
+  for (const role of ['client', null]) {
+    const who = role || 'no session';
+    check(`${who}: no cut warning for a glass with no template`, warn(...LONE, role).hidden, true);
+    check(`${who}: no cut warning for an open angle with a typed distance`, warn(...INSET, role).hidden, true);
+  }
 }
 
 console.log('');

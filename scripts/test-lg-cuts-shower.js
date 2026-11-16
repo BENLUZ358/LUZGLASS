@@ -188,5 +188,30 @@ const DH_P = [{ type: 'door', hingeSide: 'left', harmonicaSide: 'right' }, { typ
   check('sloped door: outline has 4 corners, cut box 702 wide', [g.outline.length, g.w], [4, 702]);
 }
 
+// ── מחיצת walk-in: קבוע בודד, קיר בצד אחד וצלע חופשית — המוצר הנפוץ ביותר ──
+//  זוויות רק בצלע הקיר (26 מהצלע, 201 מכל קצה), כלום בצלע החופשית
+{
+  for (const ws of ['left', 'right']) {
+    for (const bt of ['normal', 'open']) {
+      const sh = shower([{ type: 'fixed', wallSide: ws }], { 0: { w: 900, h: 2000, bracketType: bt } });
+      const g = lgCuts(sh)[0];
+      //  wallSide בכיוון של המנוע (הפוך לקנבס) — צלע הקיר נלקחת מהציור עצמו: איפה המנוע שם את הזוויות
+      eng.SH = sh;
+      const L = vm.runInContext('lgLayout(SH,{canvasW:1000})', eng), s0 = L.shapes[0];
+      const wb = L.hardware.filter(h => h.kind === 'bracket');
+      const edge = wb.length && wb.every(h => h.x < s0.x + s0.w / 2) ? 'left' : 'right';
+      const kind = bt === 'open' ? 'open' : 'closed', key = 'fixed-' + kind;
+      const x = edge === 'left' ? 26 : g.w - 26;
+      check(`walk-in wall ${ws}: the engine puts 2 angles on one edge`, wb.length, 2);
+      check(`walk-in wall ${ws}, ${bt}: key ${key}, no issues`, [g.key, g.side, g.issues], [key, edge, []]);
+      check(`walk-in wall ${ws}, ${bt}: two ${kind} cuts on the wall edge only`,
+            g.cuts.map(c => [c.kind, c.x, c.y]).sort((a, b) => a[2] - b[2]), [[kind, x, 201], [kind, x, 1801]]);
+    }
+  }
+  //  קבוע בין שני קירות (זוויות בשתי הצלעות) — לא נמדד, נשאר חסום
+  const both = lgCuts(shower([{ type: 'fixed', wallSide: 'both' }], { 0: { w: 900, h: 2000 } }))[0];
+  check('fixed between two walls: still no template (blocked)', [both.key, both.issues.length], [null, 1]);
+}
+
 if (failed) { console.error(failed + ' failed'); process.exit(1); }
 console.log('all passed');
