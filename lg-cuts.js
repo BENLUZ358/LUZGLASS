@@ -79,7 +79,8 @@ function _lgFrame(spec, edge, end, shift) {
   };
   return { pt, seg };
 }
-//  המסגרת לחיתוך שמרכזו (uc, vc): ההזזה של קצה נטוי נמדדת ב-x של החיתוך
+//  המסגרת לחיתוך שמרכזו (uc, vc): בקצה נטוי לוקחים את גובה הקו ב-x של מרכז החיתוך,
+//  ומזיזים את כל החיתוך בגובה הזה (לא מסובבים) — כך המרחק מהקצה נמדד מהקו הנטוי מול החיתוך
 function _lgFrameAt(spec, edge, end, uc, vc) {
   const x = _lgFrame(spec, edge, end, 0).pt(uc, vc)[0];
   const ey = _lgEndY(spec, end, x);
@@ -122,17 +123,34 @@ function _lgHandle(spec, edge) {
     const x = _lgEdgeX(spec, edge, spec.h / 2) + into * off;
     y = (_lgEndY(spec, 'bottom', x) + _lgEndY(spec, 'top', x)) / 2;
   }
-  const ys = H.type === 'towel' ? [y - (H.spacing || LG_TOWEL_SPACING) / 2, y + (H.spacing || LG_TOWEL_SPACING) / 2] : [y];
+  const sp = H.spacing ?? LG_TOWEL_SPACING;
+  const ys = H.type === 'towel' ? [y - sp / 2, y + sp / 2] : [y];
   return ys.map(yy => _lgCircle('handle', _lgEdgeX(spec, edge, yy) + into * off, yy, LG_CUT.handle.dia));
+}
+
+function _lgCheckSpec(spec) {
+  const bad = m => { throw new Error('lgCutTemplate: ' + m); };
+  if (!spec || typeof spec !== 'object') bad('missing spec');
+  if (spec.side !== 'left' && spec.side !== 'right') bad('side must be left|right, got ' + JSON.stringify(spec.side));
+  for (const k of ['w', 'h']) if (!(Number.isFinite(spec[k]) && spec[k] > 0)) bad(k + ' must be a positive number, got ' + JSON.stringify(spec[k]));
+  for (const s of [].concat(spec.slope || [])) {
+    if (!s || !['left', 'right', 'top', 'bottom'].includes(s.edge)) bad('unknown slope edge ' + JSON.stringify(s && s.edge));
+    if (!Number.isFinite(s.a) || !Number.isFinite(s.b)) bad('slope a/b must be numbers');
+  }
+  const ht = spec.handle && spec.handle.type;
+  if (ht != null && ht !== 'knob' && ht !== 'towel') bad('unknown handle type ' + JSON.stringify(ht));
 }
 
 //  lgCutTemplate(key, spec) → { w, h, outline, cuts } — מ"מ במידת החיתוך, ראשית שמאל-למטה.
 //  spec: { w, h, side, slope?, hingeEnd?, angleEnd?, harmEnd?, harmEdge?, handle? }
+//  שימו לב: hingeEnd / angleEnd = מהקצה עד שפת התיבה של החיתוך; harmEnd = מהקצה עד מרכז החור הראשון.
+//  spec שגוי זורק שגיאה — עדיף בלי קובץ מאשר זכוכית הפוכה או חיתוך במקום אקראי.
 //  התבנית = ברירת המחדל שנמדדה; כל שדה חריג הוא שינוי ידני לפריט בודד (top/bottom לכל קצה).
 function lgCutTemplate(key, spec) {
   const T = LG_CUT_TEMPLATES[key];
   if (!T) throw new Error('lgCutTemplate: unknown template ' + key);
-  const side = spec.side === 'right' ? 'right' : 'left', other = side === 'left' ? 'right' : 'left';
+  _lgCheckSpec(spec);
+  const side = spec.side, other = side === 'left' ? 'right' : 'left';
   const cuts = [];
   for (const kind of Object.keys(T)) {
     const edge = T[kind] === 'side' ? side : other;
