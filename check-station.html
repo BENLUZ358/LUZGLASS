@@ -121,6 +121,10 @@ html,body{height:100%;overflow:hidden;}
 .si-name{font-size:13px;font-weight:700;flex:1;}.si-dim{font-size:12px;color:var(--muted);}
 .si-tag{font-size:12px;padding:2px 7px;border-radius:2px;font-weight:700;}
 /* הצורה מאופטי-ווי (בן, 16/11) */
+.sh-opty{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 12px;background:#fff7f5;border-bottom:1px solid rgba(169,50,38,.25);direction:rtl;font-family:Heebo,sans-serif;}
+.sh-opty[hidden]{display:none;}
+.sh-opty-t{font-size:13px;font-weight:900;color:#a93226;margin-inline-end:4px;}
+.sh-opty .lg-opty-chip small{font-weight:500;color:#555;margin-inline-start:4px;}
 .si-shape{min-height:44px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface,#fff);color:var(--text);font:700 13px Heebo,sans-serif;cursor:pointer;white-space:nowrap;}
 .grp-hdr{padding:6px 14px;background:rgba(201,168,76,0.1);border-bottom:1px solid rgba(201,168,76,0.2);font-size:12px;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;align-items:center;}
 .note-area{padding:12px 14px;background:var(--bg2);}
@@ -318,6 +322,8 @@ html,body{height:100%;overflow:hidden;}
     <div class="sh-client" id="shClient"></div>
     <div class="sh-meta" id="shMeta"></div>
   </div>
+  <!-- הצורות מאופטי-ווי של ההזמנה — גלוי מיד בפתיחה (בן, 16/11: "לא הבנתי איפה הכפתור") -->
+  <div id="shOpty" class="sh-opty" hidden></div>
   <!-- מוצג רק בטאב "הושלמו" — מחליף את סרגל הכלים הפעיל -->
   <div id="doneBadge" style="display:none;background:var(--green);color:#fff;padding:8px 16px;font-size:12px;font-weight:700;font-family:Heebo,sans-serif;text-align:center;direction:rtl;letter-spacing:0.02em;">
     ✅ הסקיצה הושלמה ונבדקה — ממתינה לשליחה לחיסום
@@ -906,7 +912,21 @@ function _showSketchImg(el, src, fallbackSrc, readOnly){
     lgAttFlipper(document.getElementById('skArea'), cur, { img, overlay: 'top', swipe: false });
 }
 
+//  📐 פס הצורות מאופטי-ווי מתחת לשם הלקוח — כפתור לכל פריט עם מספר צורה (פותח ציור, מספר, פקודה, מדבקות)
+function csRenderOptyStrip(){
+  const box=document.getElementById('shOpty'); if(!box) return;
+  const items=cur?(Array.isArray(cur.items)?cur.items:Object.values(cur.items||{})):[];
+  const seen=new Set(), chips=[];
+  items.forEach((it,i)=>{
+    if(!it||!it.optyShape||seen.has(it.optyShape)||typeof lgOptyChip!=='function') return;
+    seen.add(it.optyShape);
+    chips.push(lgOptyChip(cur,i).replace('</button>',`<small>${lgDimsText(it.w,it.h)}</small></button>`));
+  });
+  box.hidden=!chips.length;
+  box.innerHTML=chips.length?`<span class="sh-opty-t">📐 צורות מאופטי-ווי:</span>${chips.join('')}`:'';
+}
 function renderSketch(){
+  csRenderOptyStrip();
   const el=document.getElementById('skWrap');
   scl=1;px=0;py=0;el.style.transform='';
   if(typeof lgAttFlipper==='function') lgAttFlipper(document.getElementById('skArea'), null);   // פס של ההזמנה הקודמת
