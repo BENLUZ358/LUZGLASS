@@ -2298,6 +2298,17 @@ function notchAnswer(fix){
   renderShapeSheet(); renderShapeUI(); draw();
 }
 
+// ‏האם לזכוכית i יש זווית קיר — הצומת שלה עם הקיר (lgJunctions: צומת j בין
+// זכוכית j−1 ל-j) הוא bracket-wall. זכוכית הזזה אינה נחשבת (אין לה תבנית).
+function _sheetWallAngle(i){
+  try{
+    const sh=_lgShowerOf(getPanels(),getPStates()), s=sh.shapes[i];
+    if(!s || s.kind!=='fixed' || s.sliding || typeof lgJunctions!=='function') return false;
+    const J=lgJunctions(sh)||[];
+    return [J[i],J[i+1]].some(j=>j && j.type==='bracket-wall');
+  }catch(e){ return false; }
+}
+
 function renderShapeSheet(){
   const body=document.getElementById('shapeSheetBody');
   const i=_sheetIdx();
@@ -2420,8 +2431,10 @@ function renderShapeSheet(){
         '<p class="sh-note">2.5 ס"מ כברירת מחדל, ואז המידה לא מופיעה בשרטוט.</p>'+
         // ‏זווית רגילה = חור Ø20; פתוחה = שקע פתוח לצלע. ברירת המחדל רגילה,
         // וגם סקיצה ישנה בלי ערך (בן, 16/11).
+        // ‏רק לזכוכית שיש לה זווית **קיר** — לא זכוכית-זכוכית בלבד, לא צירים בלבד.
+        (_sheetWallAngle(i) ?
         '<label class="sh-tog"><input type="checkbox" '+(ps.bracketType==='open'?'checked':'')+
-          ' onchange="sheetSet(\'bracketType\',this.checked?\'open\':\'normal\')">זווית פתוחה</label>'+
+          ' onchange="sheetSet(\'bracketType\',this.checked?\'open\':\'normal\')">זווית פתוחה</label>' : '')+
       '</div>')+
 
   // קדחים שהצורה נושאת בעצמה — גם על זכוכית חופשית, שהרי היא
@@ -3091,7 +3104,14 @@ function drawFoldedMode(panels,pss,DPR,cW){
 
   const real=_lgShowerOf(panels,pss).boundary;
   const fullJ=(typeof lgJunctions==='function') ? lgJunctions(_lgShowerOf(panels,pss)) : [];
-  const armCuts=[];
+  // ‏החיתוכים מחושבים **פעם אחת על המקלחון המלא** — אותו מקור כמו ה-DXF והציור
+  // הרגיל. הגבול שהזרוע ממציאה בפינה הוא לתצוגה בלבד; חיתוך שנגזר ממנו
+  // היה שונה מהקובץ (ציר שנעלם, גובה שזז, זכוכית חסומה שנראית מוכנה).
+  // לכל זרוע [a,b) — השורות שלה, idx מוזז ל-idx−a. קואורדינטות החיתוך מקומיות
+  // לכל זכוכית, ולכן הן נמפות על L.shapes[idx−a] של הזרוע בלי שינוי.
+  const fullCuts=engCutsOf(_lgShowerOf(panels,pss));
+  const armCuts=ranges.map(([a,b])=>fullCuts ? fullCuts.filter(g=>g.idx>=a && g.idx<b)
+                                            .map(g=>Object.assign({},g,{idx:g.idx-a})) : null);
   const layouts=ranges.map(([a,b],i)=>{
     const armPanels=panels.slice(a,b);
     const armPss=_sliceP(pss,a,b);
@@ -3103,8 +3123,6 @@ function drawFoldedMode(panels,pss,DPR,cW){
     };
     const SH=_lgShowerOf(armPanels,armPss);
     SH.boundary=bnd;
-    // ‏החיתוכים מאותו מקלחון-זרוע שמצויר — כך הם יושבים על אותם צירים וזוויות
-    armCuts[i]=engCutsOf(SH);
     return lgLayout(SH,{canvasW:600});
   });
 

@@ -220,22 +220,26 @@ const DH_P = [{ type: 'door', hingeSide: 'left', harmonicaSide: 'right' }, { typ
 }
 
 /* ── the panel sheet: "זווית פתוחה" ─────────────────────────────────────── */
-function sheet(kind, ps) {
-  const ctx = vm.createContext({ Math, JSON, Object, Array, String, Number, console });
+//  the real sheet, on glass `idx` of a real shower (P panels; the sheet glass gets `ps`)
+function sheet(kind, ps, P, idx) {
+  P = P || [{ type: kind === 'door' ? 'door' : kind, wallSide: 'left' }]; idx = idx || 0;
+  const ctx = sandbox();
   const els = {};
-  ctx.document = { getElementById: id => (els[id] || (els[id] = { innerHTML: '' })) };
+  ctx.document.getElementById = id => (els[id] || (els[id] = { innerHTML: '' }));
+  ctx.PANELS = P;
   vm.runInContext([
-    'var sheetPfx="combo", PS=' + JSON.stringify(ps) + ', DRAWN=0, NOTCH_DEF={notchW:200,notchH:500}, HANDLE_EDGE_CM=6, TOWEL_SPACING_CM=40;',
-    'function _sheetIdx(){ return 0; }',
+    'var sheetPfx="combo", PS=' + JSON.stringify(ps) + ', IDX=' + idx + ', DRAWN=0, NOTCH_DEF={notchW:200,notchH:500};',
+    'function _sheetIdx(){ return IDX; }',
     'function _sheetMeta(){ return {kind:' + JSON.stringify(kind) + ', label:"x"}; }',
     'function getPS(){ return PS; }',
+    'function getPanels(){ return PANELS; }',
+    'function getPStates(){ var o={}; PANELS.forEach(function(p,n){ o[n]= n===IDX ? PS : mkPS(p); }); return o; }',
     'function _sheetResolved(){ return {}; } function _notchAskHtml(){ return ""; }',
     'function _shHoles(){ return ""; } function _shEsc(s){ return String(s); }',
     'function _dimToUnit(v){ return v; } function _dimUnitLabel(){ return "מ\\"מ"; }',
     'function _harmonicaHeightSync(){}',
     'function renderShapeUI(){} function draw(){ DRAWN++; }',
-    grabConst('KIND_HE'), (DEMO.match(/function kindName\(k\)\{[^}]*\}/) || [''])[0],
-    ['isFreeGlass', '_shSeg', '_shNum', 'sheetSet', 'renderShapeSheet'].map(grab).join('\n'),
+    ['isFreeGlass', '_shSeg', '_shNum', 'sheetSet', '_sheetWallAngle', 'renderShapeSheet'].map(grab).join('\n'),
   ].join('\n'), ctx);
   vm.runInContext('renderShapeSheet()', ctx);
   return { ctx, html: els.shapeSheetBody.innerHTML };
@@ -261,6 +265,18 @@ const toggleOf = html => {
   check('an old sketch with no value shows it off', toggleOf(old.html) && toggleOf(old.html).checked, false);
   check('door sheet has no "זווית פתוחה"', /זווית פתוחה/.test(sheet('door', { w: 800, h: 1985 }).html), false);
   check('mirror sheet has no "זווית פתוחה"', /זווית פתוחה/.test(sheet('mirror', { w: 600, h: 800 }).html), false);
+  //  only a glass with a WALL angle gets the toggle
+  const has = (P, i) => /זווית פתוחה/.test(sheet('fixed', { w: 500, h: 2000 }, P, i).html);
+  check('fixed carrying a door, on the wall: toggle', has(FD_P, 0), true);
+  check('walk-in (one wall, free edge): toggle', has([{ type: 'fixed', wallSide: 'left' }], 0), true);
+  const P2KD = [{ type: 'fixed', wallSide: 'right' }, { type: 'fixed', wallSide: 'none' }, { type: 'door' }];
+  check('fixed with only door hinges (p_2kd middle glass): no toggle', has(P2KD, 1), false);
+  check('fixed on the wall next to it (wall + glass angle): toggle', has(P2KD, 0), true);
+  //  3 fixed: the middle one meets only glass (junctions bracket-gg on both sides; it hosts one pair)
+  const F3 = [{ type: 'fixed', wallSide: 'right' }, { type: 'fixed', wallSide: 'none' }, { type: 'fixed', wallSide: 'left' }];
+  check('fixed with glass-to-glass angles only: no toggle', has(F3, 1), false);
+  check('…its neighbours on the walls: toggle', [has(F3, 0), has(F3, 2)], [true, true]);
+  check('slider (fixed in the engine): no toggle', has([{ type: 'fixed', wallSide: 'right' }, { type: 'slider' }], 1), false);
 }
 
 /* ── the open choice reaches the drawing ────────────────────────────────── */
@@ -285,6 +301,49 @@ const toggleOf = html => {
   ctx.cx.log.length = 0;
   vm.runInContext('engPaintFolded(L,function(x,y){return [x,y];},"combo",false,L.scale,null);', ctx);
   check('folded view without cuts: old markers as before', paths(ctx.cx.log).some(q => q.rr.some(r => near(r[2], 24))), true);
+}
+
+/* ── the corner view draws the SAME cuts as the cut file (full shower) ─── */
+/* drawFoldedMode used to run lgCuts on each arm's shower with a made-up corner
+   boundary: a hinge window vanished, a hinge moved 30 mm, a blocked glass looked ready. */
+function folded(P, S, corner) {
+  const ctx = sandbox();
+  vm.runInContext([
+    'var lgCornerAt=' + JSON.stringify([corner]) + ';',
+    'var C={}; function drawComboMode(){ throw new Error("not folded"); }',
+    DEMO.match(/const LG_FOLD_THETA = [^;]*;/)[0], DEMO.match(/const LG_FOLD_SHRINK = [^;]*;/)[0],
+    ['_sliceP', '_bboxOfL', '_foldMatrix', '_lgFoldedPushSpec', '_lgFoldedDimPush', 'engPaintFolded', 'drawFoldedMode'].map(grab).join('\n'),
+    //  spy: every row the painter receives, with the arm it was painted in
+    'var DRAWN=[], ARM=-1, _real=engPaintCuts; engPaintCuts=function(g,s,sc,tf,r){ DRAWN.push({idx:g.idx, key:g.key, cuts:g.cuts}); return _real(g,s,sc,tf,r); };',
+    'var _realFold=engPaintFolded; engPaintFolded=function(){ ARM++; DRAWN.push({arm:ARM}); return _realFold.apply(null,arguments); };',
+  ].join('\n'), ctx);
+  ctx.P = P; ctx.S = S;
+  vm.runInContext('drawFoldedMode(P,S,1,900)', ctx);
+  const full = vm.runInContext('lgCuts(_lgShowerOf(P,S))', ctx);
+  //  back to global indices: arm k starts at 0 or at the corner
+  let arm = -1; const drawn = [];
+  for (const d of ctx.DRAWN) { if (d.arm != null) { arm = d.arm; continue; } drawn.push(Object.assign({}, d, { idx: d.idx + (arm ? corner : 0) })); }
+  return { full, drawn, log: ctx.cx.log };
+}
+function sameAsFile(label, P, S, corner) {
+  const { full, drawn } = folded(P, S, corner);
+  const want = full.filter(g => g.key).map(g => ({ idx: g.idx, key: g.key, cuts: g.cuts }));
+  check(label + ': corner view paints exactly the full-shower cut rows',
+        JSON.stringify(drawn.sort((a, b) => a.idx - b.idx)), JSON.stringify(want));
+  return { full, drawn };
+}
+{
+  const S = { 0: { w: 500, h: 2000 }, 1: { w: 700, h: 1985 } };
+  const a = sameAsFile('fixed(carries door)+door, corner at 1', FD_P, S, 1);
+  check('…the fixed keeps its two hinge windows', (a.drawn.find(d => d.idx === 0) || { cuts: [] }).cuts.filter(c => c.kind === 'hinge').length, 2);
+  const DF_P = [{ type: 'door', hingeSide: 'right', hingeOnFixed: 'next' }, { type: 'fixed', wallSide: 'right', carriesDoor: true }];
+  const b = sameAsFile('door+fixed mirrored, corner at 1', DF_P, { 0: { w: 700, h: 1985 }, 1: { w: 500, h: 2000 } }, 1);
+  const hy = g => (g ? g.cuts.filter(c => c.kind === 'hinge').map(c => c.y).sort((x, y) => x - y) : []);
+  check('…the door hinges at the same heights as the file', hy(b.drawn.find(d => d.idx === 0)), hy(b.full[0]));
+  const FFP = [{ type: 'fixed', wallSide: 'right' }, { type: 'fixed', wallSide: 'left' }];
+  const c = sameAsFile('fixed+fixed, corner at 1', FFP, { 0: { w: 600, h: 2000 }, 1: { w: 600, h: 2000 } }, 1);
+  check('…a glass blocked in the file is not drawn as cut-ready',
+        c.full.filter(g => !g.key).every(g => !c.drawn.some(d => d.idx === g.idx)), true);
 }
 
 /* ── issues show in the warnings strip — to the admin only ─────────────── */
