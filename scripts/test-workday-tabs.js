@@ -21,8 +21,8 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
   : (failed++, console.error(`FAIL  ${name}\n        expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`));
 
 const tabs = [...W.matchAll(/<div class="phase-tab[^"]*" id="tab-(\w+)"[^>]*>/g)];
-check('workday still has its six tabs', tabs.map(m => m[1]),
-      ['build', 'work', 'chisum', 'triplex', 'graphic', 'delivery']);
+check('workday has its seven tabs (+ אביבי, 17/11)', tabs.map(m => m[1]),
+      ['build', 'work', 'chisum', 'triplex', 'graphic', 'delivery', 'avivi']);
 check('every tab is announced as a tab', tabs.every(m => /role="tab"/.test(m[0])), true);
 check('and reachable from the keyboard', tabs.every(m => /tabindex="0"/.test(m[0])), true);
 check('the strip is a tablist', /<div class="phase-tabs" role="tablist"/.test(W), true);
@@ -32,7 +32,7 @@ check('switching tabs updates aria-selected', /setAttribute\('aria-selected'/.te
 
 const grid = (W.match(/\/\* ─ טאבים במסך צר[\s\S]*?\r?\n  }\r?\n/) || [''])[0];
 check('the narrow layout exists', grid.length > 0, true);
-check('all six fit: three columns, two rows', /grid-template-columns:repeat\(3,1fr\)/.test(grid), true);
+check('all seven fit: four columns, two rows', /grid-template-columns:repeat\(4,1fr\)/.test(grid), true);
 check('each tab is at least 44px tall', /min-height:(4[4-9]|5\d)px/.test(grid), true);
 check('the counter does not push the label around', /\.phase-tab \.cnt\{[^}]*position:absolute/.test(grid), true);
 

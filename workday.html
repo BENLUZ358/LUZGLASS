@@ -36,8 +36,8 @@
   .topbar-right{display:flex;gap:8px;}
 
   /* PHASE TABS */
-  .phase-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);padding:0 24px;}
-  .phase-tab{padding:14px 20px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.15s;display:flex;align-items:center;gap:8px;}
+  .phase-tabs{display:flex;border-bottom:2px solid var(--border);background:var(--surface);padding:0 24px;overflow-x:auto;}
+  .phase-tab{padding:14px 14px;flex-shrink:0;white-space:nowrap;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.15s;display:flex;align-items:center;gap:8px;}
   .phase-tab:hover{color:var(--text);}
   .phase-tab.active{color:var(--text);border-bottom-color:var(--gold-text);}
   .phase-tab .cnt{font-size:12px;padding:2px 7px;border-radius:10px;font-weight:700;}
@@ -143,6 +143,36 @@
   .stv-grand-n{font-size:26px;font-weight:900;line-height:1;}
   .stv-grand-l{font-size:13px;color:var(--muted);font-weight:600;}
 
+  /* ── אביבי (בן, 17/11) ── שני חלקים זה לצד זה, בטלפון זה מתחת לזה */
+  .av-search{display:flex;align-items:center;gap:8px;background:var(--surface);border:2px solid #7a5a2f55;
+             border-radius:10px;padding:0 12px;margin-bottom:12px;}
+  .av-search input{flex:1;min-width:0;border:none;outline:none;background:transparent;font-family:Heebo,sans-serif;
+             font-size:17px;padding:12px 0;color:var(--text);}
+  .av-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start;}
+  @media(max-width:900px){.av-cols{grid-template-columns:1fr;}}
+  .av-col{background:var(--surface);border:1px solid rgba(0,0,0,0.08);border-radius:10px;overflow:hidden;}
+  .av-col-h{padding:12px 14px;font-size:15px;font-weight:900;display:flex;justify-content:space-between;align-items:center;}
+  .av-empty{padding:16px 14px;font-size:13px;color:var(--muted);}
+  .av-ord{padding:10px 14px;border-top:1px solid rgba(0,0,0,0.06);}
+  .av-ord.av-hit{background:rgba(122,90,47,0.07);}
+  .av-ord-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .av-po{font-size:16px;font-weight:900;color:var(--text);direction:ltr;unicode-bidi:isolate;}
+  .av-po-sub{font-size:12px;color:var(--muted);font-weight:600;}
+  .av-sp{flex:1;}
+  .av-row{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px;}
+  .av-row .av-dim{font-weight:800;min-width:86px;}
+  .av-row .av-nm{flex:1;min-width:0;color:#666;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .av-row.av-hl .av-dim{background:#ffe9a8;border-radius:4px;padding:0 4px;}
+  .av-btn{min-height:40px;padding:6px 12px;border-radius:6px;border:1px solid #7a5a2f;background:#fff;color:#7a5a2f;
+          font-family:Heebo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;}
+  .av-btn.on{background:#27ae60;border-color:#27ae60;color:#fff;}
+  .av-btn.all{background:#7a5a2f;color:#fff;}
+  .av-btn.ghost{border-color:rgba(0,0,0,0.15);color:var(--muted);min-height:34px;font-size:12px;}
+  .av-go{display:block;width:calc(100% - 28px);margin:12px 14px 14px;min-height:48px;border:none;border-radius:8px;
+         background:#2980b9;color:#fff;font-family:Heebo,sans-serif;font-size:15px;font-weight:900;cursor:pointer;}
+  .av-go:disabled{background:#b8c6d1;cursor:default;}
+  .av-work{margin-top:10px;font-size:13px;color:var(--muted);font-weight:600;}
+
   .stv-card{background:var(--surface);border:1px solid rgba(0,0,0,0.08);border-radius:10px;
             overflow:hidden;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);}
   .stv-head{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;}
@@ -237,11 +267,12 @@
 
   /* ─ טאבים במסך צר: כל השישה גלויים ─
      שורה אחת של ~900px, בלי גלילה, בתוך .main שחותך (overflow-x:hidden):
-     בטלפון טריפלקס, גרפיקה והובלות לא היו נגישים בכלל. 3 עמודות × 2 שורות. */
+     בטלפון טריפלקס, גרפיקה והובלות לא היו נגישים בכלל. 4 עמודות × 2 שורות
+     (שבעה טאבים מאז "אביבי", 17/11 — 3 עמודות השאירו טאב בודד בשורה שלישית). */
   @media(max-width:900px){
-    .phase-tabs{display:grid;grid-template-columns:repeat(3,1fr);padding:0;}
+    .phase-tabs{display:grid;grid-template-columns:repeat(4,1fr);padding:0;overflow:visible;}
     .phase-tab{position:relative;flex-direction:column;justify-content:center;gap:2px;min-height:56px;
-               padding:6px 4px;text-align:center;line-height:1.2;font-size:12px;}
+               padding:6px 4px;text-align:center;line-height:1.2;font-size:12px;white-space:normal;}
     .phase-tab .cnt{position:absolute;top:4px;inset-inline-start:4px;padding:0 5px;line-height:16px;}
   }
   /* ═══ רספונסיביות — 600 / 900 / 1200 כמו בשאר המערכת ═══ */
@@ -351,6 +382,7 @@
   <script src="opty-shape.js?v=20261116d"></script>
   <script src="print-labels.js?v=20261117b"></script>
   <script src="order-labels.js?v=20261116e"></script>
+  <script src="avivi-wrap.js?v=20261117"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
@@ -422,6 +454,10 @@
     <div class="phase-tab" id="tab-delivery" role="tab" tabindex="0" aria-selected="false" onclick="setTab('delivery')">
       <span data-icon="truck"></span> הובלות
       <span class="cnt" id="cnt-delivery" style="background:#2980b9">0</span>
+    </div>
+    <div class="phase-tab" id="tab-avivi" role="tab" tabindex="0" aria-selected="false" onclick="setTab('avivi')">
+      <span data-icon="package"></span> אביבי
+      <span class="cnt" id="cnt-avivi" style="background:#7a5a2f">0</span>
     </div>
   </div>
 
@@ -574,6 +610,18 @@
         <div class="avail-title">🚚 הובלות ממתינות</div>
         <div id="brokenReturnBox"></div>
         <div id="deliveryOrders"></div>
+      </div>
+    </div>
+    <!-- אביבי (בן, 17/11): עוטפים כל זכוכית וכותבים את ה-PO; פעם בשבוע מה שמוכן יוצא -->
+    <div id="view-avivi" style="display:none">
+      <div class="available-section">
+        <div class="av-search">
+          <span data-icon="search"></span>
+          <input id="avSearch" type="search" inputmode="search" autocomplete="off"
+                 placeholder="חיפוש: סוף ה-PO או מידה"
+                  oninput="renderAviviTab()" aria-label="חיפוש הזמנת אביבי">
+        </div>
+        <div id="aviviLists"></div>
       </div>
     </div>
 
@@ -1221,7 +1269,7 @@ document.addEventListener('keydown', e => {
 });
 function setTab(tab){
   currentTab = tab;
-  ['build','work','chisum','triplex','graphic','delivery'].forEach(t=>{
+  ['build','work','chisum','triplex','graphic','delivery','avivi'].forEach(t=>{
     const vEl = document.getElementById('view-'+t);
     const tEl = document.getElementById('tab-'+t);
     if(vEl) vEl.style.display = t===tab?'block':'none';
@@ -1230,10 +1278,10 @@ function setTab(tab){
   const fb = document.getElementById('filterBar');
   if(fb) fb.style.display = tab==='build'?'flex':'none';
   const finishBtn = document.getElementById('finishBtn');
-  const hideFinish = ['build','chisum','triplex','graphic','delivery'];
+  const hideFinish = ['build','chisum','triplex','graphic','delivery','avivi'];
   if(finishBtn) finishBtn.style.display = hideFinish.includes(tab) ? 'none' : '';
   const stb = document.getElementById('sumTypeBar');
-  const hideSumBar = ['chisum','triplex','graphic','delivery'];
+  const hideSumBar = ['chisum','triplex','graphic','delivery','avivi'];
   if(stb) stb.style.display = hideSumBar.includes(tab) ? 'none' : 'flex';
   renderAll();
 }
@@ -1260,6 +1308,7 @@ function renderAll(){
   renderTriplexTab();
   renderGraphicTab();
   renderDeliveryTab();
+  renderAviviTab();
   updateCounts();
   updateSummaryBar();
   checkChisumArrived();
@@ -3051,7 +3100,8 @@ function _renderStageTab(key){
   const cfg = LG_STAGE_VIEW[key];
   const el  = document.getElementById(cfg.elId);
   if(!el) return;
-  const ords = allOrders.filter(o => (o.stage||'') === cfg.stage);
+  //  הזמנות אביבי בהובלה יושבות בלשונית "אביבי" (בן, 17/11)
+  const ords = allOrders.filter(o => (o.stage||'') === cfg.stage && !(cfg.stage === 'delivery' && lgAvIsAvivi(o)));
   if(!ords.length){
     el.innerHTML = `<div class="empty"><div class="empty-icon">${cfg.emptyIcon}</div><p>${lgEsc(cfg.emptyText)}</p></div>`;
     return;
@@ -3238,6 +3288,111 @@ function _waDrainOutcome(r){
 async function finalizeDelivery(orderId){
   await updateStage(String(orderId), 'collected');
   showToast('✓ הובלה הושלמה — הועבר לנאסף');
+}
+
+// ═══════════════════════════════════════
+//  AVIVI TAB (בן, 17/11)
+// ═══════════════════════════════════════
+//  החישוב ב-avivi-wrap.js. כאן רק הציור והכתיבה של avWrap/<idx>.
+//  "יוצאים להובלה" = בדיוק מה ש"סיים הובלה" עושה (נאסף), רק על מה שמוכן.
+function _avPoText(o){ return o.sketchName || o.orderNum || o.id; }
+
+function _avOrdHTML(o, m, ready){
+  const id = lgEsc(String(o.id));
+  const items = o.items || [];
+  const wrapped = new Set(lgAvWrappedIdxs(o));
+  const hit = m.q ? ' av-hit' : '';
+  if(ready){
+    return `<div class="av-ord${hit}"><div class="av-ord-top">
+      <span class="av-po">${lgEsc(_avPoText(o))}</span><span class="av-po-sub">✓ ${items.length} זכוכיות</span>
+      <span class="av-sp"></span>
+      <button type="button" class="av-btn ghost" onclick="avUnwrapAll('${id}')">↩ החזר ללא מוכן</button>
+    </div></div>`;
+  }
+  const sub = `${o.orderNum ? lgEsc(o.orderNum) + ' · ' : ''}${wrapped.size}/${items.length} עטופות`;
+  const hl = new Set(m.idxs);
+  const rows = items.map((it, i) => {
+    const on = wrapped.has(i);
+    return `<div class="av-row${hl.has(i)?' av-hl':''}">
+      <span class="av-dim">${lgDimsText(it.w, it.h, '?')}</span>
+      <span class="av-nm">${lgEsc(it.name||'')}</span>
+      <button type="button" class="av-btn${on?' on':''}" aria-pressed="${on}" onclick="avToggleWrap('${id}',${i})">${on?'✓ עטוף':'עטפתי'}</button>
+    </div>`;
+  }).join('') || '<div class="av-empty">אין פריטים בהזמנה</div>';
+  return `<div class="av-ord${hit}">
+    <div class="av-ord-top">
+      <span class="av-po">${lgEsc(_avPoText(o))}</span><span class="av-po-sub">${sub}</span>
+      <span class="av-sp"></span>
+      ${items.length>1?`<button type="button" class="av-btn all" onclick="avWrapAll('${id}')">עטפתי את כל ההזמנה</button>`:''}
+    </div>
+    ${rows}
+  </div>`;
+}
+
+function renderAviviTab(){
+  const el = document.getElementById('aviviLists'); if(!el) return;
+  const inp = document.getElementById('avSearch');
+  const q = inp ? inp.value.trim() : '';
+  const sp = lgAvSplit(allOrders);
+  const pick = list => list.map(o => ({ o, m: { ...lgAvMatch(o, q), q } })).filter(x => x.m.hit);
+  const nr = pick(sp.notReady), rd = pick(sp.ready);
+  const noHit = q ? '<div class="av-empty">לא נמצא — נסה מספר אחר או מידה</div>' : '';
+  el.innerHTML = `<div class="av-cols">
+    <div class="av-col">
+      <div class="av-col-h" style="background:rgba(122,90,47,0.08);color:#7a5a2f">
+        <span>📦 לא מוכן — לעטוף</span><span>${sp.notReady.length}</span></div>
+      ${nr.length ? nr.map(x => _avOrdHTML(x.o, x.m, false)).join('')
+                  : (noHit || '<div class="av-empty">אין מה לעטוף</div>')}
+    </div>
+    <div class="av-col">
+      <div class="av-col-h" style="background:rgba(39,174,96,0.08);color:#1e8449">
+        <span>✓ מוכן — עטוף</span><span>${sp.ready.length}</span></div>
+      ${rd.length ? rd.map(x => _avOrdHTML(x.o, x.m, true)).join('')
+                  : (noHit || '<div class="av-empty">עוד אין הזמנות מוכנות</div>')}
+      <button type="button" class="av-go" ${sp.ready.length?'':'disabled'} onclick="avShipReady()">
+        🚚 יוצאים להובלה${sp.ready.length?` (${sp.ready.length} הזמנות)`:''}</button>
+    </div>
+  </div>
+  ${sp.inWork.length ? `<div class="av-work">עוד ${sp.inWork.length} הזמנות של אביבי בעבודה — יופיעו כאן אחרי "סיים יום עבודה"</div>` : ''}`;
+}
+
+const _avBusy = {};
+async function _avWrite(id, fields, okMsg){
+  if(_avBusy[id]) return; _avBusy[id] = true;
+  try { await updateOrder(String(id), fields); if(okMsg) showToast(okMsg); }
+  catch(e){ console.error('avivi wrap:', e); showToast('⚠️ לא נשמר — בדוק חיבור'); }
+  finally { delete _avBusy[id]; }
+}
+function avToggleWrap(id, idx){
+  const o = allOrders.find(x => String(x.id) === String(id)); if(!o) return;
+  const on = lgAvWrappedIdxs(o).includes(Number(idx));
+  const after = { ...o, avWrap: { ...(o.avWrap||{}), [idx]: on ? null : 1 } };
+  _avWrite(id, { ['avWrap/' + idx]: on ? null : Date.now() },
+           !on && lgAvIsReady(after) ? '✓ ' + _avPoText(o) + ' — כל ההזמנה עטופה, עברה למוכן' : '');
+}
+function avWrapAll(id){
+  const o = allOrders.find(x => String(x.id) === String(id)); if(!o) return;
+  const t = Date.now(), up = {};
+  (o.items||[]).forEach((_, i) => { up['avWrap/' + i] = t; });
+  _avWrite(id, up, '✓ ' + _avPoText(o) + ' — עברה למוכן');
+}
+function avUnwrapAll(id){
+  const o = allOrders.find(x => String(x.id) === String(id)); if(!o) return;
+  if(!confirm('להחזיר את ' + _avPoText(o) + ' ל"לא מוכן"? הסימון "עטפתי" יימחק מכל הזכוכיות שלה.')) return;
+  _avWrite(id, { avWrap: null }, '↩ ' + _avPoText(o) + ' חזרה ללא מוכן');
+}
+let _avShipping = false;
+async function avShipReady(){
+  if(_avShipping) return;
+  const ready = lgAvSplit(allOrders).ready;
+  if(!ready.length) return;
+  if(!confirm('לצאת להובלה עם ' + ready.length + ' הזמנות של אביבי?\n\nהן יעברו לנאסף ויחכו לחשבונית. מה שלא עטוף נשאר כאן.')) return;
+  _avShipping = true;
+  try {
+    await Promise.all(ready.map(o => updateStage(String(o.id), 'collected')));
+    showToast('✓ הובלה הושלמה — ' + ready.length + ' הזמנות של אביבי בנאסף, ממתינות לחשבונית');
+  } catch(e){ console.error('avivi ship:', e); showToast('⚠️ חלק לא נשמר — בדוק חיבור ונסה שוב'); }
+  finally { _avShipping = false; }
 }
 
 // ═══════════════════════════════════════
@@ -3897,9 +4052,12 @@ function updateCounts(){
   if(gcEl) gcEl.textContent = graphicCount;
 
   // cnt-delivery: הזמנות ממתינות להובלה
-  const deliveryCount = allOrders.filter(o => (o.stage||'') === 'delivery').length;
+  //  אביבי לא נספר כאן — יש לו לשונית משלו (בן, 17/11)
+  const deliveryCount = allOrders.filter(o => (o.stage||'') === 'delivery' && !lgAvIsAvivi(o)).length;
   const dcEl = document.getElementById('cnt-delivery');
   if(dcEl) dcEl.textContent = deliveryCount;
+  const avEl = document.getElementById('cnt-avivi');
+  if(avEl) avEl.textContent = lgAvSplit(allOrders).notReady.length;
 }
 
 function updateSummaryBar(){
