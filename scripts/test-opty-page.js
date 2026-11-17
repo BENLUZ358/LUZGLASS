@@ -198,5 +198,31 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   for (let i = 0; i < 30 && !d.o1.items[0].optyCut.undone; i++) await tick();
   check('"בטל נחתך" keeps the mark but as undone', [d.o1.items[0].optyCut.undone, d.o1.items[0].optyCut.job], [true, 'M00291']);
 
+  //  ─── עבודת היום (בן, 17/11): סימון לוחות, סוג זכוכית, אחוז ביצוע ───
+  db._data.meta.optyJobs.M00400 = { job: 'M00400', day: '2026-11-13', mat: '10S',
+    sheets: [w.lgOptyLayoutParse('[P1H1R7D64R639CX1F54Y5410S<n=700>N1X1F54Y5410N2]')[0], w.lgOptyLayoutParse('[P1H2-4R7D64R639CX1F54Y5410N3]')[0]],
+    pieces: { 1: { client: 'נאור', name: 'דני', w: 800, h: 2150, shape: '700' } } };
+  db._data.meta.optyJobs.M00401 = { job: 'M00401', day: '2026-11-13', mat: '06MIR', sheets: [w.lgOptyLayoutParse('[P1H1R7D64R639CX1F54Y5410N1]')[0]], pieces: {} };
+  db._data.meta.optyMats['10S'] = { he: '10 שקוף', en: '10 mm clear' };
+  d.o2.items.a = Object.assign(it(518, 1939), { optyShape: '700', optyJob: 'M00400', optyCut: { at: '2026-11-13', job: 'M00400' } });
+  doc.querySelector('[data-tab="today"]').click();
+  for (let i = 0; i < 30 && doc.querySelectorAll('[data-mark]').length < 6; i++) await tick();
+  check('today: groups by glass (Hebrew name) and one button per physical sheet', [[...doc.querySelectorAll('[data-tgroup]')].map(g => g.dataset.tgroup), doc.querySelectorAll('[data-mark]').length, /10S · 10 שקוף/.test(doc.getElementById('pane-today').textContent)], [['10S', '06MIR'], 6, true]);   // 10S: M00400 (1 + 3 זהים) + M00337 מלמעלה
+  check('today: progress starts at 0%', /ביצעת 0%/.test(doc.getElementById('tProg').textContent), true);
+  doc.querySelector('[data-mark="M00400|1"]').click();
+  for (let i = 0; i < 30 && !(db._data.meta.optyJobs.M00400.marks || {})[1]; i++) await tick();
+  for (let i = 0; i < 5; i++) await tick();
+  check('mark a sheet: saved with time, not bulk', [typeof db._data.meta.optyJobs.M00400.marks[1].at, db._data.meta.optyJobs.M00400.marks[1].bulk], ['number', false]);
+  check('mark a sheet: its linked glass is cut now', d.o2.items.a.optyCut.marked, true);
+  check('progress moves above 0', /ביצעת ([1-9]\d?)%/.test(doc.getElementById('tProg').textContent), true);
+  doc.querySelector('[data-mark="M00400|1"]').click();
+  for (let i = 0; i < 30 && (db._data.meta.optyJobs.M00400.marks || {})[1]; i++) await tick();
+  for (let i = 0; i < 5; i++) await tick();
+  check('tap again: unmarked', [(db._data.meta.optyJobs.M00400.marks || {})[1], !!d.o2.items.a.optyCut.marked], [undefined, false]);
+  doc.querySelector('[data-markmat="10S"]').click();
+  for (let i = 0; i < 30 && Object.keys(db._data.meta.optyJobs.M00400.marks || {}).length < 4; i++) await tick();
+  check('"all of this glass": every sheet of 10S marked as bulk', Object.values(db._data.meta.optyJobs.M00400.marks).map(m => m.bulk), [true, true, true, true]);
+  check('06MIR untouched', db._data.meta.optyJobs.M00401.marks, undefined);
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

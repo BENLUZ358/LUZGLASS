@@ -109,6 +109,19 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .jv td,.jv th{border-bottom:1px solid var(--border);padding:6px 4px;text-align:start;}
 .jv tr.sel{background:rgba(201,162,39,.15);}
 .jday{font-size:var(--fs-sm);font-weight:var(--fw-bold);margin:var(--space-3) 0 var(--space-2);}
+/* עבודת היום (בן, 17/11) — טלפון, טאבלט, מחשב */
+.tprog{position:sticky;top:56px;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-bottom:var(--space-3);font-weight:var(--fw-black);font-size:var(--fs-lg);}
+.tprog .bar{height:12px;border-radius:6px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:6px;}
+.tprog .bar i{display:block;height:100%;background:#1e7d32;}
+.tgrp{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-bottom:var(--space-3);}
+.tgrp h2{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);justify-content:space-between;}
+.tgrid{display:grid;grid-template-columns:1fr;gap:var(--space-2);}
+@media (min-width:700px){.tgrid{grid-template-columns:1fr 1fr;}}
+.tsheet{display:flex;align-items:center;gap:var(--space-2);border:1px solid var(--border);border-radius:var(--radius);padding:var(--space-2);}
+.tsheet .who{flex:1;font-size:var(--fs-sm);}
+.tsheet button.mk{min-height:56px;min-width:110px;font-size:var(--fs-lg);font-weight:var(--fw-black);border-radius:var(--radius);border:2px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;}
+.tsheet.done{background:#e6f4ea;}
+.tsheet.done button.mk{background:#1e7d32;border-color:#1e7d32;color:#fff;}
 .cutok{color:#1e7d32;font-weight:var(--fw-bold);}
 .cutwait{color:var(--muted);}
 .ord{font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-1);}
@@ -132,6 +145,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <main class="wrap">
   <nav class="tabs" role="tablist" aria-label="אופטי-ווי">
     <button type="button" role="tab" data-tab="imp" aria-selected="true">קליטה</button>
+    <button type="button" role="tab" data-tab="today" aria-selected="false">עבודת היום</button>
     <button type="button" role="tab" data-tab="jobs" aria-selected="false">אופטימיזציות</button>
     <button type="button" role="tab" data-tab="link" aria-selected="false">לחיבור<span class="cnt" id="cntLink" hidden></span></button>
     <button type="button" role="tab" data-tab="find" aria-selected="false">חיפוש</button>
@@ -166,6 +180,13 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
   <section class="card hist"><h2>קליטות קודמות</h2><div id="hist"><p class="note">טוען…</p></div></section>
   </div>
 
+  <div class="pane" id="pane-today" hidden>
+    <div class="jflt"><label>יום עבודה <input type="date" id="tDay"></label></div>
+    <div id="tHead"></div>
+    <div id="tProg" class="tprog" role="status"></div>
+    <div id="tOut"><p class="note">טוען…</p></div>
+  </div>
+
   <div class="pane" id="pane-jobs" hidden>
     <div class="jflt">
       <label>מ-<input type="date" id="jFrom"></label>
@@ -173,9 +194,9 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
       <select class="sm" id="jMat" aria-label="סוג זכוכית"><option value="">כל סוגי הזכוכית</option></select>
       <input id="jQ" type="search" placeholder="חיפוש שייפ: לקוח / שם סקיצה / מספר שייפ / M00…" aria-label="חיפוש שייפ">
     </div>
+    <div id="jobView"></div>
     <div id="jHits"></div>
     <div id="jList"><p class="note">טוען…</p></div>
-    <div id="jobView"></div>
   </div>
 
   <div class="pane" id="pane-link" hidden>
@@ -253,6 +274,7 @@ function showTab(t) {
   st('');
   if (t === 'link') loadLink();
   if (t === 'jobs') jobsLoad();
+  if (t === 'today') todayLoad();
   if (t === 'find') $('q').focus();
   if (t === 'set') { loadPairs(); loadMats(); }
 }
@@ -703,12 +725,12 @@ function jobSheet() {
   const cut = {}; cur.sheet.pieces.forEach(p => { const x = p.shape && lk[p.shape]; const c = x && lgOptyCutState(x.it.optyCut, today); if (c && c.cut) cut[p.order] = 1; });
   const mark = (rec.marks || {})[cur.sheetNo];
   $('jobView').innerHTML = `<section class="jv">
-    <h2>${esc(rec.job)} · ${esc(matLbl(rec))} · יום עבודה ${esc(dmy(rec.day))}</h2>
+    <h2>${esc(rec.job)} · ${esc(matLbl(rec))} · יום עבודה ${esc(dmy(rec.day))} <button class="sm quiet" type="button" id="jClose" aria-label="סגור את האופטימיזציה">✕ סגור</button></h2>
     <div class="acts"><label>יום עבודה <input type="date" id="jDay" value="${esc(rec.day)}"></label><button class="sm" id="jDayGo" type="button">שנה יום עבודה</button>
       <button class="sm gold" id="jPrintAll" type="button">🏷 הדפס את כל המדבקות</button><button class="sm" id="jPrintSheet" type="button">🏷 הדפס לוח זה</button></div>
-    <div class="nav"><button class="sm" type="button" data-jnav="-1" aria-label="הלוח הקודם" ${JV.i ? '' : 'disabled'}>‹</button>
+    <div class="nav"><button class="sm" type="button" data-jnav="-1" aria-label="הלוח הקודם" ${JV.i ? '' : 'disabled'}>›</button>
       <b>לוח ${cur.sheetNo}/${cur.total}${mark ? ' · ✓ סומן נחתך' : ''}</b>
-      <button class="sm" type="button" data-jnav="1" aria-label="הלוח הבא" ${JV.i < seq.length - 1 ? '' : 'disabled'}>›</button></div>
+      <button class="sm" type="button" data-jnav="1" aria-label="הלוח הבא" ${JV.i < seq.length - 1 ? '' : 'disabled'}>‹</button></div>
     ${lgOptyLayoutSvg(cur.sheet, info, GEOS, { selected: JV.sel, cut })}
     <table><thead><tr><th>#</th><th>שייפ</th><th>לקוח</th><th>סקיצה</th><th>מידה</th><th>מצב</th><th></th></tr></thead><tbody>
     ${cur.sheet.pieces.map(p => {
@@ -782,6 +804,7 @@ $('pane-jobs').addEventListener('click', e => {
   const hit = t.closest('[data-hit]'); if (hit) { const [j, sn, ord] = hit.dataset.hit.split('|'); jobOpen(j, Number(sn), Number(ord)); return; }
   const nav = t.closest('[data-jnav]'); if (nav && JV) { JV.i += Number(nav.dataset.jnav); JV.sel = 0; jobSheet(); return; }
   const pc = t.closest('.lg-opty-pc'); if (pc && JV) { JV.sel = Number(pc.dataset.order); jobSheet(); return; }
+  if (t.closest('#jClose')) { JV = null; $('jobView').innerHTML = ''; return; }
   if (t.closest('#jPrintAll')) { jobPrint({}); return; }
   if (t.closest('#jPrintSheet')) { jobPrint({ sheet: JV.i + 1 }); return; }
   const pl = t.closest('[data-plabel]'); if (pl) { jobPrint({ sheet: JV.i + 1, order: Number(pl.dataset.plabel) }); return; }
@@ -789,6 +812,112 @@ $('pane-jobs').addEventListener('click', e => {
   const u = t.closest('[data-undo]'); if (u) { jobCut(u.dataset.undo, false); return; }
   const r = t.closest('[data-redo]'); if (r) { jobCut(r.dataset.redo, true); return; }
 });
+
+//  ─── עבודת היום (בן, 17/11): לוחות היום לפי סוג זכוכית, "נחתך" על כל לוח, "כל ה-X נחתך", אחוז ביצוע ───
+let TDAY = null;
+const _whoAmI = () => { const u = typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser; return String((u && u.email) || '').replace('@luzglass.local', ''); };
+async function todayLoad() {
+  if (!$('tDay').value) $('tDay').value = lgOptyTodayIso();
+  try {
+    const [j, m, md] = await Promise.all([_lgDb.ref('meta/optyJobs').once('value'), _lgDb.ref('meta/optyMats').once('value'), _lgDb.ref('meta/optyModel').once('value')]);
+    JOBS = j.val() || {}; MATS = m.val() || {}; JOBS_MODEL = md.val() || null;
+    await loadOrders();
+    todayLearn();
+    todayRender();
+  } catch (e) { console.error(e); $('tOut').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור</p>'; }
+}
+//  כל הלוחות הפיזיים של היום: { key 'job|n', rec, sheetNo, total, sheet, units }
+function todaySheets() {
+  const day = $('tDay').value, out = [];
+  Object.values(JOBS).filter(r => r && r.day === day && r.sheets).sort((a, b) => a.job.localeCompare(b.job)).forEach(rec => {
+    lgOptySheetSeq(rec.sheets).forEach(x => {
+      const st = lgOptySheetStats(x.sheet, {});
+      out.push({ key: rec.job + '|' + x.sheetNo, rec, sheetNo: x.sheetNo, total: x.total, sheet: x.sheet, st,
+        units: lgOptyUnits(Object.assign({ sheets: 1 }, st), JOBS_MODEL), mark: (rec.marks || {})[x.sheetNo] || null });
+    });
+  });
+  return out;
+}
+function todayProgress(list) {
+  const tot = list.reduce((n, x) => n + x.units, 0), done = list.filter(x => x.mark).reduce((n, x) => n + x.units, 0);
+  return { done, total: tot, pct: tot ? Math.round((done / tot) * 100) : 0 };
+}
+function todayRender() {
+  const day = $('tDay').value, list = todaySheets();
+  const st = lgOptyDayStats(JOBS, day, {}), u = lgOptyUnits(st, JOBS_MODEL);
+  const days = [...new Set(Object.values(JOBS).map(r => r && r.day).filter(Boolean))].filter(d => d < day).sort().slice(-20);
+  const v = lgOptyDayVerdict(u, days.map(d => lgOptyUnits(lgOptyDayStats(JOBS, d, {}), JOBS_MODEL))), hrs = lgOptyHours(u, JOBS_MODEL);
+  $('tHead').innerHTML = list.length ? `<p class="note"><b>${esc(v.label)}${v.ratio ? ' (×' + v.ratio + ')' : ''}</b> · ${st.sheets} לוחות · ${st.pieces} זכוכיות · ${st.m2} מ"ר · ${st.features} חורים וחיתוכים${hrs ? ' · בערך ' + hrs + ' שעות חיתוך' : ''}</p>` : '';
+  const pr = todayProgress(list);
+  $('tProg').innerHTML = list.length ? `ביצעת ${pr.pct}%, נשאר ${100 - pr.pct}%<div class="bar"><i style="width:${pr.pct}%"></i></div>` : '';
+  if (!list.length) { $('tOut').innerHTML = '<p class="note">אין אופטימיזציות ליום הזה. קולטים אותן בלשונית "קליטה".</p>'; return; }
+  const groups = {};
+  list.forEach(x => { (groups[x.rec.mat || '—'] = groups[x.rec.mat || '—'] || []).push(x); });
+  $('tOut').innerHTML = Object.entries(groups).map(([mat, xs]) => {
+    const gp = todayProgress(xs), left = xs.filter(x => !x.mark).length;
+    return `<section class="tgrp" data-tgroup="${esc(mat)}"><h2><span>${esc(lgOptyMatLabel(mat, MATS))} · ${gp.pct}%</span>
+      ${left ? `<button class="sm gold" type="button" data-markmat="${esc(mat)}">כל ה-${esc(lgOptyMatLabel(mat, MATS))} נחתך</button>` : '<span class="cutok">✓ הכל נחתך</span>'}</h2>
+      <div class="tgrid">${xs.map(x => `<div class="tsheet${x.mark ? ' done' : ''}"><span class="who"><b>${esc(x.rec.job)} · לוח ${x.sheetNo}/${x.total}</b><br>
+        ${x.st.pieces} זכוכיות · ${x.st.m2} מ"ר${x.st.features ? ' · ' + x.st.features + ' חורים' : ''}${x.mark ? '<br>✓ ' + esc(new Date(x.mark.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })) : ''}</span>
+        <button type="button" class="mk" data-mark="${esc(x.key)}" aria-pressed="${x.mark ? 'true' : 'false'}">${x.mark ? '✓ נחתך' : 'נחתך'}</button></div>`).join('')}</div></section>`;
+  }).join('');
+}
+//  סימון לוח: meta/optyJobs/<job>/marks/<n> + "נחתך" עכשיו על הזכוכיות המחוברות של הלוח (optyCut.marked)
+function _sheetLinkUpdates(rec, sheet, on, up) {
+  const shapes = new Set((sheet.pieces || []).map(p => p.shape).filter(Boolean)), now = Date.now();
+  ORDERS.forEach(o => o.items.forEach((it, idx) => {
+    if (!it || it.optyJob !== rec.job || !shapes.has(it.optyShape)) return;
+    const c = it.optyCut; if (c && c.undone) return;
+    const key = (KEYS[o.id] || [])[idx]; if (key == null) return;
+    const v = on ? Object.assign({ at: rec.day, job: rec.job }, c || {}, { marked: true }) : Object.assign({}, c || { at: rec.day, job: rec.job }, { marked: false });
+    up['orders/' + o.id + '/items/' + key + '/optyCut'] = v; up['orders/' + o.id + '/updatedAt'] = now;
+    it.optyCut = v;
+  }));
+}
+async function todayMark(keys, on, bulk) {
+  const list = todaySheets(), up = {}, now = Date.now(), by = _whoAmI();
+  keys.forEach(k => {
+    const x = list.find(y => y.key === k); if (!x) return;
+    up['meta/optyJobs/' + x.rec.job + '/marks/' + x.sheetNo] = on ? { at: now, by, bulk: !!bulk } : null;
+    if (on) (x.rec.marks = x.rec.marks || {})[x.sheetNo] = { at: now, by, bulk: !!bulk };
+    else if (x.rec.marks) delete x.rec.marks[x.sheetNo];
+    //  לוח שחוזר (H5-6): הזכוכיות נחתכות כשסומן לוח אחד מהם — ביטול רק כשאף אחד מהם לא מסומן
+    const same = list.filter(y => y.rec === x.rec && y.sheet === x.sheet);
+    if (on || !same.some(y => (x.rec.marks || {})[y.sheetNo])) _sheetLinkUpdates(x.rec, x.sheet, on, up);
+  });
+  try { await _lgDb.ref().update(up); todayRender(); }
+  catch (e) { st('✗ לא נשמר: ' + (e.message || '') + ' — נסה שוב', 'bad'); todayLoad(); }
+}
+//  למידה (פעם ביום, בפתיחת המסך): הזמן בין סימונים רצופים באותו יום → lgOptyFit → meta/optyModel
+async function todayLearn() {
+  try {
+    if (JOBS_MODEL && JOBS_MODEL.fittedAt && lgOptyTodayIso(JOBS_MODEL.fittedAt) === lgOptyTodayIso()) return;
+    const byDay = {};
+    Object.values(JOBS).forEach(rec => {
+      if (!rec || !rec.marks || !rec.sheets) return;
+      const seq = lgOptySheetSeq(rec.sheets);
+      Object.entries(rec.marks).forEach(([n, m]) => {
+        const x = seq[Number(n) - 1]; if (!x || !m || !m.at) return;
+        (byDay[rec.day] = byDay[rec.day] || []).push({ at: m.at, bulk: !!m.bulk, stats: lgOptySheetStats(x.sheet, {}) });
+      });
+    });
+    const gaps = [];
+    Object.values(byDay).forEach(ms => {
+      ms.sort((a, b) => a.at - b.at);
+      for (let i = 1; i < ms.length; i++) if (!ms[i].bulk && !ms[i - 1].bulk) gaps.push({ stats: ms[i].stats, minutes: (ms[i].at - ms[i - 1].at) / 60000 });
+    });
+    const m = lgOptyFit(gaps);
+    if (m) { JOBS_MODEL = Object.assign(m, { fittedAt: Date.now() }); await _lgDb.ref('meta/optyModel').set(JOBS_MODEL); }
+  } catch (e) { console.warn('learn', e); }
+}
+$('tDay').addEventListener('change', todayRender);
+$('pane-today').addEventListener('click', e => {
+  const b = e.target.closest('[data-mark]');
+  if (b) { const k = b.dataset.mark, x = todaySheets().find(y => y.key === k); if (x) todayMark([k], !x.mark, false); return; }
+  const g = e.target.closest('[data-markmat]');
+  if (g) { const keys = todaySheets().filter(x => (x.rec.mat || '—') === g.dataset.markmat && !x.mark).map(x => x.key); if (keys.length) todayMark(keys, true, true); }
+});
+if (location.hash === '#today') showTab('today');
 
 //  ─── חיפוש ───
 async function find() {
