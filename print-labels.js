@@ -90,6 +90,11 @@ function lgLabelDraw(ctx, label, W) {
     ctx.fillStyle = '#000';
     at(l.title, (M + 136 + W - M) / 2, y, maxW - 136, max, 24, 'rtl');
   };
+  //  מספר הצורה גדול, סוג הזכוכית קטן מעליו (בן, 17/11 — "מספר השייפ בגדול, סוג הזכוכית יכול להיות בקטן")
+  const lower = y => {
+    if (l.glass) line(l.glass, y, 30, 20, '700', 'rtl');
+    line('צורה ' + l.shape, l.glass ? y + 54 : y + 40, 72, 36, '700', 'rtl');
+  };
   if (l.geo && typeof lgOptyShapeDraw === 'function') {
     head(52, 56);
     ctx.fillRect(M, 100, maxW, 4);
@@ -98,30 +103,25 @@ function lgLabelDraw(ctx, label, W) {
     at(l.dims, cx + cw / 2, 190, cw, 64, 30, 'ltr');
     at(l.sketchName, cx + cw / 2, 300, cw, 44, 22, 'rtl');
     ctx.fillRect(M, 376, maxW, 4);
-    if (l.glass) line(l.glass, 432, 58, 26, '700', 'rtl');            // סוג הזכוכית — גדול
+    if (l.shape) lower(406);
+    else if (l.glass) line(l.glass, 432, 58, 26, '700', 'rtl');       // סוג הזכוכית — גדול
   } else {
     head(70, 60);
     ctx.fillRect(M, 124, maxW, 4);
     line(l.dims, 228, 104, 48, '700', 'ltr');                          // המידה — קצת קטנה יותר מבעבר
     ctx.fillRect(M, 326, maxW, 4);
-    if (l.glass) {
+    if (l.shape) { line(l.sketchName, 362, 40, 22, '700', 'rtl'); lower(406); }
+    else if (l.glass) {
       line(l.sketchName, 372, 44, 24, '700', 'rtl');                   // שם הסקיצה
       line(l.glass, 442, 58, 26, '700', 'rtl');                        // סוג הזכוכית — גדול
     } else line(l.sketchName, 420, 64, 28, '700', 'rtl');
   }
-  //  שורה תחתונה: מספר ההזמנה משמאל · מספר אופטימיזציה באמצע · "צורה N" מימין — הצורה והאופטימיזציה
-  //  גדולות יותר (בן, 16/11); האופטימיזציה מתכווצת אם אין מקום ביניהם
+  //  שורה תחתונה: מספר ההזמנה משמאל · מספר אופטימיזציה מימין (הצורה עברה למעלה, גדולה — 17/11)
   let left = M, right = W - M;
   if (l.orderNum) {
     ctx.font = '700 26px Heebo, Arial, sans-serif'; ctx.direction = 'ltr'; ctx.textAlign = 'left';
     ctx.fillText(String(l.orderNum), M, 535);
     left = M + ctx.measureText(String(l.orderNum)).width + 16;
-    ctx.textAlign = 'center';
-  }
-  if (l.shape) {                                                     // מספר הצורה באופטי-ווי — בפינה הימנית
-    ctx.font = '700 34px Heebo, Arial, sans-serif'; ctx.direction = 'rtl'; ctx.textAlign = 'right';
-    ctx.fillText('צורה ' + l.shape, W - M, 537);
-    right = W - M - ctx.measureText('צורה ' + l.shape).width - 16;
     ctx.textAlign = 'center';
   }
   if (l.job) {                                                       // מספר אופטימיזציה (M00272) — באמצע, בין ההזמנה לצורה

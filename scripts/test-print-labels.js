@@ -69,7 +69,11 @@ const O3 = { ...O1, items: [{ ...it(502, 1902), optyShape: '274328' }] };
 check('E1 shape number travels from the item to the label', PL.lgLabelsForClient([{ order: O3, idxs: [0] }])[0].shape, '274328');
 const ink = l => { const cc = createCanvas(W, W), x = cc.getContext('2d'); PL.lgLabelDraw(x, l);
   const d = x.getImageData(W - 200, 515, 180, 40).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return n; };
-check('E2 shape number printed bottom-right; no shape → corner stays empty', [ink({ ...labels[0], shape: '274328' }) > 50, ink(labels[0])], [true, 0]);
+//  17/11 (בן): "מספר השייפ בגדול, סוג הזכוכית בקטן" — הצורה עברה מהפינה לשורה גדולה מעל השורה התחתונה
+const sz = l => { const cc = createCanvas(W, W); return PL.lgLabelDraw(cc.getContext('2d'), l); };
+const withShape = sz({ ...labels[0], glass: '8 אקסטרה קליר', shape: '274328' }), noShape = sz({ ...labels[0], glass: '8 אקסטרה קליר' });
+check('E2 shape number is the biggest line; glass type small above it', [Math.max(...withShape.map(x => x.size)) >= 64, withShape[withShape.length - 2].size <= 30, withShape.every(x => x.width <= W - 40)], [true, true, true]);
+check('E2b no shape → glass type stays big as before; bottom-right corner empty', [noShape[noShape.length - 1].size >= 50, ink(labels[0])], [true, 0]);
 global.lgOptyShapeDraw = require(path.join(__dirname, '..', 'opty-shape.js')).lgOptyShapeDraw;
 const box = l => { const cc = createCanvas(W, W), x = cc.getContext('2d'); const r = PL.lgLabelDraw(x, l);
   const d = x.getImageData(20, 160, 230, 230).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return [n > 100, r.every(s => s.width <= W - 40)]; };
@@ -81,7 +85,7 @@ check('E4a optimisation number travels from the item to the label', PL.lgLabelsF
 const mid = l => { const cc = createCanvas(W, W), x = cc.getContext('2d'); PL.lgLabelDraw(x, l);
   const d = x.getImageData(140, 508, 180, 38).data; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++; return n; };
 check('E4b printed in the middle of the bottom row; no number → empty', [mid({ ...labels[0], shape: '274328', job: 'M00272' }) > 50, mid({ ...labels[0], shape: '274328' })], [true, 0]);
-check('E4c does not run into the order number or the shape number', ink({ ...labels[0], shape: '274328', job: 'M00272' }) === ink({ ...labels[0], shape: '274328' }), true);
+check('E4c shape number no longer sits in the bottom row (nothing to collide with)', ink({ ...labels[0], shape: '274328' }), 0);
 
 if (failed) { console.error('\n' + failed + ' failed'); process.exit(1); }
 console.log('\nall passed');
