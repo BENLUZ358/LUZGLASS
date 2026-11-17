@@ -333,6 +333,8 @@ function unavClose(){document.getElementById('unavSidebar').classList.remove('mo
 .mit-lbl{min-width:44px;min-height:44px;margin-inline-start:auto;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:18px;cursor:pointer;}
 /* הצורה מאופטי-ווי (בן, 16/11) — opty.html קולט, opty-shape.js מצייר */
 .mit-sh{font-size:12px;font-weight:700;padding:1px 7px;border-radius:3px;white-space:nowrap;background:rgba(192,57,43,0.10);color:#a93226;}
+.mit-cut{background:#e6f4ea;color:#1e7d32;font-weight:700;}
+.mit-tocut{background:rgba(0,0,0,.05);color:#555;}
 .mit-geo{flex:1 0 100%;display:flex;justify-content:center;}
 .mit-geo:empty{display:none;}
 .mit-geo svg{height:150px;max-width:100%;color:var(--text);}
@@ -426,6 +428,7 @@ label.msec-t{display:block;}
   <script src="drafter-batch.js?v=20261111"></script>
   <script src="print-labels.js?v=20261117a"></script>
   <script src="opty-shape.js?v=20261116d"></script>
+  <script src="opty-layout.js?v=20261117a"></script>
   <script src="order-labels.js?v=20261116e"></script>
 </head>
 <body>
@@ -1111,6 +1114,8 @@ function _modItemsHtml(items){
       ${i.chisum ? '<span class="mit-t mit-chis">חיסום</span>' : i.litush ? '<span class="mit-t mit-lit">ליטוש</span>' : ''}
       ${i.graphic ? '<span class="mit-t mit-gr">גרפיקה</span>' : ''}
       ${i.optyShape ? `<span class="mit-sh" title="מספר הצורה באופטי-ווי">צורה ${lgEsc(i.optyShape)}</span>` : ''}
+      ${i.optyJob ? `<span class="mit-sh" title="מספר האופטימיזציה">אופטימיזציה ${lgEsc(i.optyJob)}</span>` : ''}
+      ${(() => { const c = typeof lgOptyCutState === 'function' && lgOptyCutState(i.optyCut, lgOptyTodayIso()); return c ? `<span class="mit-t ${c.cut ? 'mit-cut' : 'mit-tocut'}">${lgEsc(c.label)}</span>` : ''; })()}
       ${i.w && i.h ? `<button type="button" class="mit-lbl" title="הדפס מדבקה" aria-label="הדפס מדבקה לפריט ${idx+1}" onclick="modLabel(${idx})">🏷</button>` : ''}
       ${i.optyShape && i.w && i.h ? `<button type="button" class="mit-lbl-sh" title="מדבקה עם ציור הצורה" aria-label="הדפס מדבקה עם הצורה לפריט ${idx+1}" onclick="modLabel(${idx}, true)">🏷 עם צורה</button>` : ''}
       ${i.optyShape ? `<div class="mit-geo" data-shape="${lgEsc(i.optyShape)}"></div>` : ''}
