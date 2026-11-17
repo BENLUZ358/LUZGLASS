@@ -295,7 +295,7 @@ async function _build(cover, items, b) {
     const it = items[i];
     const head = { title: it.sketchName || it.orderNum || 'סקיצה',
                    info: [it.orderNum ? 'הזמנה ' + it.orderNum : '', it.client].filter(Boolean).join('   ·   '),
-                   idx: i, total: items.length };
+                   idx: i, total: items.length, compact: true };
     try { await M.lgAddSketchPage(doc, font, it.img, head); }
     catch (_) { await M.lgAddSketchPage(doc, font, null, head); }   // תמונה פגומה — עמוד "אין סקיצה"
     for (const a of it.atts || []) {

@@ -92,6 +92,8 @@ async function lgAddSketchPage(doc, font, img, head) {
             : img.mime === 'image/jpeg' ? await doc.embedJpg(_own(img.buf))
             : img.mime === 'image/png'  ? await doc.embedPng(_own(img.buf))
             :                             await doc.embedPng(_own(await _toPng(img.buf)));
+  //  שרטט (בן, 17/11): "הסקיצה עצמה ממש גדולה, והשם לקוח וכו' יותר בקטן — שייראו את המידות"
+  if (h0.compact) return _compactPage(doc, font, pic, img, h0);
   const page = doc.addPage(A4);
   const [W, H] = A4;
   const top = H - MARGIN, right = W - MARGIN - 14;
@@ -137,6 +139,47 @@ async function lgAddSketchPage(doc, font, img, head) {
   const k = Math.min(boxW / pic.width, boxH / pic.height);
   const w = pic.width * k, h = pic.height * k;
   page.drawImage(pic, { x: (W - w) / 2, y: MARGIN + (boxH - h) / 2, width: w, height: h });
+  return page;
+}
+
+//  עמוד "דחוס": שורת פרטים אחת קטנה למעלה, והסקיצה ממלאת את כל השאר.
+//  העמוד לרוחב כשהסקיצה לרוחב — כך היא יוצאת בגודל המרבי על A4.
+function _compactPage(doc, font, pic, img, h0) {
+  const { rgb } = require('pdf-lib');
+  const grey = rgb(0.35, 0.35, 0.35);
+  const land = !!(pic && pic.width > pic.height);
+  const page = doc.addPage(land ? [A4[1], A4[0]] : A4);
+  const [W, H] = land ? [A4[1], A4[0]] : A4;
+  const M = 12, LINE = 18, SZ = 10;
+  const parts = [String(h0.title || '').trim(), String(h0.info || '').trim()].filter(Boolean);
+  const t = _visual(parts.join('   ·   '));
+  const ts = _fit(font, t, SZ, 7, W - 2 * M - 50);
+  page.drawText(t, { x: W - M - font.widthOfTextAtSize(t, ts), y: H - M - ts, size: ts, font, color: grey });
+  if (h0.total > 1) page.drawText((h0.idx + 1) + ' / ' + h0.total, { x: M, y: H - M - SZ, size: SZ, font, color: grey });
+  const boxW = W - 2 * M, boxH = H - 2 * M - LINE;
+  if (img && Array.isArray(img.lines)) {
+    //  הזמנת טקסט — אותו עמוד רגיל (אין תמונה להגדיל)
+    let y = H - M - LINE - 20;
+    const n = img.lines.length, lh = Math.max(16, Math.min(44, Math.floor((boxH - 20) / Math.max(1, n))));
+    for (const l of img.lines) {
+      if (y < M) break;
+      const v = _visual(String(l.text || ''));
+      if (l.kind === 'gap') { y -= lh * 0.6; continue; }
+      const max = l.kind === 'head' ? Math.min(15, lh * 0.6) : Math.min(26, lh * 0.7);
+      const sz = _fit(font, v, max, 9, boxW - 28);
+      page.drawText(v, { x: W - M - 14 - font.widthOfTextAtSize(v, sz), y, size: sz, font, color: l.kind === 'head' ? grey : rgb(0, 0, 0) });
+      y -= l.kind === 'head' ? lh * 1.3 : lh;
+    }
+    return page;
+  }
+  if (!pic) {
+    const v = _visual('אין סקיצה');
+    page.drawText(v, { x: (W - font.widthOfTextAtSize(v, 28)) / 2, y: H / 2, size: 28, font, color: grey });
+    return page;
+  }
+  const k = Math.min(boxW / pic.width, boxH / pic.height);
+  const w = pic.width * k, h = pic.height * k;
+  page.drawImage(pic, { x: (W - w) / 2, y: M + (boxH - h) / 2, width: w, height: h });
   return page;
 }
 
