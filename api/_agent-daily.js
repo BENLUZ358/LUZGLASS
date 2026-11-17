@@ -77,7 +77,7 @@ async function lgAgentDailySummary(db, now) {
   let cutLine = '';
   try {
     const today = _jerDate(now).iso;
-    const jobs = Object.values((await db.ref('meta/optyJobs').orderByChild('day').equalTo(today).once('value')).val() || {})
+    const jobs = Object.values((await db.ref('meta/optyJobs').orderByKey().limitToLast(80).once('value')).val() || {})
       .filter(j => j && j.day === today && Array.isArray(j.sheets));
     if (jobs.length) {
       let pcs = 0, sheets = 0, marked = 0;

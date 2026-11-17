@@ -92,6 +92,11 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   doc.getElementById('btnCheck').click();
   for (let i = 0; i < 20 && !(doc.querySelector('.sum b') && doc.querySelector('.sum b').textContent === '0'); i++) await tick();
   check('second run: both already linked, nothing new', [...doc.querySelectorAll('.sum b')].map(b => b.textContent), ['0', '0', '0', '2']);
+  //  סקירה: קליטה חוזרת לא מזיזה אופטימיזציה שכבר נשמרה ליום אחר
+  check('re-import: a saved optimisation shows its saved day, marked as saved', [doc.querySelector('[data-jobday="M00291"]').value, doc.querySelector('[data-jobday="M00291"]').dataset.saved], ['2026-11-16', '1']);
+  const all2 = doc.getElementById('jobDayAll');
+  if (all2) { all2.value = '2026-11-25'; all2.dispatchEvent(new w.Event('change')); }
+  check('re-import: the "all" picker does not move a saved one', doc.querySelector('[data-jobday="M00291"]').value, '2026-11-16');
 
   //  לקוח שלא מזוהה → שיוך נשמר ב-meta/optyClients
   d.o2.orderClient = 'דוקטור זכוכית'; delete d.o2.items.a.optyShape;
@@ -145,9 +150,11 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   doc.getElementById('btnFind').click();
   for (let i = 0; i < 30 && !doc.querySelector('[data-cut]'); i++) await tick();
   check('search by shape number finds the linked glass', doc.querySelector('#findOut .shape') && doc.querySelector('#findOut .shape').textContent, '900');
+  d.o1.items[1].optyCut = { at: '2026-11-13', job: 'M1' };   // סקירה: חותמת ישנה לא נשארת אחרי ניתוק
   doc.querySelector('[data-cut]').click();
   for (let i = 0; i < 30 && d.o1.items[1].optyShape; i++) await tick();
   check('"נתק" clears the glass and puts the shape back to link (size from the drawing)', [d.o1.items[1].optyShape, db._data.meta.optyPending.o1['900'].w, db._data.meta.optyPending.o1['900'].h], [undefined, 501, 1889]);
+  check('"נתק" also clears the cut mark', d.o1.items[1].optyCut, undefined);
 
   //  ─── הגדרות ───
   doc.querySelector('[data-tab="set"]').click();

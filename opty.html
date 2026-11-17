@@ -335,10 +335,13 @@ async function check() {
     RES.pieces = pieces.length; RES.since = since; RES.days = days;
     //  אופטימיזציות (בן, 17/11): כל קובץ חיתוך שהיום המוצע שלו בטווח; בן בוחר את יום העבודה לפני השמירה
     FOUND = [];
+    let saved = {};
+    try { saved = (await _lgDb.ref('meta/optyJobs').orderByKey().startAt(R01S.length ? R01S[0].job : 'M').once('value')).val() || {}; } catch (_) { saved = {}; }
     R01S.forEach(r => {
       const day = lgOptyCutDay(r.ms || Date.now());
       if (day < since) return;
-      try { FOUND.push(Object.assign({ day, sheets: lgOptyLayoutParse(r.text) }, r)); }
+      const was = saved[r.job] && saved[r.job].day;      // כבר נשמרה — היום שבן קבע נשאר (סקירה 17/11)
+      try { FOUND.push(Object.assign({ day: was || day, saved: !!was, sheets: lgOptyLayoutParse(r.text) }, r)); }
       catch (err) { console.warn(r.job, err); }
     });
     st('נקראו ' + pieces.length + ' חלקים עם מספר צורה מ-' + since.split('-').reverse().join('/') + ' · ' + ORDERS.length + ' הזמנות', 'ok');
@@ -379,10 +382,10 @@ function render() {
     </div>
     ${FOUND.length ? `<section class="card jobs-found"><h2>אופטימיזציות שנמצאו (${FOUND.length})</h2>
       <p class="note">לאיזה יום עבודה כל אחת? המערכת הציעה: לפני 12:00 — אותו יום, אחרי — יום העבודה הבא.</p>
-      <div class="step"><label>יום עבודה לכל האופטימיזציות <input type="date" id="jobDayAll" value="${esc(FOUND[0].day)}"></label></div>
+      ${FOUND.some(j => !j.saved) ? `<div class="step"><label>יום עבודה לכל החדשות <input type="date" id="jobDayAll" value="${esc((FOUND.find(j => !j.saved) || FOUND[0]).day)}"></label></div>` : ''}
       ${FOUND.map(j => `<div class="row"><b class="shape">${esc(j.job)}</b>
         <span class="who">${lgOptySheetSeq(j.sheets).length} לוחות · ${j.sheets.reduce((n, s) => n + s.pieces.length * (s.count || 1), 0)} זכוכיות</span>
-        <input type="date" data-jobday="${esc(j.job)}" value="${esc(j.day)}" aria-label="יום עבודה ל-${esc(j.job)}"></div>`).join('')}
+        <input type="date" data-jobday="${esc(j.job)}" value="${esc(j.day)}"${j.saved ? ' data-saved="1"' : ''} aria-label="יום עבודה ל-${esc(j.job)}">${j.saved ? '<small class="note">כבר נשמרה</small>' : ''}</div>`).join('')}
     </section>` : ''}
     ${r.auto.length || waitN || FOUND.length ? `<button class="go" id="btnSave" type="button">💾 שמור${r.auto.length ? ' ' + r.auto.length + ' מספרי צורה' : ''}${waitN ? (r.auto.length ? ' +' : '') + ' ' + waitN + ' לחיבור' : ''}${FOUND.length ? ((r.auto.length || waitN) ? ' +' : '') + ' ' + FOUND.length + ' אופטימיזציות' : ''}</button>
       ${waitN ? `<p class="note">${waitN} שלא התחברו לבד יעברו ללשונית "לחיבור" — שם בוחרים את הזכוכית, מתי שנוח (גם לפני החיסום).</p>` : ''}` : ''}
@@ -400,7 +403,7 @@ function render() {
       </section>` : ''}`;
   const sv = $('btnSave'); if (sv) sv.addEventListener('click', () => saveImport(sv));
   const all = $('jobDayAll');
-  if (all) all.addEventListener('change', () => { document.querySelectorAll('[data-jobday]').forEach(i => { i.value = all.value; }); });
+  if (all) all.addEventListener('change', () => { document.querySelectorAll('[data-jobday]:not([data-saved])').forEach(i => { i.value = all.value; }); });
 }
 
 //  כתיבה אחת: מספר הצורה + פקודת החיתוך על הפריט, והצורה ב-meta/optyGeo.
@@ -422,6 +425,7 @@ async function save(list, btn, pend, rev) {
     if (key == null) return;
     up['orders/' + a.orderId + '/items/' + key + '/optyShape'] = a.shape;
     up['orders/' + a.orderId + '/items/' + key + '/optyJob'] = a.job || '';
+    up['orders/' + a.orderId + '/items/' + key + '/optyCut'] = null;        // חיבור חדש — "נחתך" ייקבע מהאופטימיזציה שלו
     up['orders/' + a.orderId + '/updatedAt'] = now;
     if (DAT[a.shape]) up['meta/optyGeo/' + a.shape] = DAT[a.shape];
     up['meta/optyPending/' + a.orderId + '/' + a.shape] = null;          // חובר → יורד מהרשימה בחיסום
@@ -616,6 +620,7 @@ async function linkOne(shape, job, orderId, idx, qty) {
   if (cur) { st('✗ לזכוכית הזו כבר יש צורה ' + cur, 'bad'); return false; }
   const linked = ORDERS.reduce((n, x) => n + x.items.filter(it => String(it.optyShape || '') === String(shape)).length, 0) + 1;
   const up = { ['orders/' + orderId + '/items/' + key + '/optyShape']: String(shape), ['orders/' + orderId + '/items/' + key + '/optyJob']: String(job || ''),
+    ['orders/' + orderId + '/items/' + key + '/optyCut']: null,
     ['orders/' + orderId + '/updatedAt']: Date.now() };
   if (linked >= (Number(qty) || 1)) {
     Object.keys(PENDING).forEach(oid => { if ((PENDING[oid] || {})[shape]) up['meta/optyPending/' + oid + '/' + shape] = null; });
@@ -655,10 +660,12 @@ $('linkOut').addEventListener('click', async e => {
 let JOBS = {}, JV = null;              // JV: { job, i (אינדקס לוח פיזי), sel (סדר זכוכית מסומנת) }
 const dmy = iso => String(iso || '').split('-').reverse().slice(0, 2).join('/');
 const matLbl = rec => rec ? (typeof lgOptyMatLabel === 'function' ? lgOptyMatLabel(rec.mat, MATS) : (rec.mat || '')) : '';
-let MATS = {}, JOBS_MODEL = null;   // JOBS_MODEL: meta/optyModel — המשקלות שנלמדו מזמני הסימון
+let MATS = {}, JOBS_MODEL = null;
+//  האופטימיזציות האחרונות בלבד (המספרים רק עולים) — לא כל ההיסטוריה בכל פתיחה (סקירה 17/11)
+const lgOptyJobsRef = () => { const r = _lgDb.ref('meta/optyJobs').orderByKey(); return typeof r.limitToLast === 'function' ? r.limitToLast(400) : r; };   // JOBS_MODEL: meta/optyModel — המשקלות שנלמדו מזמני הסימון
 async function jobsLoad() {
   try {
-    const [j, m, md] = await Promise.all([_lgDb.ref('meta/optyJobs').once('value'), _lgDb.ref('meta/optyMats').once('value'), _lgDb.ref('meta/optyModel').once('value')]);
+    const [j, m, md] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value'), _lgDb.ref('meta/optyModel').once('value')]);
     JOBS = j.val() || {}; MATS = m.val() || {}; JOBS_MODEL = md.val() || null;
     await loadOrders();
     if (!$('jFrom').value) $('jFrom').value = lgOptyTodayIso(Date.now() - 2 * 86400000);
@@ -819,7 +826,7 @@ const _whoAmI = () => { const u = typeof firebase !== 'undefined' && firebase.au
 async function todayLoad() {
   if (!$('tDay').value) $('tDay').value = lgOptyTodayIso();
   try {
-    const [j, m, md] = await Promise.all([_lgDb.ref('meta/optyJobs').once('value'), _lgDb.ref('meta/optyMats').once('value'), _lgDb.ref('meta/optyModel').once('value')]);
+    const [j, m, md] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value'), _lgDb.ref('meta/optyModel').once('value')]);
     JOBS = j.val() || {}; MATS = m.val() || {}; JOBS_MODEL = md.val() || null;
     await loadOrders();
     todayLearn();
@@ -959,6 +966,7 @@ $('findOut').addEventListener('click', async e => {
       const g = GEOS[sh] || (await _lgDb.ref('meta/optyGeo/' + sh).once('value')).val(), cut = g && lgOptyCutSize(g);
       const prev = ((PENDING[oid] || {})[sh]) || {};
       await _lgDb.ref().update({ ['orders/' + oid + '/items/' + key + '/optyShape']: null, ['orders/' + oid + '/items/' + key + '/optyJob']: null,
+        ['orders/' + oid + '/items/' + key + '/optyCut']: null,   // סקירה 17/11: חותמת "נחתך" ישנה לא נשארת על זכוכית מנותקת
         ['orders/' + oid + '/updatedAt']: Date.now(),
         ['meta/optyPending/' + oid + '/' + sh]: { shape: sh, job: String(it.optyJob || ''),
           w: Number(cut ? cut.w : g ? g.w : (Number(it.w) || 0) + 2), h: Number(cut ? cut.h : g ? g.h : (Number(it.h) || 0) + 2),
