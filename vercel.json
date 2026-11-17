@@ -1,4 +1,8 @@
 {
+  "redirects": [
+    { "source": "/AV/:code", "destination": "/workday.html?av=:code", "permanent": false },
+    { "source": "/av/:code", "destination": "/workday.html?av=:code", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/api/devbrain-relay", "destination": "/api/wa-inbound?devbrain=relay" },
     { "source": "/api/invoice-pdf-upload", "destination": "/api/wa-inbound?invoice=upload" },

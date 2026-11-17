@@ -44,6 +44,8 @@ const _str = (v, n) => String(v == null ? '' : v).slice(0, n);
 const _label = l => ({ title: _str(l && l.title, 80), dims: _str(l && l.dims, 40),
                        sketchName: _str(l && l.sketchName, 80), glass: _str(l && l.glass, 60), orderNum: _str(l && l.orderNum, 30),
                        shape: _str(l && l.shape, 12), job: _str(l && l.job, 12), withShape: !!(l && l.withShape), broken: !!(l && l.broken),   // אופטי-ווי (בן, 16/11)
+                       //  ברקוד אביבי (בן, 17/11) — רק הכתובת של לשונית אביבי, שום דבר אחר
+                       ...(l && typeof l.qr === 'string' && /^HTTPS:\/\/LUZGLASS[A-Z0-9-]*\.VERCEL\.APP\/AV\/\d{3,7}-\d{1,3}$/.test(l.qr) ? { qr: l.qr } : {}),
                        //  מדבקת לוח i/N בתחילת כל לוח (בן, 17/11)
                        ...(l && l.marker ? { marker: _str(l.marker, 20), mat: _str(l.mat, 40), pieces: Math.max(0, Math.min(999, Number(l.pieces) | 0)) } : {}) });
 const _b64 = s => typeof s === 'string' && s.length === BITMAP_B64 && /^[A-Za-z0-9+/]+=*$/.test(s);

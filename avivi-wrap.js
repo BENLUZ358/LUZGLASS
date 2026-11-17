@@ -66,6 +66,10 @@ function lgAvMatch(o, q) {
   const s = String(q || '').trim().toLowerCase();
   if (!s) return { hit: true, idxs: [] };
   const items = (o && o.items) || [];
+  //  קוד מהמדבקה ('1247-3') — ההזמנה הזו והזכוכית הזו
+  const sc = lgAvParseScan(s);
+  if (sc && String((o && o.orderNum) || '').replace(/\D/g, '') === sc.num)
+    return { hit: true, idxs: sc.idx < items.length ? [sc.idx] : [] };
   const po = String((o && o.sketchName) || '').toLowerCase();
   const nums = s.match(/\d+/g) || [];
   const letters = /[a-z֐-׿]/.test(s.replace(/[x×]/g, ''));
@@ -90,6 +94,36 @@ function lgAvMatch(o, q) {
   return { hit: poHit || idxs.length > 0, idxs: poHit ? [] : idxs };
 }
 
+// ─── ברקוד על המדבקה (בן, 17/11) — רק אביבי ───
+//  הקוד: ספרות מספר ההזמנה + "-" + מספר הזכוכית (מ-1): "1247-3". רק ספרות ומקף —
+//  נכון בכל שפת מקלדת, וגם מוקלד ביד בחיפוש.
+//  הברקוד עצמו הוא כתובת באותיות גדולות (HTTPS://<אתר>/AV/1247-3): המצלמה הרגילה
+//  של כל טלפון פותחת אותה, ו-vercel.json מפנה ל-workday.html?av=1247-3.
+function lgAvScanCode(o, idx) {
+  if (!lgAvIsAvivi(o)) return '';
+  const n = String((o && o.orderNum) || '').replace(/\D/g, '');
+  const i = Number(idx);
+  if (!n || !Number.isInteger(i) || i < 0) return '';
+  return n + '-' + (i + 1);
+}
+function lgAvScanUrl(code, host) {
+  if (!code) return '';
+  return ('HTTPS://' + String(host || 'luzglass.vercel.app') + '/AV/' + code).toUpperCase();
+}
+//  "1247-3" (גם בתוך כתובת, או "L1247-3") → {num:'1247', idx:2}; אחרת null
+function lgAvParseScan(text) {
+  const m = String(text || '').trim().match(/(?:^|\/AV\/|[^0-9])(\d{3,7})-(\d{1,3})\s*$/i);
+  if (!m) return null;
+  const idx = Number(m[2]) - 1;
+  return idx >= 0 ? { num: m[1], idx } : null;
+}
+//  ההזמנה של אביבי שהקוד מצביע עליה (לפי מספר ההזמנה), או null
+function lgAvFindScan(orders, scan) {
+  if (!scan) return null;
+  return (orders || []).find(o => lgAvIsAvivi(o) && String(o.orderNum || '').replace(/\D/g, '') === scan.num) || null;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_AV_CARD, lgAvIsAvivi, lgAvWrappedIdxs, lgAvIsReady, lgAvState, lgAvSort, lgAvSplit, lgAvMatch };
+  module.exports = { LG_AV_CARD, lgAvIsAvivi, lgAvWrappedIdxs, lgAvIsReady, lgAvState, lgAvSort, lgAvSplit, lgAvMatch,
+    lgAvScanCode, lgAvScanUrl, lgAvParseScan, lgAvFindScan };
 }

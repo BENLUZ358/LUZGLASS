@@ -399,9 +399,10 @@
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="opty-shape.js?v=20261116d"></script>
-  <script src="print-labels.js?v=20261117b"></script>
+  <script src="lg-qr.js?v=20261117"></script>
+  <script src="print-labels.js?v=20261117c"></script>
   <script src="order-labels.js?v=20261116e"></script>
-  <script src="avivi-wrap.js?v=20261117b"></script>
+  <script src="avivi-wrap.js?v=20261117c"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
@@ -638,7 +639,7 @@
           <span data-icon="search"></span>
           <input id="avSearch" type="search" inputmode="search" autocomplete="off"
                  placeholder="חיפוש: סוף ה-PO או מידה"
-                  oninput="renderAviviTab()" aria-label="חיפוש הזמנת אביבי">
+                  oninput="renderAviviTab()" onkeydown="avSearchKey(event)" aria-label="חיפוש הזמנת אביבי">
         </div>
         <div id="aviviChips" class="av-chips" role="group" aria-label="סינון"></div>
         <div id="aviviLists"></div>
@@ -1332,6 +1333,7 @@ function renderAll(){
   updateCounts();
   updateSummaryBar();
   checkChisumArrived();
+  _avHandlePendingScan();   // ברקוד אביבי שנסרק במצלמה (17/11)
 }
 
 // ═══════════════════════════════════════
@@ -2962,7 +2964,7 @@ async function _lblPrint(){
   b.disabled = true; st.textContent = 'שולח…';
   try {
     await _lblFonts();
-    const labels = _lbl.labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, glass: l.glass || '', orderNum: l.orderNum, shape: l.shape || '', job: l.job || '', broken: !!l.broken }));
+    const labels = _lbl.labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, glass: l.glass || '', orderNum: l.orderNum, shape: l.shape || '', job: l.job || '', broken: !!l.broken, ...(l.qr ? { qr: l.qr } : {}) }));
     const bitmaps = labels.map(l => lgLabelRender(l).bitmap);
     const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels',
       client: _lbl.client, orderIds: _lbl.orderIds, labels, bitmaps });
@@ -3359,6 +3361,7 @@ function _avOrdHTML(o, m, open){
 
   //  עוד לא נעטפו — קודם; עטופות — אפורות למטה
   const hl = new Set(m.idxs);
+  if(_avScanHl && _avScanHl.id === String(o.id)) hl.add(_avScanHl.idx);   // הזכוכית שנסרקה
   const idxs = items.map((_, i) => i).sort((a, b) => wrapped.has(a) - wrapped.has(b) || a - b);
   const rows = idxs.map(i => {
     const it = items[i], on = wrapped.has(i);
@@ -3409,6 +3412,51 @@ function renderAviviTab(){
       🚚 יוצאים להובלה${sp.ready.length?` (${sp.ready.length} הזמנות מוכנות)`:' — אין עדיין הזמנות מוכנות'}</button>
     ${sp.inWork.length ? `<div class="av-work">עוד ${sp.inWork.length} הזמנות של אביבי בעבודה — יופיעו כאן אחרי "סיים יום עבודה"</div>` : ''}`;
   _hydrateStageSketches(el);
+}
+
+// ── סריקת ברקוד (בן, 17/11) ──
+//  המצלמה של הטלפון פותחת HTTPS://<אתר>/AV/1247-3 → vercel.json → workday.html?av=1247-3.
+//  כשההזמנות נטענו: עוברים ללשונית אביבי, פותחים את ההזמנה ומסמנים את הזכוכית "עטוף".
+//  גם הקלדה בחיפוש + Enter עושה אותו דבר. AV/TEST = בדיקה שהמצלמה פותחת את האתר.
+var _avPendingScan = (() => { try { return new URLSearchParams(location.search).get('av') || null; } catch(_) { return null; } })();
+var _avScanHl = null;
+function _avHandlePendingScan(){
+  if(!_avPendingScan || !allOrders.length) return;
+  const code = _avPendingScan; _avPendingScan = null;
+  try { history.replaceState(null, '', location.pathname); } catch(_) {}
+  if(String(code).toUpperCase() === 'TEST'){ setTab('avivi'); showToast('✓ הברקוד נקרא — הסריקה עובדת'); return; }
+  avScan(code);
+}
+function avScan(text){
+  const sc = lgAvParseScan(text);
+  if(currentTab !== 'avivi') setTab('avivi');
+  if(!sc){ showToast('⚠️ הברקוד לא מוכר: ' + text); return; }
+  const o = lgAvFindScan(allOrders, sc);
+  if(!o){ showToast('⚠️ לא מצאתי הזמנה של אביבי מספר ' + sc.num); return; }
+  const id = String(o.id), it = (o.items || [])[sc.idx], st = o.stage || '';
+  if(st === 'collected' || st === 'done'){ showToast('ההזמנה ' + _avPoText(o) + ' כבר יצאה (' + lgStageToStatus(st) + ') — לא סומן'); return; }
+  _avOpen.add(id); _avScanHl = { id, idx: sc.idx };
+  if(!it){ renderAviviTab(); showToast('⚠️ אין בהזמנה ' + _avPoText(o) + ' זכוכית מספר ' + (sc.idx + 1) + ' — סמן ביד'); return; }
+  const dims = lgDimsText(it.w, it.h, '?'), n = (o.items || []).length;
+  const later = st === 'delivery' ? '' : ' — ההזמנה עוד בעבודה, תופיע כאן אחרי "סיים יום עבודה"';
+  if(lgAvWrappedIdxs(o).includes(sc.idx)){
+    renderAviviTab(); _avScrollToHl();
+    showToast('כבר מסומן עטוף: ' + _avPoText(o) + ' · ' + dims); return;
+  }
+  const done = lgAvWrappedIdxs(o).length + 1;
+  _avWrite(id, { ['avWrap/' + sc.idx]: Date.now() },
+    '✓ ' + _avPoText(o) + ' · ' + dims + ' עטוף (' + done + '/' + n + ')' + (done === n && st === 'delivery' ? ' — כל ההזמנה מוכנה' : '') + later)
+    .then(() => { renderAviviTab(); _avScrollToHl(); });
+}
+function _avScrollToHl(){
+  const el = document.querySelector('#aviviLists .av-row.av-hl');
+  if(el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+function avSearchKey(ev){
+  if(ev.key !== 'Enter') return;
+  const inp = ev.target, v = inp.value.trim();
+  if(!lgAvParseScan(v)) return;
+  ev.preventDefault(); inp.value = ''; avScan(v);
 }
 
 const _avBusy = {};

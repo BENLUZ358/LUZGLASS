@@ -243,7 +243,9 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-match.js?v=20261116e"></script>
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261117b"></script>
-<script src="print-labels.js?v=20261117b"></script>
+<script src="lg-qr.js?v=20261117"></script>
+<script src="avivi-wrap.js?v=20261117c"></script>
+<script src="print-labels.js?v=20261117c"></script>
 <script src="order-labels.js?v=20261116e"></script>
 <script src="lg-icons.js?v=20261103"></script>
 <script>
@@ -767,7 +769,7 @@ async function jobPrint(opts, job) {
     try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (_) {}
     const chunks = lgOptyChunks(labels, 70);
     for (const part of chunks) {
-      const plain = part.map(l => { const o = {}; ['title', 'dims', 'sketchName', 'glass', 'orderNum', 'shape', 'job', 'withShape', 'marker', 'mat', 'pieces'].forEach(k => { if (l[k] != null && l[k] !== '') o[k] = l[k]; }); return o; });
+      const plain = part.map(l => { const o = {}; ['title', 'dims', 'sketchName', 'glass', 'orderNum', 'shape', 'job', 'withShape', 'marker', 'mat', 'pieces', 'qr'].forEach(k => { if (l[k] != null && l[k] !== '') o[k] = l[k]; }); return o; });
       const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels', client: 'אופטי-ווי ' + rec.job,
         orderIds: [...new Set(Object.values(lk).map(x => String(x.o.id)))], labels: plain, bitmaps: part.map(l => lgLabelRender(l).bitmap) });
       const d = await res.json().catch(() => ({}));

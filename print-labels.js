@@ -27,11 +27,23 @@ function lgLabelsForClient(entries) {
         shape: String(it.optyShape || ''),          // מספר הצורה באופטי-ווי (opty.html, בן 16/11)
         job: String(it.optyJob || ''),              // מספר אופטימיזציה M00xxx (בן, 16/11)
         orderId: String(order.id || ''), idx: i,
+        ...(_lgLabelQr(order, i) ? { qr: _lgLabelQr(order, i) } : {}),   // ברקוד — רק אביבי (בן, 17/11)
       });
     });
   });
   return out;
 }
+
+//  ברקוד (בן, 17/11): רק לקוח אביבי — "אני לא רוצה שיהיו ברקודים ללקוחות אחרים".
+//  הכתובת באותיות גדולות: המצלמה של הטלפון פותחת אותה ← לשונית אביבי מסמנת "עטוף".
+//  avivi-wrap.js לא נטען בדף → אין ברקוד (בטוח לכל לקוח).
+function _lgLabelQr(order, idx) {
+  if (typeof lgAvScanCode !== 'function' || typeof lgAvScanUrl !== 'function') return '';
+  const code = lgAvScanCode(order, idx); if (!code) return '';
+  const h = typeof location !== 'undefined' && /^luzglass[a-z0-9-]*\.vercel\.app$/i.test(location.host || '') ? location.host : '';
+  return lgAvScanUrl(code, h);
+}
+const LG_LABEL_QR = { x: 440, y: 8, box: 100 };   // פינה ימנית-עליונה; הכותרת נכנסת משמאל לו
 
 //  גודל הגופן הגדול ביותר (עד max) שהטקסט נכנס בו ברוחב. גם min לא נכנס →
 //  מקצרים עם "…" (גלוי במדבקה — לא חותכים בשקט).
@@ -82,13 +94,23 @@ function lgLabelDraw(ctx, label, W) {
     out.push({ size: f.size, width: ctx.measureText(f.text).width, cut: f.cut });
   };
   //  שם הלקוח; "שבר" (בן, 16/11 — כל מדבקה שמודפסת מהחיסום) = מלבן שחור בפינה השמאלית, השם לידו
+  //  ברקוד בפינה הימנית-העליונה; הכותרת והקו שמתחתיה מתקצרים כדי לא לגעת בו
+  const qr = l.qr && typeof lgQrMatrix === 'function' ? lgQrMatrix(String(l.qr), 'L') : null;
+  const Q = LG_LABEL_QR, qrLeft = qr ? Q.x - 16 : W - M;
+  if (qr) {
+    const mod = Math.floor(Q.box / qr.length), side = qr.length * mod;
+    lgQrDraw(ctx, qr, Q.x + (Q.box - side), Q.y, mod);
+    out.qr = { x: Q.x + (Q.box - side), y: Q.y, side, mod };
+  }
+  const rule = y => ctx.fillRect(M, y, (qr && y < Q.y + Q.box + 8 ? qrLeft : W - M) - M, 4);
   const head = (y, max) => {
+    if (qr && !l.broken) { at(l.title, (M + qrLeft) / 2, y, qrLeft - M, max, 24, 'rtl'); return; }
     if (!l.broken) { line(l.title, y, max, 28, '700', 'rtl'); return; }
     ctx.fillRect(M, y - 34, 124, 68);
     ctx.fillStyle = '#fff'; ctx.font = '700 46px Heebo, Arial, sans-serif'; ctx.direction = 'rtl';
     ctx.fillText('שבר', M + 62, y + 2);
     ctx.fillStyle = '#000';
-    at(l.title, (M + 136 + W - M) / 2, y, maxW - 136, max, 24, 'rtl');
+    at(l.title, (M + 136 + qrLeft) / 2, y, qrLeft - M - 136, max, 24, 'rtl');
   };
   //  מספר הצורה גדול, סוג הזכוכית קטן מעליו (בן, 17/11 — "מספר השייפ בגדול, סוג הזכוכית יכול להיות בקטן")
   const lower = y => {
@@ -97,7 +119,7 @@ function lgLabelDraw(ctx, label, W) {
   };
   if (l.geo && typeof lgOptyShapeDraw === 'function') {
     head(52, 56);
-    ctx.fillRect(M, 100, maxW, 4);
+    rule(100);
     lgOptyShapeDraw(ctx, l.geo, M, 114, 250, 250);                     // הצורה — משמאל
     const cx = M + 266, cw = maxW - 266;                               // עמודה ימנית
     at(l.dims, cx + cw / 2, 190, cw, 64, 30, 'ltr');
@@ -107,7 +129,7 @@ function lgLabelDraw(ctx, label, W) {
     else if (l.glass) line(l.glass, 432, 58, 26, '700', 'rtl');       // סוג הזכוכית — גדול
   } else {
     head(70, 60);
-    ctx.fillRect(M, 124, maxW, 4);
+    rule(124);
     line(l.dims, 228, 104, 48, '700', 'ltr');                          // המידה — קצת קטנה יותר מבעבר
     ctx.fillRect(M, 326, maxW, 4);
     if (l.shape) { line(l.sketchName, 362, 40, 22, '700', 'rtl'); lower(406); }
