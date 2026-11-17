@@ -52,7 +52,7 @@ const ROWS = [
 ];
 const rec = L.lgOptyJobRecord('M00290', M290, '2026-11-17', ROWS, 123);
 check('record: day, mat, 1 sheet with 4 pieces', [rec.job, rec.day, rec.mat, rec.matName, rec.sheets.length, rec.sheets[0].pieces.length, rec.importedAt], ['M00290', '2026-11-17', '08S', '8 mm clear', 1, 4, 123]);
-check('record: piece info from Pezzi (only this job)', rec.pieces[4], { client: 'אומנות הזכוכ', name: '510', w: 302, h: 2002, qty: 1, shape: '274380', grind: 0 });
+check('record: piece info from Pezzi (only this job)', rec.pieces[4], { client: 'אומנות הזכוכ', name: '510', w: 302, h: 2002, qty: 1, shape: '274380', grind: 0, note: '' });
 check('record: other job rows ignored', Object.keys(rec.pieces).sort(), ['1', '4']);
 const bare = L.lgOptyJobRecord('M00290', M290, '2026-11-17', [], 1);
 check('record without Pezzi rows: still the sheet', [bare.sheets.length, bare.pieces, bare.mat], [1, {}, '']);
@@ -155,6 +155,11 @@ if (require.main === module) {
     [{ cut: true, ready: false, label: 'בחיסום · חוזר מחר בבוקר' }, { cut: true, ready: true, label: 'חזר מחיסום · מוכן' }]);
   check('ready: chisum cut Wednesday → back Sunday (no Fri/Sat)', L.lgOptyPieceReady(wed, 1, '2026-11-19', true).label, "בחיסום · חוזר ביום א' 22/11 בבוקר");
   check('ready: chisum marked cut today → goes out tomorrow', L.lgOptyPieceReady(Object.assign({}, rec, { marks: { 2: { at: 1 } } }), 1, '2026-11-17', true).label, 'נחתך · יוצא לחיסום מחר');
+  //  ההערה של הפריט באופטי-ווי קובעת (בן, 17/11)
+  check('note: chisum / no chisum / graphics / none', ['חיסום/חור', 'ללא חיסום/ללא', 'חיסום/ללא/צבע 040NWC', 'חיסום/חור/גרפיקה', ''].map(n => L.lgOptyNoteInfo(n)),
+    [{ chisum: true, graphic: false }, { chisum: false, graphic: false }, { chisum: true, graphic: true }, { chisum: true, graphic: true }, { chisum: null, graphic: false }]);
+  check('ready: back from chisum with graphics → not ready yet', L.lgOptyPieceReady(sun, 1, '2026-11-17', true, true), { cut: true, ready: false, label: 'חזר מחיסום · לגרפיקה' });
+  check('job record keeps the note', L.lgOptyJobRecord('M1', '', '2026-11-17', [{ CODCOM: 'M1', POSPZ: 1, NOTE: ' ללא חיסום/ללא ', DIMXPZ: 1, DIMYPZ: 1 }], 1).pieces[1].note, 'ללא חיסום/ללא');
   check('ready: no chisum → ready once cut', L.lgOptyPieceReady(sun, 1, '2026-11-16', false), { cut: true, ready: true, label: 'נחתך · מוכן' });
 
 }

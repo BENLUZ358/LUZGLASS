@@ -1043,8 +1043,11 @@ if (location.hash === '#today') showTab('today');
 //  חיפוש (בן, 17/11): קודם בזכוכיות של האופטימיזציות — שבוע אחורה, מיד, עם "נחתך" גם בלי חיבור להזמנה;
 //  "חפש עוד אחורה" מוסיף שבועיים (ומושך אופטימיזציות ישנות אם צריך). ההזמנות המחוברות — מתחת, כשנטענות.
 let FIND = { q: '', days: 7 };
-//  חיסום לזכוכית בחיפוש (בן, 17/11): פריט מחובר (אותו שייפ בהזמנה) — מה שבהזמנה; אחרת לפי סוג הזכוכית
+//  חיסום לזכוכית בחיפוש (בן, 17/11): ההערה באופטי-ווי ("חיסום/חור", "ללא חיסום/ללא") קובעת;
+//  בלי הערה — פריט מחובר (אותו שייפ בהזמנה) לפי ההזמנה, אחרת לפי סוג הזכוכית
 function chisumOf(h) {
+  const ni = lgOptyNoteInfo(h.note);
+  if (ni.chisum !== null) return ni.chisum;
   if (h.shape) for (const o of (typeof ORDERS !== 'undefined' && ORDERS) || []) {
     const it = Object.values((o && o.items) || {}).find(x => x && String(x.optyShape || '') === String(h.shape));
     if (it) return !!it.chisum;
@@ -1068,10 +1071,10 @@ async function findOpty() {
   }
   const hits = lgOptyPieceSearch(JOBS, $('q').value, { from: since }).slice(0, 150);
   $('findOpty').innerHTML = `<section class="card"><h2>באופטימיזציות — ${FIND.days} ימים אחורה (${hits.length})</h2>
-    ${hits.map(h => { const c = lgOptyPieceReady(JOBS[h.job], h.sheetNo, today, chisumOf(h)); return `<button type="button" class="jhit" data-ohit="${esc(h.job + '|' + h.sheetNo + '|' + h.order)}">
+    ${hits.map(h => { const c = lgOptyPieceReady(JOBS[h.job], h.sheetNo, today, chisumOf(h), lgOptyNoteInfo(h.note).graphic); return `<button type="button" class="jhit" data-ohit="${esc(h.job + '|' + h.sheetNo + '|' + h.order)}">
       ${h.shape && GEOS[h.shape] ? lgOptyShapeSvg(GEOS[h.shape], { px: 40 }) : ''}
       <span class="who"><b>${esc(h.client)}</b> · ${esc(h.name)} · <span dir="ltr">${esc(Math.round(h.w) + '×' + Math.round(h.h))}</span><br>
-      <small>${h.shape ? 'שייפ ' + esc(h.shape) + ' · ' : ''}${esc(h.job)} · לוח ${h.sheetNo} · ${esc(dmy(h.day))} · ${esc(matLbl(JOBS[h.job]))}</small></span>
+      <small>${h.note ? esc(h.note) + ' · ' : ''}${h.shape ? 'שייפ ' + esc(h.shape) + ' · ' : ''}${esc(h.job)} · לוח ${h.sheetNo} · ${esc(dmy(h.day))} · ${esc(matLbl(JOBS[h.job]))}</small></span>
       <span class="cst ${c.ready ? 'cutok' : 'cutwait'}">${esc(c.label)}</span></button>`; }).join('') || '<p class="note">לא נמצא בטווח הזה</p>'}
     <button class="sm" type="button" data-older="1">חפש עוד אחורה (+14 ימים)</button></section>`;
   if (hits.length) loadGeos(hits.map(h => h.shape).filter(Boolean)).then(n => { if (n && FIND.q === lgOptyNorm($('q').value)) findOpty(); });

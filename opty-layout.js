@@ -154,7 +154,8 @@ function lgOptyJobRecord(job, r01Text, day, pezziRows, nowMs) {
     const pos = Number(r.POSPZ); if (!(pos > 0)) return;
     pieces[pos] = { client: String(r.CLIENTE || '').trim(), name: String(r.ORDINE || '').trim(),
       w: Number(r.DIMXPZ) || 0, h: Number(r.DIMYPZ) || 0, qty: Number(r.QTAPZ) || 1,
-      shape: String(r.SAGOMA || '').trim(), grind: Number(r.MOLATURA) || 0 };
+      shape: String(r.SAGOMA || '').trim(), grind: Number(r.MOLATURA) || 0,
+      note: String(r.NOTE || '').trim() };   //  "חיסום/חור", "ללא חיסום/ללא", "/גרפיקה" — ההערה שממנה יוצא הדוח (בן, 17/11)
   });
   const first = rows[0] || {};
   return { job, day, mat: String(first.COD_MAT_COMP || '').trim(), matName: String(first.DESCR_MAT_COMP || '').trim(),
@@ -263,7 +264,7 @@ function lgOptyPieceSearch(jobs, q, f) {
       const hay = n([p.shape, r.client, r.name, rec.job].join(' '));
       if (!words.every(w => hay.includes(w))) return;
       out.push({ job: rec.job, day: rec.day || '', mat: rec.mat || '', sheetNo, order: p.order, pos: p.pos, shape: p.shape || '',
-        client: r.client || '', name: r.name || '', w: r.w || p.w, h: r.h || p.h });
+        client: r.client || '', name: r.name || '', w: r.w || p.w, h: r.h || p.h, note: r.note || '' });
     }));
   });
   return out.sort((a, b) => (b.day || '').localeCompare(a.day || ''));
@@ -306,16 +307,26 @@ function _lgWhen(iso, todayIso) {
   if (iso === _lgIsoAdd(todayIso, 1)) return 'מחר';
   return 'ביום ' + LG_HE_DAYS[new Date(iso + 'T12:00:00Z').getUTCDay()] + ' ' + iso.split('-').reverse().slice(0, 2).join('/');
 }
+//  ההערה של הפריט באופטי-ווי (בן, 17/11): "ללא חיסום/ללא" · "חיסום/ללא" · "חיסום/חור" (+ "/גרפיקה", "/צבע …")
+//  → { chisum: true|false|null (אין הערה), graphic }. גוברת על סוג הזכוכית.
+function lgOptyNoteInfo(note) {
+  const t = String(note || '').replace(/\s+/g, ' ').trim();
+  const first = t.split('/')[0].trim();
+  const chisum = /^ללא\s*חיסום/.test(first) ? false : /^חיסום/.test(first) ? true : null;
+  return { chisum, graphic: /גרפיקה|צבע/.test(t) };
+}
 //  מצב "מוכן" לזכוכית בחיפוש: { cut, ready, label }. בלי חיסום — מוכן מרגע שנחתך.
 //  חיסום: יום החיתוך → "יוצא לחיסום <יום העבודה הבא>"; למחרת → "בחיסום · חוזר <יום אחריו> בבוקר"; משם — מוכן.
-function lgOptyPieceReady(rec, sheetNo, todayIso, chisum) {
+//  graphic (גרפיקה / צבע בהערה) — אחרי החיתוך/החיסום יש עוד שלב, ולכן לא "מוכן" (בן מסמן ידנית).
+function lgOptyPieceReady(rec, sheetNo, todayIso, chisum, graphic) {
   const c = lgOptyPieceCut(rec, sheetNo, todayIso);
-  if (!c.cut) return Object.assign({ ready: false }, c, chisum ? { label: c.label + ' · חיסום' } : {});
-  if (!chisum) return { cut: true, ready: true, label: c.label + ' · מוכן' };
+  if (!c.cut) return Object.assign({ ready: false }, c, chisum || graphic ? { label: c.label + (chisum ? ' · חיסום' : '') + (graphic ? ' · גרפיקה' : '') } : {});
+  const done = (lbl) => graphic ? { cut: true, ready: false, label: lbl + ' · לגרפיקה' } : { cut: true, ready: true, label: lbl + ' · מוכן' };
+  if (!chisum) return done(c.label);
   const day = (rec && rec.day) || todayIso, out = lgOptyWorkAdd(day, 1), back = lgOptyWorkAdd(day, 2);
   if (todayIso < out) return { cut: true, ready: false, label: 'נחתך · יוצא לחיסום ' + _lgWhen(out, todayIso) };
   if (todayIso < back) return { cut: true, ready: false, label: 'בחיסום · חוזר ' + _lgWhen(back, todayIso) + ' בבוקר' };
-  return { cut: true, ready: true, label: 'חזר מחיסום · מוכן' };
+  return done('חזר מחיסום');
 }
 
 //  ─── הערכת עבודה (בן, 17/11: "כמה עבודה יש היום והאם זה הרבה") ───
@@ -399,5 +410,5 @@ function lgOptyHours(units, model) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyPieceCut, lgOptyMatChisum, lgOptyWorkAdd, lgOptyPieceReady, lgOptyMatHe, lgOptyMatLabel, lgOptySheetStats, lgOptyUnits, lgOptyDayStats, lgOptyDayVerdict, lgOptyFit, lgOptyHours };
+  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyPieceCut, lgOptyMatChisum, lgOptyWorkAdd, lgOptyPieceReady, lgOptyNoteInfo, lgOptyMatHe, lgOptyMatLabel, lgOptySheetStats, lgOptyUnits, lgOptyDayStats, lgOptyDayVerdict, lgOptyFit, lgOptyHours };
 }
