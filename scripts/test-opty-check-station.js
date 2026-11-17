@@ -145,7 +145,8 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
       check('a shape that fits stays in the red strip; the unfitting one is under the quiet line',
         [/עוד לא חוברו/.test(b.textContent), !!b.querySelector('#wdPend_L1259_274150'), !!b.querySelector('#wdPend_L1259_274142')], [true, true, false]);
     }
-    check('chisum rows show the optimisation number (single + group)', (WD.match(/\$\{wdJobTag\(o, it\.globalIdx\)\}/g) || []).length, 2);
+    //  17/11: רק כשפותחים "📐 צורות" לסקיצה (test-chisum-shapes-hidden.js)
+    check('chisum rows show the optimisation number (single + group)', (WD.match(/shOpen \? lgOptyChip\(o, it\.globalIdx\) \+ wdJobTag\(o, it\.globalIdx\)/g) || []).length, 2);
   }
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })();

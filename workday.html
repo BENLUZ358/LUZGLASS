@@ -2485,6 +2485,11 @@ const LG_TRACK = {
 };
 const _tr = t => LG_TRACK[t] || LG_TRACK.chisum;
 
+var wdShapesOpen = new Set();   // var — הרשימה יכולה להיבנות לפני השורה הזאת
+function wdToggleShapes(sid, track){
+  if(wdShapesOpen.has(sid)) wdShapesOpen.delete(sid); else wdShapesOpen.add(sid);
+  _tr(track).render();
+}
 function toggleChisumOpen(key, track){
   const T = _tr(track);
   T.open[key] = !T.open[key];
@@ -2683,6 +2688,10 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
       groupMap[gid].idxs.push(it.globalIdx);
     });
 
+    //  צורות מאופטי-ווי — מוסתרות ברשימה, נפתחות לכל סקיצה בכפתור "📐 צורות" (בן, 17/11: "מבולגן לי בעין")
+    const shOpen = wdShapesOpen.has(sid);
+    const _its = Array.isArray(o.items) ? o.items : Object.values(o.items||{});
+    const shCount = allChisumItems.filter(x => _its[x.globalIdx] && _its[x.globalIdx].optyShape).length + _wdPendOpen(o).length;
     const itemsHtml = groupOrder.map(gid => {
       const grp = groupMap[gid];
       const idxs = grp.idxs;
@@ -2696,7 +2705,7 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
         <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${isChecked?'rgba(39,174,96,0.04)':'#fff'}">
           <div style="flex:1">
             <div style="font-size:12px;font-weight:700;color:${isChecked?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')}</div>
-            <div style="font-size:12px;color:#8a8278">${lgDimsText(it.w, it.h)} מ"מ ${lgOptyChip(o, it.globalIdx)}${wdJobTag(o, it.globalIdx)}</div>
+            <div style="font-size:12px;color:#8a8278">${lgDimsText(it.w, it.h)} מ"מ ${shOpen ? lgOptyChip(o, it.globalIdx) + wdJobTag(o, it.globalIdx) : ''}</div>
           </div>
           ${wdLabelBtn(o, [idxs[0]], tk)}
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;padding:6px 10px;border-radius:6px;border:1px solid ${isChecked?'#27ae60':'rgba(0,0,0,0.12)'};background:${isChecked?'rgba(39,174,96,0.08)':'rgba(0,0,0,0.02)'}">
@@ -2715,7 +2724,7 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
       <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${allArrived?'rgba(39,174,96,0.04)':'#fff'}">
         <div style="flex:1">
           <div style="font-size:12px;font-weight:700;color:${allArrived?'#27ae60':'#1a1714'}">${lgEsc(it.name||'')} <span style="color:${T.color}">×${idxs.length}</span></div>
-          <div style="font-size:12px;color:#8a8278">${lgDimsText(it.w, it.h)} מ"מ ${lgOptyChip(o, it.globalIdx)}${wdJobTag(o, it.globalIdx)}</div>
+          <div style="font-size:12px;color:#8a8278">${lgDimsText(it.w, it.h)} מ"מ ${shOpen ? lgOptyChip(o, it.globalIdx) + wdJobTag(o, it.globalIdx) : ''}</div>
         </div>
         ${wdLabelBtn(o, idxs, tk)}
         <div style="display:flex;align-items:center;gap:6px;">
@@ -2737,8 +2746,11 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
       ${lgHasSketch(o)?`<button onclick="showSketchPopup('${o.id}')"
         style="padding:3px 9px;background:var(--text);color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">
         🖼 ראה סקיצה</button>`:''}
+      ${shCount?`<button onclick="wdToggleShapes('${lgJsStr(sid)}','${tk}')" aria-pressed="${shOpen?'true':'false'}" data-wdshapes="${lgEsc(sid)}"
+        style="padding:3px 9px;background:${shOpen?'#a93226':'#fff'};color:${shOpen?'#fff':'#a93226'};font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(169,50,38,.45);cursor:pointer;border-radius:4px;white-space:nowrap;">
+        📐 ${shOpen?'הסתר צורות':'צורות ('+shCount+')'}</button>`:''}
     </div>
-    ${wdPendingStrip(o)}
+    ${shOpen ? wdPendingStrip(o) : ''}
     ${itemsHtml}`;
   });
 
