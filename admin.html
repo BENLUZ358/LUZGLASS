@@ -524,6 +524,8 @@ label.msec-t{display:block;}
     <select class="fsel" id="cf" onchange="renderAll()">
       <option value="">כל הלקוחות</option>
     </select>
+    <!-- "סמן הכל" במוכן לאיסוף (בן, 17/11) — renderInvAll() -->
+    <span id="invAllWrap"></span>
   </div>
 
   <div id="kanbanView" class="kanban" style="display:none"></div>
@@ -1324,6 +1326,39 @@ function invToggle(id, client, ev){
 
 function invClear(){ invSel.clear(); invSelClient = null; renderAll(); }
 
+// "סמן הכל" (בן, 17/11: "שיהיה בסינון של מוכן, סמן הכל"). חשבונית היא על
+// לקוח אחד, ולכן הכפתור מופיע רק כשכל מה שמסונן במוכן לאיסוף שייך ללקוח אחד
+// (בחירה ב"כל הלקוחות" או חיפוש). אחרת — שורה שאומרת לבחור לקוח.
+function _invAllTargets(list){
+  const ready = list.filter(o => o.status === 'מוכן לאיסוף');
+  const names = new Set(ready.map(o => o.orderClient || ''));
+  if(!ready.length || names.size !== 1) return { client: null, ids: [], clients: names.size };
+  return { client: ready[0].orderClient || '', ids: ready.map(o => o.id), clients: 1 };
+}
+function renderInvAll(){
+  const el = document.getElementById('invAllWrap');
+  if(!el) return;
+  if(sf !== 'מוכן לאיסוף'){ el.innerHTML = ''; return; }
+  const t = _invAllTargets(filtered());
+  if(!t.ids.length){
+    el.innerHTML = t.clients > 1
+      ? '<span style="font-size:12px;color:var(--muted);margin-inline-start:6px">לסמן הכל: בחר לקוח ב"כל הלקוחות"</span>' : '';
+    return;
+  }
+  const all = t.ids.every(id => invSel.has(id));
+  el.innerHTML = '<button type="button" class="fb" id="invAllBtn" onclick="invSelectAll()" style="background:var(--gold);color:var(--on-gold);border-color:var(--gold);font-weight:800">'
+    + (all ? 'בטל סימון' : 'סמן הכל (' + t.ids.length + ')') + '</button>';
+}
+function invSelectAll(){
+  const t = _invAllTargets(filtered());
+  if(!t.ids.length) return;
+  if(t.ids.every(id => invSel.has(id))){ invClear(); return; }
+  invSel.clear();
+  t.ids.forEach(id => invSel.add(id));
+  invSelClient = t.client;
+  renderAll();
+}
+
 // האם מותר לסמן את ההזמנה כפיקטיבית — רק כשעדיין לא סומנה, לא הופקה עליה
 // חשבונית, ולא נפתח עליה מסמך אמיתי בחשבשבת. חד-כיווני בכוונה: הפיכת הזמנה
 // פיקטיבית לאמיתית היא הכיוון המסוכן.
@@ -1659,6 +1694,7 @@ function buildOrderFilters(){
 function renderAll(){
   buildOrderFilters();
   renderInvBar();
+  renderInvAll();
   renderStats();if(cv==='kanban')renderKanban();else renderTable();
 
   // תור הסקיצות נבנה מ-orders, אבל נבנה מחדש רק בפתיחת התור. לכן סקיצה
