@@ -231,5 +231,25 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   check('"all of this glass": every sheet of 10S marked as bulk', Object.values(db._data.meta.optyJobs.M00400.marks).map(m => m.bulk), [true, true, true, true]);
   check('06MIR untouched', db._data.meta.optyJobs.M00401.marks, undefined);
 
+  //  ─── עבודת היום: הדפסה (בן, 17/11) — לוחות במדפסת רגילה, מדבקות לפי לוח ───
+  let printed = 0; w.print = () => { printed++; };
+  doc.querySelector('[data-tprint="M00400"]').click();
+  for (let i = 0; i < 30 && !printed; i++) await tick();
+  const pa = doc.getElementById('printArea');
+  check('print sheets: regular print opened once', printed, 1);
+  check('print sheets: one block per different sheet, repeated sheet once with its range', pa && [...pa.querySelectorAll('.pblock h3')].map(h => h.textContent.replace(/\s+/g, ' ').trim().split(' · ').slice(0, 2).join(' · ')), ['M00400 · לוח 1/4', 'M00400 · לוחות 2–4/4 (×3)']);
+  check('print sheets: drawing + piece table with client', pa && [pa.querySelectorAll('.pblock svg').length, /נאור/.test(pa.textContent), /דני/.test(pa.textContent)], [2, true, true]);
+  printed = 0; doc.querySelector('[data-tprintday]').click();
+  for (let i = 0; i < 30 && !printed; i++) await tick();
+  check('print whole day: both optimisations, in order', [...doc.getElementById('printArea').querySelectorAll('.pjob')].map(x => x.dataset.job), ['M00337', 'M00400', 'M00401']);
+  const n0 = posts.length;
+  doc.querySelector('[data-tlabels="M00400"]').click();
+  for (let i = 0; i < 30 && posts.length === n0; i++) await tick();
+  check('labels for an optimisation: marker before each physical sheet', posts[n0] && posts[n0][1].labels.filter(l => l.marker).map(l => l.marker), ['לוח 1/4', 'לוח 2/4', 'לוח 3/4', 'לוח 4/4']);
+  const n1 = posts.length;
+  doc.querySelector('[data-tlab="M00400|1"]').click();
+  for (let i = 0; i < 30 && posts.length === n1; i++) await tick();
+  check('labels for one sheet: its marker + its glass', posts[n1] && [posts[n1][1].labels[0].marker, posts[n1][1].labels.length], ['לוח 1/4', 3]);
+
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

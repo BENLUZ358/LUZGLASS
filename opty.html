@@ -122,6 +122,22 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .tsheet button.mk{min-height:56px;min-width:110px;font-size:var(--fs-lg);font-weight:var(--fw-black);border-radius:var(--radius);border:2px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;}
 .tsheet.done{background:#e6f4ea;}
 .tsheet.done button.mk{background:#1e7d32;border-color:#1e7d32;color:#fff;}
+/* הדפסת לוחות (בן, 17/11) */
+.tjob{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:var(--space-3) 0 var(--space-2);}
+.tjob b{flex:1;}
+#printArea{display:none;}
+@media print{
+  body.printing > *:not(#printArea){display:none !important;}
+  body.printing #printArea{display:block;}
+  #printArea{direction:rtl;font-family:Heebo,Arial,sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  #printArea .pjob{page-break-after:always;}
+  #printArea .pjob h2{font-size:15pt;margin:0 0 6pt;}
+  #printArea .pblock{page-break-inside:avoid;break-inside:avoid;margin-bottom:10pt;}
+  #printArea .pblock h3{font-size:12pt;margin:0 0 4pt;}
+  #printArea svg{width:100%;max-height:120mm;height:auto;border:1px solid #000;}
+  #printArea table{width:100%;border-collapse:collapse;font-size:9pt;margin-top:4pt;}
+  #printArea td,#printArea th{border:1px solid #999;padding:2pt 4pt;text-align:start;}
+}
 .cutok{color:#1e7d32;font-weight:var(--fw-bold);}
 .cutwait{color:var(--muted);}
 .ord{font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-1);}
@@ -752,8 +768,8 @@ function jobSheet() {
     }).join('')}</tbody></table></section>`;
 }
 //  מדבקות → מרכז ההדפסות, בחלקים של עד 70 (לא נגמר במדבקת לוח)
-async function jobPrint(opts) {
-  const rec = JOBS[JV.job], lk = linkedOf(rec.job), ours = {};
+async function jobPrint(opts, job) {
+  const rec = JOBS[job || JV.job], lk = linkedOf(rec.job), ours = {};
   Object.entries(lk).forEach(([sh, x]) => { const l = lgLabelsForClient([{ order: x.o, idxs: [x.idx] }])[0]; if (l) ours[sh] = l; });
   const labels = lgOptyJobLabels(rec, ours, opts, matLbl(rec));
   if (!labels.length) { st('אין מה להדפיס', 'bad'); return; }
@@ -854,7 +870,7 @@ function todayRender() {
   const st = lgOptyDayStats(JOBS, day, {}), u = lgOptyUnits(st, JOBS_MODEL);
   const days = [...new Set(Object.values(JOBS).map(r => r && r.day).filter(Boolean))].filter(d => d < day).sort().slice(-20);
   const v = lgOptyDayVerdict(u, days.map(d => lgOptyUnits(lgOptyDayStats(JOBS, d, {}), JOBS_MODEL))), hrs = lgOptyHours(u, JOBS_MODEL);
-  $('tHead').innerHTML = list.length ? `<p class="note"><b>${esc(v.label)}${v.ratio ? ' (×' + v.ratio + ')' : ''}</b> · ${st.sheets} לוחות · ${st.pieces} זכוכיות · ${st.m2} מ"ר · ${st.features} חורים וחיתוכים${hrs ? ' · בערך ' + hrs + ' שעות חיתוך' : ''}</p>` : '';
+  $('tHead').innerHTML = list.length ? `<p><button class="sm gold" type="button" data-tprintday="1">🖨 הדפס את כל הלוחות של היום</button></p><p class="note"><b>${esc(v.label)}${v.ratio ? ' (×' + v.ratio + ')' : ''}</b> · ${st.sheets} לוחות · ${st.pieces} זכוכיות · ${st.m2} מ"ר · ${st.features} חורים וחיתוכים${hrs ? ' · בערך ' + hrs + ' שעות חיתוך' : ''}</p>` : '';
   const pr = todayProgress(list);
   $('tProg').innerHTML = list.length ? `ביצעת ${pr.pct}%, נשאר ${100 - pr.pct}%<div class="bar"><i style="width:${pr.pct}%"></i></div>` : '';
   if (!list.length) { $('tOut').innerHTML = '<p class="note">אין אופטימיזציות ליום הזה. קולטים אותן בלשונית "קליטה".</p>'; return; }
@@ -864,9 +880,12 @@ function todayRender() {
     const gp = todayProgress(xs), left = xs.filter(x => !x.mark).length;
     return `<section class="tgrp" data-tgroup="${esc(mat)}"><h2><span>${esc(lgOptyMatLabel(mat, MATS))} · ${gp.pct}%</span>
       ${left ? `<button class="sm gold" type="button" data-markmat="${esc(mat)}">כל ה-${esc(lgOptyMatLabel(mat, MATS))} נחתך</button>` : '<span class="cutok">✓ הכל נחתך</span>'}</h2>
-      <div class="tgrid">${xs.map(x => `<div class="tsheet${x.mark ? ' done' : ''}"><span class="who"><b>${esc(x.rec.job)} · לוח ${x.sheetNo}/${x.total}</b><br>
+      ${[...new Set(xs.map(x => x.rec.job))].map(job => { const ys = xs.filter(x => x.rec.job === job); return `<div class="tjob"><b>${esc(job)} · ${ys.length} לוחות</b>
+        <button class="sm" type="button" data-tprint="${esc(job)}">🖨 הדפס לוחות</button><button class="sm" type="button" data-tlabels="${esc(job)}">🏷 מדבקות</button></div>
+      <div class="tgrid">${ys.map(x => `<div class="tsheet${x.mark ? ' done' : ''}"><span class="who"><b>${esc(x.rec.job)} · לוח ${x.sheetNo}/${x.total}</b><br>
         ${x.st.pieces} זכוכיות · ${x.st.m2} מ"ר${x.st.features ? ' · ' + x.st.features + ' חורים' : ''}${x.mark ? '<br>✓ ' + esc(new Date(x.mark.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })) : ''}</span>
-        <button type="button" class="mk" data-mark="${esc(x.key)}" aria-pressed="${x.mark ? 'true' : 'false'}">${x.mark ? '✓ נחתך' : 'נחתך'}</button></div>`).join('')}</div></section>`;
+        <button type="button" class="sm quiet" data-tlab="${esc(x.key)}" aria-label="מדבקות של ${esc(x.rec.job)} לוח ${x.sheetNo}">🏷</button>
+        <button type="button" class="mk" data-mark="${esc(x.key)}" aria-pressed="${x.mark ? 'true' : 'false'}">${x.mark ? '✓ נחתך' : 'נחתך'}</button></div>`).join('')}</div>`; }).join('')}</section>`;
   }).join('');
 }
 //  סימון לוח: meta/optyJobs/<job>/marks/<n> + "נחתך" עכשיו על הזכוכיות המחוברות של הלוח (optyCut.marked)
@@ -895,6 +914,40 @@ async function todayMark(keys, on, bulk) {
   try { await _lgDb.ref().update(up); todayRender(); }
   catch (e) { st('✗ לא נשמר: ' + (e.message || '') + ' — נסה שוב', 'bad'); todayLoad(); }
 }
+//  הדפסת לוחות במדפסת רגילה (בן, 17/11): לכל אופטימיזציה — כל לוח שונה פעם אחת, לפי סדר החיתוך,
+//  הציור עם שייפ/לקוח/סקיצה/מידה על כל זכוכית, וטבלת הזכוכיות. לוח שחוזר (H5-6) — פעם אחת עם הטווח.
+function sheetsPrintHtml(jobs) {
+  return jobs.map(job => {
+    const rec = JOBS[job]; if (!rec || !rec.sheets) return '';
+    const seq = lgOptySheetSeq(rec.sheets), lk = linkedOf(rec.job), info = {};
+    Object.entries(rec.pieces || {}).forEach(([pos, r]) => { info[pos] = r; });
+    const groups = [];
+    seq.forEach(x => { const g = groups[groups.length - 1]; if (g && g.sheet === x.sheet) g.to = x.sheetNo; else groups.push({ sheet: x.sheet, from: x.sheetNo, to: x.sheetNo, total: x.total }); });
+    const pcs = seq.reduce((n, x) => n + x.sheet.pieces.length, 0);
+    return `<section class="pjob" data-job="${esc(rec.job)}"><h2>${esc(rec.job)} · ${esc(matLbl(rec))} · יום עבודה ${esc(dmy(rec.day))} · ${seq.length} לוחות · ${pcs} זכוכיות</h2>
+      ${groups.map(g => { const n = g.to - g.from + 1; return `<div class="pblock"><h3>${esc(rec.job)} · ${n > 1 ? 'לוחות ' + g.from + '–' + g.to + '/' + g.total + ' (×' + n + ')' : 'לוח ' + g.from + '/' + g.total} · ${esc(matLbl(rec))} · <span dir="ltr">${Math.round(g.sheet.L)}×${Math.round(g.sheet.H)}</span> · ${g.sheet.pieces.length} זכוכיות</h3>
+        ${lgOptyLayoutSvg(g.sheet, info, GEOS, {})}
+        <table><thead><tr><th>#</th><th>שייפ</th><th>לקוח</th><th>סקיצה</th><th>מידה</th></tr></thead><tbody>${g.sheet.pieces.map(p => {
+          const r = info[p.pos] || {}, x = p.shape && lk[p.shape];
+          return `<tr><td>${p.order}</td><td>${esc(p.shape || '—')}</td><td>${esc(x ? x.o.orderClient : r.client || '')}</td><td>${esc(x ? x.o.sketchName : r.name || '')}</td><td dir="ltr">${esc(Math.round(r.w || p.w) + '×' + Math.round(r.h || p.h))}</td></tr>`;
+        }).join('')}</tbody></table></div>`; }).join('')}</section>`;
+  }).join('');
+}
+async function printSheets(jobs) {
+  jobs = (jobs || []).filter(j => JOBS[j] && JOBS[j].sheets).sort();
+  if (!jobs.length) { st('אין מה להדפיס', 'bad'); return; }
+  st('מכין להדפסה…');
+  await loadGeos(jobs.flatMap(j => JOBS[j].sheets.flatMap(s => s.pieces.map(p => p.shape))).filter(Boolean));
+  let pa = $('printArea');
+  if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
+  pa.innerHTML = sheetsPrintHtml(jobs);
+  document.body.classList.add('printing');
+  const done = () => { document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  st('', '');
+  window.print();
+}
+
 //  למידה (פעם ביום, בפתיחת המסך): הזמן בין סימונים רצופים באותו יום → lgOptyFit → meta/optyModel
 async function todayLearn() {
   try {
@@ -919,6 +972,10 @@ async function todayLearn() {
 }
 $('tDay').addEventListener('change', todayRender);
 $('pane-today').addEventListener('click', e => {
+  const tp = e.target.closest('[data-tprint]'); if (tp) { printSheets([tp.dataset.tprint]); return; }
+  if (e.target.closest('[data-tprintday]')) { printSheets([...new Set(todaySheets().map(x => x.rec.job))]); return; }
+  const tl = e.target.closest('[data-tlabels]'); if (tl) { jobPrint({}, tl.dataset.tlabels); return; }
+  const ts = e.target.closest('[data-tlab]'); if (ts) { const [job, n] = ts.dataset.tlab.split('|'); jobPrint({ sheet: Number(n) }, job); return; }
   const b = e.target.closest('[data-mark]');
   if (b) { const k = b.dataset.mark, x = todaySheets().find(y => y.key === k); if (x) todayMark([k], !x.mark, false); return; }
   const g = e.target.closest('[data-markmat]');
