@@ -43,7 +43,22 @@ function _lgLabelQr(order, idx) {
   const h = typeof location !== 'undefined' && /^luzglass[a-z0-9-]*\.vercel\.app$/i.test(location.host || '') ? location.host : '';
   return lgAvScanUrl(code, h);
 }
-const LG_LABEL_QR = { x: 440, y: 8, box: 100 };   // פינה ימנית-עליונה; הכותרת נכנסת משמאל לו
+//  ברקוד לכל זכוכית מחוברת (בן, 17/11) — כל הלקוחות חוץ מאביבי (שלו /AV/, למעלה).
+//  החתימה מהשרת (/api/glass, מנהל בלבד), לפני הציור. נכשל → מדבקה בלי ברקוד, ההדפסה ממשיכה.
+async function lgLabelsSign(labels) {
+  const need = (labels || []).filter(l => l && !l.qr && !l.marker && l.orderId && Number.isInteger(l.idx));
+  if (!need.length || typeof _lgAuthPost !== 'function') return labels;
+  for (let i = 0; i < need.length; i += 200) {
+    const part = need.slice(i, i + 200);
+    try {
+      const r = await _lgAuthPost('/api/glass', { action: 'sign', items: part.map(l => ({ orderId: l.orderId, idx: l.idx })) });
+      const d = await r.json().catch(() => ({}));
+      if (d && d.ok && Array.isArray(d.urls)) part.forEach((l, k) => { if (d.urls[k]) l.qr = d.urls[k]; });
+    } catch (e) { console.warn('[labels] barcode sign failed — printing without', e); }
+  }
+  return labels;
+}
+const LG_LABEL_QR ={ x: 440, y: 8, box: 100 };   // פינה ימנית-עליונה; הכותרת נכנסת משמאל לו
 
 //  גודל הגופן הגדול ביותר (עד max) שהטקסט נכנס בו ברוחב. גם min לא נכנס →
 //  מקצרים עם "…" (גלוי במדבקה — לא חותכים בשקט).
@@ -181,5 +196,5 @@ function lgLabelRender(label) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_LABEL_PX, lgLabelsForClient, lgLabelDraw, lgLabelPack, lgLabelRender };
+  module.exports = { LG_LABEL_PX, lgLabelsForClient, lgLabelDraw, lgLabelPack, lgLabelRender, lgLabelsSign };
 }

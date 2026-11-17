@@ -62,7 +62,7 @@ check('the 📐 button does not tick the item (stopPropagation) and opens the sh
     [...lw.document.querySelectorAll('.wd-item-lbl')].forEach(b => b.click());
     check('chisum label → "שבר"; triplex → not', seen, [true, false]);
     check('both row kinds pass the track', (WD.match(/\$\{wdLabelBtn\(o, [^)]*, tk\)\}/g) || []).length, 2);
-    check('labels window marks "שבר" only on the chisum track', /if\(g\.track === 'chisum'\) labels\.forEach\(l => \{ l\.broken = true; \}\)/.test(WD), true);
+    check('labels window marks "שבר" only on the chisum track', /if\(g\.track === 'chisum' && !forCustomer\) labels\.forEach\(l => \{ l\.broken = true; \}\)/.test(WD), true);
   }
   check('chisum: button in the single row and in the ×N group row', (WD.match(/\$\{wdLabelBtn\(o, /g) || []).length, 2);
   //  חיסום: מספר אופטימיזציה ליד הפריט + צורות של ההזמנה שלא חוברו, וחיבור לפריט (בן, 16/11)

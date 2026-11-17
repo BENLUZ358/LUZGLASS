@@ -400,8 +400,8 @@
   <script src="order-attachments.js?v=20261112"></script>
   <script src="opty-shape.js?v=20261116d"></script>
   <script src="lg-qr.js?v=20261117"></script>
-  <script src="print-labels.js?v=20261117c"></script>
-  <script src="order-labels.js?v=20261116e"></script>
+  <script src="print-labels.js?v=20261117d"></script>
+  <script src="order-labels.js?v=20261117"></script>
   <script src="avivi-wrap.js?v=20261117c"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
@@ -728,6 +728,7 @@ let _deliveryAccounts = new Set(); // מפתחות כרטיס (customerId) של 
 // להסיר. זה בדיוק מה ש-deliveryClient עושה בשני מקומות (lgNextStage ו-
 // הסנכרון בכניסה ליום עבודה), ומה שנשמט כאן.
 let _monthlyPhones = new Set();
+let _labelPhones = new Set();     // לקוחות שביקשו מדבקה על כל זכוכית אחרי חיסום (users/<טלפון>/wantsLabels, 17/11)
 // טלפון התחברות → מפתח החשבון בחשבשבת. אותה שרשרת שבה ה-API מוצא את
 // מפתח החשבון, וממנה נגזר גם המספר שאליו יוצאת ההודעה ללקוח.
 let _customerIdByPhone = {};
@@ -745,6 +746,10 @@ async function _loadDeliveryClients(){
       users
         .filter(u => u.isDelivery && u.customerId)
         .map(u => String(u.customerId))
+    );
+    _labelPhones = new Set(
+      users.filter(u => u.wantsLabels).flatMap(u => [u.phone ? String(u.phone).replace(/[-\s]/g, '') : '',
+                                                      u.customerId ? 'card:' + String(u.customerId) : ''].filter(Boolean))
     );
     _monthlyPhones = new Set(
       users
@@ -2730,6 +2735,9 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
   const isOpen    = T.open[clientKey] === true;   // סגור כברירת מחדל
   // מדבקות (בן, 3/11) — החלון בונה את המדבקות מכאן, ברגע שנפתח
   _lblGroups[tk + '|' + clientKey] = { clientName, orderIds: orders.map(o => String(o.id)), track: tk };
+  //  לקוח שביקש מדבקה על כל זכוכית שחוזרת (בן, 17/11 — סימון 🏷 בכרטיס הלקוח)
+  const wantsLbl = orders.some(o => _labelPhones.has(String(o.clientPhone || o.phone || '').replace(/[-\s]/g, ''))
+                                 || (o.customerId && _labelPhones.has('card:' + String(o.customerId))));
 
   let totalItems   = 0;   // כל פריטי הדוח של הלקוח
   let arrivedCountAll = 0; // כמה מהם כבר סומנו כהגיעו
@@ -2838,6 +2846,9 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
       </div>
       <button onclick="event.stopPropagation();openLabelsModal('${lgJsStr(tk + '|' + clientKey)}')"
         style="padding:4px 10px;background:#fff;color:#1a1714;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:1px solid rgba(0,0,0,0.18);cursor:pointer;border-radius:4px;white-space:nowrap;">🏷 מדבקות</button>
+      ${wantsLbl ? `<button onclick="event.stopPropagation();openLabelsModal('${lgJsStr(tk + '|' + clientKey)}', true)"
+        title="מדבקה ללקוח: מידה, שם סקיצה וברקוד — בלי 'שבר'"
+        style="padding:4px 10px;background:#7a5a2f;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">🏷 מדבקות ללקוח</button>` : ''}
       <button onclick="event.stopPropagation();markAllClientArrived('${lgJsStr(clientKey)}','${lgJsStr(reportId||'')}','${lgJsStr(clientName)}','${tk}')"
         style="padding:4px 10px;background:#27ae60;color:#fff;font-family:Heebo,sans-serif;font-size:12px;font-weight:700;border:none;cursor:pointer;border-radius:4px;white-space:nowrap;">✓ סמן הכל</button>
       <span style="font-size:16px;color:#8a8278;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
@@ -2864,11 +2875,11 @@ function _lblEntries(key){
   }).filter(e => e.idxs.length);
 }
 
-function openLabelsModal(key){
+function openLabelsModal(key, forCustomer){
   const g = _lblGroups[key]; if(!g) return;
   const entries = _lblEntries(key);
   const labels = lgLabelsForClient(entries);
-  if(g.track === 'chisum') labels.forEach(l => { l.broken = true; });   // "שבר" — כל מדבקה מהחיסום (בן, 16/11)
+  if(g.track === 'chisum' && !forCustomer) labels.forEach(l => { l.broken = true; });   // "שבר" — כל מדבקה מהחיסום (בן, 16/11)
   if(!labels.length){ showToast('אין זכוכיות מסומנות שהגיעו. מדבקות של בדיקה שכבר נסגרה — בלוח ההדפסות'); return; }
   _lblClose();
   _lbl = { key, client: g.clientName, labels, orderIds: entries.map(e => String(e.order.id)) };
@@ -2938,6 +2949,7 @@ function _lblRender(){
 async function _lblFonts(){ try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch(e){} }
 async function _lblDrawAll(){
   await _lblFonts();
+  if(_lbl && typeof lgLabelsSign === 'function') await lgLabelsSign(_lbl.labels);   // ברקוד לכל זכוכית (17/11)
   document.querySelectorAll('#lblGrid canvas[data-lbl]').forEach(c => {
     const l = _lbl && _lbl.labels[Number(c.dataset.lbl)]; if(l) lgLabelDraw(c.getContext('2d'), l);
   });

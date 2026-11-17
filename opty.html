@@ -245,8 +245,8 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-layout.js?v=20261117k"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261117c"></script>
-<script src="print-labels.js?v=20261117c"></script>
-<script src="order-labels.js?v=20261116e"></script>
+<script src="print-labels.js?v=20261117d"></script>
+<script src="order-labels.js?v=20261117"></script>
 <script src="lg-icons.js?v=20261103"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -767,6 +767,7 @@ async function jobPrint(opts, job) {
   st('שולח ' + labels.length + ' מדבקות…');
   try {
     if (typeof lgOptyLoadGeos === 'function') await lgOptyLoadGeos(labels);
+    if (typeof lgLabelsSign === 'function') await lgLabelsSign(labels);   // ברקוד לכל זכוכית מחוברת (17/11)
     try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (_) {}
     const chunks = lgOptyChunks(labels, 70);
     for (const part of chunks) {

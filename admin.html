@@ -412,7 +412,7 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261113"></script>
+  <script src="firebase-db.js?v=20261117"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
@@ -426,10 +426,10 @@ label.msec-t{display:block;}
   <script src="lg-health.js?v=20261020"></script>
   <script src="sketch-reader-ui.js?v=20261023h"></script>
   <script src="drafter-batch.js?v=20261111"></script>
-  <script src="print-labels.js?v=20261117b"></script>
+  <script src="lg-qr.js?v=20261117"></script><script src="avivi-wrap.js?v=20261117c"></script><script src="print-labels.js?v=20261117d"></script>
   <script src="opty-shape.js?v=20261116d"></script>
   <script src="opty-layout.js?v=20261117k"></script>
-  <script src="order-labels.js?v=20261116e"></script>
+  <script src="order-labels.js?v=20261117"></script>
 </head>
 <body>
 <!-- LOADING OVERLAY — מוסתר כשהנתונים הראשונים מגיעים מ-Firebase -->
@@ -5818,6 +5818,9 @@ function _renderUserList(users, elId){
           <button onclick="umToggleMonthly('${u.id}','${lgJsStr(u.businessName||u.name)}',${!!u.monthlyBilling})"
             title="${u.monthlyBilling ? 'בטל שוטף 30' : 'הגדר כשוטף 30'}"
             style="padding:4px 8px;background:${u.monthlyBilling?'rgba(184,146,42,0.15)':'rgba(0,0,0,0.04)'};border:1px solid ${u.monthlyBilling?'rgba(184,146,42,0.4)':'rgba(0,0,0,0.1)'};color:${u.monthlyBilling?'var(--gold-text)':'#aaa'};font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">📅</button>
+          <button onclick="umToggleLabels('${u.id}','${lgJsStr(u.businessName||u.name)}',${!!u.wantsLabels})"
+            title="${u.wantsLabels ? 'רוצה מדבקה על כל זכוכית אחרי חיסום — לחץ לביטול' : 'סמן: רוצה מדבקה על כל זכוכית אחרי חיסום'}"
+            style="padding:4px 8px;background:${u.wantsLabels?'rgba(122,90,47,0.15)':'rgba(0,0,0,0.04)'};border:1px solid ${u.wantsLabels?'rgba(122,90,47,0.45)':'rgba(0,0,0,0.1)'};color:${u.wantsLabels?'#7a5a2f':'#aaa'};font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">🏷</button>
         ` : ''}
         ${!u.isMainAdmin ? `<button onclick="umDeleteUser('${u.id}','${lgJsStr(u.name)}')"
           style="padding:4px 10px;background:rgba(192,57,43,0.08);border:1px solid rgba(192,57,43,0.2);color:#c0392b;font-family:Heebo,sans-serif;font-size:12px;cursor:pointer;border-radius:4px;">מחק</button>` : ''}
@@ -5924,6 +5927,19 @@ async function umToggleDelivery(userId, clientName, currentVal){
 }
 
 // שוטף 30 — אותו דפוס בדיוק כמו umToggleDelivery.
+//  מדבקות ללקוח אחרי חיסום (בן, 17/11): לקוח מסומן מקבל כפתור "🏷 מדבקות ללקוח" בלשונית החיסום
+async function umToggleLabels(userId, clientName, currentVal){
+  const newVal = !currentVal;
+  if(!confirm(newVal
+    ? `לסמן ש${clientName} רוצה מדבקה על כל זכוכית שחוזרת מחיסום?\n\nבלשונית החיסום יופיע כפתור "🏷 מדבקות ללקוח" — מידה, שם סקיצה וברקוד.`
+    : `לבטל את המדבקות ל${clientName}?`)) return;
+  try {
+    await firebase.database().ref('users/' + userId).update({ wantsLabels: newVal, updatedAt: Date.now() });
+    showToast(newVal ? `✓ ${clientName} — מדבקות על כל זכוכית אחרי חיסום` : `✓ ${clientName} — בלי מדבקות`);
+    _loadUsers();
+  } catch(e){ showToast('שגיאה: ' + e.message); }
+}
+
 async function umToggleMonthly(userId, clientName, currentVal){
   const newVal = !currentVal;
   const label  = newVal ? 'שוטף 30' : 'חיוב רגיל';

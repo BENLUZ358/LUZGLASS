@@ -62,6 +62,18 @@ const call = (req, verify) => G.handleGlass(Object.assign({ headers: { host: 'lu
   const t = await call({ method: 'GET', query: { c: '1301-1-' + G.lgGlassSig('o3', 0) } });
   check('I3 text order: no images, the glass list instead', [t.body.images, t.body.items], [0, [{ w: 500, h: 600, name: 'מראה' }]]);
 
+  /* ── חזרה אחרי כניסה: רק דף פנימי ── */
+  {
+    const fs = require('fs');
+    const L = fs.readFileSync(path.join(__dirname, '..', 'login.html'), 'utf8');
+    const body = L.match(/function _lgNext\(\)\{[\s\S]*?\n\}/)[0];
+    const run = q => new Function('location', 'URLSearchParams', body + '\nreturn _lgNext();')({ search: q }, URLSearchParams);
+    check('N1 next: internal page with query kept', run('?next=' + encodeURIComponent('g.html?c=1300-2-ABCDEFGH&go=1')), 'g.html?c=1300-2-ABCDEFGH&go=1');
+    check('N2 next: outside address / protocol / login loop refused',
+      [run('?next=' + encodeURIComponent('https://evil.com/x.html')), run('?next=' + encodeURIComponent('//evil.com/a.html')),
+       run('?next=javascript:alert(1)'), run('?next=login.html'), run('')], ['', '', '', '', '']);
+  }
+
   console.log(fail ? `\n${fail} FAILED` : '\nall passed');
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

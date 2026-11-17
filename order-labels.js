@@ -40,6 +40,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
     busy = true;
     try {
       try { await document.fonts.load('700 64px Heebo', 'אבג 0123'); } catch (e) {}
+      if (typeof lgLabelsSign === 'function') await lgLabelsSign(labels);   // ברקוד לכל זכוכית (17/11)
       const plain = labels.map(l => ({ title: l.title, dims: l.dims, sketchName: l.sketchName, glass: l.glass || '', orderNum: l.orderNum, shape: l.shape, job: l.job || '', withShape: !!l.withShape, broken: !!l.broken, ...(l.qr ? { qr: l.qr } : {}) }));
       const bitmaps = labels.map(l => lgLabelRender(l).bitmap);   // labels — עם הצורה (geo), שלא נשמרת בתור
       const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'labels', printer: 'labels',

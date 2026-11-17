@@ -173,7 +173,10 @@ const tick = () => new Promise(r => setTimeout(r, 30));
     pieces: { 1: { client: 'נאור', name: 'דני', w: 800, h: 2150, shape: '500' }, 2: { client: 'אגן ברזל', name: 'PHR#26083', w: 800, h: 2150, shape: '' } } };
   d.o1.items[0] = Object.assign(it(502, 1902), { optyShape: '274328', optyJob: 'M00291', optyCut: { at: '2026-11-16', job: 'M00291' } });
   const posts = [];
-  w._lgAuthPost = async (url, body) => { posts.push([url, body]); return { ok: true, json: async () => ({ ok: true, id: 'j' + posts.length, job: { state: 'printed' } }) }; };
+  w._lgAuthPost = async (url, body) => {
+    //  ברקוד לכל זכוכית (17/11): החתימה לפני ההדפסה — לא עבודת הדפסה
+    if (url === '/api/glass') return { ok: true, json: async () => ({ ok: true, urls: (body.items || []).map(x => 'HTTPS://LUZGLASS.VERCEL.APP/G/1-' + (x.idx + 1) + '-AAAAAAAA') }) };
+    posts.push([url, body]); return { ok: true, json: async () => ({ ok: true, id: 'j' + posts.length, job: { state: 'printed' } }) }; };
   w.lgLabelRender = () => ({ bitmap: 'B' });
   doc.querySelector('[data-tab="jobs"]').click();
   for (let i = 0; i < 30 && doc.querySelectorAll('[data-job]').length < 2; i++) await tick();

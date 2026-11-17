@@ -17,7 +17,7 @@ const bodyOf = name => {
 let renders = 0;
 const T = { open: { 'r1_נאור': true }, color: '#8e44ad', render: () => { renders++; } };
 const ctx = vm.createContext({
-  LG_TRACK: { triplex: {}, chisum: T }, _tr: () => T, _lblGroups: {},
+  LG_TRACK: { triplex: {}, chisum: T }, _tr: () => T, _lblGroups: {}, _labelPhones: new Set(),
   _markedIdxSet: () => new Set(), _pendingIdxsOf: o => o.items.map((_, i) => i),
   lgEsc: s => String(s == null ? '' : s), lgJsStr: s => String(s), lgDimsText: (w, h) => w + '×' + h,
   lgHasSketch: () => true, wdLabelBtn: () => '<i>🏷</i>', wdPendingStrip: () => '<div class="pend">עוד לא חוברו</div>',

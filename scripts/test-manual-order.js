@@ -267,7 +267,7 @@ const run = (db, body) => handleAdmin({ action: 'manual-order-set', ...body }, {
     const fs = require('fs'), path = require('path');
     const v = f => (fs.readFileSync(path.join(__dirname, '..', f), 'utf8').match(/firebase-db\.js\?v=(\w+)/) || [])[1];
     assert.equal(v('invoices.html'), v('workday.html')); assert.equal(v('check-station.html'), v('admin.html'));
-    assert.equal(v('workday.html'), '20261113');
+    assert.equal(v('workday.html'), '20261117');   // 17/11: avWrap בנרמול + חזרה אחרי כניסה
   });
   const TOKEN = 't'.repeat(40);
   const PRINT = role => 'חשבונית מס 67400  תאריך 13/11/2026  מפתח 99  מזהה 348049  מזדמן  '
