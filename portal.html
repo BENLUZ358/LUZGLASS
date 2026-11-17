@@ -305,6 +305,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <script src="firebase-db.js?v=20260601"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי הכרטיסים כאן נבנים מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
+  <script src="order-eta.js?v=20261117a"></script>
 </head>
 <body>
 <div id="lgLoading" style="position:fixed;inset:0;background:#f7f4ef;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:Heebo,sans-serif;direction:rtl;">
@@ -856,6 +857,8 @@ function orderCard(o, extra){
   // מצב — והסקיצה נמצאת מאחורי "פרטים", כלומר נטענת רק כשמבקשים אותה.
   const oid = o.id;
   const arrival = lgPortalArrival(o);
+  //  צפי מוכן (בן, 17/11) — רק כשלכל הזכוכיות יש תאריך חיתוך אמיתי (order-eta.js)
+  const eta = !arrival && typeof lgPortalEta === 'function' ? lgPortalEta(o) : '';
 
   return '<div class="order-card">'+
     '<div class="oc-hdr" data-id="'+o.id+'" onclick="toggleExp(this.dataset.id)">'+
@@ -869,7 +872,7 @@ function orderCard(o, extra){
       '<button type="button" class="oc-toggle" data-id="'+o.id+'" aria-expanded="'+(isExp?'true':'false')+'" onclick="toggleExp(this.dataset.id)">'+
         (isExp?"▲ סגור":"▾ פרטים")+(lgHasSketch(o)&&!isExp?' <span class="oc-has-sk">🖼</span>':'')+
       '</button><span class="oc-date">'+lgEsc(o.date)+"</span>"+
-    "</div>"+(arrival?'<div class="oc-arrival">&#128666; '+lgEsc(arrival)+'</div>':'')+exp+(extra||'')+"</div>";
+    "</div>"+(arrival?'<div class="oc-arrival">&#128666; '+lgEsc(arrival)+'</div>':'')+(eta?'<div class="oc-arrival" style="color:#1e8449">&#9203; '+lgEsc(eta)+'</div>':'')+exp+(extra||'')+"</div>";
 }
 
 // שני הטאבים מציגים כרטיסים, ולכן פתיחת "פרטים" חייבת לצייר את שניהם —

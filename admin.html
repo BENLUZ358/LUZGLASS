@@ -429,6 +429,7 @@ label.msec-t{display:block;}
   <script src="lg-qr.js?v=20261117"></script><script src="avivi-wrap.js?v=20261117c"></script><script src="print-labels.js?v=20261117d"></script>
   <script src="opty-shape.js?v=20261116d"></script>
   <script src="opty-layout.js?v=20261117k"></script>
+  <script src="order-eta.js?v=20261117a"></script>
   <script src="order-labels.js?v=20261117"></script>
 </head>
 <body>
@@ -1034,6 +1035,7 @@ function openMod(id) {
       <div class="mf"><label>תאריך</label><div class="v">${lgEsc(o.date || '—')}</div></div>
       <div class="mf"><label>פריטים</label><div class="v">${items.length}${o.area ? ' · ' + lgEsc(String(o.area)) + ' מ״ר' : ''}</div></div>
     </div>
+    <div class="msec" id="mEta">${_modEtaHtml(o)}</div>
     <div class="msec">
       <div class="msec-t" style="display:flex;align-items:center;gap:8px">פריטים
         ${_modCanEditItems(o) ? `<button type="button" id="modEditItemsBtn" class="mit-edit-btn" onclick="modEditItems()"><span data-icon="pencil"></span> ערוך פריטים</button>` : ''}
@@ -1052,6 +1054,7 @@ function openMod(id) {
   `;
 
   _hydrateSketchImgs(document.getElementById('mbody'));
+  _modEtaNotes(o);
   // צרופות — דפדוף מתחת לסקיצה (order-attachments.js)
   const _mImg = document.querySelector('#mbody img.mimg');
   if(_mImg && typeof lgAttFlipper==='function') lgAttFlipper(_mImg.parentElement, o, { img: _mImg });
@@ -1123,6 +1126,41 @@ function openMod(id) {
 
 // הפריטים בחלון — פורמט אחד לכולם. קודם 3 הראשונים היו שורות פשוטות
 // ו"ראה עוד" צייר את כולם מחדש בפורמט אחר — זה מה שנראה כ"משתנה".
+// ── צפי "מוכן" (בן, 17/11) — השלב בממשק + החיתוך באופטי-ווי (order-eta.js) ──
+//  notes = ההערה של כל זכוכית מחוברת באופטי-ווי ("חיסום/חור"...) — נטענת אחרי הפתיחה; סתירה מול ההזמנה → ⚠
+function _modEtaHtml(o, notes){
+  if(typeof lgOrderEta !== 'function') return '';
+  const e = lgOrderEta(o, lgEtaToday(), notes);
+  const col = e.final ? '#1e8449' : e.late ? 'var(--red)' : 'inherit';
+  const head = '<div class="msec-t">צפי</div><div style="font-weight:800;font-size:14px;color:' + col + '">'
+    + (e.late ? '⚠ ' : '') + lgEsc(e.label) + '</div>';
+  if(e.final) return head;
+  const its = o.items || [];
+  return head + e.items.map((x, i) => {
+    const it = its[i] || {};
+    return '<div style="font-size:12px;padding:3px 0;line-height:1.5">• <span dir="ltr">' + lgDimsText(it.w, it.h) + '</span> '
+      + lgEsc(it.name || '') + ' · <b>' + lgEsc(x.label) + '</b>'
+      + (x.warn ? ' <span style="color:var(--red);font-weight:700">⚠ ' + lgEsc(x.warn) + '</span>' : '') + '</div>';
+  }).join('');
+}
+async function _modEtaNotes(o){
+  const its = o.items || [];
+  const jobs = [...new Set(its.map(it => it && it.optyJob).filter(Boolean))];
+  if(!jobs.length || typeof _lgDb === 'undefined') return;
+  const notes = [];
+  try {
+    const recs = {};
+    await Promise.all(jobs.map(async j => { recs[j] = (await _lgDb.ref('meta/optyJobs/' + j + '/pieces').once('value')).val() || {}; }));
+    its.forEach((it, i) => {
+      if(!it || !it.optyJob || !it.optyShape) return;
+      const p = Object.values(recs[it.optyJob] || {}).find(x => x && String(x.shape || '') === String(it.optyShape));
+      if(p && p.note) notes[i] = p.note;
+    });
+  } catch(e){ return; }
+  const el = document.getElementById('mEta');
+  if(el && String(eid) === String(o.id) && notes.length) el.innerHTML = _modEtaHtml(o, notes);
+}
+
 function _modItemsHtml(items){
   if(!items || !items.length) return '<div class="mit-empty">אין פריטים</div>';
   return items.map((i, idx) => `
