@@ -171,6 +171,8 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   doc.querySelector('[data-tab="jobs"]').click();
   for (let i = 0; i < 30 && doc.querySelectorAll('[data-job]').length < 2; i++) await tick();
   check('jobs tab lists the saved optimisations, newest day first', [...doc.querySelectorAll('[data-job]')].map(b => b.dataset.job), ['M00291', 'M00337']);
+  check('work estimate per day: sheets, glasses, verdict', [...doc.querySelectorAll('.jday')].map(h => h.dataset.day + ':' + /לוחות/.test(h.textContent) + ':' + /יום (קל|רגיל|עמוס)/.test(h.textContent)), ['2026-11-16:true:true', '2026-11-13:true:true']);
+  check('import counted holes per sheet (from the .dat)', typeof db._data.meta.optyJobs.M00291.sheets[0].feat, 'number');
   const mat = doc.getElementById('jMat');
   check('glass filter lists the glass types', [...mat.options].map(o => o.value).filter(Boolean).sort(), ['08S', '10S']);
   mat.value = '10S'; mat.dispatchEvent(new w.Event('change'));

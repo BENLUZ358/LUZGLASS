@@ -269,6 +269,86 @@ function lgOptyPieceSearch(jobs, q, f) {
   return out.sort((a, b) => (b.day || '').localeCompare(a.day || ''));
 }
 
+//  ─── הערכת עבודה (בן, 17/11: "כמה עבודה יש היום והאם זה הרבה") ───
+//  לוח → { pieces, m2, features }. features = חורים/חריצים/חיתוכי צורה מהשרטוט (lgOptyFeatures); בלי שרטוט = 0.
+const LG_OPTY_W0 = { sheet: 1, piece: 0.15, m2: 0.02, feature: 0.3 };   // התחלה בלבד — נלמד מזמני הסימון
+function _lgFeat() {
+  if (typeof lgOptyFeatures === 'function') return lgOptyFeatures;
+  try { return require('./opty-shape.js').lgOptyFeatures; } catch (e) { return () => []; }
+}
+function lgOptySheetStats(sheet, geos) {
+  const feat = _lgFeat(), gs = geos || {};
+  let m2 = 0, features = 0;
+  (sheet.pieces || []).forEach(p => {
+    m2 += (p.w * p.h) / 1e6;
+    const g = p.shape ? gs[p.shape] : null;
+    if (g) features += feat(g).length;
+  });
+  if (sheet.feat != null && !Object.keys(gs).length) features = Number(sheet.feat) || 0;   // נספר בקליטה (קבצי ה-.dat)
+  return { pieces: (sheet.pieces || []).length, m2: Math.round(m2 * 100) / 100, features };
+}
+function lgOptyUnits(st, model) {
+  const w = (model && model.weights) || LG_OPTY_W0, s = st || {};
+  return Math.round(((w.sheet || 0) * (s.sheets == null ? 1 : s.sheets) + (w.piece || 0) * (s.pieces || 0)
+    + (w.m2 || 0) * (s.m2 || 0) + (w.feature || 0) * (s.features || 0)) * 100) / 100;
+}
+//  יום עבודה → סכום הלוחות הפיזיים של כל האופטימיזציות שלו
+function lgOptyDayStats(jobs, day, geos) {
+  const out = { sheets: 0, pieces: 0, m2: 0, features: 0, jobs: 0 };
+  Object.values(jobs || {}).forEach(r => {
+    if (!r || r.day !== day || !r.sheets) return;
+    out.jobs++;
+    r.sheets.forEach(sh => {
+      const n = sh.count || 1, st = lgOptySheetStats(sh, geos);
+      out.sheets += n; out.pieces += n * st.pieces; out.m2 += n * st.m2; out.features += n * st.features;
+    });
+  });
+  out.m2 = Math.round(out.m2 * 100) / 100;
+  return out;
+}
+//  מול החציון של הימים הקודמים: < 0.8 קל, עד 1.2 רגיל, מעל — עמוס
+function lgOptyDayVerdict(units, history) {
+  const h = (history || []).filter(x => x > 0).slice(-20).sort((a, b) => a - b);
+  if (!h.length || !(units > 0)) return { label: 'יום רגיל', ratio: null };
+  const med = h.length % 2 ? h[(h.length - 1) / 2] : (h[h.length / 2 - 1] + h[h.length / 2]) / 2;
+  const ratio = Math.round((units / med) * 10) / 10;
+  return { label: ratio < 0.8 ? 'יום קל' : ratio <= 1.2 ? 'יום רגיל' : 'יום עמוס', ratio };
+}
+//  למידה מזמני הסימון: gaps = [{ stats, minutes }] (הזמן בין סימון לוח לסימון הקודם).
+//  פער מתחת לחצי דקה או מעל 45 דקות — לא נחשב (סימונים ראשונים לא מדויקים, הפסקות). פחות מ-30 → null.
+//  ריבועים פחותים בלי משקל שלילי (מוציאים משתנה שלילי ופותרים שוב).
+function lgOptyFit(gaps) {
+  const K = ['sheet', 'piece', 'm2', 'feature'];
+  const rows = (gaps || []).filter(g => g && g.stats && g.minutes >= 0.5 && g.minutes <= 45)
+    .map(g => ({ x: [1, g.stats.pieces || 0, g.stats.m2 || 0, g.stats.features || 0], y: g.minutes }));
+  if (rows.length < 30) return null;
+  let on = [0, 1, 2, 3];
+  for (let it = 0; it < 4; it++) {
+    const n = on.length, A = on.map(() => new Array(n + 1).fill(0));
+    rows.forEach(r => on.forEach((i, a) => { on.forEach((j, b) => { A[a][b] += r.x[i] * r.x[j]; }); A[a][n] += r.x[i] * r.y; }));
+    for (let c = 0; c < n; c++) {            // גאוס
+      let piv = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[piv][c])) piv = r;
+      [A[c], A[piv]] = [A[piv], A[c]];
+      if (Math.abs(A[c][c]) < 1e-9) { A[c][c] = 1e-9; }
+      for (let r = 0; r < n; r++) if (r !== c) { const f = A[r][c] / A[c][c]; for (let k = c; k <= n; k++) A[r][k] -= f * A[c][k]; }
+    }
+    const sol = on.map((_, a) => A[a][n] / A[a][a]);
+    const neg = sol.reduce((m, v, a) => (v < 0 && (m < 0 || v < sol[m]) ? a : m), -1);
+    if (neg < 0) {
+      const weights = { sheet: 0, piece: 0, m2: 0, feature: 0 };
+      on.forEach((i, a) => { weights[K[i]] = Math.round(sol[a] * 1000) / 1000; });
+      return { weights, n: rows.length };
+    }
+    on = on.filter((_, a) => a !== neg);
+    if (!on.length) return null;
+  }
+  return null;
+}
+//  שעות — רק כשיש מודל שנלמד (אז יחידה = דקה)
+function lgOptyHours(units, model) {
+  return model && model.n ? Math.round((units / 60) * 10) / 10 : null;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyMatHe, lgOptyMatLabel };
+  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyMatHe, lgOptyMatLabel, lgOptySheetStats, lgOptyUnits, lgOptyDayStats, lgOptyDayVerdict, lgOptyFit, lgOptyHours };
 }

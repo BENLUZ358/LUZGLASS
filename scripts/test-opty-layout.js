@@ -104,6 +104,30 @@ check('names: all 54 OptyWay glass types get Hebrew words', (() => {
   return rows.filter(r => /[a-z]{3,}/i.test(L.lgOptyMatHe(r.CODMAT, r.DESCMAT))).map(r => r.CODMAT);
 })(), []);
 
+// ── Task 9: work estimate ──
+{
+  const geos = { 274378: geoOf('274378') };
+  const st0 = L.lgOptySheetStats(sh[0], geos);
+  check('sheet stats: pieces, m² (placed sizes), features from the shape', [st0.pieces, st0.m2, st0.features], [4, 3.08, S.lgOptyFeatures(geos[274378]).length]);
+  check('sheet stats: no drawings → 0 features', L.lgOptySheetStats(sh[0], {}).features, 0);
+  check('sheet stats: features counted at import are used', L.lgOptySheetStats(Object.assign({}, sh[0], { feat: 7 }), {}).features, 7);
+  check('units: default weights', L.lgOptyUnits({ pieces: 10, m2: 50, features: 4 }, null), 1 + 1.5 + 1 + 1.2);
+  check('units: model weights', L.lgOptyUnits({ pieces: 2, m2: 1, features: 1 }, { weights: { sheet: 2, piece: 0.5, m2: 0.1, feature: 1 } }), 2 + 1 + 0.1 + 1);
+  const hist = [10, 10, 10, 10, 10];
+  check('verdict: busy / normal / light', [L.lgOptyDayVerdict(13, hist).label, L.lgOptyDayVerdict(10, hist).label, L.lgOptyDayVerdict(7, hist).label], ['יום עמוס', 'יום רגיל', 'יום קל']);
+  check('verdict: ratio vs the median', L.lgOptyDayVerdict(13, [1, 10, 10, 30]).ratio, 1.3);
+  check('verdict: no history → normal, no ratio', L.lgOptyDayVerdict(5, []), { label: 'יום רגיל', ratio: null });
+  //  למידה: 40 פערים שנוצרו ממשקלות ידועים → המשקלות חוזרים (±10%)
+  const W = { sheet: 2, piece: 0.5, m2: 0.1, feature: 1 }, gaps = [];
+  for (let i = 0; i < 40; i++) { const st = { pieces: 1 + (i * 7) % 15, m2: 1 + (i * 3) % 8, features: (i * 5) % 11 }; gaps.push({ stats: st, minutes: L.lgOptyUnits(st, { weights: W }) }); }
+  const m = L.lgOptyFit(gaps.concat([{ stats: { pieces: 1, m2: 1, features: 0 }, minutes: 90 }, { stats: { pieces: 1, m2: 1, features: 0 }, minutes: 0.2 }]));
+  check('fit: recovers the weights; long and too-short gaps ignored', m && Object.keys(W).every(k => Math.abs(m.weights[k] - W[k]) <= W[k] * 0.1) && m.n === 40, true);
+  check('fit: under 30 gaps → no model', L.lgOptyFit(gaps.slice(0, 20)), null);
+  check('hours: only with a learned model', [L.lgOptyHours(120, m), L.lgOptyHours(120, null)], [2, null]);
+  const day = L.lgOptyDayStats({ A: { day: '2026-11-17', sheets: [Object.assign({}, sh[0], { count: 2 })] }, B: { day: '2026-11-16', sheets: sh } }, '2026-11-17', {});
+  check('day stats: physical sheets of that day only', [day.sheets, day.pieces, day.m2], [2, 8, 6.16]);
+}
+
 module.exports = { check, M290, il, geoOf, L, done: () => failed };
 if (require.main === module) {
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');

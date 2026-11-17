@@ -108,6 +108,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .jv table{width:100%;border-collapse:collapse;font-size:var(--fs-sm);}
 .jv td,.jv th{border-bottom:1px solid var(--border);padding:6px 4px;text-align:start;}
 .jv tr.sel{background:rgba(201,162,39,.15);}
+.jday{font-size:var(--fs-sm);font-weight:var(--fw-bold);margin:var(--space-3) 0 var(--space-2);}
 .cutok{color:#1e7d32;font-weight:var(--fw-bold);}
 .cutwait{color:var(--muted);}
 .ord{font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-1);}
@@ -443,6 +444,7 @@ async function saveJobs() {
     const inp = document.querySelector(`[data-jobday="${f.job}"]`);
     const day = (inp && /^\d{4}-\d{2}-\d{2}$/.test(inp.value)) ? inp.value : f.day;
     const rec = lgOptyJobRecord(f.job, f.text, day, ROWS, now);
+    rec.sheets.forEach(sh => { sh.feat = lgOptySheetStats(sh, DAT).features; });   // חורים/חריצים — להערכת העבודה
     recs[f.job] = rec;
     ['job', 'day', 'mat', 'matName', 'importedAt', 'sheets', 'pieces'].forEach(k => { up['meta/optyJobs/' + f.job + '/' + k] = rec[k]; });
     rec.sheets.forEach(s => s.pieces.forEach(p => { if (p.shape && DAT[p.shape]) up['meta/optyGeo/' + p.shape] = DAT[p.shape]; }));
@@ -631,11 +633,11 @@ $('linkOut').addEventListener('click', async e => {
 let JOBS = {}, JV = null;              // JV: { job, i (אינדקס לוח פיזי), sel (סדר זכוכית מסומנת) }
 const dmy = iso => String(iso || '').split('-').reverse().slice(0, 2).join('/');
 const matLbl = rec => rec ? (typeof lgOptyMatLabel === 'function' ? lgOptyMatLabel(rec.mat, MATS) : (rec.mat || '')) : '';
-let MATS = {};
+let MATS = {}, JOBS_MODEL = null;   // JOBS_MODEL: meta/optyModel — המשקלות שנלמדו מזמני הסימון
 async function jobsLoad() {
   try {
-    const [j, m] = await Promise.all([_lgDb.ref('meta/optyJobs').once('value'), _lgDb.ref('meta/optyMats').once('value')]);
-    JOBS = j.val() || {}; MATS = m.val() || {};
+    const [j, m, md] = await Promise.all([_lgDb.ref('meta/optyJobs').once('value'), _lgDb.ref('meta/optyMats').once('value'), _lgDb.ref('meta/optyModel').once('value')]);
+    JOBS = j.val() || {}; MATS = m.val() || {}; JOBS_MODEL = md.val() || null;
     await loadOrders();
     if (!$('jFrom').value) $('jFrom').value = lgOptyTodayIso(Date.now() - 2 * 86400000);
     const mats = [...new Set(Object.values(JOBS).map(r => r && r.mat).filter(Boolean))].sort();
@@ -661,11 +663,24 @@ function jobsRender() {
       ${h.shape && GEOS[h.shape] ? lgOptyShapeSvg(GEOS[h.shape], { px: 40 }) : ''}
       <span class="who"><b>${h.shape ? 'שייפ ' + esc(h.shape) : 'בלי שייפ'}</b> · ${esc(h.client)} · ${esc(h.name)}<br><small>${esc(Math.round(h.w) + '×' + Math.round(h.h))} · ${esc(h.job)} · לוח ${h.sheetNo} · ${esc(dmy(h.day))} · ${esc(matLbl(JOBS[h.job]))}</small></span></button>`).join('') || '<p class="note">לא נמצא</p>'}</section>` : '';
   if (q) loadGeos(hits.map(h => h.shape).filter(Boolean)).then(n => { if (n) jobsRender(); });
+  //  הערכת עבודה לכל יום (בן, 17/11): מול החציון של 20 הימים הקודמים
+  const MODEL = JOBS_MODEL;
+  const allDays = [...new Set(Object.values(JOBS).map(r => r && r.day).filter(Boolean))].sort();
+  const unitsOf = d => lgOptyUnits(lgOptyDayStats(JOBS, d, {}), MODEL);
+  const dayHead = d => {
+    const st = lgOptyDayStats(JOBS, d, {}), u = lgOptyUnits(st, MODEL);
+    const v = lgOptyDayVerdict(u, allDays.filter(x => x < d).slice(-20).map(unitsOf)), hrs = lgOptyHours(u, MODEL);
+    return `<h2 class="jday" data-day="${esc(d)}">יום עבודה ${esc(dmy(d))} · ${st.sheets} לוחות · ${st.pieces} זכוכיות · ${st.m2} מ"ר · ${st.features} חורים וחיתוכים
+      — <b>${esc(v.label)}${v.ratio ? ' (×' + v.ratio + ')' : ''}</b>${hrs ? ' · בערך ' + hrs + ' שעות חיתוך' : ''}</h2>`;
+  };
+  let lastDay = null;
   $('jList').innerHTML = list.length ? list.map(r => {
+    const head = r.day !== lastDay ? dayHead(r.day) : ''; lastDay = r.day;
     const seq = lgOptySheetSeq(r.sheets), pcs = seq.reduce((n, x) => n + x.sheet.pieces.length, 0);
     const lk = linkedOf(r.job), lkN = Object.keys(lk).length, cutN = Object.values(lk).filter(x => { const c = lgOptyCutState(x.it.optyCut, lgOptyTodayIso()); return c && c.cut; }).length;
-    return `<button type="button" class="jcard" data-job="${esc(r.job)}"><b>${esc(r.job)}</b><span class="mat">${esc(matLbl(r))}</span><span>${esc(dmy(r.day))}</span>
+    const card = `<button type="button" class="jcard" data-job="${esc(r.job)}"><b>${esc(r.job)}</b><span class="mat">${esc(matLbl(r))}</span><span>${esc(dmy(r.day))}</span>
       <span class="meta">${seq.length} לוחות · ${pcs} זכוכיות · ${lkN} מחוברות להזמנות${lkN ? ' · ' + cutN + ' נחתכו' : ''}${r.marks ? ' · ' + Object.keys(r.marks).length + '/' + seq.length + ' לוחות סומנו' : ''}</span></button>`;
+    return head + card;
   }).join('') : '<p class="note">אין אופטימיזציות בטווח הזה. קולטים אותן בלשונית "קליטה" (קבצי M00…R01 מהדיסק-און-קי).</p>';
 }
 //  ציורי צורות מ-meta/optyGeo (פעם אחת לכל צורה); מחזיר כמה נטענו עכשיו
