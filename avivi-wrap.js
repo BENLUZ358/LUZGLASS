@@ -35,7 +35,20 @@ function lgAvIsReady(o) {
   return n > 0 && lgAvWrappedIdxs(o).length === n;
 }
 
-const LG_AV_PAST = ['delivery', 'done', 'collected'];
+//  לסינון (בן, 17/11): 'none' = אף זכוכית לא נעטפה, 'partial', 'ready'.
+function lgAvState(o) {
+  if (lgAvIsReady(o)) return 'ready';
+  return lgAvWrappedIdxs(o).length ? 'partial' : 'none';
+}
+
+//  סדר ברשימה: חלקיות קודם (באמצע עבודה), אחר כך לא התחילו, מוכנות בסוף.
+const LG_AV_ORDER = { partial: 0, none: 1, ready: 2 };
+function lgAvSort(list) {
+  return (list || []).slice().sort((a, b) => LG_AV_ORDER[lgAvState(a)] - LG_AV_ORDER[lgAvState(b)]
+    || String(a.sketchName || '').localeCompare(String(b.sketchName || '')));
+}
+
+const LG_AV_PAST =['delivery', 'done', 'collected'];
 function lgAvSplit(orders) {
   const out = { notReady: [], ready: [], inWork: [] };
   (orders || []).forEach(o => {
@@ -78,5 +91,5 @@ function lgAvMatch(o, q) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_AV_CARD, lgAvIsAvivi, lgAvWrappedIdxs, lgAvIsReady, lgAvSplit, lgAvMatch };
+  module.exports = { LG_AV_CARD, lgAvIsAvivi, lgAvWrappedIdxs, lgAvIsReady, lgAvState, lgAvSort, lgAvSplit, lgAvMatch };
 }

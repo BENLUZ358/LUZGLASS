@@ -37,6 +37,12 @@ check('split notReady', s.notReady.map(o => o.id), ['1']);
 check('split ready', s.ready.map(o => o.id), ['2']);
 check('split inWork', s.inWork.map(o => o.id), ['3', '4']);
 
+// מצב וסדר
+check('state none', A.lgAvState(av()), 'none');
+check('state partial', A.lgAvState(av({ avWrap: { 0: 1 } })), 'partial');
+check('state ready', A.lgAvState(av({ avWrap: { 0: 1, 1: 1 } })), 'ready');
+check('sort: partial, none, ready', A.lgAvSort([av({ id: 'r', avWrap: { 0: 1, 1: 1 } }), av({ id: 'n' }), av({ id: 'p', avWrap: { 1: 1 } })]).map(o => o.id), ['p', 'n', 'r']);
+
 // חיפוש
 const o = av();
 check('empty query → hit, no items marked', A.lgAvMatch(o, ''), { hit: true, idxs: [] });
