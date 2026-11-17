@@ -58,5 +58,18 @@ check('dims not here', A.lgAvMatch(o, '600*900'), { hit: false, idxs: [] });
 check('single side 1200', A.lgAvMatch(o, '1200'), { hit: true, idxs: [1] });
 check('single number 16 (too short for PO) → no', A.lgAvMatch(o, '16'), { hit: false, idxs: [] });
 
+// הסימון חייב לעבור את הנרמול של ההזמנות (באג 17/11: נשמר אבל לא הוצג — בן באייפון)
+{
+  const vm = require('vm'), fs = require('fs'), path = require('path');
+  //  firebase-db.js כולו, עם firebase מדומה — כדי לבדוק את הנרמול האמיתי ולא עותק שלו
+  const fake = () => new Proxy(function () {}, { get: (t, k) => (k === 'then' ? undefined : fake()), apply: () => fake() });
+  const ctx = { console, firebase: fake(), window: {}, location: { host: 'x' }, document: fake(), sessionStorage: fake(), localStorage: fake() };
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'firebase-db.js'), 'utf8') + '\nthis.N = lgNormalizeOrder;', ctx);
+  const n = ctx.N({ id: 'x', stage: 'delivery', items: [{ w: 1, h: 1 }, { w: 2, h: 2 }], avWrap: [111, 222] });
+  check('normalized order keeps avWrap (array form from Firebase)', A.lgAvWrappedIdxs(n), [0, 1]);
+  check('normalized order with no marks → none', A.lgAvWrappedIdxs(ctx.N({ id: 'y', stage: 'delivery', items: [{ w: 1, h: 1 }] })), []);
+}
+
 console.log(fail ? `\n${fail} FAILED` : '\nall passed');
 process.exit(fail ? 1 : 0);
