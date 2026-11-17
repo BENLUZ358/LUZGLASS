@@ -280,6 +280,44 @@ function lgOptyPieceCut(rec, sheetNo, todayIso) {
   return { cut: false, label: day ? 'מתוכנן ל-' + day.split('-').reverse().slice(0, 2).join('/') : 'לא ידוע' };
 }
 
+//  ─── חיסום (בן, 17/11): "נחתך ביום א', יום ב' בבוקר יוצא לחיסום, יום ג' בבוקר חוזר" ───
+//  איזו זכוכית הולכת לחיסום — לפי סוג הזכוכית: מה שבן קבע בהגדרות (meta/optyMats/<קוד>.chisum) גובר;
+//  אחרת: מראה / לקובל / סבתא / טריפלקס (+) — לא; 6 מ"מ ומעלה — כן (בהזמנות המחוברות: 112/112 של 8 מ"מ
+//  ו-6 חלבי היו חיסום, מראות אף פעם).
+function lgOptyMatChisum(code, en, mats) {
+  const c = String(code || ''), m = (mats || {})[c] || {};
+  if (m.chisum === true || m.chisum === false) return m.chisum;
+  const t = (c + ' ' + String(en || m.en || '')).toLowerCase();
+  if (/mir|mirror|lacobel|\bla\b|savta|sav\b/.test(t) || c.includes('+')) return false;
+  const th = Number((c.match(/^(\d{1,2})/) || [])[1]);
+  return th >= 6;
+}
+//  n ימי עבודה קדימה (א'–ה')
+function lgOptyWorkAdd(iso, n) {
+  let d = iso;
+  for (let k = 0; k < n; k++) {
+    d = _lgIsoAdd(d, 1);
+    for (let i = 0; i < 3; i++) { const wd = new Date(d + 'T12:00:00Z').getUTCDay(); if (wd !== 5 && wd !== 6) break; d = _lgIsoAdd(d, 1); }
+  }
+  return d;
+}
+const LG_HE_DAYS = ['א\'', 'ב\'', 'ג\'', 'ד\'', 'ה\'', 'ו\'', 'ש\''];
+function _lgWhen(iso, todayIso) {
+  if (iso === _lgIsoAdd(todayIso, 1)) return 'מחר';
+  return 'ביום ' + LG_HE_DAYS[new Date(iso + 'T12:00:00Z').getUTCDay()] + ' ' + iso.split('-').reverse().slice(0, 2).join('/');
+}
+//  מצב "מוכן" לזכוכית בחיפוש: { cut, ready, label }. בלי חיסום — מוכן מרגע שנחתך.
+//  חיסום: יום החיתוך → "יוצא לחיסום <יום העבודה הבא>"; למחרת → "בחיסום · חוזר <יום אחריו> בבוקר"; משם — מוכן.
+function lgOptyPieceReady(rec, sheetNo, todayIso, chisum) {
+  const c = lgOptyPieceCut(rec, sheetNo, todayIso);
+  if (!c.cut) return Object.assign({ ready: false }, c, chisum ? { label: c.label + ' · חיסום' } : {});
+  if (!chisum) return { cut: true, ready: true, label: c.label + ' · מוכן' };
+  const day = (rec && rec.day) || todayIso, out = lgOptyWorkAdd(day, 1), back = lgOptyWorkAdd(day, 2);
+  if (todayIso < out) return { cut: true, ready: false, label: 'נחתך · יוצא לחיסום ' + _lgWhen(out, todayIso) };
+  if (todayIso < back) return { cut: true, ready: false, label: 'בחיסום · חוזר ' + _lgWhen(back, todayIso) + ' בבוקר' };
+  return { cut: true, ready: true, label: 'חזר מחיסום · מוכן' };
+}
+
 //  ─── הערכת עבודה (בן, 17/11: "כמה עבודה יש היום והאם זה הרבה") ───
 //  לוח → { pieces, m2, features }. features = חורים/חריצים/חיתוכי צורה מהשרטוט (lgOptyFeatures); בלי שרטוט = 0.
 const LG_OPTY_W0 = { sheet: 1, piece: 0.15, m2: 0.02, feature: 0.3 };   // התחלה בלבד — נלמד מזמני הסימון
@@ -361,5 +399,5 @@ function lgOptyHours(units, model) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyPieceCut, lgOptyMatHe, lgOptyMatLabel, lgOptySheetStats, lgOptyUnits, lgOptyDayStats, lgOptyDayVerdict, lgOptyFit, lgOptyHours };
+  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyPieceCut, lgOptyMatChisum, lgOptyWorkAdd, lgOptyPieceReady, lgOptyMatHe, lgOptyMatLabel, lgOptySheetStats, lgOptyUnits, lgOptyDayStats, lgOptyDayVerdict, lgOptyFit, lgOptyHours };
 }

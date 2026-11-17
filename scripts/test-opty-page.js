@@ -267,7 +267,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   for (let i = 0; i < 40 && !doc.querySelector('[data-ohit]'); i++) await tick();
   const ohits = () => [...doc.querySelectorAll('[data-ohit]')].map(x => x.dataset.ohit.split('|')[0]);
   check('search: optimisation glass from the last week, newest first', ohits(), ['M00402', 'M00404']);
-  check('search: cut state for a glass not linked to an order', [...doc.querySelectorAll('[data-ohit] .cst')].map(x => x.textContent.trim()), ['לחיתוך היום', 'נחתך']);
+  check('search: cut state for a glass not linked to an order', [...doc.querySelectorAll('[data-ohit] .cst')].map(x => x.textContent.trim()), ['לחיתוך היום · חיסום', 'חזר מחיסום · מוכן']);   // 08S = חיסום (בן, 17/11)
   doc.querySelector('[data-older]').click();
   for (let i = 0; i < 40 && ohits().length < 3; i++) await tick();
   check('"חפש עוד אחורה" adds older glass', ohits(), ['M00402', 'M00404', 'M00403']);

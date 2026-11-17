@@ -242,7 +242,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-paradox.js?v=20261116c"></script>
 <script src="opty-match.js?v=20261116e"></script>
 <script src="opty-shape.js?v=20261116d"></script>
-<script src="opty-layout.js?v=20261117b"></script>
+<script src="opty-layout.js?v=20261117k"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261117c"></script>
 <script src="print-labels.js?v=20261117c"></script>
@@ -508,7 +508,8 @@ async function loadMats() {
     $('matsOut').innerHTML = codes.length ? codes.map(c => `<div class="row"><b class="shape" dir="ltr">${esc(c)}</b>
       <span class="who"><small dir="ltr">${esc(MATS[c].en || '')}</small></span>
       <input data-mat="${esc(c)}" value="${esc(MATS[c].he || '')}" aria-label="השם בעברית של ${esc(c)}">
-      <button class="sm" type="button" data-matgo="${esc(c)}">שמור</button></div>`).join('')
+      <button class="sm" type="button" data-matgo="${esc(c)}">שמור</button>
+      <label class="note" style="white-space:nowrap"><input type="checkbox" data-match="${esc(c)}" ${lgOptyMatChisum(c, MATS[c].en, MATS) ? 'checked' : ''}> חיסום</label></div>`).join('')
       : '<p class="note">עוד אין — הרשימה נקלטת מהקובץ Magaz.DB בתיקיית DBLITE (בקליטה).</p>';
   } catch (e) { $('matsOut').innerHTML = '<p class="note">✗ לא נטען</p>'; }
 }
@@ -804,6 +805,13 @@ async function jobCut(k, on) {
 }
 ['jFrom', 'jTo', 'jMat'].forEach(id => $(id).addEventListener('change', jobsRender));
 $('jQ').addEventListener('input', jobsRender);
+//  "חיסום" לכל סוג זכוכית (בן, 17/11) — meta/optyMats/<קוד>/chisum; משנה את "מוכן" בחיפוש
+$('pane-set').addEventListener('change', async e => {
+  const b = e.target.closest('[data-match]'); if (!b) return;
+  const c = b.dataset.match, on = !!b.checked;
+  try { await _lgDb.ref('meta/optyMats/' + c + '/chisum').set(on); MATS[c] = Object.assign({}, MATS[c], { chisum: on }); st('✓ ' + c + (on ? ' · חיסום' : ' · בלי חיסום'), 'ok'); }
+  catch (err) { b.checked = !on; st('✗ לא נשמר: ' + (err.message || ''), 'bad'); }
+});
 $('pane-set').addEventListener('click', async e => {
   const b = e.target.closest('[data-matgo]'); if (!b) return;
   const c = b.dataset.matgo, inp = document.querySelector(`[data-mat="${CSS.escape(c)}"]`), he = (inp && inp.value || '').trim();
@@ -1035,6 +1043,15 @@ if (location.hash === '#today') showTab('today');
 //  חיפוש (בן, 17/11): קודם בזכוכיות של האופטימיזציות — שבוע אחורה, מיד, עם "נחתך" גם בלי חיבור להזמנה;
 //  "חפש עוד אחורה" מוסיף שבועיים (ומושך אופטימיזציות ישנות אם צריך). ההזמנות המחוברות — מתחת, כשנטענות.
 let FIND = { q: '', days: 7 };
+//  חיסום לזכוכית בחיפוש (בן, 17/11): פריט מחובר (אותו שייפ בהזמנה) — מה שבהזמנה; אחרת לפי סוג הזכוכית
+function chisumOf(h) {
+  if (h.shape) for (const o of (typeof ORDERS !== 'undefined' && ORDERS) || []) {
+    const it = Object.values((o && o.items) || {}).find(x => x && String(x.optyShape || '') === String(h.shape));
+    if (it) return !!it.chisum;
+  }
+  const r = JOBS[h.job] || {};
+  return lgOptyMatChisum(r.mat, r.matName, MATS);
+}
 async function findOpty() {
   if (!FIND.loaded) {                                   // חיפוש חדש — האופטימיזציות הטריות (אולי נקלטו בינתיים)
     FIND.loaded = true;
@@ -1051,11 +1068,11 @@ async function findOpty() {
   }
   const hits = lgOptyPieceSearch(JOBS, $('q').value, { from: since }).slice(0, 150);
   $('findOpty').innerHTML = `<section class="card"><h2>באופטימיזציות — ${FIND.days} ימים אחורה (${hits.length})</h2>
-    ${hits.map(h => { const c = lgOptyPieceCut(JOBS[h.job], h.sheetNo, today); return `<button type="button" class="jhit" data-ohit="${esc(h.job + '|' + h.sheetNo + '|' + h.order)}">
+    ${hits.map(h => { const c = lgOptyPieceReady(JOBS[h.job], h.sheetNo, today, chisumOf(h)); return `<button type="button" class="jhit" data-ohit="${esc(h.job + '|' + h.sheetNo + '|' + h.order)}">
       ${h.shape && GEOS[h.shape] ? lgOptyShapeSvg(GEOS[h.shape], { px: 40 }) : ''}
       <span class="who"><b>${esc(h.client)}</b> · ${esc(h.name)} · <span dir="ltr">${esc(Math.round(h.w) + '×' + Math.round(h.h))}</span><br>
       <small>${h.shape ? 'שייפ ' + esc(h.shape) + ' · ' : ''}${esc(h.job)} · לוח ${h.sheetNo} · ${esc(dmy(h.day))} · ${esc(matLbl(JOBS[h.job]))}</small></span>
-      <span class="cst ${c.cut ? 'cutok' : 'cutwait'}">${esc(c.label)}</span></button>`; }).join('') || '<p class="note">לא נמצא בטווח הזה</p>'}
+      <span class="cst ${c.ready ? 'cutok' : 'cutwait'}">${esc(c.label)}</span></button>`; }).join('') || '<p class="note">לא נמצא בטווח הזה</p>'}
     <button class="sm" type="button" data-older="1">חפש עוד אחורה (+14 ימים)</button></section>`;
   if (hits.length) loadGeos(hits.map(h => h.shape).filter(Boolean)).then(n => { if (n && FIND.q === lgOptyNorm($('q').value)) findOpty(); });
 }

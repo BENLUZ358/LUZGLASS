@@ -145,6 +145,18 @@ if (require.main === module) {
   check('piece cut: today, not marked → to cut today', L.lgOptyPieceCut(rec, 1, '2026-11-17'), { cut: false, label: 'לחיתוך היום' });
   check('piece cut: today, a copy of the same sheet marked → cut', L.lgOptyPieceCut(Object.assign({}, rec, { marks: { 2: { at: 1 } } }), 1, '2026-11-17'), { cut: true, label: 'נחתך · סומן' });
   check('piece cut: day passed → cut', L.lgOptyPieceCut(rec, 1, '2026-11-18'), { cut: true, label: 'נחתך' });
+  //  חיסום (בן, 17/11): נחתך א' → ב' בבוקר לחיסום → ג' בבוקר חוזר; לפי סוג הזכוכית
+  check('chisum by glass: 8/6/10/12 yes, mirror/laminated/4-5/lacobel no',
+    ['08S', '06AC', '10C', '12C', '05MIR', '03+3S', '04+4S', '04S', '05S', '04LA'].map(c => L.lgOptyMatChisum(c, '', {})),
+    [true, true, true, true, false, false, false, false, false, false]);
+  check('chisum: setting from Ben wins', [L.lgOptyMatChisum('08S', '', { '08S': { chisum: false } }), L.lgOptyMatChisum('05S', '', { '05S': { chisum: true } })], [false, true]);
+  const sun = { day: '2026-11-15', sheets: [] }, wed = { day: '2026-11-18', sheets: [] };
+  check('ready: chisum cut Sunday → Monday in tempering, back Tuesday', ['2026-11-16', '2026-11-17'].map(d => L.lgOptyPieceReady(sun, 1, d, true)),
+    [{ cut: true, ready: false, label: 'בחיסום · חוזר מחר בבוקר' }, { cut: true, ready: true, label: 'חזר מחיסום · מוכן' }]);
+  check('ready: chisum cut Wednesday → back Sunday (no Fri/Sat)', L.lgOptyPieceReady(wed, 1, '2026-11-19', true).label, "בחיסום · חוזר ביום א' 22/11 בבוקר");
+  check('ready: chisum marked cut today → goes out tomorrow', L.lgOptyPieceReady(Object.assign({}, rec, { marks: { 2: { at: 1 } } }), 1, '2026-11-17', true).label, 'נחתך · יוצא לחיסום מחר');
+  check('ready: no chisum → ready once cut', L.lgOptyPieceReady(sun, 1, '2026-11-16', false), { cut: true, ready: true, label: 'נחתך · מוכן' });
+
 }
 
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
