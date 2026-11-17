@@ -93,6 +93,17 @@ check('cut state: undone / none → null', [L.lgOptyCutState({ at: '2026-11-17',
   check('shape search: repeated sheet listed once', hit('נאור'), ['M00337:1', 'M00337:3']);
 }
 
+// ── Task 8: glass names in Hebrew ──
+check('names: 08S / 08C / 06MIR / 3+3 / 06ACC', [L.lgOptyMatHe('08S', '8 mm clear'), L.lgOptyMatHe('08C', '8 mm extra clear'), L.lgOptyMatHe('06MIR', '6 mm mirror'), L.lgOptyMatHe('03+3S', '3+3 clear'), L.lgOptyMatHe('06ACC', '6 mm acid clear')],
+  ['8 שקוף', '8 שקוף אקסטרה', '6 מראה', '3+3 שקוף', '6 חלבי שקוף']);
+check('names: unknown word stays in English; no name → code', [L.lgOptyMatHe('06X', '6 mm zebra'), L.lgOptyMatHe('06X', '')], ['6 zebra', '06X']);
+check('label: saved Hebrew wins, else from English, else code', [L.lgOptyMatLabel('08S', { '08S': { he: '8 שקוף רגיל', en: '8 mm clear' } }), L.lgOptyMatLabel('08S', { '08S': { en: '8 mm clear' } }), L.lgOptyMatLabel('08S', {})], ['08S · 8 שקוף רגיל', '08S · 8 שקוף', '08S']);
+check('names: all 54 OptyWay glass types get Hebrew words', (() => {
+  const P = require('../opty-paradox.js');
+  const rows = P.lgOptyReadTable(fs.readFileSync(path.join(__dirname, 'fixtures', 'opty-Magaz-sample.DB'))).rows;
+  return rows.filter(r => /[a-z]{3,}/i.test(L.lgOptyMatHe(r.CODMAT, r.DESCMAT))).map(r => r.CODMAT);
+})(), []);
+
 module.exports = { check, M290, il, geoOf, L, done: () => failed };
 if (require.main === module) {
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');

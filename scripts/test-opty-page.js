@@ -50,14 +50,15 @@ const tick = () => new Promise(r => setTimeout(r, 30));
     doc.getElementById(id).dispatchEvent(new w.Event('change'));
   };
   const fx = f => fs.readFileSync(path.join(__dirname, 'fixtures', f));
-  setFiles('inDb', [['Pezzi.DB', fx('opty-Pezzi-sample.DB')], ['other.txt', Buffer.from('x')]]);
+  db._data.meta.optyMats = { '06MIR': { he: '6 מראה כסף', en: '6 mm mirror' } };   // שם שבן תיקן — לא נדרס
+  setFiles('inDb', [['Pezzi.DB', fx('opty-Pezzi-sample.DB')], ['Magaz.DB', fx('opty-Magaz-sample.DB')], ['other.txt', Buffer.from('x')]]);
   const dat = fs.readFileSync(path.join(__dirname, 'fixtures', 'opty-shapes', '274378.dat'), 'utf8').replace(/^427\.000000 1992\.000000/, '502.000000 1902.000000');
   //  קובצי חיתוך (בן, 17/11): M00291 ירד 12/11 17:10 → 13/11 שישי → יום מוצע 15/11; M00200 ישן — לא מוצג
   const R291 = '[P1H1R7D64R639Cx190y190X1F54Y5410S<n=274328>N18X1F54Y5410S<n=274325>N17]' + String.fromCharCode(13, 10) + 'N23 B';
   setFiles('inDat', [['274328.dat', Buffer.from(dat)], ['M00291.R01', Buffer.from(R291), Date.parse('2026-11-12T17:10:00+02:00')],
     ['M00200.R01', Buffer.from(R291), Date.parse('2026-10-01T10:00:00+03:00')], ['notes.txt', Buffer.from('x')]]);
   await tick();
-  check('picks Pezzi.DB out of the folder', doc.getElementById('gotDb').textContent, '✓ Pezzi.DB');
+  check('picks Pezzi.DB (and the glass list) out of the folder', doc.getElementById('gotDb').textContent, '✓ Pezzi.DB + Magaz.DB');
   check('reads .dat shape files and cutting files', doc.getElementById('gotDat').textContent, '✓ 1 צורות · 2 קובצי חיתוך');
   check('check button enabled', doc.getElementById('btnCheck').disabled, false);
 
@@ -78,6 +79,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   for (let i = 0; i < 40 && !/אופטימיזציות/.test(doc.getElementById('st').textContent); i++) await tick();
   const d = db._data.orders;
   const J = (db._data.meta.optyJobs || {});
+  check('glass names saved in Hebrew; a name Ben fixed is kept', [db._data.meta.optyMats['08S'], db._data.meta.optyMats['06MIR'].he, Object.keys(db._data.meta.optyMats).length], [{ he: '8 שקוף', en: '8 mm clear' }, '6 מראה כסף', 53]);   // 54 ברשימה, אחד מהם "חיסום/חור" — לא קוד זכוכית
   check('optimisation saved with the chosen day, its sheet and pieces', [Object.keys(J), J.M00291 && J.M00291.day, J.M00291 && J.M00291.sheets.length, J.M00291 && J.M00291.pieces[24].shape], [['M00291'], '2026-11-16', 1, '274328']);
   check('linked item stamped for that work day', d.o1.items[0].optyCut, { at: '2026-11-16', job: 'M00291' });
   check('status line counts optimisations and stamped glasses', /1 אופטימיזציות.*2 זכוכיות סומנו לחיתוך/.test(doc.getElementById('st').textContent), true);
@@ -151,6 +153,12 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   doc.querySelector('[data-tab="set"]').click();
   for (let i = 0; i < 30 && !doc.querySelector('[data-unpair]'); i++) await tick();
   check('settings: fixed pairs + saved pairs (with remove)', [doc.querySelectorAll('#pairsOut .row').length > 10, !!doc.querySelector('[data-unpair="k1"]')], [true, true]);
+  for (let i = 0; i < 30 && !doc.querySelector('[data-mat="08S"]'); i++) await tick();
+  const mi = doc.querySelector('[data-mat="08S"]');
+  check('settings: glass names table', mi && mi.value, '8 שקוף');
+  mi.value = '8 שקוף פשוט'; doc.querySelector('[data-matgo="08S"]').click();
+  for (let i = 0; i < 30 && db._data.meta.optyMats['08S'].he !== '8 שקוף פשוט'; i++) await tick();
+  check('settings: a name can be fixed', db._data.meta.optyMats['08S'].he, '8 שקוף פשוט');
 
   //  ─── אופטימיזציות (בן, 17/11) ───
   db._data.meta.optyJobs.M00337 = { job: 'M00337', day: '2026-11-13', mat: '10S', matName: '10 mm clear',

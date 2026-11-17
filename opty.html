@@ -198,6 +198,10 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
         <button class="sm gold" id="btnPair" type="button">הוסף</button>
       </div>
     </section>
+    <section class="card pairs"><h2>שמות סוגי הזכוכית</h2>
+      <p class="note">השמות מאופטי-ווי מתורגמים לעברית (08S · 8 שקוף). אפשר לתקן כל שם — הוא יופיע ברשימות, בסינון ובמדבקות.</p>
+      <div id="matsOut"></div>
+    </section>
     <section class="card"><h2>מידות</h2>
       <p class="note">אופטי-ווי מוסיף 1 מ"מ ליטוש מכל צד (852 שם = 850 אצלנו). בחלון הצורה מוצגת המידה נטו, וכל המרחקים נטו.
       בזכוכית עם שיפוע — המידה אחרי קו השיפוע; בשיפוע אופטי-ווי מוסיף לפעמים יותר, וזה עוד נלמד.</p>
@@ -221,7 +225,7 @@ const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
 const ORDER_DAYS = 30;                         // הזמנות מ-30 הימים האחרונים
 const DIM_OK = 3;                              // ✓ — המידה (עם הליטוש) עד 3 מ"מ מהזכוכית שלנו, כמו בחיבור האוטומטי
-let R01S = [], ROWS = [], FOUND = [];   // קובצי חיתוך שנבחרו · שורות Pezzi · אופטימיזציות שנמצאו (בן, 17/11)
+let R01S = [], ROWS = [], FOUND = [], MAGAZ = [];   // קובצי חיתוך שנבחרו · שורות Pezzi · אופטימיזציות שנמצאו (בן, 17/11)
 let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null, PEND = {}, REVIEW = {};
 let PENDING = {}, REVQ = {}, GEOS = {}, SK = {};   // SK: סקיצה לכל הזמנה (data URL / null)       // מה שמחכה לחיבור (meta/optyPending, meta/optyReview) + ציורים
 
@@ -249,12 +253,12 @@ function showTab(t) {
   if (t === 'link') loadLink();
   if (t === 'jobs') jobsLoad();
   if (t === 'find') $('q').focus();
-  if (t === 'set') loadPairs();
+  if (t === 'set') { loadPairs(); loadMats(); }
 }
 document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); });
 
 $('inDb').addEventListener('change', e => {
-  DB = [...e.target.files].filter(f => /^(pezzi|pezzican)\.db$/i.test(f.name));
+  DB = [...e.target.files].filter(f => /^(pezzi|pezzican|magaz)\.db$/i.test(f.name));
   $('gotDb').textContent = DB.length ? '✓ ' + DB.map(f => f.name).join(' + ') : 'לא נמצאו Pezzi.DB / PezziCan.DB — בחר את תיקיית DBLITE';
   $('gotDb').className = 'got' + (DB.length ? ' ok' : '');
   $('btnCheck').disabled = !DB.length;
@@ -291,7 +295,11 @@ async function check() {
   $('btnCheck').disabled = true; $('out').innerHTML = ''; st('קורא את הקבצים…');
   try {
     const rows = [];
-    for (const f of DB) rows.push(...lgOptyReadTable(await f.arrayBuffer()).rows);
+    MAGAZ = [];
+    for (const f of DB) {
+      const t = lgOptyReadTable(await f.arrayBuffer()).rows;
+      if (/^magaz\.db$/i.test(f.name)) MAGAZ = t; else rows.push(...t);   // Magaz = רשימת סוגי הזכוכית (שמות)
+    }
     ROWS = rows;
     const days = Math.max(1, Math.min(45, Number($('days').value) || 3));
     const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
@@ -413,6 +421,7 @@ async function saveImport(btn) {
   const r = RES;
   if (!(await save(r.auto, btn, PEND, REVIEW))) return;
   const msg = $('st').textContent;
+  if (MAGAZ.length) { try { await saveMats(); } catch (e) { console.warn('mats', e); } }
   if (FOUND.length) {
     try { const j = await saveJobs(); st((r.auto.length || countWait(PEND, REVIEW) ? msg + ' · ' : '✓ ') + j.jobs + ' אופטימיזציות נשמרו · ' + j.stamped + ' זכוכיות סומנו לחיתוך', 'ok'); }
     catch (e) { console.error(e); st('✗ שמירת האופטימיזציות נכשלה: ' + (e.message || '') + ' — נסה שוב', 'bad'); if (btn) btn.disabled = false; return; }
@@ -445,6 +454,29 @@ async function saveJobs() {
   stamps.forEach(s => { up2['orders/' + s.orderId + '/items/' + s.key + '/optyCut'] = s.value; up2['orders/' + s.orderId + '/updatedAt'] = now; });
   if (stamps.length) await _lgDb.ref().update(up2);
   return { jobs: FOUND.length, stamped: stamps.length };
+}
+
+//  שמות זכוכית (בן, 17/11: "08S 8 שקוף"): meta/optyMats/<קוד> = { he, en }. שם שבן תיקן — לא נדרס.
+async function saveMats() {
+  const cur = (await _lgDb.ref('meta/optyMats').once('value')).val() || {}, up = {};
+  MAGAZ.forEach(r => {
+    const code = String(r.CODMAT || '').trim(), en = String(r.DESCMAT || '').trim();
+    if (!code || /[.#$\[\]\/]/.test(code)) return;
+    const c = cur[code] || {};
+    up['meta/optyMats/' + code] = { he: c.he || lgOptyMatHe(code, en), en };
+  });
+  if (Object.keys(up).length) await _lgDb.ref().update(up);
+}
+async function loadMats() {
+  try {
+    MATS = (await _lgDb.ref('meta/optyMats').once('value')).val() || {};
+    const codes = Object.keys(MATS).sort();
+    $('matsOut').innerHTML = codes.length ? codes.map(c => `<div class="row"><b class="shape" dir="ltr">${esc(c)}</b>
+      <span class="who"><small dir="ltr">${esc(MATS[c].en || '')}</small></span>
+      <input data-mat="${esc(c)}" value="${esc(MATS[c].he || '')}" aria-label="השם בעברית של ${esc(c)}">
+      <button class="sm" type="button" data-matgo="${esc(c)}">שמור</button></div>`).join('')
+      : '<p class="note">עוד אין — הרשימה נקלטת מהקובץ Magaz.DB בתיקיית DBLITE (בקליטה).</p>';
+  } catch (e) { $('matsOut').innerHTML = '<p class="note">✗ לא נטען</p>'; }
 }
 
 async function loadHistory() {
@@ -722,6 +754,13 @@ async function jobCut(k, on) {
 }
 ['jFrom', 'jTo', 'jMat'].forEach(id => $(id).addEventListener('change', jobsRender));
 $('jQ').addEventListener('input', jobsRender);
+$('pane-set').addEventListener('click', async e => {
+  const b = e.target.closest('[data-matgo]'); if (!b) return;
+  const c = b.dataset.matgo, inp = document.querySelector(`[data-mat="${CSS.escape(c)}"]`), he = (inp && inp.value || '').trim();
+  if (!he) { st('כתוב שם', 'bad'); return; }
+  try { await _lgDb.ref('meta/optyMats/' + c + '/he').set(he); MATS[c] = Object.assign({}, MATS[c], { he }); st('✓ ' + c + ' · ' + he, 'ok'); }
+  catch (err) { st('✗ לא נשמר: ' + (err.message || ''), 'bad'); }
+});
 $('pane-jobs').addEventListener('click', e => {
   const t = e.target;
   const card = t.closest('[data-job]'); if (card) { jobOpen(card.dataset.job); return; }
