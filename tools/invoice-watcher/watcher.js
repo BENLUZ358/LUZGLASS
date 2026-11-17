@@ -398,7 +398,7 @@ async function loop(cfg) {
 //  כתובת ואותו טוקן של ההעלאה. השרת שומר אותו ומריץ את הבדיקות של הארכיון והקולט
 //  (קובץ שתקוע בתיקייה, שגיאת הדפסה...). ⚠️ לולאה נפרדת: דופק שנכשל (אין רשת, השרת
 //  נפל) לא נוגע בטיפול בחשבוניות — רק נרשם ביומן, וינסה שוב בעוד דקה.
-const WATCHER_VERSION = '2026-11-16';
+const WATCHER_VERSION = '2026-11-17';
 let lastPrintError = null;   // ההדפסה האחרונה שנכשלה; הדפסה שהצליחה מנקה
 function notePrint(err, file) {
   lastPrintError = err ? { at: Date.now(), message: String((err && err.message) || err).slice(0, 300), file: path.basename(String(file || '')) } : null;
@@ -485,13 +485,35 @@ function sendLabels(printer, bitmaps) {
 }
 
 //  סבב אחד: עבודה אחת לכל היותר.
+//  עמודי לוחות מאופטי-ווי (בן, 17/11): כל תמונה = עמוד A4 → PDF אחד → ה-Brother (printCopyTo) דרך Ghostscript.
+//  שגיאה בהדפסה — לא ידוע אם יצא חלק, לכן לא מנסים שוב לבד.
+async function sendPages(cfg, id, pages) {
+  if (!cfg.printCopyTo) return { ok: false, retryable: false, error: 'no regular printer configured (printCopyTo)' };
+  const fs = require('fs'), os = require('os');
+  const file = path.join(os.tmpdir(), 'lg-sheets-' + String(id).replace(/[^\w-]/g, '') + '.pdf');
+  try {
+    const { PDFDocument } = require('pdf-lib');
+    const doc = await PDFDocument.create();
+    for (const b64 of pages) {
+      const img = await doc.embedJpg(new Uint8Array(Buffer.from(b64, 'base64')));   // עותק משלו — pdf-lib מתעלם מ-byteOffset של Buffer קטן
+      const pg = doc.addPage([595.28, 841.89]);
+      pg.drawImage(img, { x: 0, y: 0, width: 595.28, height: 841.89 });
+    }
+    fs.writeFileSync(file, await doc.save());
+    await (cfg.printFn || printWithGs)(file, cfg.printCopyTo, cfg);
+    return { ok: true };
+  } catch (e) { return { ok: false, retryable: false, error: String(e && e.message || e).slice(0, 180) }; }
+  finally { try { fs.unlinkSync(file); } catch (_) {} }
+}
+
 async function printOnce(cfg, post, send) {
   const r = await post({ action: 'agent-claim' });
   const job = r && r.status === 200 && r.body && r.body.job;
   if (!job) return null;
-  const out = await (send || sendLabels)(cfg.labelPrinter, job.bitmaps || []);
-  if (out.ok) console.log('labels printed:', job.id, (job.bitmaps || []).length);
-  else console.error('labels failed:', job.id, out.error);
+  const out = job.printer === 'a4' ? await sendPages(cfg, job.id, job.bitmaps || [])
+    : await (send || sendLabels)(cfg.labelPrinter, job.bitmaps || []);
+  if (out.ok) console.log((job.printer === 'a4' ? 'pages' : 'labels') + ' printed:', job.id, (job.bitmaps || []).length);
+  else console.error((job.printer === 'a4' ? 'pages' : 'labels') + ' failed:', job.id, out.error);
   await post({ action: 'agent-done', id: job.id, ok: !!out.ok, retryable: !!out.retryable, error: out.error || '' });
   return out;
 }
@@ -510,7 +532,7 @@ async function printLoop(cfg) {
   }
 }
 
-module.exports = { loop, heartbeatBody, heartbeatOnce, WATCHER_VERSION, _resetPrintError: () => { lastPrintError = null; }, tsplForBitmap, sendLabels, printOnce, resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, processRestored, paper, paperArchivePath, docFromName, groupSingles, roleOf, docNumberOf, readPdf };
+module.exports = { loop, heartbeatBody, heartbeatOnce, WATCHER_VERSION, _resetPrintError: () => { lastPrintError = null; }, tsplForBitmap, sendLabels, sendPages, printOnce, resolveArchive, filedPaths, sideDirs, fileKind, splitTwoPages, processFile, processPair, processRestored, paper, paperArchivePath, docFromName, groupSingles, roleOf, docNumberOf, readPdf };
 
 //  עותק אחד בלבד (בן, 10/11): הכלי מופעל מכמה מקומות (הפעלה בכניסה, משימה מתוזמנת
 //  שבודקת כל כמה דקות שהוא חי). שני עותקים היו מדפיסים כל דף פעמיים — לכן הראשון

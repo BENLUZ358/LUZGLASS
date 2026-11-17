@@ -103,6 +103,21 @@ const B = n => Array.from({ length: n }, () => BM);
   await tool({ action: 'agent-done', id: c3.body.id, ok: true });
   check('D3 a late "done" after unknown still records printed', db._data.waMeta.printJobs[c3.body.id].state, 'printed');
 
+  /* G — עמודי לוחות למדפסת הרגילה (בן, 17/11) */
+  const JPG = Buffer.from([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 0xFF, 0xD9]).toString('base64');
+  const g1 = await call({ action: 'create', kind: 'sheets', printer: 'a4', client: 'אופטי-ווי M00322', orderIds: [], pages: [JPG, JPG] });
+  check('G1 a sheets job with 2 pages is queued', [g1.status, db._data.waMeta.printJobs[g1.body.id].count, db._data.waMeta.printJobs[g1.body.id].kind], [200, 2, 'sheets']);
+  check('G2 no pages / not a picture / labels to a4 → refused', [
+    (await call({ action: 'create', kind: 'sheets', printer: 'a4', client: 'x', pages: [] })).status,
+    (await call({ action: 'create', kind: 'sheets', printer: 'a4', client: 'x', pages: ['AAAA'] })).status,
+    (await call({ action: 'create', kind: 'sheets', printer: 'labels', client: 'x', pages: [JPG] })).status,
+    (await call({ action: 'create', kind: 'labels', printer: 'a4', client: 'x', labels: L(1), bitmaps: B(1) })).status], [400, 400, 400, 400]);
+  check('G3 more than 12 pages refused', (await call({ action: 'create', kind: 'sheets', printer: 'a4', client: 'x', pages: Array(13).fill(JPG) })).status, 400);
+  const gk = await tool({ action: 'agent-claim' });
+  check('G4 the office PC gets it with printer a4 and the pages', gk.body.job && [gk.body.job.id, gk.body.job.printer, gk.body.job.bitmaps.length], [g1.body.id, 'a4', 2]);
+  await tool({ action: 'agent-done', id: g1.body.id, ok: true });
+  check('G5 printed, pages dropped', [db._data.waMeta.printJobs[g1.body.id].state, (db._data.waMeta.printJobBlobs || {})[g1.body.id]], ['printed', undefined]);
+
   /* F */
   now += 91 * 24 * 3600 * 1000;
   await call({ action: 'create', kind: 'labels', printer: 'labels', client: 'new', orderIds: [], labels: L(1), bitmaps: B(1) });

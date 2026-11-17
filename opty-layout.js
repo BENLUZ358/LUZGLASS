@@ -194,7 +194,7 @@ function lgOptyTodayIso(ms) { const p = _lgIlParts(ms == null ? Date.now() : ms)
 
 //  ─── שמות זכוכית בעברית (בן, 17/11: "08S 8 שקוף") ───
 //  מהשם באנגלית של אופטי-ווי (Magaz.DB: "8 mm clear") → "8 שקוף". מילה לא מוכרת נשארת באנגלית; בן מתקן בהגדרות.
-const LG_OPTY_WORDS = [['extra clear', 'שקוף אקסטרה'], ['acid clear', 'חלבי שקוף'], ['master carre', 'מאסטר קרה'], ['master line', 'מאסטר ליין'],
+const LG_OPTY_WORDS = [['extra clear', 'אקסטרה קליר'], ['acid clear', 'חלבי שקוף'], ['master carre', 'מאסטר קרה'], ['master line', 'מאסטר ליין'],
   ['clear', 'שקוף'], ['mirror', 'מראה'], ['acid', 'חלבי'], ['bronze', 'ברונזה'], ['gray', 'אפור'], ['grey', 'אפור'], ['black', 'שחור'],
   ['mat', 'מט'], ['silk', 'משי'], ['lacobel', 'לקובל'], ['reflective', 'מחזיר אור'], ['granit', 'גרניט'], ['chinchilla', "צ'ינצ'ילה"],
   ['pepitte', 'פפיט'], ['savta', 'סבתא']];
@@ -226,7 +226,7 @@ function lgOptyJobLabels(rec, linked, opts, matLabel) {
       const r = info[p.pos] || {}, ours = p.shape ? lk[p.shape] : null;
       if (ours) out.push(Object.assign({}, ours, { shape: p.shape, job: rec.job, withShape: true }));
       else out.push({ title: r.client || '', sketchName: r.name || '', dims: Math.round(r.w || p.w) + ' × ' + Math.round(r.h || p.h),
-        glass: matLabel || rec.mat || '', orderNum: '', shape: p.shape || '', job: rec.job, withShape: !!p.shape });
+        glass: matLabel || rec.mat || '', orderNum: r.name || '', shape: p.shape || '', job: rec.job, withShape: !!p.shape });
     });
   });
   return out;
@@ -267,6 +267,17 @@ function lgOptyPieceSearch(jobs, q, f) {
     }));
   });
   return out.sort((a, b) => (b.day || '').localeCompare(a.day || ''));
+}
+
+//  מצב חיתוך של זכוכית מתוך האופטימיזציה עצמה — גם כשהיא לא מחוברת להזמנה (בן, 17/11: "אדע אם הם נחתכו").
+//  לוח שסומן (או עותק זהה שלו, H5-6) = נחתך · סומן; היום עבר = נחתך; היום = לחיתוך היום; אחר כך = מתוכנן.
+function lgOptyPieceCut(rec, sheetNo, todayIso) {
+  const seq = lgOptySheetSeq((rec && rec.sheets) || []), me = seq[(sheetNo || 1) - 1], marks = (rec && rec.marks) || {};
+  if (me && seq.some(x => x.sheet === me.sheet && marks[x.sheetNo])) return { cut: true, label: 'נחתך · סומן' };
+  const day = (rec && rec.day) || '';
+  if (day && day < todayIso) return { cut: true, label: 'נחתך' };
+  if (day === todayIso) return { cut: false, label: 'לחיתוך היום' };
+  return { cut: false, label: day ? 'מתוכנן ל-' + day.split('-').reverse().slice(0, 2).join('/') : 'לא ידוע' };
 }
 
 //  ─── הערכת עבודה (בן, 17/11: "כמה עבודה יש היום והאם זה הרבה") ───
@@ -350,5 +361,5 @@ function lgOptyHours(units, model) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyMatHe, lgOptyMatLabel, lgOptySheetStats, lgOptyUnits, lgOptyDayStats, lgOptyDayVerdict, lgOptyFit, lgOptyHours };
+  module.exports = { lgOptyLayoutParse, lgOptySheetSeq, lgOptyCutDay, lgOptyLayoutSvg, lgOptyJobRecord, lgOptyCutStamps, lgOptyCutState, lgOptyTodayIso, lgOptyJobLabels, lgOptyChunks, lgOptyPieceSearch, lgOptyPieceCut, lgOptyMatHe, lgOptyMatLabel, lgOptySheetStats, lgOptyUnits, lgOptyDayStats, lgOptyDayVerdict, lgOptyFit, lgOptyHours };
 }

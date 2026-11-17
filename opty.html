@@ -125,19 +125,6 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 /* הדפסת לוחות (בן, 17/11) */
 .tjob{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);margin:var(--space-3) 0 var(--space-2);}
 .tjob b{flex:1;}
-#printArea{display:none;}
-@media print{
-  body.printing > *:not(#printArea){display:none !important;}
-  body.printing #printArea{display:block;}
-  #printArea{direction:rtl;font-family:Heebo,Arial,sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  #printArea .pjob{page-break-after:always;}
-  #printArea .pjob h2{font-size:15pt;margin:0 0 6pt;}
-  #printArea .pblock{page-break-inside:avoid;break-inside:avoid;margin-bottom:10pt;}
-  #printArea .pblock h3{font-size:12pt;margin:0 0 4pt;}
-  #printArea svg{width:100%;max-height:120mm;height:auto;border:1px solid #000;}
-  #printArea table{width:100%;border-collapse:collapse;font-size:9pt;margin-top:4pt;}
-  #printArea td,#printArea th{border:1px solid #999;padding:2pt 4pt;text-align:start;}
-}
 .cutok{color:#1e7d32;font-weight:var(--fw-bold);}
 .cutwait{color:var(--muted);}
 .ord{font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-1);}
@@ -223,6 +210,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
   <div class="pane" id="pane-find" hidden>
     <div class="srch"><input id="q" type="search" placeholder="מספר צורה / מספר הזמנה / לקוח / שם סקיצה / M00…" enterkeyhint="search" aria-label="חיפוש">
       <button class="sm gold" id="btnFind" type="button">חפש</button></div>
+    <div id="findOpty"></div>
     <div id="findOut"></div>
   </div>
 
@@ -682,7 +670,7 @@ const lgOptyJobsRef = () => { const r = _lgDb.ref('meta/optyJobs').orderByKey();
 async function jobsLoad() {
   try {
     const [j, m, md] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value'), _lgDb.ref('meta/optyModel').once('value')]);
-    JOBS = j.val() || {}; MATS = m.val() || {}; JOBS_MODEL = md.val() || null;
+    JOBS = Object.assign({}, JOBS, j.val() || {}); MATS = m.val() || {}; JOBS_MODEL = md.val() || null;   // + ישנות שנמשכו בחיפוש
     await loadOrders();
     if (!$('jFrom').value) $('jFrom').value = lgOptyTodayIso(Date.now() - 2 * 86400000);
     const mats = [...new Set(Object.values(JOBS).map(r => r && r.mat).filter(Boolean))].sort();
@@ -843,7 +831,7 @@ async function todayLoad() {
   if (!$('tDay').value) $('tDay').value = lgOptyTodayIso();
   try {
     const [j, m, md] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value'), _lgDb.ref('meta/optyModel').once('value')]);
-    JOBS = j.val() || {}; MATS = m.val() || {}; JOBS_MODEL = md.val() || null;
+    JOBS = Object.assign({}, JOBS, j.val() || {}); MATS = m.val() || {}; JOBS_MODEL = md.val() || null;   // + ישנות שנמשכו בחיפוש
     await loadOrders();
     todayLearn();
     todayRender();
@@ -916,36 +904,94 @@ async function todayMark(keys, on, bulk) {
 }
 //  הדפסת לוחות במדפסת רגילה (בן, 17/11): לכל אופטימיזציה — כל לוח שונה פעם אחת, לפי סדר החיתוך,
 //  הציור עם שייפ/לקוח/סקיצה/מידה על כל זכוכית, וטבלת הזכוכיות. לוח שחוזר (H5-6) — פעם אחת עם הטווח.
-function sheetsPrintHtml(jobs) {
+function sheetsPrintPlan(jobs) {
   return jobs.map(job => {
-    const rec = JOBS[job]; if (!rec || !rec.sheets) return '';
+    const rec = JOBS[job]; if (!rec || !rec.sheets) return null;
     const seq = lgOptySheetSeq(rec.sheets), lk = linkedOf(rec.job), info = {};
     Object.entries(rec.pieces || {}).forEach(([pos, r]) => { info[pos] = r; });
     const groups = [];
     seq.forEach(x => { const g = groups[groups.length - 1]; if (g && g.sheet === x.sheet) g.to = x.sheetNo; else groups.push({ sheet: x.sheet, from: x.sheetNo, to: x.sheetNo, total: x.total }); });
     const pcs = seq.reduce((n, x) => n + x.sheet.pieces.length, 0);
-    return `<section class="pjob" data-job="${esc(rec.job)}"><h2>${esc(rec.job)} · ${esc(matLbl(rec))} · יום עבודה ${esc(dmy(rec.day))} · ${seq.length} לוחות · ${pcs} זכוכיות</h2>
-      ${groups.map(g => { const n = g.to - g.from + 1; return `<div class="pblock"><h3>${esc(rec.job)} · ${n > 1 ? 'לוחות ' + g.from + '–' + g.to + '/' + g.total + ' (×' + n + ')' : 'לוח ' + g.from + '/' + g.total} · ${esc(matLbl(rec))} · <span dir="ltr">${Math.round(g.sheet.L)}×${Math.round(g.sheet.H)}</span> · ${g.sheet.pieces.length} זכוכיות</h3>
-        ${lgOptyLayoutSvg(g.sheet, info, GEOS, {})}
-        <table><thead><tr><th>#</th><th>שייפ</th><th>לקוח</th><th>סקיצה</th><th>מידה</th></tr></thead><tbody>${g.sheet.pieces.map(p => {
-          const r = info[p.pos] || {}, x = p.shape && lk[p.shape];
-          return `<tr><td>${p.order}</td><td>${esc(p.shape || '—')}</td><td>${esc(x ? x.o.orderClient : r.client || '')}</td><td>${esc(x ? x.o.sketchName : r.name || '')}</td><td dir="ltr">${esc(Math.round(r.w || p.w) + '×' + Math.round(r.h || p.h))}</td></tr>`;
-        }).join('')}</tbody></table></div>`; }).join('')}</section>`;
-  }).join('');
+    return { job: rec.job, head: `${rec.job} · ${matLbl(rec)} · יום עבודה ${dmy(rec.day)} · ${seq.length} לוחות · ${pcs} זכוכיות`,
+      blocks: groups.map(g => { const n = g.to - g.from + 1; return { sheet: g.sheet, info,
+        title: `${rec.job} · ${n > 1 ? 'לוחות ' + g.from + '–' + g.to + '/' + g.total + ' (×' + n + ')' : 'לוח ' + g.from + '/' + g.total} · ${matLbl(rec)} · ${Math.round(g.sheet.L)}×${Math.round(g.sheet.H)} · ${g.sheet.pieces.length} זכוכיות`,
+        rows: g.sheet.pieces.map(p => { const r = info[p.pos] || {}, x = p.shape && lk[p.shape];
+          return [String(p.order), p.shape || '—', x ? x.o.orderClient : r.client || '', x ? x.o.sketchName : r.name || '', Math.round(r.w || p.w) + '×' + Math.round(r.h || p.h)]; }) }; }) };
+  }).filter(Boolean);
 }
+//  עמוד A4 ב-150dpi (1240×1754): כותרת, הציור, טבלה — כמה לוחות שנכנסים בעמוד. → JPEG (base64) לכל עמוד
+const _A4 = { w: 1240, h: 1754, m: 60 };
+const _svgImg = svg => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('ציור הלוח לא נטען')); i.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
+async function renderSheetPages(plan) {
+  try { await document.fonts.load('700 30px Heebo', 'אבג 0123'); } catch (_) {}
+  const PW = _A4.w, PH = _A4.h, M = _A4.m, W = PW - 2 * M, out = [];
+  const COLS = [[70, '#'], [150, 'שייפ'], [340, 'לקוח'], [320, 'סקיצה'], [240, 'מידה']];
+  for (const j of plan) {
+    const pages = []; let x, y;
+    const page = () => { const c = document.createElement('canvas'); c.width = PW; c.height = PH; x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, PW, PH); y = M; pages.push(c); };
+    const txt = (t, px, xx, yy, bold, align, dir, maxW) => {
+      x.font = (bold ? '700 ' : '400 ') + px + 'px Heebo, Arial, sans-serif'; x.fillStyle = '#000';
+      x.textAlign = align || 'right'; x.direction = dir || 'rtl'; x.textBaseline = 'middle';
+      let s = String(t == null ? '' : t);
+      if (maxW) while (s.length > 1 && x.measureText(s).width > maxW) s = s.slice(0, -2) + '…';
+      x.fillText(s, xx, yy);
+    };
+    page();
+    txt(j.head, 32, PW - M, y + 18, true, 'right', 'rtl', W); y += 60;
+    for (const b of j.blocks) {
+      const rowH = 34, tableH = rowH * (b.rows.length + 1);
+      let maxH = 760;
+      const need = () => 46 + Math.min(maxH, W * b.sheet.H / b.sheet.L) + 14 + tableH + 34;
+      if (y + need() > PH - M - 30 && y > M + 80) page();
+      const room = PH - M - 30 - y;
+      if (need() > room) maxH = Math.max(220, maxH - (need() - room));
+      const sc = Math.min(W / b.sheet.L, maxH / b.sheet.H), dw = b.sheet.L * sc, dh = b.sheet.H * sc;
+      txt(b.title, 26, PW - M, y + 18, true, 'right', 'rtl', W); y += 46;
+      const img = await _svgImg(lgOptyLayoutSvg(b.sheet, b.info, GEOS, {}));
+      x.drawImage(img, PW - M - dw, y, dw, dh);
+      x.strokeStyle = '#000'; x.lineWidth = 2; x.strokeRect(PW - M - dw, y, dw, dh);
+      y += dh + 14;
+      [COLS.map(c => c[1])].concat(b.rows).forEach((row, ri) => {
+        let right = PW - M;
+        if (!ri) { x.fillStyle = '#e8e8e8'; x.fillRect(M, y, W, rowH); }
+        COLS.forEach(([cw], ci) => {
+          x.strokeStyle = '#999'; x.lineWidth = 1; x.strokeRect(right - cw, y, cw, rowH);
+          const last = ci === COLS.length - 1 && ri;
+          txt(row[ci], 22, last ? right - cw / 2 : right - 8, y + rowH / 2, !ri, last ? 'center' : 'right', last ? 'ltr' : 'rtl', cw - 14);
+          right -= cw;
+        });
+        y += rowH;
+      });
+      y += 34;
+    }
+    pages.forEach((pc, i) => { x = pc.getContext('2d'); txt(j.job + ' · עמוד ' + (i + 1) + '/' + pages.length, 18, PW / 2, PH - 28, false, 'center', 'rtl'); });
+    out.push({ job: j.job, pages: pages.map(pc => pc.toDataURL('image/jpeg', 0.85).split(',')[1]) });
+  }
+  return out;
+}
+//  ישר ל-Brother (בן, 17/11): עמודים → תור ההדפסות (printer a4) → הכלי במחשב במשרד. עבודה לכל אופטימיזציה.
 async function printSheets(jobs) {
   jobs = (jobs || []).filter(j => JOBS[j] && JOBS[j].sheets).sort();
   if (!jobs.length) { st('אין מה להדפיס', 'bad'); return; }
-  st('מכין להדפסה…');
-  await loadGeos(jobs.flatMap(j => JOBS[j].sheets.flatMap(s => s.pieces.map(p => p.shape))).filter(Boolean));
-  let pa = $('printArea');
-  if (!pa) { pa = document.createElement('div'); pa.id = 'printArea'; document.body.appendChild(pa); }
-  pa.innerHTML = sheetsPrintHtml(jobs);
-  document.body.classList.add('printing');
-  const done = () => { document.body.classList.remove('printing'); window.removeEventListener('afterprint', done); };
-  window.addEventListener('afterprint', done);
-  st('', '');
-  window.print();
+  st('מכין את הלוחות להדפסה…');
+  try {
+    await loadGeos(jobs.flatMap(j => JOBS[j].sheets.flatMap(s => s.pieces.map(p => p.shape))).filter(Boolean));
+    const rendered = await renderSheetPages(sheetsPrintPlan(jobs));
+    let n = 0;
+    for (const r of rendered) {
+      let part = [], size = 0;
+      const send = async () => {
+        if (!part.length) return;
+        const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'sheets', printer: 'a4', client: 'אופטי-ווי ' + r.job, orderIds: [], pages: part });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok || !d.ok) throw new Error(d.code || ('HTTP ' + res.status));
+        n += part.length; part = []; size = 0;
+      };
+      for (const p of r.pages) { if (part.length >= 12 || size + p.length > 3400000) await send(); part.push(p); size += p.length; }
+      await send();
+    }
+    st('✓ ' + n + ' עמודים נשלחו למדפסת Brother', 'ok');
+  } catch (e) { console.error(e); st('✗ ההדפסה לא נשלחה: ' + (e.message || ''), 'bad'); }
 }
 
 //  למידה (פעם ביום, בפתיחת המסך): הזמן בין סימונים רצופים באותו יום → lgOptyFit → meta/optyModel
@@ -984,10 +1030,40 @@ $('pane-today').addEventListener('click', e => {
 if (location.hash === '#today') showTab('today');
 
 //  ─── חיפוש ───
+//  חיפוש (בן, 17/11): קודם בזכוכיות של האופטימיזציות — שבוע אחורה, מיד, עם "נחתך" גם בלי חיבור להזמנה;
+//  "חפש עוד אחורה" מוסיף שבועיים (ומושך אופטימיזציות ישנות אם צריך). ההזמנות המחוברות — מתחת, כשנטענות.
+let FIND = { q: '', days: 7 };
+async function findOpty() {
+  if (!FIND.loaded) {                                   // חיפוש חדש — האופטימיזציות הטריות (אולי נקלטו בינתיים)
+    FIND.loaded = true;
+    const [j, m] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value')]);
+    JOBS = Object.assign({}, JOBS, j.val() || {}); MATS = m.val() || {};
+  }
+  const today = lgOptyTodayIso(), since = lgOptyTodayIso(Date.now() - FIND.days * 86400000);
+  const oldest = Object.keys(JOBS).sort()[0];
+  if (oldest && (JOBS[oldest].day || '') > since) {      // הישנות לא נטענו — עוד 400 אחורה
+    try {
+      const r = _lgDb.ref('meta/optyJobs').orderByKey();
+      if (typeof r.endAt === 'function') { const more = (await r.endAt(oldest).limitToLast(400).once('value')).val() || {}; JOBS = Object.assign(more, JOBS); }
+    } catch (e) { console.warn('older', e); }
+  }
+  const hits = lgOptyPieceSearch(JOBS, $('q').value, { from: since }).slice(0, 150);
+  $('findOpty').innerHTML = `<section class="card"><h2>באופטימיזציות — ${FIND.days} ימים אחורה (${hits.length})</h2>
+    ${hits.map(h => { const c = lgOptyPieceCut(JOBS[h.job], h.sheetNo, today); return `<button type="button" class="jhit" data-ohit="${esc(h.job + '|' + h.sheetNo + '|' + h.order)}">
+      ${h.shape && GEOS[h.shape] ? lgOptyShapeSvg(GEOS[h.shape], { px: 40 }) : ''}
+      <span class="who"><b>${esc(h.client)}</b> · ${esc(h.name)} · <span dir="ltr">${esc(Math.round(h.w) + '×' + Math.round(h.h))}</span><br>
+      <small>${h.shape ? 'שייפ ' + esc(h.shape) + ' · ' : ''}${esc(h.job)} · לוח ${h.sheetNo} · ${esc(dmy(h.day))} · ${esc(matLbl(JOBS[h.job]))}</small></span>
+      <span class="cst ${c.cut ? 'cutok' : 'cutwait'}">${esc(c.label)}</span></button>`; }).join('') || '<p class="note">לא נמצא בטווח הזה</p>'}
+    <button class="sm" type="button" data-older="1">חפש עוד אחורה (+14 ימים)</button></section>`;
+  if (hits.length) loadGeos(hits.map(h => h.shape).filter(Boolean)).then(n => { if (n && FIND.q === lgOptyNorm($('q').value)) findOpty(); });
+}
 async function find() {
   const q = lgOptyNorm($('q').value);
-  if (!q) { $('findOut').innerHTML = ''; return; }
-  $('findOut').innerHTML = '<p class="note">מחפש…</p>';
+  if (q !== FIND.q) FIND = { q, days: 7 };
+  if (!q) { $('findOpty').innerHTML = ''; $('findOut').innerHTML = ''; return; }
+  $('findOpty').innerHTML = '<p class="note">מחפש…</p>';
+  $('findOut').innerHTML = '<p class="note">טוען את ההזמנות המחוברות…</p>';
+  try { await findOpty(); } catch (e) { console.error(e); $('findOpty').innerHTML = '<p class="note">✗ החיפוש באופטימיזציות נכשל</p>'; }
   try {
     await loadOrders();                        // טרי — אולי חיברו בינתיים בחיסום
     await loadWaiting();
@@ -1006,11 +1082,17 @@ async function find() {
       + (waits.length ? `<section class="card"><h2>מחכות לחיבור (${waits.length})</h2>${waits.map(w => `<div class="row">${geoSvg(w.p.shape)}<span class="shape">${esc(w.p.shape)}</span>
         <span class="who">${esc(w.where)}</span><span class="net">${net(w.p.w, w.p.h)}</span></div>`).join('')}
         <p class="note">מחברים בלשונית "לחיבור".</p></section>` : '')
-      || '<p class="note">לא נמצא — מחפש בהזמנות מ-30 הימים האחרונים</p>';
+      || '<p class="note">לא נמצא בהזמנות המחוברות (30 הימים האחרונים)</p>';
   } catch (e) { console.error(e); $('findOut').innerHTML = '<p class="note">✗ החיפוש נכשל</p>'; }
 }
 $('btnFind').addEventListener('click', find);
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
+$('findOpty').addEventListener('click', e => {
+  if (e.target.closest('[data-older]')) { FIND.days += 14; e.target.closest('[data-older]').disabled = true; findOpty().catch(err => console.error(err)); return; }
+  const h = e.target.closest('[data-ohit]'); if (!h) return;
+  const [job, n, order] = h.dataset.ohit.split('|');
+  showTab('jobs'); jobOpen(job, Number(n), Number(order));
+});
 $('findOut').addEventListener('click', async e => {
   const v = e.target.closest('[data-view]'), c = e.target.closest('[data-cut]');
   if (v) { const [oid, idx] = v.dataset.view.split('|'); const o = ordOf(oid); if (o) lgOptyShapeView(o, Number(idx)); }

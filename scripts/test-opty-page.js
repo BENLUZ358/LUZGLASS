@@ -232,16 +232,20 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   check('06MIR untouched', db._data.meta.optyJobs.M00401.marks, undefined);
 
   //  ─── עבודת היום: הדפסה (בן, 17/11) — לוחות במדפסת רגילה, מדבקות לפי לוח ───
-  let printed = 0; w.print = () => { printed++; };
+  //  ישר ל-Brother (בן, 17/11): הדף מצייר עמודי A4 (בדפדפן) ושולח לתור ההדפסות, printer a4
+  const plan = w.sheetsPrintPlan(['M00400']);
+  check('print plan: one block per different sheet, repeated sheet once with its range', plan[0].blocks.map(b => b.title.split(' · ').slice(0, 2).join(' · ')), ['M00400 · לוח 1/4', 'M00400 · לוחות 2–4/4 (×3)']);
+  check('print plan: table row = order on sheet, shape, client, sketch, size', plan[0].blocks[0].rows[0].filter((_, i) => i !== 2 && i !== 3), ['1', '700', '800×2150']);
+  w.renderSheetPages = async pl => pl.map(j => ({ job: j.job, pages: j.blocks.map(() => '/9j/AAAA') }));
+  let p0 = posts.length;
   doc.querySelector('[data-tprint="M00400"]').click();
-  for (let i = 0; i < 30 && !printed; i++) await tick();
-  const pa = doc.getElementById('printArea');
-  check('print sheets: regular print opened once', printed, 1);
-  check('print sheets: one block per different sheet, repeated sheet once with its range', pa && [...pa.querySelectorAll('.pblock h3')].map(h => h.textContent.replace(/\s+/g, ' ').trim().split(' · ').slice(0, 2).join(' · ')), ['M00400 · לוח 1/4', 'M00400 · לוחות 2–4/4 (×3)']);
-  check('print sheets: drawing + piece table with client', pa && [pa.querySelectorAll('.pblock svg').length, /נאור/.test(pa.textContent), /דני/.test(pa.textContent)], [2, true, true]);
-  printed = 0; doc.querySelector('[data-tprintday]').click();
-  for (let i = 0; i < 30 && !printed; i++) await tick();
-  check('print whole day: both optimisations, in order', [...doc.getElementById('printArea').querySelectorAll('.pjob')].map(x => x.dataset.job), ['M00337', 'M00400', 'M00401']);
+  for (let i = 0; i < 30 && posts.length === p0; i++) await tick();
+  const sp = posts[p0] && posts[p0][1];
+  check('print sheets: straight to the Brother queue', sp && [sp.action, sp.kind, sp.printer, sp.pages.length, sp.client], ['create', 'sheets', 'a4', 2, 'אופטי-ווי M00400']);
+  p0 = posts.length;
+  doc.querySelector('[data-tprintday]').click();
+  for (let i = 0; i < 40 && posts.length < p0 + 3; i++) await tick();
+  check('print whole day: one job per optimisation, in order', posts.slice(p0).map(x => x[1].client), ['אופטי-ווי M00337', 'אופטי-ווי M00400', 'אופטי-ווי M00401']);
   const n0 = posts.length;
   doc.querySelector('[data-tlabels="M00400"]').click();
   for (let i = 0; i < 30 && posts.length === n0; i++) await tick();
@@ -250,6 +254,23 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   doc.querySelector('[data-tlab="M00400|1"]').click();
   for (let i = 0; i < 30 && posts.length === n1; i++) await tick();
   check('labels for one sheet: its marker + its glass', posts[n1] && [posts[n1][1].labels[0].marker, posts[n1][1].labels.length], ['לוח 1/4', 3]);
+
+  //  ─── חיפוש (בן, 17/11): גם בזכוכיות של האופטימיזציות — שבוע אחורה מיד, "חפש עוד אחורה", והאם נחתכה ───
+  const iso = ms => new Date(ms - new Date(ms).getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const one = (job, day, client) => ({ job, day, mat: '08S', sheets: [w.lgOptyLayoutParse('[P1H1R7D64R639CX1F54Y5410S<n=7' + job.slice(-2) + '>N1]')[0]], pieces: { 1: { client, name: 'מקלחון', w: 800, h: 2000, shape: '7' + job.slice(-2) } } });
+  db._data.meta.optyJobs.M00402 = one('M00402', w.lgOptyTodayIso(), 'שמעון כהן');
+  db._data.meta.optyJobs.M00403 = one('M00403', iso(w.Date.now() - 20 * 86400000), 'שמעון כהן');
+  db._data.meta.optyJobs.M00404 = one('M00404', iso(w.Date.now() - 3 * 86400000), 'שמעון כהן');
+  doc.querySelector('[data-tab="find"]').click();
+  doc.getElementById('q').value = 'שמעון';
+  doc.getElementById('btnFind').click();
+  for (let i = 0; i < 40 && !doc.querySelector('[data-ohit]'); i++) await tick();
+  const ohits = () => [...doc.querySelectorAll('[data-ohit]')].map(x => x.dataset.ohit.split('|')[0]);
+  check('search: optimisation glass from the last week, newest first', ohits(), ['M00402', 'M00404']);
+  check('search: cut state for a glass not linked to an order', [...doc.querySelectorAll('[data-ohit] .cst')].map(x => x.textContent.trim()), ['לחיתוך היום', 'נחתך']);
+  doc.querySelector('[data-older]').click();
+  for (let i = 0; i < 40 && ohits().length < 3; i++) await tick();
+  check('"חפש עוד אחורה" adds older glass', ohits(), ['M00402', 'M00404', 'M00403']);
 
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

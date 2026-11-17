@@ -65,6 +65,25 @@ const B64 = BM.toString('base64');
   const more = await W.printOnce({ labelPrinter: { host: '127.0.0.1', port: deadPort } }, post({ id: 'j3', printer: 'labels', bitmaps: [B64] }));
   check('F1 a failed round reports not-ok (the loop waits)', more && more.ok, false);
 
+  /* G — עמודי לוחות → PDF → Brother (בן, 17/11) */
+  const { createCanvas } = require('@napi-rs/canvas');
+  const jpg = createCanvas(124, 175).encodeSync('jpeg').toString('base64');
+  const printed = []; calls.length = 0;
+  const gcfg = { labelPrinter: { host: '127.0.0.1', port }, printCopyTo: 'Brother MFC-L6915DN Printer',
+    printFn: async (file, printer) => { const fs = require('fs'); printed.push([printer, fs.readFileSync(file).subarray(0, 5).toString('latin1'), fs.readFileSync(file).length > 500]); } };
+  const ga = await W.printOnce(gcfg, post({ id: 'g1', printer: 'a4', bitmaps: [jpg, jpg] }));
+  check('G1 a4 job → one PDF to the Brother, not the label printer', [printed.length, printed[0] && printed[0][0], printed[0] && printed[0][1], ga.ok], [1, 'Brother MFC-L6915DN Printer', '%PDF-', true]);
+  check('G2 reported printed', calls.filter(c => c.action === 'agent-done').map(c => [c.id, c.ok]), [['g1', true]]);
+  const { PDFDocument } = require('pdf-lib');
+  let pages = 0; const keep = gcfg.printFn;
+  gcfg.printFn = async file => { pages = (await PDFDocument.load(require('fs').readFileSync(file))).getPageCount(); };
+  await W.printOnce(gcfg, post({ id: 'g2', printer: 'a4', bitmaps: [jpg, jpg, jpg] }));
+  check('G3 one A4 page per picture', pages, 3);
+  gcfg.printFn = keep;
+  calls.length = 0;
+  const gn = await W.printOnce({ labelPrinter: gcfg.labelPrinter }, post({ id: 'g3', printer: 'a4', bitmaps: [jpg] }));
+  check('G4 no Brother configured → failed, not retried', [gn.ok, calls.find(c => c.action === 'agent-done').retryable], [false, false]);
+
   /* D */
   calls.length = 0; got.length = 0;
   await W.printOnce(cfg, post(null));

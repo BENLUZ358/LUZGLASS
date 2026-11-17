@@ -30,8 +30,13 @@ const MAX_ATTEMPTS = 3;
 //  נשרפים בשתי שניות והכל "נכשל"
 const RETRY_WAIT_MS = [30000, 2 * 60000, 5 * 60000];
 const KEEP_MS = 90 * 24 * 3600 * 1000;
-const KINDS = ['labels'];
-const PRINTERS = ['labels'];
+const KINDS = ['labels', 'sheets'];
+const PRINTERS = ['labels', 'a4'];
+//  עמודי לוחות מאופטי-ווי (בן, 17/11: "שידפיס לי ישר במדפסת של brother") — תמונות JPEG של עמוד A4,
+//  הכלי במחשב במשרד אורז ל-PDF ומדפיס ב-Brother (printCopyTo)
+const MAX_PAGES = 12;
+const PAGE_B64_MAX = 1400000;
+const _jpg = s => typeof s === 'string' && s.length > 8 && s.length <= PAGE_B64_MAX && s.startsWith('/9j/') && /^[A-Za-z0-9+/]+=*$/.test(s);
 const BITMAP_B64 = 52268;   // 70 × 560 = 39200 בתים
 
 const fail = (status, code) => ({ status, body: { ok: false, code } });
@@ -54,17 +59,23 @@ function _view(id, j) {
 const _finish = (db, id) => db.ref().update({ [QUEUE + '/' + id]: null, [BLOBS + '/' + id]: null });
 
 async function create(db, b, who, now) {
-  const labels = Array.isArray(b.labels) ? b.labels : [];
-  const bitmaps = Array.isArray(b.bitmaps) ? b.bitmaps : [];
-  if (!KINDS.includes(b.kind) || !PRINTERS.includes(b.printer)) return fail(400, 'bad-kind');
-  if (!labels.length || labels.length > MAX_LABELS) return fail(400, 'bad-count');
-  if (bitmaps.length !== labels.length || !bitmaps.every(_b64)) return fail(400, 'bad-bitmaps');
+  const sheets = b.kind === 'sheets';
+  const labels = sheets ? [] : (Array.isArray(b.labels) ? b.labels : []);
+  const bitmaps = sheets ? (Array.isArray(b.pages) ? b.pages : []) : (Array.isArray(b.bitmaps) ? b.bitmaps : []);
+  if (!KINDS.includes(b.kind) || !PRINTERS.includes(b.printer) || (b.printer === 'a4') !== sheets) return fail(400, 'bad-kind');
+  if (sheets) {
+    if (!bitmaps.length || bitmaps.length > MAX_PAGES) return fail(400, 'bad-count');
+    if (!bitmaps.every(_jpg)) return fail(400, 'bad-pages');
+  } else {
+    if (!labels.length || labels.length > MAX_LABELS) return fail(400, 'bad-count');
+    if (bitmaps.length !== labels.length || !bitmaps.every(_b64)) return fail(400, 'bad-bitmaps');
+  }
   const user = (await db.ref('users/' + who).once('value')).val() || {};
   const id = now.toString(36) + crypto.randomBytes(4).toString('hex');
   const job = {
     kind: b.kind, printer: b.printer, client: _str(b.client, 80),
     orderIds: (Array.isArray(b.orderIds) ? b.orderIds : []).slice(0, 200).map(x => _str(x, 60)),
-    labels: labels.map(_label), count: labels.length, state: 'queued',
+    labels: labels.map(_label), count: bitmaps.length, state: 'queued',
     createdAt: now, createdBy: _str(user.name || who, 60), attempts: 0,
     ...(b.reprintOf ? { reprintOf: _str(b.reprintOf, 40) } : {}),
   };
@@ -175,4 +186,4 @@ async function handlePrint(req, deps) {
   return fail(400, 'bad-action');
 }
 
-module.exports = { handlePrint, MAX_LABELS, LEASE_MS };
+module.exports = { handlePrint, MAX_LABELS, MAX_PAGES, LEASE_MS };

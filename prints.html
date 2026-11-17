@@ -110,7 +110,7 @@ body{background:var(--bg);color:var(--text);}
 const $ = id => document.getElementById(id);
 const esc = s => lgEsc(s);
 const STATE = { queued: 'בתור', printing: 'מדפיס', printed: 'הודפס', failed: 'נכשל', unknown: 'לא ידוע — בדוק את המדפסת' };
-const KIND = { labels: 'מדבקות' };
+const KIND = { labels: 'מדבקות', sheets: 'עמודי לוחות (Brother)' };
 // שגיאת מדפסת במילים (הכלי מדווח את קוד הרשת)
 const ERR = { ECONNREFUSED: 'המדפסת לא ענתה — כבויה או לא ברשת', EHOSTUNREACH: 'המדפסת לא ברשת',
   ETIMEDOUT: 'המדפסת לא ענתה בזמן', ECONNRESET: 'החיבור למדפסת נקטע' };

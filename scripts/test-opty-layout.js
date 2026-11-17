@@ -94,8 +94,9 @@ check('cut state: undone / none → null', [L.lgOptyCutState({ at: '2026-11-17',
 }
 
 // ── Task 8: glass names in Hebrew ──
+check('names: extra clear = "אקסטרה קליר" (בן, 17/11)', L.lgOptyMatHe('08C', '8 mm extra clear'), '8 אקסטרה קליר');
 check('names: 08S / 08C / 06MIR / 3+3 / 06ACC', [L.lgOptyMatHe('08S', '8 mm clear'), L.lgOptyMatHe('08C', '8 mm extra clear'), L.lgOptyMatHe('06MIR', '6 mm mirror'), L.lgOptyMatHe('03+3S', '3+3 clear'), L.lgOptyMatHe('06ACC', '6 mm acid clear')],
-  ['8 שקוף', '8 שקוף אקסטרה', '6 מראה', '3+3 שקוף', '6 חלבי שקוף']);
+  ['8 שקוף', '8 אקסטרה קליר', '6 מראה', '3+3 שקוף', '6 חלבי שקוף']);
 check('names: unknown word stays in English; no name → code', [L.lgOptyMatHe('06X', '6 mm zebra'), L.lgOptyMatHe('06X', '')], ['6 zebra', '06X']);
 check('label: saved Hebrew wins, else from English, else code', [L.lgOptyMatLabel('08S', { '08S': { he: '8 שקוף רגיל', en: '8 mm clear' } }), L.lgOptyMatLabel('08S', { '08S': { en: '8 mm clear' } }), L.lgOptyMatLabel('08S', {})], ['08S · 8 שקוף רגיל', '08S · 8 שקוף', '08S']);
 check('names: all 54 OptyWay glass types get Hebrew words', (() => {
@@ -130,5 +131,21 @@ check('names: all 54 OptyWay glass types get Hebrew words', (() => {
 
 module.exports = { check, M290, il, geoOf, L, done: () => failed };
 if (require.main === module) {
-  if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
+  //  זכוכית לא מחוברת: מספר ההזמנה של אופטי-ווי (ORDINE) גם במקום של מספר ההזמנה — כדי לדעת לחבר (בן, 17/11)
+{
+  const rec = { job: 'M9', sheets: L.lgOptyLayoutParse('[P1H1R7D64R639CX1F54Y5410S<n=700>N1]'), pieces: { 1: { client: 'דור רפאל', name: '7009', w: 452, h: 1892, shape: '700' } } };
+  const lb = L.lgOptyJobLabels(rec, {}, {}, '08AC').filter(l => !l.marker)[0];
+  check('unlinked label: OptyWay order number in the order spot', [lb.orderNum, lb.sketchName, lb.title], ['7009', '7009', 'דור רפאל']);
+}
+
+//  מצב חיתוך של זכוכית מהאופטימיזציה, גם בלי חיבור להזמנה (בן, 17/11)
+{
+  const rec = { job: 'M9', day: '2026-11-17', sheets: [{ count: 2, pieces: [] }] };
+  check('piece cut: future day → planned', L.lgOptyPieceCut(Object.assign({}, rec, { day: '2026-11-18' }), 1, '2026-11-17'), { cut: false, label: 'מתוכנן ל-18/11' });
+  check('piece cut: today, not marked → to cut today', L.lgOptyPieceCut(rec, 1, '2026-11-17'), { cut: false, label: 'לחיתוך היום' });
+  check('piece cut: today, a copy of the same sheet marked → cut', L.lgOptyPieceCut(Object.assign({}, rec, { marks: { 2: { at: 1 } } }), 1, '2026-11-17'), { cut: true, label: 'נחתך · סומן' });
+  check('piece cut: day passed → cut', L.lgOptyPieceCut(rec, 1, '2026-11-18'), { cut: true, label: 'נחתך' });
+}
+
+if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 }
