@@ -116,14 +116,14 @@ function lgOptyLayoutSvg(sheet, info, geos, opts) {
     if (!colors[key]) colors[key] = LG_OPTY_PAL[ci++ % LG_OPTY_PAL.length];
     const x = p.x * S, y = H - (p.y + p.h) * S, w = p.w * S, h = p.h * S;
     const sel = o.selected === p.order;
-    g += `<g class="lg-opty-pc" data-order="${p.order}" data-pos="${p.pos}"><rect x="${_lgLr1(x)}" y="${_lgLr1(y)}" width="${_lgLr1(w)}" height="${_lgLr1(h)}" fill="${o.cut && o.cut[p.order] ? '#e5e5e5' : colors[key]}" stroke="${sel ? '#a93226' : '#333'}" stroke-width="${sel ? 3 : 1}"/>`;
+    g += `<g class="lg-opty-pc" data-order="${p.order}" data-pos="${p.pos}"><rect x="${_lgLr1(x)}" y="${_lgLr1(y)}" width="${_lgLr1(w)}" height="${_lgLr1(h)}" fill="${o.cut && o.cut[p.order] ? '#e5e5e5' : colors[key]}" stroke="${sel ? '#a93226' : o.bold ? '#000' : '#333'}" stroke-width="${sel ? 3 : o.bold ? 2.5 : 1}"/>`;
     const geo = p.shape ? gs[p.shape] : null;
     if (geo && shapeSvg) {
       const m = /<path d="([^"]+)"/.exec(shapeSvg(geo));
       if (m) {
         const rot = Math.abs(geo.w - p.w) > 1 && Math.abs(geo.w - p.h) <= 1;
         const tf = rot ? `translate(${_lgLr1(x + w)},${_lgLr1(y)}) rotate(90) scale(${S})` : `translate(${_lgLr1(x)},${_lgLr1(y)}) scale(${S})`;
-        g += `<path d="${m[1]}" transform="${tf}" fill="none" stroke="#c0392b" stroke-width="${_lgLr1(1.8 / S)}" stroke-linejoin="round"/>`;
+        g += `<path d="${m[1]}" transform="${tf}" fill="none" stroke="#c0392b" stroke-width="${_lgLr1((o.bold ? 3 : 1.8) / S)}" stroke-linejoin="round"/>`;
       }
     }
     const size = (r.w && r.h) ? `${r.w}×${r.h}` : `${Math.round(p.w)}×${Math.round(p.h)}`;
@@ -133,7 +133,7 @@ function lgOptyLayoutSvg(sheet, info, geos, opts) {
     const f = Math.max(6, Math.min(22, Lx * 1.7 / longest, Tx / (lines.length * 1.35)));
     const tot = lines.reduce((a, l) => a + l[1] * f * 1.2, 0);
     let ty = -tot / 2;
-    g += `<g transform="translate(${_lgLr1(x + w / 2)},${_lgLr1(y + h / 2)})${rotT ? ' rotate(-90)' : ''}" font-family="Heebo,Arial,sans-serif" text-anchor="middle" fill="#111">`;
+    g += `<g transform="translate(${_lgLr1(x + w / 2)},${_lgLr1(y + h / 2)})${rotT ? ' rotate(-90)' : ''}" font-family="Heebo,Arial,sans-serif" text-anchor="middle" fill="${o.bold ? '#000' : '#111'}"${o.bold ? ' font-weight="700"' : ''}>`;
     lines.forEach(([t, k, dir]) => {
       ty += k * f * 1.2;
       if (t) g += `<text x="0" y="${_lgLr1(ty - k * f * 0.3)}" font-size="${_lgLr1(k * f)}"${k > 1 ? ' font-weight="700"' : ''} direction="${dir}">${_lgEscX(t)}</text>`;

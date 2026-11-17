@@ -242,7 +242,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-paradox.js?v=20261116c"></script>
 <script src="opty-match.js?v=20261116e"></script>
 <script src="opty-shape.js?v=20261116d"></script>
-<script src="opty-layout.js?v=20261117k"></script>
+<script src="opty-layout.js?v=20261117m"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261117c"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -930,53 +930,40 @@ function sheetsPrintPlan(jobs) {
           return [String(p.order), p.shape || '—', x ? x.o.orderClient : r.client || '', x ? x.o.sketchName : r.name || '', Math.round(r.w || p.w) + '×' + Math.round(r.h || p.h)]; }) }; }) };
   }).filter(Boolean);
 }
-//  עמוד A4 ב-150dpi (1240×1754): כותרת, הציור, טבלה — כמה לוחות שנכנסים בעמוד. → JPEG (base64) לכל עמוד
-const _A4 = { w: 1240, h: 1754, m: 60 };
+//  עמוד A4 ב-150dpi (1240×1754) → JPEG (base64) לכל עמוד (הכלי במשרד מדפיס כל תמונה כעמוד A4 לאורך).
+//  בן, 17/11: "האופטימיזציה יותר בגדול ובמרכז" → לאורך, לוח אחד בעמוד, בלי טבלה (הפרטים כתובים על כל
+//  זכוכית בציור), הציור הכי גדול שנכנס, במרכז, מודגש (קווים עבים, כתב מודגש).
+const _A4 = { w: 1240, h: 1754, m: 44 };
 const _svgImg = svg => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('ציור הלוח לא נטען')); i.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); });
 async function renderSheetPages(plan) {
   try { await document.fonts.load('700 30px Heebo', 'אבג 0123'); } catch (_) {}
   const PW = _A4.w, PH = _A4.h, M = _A4.m, W = PW - 2 * M, out = [];
-  const COLS = [[70, '#'], [150, 'שייפ'], [340, 'לקוח'], [320, 'סקיצה'], [240, 'מידה']];
+  let x;
+  const txt = (t, px, yy, bold) => {
+    x.font = (bold ? '700 ' : '400 ') + px + 'px Heebo, Arial, sans-serif'; x.fillStyle = '#000';
+    x.textAlign = 'center'; x.direction = 'rtl'; x.textBaseline = 'middle';
+    let s = String(t == null ? '' : t);
+    while (s.length > 1 && x.measureText(s).width > W) s = s.slice(0, -2) + '…';
+    x.fillText(s, PW / 2, yy);
+  };
   for (const j of plan) {
-    const pages = []; let x, y;
-    const page = () => { const c = document.createElement('canvas'); c.width = PW; c.height = PH; x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, PW, PH); y = M; pages.push(c); };
-    const txt = (t, px, xx, yy, bold, align, dir, maxW) => {
-      x.font = (bold ? '700 ' : '400 ') + px + 'px Heebo, Arial, sans-serif'; x.fillStyle = '#000';
-      x.textAlign = align || 'right'; x.direction = dir || 'rtl'; x.textBaseline = 'middle';
-      let s = String(t == null ? '' : t);
-      if (maxW) while (s.length > 1 && x.measureText(s).width > maxW) s = s.slice(0, -2) + '…';
-      x.fillText(s, xx, yy);
-    };
-    page();
-    txt(j.head, 32, PW - M, y + 18, true, 'right', 'rtl', W); y += 60;
+    const pages = [];
     for (const b of j.blocks) {
-      const rowH = 34, tableH = rowH * (b.rows.length + 1);
-      let maxH = 760;
-      const need = () => 46 + Math.min(maxH, W * b.sheet.H / b.sheet.L) + 14 + tableH + 34;
-      if (y + need() > PH - M - 30 && y > M + 80) page();
-      const room = PH - M - 30 - y;
-      if (need() > room) maxH = Math.max(220, maxH - (need() - room));
-      const sc = Math.min(W / b.sheet.L, maxH / b.sheet.H), dw = b.sheet.L * sc, dh = b.sheet.H * sc;
-      txt(b.title, 26, PW - M, y + 18, true, 'right', 'rtl', W); y += 46;
-      const img = await _svgImg(lgOptyLayoutSvg(b.sheet, b.info, GEOS, {}));
-      x.drawImage(img, PW - M - dw, y, dw, dh);
-      x.strokeStyle = '#000'; x.lineWidth = 2; x.strokeRect(PW - M - dw, y, dw, dh);
-      y += dh + 14;
-      [COLS.map(c => c[1])].concat(b.rows).forEach((row, ri) => {
-        let right = PW - M;
-        if (!ri) { x.fillStyle = '#e8e8e8'; x.fillRect(M, y, W, rowH); }
-        COLS.forEach(([cw], ci) => {
-          x.strokeStyle = '#999'; x.lineWidth = 1; x.strokeRect(right - cw, y, cw, rowH);
-          const last = ci === COLS.length - 1 && ri;
-          txt(row[ci], 22, last ? right - cw / 2 : right - 8, y + rowH / 2, !ri, last ? 'center' : 'right', last ? 'ltr' : 'rtl', cw - 14);
-          right -= cw;
-        });
-        y += rowH;
-      });
-      y += 34;
+      const c = document.createElement('canvas'); c.width = PW; c.height = PH; pages.push(c);
+      x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, PW, PH);
+      txt(j.head, 26, M + 14, false);
+      txt(b.title, 34, M + 60, true);
+      const top = M + 100, h = PH - M - 50 - top;
+      const sc = Math.min(W / b.sheet.L, h / b.sheet.H), dw = b.sheet.L * sc, dh = b.sheet.H * sc;
+      const dx = M + (W - dw) / 2, dy = top + (h - dh) / 2;
+      const img = await _svgImg(lgOptyLayoutSvg(b.sheet, b.info, GEOS, { bold: true }));
+      x.drawImage(img, dx, dy, dw, dh);
+      x.strokeStyle = '#000'; x.lineWidth = 4; x.strokeRect(dx, dy, dw, dh);
     }
-    pages.forEach((pc, i) => { x = pc.getContext('2d'); txt(j.job + ' · עמוד ' + (i + 1) + '/' + pages.length, 18, PW / 2, PH - 28, false, 'center', 'rtl'); });
-    out.push({ job: j.job, pages: pages.map(pc => pc.toDataURL('image/jpeg', 0.85).split(',')[1]) });
+    out.push({ job: j.job, pages: pages.map((c, i) => {
+      x = c.getContext('2d'); txt(j.job + ' · עמוד ' + (i + 1) + '/' + pages.length, 22, PH - 26, false);
+      return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+    }) });
   }
   return out;
 }
