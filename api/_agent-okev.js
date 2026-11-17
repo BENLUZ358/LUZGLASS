@@ -42,8 +42,24 @@ const KOLET_HOWTO_TEXT = [
 
 // ביטול/שינוי מותר רק לפני שההזמנה נכנסה לייצור
 const CHANGEABLE = ['', 'pending', 'chash', 'drafter', 'opty'];
-function lgOkevCanChange(order) {
-  return CHANGEABLE.includes(String((order && order.stage) || ''));
+
+// ── נחתך (בן, 17/11): חותמת מאופטי-ווי על הפריט — items[k].optyCut = { at: יום עבודה, job, marked?, undone? }
+//    נחתך = לא בוטל, והיום שלו עבר או שהלוח סומן "נחתך". total = פריטים שמחוברים לאופטי-ווי (optyJob).
+function _ilToday(now) {
+  const p = {};
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date(now == null ? Date.now() : now)).forEach(x => { p[x.type] = x.value; });
+  return `${p.year}-${p.month}-${p.day}`;
+}
+function lgOkevCutInfo(order, todayIso) {
+  const today = todayIso || _ilToday();
+  const items = Object.values((order && order.items) || {}).filter(it => it && it.optyJob);
+  const cut = items.filter(it => { const c = it.optyCut; return c && !c.undone && c.at && (c.marked || c.at < today); }).length;
+  return { cut, total: items.length };
+}
+function lgOkevCanChange(order, todayIso) {
+  if (!CHANGEABLE.includes(String((order && order.stage) || ''))) return false;
+  return lgOkevCutInfo(order, todayIso).cut === 0;    // זכוכית כבר נחתכה → מאוחר מדי, גם אם השלב עוד מוקדם
 }
 
 // הזמנה "פתוחה": לא נאספה, לא בוטלה על ידי הסוכן, ולא תמונה שבן סימן כדוגמה (שיפור 1, 11/11)
@@ -116,7 +132,7 @@ const lgOkevTooLateStaffText = (o, who, intent) => who + ' ביקש ' + (intent 
 // "בוטלה הזמנה L1004 (אמבטיה) של כהן — הייתה בשלב שרטוט"
 const lgOkevCancelledStaffText = (o, who, stage) => 'בוטלה הזמנה ' + _numSk(o) + ' של ' + who + ' — הייתה בשלב ' + lgOkevStageName(stage);
 
-function lgOkevReply(intent, found) {
+function lgOkevReply(intent, found, todayIso) {
   if (!found || found.match === 'none') return NOT_FOUND;
   if (found.match === 'many') {
     return 'על איזו הזמנה מדובר?\n' + found.orders.map((o, i) =>
@@ -128,9 +144,14 @@ function lgOkevReply(intent, found) {
   const o = found.orders[0];
   if (intent === 'status') {
     const st = String(o.stage || '');
+    if (CHANGEABLE.includes(st)) {
+      const c = lgOkevCutInfo(o, todayIso);
+      if (c.cut && c.cut === c.total) return label(o) + ': הזכוכיות נחתכו, ההזמנה בייצור';
+      if (c.cut) return label(o) + ': חלק מהזכוכיות כבר נחתכו, ההזמנה בייצור';
+    }
     return label(o) + ': ' + (OKEV_STATUS_TEXT[st] || OKEV_STATUS_TEXT['']);
   }
-  if (!lgOkevCanChange(o)) return lgOkevTooLate(o);
+  if (!lgOkevCanChange(o, todayIso)) return lgOkevTooLate(o);
   if (intent === 'cancel') return 'בטוח לבטל את ' + label(o) + '?';
   // שינוי: לברר אם זה כל הסקיצה או זכוכית אחת (בן, 12/11)
   if (intent === 'change') return 'מה לשנות ב' + label(o) + '? כל הסקיצה, או זכוכית מסוימת? אם זכוכית מסוימת — כתוב את המידה שלה.';
@@ -158,6 +179,6 @@ function lgOkevRoute(p) {
   }
 }
 
-module.exports = { OKEV_STATUS_TEXT, AGENT_MENU_TEXT, KOLET_HOWTO_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
+module.exports = { lgOkevCutInfo, OKEV_STATUS_TEXT, AGENT_MENU_TEXT, KOLET_HOWTO_TEXT, AGENT_HANDOFF_TEXT, CANCEL_DONE_TEXT, CANCEL_KEPT_TEXT, NOT_FOUND,
                    lgOkevCanChange, lgOkevFind, lgOkevReply, lgOkevRoute, lgOkevTooLate, lgOkevChangeStaffText,
                    lgOkevStageName, lgOkevTooLateStaffText, lgOkevCancelledStaffText };

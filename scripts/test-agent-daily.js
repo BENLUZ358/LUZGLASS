@@ -88,6 +88,17 @@ const seed = () => fakeDb({ waMeta: {
     s = await D.lgAgentDailySummary(sdb, TUE);
     check('fresh heartbeat → no line', [s.text.includes('כלי החשבוניות'), s.counts.watcherSilent], [false, false]);
   }
+  /* אופטי-ווי (בן, 17/11): שורת חיתוך של היום בסיכום */
+  {
+    const TUE = Date.UTC(2026, 10, 10, 13, 0, 0);   // שלישי 10/11 15:00 ישראל
+    const sdb = seed();
+    sdb._data.meta = { optyJobs: {
+      M1: { job: 'M1', day: '2026-11-10', sheets: [{ count: 2, pieces: [{ pos: 1 }, { pos: 2 }] }], marks: { 1: { at: 1 } } },
+      M2: { job: 'M2', day: '2026-11-10', sheets: [{ count: 1, pieces: [{ pos: 1 }] }] },
+      M3: { job: 'M3', day: '2026-11-09', sheets: [{ count: 1, pieces: [{ pos: 1 }] }] } } };
+    const s = await D.lgAgentDailySummary(sdb, TUE);
+    check('cutting today line', s.text.split('\n').pop(), 'חיתוך היום: 5 זכוכיות ב-2 אופטימיזציות · 1 מתוך 3 לוחות סומנו נחתך');
+  }
   /* שליחה לצוות בלבד + בלי כפילות */
   {
     const db = seed(), p = provider();

@@ -73,6 +73,21 @@ async function lgAgentDailySummary(db, now) {
   const benOpen = _vals(await db.ref(ROOM_OPEN).once('value'));
   //  חדר הסוכנים שלב ב׳: כלי החשבוניות במשרד (השעון) לא שלח דופק 30 דק' בשעות עבודה
   const watcherLine = lgWatcherSilentLine((await db.ref(WATCHERS).once('value')).val() || {}, now);
+  //  אופטי-ווי (בן, 17/11): האופטימיזציות של יום העבודה הזה — כמה זכוכיות, כמה לוחות סומנו "נחתך"
+  let cutLine = '';
+  try {
+    const today = _jerDate(now).iso;
+    const jobs = Object.values((await db.ref('meta/optyJobs').orderByChild('day').equalTo(today).once('value')).val() || {})
+      .filter(j => j && j.day === today && Array.isArray(j.sheets));
+    if (jobs.length) {
+      let pcs = 0, sheets = 0, marked = 0;
+      jobs.forEach(j => {
+        j.sheets.forEach(s => { const n = Number(s.count) || 1; sheets += n; pcs += n * ((s.pieces || []).length); });
+        marked += Object.keys(j.marks || {}).length;
+      });
+      cutLine = 'חיתוך היום: ' + pcs + ' זכוכיות ב-' + jobs.length + ' אופטימיזציות · ' + marked + ' מתוך ' + sheets + ' לוחות סומנו נחתך';
+    }
+  } catch (e) { cutLine = ''; }
 
   const acted = shadow.filter(r => r.v.acted === true);
   const toShaul = acted.filter(r => (r.v.wouldAct || []).some(a => a && (a.type === 'staff' || a.type === 'quote-ask')));
@@ -110,6 +125,7 @@ async function lgAgentDailySummary(db, now) {
     'הצעות מחיר תקועות (מעל 3 שעות): ' + counts.quotesStuck + _list(stuck.map(num)),
     'נחסמו בשליחה: ' + counts.blockedSends,
     ...(watcherLine ? [watcherLine] : []),
+    ...(cutLine ? [cutLine] : []),
   ].join('\n');
   return { counts, text };
 }

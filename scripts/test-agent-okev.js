@@ -121,5 +121,23 @@ check('menu', AGENT_MENU_TEXT, [
 
 check('complaint with ref → okev, without → complaint', [rt('complaint', { ref: 'כהן' }), rt('complaint'), rt('complaint', { linked: false })], ['okev', 'complaint', 'shaul']);
 
+// ── נחתך (בן, 17/11: "צריך ללמד את הסוכנים") — החותמת מאופטי-ווי על הפריטים ──
+{
+  const T = '2026-11-18';
+  const cut = { optyJob: 'M1', optyShape: '1', optyCut: { at: '2026-11-17', job: 'M1' } };
+  const future = { optyJob: 'M1', optyShape: '2', optyCut: { at: '2026-11-19', job: 'M1' } };
+  const undone = { optyJob: 'M1', optyShape: '3', optyCut: { at: '2026-11-17', job: 'M1', undone: true } };
+  const plain = { optyJob: 'M1', optyShape: '4' };
+  check('cut info: counts linked items, cut = day passed or sheet marked', [okev.lgOkevCutInfo({ items: [cut, future, undone, plain, { w: 1 }] }, T), okev.lgOkevCutInfo({ items: { a: { optyJob: 'M1', optyCut: { at: T, job: 'M1', marked: true } } } }, T)], [{ cut: 1, total: 4 }, { cut: 1, total: 1 }]);
+  const st = (stage, items) => okev.lgOkevReply('status', { match: 'one', orders: [o('x', 'L1', 'מטבח', stage, { items })] }, T);
+  check('status: all cut → נחתכו', st('opty', [cut, cut]).endsWith('הזכוכיות נחתכו, ההזמנה בייצור'), true);
+  check('status: some cut → חלק', st('opty', [cut, plain]).endsWith('חלק מהזכוכיות כבר נחתכו, ההזמנה בייצור'), true);
+  check('status: none cut → as before', st('opty', [plain]).endsWith('ההזמנה בהכנה'), true);
+  check('status: later stage keeps its wording', st('delivery', [cut]).endsWith(OKEV_STATUS_TEXT.delivery), true);
+  check('canChange: early stage but a glass was cut → no', lgOkevCanChange({ stage: 'drafter', items: [cut] }, T), false);
+  check('canChange: only an undone mark → yes', lgOkevCanChange({ stage: 'drafter', items: [undone] }, T), true);
+  check('canChange: cut day still ahead → yes', lgOkevCanChange({ stage: 'drafter', items: [future] }, T), true);
+}
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall ok');
