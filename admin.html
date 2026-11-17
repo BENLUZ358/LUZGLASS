@@ -1502,8 +1502,95 @@ function _invOverlay(msg){
 
 function _invClose(){ const o = document.getElementById('invOv'); if(o) o.remove(); }
 
+// ── מחיר ידני להזמנה בלי מחיר נעול (בן, 17/11) ──
+//  השרת מחזיר את ההזמנות לפי orderNum (או id). כל שורה = קבוצת פריטים זהים,
+//  בדיוק כמו בנעילה (lgLockAndAdvance): מחיר למ"ר × שטח × כמות.
+function _invManualOrders(keys){
+  const ks = (keys || []).map(String);
+  return orders.filter(o => _invPreviewIds.includes(String(o.id))
+    && (ks.includes(String(o.orderNum || '')) || ks.includes(String(o.id))));
+}
+function _invManualGroups(o){
+  return lgGroupByQuantityId(o.items || []).map(g => {
+    const rep = g.items[0];
+    return { quantityGroupId: g.quantityGroupId, qty: g.items.length,
+             name: rep.glassFullName || rep.name || '', sku: rep.sku || '',
+             w: rep.w || 0, h: rep.h || 0, area: lgCalcAreaM2(rep.w || 0, rep.h || 0) };
+  });
+}
+function _invManualRender(ov, ords){
+  const rows = ords.map(o => {
+    const gs = _invManualGroups(o);
+    return '<div style="border:1px solid var(--line,#e5e0d8);border-radius:8px;padding:10px 12px;margin-bottom:10px">'
+      + '<div style="font-weight:800;font-size:14px;margin-bottom:6px">' + lgEsc(o.orderNum || o.id) + ' <span style="font-weight:400;color:var(--muted);font-size:12px">' + lgEsc(o.sketchName || '') + '</span></div>'
+      + gs.map((g, i) => '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;padding:4px 0">'
+          + '<span style="flex:1;min-width:180px">' + lgEsc(g.name) + ' <span style="color:var(--muted)">' + lgEsc(g.sku) + '</span><br>'
+          + '<span style="color:var(--muted);font-size:12px">' + lgDimsText(g.w, g.h) + ' · ' + g.area.toFixed(3) + ' מ"ר' + (g.qty > 1 ? ' × ' + g.qty : '') + '</span></span>'
+          + '<label style="display:flex;align-items:center;gap:4px">₪ למ"ר <input type="number" inputmode="decimal" min="0" step="0.01" data-mp-o="' + lgEsc(String(o.id)) + '" data-mp-g="' + i + '"'
+          + ' style="width:90px;padding:7px;border:1px solid #ccc;border-radius:6px;font-size:14px" oninput="_invManualSum()"></label>'
+          + '<span data-mp-t="' + lgEsc(String(o.id)) + '|' + i + '" style="min-width:70px;font-weight:700"></span></div>').join('')
+      + '</div>';
+  }).join('');
+  ov.innerHTML = '<div class="modal" style="max-width:640px">'
+    + '<div class="mhdr"><h2>מחיר ידני</h2><button class="mcl" aria-label="סגור" onclick="_invClose()"><span data-icon="x"></span></button></div>'
+    + '<div class="mbody"><div style="font-size:13px;margin-bottom:10px;line-height:1.6">ל' + (ords.length === 1 ? 'הזמנה הזו' : ords.length + ' ההזמנות האלה')
+    + ' אין מחיר במערכת. הקלד את המחיר למ"ר כמו שעדכנת בחשבשבת, והחשבונית תמשיך.</div>'
+    + rows + '<div id="mpErr" style="color:var(--red);font-size:12px;font-weight:700"></div></div>'
+    + '<div class="mfoot" style="gap:7px"><button class="btn btn-primary" id="mpSave" style="flex:1" onclick="_invManualSave()">שמור מחירים והמשך</button>'
+    + '<button class="btn btn-secondary" onclick="_invClose()">ביטול</button></div></div>';
+  ov._mpOrds = ords.map(o => String(o.id));
+  if(window.lgIcons) lgIcons.render(ov);
+}
+function _invManualSum(){
+  document.querySelectorAll('#invOv input[data-mp-o]').forEach(inp => {
+    const o = orders.find(x => String(x.id) === inp.dataset.mpO); if(!o) return;
+    const g = _invManualGroups(o)[Number(inp.dataset.mpG)];
+    const p = Number(inp.value);
+    const t = document.querySelector('#invOv [data-mp-t="' + inp.dataset.mpO + '|' + inp.dataset.mpG + '"]');
+    if(t) t.textContent = p > 0 ? '₪' + Math.round(g.area * p * g.qty).toLocaleString() : '';
+  });
+}
+async function _invManualSave(){
+  const ov = document.getElementById('invOv'); if(!ov) return;
+  const err = document.getElementById('mpErr');
+  const ids = ov._mpOrds || [];
+  const ups = [];
+  for(const id of ids){
+    const o = orders.find(x => String(x.id) === id); if(!o) continue;
+    const lockedItems = []; let total = 0;
+    for(const [i, g] of _invManualGroups(o).entries()){
+      const inp = ov.querySelector('input[data-mp-o="' + CSS.escape(id) + '"][data-mp-g="' + i + '"]');
+      const p = Number(inp && inp.value);
+      if(!(p > 0)){ err.textContent = 'חסר מחיר ב-' + (o.orderNum || id) + ' — ' + g.name; inp && inp.focus(); return; }
+      if(!g.sku){ err.textContent = 'אין מק"ט ב-' + (o.orderNum || id) + ' — ' + g.name + '. קבע מק"ט בהזמנה קודם.'; return; }
+      const lineTotal = Math.round(g.area * p * g.qty);
+      total += lineTotal;
+      lockedItems.push({ name: g.name, sku: g.sku, w: g.w, h: g.h, area: g.area, quantity: g.qty,
+                         quantityGroupId: g.quantityGroupId, pricePerM2: p, lineTotal });
+    }
+    ups.push([id, { lockedItems, totalFinal: total, pricesLockedAt: o.pricesLockedAt || Date.now(),
+                    priceManualAt: Date.now(), updatedAt: Date.now() }]);
+  }
+  const btn = document.getElementById('mpSave'); if(btn){ btn.disabled = true; btn.textContent = 'שומר...'; }
+  try {
+    for(const [id, u] of ups) await updateOrder(id, u);
+  } catch(e){
+    err.textContent = 'לא נשמר: ' + e.message;
+    if(btn){ btn.disabled = false; btn.textContent = 'שמור מחירים והמשך'; }
+    return;
+  }
+  showToast('המחירים נשמרו');
+  invPreview();
+}
+
 function _invRender(data, ok){
   const ov = document.getElementById('invOv') || _invOverlay('');
+  //  הזמנה בלי מחיר נעול — מקלידים את המחיר ביד וממשיכים (בן, 17/11: "שיהיה
+  //  אופציה להמשיך איתם ולעדכן את המחיר ידני כמו שעדכנתי בחשבשבת")
+  if(data && data.error === 'יש הזמנות בלי מחיר נעול' && _invManualOrders(data.orders).length){
+    _invManualRender(ov, _invManualOrders(data.orders));
+    return;
+  }
   if(!ok || data.error){
     const list = (data.orders || data.clients || []);
     const extra = list.length
