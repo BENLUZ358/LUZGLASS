@@ -1334,6 +1334,7 @@ function renderAll(){
   updateSummaryBar();
   checkChisumArrived();
   _avHandlePendingScan();   // ברקוד אביבי שנסרק במצלמה (17/11)
+  _wdHandleGo();            // ברקוד זכוכית → הלשונית של ההזמנה (17/11)
 }
 
 // ═══════════════════════════════════════
@@ -3427,6 +3428,41 @@ function _avHandlePendingScan(){
   if(String(code).toUpperCase() === 'TEST'){ setTab('avivi'); showToast('✓ הברקוד נקרא — הסריקה עובדת'); return; }
   avScan(code);
 }
+// ── ברקוד הזכוכית (בן, 17/11): workday.html?go=<id> — הלשונית שההזמנה נמצאת בה, ההזמנה מודגשת ──
+var _wdGoId = (() => { try { return new URLSearchParams(location.search).get('go') || null; } catch(_) { return null; } })();
+const _WD_TAB_NAME = { build:'בנה יום עבודה', work:'יום עבודה פעיל', chisum:'חיסום', triplex:'טריפלקס', graphic:'גרפיקה', delivery:'הובלות', avivi:'אביבי' };
+function wdTabForOrder(o){
+  const st = o.stage || '', id = String(o.id);
+  const inWork = workDay.inWork.map(String).includes(id);
+  if(st === 'delivery') return lgAvIsAvivi(o) ? 'avivi' : 'delivery';
+  if(st === 'graphic') return 'graphic';
+  if(st === 'chisum') return inWork ? 'work' : (o.triplexReportId && !o.triplexArrived ? 'triplex' : 'chisum');
+  if(st === 'workday') return inWork ? 'work' : 'build';
+  return 'build';
+}
+function _wdHandleGo(){
+  if(!_wdGoId || !allOrders.length) return;
+  const id = String(_wdGoId); _wdGoId = null;
+  try { history.replaceState(null, '', location.pathname); } catch(_) {}
+  const o = allOrders.find(x => String(x.id) === id);
+  if(!o){ showToast('⚠️ ההזמנה לא ביום העבודה — פתח אותה מלוח ההזמנות'); return; }
+  const tab = wdTabForOrder(o);
+  if(tab === 'avivi') _avOpen.add(id);
+  setTab(tab);
+  showToast('📍 ' + (o.sketchName || o.orderNum || '') + ' — ' + (_WD_TAB_NAME[tab] || tab));
+  setTimeout(() => {
+    const v = document.getElementById('view-' + tab); if(!v) return;
+    const sel = id.replace(/["\\]/g, '');
+    let el = v.querySelector(`[data-sketch-for="${sel}"], [data-ids*="${sel}"], [onclick*="'${sel}'"]`);
+    if(!el) return;
+    const card = el.closest('.stv-card, .av-ord, .wc-card, .order-card, .card') || el.parentElement || el;
+    card.querySelectorAll('details').forEach(d => { d.open = true; });
+    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    card.style.outline = '3px solid #e0b400'; card.style.outlineOffset = '2px';
+    setTimeout(() => { card.style.outline = ''; }, 4000);
+  }, 300);
+}
+
 function avScan(text){
   const sc = lgAvParseScan(text);
   if(currentTab !== 'avivi') setTab('avivi');

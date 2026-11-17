@@ -142,9 +142,19 @@
     return;   // בלי redirect אוטומטי — אחרת נחזור מיד לזהות שרק עכשיו נסגרה
   }
   const s = lgGetSession();
+  if(s.role && _lgNext()) { window.location.href = _lgNext(); return; }
   if(s.role === 'admin')  { window.location.href = 'admin.html';  return; }
   if(s.role === 'client') { window.location.href = 'portal.html'; return; }
 })();
+
+//  חזרה לדף שממנו הגיעו (בן, 17/11 — ברקוד הזכוכית: g.html → כניסה → ההזמנה).
+//  רק דף פנימי של האתר — לא כתובת חיצונית.
+function _lgNext(){
+  try {
+    const n = new URLSearchParams(location.search).get('next') || '';
+    return /^[a-z][a-z0-9-]*\.html(\?[A-Za-z0-9=&%._~-]*)?$/.test(n) && !/^login\.html/.test(n) ? n : '';
+  } catch(e){ return ''; }
+}
 
 const _loginBtn = document.querySelector('.btn-login');
 
@@ -178,7 +188,7 @@ async function doLogin(){
       isMainAdmin: !!user.isMainAdmin,
       loginTime:   Date.now()
     });
-    window.location.href = user.role === 'admin' ? 'admin.html' : 'portal.html';
+    window.location.href = _lgNext() || (user.role === 'admin' ? 'admin.html' : 'portal.html');
 
   } catch(err){
     console.error('[login] error:', err);

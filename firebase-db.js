@@ -972,11 +972,18 @@ async function lgLogout() {
 //  עכשיו: הרענון הרגיל של הטוקן (אותו uid) לא נוגע בכלום, והחלפת משתמש
 //  אמיתית מסיימת את הסשן בלשונית הזו במקום לאמץ אותה בשקט. עדיף להחזיר
 //  אותך למסך ההתחברות מאשר להמשיך לעבוד בזהות שלא ביקשת.
+function _lgNextParam() {
+  try {
+    const p = String(location.pathname || '').split('/').pop() + String(location.search || '');
+    return /^[a-z][a-z0-9-]*\.html/.test(p) && !/^login\.html/.test(p) ? '?next=' + encodeURIComponent(p) : '';
+  } catch (e) { return ''; }
+}
 function lgRequireAuthAsync(role) {
   return new Promise((resolve) => {
     let boundUid = null;   // ה-uid שהדף הזה נקשר אליו
     firebase.auth().onAuthStateChanged(async (fbUser) => {
-      if (!fbUser) { lgClearSession(); window.location.href = 'login.html'; resolve(null); return; }
+      //  לא מחובר → כניסה, ואחריה חזרה לדף הזה (ברקוד: הסריקה פותחת לשונית חדשה, 17/11)
+      if (!fbUser) { lgClearSession(); window.location.href = 'login.html' + _lgNextParam(); resolve(null); return; }
 
       if (boundUid) {
         if (fbUser.uid === boundUid) return;   // חידוש טוקן — אותו אדם, אין מה לעשות

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>LuzGlass — סקיצה</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;900&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lg-ui.css?v=20260807">
+<!--
+  דף הסקיצה של ברקוד הזכוכית (בן, 17/11) — ציבורי, בלי כניסה.
+  אפיון: docs/superpowers/specs/2026-11-17-glass-barcode-sketch-design.md
+  מה שמוצג מגיע מ-/api/glass, שבודק את חתימת הברקוד ומחזיר רק שם סקיצה, מידה
+  ותמונה מקורית — בלי מחירים. "כנס לראות את ההזמנה" → מנהל: לתחנה, לקוח: לפורטל.
+-->
+<style>
+  body{margin:0;background:var(--bg);font-family:Heebo,sans-serif;color:var(--text);}
+  .g-top{background:var(--dark-bg);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;}
+  .g-logo{font-family:'Playfair Display',serif;font-size:22px;color:#fff;}
+  .g-logo span{color:var(--gold);}
+  .g-wrap{max-width:720px;margin:0 auto;padding:16px;}
+  .g-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px;}
+  .g-client{font-size:13px;color:var(--muted);font-weight:700;}
+  .g-name{font-size:22px;font-weight:900;margin-top:2px;}
+  .g-dims{font-size:34px;font-weight:900;margin-top:10px;direction:ltr;text-align:right;unicode-bidi:isolate;}
+  .g-sub{font-size:14px;color:var(--muted);font-weight:600;margin-top:2px;}
+  .g-img{display:block;width:100%;height:auto;border-radius:8px;background:#fafafa;margin-top:10px;cursor:zoom-in;}
+  .g-imgl{font-size:12px;color:var(--muted);font-weight:700;margin-top:12px;}
+  .g-items{margin-top:8px;}
+  .g-item{display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border);font-size:15px;}
+  .g-item b{direction:ltr;unicode-bidi:isolate;}
+  .g-item.me{background:#fff7d6;border-radius:6px;padding:8px;}
+  .g-go{display:block;width:100%;min-height:52px;border:none;border-radius:10px;background:var(--gold);color:var(--on-gold);
+        font-family:Heebo,sans-serif;font-size:16px;font-weight:900;cursor:pointer;}
+  .g-go:disabled{opacity:.6;cursor:default;}
+  .g-msg{font-size:15px;font-weight:700;text-align:center;padding:28px 12px;}
+  .g-note{font-size:13px;color:var(--muted);text-align:center;margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="g-top"><div class="g-logo">Luz<span>Glass</span></div></div>
+<main class="g-wrap" id="app"><div class="g-card g-msg">טוען…</div></main>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="firebase-db.js?v=20261117"></script>
+<script>
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dims = (w, h) => (w || '?') + '×' + (h || '?');
+const P = new URLSearchParams(location.search);
+const CODE = (P.get('c') || '').trim();
+let VIEW = null;
+
+function msg(t){ document.getElementById('app').innerHTML = '<div class="g-card g-msg">' + esc(t) + '</div>'; }
+
+async function load(){
+  if(!CODE){ msg('ברקוד לא תקין'); return; }
+  let r, d;
+  try { r = await fetch('/api/glass?c=' + encodeURIComponent(CODE)); d = await r.json(); }
+  catch(e){ msg('אין חיבור — נסה שוב'); return; }
+  if(!r.ok || !d.ok){ msg(r.status === 404 ? 'ההזמנה לא נמצאה — אולי הברקוד ישן או שההזמנה נמחקה' : 'ברקוד לא תקין'); return; }
+  VIEW = d;
+  const g = d.glass;
+  const imgs = Array.from({ length: d.images }, (_, i) =>
+    (i ? '<div class="g-imgl">עמוד ' + (i + 1) + '</div>' : '') +
+    '<img class="g-img" alt="סקיצה — ' + esc(d.sketchName) + (i ? ' עמוד ' + (i + 1) : '') + '" src="/api/glass?c=' + encodeURIComponent(CODE) + '&img=' + i + '" onclick="window.open(this.src)">').join('');
+  const list = d.images ? '' : '<div class="g-items">' + (d.items || []).map((x, i) =>
+    '<div class="g-item' + (i + 1 === d.glassNo ? ' me' : '') + '"><span>' + esc(x.name) + '</span><b>' + esc(dims(x.w, x.h)) + '</b></div>').join('') + '</div>';
+  document.getElementById('app').innerHTML =
+    '<div class="g-card">' +
+      '<div class="g-client">' + esc(d.client) + '</div>' +
+      '<div class="g-name">' + esc(d.sketchName || d.orderNum) + '</div>' +
+      (g ? '<div class="g-dims">' + esc(dims(g.w, g.h)) + '</div><div class="g-sub">' + esc(g.name) + ' · זכוכית ' + d.glassNo + ' מתוך ' + d.count + '</div>'
+         : '<div class="g-sub">זכוכית ' + d.glassNo + ' כבר לא קיימת בהזמנה — ההזמנה עודכנה אחרי שהמדבקה הודפסה</div>') +
+    '</div>' +
+    '<div class="g-card">' + (d.images ? imgs : '<div class="g-sub">אין סקיצה להזמנה — אלה הזכוכיות שלה:</div>' + list) + '</div>' +
+    '<button class="g-go" id="goBtn" onclick="goOrder()">כנס לראות את ההזמנה בלוז גלאס</button>' +
+    '<div class="g-note">מנהל — ייפתח במקום שבו ההזמנה נמצאת עכשיו. לקוח — בפורטל שלך.</div>';
+  if(P.get('go') === '1') goOrder();
+}
+
+//  מי מחובר — לפי Firebase Auth (נשמר בטלפון), לא לפי הלשונית: הסריקה פותחת לשונית חדשה
+function goOrder(){
+  if(!VIEW) return;
+  const b = document.getElementById('goBtn'); if(b){ b.disabled = true; b.textContent = 'בודק כניסה…'; }
+  const back = 'g.html?c=' + encodeURIComponent(CODE) + '&go=1';
+  const unsub = firebase.auth().onAuthStateChanged(async u => {
+    unsub();
+    if(!u){ location.href = 'login.html?next=' + encodeURIComponent(back); return; }
+    try {
+      const phone = _lgPhoneFromAuthUser(u);
+      const role = (await firebase.database().ref('users/' + phone + '/role').once('value')).val();
+      const id = encodeURIComponent(VIEW.orderId);
+      if(role === 'admin') location.href = 'admin.html?go=' + id;
+      else if(role === 'client') location.href = 'portal.html?order=' + id;
+      else location.href = 'login.html?next=' + encodeURIComponent(back);
+    } catch(e){
+      if(b){ b.disabled = false; b.textContent = 'כנס לראות את ההזמנה בלוז גלאס'; }
+      alert('לא הצלחתי לבדוק את הכניסה — נסה שוב');
+    }
+  });
+}
+
+load();
+</script>
+</body>
+</html>

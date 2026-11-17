@@ -582,7 +582,24 @@ function _subscribePortalOrders(clientPhone) {
     renderAll();
     const ov = document.getElementById('lgLoading');
     if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
+    _lgPortalGoOnce();
   });
+}
+//  ברקוד הזכוכית (בן, 17/11): portal.html?order=<id> — הלשונית שההזמנה בה, פתוחה.
+//  הפורטל מכיל רק את הזמנות הלקוח המחובר, ולכן הזמנה של אחר פשוט לא נמצאת.
+var _lgPortalOrder = (function(){ try { return new URLSearchParams(location.search).get('order') || ''; } catch(e){ return ''; } })();
+function _lgPortalGoOnce(){
+  if(!_lgPortalOrder) return;
+  const id = _lgPortalOrder; _lgPortalOrder = '';
+  try { history.replaceState(null, '', location.pathname); } catch(e){}
+  const o = ORDERS.find(x => String(x.id) === String(id));
+  if(!o){ alert('ההזמנה לא נמצאת בחשבון שלך'); return; }
+  setTab(o.status === 'מוכן לאיסוף' ? 'ready' : o.status === 'נאסף' ? 'collected' : 'orders');
+  expanded.add(o.id); renderAll();
+  setTimeout(() => {
+    const el = document.querySelector('.oc-hdr[data-id="' + String(o.id).replace(/["\\]/g, '') + '"]');
+    if(el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, 200);
 }
 function renderAll(){renderStats();renderOrders();renderReady();renderInvoices();renderChat();}
 

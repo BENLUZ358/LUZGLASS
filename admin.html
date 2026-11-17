@@ -677,6 +677,7 @@ function load() {
     // הסתר loading overlay אחרי הטעינה הראשונה
     const ov = document.getElementById('lgLoading');
     if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
+    _lgGoToOrderOnce();
   });
   // השיוך לקוח→מחירון. נשמר אצלנו כי חשבשבת מחזיקים אותו על כרטיס הלקוח
   // ולא בדוח המחירים, ומשיכתו הייתה דורשת דוח שני.
@@ -987,6 +988,21 @@ function modSaveSketchName(id, value){
     .then(() => showToast(v ? '✓ שם הסקיצה נשמר' : '✓ שם הסקיצה נמחק'))
     .catch(e => { console.error('modSaveSketchName:', e); alert('שם הסקיצה לא נשמר: ' + e.message); });
   renderAll();
+}
+
+//  ברקוד הזכוכית (בן, 17/11): admin.html?go=<id> — לאן שההזמנה נמצאת עכשיו.
+//  בשלבי יום העבודה → workday.html (הלשונית שלה); אחרת → חלון ההזמנה כאן.
+var _lgGoId = (function(){ try { return new URLSearchParams(location.search).get('go') || ''; } catch(e){ return ''; } })();
+function _lgGoToOrderOnce(){
+  if(!_lgGoId || !orders.length) return;
+  const id = _lgGoId; _lgGoId = '';
+  try { history.replaceState(null, '', location.pathname); } catch(e){}
+  const o = orders.find(x => String(x.id) === String(id));
+  if(!o){ showToast('⚠️ ההזמנה לא נמצאה — אולי נמחקה'); return; }
+  if(['opty','workday','chisum','graphic','delivery'].includes(o.stage || '')){
+    location.href = 'workday.html?go=' + encodeURIComponent(id); return;
+  }
+  openMod(id);
 }
 
 function openMod(id) {
