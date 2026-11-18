@@ -29,6 +29,19 @@ function lgAvWrappedIdxs(o) {
   return out.sort((a, b) => a - b);
 }
 
+//  זכוכיות זהות שעוד לא עטופות (אותה מידה ואותו סוג) — בן, 18/11: "הרבה פעמים זה בא כמה יחידות ביחד".
+//  מחזיר את האינדקסים; הזכוכית שנבחרה ראשונה אם היא לא עטופה.
+function lgAvTwins(o, idx) {
+  const items = (o && o.items) || [], me = items[idx];
+  if (!me) return [];
+  const key = it => Math.round(Number(it.w) || 0) + 'x' + Math.round(Number(it.h) || 0) + '|' + String(it.name || '').trim();
+  const k = key(me), done = new Set(lgAvWrappedIdxs(o)), out = [];
+  items.forEach((it, i) => { if (it && !done.has(i) && key(it) === k) out.push(i); });
+  const at = out.indexOf(Number(idx));
+  if (at > 0) { out.splice(at, 1); out.unshift(Number(idx)); }
+  return out;
+}
+
 //  הזמנה בלי פריטים לעולם אינה מוכנה — כדי שלא תצא בהובלה בטעות.
 function lgAvIsReady(o) {
   const n = ((o && o.items) || []).length;
@@ -135,6 +148,6 @@ function lgAvFindScan(orders, scan) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_AV_CARD, lgAvCutNow, lgAvIsAvivi, lgAvWrappedIdxs, lgAvIsReady, lgAvState, lgAvSort, lgAvSplit, lgAvMatch,
+  module.exports = { LG_AV_CARD, lgAvCutNow, lgAvIsAvivi, lgAvWrappedIdxs, lgAvTwins, lgAvIsReady, lgAvState, lgAvSort, lgAvSplit, lgAvMatch,
     lgAvScanCode, lgAvScanUrl, lgAvParseScan, lgAvFindScan };
 }

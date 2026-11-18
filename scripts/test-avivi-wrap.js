@@ -70,6 +70,18 @@ check('dims not here', A.lgAvMatch(o, '600*900'), { hit: false, idxs: [] });
 check('single side 1200', A.lgAvMatch(o, '1200'), { hit: true, idxs: [1] });
 check('single number 16 (too short for PO) → no', A.lgAvMatch(o, '16'), { hit: false, idxs: [] });
 
+// זכוכיות זהות (כמה יחידות עוטפים — בן, 18/11)
+{
+  const nm = '8 קליר';
+  const o = { items: [{ w: 543, h: 561, name: nm }, { w: 543, h: 561, name: nm }, { w: 543, h: 261, name: nm },
+    { w: 543, h: 561, name: nm }, { w: 543, h: 561, name: '10 קליר' }], avWrap: { 1: 1 } };
+  check('twins: unwrapped same size+type, scanned first', A.lgAvTwins(o, 3), [3, 0]);
+  check('twins: scanned already wrapped → only the others', A.lgAvTwins(o, 1), [0, 3]);
+  check('twins: unique glass → itself', A.lgAvTwins(o, 2), [2]);
+  check('twins: other type not counted', A.lgAvTwins(o, 4), [4]);
+  check('twins: no such glass', A.lgAvTwins(o, 9), []);
+}
+
 // הסימון חייב לעבור את הנרמול של ההזמנות (באג 17/11: נשמר אבל לא הוצג — בן באייפון)
 {
   const vm = require('vm'), fs = require('fs'), path = require('path');

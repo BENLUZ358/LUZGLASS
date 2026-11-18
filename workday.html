@@ -180,6 +180,18 @@
   .av-row.on{background:#f1f1ef;border-color:transparent;} .av-row.on .av-dim,.av-row.on .av-nm{color:#9a948c;}
   .av-row.on .av-box{background:#27ae60;border-color:#27ae60;}
   .av-row.av-hl{border-color:#e0b400;box-shadow:0 0 0 2px #ffe9a8;}
+  .av-many{min-height:36px;padding:4px 10px;border-radius:6px;border:1px solid #7a5a2f;background:#fff7ea;color:#7a5a2f;
+          font-family:Heebo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+  .av-cnt-bg{position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;}
+  .av-cnt{background:#fff;border-radius:12px;max-width:420px;width:100%;padding:18px 16px;box-shadow:0 10px 40px rgba(0,0,0,0.3);}
+  .av-cnt h3{margin:0 0 4px;font-size:17px;font-weight:900;}
+  .av-cnt .av-cnt-sub{font-size:14px;color:#555;margin-bottom:14px;}
+  .av-cnt-nums{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;}
+  .av-cnt-nums button{min-height:56px;border-radius:8px;border:2px solid #7a5a2f;background:#fff;color:#7a5a2f;
+          font-family:Heebo,sans-serif;font-size:22px;font-weight:900;cursor:pointer;}
+  .av-cnt-nums button.all{background:#7a5a2f;color:#fff;}
+  .av-cnt-x{margin-top:12px;width:100%;min-height:44px;border-radius:8px;border:1px solid rgba(0,0,0,0.15);background:#fff;
+          font-family:Heebo,sans-serif;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;}
   .av-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
   .av-btn{min-height:40px;padding:6px 14px;border-radius:6px;border:1px solid #7a5a2f;background:#7a5a2f;color:#fff;
           font-family:Heebo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;}
@@ -404,7 +416,7 @@
   <script src="lg-qr.js?v=20261117"></script>
   <script src="print-labels.js?v=20261117d"></script>
   <script src="order-labels.js?v=20261117"></script>
-  <script src="avivi-wrap.js?v=20261118a"></script>
+  <script src="avivi-wrap.js?v=20261118b"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
@@ -3379,6 +3391,10 @@ function _avOrdHTML(o, m, open){
   const hl = new Set(m.idxs);
   if(_avScanHl && _avScanHl.id === String(o.id)) hl.add(_avScanHl.idx);   // הזכוכית שנסרקה
   const idxs = items.map((_, i) => i);
+  //  כמה זכוכיות זהות שלא עטופות — כפתור "סמן כמה" על הראשונה מכל קבוצה (בן, 18/11)
+  const manyAt = {};
+  idxs.forEach(i => { if(wrapped.has(i)) return; const tw = lgAvTwins(o, i);
+    if(tw.length > 1 && !tw.some(j => j < i)) manyAt[i] = tw.length; });
   const rows = idxs.map(i => {
     const it = items[i], on = wrapped.has(i);
     return `<div class="av-row${on?' on':''}${hl.has(i)?' av-hl':''}" role="checkbox" aria-checked="${on}" tabindex="0"
@@ -3386,6 +3402,8 @@ function _avOrdHTML(o, m, open){
       <span class="av-box">${on?'✓':''}</span>
       <span class="av-dim">${lgDimsText(it.w, it.h, '?')}</span>
       <span class="av-nm">${lgEsc(it.name||'')}</span>
+      ${manyAt[i] ? `<button type="button" class="av-many" title="יש ${manyAt[i]} זהות שלא עטופות — בחר כמה לסמן"
+         onclick="event.stopPropagation();avAskCount('${id}',${i})" onkeydown="event.stopPropagation()">סמן כמה (${manyAt[i]})</button>` : ''}
     </div>`;
   }).join('') || '<div class="av-empty">אין פריטים בהזמנה</div>';
   const left = items.length - wrapped.size;
@@ -3492,7 +3510,13 @@ function avScan(text){
   if(!it){ renderAviviTab(); showToast('⚠️ אין בהזמנה ' + _avPoText(o) + ' זכוכית מספר ' + (sc.idx + 1) + ' — סמן ביד'); return; }
   const dims = lgDimsText(it.w, it.h, '?'), n = (o.items || []).length;
   const later = st === 'delivery' || lgAvCutNow(o) ? '' : ' — ההזמנה עוד בעבודה, תופיע כאן ביום שהזכוכית נחתכת';
-  if(lgAvWrappedIdxs(o).includes(sc.idx)){
+  //  כמה יחידות זהות ביחד — שואלים כמה עוטפים (בן, 18/11)
+  const twins = lgAvTwins(o, sc.idx), already = lgAvWrappedIdxs(o).includes(sc.idx);
+  if(twins.length > 1 || (already && twins.length)){
+    renderAviviTab(); _avScrollToHl();
+    avAskCount(id, sc.idx, already ? 'הזכוכית שסרקת כבר מסומנת עטופה.' : ''); return;
+  }
+  if(already){
     renderAviviTab(); _avScrollToHl();
     showToast('כבר מסומן עטוף: ' + _avPoText(o) + ' · ' + dims); return;
   }
@@ -3531,6 +3555,39 @@ function avWrapAll(id){
   const t = Date.now(), up = {};
   (o.items||[]).forEach((_, i) => { up['avWrap/' + i] = t; });
   _avWrite(id, up, '✓ ' + _avPoText(o) + ' — כל ההזמנה עטופה' + ((o.stage||'') === 'delivery' ? ', עברה למוכן' : ''));
+}
+//  חלון "כמה יחידות אתה עוטף?" — אחרי סריקה, או מהכפתור "סמן כמה" בשורה
+function avAskCount(id, idx, note){
+  const o = allOrders.find(x => String(x.id) === String(id)); if(!o) return;
+  const tw = lgAvTwins(o, idx), it = (o.items || [])[idx];
+  if(!tw.length || !it) return;
+  const old = document.getElementById('avCnt'); if(old) old.remove();
+  const n = tw.length;
+  const nums = Array.from({ length: n }, (_, k) => k + 1).map(k =>
+    `<button type="button"${k === n ? ' class="all"' : ''} onclick="avWrapCount('${lgEsc(String(id))}',${idx},${k})">${k}</button>`).join('');
+  const bg = document.createElement('div');
+  bg.id = 'avCnt'; bg.className = 'av-cnt-bg';
+  bg.onclick = e => { if(e.target === bg) bg.remove(); };
+  bg.innerHTML = `<div class="av-cnt" role="dialog" aria-modal="true" aria-label="כמה יחידות אתה עוטף">
+      <h3>כמה יחידות אתה עוטף?</h3>
+      <div class="av-cnt-sub">${note ? lgEsc(note) + '<br>' : ''}${lgEsc(_avPoText(o))} · <b><bdi dir="ltr">${lgDimsText(it.w, it.h, '?')}</bdi></b><br>${lgEsc(it.name || '')}<br>
+        ${n === 1 ? 'נשארה עוד זכוכית אחת כזו שלא עטופה' : 'יש ' + n + ' זכוכיות כאלה שלא עטופות'}</div>
+      <div class="av-cnt-nums">${nums}</div>
+      <button type="button" class="av-cnt-x" onclick="document.getElementById('avCnt').remove()">ביטול</button>
+    </div>`;
+  document.body.appendChild(bg);
+}
+function avWrapCount(id, idx, k){
+  const box = document.getElementById('avCnt'); if(box) box.remove();
+  const o = allOrders.find(x => String(x.id) === String(id)); if(!o) return;
+  const pick = lgAvTwins(o, idx).slice(0, k); if(!pick.length) return;
+  const t = Date.now(), up = {};
+  pick.forEach(i => { up['avWrap/' + i] = t; });
+  const after = { ...o, avWrap: { ...(o.avWrap || {}) } }; pick.forEach(i => { after.avWrap[i] = t; });
+  const done = lgAvWrappedIdxs(after).length, n = (o.items || []).length;
+  _avWrite(id, up, '✓ ' + _avPoText(o) + ' · ' + pick.length + ' יחידות עטופות (' + done + '/' + n + ')'
+    + (done === n && (o.stage || '') === 'delivery' ? ' — כל ההזמנה מוכנה' : ''))
+    .then(() => { renderAviviTab(); _avScrollToHl(); });
 }
 function avUnwrapAll(id){
   const o = allOrders.find(x => String(x.id) === String(id)); if(!o) return;
