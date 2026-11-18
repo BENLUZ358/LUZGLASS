@@ -1044,7 +1044,8 @@ function openMod(id) {
     </div>
     ${lgHasSketch(o) ? `
     <div class="msec">
-      <div class="msec-t">סקיצה</div>
+      <div class="msec-t" style="display:flex;align-items:center;gap:8px">סקיצה
+        <button type="button" id="modPrintSkBtn" class="mit-lbl-all" onclick="modPrintSketch()">🖨 הדפס</button></div>
       <img data-sketch-for="${lgEsc(String(o.id))}" alt="סקיצת ההזמנה" class="mimg"/>
     </div>` : ''}
     <div class="msec">
@@ -1159,6 +1160,45 @@ async function _modEtaNotes(o){
   } catch(e){ return; }
   const el = document.getElementById('mEta');
   if(el && String(eid) === String(o.id) && notes.length) el.innerHTML = _modEtaHtml(o, notes);
+}
+
+// ── 🖨 הדפסת הסקיצה ישר ל-Brother (בן, 18/11) — כמו לוחות אופטי-ווי: עמוד A4 (JPEG) →
+//  תור ההדפסות (kind sheets, printer a4) → הכלי במחשב במשרד מדפיס. סקיצה לרוחב מסובבת כדי
+//  למלא את הדף; למעלה שורה קטנה: לקוח · שם סקיצה · מספר הזמנה.
+function lgSketchPageJpeg(img, head){
+  const PW = 1240, PH = 1754, M = 44, TOP = 70;
+  const c = document.createElement('canvas'); c.width = PW; c.height = PH;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, PW, PH);
+  x.font = '400 24px Heebo, Arial, sans-serif'; x.fillStyle = '#555';
+  x.textAlign = 'center'; x.direction = 'rtl'; x.textBaseline = 'middle';
+  let s = String(head || ''); while (s.length > 1 && x.measureText(s).width > PW - 2 * M) s = s.slice(0, -2) + '…';
+  x.fillText(s, PW / 2, M + 12);
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const W = PW - 2 * M, H = PH - TOP - M, rot = iw > ih * 1.15;
+  const bw = rot ? ih : iw, bh = rot ? iw : ih, sc = Math.min(W / bw, H / bh);
+  const dw = bw * sc, dh = bh * sc, cx = M + W / 2, cy = TOP + H / 2;
+  x.save(); x.translate(cx, cy); if (rot) x.rotate(Math.PI / 2);
+  x.drawImage(img, -(rot ? dh : dw) / 2, -(rot ? dw : dh) / 2, rot ? dh : dw, rot ? dw : dh);
+  x.restore();
+  for (const q of [0.85, 0.7, 0.55]) { const b = c.toDataURL('image/jpeg', q).split(',')[1]; if (b.length <= 1400000) return b; }
+  return c.toDataURL('image/jpeg', 0.4).split(',')[1];
+}
+async function modPrintSketch(){
+  const o = orders.find(x => String(x.id) === String(eid)); if (!o) return;
+  const btn = document.getElementById('modPrintSkBtn');
+  const img = document.querySelector('#mbody img[data-sketch-for]');
+  if (!img || !img.complete || !(img.naturalWidth > 0)) { showToast('⏳ הסקיצה עוד נטענת — נסה שוב בעוד רגע'); return; }
+  if (btn) { if (btn.disabled) return; btn.disabled = true; btn.textContent = 'שולח…'; }
+  try {
+    const head = [o.orderClient, o.sketchName, o.orderNum].filter(Boolean).join(' · ');
+    const page = lgSketchPageJpeg(img, head);
+    const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'sheets', printer: 'a4',
+      client: 'סקיצה ' + (o.orderNum || '') + ' ' + (o.orderClient || ''), orderIds: [String(o.id)], pages: [page] });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.ok) throw new Error(d.code || ('HTTP ' + res.status));
+    showToast('✓ הסקיצה נשלחה למדפסת Brother');
+  } catch (e) { console.error('sketch print:', e); showToast('⚠️ ההדפסה לא נשלחה: ' + (e.message || '')); }
+  finally { if (btn) setTimeout(() => { btn.disabled = false; btn.textContent = '🖨 הדפס'; }, 3000); }
 }
 
 function _modItemsHtml(items){
