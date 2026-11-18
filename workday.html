@@ -190,6 +190,8 @@
          background:#2980b9;color:#fff;font-family:Heebo,sans-serif;font-size:15px;font-weight:900;cursor:pointer;}
   .av-go:disabled{background:#b8c6d1;cursor:default;}
   .av-work{margin-top:10px;font-size:13px;color:var(--muted);font-weight:600;}
+  .av-cutw{font-size:12px;font-weight:700;color:#7a5a2f;background:#f3ead9;border-radius:10px;padding:2px 8px;white-space:nowrap;}
+  .av-acts-top{margin:0 0 10px;}
   @media(max-width:600px){ .av-bar{width:56px;} .av-num{display:none;} }
 
   .stv-card{background:var(--surface);border:1px solid rgba(0,0,0,0.08);border-radius:10px;
@@ -402,7 +404,7 @@
   <script src="lg-qr.js?v=20261117"></script>
   <script src="print-labels.js?v=20261117d"></script>
   <script src="order-labels.js?v=20261117"></script>
-  <script src="avivi-wrap.js?v=20261117c"></script>
+  <script src="avivi-wrap.js?v=20261118a"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
@@ -3366,16 +3368,17 @@ function _avOrdHTML(o, m, open){
       <span class="av-arrow">◀</span>
       <span class="av-po">${lgEsc(_avPoText(o))}</span>
       <span class="av-num">${lgEsc(o.orderNum||'')}</span>
+      ${(o.stage||'') !== 'delivery' ? '<span class="av-cutw" title="נחתכה — עוד ביום העבודה; סיים יום עבודה יעביר להובלות">✂ נחתך היום</span>' : ''}
       <span class="av-sp"></span>
       <span class="av-prog"><span class="av-bar"><i style="width:${pct}%"></i></span>${st==='ready'?'✓ ':''}${wrapped.size}/${items.length}</span>
       ${lgHasSketch(o) ? `<button type="button" class="av-skb" title="סקיצה" aria-label="פתח סקיצה" onclick="avShowSketch('${id}',event)">🖼</button>` : ''}
     </div>`;
   if(!open) return `<div class="av-ord${st==='ready'?' av-ready':''}">${head}</div>`;
 
-  //  עוד לא נעטפו — קודם; עטופות — אפורות למטה
+  //  בן, 18/11: "הסימון עובד הפוך — כשאני מסמן זה עולה מלמטה" → הזכוכיות נשארות בסדר של ההזמנה; עטופה = אפורה במקומה
   const hl = new Set(m.idxs);
   if(_avScanHl && _avScanHl.id === String(o.id)) hl.add(_avScanHl.idx);   // הזכוכית שנסרקה
-  const idxs = items.map((_, i) => i).sort((a, b) => wrapped.has(a) - wrapped.has(b) || a - b);
+  const idxs = items.map((_, i) => i);
   const rows = idxs.map(i => {
     const it = items[i], on = wrapped.has(i);
     return `<div class="av-row${on?' on':''}${hl.has(i)?' av-hl':''}" role="checkbox" aria-checked="${on}" tabindex="0"
@@ -3386,14 +3389,15 @@ function _avOrdHTML(o, m, open){
     </div>`;
   }).join('') || '<div class="av-empty">אין פריטים בהזמנה</div>';
   const left = items.length - wrapped.size;
-  const acts = `<div class="av-acts">
-      ${left > 1 ? `<button type="button" class="av-btn" onclick="avWrapAll('${id}')">עטפתי את כל השאר (${left})</button>` : ''}
+  //  "סמן הכל" לכל הזמנה בנפרד — למעלה, לפני הזכוכיות (בן, 18/11)
+  const acts = `<div class="av-acts av-acts-top">
+      ${left > 0 ? `<button type="button" class="av-btn" onclick="avWrapAll('${id}')">✓ סמן הכל${wrapped.size ? ' (' + left + ' שנשארו)' : ''}</button>` : ''}
       ${wrapped.size ? `<button type="button" class="av-btn ghost" onclick="avUnwrapAll('${id}')">↩ בטל את כל הסימונים</button>` : ''}
     </div>`;
   const sk = lgHasSketch(o)
     ? `<img class="av-sk" data-sketch-for="${id}" alt="סקיצה — ${lgEsc(_avPoText(o))}" onclick="if(this.src)_openSketchFull(this.src)">`
     : `<div class="av-nosk">אין סקיצה להזמנה</div>`;
-  return `<div class="av-ord open${st==='ready'?' av-ready':''}">${head}<div class="av-body">${rows}${acts}${sk}</div></div>`;
+  return `<div class="av-ord open${st==='ready'?' av-ready':''}">${head}<div class="av-body">${acts}${rows}${sk}</div></div>`;
 }
 
 function renderAviviTab(){
@@ -3401,7 +3405,7 @@ function renderAviviTab(){
   const inp = document.getElementById('avSearch');
   const q = inp ? inp.value.trim() : '';
   const sp = lgAvSplit(allOrders);
-  const all = lgAvSort(sp.notReady.concat(sp.ready));
+  const all = lgAvSort(sp.notReady.concat(sp.ready, sp.cut));   // + נחתכו היום ועוד ביום עבודה (בן, 18/11)
 
   const chips = document.getElementById('aviviChips');
   if(chips) chips.innerHTML = LG_AV_FILTERS.map(([k, label, fn]) =>
@@ -3423,7 +3427,8 @@ function renderAviviTab(){
     </div>
     <button type="button" class="av-go" ${sp.ready.length?'':'disabled'} onclick="avShipReady()">
       🚚 יוצאים להובלה${sp.ready.length?` (${sp.ready.length} הזמנות מוכנות)`:' — אין עדיין הזמנות מוכנות'}</button>
-    ${sp.inWork.length ? `<div class="av-work">עוד ${sp.inWork.length} הזמנות של אביבי בעבודה — יופיעו כאן אחרי "סיים יום עבודה"</div>` : ''}`;
+    ${sp.cut.length ? `<div class="av-work">✂ ${sp.cut.length} הזמנות נחתכו ועוד ביום העבודה — אפשר לעטוף; הן יוצאות בהובלה אחרי "סיים יום עבודה"</div>` : ''}
+    ${sp.inWork.length ? `<div class="av-work">עוד ${sp.inWork.length} הזמנות של אביבי בעבודה — יופיעו כאן ביום שהזכוכית נחתכת</div>` : ''}`;
   _hydrateStageSketches(el);
 }
 
@@ -3486,7 +3491,7 @@ function avScan(text){
   _avOpen.add(id); _avScanHl = { id, idx: sc.idx };
   if(!it){ renderAviviTab(); showToast('⚠️ אין בהזמנה ' + _avPoText(o) + ' זכוכית מספר ' + (sc.idx + 1) + ' — סמן ביד'); return; }
   const dims = lgDimsText(it.w, it.h, '?'), n = (o.items || []).length;
-  const later = st === 'delivery' ? '' : ' — ההזמנה עוד בעבודה, תופיע כאן אחרי "סיים יום עבודה"';
+  const later = st === 'delivery' || lgAvCutNow(o) ? '' : ' — ההזמנה עוד בעבודה, תופיע כאן ביום שהזכוכית נחתכת';
   if(lgAvWrappedIdxs(o).includes(sc.idx)){
     renderAviviTab(); _avScrollToHl();
     showToast('כבר מסומן עטוף: ' + _avPoText(o) + ' · ' + dims); return;
@@ -3525,7 +3530,7 @@ function avWrapAll(id){
   const o = allOrders.find(x => String(x.id) === String(id)); if(!o) return;
   const t = Date.now(), up = {};
   (o.items||[]).forEach((_, i) => { up['avWrap/' + i] = t; });
-  _avWrite(id, up, '✓ ' + _avPoText(o) + ' — עברה למוכן');
+  _avWrite(id, up, '✓ ' + _avPoText(o) + ' — כל ההזמנה עטופה' + ((o.stage||'') === 'delivery' ? ', עברה למוכן' : ''));
 }
 function avUnwrapAll(id){
   const o = allOrders.find(x => String(x.id) === String(id)); if(!o) return;
@@ -4208,7 +4213,7 @@ function updateCounts(){
   const dcEl = document.getElementById('cnt-delivery');
   if(dcEl) dcEl.textContent = deliveryCount;
   const avEl = document.getElementById('cnt-avivi');
-  if(avEl) avEl.textContent = lgAvSplit(allOrders).notReady.length;
+  if(avEl){ const sp = lgAvSplit(allOrders); avEl.textContent = sp.notReady.length + sp.cut.filter(o => !lgAvIsReady(o)).length; }
 }
 
 function updateSummaryBar(){

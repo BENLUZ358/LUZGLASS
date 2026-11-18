@@ -80,6 +80,11 @@ check('cut state: undone / none → null', [L.lgOptyCutState({ at: '2026-11-17',
   check('unlinked piece: OptyWay data, no drawing without a shape', [all[2].title, all[2].dims, all[2].withShape, all[2].glass], ['אגן ברזל', '800 × 2150', false, 'M 10S · 10 שקוף']);
   check('one sheet only', L.lgOptyJobLabels(two, ours, { sheet: 2 }, '').map(l => l.marker || l.sketchName), ['לוח 2/3', 'רון']);
   check('one piece: no marker', L.lgOptyJobLabels(two, ours, { sheet: 1, order: 2 }, '').map(l => l.marker || l.sketchName), ['PHR#1']);
+  //  זכוכית בלי צורה שחוברה לפי מיקום (בן, 18/11 — אביבי): linked['#<pos>']
+  const byPos = L.lgOptyJobLabels(two, { '#2': { title: 'יצחק אביבי', orderNum: 'L1309', orderId: 'av', idx: 0, qr: 'HTTPS://X/AV/1309-1' } }, { sheet: 1, order: 2 }, '');
+  check('shapeless piece linked by position: our label, no drawing', [byPos[0].title, byPos[0].orderNum, byPos[0].qr, byPos[0].withShape, byPos[0].job], ['יצחק אביבי', 'L1309', 'HTTPS://X/AV/1309-1', false, 'M00337']);
+  check('stamps: linked by position (no shape) → stamped; other position → none',
+    L.lgOptyCutStamps([{ id: 'av', items: [{ optyJob: 'M00337', optyPos: 2 }, { optyJob: 'M00337', optyPos: 9 }] }], { M00337: two }), [{ orderId: 'av', key: '0', value: { at: '2026-11-17', job: 'M00337' } }]);
   const big = Array.from({ length: 75 }, (_, i) => (i === 69 ? { marker: 'לוח 2/2' } : { title: 'x' + i }));
   check('chunks of 70 never end on a marker', L.lgOptyChunks(big, 70).map(c => c.length), [69, 6]);
   check('chunk: marker as the last of 70 moves to the next', L.lgOptyChunks(Array.from({ length: 71 }, (_, i) => (i === 69 ? { marker: 'm' } : {})), 70).map(c => c.length), [69, 2]);

@@ -171,10 +171,12 @@ function lgOptyCutStamps(orders, jobsByNo) {
     const items = (o && o.items) || {};
     Object.keys(items).forEach(k => {
       const it = items[k];
-      if (!it || it.optyCut || !it.optyJob || !it.optyShape) return;
+      if (!it || it.optyCut || !it.optyJob || !(it.optyShape || it.optyPos)) return;
       const rec = (jobsByNo || {})[it.optyJob];
       if (!rec) return;
-      const has = (rec.sheets || []).some(s => (s.pieces || []).some(p => String(p.shape || '') === String(it.optyShape)));
+      //  בלי צורה — לפי המיקום באופטימיזציה (optyPos, בן 18/11)
+      const hit = it.optyShape ? p => String(p.shape || '') === String(it.optyShape) : p => !p.shape && Number(p.pos) === Number(it.optyPos);
+      const has = (rec.sheets || []).some(s => (s.pieces || []).some(hit));
       if (has) out.push({ orderId: o.id, key: String(k), value: { at: rec.day, job: rec.job } });
     });
   });
@@ -224,8 +226,8 @@ function lgOptyJobLabels(rec, linked, opts, matLabel) {
     const ps = (sheet.pieces || []).filter(p => !o.order || p.order === o.order);
     if (!o.order) out.push({ marker: 'לוח ' + sheetNo + '/' + total, job: rec.job, mat: matLabel || rec.mat || '', pieces: ps.length });
     ps.forEach(p => {
-      const r = info[p.pos] || {}, ours = p.shape ? lk[p.shape] : null;
-      if (ours) out.push(Object.assign({}, ours, { shape: p.shape, job: rec.job, withShape: true }));
+      const r = info[p.pos] || {}, ours = p.shape ? lk[p.shape] : lk['#' + p.pos];   // בלי צורה — לפי מיקום (18/11)
+      if (ours) out.push(Object.assign({}, ours, { shape: p.shape || '', job: rec.job, withShape: !!p.shape }));
       else out.push({ title: r.client || '', sketchName: r.name || '', dims: Math.round(r.w || p.w) + ' × ' + Math.round(r.h || p.h),
         glass: matLabel || rec.mat || '', orderNum: r.name || '', shape: p.shape || '', job: rec.job, withShape: !!p.shape });
     });

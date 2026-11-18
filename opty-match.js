@@ -25,10 +25,13 @@ const LG_OPTY_CLIENT_MAX = 12;      // אופטי-ווי חותך את שם הל
 const lgOptyNorm = s => String(s || '').toLowerCase().replace(/[\s"'`׳״.\-_/\\,]+/g, '');
 
 //  שורות הטבלה → חלקים עם מספר צורה, מתאריך sinceISO ('YYYY-MM-DD') והלאה
+//  זכוכית בלי מספר צורה (מלבן פשוט — אביבי, בן 18/11) נכנסת אם יש לה אופטימיזציה + מיקום (POSPZ);
+//  היא מתחברת רק כשזה ודאי (ר' lgOptyMatch), ונשמרת על הפריט כ-optyPos במקום optyShape.
 function lgOptyPieces(rows, sinceISO) {
-  return (rows || []).filter(r => r && String(r.SAGOMA || '').trim() && (!sinceISO || String(r.DATACONS || '') >= sinceISO))
+  return (rows || []).filter(r => r && (String(r.SAGOMA || '').trim() || (Number(r.POSPZ) > 0 && String(r.CODCOM || '').trim()))
+      && (!sinceISO || String(r.DATACONS || '') >= sinceISO))
     .map(r => ({
-      shape: String(r.SAGOMA).trim(), client: String(r.CLIENTE || '').trim(), name: String(r.ORDINE || '').trim(),
+      shape: String(r.SAGOMA || '').trim(), pos: Number(r.POSPZ) || 0, client: String(r.CLIENTE || '').trim(), name: String(r.ORDINE || '').trim(),
       w: Number(r.DIMXPZ) || 0, h: Number(r.DIMYPZ) || 0, qty: Math.max(1, Number(r.QTAPZ) || 1),
       note: String(r.NOTE || '').trim(), mat: String(r.COD_MAT_COMP || '').trim(),
       job: String(r.CODCOM || '').trim(), date: String(r.DATACONS || ''),
@@ -80,12 +83,14 @@ function lgOptyMatch(pieces, orders, pairs) {
     items.forEach((it, idx) => it && rows.push({ o, it, idx, key: o.id + '#' + idx, client: lgOptyNorm(o.orderClient || o.client) }));
   });
   const shapeAt = new Map(rows.filter(r => r.it.optyShape).map(r => [String(r.it.optyShape), r.key]));
+  const posAt = new Set(rows.filter(r => r.it.optyPos && r.it.optyJob).map(r => r.it.optyJob + '#' + r.it.optyPos));
+  const free = r => !r.it.optyShape && !r.it.optyPos && !taken.has(r.key);   // פריט שעוד לא חובר לשום דבר
 
   //  קבוצה = אותו לקוח+שם+מידה; שתי צורות שונות באותה מידה מתחלקות בין השורות לפי הסדר
   const groups = new Map();
   (pieces || []).forEach(p => {
-    if (shapeAt.has(p.shape)) { out.already.push(p); return; }
-    const k = [lgOptyNorm(p.client), lgOptyNorm(p.name), Math.round(Math.min(p.w, p.h)), Math.round(Math.max(p.w, p.h))].join('|');
+    if (p.shape ? shapeAt.has(p.shape) : posAt.has(p.job + '#' + p.pos)) { out.already.push(p); return; }
+    const k = [p.shape ? '' : 'nos', lgOptyNorm(p.client), lgOptyNorm(p.name), Math.round(Math.min(p.w, p.h)), Math.round(Math.max(p.w, p.h))].join('|');
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(p);
   });
@@ -94,7 +99,7 @@ function lgOptyMatch(pieces, orders, pairs) {
     const p0 = list[0];
     const keys = _lgOptyClientKeys(p0.client, allPairs);
     //  השם אצלנו מתחיל בשם שבזוג — 'פלג מקלחונים בע"מ', 'טום גלאס  25701384'
-    const sameClientSize = rows.filter(r => keys.some(k => r.client.startsWith(k)) && !r.it.optyShape && !taken.has(r.key) && _lgOptyDimOk(p0, r.it));
+    const sameClientSize = rows.filter(r => keys.some(k => r.client.startsWith(k)) && free(r) && _lgOptyDimOk(p0, r.it));
     //  שם תואם = שם הסקיצה, או מספר ההזמנה שלנו כתוב באופטי-ווי (L1281 — בן: מעכשיו נרשם שם)
     const nameOk = r => _lgOptyNameOk(p0.name, r.o.sketchName || r.o.type)
       || (!!r.o.orderNum && lgOptyNorm(p0.name).replace(/\s/g, '') === lgOptyNorm(r.o.orderNum).replace(/\s/g, ''));
@@ -104,12 +109,13 @@ function lgOptyMatch(pieces, orders, pairs) {
       let i = 0;                                                // מספיק שורות, כולן מאותה הזמנה → ודאי
       list.forEach(p => { for (let q = 0; q < p.qty; q++, i++) {
         const r = named[i]; taken.add(r.key);
-        out.auto.push({ shape: p.shape, job: p.job, orderId: r.o.id, idx: r.idx });
+        out.auto.push(p.shape ? { shape: p.shape, job: p.job, orderId: r.o.id, idx: r.idx } : { shape: '', pos: p.pos, job: p.job, orderId: r.o.id, idx: r.idx });
       } });
       return;
     }
+    if (!p0.shape) return;     //  בלי מספר צורה — רק ודאי; לא נכנס ל"לבדיקה"/"לא נמצא" (שם הכל לפי מספר צורה)
     //  שם תואם אבל המידה רחוקה (השרטט שינה, 717→739) → לבדיקה עם כל הפריטים של אותה הזמנה
-    const nameOnly = !named.length && p0.name ? rows.filter(r => keys.some(k => r.client.startsWith(k)) && !r.it.optyShape && !taken.has(r.key)
+    const nameOnly = !named.length && p0.name ? rows.filter(r => keys.some(k => r.client.startsWith(k)) && free(r)
       && nameOk(r)) : [];
     const cands = (named.length ? named : nameOnly.length ? nameOnly : sameClientSize).map(r => ({ orderId: r.o.id, idx: r.idx }));
     const by = named.length || nameOnly.length ? 'name' : 'size';      // 'size' = רק לקוח+מידה, ההזמנה לא ידועה

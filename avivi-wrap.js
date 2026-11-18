@@ -48,14 +48,25 @@ function lgAvSort(list) {
     || String(a.sketchName || '').localeCompare(String(b.sketchName || '')));
 }
 
+//  נחתכה (בן, 18/11: "אביבי יילך ישר ביום שהוא נחתך, בלי ללחוץ סיים עבודה"): זכוכית אחת לפחות
+//  שהאופטימיזציה שלה היום או לפני, או שהלוח שלה סומן "נחתך". "בוטל" לא נחשב.
+function _lgAvToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function lgAvCutNow(o, todayIso) {
+  const t = todayIso || _lgAvToday();
+  const items = Array.isArray(o && o.items) ? o.items : Object.values((o && o.items) || {});
+  return items.some(it => { const c = it && it.optyCut; return !!(c && !c.undone && c.at && (c.marked || String(c.at) <= t)); });
+}
+
+//  ready/notReady = הובלות (רק הן יוצאות בכפתור ההובלה). cut = עוד ביום עבודה אבל נחתכה — מוצגת
+//  בלשונית לעטיפה; "סיים יום עבודה" הרגיל מעביר אותה להובלות אחר כך. inWork = עוד לא נחתכה.
 const LG_AV_PAST =['delivery', 'done', 'collected'];
-function lgAvSplit(orders) {
-  const out = { notReady: [], ready: [], inWork: [] };
+function lgAvSplit(orders, todayIso) {
+  const out = { notReady: [], ready: [], cut: [], inWork: [] };
   (orders || []).forEach(o => {
     if (!lgAvIsAvivi(o)) return;
     const st = o.stage || '';
     if (st === 'delivery') (lgAvIsReady(o) ? out.ready : out.notReady).push(o);
-    else if (!LG_AV_PAST.includes(st)) out.inWork.push(o);
+    else if (!LG_AV_PAST.includes(st)) (lgAvCutNow(o, todayIso) ? out.cut : out.inWork).push(o);
   });
   return out;
 }
@@ -124,6 +135,6 @@ function lgAvFindScan(orders, scan) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_AV_CARD, lgAvIsAvivi, lgAvWrappedIdxs, lgAvIsReady, lgAvState, lgAvSort, lgAvSplit, lgAvMatch,
+  module.exports = { LG_AV_CARD, lgAvCutNow, lgAvIsAvivi, lgAvWrappedIdxs, lgAvIsReady, lgAvState, lgAvSort, lgAvSplit, lgAvMatch,
     lgAvScanCode, lgAvScanUrl, lgAvParseScan, lgAvFindScan };
 }

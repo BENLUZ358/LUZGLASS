@@ -37,6 +37,18 @@ check('split notReady', s.notReady.map(o => o.id), ['1']);
 check('split ready', s.ready.map(o => o.id), ['2']);
 check('split inWork', s.inWork.map(o => o.id), ['3', '4']);
 
+// מהיום שנחתך (בן, 18/11): הזמנה ביום עבודה שזכוכית שלה נחתכה — כבר בלשונית, בלי "סיים יום עבודה"
+{
+  const cutOn = (at, extra) => [{ w: 1, h: 1, optyCut: Object.assign({ at, job: 'M1' }, extra || {}) }, { w: 2, h: 2 }];
+  const os = [av({ id: 'c1', stage: 'workday', items: cutOn('2026-11-18') }), av({ id: 'c2', stage: 'workday', items: cutOn('2026-11-17') }),
+    av({ id: 'c3', stage: 'workday', items: cutOn('2026-11-19') }), av({ id: 'c4', stage: 'workday', items: cutOn('2026-11-17', { undone: true }) }),
+    av({ id: 'c5', stage: 'chisum', items: cutOn('2026-11-19', { marked: true }) }), av({ id: 'c6', stage: 'collected', items: cutOn('2026-11-17') })];
+  const t = A.lgAvSplit(os, '2026-11-18');
+  check('cut: today / before / marked → in the tab; later / undone → still in work', [t.cut.map(o => o.id), t.inWork.map(o => o.id)], [['c1', 'c2', 'c5'], ['c3', 'c4']]);
+  check('cut orders are never in ready (only delivery ships)', t.ready.length + t.notReady.length, 0);
+  check('lgAvCutNow', [A.lgAvCutNow(os[0], '2026-11-18'), A.lgAvCutNow(os[2], '2026-11-18'), A.lgAvCutNow(av(), '2026-11-18')], [true, false, false]);
+}
+
 // מצב וסדר
 check('state none', A.lgAvState(av()), 'none');
 check('state partial', A.lgAvState(av({ avWrap: { 0: 1 } })), 'partial');

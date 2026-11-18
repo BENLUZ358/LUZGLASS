@@ -112,4 +112,23 @@ check('our order number written in OptyWay (L1281) = name match',
   const pend = M.lgOptyPendingByOrder(M.lgOptyMatch([{ ...p, cw: 604, ch: 2002 }], [two]).review);
   check('waiting for chisum keeps the size after the cut (✓ there matches our glass)', [pend.L1290['274579'].w, pend.L1290['274579'].h], [604, 2002]);
 }
+
+//  ─── זכוכית בלי מספר צורה (בן, 18/11: אביבי — 17846 באופטי-ווי, 882×248, אין שייפ) ───
+{
+  const rows = [{ SAGOMA: '', POSPZ: 3, CODCOM: 'M00341', CLIENTE: 'אביבי', ORDINE: '17846', DIMXPZ: 248, DIMYPZ: 882, QTAPZ: 1, DATACONS: '2026-11-18' },
+                { SAGOMA: '', POSPZ: 0, CODCOM: 'M00341', DATACONS: '2026-11-18' }, { SAGOMA: '', POSPZ: 4, CODCOM: '', DATACONS: '2026-11-18' }];
+  const ps = M.lgOptyPieces(rows, '2026-11-16');
+  check('pieces: no shape but has job+position → kept with pos', ps.map(p => [p.shape, p.pos, p.job]), [['', 3, 'M00341']]);
+  const av = { id: 'L1309', orderNum: 'L1309', orderClient: "יצחק אביבי מטבחים יצור בע''מ", sketchName: 'PO26H017846', items: [{ w: 882, h: 248 }] };
+  const r = M.lgOptyMatch(ps, [av]);
+  check('no shape, Avivi PO end + size → automatic with pos', r.auto.map(a => [a.shape, a.pos, a.job, a.orderId, a.idx]), [['', 3, 'M00341', 'L1309', 0]]);
+  check('no shape, not sure → not in review / not found (lists stay as before)', [M.lgOptyMatch(ps, [{ ...av, sketchName: 'PO26H099999' }]).review.length,
+    M.lgOptyMatch(ps, [{ ...av, sketchName: 'PO26H099999' }]).notFound.length], [0, 0]);
+  check('no shape, already linked (same job+pos) → already', M.lgOptyMatch(ps, [{ ...av, items: [{ w: 882, h: 248, optyJob: 'M00341', optyPos: 3 }] }]).already.length, 1);
+  check('a glass linked by position is not offered again to a shape',
+    M.lgOptyMatch([P('77', 'אביבי', '17846', 248, 882)], [{ ...av, items: [{ w: 882, h: 248, optyJob: 'M00341', optyPos: 3 }] }]).auto.length, 0);
+  const two = { ...av, items: [{ w: 882, h: 248 }, { w: 882, h: 248 }] };
+  const r2 = M.lgOptyMatch([ps[0], { ...ps[0], pos: 5 }], [two]);
+  check('two shapeless pieces, two same glasses → one each', r2.auto.map(a => [a.pos, a.idx]), [[3, 0], [5, 1]]);
+}
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');

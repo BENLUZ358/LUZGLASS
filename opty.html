@@ -240,11 +240,11 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="firebase-db.js?v=20261103"></script>
 <script src="opty-paradox.js?v=20261116c"></script>
-<script src="opty-match.js?v=20261116e"></script>
+<script src="opty-match.js?v=20261118a"></script>
 <script src="opty-shape.js?v=20261116d"></script>
-<script src="opty-layout.js?v=20261117m"></script>
+<script src="opty-layout.js?v=20261118a"></script>
 <script src="lg-qr.js?v=20261117"></script>
-<script src="avivi-wrap.js?v=20261117c"></script>
+<script src="avivi-wrap.js?v=20261118a"></script>
 <script src="print-labels.js?v=20261117d"></script>
 <script src="order-labels.js?v=20261117"></script>
 <script src="lg-icons.js?v=20261103"></script>
@@ -429,6 +429,13 @@ async function save(list, btn, pend, rev) {
   list.forEach(a => {
     const key = (KEYS[a.orderId] || [])[a.idx];
     if (key == null) return;
+    if (!a.shape) {     //  זכוכית בלי מספר צורה — מחוברת לפי המיקום באופטימיזציה (בן, 18/11 — אביבי)
+      up['orders/' + a.orderId + '/items/' + key + '/optyPos'] = Number(a.pos) || 0;
+      up['orders/' + a.orderId + '/items/' + key + '/optyJob'] = a.job || '';
+      up['orders/' + a.orderId + '/items/' + key + '/optyCut'] = null;
+      up['orders/' + a.orderId + '/updatedAt'] = now;
+      return;
+    }
     up['orders/' + a.orderId + '/items/' + key + '/optyShape'] = a.shape;
     up['orders/' + a.orderId + '/items/' + key + '/optyJob'] = a.job || '';
     up['orders/' + a.orderId + '/items/' + key + '/optyCut'] = null;        // חיבור חדש — "נחתך" ייקבע מהאופטימיזציה שלו
@@ -685,9 +692,14 @@ async function jobsLoad() {
 }
 const jFilter = () => ({ from: $('jFrom').value || '', to: $('jTo').value || '', mat: $('jMat').value || '' });
 //  זכוכיות מחוברות: צורה → { order, idx } (רק הזמנות שנטענו — 30 יום)
+const lkOf = (lk, p) => (p.shape ? lk[p.shape] : lk['#' + p.pos]) || null;   // זכוכית בלוח → הפריט שלנו (צורה, או מיקום — 18/11)
 function linkedOf(job) {
   const m = {};
-  ORDERS.forEach(o => o.items.forEach((it, idx) => { if (it && it.optyJob === job && it.optyShape) m[it.optyShape] = { o, idx, it }; }));
+  ORDERS.forEach(o => o.items.forEach((it, idx) => {
+    if (!it || it.optyJob !== job) return;
+    if (it.optyShape) m[it.optyShape] = { o, idx, it };
+    else if (it.optyPos) m['#' + it.optyPos] = { o, idx, it };     // בלי צורה — לפי מיקום (18/11)
+  }));
   return m;
 }
 function jobsRender() {
@@ -736,7 +748,7 @@ function jobSheet() {
   const rec = JOBS[JV.job], seq = lgOptySheetSeq(rec.sheets), cur = seq[JV.i] || seq[0];
   const lk = linkedOf(rec.job), today = lgOptyTodayIso();
   const info = {}; Object.entries(rec.pieces || {}).forEach(([pos, r]) => { info[pos] = r; });
-  const cut = {}; cur.sheet.pieces.forEach(p => { const x = p.shape && lk[p.shape]; const c = x && lgOptyCutState(x.it.optyCut, today); if (c && c.cut) cut[p.order] = 1; });
+  const cut = {}; cur.sheet.pieces.forEach(p => { const x = lkOf(lk, p); const c = x && lgOptyCutState(x.it.optyCut, today); if (c && c.cut) cut[p.order] = 1; });
   const mark = (rec.marks || {})[cur.sheetNo];
   $('jobView').innerHTML = `<section class="jv">
     <h2>${esc(rec.job)} · ${esc(matLbl(rec))} · יום עבודה ${esc(dmy(rec.day))} <button class="sm quiet" type="button" id="jClose" aria-label="סגור את האופטימיזציה">✕ סגור</button></h2>
@@ -748,7 +760,7 @@ function jobSheet() {
     ${lgOptyLayoutSvg(cur.sheet, info, GEOS, { selected: JV.sel, cut })}
     <table><thead><tr><th>#</th><th>שייפ</th><th>לקוח</th><th>סקיצה</th><th>מידה</th><th>מצב</th><th></th></tr></thead><tbody>
     ${cur.sheet.pieces.map(p => {
-      const r = info[p.pos] || {}, x = p.shape && lk[p.shape], c = x && lgOptyCutState(x.it.optyCut, today);
+      const r = info[p.pos] || {}, x = lkOf(lk, p), c = x && lgOptyCutState(x.it.optyCut, today);
       const k = x ? x.o.id + '|' + x.idx : '';
       const state = !x ? '<span class="cutwait">לא מחובר</span>'
         : c ? `<span class="${c.cut ? 'cutok' : 'cutwait'}">${esc(c.label)}</span> <button class="sm quiet" type="button" data-undo="${esc(k)}">בטל נחתך</button>`
@@ -926,7 +938,7 @@ function sheetsPrintPlan(jobs) {
     return { job: rec.job, head: `${rec.job} · ${matLbl(rec)} · יום עבודה ${dmy(rec.day)} · ${seq.length} לוחות · ${pcs} זכוכיות`,
       blocks: groups.map(g => { const n = g.to - g.from + 1; return { sheet: g.sheet, info,
         title: `${rec.job} · ${n > 1 ? 'לוחות ' + g.from + '–' + g.to + '/' + g.total + ' (×' + n + ')' : 'לוח ' + g.from + '/' + g.total} · ${matLbl(rec)} · ${Math.round(g.sheet.L)}×${Math.round(g.sheet.H)} · ${g.sheet.pieces.length} זכוכיות`,
-        rows: g.sheet.pieces.map(p => { const r = info[p.pos] || {}, x = p.shape && lk[p.shape];
+        rows: g.sheet.pieces.map(p => { const r = info[p.pos] || {}, x = lkOf(lk, p);
           return [String(p.order), p.shape || '—', x ? x.o.orderClient : r.client || '', x ? x.o.sketchName : r.name || '', Math.round(r.w || p.w) + '×' + Math.round(r.h || p.h)]; }) }; }) };
   }).filter(Boolean);
 }
