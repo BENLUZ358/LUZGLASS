@@ -414,6 +414,9 @@ let wdInChisum=[];
 // עבודה שנשלחה לתחנה ועוד לא יובאה (workday/csNew/<id> = מתי). לא מוצגת ולא
 // נשלחת למפעל עד "ייבא עבודה" — כדי שלא תתערבב בסחורה שבאמצע בדיקה (בן, 16/11).
 let wdCsNew={}, csHeld=[];
+// מתי יובאה כל הזמנה לתחנה (workday/csBatch/<id> = רגע הייבוא). ייבוא אחד = משלוח אחד.
+// "שלח למפעל" שואל אם בדוח יש הזמנות משני ייבואים שונים (בן, 19/11).
+let wdCsBatch={};
 let _csUnsub=null, _wdRef=null, _checkEditsRef=null;
 let _wdReady=false, _ordersReady=false; // דגלי טעינה — מונעים render לפני שהכל מוכן
 let _sendingToFactory=false; // מונע double-tap על "שלח למפעל"
@@ -524,6 +527,7 @@ function load(){
     function objToArr(v){ return v ? Object.values(v).map(String) : []; }
     wdInChisum = objToArr(wd.inChisum);
     wdCsNew = (wd.csNew && typeof wd.csNew === 'object') ? wd.csNew : {};
+    wdCsBatch = (wd.csBatch && typeof wd.csBatch === 'object') ? wd.csBatch : {};
 
     // Firebase הוא מקור האמת לסימוני הבדיקה. localStorage הוא מטמון תצוגה בלבד.
     // קודם היה כאן ענף "שחזור" שדחף את התוכן המקומי בחזרה לענן כשהצומת היה ריק —
@@ -1082,21 +1086,41 @@ function renderImportBar(){
   document.getElementById('csImportTxt').textContent =
     'נכנסה עבודה חדשה: ' + n + (n === 1 ? ' הזמנה' : ' הזמנות') + ' · ' + items + ' פריטים';
   const left = orders.filter(o => !isDone(o)).length;
-  document.getElementById('csImportSub').textContent = left
-    ? 'קודם סיים את ' + left + ' ההזמנות שלפניך, ואז ייבא'
-    : 'אפשר לייבא';
+  const unsent = orders.filter(isDone).length;
+  document.getElementById('csImportSub').textContent = csImportHint(left, unsent);
+}
+
+// "הושלמו" שעוד לא נשלחו למפעל נחשבים גם הם עבודה שלפניך (בן, 19/11).
+// קודם נספרו רק הזמנות שלא נבדקו, ולכן עם "הושלמו" מלא ההודעה הייתה "אפשר
+// לייבא" — ו"שלח למפעל" היה מוציא את שני הימים בדוח אחד.
+function csImportHint(left, unsent){
+  if(left && unsent) return 'קודם סיים את ' + left + ' ההזמנות שלפניך ושלח למפעל את ' + unsent + ' שהושלמו, ואז ייבא';
+  if(left)   return 'קודם סיים את ' + left + ' ההזמנות שלפניך, ואז ייבא';
+  if(unsent) return 'קודם שלח למפעל את ' + unsent + ' ההזמנות שהושלמו, ואז ייבא';
+  return 'אפשר לייבא';
+}
+
+// השאלה לפני ייבוא — '' כשאין מה לשאול. אפשר תמיד לייבא בכל זאת.
+function csImportQuestion(left, unsent){
+  const lines = [];
+  if(unsent) lines.push('ב"הושלמו" יש ' + unsent + ' הזמנות שעוד לא נשלחו למפעל.');
+  if(left)   lines.push('יש עוד ' + left + ' הזמנות שלא סיימת לבדוק.');
+  if(!lines.length) return '';
+  return lines.join('\n') + '\nאם תייבא עכשיו, העבודה החדשה תתערבב איתן' +
+    (unsent ? ' ו"שלח למפעל" יוציא את כולן בדוח אחד' : '') + '.\n\nלייבא בכל זאת?';
 }
 
 async function csImportWork(){
   const ids = csHeld.map(o => String(o.id));
   if(!ids.length) return;
-  const left = orders.filter(o => !isDone(o)).length;
-  if(left && !confirm('יש עוד ' + left + ' הזמנות שלא סיימת לבדוק.\nאם תייבא עכשיו, העבודה החדשה תתערבב איתן.\n\nלייבא בכל זאת?')) return;
+  const _q = csImportQuestion(orders.filter(o => !isDone(o)).length, orders.filter(isDone).length);
+  if(_q && !confirm(_q)) return;
   const btn = document.getElementById('csImportBtn');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ מייבא...'; }
   try{
-    const patch = {}; ids.forEach(id => { patch[id] = null; });
-    await firebase.database().ref('workday/csNew').update(patch);
+    const patch = {}, at = Date.now();
+    ids.forEach(id => { patch['csNew/' + id] = null; patch['csBatch/' + id] = at; });
+    await firebase.database().ref('workday').update(patch);
     toast('✓ יובאו ' + ids.length + (ids.length === 1 ? ' הזמנה' : ' הזמנות'));
   }catch(e){
     console.error('[CS] import:', e);
@@ -1218,6 +1242,13 @@ async function sendAllToFactory(){
     if(printWin && !printWin.closed) printWin.close(); // אחרת נשאר טאב ריק פתוח
     return;
   }
+  // עבודה משני ייבואים בדוח אחד (בן, 19/11) — שואלים, ואפשר לשלוח בכל זאת.
+  // החלון נפתח קודם (הדפדפן חוסם פתיחה אחרי המתנה), ונסגר אם עונים "לא".
+  const _mixQ = csMixedBatchQuestion(doneOrds, wdCsBatch);
+  if(_mixQ && !confirm(_mixQ)){
+    if(printWin && !printWin.closed) printWin.close();
+    return;
+  }
 
   // שני דוחות נפרדים, ממוספרים בנפרד.
   //
@@ -1312,6 +1343,8 @@ async function sendAllToFactory(){
       .catch(e=>console.error('[CS] removeCheckEdit:', e));
     firebase.database().ref('workday/checkState/' + o.id).remove()
       .catch(e=>console.error('[CS] removeCheckState:', e));
+    firebase.database().ref('workday/csBatch/' + o.id).remove()
+      .catch(e=>console.error('[CS] removeCsBatch:', e));
     delete cs[o.id];
   });
   // חובה לעדכן גם את המטמון המקומי, אחרת מנגנון השחזור בליסנר מחזיר את המחיקה
@@ -1337,6 +1370,23 @@ async function sendAllToFactory(){
   }
 }
 
+
+// כמה ייבואים שונים יש בין ההזמנות שנשלחות. הזמנה בלי חותמת ייבוא (יובאה לפני
+// 19/11) לא נספרת — אין לנו דרך לדעת לאיזה משלוח היא שייכת.
+// מחזיר '' כשהכל מייבוא אחד, אחרת את השאלה עם פירוט לפי שעת ייבוא.
+function csMixedBatchQuestion(doneOrds, batchMap){
+  const groups = {};
+  (doneOrds || []).forEach(o => {
+    const t = Number((batchMap || {})[String(o.id)]) || 0;
+    if(t) groups[t] = (groups[t] || 0) + 1;
+  });
+  const keys = Object.keys(groups).map(Number).sort((a, b) => a - b);
+  if(keys.length < 2) return '';
+  const when = t => new Date(t).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return 'שים לב: בדוח הזה יש עבודה מ-' + keys.length + ' ייבואים שונים:\n' +
+    keys.map(t => '• יובא ' + when(t) + ' — ' + groups[t] + ' הזמנות').join('\n') +
+    '\n\nאם זה לא משלוח אחד, לחץ "ביטול", החזר לבדיקה את מה שלא נוסע עכשיו ושלח שוב.\n\nלשלוח את כולן בדוח אחד?';
+}
 
 // CHISUM REPORT
 // דוח שיוצא פיזית למפעל. בעבר הוא נעטף ב-height:100vh;height:100dvh;overflow:hidden (דוח ארוך

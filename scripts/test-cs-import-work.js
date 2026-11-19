@@ -49,6 +49,7 @@ const ctx = vm.createContext({
   document: { getElementById: getEl },
   confirm: () => { confirms++; return confirmAnswer; },
   toast: () => {},
+  Date,
   firebase: { database: () => ({ ref: p => ({ update: v => { writes.push([p, v]); return Promise.resolve(); } }) }) },
   mapFirebaseOrder: o => o, buildClients: () => {}, renderList: () => {},
   window: {},
@@ -56,7 +57,8 @@ const ctx = vm.createContext({
 vm.runInContext([
   'var orders=[], cs={}, cur=null, wdInChisum=[], wdCsNew={}, csHeld=[];',
   bodyOf(CS, 'chisumIdxs'), bodyOf(CS, 'isDone'),
-  bodyOf(CS, '_filterOrders'), bodyOf(CS, 'renderImportBar'), bodyOf(CS, 'csImportWork'),
+  bodyOf(CS, '_filterOrders'), bodyOf(CS, 'renderImportBar'), bodyOf(CS, 'csImportHint'),
+  bodyOf(CS, 'csImportQuestion'), bodyOf(CS, 'csImportWork'),
 ].join('\n'), ctx);
 
 const ord = (id, n) => ({ id, items: Array.from({ length: n }, () => ({ chisum: true })) });
@@ -68,20 +70,24 @@ check('orders already imported are listed', vm.runInContext('orders.map(o=>o.id)
 check('the new one is held back', vm.runInContext('csHeld.map(o=>o.id)', ctx), ['c']);
 check('the import bar shows', getEl('csImportBar').style.display, 'flex');
 check('and says what came in', getEl('csImportTxt').textContent, 'נכנסה עבודה חדשה: 1 הזמנה · 3 פריטים');
-check('and how many are still to finish first', getEl('csImportSub').textContent, 'קודם סיים את 1 ההזמנות שלפניך, ואז ייבא');
+check('and how many are still to finish / send first', getEl('csImportSub').textContent, 'קודם סיים את 1 ההזמנות שלפניך ושלח למפעל את 1 שהושלמו, ואז ייבא');
 
 (async () => {
   confirmAnswer = false;
   await ctx.csImportWork();
+  confirmAnswer = true;
   check('importing with unchecked work asks first', confirms, 1);
   check('and a "no" imports nothing', writes.length, 0);
 
   vm.runInContext('cs.b={0:true}', ctx);
   ctx.renderImportBar();
-  check('once all is checked it says it can import', getEl('csImportSub').textContent, 'אפשר לייבא');
+  // בן, 19/11: "הושלמו" שלא נשלחו למפעל — עדיין עבודה שלפניך
+  check('all checked but not sent → asks to send first', getEl('csImportSub').textContent, 'קודם שלח למפעל את 2 ההזמנות שהושלמו, ואז ייבא');
   await ctx.csImportWork();
-  check('with nothing left it does not ask', confirms, 1);
-  check('import clears exactly the held marks', writes, [['workday/csNew', { c: null }]]);
+  check('…and importing still asks', confirms, 2);
+  check('…and a "yes" imports: clears exactly the held marks and stamps the import',
+        [writes.length, writes[0][0], writes[0][1]['csNew/c'], typeof writes[0][1]['csBatch/c'], Object.keys(writes[0][1]).length],
+        [1, 'workday', null, 'number', 2]);
 
   vm.runInContext('wdCsNew={}', ctx);
   ctx._filterOrders();
