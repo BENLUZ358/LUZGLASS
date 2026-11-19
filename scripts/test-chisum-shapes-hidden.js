@@ -20,7 +20,7 @@ const ctx = vm.createContext({
   LG_TRACK: { triplex: {}, chisum: T }, _tr: () => T, _lblGroups: {}, _labelPhones: new Set(),
   _markedIdxSet: () => new Set(), _pendingIdxsOf: o => o.items.map((_, i) => i),
   lgEsc: s => String(s == null ? '' : s), lgJsStr: s => String(s), lgDimsText: (w, h) => w + '×' + h,
-  lgHasSketch: () => true, wdLabelBtn: () => '<i>🏷</i>', wdPendingStrip: () => '<div class="pend">עוד לא חוברו</div>',
+  lgHasSketch: () => true, wdLabelBtn: () => '<i>🏷</i>', wdItemMenuBtn: () => '<i>⋯</i>', wdPendingStrip: () => '<div class="pend">עוד לא חוברו</div>',
   _wdPendOpen: () => [], lgOptyChip: (o, i) => o.items[i].optyShape ? '<b class="lg-opty-chip">📐 ' + o.items[i].optyShape + '</b>' : '',
   wdJobTag: (o, i) => o.items[i].optyJob ? '<span class="wd-opty-job">אופטימיזציה ' + o.items[i].optyJob + '</span>' : '',
 });

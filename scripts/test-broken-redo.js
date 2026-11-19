@@ -59,7 +59,7 @@ check('list draws the redo section', /csRedoSectionHtml\(\)/.test(csFn('renderLi
 /* ── Task 4: clean card ── */
 const card = fn('_chisumClientCardHtml');
 check('card no longer shows the label button inline', /wdLabelBtn\(/.test(card), false);
-check('card offers break through the menu', /wdItemMenu\(/.test(card), true);
+check('card offers break through the menu', /wdItemMenuBtn\(/.test(card), true);
 
 console.log(fail ? `\n${fail} FAILED` : '\nall ok');
 process.exit(fail ? 1 : 0);
