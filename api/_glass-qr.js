@@ -9,6 +9,8 @@
 //  פעולות:
 //   POST {action:'sign', items:[{orderId, idx}]}  — מנהל בלבד. מחזיר כתובת לכל זכוכית.
 //   GET  ?c=<code>                                  — ציבורי. שם סקיצה, מידה, תמונות (מספר), בלי מחירים.
+//   POST {action:'collect', c, name?}               — ציבורי (נהג הלקוח, בן 19/11). החתימה = ההרשאה.
+//                                                     כל ההזמנה → נאסף + scanCollect {at, glassNo, name, early}.
 //   GET  ?c=<code>&img=<n>                          — ציבורי. התמונה n (המקורית של הלקוח / צרופה).
 //  הניתוב: vercel.json /api/glass → wa-inbound?glass=1 (מגבלת 12 הפונקציות).
 // ═══════════════════════════════════════════════════════════════════════
@@ -100,14 +102,43 @@ function _publicView(o, idx, imgCount) {
     images: imgCount,
     //  בלי סקיצה (הזמנת טקסט) — רשימת הזכוכיות במקום תמונה
     items: imgCount ? [] : items.map(glass),
+    stage: String(o.stage || ''),
+    scanCollect: o.scanCollect ? { at: Number(o.scanCollect.at) || 0, name: String(o.scanCollect.name || ''), early: !!o.scanCollect.early } : null,
   };
 }
 
 const fail = (status, code) => ({ status, body: { ok: false, code } });
 
+//  נהג הלקוח סרק ולחץ "הזמנה נאספה" (בן, 19/11). כל ההזמנה נאספת.
+//  כבר נאסף → לא כותבים שוב. בהובלה שלנו → לא (סיום הובלה נעשה ממסך ההובלות, עם ההודעה ללקוח).
+//  לפני "מוכן" → נאסף בכל זאת (הנהג מחזיק את הזכוכית), מסומן early כדי שבניהול יראו.
+function lgScanCollectPlan(o, now, glassNo, name) {
+  const st = String((o && o.stage) || '');
+  if (st === 'collected') return { kind: 'already', at: Number(o.scanCollect && o.scanCollect.at) || Number(o.updatedAt) || 0 };
+  if (st === 'delivery') return { kind: 'delivery' };
+  const rec = { at: now, glassNo: Number(glassNo) || 0 };
+  const nm = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (nm) rec.name = nm;
+  if (st !== 'done') rec.early = true;
+  return { kind: 'ok', patch: { stage: 'collected', status: 'נאסף', updatedAt: now, scanCollect: rec } };
+}
+
 async function handleGlass(req, deps) {
   const { db, verify } = deps;
   const q = req.query || {};
+  if (req.method === 'POST' && (req.body || {}).action === 'collect') {
+    const b = req.body;
+    const p = lgGlassParse(b.c);
+    if (!p) return fail(400, 'bad-code');
+    const orders = (await db.ref('orders').once('value')).val() || {};
+    const o = lgGlassFind(orders, p, _secret());
+    if (!o) return fail(404, 'not-found');
+    const plan = lgScanCollectPlan(o, Date.now(), p.idx + 1, b.name);
+    if (plan.kind === 'already') return { status: 409, body: { ok: false, code: 'already', at: plan.at } };
+    if (plan.kind === 'delivery') return fail(409, 'delivery');
+    await db.ref('orders/' + o.id).update(plan.patch);
+    return { status: 200, body: { ok: true, at: plan.patch.updatedAt, early: !!plan.patch.scanCollect.early } };
+  }
   if (req.method === 'POST') {
     const who = await verify(req);
     if (!who.ok || who.role !== 'admin') return fail(who.ok ? 403 : (who.status || 401), 'not-admin');
@@ -139,4 +170,4 @@ async function handleGlass(req, deps) {
   return { status: 200, image: String(src || '') };
 }
 
-module.exports = { handleGlass, lgGlassSig, lgGlassCode, lgGlassParse, lgGlassFind, lgGlassUrl, _publicView };
+module.exports = { handleGlass, lgScanCollectPlan, lgGlassSig, lgGlassCode, lgGlassParse, lgGlassFind, lgGlassUrl, _publicView };

@@ -16,6 +16,9 @@ const orders = {
         items: [{ w: 700, h: 1900, name: '8 מ"מ שקוף', price: 5 }, { w: 400, h: 1900, name: '8 מ"מ שקוף' }],
         attachments: { 0: { kind: 'hardware', at: 1 } } },
   o2: { id: 'o2', orderNum: 'X1300', orderClient: 'אחר', sketchName: 'אחר', items: [{ w: 1, h: 1 }] },
+  o4: { id: 'o4', orderNum: 'L1310', stage: 'done', orderClient: 'נהג', sketchName: 'נאסף', items: [{ w: 1, h: 1 }, { w: 2, h: 2 }] },
+  o5: { id: 'o5', orderNum: 'L1311', stage: 'chisum', orderClient: 'מוקדם', items: [{ w: 1, h: 1 }] },
+  o6: { id: 'o6', orderNum: 'L1312', stage: 'delivery', orderClient: 'הובלה', items: [{ w: 1, h: 1 }] },
   o3: { id: 'o3', orderNum: 'L1301', orderClient: 'טקסט', sketchName: 'בלי סקיצה', items: [{ w: 500, h: 600, name: 'מראה' }] },
 };
 const db = fakeDb({ orders, sketches: { o1: 'data:image/png;base64,AAAA', o1__layer: '{"v":1}', o1__base: 'data:image/png;base64,BBBB', o1__att0: 'data:image/jpeg;base64,CCCC' } });
@@ -61,6 +64,30 @@ const call = (req, verify) => G.handleGlass(Object.assign({ headers: { host: 'lu
   check('I2 out of range → 404', (await call({ method: 'GET', query: { c: code, img: '5' } })).status, 404);
   const t = await call({ method: 'GET', query: { c: '1301-1-' + G.lgGlassSig('o3', 0) } });
   check('I3 text order: no images, the glass list instead', [t.body.images, t.body.items], [0, [{ w: 500, h: 600, name: 'מראה' }]]);
+
+  /* ── נהג הלקוח סורק ומסמן נאסף (בן, 19/11) — בלי כניסה ── */
+  {
+    const noAuth = async () => { throw new Error('collect must not need auth'); };
+    const c4 = '1310-2-' + G.lgGlassSig('o4', 1);
+    const r1 = await call({ method: 'POST', body: { action: 'collect', c: c4, name: '  משה הנהג  ' } }, noAuth);
+    const o4 = (await db.ref('orders/o4').once('value')).val();
+    check('C1 scan collects the whole order, no login', [r1.status, r1.body.ok, o4.stage, o4.status, o4.scanCollect.glassNo, o4.scanCollect.name, !!o4.scanCollect.early],
+          [200, true, 'collected', 'נאסף', 2, 'משה הנהג', false]);
+    const at1 = o4.scanCollect.at;
+    const r2 = await call({ method: 'POST', body: { action: 'collect', c: c4 } }, noAuth);
+    check('C2 second scan → already, first time kept', [r2.status, r2.body.code, r2.body.at, (await db.ref('orders/o4/scanCollect/at').once('value')).val()], [409, 'already', at1, at1]);
+    const r3 = await call({ method: 'POST', body: { action: 'collect', c: '1311-1-' + G.lgGlassSig('o5', 0) } }, noAuth);
+    check('C3 before ready → collected anyway, marked early', [r3.status, r3.body.early, (await db.ref('orders/o5/scanCollect/early').once('value')).val()], [200, true, true]);
+    const r4 = await call({ method: 'POST', body: { action: 'collect', c: '1312-1-' + G.lgGlassSig('o6', 0) } }, noAuth);
+    check('C4 our delivery → refused, stage unchanged', [r4.status, r4.body.code, (await db.ref('orders/o6/stage').once('value')).val()], [409, 'delivery', 'delivery']);
+    const bad = c4.replace(/-([A-Z2-7]{8})$/, (m, s) => '-' + (s[0] === 'A' ? 'B' : 'A') + s.slice(1));
+    check('C5 wrong signature → 404', (await call({ method: 'POST', body: { action: 'collect', c: bad } }, noAuth)).status, 404);
+    await call({ method: 'POST', body: { action: 'collect', c: '1300-1-' + G.lgGlassSig('o1', 0), name: 'א'.repeat(60) } }, noAuth);
+    check('C6 name cut to 40', ((await db.ref('orders/o1/scanCollect/name').once('value')).val() || '').length, 40);
+    const v7 = await call({ method: 'GET', query: { c: c4 } }, noAuth);
+    check('C7 view shows stage + scan record', [v7.body.stage, v7.body.scanCollect.at, v7.body.scanCollect.name], ['collected', at1, 'משה הנהג']);
+    check('C8 bad code on collect → 400', (await call({ method: 'POST', body: { action: 'collect', c: 'x' } }, noAuth)).status, 400);
+  }
 
   /* ── חזרה אחרי כניסה: רק דף פנימי ── */
   {
