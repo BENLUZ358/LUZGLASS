@@ -1392,6 +1392,11 @@ function _lgLegacyInvoiced(o) {
 //    'invoiced'  הופקה חשבונית — יוצאת מהתהליך
 //  המקום היחיד שמחליט. מסך לא גוזר מצב בעצמו.
 const LG_INVOICE_STATES = ['pending', 'verified', 'changed', 'invoiced'];
+//  חשבונית לפני איסוף (בן, 19/11: "לפעמים מוציאים חשבונית לפני שהלקוח אוסף"):
+//  מוכן לאיסוף / ממתין להובלה נכנסים לתחנה בלשונית משלהם (scope 'ready'), וכשמסמנים
+//  חשבונית — נשאלים אם להעביר לנאסף. כשהיא תיאסף אחר כך היא כבר 'invoiced' ולא חוזרת.
+const LG_EARLY_INVOICE_STAGES = ['done', 'delivery'];
+function lgEarlyInvoiceStage(o) { return !!o && LG_EARLY_INVOICE_STAGES.includes(o.stage); }
 
 // ── חשבונית חלקית (בן, 2/11) ──
 //  הלקוחות האלה מקבלים סחורה כל יום. מה שחזר מחיסום ונסגר ב"סיום בדיקה" יוצא
@@ -1413,7 +1418,7 @@ function lgInvoiceablePieces(o) {
   const n = (o.items || []).length;
   const billed = o.invoicePieces || {};
   let idxs;
-  if (o.stage === 'collected') idxs = Array.from({ length: n }, (_, i) => i);
+  if (o.stage === 'collected' || lgEarlyInvoiceStage(o)) idxs = Array.from({ length: n }, (_, i) => i);
   else if (o.stage === 'chisum' && lgPartialInvoiceOrder(o)) {
     idxs = [...new Set(lgArrivedIdxs(o.chisumClosedIdxs).concat(lgArrivedIdxs(o.triplexClosedIdxs)))].sort((a, b) => a - b);
   } else return [];
@@ -1433,10 +1438,10 @@ function _lgCheckOk(o) {
 function lgInvoiceState(o) {
   if (!o) return null;
   const early = o.stage === 'chisum' && lgPartialInvoiceOrder(o) && lgInvoiceablePieces(o).length > 0;
-  if (o.stage !== 'collected' && !early) return null;
+  if (o.stage !== 'collected' && !lgEarlyInvoiceStage(o) && !early) return null;
   if ((o.invoiceDone && o.invoiceDone.docNumber) || _lgLegacyInvoiced(o)) return 'invoiced';
   //  כל הפריטים כבר חויבו בחשבוניות חלקיות
-  if (o.stage === 'collected' && Object.keys(o.invoicePieces || {}).length && !lgInvoiceablePieces(o).length) return 'invoiced';
+  if ((o.stage === 'collected' || lgEarlyInvoiceStage(o)) && Object.keys(o.invoicePieces || {}).length && !lgInvoiceablePieces(o).length) return 'invoiced';
   const c = o.invoiceCheck;
   if (!c || !c.verifiedAt || c.revokedAt) return 'pending';
   return c.itemsHash === lgItemsHash(o.items) ? 'verified' : 'changed';
@@ -1884,7 +1889,7 @@ async function lgMarkInvoiced(selected, docNumberRaw, allOrders, chosen) {
       pieces.forEach(i => { update[o.id + '/invoiceDone/pieces/' + i] = p.docNumber; });
       const billed = new Set(Object.keys(o.invoicePieces || {}).map(Number).concat(pieces));
       const all = (o.items || []).every((_, i) => billed.has(i));
-      if (o.stage === 'collected' && all) Object.keys(done).forEach(k => { update[o.id + '/invoiceDone/' + k] = done[k]; });
+      if ((o.stage === 'collected' || lgEarlyInvoiceStage(o)) && all) Object.keys(done).forEach(k => { update[o.id + '/invoiceDone/' + k] = done[k]; });
     } else {
       update[o.id + '/invoiceDone'] = done;
     }
@@ -1944,7 +1949,9 @@ function lgClientKey(o) {
 // משותף שבו חשבונית אחת הייתה מכסה הזמנות של אנשים שונים.
 // המיון: קודם מי שיש לו הזמנה שהשתנתה אחרי אימות, אחר כך לפי כמה פתוחות.
 //
-// opts.scope — 'all' (ברירת מחדל) · 'daily' · 'monthly'
+// opts.scope — 'all' (ברירת מחדל) · 'daily' · 'monthly' · 'ready'
+//   'ready' — רק מוכן לאיסוף / ממתין להובלה (חשבונית לפני איסוף, בן 19/11).
+//   'daily' / 'monthly' — רק מה שכבר נאסף (או חלקי בחיסום), כמו תמיד.
 //   ברירת המחדל היא 'all' ולא 'daily' בכוונה: קורא ששוכח להעביר scope יראה
 //   הכול מעורבב — מכוער ומיד גלוי. עם 'daily' הוא היה מאבד הזמנות בשקט.
 //   שוטף 30 עובד לפי חודש ולא לפי יום, ותור מעורב היה מציג למזכירה חמישה
@@ -1961,7 +1968,8 @@ function lgInvoiceGroups(allOrders, q, opts) {
   (allOrders || []).forEach(o => {
     const s = lgInvoiceState(o);
     if (!s || s === 'invoiced') return;
-    if (scope !== 'all' && lgIsMonthlyOrder(o, phones) !== (scope === 'monthly')) return;
+    if (scope === 'ready' ? !lgEarlyInvoiceStage(o)
+        : scope !== 'all' && (lgEarlyInvoiceStage(o) || lgIsMonthlyOrder(o, phones) !== (scope === 'monthly'))) return;
     // לקוח עם כרטיס בחשבשבת מקובץ לפי הכרטיס: חשבונית יוצאת לכרטיס, ולקוח
     // כמו פלג (07) שמזמין במייל בלי טלפון נפל קודם להזמנה־לקבוצה (בן, 10/11)
     const phone = lgClientKey(o);

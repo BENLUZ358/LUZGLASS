@@ -527,6 +527,47 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
     check('the measurement inputs are 44px targets', /\.edit-mm\{[^}]*min-height:44px/.test(PAGE), true);
   }
 
+  /* ── invoice before pickup (Ben, 19/11): ready / awaiting delivery get their own tab ── */
+  {
+    const r = (id, stage, extra) => ctx.lgNormalizeOrder(Object.assign(
+      { id, orderNum: id, orderClient: 'מוכן', clientPhone: '0508888888', stage, items: ITEMS.map(i => ({ ...i })) }, extra || {}));
+    const D = r('d1', 'done'), V = r('v1', 'delivery'), C = r('c1', 'collected'), W = r('w1', 'workday');
+    check('a ready order is in the station, waiting', ctx.lgInvoiceState(D), 'pending');
+    check('so is one awaiting delivery', ctx.lgInvoiceState(V), 'pending');
+    check('an order still in production is not', ctx.lgInvoiceState(W), null);
+    const ids = sc => ctx.lgInvoiceGroups([D, V, C, W], '', { scope: sc, monthlyPhones: new Set() })
+      .flatMap(g => g.ords.map(o => o.id)).sort();
+    check('the ready tab shows only ready + delivery', ids('ready'), ['d1', 'v1']);
+    check('the daily tab does not show them', ids('daily'), ['c1']);
+    check('the monthly tab does not show them', ids('monthly'), []);
+    check('"all" still means everything', ids('all'), ['c1', 'd1', 'v1']);
+
+    /* invoiced while ready → stays invoiced after pickup, never back in a queue */
+    const hash = ctx.lgItemsHash(D.items);
+    const DV = r('d2', 'done', { invoiceCheck: { verifiedAt: 1, verifiedBy: 'x', itemsHash: hash } });
+    check('a verified ready order can be invoiced', ctx.lgInvoiceState(DV), 'verified');
+    writes.length = 0;
+    await ctx.lgMarkInvoiced([DV], '5550', [DV]);
+    const w = writes.find(x => x.path === 'orders');
+    check('marking writes invoiceDone on the ready order', !!(w && w.update['d2/invoiceDone'] && w.update['d2/invoiceDone'].docNumber === '5550'), true);
+    const after = r('d2', 'done', { invoiceDone: { markedAt: 1, markedBy: 'x', docNumber: '5550' } });
+    const picked = r('d2', 'collected', { invoiceDone: { markedAt: 1, markedBy: 'x', docNumber: '5550' } });
+    check('it is invoiced while still ready', ctx.lgInvoiceState(after), 'invoiced');
+    check('and still invoiced once collected', ctx.lgInvoiceState(picked), 'invoiced');
+    check('so it is in no tab at all', ['ready', 'daily', 'monthly', 'all'].map(sc =>
+      ctx.lgInvoiceGroups([after, picked], '', { scope: sc, monthlyPhones: new Set() }).length), [0, 0, 0, 0]);
+
+    /* a partial-invoice client (9117) that is ready: every unbilled piece, and it closes */
+    const PR = r('p9', 'done', { customerId: '9117', invoiceCheck: { verifiedAt: 1, verifiedBy: 'x', itemsHash: hash },
+                                 invoiceDone: { pieces: { 0: '5000' } } });
+    check('ready partial order: the unbilled piece is billable', ctx.lgInvoiceablePieces(PR), [1]);
+    writes.length = 0;
+    await ctx.lgMarkInvoiced([PR], '5551', [PR], { p9: [1] });
+    const pw = writes.find(x => x.path === 'orders').update;
+    check('ready partial order: piece 1 recorded and the order closed',
+          [pw['p9/invoiceDone/pieces/1'], pw['p9/invoiceDone/docNumber']], ['5551', '5551']);
+  }
+
   /* stage is never touched by the station */
   const station = pick(/\/\/ ─── 9א\.[\s\S]*?\nasync function lgMarkInvoiced[\s\S]*?\n}/);
   check('nothing in the station writes stage', /\bstage\s*:|updateStage\(/.test(station), false);
