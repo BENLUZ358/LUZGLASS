@@ -252,6 +252,8 @@ module.exports = async function handler(req, res, deps) {
       orderIds: liveIds, queuedBy: auth.phone,
       // תיעוד בלבד — ר' lgWaEnqueue
       phoneSource: targets[0].source, accountKey: targets[0].accountKey,
+      //  "טופלו" נשלח רק מלחיצה בתור הסקיצות — הודעה שנכשלה 3 פעמים מקבלת סבב חדש
+      retryExhausted: kind === 'sketches-handled',
     });
 
     //  ההודעה בתור — אין יותר מה לעקוב (api/_ready-net.js)
