@@ -247,7 +247,7 @@ html,body{height:100%;overflow:hidden;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261117"></script>
+  <script src="firebase-db.js?v=20261119"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
   <!-- הצורה מאופטי-ווי + מדבקה (בן, 16/11) -->
@@ -407,7 +407,7 @@ const safeStorage = {
 };
 
 // STATE
-let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[],chTriplex=[];
+let orders=[],cs={},notes={},cur=null,scl=1,px=0,py=0,qnId=null,chDone=[],chTriplex=[],chRedo=[];
 let activeTab='active'; // 'active' | 'done'
 let wdInChisum=[];
 // עבודה שנשלחה לתחנה ועוד לא יובאה (workday/csNew/<id> = מתי). לא מוצגת ולא
@@ -769,9 +769,47 @@ function csOrderRowHtml(o){
     </div>`;
 }
 
+// ── 💥 שבר (בן, 19/11) ── זכוכית שבורה שנשלחה מהחיסום. לא הזמנה בתור: רק
+//  זכוכית אחת, נבדקת כאן ב"✓ נבדק" ויוצאת בדוח החיסום הבא מסומנת "שבר".
+function csRedoList(){ return lgBrokenRedoQueue(window._allCsOrders || []); }
+function csRedoSectionHtml(){
+  const all = csRedoList();
+  const list = activeTab === 'done' ? all.filter(x => x.checked) : all.filter(x => !x.checked);
+  if(!list.length) return '';
+  return `<div class="oc-wide" style="border:2px solid #c0392b;border-radius:10px;background:#fdf2f1;padding:10px 12px;">
+    <div style="font-size:15px;font-weight:900;color:#c0392b;margin-bottom:6px;">💥 שבר (${list.length}) ${activeTab==='done'?'— ייצא בדוח הבא':'— לבדוק ולשלוח שוב לחיסום'}</div>
+    ${list.map(x => { const o = x.order, it = (o.items || [])[x.idx] || {};
+      const oid = lgEsc(lgJsStr(String(o.id)));
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(192,57,43,.18);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:800;color:var(--text);">${lgEsc(o.orderClient || '')}${o.sketchName ? ' · ' + lgEsc(o.sketchName) : ''} <span style="font-size:12px;font-weight:600;color:var(--muted)" dir="ltr">${lgEsc(o.orderNum || '')}</span></div>
+          <div style="margin-top:2px;"><span style="font-size:18px;font-weight:900;color:var(--text);">${lgDimsText(it.w, it.h)}</span>
+            <span style="font-size:12px;color:var(--muted);">${lgEsc(it.name || csGlassOf(it) || '')}${it.optyShape ? ' · צורה ' + lgEsc(it.optyShape) : ''}</span></div>
+        </div>
+        <button type="button" onclick="csRedoToggle('${oid}',${x.idx},${x.checked ? 'false' : 'true'})"
+          style="min-height:44px;padding:0 14px;border-radius:8px;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap;${x.checked ? 'background:#fff;color:var(--muted);border:1px solid var(--border);' : 'background:var(--green);color:#fff;border:none;'}">${x.checked ? '↩ החזר לבדיקה' : '✓ נבדק'}</button>
+      </div>`; }).join('')}
+  </div>`;
+}
+async function csRedoToggle(orderId, idx, on){
+  try { await updateOrder(String(orderId), { ['brokenChisum/' + idx + '/redoCheckedAt']: on ? Date.now() : null });
+        toast(on ? '✓ נבדק — עבר ל"הושלמו"' : 'הוחזר לבדיקה'); }
+  catch(e){ console.error('csRedoToggle:', e); toast('⚠️ לא נשמר — בדוק חיבור'); }
+}
+
 function renderList(){
   const list=getFiltered();
   const el=document.getElementById('listView');
+  const redoHtml = csRedoSectionHtml();
+  if(!list.length && redoHtml){
+    el.classList.add('oc-grid');
+    const redoN = csRedoList().filter(x => x.checked).length;
+    el.innerHTML = (activeTab==='done' && redoN ? `<div class="oc-wide" style="padding:12px 14px;background:rgba(142,68,173,0.1);border-bottom:2px solid var(--purple);">
+      <button onclick="sendAllToFactory()" style="width:100%;padding:13px;background:var(--purple);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
+        🔥 שלח ${redoN} שבר לחיסום והוצא דוח</button></div>` : '') + redoHtml;
+    updateTabCounts();
+    return;
+  }
   if(!list.length){
     const doneCount = orders.filter(isDone).length;
     const emptyMsg = activeTab==='done'
@@ -786,11 +824,11 @@ function renderList(){
   // כפתור "שלח לחיסום" בטאב הושלמו
   const sendBtn = activeTab==='done' ? `<div class="oc-wide" style="padding:12px 14px;background:rgba(142,68,173,0.1);border-bottom:2px solid var(--purple);">
     <button onclick="sendAllToFactory()" style="width:100%;padding:13px;background:var(--purple);color:#fff;font-family:Heebo,sans-serif;font-size:14px;font-weight:900;border:none;cursor:pointer;border-radius:6px;">
-      🔥 סיים יום — שלח ${list.length} הזמנות לחיסום והוצא דוח
+      🔥 סיים יום — שלח ${list.length} הזמנות${(() => { const n = csRedoList().filter(x => x.checked).length; return n ? ' + ' + n + ' שבר' : ''; })()} לחיסום והוצא דוח
     </button>
   </div>` : '';
   el.classList.add('oc-grid');
-  el.innerHTML = sendBtn + list.map(o => csOrderRowHtml(o)).join('');
+  el.innerHTML = sendBtn + redoHtml + list.map(o => csOrderRowHtml(o)).join('');
 
   // התג והרשימה נגזרים מאותו orders, ולכן חייבים להיחשב באותו רגע.
   // updateTabCounts נקראה רק משני מקומות — מהליסנר של Firebase ומטיימר
@@ -1067,8 +1105,9 @@ async function csImportWork(){
 }
 
 function updateTabCounts(){
-  const active=orders.filter(o=>!isDone(o)).length;
-  const done=orders.filter(o=>isDone(o)).length;
+  const _rq=csRedoList(), _rc=_rq.filter(x=>x.checked).length;   // 💥 שבר נספר גם הוא
+  const active=orders.filter(o=>!isDone(o)).length + (_rq.length - _rc);
+  const done=orders.filter(o=>isDone(o)).length + _rc;
   document.getElementById('tabActive').textContent=`🔍 לבדיקה (${active})`;
   document.getElementById('tabDone').textContent=`✅ הושלמו (${done})`;
   renderImportBar();   // "קודם סיים את N" משתנה עם כל סקיצה שנגמרת
@@ -1162,14 +1201,17 @@ async function _createReportNum(){
 async function sendAllToFactory(){
   if(_sendingToFactory) return; // מונע double-tap
   _sendingToFactory = true;
-  chDone = []; chTriplex = []; // אפס לפני כל שליחה חדשה
+  chDone = []; chTriplex = []; chRedo = []; // אפס לפני כל שליחה חדשה
   const sendBtn = document.querySelector('button[onclick="sendAllToFactory()"]');
   if(sendBtn){ sendBtn.disabled=true; sendBtn.textContent='⏳ שולח...'; }
   // פתח חלון דוח עכשיו (sync, בתוך gesture) — browsers חוסמים window.open אחרי await
   const printWin = window.open('', '_blank');
   try {
   const doneOrds = orders.filter(isDone);
-  if(!doneOrds.length){
+  //  שבר חוזר (בן, 19/11): זכוכיות שבורות שנבדקו יוצאות באותו דוח, מסומנות "שבר"
+  const redo = lgBrokenRedoQueue(window._allCsOrders || []).filter(x => x.checked)
+    .map(x => ({ ...x, track: ((x.order.brokenChisum || {})[x.idx] || {}).track === 'triplex' ? 'triplex' : 'chisum' }));
+  if(!doneOrds.length && !redo.length){
     toast('אין הזמנות שהושלמו');
     if(printWin && !printWin.closed) printWin.close(); // אחרת נשאר טאב ריק פתוח
     return;
@@ -1184,8 +1226,8 @@ async function sendAllToFactory(){
   //
   // הזמנה שיש בה גם וגם מופיעה בשני הדוחות, בכל אחד רק הפריטים שלו,
   // ונושאת שתי חותמות.
-  const _hasTriplex = doneOrds.some(o => lgSplitFactoryItems(o.items).triplex.length);
-  const _hasChisum  = doneOrds.some(o => lgSplitFactoryItems(o.items).chisum.length);
+  const _hasTriplex = doneOrds.some(o => lgSplitFactoryItems(o.items).triplex.length) || redo.some(x => x.track === 'triplex');
+  const _hasChisum  = doneOrds.some(o => lgSplitFactoryItems(o.items).chisum.length)  || redo.some(x => x.track === 'chisum');
 
   const reportId  = 'chisum_' + Date.now();
   const reportNum = _hasChisum ? await _createReportNum() : null;
@@ -1245,6 +1287,15 @@ async function sendAllToFactory(){
   }));
   if(_unpricedAll.length) toast('⚠️ לא כל הפריטים תומחרו: ' + _unpricedAll.join(', '));
 
+  //  שבר חוזר: חותמת הדוח על הזכוכית השבורה — מכאן היא יוצאת מהתור ולא תיכנס לדוח שוב
+  await Promise.all(redo.map(x => {
+    const tx = x.track === 'triplex', p = 'brokenChisum/' + x.idx + '/';
+    return updateOrder(String(x.order.id), { [p + 'redoReportId']: tx ? triplexId : reportId,
+                                             [p + 'redoReportNum']: tx ? triplexNum : reportNum, [p + 'redoSentAt']: Date.now() })
+      .then(() => chRedo.push(x))
+      .catch(e => { console.error('sendAllToFactory redo:', e); failed.push(x.order); });
+  }));
+
   // שלב 2: הסר מ-inChisum — רק את ההזמנות שבאמת עודכנו בהצלחה
   const sentIds   = new Set(sent.map(o => String(o.id)));
   const remaining = wdInChisum.filter(id => !sentIds.has(String(id)));
@@ -1265,14 +1316,14 @@ async function sendAllToFactory(){
   safeStorage.setItem('lgCheckState', JSON.stringify(cs));
   _clearCSEditsForOrders(sent.map(o=>o.id));
 
-  if(chDone.length || chTriplex.length) printChisum(reportNum, printWin, triplexNum);
+  if(chDone.length || chTriplex.length || chRedo.length) printChisum(reportNum, printWin, triplexNum);
   else if(printWin && !printWin.closed) printWin.close();
 
   if(failed.length){
-    toast(`⚠️ ${failed.length} מתוך ${doneOrds.length} נכשלו ונשארו בתור — נסה שוב`);
+    toast(`⚠️ ${failed.length} מתוך ${doneOrds.length + redo.length} נכשלו ונשארו בתור — נסה שוב`);
   } else {
     const _nums = [reportNum && `חיסום ${reportNum}`, triplexNum && `טריפלקס ${triplexNum}`].filter(Boolean).join(' · ');
-    toast(`✓ ${_nums || 'נשלח'} — ${sent.length} הזמנות נשלחו למפעל`);
+    toast(`✓ ${_nums || 'נשלח'} — ${sent.length} הזמנות${chRedo.length ? ' + ' + chRedo.length + ' שבר' : ''} נשלחו למפעל`);
   }
   } catch(e) {
     console.error('[CS] sendAllToFactory error:', e);
@@ -1291,18 +1342,22 @@ async function sendAllToFactory(){
 // "מספר דוח:" בלי המספר עצמו. עכשיו: מסמך הדפסה נקי בלבד.
 // בונה מקטע דוח אחד: כותרת, מספר, וטבלת הפריטים שנוסעים לתהליך הזה.
 // `pick` בוחר מתוך כל הזמנה את הפריטים ששייכים לתהליך.
-function _csReportSection(title, reportNum, orders, pick){
+function _csReportSection(title, reportNum, orders, pick, redo){
   const items = [];
   orders.forEach(o => pick(o.items).forEach(({item}) =>
     items.push({ ...item, client: o.orderClient, orderNum: o.orderNum })));
+  //  שבר חוזר (בן, 19/11) — בסוף הדוח, עם "💥 שבר" כדי שבמפעל יידעו
+  (redo || []).forEach(x => { const it = ((x.order.items || [])[x.idx]) || {};
+    items.push({ ...it, client: x.order.orderClient || x.order.clientName || '', orderNum: x.order.orderNum, redo: true }); });
   if(!items.length) return '';
+  const nOrders = new Set([...orders.map(o => String(o.id)), ...(redo || []).map(x => String(x.order.id))]).size;
   return `
 <section>
   <div class="report-num">מספר דוח: ${lgEsc(reportNum || '—')}</div>
   <div class="report-title">${lgEsc(title)}</div>
-  <div class="report-meta">${new Date().toLocaleDateString('he-IL')} · ${items.length} פריטים · ${orders.length} הזמנות</div>
+  <div class="report-meta">${new Date().toLocaleDateString('he-IL')} · ${items.length} פריטים · ${nOrders} הזמנות</div>
   <table><thead><tr><th>#</th><th>זכוכית</th><th>מידות (מ"מ)</th><th>לקוח</th><th>הזמנה</th></tr></thead>
-  <tbody>${items.map((item,i)=>`<tr><td>${i+1}</td><td>${lgEsc(item.name||'—')}</td><td>${lgDimsText(item.w, item.h)}${item.optyShape ? ' · צורה ' + lgEsc(item.optyShape) : ''}</td><td>${lgEsc(item.client)}</td><td>${lgEsc(item.orderNum||'')}</td></tr>`).join('')}</tbody></table>
+  <tbody>${items.map((item,i)=>`<tr${item.redo?' style="background:#fdecea"':''}><td>${i+1}</td><td>${item.redo?'<b style="color:#c0392b">💥 שבר</b> · ':''}${lgEsc(item.name||'—')}</td><td>${lgDimsText(item.w, item.h)}${item.optyShape ? ' · צורה ' + lgEsc(item.optyShape) : ''}</td><td>${lgEsc(item.client)}</td><td>${lgEsc(item.orderNum||'')}</td></tr>`).join('')}</tbody></table>
 </section>`;
 }
 
@@ -1312,9 +1367,9 @@ function _csReportSection(title, reportNum, orders, pick){
 function printChisum(reportNum, w, triplexNum){
   if(!w){ toast('⚠️ חלון הדוח נחסם — אשר popup ונסה שוב'); return; }
   const chisumHtml  = _csReportSection('🔥 דוח חיסום ' + (reportNum||''),  reportNum,  chDone,
-                                       items => lgSplitFactoryItems(items).chisum);
+                                       items => lgSplitFactoryItems(items).chisum, chRedo.filter(x => x.track !== 'triplex'));
   const triplexHtml = _csReportSection('◪ דוח טריפלקס — הדבקה ' + (triplexNum||''), triplexNum, chTriplex,
-                                       items => lgSplitFactoryItems(items).triplex);
+                                       items => lgSplitFactoryItems(items).triplex, chRedo.filter(x => x.track === 'triplex'));
   if(!chisumHtml && !triplexHtml){ if(!w.closed) w.close(); return; }
 
   w.document.write(`<html dir="rtl"><head><meta charset="UTF-8"><title>דוחות למפעל</title><style>

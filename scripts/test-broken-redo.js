@@ -53,7 +53,7 @@ const send = csFn('sendAllToFactory');
 check('send collects checked redo pieces', /lgBrokenRedoQueue\([^)]*\)\.filter\(x ?=> ?x\.checked\)/.test(send), true);
 check('send does not stop when only redo pieces wait', /if\(!doneOrds\.length && !redo\.length\)/.test(send), true);
 check('send stamps redoReportNum', /redoReportNum/.test(send), true);
-check('report prints "שבר"', /💥 שבר/.test(csFn('_csRedoReportSection')), true);
+check('report prints "שבר"', /💥 שבר/.test(csFn('_csReportSection')), true);
 check('list draws the redo section', /csRedoSectionHtml\(\)/.test(csFn('renderList')), true);
 
 /* ── Task 4: clean card ── */
