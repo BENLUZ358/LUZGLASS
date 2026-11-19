@@ -257,7 +257,9 @@ async function _items(db, b) {
   for (const id of b.orderIds || []) {
     const o = (await db.ref('orders/' + id).once('value')).val() || {};
     const raw = await _sketch(db, id);
-    const d = _dataUrl(raw);
+    const d0 = _dataUrl(raw);
+    //  תמונה מהטלפון של דף על שולחן (המקום לאמבט, 19/11) — חותכים לציור כדי שימלא את העמוד
+    const d = d0 && /^image\//.test(d0.mime) && !/svg/.test(d0.mime) ? await require('./_sketch-fit').lgFitSketch(d0) : d0;
     //  הזמנה מהודעת טקסט: "הסקיצה" היא SVG, ש-pdf-lib לא מצייר — עמוד עם שורות ההודעה (בן, 14/11)
     const lines = d ? null : require('./_wa-text-order').lgWaTextSvgLines(raw);
     //  צרופות (בן, 10/11) — עמוד לכל אחת מיד אחרי הסקיצה
