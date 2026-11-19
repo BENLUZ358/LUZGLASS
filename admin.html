@@ -4064,7 +4064,9 @@ async function _sqAckSend(key, view){
         lgWaDrain().catch(() => {});
       }
     } else if(d.blocked || d.reason){
-      showToast('העדכון לא נשלח: ' + (d.reason || 'נחסם'));
+      //  הסיבה האמיתית פר-הזמנה ("הלקוח כבר עודכן", "כבר בהודעה שבדרך"…) ולא רק "אין הזמנות לשליחה"
+      const why = [...new Set((d.skipped || []).map(s => s.reason).filter(Boolean))].join(' · ');
+      showToast('העדכון לא נשלח: ' + (d.reason || 'נחסם') + (why ? ' (' + why + ')' : ''));
     }
   } catch(e){
     console.error('_sqAckSend:', e);

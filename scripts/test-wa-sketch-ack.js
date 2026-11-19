@@ -82,6 +82,31 @@ const check = (name, actual, expected) => JSON.stringify(actual) === JSON.string
   check('C3 an expired one is free again — the customer never got it', ids.includes('e'), false);
   check('C3 another kind does not count', ids.includes('f'), false);
 
+  //  מאור (בן, 19/11): הודעה שנכשלה 3 פעמים נשארה 'failed' לנצח — השרת ענה
+  //  "אין הזמנות לשליחה" והשורה "ממתינים לעדכון" נשארה בלי דרך לשלוח
+  const db2 = fakeDb({ waOutbox: {
+    k6: { kind: 'sketches-handled', state: 'failed', orderIds: ['g'], attempts: 3, createdAt: 6 },
+    k7: { kind: 'sketches-handled', state: 'failed', orderIds: ['h'], attempts: 2, createdAt: 7 },
+  } });
+  const ids2 = [...await sa.lgSketchAckActiveIds(db2)].sort();
+  check('C5 a message that used up its tries does not hold the order', ids2.includes('g'), false);
+  check('C5 one still retrying does', ids2.includes('h'), true);
+
+  const ob = require(path.join(ROOT, 'api', '_wa-outbox.js'));
+  const base = { kind: 'sketches-handled', to: '972500000000', clientName: 'מאור', orderNums: ['L1'], orderIds: ['g'] };
+  const key = ob.lgWaMsgKey('sketches-handled', ['g']);
+  const db3 = fakeDb({ waOutbox: { [key]: { ...base, state: 'failed', attempts: 3, createdAt: 1 } } });
+  await ob.lgWaEnqueue(db3, base);
+  check('C6 a plain re-enqueue keeps the used-up count (no endless retries)',
+        (await db3.ref('waOutbox/' + key).once('value')).val().attempts, 3);
+  const db4 = fakeDb({ waOutbox: { [key]: { ...base, state: 'failed', attempts: 3, createdAt: 1 } } });
+  const r6 = await ob.lgWaEnqueue(db4, { ...base, retryExhausted: true });
+  const e6 = (await db4.ref('waOutbox/' + key).once('value')).val();
+  check('C6 "שלח עכשיו" re-arms it: queued, 0 tries, fresh age',
+        [r6.queued, e6.state, e6.attempts, e6.createdAt > 1], [true, 'pending', 0, true]);
+  check('C6 dispatch asks for it on sketches-handled only',
+        /retryExhausted:\s*kind === 'sketches-handled'/.test(fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-dispatch.js'), 'utf8')), true);
+
   const D = fs.readFileSync(path.join(ROOT, 'api', 'whatsapp-dispatch.js'), 'utf8');
   check('C4 dispatch accepts the new kind', /'sketches-handled'/.test(D), true);
   check('C4 and filters through lgSketchAckSkip', /lgSketchAckSkip\(/.test(D) && /lgSketchAckActiveIds\(/.test(D), true);

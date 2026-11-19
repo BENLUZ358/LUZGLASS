@@ -69,7 +69,7 @@ function lgWaMsgKey(kind, orderIds) {
 //  **דרך מה** נמצא המספר. בחקירת L9005 בדיוק המידע הזה היה חסר.
 async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, orderIds,
                                  queuedBy, phoneSource, accountKey, invoiceKey, docNumber, deliveryTomorrow,
-                                 missingSketchNums, extraLines, keySuffix }) {
+                                 missingSketchNums, extraLines, keySuffix, retryExhausted }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   //  שבר שחזר (בן, 10/11): מפתח לכל פריט — keySuffix = מספר הפריט
   const key = lgWaMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber
@@ -79,6 +79,11 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, o
   const r = await db.ref(OUTBOX + '/' + key).transaction(cur => {
     if (cur && cur.state === 'sent')    return;   // abort — כבר נשלחה
     if (cur && cur.state === 'pending') return;   // abort — כבר בתור
+    //  לחיצה מפורשת של בן ("שלח עכשיו") על הודעה שנגמרו לה הניסיונות — מתחילה
+    //  מחדש: 0 ניסיונות וגיל חדש. בלי זה ה-claim מסרב לה לנצח (attempts>=MAX),
+    //  או מסמן אותה פגת תוקף לפי createdAt הישן. רק כשהמתקשר ביקש — הדופק
+    //  שמכניס שוב לבד (ready-net) לא מאפס, כדי שלא ינסה בלי סוף.
+    const rearm = retryExhausted === true && cur && cur.state === 'failed' && (cur.attempts || 0) >= MAX_ATTEMPTS;
     return {
       kind:      String(kind),
       to:        String(to),
@@ -92,8 +97,8 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, o
       sketchNames: (orderNums || []).map((_, i) => String((sketchNames || [])[i] || '')),
       orderIds:  [...new Set((orderIds || []).map(String))].sort(),
       state:     'pending',
-      attempts:  (cur && cur.attempts) || 0,
-      createdAt: (cur && cur.createdAt) || now,
+      attempts:  rearm ? 0 : ((cur && cur.attempts) || 0),
+      createdAt: rearm ? now : ((cur && cur.createdAt) || now),
       updatedAt: now,
       queuedBy:  String(queuedBy || ''),
       //  חשבונית (DB-00004): הקבצים נטענים בשליחה מ-invoicePdfBlobs/<invoiceKey>

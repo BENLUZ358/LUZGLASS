@@ -11,6 +11,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const KIND = 'sketches-handled';
+//  ⚠️ אותו מספר כמו בתור (api/_wa-outbox.js). מועתק ולא מיובא — כך העוזר נשאר בלי תלויות
+const MAX_ATTEMPTS = 3;
 
 //  מחזיר סיבה לדילוג, או null אם ההזמנה נכללת.
 function lgSketchAckSkip(order, id, activeIds) {
@@ -43,6 +45,9 @@ async function lgSketchAckActiveIds(db) {
   snaps.forEach(sn => sn.forEach(ch => {
     const v = ch.val() || {};
     if (v.kind !== KIND) return;
+    //  ⚠️ מאור (בן, 19/11): 'failed' שנגמרו לו הניסיונות לא יישלח לעולם — לא
+    //  "בדרך". בלי זה השורה "ממתינים לעדכון" נשארה, ו"שלח עכשיו" ענה "אין הזמנות לשליחה".
+    if (v.state === 'failed' && (v.attempts || 0) >= MAX_ATTEMPTS) return;
     (Array.isArray(v.orderIds) ? v.orderIds : Object.values(v.orderIds || {})).forEach(x => ids.add(String(x)));
   }));
   return ids;
