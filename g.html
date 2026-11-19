@@ -34,6 +34,14 @@
         font-family:Heebo,sans-serif;font-size:16px;font-weight:900;cursor:pointer;}
   .g-go:disabled{opacity:.6;cursor:default;}
   .g-msg{font-size:15px;font-weight:700;text-align:center;padding:28px 12px;}
+  .g-col{background:#e8f6ec;border-color:#9fd3ad;}
+  .g-col-btn{display:block;width:100%;min-height:60px;border:none;border-radius:10px;background:#1e8e3e;color:#fff;
+        font-family:Heebo,sans-serif;font-size:20px;font-weight:900;cursor:pointer;margin-top:10px;}
+  .g-col-btn:disabled{opacity:.6;cursor:default;}
+  .g-col-in{display:block;width:100%;box-sizing:border-box;min-height:46px;border:1px solid #9fd3ad;border-radius:8px;padding:8px 12px;
+        font-family:Heebo,sans-serif;font-size:16px;background:#fff;color:#1a1714;}
+  .g-col-done{font-size:20px;font-weight:900;color:#1e6b34;text-align:center;}
+  .g-col-sub{font-size:13px;color:#3f6b4b;text-align:center;margin-top:4px;font-weight:600;}
   .g-note{font-size:13px;color:var(--muted);text-align:center;margin-top:8px;}
 </style>
 </head>
@@ -74,10 +82,50 @@ async function load(){
       (g ? '<div class="g-dims">' + esc(dims(g.w, g.h)) + '</div><div class="g-sub">' + esc(g.name) + ' · זכוכית ' + d.glassNo + ' מתוך ' + d.count + '</div>'
          : '<div class="g-sub">זכוכית ' + d.glassNo + ' כבר לא קיימת בהזמנה — ההזמנה עודכנה אחרי שהמדבקה הודפסה</div>') +
     '</div>' +
+    '<div class="g-card g-col" id="colBox">' + collectHtml(d) + '</div>' +
     '<div class="g-card">' + (d.images ? imgs : '<div class="g-sub">אין סקיצה להזמנה — אלה הזכוכיות שלה:</div>' + list) + '</div>' +
     '<button class="g-go" id="goBtn" onclick="goOrder()">כנס לראות את ההזמנה בלוז גלאס</button>' +
     '<div class="g-note">מנהל — ייפתח במקום שבו ההזמנה נמצאת עכשיו. לקוח — בפורטל שלך.</div>';
   if(P.get('go') === '1') goOrder();
+}
+
+//  נהג הלקוח: "הזמנה נאספה" (בן, 19/11). כל ההזמנה. בלי כניסה — הברקוד החתום הוא ההרשאה.
+const hm = t => { const x = new Date(t); return String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
+const dm = t => { const x = new Date(t); return x.getDate() + '/' + (x.getMonth() + 1); };
+function collectHtml(d){
+  const sc = d.scanCollect;
+  if(d.stage === 'collected')
+    return '<div class="g-col-done">✓ ההזמנה כבר נאספה</div>' +
+      (sc && sc.at ? '<div class="g-col-sub">' + esc(dm(sc.at) + ' · ' + hm(sc.at)) + (sc.name ? ' · ' + esc(sc.name) : '') + '</div>' : '');
+  if(d.stage === 'delivery')
+    return '<div class="g-col-done" style="color:#1a5a8a">🚚 ההזמנה יוצאת בהובלה של לוז גלאס</div><div class="g-col-sub" style="color:#4a6a80">אין צורך לסמן איסוף</div>';
+  return '<input class="g-col-in" id="colName" maxlength="40" autocomplete="name" placeholder="שם הנהג (לא חובה)" aria-label="שם הנהג (לא חובה)">' +
+    '<button class="g-col-btn" id="colBtn" onclick="collectNow()">✓ הזמנה נאספה</button>' +
+    '<div class="g-col-sub">מסמן את כל ההזמנה (' + d.count + ' זכוכיות) כנאספה</div>';
+}
+async function collectNow(){
+  if(!VIEW) return;
+  if(!confirm('לסמן את כל ההזמנה (' + VIEW.count + ' זכוכיות) כנאספה?')) return;
+  const b = document.getElementById('colBtn'), box = document.getElementById('colBox');
+  const name = (document.getElementById('colName') || {}).value || '';
+  b.disabled = true; b.textContent = 'שומר…';
+  let r, d;
+  try {
+    r = await fetch('/api/glass', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'collect', c: CODE, name }) });
+    d = await r.json();
+  } catch(e){ b.disabled = false; b.textContent = '✓ הזמנה נאספה'; alert('אין חיבור — נסה שוב'); return; }
+  if(d.ok || d.code === 'already'){
+    VIEW.stage = 'collected';
+    VIEW.scanCollect = { at: d.at, name: d.ok ? name.trim().slice(0, 40) : '' };
+    box.innerHTML = d.ok
+      ? '<div class="g-col-done">✓ נרשם שנאסף · ' + esc(hm(d.at)) + '</div><div class="g-col-sub">תודה! אפשר לסגור את הדף</div>'
+      : collectHtml(VIEW);
+    return;
+  }
+  if(d.code === 'delivery'){ VIEW.stage = 'delivery'; box.innerHTML = collectHtml(VIEW); return; }
+  b.disabled = false; b.textContent = '✓ הזמנה נאספה';
+  alert(r.status === 404 ? 'ההזמנה לא נמצאה' : 'לא הצלחתי לסמן — נסה שוב');
 }
 
 //  מי מחובר — לפי Firebase Auth (נשמר בטלפון), לא לפי הלשונית: הסריקה פותחת לשונית חדשה
