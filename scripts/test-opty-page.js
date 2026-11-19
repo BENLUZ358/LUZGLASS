@@ -29,7 +29,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
 
   let html = fs.readFileSync(path.join(ROOT, 'opty.html'), 'utf8')
     .replace(/<script src="https:[^"]*"><\/script>/g, '').replace(/<script src="(firebase-db|lg-icons)\.js[^"]*"><\/script>/g, '');
-  for (const f of ['opty-paradox.js', 'opty-match.js', 'opty-shape.js', 'opty-layout.js', 'print-labels.js', 'order-labels.js'])
+  for (const f of ['opty-paradox.js', 'opty-match.js', 'opty-shape.js', 'opty-layout.js', 'opty-hub.js', 'print-labels.js', 'order-labels.js'])
     html = html.replace(new RegExp(`<script src="${f.replace('.', '\\.')}[^"]*"></script>`), `<script>${fs.readFileSync(path.join(ROOT, f), 'utf8')}</script>`);
   const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://luzglass-test.vercel.app/opty.html',
     beforeParse(w) {
@@ -145,13 +145,18 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   check('"לא שייך" removes it from the list', (db._data.meta.optyReview || {})['901'], undefined);
 
   //  ─── חיפוש + נתק ───
+  const hq = doc.getElementById('hQ');
+  const hsearch = async (q, until) => { hq.value = q; hq.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter' }));
+    for (let i = 0; i < 40 && !until(); i++) { await tick(); hq.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter' })); } };
   doc.querySelector('[data-tab="find"]').click();
-  doc.getElementById('q').value = '900';
-  doc.getElementById('btnFind').click();
-  for (let i = 0; i < 30 && !doc.querySelector('[data-cut]'); i++) await tick();
-  check('search by shape number finds the linked glass', doc.querySelector('#findOut .shape') && doc.querySelector('#findOut .shape').textContent, '900');
+  await hsearch('900', () => doc.querySelector('#hubOut [data-cut]'));
+  check('search by shape number finds the linked glass (highlighted)', (doc.querySelector('#hubOut .hit.on .hnm') || {}).textContent, 'שקוף 8 · צורה 900');
+  await hsearch('1902x500', () => doc.querySelector('#hubOut .hord'));
+  check('search by size (either way round, ±3) finds 1240 and the old 1100 too (history)', [...doc.querySelectorAll('#hubOut .hord header b')].map(b => b.textContent), ['1240', '1100']);
+  check('one state per glass (our order, before cutting)', [...doc.querySelectorAll('#hubOut .hit.on .pill')].map(x => x.textContent), ['ממתין לאישור', 'ממתין לאישור']);
+  await hsearch('900', () => doc.querySelector('#hubOut [data-cut]'));
   d.o1.items[1].optyCut = { at: '2026-11-13', job: 'M1' };   // סקירה: חותמת ישנה לא נשארת אחרי ניתוק
-  doc.querySelector('[data-cut]').click();
+  doc.querySelector('#hubOut .hit.on [data-cut]').click();
   for (let i = 0; i < 30 && d.o1.items[1].optyShape; i++) await tick();
   check('"נתק" clears the glass and puts the shape back to link (size from the drawing)', [d.o1.items[1].optyShape, db._data.meta.optyPending.o1['900'].w, db._data.meta.optyPending.o1['900'].h], [undefined, 501, 1889]);
   check('"נתק" also clears the cut mark', d.o1.items[1].optyCut, undefined);
@@ -188,10 +193,15 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   mat.value = '10S'; mat.dispatchEvent(new w.Event('change'));
   check('glass filter hides the others', [...doc.querySelectorAll('[data-job]')].map(b => b.dataset.job), ['M00337']);
   mat.value = ''; mat.dispatchEvent(new w.Event('change'));
-  const jq = doc.getElementById('jQ');
-  jq.value = 'אגן'; jq.dispatchEvent(new w.Event('input'));
-  check('shape search finds an unlinked client', [...doc.querySelectorAll('[data-hit]')].map(b => b.dataset.hit), ['M00337|1|2']);
-  jq.value = ''; jq.dispatchEvent(new w.Event('input'));
+  check('the jobs tab has no second search box any more', doc.getElementById('jQ'), null);
+  doc.querySelector('[data-tab="find"]').click();
+  await hsearch('אגן', () => doc.querySelector('#hubOut [data-ohit]'));
+  check('one search also finds glass of a client that is not in our system', [...doc.querySelectorAll('#hubOut [data-ohit]')].map(b => b.dataset.ohit), ['M00337|1|2']);
+  doc.querySelector('#hubOut [data-ohit]').click();
+  for (let i = 0; i < 30 && !doc.querySelector('#jobView svg'); i++) await tick();
+  check('tapping it opens its sheet in the optimisations tab', [doc.getElementById('pane-jobs').hidden, /M00337/.test(doc.getElementById('jobView').textContent)], [false, true]);
+  doc.getElementById('jClose').click();
+  for (let i = 0; i < 30 && !doc.querySelector('[data-job="M00291"]'); i++) await tick();
   doc.querySelector('[data-job="M00291"]').click();
   for (let i = 0; i < 30 && !doc.querySelector('#jobView svg'); i++) await tick();
   check('job view: sheet i/N and the drawing', [/לוח 1\/1/.test(doc.getElementById('jobView').textContent), !!doc.querySelector('#jobView svg')], [true, true]);
@@ -265,15 +275,20 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   db._data.meta.optyJobs.M00403 = one('M00403', iso(w.Date.now() - 20 * 86400000), 'שמעון כהן');
   db._data.meta.optyJobs.M00404 = one('M00404', iso(w.Date.now() - 3 * 86400000), 'שמעון כהן');
   doc.querySelector('[data-tab="find"]').click();
-  doc.getElementById('q').value = 'שמעון';
-  doc.getElementById('btnFind').click();
-  for (let i = 0; i < 40 && !doc.querySelector('[data-ohit]'); i++) await tick();
-  const ohits = () => [...doc.querySelectorAll('[data-ohit]')].map(x => x.dataset.ohit.split('|')[0]);
-  check('search: optimisation glass from the last week, newest first', ohits(), ['M00402', 'M00404']);
-  check('search: cut state for a glass not linked to an order', [...doc.querySelectorAll('[data-ohit] .cst')].map(x => x.textContent.trim()), ['לחיתוך היום · חיסום', 'חזר מחיסום · מוכן']);   // 08S = חיסום (בן, 17/11)
-  doc.querySelector('[data-older]').click();
-  for (let i = 0; i < 40 && ohits().length < 3; i++) await tick();
-  check('"חפש עוד אחורה" adds older glass', ohits(), ['M00402', 'M00404', 'M00403']);
+  await hsearch('שמעון', () => doc.querySelectorAll('#hubOut [data-ohit]').length >= 3);
+  const ohits = () => [...doc.querySelectorAll('#hubOut [data-ohit]')].map(x => x.dataset.ohit.split('|')[0]);
+  check('search: optimisation glass, any date when searching, newest first', ohits(), ['M00402', 'M00404', 'M00403']);
+  check('search: ready state for a glass not linked to an order (08S = chisum)', [...doc.querySelectorAll('#hubOut [data-ohit] .pill')].map(x => x.textContent.trim()).slice(0, 2), ['לחיתוך היום · חיסום', 'חזר מחיסום · מוכן']);
+  //  "לא אצלנו" (בן, 19/11): בלי מילת חיפוש — שבוע אחורה, רק מה שלא מחובר
+  hq.value = '';
+  doc.querySelector('[data-tab="loose"]').click();
+  for (let i = 0; i < 40 && !ohits().includes('M00404'); i++) await tick();
+  check('"לא אצלנו": the last week only, no orders', [ohits().includes('M00402'), ohits().includes('M00404'), ohits().includes('M00403'), doc.querySelectorAll('#hubOut .hord').length], [true, true, false, 0]);
+  check('"לא אצלנו": tab and chip selected, count on the tab', [doc.querySelector('[data-tab="loose"]').getAttribute('aria-selected'), doc.querySelector('[data-hstate="loose"]').getAttribute('aria-pressed'), doc.getElementById('cntLoose').hidden], ['true', 'true', false]);
+  doc.getElementById('hAll').click();
+  check('"כל התאריכים" brings the older glass too', ohits().includes('M00403'), true);
+  doc.querySelector('[data-hstate="ready"]').click();
+  check('state filter "מוכן": only the ready glass', [...doc.querySelectorAll('#hubOut [data-ohit] .pill')].map(x => x.textContent.trim()).every(t => /מוכן/.test(t)), true);
 
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
 })().catch(e => { console.error(e); process.exit(1); });

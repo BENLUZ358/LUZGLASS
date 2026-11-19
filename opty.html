@@ -87,11 +87,55 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .tabs button[aria-selected="true"]{background:var(--text);color:var(--surface);border-color:var(--text);}
 .tabs .cnt{display:inline-block;min-width:20px;padding:0 6px;margin-inline-start:6px;border-radius:999px;background:var(--gold);color:var(--on-gold);font-size:12px;}
 .pane[hidden]{display:none;}
+.tabs .tsep{flex:1 1 0;min-width:0;}
+@media (max-width:600px){ .tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px;} .tabs button{flex:none;} .tabs .tsep{display:none;} }
+/* חיפוש אחד (בן, 19/11) */
+.hbar{position:sticky;top:56px;z-index:6;background:var(--bg);padding:var(--space-2) 0;margin-bottom:var(--space-2);}
+#hQ{width:100%;min-height:52px;padding:0 var(--space-3);border:2px solid var(--border);border-radius:var(--radius);font-size:17px;font-family:inherit;background:var(--surface);color:var(--text);box-sizing:border-box;}
+#hQ:focus{border-color:var(--gold);outline:none;}
+.hflt-box summary{min-height:40px;font-size:var(--fs-sm);color:var(--muted);margin-top:var(--space-1);}
+.hflt-box summary span{color:var(--text);}
+@media (max-width:600px){ .hbar{position:static;} .hflt label{flex:1 1 40%;} .hflt label input{flex:1;min-width:0;} }
+.hflt{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-top:var(--space-2);}
+.hflt label{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-sm);}
+.hflt input[type=date]{min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 6px;background:var(--surface);color:var(--text);}
+.chips{display:flex;gap:6px;margin-top:var(--space-2);overflow-x:auto;scrollbar-width:none;}
+.chip{flex:none;min-height:40px;padding:0 var(--space-3);border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font:var(--fw-bold) var(--fs-sm) Heebo,sans-serif;cursor:pointer;}
+.chip span{color:var(--muted);font-weight:var(--fw-medium);margin-inline-start:4px;}
+.chip[aria-pressed="true"]{background:var(--text);color:var(--surface);border-color:var(--text);}
+.chip[aria-pressed="true"] span{color:inherit;opacity:.8;}
+.hsum{margin:0 0 var(--space-2);}
+.hord{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-bottom:var(--space-2);overflow:hidden;}
+.hord header{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px var(--space-3);margin-bottom:var(--space-1);}
+.hord header b{font-size:var(--fs-lg);font-weight:var(--fw-black);}
+.hord header span{font-weight:var(--fw-bold);}
+.hord header .sk{color:var(--muted);}
+.hord header small{color:var(--muted);margin-inline-start:auto;}
+.hit{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"dim nm pill" "src src act";align-items:center;gap:4px var(--space-2);padding:var(--space-2) 0;border-top:1px solid var(--border);font-size:var(--fs-sm);}
+.hit.on{background:rgba(201,162,39,.13);margin-inline:calc(-1 * var(--space-3));padding-inline:var(--space-3);}
+.hit .hdim{grid-area:dim;font-weight:var(--fw-black);white-space:nowrap;}
+.hit .hnm{grid-area:nm;min-width:0;}
+.hit .pill{grid-area:pill;}
+.hit .hsrc{grid-area:src;color:var(--muted);font-size:var(--fs-xs);}
+.hit .hact{grid-area:act;display:flex;gap:4px;}
+.hit .hact .sm{min-height:40px;}
+@media (min-width:760px){ .hit{grid-template-columns:110px 1fr auto 150px auto;grid-template-areas:"dim nm pill src act";} }
+.pill{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:var(--fw-bold);font-size:var(--fs-xs);white-space:nowrap;border:1px solid transparent;}
+.pill.t-wait{background:#eef0f2;color:#3d4650;border-color:#d5dade;}
+.pill.t-plan{background:#fff4dc;color:#7a5200;border-color:#f0d9a0;}
+.pill.t-cut{background:#e3effc;color:#1b4f8a;border-color:#b9d3f0;}
+.pill.t-ready{background:#e6f4ea;color:#155d33;border-color:#b6dcc2;}
+.hloose h3{font-size:var(--fs-sm);font-weight:var(--fw-black);margin:var(--space-3) 0 var(--space-1);}
+.hlz{display:flex;align-items:center;gap:var(--space-3);width:100%;text-align:start;padding:var(--space-2);border:none;border-bottom:1px solid var(--border);background:none;color:var(--text);font:inherit;font-size:var(--fs-sm);cursor:pointer;min-height:56px;}
+.hlz svg{height:56px;width:42px;flex:none;}
+.hlz .who{flex:1;min-width:0;}
+.hlz:hover{background:rgba(0,0,0,.04);}
+.hempty b{display:block;margin-bottom:4px;}
+.hmore{text-align:center;margin:var(--space-3) 0;}
 /* אופטימיזציות (בן, 17/11) */
 .jflt{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-bottom:var(--space-3);}
 .jflt label{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-sm);}
 .jflt input[type=date]{min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 6px;background:var(--surface);color:var(--text);}
-.jflt #jQ{flex:1 1 260px;min-height:48px;padding:0 var(--space-3);border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);}
 .jcard{display:flex;flex-wrap:wrap;align-items:center;gap:4px var(--space-3);width:100%;text-align:start;padding:var(--space-3);margin-bottom:var(--space-2);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);cursor:pointer;color:var(--text);font:inherit;}
 .jcard b{font-size:var(--fs-lg);font-weight:var(--fw-black);}
 .jcard .mat{font-weight:var(--fw-bold);}
@@ -142,21 +186,23 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <body>
 <header class="topbar">
   <a class="tb-btn" href="admin.html" aria-label="חזרה לאדמין"><span data-icon="arrow-right"></span></a>
-  <div class="tb-title">אופטי-ווי<small>מספר הצורה וציור הצורה לכל זכוכית — קליטה, חיבור, חיפוש והגדרות</small></div>
+  <div class="tb-title">אופטי-ווי<small>חיפוש, מצב כל זכוכית, עבודת היום והאופטימיזציות — במקום אחד</small></div>
 </header>
 
 <main class="wrap">
   <nav class="tabs" role="tablist" aria-label="אופטי-ווי">
-    <button type="button" role="tab" data-tab="imp" aria-selected="true">קליטה</button>
+    <button type="button" role="tab" data-tab="find" aria-selected="true">🔍 חיפוש</button>
     <button type="button" role="tab" data-tab="today" aria-selected="false">עבודת היום</button>
     <button type="button" role="tab" data-tab="jobs" aria-selected="false">אופטימיזציות</button>
+    <button type="button" role="tab" data-tab="loose" aria-selected="false">לא אצלנו<span class="cnt" id="cntLoose" hidden></span></button>
     <button type="button" role="tab" data-tab="link" aria-selected="false">לחיבור<span class="cnt" id="cntLink" hidden></span></button>
-    <button type="button" role="tab" data-tab="find" aria-selected="false">חיפוש</button>
+    <span class="tsep" aria-hidden="true"></span>
+    <button type="button" role="tab" data-tab="imp" aria-selected="false">קליטה</button>
     <button type="button" role="tab" data-tab="set" aria-selected="false">הגדרות</button>
   </nav>
   <div id="st" role="status"></div>
 
-  <div class="pane" id="pane-imp">
+  <div class="pane" id="pane-imp" hidden>
   <section class="card">
     <h2>1. בחר מהדיסק-און-קי</h2>
     <div class="step">
@@ -195,10 +241,8 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
       <label>מ-<input type="date" id="jFrom"></label>
       <label>עד <input type="date" id="jTo"></label>
       <select class="sm" id="jMat" aria-label="סוג זכוכית"><option value="">כל סוגי הזכוכית</option></select>
-      <input id="jQ" type="search" placeholder="חיפוש שייפ: לקוח / שם סקיצה / מספר שייפ / M00…" aria-label="חיפוש שייפ">
     </div>
     <div id="jobView"></div>
-    <div id="jHits"></div>
     <div id="jList"><p class="note">טוען…</p></div>
   </div>
 
@@ -207,11 +251,20 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
     <div id="linkOut"><p class="note">טוען…</p></div>
   </div>
 
-  <div class="pane" id="pane-find" hidden>
-    <div class="srch"><input id="q" type="search" placeholder="מספר צורה / מספר הזמנה / לקוח / שם סקיצה / M00…" enterkeyhint="search" aria-label="חיפוש">
-      <button class="sm gold" id="btnFind" type="button">חפש</button></div>
-    <div id="findOpty"></div>
-    <div id="findOut"></div>
+  <div class="pane" id="pane-find">
+    <div class="hbar">
+      <input id="hQ" type="search" placeholder="מידה (850x1900), מספר הזמנה, לקוח, שם סקיצה, מספר צורה, M00…" enterkeyhint="search" aria-label="חיפוש" autocomplete="off">
+      <details class="hflt-box" id="hFltBox"><summary>סינון: תאריכים וסוג זכוכית <span id="hFltOn"></span></summary>
+      <div class="hflt">
+        <label>מ-<input type="date" id="hFrom"></label>
+        <label>עד <input type="date" id="hTo"></label>
+        <select class="sm" id="hMat" aria-label="סוג זכוכית"><option value="">כל סוגי הזכוכית</option></select>
+        <button class="sm" type="button" id="hAll">כל התאריכים</button>
+        <button class="sm quiet" type="button" id="hClear">נקה</button>
+      </div></details>
+      <div class="chips" id="hChips" role="group" aria-label="סינון לפי מצב"></div>
+    </div>
+    <div id="hubOut"><p class="note">טוען…</p></div>
   </div>
 
   <div class="pane" id="pane-set" hidden>
@@ -243,6 +296,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-match.js?v=20261118a"></script>
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
+<script src="opty-hub.js?v=20261119a"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -254,7 +308,7 @@ const esc = s => lgEsc(s);
 const ORDER_DAYS = 30;                         // הזמנות מ-30 הימים האחרונים
 const DIM_OK = 3;                              // ✓ — המידה (עם הליטוש) עד 3 מ"מ מהזכוכית שלנו, כמו בחיבור האוטומטי
 let R01S = [], ROWS = [], FOUND = [], MAGAZ = [];   // קובצי חיתוך שנבחרו · שורות Pezzi · אופטימיזציות שנמצאו (בן, 17/11)
-let DB = [], DAT = {}, ORDERS = [], KEYS = {}, PAIRS = [], RES = null, PEND = {}, REVIEW = {};
+let DB = [], DAT = {}, ORDERS = [], ALL_ORDERS = [], KEYS = {}, PAIRS = [], RES = null, PEND = {}, REVIEW = {};
 let PENDING = {}, REVQ = {}, GEOS = {}, SK = {};   // SK: סקיצה לכל הזמנה (data URL / null)       // מה שמחכה לחיבור (meta/optyPending, meta/optyReview) + ציורים
 
 const st = (t, cls) => { $('st').textContent = t; $('st').className = cls || ''; };
@@ -262,7 +316,7 @@ const st = (t, cls) => { $('st').textContent = t; $('st').className = cls || '';
 const dimT = (w, h) => { const a = Math.round(Number(w) || 0), b = Math.round(Number(h) || 0); return typeof lgDimsText === 'function' ? lgDimsText(a, b) : a + '×' + b; };
 const net = (w, h) => dimT(Number(w) - 2, Number(h) - 2);   // נטו — בלי 1 מ"מ ליטוש מכל צד
 const geoSvg = shape => { const g = DAT[shape] || GEOS[shape]; return g ? lgOptyShapeSvg(lgOptyNetGeo(g), { px: 40 }) : ''; };
-const ordOf = id => ORDERS.find(x => x.id === id);
+const ordOf = id => ORDERS.find(x => x.id === id) || ALL_ORDERS.find(x => x.id === id);
 const ordTitle = id => { const o = ordOf(id); return o ? (o.orderNum || '') + ' · ' + (o.orderClient || '') + ' · ' + (o.sketchName || 'ללא שם') : id; };
 const itemText = (id, idx) => { const o = ordOf(id), it = o && o.items[idx];
   return it ? (it.name || 'פריט') + ' · ' + dimT(it.w, it.h) : ''; };
@@ -274,14 +328,21 @@ const gap = (p, it) => { const w = Number(it.w) || 0, h = Number(it.h) || 0, a =
 const countWait = (pend, rev) => Object.values(pend || {}).reduce((n, o) => n + Object.keys(o || {}).length, 0) + Object.keys(rev || {}).length;
 
 //  ─── לשוניות (בן, 16/11: "שאני אכנס לאופטי-ווי ושם יהיה הכל") ───
+//  "לא אצלנו" (בן, 19/11) = החיפוש, מסונן לזכוכיות שנחתכו באופטי-ווי ולא קיימות אצלנו
+//  בטלפון הלשוניות והכפתורים גוללים הצידה — מה שנבחר נשאר בתוך המסך
+const _seen = el => { if (el && el.scrollIntoView) try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) {} };
 function showTab(t) {
   document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
-  document.querySelectorAll('.pane').forEach(p => { p.hidden = p.id !== 'pane-' + t; });
+  const pane = t === 'loose' ? 'find' : t;
+  _seen(document.querySelector('.tabs [aria-selected="true"]'));
+  document.querySelectorAll('.pane').forEach(p => { p.hidden = p.id !== 'pane-' + pane; });
   st('');
+  if (t === 'loose') HUB.state = 'loose';
+  else if (t === 'find' && HUB.state === 'loose') HUB.state = '';
+  if (pane === 'find') hubLoad(true);           // טרי בכל כניסה — אולי חיברו בינתיים
   if (t === 'link') loadLink();
   if (t === 'jobs') jobsLoad();
   if (t === 'today') todayLoad();
-  if (t === 'find') $('q').focus();
   if (t === 'set') { loadPairs(); loadMats(); }
 }
 document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); });
@@ -308,14 +369,16 @@ $('inDat').addEventListener('change', async e => {
 async function loadOrders() {
   const [snap, pairs] = await Promise.all([_lgDb.ref('orders').once('value'), _lgDb.ref('meta/optyClients').once('value')]);
   const from = Date.now() - ORDER_DAYS * 86400000;
-  ORDERS = []; KEYS = {};
+  ORDERS = []; ALL_ORDERS = []; KEYS = {};
+  //  ALL_ORDERS — כל ההזמנות, לחיפוש (בן, 19/11: גם היסטוריה); ORDERS — 30 יום, לחיבור צורות
   Object.values(snap.val() || {}).forEach(o => {
     if (!o || !o.id || o.isSample || o.isTest) return;
-    if (Number(o.createdAt || o.updatedAt || 0) < from) return;
     const keys = Array.isArray(o.items) ? o.items.map((_, i) => i) : Object.keys(o.items || {});
     KEYS[o.id] = keys;
-    ORDERS.push({ id: o.id, orderNum: o.orderNum || '', orderClient: o.orderClient || o.client || '',
-      sketchName: o.sketchName || o.type || '', items: keys.map(k => (o.items || {})[k] || {}) });
+    const x = { id: o.id, orderNum: o.orderNum || '', orderClient: o.orderClient || o.client || '',
+      sketchName: o.sketchName || o.type || '', stage: o.stage || '', createdAt: Number(o.createdAt || o.updatedAt || 0), items: keys.map(k => (o.items || {})[k] || {}) };
+    ALL_ORDERS.push(x);
+    if (x.createdAt >= from) ORDERS.push(x);
   });
   PAIRS = Object.entries(pairs.val() || {}).filter(([, p]) => p && p.ours && p.opty).map(([k, p]) => ({ ...p, key: k }));
 }
@@ -703,14 +766,9 @@ function linkedOf(job) {
   return m;
 }
 function jobsRender() {
-  const f = jFilter(), q = $('jQ').value.trim();
+  const f = jFilter();
   const list = Object.values(JOBS).filter(r => r && r.sheets && (!f.mat || r.mat === f.mat) && (!f.from || r.day >= f.from) && (!f.to || r.day <= f.to))
     .sort((a, b) => (b.day || '').localeCompare(a.day || '') || a.job.localeCompare(b.job));
-  const hits = q ? lgOptyPieceSearch(JOBS, q, f).slice(0, 60) : [];
-  $('jHits').innerHTML = q ? `<section class="card"><h2>שייפים שנמצאו (${hits.length})</h2>${hits.map(h => `<button type="button" class="jhit" data-hit="${esc(h.job + '|' + h.sheetNo + '|' + h.order)}">
-      ${h.shape && GEOS[h.shape] ? lgOptyShapeSvg(GEOS[h.shape], { px: 40 }) : ''}
-      <span class="who"><b>${h.shape ? 'שייפ ' + esc(h.shape) : 'בלי שייפ'}</b> · ${esc(h.client)} · ${esc(h.name)}<br><small>${esc(Math.round(h.w) + '×' + Math.round(h.h))} · ${esc(h.job)} · לוח ${h.sheetNo} · ${esc(dmy(h.day))} · ${esc(matLbl(JOBS[h.job]))}</small></span></button>`).join('') || '<p class="note">לא נמצא</p>'}</section>` : '';
-  if (q) loadGeos(hits.map(h => h.shape).filter(Boolean)).then(n => { if (n) jobsRender(); });
   //  הערכת עבודה לכל יום (בן, 17/11): מול החציון של 20 הימים הקודמים
   const MODEL = JOBS_MODEL;
   const allDays = [...new Set(Object.values(JOBS).map(r => r && r.day).filter(Boolean))].sort();
@@ -817,7 +875,6 @@ async function jobCut(k, on) {
   } catch (e) { st('✗ לא נשמר: ' + (e.message || ''), 'bad'); }
 }
 ['jFrom', 'jTo', 'jMat'].forEach(id => $(id).addEventListener('change', jobsRender));
-$('jQ').addEventListener('input', jobsRender);
 //  "חיסום" לכל סוג זכוכית (בן, 17/11) — meta/optyMats/<קוד>/chisum; משנה את "מוכן" בחיפוש
 $('pane-set').addEventListener('change', async e => {
   const b = e.target.closest('[data-match]'); if (!b) return;
@@ -835,7 +892,6 @@ $('pane-set').addEventListener('click', async e => {
 $('pane-jobs').addEventListener('click', e => {
   const t = e.target;
   const card = t.closest('[data-job]'); if (card) { jobOpen(card.dataset.job); return; }
-  const hit = t.closest('[data-hit]'); if (hit) { const [j, sn, ord] = hit.dataset.hit.split('|'); jobOpen(j, Number(sn), Number(ord)); return; }
   const nav = t.closest('[data-jnav]'); if (nav && JV) { JV.i += Number(nav.dataset.jnav); JV.sel = 0; jobSheet(); return; }
   const pc = t.closest('.lg-opty-pc'); if (pc && JV) { JV.sel = Number(pc.dataset.order); jobSheet(); return; }
   if (t.closest('#jClose')) { JV = null; $('jobView').innerHTML = ''; return; }
@@ -1039,85 +1095,106 @@ $('pane-today').addEventListener('click', e => {
 });
 if (location.hash === '#today') showTab('today');
 
-//  ─── חיפוש ───
-//  חיפוש (בן, 17/11): קודם בזכוכיות של האופטימיזציות — שבוע אחורה, מיד, עם "נחתך" גם בלי חיבור להזמנה;
-//  "חפש עוד אחורה" מוסיף שבועיים (ומושך אופטימיזציות ישנות אם צריך). ההזמנות המחוברות — מתחת, כשנטענות.
-let FIND = { q: '', days: 7 };
-//  חיסום לזכוכית בחיפוש (בן, 17/11): ההערה באופטי-ווי ("חיסום/חור", "ללא חיסום/ללא") קובעת;
-//  בלי הערה — פריט מחובר (אותו שייפ בהזמנה) לפי ההזמנה, אחרת לפי סוג הזכוכית
-function chisumOf(h) {
-  const ni = lgOptyNoteInfo(h.note);
-  if (ni.chisum !== null) return ni.chisum;
-  if (h.shape) for (const o of (typeof ORDERS !== 'undefined' && ORDERS) || []) {
-    const it = Object.values((o && o.items) || {}).find(x => x && String(x.optyShape || '') === String(h.shape));
-    if (it) return !!it.chisum;
-  }
-  const r = JOBS[h.job] || {};
-  return lgOptyMatChisum(r.mat, r.matName, MATS);
-}
-async function findOpty() {
-  if (!FIND.loaded) {                                   // חיפוש חדש — האופטימיזציות הטריות (אולי נקלטו בינתיים)
-    FIND.loaded = true;
+//  ─── חיפוש אחד (בן, 19/11): "חיפוש הזמנה עפ"י כמה פרמטרים, מידה, שם הזמנה, שם סקיצה וכו'" ───
+//  ההזמנות שלנו + האופטימיזציות → כרטיס להזמנה, ולכל זכוכית מצב אחד (opty-hub.js).
+//  "לא אצלנו" = אותו חיפוש, מסונן לזכוכיות שנחתכו באופטי-ווי ולא מחוברות לשום פריט אצלנו.
+//  מחליף את החיפוש של 17/11 ואת חיפוש השייפים שהיה בלשונית האופטימיזציות.
+let HUB = { state: '', loaded: false, older: 0, all: false };
+const HUB_RECENT_DAYS = 7;                    // בלי מילת חיפוש ובלי תאריכים — מוצג שבוע אחורה
+const hubF = () => {
+  const f = { from: $('hFrom').value || '', to: $('hTo').value || '', mat: $('hMat').value || '', state: HUB.state };
+  if (!HUB.all && !$('hQ').value.trim() && !f.from && !f.to) f.from = lgOptyTodayIso(Date.now() - HUB_RECENT_DAYS * 86400000);
+  return f;
+};
+async function hubLoad(force) {
+  if (HUB.loaded && !force) { hubRender(); return; }
+  $('hubOut').innerHTML = '<p class="note">טוען…</p>';
+  try {
     const [j, m] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value')]);
     JOBS = Object.assign({}, JOBS, j.val() || {}); MATS = m.val() || {};
-  }
-  const today = lgOptyTodayIso(), since = lgOptyTodayIso(Date.now() - FIND.days * 86400000);
-  const oldest = Object.keys(JOBS).sort()[0];
-  if (oldest && (JOBS[oldest].day || '') > since) {      // הישנות לא נטענו — עוד 400 אחורה
-    try {
-      const r = _lgDb.ref('meta/optyJobs').orderByKey();
-      if (typeof r.endAt === 'function') { const more = (await r.endAt(oldest).limitToLast(400).once('value')).val() || {}; JOBS = Object.assign(more, JOBS); }
-    } catch (e) { console.warn('older', e); }
-  }
-  const hits = lgOptyPieceSearch(JOBS, $('q').value, { from: since }).slice(0, 150);
-  $('findOpty').innerHTML = `<section class="card"><h2>באופטימיזציות — ${FIND.days} ימים אחורה (${hits.length})</h2>
-    ${hits.map(h => { const c = lgOptyPieceReady(JOBS[h.job], h.sheetNo, today, chisumOf(h), lgOptyNoteInfo(h.note).graphic); return `<button type="button" class="jhit" data-ohit="${esc(h.job + '|' + h.sheetNo + '|' + h.order)}">
-      ${h.shape && GEOS[h.shape] ? lgOptyShapeSvg(GEOS[h.shape], { px: 40 }) : ''}
-      <span class="who"><b>${esc(h.client)}</b> · ${esc(h.name)} · <span dir="ltr">${esc(Math.round(h.w) + '×' + Math.round(h.h))}</span><br>
-      <small>${h.note ? esc(h.note) + ' · ' : ''}${h.shape ? 'שייפ ' + esc(h.shape) + ' · ' : ''}${esc(h.job)} · לוח ${h.sheetNo} · ${esc(dmy(h.day))} · ${esc(matLbl(JOBS[h.job]))}</small></span>
-      <span class="cst ${c.ready ? 'cutok' : 'cutwait'}">${esc(c.label)}</span></button>`; }).join('') || '<p class="note">לא נמצא בטווח הזה</p>'}
-    <button class="sm" type="button" data-older="1">חפש עוד אחורה (+14 ימים)</button></section>`;
-  if (hits.length) loadGeos(hits.map(h => h.shape).filter(Boolean)).then(n => { if (n && FIND.q === lgOptyNorm($('q').value)) findOpty(); });
+    await loadOrders(); await loadWaiting();
+    HUB.loaded = true;
+    const mats = [...new Set(Object.values(JOBS).map(r => r && r.mat).filter(Boolean))].sort(), cur = $('hMat').value;
+    $('hMat').innerHTML = '<option value="">כל סוגי הזכוכית</option>' + mats.map(x => `<option value="${esc(x)}">${esc(lgOptyMatLabel(x, MATS))}</option>`).join('');
+    $('hMat').value = cur;
+    hubRender();
+  } catch (e) { console.error(e); $('hubOut').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור ונסה שוב</p>'; }
 }
-async function find() {
-  const q = lgOptyNorm($('q').value);
-  if (q !== FIND.q) FIND = { q, days: 7 };
-  if (!q) { $('findOpty').innerHTML = ''; $('findOut').innerHTML = ''; return; }
-  $('findOpty').innerHTML = '<p class="note">מחפש…</p>';
-  $('findOut').innerHTML = '<p class="note">טוען את ההזמנות המחוברות…</p>';
-  try { await findOpty(); } catch (e) { console.error(e); $('findOpty').innerHTML = '<p class="note">✗ החיפוש באופטימיזציות נכשל</p>'; }
+//  אופטימיזציות ישנות (מעבר ל-400 האחרונות) — רק כשמבקשים היסטוריה
+async function hubOlder(btn) {
+  const oldest = Object.keys(JOBS).sort()[0]; if (!oldest) return;
+  btn.disabled = true; btn.textContent = 'טוען…';
   try {
-    await loadOrders();                        // טרי — אולי חיברו בינתיים בחיסום
-    await loadWaiting();
-    const hit = s => lgOptyNorm(s).includes(q);
-    const rows = [];
-    ORDERS.forEach(o => o.items.forEach((it, idx) => {
-      if (it.optyShape && [it.optyShape, it.optyJob, o.orderNum, o.orderClient, o.sketchName].some(hit)) rows.push({ o, it, idx });
-    }));
-    const waits = [];
-    Object.entries(PENDING).forEach(([oid, sh]) => Object.values(sh || {}).forEach(p => { if (p && [p.shape, p.job, p.name, ordTitle(oid)].some(hit)) waits.push({ p, where: ordTitle(oid) }); }));
-    Object.values(REVQ).forEach(p => { if (p && [p.shape, p.job, p.name, p.client].some(hit)) waits.push({ p, where: p.client + ' · ' + (p.name || '') }); });
-    $('findOut').innerHTML = (rows.length ? `<section class="card"><h2>מחוברות (${rows.length})</h2>${rows.slice(0, 200).map(r => `<div class="row">
-        <span class="shape">${esc(r.it.optyShape)}</span><span class="who">${esc(ordTitle(r.o.id))}<br><small>${esc(r.it.name || 'פריט')} · ${dimT(r.it.w, r.it.h)}${r.it.optyJob ? ' · ' + esc(r.it.optyJob) : ''}</small></span>
-        <button class="sm" type="button" data-view="${esc(r.o.id)}|${r.idx}">📐 צורה</button>
-        <button class="sm quiet" type="button" data-cut="${esc(r.o.id)}|${r.idx}">נתק</button></div>`).join('')}</section>` : '')
-      + (waits.length ? `<section class="card"><h2>מחכות לחיבור (${waits.length})</h2>${waits.map(w => `<div class="row">${geoSvg(w.p.shape)}<span class="shape">${esc(w.p.shape)}</span>
-        <span class="who">${esc(w.where)}</span><span class="net">${net(w.p.w, w.p.h)}</span></div>`).join('')}
-        <p class="note">מחברים בלשונית "לחיבור".</p></section>` : '')
-      || '<p class="note">לא נמצא בהזמנות המחוברות (30 הימים האחרונים)</p>';
-  } catch (e) { console.error(e); $('findOut').innerHTML = '<p class="note">✗ החיפוש נכשל</p>'; }
+    const r = _lgDb.ref('meta/optyJobs').orderByKey();
+    if (typeof r.endAt === 'function') { const more = (await r.endAt(oldest).limitToLast(400).once('value')).val() || {}; delete more[oldest]; JOBS = Object.assign(more, JOBS); HUB.older += Object.keys(more).length; }
+  } catch (e) { console.warn('older', e); }
+  hubRender();
 }
-$('btnFind').addEventListener('click', find);
-$('q').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
-$('findOpty').addEventListener('click', e => {
-  if (e.target.closest('[data-older]')) { FIND.days += 14; e.target.closest('[data-older]').disabled = true; findOpty().catch(err => console.error(err)); return; }
-  const h = e.target.closest('[data-ohit]'); if (!h) return;
-  const [job, n, order] = h.dataset.ohit.split('|');
-  showTab('jobs'); jobOpen(job, Number(n), Number(order));
-});
-$('findOut').addEventListener('click', async e => {
-  const v = e.target.closest('[data-view]'), c = e.target.closest('[data-cut]');
-  if (v) { const [oid, idx] = v.dataset.view.split('|'); const o = ordOf(oid); if (o) lgOptyShapeView(o, Number(idx)); }
+const hubWaiting = () => { const s = new Set(); Object.values(PENDING || {}).forEach(o => Object.keys(o || {}).forEach(k => s.add(String(k)))); Object.keys(REVQ || {}).forEach(k => s.add(String(k))); return s; };
+const hubRun = (state) => lgHubSearch({ orders: ALL_ORDERS, jobs: JOBS, todayIso: lgOptyTodayIso(), q: $('hQ').value, f: Object.assign(hubF(), { state }), waiting: hubWaiting(), mats: MATS });
+const hubPill = s => `<span class="pill t-${esc(s.tone)}">${esc(s.label)}</span>`;
+function hubRender() {
+  if (!HUB.loaded) return;
+  const res = hubRun(HUB.state), f = hubF();
+  //  ספירה לכל מצב — כמה הזמנות/זכוכיות יש בכל כפתור
+  const cnt = {}; LG_HUB_STATES.forEach(s => { const r = s.id === HUB.state ? res : hubRun(s.id); cnt[s.id] = s.id === 'loose' ? r.counts.loose : r.counts.orders + r.counts.loose; });
+  $('hChips').innerHTML = LG_HUB_STATES.map(s => `<button type="button" class="chip" data-hstate="${esc(s.id)}" aria-pressed="${s.id === HUB.state}">${esc(s.label)} <span>${cnt[s.id]}</span></button>`).join('');
+  //  המספר על הלשונית "לא אצלנו" — תמיד השבוע האחרון, בלי קשר למה שמוקלד בחיפוש
+  _seen(document.querySelector('#hChips [aria-pressed="true"]'));
+  const nl = lgHubSearch({ orders: ALL_ORDERS, jobs: JOBS, todayIso: lgOptyTodayIso(), q: '', waiting: hubWaiting(), mats: MATS,
+    f: { from: lgOptyTodayIso(Date.now() - HUB_RECENT_DAYS * 86400000), state: 'loose' } }).counts.loose;
+  $('cntLoose').hidden = !nl; $('cntLoose').textContent = nl;
+  const range = !HUB.all && !$('hQ').value.trim() && !$('hFrom').value && !$('hTo').value ? `${HUB_RECENT_DAYS} הימים האחרונים` : (f.from || f.to ? (f.from ? 'מ-' + dmy(f.from) : '') + (f.to ? ' עד ' + dmy(f.to) : '') : 'כל התאריכים');
+  const fOn = [f.mat && lgOptyMatLabel(f.mat, MATS), $('hFrom').value && 'מ-' + dmy($('hFrom').value), $('hTo').value && 'עד ' + dmy($('hTo').value), HUB.all && 'כל התאריכים'].filter(Boolean);
+  $('hFltOn').textContent = fOn.length ? '· ' + fOn.join(' · ') : '';
+  const sum = `<p class="note hsum">${res.counts.orders} הזמנות · ${res.counts.loose} זכוכיות באופטי-ווי שלא אצלנו · ${esc(range)}${f.mat ? ' · ' + esc(lgOptyMatLabel(f.mat, MATS)) : ''}</p>`;
+  const ords = res.orders.map(x => {
+    const o = x.o;
+    return `<article class="hord"><header><b>${esc(o.orderNum || '—')}</b><span>${esc(o.orderClient || '')}</span><span class="sk">${esc(o.sketchName || 'ללא שם')}</span>
+      <small>${esc(dmy(x.date))}${x.mats.length ? ' · ' + x.mats.map(m => esc(lgOptyMatLabel(m, MATS))).join(', ') : ''}</small></header>
+      ${x.items.map(r => { const it = r.it, rec = it.optyJob && JOBS[it.optyJob];
+        return `<div class="hit${r.hit ? ' on' : ''}"><span class="hdim">${dimT(it.w, it.h)}</span><span class="hnm">${esc(it.name || 'פריט')}${it.optyShape ? ' · צורה ' + esc(it.optyShape) : ''}</span>
+        ${hubPill(r.st)}<span class="hsrc">${it.optyJob ? esc(it.optyJob) + (rec ? ' · ' + esc(dmy(rec.day)) : '') : 'עוד לא באופטי-ווי'}</span>
+        <span class="hact">${it.optyShape ? `<button class="sm" type="button" data-view="${esc(o.id)}|${r.idx}" aria-label="צורה של ${esc(it.optyShape)}">📐</button>` : ''}
+        ${rec ? `<button class="sm" type="button" data-ojob="${esc(it.optyJob)}|${esc(it.optyShape || '')}|${esc(it.optyPos || '')}">ללוח</button>` : ''}
+        ${it.optyShape ? `<button class="sm quiet" type="button" data-cut="${esc(o.id)}|${r.idx}">נתק</button>` : ''}</span></div>`; }).join('')}
+    </article>`;
+  }).join('');
+  const groups = lgHubGroupLoose(res.loose);
+  const loose = groups.length ? `<section class="card hloose"><h2>נחתך / מתוכנן באופטי-ווי — לא קיים אצלנו (${res.counts.loose})</h2>
+    <p class="note">זכוכיות מהאופטימיזציות שלא מחוברות לשום הזמנה במערכת. "מחכה לחיבור" = נמצאה הזמנה, צריך רק לבחור זכוכית בלשונית "לחיבור".</p>
+    ${groups.map(g => `<h3>${esc(g.client)} · ${g.list.length}</h3>${g.list.map(p => `<button type="button" class="hlz" data-ohit="${esc(p.job + '|' + p.sheetNo + '|' + p.order)}">
+      ${p.shape && GEOS[p.shape] ? lgOptyShapeSvg(GEOS[p.shape], { px: 40 }) : ''}
+      <span class="who"><b>${esc(p.name || 'בלי שם')}</b> · <span dir="ltr">${esc(Math.round(p.w) + '×' + Math.round(p.h))}</span>${p.waiting ? ' <span class="pill t-plan">מחכה לחיבור</span>' : ''}<br>
+      <small>${p.shape ? 'צורה ' + esc(p.shape) + ' · ' : ''}${esc(p.job)} · לוח ${p.sheetNo}/${p.total} · ${esc(dmy(p.day))} · ${esc(matLbl(JOBS[p.job]))}${p.note ? ' · ' + esc(p.note) : ''}</small></span>
+      ${hubPill(p.st)}</button>`).join('')}`).join('')}</section>` : '';
+  const more = `<p class="hmore"><button class="sm" type="button" data-holder="1">טען אופטימיזציות ישנות יותר</button>${HUB.older ? ' <small class="note">נטענו עוד ' + HUB.older + '</small>' : ''}</p>`;
+  const empty = !res.orders.length && !res.loose.length ? `<div class="card hempty"><b>לא נמצא</b><p class="note">נסה: רק מספר אחד מהמידה (1900), חלק משם הלקוח, או לחץ "כל התאריכים". חיפוש מראה גם הזמנות ישנות — אבל אופטימיזציות רק מ-400 האחרונות, אלא אם טוענים ישנות יותר.</p></div>` : '';
+  $('hubOut').innerHTML = sum + (HUB.state === 'loose' ? loose + ords : ords + loose) + empty + more;
+  const need = res.loose.map(p => p.shape).filter(s => s && !(s in GEOS)).slice(0, 80);
+  if (need.length) loadGeos(need).then(n => { if (n) hubRender(); });
+}
+let _hubT = null;
+$('hQ').addEventListener('input', () => { clearTimeout(_hubT); _hubT = setTimeout(hubRender, 250); });
+$('hQ').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(_hubT); hubRender(); } });
+['hFrom', 'hTo', 'hMat'].forEach(id => $(id).addEventListener('change', hubRender));
+$('hAll').addEventListener('click', () => { HUB.all = true; $('hFrom').value = ''; $('hTo').value = ''; hubRender(); });
+$('hClear').addEventListener('click', () => { HUB.all = false; $('hQ').value = ''; $('hFrom').value = ''; $('hTo').value = ''; $('hMat').value = ''; HUB.state = ''; hubRender(); $('hQ').focus(); });
+$('pane-find').addEventListener('click', async e => {
+  const ch = e.target.closest('[data-hstate]');
+  if (ch) { HUB.state = ch.dataset.hstate; document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === (HUB.state === 'loose' ? 'loose' : 'find')))); hubRender(); return; }
+  const old = e.target.closest('[data-holder]'); if (old) { hubOlder(old); return; }
+  const h = e.target.closest('[data-ohit]');
+  if (h) { const [job, n, order] = h.dataset.ohit.split('|'); showTab('jobs'); jobOpen(job, Number(n), Number(order)); return; }
+  const oj = e.target.closest('[data-ojob]');
+  if (oj) {   // זכוכית שלנו → הלוח שלה באופטימיזציה
+    const [job, shape, pos] = oj.dataset.ojob.split('|'), rec = JOBS[job]; if (!rec) return;
+    const hit = lgOptySheetSeq(rec.sheets).map(x => ({ x, p: x.sheet.pieces.find(p => shape ? String(p.shape) === shape : String(p.pos) === pos) })).find(y => y.p);
+    showTab('jobs'); jobOpen(job, hit ? hit.x.sheetNo : 1, hit ? hit.p.order : 0); return;
+  }
+  const v = e.target.closest('[data-view]');
+  if (v) { const [oid, idx] = v.dataset.view.split('|'); const o = ordOf(oid); if (o) lgOptyShapeView(o, Number(idx)); return; }
+  const c = e.target.closest('[data-cut]');
   if (c) {
     const [oid, idxS] = c.dataset.cut.split('|'), idx = Number(idxS), o = ordOf(oid), it = o && o.items[idx], key = (KEYS[oid] || [])[idx];
     if (!it || key == null || !it.optyShape) return;
@@ -1132,8 +1209,8 @@ $('findOut').addEventListener('click', async e => {
         ['meta/optyPending/' + oid + '/' + sh]: { shape: sh, job: String(it.optyJob || ''),
           w: Number(cut ? cut.w : g ? g.w : (Number(it.w) || 0) + 2), h: Number(cut ? cut.h : g ? g.h : (Number(it.h) || 0) + 2),
           qty: Number(prev.qty) || 1, name: String(prev.name || o.sketchName || ''), note: String(prev.note || ''), at: Date.now() } });
-      delete it.optyShape; delete it.optyJob;
-      st('נותק: ' + sh + ' — מחכה בלשונית "לחיבור"', 'ok'); find(); updateCount();
+      delete it.optyShape; delete it.optyJob; delete it.optyCut;
+      st('נותק: ' + sh + ' — מחכה בלשונית "לחיבור"', 'ok'); await loadWaiting(); hubRender(); updateCount();
     } catch (err) { st('✗ לא נותק: ' + (err.message || ''), 'bad'); }
   }
 });
@@ -1176,9 +1253,12 @@ $('out').addEventListener('click', async e => {
 });
 $('btnCheck').addEventListener('click', check);
 
+if (window.matchMedia && window.matchMedia('(min-width: 760px)').matches) $('hFltBox').open = true;   // מחשב — הסינון פתוח; טלפון — מקופל
 Promise.resolve(lgRequireAuthAsync('admin')).then(() => {
   loadHistory(); updateCount();
   if (/[#&?]tab=link/.test(location.href)) showTab('link');
+  else if (/[#&?]tab=imp/.test(location.href)) showTab('imp');
+  else if (location.hash !== '#today') showTab(/[#&?]tab=loose/.test(location.href) ? 'loose' : 'find');
 });
 </script>
 </body>
