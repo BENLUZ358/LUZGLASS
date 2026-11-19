@@ -1292,8 +1292,8 @@ async function sendAllToFactory(){
   //  שבר חוזר: חותמת הדוח על הזכוכית השבורה — מכאן היא יוצאת מהתור ולא תיכנס לדוח שוב
   await Promise.all(redo.map(x => {
     const tx = x.track === 'triplex', p = 'brokenChisum/' + x.idx + '/';
-    return updateOrder(String(x.order.id), { [p + 'redoReportId']: tx ? triplexId : reportId,
-                                             [p + 'redoReportNum']: tx ? triplexNum : reportNum, [p + 'redoSentAt']: Date.now() })
+    const rid = tx ? triplexId : reportId, rnum = tx ? triplexNum : reportNum;
+    return updateOrder(String(x.order.id), { [p + 'redoReportId']: rid, [p + 'redoReportNum']: rnum, [p + 'redoSentAt']: Date.now() })
       .then(() => chRedo.push(x))
       .catch(e => { console.error('sendAllToFactory redo:', e); failed.push(x.order); });
   }));

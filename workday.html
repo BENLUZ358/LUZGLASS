@@ -4508,7 +4508,8 @@ async function wdMarkBroken(orderId, idx){
     //  אם סומנה בטעות כ"הגיע" — יורדת מהסימון
     const marked = _markedIdxSet(sid, 'chisum');
     if(marked.has(idx)){ marked.delete(idx); LG_TRACK.chisum.echo[sid] = [...marked]; await _persistArrivedIdxs(sid, marked, 'chisum'); }
-    await updateOrder(sid, { ['brokenChisum/' + idx]: { at: now, track: 'chisum', manual: true, redoAt: now } });
+    const rec = { at: now, track: 'chisum', manual: true, redoAt: now };
+    await updateOrder(sid, { ['brokenChisum/' + idx]: rec });
     await _closeArrived(sid, [idx], 'chisum');
     showToast('💥 נרשם שבר — עבר לתחנת הבדיקה');
   } catch(e){ console.error('wdMarkBroken:', e); showToast('⚠️ לא נשמר — בדוק חיבור'); }

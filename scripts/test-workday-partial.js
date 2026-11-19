@@ -48,11 +48,11 @@ const grab = (src, name, optional) => {
 const DB_FNS = ['lgStageToStatus', '_lgItemHasGraphic', '_lgItemHasChalavi', '_lgItemIsTriplex',
   '_lgItemIsLaminatedTriplex', '_lgItemHasSurfaceWork', 'lgArrivedIdxs', '_lgItemIsMirror',
   'lgSplitFactoryItems', 'lgNextStage'];
-const DB_OPT = ['lgWorkdayLeft', 'lgIdxsObj'];          // קיימות רק אחרי התיקון
+const DB_OPT = ['lgWorkdayLeft', 'lgIdxsObj', '_lgBrokenEntries', 'lgBrokenOpen', 'lgBrokenHolds', 'lgFinishPlan'];          // קיימות רק אחרי התיקון
 const WD_FNS = ['isMirrorOrder', 'classifyOrder', 'getActiveItemsForOrder', 'saveOrderToStorage',
   'markStageDone', 'markStageWorkday', 'addSingleItem', '_getFinishDayGroups', 'handleWorkdayStart', 'confirmFinish',
   '_ordersUnderCheck', 'confirmResetChisum', 'clearDraft'];
-const WD_OPT = ['_todayPolishIdxs', '_finishPlan', '_waitsForPolish', '_wdBuildable', '_wdUnavailIdxs'];
+const WD_OPT = ['_finishPlanOf', '_todayPolishIdxs', '_finishPlan', '_waitsForPolish', '_wdBuildable', '_wdUnavailIdxs'];
 
 const STAGE_MAP = (DB.match(/const LG_STAGE_TO_STATUS = \{[\s\S]*?\n\};/) || [''])[0];
 const DELIV_LIST = (DB.match(/const LG_DELIVERY_ACCOUNTS = .*;/) || [""])[0];
@@ -91,7 +91,8 @@ function world(orders, opts = {}) {
     // מצב המפעל — נשלט על ידי התרחיש
     _factory: {},
     _factoryDoneState(o) { const d = ctx._factory[String(o.id)] || 'none';
-      return { done: d === 'all', marked: d === 'all' || d === 'some' ? 1 : 0, chisumMissing: d === 'all' ? 0 : 1, chisumTotal: 1, triplexMissing: 0 }; },
+      return { done: d === 'all', marked: d === 'all' || d === 'some' ? 1 : 0, chisumMissing: d === 'all' ? 0 : 1, chisumMissingIdxs: d === 'all' ? [] : [0], chisumArrived: [], triplexArrived: [], chisumTotal: 1, triplexMissing: 0 }; },
+    lgPartialInvoiceOrder: () => false,
     _chisumIdxsOf: o => (o.items || []).map((it, i) => it.chisum ? i : -1).filter(i => i >= 0),
     _closeArrived() { return Promise.resolve(); },
     // סימון "ממתינה לייבוא" בתחנה (בן, 16/11) — לא רלוונטי לבדיקה הזו
