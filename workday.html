@@ -416,6 +416,7 @@
   <script src="lg-qr.js?v=20261117"></script>
   <script src="print-labels.js?v=20261117d"></script>
   <script src="order-labels.js?v=20261117"></script>
+  <script src="broken-print.js?v=20261119"></script>
   <script src="avivi-wrap.js?v=20261118b"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
@@ -4012,6 +4013,7 @@ function _factoryDoneState(o){
 
   return {
     chisumTotal: chisumIdxs.length,   chisumArrived: chArrived,  chisumMissing: chMissing,
+    chisumMissingIdxs: chisumIdxs.filter(i => !chMarked.has(i)),
     triplexTotal: triplexIdxs.length, triplexArrived: txArrived, triplexMissing: txMissing,
     marked: chArrived.length + txArrived.length,
     // "הכל חזר" נמדד על מה שעוד פתוח. מה שנסגר בסיבוב קודם כבר לא נספר.
@@ -4051,6 +4053,18 @@ function resetChisumList(track){
 
     // allArrivedNow ולא sessionArrived — הסימונים נשמרים ל-Firebase מיד,
     // אז אחרי רענון הם קיימים ב-existingArrived והסשן ריק.
+    //  לשונית החיסום (בן, 19/11): מה שלא סומן = שבר, לכל הלקוחות — אותה החלטה כמו באישור
+    if(_resetTrack === 'chisum'){
+      const plan = _finishPlanOf(o, st);
+      o._broken = plan.newBroken.map(idx => ({ idx }));
+      o._heldIdxs = [...new Set([...lgBrokenOpen(o).map(b => b.idx), ...plan.newBroken])];
+      if(plan.action === 'polish')        waitPolish.push(o);
+      else if(plan.action === 'hold')     heldOrds.push(o);
+      else if(plan.action === 'triplex')  waitingTriplex.push(o);
+      else if(o._broken.length)           brokenOrds.push(o);
+      else                                doneOrds.push(o);
+      return;
+    }
     o._broken = _brokenPlanOf(o, st, _resetTrack);
     if(st.done && _waitsForPolish(o))      waitPolish.push(o);
     else if(_brokenHoldsOf(o))             heldOrds.push(o);
@@ -4103,13 +4117,13 @@ function resetChisumList(track){
           </div>`:''}`;
         })():''}
         ${brokenOrds.length?`<div style="padding:10px 14px;background:rgba(214,69,69,0.07);border:1px solid rgba(214,69,69,0.3);border-radius:6px;">
-          <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px;">🚚 ${brokenOrds.length} סקיצות של לקוחות הובלות ממשיכות — מה שלא חזר ייחשב שבור ויישאר בחיסום</div>
+          <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px;">🚚 ${brokenOrds.length} סקיצות ממשיכות להובלה — מה שלא סומן נרשם שבר ועובר לתחנת הבדיקה</div>
           ${brokenOrds.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}${o.sketchName?' · '+lgEsc(o.sketchName):''} — <strong style="color:#c0392b">${o._broken.length===1?'פריט אחד לא חזר':o._broken.length+' פריטים לא חזרו'}: ${o._broken.map(b=>_brokenItemText(o,b.idx)).join(', ')}</strong></div>`).join('')}
           <div style="font-size:12px;color:#8a8278;margin-top:5px;">החשבונית תצא על כל ההזמנה, והלקוח יקבל הודעה על הפריט השבור.</div>
         </div>`:''}
         ${heldOrds.length?`<div style="padding:10px 14px;background:rgba(214,69,69,0.07);border:1px solid rgba(214,69,69,0.3);border-radius:6px;">
-          <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px;">💥 ${heldOrds.length} סקיצות מחכות לזכוכית שבורה — נשארות בחיסום, בלי הודעה</div>
-          ${heldOrds.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}${o.sketchName?' · '+lgEsc(o.sketchName):''} — <strong style="color:#c0392b">${lgBrokenOpen(o).map(b=>_brokenItemText(o,b.idx)).join(', ')}</strong></div>`).join('')}
+          <div style="font-size:12px;font-weight:700;color:#c0392b;margin-bottom:6px;">💥 ${heldOrds.length} סקיצות מחכות לשבר — מה שלא סומן נרשם שבר ועובר לתחנת הבדיקה; ההזמנה נשארת בחיסום, בלי הודעה</div>
+          ${heldOrds.map(o=>`<div style="font-size:12px;color:#555;padding:2px 0;">${lgEsc(o.orderClient)} · ${lgEsc(o.orderNum||'')}${o.sketchName?' · '+lgEsc(o.sketchName):''} — <strong style="color:#c0392b">${(o._heldIdxs||lgBrokenOpen(o).map(b=>b.idx)).map(i=>_brokenItemText(o,i)).join(', ')}</strong></div>`).join('')}
           <div style="font-size:12px;color:#8a8278;margin-top:5px;">כשהשבר יחזור — "✓ חזר" בקופסת השבר, ואז "סיום בדיקה" מעביר אותן הלאה.</div>
         </div>`:''}
         ${partialOrds.length?`<div style="padding:10px 14px;background:rgba(184,146,42,0.08);border:1px solid rgba(184,146,42,0.2);border-radius:6px;">
@@ -4159,6 +4173,7 @@ function confirmResetChisum(){
   let polishCount   = 0;
   let brokenCount   = 0;
   let heldCount     = 0;
+  const _redoNew    = [];   // [{order, idx}] — זכוכיות שעברו עכשיו לשבר (לחלון ההדפסה)
   const _waPending  = [];   // הזמנות שעוברות ל-done — הודעה אחת מרוכזת
   const _advWrites  = [];   // הכתיבות של המעבר ל-done — ההודעה יוצאת רק אחריהן
 
@@ -4174,6 +4189,27 @@ function confirmResetChisum(){
     const everHadFactoryItems = _chisumIdxsOf(o).length || LG_TRACK.triplex.idxsOf(o).length;
     if(!everHadFactoryItems) return;
 
+    let broken = null;
+    if(_resetTrack === 'chisum'){
+      // לשונית החיסום (בן, 19/11): כל זכוכית שלא סומנה = שבר, אצל כל הלקוחות.
+      // נרשמת עם redoAt — עוברת מיד לתחנת הבדיקה תחת "💥 שבר" — ויוצאת מרשימת
+      // הדוח. ואז lgFinishPlan: ממשיכה / מחכה לשבר / לטריפלקס / לליטוש.
+      const plan = _finishPlanOf(o, st);
+      if(plan.newBroken.length){
+        brokenCount++;
+        const at = Date.now(), patch = {};
+        plan.newBroken.forEach(i => { patch['brokenChisum/' + i] = { at, track: 'chisum', redoAt: at, auto: true }; _redoNew.push({ order: o, idx: i }); });
+        _advWrites.push(updateOrder(sid, patch).catch(e => console.error('brokenChisum:', e)));
+        _closeArrived(sid, [...st.chisumArrived, ...plan.newBroken], 'chisum');
+      }
+      if(plan.action !== 'advance'){
+        if(plan.action === 'polish') polishCount++; else if(plan.action === 'hold') heldCount++; else partialCount++;
+        if(!plan.newBroken.length) _closeArrived(sid, st.chisumArrived, 'chisum');
+        _closeArrived(sid, st.triplexArrived, 'triplex');
+        return;
+      }
+      if(plan.newBroken.length) broken = plan.newBroken;
+    } else {
     // כל המפעל חזר, אבל ליטוש של אותה סקיצה עוד לא נחתך — לא מתקדמת ולא
     // שולחת "מוכן לאיסוף". הסימונים נשארים, ולחיצה אחרי הליטוש מקדמת.
     if(st.done && _waitsForPolish(o)){ polishCount++; return; }
@@ -4190,7 +4226,7 @@ function confirmResetChisum(){
     // שבר בחיסום (בן, 10/11): לקוח הובלות — מה שלא חזר נרשם שבור, וההזמנה
     // ממשיכה בדיוק כמו הזמנה שהושלמה. הרישום נכתב לפני ההתקדמות, כי ההתקדמות
     // מוחקת את רשימות הסימון — ובלעדיו השבור היה נעלם.
-    const broken = st.done ? null : _brokenPlanOf(o, st, _resetTrack);
+    broken = st.done ? null : _brokenPlanOf(o, st, _resetTrack);
     if(broken){
       brokenCount++;
       const at = Date.now(), rec = {};
@@ -4198,6 +4234,7 @@ function confirmResetChisum(){
       _closeArrived(sid, st.chisumArrived,  'chisum');
       _closeArrived(sid, st.triplexArrived, 'triplex');
       _advWrites.push(updateOrder(sid, { brokenChisum: rec }).catch(e => console.error('brokenChisum:', e)));
+    }
     }
 
     if(st.done || broken){
@@ -4241,6 +4278,8 @@ function confirmResetChisum(){
   const msg3 = (polishCount ? ` · ${polishCount} ממתינות לליטוש` : '') + (brokenCount ? ` · ${brokenCount} עם פריט שבור — המשיכו` : '') + (heldCount ? ` · ${heldCount} מחכות לשבר` : '');
   showToast((msg || '✓ בדיקה הושלמה') + msg2 + msg3);
   renderAll();
+  //  בן, 19/11: חלון על מה שעבר עכשיו לשבר — עם הדפסת סקיצה, צורה ומדבקה
+  if(_redoNew.length && typeof lgBrokenRedoPopup === 'function') lgBrokenRedoPopup(_redoNew);
   } finally {
     // שחרור מושהה — הכתיבות למעלה אסינכרוניות, וצריך לתת ל-listener להחזיר
     // allOrders מעודכן לפני שלחיצה נוספת נחשבת לגיטימית.
@@ -4434,6 +4473,19 @@ function _brokenPlanOf(o, st, track){
     itemCount: (o.items || []).length, factoryCount: split.chisum.length + split.triplex.length,
   });
 }
+//  "סיום בדיקה" בחיסום (בן, 19/11) — ההחלטה ב-lgFinishPlan (firebase-db.js)
+function _finishPlanOf(o, st){
+  st = st || _factoryDoneState(o);
+  const cid = String(o.customerId || '');
+  return lgFinishPlan({
+    done: st.done, waitsPolish: _waitsForPolish(o),
+    chisumMissing: st.chisumMissingIdxs || [], triplexMissing: st.triplexMissing,
+    openIdxs: lgBrokenOpen(o).map(b => b.idx),
+    factoryIdxs: [..._chisumIdxsOf(o), ...LG_TRACK.triplex.idxsOf(o)],
+    isDelivery: !!o.deliveryClient || _isDeliveryClient(o.orderClient, o.phone, o.customerId) || LG_DELIVERY_ACCOUNTS.includes(cid),
+    partialInvoice: !!lgPartialInvoiceOrder(o),
+  });
+}
 //  שבר חוזר (בן, 19/11) — ההחלטה ב-lgBrokenHolds (firebase-db.js)
 function _brokenHoldsOf(o){
   const cid = String(o.customerId || '');
@@ -4483,6 +4535,7 @@ function _renderBrokenChisumBox(){
         <div style="font-size:12px;color:#8a8278;">${lgEsc(_brokenItemText(o,b.idx))}${b.track==='triplex'?' · טריפלקס':''} · ${(o.stage||'')==='chisum'?'ההזמנה מחכה לו בחיסום':'ההזמנה כבר המשיכה ('+lgEsc(lgStageToStatus(o.stage||'')||o.stage||'')+')'}</div>
         ${(() => { const v = (o.brokenChisum||{})[b.idx] || {}; const lbl = lgBrokenRedoLabel(v);
           return lbl ? `<div style="font-size:12px;font-weight:800;color:#8e44ad;margin-top:2px;">💥 ${lgEsc(lbl)}</div>` : ''; })()}
+        ${typeof lgBrokenPrintBtns === 'function' ? '<div style="margin-top:6px;">' + lgBrokenPrintBtns(o, b.idx) + '</div>' : ''}
       </div>
       ${((o.brokenChisum||{})[b.idx]||{}).redoAt ? '' : `<button type="button" onclick="wdSendBrokenToCheck('${lgEsc(String(o.id))}',${b.idx})"
         style="padding:9px 12px;min-height:40px;background:#fff;color:#c0392b;border:1px solid rgba(192,57,43,.5);border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;">💥 לבדיקה</button>`}

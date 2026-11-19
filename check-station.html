@@ -254,6 +254,7 @@ html,body{height:100%;overflow:hidden;}
   <script src="opty-shape.js?v=20261116d"></script>
   <script src="lg-qr.js?v=20261117"></script><script src="avivi-wrap.js?v=20261117c"></script><script src="print-labels.js?v=20261117d"></script>
   <script src="order-labels.js?v=20261117"></script>
+  <script src="broken-print.js?v=20261119"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20260807"></script>
 </head>
@@ -785,6 +786,7 @@ function csRedoSectionHtml(){
           <div style="font-size:14px;font-weight:800;color:var(--text);">${lgEsc(o.orderClient || '')}${o.sketchName ? ' · ' + lgEsc(o.sketchName) : ''} <span style="font-size:12px;font-weight:600;color:var(--muted)" dir="ltr">${lgEsc(o.orderNum || '')}</span></div>
           <div style="margin-top:2px;"><span style="font-size:18px;font-weight:900;color:var(--text);">${lgDimsText(it.w, it.h)}</span>
             <span style="font-size:12px;color:var(--muted);">${lgEsc(it.name || csGlassOf(it) || '')}${it.optyShape ? ' · צורה ' + lgEsc(it.optyShape) : ''}</span></div>
+          ${typeof lgBrokenPrintBtns === 'function' ? '<div style="margin-top:6px;">' + lgBrokenPrintBtns(o, x.idx) + '</div>' : ''}
         </div>
         <button type="button" onclick="csRedoToggle('${oid}',${x.idx},${x.checked ? 'false' : 'true'})"
           style="min-height:44px;padding:0 14px;border-radius:8px;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap;${x.checked ? 'background:#fff;color:var(--muted);border:1px solid var(--border);' : 'background:var(--green);color:#fff;border:none;'}">${x.checked ? '↩ החזר לבדיקה' : '✓ נבדק'}</button>

@@ -530,6 +530,20 @@ function lgBrokenHolds(x) {
   const f = x.factoryIdxs || [];
   return f.length > 0 && f.every(i => open.includes(i));
 }
+//  "סיום בדיקה" בלשונית החיסום (בן, 19/11): כל זכוכית חיסום שלא סומנה שהגיעה = שבר,
+//  אצל כל הלקוחות — "מה שבדוח נשלח לחיסום בוודאות". היא נרשמת שבורה ועוברת לתחנת
+//  הבדיקה. ואז: טריפלקס שעוד במפעל → מחכה; lgBrokenHolds → מחכה; ליטוש → מחכה; אחרת ממשיכה.
+//  x = {done, waitsPolish, chisumMissing:[idx], triplexMissing:n, openIdxs, factoryIdxs, isDelivery, partialInvoice}
+function lgFinishPlan(x) {
+  if (x.done && x.waitsPolish) return { newBroken: [], action: 'polish' };
+  const newBroken = (x.chisumMissing || []).slice();
+  const open = [...new Set([...(x.openIdxs || []), ...newBroken])];
+  let action = 'advance';
+  if ((x.triplexMissing || 0) > 0) action = 'triplex';
+  else if (lgBrokenHolds({ openIdxs: open, factoryIdxs: x.factoryIdxs, isDelivery: x.isDelivery, partialInvoice: x.partialInvoice })) action = 'hold';
+  else if (x.waitsPolish) action = 'polish';
+  return { newBroken, action };
+}
 function lgNextStage(order, isDelivery) {
   const items      = order.items || [];
   // טריפלקס רגיל אינו מסומן chisum מלכתחילה, ולכן הוא כבר לא נכנס לכאן —
