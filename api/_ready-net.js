@@ -25,7 +25,7 @@
 const NET = 'waMeta/readyNet';
 const MIN = 60 * 1000, H = 60 * MIN;
 const GAP_MS = 50 * 1000;        // מנעול קצר — שני מחשבים עם כלי חשבוניות לא בודקים יחד
-const MIN_AGE_MS = 3 * MIN;      // הדף שולח תוך שניות — 3 דק' זה "לא יצא"
+const MIN_AGE_MS = 1 * MIN;      // הדף שולח תוך שניות — דקה זה "לא יצא" (היה 3; בן 19/11: לקצר)
 const MAX_AGE_MS = 24 * H;       // כמו lgReadyUnsentIds; הודעה בת יממה פגה ממילא
 const MAX_GROUPS = 10;           // לכל ריצה
 

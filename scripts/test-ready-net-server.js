@@ -16,10 +16,10 @@ const NOW = Date.UTC(2026, 10, 11, 10, 30);
 const ord = (id, o) => ({ id, stage: 'done', orderClient: 'א.מ.מראות', orderNum: 'L' + id, sketchName: 'S' + id, readyAt: NOW - 20 * MIN, ...o });
 
 (async () => {
-  await test('pick: only done, 3min–24h, no message, not test, not already queued/tried', async () => {
+  await test('pick: only done, 1min–24h, no message, not test, not already queued/tried', async () => {
     const orders = {
       a: ord('a'), b: ord('b'),
-      fresh: ord('fresh', { readyAt: NOW - MIN }),
+      fresh: ord('fresh', { readyAt: NOW - 30 * 1000 }),
       old: ord('old', { readyAt: NOW - 25 * H }),
       sent: ord('sent', { whatsapp: { sentAt: NOW - 10 * MIN } }),
       mail: ord('mail', { emailNotices: { ready: { sentAt: 1 } } }),
@@ -73,8 +73,8 @@ const ord = (id, o) => ({ id, stage: 'done', orderClient: 'א.מ.מראות', or
     assert.ok(!paths.some(p => /^orders/.test(p)), paths.join(','));
   });
 
-  await test('run: marked under 3 minutes ago → waits, stays on the list', async () => {
-    const db = fakeDb({ orders: { a: ord('a', { readyAt: NOW - MIN }) }, waMeta: { readyNet: { watch: { a: NOW - MIN } } } });
+  await test('run: marked under a minute ago → waits, stays on the list', async () => {
+    const db = fakeDb({ orders: { a: ord('a', { readyAt: NOW - 30 * 1000 }) }, waMeta: { readyNet: { watch: { a: NOW - 30 * 1000 } } } });
     let n = 0;
     await N.lgReadyNetRun(db, { now: NOW, dispatch: async () => { n++; return { status: 200, body: { queued: true, outboxKey: 'x' } }; }, drain: async () => {} });
     assert.equal(n, 0);

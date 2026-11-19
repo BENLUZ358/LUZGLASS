@@ -409,7 +409,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261119"></script>
+  <script src="firebase-db.js?v=20261119c"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="opty-shape.js?v=20261116d"></script>
@@ -3296,6 +3296,16 @@ function showClientDeliveryPrompt(orderIdsCommaSep){
 //
 //  ⚠️ מקובץ **לפי הפעולה הנוכחית בלבד**: נכנסות רק ההזמנות שהגיעו ל-done
 //  עכשיו. הזמנה ישנה של אותו לקוח שכבר יושבת ב-done אינה נגררת פנימה.
+//  רישום על ההזמנה מה קרה בניסיון לשלוח "מוכן" מהדף (בן, 19/11) — orders/<id>/readyTry.
+//  ההודעה עצמה יוצאת בכל מקרה (רשת הביטחון בשרת); הרישום עונה על "למה הדף לא שלח".
+//  scheduled → sending → queued / preview / error / exception. נשאר רק האחרון.
+function _wdReadyTry(ids, status, detail){
+  const rec = { at: Date.now(), status: String(status), detail: String(detail == null ? '' : detail).slice(0, 200) };
+  (ids || []).forEach(id => {
+    try { updateOrder(String(id), { readyTry: rec }).catch(() => {}); } catch(e){}
+  });
+}
+
 async function _waSendReadyGrouped(orderIds){
   const ids = [...new Set((orderIds||[]).map(String))];
   if(!ids.length) return;
@@ -3317,9 +3327,12 @@ async function _waSendReadyGrouped(orderIds){
   for(const [client, group] of byClient){
     const name = nameOf.get(client) || '—';
     try {
+      _wdReadyTry(group, 'sending');
       const res  = await _lgAuthPost('/api/whatsapp-dispatch',
-                                     { kind:'ready', orderIds: group, dryRun:false });
-      const data = await res.json();
+                                     { kind:'ready', orderIds: group, dryRun:false }, { keepalive: true });
+      const data = await res.json().catch(() => ({}));
+      _wdReadyTry(group, data.queued ? 'queued' : (res.ok ? (data.preview ? 'preview' : 'not-queued') : 'error ' + res.status),
+                  data.error || data.reason || '');
 
       if(res.status === 409){
         // ממצא בנתונים ולא תקלה טכנית — שני כרטיסים עם אותו שם
@@ -3336,6 +3349,7 @@ async function _waSendReadyGrouped(orderIds){
       if(data.queued) queued++;
     } catch(e){
       console.error('whatsapp ready group:', e);
+      _wdReadyTry(group, 'exception', (e && (e.name + ': ' + e.message)) || '');
       showToast('⚠️ לא הצלחתי להגיע לשרת השליחה');
     }
   }
@@ -4268,7 +4282,7 @@ function confirmResetChisum(){
   // אחרי שהשלבים נכתבו — שליחה אחת מרוכזת מהשרת. מחכים לכתיבות עצמן (ולא
   // להשהיה קבועה), אחרת השרת קורא הזמנה שעדיין לא סומנה done. ואם הדף נסגר
   // לפני — רשת הביטחון בטעינה הבאה שולחת (lgReadyUnsentIds, בן 9/11).
-  if(_waPending.length) Promise.allSettled(_advWrites).then(() => _waSendReadyGrouped(_waPending));
+  if(_waPending.length){ _wdReadyTry(_waPending, 'scheduled', 'check-finish'); Promise.allSettled(_advWrites).then(() => _waSendReadyGrouped(_waPending)); }
 
   LG_TRACK.chisum.echo  = {};
   LG_TRACK.triplex.echo = {};
@@ -4873,7 +4887,7 @@ function confirmFinish(){
   const _waReady = cutReady
     .filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId)) === 'done')
     .map(o => String(o.id));
-  if(_waReady.length) setTimeout(() => _waSendReadyGrouped(_waReady), 1200);
+  if(_waReady.length){ _wdReadyTry(_waReady, 'scheduled', 'finish-day'); setTimeout(() => _waSendReadyGrouped(_waReady), 1200); }
 
   // עדכן statuses
   allOrders.forEach(o => {

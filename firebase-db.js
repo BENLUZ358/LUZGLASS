@@ -1196,6 +1196,12 @@ function lgNormalizeOrder(o) {
       httpStatus:  Number(o.sketchAck.httpStatus)  || 0,
       waMessageId: o.sketchAck.waMessageId || '',
     } : null,
+    //  מה קרה כשהדף ניסה לשלוח "מוכן" (workday.html _wdReadyTry, בן 19/11) — לבירור בלבד
+    readyTry:      (o.readyTry && typeof o.readyTry === 'object') ? {
+      at:     Number(o.readyTry.at) || 0,
+      status: String(o.readyTry.status || ''),
+      detail: String(o.readyTry.detail || ''),
+    } : null,
     // אותה קבלה לערוץ המייל: { <kind>: { sentAt, key } }, נכתבת רק בשרת
     // (_email-outbox.js) אחרי שהסקריפט ב-Gmail שלח. בלעדיה הזמנת מייל שטופלה
     // נשארת "ממתינה לעדכון" לנצח (אביבי, 29/10).
@@ -2773,10 +2779,13 @@ async function _lgAuthFetch(url){
   return fetch(url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
 }
 
-async function _lgAuthPost(url, payload){
+//  opts.keepalive — הבקשה ממשיכה גם אם הדף נסגר / עובר מסך באמצע (בן, 19/11:
+//  "מוכן" אחרי "סיים יום עבודה" לא הגיע לשרת פעמיים ביום). רק לבקשה קטנה (<64KB).
+async function _lgAuthPost(url, payload, opts){
   const token = await (firebase.auth().currentUser && firebase.auth().currentUser.getIdToken());
   return fetch(url, {
     method: 'POST',
+    keepalive: !!(opts && opts.keepalive),
     headers: Object.assign(
       { 'Content-Type': 'application/json' },
       token ? { Authorization: 'Bearer ' + token } : {}

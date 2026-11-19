@@ -85,6 +85,7 @@ function world(orders, opts = {}) {
     renderAll() { log.renders++; }, updateDraftBadge() {}, closeDraftPreview() {},
     showToast(m) { log.toasts.push(m); },
     _waSendReadyGrouped(ids) { log.wa.push(...ids); },
+    _wdReadyTry() {},
     setTimeout(fn) { if (fn.name === '' && /_waSendReadyGrouped/.test(String(fn))) fn(); },
     confirm: () => true,
     document: { querySelectorAll: () => [], getElementById: () => ({ style: {}, classList: { add() {}, remove() {} } }) },
