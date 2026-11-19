@@ -262,7 +262,7 @@ html,body{height:100%;overflow:hidden;}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="firebase-db.js?v=20261117"></script>
+<script src="firebase-db.js?v=20261119d"></script>
 <script src="order-attachments.js?v=20261112"></script>
 <script src="sku-picker.js?v=20261028"></script>
 <script src="opty-shape.js?v=20261116d"></script>
@@ -292,6 +292,8 @@ html,body{height:100%;overflow:hidden;}
         <div class="scopes" role="tablist" aria-label="סוג החשבונית">
           <button class="scope" role="tab" type="button" data-scope="daily"   aria-selected="true">יומיות<span class="scope-n" id="nDaily"></span></button>
           <button class="scope" role="tab" type="button" data-scope="monthly" aria-selected="false">שוטף 30<span class="scope-n" id="nMonthly"></span></button>
+          <!-- חשבונית לפני איסוף (בן, 19/11): מוכן לאיסוף / ממתין להובלה -->
+          <button class="scope" role="tab" type="button" data-scope="ready"   aria-selected="false">מוכן, לא נאסף<span class="scope-n" id="nReady"></span></button>
         </div>
         <label class="search"><span class="sr-only">חיפוש לקוח או הזמנה</span>
           <span data-icon="search"></span>
@@ -334,7 +336,7 @@ let selId  = null;        // ההזמנה שבאימות
 let vTab   = 'items';     // טלפון בלבד
 const ticks = {};         // סימון לעין, לפי הזמנה. לא נשמר
 let editIdx = null;       // הפריט שנמצא כרגע בעריכת מידה. null = אף אחד
-let scope = 'daily';      // 'daily' | 'monthly' — איזה תור מוצג
+let scope = 'daily';      // 'daily' | 'monthly' | 'ready' — איזה תור מוצג (ready = מוכן, עוד לא נאסף)
 let MONTHLY = new Set();  // טלפוני לקוחות שוטף 30, מרשומות המשתמשים
 
 const $ = id => document.getElementById(id);
@@ -413,6 +415,8 @@ function renderCustomers() {
   if (!gs.length) {
     $('custList').innerHTML = $('q').value
       ? `<div class="empty-state"><span data-icon="search"></span><div class="empty-state-title">לא נמצא</div><div class="empty-state-msg">נסה שם אחר, טלפון, מספר הזמנה או אסמכתא</div></div>`
+      : scope === 'ready'
+      ? `<div class="empty-state"><span data-icon="check-circle"></span><div class="empty-state-title">אין הזמנות מוכנות שעוד לא נאספו</div><div class="empty-state-msg">כאן מוציאים חשבונית על הזמנה מוכנה, לפני שהלקוח אוסף</div></div>`
       : scope === 'monthly'
       ? `<div class="empty-state"><span data-icon="check-circle"></span><div class="empty-state-title">אין הזמנות שוטף 30</div><div class="empty-state-msg">לקוח מוגדר כשוטף 30 בניהול המשתמשים</div></div>`
       : `<div class="empty-state"><span data-icon="check-circle"></span><div class="empty-state-title">אין הזמנות שממתינות לחשבונית</div><div class="empty-state-msg">הזמנה מגיעה לכאן כשהיא נאספת</div></div>`;
@@ -431,7 +435,7 @@ function renderCustomers() {
 // המספר על כל טאב הוא הזמנות פתוחות (ממתינות + השתנו), לא לקוחות: זה מה
 // שנשאר לעשות. מונה ריק לא מוצג — אפס הוא חדשות טובות ולא עוד מספר לקרוא.
 function renderScopes() {
-  [['daily', 'nDaily'], ['monthly', 'nMonthly']].forEach(([sc, el]) => {
+  [['daily', 'nDaily'], ['monthly', 'nMonthly'], ['ready', 'nReady']].forEach(([sc, el]) => {
     const open = lgInvoiceGroups(ORDERS, '', { scope: sc, monthlyPhones: MONTHLY })
                    .reduce((n, g) => n + g.counts.open, 0);
     $(el).textContent = open || '';
@@ -792,10 +796,31 @@ function openInvoiceModal() {
       const r = await lgMarkInvoiced(sel, input.value, ORDERS, chosen);
       closeModal();
       toast(`נרשם: חשבונית ${r.docNumber} על ${nOrders(r.count)}`);
+      const early = sel.filter(o => lgEarlyInvoiceStage(o));
+      if (early.length) askCollect(early, r.docNumber);
     } catch (err) {
       field.classList.add('field-error'); msg.textContent = err.message;
       b.disabled = false; b.innerHTML = '<span data-icon="check"></span>החשבונית הופקה';
     }
+  };
+}
+
+// חשבונית לפני איסוף (בן, 19/11): אחרי הרישום — "יצאה חשבונית. להעביר לנאסף?"
+//  "לא" משאיר במוכן; ההזמנה כבר 'invoiced' ולא תחזור לתור כשתיאסף.
+function askCollect(list, docNumber) {
+  openModal(`<div class="modal-in">
+    <h3 id="ovTitle">יצאה חשבונית ${esc(docNumber)}</h3>
+    <div class="sub">${list.length === 1 ? 'ההזמנה ' + esc(list[0].orderNum || list[0].id) + ' עדיין במוכן לאיסוף' : list.length + ' הזמנות עדיין במוכן לאיסוף'}</div>
+    <p style="margin:var(--space-3) 0">להעביר לנאסף?</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="collectYes" type="button"><span data-icon="check"></span>כן, העבר לנאסף</button>
+      <button class="btn btn-ghost" type="button" data-close>לא, להשאיר במוכן</button></div></div>`);
+  $('collectYes').onclick = async () => {
+    const b = $('collectYes'); b.disabled = true; b.innerHTML = '<span class="spin"></span>מעביר…';
+    const res = await Promise.allSettled(list.map(o => updateStage(String(o.id), 'collected')));
+    const bad = res.filter(x => x.status === 'rejected').length;
+    closeModal();
+    toast(bad ? `${bad} לא הועברו לנאסף — נסה מהלוח` : (list.length === 1 ? 'הועבר לנאסף' : list.length + ' הועברו לנאסף'), !!bad);
   };
 }
 

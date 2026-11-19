@@ -525,6 +525,11 @@ const order = (extra) => ctx.lgNormalizeOrder(Object.assign(
     check('switching tabs drops the selected client, which belonged to the other one',
           /scope = b\.dataset\.scope;[\s\S]{0,160}?selKey = null; selId = null;/.test(PAGE), true);
     check('the measurement inputs are 44px targets', /\.edit-mm\{[^}]*min-height:44px/.test(PAGE), true);
+    check('the station has a "ready, not collected" tab', /data-scope="ready"[^>]*>מוכן, לא נאסף/.test(PAGE), true);
+    check('after marking a ready order it asks to move it to collected',
+          /early = sel\.filter\(o => lgEarlyInvoiceStage\(o\)\);[\s\S]{0,80}askCollect\(early/.test(PAGE), true);
+    check('"yes" moves exactly those orders to collected',
+          /function askCollect[\s\S]*?list\.map\(o => updateStage\(String\(o\.id\), 'collected'\)\)/.test(PAGE), true);
   }
 
   /* ── invoice before pickup (Ben, 19/11): ready / awaiting delivery get their own tab ── */
