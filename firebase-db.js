@@ -515,6 +515,16 @@ function lgBrokenRedoQueue(orders) {
   }));
   return out;
 }
+//  "נאסף בסריקה" — נהג הלקוח סרק את המדבקה ולחץ "הזמנה נאספה" (g.html, בן 19/11).
+function lgScanCollectLine(o) {
+  const sc = o && o.scanCollect;
+  if (!sc || !sc.at) return '';
+  const d = new Date(Number(sc.at));
+  const t = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  return '📱 נאסף בסריקה ' + d.getDate() + '/' + (d.getMonth() + 1) + ' ' + t
+    + (sc.name ? ' (' + sc.name + ')' : '') + (sc.early ? ' · ⚠ לפני מוכן' : '');
+}
+
 function lgBrokenRedoLabel(v) {
   if (!v || !v.redoAt) return '';
   if (v.redoReportId) return 'בדוח ' + (v.redoReportNum || '');
@@ -584,6 +594,8 @@ async function updateStage(id, stage) {
   // הרגע שההזמנה נכנסה ל-OptyWay (השרטט סיים) — לוח הסקיצות ביום העבודה
   // מסדר לפיו את הסקיצות של כל לקוח, כמו באופטי ווי (בן, 19/10).
   if (stage === 'opty') patch.optyAt = patch.updatedAt;
+  //  החזרה מנאסף (למשל סריקה בטעות) — רישום הסריקה יורד (בן, 19/11)
+  if (stage !== 'collected') patch.scanCollect = null;
   await _lgDb.ref('orders/' + id).update(patch);
   return { id, stage, status };
 }

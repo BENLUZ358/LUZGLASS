@@ -412,7 +412,7 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261117"></script>
+  <script src="firebase-db.js?v=20261119s"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
@@ -1042,6 +1042,7 @@ function openMod(id) {
       <div class="mf"><label>פריטים</label><div class="v">${items.length}${o.area ? ' · ' + lgEsc(String(o.area)) + ' מ״ר' : ''}</div></div>
     </div>
     <div class="msec" id="mEta">${_modEtaHtml(o)}</div>
+    ${typeof lgScanCollectLine === 'function' && lgScanCollectLine(o) ? `<div class="msec"><div style="font-weight:800;font-size:14px;color:${o.scanCollect.early?'var(--red)':'#1e8449'}">${lgEsc(lgScanCollectLine(o))}</div></div>` : ''}
     <div class="msec">
       <div class="msec-t" style="display:flex;align-items:center;gap:8px">פריטים
         ${_modCanEditItems(o) ? `<button type="button" id="modEditItemsBtn" class="mit-edit-btn" onclick="modEditItems()"><span data-icon="pencil"></span> ערוך פריטים</button>` : ''}
@@ -1784,6 +1785,7 @@ function card(o) {
     <div class="c-name">${lgEsc(o.sketchName||o.type||'—')}</div>
     <div class="c-tags">
       ${subBadge}
+      ${o.scanCollect && o.scanCollect.at ? `<span class="tag" style="background:${o.scanCollect.early?'rgba(192,57,43,0.12);color:var(--red)':'rgba(30,132,73,0.12);color:#1e8449'}">📱 נאסף בסריקה${o.scanCollect.early?' ⚠':''}</span>` : ''}
       ${o.glass ? `<span class="tag tg">${lgEsc(o.glass)}</span>` : ''}
       ${o.finish ? `<span class="tag tf">${lgEsc(o.finish)}</span>` : ''}
     </div>
