@@ -502,6 +502,34 @@ function lgBrokenReturnedUndelivered(o) {
   return _lgBrokenEntries(o).filter(e => e.v.returnedAt && !e.v.deliveredAt)
     .map(e => ({ idx: e.idx, track: e.v.track || 'chisum', returnedAt: e.v.returnedAt }));
 }
+// ── שבר חוזר לתחנת הבדיקה (בן, 19/11) ──
+//  "💥 שבר" שולח את הזכוכית שוב דרך תחנת הבדיקה לדוח החיסום הבא, מסומנת "שבר".
+//  על אותה רשומה: redoAt (נשלח לבדיקה) → redoCheckedAt (נבדק) → redoReportId/Num
+//  (יצא בדוח) → returnedAt ("✓ חזר", כמו קודם). בלי חשבונית ובלי "מוכן" נוסף.
+//  ר' docs/superpowers/specs/2026-11-19-broken-redo-design.md
+function lgBrokenRedoQueue(orders) {
+  const out = [];
+  (orders || []).forEach(o => _lgBrokenEntries(o).forEach(e => {
+    if (e.v.redoAt && !e.v.redoReportId && !e.v.returnedAt)
+      out.push({ order: o, idx: e.idx, checked: !!e.v.redoCheckedAt });
+  }));
+  return out;
+}
+function lgBrokenRedoLabel(v) {
+  if (!v || !v.redoAt) return '';
+  if (v.redoReportId) return 'בדוח ' + (v.redoReportNum || '');
+  return v.redoCheckedAt ? 'נבדק — יוצא בדוח הבא' : 'בתחנת הבדיקה';
+}
+//  האם הזמנה עם שבר פתוח נשארת בחיסום ב"סיום בדיקה". לקוח הובלות ממשיך עם
+//  השאר (הכלל מ-10/11); לקוח איסוף או חשבונית חלקית מחכה; וגם הובלות מחכה
+//  כשכל זכוכיות המפעל שלה שבורות — אין מה לשלוח (בן, 19/11: L1288-3).
+function lgBrokenHolds(x) {
+  const open = (x && x.openIdxs) || [];
+  if (!open.length) return false;
+  if (!x.isDelivery || x.partialInvoice) return true;
+  const f = x.factoryIdxs || [];
+  return f.length > 0 && f.every(i => open.includes(i));
+}
 function lgNextStage(order, isDelivery) {
   const items      = order.items || [];
   // טריפלקס רגיל אינו מסומן chisum מלכתחילה, ולכן הוא כבר לא נכנס לכאן —
