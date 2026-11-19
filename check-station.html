@@ -783,13 +783,13 @@ function csRedoSectionHtml(){
       const oid = lgEsc(lgJsStr(String(o.id)));
       return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(192,57,43,.18);">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:800;color:var(--text);">${lgEsc(o.orderClient || '')}${o.sketchName ? ' · ' + lgEsc(o.sketchName) : ''} <span style="font-size:12px;font-weight:600;color:var(--muted)" dir="ltr">${lgEsc(o.orderNum || '')}</span></div>
-          <div style="margin-top:2px;"><span style="font-size:18px;font-weight:900;color:var(--text);">${lgDimsText(it.w, it.h)}</span>
-            <span style="font-size:12px;color:var(--muted);">${lgEsc(it.name || csGlassOf(it) || '')}${it.optyShape ? ' · צורה ' + lgEsc(it.optyShape) : ''}</span></div>
+          <div style="font-size:14px;font-weight:800;color:#1a1714;">${lgEsc(o.orderClient || '')}${o.sketchName ? ' · ' + lgEsc(o.sketchName) : ''} <span style="font-size:12px;font-weight:600;color:#6b6259" dir="ltr">${lgEsc(o.orderNum || '')}</span></div>
+          <div style="margin-top:2px;"><span style="font-size:18px;font-weight:900;color:#1a1714;">${lgDimsText(it.w, it.h)}</span>
+            <span style="font-size:12px;color:#6b6259;">${lgEsc(it.name || csGlassOf(it) || '')}${it.optyShape ? ' · צורה ' + lgEsc(it.optyShape) : ''}</span></div>
           ${typeof lgBrokenPrintBtns === 'function' ? '<div style="margin-top:6px;">' + lgBrokenPrintBtns(o, x.idx) + '</div>' : ''}
         </div>
         <button type="button" onclick="csRedoToggle('${oid}',${x.idx},${x.checked ? 'false' : 'true'})"
-          style="min-height:44px;padding:0 14px;border-radius:8px;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap;${x.checked ? 'background:#fff;color:var(--muted);border:1px solid var(--border);' : 'background:var(--green);color:#fff;border:none;'}">${x.checked ? '↩ החזר לבדיקה' : '✓ נבדק'}</button>
+          style="min-height:44px;padding:0 14px;border-radius:8px;font-family:Heebo,sans-serif;font-size:14px;font-weight:800;cursor:pointer;white-space:nowrap;${x.checked ? 'background:#fff;color:#6b6259;border:1px solid rgba(0,0,0,.2);' : 'background:var(--green);color:#fff;border:none;'}">${x.checked ? '↩ החזר לבדיקה' : '✓ נבדק'}</button>
       </div>`; }).join('')}
   </div>`;
 }
