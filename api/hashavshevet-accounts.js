@@ -99,7 +99,7 @@ module.exports = async function handler(req, res) {
 
     if (!wgRes.ok) {
       console.error('hashavshevet-accounts: WizGround error', wgRes.status, text.slice(0, 500));
-      res.status(502).json({ error: 'WizGround request failed', status: wgRes.status });
+      res.status(502).json({ error: 'WizGround request failed', status: wgRes.status, detail: String(text || '').slice(0, 400) });
       return;
     }
 
@@ -116,7 +116,7 @@ module.exports = async function handler(req, res) {
       }))
       .filter(a => a.key);
 
-    res.status(200).json({ ok: true, count: accounts.length, accounts });
+    res.status(200).json({ ok: true, count: accounts.length, rows: rows.length, accounts });
   } catch (e) {
     console.error('hashavshevet-accounts: unexpected error', e);
     res.status(500).json({ error: 'internal error' });

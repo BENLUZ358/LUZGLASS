@@ -77,7 +77,7 @@ module.exports = async function handler(req, res) {
 
     if (!wgRes.ok) {
       console.error('hashavshevet-items: WizGround error', wgRes.status, text.slice(0, 500));
-      res.status(502).json({ error: 'WizGround request failed', status: wgRes.status });
+      res.status(502).json({ error: 'WizGround request failed', status: wgRes.status, detail: String(text || '').slice(0, 400) });
       return;
     }
 

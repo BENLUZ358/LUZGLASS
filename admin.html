@@ -2483,7 +2483,7 @@ async function syncFromHashavshevetNow(){
     // זכוכית ("מכפלה") וגם פרזול ("פריט רגיל") — בן, 1/11. ר' lgHbItemsForCatalog
     const res = await _lgAuthFetch('/api/hashavshevet-items?itemType=all');
     const data = await res.json();
-    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP '+res.status));
+    if(!res.ok || !data.ok) throw new Error((data.error || ('HTTP '+res.status)) + (data.detail ? ' — ' + String(data.detail).slice(0,160) : ''));
 
     const rows = lgHbItemsForCatalog(data.items);
     const BATCH = 20;
@@ -2505,7 +2505,7 @@ async function syncFromHashavshevetNow(){
     if (!hwN) alert('לא נמצא פרזול בדוח של חשבשבת.\nהסוגים שחזרו: ' + (typesTxt || '(אין)'));
   }catch(e){
     console.error('syncFromHashavshevetNow:', e);
-    showToast('⚠️ סנכרון נכשל — בדוק קונסול');
+    showToast('⚠️ סנכרון נכשל: ' + String((e && e.message) || '').slice(0, 220));
   }finally{
     _hbSyncing = false;
     renderPricing();
@@ -2521,7 +2521,7 @@ async function syncAccountsFromHashavshevetNow(){
   try{
     const res = await _lgAuthFetch('/api/hashavshevet-accounts');
     const data = await res.json();
-    if(!res.ok || !data.ok) throw new Error(data.error || ('HTTP '+res.status));
+    if(!res.ok || !data.ok) throw new Error((data.error || ('HTTP '+res.status)) + (data.detail ? ' — ' + String(data.detail).slice(0,160) : ''));
 
     const BATCH = 20;
     let created=0;
@@ -2537,7 +2537,7 @@ async function syncAccountsFromHashavshevetNow(){
     showToast(`✓ סונכרנו ${created} לקוחות מחשבשבת`);
   }catch(e){
     console.error('syncAccountsFromHashavshevetNow:', e);
-    showToast('⚠️ סנכרון נכשל — בדוק קונסול');
+    showToast('⚠️ סנכרון נכשל: ' + String((e && e.message) || '').slice(0, 220));
   }finally{
     _hbAccSyncing = false;
     renderPricing();
