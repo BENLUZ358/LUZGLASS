@@ -26,7 +26,8 @@ const PAGES = ['workday.html', 'check-station.html', 'admin.html', 'portal.html'
                'drafter.html', 'upload.html', 'new-order.html', 'login.html',
                'mekhlahon.html', 'opty.html'];
 const SHARED = ['firebase-db.js', 'lg-icons.js', 'lg-sketch-editor.js', 'lg-health.js', 'print-labels.js', 'sq-new-order.js', 'workday-remind.js',
-                'opty-paradox.js', 'opty-match.js', 'opty-shape.js', 'opty-layout.js', 'opty-hub.js', 'avivi-wrap.js', 'lg-qr.js', 'order-eta.js'];
+                'opty-paradox.js', 'opty-match.js', 'opty-shape.js', 'opty-layout.js', 'opty-hub.js', 'avivi-wrap.js', 'lg-qr.js', 'order-eta.js',
+                'broken-print.js'];   // lgPrintOrderSketch — 🖨 סקיצה בתחנת בדיקה / לשרטט (בן, 19/11)
 
 /* Anything the browser, Firebase or our own shared scripts provide. */
 const GLOBALS = new Set([

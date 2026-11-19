@@ -8,7 +8,11 @@
 (function () {
   'use strict';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const say = m => { if (typeof showToast === 'function') showToast(m); else if (typeof toast === 'function') toast(m); };
+  //  מסך בלי הודעות משלו (לשרטט) — הודעה קטנה למטה, שלא תיעלם לחיצה בלי תשובה
+  const ownToast = m => { const t = document.createElement('div'); t.setAttribute('role', 'status'); t.textContent = m;
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;background:#1a1714;color:#fff;padding:10px 18px;border-radius:8px;font:600 14px Heebo,sans-serif;direction:rtl';
+    document.body.appendChild(t); setTimeout(() => t.remove(), 3500); };
+  const say = m => { if (typeof showToast === 'function') showToast(m); else if (typeof toast === 'function') toast(m); else ownToast(m); };
   const itemsOf = o => Array.isArray(o && o.items) ? o.items : Object.values((o && o.items) || {});
 
   //  עמוד A4 (JPEG base64) מתמונה: שורת כותרת קטנה למעלה, תמונה לרוחב מסובבת למלא את הדף
@@ -45,6 +49,27 @@
       await sendA4(lgA4PageJpeg(await loadImg(src), headOf(o)), 'שבר — סקיצה ' + (o.orderNum || ''), o.id);
       say('✓ הסקיצה נשלחה למדפסת Brother');
     } catch (e) { console.error('broken sketch print:', e); say('⚠️ הסקיצה לא נשלחה: ' + (e.message || '')); }
+  }
+
+  //  🖨 הדפסת סקיצה רגילה מכל מסך (בן, 19/11: "בכל שלב כפתור הדפס על הסקיצה") — תחנת בדיקה,
+  //  תחנת חשבוניות, לשרטט. opts.img — התמונה שעל המסך (כולל ציור מקומי שעוד לא נשמר);
+  //  opts.src — כתובת/data של סקיצה ערוכה; אחרת הסקיצה השמורה. opts.btn — ננעל עד שנשלח.
+  async function lgPrintOrderSketch(o, opts) {
+    const op = opts || {}, btn = op.btn;
+    if (!o) return;
+    if (btn) { if (btn.disabled) return; btn.disabled = true; btn.dataset.t = btn.innerHTML; btn.textContent = 'שולח…'; }
+    try {
+      let img = op.img && op.img.complete && op.img.naturalWidth > 0 ? op.img : null;
+      if (!img) {
+        const src = op.src || await lgLoadSketch(o);
+        if (!src) { say('⚠️ אין סקיצה להזמנה הזאת'); return; }
+        img = await loadImg(src);
+      }
+      const head = [o.orderClient, o.sketchName, o.orderNum].filter(Boolean).join(' · ');
+      await sendA4(lgA4PageJpeg(img, head), 'סקיצה ' + (o.orderNum || '') + ' ' + (o.orderClient || ''), o.id);
+      say('✓ הסקיצה נשלחה למדפסת Brother');
+    } catch (e) { console.error('sketch print:', e); say('⚠️ ההדפסה לא נשלחה: ' + (e.message || '')); }
+    finally { if (btn) setTimeout(() => { btn.disabled = false; btn.innerHTML = btn.dataset.t || '🖨 הדפס'; }, 3000); }
   }
 
   async function lgPrintShapeA4(o, idx) {
@@ -156,4 +181,5 @@
   window.lgBrokenPrintBtns = lgBrokenPrintBtns;
   window.lgBrokenPrint = lgBrokenPrint;
   window.lgA4PageJpeg = lgA4PageJpeg;
+  window.lgPrintOrderSketch = lgPrintOrderSketch;
 })();

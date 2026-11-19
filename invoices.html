@@ -123,6 +123,7 @@ html,body{height:100%;overflow:hidden;}
 .sketch-box{order:-1;position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
   min-height:260px;display:flex;align-items:center;justify-content:center;overflow:hidden;}
 .sketch-box img{max-height:70vh;width:100%;object-fit:contain;}
+.sketch-print{margin-top:var(--space-2);width:100%;min-height:44px;}
 .sketch-full{position:absolute;top:var(--space-2);left:var(--space-2);}
 /* זה לצד זה רק כשיש באמת מקום. אייפד לאורך (768) נערם — בשני חצאים של
    380px סקיצת A4 נותנת מידה בגובה חמישה פיקסלים (המפרט, ד.6) */
@@ -268,6 +269,7 @@ html,body{height:100%;overflow:hidden;}
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="lg-qr.js?v=20261117"></script><script src="avivi-wrap.js?v=20261117c"></script><script src="print-labels.js?v=20261117d"></script>
 <script src="order-labels.js?v=20261116e"></script>
+<script src="broken-print.js?v=20261119c"></script>
 <script src="lg-icons.js?v=20261103"></script>
 </head>
 <body data-view="customers">
@@ -615,6 +617,7 @@ function renderVerify() {
       <img id="skImg" alt="הסקיצה של ${esc(o.orderNum || '')}" hidden>
       <div class="empty-state" id="skEmpty"><span data-icon="image"></span><div class="empty-state-msg">טוען סקיצה…</div></div>
       <button class="tb-btn sketch-full" id="skFull" type="button" aria-label="סקיצה במסך מלא" hidden><span data-icon="external"></span></button>
+      <button class="btn btn-ghost sketch-print" id="skPrint" type="button" onclick="lgPrintOrderSketch(orderOf(selId), { btn: this, img: $('skImg') })">🖨 הדפס סקיצה</button>
     </div>`;
 
   if (keepSketch) {

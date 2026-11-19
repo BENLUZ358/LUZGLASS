@@ -254,7 +254,7 @@ html,body{height:100%;overflow:hidden;}
   <script src="opty-shape.js?v=20261116d"></script>
   <script src="lg-qr.js?v=20261117"></script><script src="avivi-wrap.js?v=20261117c"></script><script src="print-labels.js?v=20261117d"></script>
   <script src="order-labels.js?v=20261117"></script>
-  <script src="broken-print.js?v=20261119b"></script>
+  <script src="broken-print.js?v=20261119c"></script>
 <!-- אייקוני SVG. עוקב אחרי הוספות DOM. -->
 <script src="lg-icons.js?v=20260807"></script>
 </head>
@@ -332,6 +332,7 @@ html,body{height:100%;overflow:hidden;}
   <div class="sketch-hdr">
     <div class="sh-client" id="shClient"></div>
     <div class="sh-meta" id="shMeta"></div>
+    <button type="button" id="shPrintBtn" onclick="csPrintSketch(this)" style="align-self:flex-start;min-height:40px;padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer">🖨 הדפס סקיצה</button>
   </div>
   <!-- הצורות מאופטי-ווי של ההזמנה — גלוי מיד בפתיחה (בן, 16/11: "לא הבנתי איפה הכפתור") -->
   <div id="shOpty" class="sh-opty" hidden></div>
@@ -985,6 +986,13 @@ function csRenderOptyStrip(){
   });
   box.hidden=!chips.length;
   box.innerHTML=chips.length?`<span class="sh-opty-t">📐 צורות מאופטי-ווי:</span>${chips.join('')}`:'';
+}
+// 🖨 הסקיצה שעל המסך → Brother (broken-print.js). סקיצה ערוכה — מה שערכו, לא המקור.
+function csPrintSketch(btn){
+  if (!cur) return;
+  const edited = (window._csCheckEdits||{})[String(cur.id)] || cur._editedSketch || null;
+  const img = document.querySelector('#skWrap img');
+  lgPrintOrderSketch(cur, { btn, img: edited ? null : img, src: edited || null });
 }
 function renderSketch(){
   csRenderOptyStrip();

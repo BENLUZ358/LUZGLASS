@@ -166,6 +166,7 @@ html,body{height:100%;overflow:hidden;}
        המשתמש שלו — אותו תפריט בדיוק כמו בשאר הדפים — הוצג באמוג'י. -->
   <script src="lg-icons.js?v=20260807"></script>
   <script src="drafter-batch.js?v=20261111"></script>
+  <script src="broken-print.js?v=20261119c"></script>
 </head>
 <body>
 <a href="#drMain" class="skip-link">דלג לתוכן</a>
@@ -227,6 +228,7 @@ html,body{height:100%;overflow:hidden;}
         </div>
       </div>
       <div id="smItems" style="display:flex;gap:6px;flex-wrap:wrap;margin-right:auto"></div>
+      <button type="button" id="smPrintBtn" onclick="drPrintSketch(this)" style="min-height:40px;padding:6px 14px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-family:Heebo,sans-serif;font-size:13px;font-weight:700;cursor:pointer">🖨 הדפס סקיצה</button>
     </div>
 
     <div class="sketch-canvas" id="sketchCanvas">
@@ -338,6 +340,12 @@ function renderSidebar(){
       <div class="sb-desc">${lgEsc(o.sketchName||o.type||'—')}</div>
       ${lgZgagiUpdatedTag(o)}
     </div>`).join('');
+}
+
+// 🖨 הסקיצה שעל המסך (כולל ציור שעוד לא נשמר) → Brother (broken-print.js, בן 19/11)
+function drPrintSketch(btn){
+  if (!curOrder) return;
+  lgPrintOrderSketch(curOrder, { btn, img: document.querySelector('#sketchCanvas img.sketch-img'), src: curOrder._editedSketch || null });
 }
 
 // ═══ SHOW ORDER ═══

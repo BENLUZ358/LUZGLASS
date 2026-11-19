@@ -1424,6 +1424,13 @@ function lgInvoiceablePieces(o) {
   } else return [];
   return idxs.filter(i => i < n && !billed[i]);
 }
+//  כל מספרי החשבונית של הזמנה — מלאה + חלקיות (תווית 🧾 בלוח, בן 19/11).
+//  חשבונית ישנה שהופקה דרך ה-API (לפני התחנה) — בלי מספר: [''].
+function lgOrderInvoiceDocs(o) {
+  if (!o) return [];
+  const d = [...new Set([o.invoiceDone && o.invoiceDone.docNumber, ...Object.values(o.invoicePieces || {})].filter(Boolean).map(String))];
+  return d.length ? d : (_lgLegacyInvoiced(o) ? [''] : []);
+}
 //  מספרי המסמכים שכבר כיסו חלק מההזמנה (לתצוגה: "4 חתיכות כבר בחשבונית 67400")
 function lgPartialInvoiceDocs(o) {
   return [...new Set(Object.values((o && o.invoicePieces) || {}).map(String))];
