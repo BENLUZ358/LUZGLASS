@@ -77,7 +77,8 @@ async function lgEmailEnqueue(db, { kind, thread, messageId, email, clientName, 
     sendTo = email;
   }
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
-  const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber
+  //  "שלח שוב" מהלוח (בן, 19/11): חשבונית + keySuffix = מפתח חדש לאותו מסמך
+  const key = lgEmailMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber + (keySuffix != null ? '#' + keySuffix : '')
                           : keySuffix != null ? kind + '#' + keySuffix : kind, thread, orderIds);
   const at  = now || Date.now();
   const r = await db.ref(EM_OUTBOX + '/' + key).transaction(cur => {

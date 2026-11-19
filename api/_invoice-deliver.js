@@ -168,7 +168,10 @@ async function _separateFiles(db, key) {
   return { ok: true, rec, files, missing };
 }
 
-//  deps: { now?, drain?(db, keys, by) → { results }, provider? }
+//  deps: { now?, drain?(db, keys, by) → { results }, provider?, resend? }
+//  resend — "שלח שוב" מהלוח (בן, 19/11): בקשה מפורשת של אדמין לשלוח עוד פעם חשבונית
+//  שכבר יצאה. מדלג על "כבר נשלח" ושולח עם מפתח תור חדש — לפי הדקה, כך שלחיצה כפולה
+//  באותה דקה נשארת הודעה אחת (המפתח כבר בתור / נשלח → התור מסרב).
 async function lgInvoiceDeliver(db, key, deps) {
   const d = deps || {};
   const now = d.now || Date.now();
@@ -177,7 +180,8 @@ async function lgInvoiceDeliver(db, key, deps) {
   const rec = (await db.ref('invoicePdf/' + key).once('value')).val();
   if (!rec || rec.state !== 'ready') return { state: 'none' };
   //  הדפסה חוזרת / שיוך חוזר — לא שולחים פעמיים
-  const dv = rec.delivery;
+  const resend = d.resend === true;
+  const dv = resend ? null : rec.delivery;
   if (dv && dv.state === 'sent') return dv;
   //  וואטסאפ שנתקע או נכשל ועדיין ממתין בתור → הדפסה חוזרת מנסה שוב עכשיו.
   //  אין שליחה כפולה: התפיסה בתור (2 דקות) והמצב 'sent' חוסמים.
@@ -225,7 +229,8 @@ async function lgInvoiceDeliver(db, key, deps) {
                    missingSketchNums: files.missing || [],
                    //  שבר בחיסום (בן, 10/11): מה שעוד לא חזר מהמפעל — נאמר עם החשבונית
                    extraLines: require('./_broken').brokenInvoiceLines(orders),
-                   deliveryTomorrow: manOrder ? false : await lgIsDeliveryInvoice(db, orders, who.accountKey) };
+                   deliveryTomorrow: manOrder ? false : await lgIsDeliveryInvoice(db, orders, who.accountKey),
+                   ...(resend ? { keySuffix: 'r' + Math.floor(now / 60000), queuedBy: 'resend' } : {}) };
 
   if (who.channel === 'email') {
     const { lgEmailEnqueue } = require('./_email-outbox');

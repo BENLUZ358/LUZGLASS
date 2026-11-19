@@ -72,7 +72,8 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, o
                                  missingSketchNums, extraLines, keySuffix, retryExhausted }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   //  שבר שחזר (בן, 10/11): מפתח לכל פריט — keySuffix = מספר הפריט
-  const key = lgWaMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber
+  //  "שלח שוב" מהלוח (בן, 19/11): חשבונית + keySuffix = מפתח חדש לאותו מסמך
+  const key = lgWaMsgKey(kind === 'invoice' && docNumber ? 'invoice#' + docNumber + (keySuffix != null ? '#' + keySuffix : '')
                        : keySuffix != null ? kind + '#' + keySuffix : kind, orderIds);
   const now = Date.now();
 

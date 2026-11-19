@@ -8,6 +8,9 @@
 //    GET  pdf       ?key=                   אדמין — פותח את המקור
 //    GET  mine                              לקוח — החשבוניות שלו (מוכנות בלבד)
 //    GET  minepdf   ?key=                   לקוח — המקור, רק אם כל ההזמנות שלו
+//    GET  order     ?id=                    אדמין — החשבוניות של הזמנה (חלון ההזמנה בלוח, בן 19/11)
+//    POST resend    {key}                   אדמין — "שלח שוב" ללקוח (lgInvoiceDeliver resend)
+//    POST print     {key}                   אדמין — המקור כעמודי A4 לתור ההדפסה → Brother במשרד
 //
 //  ההעתק לעולם לא יוצא מכאן: רק blob.original נקרא.
 //
@@ -215,6 +218,49 @@ async function minePdf(db, key, phone) {
   return original(db, key);
 }
 
+//  החשבוניות של הזמנה אחת: מספרי המסמך מההזמנה (invoiceDone + חלקיות), ולכל אחד
+//  הרשומות ב-invoicePdf עם אותו מספר שה-orderIds שלהן כוללים את ההזמנה.
+//  docs = כל המספרים, גם כאלה שה-PDF שלהם עוד לא הגיע (החלון אומר זאת).
+async function forOrder(db, id) {
+  if (!id || /[.#$\[\]\/]/.test(id)) return fail(400, 'bad-id');
+  const o = (await db.ref('orders/' + id).once('value')).val();
+  if (!o) return fail(404, 'no-order');
+  const done = o.invoiceDone || {};
+  const docs = [...new Set([done.docNumber, ...Object.values(done.pieces || {})].filter(Boolean).map(String))];
+  const items = [];
+  for (const dn of docs) {
+    const snap = (await db.ref('invoicePdf').orderByChild('docNumber').equalTo(dn).once('value')).val() || {};
+    Object.keys(snap).forEach(k => { if ((snap[k].orderIds || []).map(String).includes(String(id))) items.push(view(k, snap[k])); });
+  }
+  items.sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.createdAt - a.createdAt);
+  return { status: 200, body: { ok: true, docs, items } };
+}
+
+//  "שלח שוב" — רק חשבונית מוכנה (יש לה PDF). התשובה אומרת מה קרה, בעברית לחלון.
+async function resend(db, key, deps, now) {
+  const rec = key && (await db.ref('invoicePdf/' + key).once('value')).val();
+  if (!rec) return fail(404, 'not-found');
+  if (rec.state !== 'ready') return fail(409, 'not-ready');
+  const deliver = deps.deliver || require('./_invoice-deliver').lgInvoiceDeliver;
+  const r = await deliver(db, key, { now, resend: true, drain: deps.drain });
+  return { status: 200, body: { ok: true, state: (r && r.state) || '', channel: (r && r.channel) || '' } };
+}
+
+//  הדפסה: המקור → עמודי JPEG ברוחב A4 (1240) → עבודת sheets/a4, כמו הסקיצות. הכלי
+//  במשרד מדפיס כל עמוד על דף A4 שלם — חשבונית היא A4 לאורך, ולכן לא נמתחת.
+async function printInvoice(db, key, who, deps, now) {
+  const rec = key && (await db.ref('invoicePdf/' + key).once('value')).val();
+  if (!rec) return fail(404, 'not-found');
+  const blob = (await db.ref('invoicePdfBlobs/' + key).once('value')).val();
+  if (!blob || !blob.original) return fail(404, 'no-pdf');
+  const toJpegs = deps.pdfToJpegs || require('./_pdf-pages').lgPdfToJpegs;
+  const pages = await toJpegs(Buffer.from(blob.original, 'base64'), { targetW: 1240, maxPages: 10 });
+  if (!pages.length) return fail(422, 'no-pages');
+  const P = require('./_print-jobs');
+  return P.create(db, { kind: 'sheets', printer: 'a4', client: 'חשבונית ' + (rec.docNumber || '') + ' ' + (rec.client || ''),
+    orderIds: rec.orderIds || [], pages: pages.map(p => Buffer.from(p.bytes).toString('base64')) }, who, now);
+}
+
 //  deps: { db, now, verify(req) → {ok,status,error,phone,role} }
 async function handleCtl(req, deps) {
   const now = deps.now || Date.now();
@@ -235,7 +281,10 @@ async function handleCtl(req, deps) {
     }
     return r;
   }
+  if (req.method === 'POST' && action === 'resend') return admin ? resend(deps.db, String(body && body.key || ''), deps, now) : fail(403, 'forbidden');
+  if (req.method === 'POST' && action === 'print') return admin ? printInvoice(deps.db, String(body && body.key || ''), u.phone, deps, now) : fail(403, 'forbidden');
   if (req.method !== 'GET') return fail(405, 'method');
+  if (action === 'order') return admin ? forOrder(deps.db, String(q.id || '')) : fail(403, 'forbidden');
   if (action === 'list') return admin ? list(deps.db, q, now) : fail(403, 'forbidden');
   if (action === 'pdf') return admin ? original(deps.db, q.key) : fail(403, 'forbidden');
   if (action === 'mine') return mine(deps.db, normPhone(u.phone));

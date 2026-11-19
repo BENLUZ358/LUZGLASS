@@ -188,4 +188,4 @@ async function handlePrint(req, deps) {
   return fail(400, 'bad-action');
 }
 
-module.exports = { handlePrint, MAX_LABELS, MAX_PAGES, LEASE_MS };
+module.exports = { handlePrint, create, MAX_LABELS, MAX_PAGES, LEASE_MS };

@@ -149,6 +149,39 @@ async function test(name, fn) { await fn(); passed++; console.log('ok ' + name);
     assert.deepEqual([q.kind, q.to, q.invoiceKey, q.docNumber, q.state], ['invoice', GROUP, 'k1', '67346', 'pending']);
     assert.equal(db._data.invoicePdf.k1.delivery.channel, 'whatsapp');
   });
+  //  ── "שלח שוב" מהלוח (בן, 19/11) ──
+  await test('resend: an invoice already sent goes again, under a new queue key', async () => {
+    const db = base({ a: waOrder, b: portal });
+    const keys = [];
+    const drain = async (_db, ks) => { keys.push(ks[0]); _db._data.waOutbox[ks[0]].state = 'sent'; return { results: [{ key: ks[0], status: 'sent' }] }; };
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain });
+    db._data.invoicePdf.k1.delivery.state = 'sent';   // ה-drain האמיתי מעדכן את זה
+    const again = await D.lgInvoiceDeliver(db, 'k1', { now: NOW + 1000, drain });          // הדפסה חוזרת — לא שולחים
+    assert.equal(keys.length, 1); assert.equal(again.state, 'sent');
+    const r = await D.lgInvoiceDeliver(db, 'k1', { now: NOW + 5000, drain, resend: true });
+    assert.equal(r.state, 'sent');
+    assert.equal(keys.length, 2); assert.notEqual(keys[1], keys[0]);
+    const q = db._data.waOutbox[keys[1]];
+    assert.deepEqual([q.kind, q.to, q.invoiceKey, q.docNumber], ['invoice', GROUP, 'k1', '67346']);
+  });
+  await test('resend: a double click in the same minute is one message', async () => {
+    const db = base({ a: waOrder, b: portal });
+    const sent = [];
+    const drain = async (_db, ks) => { const e = _db._data.waOutbox[ks[0]];
+      if (e.state !== 'sent') { sent.push(ks[0]); e.state = 'sent'; } return { results: [{ key: ks[0], status: 'sent' }] }; };
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW, drain, resend: true });
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW + 20000, drain, resend: true });
+    assert.equal(sent.length, 1);
+    await D.lgInvoiceDeliver(db, 'k1', { now: NOW + 61000, drain, resend: true });
+    assert.equal(sent.length, 2);
+  });
+  await test('resend: a trial invoice / portal-only order is never sent', async () => {
+    const sim = base({ a: waOrder, b: portal }, { simulated: true });
+    assert.equal((await D.lgInvoiceDeliver(sim, 'k1', { now: NOW, drain: noDrain, resend: true })).state, 'skipped');
+    const por = base({ a: portal, b: portal });
+    assert.equal((await D.lgInvoiceDeliver(por, 'k1', { now: NOW, drain: noDrain, resend: true })).state, 'portal');
+    assert.equal(por._data.waOutbox, undefined);
+  });
   //  ── חשבוניות לפרטי (בן, 2/11: המקום לאמבט ונאור חזקיה) — waMeta/invoiceToPrivate/<מפתח> ──
   const privDb = (on, phone) => {
     const db = base({ a: waOrder, b: portal });
