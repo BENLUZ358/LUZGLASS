@@ -525,6 +525,11 @@ label.msec-t{display:block;}
     <select class="fsel" id="cf" onchange="renderAll()">
       <option value="">כל הלקוחות</option>
     </select>
+    <!-- סדר ההזמנות (בן, 19/11) — ברירת מחדל: החדשה למעלה. נזכר בין כניסות. -->
+    <select class="fsel" id="sortf" aria-label="סדר ההזמנות" onchange="lgSaveOrderSort(this.value);renderAll()">
+      <option value="new">מהחדש לישן</option>
+      <option value="old">מהישן לחדש</option>
+    </select>
     <!-- "סמן הכל" במוכן לאיסוף (בן, 17/11) — renderInvAll() -->
     <span id="invAllWrap"></span>
   </div>
@@ -666,6 +671,7 @@ function lgWdForgotInit() {
 }
 
 function load() {
+  lgRestoreOrderSort();
   if (_unsubscribe) _unsubscribe();
   lgAgentsNavCount();
   lgWdForgotInit();
@@ -1859,7 +1865,30 @@ function filtered(){
     if(q){const h=((o.orderClient||'')+(o.orderNum||'')+(o.sketchName||'')+(o.type||'')+(o.phone||'')).toLowerCase();if(!h.includes(q))return false;}
     return true;
   });
-  return result;
+  return lgSortOrdersByTime(result, document.getElementById('sortf')?.value || 'new');
+}
+
+// סדר ההזמנות בלוח ובטבלה (בן, 19/11): "סיננתי פלג — שהחדשה תהיה למעלה".
+// עד כאן הסדר היה סדר המפתחות ב-Firebase, כלומר כמעט אקראי. ממיינים לפי
+// מתי ההזמנה נוצרה; בלי זמן — לפי מספר ההזמנה. מחזיר מערך חדש.
+function lgOrderTime(o){
+  return Number(o && (o.createdAt || o.waReceivedAt || o.emailReceivedAt)) || 0;
+}
+function lgOrderNumVal(o){
+  const m = String((o && o.orderNum) || '').match(/[0-9]+/);
+  return m ? Number(m[0]) : 0;
+}
+function lgSortOrdersByTime(list, dir){
+  const sign = dir === 'old' ? 1 : -1;
+  return [...(list || [])].sort((a, b) =>
+    sign * ((lgOrderTime(a) - lgOrderTime(b)) || (lgOrderNumVal(a) - lgOrderNumVal(b))));
+}
+function lgSaveOrderSort(v){ try{ safeStorage.setItem('lgOrderSort', v === 'old' ? 'old' : 'new'); }catch(e){} }
+function lgRestoreOrderSort(){
+  const el = document.getElementById('sortf');
+  if(!el) return;
+  let v = 'new'; try{ v = safeStorage.getItem('lgOrderSort') === 'old' ? 'old' : 'new'; }catch(e){}
+  el.value = v;
 }
 
 // שני מנועי הסינון של הרשימה הראשית, נבנים מהנתונים החיים.
