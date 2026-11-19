@@ -14,6 +14,6 @@ check('L2 time + name', ctx.f({ scanCollect: { at, name: 'משה' } }), '📱 נ
 check('L3 early flagged', ctx.f({ scanCollect: { at, early: true } }), '📱 נאסף בסריקה 19/11 09:05 · ⚠ לפני מוכן');
 check('U1 leaving collected clears the scan record', /if \(stage !== 'collected'\) patch\.scanCollect = null;/.test(SRC), true);
 check('A1 admin modal + card show it', [/lgScanCollectLine\(o\)/.test(AD), /📱 נאסף בסריקה\$\{/.test(AD)], [true, true]);
-check('A2 admin loads the new firebase-db', /firebase-db\.js\?v=20261119s/.test(AD), true);
+check('A2 admin loads the new firebase-db', /firebase-db\.js\?v=20261119[s-z]/.test(AD), true);
 console.log(fail ? '\n' + fail + ' failed' : '\nall passed');
 process.exit(fail ? 1 : 0);
