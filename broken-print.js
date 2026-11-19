@@ -79,6 +79,8 @@
     const b = 'min-height:44px;padding:0 12px;border-radius:8px;font:700 13px Heebo,sans-serif;cursor:pointer;white-space:nowrap;border:1px solid rgba(0,0,0,.18);background:#fff;color:#1a1714;';
     const kq = esc(JSON.stringify(k));
     return `<span style="display:inline-flex;gap:6px;flex-wrap:wrap;">`
+      + (has ? `<button type="button" style="${b}background:#1a1714;border-color:#1a1714;color:#fff;" onclick="event.stopPropagation();lgBrokenPrint(${kq},'view')">🖼 ראה סקיצה</button>` : '')
+      + (it.optyShape ? `<button type="button" style="${b}" onclick="event.stopPropagation();lgBrokenPrint(${kq},'viewShape')">📐 ראה צורה</button>` : '')
       + (has ? `<button type="button" style="${b}" onclick="event.stopPropagation();lgBrokenPrint(${kq},'sketch')">🖨 סקיצה</button>` : '')
       + (it.optyShape ? `<button type="button" style="${b}" onclick="event.stopPropagation();lgBrokenPrint(${kq},'shape')">🖨 צורה ${esc(it.optyShape)}</button>` : '')
       + (Number(it.w) > 0 && Number(it.h) > 0 ? `<button type="button" style="${b}background:#b8922a;border-color:#b8922a;color:#fff;" onclick="event.stopPropagation();lgBrokenPrint(${kq},'label')">🏷 מדבקה${it.optyShape ? ' + צורה' : ''}</button>` : '')
@@ -87,9 +89,42 @@
   function lgBrokenPrint(k, what) {
     const o = _reg[k]; if (!o) return;
     const idx = Number(String(k).split(':').pop());
+    if (what === 'view') return lgBrokenViewSketch(o, idx);
+    if (what === 'viewShape') { if (typeof lgOptyShapeView === 'function') lgOptyShapeView(o, idx); return; }
     if (what === 'sketch') return lgPrintSketchA4(o);
     if (what === 'shape') return lgPrintShapeA4(o, idx);
     return lgPrintBrokenLabel(o, idx);
+  }
+
+  //  🖼 ראה סקיצה (בן, 19/11: "אין לי אופציה לראות את הסקיצה") — חלון עם הסקיצה,
+  //  והזכוכית השבורה כתובה למעלה; מתוכו גם הדפסה
+  function lgBrokenViewSketch(o, idx) {
+    const it = itemsOf(o)[idx] || {};
+    const old = document.getElementById('lgBrokenSk'); if (old) old.remove();
+    const ov = document.createElement('div'); ov.id = 'lgBrokenSk';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:10px;font-family:Heebo,sans-serif;direction:rtl;';
+    const b = 'min-height:44px;padding:0 14px;border-radius:8px;font:800 14px Heebo,sans-serif;cursor:pointer;border:1px solid #ccc;background:#fff;color:#1a1714;';
+    ov.innerHTML = `<div style="background:#fff;border-radius:12px;width:100%;max-width:900px;max-height:96vh;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #eee;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:16px;font-weight:900;color:#1a1714;">${esc(o.orderClient || '')}${o.sketchName ? ' · ' + esc(o.sketchName) : ''} <span style="font-size:12px;color:#6b6259" dir="ltr">${esc(o.orderNum || '')}</span></div>
+          <div style="font-size:14px;color:#c0392b;font-weight:800;">💥 שבר: ${typeof lgDimsText === 'function' ? lgDimsText(it.w, it.h) : esc(it.w + '×' + it.h)} · ${esc(it.name || '')}${it.optyShape ? ' · צורה ' + esc(it.optyShape) : ''}</div>
+        </div>
+        <button type="button" data-print style="${b}">🖨 הדפס</button>
+        <button type="button" data-close aria-label="סגור" style="${b}min-width:44px;padding:0;">✕</button>
+      </div>
+      <div style="flex:1;overflow:auto;background:#f6f6f6;display:flex;align-items:center;justify-content:center;min-height:240px;">
+        <img alt="סקיצת ההזמנה" style="max-width:100%;max-height:80vh;display:block;">
+      </div></div>`;
+    ov.addEventListener('click', e => {
+      if (e.target === ov || e.target.closest('[data-close]')) ov.remove();
+      else if (e.target.closest('[data-print]')) lgPrintSketchA4(o);
+    });
+    document.body.appendChild(ov);
+    const img = ov.querySelector('img');
+    if (typeof lgSketchIntoImg === 'function') lgSketchIntoImg(img, o);
+    else lgLoadSketch(o).then(src => { if (src) img.src = src; });
   }
 
   //  list = [{order, idx}]
