@@ -303,6 +303,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20260601"></script>
+  <script src="change-password.js?v=20261122a"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי הכרטיסים כאן נבנים מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
 </head>
@@ -318,6 +319,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <div class="logo">Luz<span>Glass</span></div>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="nav-name">שלום, <strong id="navName">&#8212;</strong></div>
+    <button class="nav-logout" type="button" onclick="lgOpenChangePassword()" aria-label="שינוי סיסמה">🔑 סיסמה</button>
     <button class="nav-logout" onclick="logout()"><span data-icon="logout"></span>יציאה</button>
   </div>
 </nav>
