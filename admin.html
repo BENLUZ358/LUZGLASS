@@ -413,6 +413,7 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20261119t"></script>
+  <script src="change-password.js?v=20261122a"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="lg-sketch-editor.js?v=20261019"></script>
@@ -471,6 +472,7 @@ label.msec-t{display:block;}
   </nav>
   <div class="unav-bot">
     <div style="font-size:12px;color:rgba(247,244,239,0.45);padding:4px 0 8px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:8px;" id="sidebarUserName"></div>
+    <a href="#" onclick="event.preventDefault();lgOpenChangePassword()">🔑 שינוי סיסמה</a>
     <a href="#" onclick="lgLogout()"><span data-icon="logout"></span> יציאה</a>
   </div>
 </div>
@@ -496,6 +498,7 @@ label.msec-t{display:block;}
       </div>
       <button type="button" onclick="lgRunHealthCheck()" title="בודק את הנתונים ומראה דברים שתקועים או חסרים — רק קורא, לא משנה כלום" style="display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:6px 12px;background:none;border:1px solid var(--gold);color:var(--gold-text);font-family:Heebo,sans-serif;font-size:12px;font-weight:700;cursor:pointer;border-radius:4px;white-space:nowrap;"><span data-icon="check-circle"></span>בדיקת תקינות</button>
       <span id="topbarUserName" style="font-size:12px;color:var(--muted);white-space:nowrap;display:none"></span>
+      <button type="button" onclick="lgOpenChangePassword()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="שינוי סיסמה">🔑 סיסמה</button>
       <button onclick="lgLogout()" style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;background:rgba(0,0,0,0.06);border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border-radius:4px;white-space:nowrap;" title="יציאה"><span data-icon="logout"></span>יציאה</button>
     </div>
   </div>
