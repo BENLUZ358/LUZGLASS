@@ -412,7 +412,7 @@ label.msec-t{display:block;}
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261119t"></script>
+  <script src="firebase-db.js?v=20261123a"></script>
   <script src="change-password.js?v=20261122a"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
@@ -2048,8 +2048,8 @@ function renderStats(){
   const inP=f.filter(o=>['ירד לביצוע','נשלח לחיסום','חזר מחיסום','בגרפיקה','ממתין להובלה'].includes(o.status)).length;
   // תור סקיצות ושרטט (בן, 06/10) — במקום כרטיסי הסכום ומוכן-לאיסוף.
   // על כל ההזמנות ולא על המסונן: אלה קיצורי דרך, לא סיכום של הסינון.
-  const inQ=orders.filter(o=>!o.stage && !o.isSample).length;
-  const unseen=orders.filter(o=>!o.stage && !o.isSample && !o.sketchSeenAt).length;
+  const inQ=orders.filter(o=>!o.stage && !o.isSample && !o.sqDeletedAt).length;
+  const unseen=orders.filter(o=>!o.stage && !o.isSample && !o.sqDeletedAt && !o.sketchSeenAt).length;
   const atD=orders.filter(o=>o.status==='אצל שרטט').length;
   const urg=f.filter(o=>o.urgent).length;
   document.getElementById('stats').innerHTML=`
@@ -3409,6 +3409,8 @@ document.addEventListener('visibilitychange', () => {
 .sq-action-quiet [data-icon]{width:14px;height:14px;vertical-align:-2px;}
 /* כפתור צדדי — קטן, לא מתחרה בכפתורי השלבים (בן, 13/11: "הזמנה פיקטיבית בקטן") */
 .sq-action-small{flex:0 0 auto;min-width:0;padding:5px 9px;font-size:11px;font-weight:600;border-width:1px;}
+.sq-del-btn{color:#b3261e;border-color:rgba(179,38,30,.35);}
+.sq-bin-tab{flex:0 0 auto;}
 .sq-dl-btn{
   width:36px;height:38px;background:#f5f2ed;border:1px solid rgba(0,0,0,0.1);
   cursor:pointer;border-radius:6px;font-size:14px;flex-shrink:0;
@@ -3865,6 +3867,7 @@ document.addEventListener('visibilitychange', () => {
                 onclick="sqSetSeenTab('unseen')">עוד לא נראה <span id="sqTabUnseenN">0</span></button>
         <button class="sq-seen-tab" id="sqTabSeen" role="tab" aria-selected="false"
                 onclick="sqSetSeenTab('seen')">נראה <span id="sqTabSeenN">0</span></button>
+        <button class="sq-seen-tab sq-bin-tab" id="sqBinBtn" type="button" hidden onclick="sqBinOpen()" title="סקיצות שנמחקו — אפשר להחזיר">🗑 <span id="sqBinN">0</span></button>
       </div>
       <!-- קליטות WhatsApp ומייל — wa-inbound-panel.js -->
       <button id="waInBtn" type="button" onclick="lgWaInOpen()" aria-label="קליטות WhatsApp ומייל"><span data-icon="inbox"></span>קליטות
@@ -3997,6 +4000,7 @@ document.addEventListener('visibilitychange', () => {
             <button id="sqBtnChash"   class="sq-action-btn" onclick="sqSetStage('chash')">📋 הועבר לחשבשבת</button>
             <!-- "הצג מה יישלח" הוסר מהכרטיס (בן, 13/11). הבדיקה עדיין זמינה מחלון השגיאה. -->
             <button id="sqBtnTest"    class="sq-action-btn sq-action-small" onclick="sqMarkTestOrder()" title="אותו תהליך בדיוק, רק שלא ייפתח מסמך בחשבשבת">🧪 הזמנה פיקטיבית</button>
+            <button id="sqBtnDel"     class="sq-action-btn sq-action-small sq-del-btn" onclick="sqDeleteSketch()" title="מעביר לסל — אפשר להחזיר">🗑 מחק סקיצה</button>
             <button id="sqBtnOpty"    class="sq-action-btn" onclick="sqSetStage('opty')"><span data-icon="settings"></span> הוכנס ל-OptyWay</button>
             <button class="sq-dl-btn" onclick="sqDownload()" title="הורד" aria-label="הורד"><span data-icon="download"></span></button>
             <button class="sq-dl-btn" id="sqEditBtn" onclick="sqOpenEditor()" title="ערוך סקיצה" aria-label="ערוך סקיצה" style="display:none;"><span data-icon="pencil"></span></button>
@@ -4441,6 +4445,8 @@ function buildSQItems(){
     if (o.stage && o.stage !== '') return;
     // מרכזן (שיפור 1): בן סימן "דוגמה — הוצא מהתור" — מוסתרת, לא נמחקת
     if (o.isSample) return;
+    // 🗑 נמחקה מהתור (בן, 23/11) — בסל, אפשר להחזיר (sqBinOpen)
+    if (o.sqDeletedAt) return;
 
     sqItems.push({
       id:           o.id,
@@ -4562,6 +4568,7 @@ function sqRender(){
   var elS=document.getElementById('sqTabSeenN');
   if(elU) elU.textContent=sqSeenSplit(sqItems,'unseen').length;
   if(elS) elS.textContent=sqSeenSplit(sqItems,'seen').length;
+  _sqBinCount();
   const pending=sqItems.filter(i=>!(sqStageMap[i.id])).length;
   const atDrafter=sqItems.filter(i=>sqStageMap[i.id]==='drafter').length;
   document.getElementById('sqCounter').textContent=`${sqItems.length} סקיצות · ${pending} ממתין · ${atDrafter} שרטט`;
@@ -4954,6 +4961,66 @@ let _sqHbAgent = '1';
 //
 // הסימון על ההזמנה ולא על המסך, כי השרת הוא זה שמחליט אם לשלוח — כפתור
 // אפשר לעקוף.
+// ── 🗑 מחיקת סקיצה מהתור — לסל, עם החזרה (בן, 23/11) ─────────────────────
+//  לא מוחקים באמת: sqDeletedAt על ההזמנה מסתיר אותה מהתור, מהמונים ומהפורטל
+//  של הלקוח. לחיצה בטעות = "החזר" מהסל. ללקוח לא יוצאת הודעה.
+function _sqBinList(){
+  return orders.filter(o => !o.stage && o.sqDeletedAt && !o.isSample)
+               .sort((a, b) => b.sqDeletedAt - a.sqDeletedAt);
+}
+function _sqBinCount(){
+  const n = _sqBinList().length, b = document.getElementById('sqBinBtn');
+  if(!b) return;
+  b.hidden = !n;
+  document.getElementById('sqBinN').textContent = n;
+}
+async function sqDeleteSketch(){
+  const o = sqCurrent; if(!o) return;
+  const name = [o.client || o.orderClient, o.orderNum, o.sketchName].filter(Boolean).join(' · ');
+  if(!confirm('למחוק את הסקיצה "' + name + '"?' + String.fromCharCode(10,10) + 'היא עוברת לסל 🗑 ליד "נראה", ומשם אפשר להחזיר אותה.')) return;
+  const who = (window._lgSession && (window._lgSession.name || window._lgSession.phone)) || '';
+  try { await updateOrder(o.id, { sqDeletedAt: Date.now(), sqDeletedBy: who }); }
+  catch(e){ console.error('sqDeleteSketch:', e); showToast('המחיקה לא נשמרה — נסה שוב'); return; }
+  showToast('🗑 הסקיצה עברה לסל');
+  sqCurrent = null; sqCurrentIdx = -1;
+  sqShowDetail();
+}
+function sqBinOpen(){
+  document.getElementById('sqBinBox')?.remove();
+  const box = document.createElement('div');
+  box.id = 'sqBinBox';
+  box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'סקיצות שנמחקו');
+  box.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;direction:rtl;font-family:Heebo,sans-serif';
+  const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = ev => { if(ev.key === 'Escape') close(); };
+  const draw = () => {
+    const list = _sqBinList();
+    const when = t => new Date(t).toLocaleString('he-IL', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+    box.innerHTML = `<div style="background:#fff;color:#222;width:100%;max-width:480px;max-height:80vh;overflow:auto;border-radius:10px;padding:18px">
+      <h2 style="margin:0 0 4px;font-size:18px">🗑 סקיצות שנמחקו</h2>
+      <div style="font-size:13px;color:#666;margin-bottom:12px">"החזר" מחזיר את הסקיצה לתור, לאותו מקום שהייתה בו.</div>
+      ${list.length ? list.map(o => `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #eee">
+          <div style="flex:1;min-width:0"><div style="font-weight:700">${lgEsc(o.orderClient || '—')}</div>
+            <div style="font-size:12px;color:#666">${lgEsc([o.orderNum, o.sketchName].filter(Boolean).join(' · '))} · נמחקה ${when(o.sqDeletedAt)}</div></div>
+          <button type="button" data-id="${lgEsc(String(o.id))}" style="min-height:40px;padding:0 16px;background:#1e7d3a;color:#fff;border:0;border-radius:6px;font-weight:700;font-family:inherit;cursor:pointer">החזר</button>
+        </div>`).join('') : '<div style="padding:20px 0;text-align:center;color:#888">הסל ריק</div>'}
+      <button type="button" id="sqBinClose" style="margin-top:12px;width:100%;min-height:42px;background:#eee;border:0;border-radius:6px;font-family:inherit;font-size:15px;cursor:pointer">סגור</button></div>`;
+    box.querySelector('#sqBinClose').onclick = close;
+    box.querySelectorAll('button[data-id]').forEach(btn => btn.onclick = async () => {
+      btn.disabled = true;
+      try { await _lgDb.ref('orders/' + btn.dataset.id).update({ sqDeletedAt: null, sqDeletedBy: null, updatedAt: Date.now() }); }
+      catch(e){ console.error('sqBinRestore:', e); showToast('ההחזרה לא נשמרה — נסה שוב'); btn.disabled = false; return; }
+      const o = orders.find(x => String(x.id) === btn.dataset.id); if(o) delete o.sqDeletedAt;
+      showToast('✓ הסקיצה חזרה לתור');
+      draw();
+    });
+  };
+  box.addEventListener('click', ev => { if(ev.target === box) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(box);
+  draw();
+}
+
 async function sqMarkTestOrder(){
   const id = sqCurrent && sqCurrent.id;
   if(!id) return;

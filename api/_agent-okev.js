@@ -63,7 +63,7 @@ function lgOkevCanChange(order, todayIso) {
 }
 
 // הזמנה "פתוחה": לא נאספה, לא בוטלה על ידי הסוכן, ולא תמונה שבן סימן כדוגמה (שיפור 1, 11/11)
-const isOpen = o => o.stage !== 'collected' && !o.agentCancelled && !o.isSample;
+const isOpen = o => o.stage !== 'collected' && !o.agentCancelled && !o.isSample && !o.sqDeletedAt;
 
 // ── נרמול הפניה: רווחים, גרש/גרשיים, אותיות קטנות ──
 const normRef = s => String(s == null ? '' : s).toLowerCase().replace(/[\s'"`׳״‘’“”]/g, '');

@@ -32,7 +32,7 @@ const LG_STAGE_PHASE = { '': 'pre', pending: 'pre', chash: 'pre', drafter: 'pre'
 
 const _n = v => (Number(v) > 0 ? Number(v) : 0);
 const _readyAt = o => Math.min(...[_n(o.readyAt), _n(o.deliveryAt)].filter(Boolean), Infinity);
-const _skip = o => !o || typeof o !== 'object' || o.isTest === true || o.isSample === true || !!o.agentCancelled;
+const _skip = o => !o || typeof o !== 'object' || o.isTest === true || o.isSample === true || !!o.sqDeletedAt || !!o.agentCancelled;
 const _median = a => {
   if (!a.length) return 0;
   const s = [...a].sort((x, y) => x - y), m = s.length >> 1;

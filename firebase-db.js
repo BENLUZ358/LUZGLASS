@@ -1179,6 +1179,8 @@ function lgNormalizeOrder(o) {
     // sampleSuspect → תג "אולי דוגמה" בתור; isSample → בן סימן "דוגמה" — התור מסתיר אותה
     sampleSuspect: o.sampleSuspect === true,
     isSample:      o.isSample === true,
+    // 🗑 נמחקה מתור הסקיצות (בן, 23/11) — מוסתרת בתור ובפורטל, אפשר להחזיר מהסל
+    sqDeletedAt:   Number(o.sqDeletedAt) || 0,
     sampleText:    typeof o.sampleText === 'string' ? o.sampleText : '',
     // קבוצת WhatsApp שממנה הגיעה הסקיצה — לשם יוצא "הסקיצות טופלו" (06/10)
     waGroup:       o.waGroup      || '',

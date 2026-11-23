@@ -291,7 +291,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="firebase-db.js?v=20261103"></script>
+<script src="firebase-db.js?v=20261123a"></script>
 <script src="opty-paradox.js?v=20261116c"></script>
 <script src="opty-match.js?v=20261118a"></script>
 <script src="opty-shape.js?v=20261116d"></script>
@@ -372,7 +372,7 @@ async function loadOrders() {
   ORDERS = []; ALL_ORDERS = []; KEYS = {};
   //  ALL_ORDERS — כל ההזמנות, לחיפוש (בן, 19/11: גם היסטוריה); ORDERS — 30 יום, לחיבור צורות
   Object.values(snap.val() || {}).forEach(o => {
-    if (!o || !o.id || o.isSample || o.isTest) return;
+    if (!o || !o.id || o.isSample || o.sqDeletedAt || o.isTest) return;
     const keys = Array.isArray(o.items) ? o.items.map((_, i) => i) : Object.keys(o.items || {});
     KEYS[o.id] = keys;
     const x = { id: o.id, orderNum: o.orderNum || '', orderClient: o.orderClient || o.client || '',

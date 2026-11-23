@@ -149,7 +149,7 @@ const OPTY_NOBATCH_MS = DAY;
 function lgOptyWithoutBatch(orders, now) {
   const out = [];
   for (const [id, o] of Object.entries(orders || {})) {
-    if (!o || typeof o !== 'object' || o.isTest === true || o.isSample === true || o.agentCancelled) continue;
+    if (!o || typeof o !== 'object' || o.isTest === true || o.isSample === true || o.sqDeletedAt || o.agentCancelled) continue;
     const t = Number(o.optyAt) || 0;
     if (!t || t > now || now - t > OPTY_NOBATCH_MS || o.drafterBatch != null) continue;
     const who = String(o.orderClient || o.client || '').trim();
