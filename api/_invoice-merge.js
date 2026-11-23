@@ -150,12 +150,25 @@ function _compactPage(doc, font, pic, img, h0) {
   const land = !!(pic && pic.width > pic.height);
   const page = doc.addPage(land ? [A4[1], A4[0]] : A4);
   const [W, H] = land ? [A4[1], A4[0]] : A4;
-  const M = 12, LINE = 18, SZ = 10;
+  //  בן 23/11: "שייראו את השמות של הלקוחות יותר גדול" + "הדף התחתון נחתך ולא רואים את המידה".
+  //  M=26 (~9 מ"מ) — מחוץ לשוליים שהמדפסת לא מדפיסה בהם (Brother ~4 מ"מ). קודם 12 (~4 מ"מ),
+  //  והסקיצה שנמתחה עד שם נחתכה בתחתית. שם הלקוח לבד, שחור ו-16; השאר אפור ו-10 משמאלו.
+  const M = 26, LINE = 26, SZ = 10, CSZ = 16;
+  const client = _visual(String(h0.client || '').trim());
   const parts = [String(h0.title || '').trim(), String(h0.info || '').trim()].filter(Boolean);
   const t = _visual(parts.join('   ·   '));
-  const ts = _fit(font, t, SZ, 7, W - 2 * M - 50);
-  page.drawText(t, { x: W - M - font.widthOfTextAtSize(t, ts), y: H - M - ts, size: ts, font, color: grey });
-  if (h0.total > 1) page.drawText((h0.idx + 1) + ' / ' + h0.total, { x: M, y: H - M - SZ, size: SZ, font, color: grey });
+  let x = W - M;
+  if (client) {
+    const cs = _fit(font, client, CSZ, 11, (W - 2 * M - 50) * 0.6);
+    x -= font.widthOfTextAtSize(client, cs);
+    page.drawText(client, { x, y: H - M - CSZ, size: cs, font, color: rgb(0, 0, 0) });
+    x -= 14;
+  }
+  if (t) {
+    const ts = _fit(font, t, SZ, 7, x - M - 50);
+    page.drawText(t, { x: x - font.widthOfTextAtSize(t, ts), y: H - M - CSZ, size: ts, font, color: grey });
+  }
+  if (h0.total > 1) page.drawText((h0.idx + 1) + ' / ' + h0.total, { x: M, y: H - M - CSZ, size: SZ, font, color: grey });
   const boxW = W - 2 * M, boxH = H - 2 * M - LINE;
   if (img && Array.isArray(img.lines)) {
     //  הזמנת טקסט — אותו עמוד רגיל (אין תמונה להגדיל)
