@@ -1340,7 +1340,14 @@ function _modEditHtml(o){
              aria-label="מק״ט שורה ${i+1}" placeholder="מק״ט" value="${lgEsc(it.sku||'')}" onchange="modItemSku(${i},this.value)">
       <button type="button" class="mit-del" onclick="modItemRemove(${i})" aria-label="מחק שורה ${i+1}"><span data-icon="x"></span></button>
     </div>`).join('');
-  return banner + (rows || '<div class="mit-empty">אין פריטים</div>') + `
+  //  בן 23/11 (L1347, 6 פריטים שהוזנו "שקוף" במקום "אסיד"): סוג זכוכית אחד לכל השורות בבת אחת
+  const all = items.length > 1 ? `
+    <div class="mit mit-add mit-all">
+      <span class="mit-n">סוג זכוכית לכל ${items.length} השורות:</span>
+      <input class="mit-in mit-sku" id="modAllSku" list="iwCodeList" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="מק״ט לכל השורות" placeholder="מק״ט">
+      <button type="button" class="mit-edit-btn" onclick="modItemSkuAll(document.getElementById('modAllSku').value)">החלף לכולן</button>
+    </div>` : '';
+  return banner + all + (rows || '<div class="mit-empty">אין פריטים</div>') + `
     <div class="mit mit-add">
       <input class="mit-in mit-sku" id="modAddSku" list="iwCodeList" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="מק״ט לשורה חדשה" placeholder="מק״ט">
       <input class="mit-in" id="modAddW" inputmode="decimal" aria-label="רוחב לשורה חדשה" placeholder="רוחב">
@@ -1414,6 +1421,17 @@ function modItemSku(i, code){
   _modDetach(items, it);
   Object.assign(it, f); delete it.skuMissing;
   _modSaveItems(o, items, '✓ סוג הזכוכית הוחלף');
+}
+function modItemSkuAll(code){
+  const o = orders.find(x => x.id === eid); if(!o) return;
+  const f = _modSkuFields(code);
+  if(!f){ showToast('מק"ט לא נמצא בקטלוג'); return; }
+  const items = _modItemsCopy(o);
+  if(!items.length || items.every(it => it.sku === f.sku)) return;
+  if(!confirm('להחליף את כל ' + items.length + ' השורות ל"' + f.name + '"? המידות נשארות.')) return;
+  //  כל השורות מקבלות אותו סוג — קבוצות הכמות נשארות שלמות
+  items.forEach(it => { Object.assign(it, f); delete it.skuMissing; });
+  _modSaveItems(o, items, '✓ סוג הזכוכית הוחלף בכל השורות');
 }
 function modItemRemove(i){
   const o = orders.find(x => x.id === eid); if(!o) return;
