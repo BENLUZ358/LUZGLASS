@@ -185,7 +185,74 @@ function _looksOk(b) {
   return jpg || png || webp;
 }
 
-//  { buf, mime } → { buf, mime, crop? } — JPEG חתוך, או המקור כמו שהוא
+//  ─── ניקוי צילום (בן, 23/11: "שזה ממש יהיה גדול כדי שהמידות יהיו מובנות") ───
+//  צילום של דף מהטלפון: הנייר אפור, יש צל, והעט (לרוב כחול) חלש — במדפסת שחור-לבן
+//  המספרים יוצאים אפור על אפור. מחלקים בתמונת הרקע (הנייר בלי הדיו) — הנייר נהיה
+//  לבן והצל נעלם — ואז מכהים את הקווים. סקיצה מהמערכת (רקע לבן) ורקע שחור — לא נוגעים.
+const BG_SIDE = 320;       // צד ארוך של העותק שעליו מחשבים את הרקע
+
+function _maxBlur(src, w, h, r, max) {
+  const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let m = max ? 0 : 0, s = 0, c = 0;
+    for (let d = Math.max(0, x - r); d <= Math.min(w - 1, x + r); d++) { const v = src[y * w + d]; if (max) { if (v > m) m = v; } else { s += v; c++; } }
+    tmp[y * w + x] = max ? m : Math.round(s / c);
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let m = 0, s = 0, c = 0;
+    for (let d = Math.max(0, y - r); d <= Math.min(h - 1, y + r); d++) { const v = tmp[d * w + x]; if (max) { if (v > m) m = v; } else { s += v; c++; } }
+    out[y * w + x] = max ? m : Math.round(s / c);
+  }
+  return out;
+}
+
+//  אחוזון של מערך ערכים 0..255
+function _pct(a, q) {
+  const h = new Array(256).fill(0);
+  for (const v of a) h[v]++;
+  let c = 0;
+  for (let v = 0; v < 256; v++) { c += h[v]; if (c >= a.length * q) return v; }
+  return 255;
+}
+
+//  רקע של עותק אפור קטן → { bg, dark } ; dark = הנייר אפור / יש צל
+function lgPaperBg(g, w, h) {
+  const r = Math.max(2, Math.round(Math.max(w, h) / 80));
+  const bg = _maxBlur(_maxBlur(g, w, h, r, true), w, h, r * 2, false);
+  const med = _pct(bg, 0.5), low = _pct(bg, 0.1), raw = _pct(g, 0.5);
+  //  רקע שחור (ציור בטלפון) — רוב התמונה כהה; ניקוי היה הופך אותו לרעש
+  return { bg, med, low, dark: raw >= 110 && (med < 232 || low < 200) };
+}
+
+//  רמות: נייר (מעל 230) לבן; כל קו (מתחת ל-180) מוכהה בחצי — עיפרון ועט חלש
+//  יוצאים כהים במדפסת שחור-לבן; ובאמצע מעבר רך כדי שלא יהיו קצוות משוננים
+const _lvl = v => v >= 230 ? 255 : v <= 180 ? Math.round(v * 0.55) : Math.round(99 + (v - 180) * 156 / 50);
+
+//  ציור על canvas (W×H) — מנקה במקום. מחזיר true אם ניקה.
+function _clean(ctx, W, H, createCanvas) {
+  const k = Math.min(1, BG_SIDE / Math.max(W, H));
+  const w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k));
+  const sc = createCanvas(w, h), sx = sc.getContext('2d');
+  sx.drawImage(ctx.canvas, 0, 0, w, h);
+  const sd = sx.getImageData(0, 0, w, h).data;
+  const g = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) g[i] = Math.round((sd[i * 4] + sd[i * 4 + 1] + sd[i * 4 + 2]) / 3);
+  const P = lgPaperBg(g, w, h);
+  if (!P.dark) return false;
+  const id = ctx.getImageData(0, 0, W, H), d = id.data;
+  for (let y = 0; y < H; y++) {
+    const yy = Math.min(h - 1, Math.floor(y * k));
+    for (let x = 0; x < W; x++) {
+      const b = P.bg[yy * w + Math.min(w - 1, Math.floor(x * k))] || 1;
+      const i = (y * W + x) * 4;
+      for (let c = 0; c < 3; c++) d[i + c] = _lvl(Math.min(255, Math.round(d[i + c] * 255 / b)));
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+  return true;
+}
+
+//  { buf, mime } → { buf, mime, crop?, cleaned? } — JPEG חתוך ו/או מנוקה, או המקור כמו שהוא
 async function lgFitSketch(img) {
   if (!img || !img.buf || !/^image\//.test(String(img.mime || ''))) return img;
   //  ⚠️ קובץ שבור/קצר מפיל את @napi-rs/canvas עם panic שלא נתפס (כל התהליך נופל) —
@@ -196,23 +263,33 @@ async function lgFitSketch(img) {
     const pic = await loadImage(img.buf);
     const W = pic.width, H = pic.height;
     if (!W || !H) return img;
+    //  קודם מנקים את כל התמונה, ואז חותכים: אפור של הנייר ושקיפות של דפים מתחת
+    //  כבר לבנים, כך שהחיתוך נצמד לציור עצמו והוא יוצא גדול יותר בעמוד
+    const full = createCanvas(W, H);
+    const f = full.getContext('2d');
+    f.fillStyle = '#fff'; f.fillRect(0, 0, W, H);
+    f.drawImage(pic, 0, 0, W, H);
+    const cleaned = _clean(f, W, H, createCanvas);
     const k = Math.min(1, WORK / Math.max(W, H));
     const w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k));
     const c = createCanvas(w, h);
     const ctx = c.getContext('2d');
-    ctx.drawImage(pic, 0, 0, w, h);
+    ctx.drawImage(full, 0, 0, w, h);
     const box = lgSketchCropBox(ctx.getImageData(0, 0, w, h).data, w, h);
-    if (!box) return img;
+    if (!box && !cleaned) return img;
+    if (!box) return { buf: full.toBuffer('image/jpeg', 88), mime: 'image/jpeg', cleaned: true };
     const X = Math.floor(box.x / k), Y = Math.floor(box.y / k);
     const CW = Math.min(W - X, Math.ceil(box.w / k)), CH = Math.min(H - Y, Math.ceil(box.h / k));
     const out = createCanvas(CW, CH);
     const o = out.getContext('2d');
     o.fillStyle = '#fff'; o.fillRect(0, 0, CW, CH);
-    o.drawImage(pic, X, Y, CW, CH, 0, 0, CW, CH);
-    return { buf: out.toBuffer('image/jpeg', 88), mime: 'image/jpeg', crop: { x: X, y: Y, w: CW, h: CH, of: [W, H] } };
+    o.drawImage(full, X, Y, CW, CH, 0, 0, CW, CH);
+    const r = { buf: out.toBuffer('image/jpeg', 88), mime: 'image/jpeg', crop: { x: X, y: Y, w: CW, h: CH, of: [W, H] } };
+    if (cleaned) r.cleaned = true;
+    return r;
   } catch (_) {
     return img;
   }
 }
 
-module.exports = { lgFitSketch, lgSketchCropBox };
+module.exports = { lgFitSketch, lgSketchCropBox, lgPaperBg };

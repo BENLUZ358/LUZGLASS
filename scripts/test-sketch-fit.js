@@ -58,6 +58,18 @@ const pen = (x, color) => { x.strokeStyle = color || '#1a2a9a'; x.lineWidth = 6;
   const SRC = fs.readFileSync(path.join(ROOT, 'api', '_drafter-batch.js'), 'utf8');
   check('drafter items crop the sketch image', /const d = d0 && \/\^image\\\/\/\.test\(d0\.mime\) && !\/svg\/\.test\(d0\.mime\) \? await require\('\.\/_sketch-fit'\)\.lgFitSketch\(d0\) : d0;/.test(SRC), true);
 
+  //  7. ניקוי (בן, 23/11): צילום עם נייר אפור ועט חלש → נייר לבן, קו כהה; רקע שחור — לא נוגעים
+  const grey = jpg(x => { const g = x.createLinearGradient(0, 0, 1080, 0); g.addColorStop(0, '#9a9a9a'); g.addColorStop(1, '#c8c8c8');
+    x.fillStyle = g; x.fillRect(0, 0, 1080, 1920); x.strokeStyle = '#5a5f80'; x.lineWidth = 5; x.strokeRect(150, 300, 780, 1300); x.strokeRect(300, 600, 300, 500); });
+  const r7 = await F.lgFitSketch(grey);
+  check('grey photo → cleaned', !!r7.cleaned, true);
+  const px = async (img, X, Y) => { const p = await loadImage(img.buf); const c = createCanvas(p.width, p.height); const t = c.getContext('2d'); t.drawImage(p, 0, 0);
+    const off = img.crop ? [img.crop.x, img.crop.y] : [0, 0]; return t.getImageData(X - off[0], Y - off[1], 1, 1).data[0]; };
+  check('paper turns white', (await px(r7, 750, 400)) > 235, true);
+  const lv = Math.min(await px(r7, 149, 900), await px(r7, 150, 900), await px(r7, 151, 900)); check('faint line turns dark (' + lv + ')', lv < 110, true);
+  const night = jpg(x => { x.fillStyle = '#000'; x.fillRect(0, 0, 1080, 1920); x.strokeStyle = '#3f6'; x.lineWidth = 8; x.strokeRect(100, 100, 880, 1700); });
+  check('black background → not cleaned', !!(await F.lgFitSketch(night)).cleaned, false);
+
   if (failed) { console.error(`\n${failed} check(s) failed.`); process.exit(1); }
   console.log('\nAll sketch-fit checks passed.');
 })().catch(e => { console.error(e); process.exit(1); });
