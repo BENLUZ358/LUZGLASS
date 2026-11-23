@@ -98,11 +98,11 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       h += '<div class="drb-body">';
       if ((st.basket || []).length) h += '<button type="button" class="btn btn-secondary drb-btn drb-preview" id="drbPreview">הצג טיוטה (PDF)</button>';
       h += (st.basket || []).length
-        ? '<ul class="drb-list">' + st.basket.map(it => '<li><span>' + esc(drafterItemLine(it)) + '</span>'
+        ? '<ul class="drb-list">' + st.basket.map(it => '<li><span>' + esc(drafterItemLine(it)) + '</span>' + (window.lgSketchEditor ? '<button type="button" class="btn btn-ghost drb-mini" data-edit="' + esc(it.id) + '" data-title="' + esc(drafterItemLine(it)) + '">✏️ ערוך</button>' : '')
             + '<button type="button" class="btn btn-ghost drb-mini" data-hold="' + esc(it.id) + '">לא לשלוח עכשיו</button></li>').join('') + '</ul>'
         : '<p class="drb-empty">עוד לא נכנסה הזמנה. כל הזמנה שתשלח לחשבשבת תיכנס לכאן.</p>';
       if ((st.held || []).length) {
-        h += '<div class="drb-sub">לא לשלוח עכשיו</div><ul class="drb-list drb-held">' + st.held.map(it => '<li><span>' + esc(drafterItemLine(it)) + '</span>'
+        h += '<div class="drb-sub">לא לשלוח עכשיו</div><ul class="drb-list drb-held">' + st.held.map(it => '<li><span>' + esc(drafterItemLine(it)) + '</span>' + (window.lgSketchEditor ? '<button type="button" class="btn btn-ghost drb-mini" data-edit="' + esc(it.id) + '" data-title="' + esc(drafterItemLine(it)) + '">✏️ ערוך</button>' : '')
           + '<button type="button" class="btn btn-secondary drb-mini" data-unhold="' + esc(it.id) + '">החזר</button></li>').join('') + '</ul>';
       }
       if (m.open.length) {
@@ -151,6 +151,8 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       busy = false;
       await refresh(r.ok ? '' : (r.message || 'לא הצליח'));
     }; });
+    // ✏️ ערוך (בן, 23/11): הזמנה שכבר יצאה מהתור לחשבשבת — עריכת הסקיצה לפני השליחה לשרטט
+    box.querySelectorAll('[data-edit]').forEach(btn => { btn.onclick = () => editSketch(btn.dataset.edit, btn.dataset.title || ''); });
     box.querySelectorAll('.drb-resend').forEach(btn => { btn.onclick = async () => {
       if (busy) return;
       const n = Number(btn.dataset.n);
@@ -168,6 +170,36 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (function 
       busy = false;
       await refresh(r.ok ? drafterDoneText(r) : 'לא הצליח: ' + (r.message || ''));
     };
+  }
+
+  // אותו עורך ואותה שמירה כמו בתור הסקיצות (admin.html sqOpenEditor/sqSaveEdit): הסקיצה של
+  // ההזמנה מתעדכנת, ולכן גם קובץ השרטט (api/_drafter-batch.js קורא את sketches/<id>).
+  async function editSketch(id, title) {
+    if (busy || !id || !window.lgSketchEditor) return;
+    busy = true; draw('פותח את הסקיצה…');
+    let order, current, saved;
+    try {
+      const snap = await _lgDb.ref('orders/' + id).once('value');
+      order = Object.assign({}, snap.val() || {}, { id });
+      current = await lgLoadSketch(order);
+      saved = current ? await lgLoadSketchLayer(id).catch(() => null) : null;
+    } catch (e) {
+      busy = false; draw('לא הצלחתי לפתוח את הסקיצה: ' + (e.message || e)); return;
+    }
+    busy = false;
+    if (!current) { draw('אין להזמנה הזאת סקיצה לערוך'); return; }
+    draw();
+    const src = typeof sqEditorSource === 'function' ? sqEditorSource(current, saved) : { base: current, layer: null, writeBase: true };
+    lgSketchEditor.open({
+      title: title || 'סקיצה',
+      baseSrc: src.base,
+      layer: src.layer,
+      output: { mime: 'image/jpeg', minW: 1200, maxB64: 6.5 * 1024 * 1024 },
+      onSave: async ({ mergedSrc, layer }) => {
+        await lgReplaceSketch(order, mergedSrc, { layer, base: src.writeBase ? src.base : undefined });
+        draw('✓ הסקיצה נשמרה — בקובץ לשרטט היא תצא מתוקנת');
+      },
+    });
   }
 
   async function refresh(msg) {

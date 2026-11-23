@@ -426,7 +426,7 @@ label.msec-t{display:block;}
   <script src="sku-picker.js"></script>
   <script src="lg-health.js?v=20261020"></script>
   <script src="sketch-reader-ui.js?v=20261023h"></script>
-  <script src="drafter-batch.js?v=20261111"></script>
+  <script src="drafter-batch.js?v=202611231"></script>
   <script src="lg-qr.js?v=20261117"></script><script src="avivi-wrap.js?v=20261118b"></script><script src="print-labels.js?v=20261117d"></script>
   <script src="opty-shape.js?v=20261116d"></script>
   <script src="opty-layout.js?v=20261118a"></script>
@@ -3500,7 +3500,8 @@ document.addEventListener('visibilitychange', () => {
 .drb-btn{min-height:44px;}
 .drb-body{max-height:50vh;overflow:auto;margin-top:8px;}
 .drb-list{list-style:none;margin:0;padding:0;font-size:14px;}
-.drb-list li{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);}
+.drb-list li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:6px 0;border-bottom:1px solid var(--border);}
+.drb-list li>span{flex:1 1 100%;}
 .drb-held li span{color:var(--muted);}
 .drb-mini{min-height:44px;padding:4px 10px;font-size:13px;white-space:nowrap;}
 .drb-sub{margin:12px 0 4px;font-size:13px;font-weight:600;color:var(--muted);}
