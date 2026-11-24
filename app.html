@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- אפליקציה במסך הבית (בן, 24/11): אייקון LuzGlass, נפתח בלי שורת הדפדפן -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="theme-color" content="#1a1714">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="LuzGlass">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>LuzGlass במסך הבית</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;900&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#f7f4ef;color:#1a1714;font-family:Heebo,sans-serif;}
+  header{background:#1a1714;color:#f7f4ef;padding:22px 16px 26px;text-align:center;}
+  .logo{font:700 28px "Playfair Display",serif;} .logo b{color:#b8922a;}
+  header p{margin-top:8px;font-size:15px;color:rgba(247,244,239,.75);}
+  main{max-width:560px;margin:0 auto;padding:16px;}
+  h2{font-size:19px;font-weight:900;margin:18px 0 10px;}
+  video{width:100%;border-radius:10px;background:#000;display:block;}
+  .tabs{display:flex;gap:8px;margin-top:6px;}
+  .tabs button{flex:1;min-height:46px;border:1px solid #d8d1c4;background:#fff;border-radius:999px;font:700 15px Heebo,sans-serif;color:#1a1714;cursor:pointer;}
+  .tabs button[aria-pressed="true"]{background:#1a1714;color:#f7f4ef;border-color:#1a1714;}
+  ol{margin:14px 0 0;padding-inline-start:22px;font-size:16px;line-height:1.8;}
+  .go{display:flex;align-items:center;justify-content:center;min-height:52px;margin-top:22px;background:#b8922a;color:#1a1714;border-radius:10px;font-weight:900;font-size:17px;text-decoration:none;}
+  .go.alt{background:#fff;border:1px solid #d8d1c4;margin-top:10px;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Luz<b>Glass</b></div>
+  <p>שמים את LuzGlass במסך הבית — ונכנסים לפורטל בלחיצה אחת</p>
+</header>
+<main>
+  <div class="tabs" role="group" aria-label="איזה טלפון יש לך">
+    <button type="button" data-os="ios">אייפון</button>
+    <button type="button" data-os="android">גלקסי / אנדרואיד</button>
+  </div>
+  <h2 id="ttl"></h2>
+  <video id="vid" controls playsinline preload="metadata"></video>
+  <ol id="steps"></ol>
+  <a class="go" href="/portal.html">כניסה לפורטל</a>
+  <a class="go alt" href="/portal.html?pw=1">🔑 החלפת סיסמה</a>
+</main>
+<script>
+const OS = {
+  ios: { t: 'אייפון — דרך ספארי', v: '/media/home-iphone.mp4',
+    s: ['פותחים את luzglass.vercel.app בספארי', 'לוחצים על כפתור השיתוף ⬆︎ למטה', 'לוחצים "הוסף למסך הבית"', 'לוחצים "הוסף" למעלה'] },
+  android: { t: 'גלקסי / אנדרואיד — דרך כרום', v: '/media/home-galaxy.mp4',
+    s: ['פותחים את luzglass.vercel.app בכרום', 'לוחצים על שלוש הנקודות ⋮ למעלה', 'לוחצים "הוספה למסך הבית" (או "התקנת האפליקציה")', 'לוחצים "הוספה" / "התקנה"'] },
+};
+function pick(os) {
+  const o = OS[os];
+  document.querySelectorAll('[data-os]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.os === os)));
+  document.getElementById('ttl').textContent = o.t;
+  const v = document.getElementById('vid'); if (v.getAttribute('src') !== o.v) v.src = o.v;
+  document.getElementById('steps').innerHTML = o.s.map(x => '<li>' + x + '</li>').join('');
+}
+document.querySelectorAll('[data-os]').forEach(b => b.addEventListener('click', () => pick(b.dataset.os)));
+pick(/iphone|ipad|ipod|macintosh/i.test(navigator.userAgent) && !/android/i.test(navigator.userAgent) ? 'ios' : 'android');
+</script>
+</body>
+</html>

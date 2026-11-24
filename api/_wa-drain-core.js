@@ -149,6 +149,34 @@ async function drainKeys(db, provider, keys, by, started, budgetMs = BUDGET_MS) 
     //  ⚠️ orderIds ממוינים בתור, ולכן "הראשונה" היא מקרית. חשבונית עם הזמנה ידנית
     //  (בן, 13/11) נפתרת תמיד דרך ההזמנה הידנית — אחרת חשבונית מעורבת (ידנית + הזמנת
     //  קבוצה ישנה של אותו כרטיס) הייתה יוצאת לקבוצה במקום לנייד שבן רשם.
+    //  הודעה כללית ללקוח פורטל (בן, 24/11: סרטון מסך הבית + החלפת סיסמה) — בלי הזמנה.
+    //  הנמען חייב להיות טלפון כניסה של לקוח (users/<נייד>, role client); השער כמו בקישור.
+    if (entry.kind === 'notice') {
+      const to = String(entry.to || '');
+      const u  = /^05\d{8}$/.test(to) ? (await db.ref('users/' + to).once('value')).val() : null;
+      const g  = u && u.role === 'client'
+        ? provider.gate({ phone: to, accountKey: String(u.customerId || ''), linked: true })
+        : { allowed: false, reason: 'הנמען אינו לקוח פורטל עם נייד' };
+      if (!g.allowed || !provider.configured) {
+        const why = !g.allowed ? g.reason : 'הספק אינו מוגדר בסביבה הזו';
+        await lgWaComplete(db, key, { ok: false, reason: why });
+        results.push({ key, status: 'blocked', reason: why });
+        continue;
+      }
+      const out = await provider.send({ to, kind: 'notice', clientName: entry.clientName, orderNums: [], sketchNames: [],
+                                        extraLines: entry.extraLines || [] });
+      if (!out.ok && out.failureKind === 'disconnected') {
+        await lgWaRelease(db, key, out.reason || 'WhatsApp מנותק');
+        results.push({ key, status: 'waiting', reason: 'WhatsApp מנותק — ההודעה ממתינה' });
+        state = 'notAuthorized';
+        break;
+      }
+      await lgWaComplete(db, key, out);
+      processed++;
+      results.push({ key, status: out.ok ? 'sent' : 'error', orderNums: [], reason: out.reason || null });
+      continue;
+    }
+
     let firstId = (entry.orderIds || [])[0];
     let order   = firstId ? (await db.ref('orders/' + firstId).once('value')).val() : null;
     if (entry.kind === 'invoice' && !(order && order.source === 'manual')) {

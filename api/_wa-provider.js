@@ -126,6 +126,8 @@ ${BUSINESS}`;
   if (kind === 'drafter-batch') return extra.join('\n');
   //  התראת תקלה לבן (_agent-ben.js) — מייל פנימי, הטקסט קבוע של המערכת
   if (kind === 'agent-alarm') return extra.join('\n');
+  //  הודעה כללית ללקוח פורטל (בן, 24/11) — השורות כמו שהן, כולל שורות ריקות בין פסקאות
+  if (kind === 'notice') return (extraLines || []).map(s => String(s == null ? '' : s)).join('\n').trim();
   if (kind === 'broken-returned') {
     const doc = docNumber ? ' (חשבונית ' + String(docNumber) + ')' : '';
     return `שלום ${who},\n\n${extra.join('\n')}\nהחשבונית כבר יצאה על כל ההזמנה${doc}.\n\n${BUSINESS}`;
