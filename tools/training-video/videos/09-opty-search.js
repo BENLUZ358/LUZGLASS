@@ -36,45 +36,23 @@ export function seed() {
 }
 
 export async function script(r) {
-  r.card({ kind: 'title', title: 'איפה ההזמנה?', sub: 'חיפוש בדף אופטי-ווי · לכל העובדים',
-    bullets: ['מחפשים לפי **מספר הזמנה, שם לקוח או מידה** — או כמה יחד', 'רואים **מתי נחתך** ו**איפה זה עכשיו**', 'גם זכוכית שעוד **לא במערכת**'] });
+  //  בן, 24/11: קצר ומעשי — בלי פתיחה ארוכה, מראים איך מגיעים לדף ואז מחפשים
+  await r.open('admin.html', { wait: '#unavSidebar a[href="opty.html"]' });
+  await r.show({ focus: '#unavSidebar', mark: '#unavSidebar a[href="opty.html"]',
+    text: 'בתפריט, למטה תחת **הגדרות** — לוחצים **אופטי-ווי**.', hold: 3.2 });
 
   await r.open('opty.html', { wait: '#hQ' });
-  await r.show({ focus: ['.tabs', '.hbar'], mark: '#hQ',
-    text: 'נכנסים ל**אופטי-ווי**. למעלה **🔍 חיפוש** — ושורת חיפוש אחת. זה כל מה שצריך.', hold: 5 });
+  await r.type({ target: '#hQ', value: 'L9401', focus: '.hbar', text: 'בשורת החיפוש מקלידים **מספר הזמנה**.' });
+  await r.show({ focus: '#hubOut .hord', mark: ['#hubOut .hcut', '#hubOut .hit .pill'],
+    text: '✂ **מתי נחתך** · התגית מימין = **איפה זה עכשיו** (כאן: בחיסום).', hold: 4 });
 
-  r.chapter('לפי מספר הזמנה');
-  await r.type({ target: '#hQ', value: 'L9401', focus: '.hbar', text: 'מקלידים את **מספר ההזמנה**.' });
-  await r.show({ focus: '#hubOut .hord', mark: '#hubOut .hord header',
-    text: 'הכרטיס של ההזמנה: מספר, לקוח, שם הסקיצה — ותגית קטנה **"במערכת"**.', hold: 4.5 });
-  await r.show({ focus: '#hubOut .hord', mark: { sel: '#hubOut .hcut', nth: 0 },
-    text: 'בכל זכוכית — **מתי נחתכה**: ✂ נחתך + היום והתאריך.', hold: 4.5 });
-  await r.show({ focus: '#hubOut .hord', mark: { sel: '#hubOut .hit .pill', nth: 0 },
-    text: 'ומימין — **איפה היא עכשיו**: כאן **בחיסום**. ככה יודעים בדיוק מה לענות ללקוח.', hold: 5 });
-  await r.click({ target: { sel: '#hubOut .hit .hdim', nth: 0 }, focus: '#hubOut .hord',
-    text: 'רוצים עוד פרטים? לוחצים על הזכוכית.',
-    after: 'נפתח מספר האופטימיזציה, מספר הצורה, והכפתורים **📐 צורה** ו**ללוח**. לחיצה נוספת סוגרת.', afterMark: { sel: '#hubOut .hx', nth: 0 } });
+  await r.type({ target: '#hQ', value: 'השרון', focus: '.hbar', text: 'או **חלק משם הלקוח**.', hold: 1.2 });
+  await r.show({ focus: '#hubOut', mark: '#hubOut .hord', text: '⏳ לחיתוך היום · **מתוכנן לחיתוך**.', hold: 3 });
 
-  r.chapter('לפי שם לקוח');
-  await r.type({ target: '#hQ', value: 'השרון', focus: '.hbar', text: 'אפשר גם **חלק משם הלקוח**.' });
-  await r.show({ focus: '#hubOut', mark: '#hubOut .hord',
-    text: 'כל ההזמנות של הלקוח. כאן: **⏳ לחיתוך היום**, והמצב — **מתוכנן לחיתוך**.', hold: 5 });
+  await r.type({ target: '#hQ', value: '1985', focus: '.hbar', text: 'או **מספר מהמידה**.', hold: 1.2 });
+  await r.show({ focus: '#hubOut', mark: '#hubOut .hord.out .htag',
+    text: 'מופיע גם מה ש**לא במערכת** (קו מקווקו) — עם מתי נחתך ומה המצב.', hold: 4 });
 
-  r.chapter('לפי מידה');
-  await r.type({ target: '#hQ', value: '1985', focus: '.hbar', text: 'יש רק מידה? מקלידים **מספר אחד מהמידה**.' });
-  await r.show({ focus: '#hubOut', wide: false, mark: '#hubOut .hsum',
-    text: 'מופיע כל מה שיש בו 1985 — **הזמנות במערכת**, וגם **זכוכיות שלא במערכת**.', hold: 5 });
-  await r.show({ focus: '#hubOut .hord.out', mark: '#hubOut .hord.out .htag',
-    text: 'כרטיס עם קו מקווקו ותגית **"לא במערכת"** = זכוכית שנחתכה באופטי-ווי, אבל אין לה הזמנה אצלנו. גם לה רואים **מתי נחתכה** ו**מה המצב**.', hold: 6.5 });
-
-  r.chapter('כמה פרמטרים יחד');
-  await r.type({ target: '#hQ', value: '1985 הים', focus: '.hbar', text: 'יותר מדי תוצאות? מוסיפים עוד מילה — **מידה + לקוח**.' });
-  await r.show({ focus: '#hubOut', mark: '#hubOut .hord',
-    text: 'נשאר רק מה שמתאים **לשניהם**. אפשר לשלב: מידה, לקוח, שם סקיצה, מספר הזמנה.', hold: 5 });
-  await r.type({ target: '#hQ', value: '885x1985', focus: '.hbar', text: 'מידה מלאה? כותבים **רוחב x גובה**.' });
-  await r.show({ focus: '#hubOut', mark: '#hubOut .hit.on',
-    text: 'הזכוכית שמתאימה **מודגשת בצהוב**.', hold: 4.5 });
-
-  r.card({ title: 'לסיכום', bullets: ['🔍 חיפוש → מקלידים **מספר הזמנה / לקוח / מידה**', '✂ = **מתי נחתך** · התגית הצבעונית = **איפה עכשיו**',
-    '"במערכת" / **"לא במערכת"** — רשום בקטן על כל כרטיס', 'לא מצאת? נסה רק מספר אחד מהמידה, או חלק מהשם'] });
+  await r.type({ target: '#hQ', value: '1985 הים', focus: '.hbar', text: 'הרבה תוצאות? **מידה + לקוח** יחד.', hold: 1.2 });
+  await r.show({ focus: '#hubOut', mark: '#hubOut .hord', text: 'נשאר רק מה שמתאים לשניהם. זהו!', hold: 3 });
 }
