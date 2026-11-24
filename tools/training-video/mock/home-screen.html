@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מסך הבית — הדגמה</title>
+<!-- דף הדגמה לסרטון בלבד (בן, 24/11): טלפון מצויר, כל לחיצה מעבירה לשלב הבא. ?os=ios | android -->
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#efeae2;font-family:Heebo,"Segoe UI",Arial,sans-serif;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .stage{display:flex;align-items:center;gap:70px;}
+  .side{width:520px;color:#1a1714;}
+  .side h1{font-size:46px;font-weight:900;margin-bottom:12px;}
+  .side .os{display:inline-block;font-size:22px;font-weight:700;background:#1a1714;color:#f7f4ef;border-radius:999px;padding:6px 18px;margin-bottom:22px;}
+  .side ol{font-size:26px;line-height:1.9;padding-inline-start:30px;}
+  .side li.now{font-weight:900;color:#8a6a12;}
+  .side li.done{color:#8a8278;text-decoration:line-through;}
+  .phone{width:390px;height:800px;border-radius:54px;background:#111;padding:14px;box-shadow:0 30px 70px rgba(0,0,0,.35);position:relative;}
+  .scr{width:100%;height:100%;border-radius:42px;overflow:hidden;position:relative;background:#fff;}
+  .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:120px;height:32px;background:#111;border-radius:20px;z-index:50;}
+  .android .notch{width:14px;height:14px;top:14px;border-radius:50%;}
+  .sb{height:50px;display:flex;justify-content:space-between;align-items:flex-end;padding:0 28px 6px;font-size:15px;font-weight:700;direction:ltr;}
+  .view{position:absolute;inset:0;display:none;}
+  .view.on{display:block;}
+  /* האתר בתוך הדפדפן */
+  .site{position:absolute;top:50px;left:0;right:0;bottom:84px;background:#f7f4ef;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+  .site .logo{font:900 40px Georgia,serif;color:#1a1714;}
+  .site .logo b{color:#b8922a;}
+  .site .f{width:250px;height:46px;border:1px solid #d8d1c4;background:#fff;border-radius:6px;}
+  .site .btn{width:250px;height:48px;background:#1a1714;color:#f7f4ef;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;}
+  /* iOS ספארי: שורת כתובת למטה */
+  .ios-bar{position:absolute;left:0;right:0;bottom:0;height:84px;background:#f2f2f2;border-top:1px solid #ddd;padding:8px 14px;}
+  .ios-url{height:34px;background:#e3e3e8;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;direction:ltr;color:#222;}
+  .ios-tools{display:flex;justify-content:space-around;align-items:center;height:36px;font-size:22px;color:#0a84ff;direction:ltr;}
+  .ios-tools span{width:44px;height:36px;display:flex;align-items:center;justify-content:center;}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#f2f2f7;border-radius:16px 16px 0 0;padding:14px 14px 30px;box-shadow:0 -8px 30px rgba(0,0,0,.25);}
+  .sheet .hd{display:flex;align-items:center;gap:10px;padding:6px 4px 14px;border-bottom:1px solid #ddd;margin-bottom:10px;}
+  .ic{width:44px;height:44px;border-radius:10px;background:#1a1714;display:flex;align-items:center;justify-content:center;font:900 20px Georgia,serif;flex:none;}
+  .ic i{font-style:normal;color:#f7f4ef;} .ic b{color:#b8922a;}
+  .grp{background:#fff;border-radius:12px;overflow:hidden;margin-top:10px;}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;font-size:17px;border-bottom:1px solid #eee;}
+  .row:last-child{border-bottom:none;}
+  .row .g{font-size:20px;color:#555;}
+  .dim{position:absolute;inset:0;background:rgba(0,0,0,.25);}
+  .addscr{position:absolute;inset:0;background:#f2f2f7;padding-top:50px;}
+  .addscr .top{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;font-size:17px;}
+  .addscr .top .b{color:#0a84ff;font-weight:700;padding:6px 10px;}
+  .addscr .top .c{color:#0a84ff;padding:6px 10px;}
+  .addscr .card{background:#fff;margin:20px 16px;border-radius:12px;padding:16px;display:flex;gap:14px;align-items:center;}
+  .addscr .card .ic{width:62px;height:62px;font-size:28px;border-radius:14px;}
+  .addscr .nm{font-size:18px;border-bottom:1px solid #eee;padding-bottom:8px;margin-bottom:6px;}
+  .addscr .u{font-size:13px;color:#888;direction:ltr;text-align:right;}
+  /* מסך הבית */
+  .home{position:absolute;inset:0;background:linear-gradient(160deg,#5b6f8a,#2d3a4c 60%,#1d2533);padding:70px 22px 0;}
+  .apps{display:grid;grid-template-columns:repeat(4,1fr);gap:22px 10px;}
+  .app{display:flex;flex-direction:column;align-items:center;gap:6px;color:#fff;font-size:12px;}
+  .app .a{width:62px;height:62px;border-radius:15px;}
+  .app .ic{width:62px;height:62px;font-size:26px;border-radius:15px;}
+  .app.new .ic{box-shadow:0 0 0 4px #ffd75e,0 0 26px #ffd75e;animation:pulse 1.4s infinite;}
+  @keyframes pulse{50%{box-shadow:0 0 0 7px #ffd75e,0 0 40px #ffd75e;}}
+  .android .home{background:linear-gradient(170deg,#3d5a4a,#1f2f27);}
+  .android .app .a,.android .app .ic{border-radius:50%;}
+  /* אנדרואיד כרום: שורת כתובת למעלה */
+  .ch-bar{position:absolute;top:50px;left:0;right:0;height:56px;background:#fff;border-bottom:1px solid #e3e3e3;display:flex;align-items:center;gap:8px;padding:0 10px;direction:ltr;}
+  .ch-url{flex:1;height:38px;background:#f1f3f4;border-radius:19px;display:flex;align-items:center;padding:0 14px;font-size:15px;color:#222;}
+  .ch-dots{width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#444;}
+  .android .site{top:106px;bottom:0;}
+  .menu{position:absolute;top:60px;right:8px;width:250px;background:#fff;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.3);padding:6px 0;}
+  .menu .row{font-size:16px;padding:13px 16px;border:none;}
+  .dlg{position:absolute;left:24px;right:24px;top:260px;background:#fff;border-radius:24px;padding:22px;box-shadow:0 10px 40px rgba(0,0,0,.35);}
+  .dlg h3{font-size:20px;margin-bottom:16px;}
+  .dlg .card{display:flex;gap:12px;align-items:center;margin-bottom:22px;}
+  .dlg .btns{display:flex;justify-content:flex-start;gap:20px;font-size:16px;font-weight:700;color:#1a73e8;}
+  .dlg .btns span{padding:8px 6px;}
+  .tap{cursor:pointer;}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="phone" id="phone"><div class="scr"><div class="notch"></div>
+    <!-- נבנה לפי ?os -->
+    <div id="views"></div>
+  </div></div>
+  <div class="side">
+    <div class="os" id="osName"></div>
+    <h1>LuzGlass במסך הבית</h1>
+    <ol id="steps"></ol>
+  </div>
+</div>
+<script>
+const OS = new URLSearchParams(location.search).get('os') === 'android' ? 'android' : 'ios';
+const ICON = '<div class="ic"><i>L</i><b>G</b></div>';
+const SITE = '<div class="site"><div class="logo">Luz<b>Glass</b></div><div class="f"></div><div class="f"></div><div class="btn">כניסה</div></div>';
+const SB = '<div class="sb"><span>9:41</span><span>▮▮▮ ◔</span></div>';
+const APPS = n => Array.from({ length: n }, (_, i) => `<div class="app"><div class="a" style="background:hsl(${i * 37 % 360},45%,55%)"></div><span>אפליקציה</span></div>`).join('');
+const HOME = `<div class="home"><div class="apps">${APPS(10)}<div class="app new" id="newApp">${ICON}<span>LuzGlass</span></div></div></div>`;
+const V = OS === 'ios' ? {
+  name: 'אייפון · ספארי',
+  steps: ['פותחים את luzglass.vercel.app בספארי', 'לוחצים על כפתור השיתוף ⬆︎', 'גוללים ולוחצים "הוסף למסך הבית"', 'לוחצים "הוסף" למעלה', 'האייקון מופיע במסך הבית'],
+  views: [
+    SB + SITE + '<div class="ios-bar"><div class="ios-url">🔒 luzglass.vercel.app</div><div class="ios-tools"><span>‹</span><span>›</span><span class="tap" id="share" data-go="1">⬆︎</span><span>📖</span><span>⧉</span></div></div>',
+    SB + SITE + '<div class="dim"></div><div class="sheet"><div class="hd">' + ICON + '<div><b>LuzGlass</b><div style="font-size:13px;color:#888;direction:ltr;text-align:right">luzglass.vercel.app</div></div></div>' +
+      '<div class="grp"><div class="row"><span>העתק</span><span class="g">⧉</span></div><div class="row"><span>הוסף לרשימת קריאה</span><span class="g">👓</span></div><div class="row"><span>הוסף סימנייה</span><span class="g">📖</span></div></div>' +
+      '<div class="grp"><div class="row"><span>הוסף למועדפים</span><span class="g">☆</span></div><div class="row tap" id="addHome" data-go="2"><span>הוסף למסך הבית</span><span class="g">⊞</span></div><div class="row"><span>הדפס</span><span class="g">🖨</span></div></div></div>',
+    SB + '<div class="addscr"><div class="top"><span class="c">ביטול</span><b>הוסף למסך הבית</b><span class="b tap" id="addBtn" data-go="3">הוסף</span></div><div class="card">' + ICON + '<div style="flex:1"><div class="nm">LuzGlass</div><div class="u">luzglass.vercel.app</div></div></div></div>',
+    SB + HOME,
+  ],
+} : {
+  name: 'גלקסי · כרום',
+  steps: ['פותחים את luzglass.vercel.app בכרום', 'לוחצים על שלוש הנקודות ⋮ למעלה', 'לוחצים "הוספה למסך הבית" (או "התקנת האפליקציה")', 'לוחצים "התקנה" / "הוספה"', 'האייקון מופיע במסך הבית'],
+  views: [
+    SB + '<div class="ch-bar"><span style="font-size:20px">⌂</span><div class="ch-url">luzglass.vercel.app</div><span class="ch-dots tap" id="dots" data-go="1">⋮</span></div>' + SITE,
+    SB + '<div class="ch-bar"><span style="font-size:20px">⌂</span><div class="ch-url">luzglass.vercel.app</div><span class="ch-dots">⋮</span></div>' + SITE +
+      '<div class="menu"><div class="row">כרטיסייה חדשה</div><div class="row">היסטוריה</div><div class="row">הורדות</div><div class="row">שיתוף…</div><div class="row tap" id="addHome" data-go="2">הוספה למסך הבית</div><div class="row">הגדרות</div></div>',
+    SB + '<div class="ch-bar"><span style="font-size:20px">⌂</span><div class="ch-url">luzglass.vercel.app</div><span class="ch-dots">⋮</span></div>' + SITE +
+      '<div class="dim"></div><div class="dlg"><h3>הוספה למסך הבית</h3><div class="card">' + ICON + '<b style="font-size:18px">LuzGlass</b></div><div class="btns"><span class="tap" id="addBtn" data-go="3">הוספה</span><span style="color:#666">ביטול</span></div></div>',
+    SB + HOME,
+  ],
+};
+document.getElementById('phone').classList.toggle('android', OS === 'android');
+document.getElementById('osName').textContent = V.name;
+document.getElementById('views').innerHTML = V.views.map((h, i) => `<div class="view${i ? '' : ' on'}" data-v="${i}">${h}</div>`).join('');
+function show(n) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', Number(v.dataset.v) === n));
+  document.getElementById('steps').innerHTML = V.steps.map((s, i) => `<li class="${i < n + 1 ? 'done' : i === n + 1 ? 'now' : ''}">${s}</li>`).join('');
+  if (n === 3) document.getElementById('steps').lastElementChild.className = 'now';
+}
+document.addEventListener('click', e => { const t = e.target.closest('[data-go]'); if (t) show(Number(t.dataset.go)); });
+show(0);
+</script>
+</body>
+</html>
