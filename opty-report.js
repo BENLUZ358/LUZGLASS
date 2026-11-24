@@ -3,9 +3,9 @@
 //  "תעודה" — למי שמעבד (חיסום: לכבוד עוזי), כמו התעודה של התוכנה הקודמת (מס' 5900): בלי שמות,
 //    "חיסום בלבד 8 מ"מ", גובה, רוחב, כמות, שטח (מ"ר) — שורה לכל זכוכית, לפי רוחב מהקטן לגדול.
 //  ארבע תעודות נפרדות, כל אחת עם מספר משלה:
-//    חיסום — ההערה באופטי-ווי גוברת ("חיסום" / "ללא חיסום"), אחרת סוג הזכוכית (הגדרות)
+//    חיסום — רק מה שרשום "חיסום" בהערה באופטי-ווי (בן, 24/11: "כל עוד לא רשום חיסום, זה לא נכנס")
 //    צבע — "צבע <קוד>" בהערה; נמצא גם בחיסום
-//    CNC — "CNC" בהערה; נמצא גם בחיסום
+//    CNC — "CNC" בהערה; בחיסום רק אם רשום גם "חיסום"
 //    טריפלקס — "טריפלקס" בהערה; רק בתעודת טריפלקס, לא בחיסום
 //  המידות כמו שהן באופטי-ווי (כמו בתוכנה הקודמת שמשכה מאופטי-ווי).
 //  שמירה: meta/optyReports/<יום>/{ nos/<סוג>, manual/<id>, hide/<key> } · מספור רץ אחד: meta/optyReportSeq
@@ -23,10 +23,6 @@ function _repNoteChisum(note) {
   const f = typeof lgOptyNoteInfo === 'function' ? lgOptyNoteInfo : (typeof require === 'function' ? require('./opty-layout.js').lgOptyNoteInfo : null);
   return f ? f(note).chisum : null;
 }
-function _repMatChisum(code, en, mats) {
-  const f = typeof lgOptyMatChisum === 'function' ? lgOptyMatChisum : (typeof require === 'function' ? require('./opty-layout.js').lgOptyMatChisum : null);
-  return !!(f && f(code, en, mats));
-}
 //  מההערה: { triplex: '' | 'טריפלקס' | 'טריפלקס מט', paint: '' | '7016', cnc }
 function lgOptyReportProc(note) {
   const t = String(note || '').replace(/\s+/g, ' ').trim();
@@ -43,8 +39,8 @@ function lgOptyReportRows(jobs, day, mats, rep) {
   Object.values(jobs || {}).filter(j => j && j.day === day).sort((a, b) => String(a.job).localeCompare(String(b.job))).forEach(j => {
     Object.entries(j.pieces || {}).sort((a, b) => Number(a[0]) - Number(b[0])).forEach(([pos, p]) => {
       if (!p) return;
-      const pr = lgOptyReportProc(p.note), n = _repNoteChisum(p.note);
-      const chisum = !pr.triplex && (n !== null ? n : _repMatChisum(j.mat, j.matName, mats));
+      //  בן, 24/11: "כל עוד לא רשום חיסום, זה לא נכנס לחיסום" — רק ההערה קובעת, לא סוג הזכוכית
+      const pr = lgOptyReportProc(p.note), chisum = !pr.triplex && _repNoteChisum(p.note) === true;
       const key = j.job + '_' + pos;
       push({ key, src: 'opty', job: j.job, client: String(p.client || '').trim(), name: String(p.name || '').trim(),
         glass: String(j.matName || j.mat || '').trim(), mat: String(j.mat || ''), w: Number(p.w) || 0, h: Number(p.h) || 0, qty: Number(p.qty) || 1,
@@ -57,7 +53,7 @@ function lgOptyReportRows(jobs, day, mats, rep) {
     const k = LG_REPORT_KINDS[m.kind] ? m.kind : 'chisum';
     push({ key: 'm_' + id, id, src: 'manual', client: String(m.client || '').trim(), name: String(m.name || '').trim(),
       glass: String(m.glass || '').trim(), mat: '', w: Number(m.w) || 0, h: Number(m.h) || 0, qty: Number(m.qty) || 1,
-      chisum: k !== 'triplex', paint: k === 'paint' ? (String(m.color || '').trim() || 'צבע') : '', cnc: k === 'cnc', triplex: k === 'triplex' ? 'טריפלקס' : '', hidden: false });
+      chisum: k === 'chisum' || k === 'paint', paint: k === 'paint' ? (String(m.color || '').trim() || 'צבע') : '', cnc: k === 'cnc', triplex: k === 'triplex' ? 'טריפלקס' : '', hidden: false });
   });
   return rows;
 }
@@ -91,7 +87,7 @@ function lgOptyNoteRows(rows, kind) {
   return lgOptyReportFor(rows, kind).map((r, i) => {
     const t = lgOptyReportThick(r.mat, r.glass);
     const what = kind === 'paint' ? 'צבע' + (r.paint && r.paint !== 'צבע' ? ' ' + r.paint : '') : kind === 'triplex' ? r.triplex || K.item : K.item;
-    return { i, t, item: what + ' ' + (t ? t + ' מ"מ' : (r.glass || '')), w: r.w, h: r.h, qty: r.qty,
+    return { i, t, code: kind === "paint" && r.paint !== "צבע" ? r.paint : "", item: what + ' ' + (t ? t + ' מ"מ' : (r.glass || '')), w: r.w, h: r.h, qty: r.qty,
       m2: Math.round((r.w * r.h * r.qty) / 10000) / 100 };
   }).sort((a, b) => (parseFloat(a.t) || 99) - (parseFloat(b.t) || 99) || a.item.localeCompare(b.item) || a.w - b.w || a.i - b.i);
 }
@@ -113,7 +109,7 @@ function lgOptyReportHtml(kind, rows, day, no) {
   if (isNote) {
     const ns = lgOptyNoteRows(rows, kind), qty = ns.reduce((n, r) => n + r.qty, 0), m2 = ns.reduce((n, r) => n + r.m2, 0);
     cols = '<th>פריט</th><th>גובה</th><th>רוחב</th><th>כמות</th><th>שטח</th>';
-    body = ns.length ? `<tbody>${ns.map(r => `<tr><td class="g">${e(r.item)}</td><td>${e(r.h)}</td><td>${e(r.w)}</td><td>${e(r.qty)}</td><td>${r.m2.toFixed(2)}</td></tr>`).join('')}</tbody>
+    body = ns.length ? `<tbody>${ns.map(r => `<tr><td class="g">${r.code ? e(r.item).replace(e(r.code), "<bdi dir=\"ltr\">" + e(r.code) + "</bdi>") : e(r.item)}</td><td>${e(r.h)}</td><td>${e(r.w)}</td><td>${e(r.qty)}</td><td>${r.m2.toFixed(2)}</td></tr>`).join('')}</tbody>
       <tbody><tr class="t all"><td colspan="3">סה"כ</td><td>${qty}</td><td>${m2.toFixed(2)}</td></tr></tbody>` : '';
   } else {
     cols = '<th>פריט</th><th>גובה</th><th>רוחב</th><th>כמות</th>';
@@ -129,7 +125,7 @@ function lgOptyReportHtml(kind, rows, day, no) {
   .mid{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;margin:12px 0 6px}
   .ttl{font-size:22px;font-weight:700;text-align:center} .ttl small{display:block;font-size:14px;font-weight:400}
   .side{font-size:13px;text-align:left} .side b{display:block;font-style:italic}
-  .to{font-size:14px;margin-bottom:6px}
+  .to{font-size:14px;margin-bottom:6px} .to .blank{display:inline-block;width:60mm;border-bottom:1px solid #111;vertical-align:-2px}
   table{width:100%;border-collapse:collapse} thead th{font-size:12px;font-weight:400;border-bottom:1px solid #111;padding:4px 6px;text-align:center}
   thead th:first-child,td.g{text-align:right} td{padding:4px 6px;text-align:center} tbody tr:nth-child(even) td{background:#e4e4e4}
   tr.c th{font-size:17px;padding:12px 6px 4px;text-align:center} tr.o th{font-size:14px;text-align:center;padding:6px;text-decoration:underline}
@@ -138,7 +134,7 @@ function lgOptyReportHtml(kind, rows, day, no) {
   </style></head><body>
   <div class="hd"><span class="n">${e(H.name)}</span><span class="id">ע.מ. ${e(H.id)}</span></div>
   <div class="mid"><span></span><div class="ttl">${e(title)}<small>${isNote ? 'תעודת ' + e(K.he) : 'דוח חיסום'}</small></div><div class="side">${isNote ? '<b>מקור</b>' : ''}${e(lgOptyReportDate(day))}</div></div>
-  ${isNote ? `<div class="to">לכבוד: ${e(K.to)}</div>` : ''}
+  ${isNote ? `<div class="to">לכבוד: ${K.to ? e(K.to) : '<span class="blank"></span>'}</div>` : ''}
   ${body ? `<table><thead><tr>${cols}</tr></thead>${body}</table>` : '<p class="empty">אין זכוכית לתעודה הזאת ביום הזה</p>'}
   </body></html>`;
 }
