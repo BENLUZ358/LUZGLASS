@@ -35,7 +35,7 @@
   .ios-tools span{width:44px;height:36px;display:flex;align-items:center;justify-content:center;}
   .sheet{position:absolute;left:0;right:0;bottom:0;background:#f2f2f7;border-radius:16px 16px 0 0;padding:14px 14px 30px;box-shadow:0 -8px 30px rgba(0,0,0,.25);}
   .sheet .hd{display:flex;align-items:center;gap:10px;padding:6px 4px 14px;border-bottom:1px solid #ddd;margin-bottom:10px;}
-  .ic{width:44px;height:44px;border-radius:10px;background:#1a1714;display:flex;align-items:center;justify-content:center;font:900 20px Georgia,serif;flex:none;}
+  .ic{direction:ltr;width:44px;height:44px;border-radius:10px;background:#1a1714;display:flex;align-items:center;justify-content:center;font:900 20px Georgia,serif;flex:none;}
   .ic i{font-style:normal;color:#f7f4ef;} .ic b{color:#b8922a;}
   .grp{background:#fff;border-radius:12px;overflow:hidden;margin-top:10px;}
   .row{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;font-size:17px;border-bottom:1px solid #eee;}
@@ -88,7 +88,8 @@
   </div>
 </div>
 <script>
-const OS = new URLSearchParams(location.search).get('os') === 'android' ? 'android' : 'ios';
+//  גם דרך עמוד ההקלטה (?p=…%3Fos%3Dandroid)
+const OS = /os=android/.test(decodeURIComponent(location.search)) ? 'android' : 'ios';
 const ICON = '<div class="ic"><i>L</i><b>G</b></div>';
 const SITE = '<div class="site"><div class="logo">Luz<b>Glass</b></div><div class="f"></div><div class="f"></div><div class="btn">כניסה</div></div>';
 const SB = '<div class="sb"><span>9:41</span><span>▮▮▮ ◔</span></div>';
