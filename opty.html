@@ -284,7 +284,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 
   <!-- דוחות חיסום (בן, 24/11): דוח לפי לקוח למעקב + תעודה לנהג לפי סוג ומידה; אפשר להוסיף ידנית -->
   <div class="pane" id="pane-rep" hidden>
-    <div class="jflt"><label>יום עבודה <input type="date" id="rDay"></label></div>
+    <div class="jflt"><label>יום חיתוך <input type="date" id="rDay"></label><span class="note" id="rOutDay"></span></div>
     <div id="rHead"></div>
     <details class="card radd" id="rAdd">
       <summary>+ הוסף ידנית</summary>
@@ -1005,6 +1005,7 @@ async function repLoad() {
 }
 const repRows = () => lgOptyReportRows(JOBS, $('rDay').value, MATS, REP);
 function repRender() {
+  $('rOutDay').textContent = $('rDay').value ? 'יוצא ' + lgOptyReportDate(lgOptyReportOutDay($('rDay').value)) + ' — זה התאריך על הדף' : '';
   const rows = repRows(), nos = REP.nos || {};
   //  כפתור לכל תעודה (צבע / CNC / טריפלקס — רק כשיש), עם כמה יחידות ומה המספר שלה
   const btn = (k, label) => { const rs = lgOptyReportFor(rows, k), u = rs.reduce((n, r) => n + r.qty, 0), no = nos[k === 'report' ? 'chisum' : k];

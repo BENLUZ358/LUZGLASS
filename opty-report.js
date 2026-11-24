@@ -7,7 +7,7 @@
 //    צבע — "צבע <קוד>" בהערה; נמצא גם בחיסום
 //    CNC — "CNC" בהערה; בחיסום רק אם רשום גם "חיסום"
 //    טריפלקס — "טריפלקס" בהערה; רק בתעודת טריפלקס, לא בחיסום
-//  המידות כמו שהן באופטי-ווי (כמו בתוכנה הקודמת שמשכה מאופטי-ווי).
+//  המידות נטו (בלי 2 מ"מ ליטוש) והתאריך המודפס = יום העבודה שאחרי החיתוך (אז זה יוצא) — כמו בתוכנה הקודמת.
 //  שמירה: meta/optyReports/<יום>/{ nos/<סוג>, manual/<id>, hide/<key> } · מספור רץ אחד: meta/optyReportSeq
 
 const LG_REPORT_FIRST_NO = 5901;          // המספר האחרון בתוכנה הקודמת: 5900 (בן, 24/11)
@@ -30,8 +30,12 @@ function lgOptyReportProc(note) {
   return { triplex: tr ? tr[0].replace(/\s+/g, ' ') : '', paint: pc ? (pc[1].trim() || 'צבע') : '', cnc: /\bCNC\b/i.test(t) };
 }
 
+//  מידה נטו, כמו בתעודה 5900 של התוכנה הקודמת: מה שבאופטי-ווי פחות 2 מ"מ ליטוש, במ"מ שלמים
+//  (בדקתי 24/11: 39 שורות מ-5900 = החיתוך של 23/11 בדיוק כך — "רוחב" = Y באופטי-ווי, "גובה" = X)
+function lgOptyReportNet(v) { const n = Number(v) || 0; return n > 2 ? Math.round(n - 2) : Math.round(n); }
+
 //  jobs = meta/optyJobs · rep = meta/optyReports/<day> → שורות:
-//  { key, src: 'opty'|'manual', client, name, glass, mat, w, h, qty, job, chisum, paint, cnc, triplex, hidden }
+//  { key, src: 'opty'|'manual', client, name, glass, mat, w (רוחב), h (גובה), qty, job, chisum, paint, cnc, triplex, hidden }
 //  רק זכוכית שהולכת לאחד מהעיבודים. hidden = שורות שבן הוריד (מוצגות בעמוד עם "החזר", לא בהדפסה)
 function lgOptyReportRows(jobs, day, mats, rep) {
   const r = rep || {}, hide = r.hide || {}, rows = [];
@@ -43,7 +47,7 @@ function lgOptyReportRows(jobs, day, mats, rep) {
       const pr = lgOptyReportProc(p.note), chisum = !pr.triplex && _repNoteChisum(p.note) === true;
       const key = j.job + '_' + pos;
       push({ key, src: 'opty', job: j.job, client: String(p.client || '').trim(), name: String(p.name || '').trim(),
-        glass: String(j.matName || j.mat || '').trim(), mat: String(j.mat || ''), w: Number(p.w) || 0, h: Number(p.h) || 0, qty: Number(p.qty) || 1,
+        glass: String(j.matName || j.mat || '').trim(), mat: String(j.mat || ''), w: lgOptyReportNet(p.h), h: lgOptyReportNet(p.w), qty: Number(p.qty) || 1,
         chisum, paint: pr.paint, cnc: pr.cnc, triplex: pr.triplex, hidden: !!hide[key] });
     });
   });
@@ -101,6 +105,11 @@ function lgOptyReportDate(iso) {
   return 'יום ' + LG_REPORT_DAYS[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + LG_REPORT_MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
 }
 
+//  התאריך על הדף = יום העבודה שאחרי החיתוך (תעודה 5900 מ-24/11 = החיתוך של 23/11)
+function lgOptyReportOutDay(day) {
+  const f = typeof lgOptyWorkAdd === 'function' ? lgOptyWorkAdd : (typeof require === 'function' ? require('./opty-layout.js').lgOptyWorkAdd : null);
+  return f && /^\d{4}-\d{2}-\d{2}$/.test(String(day)) ? f(day, 1) : day;
+}
 //  עמוד הדפסה מלא. kind: 'report' (הדוח שלנו) | chisum | paint | cnc | triplex (תעודות)
 function lgOptyReportHtml(kind, rows, day, no) {
   const e = _repEsc, isNote = kind !== 'report', H = LG_REPORT_HEAD, K = LG_REPORT_KINDS[kind] || LG_REPORT_KINDS.chisum;
@@ -133,12 +142,12 @@ function lgOptyReportHtml(kind, rows, day, no) {
   tr{break-inside:avoid} .empty{text-align:center;padding:40px;color:#666}
   </style></head><body>
   <div class="hd"><span class="n">${e(H.name)}</span><span class="id">ע.מ. ${e(H.id)}</span></div>
-  <div class="mid"><span></span><div class="ttl">${e(title)}<small>${isNote ? 'תעודת ' + e(K.he) : 'דוח חיסום'}</small></div><div class="side">${isNote ? '<b>מקור</b>' : ''}${e(lgOptyReportDate(day))}</div></div>
+  <div class="mid"><span></span><div class="ttl">${e(title)}<small>${isNote ? 'תעודת ' + e(K.he) : 'דוח חיסום'}</small></div><div class="side">${isNote ? '<b>מקור</b>' : ''}${e(lgOptyReportDate(lgOptyReportOutDay(day)))}</div></div>
   ${isNote ? `<div class="to">לכבוד: ${K.to ? e(K.to) : '<span class="blank"></span>'}</div>` : ''}
   ${body ? `<table><thead><tr>${cols}</tr></thead>${body}</table>` : '<p class="empty">אין זכוכית לתעודה הזאת ביום הזה</p>'}
   </body></html>`;
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, LG_REPORT_FIRST_NO, LG_REPORT_KINDS };
+  module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, lgOptyReportOutDay, lgOptyReportNet, LG_REPORT_FIRST_NO, LG_REPORT_KINDS };
 }

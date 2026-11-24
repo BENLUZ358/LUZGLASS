@@ -40,8 +40,11 @@ check('B1 report = chisum rows by client, then order name', byC.map(c => [c.clie
 
 check('C0 thickness', ['08S', '10C', '03+3S', ''].map((m, i) => R.lgOptyReportThick(m, i === 3 ? '6 mm clear' : '')), ['8', '10', '3+3', '6']);
 check('C1 chisum note: a row per glass, by thickness then width small→big, area m²', R.lgOptyNoteRows(rows, 'chisum').map(r => [r.item, r.h, r.w, r.qty, r.m2]),
-  [['חיסום בלבד 5 מ"מ', 600, 600, 1, 0.36], ['חיסום בלבד 8 מ"מ', 650, 650, 1, 0.42], ['חיסום בלבד 8 מ"מ', 1885, 660, 1, 1.24], 
-   ['חיסום בלבד 8 מ"מ', 400, 900, 1, 0.36], ['חיסום בלבד 8 מ"מ', 660, 1885, 1, 1.24], ['חיסום בלבד 8 מ"מ', 660, 1885, 3, 3.73]]);
+  [['חיסום בלבד 5 מ"מ', 598, 598, 1, 0.36], ['חיסום בלבד 8 מ"מ', 898, 398, 1, 0.36], ['חיסום בלבד 8 מ"מ', 650, 650, 1, 0.42],
+   ['חיסום בלבד 8 מ"מ', 1883, 658, 1, 1.24], ['חיסום בלבד 8 מ"מ', 658, 1883, 1, 1.24], ['חיסום בלבד 8 מ"מ', 660, 1885, 3, 3.73]]);
+check('C1e like note 5900: OptyWay X 402 / Y 1452 → רוחב 1450, גובה 400; decimals rounded', R.lgOptyReportRows({ M: { job: 'M', day: 'd', mat: '08S', pieces: {
+  1: { w: 402, h: 1452, qty: 1, note: 'חיסום' }, 2: { w: 622.1, h: 345.8, qty: 1, note: 'חיסום' } } } }, 'd', {}, {}).map(r => [r.w, r.h]), [[1450, 400], [344, 620]]);
+check('C1f date on the page = next work day (Thu 26/11 → Sun 29/11)', [R.lgOptyReportOutDay('2026-11-23'), R.lgOptyReportOutDay('2026-11-26')], ['2026-11-24', '2026-11-29']);
 check('C1b area like the old note: 1850×712×2 = 2.63', R.lgOptyNoteRows([{ w: 1850, h: 712, qty: 2, mat: '08S', chisum: true }], 'chisum')[0].m2, 2.63);
 check('C1c paint item names carry the colour', R.lgOptyNoteRows(rows, 'paint').map(r => r.item), ['צבע 040NWC 8 מ"מ', 'צבע 7016 8 מ"מ']);
 check('C1d triplex item names', R.lgOptyNoteRows(rows, 'triplex').map(r => r.item), ['טריפלקס 8 מ"מ', 'טריפלקס 10 מ"מ']);
