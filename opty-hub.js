@@ -82,9 +82,11 @@ function lgHubCutLine(it, rec, todayIso) {
 //  איפה עכשיו — השלב שלנו מהחיסום והלאה; לפני כן: נחתך / מתוכנן / השלב המוקדם
 function lgHubNow(o, it, todayIso) {
   const late = LG_HUB_STAGE[(o && o.stage) || ''];
+  const c = it && it.optyCut, cutNow = c && !c.undone && c.at && (c.marked || c.at < todayIso);
+  //  ההזמנה בחיסום אבל הזכוכית הזאת עוד לא נחתכה (למשל שבר שנחתך מחדש) — לא "בחיסום"
+  if (late && late.tone === 'cut' && c && !c.undone && c.at && !cutNow) return { label: 'מתוכנן לחיתוך', tone: 'plan' };
   if (late) return { label: late.label, tone: late.tone };
-  const c = it && it.optyCut;
-  if (c && !c.undone && c.at && (c.marked || c.at < todayIso)) return { label: 'נחתך · לפני חיסום', tone: 'cut' };
+  if (cutNow) return { label: 'נחתך · לפני חיסום', tone: 'cut' };
   if (it && (it.optyJob || (c && !c.undone && c.at))) return { label: 'מתוכנן לחיתוך', tone: 'plan' };
   return { label: LG_HUB_EARLY[(o && o.stage) || ''] || 'ממתין', tone: 'wait' };
 }

@@ -90,6 +90,8 @@ check('cut line: in job, no cut info → by job day', H.lgHubCutLine({ optyJob: 
 check('cut line: in job, job not loaded', H.lgHubCutLine({ optyJob: 'M00999' }, null, T), { label: 'באופטימיזציה M00999', cut: false });
 check('cut line: not in optimisation', H.lgHubCutLine(orders[2].items[0], null, T), { label: 'עוד לא באופטימיזציה', cut: false });
 check('now: at drafter', H.lgHubNow(orders[2], orders[2].items[0], T), { label: 'אצל שרטט', tone: 'wait' });
+check('now: order in chisum but this glass is cut tomorrow', H.lgHubNow({ stage: 'chisum' }, { optyJob: 'M00321', optyCut: { at: '2026-11-20' } }, T), { label: 'מתוכנן לחיתוך', tone: 'plan' });
+check('now: order ready wins even if a cut date is ahead', H.lgHubNow({ stage: 'done' }, { optyCut: { at: '2026-11-20' } }, T).label, 'מוכן לאיסוף');
 check('now: planned', H.lgHubNow({ stage: 'workday' }, { optyJob: 'M00321' }, T), { label: 'מתוכנן לחיתוך', tone: 'plan' });
 
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }

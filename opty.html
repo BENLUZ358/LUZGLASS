@@ -86,9 +86,17 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
   border-radius:999px;font:var(--fw-bold) var(--fs-sm) Heebo,sans-serif;cursor:pointer;}
 .tabs button[aria-selected="true"]{background:var(--text);color:var(--surface);border-color:var(--text);}
 .tabs .cnt{display:inline-block;min-width:20px;padding:0 6px;margin-inline-start:6px;border-radius:999px;background:var(--gold);color:var(--on-gold);font-size:12px;}
-.pane[hidden]{display:none;}
+.pane[hidden],.tabs .cnt[hidden]{display:none;}
 .tabs .tsep{flex:1 1 0;min-width:0;}
-@media (max-width:600px){ .tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px;} .tabs button{flex:none;} .tabs .tsep{display:none;} }
+.tabs{flex-wrap:nowrap;}
+.tabs>button,.tmore>button{flex:none;}
+/* "עוד" (בן, 24/11): הלשוניות שהעובד לא צריך — בתפריט */
+.tmore{position:relative;flex:none;}
+#tMore.on{background:var(--text);color:var(--surface);border-color:var(--text);}
+.tmenu{position:absolute;top:calc(100% + 6px);inset-inline-end:0;z-index:20;display:flex;flex-direction:column;gap:4px;min-width:190px;padding:6px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:0 8px 24px rgba(0,0,0,.14);}
+.tmenu[hidden]{display:none;}
+.tmenu button{border-radius:var(--radius);text-align:start;width:100%;}
 /* חיפוש אחד (בן, 19/11) */
 .hbar{position:sticky;top:56px;z-index:6;background:var(--bg);padding:var(--space-2) 0;margin-bottom:var(--space-2);}
 #hQ{width:100%;min-height:52px;padding:0 var(--space-3);border:2px solid var(--border);border-radius:var(--radius);font-size:17px;font-family:inherit;background:var(--surface);color:var(--text);box-sizing:border-box;}
@@ -111,15 +119,19 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .hord header span{font-weight:var(--fw-bold);}
 .hord header .sk{color:var(--muted);}
 .hord header small{color:var(--muted);margin-inline-start:auto;}
-.hit{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"dim nm pill" "src src act";align-items:center;gap:4px var(--space-2);padding:var(--space-2) 0;border-top:1px solid var(--border);font-size:var(--fs-sm);}
+.hit{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"dim nm pill" "cut cut cut" "x x x";align-items:center;gap:4px var(--space-2);padding:var(--space-2) 0;border-top:1px solid var(--border);font-size:var(--fs-sm);cursor:pointer;}
 .hit.on{background:rgba(201,162,39,.13);margin-inline:calc(-1 * var(--space-3));padding-inline:var(--space-3);}
 .hit .hdim{grid-area:dim;font-weight:var(--fw-black);white-space:nowrap;}
 .hit .hnm{grid-area:nm;min-width:0;}
 .hit .pill{grid-area:pill;}
-.hit .hsrc{grid-area:src;color:var(--muted);font-size:var(--fs-xs);}
-.hit .hact{grid-area:act;display:flex;gap:4px;}
-.hit .hact .sm{min-height:40px;}
-@media (min-width:760px){ .hit{grid-template-columns:110px 1fr auto 150px auto;grid-template-areas:"dim nm pill src act";} }
+.hit .hcut{grid-area:cut;font-weight:var(--fw-bold);color:var(--muted);}
+.hit .hcut.is-cut{color:var(--text);}
+.hit .hx{grid-area:x;display:flex;flex-wrap:wrap;align-items:center;gap:4px var(--space-2);padding-top:4px;cursor:default;}
+.hit .hx[hidden]{display:none;}
+.hit .hsrc{color:var(--muted);font-size:var(--fs-xs);flex:1 1 auto;}
+.hit .hx .sm{min-height:40px;}
+.hlzmore{margin:var(--space-2) 0;}
+@media (min-width:760px){ .hit{grid-template-columns:110px 1fr 190px auto;grid-template-areas:"dim nm cut pill" "x x x x";} }
 .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:var(--fw-bold);font-size:var(--fs-xs);white-space:nowrap;border:1px solid transparent;}
 .pill.t-wait{background:#eef0f2;color:#3d4650;border-color:#d5dade;}
 .pill.t-plan{background:#fff4dc;color:#7a5200;border-color:#f0d9a0;}
@@ -193,12 +205,17 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
   <nav class="tabs" role="tablist" aria-label="אופטי-ווי">
     <button type="button" role="tab" data-tab="find" aria-selected="true">🔍 חיפוש</button>
     <button type="button" role="tab" data-tab="today" aria-selected="false">עבודת היום</button>
-    <button type="button" role="tab" data-tab="jobs" aria-selected="false">אופטימיזציות</button>
-    <button type="button" role="tab" data-tab="loose" aria-selected="false">לא אצלנו<span class="cnt" id="cntLoose" hidden></span></button>
-    <button type="button" role="tab" data-tab="link" aria-selected="false">לחיבור<span class="cnt" id="cntLink" hidden></span></button>
     <span class="tsep" aria-hidden="true"></span>
-    <button type="button" role="tab" data-tab="imp" aria-selected="false">קליטה</button>
-    <button type="button" role="tab" data-tab="set" aria-selected="false">הגדרות</button>
+    <div class="tmore">
+      <button type="button" id="tMore" aria-haspopup="true" aria-expanded="false"><span id="tMoreLbl">עוד ⋯</span><span class="cnt" id="cntMore" hidden></span></button>
+      <div class="tmenu" id="tMenu" hidden>
+        <button type="button" role="tab" data-tab="jobs" aria-selected="false">אופטימיזציות</button>
+        <button type="button" role="tab" data-tab="loose" aria-selected="false">לא אצלנו<span class="cnt" id="cntLoose" hidden></span></button>
+        <button type="button" role="tab" data-tab="link" aria-selected="false">לחיבור<span class="cnt" id="cntLink" hidden></span></button>
+        <button type="button" role="tab" data-tab="imp" aria-selected="false">קליטה</button>
+        <button type="button" role="tab" data-tab="set" aria-selected="false">הגדרות</button>
+      </div>
+    </div>
   </nav>
   <div id="st" role="status"></div>
 
@@ -253,8 +270,9 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 
   <div class="pane" id="pane-find">
     <div class="hbar">
-      <input id="hQ" type="search" placeholder="מידה (850x1900), מספר הזמנה, לקוח, שם סקיצה, מספר צורה, M00…" enterkeyhint="search" aria-label="חיפוש" autocomplete="off">
-      <details class="hflt-box" id="hFltBox"><summary>סינון: תאריכים וסוג זכוכית <span id="hFltOn"></span></summary>
+      <input id="hQ" type="search" placeholder="מספר הזמנה, שם לקוח או מידה (1900)" enterkeyhint="search" aria-label="חיפוש" autocomplete="off">
+      <details class="hflt-box" id="hFltBox"><summary>סינון <span id="hFltOn"></span></summary>
+      <div class="chips" id="hChips" role="group" aria-label="סינון לפי מצב"></div>
       <div class="hflt">
         <label>מ-<input type="date" id="hFrom"></label>
         <label>עד <input type="date" id="hTo"></label>
@@ -262,7 +280,6 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
         <button class="sm" type="button" id="hAll">כל התאריכים</button>
         <button class="sm quiet" type="button" id="hClear">נקה</button>
       </div></details>
-      <div class="chips" id="hChips" role="group" aria-label="סינון לפי מצב"></div>
     </div>
     <div id="hubOut"><p class="note">טוען…</p></div>
   </div>
@@ -296,7 +313,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-match.js?v=20261118a"></script>
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
-<script src="opty-hub.js?v=20261119a"></script>
+<script src="opty-hub.js?v=20261124a"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -333,6 +350,7 @@ const countWait = (pend, rev) => Object.values(pend || {}).reduce((n, o) => n + 
 const _seen = el => { if (el && el.scrollIntoView) try { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (_) {} };
 function showTab(t) {
   document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+  tabMoreMark(t);
   const pane = t === 'loose' ? 'find' : t;
   _seen(document.querySelector('.tabs [aria-selected="true"]'));
   document.querySelectorAll('.pane').forEach(p => { p.hidden = p.id !== 'pane-' + pane; });
@@ -345,7 +363,21 @@ function showTab(t) {
   if (t === 'today') todayLoad();
   if (t === 'set') { loadPairs(); loadMats(); }
 }
-document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) showTab(b.dataset.tab); });
+//  "עוד ⋯" (בן, 24/11): שם הלשונית שנבחרה מהתפריט מופיע על הכפתור; המספרים של "לחיבור" + "לא אצלנו" גם עליו
+function tabMoreMark(t) {
+  const b = document.querySelector('#tMenu [data-tab="' + t + '"]');
+  $('tMore').classList.toggle('on', !!b);
+  $('tMoreLbl').textContent = b ? 'עוד · ' + b.firstChild.textContent.trim() : 'עוד ⋯';
+}
+function tabMoreCnt() {
+  const n = ['cntLoose', 'cntLink'].reduce((a, id) => a + ($(id).hidden ? 0 : Number($(id).textContent) || 0), 0);
+  $('cntMore').hidden = !n; $('cntMore').textContent = n;
+}
+const tabMenu = open => { $('tMenu').hidden = !open; $('tMore').setAttribute('aria-expanded', String(open)); };
+$('tMore').addEventListener('click', e => { e.stopPropagation(); tabMenu($('tMenu').hidden); });
+document.addEventListener('click', e => { if (!e.target.closest('.tmore')) tabMenu(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') tabMenu(false); });
+document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { tabMenu(false); showTab(b.dataset.tab); } });
 
 $('inDb').addEventListener('change', e => {
   DB = [...e.target.files].filter(f => /^(pezzi|pezzican|magaz)\.db$/i.test(f.name));
@@ -605,7 +637,7 @@ async function updateCount() {
   try {
     const [p, r] = await Promise.all([_lgDb.ref('meta/optyPending').once('value'), _lgDb.ref('meta/optyReview').once('value')]);
     const n = countWait(p.val(), r.val());
-    $('cntLink').hidden = !n; $('cntLink').textContent = n;
+    $('cntLink').hidden = !n; $('cntLink').textContent = n; tabMoreCnt();
   } catch (_) {}
 }
 //  בחירה: הזכוכיות שעוד בלי צורה; ✓ = המידה מתאימה; הקרוב במידה ראשון ומסומן מראש
@@ -1099,7 +1131,7 @@ if (location.hash === '#today') showTab('today');
 //  ההזמנות שלנו + האופטימיזציות → כרטיס להזמנה, ולכל זכוכית מצב אחד (opty-hub.js).
 //  "לא אצלנו" = אותו חיפוש, מסונן לזכוכיות שנחתכו באופטי-ווי ולא מחוברות לשום פריט אצלנו.
 //  מחליף את החיפוש של 17/11 ואת חיפוש השייפים שהיה בלשונית האופטימיזציות.
-let HUB = { state: '', loaded: false, older: 0, all: false };
+let HUB = { state: '', loaded: false, older: 0, all: false, open: new Set() };
 const HUB_RECENT_DAYS = 7;                    // בלי מילת חיפוש ובלי תאריכים — מוצג שבוע אחורה
 const hubF = () => {
   const f = { from: $('hFrom').value || '', to: $('hTo').value || '', mat: $('hMat').value || '', state: HUB.state };
@@ -1138,26 +1170,30 @@ function hubRender() {
   const res = hubRun(HUB.state), f = hubF();
   //  ספירה לכל מצב — כמה הזמנות/זכוכיות יש בכל כפתור
   const cnt = {}; LG_HUB_STATES.forEach(s => { const r = s.id === HUB.state ? res : hubRun(s.id); cnt[s.id] = s.id === 'loose' ? r.counts.loose : r.counts.orders + r.counts.loose; });
-  $('hChips').innerHTML = LG_HUB_STATES.map(s => `<button type="button" class="chip" data-hstate="${esc(s.id)}" aria-pressed="${s.id === HUB.state}">${esc(s.label)} <span>${cnt[s.id]}</span></button>`).join('');
+  $('hChips').innerHTML = LG_HUB_STATES.filter(s => s.id !== 'loose').map(s => `<button type="button" class="chip" data-hstate="${esc(s.id)}" aria-pressed="${s.id === HUB.state}">${esc(s.label)} <span>${cnt[s.id]}</span></button>`).join('');
   //  המספר על הלשונית "לא אצלנו" — תמיד השבוע האחרון, בלי קשר למה שמוקלד בחיפוש
   _seen(document.querySelector('#hChips [aria-pressed="true"]'));
   const nl = lgHubSearch({ orders: ALL_ORDERS, jobs: JOBS, todayIso: lgOptyTodayIso(), q: '', waiting: hubWaiting(), mats: MATS,
     f: { from: lgOptyTodayIso(Date.now() - HUB_RECENT_DAYS * 86400000), state: 'loose' } }).counts.loose;
-  $('cntLoose').hidden = !nl; $('cntLoose').textContent = nl;
+  $('cntLoose').hidden = !nl; $('cntLoose').textContent = nl; tabMoreCnt();
   const range = !HUB.all && !$('hQ').value.trim() && !$('hFrom').value && !$('hTo').value ? `${HUB_RECENT_DAYS} הימים האחרונים` : (f.from || f.to ? (f.from ? 'מ-' + dmy(f.from) : '') + (f.to ? ' עד ' + dmy(f.to) : '') : 'כל התאריכים');
-  const fOn = [f.mat && lgOptyMatLabel(f.mat, MATS), $('hFrom').value && 'מ-' + dmy($('hFrom').value), $('hTo').value && 'עד ' + dmy($('hTo').value), HUB.all && 'כל התאריכים'].filter(Boolean);
-  $('hFltOn').textContent = fOn.length ? '· ' + fOn.join(' · ') : '';
-  const sum = `<p class="note hsum">${res.counts.orders} הזמנות · ${res.counts.loose} זכוכיות באופטי-ווי שלא אצלנו · ${esc(range)}${f.mat ? ' · ' + esc(lgOptyMatLabel(f.mat, MATS)) : ''}</p>`;
+  const stL = HUB.state && HUB.state !== 'loose' && (LG_HUB_STATES.find(s => s.id === HUB.state) || {}).label;
+  const fOn = [stL, f.mat && lgOptyMatLabel(f.mat, MATS), $('hFrom').value && 'מ-' + dmy($('hFrom').value), $('hTo').value && 'עד ' + dmy($('hTo').value), HUB.all && 'כל התאריכים'].filter(Boolean);
+  $('hFltOn').textContent = fOn.length ? '· מסונן: ' + fOn.join(' · ') : '';
+  const sum = `<p class="note hsum">${HUB.state === 'loose' ? res.counts.loose + ' זכוכיות באופטי-ווי שלא אצלנו' : res.counts.orders + ' הזמנות'} · ${esc(range)}${f.mat ? ' · ' + esc(lgOptyMatLabel(f.mat, MATS)) : ''}</p>`;
   const ords = res.orders.map(x => {
     const o = x.o;
     return `<article class="hord"><header><b>${esc(o.orderNum || '—')}</b><span>${esc(o.orderClient || '')}</span><span class="sk">${esc(o.sketchName || 'ללא שם')}</span>
       <small>${esc(dmy(x.date))}${x.mats.length ? ' · ' + x.mats.map(m => esc(lgOptyMatLabel(m, MATS))).join(', ') : ''}</small></header>
-      ${x.items.map(r => { const it = r.it, rec = it.optyJob && JOBS[it.optyJob];
-        return `<div class="hit${r.hit ? ' on' : ''}"><span class="hdim">${dimT(it.w, it.h)}</span><span class="hnm">${esc(it.name || 'פריט')}${it.optyShape ? ' · צורה ' + esc(it.optyShape) : ''}</span>
-        ${hubPill(r.st)}<span class="hsrc">${it.optyJob ? esc(it.optyJob) + (rec ? ' · ' + esc(dmy(rec.day)) : '') : 'עוד לא באופטי-ווי'}</span>
-        <span class="hact">${it.optyShape ? `<button class="sm" type="button" data-view="${esc(o.id)}|${r.idx}" aria-label="צורה של ${esc(it.optyShape)}">📐</button>` : ''}
+      ${x.items.map(r => { const it = r.it, rec = it.optyJob && JOBS[it.optyJob], key = o.id + '|' + r.idx, open = HUB.open.has(key);
+        const cl = lgHubCutLine(it, rec, lgOptyTodayIso()), now = lgHubNow(o, it, lgOptyTodayIso());
+        const src = it.optyJob ? esc(it.optyJob) + (rec ? ' · ' + esc(dmy(rec.day)) : '') + (it.optyShape ? ' · צורה ' + esc(it.optyShape) : '') : 'עוד לא באופטי-ווי';
+        return `<div class="hit${r.hit ? ' on' : ''}" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(it.w, it.h)}</span><span class="hnm">${esc(it.name || 'פריט')}</span>
+        <span class="hcut${cl.cut ? ' is-cut' : ''}">${esc(cl.label)}</span>${hubPill(now)}
+        <div class="hx"${open ? '' : ' hidden'}><span class="hsrc">${src}</span>
+        ${it.optyShape ? `<button class="sm" type="button" data-view="${esc(o.id)}|${r.idx}" aria-label="צורה של ${esc(it.optyShape)}">📐 צורה</button>` : ''}
         ${rec ? `<button class="sm" type="button" data-ojob="${esc(it.optyJob)}|${esc(it.optyShape || '')}|${esc(it.optyPos || '')}">ללוח</button>` : ''}
-        ${it.optyShape ? `<button class="sm quiet" type="button" data-cut="${esc(o.id)}|${r.idx}">נתק</button>` : ''}</span></div>`; }).join('')}
+        ${it.optyShape ? `<button class="sm quiet" type="button" data-cut="${esc(o.id)}|${r.idx}">נתק</button>` : ''}</div></div>`; }).join('')}
     </article>`;
   }).join('');
   const groups = lgHubGroupLoose(res.loose);
@@ -1170,7 +1206,8 @@ function hubRender() {
       ${hubPill(p.st)}</button>`).join('')}`).join('')}</section>` : '';
   const more = `<p class="hmore"><button class="sm" type="button" data-holder="1">טען אופטימיזציות ישנות יותר</button>${HUB.older ? ' <small class="note">נטענו עוד ' + HUB.older + '</small>' : ''}</p>`;
   const empty = !res.orders.length && !res.loose.length ? `<div class="card hempty"><b>לא נמצא</b><p class="note">נסה: רק מספר אחד מהמידה (1900), חלק משם הלקוח, או לחץ "כל התאריכים". חיפוש מראה גם הזמנות ישנות — אבל אופטימיזציות רק מ-400 האחרונות, אלא אם טוענים ישנות יותר.</p></div>` : '';
-  $('hubOut').innerHTML = sum + (HUB.state === 'loose' ? loose + ords : ords + loose) + empty + more;
+  const looseBtn = res.loose.length ? `<p class="hlzmore"><button class="sm" type="button" data-hstate="loose">יש עוד ${res.counts.loose} זכוכיות באופטי-ווי שלא מחוברות להזמנה — הצג</button></p>` : '';
+  $('hubOut').innerHTML = sum + (HUB.state === 'loose' ? loose + ords : ords + looseBtn) + empty + more;
   const need = res.loose.map(p => p.shape).filter(s => s && !(s in GEOS)).slice(0, 80);
   if (need.length) loadGeos(need).then(n => { if (n) hubRender(); });
 }
@@ -1182,7 +1219,7 @@ $('hAll').addEventListener('click', () => { HUB.all = true; $('hFrom').value = '
 $('hClear').addEventListener('click', () => { HUB.all = false; $('hQ').value = ''; $('hFrom').value = ''; $('hTo').value = ''; $('hMat').value = ''; HUB.state = ''; hubRender(); $('hQ').focus(); });
 $('pane-find').addEventListener('click', async e => {
   const ch = e.target.closest('[data-hstate]');
-  if (ch) { HUB.state = ch.dataset.hstate; document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === (HUB.state === 'loose' ? 'loose' : 'find')))); hubRender(); return; }
+  if (ch) { HUB.state = ch.dataset.hstate; const tt = HUB.state === 'loose' ? 'loose' : 'find'; document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tt))); tabMoreMark(tt); hubRender(); return; }
   const old = e.target.closest('[data-holder]'); if (old) { hubOlder(old); return; }
   const h = e.target.closest('[data-ohit]');
   if (h) { const [job, n, order] = h.dataset.ohit.split('|'); showTab('jobs'); jobOpen(job, Number(n), Number(order)); return; }
@@ -1212,7 +1249,20 @@ $('pane-find').addEventListener('click', async e => {
       delete it.optyShape; delete it.optyJob; delete it.optyCut;
       st('נותק: ' + sh + ' — מחכה בלשונית "לחיבור"', 'ok'); await loadWaiting(); hubRender(); updateCount();
     } catch (err) { st('✗ לא נותק: ' + (err.message || ''), 'bad'); }
+    return;
   }
+  const row = e.target.closest('[data-row]');
+  if (row && !e.target.closest('.hx')) hubRowToggle(row);
+});
+//  לחיצה על זכוכית → הפרטים (מספר אופטימיזציה, צורה) והכפתורים; נשאר פתוח גם אחרי רענון החיפוש
+function hubRowToggle(row) {
+  const k = row.dataset.row, open = !HUB.open.has(k);
+  if (open) HUB.open.add(k); else HUB.open.delete(k);
+  row.setAttribute('aria-expanded', String(open)); row.querySelector('.hx').hidden = !open;
+}
+$('pane-find').addEventListener('keydown', e => {
+  const row = e.target.closest && e.target.closest('[data-row]');
+  if (row && e.target === row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); hubRowToggle(row); }
 });
 
 //  ─── הגדרות: זוגות שמות ───
@@ -1253,7 +1303,6 @@ $('out').addEventListener('click', async e => {
 });
 $('btnCheck').addEventListener('click', check);
 
-if (window.matchMedia && window.matchMedia('(min-width: 760px)').matches) $('hFltBox').open = true;   // מחשב — הסינון פתוח; טלפון — מקופל
 Promise.resolve(lgRequireAuthAsync('admin')).then(() => {
   loadHistory(); updateCount();
   if (/[#&?]tab=link/.test(location.href)) showTab('link');
