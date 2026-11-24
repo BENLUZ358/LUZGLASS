@@ -118,6 +118,17 @@ async function lgWaSenderLink(db, phone) {
   return { customerId: String(link.customerId), customerName: String(link.customerName || ''), phone: key };
 }
 
+//  משתמש הפורטל של כרטיס (בן, 24/11): משתמש שהכרטיס ברשימת portalCards שלו גובר —
+//  כך המקום לאמבט רואה גם את הר מקלחונים ואת כתר מקלחונים בכניסה אחת. אחרת — המשתמש של הכרטיס עצמו.
+function lgLoginForCard(users, customerId, opts) {
+  const cid = String(customerId || ''), all = users || {};
+  if (!cid) return '';
+  const ok = k => all[k] && (!(opts && opts.clientOnly) || all[k].role === 'client');
+  const keys = Object.keys(all).filter(ok);
+  return keys.find(k => all[k].portalCards && Object.prototype.hasOwnProperty.call(all[k].portalCards, cid))
+      || keys.find(k => String(all[k].customerId || '') === cid) || '';
+}
+
 async function lgClientFromWaSender(db, chatId) {
   const phone = waChatToLocal(chatId);
   const none = { matched: false, via: 'none', phone, loginPhone: '', customerId: '', name: '' };
@@ -127,7 +138,7 @@ async function lgClientFromWaSender(db, chatId) {
   const link = await lgWaSenderLink(db, phone);
   if (link) {
     const users = (await db.ref('users').once('value')).val() || {};
-    const login = Object.keys(users).find(k => users[k] && users[k].role === 'client' && String(users[k].customerId || '') === link.customerId) || '';
+    const login = lgLoginForCard(users, link.customerId, { clientOnly: true });
     const card = link.customerName ? null : (await db.ref('hashavshevetAccounts/' + link.customerId).once('value')).val();
     return { matched: true, via: 'link', phone, loginPhone: login, customerId: link.customerId,
              name: link.customerName || String((card && card.name) || '') };
@@ -167,7 +178,7 @@ async function lgClientFromWaGroup(db, groupId, memberPhone) {
   const customerId = String(link.customerId);
   // משתמש הפורטל של הלקוח — כדי שהסקיצה תופיע אצלו (D2)
   const users = (await db.ref('users').once('value')).val() || {};
-  const login = Object.keys(users).find(k => users[k] && String(users[k].customerId || '') === customerId) || '';
+  const login = lgLoginForCard(users, customerId);
   const card  = (await db.ref('hashavshevetAccounts/' + customerId).once('value')).val() || {};
   return {
     matched: true, via: 'group',
@@ -276,4 +287,4 @@ async function _resolveWa(db, order) {
 }
 
 module.exports = { resolvePhone, resolveRecipient, resolveRecipientWa, lgInvoiceToPrivate, toWaNumber, norm, orderSketchName, waChatToLocal,
-                   lgClientFromWaSender, lgClientFromWaGroup, lgWaSenderKey, lgWaSenderLink };
+                   lgClientFromWaSender, lgClientFromWaGroup, lgWaSenderKey, lgWaSenderLink, lgLoginForCard };

@@ -66,6 +66,14 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
 .hstat{background:rgba(255,255,255,0.05);padding:14px 10px;text-align:center;}
 .hstat .n{font-family:"Playfair Display",serif;font-size:22px;font-weight:900;color:var(--gold);}
 .hstat .l{font-size:12px;color:rgba(247,244,239,0.4);margin-top:4px;}
+/* כניסה אחת לכמה כרטיסים (בן, 24/11): כפתור לכל כרטיס */
+.cardbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px;}
+.cardbar[hidden]{display:none;}
+.cardbar button{min-height:40px;padding:0 14px;border-radius:999px;border:1px solid rgba(247,244,239,0.25);background:transparent;color:#f7f4ef;
+  font:700 13px Heebo,sans-serif;cursor:pointer;}
+.cardbar button span{opacity:.6;font-weight:500;margin-inline-start:4px;}
+.cardbar button[aria-pressed="true"]{background:var(--gold);color:var(--on-gold);border-color:var(--gold);}
+.cardbar button[aria-pressed="true"] span{opacity:.8;}
 .tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;position:sticky;top:58px;z-index:9;}
 .tab{padding:13px 15px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;display:flex;align-items:center;gap:5px;}
 .tab.active{color:var(--text);border-bottom-color:var(--gold-text);}
@@ -303,6 +311,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="firebase-db.js?v=20261123a"></script>
+  <script src="portal-cards.js?v=20261124a"></script>
   <script src="change-password.js?v=20261122a"></script>
   <!-- אייקוני SVG. עוקב אחרי הוספות DOM, כי הכרטיסים כאן נבנים מ-JS. -->
   <script src="lg-icons.js?v=20260806"></script>
@@ -341,6 +350,7 @@ nav{background:var(--text);padding:0 20px;height:58px;display:flex;align-items:c
     <!-- יתרת חוב מוסתרת לגמרי (בן, 4/11): הסכום חושב מההזמנות ולא מחשבשבת, והטעה לקוחות שכבר שילמו. -->
     <div class="hstat" style="display:none"><div class="n" id="statDebt">&#8362;0</div><div class="l">יתרת חוב</div></div>
   </div>
+  <div class="cardbar" id="cardBar" role="group" aria-label="הצג הזמנות של" hidden></div>
 </div>
 <div class="tabs" role="tablist" aria-label="הפורטל שלי">
   <!-- הצעת מחיר מוסתרת מהלקוחות עד שנתכנן אותה מחדש (בן, 4/11). הקוד נשאר. -->
@@ -549,14 +559,48 @@ function init(){
   _subscribePortalOrders(sess.phone);
 }
 
+//  ─── כמה כרטיסים בכניסה אחת (בן, 24/11) ───
+//  כל ההזמנות של הטלפון נטענות ל-_PORTAL_ALL; ORDERS = מה שמוצג לפי הכרטיס שנבחר.
+const _PORTAL_ALL = [];
+let _portalCardsMeta = null, _portalCard = '';
+try { _portalCard = localStorage.getItem('lgPortalCard') || ''; } catch (e) {}
+function _portalApplyCard() {
+  const cards = lgPortalCards(_PORTAL_ALL, _portalCardsMeta);
+  if (_portalCard && !cards.some(c => c.id === _portalCard)) _portalCard = '';
+  ORDERS.length = 0;
+  lgPortalPick(_PORTAL_ALL, _portalCard).forEach(o => ORDERS.push(o));
+  const bar = document.getElementById('cardBar');
+  if (bar) {
+    bar.hidden = !cards.length;
+    bar.innerHTML = !cards.length ? '' : [{ id: '', name: 'הכל', n: _PORTAL_ALL.length }].concat(cards)
+      .map(c => '<button type="button" data-card="' + lgEsc(c.id) + '" aria-pressed="' + (c.id === _portalCard) + '">' + lgEsc(c.name) + '<span>' + c.n + '</span></button>').join('');
+  }
+  renderAll();
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('#cardBar [data-card]');
+  if (!b) return;
+  _portalCard = b.dataset.card || '';
+  try { localStorage.setItem('lgPortalCard', _portalCard); } catch (err) {}
+  _portalApplyCard();
+});
+function _portalLoadCards(phone) {
+  const p = String(phone || '').replace(/[-\s]/g, '');
+  if (!p) return;
+  firebase.database().ref('users/' + p + '/portalCards').once('value')
+    .then(s => { _portalCardsMeta = s.val() || null; if (_portalCardsMeta) _portalApplyCard(); })
+    .catch(() => {});
+}
+
 function _subscribePortalOrders(clientPhone) {
+  _portalLoadCards(clientPhone);
   if (_portalUnsub) _portalUnsub();
   const clientName = (window._lgSession || {}).name || '';
   _portalUnsub = listenClientOrders(clientPhone, function(fbOrders){
-    ORDERS.length = 0;
+    _PORTAL_ALL.length = 0;
     fbOrders.forEach(o => {
       if (o.sqDeletedAt) return;   // נמחקה מתור הסקיצות (בן, 23/11)
-      ORDERS.push({
+      _PORTAL_ALL.push({
         id:         o.id,
         num:        o.orderNum  || o.refNum || '',
         name:       o.sketchName|| o.type   || '',
@@ -583,7 +627,7 @@ function _subscribePortalOrders(clientPhone) {
         phone:      o.phone     || '',
       });
     });
-    renderAll();
+    _portalApplyCard();
     const ov = document.getElementById('lgLoading');
     if (ov) { ov.style.opacity = '0'; ov.style.transition = 'opacity 0.3s'; setTimeout(() => ov.remove(), 320); }
     _lgPortalGoOnce();

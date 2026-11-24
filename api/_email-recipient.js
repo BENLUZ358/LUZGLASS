@@ -14,7 +14,7 @@
 //  כל כתובת בנפרד — לא מנרמלים באחסון כדי לא לאבד את מה שהוזן.
 // ═══════════════════════════════════════════════════════════════════
 
-const { norm } = require('./_wa-recipient.js');
+const { norm, lgLoginForCard } = require('./_wa-recipient.js');
 
 //  '"Dana" <Dana@X.com>' → 'dana@x.com'. כל דבר שאינו כתובת → ''.
 function lgEmailAddr(raw) {
@@ -55,7 +55,7 @@ async function lgClientFromEmail(db, from) {
   const link = await lgEmailSenderLink(db, email);
   if (link) {
     const users = (await db.ref('users').once('value')).val() || {};
-    const login = Object.keys(users).find(k => users[k] && String(users[k].customerId || '') === link.customerId) || '';
+    const login = lgLoginForCard(users, link.customerId);
     const card = link.customerName ? null : (await db.ref('hashavshevetAccounts/' + link.customerId).once('value')).val();
     return { matched: true, via: 'link', email, phone: login, loginPhone: login, customerId: link.customerId,
              name: link.customerName || String((card && card.name) || '') };
@@ -71,7 +71,7 @@ async function lgClientFromEmail(db, from) {
   const customerId = String(card.key || key);
   // משתמש הפורטל של הלקוח — כמו ב-lgClientFromWaGroup, כדי שהסקיצה תופיע אצלו
   const users = (await db.ref('users').once('value')).val() || {};
-  const login = Object.keys(users).find(k => users[k] && String(users[k].customerId || '') === customerId) || '';
+  const login = lgLoginForCard(users, customerId);
   const u = users[login] || {};
   return {
     matched: true, via: 'email', email,
