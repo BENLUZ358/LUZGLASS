@@ -76,5 +76,21 @@ check('date range: order counts by its cut day too', ids(run('', { from: '2026-1
 check('newest order first', ids(run('')), ['c', 'a', 'b']);
 check('nothing found', (r => [r.orders.length, r.loose.length])(run('לא קיים בכלל')), [0, 0]);
 
+// ── מתי נחתך + איפה עכשיו (בן, 24/11) ── T = יום ה' 19/11
+const a1 = orders[0].items[0];
+check('cut line: cut on 18/11', H.lgHubCutLine(a1, jobs.M00320, T), { label: "✂ נחתך ד' 18/11", cut: true });
+check('cut line stays when order is in chisum', H.lgHubCutLine(a1, jobs.M00320, T).label, "✂ נחתך ד' 18/11");
+check('now: in chisum', H.lgHubNow(Object.assign({}, orders[0], { stage: 'chisum' }), a1, T), { label: 'בחיסום / תחנת בדיקה', tone: 'cut' });
+check('now: cut, before chisum', H.lgHubNow(orders[0], a1, T), { label: 'נחתך · לפני חיסום', tone: 'cut' });
+check('cut line: tomorrow', H.lgHubCutLine({ optyJob: 'M00321', optyCut: { at: '2026-11-20' } }, jobs.M00321, T).label, '⏳ לחיתוך מחר 20/11');
+check('cut line: today', H.lgHubCutLine({ optyCut: { at: T } }, null, T).label, '⏳ לחיתוך היום');
+check('cut line: later day', H.lgHubCutLine({ optyCut: { at: '2026-11-22' } }, null, T).label, "⏳ לחיתוך א' 22/11");
+check('cut line: undone mark is not cut', H.lgHubCutLine({ optyJob: 'M00321', optyCut: { at: '2026-11-18', undone: true } }, jobs.M00321, T), { label: '⏳ לחיתוך מחר 20/11', cut: false });
+check('cut line: in job, no cut info → by job day', H.lgHubCutLine({ optyJob: 'M00321' }, jobs.M00321, T).label, '⏳ לחיתוך מחר 20/11');
+check('cut line: in job, job not loaded', H.lgHubCutLine({ optyJob: 'M00999' }, null, T), { label: 'באופטימיזציה M00999', cut: false });
+check('cut line: not in optimisation', H.lgHubCutLine(orders[2].items[0], null, T), { label: 'עוד לא באופטימיזציה', cut: false });
+check('now: at drafter', H.lgHubNow(orders[2], orders[2].items[0], T), { label: 'אצל שרטט', tone: 'wait' });
+check('now: planned', H.lgHubNow({ stage: 'workday' }, { optyJob: 'M00321' }, T), { label: 'מתוכנן לחיתוך', tone: 'plan' });
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');

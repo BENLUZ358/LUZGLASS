@@ -61,6 +61,34 @@ function lgHubItemState(o, it, todayIso) {
   return { label: LG_HUB_EARLY[(o && o.stage) || ''] || 'ממתין', tone: 'wait', src: 'ours' };
 }
 
+//  ─── שני דברים לעובד (בן, 24/11: "מתי זה נחתך ומה הסטטוס של זה") ───
+//  מתי נחתך — מהסימון של אופטי-ווי על הפריט (נשאר גם אחרי שההזמנה עברה לחיסום), ואם אין — לפי יום האופטימיזציה
+const _hubDay = iso => { const d = new Date(String(iso).slice(0, 10) + 'T12:00:00Z'); return isNaN(d) ? '' : 'אבגדהוש'[d.getUTCDay()] + "'"; };
+const _hubDm = iso => String(iso).slice(8, 10) + '/' + String(iso).slice(5, 7);
+const _hubNext = iso => new Date(Date.parse(String(iso).slice(0, 10) + 'T12:00:00Z') + 86400000).toISOString().slice(0, 10);
+function _hubWhen(at, cut, todayIso) {
+  if (cut) return { label: '✂ נחתך ' + _hubDay(at) + ' ' + _hubDm(at), cut: true };
+  if (at === todayIso) return { label: '⏳ לחיתוך היום', cut: false };
+  if (at === _hubNext(todayIso)) return { label: '⏳ לחיתוך מחר ' + _hubDm(at), cut: false };
+  return { label: '⏳ לחיתוך ' + _hubDay(at) + ' ' + _hubDm(at), cut: false };
+}
+function lgHubCutLine(it, rec, todayIso) {
+  const c = it && it.optyCut;
+  if (c && !c.undone && c.at) return _hubWhen(c.at, !!c.marked || c.at < todayIso, todayIso);
+  if (it && it.optyJob && rec && rec.day) return _hubWhen(rec.day, false, todayIso);
+  if (it && it.optyJob) return { label: 'באופטימיזציה ' + it.optyJob, cut: false };
+  return { label: 'עוד לא באופטימיזציה', cut: false };
+}
+//  איפה עכשיו — השלב שלנו מהחיסום והלאה; לפני כן: נחתך / מתוכנן / השלב המוקדם
+function lgHubNow(o, it, todayIso) {
+  const late = LG_HUB_STAGE[(o && o.stage) || ''];
+  if (late) return { label: late.label, tone: late.tone };
+  const c = it && it.optyCut;
+  if (c && !c.undone && c.at && (c.marked || c.at < todayIso)) return { label: 'נחתך · לפני חיסום', tone: 'cut' };
+  if (it && (it.optyJob || (c && !c.undone && c.at))) return { label: 'מתוכנן לחיתוך', tone: 'plan' };
+  return { label: LG_HUB_EARLY[(o && o.stage) || ''] || 'ממתין', tone: 'wait' };
+}
+
 //  זכוכית מהאופטימיזציה בלבד (לא מחוברת): נחתך / לחיתוך לפי יום העבודה והסימון בלוח, ועם info
 //  ({chisum, graphic}) — גם "יוצא לחיסום / בחיסום / מוכן" כמו בחיפוש של 17/11 (lgOptyPieceReady)
 function lgHubPieceState(rec, sheetNo, todayIso, info) {
@@ -165,5 +193,5 @@ function lgHubGroupLoose(loose) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_HUB_STATES, lgHubParse, lgHubItemState, lgHubPieceState, lgHubLinkedKeys, lgHubSearch, lgHubGroupLoose };
+  module.exports = { LG_HUB_STATES, lgHubParse, lgHubItemState, lgHubCutLine, lgHubNow, lgHubPieceState, lgHubLinkedKeys, lgHubSearch, lgHubGroupLoose };
 }
