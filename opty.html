@@ -183,6 +183,20 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .tprog{position:sticky;top:56px;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-bottom:var(--space-3);font-weight:var(--fw-black);font-size:var(--fs-lg);}
 .tprog .bar{height:12px;border-radius:6px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:6px;}
 .tprog .bar i{display:block;height:100%;background:#1e7d32;}
+.rprint{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2);}
+.radd summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;}
+.radd form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-2);}
+.radd label{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-sm);}
+.radd label.wide{grid-column:1/-1;}
+.rrow .xt{font-size:11px;border:1px solid var(--border);border-radius:999px;padding:0 6px;margin-inline-start:4px;white-space:nowrap;}
+.radd input,.radd select{min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;background:var(--surface);color:var(--text);font:inherit;min-width:0;}
+.radd button{grid-column:1/-1;min-height:48px;}
+.rgrp{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-bottom:var(--space-3);}
+.rgrp h3{font-size:16px;margin-bottom:var(--space-2);}
+.rrow{display:flex;align-items:center;gap:var(--space-2);padding:6px 0;border-top:1px solid var(--border);font-size:var(--fs-sm);}
+.rrow .rt{flex:1;min-width:0;} .rrow .rd{font-weight:700;direction:ltr;unicode-bidi:isolate;}
+.rrow.off .rt{text-decoration:line-through;color:var(--muted);}
+.rrow .man{font-size:12px;color:var(--gold);font-weight:700;}
 .tgrp{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-bottom:var(--space-3);}
 .tgrp h2{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);justify-content:space-between;}
 .tgrid{display:grid;grid-template-columns:1fr;gap:var(--space-2);}
@@ -219,6 +233,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
   <nav class="tabs" role="tablist" aria-label="אופטי-ווי">
     <button type="button" role="tab" data-tab="find" aria-selected="true">🔍 חיפוש</button>
     <button type="button" role="tab" data-tab="today" aria-selected="false">עבודת היום</button>
+    <button type="button" role="tab" data-tab="rep" aria-selected="false">דוחות</button>
     <span class="tsep" aria-hidden="true"></span>
     <div class="tmore">
       <button type="button" id="tMore" aria-haspopup="true" aria-expanded="false"><span id="tMoreLbl">עוד ⋯</span><span class="cnt" id="cntMore" hidden></span></button>
@@ -265,6 +280,28 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
     <div id="tHead"></div>
     <div id="tProg" class="tprog" role="status"></div>
     <div id="tOut"><p class="note">טוען…</p></div>
+  </div>
+
+  <!-- דוחות חיסום (בן, 24/11): דוח לפי לקוח למעקב + תעודה לנהג לפי סוג ומידה; אפשר להוסיף ידנית -->
+  <div class="pane" id="pane-rep" hidden>
+    <div class="jflt"><label>יום עבודה <input type="date" id="rDay"></label></div>
+    <div id="rHead"></div>
+    <details class="card radd" id="rAdd">
+      <summary>+ הוסף ידנית</summary>
+      <form id="rForm" autocomplete="off">
+        <label>רוחב<input type="number" id="rW" inputmode="numeric" min="1" required></label>
+        <label>גובה<input type="number" id="rH" inputmode="numeric" min="1" required></label>
+        <label>כמות<input type="number" id="rQ" inputmode="numeric" min="1" value="1" required></label>
+        <label class="wide">סוג זכוכית<input id="rG" list="rGlassList" required placeholder="8 mm clear"></label>
+        <label class="wide">שם לקוח<input id="rC" required></label>
+        <label class="wide">שם הזמנה (לא חובה)<input id="rN"></label>
+        <label class="wide">לאיזו תעודה<select id="rK"><option value="chisum">חיסום</option><option value="paint">צבע (נכנס גם לחיסום)</option><option value="cnc">CNC (נכנס גם לחיסום)</option><option value="triplex">טריפלקס (רק טריפלקס)</option></select></label>
+        <label class="wide" id="rColorL" hidden>קוד צבע<input id="rColor" placeholder="7016"></label>
+        <datalist id="rGlassList"></datalist>
+        <button class="sm gold" type="submit">הוסף לדוח</button>
+      </form>
+    </details>
+    <div id="rOut"><p class="note">טוען…</p></div>
   </div>
 
   <div class="pane" id="pane-jobs" hidden>
@@ -328,6 +365,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
 <script src="opty-hub.js?v=20261124b"></script>
+<script src="opty-report.js?v=20261124a"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -375,6 +413,7 @@ function showTab(t) {
   if (t === 'link') loadLink();
   if (t === 'jobs') jobsLoad();
   if (t === 'today') todayLoad();
+  if (t === 'rep') repLoad();
   if (t === 'set') { loadPairs(); loadMats(); }
 }
 //  "עוד ⋯" (בן, 24/11): שם הלשונית שנבחרה מהתפריט מופיע על הכפתור; המספרים של "לחיבור" + "לא אצלנו" גם עליו
@@ -948,6 +987,81 @@ $('pane-jobs').addEventListener('click', e => {
   const u = t.closest('[data-undo]'); if (u) { jobCut(u.dataset.undo, false); return; }
   const r = t.closest('[data-redo]'); if (r) { jobCut(r.dataset.redo, true); return; }
 });
+
+//  ─── דוחות חיסום (בן, 24/11) ───
+//  כל מה שנחתך ביום העבודה והולך לחיסום (opty-report.js) + מה שבן הוסיף ידנית. "הורד" = לא בהדפסה (אפשר להחזיר).
+//  כל תעודה (חיסום / צבע / CNC / טריפלקס) מקבלת מספר משלה בהדפסה הראשונה (meta/optyReportSeq, מ-5901); הדוח = מספר החיסום.
+let REP = {};
+const repRef = () => _lgDb.ref('meta/optyReports/' + $('rDay').value);
+async function repLoad() {
+  if (!$('rDay').value) $('rDay').value = lgOptyTodayIso();
+  $('rOut').innerHTML = '<p class="note">טוען…</p>';
+  try {
+    const [j, m, r] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value'), repRef().once('value')]);
+    JOBS = Object.assign({}, JOBS, j.val() || {}); MATS = m.val() || {}; REP = r.val() || {};
+    $('rGlassList').innerHTML = [...new Set(Object.values(JOBS).map(x => x && x.matName).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('');
+    repRender();
+  } catch (e) { console.error(e); $('rOut').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור</p>'; }
+}
+const repRows = () => lgOptyReportRows(JOBS, $('rDay').value, MATS, REP);
+function repRender() {
+  const rows = repRows(), nos = REP.nos || {};
+  //  כפתור לכל תעודה (צבע / CNC / טריפלקס — רק כשיש), עם כמה יחידות ומה המספר שלה
+  const btn = (k, label) => { const rs = lgOptyReportFor(rows, k), u = rs.reduce((n, r) => n + r.qty, 0), no = nos[k === 'report' ? 'chisum' : k];
+    return (k === 'chisum' || k === 'report' || rs.length) ? `<button class="sm gold" type="button" data-rprint="${k}" ${rs.length ? '' : 'disabled'}>🖨 ${label} · ${u}${no ? ' · מס׳ ' + esc(no) : ''}</button>` : ''; };
+  $('rHead').innerHTML = `<div class="rprint">${btn('report', 'דוח לפי לקוח')}${btn('chisum', 'תעודת חיסום')}${btn('paint', 'תעודת צבע')}${btn('cnc', 'תעודת CNC')}${btn('triplex', 'תעודת טריפלקס')}</div>
+    <p class="note">כל תעודה מקבלת מספר משלה בהדפסה הראשונה. המספר על הכפתור = כמה יחידות.</p>`;
+  if (!rows.length) { $('rOut').innerHTML = '<p class="note">אין זכוכית לחיסום, צבע, CNC או טריפלקס ביום הזה. אפשר להוסיף ידנית, או לקלוט את האופטימיזציות בלשונית "קליטה".</p>'; return; }
+  const tags = r => (r.triplex ? `<span class="xt">${esc(r.triplex)}</span>` : '') + (r.paint ? `<span class="xt">צבע${r.paint !== 'צבע' ? ' ' + esc(r.paint) : ''}</span>` : '') + (r.cnc ? '<span class="xt">CNC</span>' : '');
+  const groups = {};
+  rows.forEach(r => { const c = r.client || 'בלי שם לקוח'; (groups[c] = groups[c] || []).push(r); });
+  $('rOut').innerHTML = Object.entries(groups).map(([c, rs]) => `<section class="rgrp"><h3>${esc(c)}</h3>${rs.map(r => `<div class="rrow${r.hidden ? ' off' : ''}">
+    <span class="rt">${r.src === 'manual' ? '<span class="man">ידני</span> ' : ''}${esc(r.name || '')}${r.name ? ' · ' : ''}<bdi dir="ltr">${esc(r.glass)}</bdi> ·<span class="rd">${esc(r.w)} × ${esc(r.h)}</span>${r.qty > 1 ? ' · ' + r.qty + ' יח׳' : ''}${tags(r)}</span>
+    ${r.src === 'manual' ? `<button class="sm quiet" type="button" data-rdel="${esc(r.id)}" aria-label="מחק שורה ידנית">🗑</button>`
+      : `<button class="sm quiet" type="button" data-rhide="${esc(r.key)}">${r.hidden ? 'החזר' : 'הורד'}</button>`}</div>`).join('')}</section>`).join('');
+}
+async function repWrite(path, val, okMsg) {
+  try { await repRef().child(path).set(val); st(okMsg, 'ok'); }
+  catch (e) { console.error(e); st('✗ לא נשמר — בדוק חיבור', 'bad'); }
+  const r = await repRef().once('value').catch(() => null); if (r) REP = r.val() || {};
+  repRender();
+}
+$('rDay').addEventListener('change', repLoad);
+$('rK').addEventListener('change', () => { $('rColorL').hidden = $('rK').value !== 'paint'; });
+$('rForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const w = Math.round(Number($('rW').value)), h = Math.round(Number($('rH').value)), qty = Math.max(1, Math.round(Number($('rQ').value) || 1));
+  const glass = $('rG').value.trim(), client = $('rC').value.trim(), name = $('rN').value.trim();
+  if (!(w > 0 && h > 0) || !glass || !client) { st('צריך מידה, סוג זכוכית ושם לקוח', 'bad'); return; }
+  const kind = $('rK').value, color = kind === 'paint' ? $('rColor').value.trim() : '';
+  const id = repRef().child('manual').push().key;
+  await repWrite('manual/' + id, { w, h, qty, glass, client, name, kind, color, at: Date.now(), by: _whoAmI() }, '✓ נוסף');
+  $('rW').value = ''; $('rH').value = ''; $('rQ').value = '1'; $('rN').value = ''; $('rW').focus();
+});
+$('pane-rep').addEventListener('click', async e => {
+  const h = e.target.closest('[data-rhide]'), d = e.target.closest('[data-rdel]'), p = e.target.closest('[data-rprint]');
+  if (h) { const k = h.dataset.rhide, off = !(REP.hide || {})[k]; await repWrite('hide/' + k, off ? true : null, off ? '✓ הורד מהדוח' : '✓ חזר לדוח'); }
+  else if (d) { if (confirm('למחוק את השורה הידנית?')) await repWrite('manual/' + d.dataset.rdel, null, '✓ נמחק'); }
+  else if (p) repPrint(p.dataset.rprint);
+});
+//  החלון נפתח מיד (בתוך הלחיצה — אחרת הדפדפן חוסם), המספר נקבע אחר כך
+async function repPrint(kind) {
+  const win = window.open('', '_blank');
+  if (!win) { st('הדפדפן חסם את חלון ההדפסה — אשר חלונות קופצים לאתר', 'bad'); return; }
+  win.document.write('<p dir="rtl" style="font-family:Arial">מכין…</p>');
+  try {
+    const nk = kind === 'report' ? 'chisum' : kind;          // הדוח שלנו = אותו מספר כמו תעודת החיסום
+    let no = (REP.nos || {})[nk];
+    if (!no) {
+      const t = await _lgDb.ref('meta/optyReportSeq').transaction(c => (Number(c) || LG_REPORT_FIRST_NO - 1) + 1);
+      const mine = t.snapshot.val();
+      const set = await repRef().child('nos/' + nk).transaction(c => c || mine);    // שני מחשבים באותו רגע — נשאר הראשון
+      no = set.snapshot.val(); REP.nos = Object.assign({}, REP.nos, { [nk]: no }); repRender();
+    }
+    win.document.open(); win.document.write(lgOptyReportHtml(kind, repRows(), $('rDay').value, no)); win.document.close();
+    win.focus(); setTimeout(() => { try { win.print(); } catch (_) {} }, 300);
+  } catch (e) { console.error(e); try { win.close(); } catch (_) {} st('✗ לא הודפס — בדוק חיבור', 'bad'); }
+}
 
 //  ─── עבודת היום (בן, 17/11): לוחות היום לפי סוג זכוכית, "נחתך" על כל לוח, "כל ה-X נחתך", אחוז ביצוע ───
 let TDAY = null;

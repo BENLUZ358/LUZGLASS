@@ -167,7 +167,7 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   check('"נתק" also clears the cut mark', d.o1.items[1].optyCut, undefined);
 
   //  ─── הגדרות ───
-  check('only search + today work are on top; the rest is under "עוד"', [...doc.querySelectorAll('.tabs > [data-tab]')].map(b => b.dataset.tab), ['find', 'today']);
+  check('search, today work and reports are on top; the rest is under "עוד"', [...doc.querySelectorAll('.tabs > [data-tab]')].map(b => b.dataset.tab), ['find', 'today', 'rep']);
   doc.getElementById('tMore').click();
   check('"עוד" opens the menu', doc.getElementById('tMenu').hidden, false);
   doc.querySelector('[data-tab="set"]').click();
