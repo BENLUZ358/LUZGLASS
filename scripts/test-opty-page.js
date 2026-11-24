@@ -204,9 +204,9 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   mat.value = ''; mat.dispatchEvent(new w.Event('change'));
   check('the jobs tab has no second search box any more', doc.getElementById('jQ'), null);
   doc.querySelector('[data-tab="find"]').click();
-  await hsearch('אגן', () => doc.querySelector('#hubOut [data-hstate="loose"]'));
-  check('search: glass not linked to an order is behind one button, not under the results', [!!doc.querySelector('#hubOut [data-ohit]'), /יש עוד 1 /.test(doc.querySelector('#hubOut [data-hstate="loose"]').textContent)], [false, true]);
-  doc.querySelector('#hubOut [data-hstate="loose"]').click();
+  await hsearch('אגן', () => doc.querySelector('#hubOut .hord.out'));
+  //  בן, 24/11: מה שלא במערכת מופיע מיד בחיפוש, עם תגית קטנה, בלי ללחוץ "לא אצלנו"
+  check('search: glass not in our system shows right away, tagged', [!!doc.querySelector('#hubOut [data-hstate="loose"]'), doc.querySelector('#hubOut .hord.out .htag.out').textContent, !!doc.querySelector('#hubOut .hord.out .hcut')], [false, 'לא במערכת', true]);
   check('one search also finds glass of a client that is not in our system', [...doc.querySelectorAll('#hubOut [data-ohit]')].map(b => b.dataset.ohit), ['M00337|1|2']);
   doc.querySelector('#hubOut [data-ohit]').click();
   for (let i = 0; i < 30 && !doc.querySelector('#jobView svg'); i++) await tick();
@@ -286,12 +286,11 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   db._data.meta.optyJobs.M00403 = one('M00403', iso(w.Date.now() - 20 * 86400000), 'שמעון כהן');
   db._data.meta.optyJobs.M00404 = one('M00404', iso(w.Date.now() - 3 * 86400000), 'שמעון כהן');
   doc.querySelector('[data-tab="find"]').click();
-  await hsearch('שמעון', () => doc.querySelector('#hubOut [data-hstate="loose"]'));
-  doc.querySelector('#hubOut [data-hstate="loose"]').click();
-  for (let i = 0; i < 40 && doc.querySelectorAll('#hubOut [data-ohit]').length < 3; i++) await tick();
+  await hsearch('שמעון', () => doc.querySelectorAll('#hubOut [data-ohit]').length >= 3);
   const ohits = () => [...doc.querySelectorAll('#hubOut [data-ohit]')].map(x => x.dataset.ohit.split('|')[0]);
   check('search: optimisation glass, any date when searching, newest first', ohits(), ['M00402', 'M00404', 'M00403']);
-  check('search: ready state for a glass not linked to an order (08S = chisum)', [...doc.querySelectorAll('#hubOut [data-ohit] .pill')].map(x => x.textContent.trim()).slice(0, 2), ['לחיתוך היום · חיסום', 'חזר מחיסום · מוכן']);
+  check('search: ready state for a glass not linked to an order (08S = chisum)', [...doc.querySelectorAll('#hubOut .hord.out .hit .pill')].map(x => x.textContent.trim()).slice(0, 2), ['לחיתוך היום · חיסום', 'חזר מחיסום · מוכן']);
+  check('our orders carry a small "במערכת" tag', [...doc.querySelectorAll('#hubOut .hord:not(.out) .htag')].every(t => t.textContent === 'במערכת'), true);
   //  "לא אצלנו" (בן, 19/11): בלי מילת חיפוש — שבוע אחורה, רק מה שלא מחובר
   hq.value = '';
   doc.querySelector('[data-tab="loose"]').click();

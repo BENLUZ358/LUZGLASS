@@ -94,5 +94,9 @@ check('now: order in chisum but this glass is cut tomorrow', H.lgHubNow({ stage:
 check('now: order ready wins even if a cut date is ahead', H.lgHubNow({ stage: 'done' }, { optyCut: { at: '2026-11-20' } }, T).label, 'מוכן לאיסוף');
 check('now: planned', H.lgHubNow({ stage: 'workday' }, { optyJob: 'M00321' }, T), { label: 'מתוכנן לחיתוך', tone: 'plan' });
 
+check('not ours: cut day line', H.lgHubDayLine('2026-11-18', true, T), { label: "✂ נחתך ד' 18/11", cut: true });
+check('not ours: planned tomorrow', H.lgHubDayLine('2026-11-20', false, T).label, '⏳ לחיתוך מחר 20/11');
+check('not ours: no day', H.lgHubDayLine('', false, T).label, '');
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');

@@ -80,6 +80,10 @@ function lgHubCutLine(it, rec, todayIso) {
   return { label: 'עוד לא באופטימיזציה', cut: false };
 }
 //  איפה עכשיו — השלב שלנו מהחיסום והלאה; לפני כן: נחתך / מתוכנן / השלב המוקדם
+//  זכוכית שלא במערכת (רק באופטי-ווי): אותה שורת "מתי נחתך" לפי יום העבודה ומצב החיתוך (בן, 24/11)
+function lgHubDayLine(dayIso, cut, todayIso) {
+  return dayIso ? _hubWhen(String(dayIso).slice(0, 10), !!cut, todayIso) : { label: '', cut: false };
+}
 function lgHubNow(o, it, todayIso) {
   const late = LG_HUB_STAGE[(o && o.stage) || ''];
   const c = it && it.optyCut, cutNow = c && !c.undone && c.at && (c.marked || c.at < todayIso);
@@ -195,5 +199,5 @@ function lgHubGroupLoose(loose) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LG_HUB_STATES, lgHubParse, lgHubItemState, lgHubCutLine, lgHubNow, lgHubPieceState, lgHubLinkedKeys, lgHubSearch, lgHubGroupLoose };
+  module.exports = { LG_HUB_STATES, lgHubParse, lgHubItemState, lgHubCutLine, lgHubNow, lgHubDayLine, lgHubPieceState, lgHubLinkedKeys, lgHubSearch, lgHubGroupLoose };
 }

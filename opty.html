@@ -140,6 +140,11 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .hit .hsrc{color:var(--muted);font-size:var(--fs-xs);flex:1 1 auto;}
 .hit .hx .sm{min-height:40px;}
 .hlzmore{margin:var(--space-2) 0;}
+/* בן, 24/11: בחיפוש — גם מה שלא במערכת, באותו כרטיס, עם תגית קטנה */
+.htag{font-size:12px;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid;white-space:nowrap;}
+.htag.in{color:#1f6b3a;border-color:#b9dcc5;background:#eef8f1;}
+.htag.out{color:#7a5200;border-color:#f0d9a0;background:#fff4dc;}
+.hord.out{border-style:dashed;}
 @media (min-width:760px){ .hit{grid-template-columns:110px 1fr 190px auto;grid-template-areas:"dim nm cut pill" "x x x x";} }
 .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:var(--fw-bold);font-size:var(--fs-xs);white-space:nowrap;border:1px solid transparent;}
 .pill.t-wait{background:#eef0f2;color:#3d4650;border-color:#d5dade;}
@@ -322,7 +327,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-match.js?v=20261118a"></script>
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
-<script src="opty-hub.js?v=20261124a"></script>
+<script src="opty-hub.js?v=20261124b"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -1189,10 +1194,11 @@ function hubRender() {
   const stL = HUB.state && HUB.state !== 'loose' && (LG_HUB_STATES.find(s => s.id === HUB.state) || {}).label;
   const fOn = [stL, f.mat && lgOptyMatLabel(f.mat, MATS), $('hFrom').value && 'מ-' + dmy($('hFrom').value), $('hTo').value && 'עד ' + dmy($('hTo').value), HUB.all && 'כל התאריכים'].filter(Boolean);
   $('hFltOn').textContent = fOn.length ? '· מסונן: ' + fOn.join(' · ') : '';
-  const sum = `<p class="note hsum">${HUB.state === 'loose' ? res.counts.loose + ' זכוכיות באופטי-ווי שלא אצלנו' : res.counts.orders + ' הזמנות'} · ${esc(range)}${f.mat ? ' · ' + esc(lgOptyMatLabel(f.mat, MATS)) : ''}</p>`;
+  const qOn = !!$('hQ').value.trim() && HUB.state !== 'loose';
+  const sum = `<p class="note hsum">${HUB.state === 'loose' ? res.counts.loose + ' זכוכיות באופטי-ווי שלא אצלנו' : res.counts.orders + ' הזמנות במערכת' + (qOn && res.counts.loose ? ' · ' + res.counts.loose + ' זכוכיות שלא במערכת' : '')} · ${esc(range)}${f.mat ? ' · ' + esc(lgOptyMatLabel(f.mat, MATS)) : ''}</p>`;
   const ords = res.orders.map(x => {
     const o = x.o;
-    return `<article class="hord"><header><b>${esc(o.orderNum || '—')}</b><span>${esc(o.orderClient || '')}</span><span class="sk">${esc(o.sketchName || 'ללא שם')}</span>
+    return `<article class="hord"><header><b>${esc(o.orderNum || '—')}</b><span>${esc(o.orderClient || '')}</span><span class="sk">${esc(o.sketchName || 'ללא שם')}</span><span class="htag in">במערכת</span>
       <small>${esc(dmy(x.date))}${x.mats.length ? ' · ' + x.mats.map(m => esc(lgOptyMatLabel(m, MATS))).join(', ') : ''}</small></header>
       ${x.items.map(r => { const it = r.it, rec = it.optyJob && JOBS[it.optyJob], key = o.id + '|' + r.idx, open = HUB.open.has(key);
         const cl = lgHubCutLine(it, rec, lgOptyTodayIso()), now = lgHubNow(o, it, lgOptyTodayIso());
@@ -1216,7 +1222,18 @@ function hubRender() {
   const more = `<p class="hmore"><button class="sm" type="button" data-holder="1">טען אופטימיזציות ישנות יותר</button>${HUB.older ? ' <small class="note">נטענו עוד ' + HUB.older + '</small>' : ''}</p>`;
   const empty = !res.orders.length && !res.loose.length ? `<div class="card hempty"><b>לא נמצא</b><p class="note">נסה: רק מספר אחד מהמידה (1900), חלק משם הלקוח, או לחץ "כל התאריכים". חיפוש מראה גם הזמנות ישנות — אבל אופטימיזציות רק מ-400 האחרונות, אלא אם טוענים ישנות יותר.</p></div>` : '';
   const looseBtn = res.loose.length ? `<p class="hlzmore"><button class="sm" type="button" data-hstate="loose">יש עוד ${res.counts.loose} זכוכיות באופטי-ווי שלא מחוברות להזמנה — הצג</button></p>` : '';
-  $('hubOut').innerHTML = sum + (HUB.state === 'loose' ? loose + ords : ords + looseBtn) + empty + more;
+  //  בן, 24/11: בחיפוש — זכוכיות שלא במערכת מופיעות מיד אחרי ההזמנות, באותו כרטיס, עם "לא במערכת"
+  const today = lgOptyTodayIso();
+  const looseCards = groups.map(g => `<article class="hord out"><header><b>${esc(g.client)}</b><span class="htag out">לא במערכת</span>
+      <small>${esc(dmy(g.list[0].day))} · ${esc(matLbl(JOBS[g.list[0].job]))}</small></header>
+      ${g.list.map(p => { const key = 'L|' + p.job + '|' + p.sheetNo + '|' + p.order, open = HUB.open.has(key);
+        const cl = lgHubDayLine(p.day, p.st && (p.st.tone === 'cut' || p.st.tone === 'ready'), today);
+        return `<div class="hit" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(p.w, p.h)}</span><span class="hnm">${esc(p.name || 'בלי שם')}</span>
+        <span class="hcut${cl.cut ? ' is-cut' : ''}">${esc(cl.label)}</span>${hubPill(p.st)}
+        <div class="hx"${open ? '' : ' hidden'}><span class="hsrc">${esc(p.job)} · לוח ${p.sheetNo}/${p.total}${p.shape ? ' · צורה ' + esc(p.shape) : ''}${p.note ? ' · ' + esc(p.note) : ''}${p.waiting ? ' · מחכה לחיבור' : ''}</span>
+        <button class="sm" type="button" data-ohit="${esc(p.job + '|' + p.sheetNo + '|' + p.order)}">ללוח</button></div></div>`; }).join('')}
+    </article>`).join('');
+  $('hubOut').innerHTML = sum + (HUB.state === 'loose' ? loose + ords : ords + (qOn ? looseCards : looseBtn)) + empty + more;
   const need = res.loose.map(p => p.shape).filter(s => s && !(s in GEOS)).slice(0, 80);
   if (need.length) loadGeos(need).then(n => { if (n) hubRender(); });
 }
