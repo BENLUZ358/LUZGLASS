@@ -30,9 +30,10 @@ function lgOptyReportProc(note) {
   return { triplex: tr ? tr[0].replace(/\s+/g, ' ') : '', paint: pc ? (pc[1].trim() || 'צבע') : '', cnc: /\bCNC\b/i.test(t) };
 }
 
-//  מידה נטו, כמו בתעודה 5900 של התוכנה הקודמת: מה שבאופטי-ווי פחות 2 מ"מ ליטוש, במ"מ שלמים
-//  (בדקתי 24/11: 39 שורות מ-5900 = החיתוך של 23/11 בדיוק כך — "רוחב" = Y באופטי-ווי, "גובה" = X)
-function lgOptyReportNet(v) { const n = Number(v) || 0; return n > 2 ? Math.round(n - 2) : Math.round(n); }
+//  מידה נטו, כמו בתעודה 5900 של התוכנה הקודמת, במ"מ שלמים. "רוחב" = Y באופטי-ווי, "גובה" = X.
+//  זכוכית שהמידה שלה כוללת את הליטוש (MOLATURA 0 — השרטט הוסיף 2) → פחות 2; MOLATURA > 0 (אופטי-ווי מוסיף לבד) → כמו שהיא.
+//  (נבדק 24/11 מול 5900: 39 שורות של החיתוך של 23/11 עם ליטוש 0 → פחות 2, 2 שורות עם ליטוש 2 → כמו שהן)
+function lgOptyReportNet(v, grind) { const n = Number(v) || 0; return Math.round(Number(grind) > 0 || n <= 2 ? n : n - 2); }
 
 //  jobs = meta/optyJobs · rep = meta/optyReports/<day> → שורות:
 //  { key, src: 'opty'|'manual', client, name, glass, mat, w (רוחב), h (גובה), qty, job, chisum, paint, cnc, triplex, hidden }
@@ -47,7 +48,7 @@ function lgOptyReportRows(jobs, day, mats, rep) {
       const pr = lgOptyReportProc(p.note), chisum = !pr.triplex && _repNoteChisum(p.note) === true;
       const key = j.job + '_' + pos;
       push({ key, src: 'opty', job: j.job, client: String(p.client || '').trim(), name: String(p.name || '').trim(),
-        glass: String(j.matName || j.mat || '').trim(), mat: String(j.mat || ''), w: lgOptyReportNet(p.h), h: lgOptyReportNet(p.w), qty: Number(p.qty) || 1,
+        glass: String(j.matName || j.mat || '').trim(), mat: String(j.mat || ''), w: lgOptyReportNet(p.h, p.grind), h: lgOptyReportNet(p.w, p.grind), qty: Number(p.qty) || 1,
         chisum, paint: pr.paint, cnc: pr.cnc, triplex: pr.triplex, hidden: !!hide[key] });
     });
   });
