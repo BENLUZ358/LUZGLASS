@@ -62,6 +62,8 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   check('reads .dat shape files and cutting files', doc.getElementById('gotDat').textContent, '✓ 1 צורות · 2 קובצי חיתוך');
   check('check button enabled', doc.getElementById('btnCheck').disabled, false);
 
+  //  תאריך האספקה באופטי-ווי יכול להיות ימים אחורה (23/11: 18/11) — בודקים 14 יום כברירת מחדל
+  check('default look-back is 14 days', doc.getElementById('days').value, '14');
   doc.getElementById('days').value = '3';
   doc.getElementById('btnCheck').click();
   for (let i = 0; i < 20 && !doc.querySelector('.sum'); i++) await tick();

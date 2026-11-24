@@ -219,7 +219,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
   <section class="card">
     <h2>2. בדוק</h2>
     <div class="step">
-      <span class="days">חלקים מ-<input type="number" id="days" min="1" max="45" value="3">הימים האחרונים</span>
+      <span class="days">חלקים מ-<input type="number" id="days" min="1" max="45" value="14">הימים האחרונים</span>
       <button class="go" id="btnCheck" type="button" disabled>🔍 בדוק מול ההזמנות</button>
     </div>
   </section>
@@ -393,7 +393,7 @@ async function check() {
       if (/^magaz\.db$/i.test(f.name)) MAGAZ = t; else rows.push(...t);   // Magaz = רשימת סוגי הזכוכית (שמות)
     }
     ROWS = rows;
-    const days = Math.max(1, Math.min(45, Number($('days').value) || 3));
+    const days = Math.max(1, Math.min(45, Number($('days').value) || 14));
     const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
     const pieces = lgOptyPieces(rows, since);
     //  שיפוע: המידה אחרי החיתוך מהשרטוט (צריך את קבצי ה-.dat) — ר' lgOptyCutSize
