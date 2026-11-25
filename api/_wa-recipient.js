@@ -208,6 +208,8 @@ async function lgClientFromWaGroup(db, groupId, memberPhone) {
 //  חוסמים אותם בהזמנה מהפורטל), ולכן הזמנה מזויפת לא מגיעה לערוץ המייל.
 //  כל תשובה אחרת נושאת channel:'whatsapp'.
 async function resolveRecipient(db, order, kind) {
+  //  "מוכן" למספר קבוע של הכרטיס (בן, 25/11) — גובר גם על ערוץ המייל
+  if (kind === 'ready' && await lgReadyToRec(db, order && order.customerId)) return resolveRecipientWa(db, order, kind);
   if (order && order.source === 'email' && order.emailThreadId && order.emailMessageId) {
     const { lgEmailSenderLink } = require('./_email-recipient');   // עצל — _email-recipient דורש את הקובץ הזה
     const el = await lgEmailSenderLink(db, order.emailFrom);
@@ -231,6 +233,18 @@ async function resolveRecipient(db, order, kind) {
 //  החשבוניות בפרטי אותו הדבר") — waMeta/invoiceToPrivate/<מפתח>/phone גובר על
 //  המספר שבכרטיס. נכתב רק בידי מנהל (waMeta), ולכן גם הוא הרשאה.
 async function resolveRecipientWa(db, order, kind) {
+  //  ─── "מוכן" למספר קבוע (בן, 25/11) ───
+  //  "כל הזמנה מוכנה של פלג מקלחונים — הודעה ל-<מספר>, גם שזה לקוח הובלות".
+  //  waMeta/readyTo/<מפתח כרטיס> = { phone } — נכתב רק בידי מנהל, ולכן הוא ההרשאה
+  //  (כמו invoiceToPrivate). רק 'ready'. בלי מספר תקין → חסום, לא חזרה לנמען אחר.
+  if (kind === 'ready') {
+    const rt = await lgReadyToRec(db, order && order.customerId);
+    if (rt) {
+      const phone = norm(rt.phone);
+      return { phone, source: phone ? 'ready-to' : 'ready-to-missing', accountKey: String(order.customerId),
+               linked: true, channel: 'whatsapp' };
+    }
+  }
   //  הזמנה ידנית (source:'manual'): רק 'מוכן' ו'חשבונית', ורק לטלפון שבן רשם ב-
   //  waMeta/manualOrders/<id>. לעולם לא לטלפון הכרטיס, ולא ל-invoiceToPrivate.
   if (order && order.source === 'manual') {
@@ -257,6 +271,13 @@ async function resolveRecipientWa(db, order, kind) {
              accountKey: r.accountKey, linked: true, channel: 'whatsapp' };
   }
   return { ...r, channel: 'whatsapp' };
+}
+
+async function lgReadyToRec(db, accountKey) {
+  const k = String(accountKey || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,40}$/.test(k)) return null;
+  const v = (await db.ref('waMeta/readyTo/' + k).once('value')).val();
+  return v && typeof v === 'object' && v.phone ? v : null;
 }
 
 async function _invoicePrivateRec(db, accountKey) {
@@ -286,5 +307,5 @@ async function _resolveWa(db, order) {
   return { phone: String(g), source: 'group', accountKey: String(link.customerId), linked: true };
 }
 
-module.exports = { resolvePhone, resolveRecipient, resolveRecipientWa, lgInvoiceToPrivate, toWaNumber, norm, orderSketchName, waChatToLocal,
+module.exports = { resolvePhone, resolveRecipient, resolveRecipientWa, lgReadyToRec, lgInvoiceToPrivate, toWaNumber, norm, orderSketchName, waChatToLocal,
                    lgClientFromWaSender, lgClientFromWaGroup, lgWaSenderKey, lgWaSenderLink, lgLoginForCard };

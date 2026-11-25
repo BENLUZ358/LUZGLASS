@@ -84,7 +84,8 @@ function world(orders, opts = {}) {
     saveWorkDay() {}, setTab() {}, closeFinish() {}, _showChisumBanner() {},
     renderAll() { log.renders++; }, updateDraftBadge() {}, closeDraftPreview() {},
     showToast(m) { log.toasts.push(m); },
-    _waSendReadyGrouped(ids) { log.wa.push(...ids); },
+    //  onlyReadyTo (בן, 25/11): לקוח הובלות — השרת שולח רק למספר קבוע; נרשם בנפרד
+    _waSendReadyGrouped(ids, o) { (o && o.onlyReadyTo ? (log.waRT = log.waRT || []) : log.wa).push(...ids); },
     _wdReadyTry() {},
     setTimeout(fn) { if (fn.name === '' && /_waSendReadyGrouped/.test(String(fn))) fn(); },
     confirm: () => true,
@@ -239,6 +240,7 @@ const addable   = (w, id) => w.ctx._wdUnavailIdxs
   check('delivery client: goes to delivery', w.o(7).stage, 'delivery');
   check('graphic order: goes to graphic', w.o(8).stage, 'graphic');
   check('neither gets a "ready" message', w.log.wa, []);
+  check('delivery client: only the fixed-number "ready" path (server filters)', w.log.waRT, ['7']);
 }
 
 /* ── 8. לחיצה כפולה על "שלח הודעות" — אין כפילויות ─────────────────────── */

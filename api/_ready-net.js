@@ -40,19 +40,23 @@ function lgReadyNetHours(now) {
 
 //  טהור. orders = { id: order }, inQueue = Set של מזהי הזמנות שכבר בתור ready, tried = { id: at }
 //  → [{ client, ids:[...] }] מקובץ לפי orderClient (+ הנייד של הזמנה ידנית), בסדר readyAt
-function lgReadyNetPick(orders, now, inQueue, tried, minAgeMs) {
+//  readyTo = Set של כרטיסים עם מספר קבוע ל"מוכן" (בן, 25/11 — פלג): הזמנה שלהם
+//  שעברה להובלה נחשבת "מוכנה" מרגע deliveryAt.
+const _readyAtOf = (o, readyTo) => o.stage === 'done' ? Number(o.readyAt) || 0
+  : o.stage === 'delivery' && readyTo && readyTo.has(String(o.customerId || '')) ? Number(o.deliveryAt) || 0 : 0;
+function lgReadyNetPick(orders, now, inQueue, tried, minAgeMs, readyTo) {
   const t = Number(now) || Date.now();
   const q = inQueue || new Set(), tr = tried || {};
   const list = Object.entries(orders || {}).filter(([id, o]) => {
-    if (!o || o.stage !== 'done' || o.isTest) return false;
-    const at = Number(o.readyAt) || 0;
+    if (!o || o.isTest) return false;
+    const at = _readyAtOf(o, readyTo);
     const minAge = minAgeMs == null ? MIN_AGE_MS : minAgeMs;
     if (!at || t - at < minAge || t - at > MAX_AGE_MS) return false;
     if (o.whatsapp && o.whatsapp.sentAt) return false;
     if (o.emailNotices && o.emailNotices.ready) return false;
     if (q.has(id) || tr[id]) return false;
     return true;
-  }).sort((a, b) => (Number(a[1].readyAt) || 0) - (Number(b[1].readyAt) || 0));
+  }).sort((a, b) => _readyAtOf(a[1], readyTo) - _readyAtOf(b[1], readyTo));
   //  ⚠️ תאום של wdReadyGroupKey (sq-new-order.js) — אם אחד משתנה, גם השני.
   //  הזמנה ידנית נפרדת לפי הנייד שלה: לא מתאחדת עם הזמנה רגילה של אותו כרטיס,
   //  ושני לקוחות מזדמנים באותו שם עם ניידים שונים לא מתאחדים.
@@ -164,7 +168,8 @@ async function lgReadyNetRun(db, o) {
     if (v) orders[id] = v;
   }
   await lgReadyNetUnwatch(db, due);
-  const groups = lgReadyNetPick(orders, now, await _queuedReadyIds(db, now), {}, 0).slice(0, MAX_GROUPS);
+  const readyTo = new Set(Object.keys((await db.ref('waMeta/readyTo').once('value')).val() || {}));
+  const groups = lgReadyNetPick(orders, now, await _queuedReadyIds(db, now), {}, 0, readyTo).slice(0, MAX_GROUPS);
   if (!groups.length) return { ok: true, sent: 0 };
 
   const { lgRoomPost } = require('./_agent-room');

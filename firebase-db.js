@@ -3032,7 +3032,8 @@ async function lgLockAndAdvance(orderId, order, globalP, clientP, nextStage){
   if(nextStage === 'done') update.readyAt = update.updatedAt;
   //  השרת מתחיל לעקוב: אם "מוכן" לא ייצא מהדף תוך 3 דק', הוא שולח (api/_ready-net.js, בן 11/11).
   //  נשלח לפני הכתיבה ובלי לחכות — כדי שגם דף שנסגר מיד אחרי הסימון יספיק לשלוח אותו.
-  if(nextStage === 'done' && typeof _lgAuthPost === 'function'){
+  //  גם מעבר להובלה (בן, 25/11): לכרטיס עם מספר קבוע ל"מוכן" (פלג) השרת שולח; לאחרים מדלג
+  if((nextStage === 'done' || nextStage === 'delivery') && typeof _lgAuthPost === 'function'){
     try { _lgAuthPost('/api/whatsapp-dispatch', { kind:'ready-watch', orderIds:[String(orderId)] }).catch(()=>{}); } catch(e){}
   }
   const result = { locked: false, unpricedNames: [] };

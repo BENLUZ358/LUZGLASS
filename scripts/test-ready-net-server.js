@@ -121,7 +121,7 @@ const ord = (id, o) => ({ id, stage: 'done', orderClient: 'א.מ.מראות', or
   await test('page: marking done tells the server to start watching; a queued ready message clears it', async () => {
     const fs = require('fs'), path = require('path');
     const fdb = fs.readFileSync(path.join(__dirname, '..', 'firebase-db.js'), 'utf8');
-    assert.ok(/nextStage === 'done' && typeof _lgAuthPost === 'function'[\s\S]{0,200}kind:'ready-watch'/.test(fdb));
+    assert.ok(/\(nextStage === 'done' \|\| nextStage === 'delivery'\) && typeof _lgAuthPost === 'function'[\s\S]{0,200}kind:'ready-watch'/.test(fdb));
     const d = fs.readFileSync(path.join(__dirname, '..', 'api', 'whatsapp-dispatch.js'), 'utf8');
     assert.ok(/body\.kind === 'ready-watch'[\s\S]{0,400}lgReadyNetWatch/.test(d));
     assert.ok(/kind === 'ready'\) \{\s*try \{ await require\('\.\/_ready-net'\)\.lgReadyNetUnwatch\(db, liveIds\)/.test(d));

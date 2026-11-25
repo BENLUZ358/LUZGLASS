@@ -39,7 +39,7 @@ const { verifyAdmin }   = require('./_verifyAdmin');
 const { lgDatabaseUrl } = require('./_env');
 const { lgWaProvider }  = require('./_wa-provider');
 const { lgWaEnqueue }   = require('./_wa-outbox');
-const { resolveRecipient, orderSketchName } = require('./_wa-recipient');
+const { resolveRecipient, orderSketchName, lgReadyToRec } = require('./_wa-recipient');
 const { lgSketchAckSkip, lgSketchAckActiveIds } = require('./_wa-sketch-ack');
 const { lgZgagiOwned } = require('./_zgagi-inbound');
 const { lgEmailDispatch } = require('./_email-dispatch');
@@ -152,6 +152,13 @@ module.exports = async function handler(req, res, deps) {
       }
       if (kind === 'ready' && order.whatsapp && order.whatsapp.sentAt && !force) {
         loaded.push({ id, skip: 'כבר נשלחה הודעת מוכן לאיסוף' }); continue;
+      }
+      //  לקוח הובלות (בן, 25/11): "מוכן" יוצא רק לכרטיס עם מספר קבוע ל"מוכן"
+      //  (waMeta/readyTo — פלג). הדף שולח onlyReadyTo על מה שעובר להובלה; הזמנה
+      //  שכבר בשלב הובלה בלי מספר כזה לא מקבלת "מוכן לאיסוף" — כמו תמיד.
+      if (kind === 'ready' && (body.onlyReadyTo === true || order.stage === 'delivery')
+          && !(await lgReadyToRec(db, order.customerId))) {
+        loaded.push({ id, skip: 'לקוח הובלות — אין מספר קבוע ל"מוכן"' }); continue;
       }
       //  אותה חד-פעמיות להזמנה שקיבלה "מוכן לאיסוף" במייל (_email-outbox.js)
       if (kind === 'ready' && order.emailNotices && order.emailNotices.ready && !force) {

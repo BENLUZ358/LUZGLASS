@@ -418,7 +418,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261123a"></script>
+  <script src="firebase-db.js?v=20261125a"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="opty-shape.js?v=20261116d"></script>
@@ -3252,6 +3252,7 @@ async function completeGraphic(orderId){
   if(nextSt === 'done'){
     setTimeout(() => _waSendReadyGrouped([String(o.id)]), 1200);
   }
+  if(nextSt === 'delivery') setTimeout(() => _waSendReadyGrouped([String(o.id)], { onlyReadyTo: true }), 1200);
   if(nextSt === 'done' || nextSt === 'delivery'){
     _lgWarnUnpriced(await lgLockAndAdvance(String(orderId), o, _wdGlobalPrices, _wdClientPrices, nextSt));
   } else {
@@ -3315,7 +3316,10 @@ function _wdReadyTry(ids, status, detail){
   });
 }
 
-async function _waSendReadyGrouped(orderIds){
+//  opts.onlyReadyTo (בן, 25/11) — הזמנות שעוברות להובלה: השרת שולח "מוכן" רק לכרטיס
+//  עם מספר קבוע ל"מוכן" (waMeta/readyTo — פלג) ומדלג בשקט על כל השאר.
+async function _waSendReadyGrouped(orderIds, opts){
+  const onlyRT = !!(opts && opts.onlyReadyTo);
   const ids = [...new Set((orderIds||[]).map(String))];
   if(!ids.length) return;
 
@@ -3336,11 +3340,11 @@ async function _waSendReadyGrouped(orderIds){
   for(const [client, group] of byClient){
     const name = nameOf.get(client) || '—';
     try {
-      _wdReadyTry(group, 'sending');
+      if(!onlyRT) _wdReadyTry(group, 'sending');
       const res  = await _lgAuthPost('/api/whatsapp-dispatch',
-                                     { kind:'ready', orderIds: group, dryRun:false }, { keepalive: true });
+                                     { kind:'ready', orderIds: group, dryRun:false, ...(onlyRT ? { onlyReadyTo: true } : {}) }, { keepalive: true });
       const data = await res.json().catch(() => ({}));
-      _wdReadyTry(group, data.queued ? 'queued' : (res.ok ? (data.preview ? 'preview' : 'not-queued') : 'error ' + res.status),
+      if(!onlyRT) _wdReadyTry(group, data.queued ? 'queued' : (res.ok ? (data.preview ? 'preview' : 'not-queued') : 'error ' + res.status),
                   data.error || data.reason || '');
 
       if(res.status === 409){
@@ -4198,6 +4202,7 @@ function confirmResetChisum(){
   let heldCount     = 0;
   const _redoNew    = [];   // [{order, idx}] — זכוכיות שעברו עכשיו לשבר (לחלון ההדפסה)
   const _waPending  = [];   // הזמנות שעוברות ל-done — הודעה אחת מרוכזת
+  const _waDeliv    = [];   // עוברות להובלה — "מוכן" רק לכרטיס עם מספר קבוע (פלג, בן 25/11)
   const _advWrites  = [];   // הכתיבות של המעבר ל-done — ההודעה יוצאת רק אחריהן
 
   chisumOrds.forEach(o => {
@@ -4278,6 +4283,7 @@ function confirmResetChisum(){
       // הודעה ללקוח רק אם עובר ל-done (לא גרפיקה, לא הובלה).
       // נאסף ונשלח בבת אחת מהשרת אחרי הלולאה — לא נפתח חלון לכל הזמנה.
       if(nextSt === 'done'){ _waPending.push(sid); msgCount++; }
+      if(nextSt === 'delivery') _waDeliv.push(sid);   // "מוכן" למספר קבוע (פלג, בן 25/11)
     } else if(st.marked > 0){
       // חלקי — ההזמנה נשארת בחיסום, אבל מה שכבר הגיע נסגר ויורד מהרשימה.
       // עד כאן זה רק כתב מחדש את אותם סימונים, כלומר לא עשה כלום: הרשימה
@@ -4292,6 +4298,7 @@ function confirmResetChisum(){
   // להשהיה קבועה), אחרת השרת קורא הזמנה שעדיין לא סומנה done. ואם הדף נסגר
   // לפני — רשת הביטחון בטעינה הבאה שולחת (lgReadyUnsentIds, בן 9/11).
   if(_waPending.length){ _wdReadyTry(_waPending, 'scheduled', 'check-finish'); Promise.allSettled(_advWrites).then(() => _waSendReadyGrouped(_waPending)); }
+  if(_waDeliv.length) Promise.allSettled(_advWrites).then(() => _waSendReadyGrouped(_waDeliv, { onlyReadyTo: true }));
 
   LG_TRACK.chisum.echo  = {};
   LG_TRACK.triplex.echo = {};
@@ -4897,6 +4904,11 @@ function confirmFinish(){
     .filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId)) === 'done')
     .map(o => String(o.id));
   if(_waReady.length){ _wdReadyTry(_waReady, 'scheduled', 'finish-day'); setTimeout(() => _waSendReadyGrouped(_waReady), 1200); }
+  //  לקוח הובלות עם מספר קבוע ל"מוכן" (פלג, בן 25/11) — השרת מסנן
+  const _waDelivReady = cutReady
+    .filter(o => lgNextStage(o, _isDeliveryClient(o.orderClient, o.phone, o.customerId)) === 'delivery')
+    .map(o => String(o.id));
+  if(_waDelivReady.length) setTimeout(() => _waSendReadyGrouped(_waDelivReady, { onlyReadyTo: true }), 1200);
 
   // עדכן statuses
   allOrders.forEach(o => {

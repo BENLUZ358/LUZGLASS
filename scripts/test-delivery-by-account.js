@@ -20,7 +20,7 @@ check('email order, no phone, delivery card → delivery', ctx.f('אביבי', '
 check('no phone, regular card → not delivery', ctx.f('פלג', '', '07'), false);
 check('nothing → not delivery', ctx.f('', '', ''), false);
 check('every call site passes the card', (WD.match(/_isDeliveryClient\(o\.orderClient, o\.phone\)/g) || []).length, 0);
-check('call sites with the card', (WD.match(/_isDeliveryClient\(o\.orderClient, o\.phone, o\.customerId\)/g) || []).length, 12);
+check('call sites with the card', (WD.match(/_isDeliveryClient\(o\.orderClient, o\.phone, o\.customerId\)/g) || []).length, 16);   // 25/11: +3 מאז, +1 "מוכן" לפלג
 check('cards loaded from users with isDelivery', /_deliveryAccounts = new Set\(\s*users\s*\.filter\(u => u\.isDelivery && u\.customerId\)/.test(WD), true);
 
 const pf = ADM.match(/async function _propagateDeliveryToOrders[\s\S]*?\n\}/)[0];
