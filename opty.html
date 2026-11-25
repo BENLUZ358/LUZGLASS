@@ -365,7 +365,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
 <script src="opty-hub.js?v=20261124b"></script>
-<script src="opty-report.js?v=20261124c"></script>
+<script src="opty-report.js?v=20261125a"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -1008,9 +1008,9 @@ function repRender() {
   $('rOutDay').textContent = $('rDay').value ? 'יוצא ' + lgOptyReportDate(lgOptyReportOutDay($('rDay').value)) + ' — זה התאריך על הדף' : '';
   const rows = repRows(), nos = REP.nos || {};
   //  כפתור לכל תעודה (צבע / CNC / טריפלקס — רק כשיש), עם כמה יחידות ומה המספר שלה
-  const btn = (k, label) => { const rs = lgOptyReportFor(rows, k), u = rs.reduce((n, r) => n + r.qty, 0), no = nos[k === 'report' ? 'chisum' : k];
+  const btn = (k, label) => { const rs = lgOptyReportFor(rows, k), u = rs.reduce((n, r) => n + r.qty, 0), no = nos[LG_REPORT_OF[k] || k];
     return (k === 'chisum' || k === 'report' || rs.length) ? `<button class="sm gold" type="button" data-rprint="${k}" ${rs.length ? '' : 'disabled'}>🖨 ${label} · ${u}${no ? ' · מס׳ ' + esc(no) : ''}</button>` : ''; };
-  $('rHead').innerHTML = `<div class="rprint">${btn('report', 'דוח לפי לקוח')}${btn('chisum', 'תעודת חיסום')}${btn('paint', 'תעודת צבע')}${btn('cnc', 'תעודת CNC')}${btn('triplex', 'תעודת טריפלקס')}</div>
+  $('rHead').innerHTML = `<div class="rprint">${btn('report', 'דוח חיסום לפי לקוח')}${btn('report-triplex', 'דוח טריפלקס לפי לקוח')}${btn('chisum', 'תעודת חיסום')}${btn('paint', 'תעודת צבע')}${btn('cnc', 'תעודת CNC')}${btn('triplex', 'תעודת טריפלקס')}</div>
     <p class="note">כל תעודה מקבלת מספר משלה בהדפסה הראשונה. המספר על הכפתור = כמה יחידות.</p>`;
   if (!rows.length) { $('rOut').innerHTML = '<p class="note">אין זכוכית לחיסום, צבע, CNC או טריפלקס ביום הזה. אפשר להוסיף ידנית, או לקלוט את האופטימיזציות בלשונית "קליטה".</p>'; return; }
   const tags = r => (r.triplex ? `<span class="xt">${esc(r.triplex)}</span>` : '') + (r.paint ? `<span class="xt">צבע${r.paint !== 'צבע' ? ' ' + esc(r.paint) : ''}</span>` : '') + (r.cnc ? '<span class="xt">CNC</span>' : '');
@@ -1051,7 +1051,7 @@ async function repPrint(kind) {
   if (!win) { st('הדפדפן חסם את חלון ההדפסה — אשר חלונות קופצים לאתר', 'bad'); return; }
   win.document.write('<p dir="rtl" style="font-family:Arial">מכין…</p>');
   try {
-    const nk = kind === 'report' ? 'chisum' : kind;          // הדוח שלנו = אותו מספר כמו תעודת החיסום
+    const nk = LG_REPORT_OF[kind] || kind;          // דוח = אותו מספר כמו התעודה שלו (חיסום / טריפלקס)
     let no = (REP.nos || {})[nk];
     if (!no) {
       const t = await _lgDb.ref('meta/optyReportSeq').transaction(c => (Number(c) || LG_REPORT_FIRST_NO - 1) + 1);

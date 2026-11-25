@@ -56,6 +56,9 @@ check('C5 other notes: empty line to fill "לכבוד" by hand', /לכבוד: <s
 check('C4 triplex note says טריפלקס and has no chisum rows', /תעודת טריפלקס/.test(ht) && !/חיסום בלבד/.test(ht), true);
 const h2 = R.lgOptyReportHtml('report', rows, '2026-11-24', 5901);
 check('D1 report shows clients and orders, not triplex', /BathPlace/.test(h2) && /דרורית/.test(h2) && /ידני/.test(h2) && !/>T</.test(h2), true);
+const h3 = R.lgOptyReportHtml('report-triplex', rows, '2026-11-24', 5902);
+check('D5 triplex report (Ben 25/11): own page by client, only triplex, not in chisum report', /דוח טריפלקס/.test(h3) && />T</.test(h3) && !/BathPlace/.test(h3) && !/דוח חיסום/.test(h3) && !/>T</.test(h2), true);
+check('D6 triplex report rows = triplex note rows', R.lgOptyReportFor(rows, 'report-triplex').map(r => r.key), ['M1_5', 'm_k2']);
 check('D2 date line', R.lgOptyReportDate('2026-08-18'), 'יום שלישי 18 אוגוסט 2026');
 check('D3 empty day', /אין זכוכית/.test(R.lgOptyReportHtml('report', [], '2026-11-24', 0)), true);
 check('D4 escapes', /<b>x/.test(R.lgOptyReportHtml('report', [{ client: '<b>x', name: '', glass: '', w: 1, h: 1, qty: 1, chisum: true }], 'x', 0)), false);

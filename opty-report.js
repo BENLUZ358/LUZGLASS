@@ -62,9 +62,10 @@ function lgOptyReportRows(jobs, day, mats, rep) {
   });
   return rows;
 }
-//  השורות של תעודה אחת (בלי מה שהורד). 'report' = הדוח שלנו = מה שבחיסום
+//  השורות של תעודה אחת (בלי מה שהורד). 'report' = הדוח שלנו = מה שבחיסום; 'report-triplex' = דוח טריפלקס נפרד (בן, 25/11)
+const LG_REPORT_OF = { report: 'chisum', 'report-triplex': 'triplex' };
 function lgOptyReportFor(rows, kind) {
-  const k = kind === 'report' ? 'chisum' : kind;
+  const k = LG_REPORT_OF[kind] || kind;
   return (rows || []).filter(r => !r.hidden && r[k]);
 }
 
@@ -113,7 +114,7 @@ function lgOptyReportOutDay(day) {
 }
 //  עמוד הדפסה מלא. kind: 'report' (הדוח שלנו) | chisum | paint | cnc | triplex (תעודות)
 function lgOptyReportHtml(kind, rows, day, no) {
-  const e = _repEsc, isNote = kind !== 'report', H = LG_REPORT_HEAD, K = LG_REPORT_KINDS[kind] || LG_REPORT_KINDS.chisum;
+  const e = _repEsc, isNote = !LG_REPORT_OF[kind], repName = kind === 'report-triplex' ? 'דוח טריפלקס' : 'דוח חיסום', H = LG_REPORT_HEAD, K = LG_REPORT_KINDS[kind] || LG_REPORT_KINDS.chisum;
   const title = 'הזמנה מס׳ ' + (no || '—');
   let body = '', cols = '';
   if (isNote) {
@@ -124,10 +125,10 @@ function lgOptyReportHtml(kind, rows, day, no) {
   } else {
     cols = '<th>פריט</th><th>גובה</th><th>רוחב</th><th>כמות</th>';
     const row = r => `<tr><td class="g"><bdi dir="ltr">${e(r.glass)}</bdi></td><td>${e(r.h)}</td><td>${e(r.w)}</td><td>${e(r.qty)}</td></tr>`;
-    body = lgOptyReportByClient(lgOptyReportFor(rows, 'report')).map(c => `<tbody><tr class="c"><th colspan="4">${e(c.client)}</th></tr>${c.orders.map(o =>
+    body = lgOptyReportByClient(lgOptyReportFor(rows, kind)).map(c => `<tbody><tr class="c"><th colspan="4">${e(c.client)}</th></tr>${c.orders.map(o =>
       (o.name ? `<tr class="o"><th colspan="4">${e(o.name)}</th></tr>` : '') + o.rows.map(row).join('')).join('')}</tbody>`).join('');
   }
-  return `<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${isNote ? 'תעודת ' + e(K.he) : 'דוח חיסום'} ${e(no || '')} · ${e(day)}</title><style>
+  return `<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${isNote ? 'תעודת ' + e(K.he) : repName} ${e(no || '')} · ${e(day)}</title><style>
   @page { size: A4; margin: 12mm 12mm 16mm; @bottom-center { content: "דף " counter(page) " מ-" counter(pages); font: 11px Arial, sans-serif; } }
   *{box-sizing:border-box} body{font-family:Arial,"Heebo",sans-serif;color:#111;margin:0;font-size:14px}
   .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px}
@@ -143,7 +144,7 @@ function lgOptyReportHtml(kind, rows, day, no) {
   tr{break-inside:avoid} .empty{text-align:center;padding:40px;color:#666}
   </style></head><body>
   <div class="hd"><span class="n">${e(H.name)}</span><span class="id">ע.מ. ${e(H.id)}</span></div>
-  <div class="mid"><span></span><div class="ttl">${e(title)}<small>${isNote ? 'תעודת ' + e(K.he) : 'דוח חיסום'}</small></div><div class="side">${isNote ? '<b>מקור</b>' : ''}${e(lgOptyReportDate(lgOptyReportOutDay(day)))}</div></div>
+  <div class="mid"><span></span><div class="ttl">${e(title)}<small>${isNote ? 'תעודת ' + e(K.he) : repName}</small></div><div class="side">${isNote ? '<b>מקור</b>' : ''}${e(lgOptyReportDate(lgOptyReportOutDay(day)))}</div></div>
   ${isNote ? `<div class="to">לכבוד: ${K.to ? e(K.to) : '<span class="blank"></span>'}</div>` : ''}
   ${body ? `<table><thead><tr>${cols}</tr></thead>${body}</table>` : '<p class="empty">אין זכוכית לתעודה הזאת ביום הזה</p>'}
   </body></html>`;
