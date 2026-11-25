@@ -59,6 +59,7 @@ const loose = run('', { state: 'loose' });
 check('loose: only unlinked pieces, no orders', [loose.orders.length, loose.loose.map(p => p.job + '#' + p.pos)], [0, ['M00321#1', 'M00320#3']]);
 check('loose: state from the job day (+ chisum by note/glass type)', loose.loose.map(p => p.st.label), ['מתוכנן ל-20/11', 'נחתך · מוכן']);
 check('loose: 8mm cut yesterday without a note → goes to chisum', H.lgHubPieceState(jobs.M00320, 1, T, { chisum: true }), { label: "בחיסום · חוזר ביום א' 22/11 בבוקר", tone: 'cut', src: 'opty' });
+check('loose: quantity from OptyWay (Ben 25/11)', loose.loose.map(p => p.qty).every(q => q >= 1), true);
 check('loose: identical sheets (count 2) counted once', loose.loose.filter(p => p.job === 'M00321').length, 1);
 check('loose: waiting-to-link shape is flagged', run('', { state: 'loose' }, { waiting: new Set(['274200']) }).loose[0].waiting, true);
 check('loose: linked by position (no shape) is not loose', H.lgHubSearch({ jobs, todayIso: T, f: { state: 'loose' },

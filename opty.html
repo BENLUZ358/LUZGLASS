@@ -132,6 +132,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .hit.on{background:rgba(201,162,39,.13);margin-inline:calc(-1 * var(--space-3));padding-inline:var(--space-3);}
 .hit .hdim{grid-area:dim;font-weight:var(--fw-black);white-space:nowrap;}
 .hit .hnm{grid-area:nm;min-width:0;}
+.hit .hq{font-weight:var(--fw-bold);color:var(--muted);}
 .hit .pill{grid-area:pill;}
 .hit .hcut{grid-area:cut;font-weight:var(--fw-bold);color:var(--muted);}
 .hit .hcut.is-cut{color:var(--text);}
@@ -364,7 +365,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-match.js?v=20261118a"></script>
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
-<script src="opty-hub.js?v=20261124b"></script>
+<script src="opty-hub.js?v=20261125a"></script>
 <script src="opty-report.js?v=20261125a"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
@@ -1318,7 +1319,7 @@ function hubRender() {
       ${x.items.map(r => { const it = r.it, rec = it.optyJob && JOBS[it.optyJob], key = o.id + '|' + r.idx, open = HUB.open.has(key);
         const cl = lgHubCutLine(it, rec, lgOptyTodayIso()), now = lgHubNow(o, it, lgOptyTodayIso());
         const src = it.optyJob ? esc(it.optyJob) + (rec ? ' · ' + esc(dmy(rec.day)) : '') + (it.optyShape ? ' · צורה ' + esc(it.optyShape) : '') : 'עוד לא באופטי-ווי';
-        return `<div class="hit${r.hit ? ' on' : ''}" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(it.w, it.h)}</span><span class="hnm">${esc(it.name || 'פריט')}</span>
+        return `<div class="hit${r.hit ? ' on' : ''}" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(it.w, it.h)}${hubQty(it.quantity || it.qty)}</span><span class="hnm">${esc(it.name || 'פריט')}</span>
         <span class="hcut${cl.cut ? ' is-cut' : ''}">${esc(cl.label)}</span>${hubPill(now)}
         <div class="hx"${open ? '' : ' hidden'}><span class="hsrc">${src}</span>
         ${it.optyShape ? `<button class="sm" type="button" data-view="${esc(o.id)}|${r.idx}" aria-label="צורה של ${esc(it.optyShape)}">📐 צורה</button>` : ''}
@@ -1343,7 +1344,7 @@ function hubRender() {
       <small>${esc(dmy(g.list[0].day))} · ${esc(matLbl(JOBS[g.list[0].job]))}</small></header>
       ${g.list.map(p => { const key = 'L|' + p.job + '|' + p.sheetNo + '|' + p.order, open = HUB.open.has(key);
         const cl = lgHubDayLine(p.day, p.st && (p.st.tone === 'cut' || p.st.tone === 'ready'), today);
-        return `<div class="hit" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(p.w, p.h)}</span><span class="hnm">${esc(p.name || 'בלי שם')}</span>
+        return `<div class="hit" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(p.w, p.h)}${hubQty(p.qty)}</span><span class="hnm">${esc(p.name || 'בלי שם')}</span>
         <span class="hcut${cl.cut ? ' is-cut' : ''}">${esc(cl.label)}</span>${hubPill(p.st)}
         <div class="hx"${open ? '' : ' hidden'}><span class="hsrc">${esc(p.job)} · לוח ${p.sheetNo}/${p.total}${p.shape ? ' · צורה ' + esc(p.shape) : ''}${p.note ? ' · ' + esc(p.note) : ''}${p.waiting ? ' · מחכה לחיבור' : ''}</span>
         <button class="sm" type="button" data-ohit="${esc(p.job + '|' + p.sheetNo + '|' + p.order)}">ללוח</button></div></div>`; }).join('')}
@@ -1352,6 +1353,8 @@ function hubRender() {
   const need = res.loose.map(p => p.shape).filter(s => s && !(s in GEOS)).slice(0, 80);
   if (need.length) loadGeos(need).then(n => { if (n) hubRender(); });
 }
+//  בן, 25/11: כמות ליד המידה בכל שורה בחיפוש
+const hubQty = q => ` <span class="hq">· ${esc(Math.max(1, Number(q) || 1))} יח׳</span>`;
 let _hubT = null;
 $('hQ').addEventListener('input', () => { clearTimeout(_hubT); _hubT = setTimeout(hubRender, 250); });
 $('hQ').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(_hubT); hubRender(); } });

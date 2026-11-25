@@ -182,7 +182,7 @@ function lgHubSearch(args) {
       const st = lgHubPieceState(rec, sheetNo, today, _hubPieceInfo(rec, r, a.mats));
       if (f.state && f.state !== 'loose' && st.tone !== f.state) return;
       outL.push({ job: rec.job, day: rec.day || '', mat: rec.mat || '', sheetNo, total, order: p.order, pos: p.pos, shape: p.shape || '',
-        client: r.client || '', name: r.name || '', w, h, note: r.note || '', st, waiting: !!(p.shape && waiting.has(String(p.shape))) });
+        client: r.client || '', name: r.name || '', w, h, qty: Number(r.qty) || 1, note: r.note || '', st, waiting: !!(p.shape && waiting.has(String(p.shape))) });
     }));
   });
   outL.sort((x, y) => (y.day || '').localeCompare(x.day || '') || x.client.localeCompare(y.client) || x.job.localeCompare(y.job) || x.order - y.order);
