@@ -184,6 +184,8 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .tprog{position:sticky;top:56px;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-bottom:var(--space-3);font-weight:var(--fw-black);font-size:var(--fs-lg);}
 .tprog .bar{height:12px;border-radius:6px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:6px;}
 .tprog .bar i{display:block;height:100%;background:#1e7d32;}
+.rfind{width:100%;box-sizing:border-box;min-height:48px;padding:0 14px;margin-bottom:var(--space-3);border:1px solid var(--border);border-radius:12px;background:var(--surface);color:var(--text);font:inherit;font-size:16px;}
+.rfh{display:flex;align-items:center;justify-content:space-between;gap:8px;} .rfh .sm{min-height:40px;}
 .rseg{display:flex;background:var(--surface-2,#e9e3d8);border-radius:12px;padding:4px;margin-bottom:var(--space-3);}
 .rseg button{flex:1;min-height:44px;border:0;background:none;border-radius:9px;font:inherit;font-size:16px;font-weight:600;color:var(--muted);cursor:pointer;}
 .rseg button.on{background:var(--surface);color:var(--text);font-weight:800;box-shadow:0 1px 2px rgba(0,0,0,.12);}
@@ -320,6 +322,8 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 
   <!-- דוחות ותעודות ממוספרים (בן, 26/11): ממתין → "הוצא דוח N"; תעודות משלוח לפי מספר דוח, באותו מספר -->
   <div class="pane" id="pane-rep" hidden>
+    <input id="rFind" class="rfind" type="search" autocomplete="off" placeholder="🔍 חפש — לקוח, שם הזמנה או מידה (550x1885)" aria-label="חיפוש בדוחות ובתעודות">
+    <div id="rFindOut" hidden></div>
     <div class="rseg" role="tablist"><button type="button" data-rview="rep" class="on">דוחות</button><button type="button" data-rview="notes">תעודות משלוח</button></div>
     <div id="rViewRep">
       <div id="rPend" class="rcard pend">
@@ -409,7 +413,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
 <script src="opty-hub.js?v=20261125a"></script>
-<script src="opty-report.js?v=20261126d"></script>
+<script src="opty-report.js?v=20261126e"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -1064,7 +1068,17 @@ function repChips(b) {
   return REP_NOTE_KINDS.filter(k => s.by[k]).map(k => n[k] ? `<span class="rchip done">${esc(LG_REPORT_KINDS[k].he)} ✓</span>`
     : `<span class="rchip need">${esc(LG_REPORT_KINDS[k].he)} — עוד לא</span>`).join('');
 }
+//  חיפוש (בן, 26/11): כשיש טקסט בשורת החיפוש — רק התוצאות, לפי דוח; "תעודות ←" קופץ לתעודות של אותו דוח
+function repRenderFind(q) {
+  const res = lgOptyRepSearch(q, repPending(), REPB), n = res.reduce((k, g) => k + g.rows.length, 0);
+  $('rFindOut').innerHTML = !n ? '<p class="note">לא נמצא בדוחות ובממתין</p>'
+    : `<p class="note">${n >= 150 ? 'יותר מ-150 — ' : ''}${n} זכוכיות נמצאו</p>` + res.map(g => `<section class="rgrp"><h3 class="rfh">${g.no ? `דוח ${esc(g.no)} · ${esc(repWhen(g.b))}` : '⏳ ממתין — עוד לא יצא'}
+      ${g.no ? `<button class="sm" type="button" data-rnotes="${esc(g.no)}">תעודות ←</button>` : ''}</h3>${g.rows.map(r => `<div class="rrow"><span class="rt"><b>${esc(r.client || 'בלי שם לקוח')}</b>${r.name ? ' · ' + esc(r.name) : ''} · <bdi dir="ltr">${esc(r.glass)}</bdi> ·<span class="rd">${esc(r.w)} × ${esc(r.h)}</span>${r.qty > 1 ? ' · ' + r.qty + ' יח׳' : ''}${r.triplex ? '<span class="xt">טריפלקס</span>' : ''}${r.paint ? '<span class="xt">צבע</span>' : ''}${r.cnc ? '<span class="xt">CNC</span>' : ''}</span></div>`).join('')}</section>`).join('');
+}
 function repRender() {
+  const fq = ($('rFind').value || '').trim(), finding = fq.length > 0;
+  $('rFindOut').hidden = !finding; document.querySelector('#pane-rep .rseg').style.display = finding ? 'none' : '';
+  if (finding) { $('rViewRep').hidden = true; $('rViewNotes').hidden = true; repRenderFind(fq); return; }
   document.querySelectorAll('[data-rview]').forEach(x => x.classList.toggle('on', x.dataset.rview === REPV));
   $('rViewRep').hidden = REPV !== 'rep'; $('rViewNotes').hidden = REPV !== 'notes';
   if (REPV === 'notes') { repRenderNotes(); return; }
@@ -1162,13 +1176,14 @@ $('rForm').addEventListener('submit', async e => {
   await repPendWrite('manual/' + id, { w, h, qty, glass, client, name, kind, color, at: Date.now(), by: _whoAmI() }, '✓ נוסף לממתין');
   $('rW').value = ''; $('rH').value = ''; $('rQ').value = '1'; $('rN').value = ''; $('rW').focus();
 });
+$('rFind').addEventListener('input', () => repRender());
 $('pane-rep').addEventListener('change', e => { if (e.target.id === 'rSelMore' && e.target.value) { REPSEL = e.target.value; repRender(); } });
 $('pane-rep').addEventListener('click', async e => {
   const t = e.target;
   const v = t.closest('[data-rview]'); if (v) { REPV = v.dataset.rview; try { localStorage.setItem('lgRepView', REPV); } catch (_) {} repRender(); return; }
   if (t.closest('[data-rissue]')) { repIssue(); return; }
   const sel = t.closest('[data-rsel]'); if (sel) { REPSEL = sel.dataset.rsel; repRender(); return; }
-  const go = t.closest('[data-rnotes]'); if (go) { REPSEL = go.dataset.rnotes; REPV = 'notes'; try { localStorage.setItem('lgRepView', REPV); } catch (_) {} repRender(); window.scrollTo(0, 0); return; }
+  const go = t.closest('[data-rnotes]'); if (go) { $('rFind').value = ''; REPSEL = go.dataset.rnotes; REPV = 'notes'; try { localStorage.setItem('lgRepView', REPV); } catch (_) {} repRender(); window.scrollTo(0, 0); return; }
   const h = t.closest('[data-rhide]'), d = t.closest('[data-rdel]'), p = t.closest('[data-rprint]');
   if (h) { const k = h.dataset.rhide, off = !(REPP.hide || {})[k]; await repPendWrite('hide/' + k, off ? true : null, off ? '✓ הורד — לא ייכנס לדוח' : '✓ חזר לממתין'); }
   else if (d) { if (confirm('למחוק את השורה הידנית?')) await repPendWrite('manual/' + d.dataset.rdel, null, '✓ נמחק'); }

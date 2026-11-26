@@ -94,6 +94,31 @@ function lgOptyRepSummary(rows) {
   const by = {}; Object.keys(LG_REPORT_KINDS).forEach(k => { by[k] = u(lgOptyReportFor(live, k)); });
   return { rows: live.length, units: u(live), clients: new Set(live.map(r => r.client || '')).size, by };
 }
+//  חיפוש בדוחות ובממתין (בן, 26/11): לקוח, שם הזמנה, סוג זכוכית, מספר אופטימיזציה, מידה.
+//  "1885" — רוחב או גובה (±2: נטו מול ברוטו); "550x1885" / "550 1885" — שתי המידות, בכל סדר. כל המילים חייבות להתאים.
+function lgOptyRepMatch(r, q) {
+  const toks = String(q || '').toLowerCase().replace(/(\d)\s*[×x*]\s*(?=\d)/g, '$1 ').replace(/×/g, ' ').split(/\s+/).filter(Boolean);
+  if (!toks.length) return false;
+  const txt = [r.client, r.name, r.glass, r.job, r.mat].map(v => String(v || '').toLowerCase()).join(' ');
+  const nums = [Number(r.w) || 0, Number(r.h) || 0], used = [false, false];
+  return toks.every(t => {
+    if (/^\d{2,}$/.test(t)) {
+      const n = Number(t), i = nums.findIndex((v, k) => !used[k] && Math.abs(v - n) <= 2);
+      if (i >= 0) { used[i] = true; return true; }
+      return txt.includes(t);
+    }
+    return txt.includes(t);
+  });
+}
+//  → [{ no (null = ממתין), b, rows }] — הממתין ראשון, אחר כך מהדוח החדש לישן
+function lgOptyRepSearch(q, pending, batches, max) {
+  const out = [], cap = max || 150; let n = 0;
+  const add = (no, b, rows) => { const hit = rows.filter(r => r && !r.hidden && lgOptyRepMatch(r, q)).slice(0, Math.max(0, cap - n)); if (hit.length) { out.push({ no, b, rows: hit }); n += hit.length; } };
+  add(null, null, pending || []);
+  Object.values(batches || {}).filter(b => b && b.no).sort((a, b) => Number(b.no) - Number(a.no))
+    .forEach(b => add(b.no, b, Array.isArray(b.rows) ? b.rows : Object.values(b.rows || {})));
+  return out;
+}
 //  מספר התעודה = מספר הדוח. רק בדוחות הישנים (לפני 27/11) לטריפלקס/CNC/צבע היה מספר משלו — שומרים אותו.
 function lgOptyBatchNoteNo(b, kind) {
   return (b && b.legacy && b.legacy.nos && b.legacy.nos[kind]) || (b && b.no) || '';
@@ -225,5 +250,5 @@ function lgOptyReportPrintModel(kind, rows, day, no, outDay, per) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, lgOptyReportOutDay, lgOptyReportNet, lgOptyReportPrintModel, lgOptyClientCmp, LG_REPORT_FIRST_NO, LG_REPORT_KINDS,
-    lgOptyPendingRows, lgOptyRepSummary, lgOptyBatchNoteNo, LG_REP_START_DAY };
+    lgOptyPendingRows, lgOptyRepSummary, lgOptyBatchNoteNo, LG_REP_START_DAY, lgOptyRepMatch, lgOptyRepSearch };
 }
