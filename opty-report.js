@@ -151,6 +151,41 @@ function lgOptyReportHtml(kind, rows, day, no, outDay) {
   </body></html>`;
 }
 
+//  הדפסה ישר ל-Brother (בן, 26/11: "מהאייפון / אייפד — שיישאל ויישלח למדפסת הרגילה")
+//  מודל עמודים לציור על קנבס (A4): כותרת בכל עמוד, שורות עם פס כל שנייה, "דף i מ-N".
+//  per = כמה יחידות גובה בעמוד (שורה = 1). כותרת לקוח לא נשארת לבד בתחתית עמוד.
+function lgOptyReportPrintModel(kind, rows, day, no, outDay, per) {
+  const isNote = !LG_REPORT_OF[kind], K = LG_REPORT_KINDS[kind] || LG_REPORT_KINDS.chisum, cap = per || 40;
+  const printDay = /^\d{4}-\d{2}-\d{2}$/.test(String(outDay || '')) ? outDay : lgOptyReportOutDay(day);
+  const head = { company: LG_REPORT_HEAD.name, id: 'ע.מ. ' + LG_REPORT_HEAD.id, title: 'הזמנה מס׳ ' + (no || '—'),
+    sub: isNote ? 'תעודת ' + K.he : (kind === 'report-triplex' ? 'דוח טריפלקס' : 'דוח חיסום'),
+    date: lgOptyReportDate(printDay), orig: isNote, to: isNote ? (K.to ? 'לכבוד: ' + K.to : 'לכבוד: ____________') : '' };
+  const cols = isNote ? ['פריט', 'גובה', 'רוחב', 'כמות', 'שטח'] : ['פריט', 'גובה', 'רוחב', 'כמות'];
+  const lines = [];
+  if (isNote) {
+    const ns = lgOptyNoteRows(rows, kind);
+    ns.forEach((r, i) => lines.push({ t: 'r', z: i % 2 === 1, cells: [r.item, String(r.h), String(r.w), String(r.qty), r.m2.toFixed(2)] }));
+    if (ns.length) lines.push({ t: 't', cells: ['סה"כ', '', '', String(ns.reduce((n, r) => n + r.qty, 0)), ns.reduce((n, r) => n + r.m2, 0).toFixed(2)] });
+  } else {
+    let zi = 0;
+    lgOptyReportByClient(lgOptyReportFor(rows, kind)).forEach(c => {
+      lines.push({ t: 'c', text: String(c.client || '') });
+      c.orders.forEach(o => { if (o.name) lines.push({ t: 'o', text: String(o.name) });
+        o.rows.forEach(r => lines.push({ t: 'r', z: zi++ % 2 === 1, cells: [String(r.glass || ''), String(r.h), String(r.w), String(r.qty)] })); });
+    });
+  }
+  const H = { c: 1.8, o: 1.3, r: 1, t: 1.5 };
+  const pages = [[]]; let used = 0;
+  lines.forEach((ln, i) => {
+    let need = H[ln.t];
+    if (ln.t === 'c' || ln.t === 'o') for (let j = i + 1; j < lines.length && lines[j].t !== 'r'; j++) need += H[lines[j].t];
+    if (ln.t === 'c' || ln.t === 'o') need += 1;                     // לפחות שורה אחת אחרי הכותרת
+    if (used + need > cap && pages[pages.length - 1].length) { pages.push([]); used = 0; }
+    pages[pages.length - 1].push(ln); used += H[ln.t];
+  });
+  return { head, cols, pages, empty: !lines.length };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, lgOptyReportOutDay, lgOptyReportNet, LG_REPORT_FIRST_NO, LG_REPORT_KINDS };
+  module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, lgOptyReportOutDay, lgOptyReportNet, lgOptyReportPrintModel, LG_REPORT_FIRST_NO, LG_REPORT_KINDS };
 }

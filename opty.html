@@ -185,6 +185,9 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .tprog .bar{height:12px;border-radius:6px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:6px;}
 .tprog .bar i{display:block;height:100%;background:#1e7d32;}
 .rprint{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2);}
+.rask{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;}
+.rask-box{background:var(--surface);color:var(--text);border-radius:12px;padding:20px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;}
+.rask-q{font-size:18px;font-weight:700;margin:0;} .rask-box .note{margin:0 0 4px;} .rask-box button{min-height:48px;font-size:16px;}
 .radd summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;}
 .radd form{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-2);margin-top:var(--space-2);}
 .radd label{display:flex;flex-direction:column;gap:2px;font-size:var(--fs-sm);}
@@ -366,7 +369,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
 <script src="opty-hub.js?v=20261125a"></script>
-<script src="opty-report.js?v=20261126a"></script>
+<script src="opty-report.js?v=20261126b"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -1054,22 +1057,99 @@ $('pane-rep').addEventListener('click', async e => {
   const h = e.target.closest('[data-rhide]'), d = e.target.closest('[data-rdel]'), p = e.target.closest('[data-rprint]');
   if (h) { const k = h.dataset.rhide, off = !(REP.hide || {})[k]; await repWrite('hide/' + k, off ? true : null, off ? '✓ הורד מהדוח' : '✓ חזר לדוח'); }
   else if (d) { if (confirm('למחוק את השורה הידנית?')) await repWrite('manual/' + d.dataset.rdel, null, '✓ נמחק'); }
-  else if (p) repPrint(p.dataset.rprint);
+  else if (p) repAsk(p.dataset.rprint);
 });
+//  מספר התעודה: נקבע בהדפסה הראשונה (meta/optyReportSeq), נשמר ליום; דוח = מספר התעודה שלו
+async function repNumber(kind) {
+  const nk = LG_REPORT_OF[kind] || kind;
+  let no = (REP.nos || {})[nk];
+  if (!no) {
+    const t = await _lgDb.ref('meta/optyReportSeq').transaction(c => (Number(c) || LG_REPORT_FIRST_NO - 1) + 1);
+    const mine = t.snapshot.val();
+    const set = await repRef().child('nos/' + nk).transaction(c => c || mine);    // שני מחשבים באותו רגע — נשאר הראשון
+    no = set.snapshot.val(); REP.nos = Object.assign({}, REP.nos, { [nk]: no }); repRender();
+  }
+  return no;
+}
+//  לחיצה על כפתור הדפסה (בן, 26/11): שואל — ישר ל-Brother (גם מאייפון/אייפד) או לפתוח את הדוח במסך
+function repAsk(kind) {
+  const label = (document.querySelector('[data-rprint="' + kind + '"]') || {}).textContent || '';
+  const ov = document.createElement('div'); ov.className = 'rask'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+  ov.innerHTML = `<div class="rask-box"><p class="rask-q">להדפיס במדפסת הרגילה (Brother)?</p><p class="note">${esc(label.replace('🖨', '').trim())}</p>
+    <button type="button" class="sm gold" data-a="brother">🖨 כן, הדפס ב-Brother</button>
+    <button type="button" class="sm" data-a="open">פתח את הדוח במסך</button>
+    <button type="button" class="sm quiet" data-a="no">ביטול</button></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => {
+    const b = e.target.closest('[data-a]'); if (!b && e.target !== ov) return;
+    ov.remove(); if (!b) return;
+    if (b.dataset.a === 'brother') repBrother(kind);
+    else if (b.dataset.a === 'open') repPrint(kind);
+  });
+  ov.querySelector('[data-a="brother"]').focus();
+}
+//  ציור העמודים (A4, 150dpi) → JPEG → תור ההדפסות (printer a4) → הכלי במשרד → Brother
+function repPageJpegs(m) {
+  const PW = 1240, PH = 1754, M = 71, W = PW - 2 * M, U = 31, R = PW - M;
+  const colX = m.cols.length === 5 ? [R - 6, M + W * 0.525, M + W * 0.375, M + W * 0.225, M + W * 0.075] : [R - 6, M + W * 0.5, M + W * 0.3, M + W * 0.1];
+  const N = m.pages.length;
+  return m.pages.map((lines, pi) => {
+    const c = document.createElement('canvas'); c.width = PW; c.height = PH;
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, PW, PH); x.fillStyle = '#111'; x.textBaseline = 'middle';
+    try { x.direction = 'rtl'; } catch (_) {}
+    const T = (t, px, py, size, bold, align) => { try { x.direction = /[֐-׿]/.test(String(t)) ? 'rtl' : 'ltr'; } catch (_) {} x.font = (bold ? '700 ' : '400 ') + size + 'px Arial, Heebo, sans-serif'; x.textAlign = align || 'center'; x.fillText(String(t), px, py); };
+    let y = M + 20;
+    T(m.head.company, R, y, 34, true, 'right'); T(m.head.id, M, y + 6, 19, false, 'left');
+    y += 30; x.fillRect(M, y, W, 3);
+    y += 50; T(m.head.title, PW / 2, y, 36, true); y += 36; T(m.head.sub, PW / 2, y, 22, false);
+    if (m.head.orig) T('מקור', M, y - 36, 21, true, 'left');
+    T(m.head.date, M, y, 21, false, 'left');
+    if (m.head.to) { y += 40; T(m.head.to, R, y, 22, false, 'right'); }
+    y += 38;
+    m.cols.forEach((h, i) => T(h, colX[i], y, 19, false, i ? 'center' : 'right'));
+    y += 16; x.fillRect(M, y, W, 1.5); y += 6;
+    lines.forEach(ln => {
+      if (ln.t === 'c') { const h = U * 1.8; T(ln.text, PW / 2, y + h * 0.62, 27, true); y += h; return; }
+      if (ln.t === 'o') { const h = U * 1.3; x.font = '400 22px Arial, Heebo, sans-serif'; const w = x.measureText(ln.text).width; T(ln.text, PW / 2, y + h / 2, 22, false); x.fillRect(PW / 2 - w / 2, y + h / 2 + 13, w, 1.5); y += h; return; }
+      const h = ln.t === 't' ? U * 1.5 : U;
+      if (ln.z) { x.fillStyle = '#dcdcdc'; x.fillRect(M, y, W, h); x.fillStyle = '#111'; }
+      if (ln.t === 't') x.fillRect(M, y, W, 3);
+      ln.cells.forEach((v, i) => { if (v !== '') T(v, colX[i], y + h / 2 + 1, ln.t === 't' ? 24 : 22, ln.t === 't', i ? 'center' : 'right'); });
+      y += h;
+    });
+    if (m.empty) T('אין זכוכית לתעודה הזאת ביום הזה', PW / 2, y + 80, 24, false);
+    T('דף ' + (pi + 1) + ' מ-' + N, PW / 2, PH - 40, 19, false);
+    for (const q of [0.85, 0.7, 0.55]) { const b = c.toDataURL('image/jpeg', q).split(',')[1]; if (b.length <= 1400000) return b; }
+    return c.toDataURL('image/jpeg', 0.4).split(',')[1];
+  });
+}
+async function repBrother(kind) {
+  st('מכין את הדוח למדפסת…');
+  try {
+    const no = await repNumber(kind);
+    const m = lgOptyReportPrintModel(kind, repRows(), $('rDay').value, no, repPrintDay());
+    if (m.empty) { st('אין מה להדפיס בדוח הזה', 'bad'); return; }
+    const pages = repPageJpegs(m), name = m.head.sub + ' ' + no;
+    let sent = 0, part = [], size = 0;
+    const send = async () => {
+      if (!part.length) return;
+      const res = await _lgAuthPost('/api/print', { action: 'create', kind: 'sheets', printer: 'a4', client: name, orderIds: [], pages: part });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) throw new Error(d.code || ('HTTP ' + res.status));
+      sent += part.length; part = []; size = 0;
+    };
+    for (const p of pages) { if (part.length >= 12 || size + p.length > 3400000) await send(); part.push(p); size += p.length; }
+    await send();
+    st('✓ ' + name + ' נשלח למדפסת Brother (' + sent + ' עמודים)', 'ok');
+  } catch (e) { console.error(e); st('✗ לא נשלח למדפסת: ' + (e.message || '') + ' — אפשר "פתח את הדוח במסך"', 'bad'); }
+}
 //  החלון נפתח מיד (בתוך הלחיצה — אחרת הדפדפן חוסם), המספר נקבע אחר כך
 async function repPrint(kind) {
   const win = window.open('', '_blank');
   if (!win) { st('הדפדפן חסם את חלון ההדפסה — אשר חלונות קופצים לאתר', 'bad'); return; }
   win.document.write('<p dir="rtl" style="font-family:Arial">מכין…</p>');
   try {
-    const nk = LG_REPORT_OF[kind] || kind;          // דוח = אותו מספר כמו התעודה שלו (חיסום / טריפלקס)
-    let no = (REP.nos || {})[nk];
-    if (!no) {
-      const t = await _lgDb.ref('meta/optyReportSeq').transaction(c => (Number(c) || LG_REPORT_FIRST_NO - 1) + 1);
-      const mine = t.snapshot.val();
-      const set = await repRef().child('nos/' + nk).transaction(c => c || mine);    // שני מחשבים באותו רגע — נשאר הראשון
-      no = set.snapshot.val(); REP.nos = Object.assign({}, REP.nos, { [nk]: no }); repRender();
-    }
+    const no = await repNumber(kind);
     win.document.open(); win.document.write(lgOptyReportHtml(kind, repRows(), $('rDay').value, no, repPrintDay())); win.document.close();
     win.focus(); setTimeout(() => { try { win.print(); } catch (_) {} }, 300);
   } catch (e) { console.error(e); try { win.close(); } catch (_) {} st('✗ לא הודפס — בדוק חיבור', 'bad'); }

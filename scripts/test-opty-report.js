@@ -65,4 +65,16 @@ check('D4 escapes', /<b>x/.test(R.lgOptyReportHtml('report', [{ client: '<b>x', 
 const hz = R.lgOptyReportHtml('report', rows, '2026-11-26', 5901);
 check('E1 date chosen by hand (Ben 26/11) wins; bad value → regular next work day', [/יום שלישי 1 דצמבר 2026/.test(R.lgOptyReportHtml('chisum', rows, '2026-11-26', 5901, '2026-12-01')), /יום ראשון 29 נובמבר 2026/.test(R.lgOptyReportHtml('chisum', rows, '2026-11-26', 5901, 'x')), /יום ראשון 29 נובמבר 2026/.test(hz)], [true, true, true]);
 check('E2 stripes: every other glass row grey, also when printing (Ben 26/11)', [(h2.match(/<tr class="z">/g) || []).length, /print-color-adjust:exact/.test(h2), (R.lgOptyReportHtml('chisum', rows, 'd', 1).match(/<tr class="z">/g) || []).length], [3, true, 3]);
+//  ישר ל-Brother (בן, 26/11): מודל עמודים
+const pm = R.lgOptyReportPrintModel('report', rows, '2026-11-26', 5901, '2026-12-01');
+check('F1 head: number, report name, chosen date', [pm.head.title, pm.head.sub, pm.head.date, pm.head.orig], ['הזמנה מס׳ 5901', 'דוח חיסום', 'יום שלישי 1 דצמבר 2026', false]);
+check('F2 report lines = clients, orders, rows; stripes every other row', pm.pages[0].map(l => l.t + (l.z ? 'z' : '')).join(''), 'corcorzcorcorzcrrz');
+const pn = R.lgOptyReportPrintModel('chisum', rows, '2026-11-26', 5901);
+check('F3 note: rows + total, date = next work day, to Uzi', [pn.pages[0].length, pn.pages[0][6].t, pn.pages[0][6].cells[3], pn.head.date, pn.head.to], [7, 't', '8', 'יום ראשון 29 נובמבר 2026', 'לכבוד: עוזי']);
+const big = {}; for (let i = 1; i <= 90; i++) big[i] = { client: 'C' + Math.floor(i / 10), name: 'n' + (i % 3), w: 500 + i, h: 600, qty: 1, note: 'חיסום' };
+const pb = R.lgOptyReportPrintModel('report', R.lgOptyReportRows({ M: { job: 'M', day: 'd', mat: '08S', pieces: big } }, 'd', {}, {}), 'd', 1, '', 40);
+const units = { c: 1.8, o: 1.3, r: 1, t: 1.5 };
+check('F4 long report splits into pages, none over the limit, no client/order title left last on a page, all 90 rows kept',
+  [pb.pages.length > 2, pb.pages.every(pg => pg.reduce((n, l) => n + units[l.t], 0) <= 40), pb.pages.every(pg => pg[pg.length - 1].t === 'r'), pb.pages.flat().filter(l => l.t === 'r').length], [true, true, true, 90]);
+check('F5 empty day', R.lgOptyReportPrintModel('cnc', [], 'd', 1).empty, true);
 console.log(fail ? fail + ' FAILED' : 'all passed'); process.exit(fail ? 1 : 0);
