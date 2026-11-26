@@ -210,6 +210,9 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .rcard.done .rchip.need{border-color:#e0c47a;color:#e0c47a;}
 .rprev .rchip.done{background:#1a1714;color:#fff;}
 .rbtns{display:flex;flex-direction:column;gap:8px;margin-top:10px;} .rbtns .sm{min-height:44px;}
+.rfin{width:100%;box-sizing:border-box;font:inherit;font-size:16px;min-height:44px;padding:0 12px;margin-top:10px;border:1.5px solid #b8922a;border-radius:10px;background:#fff;color:#1a1714;}
+.rfinout{margin-top:8px;background:#fff;color:#1a1714;border-radius:10px;} .rfinout:empty{display:none;}
+.rfinout .note{padding:10px 12px;margin:0;color:#6b6259;} .rfinout .rrow{padding:8px 12px;}
 .rh{font-size:13px;font-weight:800;color:var(--muted);margin:var(--space-2) 2px;}
 .rlist,.nlist{background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:var(--space-3);}
 .rprev{padding:12px 14px;border-bottom:1px solid var(--border);font-size:15px;} .rprev:last-child{border:0;}
@@ -1070,11 +1073,19 @@ function repChips(b) {
     : `<span class="rchip need">${esc(LG_REPORT_KINDS[k].he)} — עוד לא</span>`).join('');
 }
 //  חיפוש (בן, 26/11): כשיש טקסט בשורת החיפוש — רק התוצאות, לפי דוח; "תעודות ←" קופץ לתעודות של אותו דוח
+const repFindRow = r => `<div class="rrow"><span class="rt"><b>${esc(r.client || 'בלי שם לקוח')}</b>${r.name ? ' · ' + esc(r.name) : ''} · <bdi dir="ltr">${esc(r.glass)}</bdi> ·<span class="rd">${esc(r.w)} × ${esc(r.h)}</span>${r.qty > 1 ? ' · ' + r.qty + ' יח׳' : ''}${r.triplex ? '<span class="xt">טריפלקס</span>' : ''}${r.paint ? '<span class="xt">צבע</span>' : ''}${r.cnc ? '<span class="xt">CNC</span>' : ''}</span></div>`;
+//  חיפוש בתוך דוח אחד (בן, 26/11: "חיפוש גם פריט בדוח מסוים") — בתוך "פתח דוח"
+function repRenderFindIn(no, q) {
+  const out = document.querySelector(`[data-rfinout="${CSS.escape(String(no))}"]`), b = repBatch(no); if (!out) return;
+  q = String(q || '').trim(); if (!q || !b) { out.innerHTML = ''; return; }
+  const res = lgOptyRepSearch(q, [], { [no]: b }, 300), rows = res.length ? res[0].rows : [];
+  out.innerHTML = rows.length ? `<p class="note">${rows.length} זכוכיות בדוח ${esc(no)}</p>` + rows.map(repFindRow).join('') : `<p class="note">לא נמצא בדוח ${esc(no)}</p>`;
+}
 function repRenderFind(q) {
   const res = lgOptyRepSearch(q, repPending(), REPB), n = res.reduce((k, g) => k + g.rows.length, 0);
   $('rFindOut').innerHTML = !n ? '<p class="note">לא נמצא בדוחות ובממתין</p>'
     : `<p class="note">${n >= 150 ? 'יותר מ-150 — ' : ''}${n} זכוכיות נמצאו</p>` + res.map(g => `<section class="rgrp"><h3 class="rfh">${g.no ? `דוח ${esc(g.no)} · ${esc(repWhen(g.b))}` : '⏳ ממתין — עוד לא יצא'}
-      ${g.no ? `<button class="sm" type="button" data-rnotes="${esc(g.no)}">תעודות ←</button>` : ''}</h3>${g.rows.map(r => `<div class="rrow"><span class="rt"><b>${esc(r.client || 'בלי שם לקוח')}</b>${r.name ? ' · ' + esc(r.name) : ''} · <bdi dir="ltr">${esc(r.glass)}</bdi> ·<span class="rd">${esc(r.w)} × ${esc(r.h)}</span>${r.qty > 1 ? ' · ' + r.qty + ' יח׳' : ''}${r.triplex ? '<span class="xt">טריפלקס</span>' : ''}${r.paint ? '<span class="xt">צבע</span>' : ''}${r.cnc ? '<span class="xt">CNC</span>' : ''}</span></div>`).join('')}</section>`).join('');
+      ${g.no ? `<button class="sm" type="button" data-rnotes="${esc(g.no)}">תעודות ←</button>` : ''}</h3>${g.rows.map(repFindRow).join('')}</section>`).join('');
 }
 function repRender() {
   const fq = ($('rFind').value || '').trim(), finding = fq.length > 0;
@@ -1101,13 +1112,18 @@ function repRender() {
       : `<button class="sm quiet" type="button" data-rhide="${esc(r.key)}">${r.hidden ? 'החזר' : 'הורד'}</button>`}</div>`).join('')}</section>`).join('');
   //  הדוח האחרון + הקודמים
   const list = repList(), last = list[0];
+  const keep = [...document.querySelectorAll('#rViewRep details[data-ropen][open]')].map(d => { const i = d.querySelector('[data-rfin]'); return { no: d.dataset.ropen, q: i ? i.value : '', f: i && document.activeElement === i }; });
   $('rLast').innerHTML = last ? repCard(last, true) : '';
   $('rPrev').innerHTML = list.length > 1 ? `<h3 class="rh">דוחות קודמים</h3><div class="rlist">${list.slice(1, 11).map(b => repCard(b, false)).join('')}</div>` : '';
+  keep.forEach(k => { const d = document.querySelector(`#rViewRep details[data-ropen="${CSS.escape(k.no)}"]`); if (!d) return; d.open = true;
+    const i = d.querySelector('[data-rfin]'); if (i && k.q) { i.value = k.q; repRenderFindIn(k.no, k.q); } if (i && k.f) i.focus(); });
 }
 //  כרטיס דוח: גדול וכהה לאחרון, שורה בהירה לקודמים. הדפסה חוזרת — רק בפתיחה (שלא ילחצו עליה במקום "הוצא דוח")
 function repCard(b, big) {
   const s = lgOptyRepSummary(repRowsOf(b)), tr = s.by.triplex;
-  const acts = `<details class="racts"><summary>פתח דוח · הדפס שוב</summary><div class="rbtns">
+  const acts = `<details class="racts" data-ropen="${esc(b.no)}"><summary>פתח דוח · הדפס שוב</summary>
+      <input class="rfin" type="search" data-rfin="${esc(b.no)}" autocomplete="off" placeholder="🔍 חפש בדוח ${esc(b.no)} — לקוח, שם, מידה" aria-label="חיפוש בדוח ${esc(b.no)}">
+      <div class="rfinout" data-rfinout="${esc(b.no)}"></div><div class="rbtns">
       <button class="sm" type="button" data-rprint="report" data-rno="${esc(b.no)}">🖨 דוח חיסום לפי לקוח</button>
       ${tr ? `<button class="sm" type="button" data-rprint="report-triplex" data-rno="${esc(b.no)}">🖨 דוח טריפלקס לפי לקוח</button>` : ''}
       <button class="sm" type="button" data-rnotes="${esc(b.no)}">תעודות משלוח לדוח הזה ←</button></div></details>`;
@@ -1178,6 +1194,7 @@ $('rForm').addEventListener('submit', async e => {
   $('rW').value = ''; $('rH').value = ''; $('rQ').value = '1'; $('rN').value = ''; $('rW').focus();
 });
 $('rFind').addEventListener('input', () => repRender());
+$('pane-rep').addEventListener('input', e => { const no = e.target.dataset && e.target.dataset.rfin; if (no) repRenderFindIn(no, e.target.value); });
 $('pane-rep').addEventListener('change', e => { if (e.target.id === 'rSelMore' && e.target.value) { REPSEL = e.target.value; repRender(); } });
 $('pane-rep').addEventListener('click', async e => {
   const t = e.target;
