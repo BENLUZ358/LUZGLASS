@@ -77,4 +77,7 @@ const units = { c: 1.8, o: 1.3, r: 1, t: 1.5 };
 check('F4 long report splits into pages, none over the limit, no client/order title left last on a page, all 90 rows kept',
   [pb.pages.length > 2, pb.pages.every(pg => pg.reduce((n, l) => n + units[l.t], 0) <= 40), pb.pages.every(pg => pg[pg.length - 1].t === 'r'), pb.pages.flat().filter(l => l.t === 'r').length], [true, true, true, 90]);
 check('F5 empty day', R.lgOptyReportPrintModel('cnc', [], 'd', 1).empty, true);
+check('G1 clients A-Z, English first then Hebrew, no name last (Ben 26/11)', ['מאור', 'בלי שם לקוח', 'zeta glass', 'א.א.פנדה', 'BathPlace', 'דודו עקיבא', 'H.B.GLASS', '3D זכוכית', 'S GLASS'].sort(R.lgOptyClientCmp),
+  ['3D זכוכית', 'BathPlace', 'H.B.GLASS', 'S GLASS', 'zeta glass', 'א.א.פנדה', 'דודו עקיבא', 'מאור', 'בלי שם לקוח']);
+check('G2 report groups follow that order', R.lgOptyReportByClient([{ client: 'מאור', name: 'a' }, { client: 'BathPlace', name: 'b' }, { client: 'א.א.פנדה', name: 'c' }]).map(c => c.client), ['BathPlace', 'א.א.פנדה', 'מאור']);
 console.log(fail ? fail + ' FAILED' : 'all passed'); process.exit(fail ? 1 : 0);

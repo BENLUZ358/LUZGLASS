@@ -369,7 +369,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
 <script src="opty-hub.js?v=20261125a"></script>
-<script src="opty-report.js?v=20261126b"></script>
+<script src="opty-report.js?v=20261126c"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -1025,7 +1025,7 @@ function repRender() {
   const tags = r => (r.triplex ? `<span class="xt">${esc(r.triplex)}</span>` : '') + (r.paint ? `<span class="xt">צבע${r.paint !== 'צבע' ? ' ' + esc(r.paint) : ''}</span>` : '') + (r.cnc ? '<span class="xt">CNC</span>' : '');
   const groups = {};
   rows.forEach(r => { const c = r.client || 'בלי שם לקוח'; (groups[c] = groups[c] || []).push(r); });
-  $('rOut').innerHTML = Object.entries(groups).map(([c, rs]) => `<section class="rgrp"><h3>${esc(c)}</h3>${rs.map(r => `<div class="rrow${r.hidden ? ' off' : ''}">
+  $('rOut').innerHTML = Object.entries(groups).sort((x, y) => lgOptyClientCmp(x[0], y[0])).map(([c, rs]) => `<section class="rgrp"><h3>${esc(c)}</h3>${rs.map(r => `<div class="rrow${r.hidden ? ' off' : ''}">
     <span class="rt">${r.src === 'manual' ? '<span class="man">ידני</span> ' : ''}${esc(r.name || '')}${r.name ? ' · ' : ''}<bdi dir="ltr">${esc(r.glass)}</bdi> ·<span class="rd">${esc(r.w)} × ${esc(r.h)}</span>${r.qty > 1 ? ' · ' + r.qty + ' יח׳' : ''}${tags(r)}</span>
     ${r.src === 'manual' ? `<button class="sm quiet" type="button" data-rdel="${esc(r.id)}" aria-label="מחק שורה ידנית">🗑</button>`
       : `<button class="sm quiet" type="button" data-rhide="${esc(r.key)}">${r.hidden ? 'החזר' : 'הורד'}</button>`}</div>`).join('')}</section>`).join('');

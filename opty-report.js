@@ -70,6 +70,13 @@ function lgOptyReportFor(rows, kind) {
 }
 
 //  דוח: [{ client, orders: [{ name, rows }] }] — לפי סדר ההופעה (כמו באופטי-ווי)
+//  סדר לקוחות (בן, 26/11): לפי א-ב, אנגלית קודם ("BathPlace", "H.B.GLASS"), אחר כך עברית; "בלי שם לקוח" בסוף
+function lgOptyClientCmp(a, b) {
+  const grp = s => { s = String(s || '').trim(); if (!s || s === 'בלי שם לקוח') return 2; const L = s.replace(/[^A-Za-z֐-׿]/g, '')[0] || ''; return /[A-Za-z]/.test(L) ? 0 : 1; };   // לפי האות הראשונה
+  const ga = grp(a), gb = grp(b);
+  if (ga !== gb) return ga - gb;
+  return String(a || '').localeCompare(String(b || ''), ga === 0 ? 'en' : 'he', { sensitivity: 'base', numeric: true });
+}
 function lgOptyReportByClient(rows) {
   const out = [], byC = {};
   (rows || []).forEach(r => {
@@ -79,7 +86,7 @@ function lgOptyReportByClient(rows) {
     if (!g._o[n]) { g._o[n] = { name: n, rows: [] }; g.orders.push(g._o[n]); }
     g._o[n].rows.push(r);
   });
-  return out.map(g => ({ client: g.client, orders: g.orders }));
+  return out.sort((x, y) => lgOptyClientCmp(x.client, y.client)).map(g => ({ client: g.client, orders: g.orders }));
 }
 
 //  עובי: "08S" → "8" · "10C" → "10" · "03+3S" → "3+3"; בשורה ידנית — המספר הראשון בטקסט ("8 mm clear" → "8")
@@ -187,5 +194,5 @@ function lgOptyReportPrintModel(kind, rows, day, no, outDay, per) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, lgOptyReportOutDay, lgOptyReportNet, lgOptyReportPrintModel, LG_REPORT_FIRST_NO, LG_REPORT_KINDS };
+  module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, lgOptyReportOutDay, lgOptyReportNet, lgOptyReportPrintModel, lgOptyClientCmp, LG_REPORT_FIRST_NO, LG_REPORT_KINDS };
 }
