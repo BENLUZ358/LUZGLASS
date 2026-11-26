@@ -1059,7 +1059,8 @@ const repPending = () => lgOptyPendingRows(JOBS, MATS, REPP, REPB, REPL);
 const repList = () => Object.values(REPB).filter(b => b && b.no).sort((a, b) => Number(b.no) - Number(a.no));
 const repBatch = no => REPB[String(no)] || null;
 const repRowsOf = b => (b && Array.isArray(b.rows) ? b.rows : Object.values((b && b.rows) || {})).filter(Boolean);
-const repWhen = b => { const d = new Date(Number(b.at) || 0), t = lgOptyTodayIso(), y = lgOptyTodayIso(Date.now() - 86400000), iso = b.date || lgOptyTodayIso(Number(b.at));
+//  דוח ישן (לפני המספור החדש, 26/11) — לפי יום החיתוך, לא 'היום' (בן: 'למה רשום 2 דוחות על היום')
+const repWhen = b => { if (b && b.legacy && b.legacy.day) return 'ישן · חיתוך ' + b.legacy.day.slice(8, 10) + '/' + b.legacy.day.slice(5, 7); const d = new Date(Number(b.at) || 0), t = lgOptyTodayIso(), y = lgOptyTodayIso(Date.now() - 86400000), iso = b.date || lgOptyTodayIso(Number(b.at));
   return (iso === t ? 'היום' : iso === y ? 'אתמול' : iso.slice(8, 10) + '/' + iso.slice(5, 7)) + (b.at && !b.legacy ? ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') : ''); };
 const REP_NOTE_KINDS = ['chisum', 'paint', 'cnc', 'triplex'];
 //  שבב לכל תעודה שיש בדוח: כהה = הודפסה ✓, מסגרת = עוד לא
