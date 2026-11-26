@@ -9,8 +9,15 @@
 //    טריפלקס — "טריפלקס" בהערה; רק בתעודת טריפלקס, לא בחיסום
 //  המידות נטו (בלי 2 מ"מ ליטוש) והתאריך המודפס = יום העבודה שאחרי החיתוך (אז זה יוצא) — כמו בתוכנה הקודמת.
 //  שמירה: meta/optyReports/<יום>/{ nos/<סוג>, manual/<id>, hide/<key> } · מספור רץ אחד: meta/optyReportSeq
+//
+//  דוחות ממוספרים (בן, 26/11 — "יום חיתוך" ו"תאריך על הדף" בלבלו את העובדים):
+//    "ממתין" = כל מה שנקלט מאופטי-ווי ועוד לא נכנס לשום דוח (+ שורות ידניות, meta/optyRepPending/{manual,hide}).
+//    "הוצא דוח" = מספר חדש (meta/optyReportSeq) → meta/optyRepBatches/<no> = { no, at, date, rows, keys, notes }.
+//    הדוח לא משתנה אחרי שיצא. התעודות של הדוח (חיסום / צבע / CNC / טריפלקס) — באותו מספר בדיוק (בן: "כדי שנדע מה שייך למה").
+//    ימי החיתוך שכבר הודפסו בשיטה הישנה (meta/optyReports/<יום>/nos) — לא חוזרים ל"ממתין".
 
-const LG_REPORT_FIRST_NO = 5901;          // המספר האחרון בתוכנה הקודמת: 5900 (בן, 24/11)
+const LG_REPORT_FIRST_NO = 5901;
+const LG_REP_START_DAY = '2026-11-25';    // לפני זה הדוחות יצאו מהתוכנה הקודמת — לא "ממתין"          // המספר האחרון בתוכנה הקודמת: 5900 (בן, 24/11)
 const LG_REPORT_HEAD = { name: 'לוז זגגות ומראות האחים בע"מ', id: '513020198' };
 const LG_REPORT_KINDS = {
   chisum:  { he: 'חיסום',   item: 'חיסום בלבד', to: 'עוזי' },
@@ -67,6 +74,29 @@ const LG_REPORT_OF = { report: 'chisum', 'report-triplex': 'triplex' };
 function lgOptyReportFor(rows, kind) {
   const k = LG_REPORT_OF[kind] || kind;
   return (rows || []).filter(r => !r.hidden && r[k]);
+}
+
+//  "ממתין לדוח": כל הזכוכית מאופטי-ווי מיום LG_REP_START_DAY שלא נכנסה לדוח (batches) ולא ביום שהודפס בשיטה הישנה (legacy),
+//  + השורות הידניות שמחכות. pend = meta/optyRepPending { manual, hide } · batches = meta/optyRepBatches · legacy = meta/optyReports
+function lgOptyPendingRows(jobs, mats, pend, batches, legacy) {
+  const used = {}, oldDays = {}, p = pend || {};
+  Object.values(batches || {}).forEach(b => Object.keys((b && b.keys) || {}).forEach(k => { used[k] = 1; }));
+  Object.entries(legacy || {}).forEach(([d, r]) => { if (r && r.nos && Object.keys(r.nos).length) oldDays[d] = 1; });
+  const days = [...new Set(Object.values(jobs || {}).map(j => j && j.day).filter(d => d && d >= LG_REP_START_DAY && !oldDays[d]))].sort();
+  const rows = [];
+  days.forEach(d => lgOptyReportRows(jobs, d, mats, { hide: p.hide }).forEach(r => { if (!used[r.key]) rows.push(Object.assign(r, { day: d })); }));
+  lgOptyReportRows({}, '', mats, { manual: p.manual }).forEach(r => { r.hidden = !!(p.hide || {})[r.key]; rows.push(r); });
+  return rows;
+}
+//  סיכום לכרטיס: יחידות, לקוחות, ולכל סוג תעודה — כמה יחידות (0 = אין תעודה כזאת)
+function lgOptyRepSummary(rows) {
+  const live = (rows || []).filter(r => !r.hidden), u = rs => rs.reduce((n, r) => n + (Number(r.qty) || 1), 0);
+  const by = {}; Object.keys(LG_REPORT_KINDS).forEach(k => { by[k] = u(lgOptyReportFor(live, k)); });
+  return { rows: live.length, units: u(live), clients: new Set(live.map(r => r.client || '')).size, by };
+}
+//  מספר התעודה = מספר הדוח. רק בדוחות הישנים (לפני 27/11) לטריפלקס/CNC/צבע היה מספר משלו — שומרים אותו.
+function lgOptyBatchNoteNo(b, kind) {
+  return (b && b.legacy && b.legacy.nos && b.legacy.nos[kind]) || (b && b.no) || '';
 }
 
 //  דוח: [{ client, orders: [{ name, rows }] }] — לפי סדר ההופעה (כמו באופטי-ווי)
@@ -154,7 +184,7 @@ function lgOptyReportHtml(kind, rows, day, no, outDay) {
   <div class="hd"><span class="n">${e(H.name)}</span><span class="id">ע.מ. ${e(H.id)}</span></div>
   <div class="mid"><span></span><div class="ttl">${e(title)}<small>${isNote ? 'תעודת ' + e(K.he) : repName}</small></div><div class="side">${isNote ? '<b>מקור</b>' : ''}${e(lgOptyReportDate(printDay))}</div></div>
   ${isNote ? `<div class="to">לכבוד: ${K.to ? e(K.to) : '<span class="blank"></span>'}</div>` : ''}
-  ${body ? `<table><thead><tr>${cols}</tr></thead>${body}</table>` : '<p class="empty">אין זכוכית לתעודה הזאת ביום הזה</p>'}
+  ${body ? `<table><thead><tr>${cols}</tr></thead>${body}</table>` : '<p class="empty">אין זכוכית לתעודה הזאת בדוח הזה</p>'}
   </body></html>`;
 }
 
@@ -194,5 +224,6 @@ function lgOptyReportPrintModel(kind, rows, day, no, outDay, per) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, lgOptyReportOutDay, lgOptyReportNet, lgOptyReportPrintModel, lgOptyClientCmp, LG_REPORT_FIRST_NO, LG_REPORT_KINDS };
+  module.exports = { lgOptyReportRows, lgOptyReportProc, lgOptyReportFor, lgOptyReportByClient, lgOptyReportThick, lgOptyNoteRows, lgOptyReportHtml, lgOptyReportDate, lgOptyReportOutDay, lgOptyReportNet, lgOptyReportPrintModel, lgOptyClientCmp, LG_REPORT_FIRST_NO, LG_REPORT_KINDS,
+    lgOptyPendingRows, lgOptyRepSummary, lgOptyBatchNoteNo, LG_REP_START_DAY };
 }

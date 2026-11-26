@@ -184,7 +184,39 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .tprog{position:sticky;top:56px;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:var(--space-3);margin-bottom:var(--space-3);font-weight:var(--fw-black);font-size:var(--fs-lg);}
 .tprog .bar{height:12px;border-radius:6px;background:rgba(0,0,0,.08);overflow:hidden;margin-top:6px;}
 .tprog .bar i{display:block;height:100%;background:#1e7d32;}
-.rprint{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-bottom:var(--space-2);}
+.rseg{display:flex;background:var(--surface-2,#e9e3d8);border-radius:12px;padding:4px;margin-bottom:var(--space-3);}
+.rseg button{flex:1;min-height:44px;border:0;background:none;border-radius:9px;font:inherit;font-size:16px;font-weight:600;color:var(--muted);cursor:pointer;}
+.rseg button.on{background:var(--surface);color:var(--text);font-weight:800;box-shadow:0 1px 2px rgba(0,0,0,.12);}
+.rcard{border-radius:14px;padding:16px;margin-bottom:var(--space-3);}
+.rcard.pend{border:2px solid var(--gold);background:#fffaf0;color:#1a1714;}
+.rcard.empty{border:1px solid var(--border);background:var(--surface);}
+.rcard.done{background:#1a1714;color:#f5f1ea;}
+.rcard.sel{background:var(--surface);border:1px solid var(--border);padding:12px 14px;}
+.rlbl{font-size:14px;font-weight:700;color:#8a6a12;} .rcard.done .rlbl,.rcard.done .rsub{color:#b9b0a4;font-weight:400;}
+.rbig{font-size:22px;font-weight:800;margin:4px 0 6px;}
+.rtag{display:inline-block;font-size:13px;font-weight:600;padding:3px 10px;border-radius:20px;background:#f1e6c8;color:#6b5210;margin:0 0 6px 4px;}
+.rmain{display:block;width:100%;margin-top:10px;min-height:52px;border:0;border-radius:10px;background:var(--gold);color:#fff;font:inherit;font-size:18px;font-weight:800;cursor:pointer;}
+.rmain:disabled{opacity:.6;}
+.rmore>summary,.racts>summary{cursor:pointer;margin-top:10px;font-size:15px;font-weight:600;color:#6b5210;min-height:32px;}
+.rcard.done .racts>summary{color:#e0c47a;}
+.rmore #rOut{margin-top:10px;} .rmore .radd{margin-top:10px;}
+.rno{font-size:30px;font-weight:800;color:#e0c47a;}
+.rok{display:inline-block;background:#2e7d4f;color:#fff;font-size:13px;font-weight:700;padding:2px 9px;border-radius:20px;margin-inline-start:8px;vertical-align:middle;}
+.rchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.rchip{font-size:14px;font-weight:700;padding:5px 10px;border-radius:8px;}
+.rchip.done{background:#3a332c;color:#f5f1ea;} .rchip.need{border:1.5px solid var(--gold);color:#8a6a12;}
+.rcard.done .rchip.need{border-color:#e0c47a;color:#e0c47a;}
+.rprev .rchip.done{background:#1a1714;color:#fff;}
+.rbtns{display:flex;flex-direction:column;gap:8px;margin-top:10px;} .rbtns .sm{min-height:44px;}
+.rh{font-size:13px;font-weight:800;color:var(--muted);margin:var(--space-2) 2px;}
+.rlist,.nlist{background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:var(--space-3);}
+.rprev{padding:12px 14px;border-bottom:1px solid var(--border);font-size:15px;} .rprev:last-child{border:0;}
+.rpicks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:var(--space-3);}
+.rpick{min-height:44px;padding:0 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;font-size:16px;cursor:pointer;}
+.rpick.on{background:#1a1714;color:#fff;border-color:#1a1714;}
+.rselno{font-size:18px;}
+.nrow{display:flex;align-items:center;gap:10px;padding:14px;border-bottom:1px solid var(--border);} .nrow:last-child{border:0;}
+.nrow .t{flex:1;min-width:0;} .nrow .t b{font-size:17px;} .nrow .sm{min-height:44px;} .nrow.off{opacity:.45;}
 .rask{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;}
 .rask-box{background:var(--surface);color:var(--text);border-radius:12px;padding:20px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;}
 .rask-q{font-size:18px;font-weight:700;margin:0;} .rask-box .note{margin:0 0 4px;} .rask-box button{min-height:48px;font-size:16px;}
@@ -286,12 +318,15 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
     <div id="tOut"><p class="note">טוען…</p></div>
   </div>
 
-  <!-- דוחות חיסום (בן, 24/11): דוח לפי לקוח למעקב + תעודה לנהג לפי סוג ומידה; אפשר להוסיף ידנית -->
+  <!-- דוחות ותעודות ממוספרים (בן, 26/11): ממתין → "הוצא דוח N"; תעודות משלוח לפי מספר דוח, באותו מספר -->
   <div class="pane" id="pane-rep" hidden>
-    <div class="jflt"><label>יום חיתוך <input type="date" id="rDay"></label><label>תאריך על הדף <input type="date" id="rPrintDay"></label><button class="sm quiet" type="button" id="rPrintDayReset" hidden>חזור לתאריך הרגיל</button><span class="note" id="rOutDay"></span></div>
-    <div id="rHead"></div>
-    <details class="card radd" id="rAdd">
-      <summary>+ הוסף ידנית</summary>
+    <div class="rseg" role="tablist"><button type="button" data-rview="rep" class="on">דוחות</button><button type="button" data-rview="notes">תעודות משלוח</button></div>
+    <div id="rViewRep">
+      <div id="rPend" class="rcard pend">
+        <div id="rPendHead"><p class="note">טוען…</p></div>
+        <details class="rmore"><summary id="rPendSum">ראה מה ממתין</summary>
+          <div id="rOut"></div>
+          <details class="card radd" id="rAdd"><summary>+ הוסף שורה ידנית</summary>
       <form id="rForm" autocomplete="off">
         <label>רוחב<input type="number" id="rW" inputmode="numeric" min="1" required></label>
         <label>גובה<input type="number" id="rH" inputmode="numeric" min="1" required></label>
@@ -302,10 +337,15 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
         <label class="wide">לאיזו תעודה<select id="rK"><option value="chisum">חיסום</option><option value="paint">צבע (נכנס גם לחיסום)</option><option value="cnc">CNC</option><option value="triplex">טריפלקס (רק טריפלקס)</option></select></label>
         <label class="wide" id="rColorL" hidden>קוד צבע<input id="rColor" placeholder="7016"></label>
         <datalist id="rGlassList"></datalist>
-        <button class="sm gold" type="submit">הוסף לדוח</button>
+        <button class="sm gold" type="submit">הוסף לממתין</button>
       </form>
-    </details>
-    <div id="rOut"><p class="note">טוען…</p></div>
+          </details>
+        </details>
+      </div>
+      <div id="rLast"></div>
+      <div id="rPrev"></div>
+    </div>
+    <div id="rViewNotes" hidden><div id="rNotes"></div></div>
   </div>
 
   <div class="pane" id="pane-jobs" hidden>
@@ -369,7 +409,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
 <script src="opty-hub.js?v=20261125a"></script>
-<script src="opty-report.js?v=20261126c"></script>
+<script src="opty-report.js?v=20261126d"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -992,56 +1032,125 @@ $('pane-jobs').addEventListener('click', e => {
   const r = t.closest('[data-redo]'); if (r) { jobCut(r.dataset.redo, true); return; }
 });
 
-//  ─── דוחות חיסום (בן, 24/11) ───
-//  כל מה שנחתך ביום העבודה והולך לחיסום (opty-report.js) + מה שבן הוסיף ידנית. "הורד" = לא בהדפסה (אפשר להחזיר).
-//  כל תעודה (חיסום / צבע / CNC / טריפלקס) מקבלת מספר משלה בהדפסה הראשונה (meta/optyReportSeq, מ-5901); הדוח = מספר החיסום.
-let REP = {};
-const repRef = () => _lgDb.ref('meta/optyReports/' + $('rDay').value);
+//  ─── דוחות ותעודות ממוספרים (בן, 26/11) ───
+//  "ממתין" (מסגרת זהב) → "הוצא דוח N" → הדוח יצא (כרטיס כהה). תעודות משלוח בנפרד: בוחרים דוח → חיסום / צבע / CNC / טריפלקס,
+//  כל התעודות באותו מספר של הדוח. אין יותר "יום חיתוך" / "תאריך על הדף" — התאריך = היום שבו הדוח יצא.
+//  מבנה: meta/optyRepPending { manual, hide } · meta/optyRepBatches/<no> · מספור: meta/optyReportSeq (opty-report.js)
+let REPB = {}, REPP = {}, REPL = {}, REPSEQ = 0, REPV = 'rep', REPSEL = '';
+try { REPV = localStorage.getItem('lgRepView') === 'notes' ? 'notes' : 'rep'; } catch (_) {}
+const repPendRef = () => _lgDb.ref('meta/optyRepPending');
+const repBatchRef = no => _lgDb.ref('meta/optyRepBatches/' + no);
 async function repLoad() {
-  if (!$('rDay').value) $('rDay').value = lgOptyTodayIso();
   $('rOut').innerHTML = '<p class="note">טוען…</p>';
   try {
-    const [j, m, r] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value'), repRef().once('value')]);
-    JOBS = Object.assign({}, JOBS, j.val() || {}); MATS = m.val() || {}; REP = r.val() || {};
+    const [j, m, b, p, l, q] = await Promise.all([lgOptyJobsRef().once('value'), _lgDb.ref('meta/optyMats').once('value'),
+      _lgDb.ref('meta/optyRepBatches').once('value'), repPendRef().once('value'), _lgDb.ref('meta/optyReports').once('value'), _lgDb.ref('meta/optyReportSeq').once('value')]);
+    JOBS = Object.assign({}, JOBS, j.val() || {}); MATS = m.val() || {}; REPB = b.val() || {}; REPP = p.val() || {}; REPL = l.val() || {};
+    REPSEQ = Number(q.val()) || LG_REPORT_FIRST_NO - 1;
     $('rGlassList').innerHTML = [...new Set(Object.values(JOBS).map(x => x && x.matName).filter(Boolean))].sort().map(g => `<option value="${esc(g)}">`).join('');
     repRender();
   } catch (e) { console.error(e); $('rOut').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור</p>'; }
 }
-const repRows = () => lgOptyReportRows(JOBS, $('rDay').value, MATS, REP);
-const repPrintDay = () => REP.outDay || ($('rDay').value ? lgOptyReportOutDay($('rDay').value) : '');
+const repPending = () => lgOptyPendingRows(JOBS, MATS, REPP, REPB, REPL);
+const repList = () => Object.values(REPB).filter(b => b && b.no).sort((a, b) => Number(b.no) - Number(a.no));
+const repBatch = no => REPB[String(no)] || null;
+const repRowsOf = b => (b && Array.isArray(b.rows) ? b.rows : Object.values((b && b.rows) || {})).filter(Boolean);
+const repWhen = b => { const d = new Date(Number(b.at) || 0), t = lgOptyTodayIso(), y = lgOptyTodayIso(Date.now() - 86400000), iso = b.date || lgOptyTodayIso(Number(b.at));
+  return (iso === t ? 'היום' : iso === y ? 'אתמול' : iso.slice(8, 10) + '/' + iso.slice(5, 7)) + (b.at && !b.legacy ? ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') : ''); };
+const REP_NOTE_KINDS = ['chisum', 'paint', 'cnc', 'triplex'];
+//  שבב לכל תעודה שיש בדוח: כהה = הודפסה ✓, מסגרת = עוד לא
+function repChips(b) {
+  const s = lgOptyRepSummary(repRowsOf(b)), n = b.notes || {};
+  return REP_NOTE_KINDS.filter(k => s.by[k]).map(k => n[k] ? `<span class="rchip done">${esc(LG_REPORT_KINDS[k].he)} ✓</span>`
+    : `<span class="rchip need">${esc(LG_REPORT_KINDS[k].he)} — עוד לא</span>`).join('');
+}
 function repRender() {
-  //  תאריך על הדף (בן, 26/11): רגיל = יום העבודה שאחרי החיתוך; אפשר לבחור אחר — נשמר ליום הזה (meta/optyReports/<day>/outDay)
-  const pd = repPrintDay();
-  $('rPrintDay').value = pd || '';
-  $('rPrintDayReset').hidden = !REP.outDay;
-  $('rOutDay').textContent = pd ? 'יודפס: ' + lgOptyReportDate(pd) + (REP.outDay ? ' (בחרת ידנית)' : '') : '';
-  const rows = repRows(), nos = REP.nos || {};
-  //  כפתור לכל תעודה (צבע / CNC / טריפלקס — רק כשיש), עם כמה יחידות ומה המספר שלה
-  const btn = (k, label) => { const rs = lgOptyReportFor(rows, k), u = rs.reduce((n, r) => n + r.qty, 0), no = nos[LG_REPORT_OF[k] || k];
-    return (k === 'chisum' || k === 'report' || rs.length) ? `<button class="sm gold" type="button" data-rprint="${k}" ${rs.length ? '' : 'disabled'}>🖨 ${label} · ${u}${no ? ' · מס׳ ' + esc(no) : ''}</button>` : ''; };
-  $('rHead').innerHTML = `<div class="rprint">${btn('report', 'דוח חיסום לפי לקוח')}${btn('report-triplex', 'דוח טריפלקס לפי לקוח')}${btn('chisum', 'תעודת חיסום')}${btn('paint', 'תעודת צבע')}${btn('cnc', 'תעודת CNC')}${btn('triplex', 'תעודת טריפלקס')}</div>
-    <p class="note">כל תעודה מקבלת מספר משלה בהדפסה הראשונה. המספר על הכפתור = כמה יחידות.</p>`;
-  if (!rows.length) { $('rOut').innerHTML = '<p class="note">אין זכוכית לחיסום, צבע, CNC או טריפלקס ביום הזה. אפשר להוסיף ידנית, או לקלוט את האופטימיזציות בלשונית "קליטה".</p>'; return; }
-  const tags = r => (r.triplex ? `<span class="xt">${esc(r.triplex)}</span>` : '') + (r.paint ? `<span class="xt">צבע${r.paint !== 'צבע' ? ' ' + esc(r.paint) : ''}</span>` : '') + (r.cnc ? '<span class="xt">CNC</span>' : '');
+  document.querySelectorAll('[data-rview]').forEach(x => x.classList.toggle('on', x.dataset.rview === REPV));
+  $('rViewRep').hidden = REPV !== 'rep'; $('rViewNotes').hidden = REPV !== 'notes';
+  if (REPV === 'notes') { repRenderNotes(); return; }
+  //  ממתין
+  const rows = repPending(), s = lgOptyRepSummary(rows), next = REPSEQ + 1;
+  const tags = REP_NOTE_KINDS.filter(k => s.by[k]).map(k => `<span class="rtag">${esc(LG_REPORT_KINDS[k].he)} ${s.by[k]}</span>`).join('');
+  $('rPend').className = 'rcard ' + (s.units ? 'pend' : 'empty');
+  $('rPendHead').innerHTML = s.units
+    ? `<div class="rlbl">⏳ ממתין — עוד לא יצא</div><div class="rbig">${s.units} זכוכיות · ${s.clients} לקוחות</div><div>${tags}</div>
+       <button class="rmain" type="button" data-rissue="1">🖨 הוצא דוח ${esc(next)}</button>`
+    : `<div class="rlbl">✓ הכל יצא</div><div class="rbig">אין זכוכיות חדשות</div><p class="note">אחרי קליטה מה-USB (לשונית "קליטה") הזכוכיות יופיעו כאן.</p>`;
+  $('rPendSum').textContent = rows.length ? `ראה מה ממתין (${rows.length})` : '+ הוסף שורה ידנית';
+  const tag = r => (r.triplex ? `<span class="xt">${esc(r.triplex)}</span>` : '') + (r.paint ? `<span class="xt">צבע${r.paint !== 'צבע' ? ' ' + esc(r.paint) : ''}</span>` : '') + (r.cnc ? '<span class="xt">CNC</span>' : '') + (r.chisum ? '<span class="xt">חיסום</span>' : '');
   const groups = {};
   rows.forEach(r => { const c = r.client || 'בלי שם לקוח'; (groups[c] = groups[c] || []).push(r); });
   $('rOut').innerHTML = Object.entries(groups).sort((x, y) => lgOptyClientCmp(x[0], y[0])).map(([c, rs]) => `<section class="rgrp"><h3>${esc(c)}</h3>${rs.map(r => `<div class="rrow${r.hidden ? ' off' : ''}">
-    <span class="rt">${r.src === 'manual' ? '<span class="man">ידני</span> ' : ''}${esc(r.name || '')}${r.name ? ' · ' : ''}<bdi dir="ltr">${esc(r.glass)}</bdi> ·<span class="rd">${esc(r.w)} × ${esc(r.h)}</span>${r.qty > 1 ? ' · ' + r.qty + ' יח׳' : ''}${tags(r)}</span>
+    <span class="rt">${r.src === 'manual' ? '<span class="man">ידני</span> ' : ''}${esc(r.name || '')}${r.name ? ' · ' : ''}<bdi dir="ltr">${esc(r.glass)}</bdi> ·<span class="rd">${esc(r.w)} × ${esc(r.h)}</span>${r.qty > 1 ? ' · ' + r.qty + ' יח׳' : ''}${tag(r)}</span>
     ${r.src === 'manual' ? `<button class="sm quiet" type="button" data-rdel="${esc(r.id)}" aria-label="מחק שורה ידנית">🗑</button>`
       : `<button class="sm quiet" type="button" data-rhide="${esc(r.key)}">${r.hidden ? 'החזר' : 'הורד'}</button>`}</div>`).join('')}</section>`).join('');
+  //  הדוח האחרון + הקודמים
+  const list = repList(), last = list[0];
+  $('rLast').innerHTML = last ? repCard(last, true) : '';
+  $('rPrev').innerHTML = list.length > 1 ? `<h3 class="rh">דוחות קודמים</h3><div class="rlist">${list.slice(1, 11).map(b => repCard(b, false)).join('')}</div>` : '';
 }
-async function repWrite(path, val, okMsg) {
-  try { await repRef().child(path).set(val); st(okMsg, 'ok'); }
+//  כרטיס דוח: גדול וכהה לאחרון, שורה בהירה לקודמים. הדפסה חוזרת — רק בפתיחה (שלא ילחצו עליה במקום "הוצא דוח")
+function repCard(b, big) {
+  const s = lgOptyRepSummary(repRowsOf(b)), tr = s.by.triplex;
+  const acts = `<details class="racts"><summary>פתח דוח · הדפס שוב</summary><div class="rbtns">
+      <button class="sm" type="button" data-rprint="report" data-rno="${esc(b.no)}">🖨 דוח חיסום לפי לקוח</button>
+      ${tr ? `<button class="sm" type="button" data-rprint="report-triplex" data-rno="${esc(b.no)}">🖨 דוח טריפלקס לפי לקוח</button>` : ''}
+      <button class="sm" type="button" data-rnotes="${esc(b.no)}">תעודות משלוח לדוח הזה ←</button></div></details>`;
+  return big
+    ? `<div class="rcard done"><div class="rlbl">הדוח האחרון</div><div><span class="rno">${esc(b.no)}</span><span class="rok">יצא ✓</span></div>
+        <div class="rsub">${esc(repWhen(b))} · ${s.units} זכוכיות · ${s.clients} לקוחות</div><div class="rchips">${repChips(b)}</div>${acts}</div>`
+    : `<div class="rprev"><div><b>${esc(b.no)}</b> · ${esc(repWhen(b))} · ${s.units} זכוכיות</div><div class="rchips">${repChips(b)}</div>${acts}</div>`;
+}
+function repRenderNotes() {
+  const list = repList();
+  if (!list.length) { $('rNotes').innerHTML = '<p class="note">עוד לא יצא אף דוח. מוציאים דוח בלשונית "דוחות", ואז התעודות שלו מופיעות כאן.</p>'; return; }
+  //  ברירת מחדל: הדוח האחרון שעוד חסרה לו תעודה, אחרת האחרון
+  if (!repBatch(REPSEL)) { const miss = list.find(b => { const s = lgOptyRepSummary(repRowsOf(b)); return REP_NOTE_KINDS.some(k => s.by[k] && !(b.notes || {})[k]); }); REPSEL = String((miss || list[0]).no); }
+  const b = repBatch(REPSEL), s = lgOptyRepSummary(repRowsOf(b)), n = b.notes || {};
+  const quick = list.slice(0, 4);
+  const pick = quick.map(x => `<button type="button" class="rpick${String(x.no) === REPSEL ? ' on' : ''}" data-rsel="${esc(x.no)}">${esc(x.no)} · ${esc(repWhen(x).split(' ')[0])}</button>`).join('')
+    + (list.length > 4 ? `<select class="sm" id="rSelMore" aria-label="דוח ישן יותר"><option value="">עוד…</option>${list.slice(4).map(x => `<option value="${esc(x.no)}"${String(x.no) === REPSEL ? ' selected' : ''}>${esc(x.no)} · ${esc(repWhen(x))}</option>`).join('')}</select>` : '');
+  const row = k => {
+    const u = s.by[k], done = n[k], no = lgOptyBatchNoteNo(b, k);
+    if (!u) return `<div class="nrow off"><div class="t"><b>${esc(LG_REPORT_KINDS[k].he)}</b><div class="note">אין בדוח הזה</div></div></div>`;
+    return `<div class="nrow"><div class="t"><b>${esc(LG_REPORT_KINDS[k].he)}</b><div class="note">${u} יח׳ · תעודה ${esc(no)} · ${done ? 'הודפסה ' + esc(repWhen({ at: done.at, date: done.date })) + ' ✓' : 'עוד לא הודפסה'}</div></div>
+      <button type="button" class="sm${done ? '' : ' gold'}" data-rprint="${k}" data-rno="${esc(b.no)}">${done ? 'הדפס שוב' : '🖨 הדפס'}</button></div>`;
+  };
+  $('rNotes').innerHTML = `<h3 class="rh">לאיזה דוח?</h3><div class="rpicks">${pick}</div>
+    <div class="rcard sel"><b class="rselno">דוח ${esc(b.no)}</b><div class="note">${esc(repWhen(b))} · ${s.units} זכוכיות · ${s.clients} לקוחות</div></div>
+    <div class="nlist">${REP_NOTE_KINDS.map(row).join('')}</div>
+    <p class="note">הדוח והתעודות שלו — אותו מספר: ${esc(b.no)}. ככה רואים מיד מה שייך למה.</p>`;
+}
+async function repPendWrite(path, val, okMsg) {
+  try { await repPendRef().child(path).set(val); st(okMsg, 'ok'); }
   catch (e) { console.error(e); st('✗ לא נשמר — בדוק חיבור', 'bad'); }
-  const r = await repRef().once('value').catch(() => null); if (r) REP = r.val() || {};
+  const r = await repPendRef().once('value').catch(() => null); if (r) REPP = r.val() || {};
   repRender();
 }
-$('rDay').addEventListener('change', repLoad);
-$('rPrintDay').addEventListener('change', () => {
-  const v = $('rPrintDay').value, auto = lgOptyReportOutDay($('rDay').value);
-  repWrite('outDay', v && v !== auto ? v : null, v && v !== auto ? '✓ התאריך על הדף: ' + lgOptyReportDate(v) : '✓ תאריך רגיל');
-});
-$('rPrintDayReset').addEventListener('click', () => repWrite('outDay', null, '✓ תאריך רגיל'));
+//  "הוצא דוח": שואל פעם אחת, לוקח מספר, שומר את השורות כמו שהן עכשיו (הדוח לא משתנה אחר כך), ומנקה את הממתין
+let repIssuing = false;
+async function repIssue() {
+  if (repIssuing) return;
+  const rows = repPending(), s = lgOptyRepSummary(rows);
+  if (!s.units) { st('אין זכוכיות שממתינות לדוח', 'bad'); return; }
+  if (!confirm('להוציא דוח ' + (REPSEQ + 1) + ' עם ' + s.units + ' זכוכיות?')) return;
+  repIssuing = true; st('מוציא דוח…');
+  try {
+    const t = await _lgDb.ref('meta/optyReportSeq').transaction(c => (Number(c) || LG_REPORT_FIRST_NO - 1) + 1);
+    const no = Number(t.snapshot.val()), keys = {};
+    rows.forEach(r => { keys[r.key] = true; });
+    const clean = rows.filter(r => !r.hidden).map(r => { const o = {}; ['key', 'src', 'job', 'day', 'client', 'name', 'glass', 'mat', 'w', 'h', 'qty', 'chisum', 'paint', 'cnc', 'triplex'].forEach(f => { if (r[f] !== undefined && r[f] !== '') o[f] = r[f]; }); return o; });
+    const rec = { no, at: Date.now(), date: lgOptyTodayIso(), by: _whoAmI(), rows: clean, keys };
+    const w = await repBatchRef(no).transaction(c => c || rec);
+    if (!w.committed || Number((w.snapshot.val() || {}).at) !== rec.at) throw new Error('המספר ' + no + ' כבר תפוס');
+    await repPendRef().set(null);
+    REPB[String(no)] = rec; REPP = {}; REPSEQ = no; REPSEL = String(no);
+    repRender();
+    st('✓ דוח ' + no + ' יצא — ' + s.units + ' זכוכיות', 'ok');
+    repAsk('report', no);
+  } catch (e) { console.error(e); st('✗ הדוח לא יצא: ' + (e.message || 'בדוק חיבור'), 'bad'); }
+  finally { repIssuing = false; }
+}
 $('rK').addEventListener('change', () => { $('rColorL').hidden = $('rK').value !== 'paint'; });
 $('rForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -1049,42 +1158,53 @@ $('rForm').addEventListener('submit', async e => {
   const glass = $('rG').value.trim(), client = $('rC').value.trim(), name = $('rN').value.trim();
   if (!(w > 0 && h > 0) || !glass || !client) { st('צריך מידה, סוג זכוכית ושם לקוח', 'bad'); return; }
   const kind = $('rK').value, color = kind === 'paint' ? $('rColor').value.trim() : '';
-  const id = repRef().child('manual').push().key;
-  await repWrite('manual/' + id, { w, h, qty, glass, client, name, kind, color, at: Date.now(), by: _whoAmI() }, '✓ נוסף');
+  const id = repPendRef().child('manual').push().key;
+  await repPendWrite('manual/' + id, { w, h, qty, glass, client, name, kind, color, at: Date.now(), by: _whoAmI() }, '✓ נוסף לממתין');
   $('rW').value = ''; $('rH').value = ''; $('rQ').value = '1'; $('rN').value = ''; $('rW').focus();
 });
+$('pane-rep').addEventListener('change', e => { if (e.target.id === 'rSelMore' && e.target.value) { REPSEL = e.target.value; repRender(); } });
 $('pane-rep').addEventListener('click', async e => {
-  const h = e.target.closest('[data-rhide]'), d = e.target.closest('[data-rdel]'), p = e.target.closest('[data-rprint]');
-  if (h) { const k = h.dataset.rhide, off = !(REP.hide || {})[k]; await repWrite('hide/' + k, off ? true : null, off ? '✓ הורד מהדוח' : '✓ חזר לדוח'); }
-  else if (d) { if (confirm('למחוק את השורה הידנית?')) await repWrite('manual/' + d.dataset.rdel, null, '✓ נמחק'); }
-  else if (p) repAsk(p.dataset.rprint);
+  const t = e.target;
+  const v = t.closest('[data-rview]'); if (v) { REPV = v.dataset.rview; try { localStorage.setItem('lgRepView', REPV); } catch (_) {} repRender(); return; }
+  if (t.closest('[data-rissue]')) { repIssue(); return; }
+  const sel = t.closest('[data-rsel]'); if (sel) { REPSEL = sel.dataset.rsel; repRender(); return; }
+  const go = t.closest('[data-rnotes]'); if (go) { REPSEL = go.dataset.rnotes; REPV = 'notes'; try { localStorage.setItem('lgRepView', REPV); } catch (_) {} repRender(); window.scrollTo(0, 0); return; }
+  const h = t.closest('[data-rhide]'), d = t.closest('[data-rdel]'), p = t.closest('[data-rprint]');
+  if (h) { const k = h.dataset.rhide, off = !(REPP.hide || {})[k]; await repPendWrite('hide/' + k, off ? true : null, off ? '✓ הורד — לא ייכנס לדוח' : '✓ חזר לממתין'); }
+  else if (d) { if (confirm('למחוק את השורה הידנית?')) await repPendWrite('manual/' + d.dataset.rdel, null, '✓ נמחק'); }
+  else if (p) repAsk(p.dataset.rprint, p.dataset.rno);
 });
-//  מספר התעודה: נקבע בהדפסה הראשונה (meta/optyReportSeq), נשמר ליום; דוח = מספר התעודה שלו
-async function repNumber(kind) {
-  const nk = LG_REPORT_OF[kind] || kind;
-  let no = (REP.nos || {})[nk];
-  if (!no) {
-    const t = await _lgDb.ref('meta/optyReportSeq').transaction(c => (Number(c) || LG_REPORT_FIRST_NO - 1) + 1);
-    const mine = t.snapshot.val();
-    const set = await repRef().child('nos/' + nk).transaction(c => c || mine);    // שני מחשבים באותו רגע — נשאר הראשון
-    no = set.snapshot.val(); REP.nos = Object.assign({}, REP.nos, { [nk]: no }); repRender();
-  }
-  return no;
+//  מה מודפס: דוח (התאריך = היום שבו יצא) או תעודה (התאריך = היום שבו הודפסה בפעם הראשונה; הדפסה חוזרת — אותו תאריך ואותו מספר)
+const repIsNote = kind => !LG_REPORT_OF[kind];
+function repJob(kind, no) {
+  const b = repBatch(no); if (!b) return null;
+  const note = repIsNote(kind) && (b.notes || {})[kind];
+  const date = repIsNote(kind) ? ((note && note.date) || lgOptyTodayIso()) : (b.date || lgOptyTodayIso(Number(b.at)));
+  return { b, rows: repRowsOf(b), no: repIsNote(kind) ? lgOptyBatchNoteNo(b, kind) : b.no, date };
+}
+//  תעודה שהודפסה — נרשמת על הדוח (פעם אחת; הדפסה חוזרת לא משנה)
+async function repMarkNote(kind, no, date) {
+  if (!repIsNote(kind)) return;
+  const b = repBatch(no); if (!b || (b.notes || {})[kind]) return;
+  const v = { at: Date.now(), date, by: _whoAmI() };
+  try { await repBatchRef(no).child('notes/' + kind).transaction(c => c || v); b.notes = Object.assign({}, b.notes, { [kind]: v }); repRender(); }
+  catch (e) { console.error(e); }
 }
 //  לחיצה על כפתור הדפסה (בן, 26/11): שואל — ישר ל-Brother (גם מאייפון/אייפד) או לפתוח את הדוח במסך
-function repAsk(kind) {
-  const label = (document.querySelector('[data-rprint="' + kind + '"]') || {}).textContent || '';
+function repAsk(kind, no) {
+  const label = (repIsNote(kind) ? 'תעודת ' + LG_REPORT_KINDS[kind].he : kind === 'report-triplex' ? 'דוח טריפלקס' : 'דוח חיסום') + ' ' + no;
+  const again = repIsNote(kind) && ((repBatch(no) || {}).notes || {})[kind];
   const ov = document.createElement('div'); ov.className = 'rask'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
-  ov.innerHTML = `<div class="rask-box"><p class="rask-q">להדפיס במדפסת הרגילה (Brother)?</p><p class="note">${esc(label.replace('🖨', '').trim())}</p>
+  ov.innerHTML = `<div class="rask-box"><p class="rask-q">להדפיס במדפסת הרגילה (Brother)?</p><p class="note">${esc(label)}${again ? ' — כבר הודפסה, זו הדפסה חוזרת' : ''}</p>
     <button type="button" class="sm gold" data-a="brother">🖨 כן, הדפס ב-Brother</button>
-    <button type="button" class="sm" data-a="open">פתח את הדוח במסך</button>
+    <button type="button" class="sm" data-a="open">פתח במסך</button>
     <button type="button" class="sm quiet" data-a="no">ביטול</button></div>`;
   document.body.appendChild(ov);
   ov.addEventListener('click', e => {
     const b = e.target.closest('[data-a]'); if (!b && e.target !== ov) return;
     ov.remove(); if (!b) return;
-    if (b.dataset.a === 'brother') repBrother(kind);
-    else if (b.dataset.a === 'open') repPrint(kind);
+    if (b.dataset.a === 'brother') repBrother(kind, no);
+    else if (b.dataset.a === 'open') repPrint(kind, no);
   });
   ov.querySelector('[data-a="brother"]').focus();
 }
@@ -1117,19 +1237,19 @@ function repPageJpegs(m) {
       ln.cells.forEach((v, i) => { if (v !== '') T(v, colX[i], y + h / 2 + 1, ln.t === 't' ? 24 : 22, ln.t === 't', i ? 'center' : 'right'); });
       y += h;
     });
-    if (m.empty) T('אין זכוכית לתעודה הזאת ביום הזה', PW / 2, y + 80, 24, false);
+    if (m.empty) T('אין זכוכית לתעודה הזאת בדוח הזה', PW / 2, y + 80, 24, false);
     T('דף ' + (pi + 1) + ' מ-' + N, PW / 2, PH - 40, 19, false);
     for (const q of [0.85, 0.7, 0.55]) { const b = c.toDataURL('image/jpeg', q).split(',')[1]; if (b.length <= 1400000) return b; }
     return c.toDataURL('image/jpeg', 0.4).split(',')[1];
   });
 }
-async function repBrother(kind) {
-  st('מכין את הדוח למדפסת…');
+async function repBrother(kind, no) {
+  st('מכין למדפסת…');
   try {
-    const no = await repNumber(kind);
-    const m = lgOptyReportPrintModel(kind, repRows(), $('rDay').value, no, repPrintDay());
-    if (m.empty) { st('אין מה להדפיס בדוח הזה', 'bad'); return; }
-    const pages = repPageJpegs(m), name = m.head.sub + ' ' + no;
+    const j = repJob(kind, no); if (!j) throw new Error('הדוח לא נמצא');
+    const m = lgOptyReportPrintModel(kind, j.rows, j.date, j.no, j.date);
+    if (m.empty) { st('אין מה להדפיס כאן', 'bad'); return; }
+    const pages = repPageJpegs(m), name = m.head.sub + ' ' + j.no;
     let sent = 0, part = [], size = 0;
     const send = async () => {
       if (!part.length) return;
@@ -1140,19 +1260,18 @@ async function repBrother(kind) {
     };
     for (const p of pages) { if (part.length >= 12 || size + p.length > 3400000) await send(); part.push(p); size += p.length; }
     await send();
+    await repMarkNote(kind, no, j.date);
     st('✓ ' + name + ' נשלח למדפסת Brother (' + sent + ' עמודים)', 'ok');
-  } catch (e) { console.error(e); st('✗ לא נשלח למדפסת: ' + (e.message || '') + ' — אפשר "פתח את הדוח במסך"', 'bad'); }
+  } catch (e) { console.error(e); st('✗ לא נשלח למדפסת: ' + (e.message || '') + ' — אפשר "פתח במסך"', 'bad'); }
 }
-//  החלון נפתח מיד (בתוך הלחיצה — אחרת הדפדפן חוסם), המספר נקבע אחר כך
-async function repPrint(kind) {
+//  החלון נפתח מיד (בתוך הלחיצה — אחרת הדפדפן חוסם)
+async function repPrint(kind, no) {
+  const j = repJob(kind, no); if (!j) { st('הדוח לא נמצא', 'bad'); return; }
   const win = window.open('', '_blank');
   if (!win) { st('הדפדפן חסם את חלון ההדפסה — אשר חלונות קופצים לאתר', 'bad'); return; }
-  win.document.write('<p dir="rtl" style="font-family:Arial">מכין…</p>');
-  try {
-    const no = await repNumber(kind);
-    win.document.open(); win.document.write(lgOptyReportHtml(kind, repRows(), $('rDay').value, no, repPrintDay())); win.document.close();
-    win.focus(); setTimeout(() => { try { win.print(); } catch (_) {} }, 300);
-  } catch (e) { console.error(e); try { win.close(); } catch (_) {} st('✗ לא הודפס — בדוק חיבור', 'bad'); }
+  win.document.open(); win.document.write(lgOptyReportHtml(kind, j.rows, j.date, j.no, j.date)); win.document.close();
+  win.focus(); setTimeout(() => { try { win.print(); } catch (_) {} }, 300);
+  await repMarkNote(kind, no, j.date);
 }
 
 //  ─── עבודת היום (בן, 17/11): לוחות היום לפי סוג זכוכית, "נחתך" על כל לוח, "כל ה-X נחתך", אחוז ביצוע ───
