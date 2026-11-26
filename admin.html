@@ -6067,9 +6067,30 @@ async function _loadUsers(){
     const clients = users.filter(u => u.role === 'client');
     const admins  = users.filter(u => u.role === 'admin');
     _umLinkedCustomerIds = new Set(users.map(u => u.customerId).filter(Boolean));
-    _renderUserList(clients, 'umListClients');
+    _umClients = clients;
+    _umRenderClients();
     _renderUserList(admins,  'umListAdmins');
   } catch(e){ console.error('loadUsers:', e); }
+}
+
+// רשימת הלקוחות מוסתרת — רואים לקוח רק אחרי חיפוש (בן, 26/11)
+let _umClients = [];
+function _umRenderClients(){
+  const el = document.getElementById('umListClients');
+  if(!el) return;
+  const inp = document.getElementById('umUserFind');
+  const q = ((inp && inp.value) || '').trim().toLowerCase();
+  if(!q){
+    el.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:12px">${_umClients.length} לקוחות — חפש לפי שם, טלפון או מפתח</div>`;
+    return;
+  }
+  const qd = q.replace(/[-\s]/g, '');
+  const hits = _umClients.filter(u => {
+    const txt = ((u.name||'') + ' ' + (u.businessName||'')).toLowerCase();
+    return txt.includes(q) || (qd && /^\d+$/.test(qd) && (String(u.phone||u.id||'').includes(qd) || String(u.customerId||'') === qd));
+  });
+  if(!hits.length){ el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:12px">לא נמצא לקוח</div>'; return; }
+  _renderUserList(hits, 'umListClients');
 }
 
 function _renderUserList(users, elId){
@@ -6283,6 +6304,8 @@ async function umToggleActive(userId, clientName, currentlyActive){
       <!-- CLIENTS TAB — לקוחות נוצרים אך ורק מכרטיס חשבשבת -->
       <div id="umTabClients">
         <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">רשימת לקוחות</div>
+        <input id="umUserFind" type="search" autocomplete="off" placeholder="🔍 חפש לקוח — שם, טלפון או מפתח" oninput="_umRenderClients()"
+          style="width:100%;box-sizing:border-box;padding:10px 12px;margin-bottom:8px;border:1px solid var(--border);font-family:Heebo,sans-serif;font-size:16px;border-radius:6px;outline:none;">
         <div id="umListClients" style="margin-bottom:16px;border:1px solid var(--border);border-radius:6px;overflow:hidden;"></div>
         <div id="umCredsBox" style="display:none;margin-bottom:16px;"></div>
         <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:0.1em;margin-bottom:8px;">+ לקוח חדש מכרטיס חשבשבת</div>
