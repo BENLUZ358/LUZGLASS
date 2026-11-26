@@ -5,9 +5,14 @@
 //
 // lgItemsEditOpen(orderId, ctx) — ctx: { getOrder(id), skuMap(), prices() → {globalP, clientP}, toast(msg) }
 // lgItemsEditRefresh()          — לקרוא מהמאזין של ההזמנות; מצייר מחדש אם החלון פתוח.
+//
+// סוג זכוכית (בן, 26/11): לא כולם זוכרים מק"ט — כפתורים "8 שקוף" / "8 קליר" בשלוף, והשאר
+// בחיפוש לפי שם. כפתור בשלוף שומר על העיבוד של השורה (מחוסם/מלוטש/גרפיקה/חלבי/טריפלקס) ומחליף
+// רק את הזכוכית. "כל הסקיצה" מחליף את כל השורות בבת אחת.
 (function () {
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let S = null;   // { id, ctx, busy }
+  const QUICK = [{ mm: 8, glass: 'שקוף', label: '8 שקוף' }, { mm: 8, glass: 'קליר', label: '8 קליר' }];
 
   function css() {
     if (document.getElementById('lgIeCss')) return;
@@ -31,7 +36,13 @@
 .lgie-add{background:#f6f3ee;}
 .lgie-btn{font:inherit;font-size:15px;font-weight:700;min-height:44px;padding:0 14px;border-radius:6px;border:none;background:#1a1714;color:#fff;cursor:pointer;}
 .lgie-hint{padding:10px 12px;font-size:12px;color:#8a8278;}
-.lgie-busy{opacity:.55;pointer-events:none;}`;
+.lgie-busy{opacity:.55;pointer-events:none;}
+.lgie-gl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.lgie-q{font:inherit;font-size:15px;font-weight:700;min-height:40px;padding:0 12px;border-radius:6px;border:1px solid #b8922a;background:#fff;color:#1a1714;cursor:pointer;}
+.lgie-q.on{background:#b8922a;color:#fff;}
+.lgie-s{font:inherit;font-size:15px;padding:8px;border:1px solid rgba(0,0,0,.2);border-radius:6px;flex:1;min-width:150px;}
+.lgie-all{background:#fbf6ea;border-bottom:2px solid rgba(184,146,42,.35);}
+.lgie-code{font-size:12px;color:#8a8278;direction:ltr;}`;
     document.head.appendChild(st);
   }
 
@@ -46,8 +57,26 @@
     return '';
   }
 
+  // "8 מ''מ קליר מחוסם · 8CMH" (מהחיפוש) או מק"ט לבד
+  const codeOf = v => { const t = String(v || '').trim(), k = t.lastIndexOf('·'); return (k >= 0 ? t.slice(k + 1) : t).trim().toUpperCase(); };
+  const catList = () => Object.values(S.ctx.skuMap() || {}).filter(e => e && e.code && e.active !== false && e.kind !== 'hardware' && e.proc);
+  // אותו עיבוד כמו בשורה, זכוכית אחרת. כמה אפשרויות (למשל 8CMH / 8CMHC צבע) — זו שהשם שלה
+  // הוא השם הישן עם הזכוכית החדשה, אחרת הקצרה.
+  function matchGlass(it, mm, glass) {
+    const proc = it.chisum ? 'chisum' : it.litush ? 'litush' : null;
+    const c = catList().filter(e => Number(e.mm) === mm && e.glass === glass && (!proc || e.proc === proc) &&
+      !!e.graphic === !!it.graphic && !!e.chalavi === !!it.chalavi && !!e.triplex === !!it.triplex);
+    if (!c.length) return null;
+    const oldName = String(it.name || it.glassFullName || ''), want = it.glass ? oldName.replace(it.glass, glass) : '';
+    const exact = c.find(e => e.name === want);
+    if (exact) return exact.code;
+    c.sort((a, b) => (proc ? 0 : (a.proc === 'chisum' ? -1 : 0) - (b.proc === 'chisum' ? -1 : 0)) || String(a.name).length - String(b.name).length);
+    return c[0].code;
+  }
+  const isQuick = (it, q) => Number(it.mm) === q.mm && it.glass === q.glass;
+
   function skuFields(code) {
-    const c = String(code || '').toUpperCase().trim();
+    const c = codeOf(code);
     const r = typeof lgResolveSkuCode === 'function' ? lgResolveSkuCode(c, S.ctx.skuMap() || {}) : null;
     if (!r) return null;
     return { name: r.label, glassFullName: r.label, glass: r.glass, mm: r.mm, chisum: r.proc === 'chisum', litush: r.proc === 'litush',
@@ -79,8 +108,10 @@
           <span>×</span>
           <input class="lgie-in" data-f="h" data-i="${i}" inputmode="numeric" value="${Math.round(+it.h || 0) || ''}" aria-label="גובה שורה ${i + 1} במ״מ">
           <span class="lgie-u">מ״מ</span>
-          <input class="lgie-in lgie-sku" data-f="sku" data-i="${i}" list="lgIeSkus" autocapitalize="characters" autocorrect="off" spellcheck="false" value="${esc(it.sku || '')}" aria-label="מק״ט שורה ${i + 1}" placeholder="מק״ט">
-        </div>`}
+        </div>
+        <div class="lgie-gl">${QUICK.map(q => `<button type="button" class="lgie-q${isQuick(it, q) ? ' on' : ''}" data-q="${q.mm}|${esc(q.glass)}" data-i="${i}">${esc(q.label)}</button>`).join('')}
+          <input class="lgie-s" data-f="sku" data-i="${i}" list="lgIeSkus" autocomplete="off" placeholder="🔍 סוג אחר — שם או מק״ט" aria-label="חיפוש סוג זכוכית לשורה ${i + 1}">
+          ${it.sku ? `<span class="lgie-code">${esc(it.sku)}</span>` : ''}</div>`}
         ${was ? `<div class="lgie-was">✏️ ${esc(was)}</div>` : ''}
       </div>`;
     }).join('');
@@ -90,7 +121,12 @@
       <div class="lgie-head"><b>✏️ ערוך פריטים — ${esc(o.orderClient || '')} ${esc(o.orderNum || '')}${o.sketchName ? ' · ' + esc(o.sketchName) : ''}</b>
         <button type="button" class="lgie-x" data-close aria-label="סגור">✕</button></div>
       ${stop ? `<div class="lgie-note">${esc(stop)}</div>` : hs ? '<div class="lgie-note">ההזמנה כבר בחשבשבת — כל שינוי יסומן לחשבונית וירשם ב"תיקון הזמנות"</div>' : ''}
-      <datalist id="lgIeSkus">${list.map(e => `<option value="${esc(e.code)}">${esc(e.name || e.code)}</option>`).join('')}</datalist>
+      <datalist id="lgIeSkus">${list.map(e => `<option value="${esc((e.name || e.code) + ' · ' + e.code)}"></option>`).join('')}</datalist>
+      ${!stop && items.length > 1 ? `<div class="lgie-row lgie-all">
+        <div class="lgie-top"><span class="lgie-g">כל הסקיצה (${items.length} שורות)</span></div>
+        <div class="lgie-gl">${QUICK.map(q => `<button type="button" class="lgie-q${items.every(it => isQuick(it, q)) ? ' on' : ''}" data-qall="${q.mm}|${esc(q.glass)}">${esc(q.label)}</button>`).join('')}
+          <input class="lgie-s" id="lgIeAllSku" list="lgIeSkus" autocomplete="off" placeholder="🔍 סוג אחר לכל השורות" aria-label="סוג זכוכית לכל השורות"></div>
+      </div>` : ''}
       ${rows || '<div class="lgie-hint">אין פריטים</div>'}
       ${stop ? '' : `<div class="lgie-row lgie-add">
         <div class="lgie-top"><span class="lgie-g">+ שורה חדשה</span></div>
@@ -98,10 +134,12 @@
           <input class="lgie-in" id="lgIeAddW" inputmode="numeric" placeholder="רוחב" aria-label="רוחב שורה חדשה במ״מ">
           <span>×</span>
           <input class="lgie-in" id="lgIeAddH" inputmode="numeric" placeholder="גובה" aria-label="גובה שורה חדשה במ״מ">
-          <input class="lgie-in lgie-sku" id="lgIeAddSku" list="lgIeSkus" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="מק״ט" aria-label="מק״ט שורה חדשה">
           <input class="lgie-in" id="lgIeAddQty" inputmode="numeric" value="1" style="width:52px" aria-label="כמות">
-          <button type="button" class="lgie-btn" data-add>הוסף</button>
-        </div></div>
+          <span class="lgie-u">יח׳</span>
+        </div>
+        <div class="lgie-gl">${QUICK.map(q => `<button type="button" class="lgie-q" data-qadd="${q.mm}|${esc(q.glass)}">${esc(q.label)}</button>`).join('')}
+          <input class="lgie-s" id="lgIeAddSku" list="lgIeSkus" autocomplete="off" placeholder="🔍 סוג זכוכית — שם או מק״ט" aria-label="סוג זכוכית לשורה חדשה">
+          <button type="button" class="lgie-btn" data-add>הוסף</button></div></div>
       <div class="lgie-hint">מידות במילימטרים. כל שינוי נשמר מיד.</div>`}`;
   }
 
@@ -122,15 +160,34 @@
     if (S) { S.busy = false; render(); }
   }
 
+  function setGlass(items, i, nf) {
+    const it = items[i]; if (!it || !nf || nf.sku === it.sku) return false;
+    detach(items, it); Object.assign(it, nf); delete it.skuMissing; return true;
+  }
+  function applyAll(pick, label) {
+    const o = S.ctx.getOrder(S.id); if (!o) return;
+    const items = itemsOf(o); let n = 0, miss = 0;
+    items.forEach((it, i) => { const code = pick(it); if (!code) { miss++; return; } if (setGlass(items, i, skuFields(code))) n++; });
+    if (!n) { S.ctx.toast(miss ? 'אין מק"ט מתאים ל-' + label + ' בעיבוד של השורות' : 'כל השורות כבר ' + label); render(); return; }
+    if (!confirm('להפוך ' + (n === items.length ? 'את כל ' + n + ' השורות' : n + ' שורות') + ' ל-' + label + '?' + (miss ? '\n(' + miss + ' שורות בלי מק"ט מתאים יישארו כמו שהן)' : ''))) { render(); return; }
+    save(items, '✓ ' + n + ' שורות הוחלפו ל-' + label);
+  }
+
   function onChange(e) {
-    const el = e.target; if (!S || !el.dataset || el.dataset.i == null) return;
+    const el = e.target; if (!S) return;
+    if (el.id === 'lgIeAllSku') {
+      const nf = skuFields(el.value);
+      if (!nf) { S.ctx.toast('סוג הזכוכית לא נמצא — בחר מהרשימה'); el.value = ''; return; }
+      applyAll(() => nf.sku, nf.name);
+      return;
+    }
+    if (!el.dataset || el.dataset.i == null) return;
     const o = S.ctx.getOrder(S.id); if (!o) return;
     const i = Number(el.dataset.i), f = el.dataset.f, items = itemsOf(o), it = items[i]; if (!it) return;
     if (f === 'sku') {
       const nf = skuFields(el.value);
-      if (!nf) { S.ctx.toast('מק"ט לא נמצא בקטלוג'); el.value = it.sku || ''; return; }
-      if (nf.sku === it.sku) return;
-      detach(items, it); Object.assign(it, nf); delete it.skuMissing;
+      if (!nf) { S.ctx.toast('סוג הזכוכית לא נמצא — בחר מהרשימה'); el.value = ''; return; }
+      if (!setGlass(items, i, nf)) { el.value = ''; return; }
       save(items, '✓ סוג הזכוכית הוחלף');
       return;
     }
@@ -145,6 +202,27 @@
     if (!S) return;
     const t = e.target;
     if (t === document.getElementById('lgIe') || t.closest('[data-close]')) { close(); return; }
+    const q = t.closest('[data-q]');
+    if (q) {
+      const o = S.ctx.getOrder(S.id); if (!o) return;
+      const i = Number(q.dataset.i), items = itemsOf(o), it = items[i]; if (!it) return;
+      const [mm, glass] = q.dataset.q.split('|'), code = matchGlass(it, Number(mm), glass);
+      if (!code) { S.ctx.toast('אין מק"ט ' + mm + ' ' + glass + ' לעיבוד של השורה — חפש בתיבה'); return; }
+      if (setGlass(items, i, skuFields(code))) save(items, '✓ ' + mm + ' ' + glass);
+      return;
+    }
+    const qa = t.closest('[data-qall]');
+    if (qa) { const [mm, glass] = qa.dataset.qall.split('|'); applyAll(it => matchGlass(it, Number(mm), glass), mm + ' ' + glass); return; }
+    const qd = t.closest('[data-qadd]');
+    if (qd) {
+      const [mm, glass] = qd.dataset.qadd.split('|'), o = S.ctx.getOrder(S.id);
+      //  שורה חדשה — העיבוד כמו השורה הראשונה בהזמנה, ואם אין — מחוסם
+      const first = (o && itemsOf(o)[0]) || { chisum: true };
+      const code = matchGlass(first, Number(mm), glass) || matchGlass({ chisum: true }, Number(mm), glass);
+      const nf = code && skuFields(code), box = document.getElementById('lgIeAddSku');
+      if (nf && box) box.value = nf.name + ' · ' + nf.sku;
+      return;
+    }
     const del = t.closest('[data-del]');
     if (del) {
       const o = S.ctx.getOrder(S.id); if (!o) return;
@@ -157,7 +235,7 @@
     if (t.closest('[data-add]')) {
       const o = S.ctx.getOrder(S.id); if (!o) return;
       const nf = skuFields(document.getElementById('lgIeAddSku').value);
-      if (!nf) { S.ctx.toast('בחר מק"ט מהרשימה'); return; }
+      if (!nf) { S.ctx.toast('בחר סוג זכוכית — 8 שקוף / 8 קליר או מהחיפוש'); return; }
       const rW = lgParseDimensionInput(document.getElementById('lgIeAddW').value), rH = lgParseDimensionInput(document.getElementById('lgIeAddH').value);
       if (!rW.ok) { S.ctx.toast('רוחב: ' + rW.error); return; }
       if (!rH.ok) { S.ctx.toast('גובה: ' + rH.error); return; }
