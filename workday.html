@@ -420,7 +420,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261126e"></script>
+  <script src="firebase-db.js?v=20261126f"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="opty-shape.js?v=20261116d"></script>
@@ -428,7 +428,7 @@
   <script src="print-labels.js?v=20261117d"></script>
   <script src="order-labels.js?v=20261117"></script>
   <script src="broken-print.js?v=20261119b"></script>
-  <script src="items-edit.js?v=20261126a"></script>
+  <script src="items-edit.js?v=20261126b"></script>
   <script src="avivi-wrap.js?v=20261118b"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
@@ -1075,6 +1075,7 @@ async function load(){
     renderAll();
     updateCounts();
     if(typeof lgItemsEditRefresh === 'function') lgItemsEditRefresh();
+    wdRefreshDraftModal();
     // שחזור הטיוטה — רק כאן, אחרי שההזמנות הגיעו. הוא מאמת כל שורה מול
     // המצב הנוכחי, ולכן אינו יכול לרוץ לפני שיש מול מה לאמת.
     restoreDraft();
@@ -1320,7 +1321,7 @@ function showSketchPopup(orderId){
   if(!modal){
     modal = document.createElement('div');
     modal.id = 'sketchPopupModal';
-    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:950;display:flex;align-items:center;justify-content:center;padding:20px';
     modal.onclick = ()=>modal.style.display='none';
     modal.innerHTML = '<div onclick="event.stopPropagation()" style="background:#fff;max-width:600px;width:100%;max-height:90vh;overflow:auto;position:relative">' +
       '<div style="padding:10px 14px;background:#1a1714;color:#f7f4ef;display:flex;justify-content:space-between;align-items:center">' +
@@ -1355,7 +1356,43 @@ function wdOpenItemsEdit(orderId){
     skuMap: () => skuCatalogMap,
     prices: () => ({ globalP: _wdGlobalPrices, clientP: _wdClientPrices }),
     toast: m => showToast(m),
+    onSaved: (id, r) => wdAfterItemsEdit(id, (r && r.removed) || []),
   });
+}
+
+// אחרי עריכה: שורה שנמחקה יוצאת מהטיוטה ומיום העבודה, והשורות שאחריה זזות
+// מקום אחד למעלה — אחרת "בטיוטה"/"ביום העבודה" היו נופלים על הזכוכית הלא נכונה (בן, 26/11).
+function wdShiftIdxList(list, removed){
+  const rm = removed.map(Number);
+  return (list || []).map(Number).filter(i => !rm.includes(i)).map(i => i - rm.filter(r => r < i).length);
+}
+function wdAfterItemsEdit(orderId, removed){
+  const sid = String(orderId);
+  if(removed.length){
+    const rm = removed.map(Number);
+    draftItems = draftItems.filter(d => String(d.orderId) !== sid || !rm.includes(Number(d.itemIdx)));
+    draftItems.forEach(d => { if(String(d.orderId) === sid) d.itemIdx = Number(d.itemIdx) - rm.filter(r => r < Number(d.itemIdx)).length; });
+    const sel = workDay.itemsSel && workDay.itemsSel[sid];
+    if(sel){
+      workDay.itemsSel[sid] = wdShiftIdxList(Array.isArray(sel) ? sel : Object.values(sel), rm);
+      saveWorkDay();
+    }
+  }
+  updateDraftBadge();
+  renderAll();
+  wdRefreshDraftModal();
+}
+function wdRefreshDraftModal(){
+  const ov = document.getElementById('draftOverlay');
+  if(ov && ov.style.display === 'flex') renderDraftModal();
+}
+// שורת טיוטה לפי מה שיש עכשיו בהזמנה — אחרי עריכה המידה/הסוג מתעדכנים גם כאן
+function wdDraftLive(d){
+  const o = allOrders.find(x => String(x.id) === String(d.orderId));
+  const it = o && (Array.isArray(o.items) ? o.items : Object.values(o.items || {}))[Number(d.itemIdx)];
+  if(!it) return Object.assign({ it: null }, d);
+  return Object.assign({}, d, { it, glass: it.glassFullName || it.name || d.glass, w: it.w || '', h: it.h || '',
+    type: it.chisum ? 'חיסום' : (it.litush ? 'ליטוש' : 'חיתוך') });
 }
 
 function saveWorkDay(){
@@ -1776,7 +1813,7 @@ function wdBoardDraftHtml(){
     Object.keys(groups[g]).map(id => {
       const o = allOrders.find(x => String(x.id) === String(id)) || {};
       return `<div class="wdb-dr"><span>${lgEsc(wdOptyName(o.orderClient, wdOptyNames))} · <span dir="ltr">${lgEsc(o.orderNum || '')}</span> · ${groups[g][id] === 1 ? 'זכוכית אחת' : groups[g][id] + ' זכוכיות'}</span>
-        <button type="button" class="wdb-btn wdb-rm" onclick="wdBoardRemove('${lgJsStr(String(id))}','${lgJsStr(g)}')">הוצא</button></div>`;
+        <span style="display:flex;gap:6px">${lgHasSketch(o) ? `<button type="button" class="wdb-btn wdb-rm" onclick="showSketchPopup('${lgJsStr(String(id))}')">🖼 סקיצה</button>` : ''}<button type="button" class="wdb-btn wdb-rm" onclick="wdBoardRemove('${lgJsStr(String(id))}','${lgJsStr(g)}')">הוצא</button></span></div>`;
     }).join('')).join('');
 }
 
@@ -1857,6 +1894,7 @@ function renderSketchBoard(el){
         return `<div class="wdb-it ${label === wdBoardGlass ? 'cur' : 'oth'}"><span>${lgEsc(label)}${tag ? ` <span class="tag">· ${tag}</span>` : ''}</span><span dir="ltr">${lgEsc(it.w || '')} × ${lgEsc(it.h || '')}</span></div>`;
       }).join('')}</div>
       ${left ? `<div class="wdb-left">נשארות ומחכות: ${lgEsc(left)}</div>` : ''}
+      <div class="wdb-actions" style="margin-top:8px"><button type="button" class="wdb-btn" onclick="wdOpenItemsEdit('${lgJsStr(String(o.id))}')">✏️ ערוך פריטים</button></div>
     </div>`;
     var addBtn = avail.length
       ? `<button type="button" class="wdb-btn wdb-add" onclick="wdBoardAddSketch()"><span data-icon="plus"></span> הוסף סקיצה</button>`
@@ -5228,20 +5266,28 @@ function renderDraftModal(){
     return;
   }
 
-  list.innerHTML = draftItems.map((d, i) => `
+  //  "ראה סקיצה" בסוף כל הזמנה (בן, 26/11) — כפתור קטן, הטיוטה היא חלון ולא מסך שלם
+  const live = draftItems.map(wdDraftLive);
+  list.innerHTML = live.map((d, i) => {
+    const next = live[i + 1];
+    const endOfOrder = !next || String(next.orderId) !== String(d.orderId);
+    const o = endOfOrder ? allOrders.find(x => String(x.id) === String(d.orderId)) : null;
+    return `
     <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f7f4ef;border-radius:6px;">
       <div style="flex:1;min-width:0;">
         <div style="font-size:13px;font-weight:600;">${lgEsc(d.orderName)}</div>
         <div style="font-size:12px;color:#888;">${lgEsc(d.glass)}${d.w?` · ${lgDimsText(d.w, d.h)} מ"מ`:''} · <span style="color:${d.type==='חיסום'?'#8e44ad':d.type==='ליטוש'?'#2980b9':'#27ae60'}">${d.type}</span></div>
+        ${d.it ? wdEditedMark(d.it) : ''}
       </div>
       <button aria-label="הסר פריט" onclick="removeFromDraft(${i})" style="background:none;border:none;color:#c0392b;cursor:pointer;font-size:16px;flex-shrink:0;">✕</button>
     </div>
-  `).join('');
+    ${o && lgHasSketch(o) ? `<div style="display:flex;justify-content:flex-end;margin:-2px 0 6px;"><button type="button" onclick="showSketchPopup('${lgJsStr(String(o.id))}')" style="background:var(--text);color:#fff;border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:13px;font-weight:700;min-height:36px;padding:0 14px;cursor:pointer">🖼 ראה סקיצה</button></div>` : ''}`;
+  }).join('');
 
   // סיכום
-  const cut    = draftItems.filter(d => d.type === 'חיתוך').length;
-  const litush = draftItems.filter(d => d.type === 'ליטוש').length;
-  const chisum = draftItems.filter(d => d.type === 'חיסום').length;
+  const cut    = live.filter(d => d.type === 'חיתוך').length;
+  const litush = live.filter(d => d.type === 'ליטוש').length;
+  const chisum = live.filter(d => d.type === 'חיסום').length;
   summary.innerHTML = `
     <div style="font-weight:700;margin-bottom:6px;">סיכום טיוטה:</div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;">

@@ -1812,7 +1812,7 @@ async function lgSaveOrderItemsEdit(order, newItems, opts) {
   });
   const logged = lgHsCorrectionsForEdit(update, order, before, mk.items, by);
   await _lgDb.ref('orders/' + order.id).update(update);
-  return { logged, newTotal };
+  return { logged, newTotal, removed: mk.removed };
 }
 
 // מקבץ את התיקונים לשורה אחת לכל (הזמנה, שורה בחשבשבת): שורה ששונתה כמה

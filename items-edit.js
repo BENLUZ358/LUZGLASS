@@ -13,7 +13,7 @@
     if (document.getElementById('lgIeCss')) return;
     const st = document.createElement('style'); st.id = 'lgIeCss';
     st.textContent = `
-.lgie{position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto;font-family:Heebo,sans-serif;}
+.lgie{position:fixed;inset:0;z-index:960;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto;font-family:Heebo,sans-serif;}
 .lgie-box{background:#fff;color:#1a1714;width:100%;max-width:560px;border-radius:10px;overflow:hidden;margin:auto 0;}
 .lgie-head{background:#1a1714;color:#f7f4ef;padding:12px 14px;display:flex;align-items:center;gap:10px;}
 .lgie-head b{flex:1;font-size:15px;} .lgie-x{background:none;border:none;color:#fff;font-size:22px;min-width:44px;min-height:44px;cursor:pointer;}
@@ -107,11 +107,14 @@
 
   async function save(items, okMsg) {
     const o = S && S.ctx.getOrder(S.id); if (!o) return;
+    const ctx = S.ctx, id = S.id;
     S.busy = true; render();
     try {
-      const r = await lgSaveOrderItemsEdit(o, items, S.ctx.prices ? S.ctx.prices() : {});
+      const r = await lgSaveOrderItemsEdit(o, items, ctx.prices ? ctx.prices() : {});
       o.items = items;   // מיד במסך; המאזין יביא את הגרסה עם הסימנים
-      S.ctx.toast(okMsg + (r && r.logged ? ' — נרשם בתיקון הזמנות' : ''));
+      ctx.toast(okMsg + (r && r.logged ? ' — נרשם בתיקון הזמנות' : ''));
+      //  המסך מעדכן את מה שהוא מחזיק לפי מספר שורה (טיוטה, יום העבודה) — בן, 26/11
+      if (ctx.onSaved) try { ctx.onSaved(id, r || {}); } catch (e2) { console.error('lgItemsEdit onSaved:', e2); }
     } catch (e) {
       console.error('lgItemsEdit:', e);
       S.ctx.toast('✗ ' + (e.message || 'השמירה נכשלה — נסה שוב'));
