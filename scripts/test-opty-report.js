@@ -62,4 +62,7 @@ check('D6 triplex report rows = triplex note rows', R.lgOptyReportFor(rows, 'rep
 check('D2 date line', R.lgOptyReportDate('2026-08-18'), 'יום שלישי 18 אוגוסט 2026');
 check('D3 empty day', /אין זכוכית/.test(R.lgOptyReportHtml('report', [], '2026-11-24', 0)), true);
 check('D4 escapes', /<b>x/.test(R.lgOptyReportHtml('report', [{ client: '<b>x', name: '', glass: '', w: 1, h: 1, qty: 1, chisum: true }], 'x', 0)), false);
+const hz = R.lgOptyReportHtml('report', rows, '2026-11-26', 5901);
+check('E1 date chosen by hand (Ben 26/11) wins; bad value → regular next work day', [/יום שלישי 1 דצמבר 2026/.test(R.lgOptyReportHtml('chisum', rows, '2026-11-26', 5901, '2026-12-01')), /יום ראשון 29 נובמבר 2026/.test(R.lgOptyReportHtml('chisum', rows, '2026-11-26', 5901, 'x')), /יום ראשון 29 נובמבר 2026/.test(hz)], [true, true, true]);
+check('E2 stripes: every other glass row grey, also when printing (Ben 26/11)', [(h2.match(/<tr class="z">/g) || []).length, /print-color-adjust:exact/.test(h2), (R.lgOptyReportHtml('chisum', rows, 'd', 1).match(/<tr class="z">/g) || []).length], [3, true, 3]);
 console.log(fail ? fail + ' FAILED' : 'all passed'); process.exit(fail ? 1 : 0);

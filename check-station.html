@@ -291,6 +291,7 @@ html,body{height:100%;overflow:hidden;}
   </div>
   <button class="tb-btn tb-back" id="btnBack" onclick="goBack()" style="display:none" aria-label="חזרה לרשימה"><span data-icon="arrow-right"></span> רשימה</button>
   <button class="tb-btn tb-sec" id="btnSheet" onclick="toggleSheet()" style="display:none"><span data-icon="clipboard"></span> פריטים</button>
+  <a href="opty.html?only=rep" class="tb-btn tb-sec" id="csRepBtn">🖨 דוחות חיסום</a>
   <a href="admin.html" class="tb-btn tb-out" id="csExitBtn" aria-label="יציאה מתחנת הבדיקה"><span data-icon="logout"></span> יציאה</a>
 </div>
 
@@ -867,6 +868,7 @@ function showList(){
   document.getElementById('btnBack').style.display='none';
   document.getElementById('btnSheet').style.display='none';
   document.getElementById('csExitBtn').style.display='';
+  document.getElementById('csRepBtn').style.display='';
   document.getElementById('progWrap').style.display='none';
   document.getElementById('tbTitle').textContent='תחנת בדיקה';
   // החיפוש נמחק בכל חזרה לרשימה. מחפשים סקיצה אחת, נכנסים אליה, ובחזרה
@@ -902,6 +904,7 @@ function showSketch(){
   _csShow('btnBack',    'flex');
   // בתוך סקיצה יש דרך יציאה אחת — חזרה לרשימה. היציאה מהתחנה רק מהרשימה.
   _csShow('csExitBtn',  'none');
+  _csShow('csRepBtn',   'none');
   // סרגל עבודה עליון — מוסתר בהושלמו
   _csShow('btnSheet', curReadOnly ? 'none' : 'flex');
   _csShow('progWrap', curReadOnly ? 'none' : 'flex');

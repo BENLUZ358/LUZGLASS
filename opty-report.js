@@ -113,24 +113,25 @@ function lgOptyReportOutDay(day) {
   return f && /^\d{4}-\d{2}-\d{2}$/.test(String(day)) ? f(day, 1) : day;
 }
 //  עמוד הדפסה מלא. kind: 'report' (הדוח שלנו) | chisum | paint | cnc | triplex (תעודות)
-function lgOptyReportHtml(kind, rows, day, no) {
+function lgOptyReportHtml(kind, rows, day, no, outDay) {
+  const printDay = /^\d{4}-\d{2}-\d{2}$/.test(String(outDay || '')) ? outDay : lgOptyReportOutDay(day);   // בן 26/11: אפשר לבחור תאריך אחר
   const e = _repEsc, isNote = !LG_REPORT_OF[kind], repName = kind === 'report-triplex' ? 'דוח טריפלקס' : 'דוח חיסום', H = LG_REPORT_HEAD, K = LG_REPORT_KINDS[kind] || LG_REPORT_KINDS.chisum;
   const title = 'הזמנה מס׳ ' + (no || '—');
   let body = '', cols = '';
   if (isNote) {
     const ns = lgOptyNoteRows(rows, kind), qty = ns.reduce((n, r) => n + r.qty, 0), m2 = ns.reduce((n, r) => n + r.m2, 0);
     cols = '<th>פריט</th><th>גובה</th><th>רוחב</th><th>כמות</th><th>שטח</th>';
-    body = ns.length ? `<tbody>${ns.map(r => `<tr><td class="g">${r.code ? e(r.item).replace(e(r.code), "<bdi dir=\"ltr\">" + e(r.code) + "</bdi>") : e(r.item)}</td><td>${e(r.h)}</td><td>${e(r.w)}</td><td>${e(r.qty)}</td><td>${r.m2.toFixed(2)}</td></tr>`).join('')}</tbody>
+    body = ns.length ? `<tbody>${ns.map((r, i) => `<tr${i % 2 ? ' class="z"' : ''}><td class="g">${r.code ? e(r.item).replace(e(r.code), "<bdi dir=\"ltr\">" + e(r.code) + "</bdi>") : e(r.item)}</td><td>${e(r.h)}</td><td>${e(r.w)}</td><td>${e(r.qty)}</td><td>${r.m2.toFixed(2)}</td></tr>`).join('')}</tbody>
       <tbody><tr class="t all"><td colspan="3">סה"כ</td><td>${qty}</td><td>${m2.toFixed(2)}</td></tr></tbody>` : '';
   } else {
     cols = '<th>פריט</th><th>גובה</th><th>רוחב</th><th>כמות</th>';
-    const row = r => `<tr><td class="g"><bdi dir="ltr">${e(r.glass)}</bdi></td><td>${e(r.h)}</td><td>${e(r.w)}</td><td>${e(r.qty)}</td></tr>`;
+    let zi = 0; const row = r => `<tr${zi++ % 2 ? ' class="z"' : ''}><td class="g"><bdi dir="ltr">${e(r.glass)}</bdi></td><td>${e(r.h)}</td><td>${e(r.w)}</td><td>${e(r.qty)}</td></tr>`;
     body = lgOptyReportByClient(lgOptyReportFor(rows, kind)).map(c => `<tbody><tr class="c"><th colspan="4">${e(c.client)}</th></tr>${c.orders.map(o =>
       (o.name ? `<tr class="o"><th colspan="4">${e(o.name)}</th></tr>` : '') + o.rows.map(row).join('')).join('')}</tbody>`).join('');
   }
   return `<!DOCTYPE html><html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>${isNote ? 'תעודת ' + e(K.he) : repName} ${e(no || '')} · ${e(day)}</title><style>
   @page { size: A4; margin: 12mm 12mm 16mm; @bottom-center { content: "דף " counter(page) " מ-" counter(pages); font: 11px Arial, sans-serif; } }
-  *{box-sizing:border-box} body{font-family:Arial,"Heebo",sans-serif;color:#111;margin:0;font-size:14px}
+  *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact} body{font-family:Arial,"Heebo",sans-serif;color:#111;margin:0;font-size:14px}
   .hd{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #111;padding-bottom:6px}
   .hd .n{font-size:22px;font-weight:900} .hd .id{font-size:12px}
   .mid{display:grid;grid-template-columns:1fr auto 1fr;align-items:end;margin:12px 0 6px}
@@ -138,13 +139,13 @@ function lgOptyReportHtml(kind, rows, day, no) {
   .side{font-size:13px;text-align:left} .side b{display:block;font-style:italic}
   .to{font-size:14px;margin-bottom:6px} .to .blank{display:inline-block;width:60mm;border-bottom:1px solid #111;vertical-align:-2px}
   table{width:100%;border-collapse:collapse} thead th{font-size:12px;font-weight:400;border-bottom:1px solid #111;padding:4px 6px;text-align:center}
-  thead th:first-child,td.g{text-align:right} td{padding:4px 6px;text-align:center} tbody tr:nth-child(even) td{background:#e4e4e4}
+  thead th:first-child,td.g{text-align:right} td{padding:4px 6px;text-align:center} tr.z td{background:#dcdcdc}
   tr.c th{font-size:17px;padding:12px 6px 4px;text-align:center} tr.o th{font-size:14px;text-align:center;padding:6px;text-decoration:underline}
   tr.t td{font-weight:700;border-top:2px solid #111;background:#fff!important;font-size:15px} tr.t td:first-child{text-align:right}
   tr{break-inside:avoid} .empty{text-align:center;padding:40px;color:#666}
   </style></head><body>
   <div class="hd"><span class="n">${e(H.name)}</span><span class="id">ע.מ. ${e(H.id)}</span></div>
-  <div class="mid"><span></span><div class="ttl">${e(title)}<small>${isNote ? 'תעודת ' + e(K.he) : repName}</small></div><div class="side">${isNote ? '<b>מקור</b>' : ''}${e(lgOptyReportDate(lgOptyReportOutDay(day)))}</div></div>
+  <div class="mid"><span></span><div class="ttl">${e(title)}<small>${isNote ? 'תעודת ' + e(K.he) : repName}</small></div><div class="side">${isNote ? '<b>מקור</b>' : ''}${e(lgOptyReportDate(printDay))}</div></div>
   ${isNote ? `<div class="to">לכבוד: ${K.to ? e(K.to) : '<span class="blank"></span>'}</div>` : ''}
   ${body ? `<table><thead><tr>${cols}</tr></thead>${body}</table>` : '<p class="empty">אין זכוכית לתעודה הזאת ביום הזה</p>'}
   </body></html>`;

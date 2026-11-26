@@ -285,7 +285,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 
   <!-- דוחות חיסום (בן, 24/11): דוח לפי לקוח למעקב + תעודה לנהג לפי סוג ומידה; אפשר להוסיף ידנית -->
   <div class="pane" id="pane-rep" hidden>
-    <div class="jflt"><label>יום חיתוך <input type="date" id="rDay"></label><span class="note" id="rOutDay"></span></div>
+    <div class="jflt"><label>יום חיתוך <input type="date" id="rDay"></label><label>תאריך על הדף <input type="date" id="rPrintDay"></label><button class="sm quiet" type="button" id="rPrintDayReset" hidden>חזור לתאריך הרגיל</button><span class="note" id="rOutDay"></span></div>
     <div id="rHead"></div>
     <details class="card radd" id="rAdd">
       <summary>+ הוסף ידנית</summary>
@@ -366,7 +366,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
 <script src="opty-hub.js?v=20261125a"></script>
-<script src="opty-report.js?v=20261125a"></script>
+<script src="opty-report.js?v=20261126a"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
 <script src="print-labels.js?v=20261117d"></script>
@@ -1005,8 +1005,13 @@ async function repLoad() {
   } catch (e) { console.error(e); $('rOut').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור</p>'; }
 }
 const repRows = () => lgOptyReportRows(JOBS, $('rDay').value, MATS, REP);
+const repPrintDay = () => REP.outDay || ($('rDay').value ? lgOptyReportOutDay($('rDay').value) : '');
 function repRender() {
-  $('rOutDay').textContent = $('rDay').value ? 'יוצא ' + lgOptyReportDate(lgOptyReportOutDay($('rDay').value)) + ' — זה התאריך על הדף' : '';
+  //  תאריך על הדף (בן, 26/11): רגיל = יום העבודה שאחרי החיתוך; אפשר לבחור אחר — נשמר ליום הזה (meta/optyReports/<day>/outDay)
+  const pd = repPrintDay();
+  $('rPrintDay').value = pd || '';
+  $('rPrintDayReset').hidden = !REP.outDay;
+  $('rOutDay').textContent = pd ? 'יודפס: ' + lgOptyReportDate(pd) + (REP.outDay ? ' (בחרת ידנית)' : '') : '';
   const rows = repRows(), nos = REP.nos || {};
   //  כפתור לכל תעודה (צבע / CNC / טריפלקס — רק כשיש), עם כמה יחידות ומה המספר שלה
   const btn = (k, label) => { const rs = lgOptyReportFor(rows, k), u = rs.reduce((n, r) => n + r.qty, 0), no = nos[LG_REPORT_OF[k] || k];
@@ -1029,6 +1034,11 @@ async function repWrite(path, val, okMsg) {
   repRender();
 }
 $('rDay').addEventListener('change', repLoad);
+$('rPrintDay').addEventListener('change', () => {
+  const v = $('rPrintDay').value, auto = lgOptyReportOutDay($('rDay').value);
+  repWrite('outDay', v && v !== auto ? v : null, v && v !== auto ? '✓ התאריך על הדף: ' + lgOptyReportDate(v) : '✓ תאריך רגיל');
+});
+$('rPrintDayReset').addEventListener('click', () => repWrite('outDay', null, '✓ תאריך רגיל'));
 $('rK').addEventListener('change', () => { $('rColorL').hidden = $('rK').value !== 'paint'; });
 $('rForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -1060,7 +1070,7 @@ async function repPrint(kind) {
       const set = await repRef().child('nos/' + nk).transaction(c => c || mine);    // שני מחשבים באותו רגע — נשאר הראשון
       no = set.snapshot.val(); REP.nos = Object.assign({}, REP.nos, { [nk]: no }); repRender();
     }
-    win.document.open(); win.document.write(lgOptyReportHtml(kind, repRows(), $('rDay').value, no)); win.document.close();
+    win.document.open(); win.document.write(lgOptyReportHtml(kind, repRows(), $('rDay').value, no, repPrintDay())); win.document.close();
     win.focus(); setTimeout(() => { try { win.print(); } catch (_) {} }, 300);
   } catch (e) { console.error(e); try { win.close(); } catch (_) {} st('✗ לא הודפס — בדוק חיבור', 'bad'); }
 }
@@ -1447,9 +1457,17 @@ $('out').addEventListener('click', async e => {
 });
 $('btnCheck').addEventListener('click', check);
 
+//  מתחנת הבדיקה (בן, 26/11): opty.html?only=rep — רק הדוחות, חזרה לתחנה
+const ONLY_REP = /[?&]only=rep/.test(location.search);
+if (ONLY_REP) {
+  document.querySelector('.tabs').hidden = true;
+  const back = document.querySelector('.topbar a.tb-btn'); back.href = 'check-station.html'; back.setAttribute('aria-label', 'חזרה לתחנת הבדיקה');
+  document.querySelector('.tb-title').innerHTML = 'דוחות חיסום<small>דוח לפי לקוח ותעודות — לפי יום חיתוך</small>';
+}
 Promise.resolve(lgRequireAuthAsync('admin')).then(() => {
   loadHistory(); updateCount();
-  if (/[#&?]tab=link/.test(location.href)) showTab('link');
+  if (ONLY_REP) showTab('rep');
+  else if (/[#&?]tab=link/.test(location.href)) showTab('link');
   else if (/[#&?]tab=imp/.test(location.href)) showTab('imp');
   else if (location.hash !== '#today') showTab(/[#&?]tab=loose/.test(location.href) ? 'loose' : 'find');
 });
