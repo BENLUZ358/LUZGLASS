@@ -178,7 +178,8 @@ html,body{height:100%;overflow:hidden;}
   text-align:center;font-variant-numeric:tabular-nums;-moz-appearance:textfield;}
 .edit-mm::-webkit-outer-spin-button,.edit-mm::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
 .edit-x{font-size:20px;font-weight:var(--fw-black);color:var(--muted);}
-.edit-was{font-size:var(--fs-xs);color:var(--muted);direction:ltr;text-align:right;}
+.edit-was{font-size:var(--fs-sm);font-weight:700;color:var(--red);text-align:right;}
+.item-removed .item-dim,.item-removed .item-sub{text-decoration:line-through;opacity:.6;}
 .tick.tick-save{background:var(--green);border-color:var(--green);color:#fff;}
 
 .v-foot{flex-shrink:0;padding:var(--space-3) var(--space-4);padding-bottom:calc(var(--space-3) + env(safe-area-inset-bottom));
@@ -272,7 +273,7 @@ html,body{height:100%;overflow:hidden;}
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script src="firebase-db.js?v=20261125a"></script>
+<script src="firebase-db.js?v=20261126e"></script>
 <script src="order-attachments.js?v=20261112"></script>
 <script src="sku-picker.js?v=20261028"></script>
 <script src="opty-shape.js?v=20261116d"></script>
@@ -583,14 +584,21 @@ function renderVerify() {
   const t = ticks[o.id] || (ticks[o.id] = {});
   if (editIdx !== null && !o.items[editIdx]) editIdx = null;
   const rows = o.items.map((it, i) => {
-    const n = it.hsLine || (i + 1);
+    //  שורה שנוספה אחרי השליחה לחשבשבת — אין לה מספר שם; "+" ולא מספר של שורה אחרת (בן, 26/11)
+    const n = it.hsLine || (it.addedAt && lgHsWasSent(o) ? '+' : (i + 1));
     const w = Math.round(Number(it.w) || 0), h = Math.round(Number(it.h) || 0);
     const sub = `${esc(it.glassFullName || it.name || '')}${it.sku ? ' · ' + esc(it.sku) : ''}`;
     // המידה שהייתה לפני התיקון נשארת מתחת לשורה: מי שמתקן בחשבשבת צריך לדעת
     // איזו מידה הולכת ל"בטל יתרה לאספקה" ואיזו נכנסת במקומה
-    const was = it.editedFrom
+    //  בן 26/11: גם סוג זכוכית ששונה ושורה שנוספה (עריכה מחלון הסקיצה בחיסום) — בולט, לתקן בחשבשבת
+    const wasParts = [
       // editedFrom נשמר כ"220×550" — בעברית הוא היה מוצג הפוך. ר' lgDimsText
-      ? `<div class="edit-was">היה ${esc(String(it.editedFrom).replace(/^(\d+)×(\d+)$/, (_, w, h) => lgDimsText(w, h)))}${it.editedBy ? ' · ' + esc(it.editedBy) : ''}</div>` : '';
+      it.editedFrom ? 'היה ' + String(it.editedFrom).replace(/^(\d+)×(\d+)$/, (_, w, h) => lgDimsText(w, h)) : '',
+      it.editedGlassFrom ? 'היה ' + it.editedGlassFrom : '',
+      it.addedAt ? 'שורה חדשה' : '',
+    ].filter(Boolean);
+    const was = wasParts.length
+      ? `<div class="edit-was">✏️ ${esc(wasParts.join(' · '))}${(it.editedBy || it.addedBy) ? ' · ' + esc(it.editedBy || it.addedBy) : ''}</div>` : '';
     if (i === editIdx) {
       return `<div class="item item-editing">
         <span class="item-n">${esc(n)}</span>
@@ -619,7 +627,13 @@ function renderVerify() {
       <button class="edit" type="button" data-glass="${i}" aria-label="החלף סוג זכוכית בשורה ${esc(n)}"><span data-icon="refresh"></span></button>` : ''}
       <button class="tick" type="button" data-tick="${i}" aria-pressed="${!!t[i]}" aria-label="סמן שורה ${esc(n)} כנבדקה"><span data-icon="check"></span></button>
     </div>`;
-  }).join('') || `<div class="empty-state"><div class="empty-state-title">אין פריטים בהזמנה</div></div>`;
+  }).join('') + Object.values(o.removedItems || {}).filter(Boolean).sort((a, b) => (a.at || 0) - (b.at || 0)).map(r => `
+    <div class="item item-removed">
+      <span class="item-n">${esc(r.hsLine || '—')}</span>
+      <div class="item-main"><div class="item-dim">${esc(r.w || '?')} × ${esc(r.h || '?')}</div>
+        <div class="item-sub">${esc(r.name || '')}${r.sku ? ' · ' + esc(r.sku) : ''}</div>
+        <div class="edit-was">✏️ השורה נמחקה${r.by ? ' · ' + esc(r.by) : ''} — לבטל בחשבשבת</div></div>
+    </div>`).join('') || `<div class="empty-state"><div class="empty-state-title">אין פריטים בהזמנה</div></div>`;
 
   const keepSketch = _shownSketchFor === String(o.id) && $('skImg');
   const sketchHtml = keepSketch ? null : `<div class="sketch-box" id="skBox">

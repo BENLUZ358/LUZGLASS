@@ -1132,6 +1132,7 @@ function lgNormalizeOrder(o) {
     // תיקונים שנעשו אחרי ששורה נשלחה לחשבשבת וממתינים לעדכון ידני שם
     // (דף "תיקון הזמנות"). מפתח → רשומה, כמו ב-Firebase.
     hsCorrections: (o.hsCorrections && typeof o.hsCorrections === 'object') ? o.hsCorrections : null,
+    removedItems:  (o.removedItems && typeof o.removedItems === 'object') ? o.removedItems : null,
     hsOrder:       o.hashavshevet ? {
       reference:  o.hashavshevet.reference || '',
       sentAt:     Number(o.hashavshevet.sentAt) || 0,
@@ -1703,6 +1704,64 @@ function lgHsCorrectionsForEdit(update, order, before, after, by) {
   return n;
 }
 
+// סימן על כל שורה שנערכה (בן, 26/11: "יהיה סימן על המידה שערוכה כדי שמי שעושה חשבונית
+// בחשבשבת יידע"). before/after = הפריטים לפני ואחרי פעולה אחת (כמו lgHsCorrectionsForEdit):
+// אותו אורך או ארוך יותר = שורה ששונתה / נוספה בסוף; קצר יותר = נמחקו (יישור חמדני).
+// editedFrom / editedGlassFrom שומרים את המצב הראשון — זה מה שעדיין רשום בחשבשבת;
+// חזרה למצב הראשון מורידה את הסימן. מחזיר { items (עם הסימנים), removed: [מקומות ב-before] }.
+function lgItemsEditMarks(before, after, by, now) {
+  before = before || [];
+  const items = (after || []).map(it => Object.assign({}, it));
+  const dimsOf  = it => Math.round(Number(it.w) || 0) + '×' + Math.round(Number(it.h) || 0);
+  const glassOf = it => (it.glassFullName || it.name || '') + (it.sku ? ' (' + it.sku + ')' : '');
+  const same = (a, b) => dimsOf(a) === dimsOf(b) && (a.sku || '') === (b.sku || '') && (a.name || '') === (b.name || '');
+  const mark = (b, a) => {
+    if (!b || !a || same(b, a)) return;
+    if (dimsOf(b) !== dimsOf(a)) a.editedFrom = b.editedFrom || dimsOf(b);
+    if ((b.sku || '') !== (a.sku || '') || (b.name || '') !== (a.name || '')) a.editedGlassFrom = b.editedGlassFrom || glassOf(b);
+    if (a.editedFrom === dimsOf(a)) delete a.editedFrom;
+    if (a.editedGlassFrom === glassOf(a)) delete a.editedGlassFrom;
+    a.editedAt = now; a.editedBy = by;
+  };
+  const removed = [];
+  if (items.length >= before.length) {
+    before.forEach((b, i) => mark(b, items[i]));
+    for (let i = before.length; i < items.length; i++) if (!items[i].addedAt) { items[i].addedAt = now; items[i].addedBy = by; }
+  } else {
+    let j = 0;
+    before.forEach((b, i) => { if (j < items.length && same(b, items[j])) j++; else removed.push(i); });
+  }
+  return { items, removed };
+}
+
+// מחיקת שורה מזיזה את כל השורות שאחריה מקום אחד אחורה. כל מה שנשמר על ההזמנה לפי מקום
+// (הגיע / נבדק / שבר / נעטף, ותיקונים פתוחים) זז איתן — אחרת "הגיע" עובר לזכוכית אחרת.
+// מחזיר עדכונים ל-orders/<id> (ריק כשלא נמחק כלום).
+function lgShiftIdxFields(order, removedIdxs) {
+  const out = {};
+  const rm = (removedIdxs || []).map(Number).sort((a, b) => a - b);
+  if (!rm.length || !order) return out;
+  const moveTo = k => rm.includes(k) ? -1 : k - rm.filter(r => r < k).length;
+  ['wdDoneIdxs', 'chisumArrivedIdxs', 'chisumClosedIdxs', 'triplexArrivedIdxs', 'triplexClosedIdxs', 'brokenChisum', 'avWrap'].forEach(f => {
+    const v = order[f];
+    if (!v || typeof v !== 'object') return;
+    const next = {};
+    Object.keys(v).forEach(k => {
+      if (!/^\d+$/.test(k) || v[k] == null) return;
+      const n = moveTo(Number(k));
+      if (n >= 0) next[n] = v[k];
+    });
+    out[f] = Object.keys(next).length ? next : null;
+  });
+  Object.keys(order.hsCorrections || {}).forEach(k => {
+    const c = order.hsCorrections[k];
+    if (!c || c.done || typeof c.itemIndex !== 'number') return;
+    const n = moveTo(c.itemIndex);
+    if (n >= 0 && n !== c.itemIndex) out['hsCorrections/' + k + '/itemIndex'] = n;
+  });
+  return out;
+}
+
 // עריכת פריטים מחלון "פרטים" באדמין — בכל שלב, עד שהופקה חשבונית (בן, 28/10:
 // הזמנה שכבר בתחנת הבדיקה, ואין לה מקום אחר לעריכה). newItems = כל הפריטים
 // אחרי פעולה אחת (מידה / זכוכית / מחיקה / הוספה), כמו iwSave בתור.
@@ -1738,7 +1797,20 @@ async function lgSaveOrderItemsEdit(order, newItems, opts) {
     update.totalM2     = lgCalcOrderM2({ items });
     newTotal = rp.totalFinal;
   }
-  const logged = lgHsCorrectionsForEdit(update, order, before, items, who.name || who.phone);
+  //  סימנים לתחנת החשבוניות + הזזת סימוני "הגיע" אחרי מחיקה (בן, 26/11)
+  const by = who.name || who.phone, now = Date.now();
+  const mk = lgItemsEditMarks(before, items, by, now);
+  update.items = mk.items;
+  Object.assign(update, lgShiftIdxFields(order, mk.removed));
+  mk.removed.forEach((i, n) => {
+    const b = before[i] || {};
+    if (b.addedAt) return;                       // נוספה ונמחקה שוב — לא הייתה אף פעם
+    update['removedItems/r' + now.toString(36) + n] = {
+      name: b.glassFullName || b.name || '', sku: b.sku || '', w: Math.round(Number(b.w) || 0), h: Math.round(Number(b.h) || 0),
+      hsLine: Number(b.hsLine) || null, by, at: now,
+    };
+  });
+  const logged = lgHsCorrectionsForEdit(update, order, before, mk.items, by);
   await _lgDb.ref('orders/' + order.id).update(update);
   return { logged, newTotal };
 }

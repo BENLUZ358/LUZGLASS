@@ -414,11 +414,13 @@
     .wdb-meta .wdb-draftbtn{display:none}
   }
   @media (prefers-reduced-motion:reduce){.wdb-btn:active,.wdb-chip:active{transform:none}}
+.wd-ch-glass{display:block;font-size:15px;font-weight:800;color:#1a1714;margin-top:2px;}
+.wd-ch-was{font-size:12px;font-weight:700;color:#a93226;margin-top:2px;}
 </style>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="firebase-db.js?v=20261125a"></script>
+  <script src="firebase-db.js?v=20261126e"></script>
   <script src="workday-remind.js?v=20261114"></script>
   <script src="order-attachments.js?v=20261112"></script>
   <script src="opty-shape.js?v=20261116d"></script>
@@ -426,6 +428,7 @@
   <script src="print-labels.js?v=20261117d"></script>
   <script src="order-labels.js?v=20261117"></script>
   <script src="broken-print.js?v=20261119b"></script>
+  <script src="items-edit.js?v=20261126a"></script>
   <script src="avivi-wrap.js?v=20261118b"></script>
   <!-- wdReadyGroupKey — קיבוץ "מוכן" לפי לקוח, והזמנה ידנית גם לפי הנייד -->
   <script src="sq-new-order.js?v=20261113"></script>
@@ -1071,6 +1074,7 @@ async function load(){
 
     renderAll();
     updateCounts();
+    if(typeof lgItemsEditRefresh === 'function') lgItemsEditRefresh();
     // שחזור הטיוטה — רק כאן, אחרי שההזמנות הגיעו. הוא מאמת כל שורה מול
     // המצב הנוכחי, ולכן אינו יכול לרוץ לפני שיש מול מה לאמת.
     restoreDraft();
@@ -1320,18 +1324,38 @@ function showSketchPopup(orderId){
     modal.onclick = ()=>modal.style.display='none';
     modal.innerHTML = '<div onclick="event.stopPropagation()" style="background:#fff;max-width:600px;width:100%;max-height:90vh;overflow:auto;position:relative">' +
       '<div style="padding:10px 14px;background:#1a1714;color:#f7f4ef;display:flex;justify-content:space-between;align-items:center">' +
-      '<span id="spTitle" style="font-size:13px;font-weight:700"></span>' +
+      '<span id="spTitle" style="font-size:13px;font-weight:700;flex:1"></span>' +
+      //  ✏️ ערוך פריטים (בן, 26/11) — items-edit.js, לכל מי שבמסך
+      '<button id="spEdit" type="button" style="background:#b8922a;color:#fff;border:none;border-radius:6px;font-family:Heebo,sans-serif;font-size:14px;font-weight:700;min-height:40px;padding:0 12px;margin-inline-end:8px;cursor:pointer">✏️ ערוך פריטים</button>' +
       '<button aria-label="סגור" onclick="document.getElementById(\'sketchPopupModal\').style.display=\'none\'" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">✕</button>' +
       '</div><img id="spImg" alt="סקיצת ההזמנה" style="width:100%;display:block"></div>';
     document.body.appendChild(modal);
   }
   document.getElementById('spTitle').textContent = o.orderClient+' — '+o.orderNum;
+  document.getElementById('spEdit').onclick = () => { modal.style.display = 'none'; wdOpenItemsEdit(o.id); };
   const spImg = document.getElementById('spImg');
   spImg.removeAttribute('src');            // לא להראות לרגע את הסקיצה של ההזמנה הקודמת
   lgSketchIntoImg(spImg, o);
   // צרופות (גרפיקה חלבי / שרטוט פרזול) — דפדוף מתחת לתמונה; בלי צרופות לא משנה כלום
   if(typeof lgAttFlipper==='function') lgAttFlipper(spImg.parentElement, o, { img: spImg });
   modal.style.display = 'flex';
+}
+
+//  שורה שנערכה (בן, 26/11) — אותו סימן כמו בתחנת החשבוניות, כדי שבחיסום יראו שהמידה תוקנה
+function wdEditedMark(it){
+  const t = [it.editedFrom ? 'היה ' + String(it.editedFrom).replace(/^(\d+)×(\d+)$/, (_, w, h) => lgDimsText(w, h)) : '',
+             it.editedGlassFrom ? 'היה ' + it.editedGlassFrom : '', it.addedAt ? 'שורה חדשה' : ''].filter(Boolean).join(' · ');
+  return t ? '<div class="wd-ch-was">✏️ ' + lgEsc(t) + '</div>' : '';
+}
+//  חלון עריכת הפריטים (items-edit.js) — ההזמנה העדכנית מהמאזין, מחירים לנעולות, קטלוג מק"טים
+function wdOpenItemsEdit(orderId){
+  if(typeof lgItemsEditOpen !== 'function'){ showToast('רענן את הדף ונסה שוב'); return; }
+  lgItemsEditOpen(orderId, {
+    getOrder: id => allOrders.find(x => String(x.id) === String(id)),
+    skuMap: () => skuCatalogMap,
+    prices: () => ({ globalP: _wdGlobalPrices, clientP: _wdClientPrices }),
+    toast: m => showToast(m),
+  });
 }
 
 function saveWorkDay(){
@@ -2851,13 +2875,13 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
       const arrivedCount = idxs.filter(i => arrived.has(i)).length;
 
       if(idxs.length === 1){
-        // פריט בודד. המידה הכי בולטת בשורה; סוג הזכוכית קטן לידה (בן, 19/11)
+        // פריט בודד. המידה הכי בולטת בשורה; סוג הזכוכית בולט לידה (בן, 26/11 — קודם היה קטן ואפור)
         const isChecked = arrivedCount > 0;
         return `
         <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(0,0,0,0.04);background:${isChecked?'rgba(39,174,96,0.04)':'#fff'}">
           <div style="flex:1;min-width:0">
             <span class="wd-ch-dims" style="font-size:18px;font-weight:900;color:${isChecked?'#27ae60':'#1a1714'};font-variant-numeric:tabular-nums;">${lgDimsText(it.w, it.h)}</span>
-            <span style="font-size:12px;color:#8a8278;margin-inline-start:6px;">${lgEsc(it.name||'')}</span>
+            <span class="wd-ch-glass">${lgEsc(it.glassFullName||it.name||'')}</span>${wdEditedMark(it)}
             ${shOpen ? '<div>' + lgOptyChip(o, it.globalIdx) + wdJobTag(o, it.globalIdx) + '</div>' : ''}
           </div>
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;min-height:40px;padding:0 12px;border-radius:6px;border:1px solid ${isChecked?'#27ae60':'rgba(0,0,0,0.15)'};background:${isChecked?'rgba(39,174,96,0.08)':'rgba(0,0,0,0.02)'}">
@@ -2878,7 +2902,7 @@ function _chisumClientCardHtml(clientName, orders, reportId, track){
         <div style="flex:1;min-width:0">
           <span class="wd-ch-dims" style="font-size:18px;font-weight:900;color:${allArrived?'#27ae60':'#1a1714'};font-variant-numeric:tabular-nums;">${lgDimsText(it.w, it.h)}</span>
           <span style="font-size:15px;font-weight:900;color:${T.color}">×${idxs.length}</span>
-          <span style="font-size:12px;color:#8a8278;margin-inline-start:6px;">${lgEsc(it.name||'')}</span>
+          <span class="wd-ch-glass">${lgEsc(it.glassFullName||it.name||'')}</span>${wdEditedMark(it)}
           ${shOpen ? '<div>' + lgOptyChip(o, it.globalIdx) + wdJobTag(o, it.globalIdx) + '</div>' : ''}
         </div>
         <div style="display:flex;align-items:center;gap:6px;">
