@@ -1390,8 +1390,9 @@ function wdRefreshDraftModal(){
 function wdDraftLive(d){
   const o = allOrders.find(x => String(x.id) === String(d.orderId));
   const it = o && (Array.isArray(o.items) ? o.items : Object.values(o.items || {}))[Number(d.itemIdx)];
-  if(!it) return Object.assign({ it: null }, d);
-  return Object.assign({}, d, { it, glass: it.glassFullName || it.name || d.glass, w: it.w || '', h: it.h || '',
+  const client = (o && o.orderClient) || '';
+  if(!it) return Object.assign({ it: null, client }, d);
+  return Object.assign({}, d, { it, client, glass: it.glassFullName || it.name || d.glass, w: it.w || '', h: it.h || '',
     type: it.chisum ? 'חיסום' : (it.litush ? 'ליטוש' : 'חיתוך') });
 }
 
@@ -5275,7 +5276,7 @@ function renderDraftModal(){
     return `
     <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:#f7f4ef;border-radius:6px;">
       <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:600;">${lgEsc(d.orderName)}</div>
+        <div style="font-size:13px;font-weight:600;">${d.client && d.client !== d.orderName ? `<span style="font-weight:800">${lgEsc(d.client)}</span> · ` : ''}${lgEsc(d.orderName)}</div>
         <div style="font-size:12px;color:#888;">${lgEsc(d.glass)}${d.w?` · ${lgDimsText(d.w, d.h)} מ"מ`:''} · <span style="color:${d.type==='חיסום'?'#8e44ad':d.type==='ליטוש'?'#2980b9':'#27ae60'}">${d.type}</span></div>
         ${d.it ? wdEditedMark(d.it) : ''}
       </div>
