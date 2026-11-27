@@ -204,7 +204,7 @@ function lgHubSearch(args) {
     const rows = items.map((x, i) => {
       const rec = x.it.optyJob && jobs[x.it.optyJob];
       const c = x.it.optyCut, cutDay = c && !c.undone && c.at ? String(c.at).slice(0, 10) : (rec && rec.day) || '';
-      const glass = lgHubGlass(x.it, rec, a.mats);
+      const glass = lgHubGlass(x.it, rec, a.mats) || 'אחר';   // סקירה: אותו מפתח כמו ברשימת הסינון
       const ok = (!glassSet || glassSet.has(glass)) && sizeOk(x.it.w, x.it.h, false)
         && (byOrder || !dated || inRange(cutDay || date));
       return { idx: x.idx, it: x.it, st: lgHubItemState(o, x.it, today), hit: hitBy[i], ok, glass };
@@ -227,7 +227,7 @@ function lgHubSearch(args) {
     if (!rec || !rec.sheets || !rec.job) return;
     if (f.mat && rec.mat !== f.mat) return;
     if (dated && !inRange(rec.day || '')) return;
-    const glass = lgHubMatGlass(rec.mat, a.mats);
+    const glass = lgHubMatGlass(rec.mat, a.mats) || 'אחר';
     if (glassSet && !glassSet.has(glass)) return;
     const seen = {};
     seq(rec.sheets).forEach(({ sheetNo, total, sheet }) => (sheet.pieces || []).forEach(p => {

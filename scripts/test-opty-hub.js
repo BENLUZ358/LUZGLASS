@@ -123,6 +123,8 @@ check('totals: units and m²', (r => [r.counts.units, r.counts.m2])(run2('L1235'
 const fc = H.lgHubFacets({ orders: orders2, jobs, todayIso: T, q: '', mats: mats2, f: { glass: ['8 שקוף'] } });
 check('facets: glass counts ignore the glass filter itself', fc.glass.map(x => x.key + ':' + x.n), ['8 שקוף:4', '5 מראה:1', '6 שקוף:1']);
 check('facets: clients counted with the glass filter on', fc.clients.map(x => x.key).sort(), ['אביעד נחום', 'זכוכית הצפון', 'פלג מקלחונים'].sort());
+check('glass "אחר": the option in the list finds the glass with no known type (סקירה)', ids(run2('', { glass: ['אחר'] })).length > 0 || run2('', { glass: ['אחר'] }).loose.length > 0,
+  H.lgHubFacets({ orders: orders2, jobs, todayIso: T, q: '', mats: mats2, f: {} }).glass.some(x => x.key === 'אחר'));
 const tbl = H.lgHubSizeTable(run2('אביעד', {}));
 check('sizes table: per client, sizes merged', tbl.map(g => [g.client, g.units, g.rows.map(r => r.w + 'x' + r.h + ' ' + r.glass + ' ×' + r.qty)]),
   [['אביעד נחום', 2, ['850x1900 8 שקוף ×1', '600x1900 8 שקוף ×1']]]);

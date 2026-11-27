@@ -1559,9 +1559,9 @@ const HUB_RECENT_DAYS = 7;                    // ברירת המחדל: שבוע
 try { const s = JSON.parse(localStorage.getItem('lgHubPrefs') || '{}');
   if (s.view === 'sizes') HUB.view = 'sizes';
   if (s.by === 'order') HUB.f.by = 'order';
-  if (['today', 'yesterday', 'week', '7', '30', 'all'].includes(s.preset)) { HUB.f.preset = s.preset; HUB.dateSet = s.preset !== '7'; }
+  if (s.preset === 'all') HUB.f.preset = 'all';   // סקירה: "היום"/"השבוע" של אתמול לא נשארים מחר
 } catch (_) {}
-const hubSavePrefs = () => { try { localStorage.setItem('lgHubPrefs', JSON.stringify({ view: HUB.view, by: HUB.f.by, preset: HUB.f.preset === 'range' ? '7' : HUB.f.preset })); } catch (_) {} };
+const hubSavePrefs = () => { try { localStorage.setItem('lgHubPrefs', JSON.stringify({ view: HUB.view, by: HUB.f.by, preset: HUB.f.preset === 'all' ? 'all' : '7' })); } catch (_) {} };
 const HUB_PRESETS = [['today', 'היום'], ['yesterday', 'אתמול'], ['week', 'השבוע'], ['7', '7 ימים'], ['30', '30 ימים'], ['all', 'הכל']];
 const hubDays = n => lgOptyTodayIso(Date.now() - n * 86400000);
 //  טווח לפי בחירה. "7/30 ימים" ו"השבוע" פתוחים קדימה — כוללים גם מה שמתוכנן לחיתוך.
@@ -1583,7 +1583,8 @@ const hubF = F => { F = F || HUB.f; const r = hubRange(F, hubTyping());
 function hubClientOf(n) {
   const name = String(n || '').trim(); if (!name) return '';
   const all = (typeof LG_OPTY_CLIENTS_DEFAULT !== 'undefined' ? LG_OPTY_CLIENTS_DEFAULT : []).concat(PAIRS || []);
-  const p = all.find(x => x && x.opty && (name === x.opty || name.startsWith(x.opty) || x.opty.startsWith(name)));
+  const N = typeof lgOptyNorm === 'function' ? lgOptyNorm : (v => String(v || '').trim()), nn = N(name), cut = name.length >= 12;
+  const p = all.find(x => x && x.opty && (N(x.opty) === nn || (cut && N(x.opty).startsWith(nn))));
   return p ? p.ours : name;
 }
 async function hubLoad(force) {
@@ -1698,8 +1699,9 @@ function hubSheetBody() {
         <input type="checkbox" value="${esc(x.key)}"${sel.has(x.key) ? ' checked' : ''}><span class="fnm">${esc(x.key)}</span><span class="fn" aria-label="${x.n} ${k === 'glass' ? 'יחידות' : 'תוצאות'}">${x.n}</span></label>`).join('')
         : '<p class="note">אין אפשרויות בטווח התאריכים הזה</p>'}</div>`;
   } else if (k === 'state') {
-    const base = hubRun('', d), sc = base.stateCounts, nl = hubRun('loose', d).counts.loose;
-    const opts = LG_HUB_STATES.map(s => [s.id, s.label, s.id === 'loose' ? nl : sc[s.id] || 0]);
+    const base = hubRun('', d), sc = base.stateCounts;
+    //  "לא אצלנו" היא לשונית, לא מצב בחלון (סקירה)
+    const opts = LG_HUB_STATES.filter(s => s.id !== 'loose').map(s => [s.id, s.label, sc[s.id] || 0]);
     h = `<div class="flist" role="radiogroup" aria-label="מצב">${opts.map(([id, l, n]) => `<label class="fopt"><input type="radio" name="fst" value="${esc(id)}"${d.state === id ? ' checked' : ''}><span class="fnm">${esc(l)}</span><span class="fn">${n}</span></label>`).join('')}</div>`;
   } else if (k === 'more') {
     const num = (id, v, l) => `<label>${l}<input type="text" inputmode="numeric" pattern="[0-9]*" id="${id}" value="${esc(v)}" autocomplete="off"></label>`;
@@ -1780,7 +1782,7 @@ function hubRender() {
       ${x.items.map(r => { const it = r.it, rec = it.optyJob && JOBS[it.optyJob], key = o.id + '|' + r.idx, open = HUB.open.has(key);
         const cl = lgHubCutLine(it, rec, today), now = lgHubNow(o, it, today);
         const src = it.optyJob ? esc(it.optyJob) + (rec ? ' · ' + esc(dmy(rec.day)) : '') + (it.optyShape ? ' · צורה ' + esc(it.optyShape) : '') : 'עוד לא באופטי-ווי';
-        return `<div class="hit${r.hit ? ' on' : ''}${r.match ? '' : ' off'}" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(it.w, it.h)}${hubQty(it.quantity || it.qty)}</span><span class="hnm">${esc(it.name || 'פריט')}${r.glass && !hubSaysGlass(it.name, r.glass) ? ' <small class="hgl">' + esc(r.glass) + '</small>' : ''}</span>
+        return `<div class="hit${r.hit ? ' on' : ''}${r.match ? '' : ' off'}" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(it.w, it.h)}${hubQty(it.quantity || it.qty)}</span><span class="hnm">${esc(it.name || 'פריט')}${r.glass && r.glass !== 'אחר' && !hubSaysGlass(it.name, r.glass) ? ' <small class="hgl">' + esc(r.glass) + '</small>' : ''}</span>
         <span class="hcut${cl.cut ? ' is-cut' : ''}">${esc(cl.label)}</span>${hubPill(now)}
         <div class="hx"${open ? '' : ' hidden'}><span class="hsrc">${src}</span>
         ${it.optyShape ? `<button class="sm" type="button" data-view="${esc(o.id)}|${r.idx}" aria-label="צורה של ${esc(it.optyShape)}">📐 צורה</button>` : ''}
