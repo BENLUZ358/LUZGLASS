@@ -110,12 +110,75 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 .hbar{position:sticky;top:56px;z-index:6;background:var(--bg);padding:var(--space-2) 0;margin-bottom:var(--space-2);}
 #hQ{width:100%;min-height:52px;padding:0 var(--space-3);border:2px solid var(--border);border-radius:var(--radius);font-size:17px;font-family:inherit;background:var(--surface);color:var(--text);box-sizing:border-box;}
 #hQ:focus{border-color:var(--gold);outline:none;}
-.hflt-box summary{min-height:40px;font-size:var(--fs-sm);color:var(--muted);margin-top:var(--space-1);}
-.hflt-box summary span{color:var(--text);}
-@media (max-width:600px){ .hbar{position:static;} .hflt label{flex:1 1 40%;} .hflt label input{flex:1;min-width:0;} }
-.hflt{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center;margin-top:var(--space-2);}
-.hflt label{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-sm);}
-.hflt input[type=date]{min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 6px;background:var(--surface);color:var(--text);}
+/* סינון (בן 27/11, המועצה) — שורה קבועה של כפתורים שאומרים מה בחור, וחלון לכל אחד */
+.fbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:var(--space-2);}
+.fpill{min-height:44px;padding:0 11px;border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);
+  font:var(--fw-bold) var(--fs-sm) Heebo,sans-serif;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fpill span{color:var(--muted);font-size:11px;}
+.fpill.on{background:var(--gold);border-color:var(--gold);color:var(--on-gold);}
+.fpill.on span{color:inherit;}
+@media (max-width:420px){ .fbar{gap:5px;} .fpill{padding:0 9px;font-size:13.5px;} .fpill span{display:none;} }
+.fpill:focus-visible,.pbtn:focus-visible,.seg2 button:focus-visible{outline:3px solid var(--gold);outline-offset:2px;}
+.fon{display:flex;align-items:center;gap:var(--space-2);margin-top:var(--space-2);font-size:var(--fs-sm);font-weight:var(--fw-bold);color:#8a6a12;}
+.fon[hidden]{display:none;}
+.hhead{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2);}
+.hhead .note b{color:var(--text);}
+.seg2{display:flex;background:var(--bg2,#ece6da);border-radius:12px;padding:3px;gap:2px;margin:var(--space-2) 0;}
+.seg2 button{flex:1;white-space:nowrap;min-height:44px;border:0;border-radius:9px;background:transparent;color:var(--muted);font:var(--fw-bold) var(--fs-sm) Heebo,sans-serif;cursor:pointer;padding:0 var(--space-3);}
+.seg2 button[aria-checked="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.12);}
+.seg2.sm2{margin:0;}
+.seg2.sm2 button{min-height:40px;}
+.sheet-bg{position:fixed;inset:0;background:rgba(26,23,20,.45);z-index:60;}
+.sheet-bg[hidden],.fsheet[hidden]{display:none;}
+.fsheet{position:fixed;z-index:61;inset-inline:0;bottom:0;max-height:78vh;display:flex;flex-direction:column;background:var(--surface);
+  border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.2);padding-bottom:env(safe-area-inset-bottom);}
+@media (min-width:760px){ .fsheet{bottom:auto;top:90px;inset-inline:auto;left:50%;transform:translateX(-50%);width:440px;max-height:calc(100vh - 120px);border-radius:16px;} }
+body.sheet-open{overflow:hidden;}
+.sh-head{display:flex;align-items:center;justify-content:space-between;padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--border);font-size:var(--fs-lg);}
+.sh-x{min-width:44px;min-height:44px;border:0;background:transparent;font-size:20px;cursor:pointer;color:var(--text);}
+.sh-body{overflow-y:auto;padding:var(--space-3) var(--space-4);flex:1;}
+.sh-foot{padding:var(--space-3) var(--space-4);border-top:1px solid var(--border);}
+.sh-foot .go{width:100%;}
+.sh-hint{margin:0 0 var(--space-3);}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;}
+.pbtn{min-height:48px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--text);font:var(--fw-bold) var(--fs-base) Heebo,sans-serif;cursor:pointer;}
+.pbtn.wide{width:100%;}
+.pbtn[aria-pressed="true"]{background:var(--text);color:var(--surface);border-color:var(--text);}
+.drange{display:flex;gap:var(--space-2);margin-top:var(--space-2);}
+.drange[hidden]{display:none;}
+.drange label,.frow label{flex:1;display:flex;align-items:center;gap:4px;font-size:var(--fs-sm);}
+.drange input,.frow input{flex:1;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 8px;background:var(--surface);color:var(--text);font:inherit;font-size:16px;}
+.frow{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-3);flex-wrap:wrap;}
+.frow b{flex:0 0 100%;font-size:var(--fs-sm);}
+.fsearch{width:100%;min-height:44px;border:1px solid var(--border);border-radius:var(--radius);padding:0 var(--space-3);font:inherit;font-size:16px;margin-bottom:var(--space-2);box-sizing:border-box;}
+.fnone{margin-bottom:var(--space-2);}
+.flist{display:flex;flex-direction:column;}
+.fopt{display:flex;align-items:center;gap:var(--space-3);min-height:48px;border-bottom:1px solid var(--border);cursor:pointer;font-size:var(--fs-base);}
+.fopt[hidden]{display:none;}
+.fopt input{width:22px;height:22px;accent-color:var(--gold);flex:none;}
+.fopt .fnm{flex:1;min-width:0;}
+.fopt .fn{color:var(--muted);font-size:var(--fs-sm);font-variant-numeric:tabular-nums;}
+.hit.off{opacity:.42;}
+.hgl{color:var(--muted);font-weight:var(--fw-medium);}
+.hoff{font-size:var(--fs-xs);color:var(--muted);margin:4px 0 0;}
+/* מידות לפי לקוח */
+.szg{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:var(--space-2);overflow:hidden;}
+.szg header{display:flex;justify-content:space-between;align-items:baseline;gap:var(--space-2);padding:var(--space-2) var(--space-3);background:var(--bg2,#f1ece2);}
+.szg header b{font-size:var(--fs-base);font-weight:var(--fw-black);}
+.szg header span{font-size:var(--fs-sm);color:var(--muted);font-weight:var(--fw-bold);}
+.szr{display:grid;grid-template-columns:auto auto 1fr auto;grid-template-areas:"d q gl p" "r r r r";gap:2px var(--space-2);align-items:center;padding:var(--space-2) var(--space-3);border-top:1px solid var(--border);font-size:var(--fs-sm);}
+.szr .szd{grid-area:d;font-weight:var(--fw-black);white-space:nowrap;font-size:var(--fs-base);}
+.szr .szq{grid-area:q;font-weight:var(--fw-black);color:#8a6a12;}
+.szr .szgl{grid-area:gl;}
+.szr .szref{grid-area:r;color:var(--muted);font-size:var(--fs-xs);}
+.szr>span:last-child{grid-area:p;}
+.szh{display:none;}
+@media (min-width:760px){
+  .szr{grid-template-columns:130px 60px 140px 1fr auto;grid-template-areas:none;}
+  .szr>span{grid-area:auto !important;}
+  .szh{display:grid;font-size:var(--fs-xs);color:var(--muted);font-weight:var(--fw-bold);border-top:0;}
+}
+@media (max-width:600px){ .hbar{position:static;} }
 .chips{display:flex;gap:6px;margin-top:var(--space-2);overflow-x:auto;scrollbar-width:none;}
 .chip{flex:none;min-height:40px;padding:0 var(--space-3);border:1px solid var(--border);border-radius:999px;background:var(--surface);color:var(--text);font:var(--fw-bold) var(--fs-sm) Heebo,sans-serif;cursor:pointer;}
 .chip span{color:var(--muted);font-weight:var(--fw-medium);margin-inline-start:4px;}
@@ -369,18 +432,20 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 
   <div class="pane" id="pane-find">
     <div class="hbar">
-      <input id="hQ" type="search" placeholder="מספר הזמנה, שם לקוח או מידה (1900)" enterkeyhint="search" aria-label="חיפוש" autocomplete="off">
-      <details class="hflt-box" id="hFltBox"><summary>סינון <span id="hFltOn"></span></summary>
-      <div class="chips" id="hChips" role="group" aria-label="סינון לפי מצב"></div>
-      <div class="hflt">
-        <label>מ-<input type="date" id="hFrom"></label>
-        <label>עד <input type="date" id="hTo"></label>
-        <select class="sm" id="hMat" aria-label="סוג זכוכית"><option value="">כל סוגי הזכוכית</option></select>
-        <button class="sm" type="button" id="hAll">כל התאריכים</button>
-        <button class="sm quiet" type="button" id="hClear">נקה</button>
-      </div></details>
+      <input id="hQ" type="search" placeholder="הזמנה, לקוח או מידה (850x1900)" enterkeyhint="search" aria-label="חיפוש" autocomplete="off">
+      <!-- סינון (בן 27/11, המועצה): תאריך · זכוכית · לקוח · מצב · עוד — כל כפתור אומר מה בחור בו -->
+      <div class="fbar" id="hFbar" role="group" aria-label="סינון"></div>
+      <div class="fon" id="hFon" hidden><span>מסונן</span><button type="button" class="sm quiet" data-fclear="1">נקה הכל ✕</button></div>
+      <div class="hhead"><span id="hCount" class="note" aria-live="polite"></span>
+        <div class="seg2 sm2" role="radiogroup" aria-label="תצוגה"><button type="button" role="radio" data-hview="list" aria-checked="true">רשימה</button><button type="button" role="radio" data-hview="sizes" aria-checked="false">מידות</button></div></div>
     </div>
     <div id="hubOut"><p class="note">טוען…</p></div>
+  </div>
+  <div class="sheet-bg" id="fSheetBg" hidden></div>
+  <div class="fsheet" id="fSheet" role="dialog" aria-modal="true" aria-labelledby="fShTitle" hidden>
+    <div class="sh-head"><b id="fShTitle"></b><button type="button" class="sh-x" id="fShClose" aria-label="סגור">✕</button></div>
+    <div class="sh-body" id="fShBody"></div>
+    <div class="sh-foot"><button type="button" class="go" id="fShApply">הצג</button></div>
   </div>
 
   <div class="pane" id="pane-set" hidden>
@@ -412,7 +477,7 @@ details summary{cursor:pointer;font-weight:var(--fw-bold);min-height:40px;displa
 <script src="opty-match.js?v=20261118a"></script>
 <script src="opty-shape.js?v=20261116d"></script>
 <script src="opty-layout.js?v=20261118a"></script>
-<script src="opty-hub.js?v=20261125a"></script>
+<script src="opty-hub.js?v=20261127a"></script>
 <script src="opty-report.js?v=20261126e"></script>
 <script src="lg-qr.js?v=20261117"></script>
 <script src="avivi-wrap.js?v=20261118b"></script>
@@ -1486,13 +1551,41 @@ if (location.hash === '#today') showTab('today');
 //  ההזמנות שלנו + האופטימיזציות → כרטיס להזמנה, ולכל זכוכית מצב אחד (opty-hub.js).
 //  "לא אצלנו" = אותו חיפוש, מסונן לזכוכיות שנחתכו באופטי-ווי ולא מחוברות לשום פריט אצלנו.
 //  מחליף את החיפוש של 17/11 ואת חיפוש השייפים שהיה בלשונית האופטימיזציות.
-let HUB = { state: '', loaded: false, older: 0, all: false, open: new Set() };
-const HUB_RECENT_DAYS = 7;                    // בלי מילת חיפוש ובלי תאריכים — מוצג שבוע אחורה
-const hubF = () => {
-  const f = { from: $('hFrom').value || '', to: $('hTo').value || '', mat: $('hMat').value || '', state: HUB.state };
-  if (!HUB.all && !$('hQ').value.trim() && !f.from && !f.to) f.from = lgOptyTodayIso(Date.now() - HUB_RECENT_DAYS * 86400000);
-  return f;
-};
+let HUB = { state: '', loaded: false, older: 0, open: new Set(), view: 'list', sheet: null, draft: null,
+  f: { preset: '7', from: '', to: '', by: 'cut', glass: [], clients: [], wMin: '', wMax: '', hMin: '', hMax: '', sort: 'new' }, dateSet: false };
+const HUB_RECENT_DAYS = 7;                    // ברירת המחדל: שבוע אחורה (ובזמן חיפוש — כל התאריכים)
+//  סינון (בן 27/11, המועצה): נזכרים רק בתצוגה ובתאריך. השאר מתאפס — אחרת עובד פותח מחר,
+//  "8 קליר + לקוח X" עוד דלוקים, והוא חושב שהזכוכית לא קיימת.
+try { const s = JSON.parse(localStorage.getItem('lgHubPrefs') || '{}');
+  if (s.view === 'sizes') HUB.view = 'sizes';
+  if (s.by === 'order') HUB.f.by = 'order';
+  if (['today', 'yesterday', 'week', '7', '30', 'all'].includes(s.preset)) { HUB.f.preset = s.preset; HUB.dateSet = s.preset !== '7'; }
+} catch (_) {}
+const hubSavePrefs = () => { try { localStorage.setItem('lgHubPrefs', JSON.stringify({ view: HUB.view, by: HUB.f.by, preset: HUB.f.preset === 'range' ? '7' : HUB.f.preset })); } catch (_) {} };
+const HUB_PRESETS = [['today', 'היום'], ['yesterday', 'אתמול'], ['week', 'השבוע'], ['7', '7 ימים'], ['30', '30 ימים'], ['all', 'הכל']];
+const hubDays = n => lgOptyTodayIso(Date.now() - n * 86400000);
+//  טווח לפי בחירה. "7/30 ימים" ו"השבוע" פתוחים קדימה — כוללים גם מה שמתוכנן לחיתוך.
+function hubRange(F, typing) {
+  const p = F.preset;
+  if (typing && !HUB.dateSet) return { from: '', to: '' };      // בחיפוש — כל התאריכים, אלא אם בחרו תאריך
+  if (p === 'today') return { from: hubDays(0), to: hubDays(0) };
+  if (p === 'yesterday') return { from: hubDays(1), to: hubDays(1) };
+  if (p === 'week') { const dow = new Date(hubDays(0) + 'T12:00:00Z').getUTCDay(); return { from: hubDays(dow), to: '' }; }
+  if (p === '7') return { from: hubDays(HUB_RECENT_DAYS), to: '' };
+  if (p === '30') return { from: hubDays(30), to: '' };
+  if (p === 'range') return { from: F.from || '', to: F.to || '' };
+  return { from: '', to: '' };
+}
+const hubTyping = () => !!$('hQ').value.trim();
+const hubF = F => { F = F || HUB.f; const r = hubRange(F, hubTyping());
+  return { from: r.from, to: r.to, by: F.by, glass: F.glass, clients: F.clients, wMin: F.wMin, wMax: F.wMax, hMin: F.hMin, hMax: F.hMax, sort: F.sort }; };
+//  שם הלקוח באופטי-ווי (חתוך אחרי 12 תווים) → השם אצלנו, לפי זוגות השמות
+function hubClientOf(n) {
+  const name = String(n || '').trim(); if (!name) return '';
+  const all = (typeof LG_OPTY_CLIENTS_DEFAULT !== 'undefined' ? LG_OPTY_CLIENTS_DEFAULT : []).concat(PAIRS || []);
+  const p = all.find(x => x && x.opty && (name === x.opty || name.startsWith(x.opty) || x.opty.startsWith(name)));
+  return p ? p.ours : name;
+}
 async function hubLoad(force) {
   if (HUB.loaded && !force) { hubRender(); return; }
   $('hubOut').innerHTML = '<p class="note">טוען…</p>';
@@ -1501,9 +1594,6 @@ async function hubLoad(force) {
     JOBS = Object.assign({}, JOBS, j.val() || {}); MATS = m.val() || {};
     await loadOrders(); await loadWaiting();
     HUB.loaded = true;
-    const mats = [...new Set(Object.values(JOBS).map(r => r && r.mat).filter(Boolean))].sort(), cur = $('hMat').value;
-    $('hMat').innerHTML = '<option value="">כל סוגי הזכוכית</option>' + mats.map(x => `<option value="${esc(x)}">${esc(lgOptyMatLabel(x, MATS))}</option>`).join('');
-    $('hMat').value = cur;
     hubRender();
   } catch (e) { console.error(e); $('hubOut').innerHTML = '<p class="note">✗ לא נטען — בדוק חיבור ונסה שוב</p>'; }
 }
@@ -1518,38 +1608,185 @@ async function hubOlder(btn) {
   hubRender();
 }
 const hubWaiting = () => { const s = new Set(); Object.values(PENDING || {}).forEach(o => Object.keys(o || {}).forEach(k => s.add(String(k)))); Object.keys(REVQ || {}).forEach(k => s.add(String(k))); return s; };
-const hubRun = (state) => lgHubSearch({ orders: ALL_ORDERS, jobs: JOBS, todayIso: lgOptyTodayIso(), q: $('hQ').value, f: Object.assign(hubF(), { state }), waiting: hubWaiting(), mats: MATS });
+const hubArgs = (F, state) => ({ orders: ALL_ORDERS, jobs: JOBS, todayIso: lgOptyTodayIso(), q: $('hQ').value, f: Object.assign(hubF(F), { state }),
+  waiting: hubWaiting(), mats: MATS, clientOf: hubClientOf });
+const hubRun = (state, F) => lgHubSearch(hubArgs(F, state));
 const hubPill = s => `<span class="pill t-${esc(s.tone)}">${esc(s.label)}</span>`;
+const hubStateLbl = id => (LG_HUB_STATES.find(s => s.id === id) || {}).label || '';
+const hubN = r => r.counts.orders + r.counts.loose;
+//  השם של הפריט כבר אומר את הזכוכית ("8 מ''מ קליר מחוסם") — לא כותבים פעמיים
+const hubSaysGlass = (name, g) => { const n = String(name || '').replace(/["'׳״]/g, ''), w = String(g || '').split(' ');
+  return w.length > 1 && n.includes(w[0]) && n.includes(w.slice(1).join(' ')); };
+const fmtM2 = n => (Math.round(n * 10) / 10).toLocaleString('he-IL');
+
+//  ─── שורת הסינון: כל כפתור אומר מה בחור בו (המועצה: הכפתורים הם התצוגה של מה שמסונן) ───
+function hubDateLbl(F) {
+  if (hubTyping() && !HUB.dateSet) return 'כל התאריכים';
+  const by = F.by === 'order' ? 'הוזמן' : 'חיתוך';
+  if (F.preset === 'range') return by + ': ' + (F.from ? dmy(F.from) : '…') + '–' + (F.to ? dmy(F.to) : '…');
+  return by + ': ' + ((HUB_PRESETS.find(p => p[0] === F.preset) || [])[1] || '7 ימים');
+}
+const hubMoreOn = F => !!(F.wMin || F.wMax || F.hMin || F.hMax || F.sort === 'old');
+function hubFilterOn() {
+  const F = HUB.f;
+  return !!(F.glass.length || F.clients.length || (HUB.state && HUB.state !== 'loose') || hubMoreOn(F) || HUB.dateSet);
+}
+function hubBar() {
+  const F = HUB.f, gl = F.glass, cl = F.clients;
+  const btn = (k, txt, on) => `<button type="button" class="fpill${on ? ' on' : ''}" data-fsheet="${k}" aria-haspopup="dialog" aria-expanded="${HUB.sheet === k}">${esc(txt)} <span aria-hidden="true">▾</span></button>`;
+  $('hFbar').innerHTML = btn('date', hubDateLbl(F), HUB.dateSet)
+    + btn('glass', gl.length ? (gl.length === 1 ? gl[0] : 'זכוכית: ' + gl.length) : 'זכוכית', !!gl.length)
+    + btn('clients', cl.length ? (cl.length === 1 ? cl[0] : 'לקוחות: ' + cl.length) : 'לקוח', !!cl.length)
+    + btn('state', HUB.state && HUB.state !== 'loose' ? hubStateLbl(HUB.state) : 'מצב', !!(HUB.state && HUB.state !== 'loose'))
+    + btn('more', hubMoreOn(F) ? 'עוד ✓' : 'עוד', hubMoreOn(F));
+  $('hFon').hidden = !hubFilterOn();
+}
+
+//  ─── החלון (גיליון מלמטה בטלפון, חלון צף במחשב). "הצג N" — מחיל; ביטול/חזרה — לא משנה כלום ───
+const HUB_SHEET_T = { date: 'תאריך', glass: 'סוג זכוכית', clients: 'לקוח', state: 'מצב', more: 'מידה ומיון' };
+let _hubPushed = false;
+function hubSheetOpen(k) {
+  HUB.sheet = k; HUB.draft = JSON.parse(JSON.stringify(Object.assign({}, HUB.f, { state: HUB.state, dateSet: HUB.dateSet, q: '' })));
+  $('fShTitle').textContent = HUB_SHEET_T[k] || ''; $('fSheet').hidden = false; $('fSheetBg').hidden = false;
+  document.body.classList.add('sheet-open');
+  if (!_hubPushed) { try { history.pushState({ hubSheet: 1 }, ''); _hubPushed = true; } catch (_) {} }
+  hubSheetBody(); hubBar();
+  setTimeout(() => { const f = $('fShBody').querySelector('input[type=search],button,input'); if (f && window.innerWidth > 700) f.focus(); }, 30);
+}
+function hubSheetClose(fromPop) {
+  if (!HUB.sheet) return;
+  const k = HUB.sheet; HUB.sheet = null; HUB.draft = null;
+  $('fSheet').hidden = true; $('fSheetBg').hidden = true; document.body.classList.remove('sheet-open');
+  if (_hubPushed) { _hubPushed = false; if (!fromPop) try { history.back(); } catch (_) {} }
+  hubBar(); const b = document.querySelector(`[data-fsheet="${k}"]`); if (b) b.focus();
+}
+window.addEventListener('popstate', () => { if (HUB.sheet) hubSheetClose(true); });
+function hubSheetApply() {
+  const d = HUB.draft; if (!d) return;
+  ['preset', 'from', 'to', 'by', 'glass', 'clients', 'wMin', 'wMax', 'hMin', 'hMax', 'sort'].forEach(k => { HUB.f[k] = d[k]; });
+  HUB.state = d.state; HUB.dateSet = d.dateSet;
+  hubSavePrefs(); hubSheetClose(); hubRender();
+}
+//  כמה יופיעו אם יחילו — על הכפתור בתחתית החלון
+function hubSheetCount() {
+  const d = HUB.draft; if (!d) return;
+  const keep = HUB.dateSet; HUB.dateSet = d.dateSet;
+  const r = hubRun(d.state === 'loose' ? 'loose' : d.state, d);
+  HUB.dateSet = keep;
+  const n = hubN(r);
+  $('fShApply').textContent = n ? 'הצג ' + n + (n === 1 ? ' תוצאה' : ' תוצאות') : 'אין תוצאות — הצג בכל זאת';
+}
+function hubSheetBody() {
+  const d = HUB.draft, k = HUB.sheet; if (!d) return;
+  let h = '';
+  if (k === 'date') {
+    h = `<div class="seg2" role="radiogroup" aria-label="לפי איזה תאריך">
+        <button type="button" role="radio" aria-checked="${d.by !== 'order'}" data-dby="cut">יום חיתוך</button>
+        <button type="button" role="radio" aria-checked="${d.by === 'order'}" data-dby="order">תאריך הזמנה</button></div>
+      <p class="note sh-hint">${d.by === 'order' ? 'מתי ההזמנה נכנסה למערכת.' : 'מתי הזכוכית נחתכה או תיחתך. זכוכית שעוד לא באופטימיזציה — לפי יום ההזמנה.'}</p>
+      <div class="pgrid">${HUB_PRESETS.map(([id, l]) => `<button type="button" class="pbtn" aria-pressed="${d.preset === id && d.dateSet !== false}" data-dpre="${id}">${l}</button>`).join('')}</div>
+      <button type="button" class="pbtn wide" aria-pressed="${d.preset === 'range'}" data-dpre="range">טווח אחר…</button>
+      <div class="drange"${d.preset === 'range' ? '' : ' hidden'}><label>מ-<input type="date" id="fFrom" value="${esc(d.from)}"></label><label>עד <input type="date" id="fTo" value="${esc(d.to)}"></label></div>`;
+  } else if (k === 'glass' || k === 'clients') {
+    const fc = lgHubFacets(Object.assign(hubArgs(d, d.state === 'loose' ? 'loose' : d.state)));
+    const list = k === 'glass' ? fc.glass : fc.clients, sel = new Set(d[k]);
+    //  מה שבחור ולא בתוצאות — נשאר ברשימה (עם 0), כדי שאפשר יהיה לבטל אותו
+    d[k].forEach(x => { if (!list.some(y => y.key === x)) list.push({ key: x, n: 0 }); });
+    h = (list.length > 12 ? `<input type="search" class="fsearch" id="fFind" placeholder="${k === 'glass' ? 'חפש סוג זכוכית' : 'חפש לקוח'}" autocomplete="off" aria-label="חיפוש ברשימה">` : '')
+      + (sel.size ? `<button type="button" class="sm quiet fnone" data-fnone="1">בטל את כל הסימונים</button>` : '')
+      + `<div class="flist" role="group" aria-label="${k === 'glass' ? 'סוגי זכוכית' : 'לקוחות'}">${list.length ? list.map(x => `<label class="fopt" data-fkey="${esc(x.key)}">
+        <input type="checkbox" value="${esc(x.key)}"${sel.has(x.key) ? ' checked' : ''}><span class="fnm">${esc(x.key)}</span><span class="fn" aria-label="${x.n} ${k === 'glass' ? 'יחידות' : 'תוצאות'}">${x.n}</span></label>`).join('')
+        : '<p class="note">אין אפשרויות בטווח התאריכים הזה</p>'}</div>`;
+  } else if (k === 'state') {
+    const base = hubRun('', d), sc = base.stateCounts, nl = hubRun('loose', d).counts.loose;
+    const opts = LG_HUB_STATES.map(s => [s.id, s.label, s.id === 'loose' ? nl : sc[s.id] || 0]);
+    h = `<div class="flist" role="radiogroup" aria-label="מצב">${opts.map(([id, l, n]) => `<label class="fopt"><input type="radio" name="fst" value="${esc(id)}"${d.state === id ? ' checked' : ''}><span class="fnm">${esc(l)}</span><span class="fn">${n}</span></label>`).join('')}</div>`;
+  } else if (k === 'more') {
+    const num = (id, v, l) => `<label>${l}<input type="text" inputmode="numeric" pattern="[0-9]*" id="${id}" value="${esc(v)}" autocomplete="off"></label>`;
+    h = `<p class="note sh-hint">מידה מדויקת? פשוט כתבו בחיפוש: 850x1900</p>
+      <div class="frow"><b>רוחב (מ"מ)</b>${num('fWMin', d.wMin, 'מ-')}${num('fWMax', d.wMax, 'עד')}</div>
+      <div class="frow"><b>גובה (מ"מ)</b>${num('fHMin', d.hMin, 'מ-')}${num('fHMax', d.hMax, 'עד')}</div>
+      <div class="seg2" role="radiogroup" aria-label="סדר"><button type="button" role="radio" aria-checked="${d.sort !== 'old'}" data-dsort="new">החדש קודם</button>
+        <button type="button" role="radio" aria-checked="${d.sort === 'old'}" data-dsort="old">הישן קודם</button></div>
+      ${hubMoreOn(d) ? '<button type="button" class="sm quiet fnone" data-fmoreclr="1">נקה מידה ומיון</button>' : ''}`;
+  }
+  $('fShBody').innerHTML = h;
+  hubSheetCount();
+}
+$('fSheet').addEventListener('click', e => {
+  const d = HUB.draft; if (!d) return;
+  if (e.target.closest('#fShClose')) { hubSheetClose(); return; }
+  if (e.target.closest('#fShApply')) { hubSheetApply(); return; }
+  const by = e.target.closest('[data-dby]'); if (by) { d.by = by.dataset.dby; d.dateSet = true; hubSheetBody(); return; }
+  const pr = e.target.closest('[data-dpre]'); if (pr) { d.preset = pr.dataset.dpre; d.dateSet = true; hubSheetBody(); return; }
+  const so = e.target.closest('[data-dsort]'); if (so) { d.sort = so.dataset.dsort; hubSheetBody(); return; }
+  if (e.target.closest('[data-fnone]')) { d[HUB.sheet] = []; hubSheetBody(); return; }
+  if (e.target.closest('[data-fmoreclr]')) { d.wMin = d.wMax = d.hMin = d.hMax = ''; d.sort = 'new'; hubSheetBody(); return; }
+});
+$('fSheet').addEventListener('change', e => {
+  const d = HUB.draft, t = e.target; if (!d) return;
+  if (t.type === 'checkbox') { const s = new Set(d[HUB.sheet]); if (t.checked) s.add(t.value); else s.delete(t.value); d[HUB.sheet] = [...s]; hubSheetCount(); return; }
+  if (t.name === 'fst') { d.state = t.value; hubSheetCount(); return; }
+  if (t.id === 'fFrom' || t.id === 'fTo') { d[t.id === 'fFrom' ? 'from' : 'to'] = t.value; d.preset = 'range'; d.dateSet = true; hubSheetCount(); return; }
+});
+$('fSheet').addEventListener('input', e => {
+  const d = HUB.draft, t = e.target; if (!d) return;
+  const map = { fWMin: 'wMin', fWMax: 'wMax', fHMin: 'hMin', fHMax: 'hMax' };
+  if (map[t.id]) { t.value = t.value.replace(/[^\d]/g, '').slice(0, 4); d[map[t.id]] = t.value; clearTimeout(_hubT); _hubT = setTimeout(hubSheetCount, 250); return; }
+  if (t.id === 'fFind') { const q = t.value.trim().toLowerCase(); document.querySelectorAll('#fShBody .fopt').forEach(o => { o.hidden = !!q && !String(o.dataset.fkey || '').toLowerCase().includes(q); }); }
+});
+$('fSheet').addEventListener('keydown', e => { if (e.key === 'Escape') hubSheetClose(); if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'checkbox') hubSheetApply(); });
+$('fSheetBg').addEventListener('click', () => hubSheetClose());
+
+function hubClearAll() {
+  Object.assign(HUB.f, { preset: '7', from: '', to: '', glass: [], clients: [], wMin: '', wMax: '', hMin: '', hMax: '', sort: 'new' });
+  HUB.dateSet = false; if (HUB.state !== 'loose') HUB.state = ''; hubSavePrefs(); hubRender();
+}
+
+//  ─── התוצאות ───
 function hubRender() {
   if (!HUB.loaded) return;
+  hubBar();
   const res = hubRun(HUB.state), f = hubF();
-  //  ספירה לכל מצב — כמה הזמנות/זכוכיות יש בכל כפתור
-  const cnt = {}; LG_HUB_STATES.forEach(s => { const r = s.id === HUB.state ? res : hubRun(s.id); cnt[s.id] = s.id === 'loose' ? r.counts.loose : r.counts.orders + r.counts.loose; });
-  $('hChips').innerHTML = LG_HUB_STATES.filter(s => s.id !== 'loose').map(s => `<button type="button" class="chip" data-hstate="${esc(s.id)}" aria-pressed="${s.id === HUB.state}">${esc(s.label)} <span>${cnt[s.id]}</span></button>`).join('');
   //  המספר על הלשונית "לא אצלנו" — תמיד השבוע האחרון, בלי קשר למה שמוקלד בחיפוש
-  _seen(document.querySelector('#hChips [aria-pressed="true"]'));
-  const nl = lgHubSearch({ orders: ALL_ORDERS, jobs: JOBS, todayIso: lgOptyTodayIso(), q: '', waiting: hubWaiting(), mats: MATS,
+  const nl = lgHubSearch({ orders: ALL_ORDERS, jobs: JOBS, todayIso: lgOptyTodayIso(), q: '', waiting: hubWaiting(), mats: MATS, clientOf: hubClientOf,
     f: { from: lgOptyTodayIso(Date.now() - HUB_RECENT_DAYS * 86400000), state: 'loose' } }).counts.loose;
   $('cntLoose').hidden = !nl; $('cntLoose').textContent = nl; tabMoreCnt();
-  const range = !HUB.all && !$('hQ').value.trim() && !$('hFrom').value && !$('hTo').value ? `${HUB_RECENT_DAYS} הימים האחרונים` : (f.from || f.to ? (f.from ? 'מ-' + dmy(f.from) : '') + (f.to ? ' עד ' + dmy(f.to) : '') : 'כל התאריכים');
-  const stL = HUB.state && HUB.state !== 'loose' && (LG_HUB_STATES.find(s => s.id === HUB.state) || {}).label;
-  const fOn = [stL, f.mat && lgOptyMatLabel(f.mat, MATS), $('hFrom').value && 'מ-' + dmy($('hFrom').value), $('hTo').value && 'עד ' + dmy($('hTo').value), HUB.all && 'כל התאריכים'].filter(Boolean);
-  $('hFltOn').textContent = fOn.length ? '· מסונן: ' + fOn.join(' · ') : '';
-  const qOn = !!$('hQ').value.trim() && HUB.state !== 'loose';
-  const sum = `<p class="note hsum">${HUB.state === 'loose' ? res.counts.loose + ' זכוכיות באופטי-ווי שלא אצלנו' : res.counts.orders + ' הזמנות במערכת' + (qOn && res.counts.loose ? ' · ' + res.counts.loose + ' זכוכיות שלא במערכת' : '')} · ${esc(range)}${f.mat ? ' · ' + esc(lgOptyMatLabel(f.mat, MATS)) : ''}</p>`;
+  const qOn = hubTyping() && HUB.state !== 'loose';
+  const units = res.counts.units, m2 = res.counts.m2;
+  $('hCount').innerHTML = HUB.state === 'loose' ? `<b>${res.counts.loose}</b> זכוכיות באופטי-ווי שלא אצלנו`
+    : `<b>${res.counts.orders}</b> הזמנות${(qOn || hubFilterOn()) && res.counts.loose ? ' · ' + res.counts.loose + ' לא במערכת' : ''} · ${units} יח׳ · ${fmtM2(m2)} מ״ר`;
+  document.querySelectorAll('[data-hview]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.hview === HUB.view)));
+  const today = lgOptyTodayIso();
+  const empty = !res.orders.length && !res.loose.length ? `<div class="card hempty"><b>${hubFilterOn() ? '0 תוצאות עם הסינון הזה' : 'לא נמצא'}</b>
+      <p class="note">${hubFilterOn() ? '' : 'נסה: רק מספר אחד מהמידה (1900), חלק משם הלקוח, או תאריך "הכל". '}אופטימיזציות — רק מ-400 האחרונות, אלא אם טוענים ישנות יותר.</p>
+      ${hubFilterOn() ? '<button class="go" type="button" data-fclear="1">נקה סינון</button>' : ''}</div>` : '';
+  const more = `<p class="hmore"><button class="sm" type="button" data-holder="1">טען אופטימיזציות ישנות יותר</button>${HUB.older ? ' <small class="note">נטענו עוד ' + HUB.older + '</small>' : ''}</p>`;
+
+  if (HUB.view === 'sizes') {
+    const groups = lgHubSizeTable(res);
+    const shown = groups.slice(0, 80);
+    $('hubOut').innerHTML = (shown.map(g => `<section class="szg"><header><b>${esc(g.client)}</b><span>${g.units} יח׳ · ${fmtM2(g.m2)} מ״ר</span></header>
+        <div class="szt" role="table" aria-label="מידות של ${esc(g.client)}"><div class="szr szh" role="row"><span role="columnheader">מידה</span><span role="columnheader">כמות</span><span role="columnheader">זכוכית</span><span role="columnheader">הזמנות</span><span role="columnheader">מצב</span></div>
+        ${g.rows.map(r => `<div class="szr" role="row"><span class="szd" role="cell">${dimT(r.w, r.h)}</span><span class="szq" role="cell">×${r.qty}</span><span class="szgl" role="cell">${esc(r.glass)}</span>
+          <span class="szref" role="cell">${esc(r.refs.slice(0, 3).join(', '))}${r.refs.length > 3 ? ' +' + (r.refs.length - 3) : ''}</span><span role="cell">${hubPill({ tone: r.tone, label: r.label })}</span></div>`).join('')}</div></section>`).join('')
+      + (groups.length > shown.length ? `<p class="note">מוצגים 80 הלקוחות הגדולים מתוך ${groups.length} — צמצמו בסינון</p>` : '')) + empty + more;
+    return;
+  }
   const ords = res.orders.map(x => {
-    const o = x.o;
+    const o = x.o, nOff = x.items.filter(r => !r.match).length;
     return `<article class="hord"><header><b>${esc(o.orderNum || '—')}</b><span>${esc(o.orderClient || '')}</span><span class="sk">${esc(o.sketchName || 'ללא שם')}</span><span class="htag in">במערכת</span>
-      <small>${esc(dmy(x.date))}${x.mats.length ? ' · ' + x.mats.map(m => esc(lgOptyMatLabel(m, MATS))).join(', ') : ''}</small></header>
+      <small>הוזמן ${esc(dmy(x.date))}${x.mats.length ? ' · ' + x.mats.map(m => esc(lgOptyMatLabel(m, MATS))).join(', ') : ''}</small></header>
       ${x.items.map(r => { const it = r.it, rec = it.optyJob && JOBS[it.optyJob], key = o.id + '|' + r.idx, open = HUB.open.has(key);
-        const cl = lgHubCutLine(it, rec, lgOptyTodayIso()), now = lgHubNow(o, it, lgOptyTodayIso());
+        const cl = lgHubCutLine(it, rec, today), now = lgHubNow(o, it, today);
         const src = it.optyJob ? esc(it.optyJob) + (rec ? ' · ' + esc(dmy(rec.day)) : '') + (it.optyShape ? ' · צורה ' + esc(it.optyShape) : '') : 'עוד לא באופטי-ווי';
-        return `<div class="hit${r.hit ? ' on' : ''}" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(it.w, it.h)}${hubQty(it.quantity || it.qty)}</span><span class="hnm">${esc(it.name || 'פריט')}</span>
+        return `<div class="hit${r.hit ? ' on' : ''}${r.match ? '' : ' off'}" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(it.w, it.h)}${hubQty(it.quantity || it.qty)}</span><span class="hnm">${esc(it.name || 'פריט')}${r.glass && !hubSaysGlass(it.name, r.glass) ? ' <small class="hgl">' + esc(r.glass) + '</small>' : ''}</span>
         <span class="hcut${cl.cut ? ' is-cut' : ''}">${esc(cl.label)}</span>${hubPill(now)}
         <div class="hx"${open ? '' : ' hidden'}><span class="hsrc">${src}</span>
         ${it.optyShape ? `<button class="sm" type="button" data-view="${esc(o.id)}|${r.idx}" aria-label="צורה של ${esc(it.optyShape)}">📐 צורה</button>` : ''}
         ${rec ? `<button class="sm" type="button" data-ojob="${esc(it.optyJob)}|${esc(it.optyShape || '')}|${esc(it.optyPos || '')}">ללוח</button>` : ''}
         ${it.optyShape ? `<button class="sm quiet" type="button" data-cut="${esc(o.id)}|${r.idx}">נתק</button>` : ''}</div></div>`; }).join('')}
+      ${nOff ? `<p class="hoff">${nOff === 1 ? 'זכוכית אחת בהזמנה לא מתאימה לסינון (באפור)' : nOff + ' זכוכיות בהזמנה לא מתאימות לסינון (באפור)'}</p>` : ''}
     </article>`;
   }).join('');
   const groups = lgHubGroupLoose(res.loose);
@@ -1560,21 +1797,19 @@ function hubRender() {
       <span class="who"><b>${esc(p.name || 'בלי שם')}</b> · <span dir="ltr">${esc(Math.round(p.w) + '×' + Math.round(p.h))}</span>${p.waiting ? ' <span class="pill t-plan">מחכה לחיבור</span>' : ''}<br>
       <small>${p.shape ? 'צורה ' + esc(p.shape) + ' · ' : ''}${esc(p.job)} · לוח ${p.sheetNo}/${p.total} · ${esc(dmy(p.day))} · ${esc(matLbl(JOBS[p.job]))}${p.note ? ' · ' + esc(p.note) : ''}</small></span>
       ${hubPill(p.st)}</button>`).join('')}`).join('')}</section>` : '';
-  const more = `<p class="hmore"><button class="sm" type="button" data-holder="1">טען אופטימיזציות ישנות יותר</button>${HUB.older ? ' <small class="note">נטענו עוד ' + HUB.older + '</small>' : ''}</p>`;
-  const empty = !res.orders.length && !res.loose.length ? `<div class="card hempty"><b>לא נמצא</b><p class="note">נסה: רק מספר אחד מהמידה (1900), חלק משם הלקוח, או לחץ "כל התאריכים". חיפוש מראה גם הזמנות ישנות — אבל אופטימיזציות רק מ-400 האחרונות, אלא אם טוענים ישנות יותר.</p></div>` : '';
   const looseBtn = res.loose.length ? `<p class="hlzmore"><button class="sm" type="button" data-hstate="loose">יש עוד ${res.counts.loose} זכוכיות באופטי-ווי שלא מחוברות להזמנה — הצג</button></p>` : '';
   //  בן, 24/11: בחיפוש — זכוכיות שלא במערכת מופיעות מיד אחרי ההזמנות, באותו כרטיס, עם "לא במערכת"
-  const today = lgOptyTodayIso();
   const looseCards = groups.map(g => `<article class="hord out"><header><b>${esc(g.client)}</b><span class="htag out">לא במערכת</span>
       <small>${esc(dmy(g.list[0].day))} · ${esc(matLbl(JOBS[g.list[0].job]))}</small></header>
       ${g.list.map(p => { const key = 'L|' + p.job + '|' + p.sheetNo + '|' + p.order, open = HUB.open.has(key);
         const cl = lgHubDayLine(p.day, p.st && (p.st.tone === 'cut' || p.st.tone === 'ready'), today);
-        return `<div class="hit" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(p.w, p.h)}${hubQty(p.qty)}</span><span class="hnm">${esc(p.name || 'בלי שם')}</span>
+        return `<div class="hit" data-row="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"><span class="hdim">${dimT(p.w, p.h)}${hubQty(p.qty)}</span><span class="hnm">${esc(p.name || 'בלי שם')}${p.glass ? ' <small class="hgl">' + esc(p.glass) + '</small>' : ''}</span>
         <span class="hcut${cl.cut ? ' is-cut' : ''}">${esc(cl.label)}</span>${hubPill(p.st)}
         <div class="hx"${open ? '' : ' hidden'}><span class="hsrc">${esc(p.job)} · לוח ${p.sheetNo}/${p.total}${p.shape ? ' · צורה ' + esc(p.shape) : ''}${p.note ? ' · ' + esc(p.note) : ''}${p.waiting ? ' · מחכה לחיבור' : ''}</span>
         <button class="sm" type="button" data-ohit="${esc(p.job + '|' + p.sheetNo + '|' + p.order)}">ללוח</button></div></div>`; }).join('')}
     </article>`).join('');
-  $('hubOut').innerHTML = sum + (HUB.state === 'loose' ? loose + ords : ords + (qOn ? looseCards : looseBtn)) + empty + more;
+  const cut = res.counts.orders > res.orders.length ? `<p class="note">מוצגות ${res.orders.length} ההזמנות הראשונות מתוך ${res.counts.orders} — צמצמו בסינון</p>` : '';
+  $('hubOut').innerHTML = (HUB.state === 'loose' ? loose + ords : ords + cut + ((qOn || hubFilterOn()) ? looseCards : looseBtn)) + empty + more;
   const need = res.loose.map(p => p.shape).filter(s => s && !(s in GEOS)).slice(0, 80);
   if (need.length) loadGeos(need).then(n => { if (n) hubRender(); });
 }
@@ -1583,12 +1818,13 @@ const hubQty = q => ` <span class="hq">· ${esc(Math.max(1, Number(q) || 1))} י
 let _hubT = null;
 $('hQ').addEventListener('input', () => { clearTimeout(_hubT); _hubT = setTimeout(hubRender, 250); });
 $('hQ').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(_hubT); hubRender(); } });
-['hFrom', 'hTo', 'hMat'].forEach(id => $(id).addEventListener('change', hubRender));
-$('hAll').addEventListener('click', () => { HUB.all = true; $('hFrom').value = ''; $('hTo').value = ''; hubRender(); });
-$('hClear').addEventListener('click', () => { HUB.all = false; $('hQ').value = ''; $('hFrom').value = ''; $('hTo').value = ''; $('hMat').value = ''; HUB.state = ''; hubRender(); $('hQ').focus(); });
+$('hFbar').addEventListener('click', e => { const b = e.target.closest('[data-fsheet]'); if (!b) return; if (HUB.sheet === b.dataset.fsheet) hubSheetClose(); else { if (HUB.sheet) hubSheetClose(); hubSheetOpen(b.dataset.fsheet); } });
+$('hFon').addEventListener('click', e => { if (e.target.closest('[data-fclear]')) hubClearAll(); });
+document.querySelectorAll('[data-hview]').forEach(b => b.addEventListener('click', () => { HUB.view = b.dataset.hview; hubSavePrefs(); hubRender(); }));
 $('pane-find').addEventListener('click', async e => {
   const ch = e.target.closest('[data-hstate]');
   if (ch) { HUB.state = ch.dataset.hstate; const tt = HUB.state === 'loose' ? 'loose' : 'find'; document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tt))); tabMoreMark(tt); hubRender(); return; }
+  if (e.target.closest('[data-fclear]')) { hubClearAll(); return; }
   const old = e.target.closest('[data-holder]'); if (old) { hubOlder(old); return; }
   const h = e.target.closest('[data-ohit]');
   if (h) { const [job, n, order] = h.dataset.ohit.split('|'); showTab('jobs'); jobOpen(job, Number(n), Number(order)); return; }

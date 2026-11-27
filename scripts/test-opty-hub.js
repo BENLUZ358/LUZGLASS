@@ -99,5 +99,36 @@ check('not ours: cut day line', H.lgHubDayLine('2026-11-18', true, T), { label: 
 check('not ours: planned tomorrow', H.lgHubDayLine('2026-11-20', false, T).label, '⏳ לחיתוך מחר 20/11');
 check('not ours: no day', H.lgHubDayLine('', false, T).label, '');
 
+// ── סינון חדש (בן 27/11, המועצה) ──
+const mats2 = { '08S': { he: '8 שקוף' }, '05MIR': { he: '5 מראה' }, '08C': { he: '8 אקסטרה קליר' }, '10AC': { he: '10mm חלבי' } };
+check('glass: ours mm+glass', H.lgHubGlass({ mm: 8, glass: 'קליר' }), '8 קליר');
+check('glass: triplex from the name', H.lgHubGlass({ mm: 16, glass: 'שקוף', glassFullName: "8+8 טריפלקס שקוף מחוסם" }), '8+8 שקוף');
+check('glass: only the full name', H.lgHubGlass({ name: "8 מ''מ קליר מחוסם" }), '8 קליר');
+check('glass: OptyWay extra clear = our קליר; חלבי = אסיד; 10mm cleaned', ['08C', '10AC', '08S'].map(c => H.lgHubMatGlass(c, mats2)), ['8 קליר', '10 אסיד', '8 שקוף']);
+const orders2 = orders.map(o => Object.assign({}, o, { items: Array.isArray(o.items) ? o.items.map(it => Object.assign({ mm: Number((it.name.match(/\d+/) || [])[0]), glass: 'שקוף' }, it)) : o.items }));
+orders2[1] = Object.assign({}, orders2[1], { items: { k1: { name: 'שקוף 6', mm: 6, glass: 'שקוף', w: 700, h: 1800 } } });
+const run2 = (q, f, extra) => H.lgHubSearch(Object.assign({ orders: orders2, jobs, todayIso: T, q, f, mats: mats2 }, extra || {}));
+check('glass filter: ours by item glass, also orders not yet in OptyWay', ids(run2('', { glass: ['8 שקוף'] })).sort(), ['a', 'c']);
+check('glass filter: loose by OptyWay material', run2('', { glass: ['5 מראה'] }).loose.map(p => p.client), ['מאור']);
+check('client filter (several)', ids(run2('', { clients: ['טום גלאס', 'פלג מקלחונים'] })).sort(), ['b', 'c']);
+check('client filter on loose uses the paired name', run2('', { clients: ['מאור קבוע'] }, { clientOf: n => n === 'מאור' ? 'מאור קבוע' : n }).loose.length, 1);
+check('size range: width 800–900 → a (850) and c (850)', ids(run2('', { wMin: 800, wMax: 900 })).sort(), ['a', 'c']);
+check('size range marks only the matching glass', run2('', { wMin: 800, wMax: 900 }).orders.find(x => x.o.id === 'a').items.map(r => r.match), [true, false]);
+check('date by cut day: order a cut 18/11 is in 18/11', ids(run2('', { from: '2026-11-18', to: '2026-11-18' })), ['a']);
+check('date by order: order a was ordered 16/11, not 18/11', ids(run2('', { by: 'order', from: '2026-11-18', to: '2026-11-18' })), []);
+check('date by cut: not in OptyWay yet → its order day', ids(run2('', { from: '2026-11-19', to: '2026-11-19' })), ['c']);
+check('state counts in one pass', (r => [r.stateCounts.cut, r.stateCounts.wait])(run2('', {})), [1, 1]);
+check('sort old → new', ids(run2('', { sort: 'old' })), ['b', 'a', 'c']);
+check('totals: units and m²', (r => [r.counts.units, r.counts.m2])(run2('L1235', {})), [2, 2.76]);
+const fc = H.lgHubFacets({ orders: orders2, jobs, todayIso: T, q: '', mats: mats2, f: { glass: ['8 שקוף'] } });
+check('facets: glass counts ignore the glass filter itself', fc.glass.map(x => x.key + ':' + x.n), ['8 שקוף:4', '5 מראה:1', '6 שקוף:1']);
+check('facets: clients counted with the glass filter on', fc.clients.map(x => x.key).sort(), ['אביעד נחום', 'זכוכית הצפון', 'פלג מקלחונים'].sort());
+const tbl = H.lgHubSizeTable(run2('אביעד', {}));
+check('sizes table: per client, sizes merged', tbl.map(g => [g.client, g.units, g.rows.map(r => r.w + 'x' + r.h + ' ' + r.glass + ' ×' + r.qty)]),
+  [['אביעד נחום', 2, ['850x1900 8 שקוף ×1', '600x1900 8 שקוף ×1']]]);
+const tbl2 = H.lgHubSizeTable({ allOrders: [{ o: { orderClient: 'אביבי', sketchName: 's1' }, items: [{ it: { w: 600, h: 800, qty: 2 }, glass: '8 שקוף', st: { tone: 'cut', label: 'נחתך' }, match: true }] },
+  { o: { orderClient: 'אביבי', sketchName: 's2' }, items: [{ it: { w: 600, h: 800, quantity: 3 }, glass: '8 שקוף', st: { tone: 'cut', label: 'נחתך' }, match: true }] }], allLoose: [] });
+check('sizes table: same size twice → one row, quantities added, both sketches', [tbl2[0].rows.length, tbl2[0].rows[0].qty, tbl2[0].rows[0].refs], [1, 5, ['s1', 's2']]);
+
 if (failed) { console.error(`\n${failed} failed`); process.exit(1); }
 console.log('\nall passed');

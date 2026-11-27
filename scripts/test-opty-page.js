@@ -297,9 +297,16 @@ const tick = () => new Promise(r => setTimeout(r, 30));
   for (let i = 0; i < 40 && !ohits().includes('M00404'); i++) await tick();
   check('"לא אצלנו": the last week only, no orders', [ohits().includes('M00402'), ohits().includes('M00404'), ohits().includes('M00403'), doc.querySelectorAll('#hubOut .hord').length], [true, true, false, 0]);
   check('"לא אצלנו": tab and chip selected, count on the tab', [doc.querySelector('[data-tab="loose"]').getAttribute('aria-selected'), doc.getElementById('tMoreLbl').textContent, doc.getElementById('cntLoose').hidden], ['true', 'עוד · לא אצלנו', false]);
-  doc.getElementById('hAll').click();
-  check('"כל התאריכים" brings the older glass too', ohits().includes('M00403'), true);
-  doc.querySelector('[data-hstate="ready"]').click();
+  //  סינון חדש (בן 27/11): חלון תאריך → "הכל" → "הצג"
+  doc.querySelector('[data-fsheet="date"]').click();
+  doc.querySelector('[data-dpre="all"]').click();
+  doc.getElementById('fShApply').click();
+  check('"הכל" in the date window brings the older glass too', ohits().includes('M00403'), true);
+  check('date button says what is chosen', doc.querySelector('[data-fsheet="date"]').textContent.includes('הכל'), true);
+  //  חלון מצב → "מוכן / נאסף" → "הצג"
+  doc.querySelector('[data-fsheet="state"]').click();
+  const rdy = doc.querySelector('#fShBody input[name="fst"][value="ready"]'); rdy.checked = true; rdy.dispatchEvent(new w.Event('change', { bubbles: true }));
+  doc.getElementById('fShApply').click();
   check('state filter "מוכן": only the ready glass', [...doc.querySelectorAll('#hubOut [data-ohit] .pill')].map(x => x.textContent.trim()).every(t => /מוכן/.test(t)), true);
 
   if (failed) { console.error(`\n${failed} failed`); process.exit(1); } else console.log('\nall passed');
