@@ -297,7 +297,7 @@ async function lgWaPending(db, limit, base) {
 //  הדילוג "כבר נשלחה הודעת מוכן לאיסוף".
 //  'sketches-received' (מרכזן, 10/11) — לעולם לא 'whatsapp': זה השדה של "מוכן לאיסוף"
 const _LG_WA_STAMP = { dispatched: 'whatsappDispatch', 'sketches-handled': 'sketchAck', invoice: 'whatsappInvoice',
-                       'sketches-received': 'intakeAck' };
+                       'sketches-received': 'intakeAck', 'sketches-only': 'sketchesOnlyWa' };
 function lgWaStampField(kind) { return _LG_WA_STAMP[kind] || 'whatsapp'; }
 
 module.exports = {

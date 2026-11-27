@@ -128,6 +128,11 @@ ${BUSINESS}`;
   if (kind === 'agent-alarm') return extra.join('\n');
   //  הודעה כללית ללקוח פורטל (בן, 24/11) — השורות כמו שהן, כולל שורות ריקות בין פסקאות
   if (kind === 'notice') return (extraLines || []).map(s => String(s == null ? '' : s)).join('\n').trim();
+  //  סקיצות בלי חשבונית (בן, 27/11): רק הרשימה — שם הסקיצה, או מספר ההזמנה כשאין שם
+  if (kind === 'sketches-only') {
+    const head = extra.length === 1 ? 'הסקיצה של ההזמנה שסופקה לך:' : 'הסקיצות של ההזמנות שסופקו לך:';
+    return `שלום ${who},\n\n${head}\n` + extra.map((s, i) => (i + 1) + '. ' + s).join('\n') + `\n\n${BUSINESS}`;
+  }
   if (kind === 'broken-returned') {
     const doc = docNumber ? ' (חשבונית ' + String(docNumber) + ')' : '';
     return `שלום ${who},\n\n${extra.join('\n')}\nהחשבונית כבר יצאה על כל ההזמנה${doc}.\n\n${BUSINESS}`;

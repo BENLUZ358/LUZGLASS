@@ -43,6 +43,8 @@ html,body{height:100%;overflow:hidden;}
 .tb-btn:hover{border-color:var(--gold);}
 .tb-title{flex:1;min-width:0;font-size:var(--fs-lg);font-weight:var(--fw-black);}
 .tb-title small{display:block;font-size:var(--fs-xs);font-weight:var(--fw-medium);color:var(--muted);}
+.gate-sk{margin-top:var(--space-2);}
+.gate-sk.is-busy{opacity:.55;pointer-events:none;}
 #btnBack,#btnCustomers{display:none;}
 
 /* ── שלוש העמודות ───────────────────────────────────────────────────────── */
@@ -264,6 +266,12 @@ html,body{height:100%;overflow:hidden;}
   .v-num{font-size:var(--fs-xl);}
   .item-dim{font-size:22px;}
   .tb-title small{display:none;}
+  /* בן 27/11: הכותרת נדחסה לאות בכל שורה — בטלפון: חץ + כותרת בשורה אחת, הכפתורים בשורה מתחת */
+  .topbar{flex-wrap:wrap;row-gap:var(--space-2);padding-bottom:var(--space-2);}
+  .tb-title{flex:1 1 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  /* שבירת שורה קבועה: חזרה+כותרת למעלה, שלושת הכפתורים תמיד בשורה משלהם */
+  .topbar::after{content:'';flex-basis:100%;height:0;order:2;}
+  #btnPrints,#btnCorr,#btnArchive{order:3;flex:1 1 0;min-width:0;padding:0 var(--space-2);font-size:13px;white-space:nowrap;}
 }
 @media (prefers-reduced-motion: reduce){
   .ord.is-changed{animation:none;}
@@ -530,7 +538,28 @@ function renderOrders() {
            ? (c.verified === 1 ? "הזמנה אחת מאומתת" : c.verified + " הזמנות מאומתות") + " — תבחר בחלון אילו להכניס. " + (c.open === 1 ? "הזמנה אחת שעוד לא אומתה נשארת" : c.open + " שעוד לא אומתו נשארות") + " לחשבונית הבאה."
            : (c.verified === 1 ? "ההזמנה אומתה" : "כל " + c.verified + " ההזמנות אומתו")}</div>`
       : `<button class="btn btn-secondary gate-btn" type="button" aria-disabled="true" aria-describedby="gateWhy"><span data-icon="lock"></span>הפק חשבונית בחשבשבת</button>
-         <div class="gate-note" id="gateWhy">${c.open === 1 ? "אמת לפחות הזמנה אחת כדי להפיק חשבונית" : "אמת לפחות הזמנה אחת מתוך " + c.open + " כדי להפיק חשבונית"}</div>`}`;
+         <div class="gate-note" id="gateWhy">${c.open === 1 ? "אמת לפחות הזמנה אחת כדי להפיק חשבונית" : "אמת לפחות הזמנה אחת מתוך " + c.open + " כדי להפיק חשבונית"}</div>`}
+    <button class="btn btn-secondary gate-btn gate-sk" id="skOnlyBtn" type="button"><span data-icon="image"></span>שלח סקיצות בלי חשבונית</button>`;
+}
+//  סקיצות בלי חשבונית (בן, 27/11): "הוא רוצה לדעת מה מגיע לו" — כל ההזמנות של הלקוח שבמסך,
+//  קובץ אחד עם הסקיצות + השמות בהודעה, לאן שיוצאות החשבוניות. לא משנה כלום בחשבונית.
+let _skBusy = false;
+async function sendSketchesOnly() {
+  const g = selKey && groupOf(selKey); if (!g || _skBusy) return;
+  const ords = g.ords.filter(o => lgInvoiceState(o) !== 'invoiced');
+  if (!ords.length) { toast('אין הזמנות לשלוח', true); return; }
+  const names = ords.map((o, i) => (i + 1) + '. ' + (o.sketchName || o.orderNum || o.id)).join('\n');
+  if (!confirm('לשלוח ל' + g.name + ' בוואטסאפ את הסקיצות של ' + (ords.length === 1 ? 'הזמנה אחת' : ords.length + ' הזמנות') + ', בלי חשבונית?\n\n' + names)) return;
+  _skBusy = true; const b = $('skOnlyBtn'); if (b) b.classList.add('is-busy');
+  try {
+    const r = await _lgAuthPost('/api/whatsapp-dispatch', { kind: 'sketches-only', orderIds: ords.map(o => String(o.id)), dryRun: false });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || d.reason || ('שגיאה ' + r.status));
+    toast(d.state === 'sent' ? '✓ הסקיצות נשלחו ל' + g.name
+        : d.state === 'already' ? 'כבר נשלח עכשיו — אפשר לשלוח שוב בעוד דקה'
+        : 'הסקיצות בתור לשליחה' + (d.reason ? ' — ' + d.reason : ''));
+  } catch (e) { toast('✗ לא נשלח: ' + (e.message || ''), true); }
+  finally { _skBusy = false; const b2 = $('skOnlyBtn'); if (b2) b2.classList.remove('is-busy'); }
 }
 $('ordList').addEventListener('click', e => {
   const b = e.target.closest('.ord'); if (!b) return;
@@ -540,7 +569,8 @@ $('ordList').addEventListener('click', e => {
   if (!isNarrow()) $('pVerify').focus({ preventScroll: true });
 });
 $('gate').addEventListener('click', e => {
-  if (e.target.closest('#gateBtn')) openInvoiceModal();
+  if (e.target.closest('#skOnlyBtn')) sendSketchesOnly();
+  else if (e.target.closest('#gateBtn')) openInvoiceModal();
   else if (e.target.closest('[aria-disabled="true"]')) toast('קודם מאמתים את כל ההזמנות של הלקוח');
 });
 

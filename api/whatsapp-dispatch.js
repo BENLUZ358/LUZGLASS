@@ -111,6 +111,20 @@ module.exports = async function handler(req, res, deps) {
     return;
   }
 
+  //  סקיצות בלי חשבונית (בן, 27/11) — מתחנת החשבוניות, לנמען החשבוניות
+  if (body.kind === 'sketches-only') {
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT && !(deps && deps.db)) { res.status(500).json({ error: 'server not configured' }); return; }
+    try {
+      const db = (deps && deps.db) || _db();
+      const r = await require('./_sketches-only').lgSketchesOnlyNotify(db, orderIds, deps);
+      res.status(r.state === 'blocked' ? 409 : 200).json({ ok: r.state !== 'blocked', ...r, error: r.state === 'blocked' ? r.reason : undefined });
+    } catch (e) {
+      console.error('sketches-only:', e && e.name);
+      res.status(500).json({ error: 'שגיאה בשליחה' });
+    }
+    return;
+  }
+
   if (!orderIds.length)             { res.status(400).json({ error: 'orderIds חסר' }); return; }
   if (orderIds.length > MAX_ORDERS) { res.status(400).json({ error: `יותר מדי הזמנות (מקסימום ${MAX_ORDERS})` }); return; }
   if (!process.env.FIREBASE_SERVICE_ACCOUNT && !(deps && deps.db)) {

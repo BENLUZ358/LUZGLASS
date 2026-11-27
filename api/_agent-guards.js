@@ -125,7 +125,7 @@ function lgGuardResendOk(row, now) {
 }
 
 const WA_LABEL = { ready: '"מוכן"', dispatched: '"ההובלה"', 'sketches-handled': '"הסקיצות טופלו"', 'sketches-received': '"נקלטו"',
-                   'broken-returned': '"פריט חזר מחיסום"' };
+                   'broken-returned': '"פריט חזר מחיסום"', 'sketches-only': '"סקיצות בלי חשבונית"' };
 const _label = r => (r && r.kind === 'sketches-handled' && r.variant === 'po' ? 'אישור הזמנת רכש' : WA_LABEL[r && r.kind] || 'הודעה');
 const _who = r => {
   const c = _s(r && r.clientName, 60), n = _list(r && r.orderNums).slice(0, 3).map(x => _s(x, 20)).join(', ');

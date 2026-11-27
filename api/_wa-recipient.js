@@ -259,7 +259,8 @@ async function resolveRecipientWa(db, order, kind) {
   }
   const r = await _resolveWa(db, order);
   //  'broken-returned' (בן, 10/11) — הולך לאן שהולכות החשבוניות
-  const priv = (kind === 'invoice' || kind === 'broken-returned') && r.linked && r.accountKey
+  //  'sketches-only' (בן, 27/11) — סקיצות בלי חשבונית, לאותו מקום
+  const priv = (kind === 'invoice' || kind === 'broken-returned' || kind === 'sketches-only') && r.linked && r.accountKey
     ? await _invoicePrivateRec(db, r.accountKey) : null;
   if (priv) {
     let phone = norm(priv.phone);

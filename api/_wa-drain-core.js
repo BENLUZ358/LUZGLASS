@@ -66,6 +66,21 @@ async function _sendInvoice(db, provider, to, entry) {
   }
 }
 
+//  סקיצות בלי חשבונית (בן, 27/11) — הקובץ נבנה עכשיו מהסקיצות, כמו החשבונית
+async function _sendSketchesOnly(db, provider, to, entry) {
+  if (typeof provider.sendFiles !== 'function') {
+    return { ok: false, failureKind: 'other', reason: 'הספק הנוכחי לא שולח קבצים — הסקיצות לא נשלחו' };
+  }
+  try {
+    const f = await require('./_sketches-only').lgSketchesOnlyFiles(db, entry.orderIds || [], entry.clientName);
+    if (!f.ok) return { ok: false, failureKind: 'other', reason: 'אין סקיצות לשלוח (' + f.code + ')' };
+    return await provider.sendFiles({ to, kind: 'sketches-only', clientName: entry.clientName, orderNums: entry.orderNums,
+                                      sketchNames: entry.sketchNames || [], extraLines: entry.extraLines || [], files: f.files });
+  } catch (e) {
+    return { ok: false, failureKind: 'other', reason: 'חריגה בשליחת הסקיצות (' + (e && e.name) + ')' };
+  }
+}
+
 //  "הסקיצות טופלו" על הזמנות מזגאגי (בן, 1/11): הזגג לא שלח לנו כלום בוואטסאפ,
 //  ולכן התמונות עצמן הן התיעוד שם. רק כשכל ההזמנות בהודעה מזגאגי וכל התמונות
 //  קריאות; אחרת null → הטקסט הרגיל, כמו היום (לא נתקעים בגלל תמונה).
@@ -179,6 +194,13 @@ async function drainKeys(db, provider, keys, by, started, budgetMs = BUDGET_MS) 
 
     let firstId = (entry.orderIds || [])[0];
     let order   = firstId ? (await db.ref('orders/' + firstId).once('value')).val() : null;
+    //  סקיצות בלי חשבונית — הנמען לפי הזמנת וואטסאפ, כמו בהכנסה לתור (_sketches-only._pick)
+    if (entry.kind === 'sketches-only' && !(order && order.source === 'whatsapp')) {
+      for (const id of (entry.orderIds || []).slice(1)) {
+        const o = (await db.ref('orders/' + id).once('value')).val();
+        if (o && o.source === 'whatsapp') { firstId = id; order = o; break; }
+      }
+    }
     if (entry.kind === 'invoice' && !(order && order.source === 'manual')) {
       for (const id of (entry.orderIds || []).slice(1)) {
         const o = (await db.ref('orders/' + id).once('value')).val();
@@ -227,6 +249,7 @@ async function drainKeys(db, provider, keys, by, started, budgetMs = BUDGET_MS) 
 
     const zgFiles = entry.kind === 'sketches-handled' ? await _zgagiAckFiles(db, provider, entry) : null;
     const out = entry.kind === 'invoice' ? await _sendInvoice(db, provider, live.phone, entry)
+      : entry.kind === 'sketches-only' ? await _sendSketchesOnly(db, provider, live.phone, entry)
       : zgFiles ? await provider.sendFiles({ to: live.phone, kind: entry.kind, clientName: entry.clientName,
                                              orderNums: entry.orderNums, sketchNames: entry.sketchNames || [], files: zgFiles })
       : await provider.send({
