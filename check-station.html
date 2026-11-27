@@ -428,7 +428,7 @@ let wdCsNew={}, csHeld=[];
 // מתי יובאה כל הזמנה לתחנה (workday/csBatch/<id> = רגע הייבוא). ייבוא אחד = משלוח אחד.
 // "שלח למפעל" שואל אם בדוח יש הזמנות משני ייבואים שונים (בן, 19/11).
 let wdCsBatch={};
-let _csUnsub=null, _wdRef=null, _checkEditsRef=null;
+let _csUnsub=null, _wdRef=null, _checkEditsRef=null, _csSkSeq=0;
 let _wdReady=false, _ordersReady=false; // דגלי טעינה — מונעים render לפני שהכל מוכן
 let _sendingToFactory=false; // מונע double-tap על "שלח למפעל"
 let _csGlobalPrices={}, _csClientPrices={}; // לנעילת מחיר במעבר ל-done (lgLockAndAdvance)
@@ -919,6 +919,14 @@ function goBack(){ cur=null; curReadOnly=false; hideBanner(); showList(); }
 // SELECT ORDER
 // מאזין לציור הבדיקה של הזמנה אחת. מתחלף בכל פתיחת סקיצה ומתנתק ביציאה
 // לרשימה, כדי שלא יישארו מאזינים פתוחים אחרי עשרים סקיצות.
+//  עותק מקומי של ציורי הבדיקה (גיבוי כשאין רשת). 25 ציורים ≈ 7MB — יותר ממה שהדפדפן
+//  מחזיק (~5MB). כשהשמירה נכשלה העותק הישן נשאר והוצג במקום העריכה החדשה (בן 27/11).
+//  עכשיו: לא נכנס — מוחקים את העותק, ולא מציגים ציור ישן.
+function _csStoreEdits(obj){
+  //  ישירות ל-localStorage: safeStorage בולע את השגיאה ומשאיר בדפדפן את העותק הישן
+  try{ localStorage.setItem('lgCSEdits', JSON.stringify(obj||{})); }
+  catch(e){ try{ localStorage.removeItem('lgCSEdits'); }catch(_){} }
+}
 function _csWatchEdits(id){
   if(_checkEditsRef){
     firebase.database().ref('checkEdits/' + _checkEditsRef.id).off('value', _checkEditsRef.fn);
@@ -930,7 +938,7 @@ function _csWatchEdits(id){
     if(val) window._csCheckEdits[String(id)] = val;
     else    delete window._csCheckEdits[String(id)];
     // ה-fallback ב-localStorage נשאר, אבל רק להזמנות שנפתחו — לא לכולן
-    try{ safeStorage.setItem('lgCSEdits', JSON.stringify(window._csCheckEdits)); }catch(e){}
+    _csStoreEdits(window._csCheckEdits);
     if(cur && String(cur.id) === String(id)) renderSketch();
   }, err => console.error('[CS] checkEdits listener failed:', err)); // לא חוסם עבודה — רק ציורי בדיקה
   _checkEditsRef = { id: String(id), fn };
@@ -1015,18 +1023,25 @@ function renderSketch(){
   const liveEdited = (window._csCheckEdits||{})[String(cur.id)] || cur._editedSketch || null;
   if(liveEdited && liveEdited !== cur._editedSketch) cur._editedSketch = liveEdited;
   const readOnly=curReadOnly;
+  //  בן 27/11: "שמרתי עריכה ולפעמים לא רואים אותה, רק כשנכנסים לעריכה". שתי קריאות
+  //  שרצות זו אחר זו (ציור ישן → ציור מהענן) — הטעינה האיטית שנגמרה אחרונה דרסה את
+  //  החדשה. עכשיו רק הקריאה האחרונה מציירת, והעריכה נלקחת ברגע הציור, לא ברגע הקריאה.
+  const seq = ++_csSkSeq, want=String(cur.id);
+  const editedNow = () => (window._csCheckEdits||{})[want] || (cur && cur._editedSketch) || null;
   if(liveEdited || lgHasSketch(cur)){
     // המקור נטען דרך השכבה. הזמנה עם עותק בזיכרון — מיד (microtask), כמו
     // קודם; הזמנת WhatsApp — מהצומת. אם המשתמש עבר הזמנה בינתיים, נזרק.
-    const o=cur, want=String(cur.id);
+    const o=cur;
     lgLoadSketch(o).then(orig=>{
-      if(!cur || String(cur.id)!==want) return;
-      if(liveEdited) _showSketchImg(el, liveEdited, orig, readOnly);   // עריכה, עם fallback למקור
-      else if(orig)  _showSketchImg(el, orig, null, readOnly);         // המקור בלבד
+      if(seq!==_csSkSeq || !cur || String(cur.id)!==want) return;
+      const ed = editedNow();
+      if(ed)        _showSketchImg(el, ed, orig, readOnly);    // עריכה, עם fallback למקור
+      else if(orig) _showSketchImg(el, orig, null, readOnly);  // המקור בלבד
       else { el.innerHTML=buildSVG(o, readOnly); if(!readOnly) _attachSVGTouchHandlers(el); }
     }).catch(()=>{
-      if(!cur || String(cur.id)!==want) return;
-      if(liveEdited) _showSketchImg(el, liveEdited, null, readOnly);
+      if(seq!==_csSkSeq || !cur || String(cur.id)!==want) return;
+      const ed = editedNow();
+      if(ed) _showSketchImg(el, ed, null, readOnly);
       else { el.innerHTML=buildSVG(o, readOnly); if(!readOnly) _attachSVGTouchHandlers(el); }
     });
   } else {
@@ -1584,7 +1599,7 @@ async function edSave(newSrc){
   try{
     const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
     s[savedId]=newSrc;
-    safeStorage.setItem('lgCSEdits',JSON.stringify(s));
+    _csStoreEdits(s);   // לא נכנס → העותק נמחק, ולא נשאר הציור הקודם של אותה הזמנה
   }catch(e){}
   renderSketch();
   goBack();   // "שמור" מחזיר ישר לרשימת ההזמנות (בן, 20/10) — לא נשארים ליד "סיים סקיצה"
@@ -1607,7 +1622,7 @@ function _clearCSEditsForOrders(ids){
   try{
     const s=JSON.parse(safeStorage.getItem('lgCSEdits')||'{}');
     ids.forEach(id=>{ delete s[String(id)]; });
-    safeStorage.setItem('lgCSEdits',JSON.stringify(s));
+    _csStoreEdits(s);
   }catch(e){}
 }
 
