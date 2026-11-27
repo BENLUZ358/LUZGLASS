@@ -116,7 +116,9 @@ module.exports = async function handler(req, res, deps) {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT && !(deps && deps.db)) { res.status(500).json({ error: 'server not configured' }); return; }
     try {
       const db = (deps && deps.db) || _db();
-      const r = await require('./_sketches-only').lgSketchesOnlyNotify(db, orderIds, deps);
+      //  preview — רק הנוסח (בן: "שיראה לי מה ההודעה שתשלח"); caption — הנוסח אחרי עריכה
+      const r = await require('./_sketches-only').lgSketchesOnlyNotify(db, orderIds,
+        { ...(deps || {}), preview: body.preview === true, caption: typeof body.caption === 'string' ? body.caption : undefined });
       res.status(r.state === 'blocked' ? 409 : 200).json({ ok: r.state !== 'blocked', ...r, error: r.state === 'blocked' ? r.reason : undefined });
     } catch (e) {
       console.error('sketches-only:', e && e.name);

@@ -69,7 +69,7 @@ function lgWaMsgKey(kind, orderIds) {
 //  **דרך מה** נמצא המספר. בחקירת L9005 בדיוק המידע הזה היה חסר.
 async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, orderIds,
                                  queuedBy, phoneSource, accountKey, invoiceKey, docNumber, deliveryTomorrow,
-                                 missingSketchNums, extraLines, keySuffix, retryExhausted }) {
+                                 missingSketchNums, extraLines, keySuffix, retryExhausted, caption }) {
   //  חשבונית: אותה הזמנה יכולה להיות בשתי חשבוניות (חלקית, בן 2/11) — המסמך במפתח
   //  שבר שחזר (בן, 10/11): מפתח לכל פריט — keySuffix = מספר הפריט
   //  "שלח שוב" מהלוח (בן, 19/11): חשבונית + keySuffix = מפתח חדש לאותו מסמך
@@ -110,6 +110,8 @@ async function lgWaEnqueue(db, { kind, to, clientName, orderNums, sketchNames, o
       missingSketchNums: (missingSketchNums || []).map(String),
       //  שבר בחיסום (בן, 10/11) — שורות מוכנות להודעה (api/_broken.js)
       extraLines: (extraLines || []).map(String),
+      //  נוסח חופשי שאדמין ערך לפני השליחה (סקיצות בלי חשבונית, בן 27/11) — גובר על renderText
+      caption: typeof caption === 'string' && caption ? caption : null,
       claimedAt: null, claimedBy: null, sentAt: null,
       messageId: null, lastError: null, httpStatus: null,
     };

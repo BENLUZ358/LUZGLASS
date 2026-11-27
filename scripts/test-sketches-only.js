@@ -100,6 +100,16 @@ check('stamp field is not "whatsapp" (that is the ready stamp)', lgWaStampField(
   check('break line queued', qd.extraLines.length === 1 && qd.extraLines[0].includes('L2001 (דנה)') && qd.extraLines[0].includes('800×1900'), true);
   check('double press in the same minute = one message', (await SO.lgSketchesOnlyNotify(db, ['a', 'b', 'c'], deps)).state, 'already');
   check('a minute later = explicit resend', (await SO.lgSketchesOnlyNotify(db, ['a', 'b', 'c'], { ...deps, now: deps.now + 60000 })).state, 'sent');
+  //  תצוגה מקדימה + עריכה (בן 27/11)
+  const before = Object.keys(db.data.waOutbox).length;
+  const pv = await SO.lgSketchesOnlyNotify(db, ['a', 'b', 'c'], { ...deps, preview: true });
+  check('preview returns the exact text', [pv.state, pv.text.includes('1. נוי\n2. רותי\n3. L1357'), pv.text.includes('החשבונית עוד לא יצאה')], ['preview', true, true]);
+  check('preview names orders with no sketch', pv.noSketch, ['L1357']);
+  check('preview queues nothing', Object.keys(db.data.waOutbox).length, before);
+  const ed = await SO.lgSketchesOnlyNotify(db, ['a', 'b'], { ...deps, now: deps.now + 7 * 60000, caption: '  שלום שי, הנה הסקיצות  ' });
+  check('edited text is queued as the caption', db.data.waOutbox[ed.key].caption, 'שלום שי, הנה הסקיצות');
+  const plain = await SO.lgSketchesOnlyNotify(db, ['a', 'b'], { ...deps, now: deps.now + 8 * 60000, caption: '   ' });
+  check('empty edit → fixed wording (no caption)', db.data.waOutbox[plain.key].caption, null);
   check('mixed cards blocked', (await SO.lgSketchesOnlyNotify(db, ['a', 'x'], deps)).state, 'blocked');
   check('test order blocked', (await SO.lgSketchesOnlyNotify(db, ['a', 't'], deps)).state, 'blocked');
   check('missing order blocked', (await SO.lgSketchesOnlyNotify(db, ['a', 'zz'], deps)).state, 'blocked');
@@ -130,6 +140,11 @@ check('stamp field is not "whatsapp" (that is the ready stamp)', lgWaStampField(
   check('drain sends to the invoice-private number (resolved from the WhatsApp order)', sentTo, ['0501112222']);
   check('provider got the PDF', sentFacts[0] && sentFacts[0].files.map(f => f.mime), ['application/pdf']);
   check('provider kind', sentFacts[0] && sentFacts[0].kind, 'sketches-only');
+  check('no edit → provider renders the fixed wording', sentFacts[0] && sentFacts[0].caption, undefined);
+  const e2 = await lgWaEnqueue(db2, { kind: 'sketches-only', to: '0501112222', clientName: 'המקום לאמבט', orderIds: ['a', 'b'],
+    orderNums: ['L1353', 'L1356'], sketchNames: ['נוי', 'רותי'], keySuffix: 'm2', caption: 'נוסח של בן' });
+  await D.drainKeys(db2, provider, [e2.key], 'test', Date.now());
+  check('edited wording reaches the provider as the caption', sentFacts[1] && sentFacts[1].caption, 'נוסח של בן');
   check('stamp written to sketchesOnlyWa, not "whatsapp"', [!!db2.data.orders.a.sketchesOnlyWa, db2.data.orders.a.whatsapp === undefined], [true, true]);
 
   console.log(fail ? '\n' + fail + ' FAILED' : '\nall passed');

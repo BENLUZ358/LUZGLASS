@@ -66,15 +66,31 @@ async function lgSketchesOnlyNotify(db, orderIds, deps) {
   if (!who.phone) return { state: 'blocked', reason: who.source === 'invoice-private-missing'
     ? 'סומן "חשבוניות לפרטי" אבל אין מספר פרטי בכרטיס הלקוח' : 'אין נמען בוואטסאפ ללקוח' };
 
-  const { lgWaEnqueue } = require('./_wa-outbox');
-  const q = await lgWaEnqueue(db, {
-    kind: 'sketches-only', to: who.phone, phoneSource: who.source, accountKey: who.accountKey,
-    clientName: orders[0].orderClient || '', orderIds: ids,
+  const facts = {
+    kind: 'sketches-only', clientName: orders[0].orderClient || '',
     orderNums: orders.map(o => String(o.orderNum || o.id)), sketchNames: orders.map(o => String(o.sketchName || '')),
     //  שבר בחיסום שעוד לא חזר — נאמר בהודעה, כמו בחשבונית
-    extraLines: require('./_broken').brokenInvoiceLines(orders), queuedBy: 'sketches-only',
+    extraLines: require('./_broken').brokenInvoiceLines(orders),
     //  לקוח הובלות → "ההזמנות שאמורות להגיע אליך בהובלה הבאה" (אותה הכרעה כמו בחשבונית)
     deliveryTomorrow: await require('./_invoice-deliver').lgIsDeliveryInvoice(db, orders, who.accountKey),
+  };
+
+  //  תצוגה מקדימה (בן, 27/11): "שיראה לי מה ההודעה שתשלח" — הנוסח בדיוק כמו שייצא,
+  //  ואילו הזמנות בלי סקיצה (לא ייכנסו לקובץ). לא נכנס כלום לתור.
+  if (d.preview) {
+    const { _sketch } = require('./_invoice-deliver');
+    const noSketch = [];
+    for (const o of orders) if (!(await _sketch(db, o.id))) noSketch.push(_name(o));
+    return { state: 'preview', text: require('./_wa-provider').renderText(facts), noSketch,
+             recipient: who.source === 'invoice-private' ? 'המספר הפרטי לחשבוניות' : who.source === 'group' ? 'קבוצת הוואטסאפ של הלקוח' : 'הוואטסאפ של הלקוח' };
+  }
+  //  נוסח שבן ערך בחלון — יוצא במקום הנוסח הקבוע (ריק = הנוסח הקבוע)
+  const caption = typeof d.caption === 'string' && d.caption.trim() ? d.caption.trim().slice(0, 4000) : null;
+
+  const { lgWaEnqueue } = require('./_wa-outbox');
+  const q = await lgWaEnqueue(db, {
+    ...facts, to: who.phone, phoneSource: who.source, accountKey: who.accountKey,
+    orderIds: ids, queuedBy: 'sketches-only', caption,
     //  לחיצה כפולה באותה דקה = הודעה אחת; לחיצה מאוחרת יותר = שליחה חוזרת מפורשת
     keySuffix: 'm' + Math.floor(now / 60000),
   });

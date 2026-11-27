@@ -76,7 +76,8 @@ async function _sendSketchesOnly(db, provider, to, entry) {
     if (!f.ok) return { ok: false, failureKind: 'other', reason: 'אין סקיצות לשלוח (' + f.code + ')' };
     return await provider.sendFiles({ to, kind: 'sketches-only', clientName: entry.clientName, orderNums: entry.orderNums,
                                       sketchNames: entry.sketchNames || [], extraLines: entry.extraLines || [],
-                                      deliveryTomorrow: entry.deliveryTomorrow === true, files: f.files });
+                                      deliveryTomorrow: entry.deliveryTomorrow === true, files: f.files,
+                                      ...(typeof entry.caption === 'string' && entry.caption ? { caption: entry.caption } : {}) });
   } catch (e) {
     return { ok: false, failureKind: 'other', reason: 'חריגה בשליחת הסקיצות (' + (e && e.name) + ')' };
   }

@@ -543,23 +543,50 @@ function renderOrders() {
 }
 //  סקיצות בלי חשבונית (בן, 27/11): "הוא רוצה לדעת מה מגיע לו" — כל ההזמנות של הלקוח שבמסך,
 //  קובץ אחד עם הסקיצות + השמות בהודעה, לאן שיוצאות החשבוניות. לא משנה כלום בחשבונית.
+//  בן 27/11: לפני השליחה — חלון עם ההודעה בדיוק כמו שתצא, ואפשר לערוך אותה.
 let _skBusy = false;
 async function sendSketchesOnly() {
   const g = selKey && groupOf(selKey); if (!g || _skBusy) return;
   const ords = g.ords.filter(o => lgInvoiceState(o) !== 'invoiced');
   if (!ords.length) { toast('אין הזמנות לשלוח', true); return; }
-  const names = ords.map((o, i) => (i + 1) + '. ' + (o.sketchName || o.orderNum || o.id)).join('\n');
-  if (!confirm('לשלוח ל' + g.name + ' בוואטסאפ את הסקיצות של ' + (ords.length === 1 ? 'הזמנה אחת' : ords.length + ' הזמנות') + ', בלי חשבונית?\n\n' + names)) return;
+  const ids = ords.map(o => String(o.id));
   _skBusy = true; const b = $('skOnlyBtn'); if (b) b.classList.add('is-busy');
+  let pv;
   try {
-    const r = await _lgAuthPost('/api/whatsapp-dispatch', { kind: 'sketches-only', orderIds: ords.map(o => String(o.id)), dryRun: false });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok || !d.ok) throw new Error(d.error || d.reason || ('שגיאה ' + r.status));
-    toast(d.state === 'sent' ? '✓ הסקיצות נשלחו ל' + g.name
-        : d.state === 'already' ? 'כבר נשלח עכשיו — אפשר לשלוח שוב בעוד דקה'
-        : 'הסקיצות בתור לשליחה' + (d.reason ? ' — ' + d.reason : ''));
-  } catch (e) { toast('✗ לא נשלח: ' + (e.message || ''), true); }
+    const r = await _lgAuthPost('/api/whatsapp-dispatch', { kind: 'sketches-only', orderIds: ids, preview: true });
+    pv = await r.json().catch(() => ({}));
+    if (!r.ok || !pv.ok || pv.state !== 'preview') throw new Error(pv.error || pv.reason || ('שגיאה ' + r.status));
+  } catch (e) { toast('✗ לא ניתן להכין את ההודעה: ' + (e.message || ''), true); return; }
   finally { _skBusy = false; const b2 = $('skOnlyBtn'); if (b2) b2.classList.remove('is-busy'); }
+  const orig = String(pv.text || '');
+  openModal(`<div class="modal-in">
+    <h3 id="ovTitle">סקיצות בלי חשבונית · ${esc(g.name)}</h3>
+    <div class="sub">${ords.length === 1 ? 'הזמנה אחת' : ords.length + ' הזמנות'} · יישלח ל${esc(pv.recipient || 'וואטסאפ של הלקוח')}, עם קובץ הסקיצות</div>
+    ${(pv.noSketch || []).length ? `<div class="banner banner-red" style="margin-bottom:var(--space-3)"><span>בלי סקיצה (לא ייכנסו לקובץ): ${esc(pv.noSketch.join(', '))}</span></div>` : ''}
+    <div class="field"><label for="skText">ההודעה שתישלח — אפשר לערוך</label>
+      <textarea id="skText" rows="12" maxlength="4000" style="width:100%;font:inherit;font-size:16px;line-height:1.5;padding:var(--space-3);border:1px solid var(--border);border-radius:var(--radius);resize:vertical"></textarea>
+      <div class="field-msg"><button type="button" class="btn btn-ghost" id="skReset" style="min-height:36px;padding:0 var(--space-2)">החזר לנוסח המקורי</button></div></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="skSend" type="button"><span data-icon="image"></span>שלח</button>
+      <button class="btn btn-ghost" type="button" data-close>ביטול</button></div></div>`);
+  const ta = $('skText'); ta.value = orig;
+  $('skReset').onclick = () => { ta.value = orig; ta.focus(); };
+  $('skSend').onclick = async () => {
+    const text = ta.value.trim();
+    if (!text) { toast('ההודעה ריקה', true); ta.focus(); return; }
+    const sendBtn = $('skSend'); sendBtn.disabled = true; sendBtn.textContent = 'שולח…';
+    try {
+      const body = { kind: 'sketches-only', orderIds: ids, dryRun: false };
+      if (text !== orig.trim()) body.caption = text;   // ערוך — יוצא הנוסח של בן
+      const r = await _lgAuthPost('/api/whatsapp-dispatch', body);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.ok) throw new Error(d.error || d.reason || ('שגיאה ' + r.status));
+      closeModal();
+      toast(d.state === 'sent' ? '✓ הסקיצות נשלחו ל' + g.name
+          : d.state === 'already' ? 'כבר נשלח עכשיו — אפשר לשלוח שוב בעוד דקה'
+          : 'הסקיצות בתור לשליחה' + (d.reason ? ' — ' + d.reason : ''));
+    } catch (e) { sendBtn.disabled = false; sendBtn.textContent = 'שלח'; toast('✗ לא נשלח: ' + (e.message || ''), true); }
+  };
 }
 $('ordList').addEventListener('click', e => {
   const b = e.target.closest('.ord'); if (!b) return;
