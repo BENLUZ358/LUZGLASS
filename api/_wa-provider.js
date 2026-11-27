@@ -128,10 +128,18 @@ ${BUSINESS}`;
   if (kind === 'agent-alarm') return extra.join('\n');
   //  הודעה כללית ללקוח פורטל (בן, 24/11) — השורות כמו שהן, כולל שורות ריקות בין פסקאות
   if (kind === 'notice') return (extraLines || []).map(s => String(s == null ? '' : s)).join('\n').trim();
-  //  סקיצות בלי חשבונית (בן, 27/11): רק הרשימה — שם הסקיצה, או מספר ההזמנה כשאין שם
+  //  סקיצות בלי חשבונית (בן, 27/11): הרשימה — שם הסקיצה, או מספר ההזמנה כשאין שם.
+  //  לקוח הובלות → "בהובלה הבאה"; שבר בחיסום → "שימו לב" (extraLines מ-_broken.js);
+  //  ותמיד שהחשבונית עוד לא יצאה ותישלח בקרוב.
   if (kind === 'sketches-only') {
-    const head = extra.length === 1 ? 'הסקיצה של ההזמנה שסופקה לך:' : 'הסקיצות של ההזמנות שסופקו לך:';
-    return `שלום ${who},\n\n${head}\n` + extra.map((s, i) => (i + 1) + '. ' + s).join('\n') + `\n\n${BUSINESS}`;
+    const items = (orderNums || []).map((x, i) => String((sketchNames || [])[i] || '').trim() || String(x || '')).filter(Boolean);
+    const single = items.length === 1;
+    const head = deliveryTomorrow
+      ? (single ? 'ההזמנה שאמורה להגיע אליך בהובלה הבאה:' : 'ההזמנות שאמורות להגיע אליך בהובלה הבאה:')
+      : (single ? 'הסקיצה של ההזמנה שסופקה לך:' : 'הסקיצות של ההזמנות שסופקו לך:');
+    const broken = extra.length ? '\n\nשימו לב:\n' + extra.join('\n') : '';
+    return `שלום ${who},\n\n${head}\n` + items.map((s, i) => (i + 1) + '. ' + s).join('\n') + broken +
+           `\n\nהחשבונית עוד לא יצאה, והיא תישלח בקרוב.\n\n${BUSINESS}`;
   }
   if (kind === 'broken-returned') {
     const doc = docNumber ? ' (חשבונית ' + String(docNumber) + ')' : '';

@@ -71,7 +71,10 @@ async function lgSketchesOnlyNotify(db, orderIds, deps) {
     kind: 'sketches-only', to: who.phone, phoneSource: who.source, accountKey: who.accountKey,
     clientName: orders[0].orderClient || '', orderIds: ids,
     orderNums: orders.map(o => String(o.orderNum || o.id)), sketchNames: orders.map(o => String(o.sketchName || '')),
-    extraLines: orders.map(_name), queuedBy: 'sketches-only',
+    //  שבר בחיסום שעוד לא חזר — נאמר בהודעה, כמו בחשבונית
+    extraLines: require('./_broken').brokenInvoiceLines(orders), queuedBy: 'sketches-only',
+    //  לקוח הובלות → "ההזמנות שאמורות להגיע אליך בהובלה הבאה" (אותה הכרעה כמו בחשבונית)
+    deliveryTomorrow: await require('./_invoice-deliver').lgIsDeliveryInvoice(db, orders, who.accountKey),
     //  לחיצה כפולה באותה דקה = הודעה אחת; לחיצה מאוחרת יותר = שליחה חוזרת מפורשת
     keySuffix: 'm' + Math.floor(now / 60000),
   });

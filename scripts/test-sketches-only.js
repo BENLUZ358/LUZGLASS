@@ -28,13 +28,21 @@ function fakeDb(data) {
 }
 
 /* ── הנוסח ── */
-const t = renderText({ kind: 'sketches-only', clientName: 'המקום לאמבט', orderNums: ['L1', 'L2'], extraLines: ['נוי', 'אביאל'] });
+const t = renderText({ kind: 'sketches-only', clientName: 'המקום לאמבט', orderNums: ['L1', 'L2', 'L3'], sketchNames: ['נוי', 'אביאל', ''] });
 has('greets the client', t, 'שלום המקום לאמבט,');
-has('numbered list of names', t, '1. נוי\n2. אביאל');
+has('numbered list of names, order number when no name', t, '1. נוי\n2. אביאל\n3. L3');
 has('plural header', t, 'הסקיצות של ההזמנות שסופקו לך:');
 has('not a "ready" message', t, 'לאיסוף', false);
-has('no invoice wording', t, 'חשבונית', false);
-has('single header', renderText({ kind: 'sketches-only', clientName: 'x', orderNums: ['L1'], extraLines: ['נוי'] }), 'הסקיצה של ההזמנה שסופקה לך:');
+has('says the invoice has not gone out yet', t, 'החשבונית עוד לא יצאה, והיא תישלח בקרוב.');
+has('no break → no warning', t, 'שימו לב', false);
+has('single header', renderText({ kind: 'sketches-only', clientName: 'x', orderNums: ['L1'], sketchNames: ['נוי'] }), 'הסקיצה של ההזמנה שסופקה לך:');
+const td = renderText({ kind: 'sketches-only', clientName: 'פלג', orderNums: ['L1', 'L2'], sketchNames: ['א', 'ב'], deliveryTomorrow: true });
+has('delivery client → next delivery wording', td, 'ההזמנות שאמורות להגיע אליך בהובלה הבאה:');
+has('delivery client → not "supplied"', td, 'שסופקו', false);
+has('delivery single', renderText({ kind: 'sketches-only', clientName: 'פלג', orderNums: ['L1'], deliveryTomorrow: true }), 'ההזמנה שאמורה להגיע אליך בהובלה הבאה:');
+const tb = renderText({ kind: 'sketches-only', clientName: 'x', orderNums: ['L1'], sketchNames: ['נוי'], extraLines: ['בהזמנה L1 (נוי) הפריט 800×1900 מ"מ נשבר בחיסום ונמצא בייצור מחדש.'] });
+has('break is named', tb, 'שימו לב:\nבהזמנה L1 (נוי) הפריט');
+check('break line comes before the invoice line', tb.indexOf('שימו לב') < tb.indexOf('החשבונית עוד לא יצאה'), true);
 check('stamp field is not "whatsapp" (that is the ready stamp)', lgWaStampField('sketches-only'), 'sketchesOnlyWa');
 
 (async () => {
@@ -78,7 +86,18 @@ check('stamp field is not "whatsapp" (that is the ready stamp)', lgWaStampField(
   check('recipient picked from the WhatsApp order, kind sketches-only', recipient.seen, ['L1356', 'sketches-only']);
   const q = db.data.waOutbox[r1.key];
   check('queued kind', q.kind, 'sketches-only');
-  check('names in id order (same as PDF pages), order number when no name', q.extraLines, ['נוי', 'רותי', 'L1357']);
+  check('names in id order (same as PDF pages)', q.sketchNames, ['נוי', 'רותי', '']);
+  check('not a delivery client', q.deliveryTomorrow, false);
+  check('no break → no extra lines', q.extraLines, []);
+  //  שבר בחיסום + לקוח הובלות (פלג, כרטיס 07)
+  const dbd = fakeDb({ orders: {
+    p1: { orderNum: 'L2001', sketchName: 'דנה', customerId: '07', orderClient: 'פלג', source: 'whatsapp',
+          items: [{ w: 500, h: 600 }, { w: 800, h: 1900 }], brokenChisum: { 1: { at: 1 } } },
+    p2: { orderNum: 'L2002', sketchName: 'משה', customerId: '07', orderClient: 'פלג', source: 'whatsapp', items: [{ w: 1, h: 2 }] } } });
+  const rd = await SO.lgSketchesOnlyNotify(dbd, ['p1', 'p2'], deps);
+  const qd = dbd.data.waOutbox[rd.key];
+  check('delivery client flagged', qd.deliveryTomorrow, true);
+  check('break line queued', qd.extraLines.length === 1 && qd.extraLines[0].includes('L2001 (דנה)') && qd.extraLines[0].includes('800×1900'), true);
   check('double press in the same minute = one message', (await SO.lgSketchesOnlyNotify(db, ['a', 'b', 'c'], deps)).state, 'already');
   check('a minute later = explicit resend', (await SO.lgSketchesOnlyNotify(db, ['a', 'b', 'c'], { ...deps, now: deps.now + 60000 })).state, 'sent');
   check('mixed cards blocked', (await SO.lgSketchesOnlyNotify(db, ['a', 'x'], deps)).state, 'blocked');
