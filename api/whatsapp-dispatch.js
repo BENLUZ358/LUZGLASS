@@ -239,7 +239,10 @@ module.exports = async function handler(req, res, deps) {
     // ⚠️ אותו סדר בדיוק כמו orderNums — שתי המערכות נבנות מאותה רשימה
     const sketchNames = live.map(x => orderSketchName(x.order));
     const liveIds    = live.map(x => x.id);
-    const facts      = { to, kind, clientName, orderNums, sketchNames };
+    //  שבר בחיסום (בן, 27/11): כל הודעה על סחורה מוכנה / שיצאה אומרת איזה פריט נשבר ועוד לא חזר
+    const extraLines = (kind === 'ready' || kind === 'dispatched')
+      ? require('./_broken').brokenInvoiceLines(live.map(x => ({ ...x.order, id: x.id }))) : [];
+    const facts      = { to, kind, clientName, orderNums, sketchNames, extraLines };
 
     let gate = provider.gate({ phone: to, accountKey: targets[0].accountKey, linked: !!targets[0].linked });
     //  התבנית של Meta מכירה רק "מוכן לאיסוף" — הסוג החדש יוצא רק ב-GREEN API,
@@ -269,7 +272,7 @@ module.exports = async function handler(req, res, deps) {
     // ⚠️ מפתח התור נגזר מ-kind + מזהי ההזמנות הממוינים, ולכן לחיצה כפולה
     // מייצרת אותו מפתח ולא הודעה שנייה. ר' _wa-outbox.js.
     const q = await lgWaEnqueue(db, {
-      kind, to, clientName, orderNums, sketchNames,
+      kind, to, clientName, orderNums, sketchNames, extraLines,
       orderIds: liveIds, queuedBy: auth.phone,
       // תיעוד בלבד — ר' lgWaEnqueue
       phoneSource: targets[0].source, accountKey: targets[0].accountKey,

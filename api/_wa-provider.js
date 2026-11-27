@@ -119,9 +119,11 @@ ${BUSINESS}`;
     return wrap(one ? 'סקיצה אחת אושרה, מתחילים לעבוד עליה.'
                     : count + ' אושרו, מתחילים לעבוד עליהן.');
   }
-  if (kind === 'dispatched') return wrap('ההובלה יצאה אליך עם ' + count + '.');
   //  שבר בחיסום (בן, 10/11): השורות מוכנות מ-api/_broken.js
   const extra = (extraLines || []).map(s => String(s || '').trim()).filter(Boolean);
+  //  בן, 27/11: כל הודעה על סחורה מוכנה / שיצאה — אם יש שבר, הוא נאמר
+  const brokenTail = extra.length ? 'שימו לב:\n' + extra.join('\n') + '\n' + (extra.length === 1 ? 'הפריט יגיע בהמשך.' : 'הפריטים יגיעו בהמשך.') : '';
+  if (kind === 'dispatched') return wrap('ההובלה יצאה אליך עם ' + count + '.', brokenTail);
   //  משלוח לשרטט (בן, 10/11) — מייל פנימי, השורות מוכנות ב-_drafter-batch.js
   if (kind === 'drafter-batch') return extra.join('\n');
   //  התראת תקלה לבן (_agent-ben.js) — מייל פנימי, הטקסט קבוע של המערכת
@@ -158,7 +160,8 @@ ${BUSINESS}`;
     if (deliveryTomorrow) tails.push('ההובלה תצא אליך בקרוב.');
     return wrap('מצורפת חשבונית מס ' + String(docNumber || '') + ' עבור ' + count + sk, tails.join('\n\n'));
   }
-  return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'), 'לפרטים נוספים בפורטל:\n' + lgPortalReadyUrl());
+  const readyBroken = extra.length ? 'שימו לב:\n' + extra.join('\n') + '\n' + (extra.length === 1 ? 'הפריט יהיה מוכן בהמשך, ונעדכן.' : 'הפריטים יהיו מוכנים בהמשך, ונעדכן.') + '\n\n' : '';
+  return wrap(count + (one ? ' מוכנה לאיסוף.' : ' מוכנות לאיסוף.'), readyBroken + 'לפרטים נוספים בפורטל:\n' + lgPortalReadyUrl());
 }
 
 //  בן, 16/11: בכל הודעת "מוכן" — קישור לפורטל הלקוח, ישר לטאב "מוכן" (portal.html?tab=ready).

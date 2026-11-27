@@ -37,6 +37,16 @@ const retNoDoc = renderText({ kind: 'broken-returned', clientName: 'פלג', ord
 has('no invoice yet → no number', retNoDoc, 'החשבונית כבר יצאה על כל ההזמנה.');
 has('returned is not a "ready for pickup" message', ret, 'מוכנה לאיסוף', false);
 
+/* ── בן 27/11: "מוכן" ו"ההובלה יצאה" אומרים איזה פריט נשבר ── */
+const rdy = renderText({ kind: 'ready', clientName: 'נאור', orderNums: ['L1220-3', 'L1220-4'], extraLines: lines });
+has('ready names the break', rdy, 'שימו לב:\n' + lines[0]);
+has('ready says the piece comes later', rdy, 'הפריט יהיה מוכן בהמשך, ונעדכן.');
+has('ready keeps the portal link', rdy, 'לפרטים נוספים בפורטל:');
+has('ready without break → no warning', renderText({ kind: 'ready', clientName: 'נאור', orderNums: ['L1'] }), 'שימו לב', false);
+const dsp = renderText({ kind: 'dispatched', clientName: 'נאור', orderNums: ['L1220-3'], extraLines: lines });
+has('dispatched names the break', dsp, 'שימו לב:\n' + lines[0]);
+has('dispatched says the piece comes later', dsp, 'הפריט יגיע בהמשך.');
+
 /* ── התור: מפתח לכל פריט, לחיצה כפולה = אחת ──────────────────────── */
 function fakeDb(data) {
   const get = p => p.split('/').reduce((o, k) => (o == null ? undefined : o[k]), data);

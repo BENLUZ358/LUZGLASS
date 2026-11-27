@@ -55,7 +55,10 @@ async function lgEmailDispatch(db, { kind, dryRun, force, live, targets, queuedB
     if (!gate.allowed) { msg.reason = gate.reason; msg.blocked = true; }
     else if (dryRun)   { msg.reason = 'dryRun'; }
     else {
-      const q = await lgEmailEnqueue(db, { kind, thread, messageId, email: emails[0], clientName, orderNums, sketchNames,
+      //  שבר בחיסום (בן, 27/11) — כמו בוואטסאפ
+      const extraLines = (kind === 'ready' || kind === 'dispatched')
+        ? require('./_broken').brokenInvoiceLines(orders.map((o, i) => ({ ...o, id: ts[i].id }))) : [];
+      const q = await lgEmailEnqueue(db, { kind, thread, messageId, email: emails[0], clientName, orderNums, sketchNames, extraLines,
                                            orderIds: ts.map(t => t.id), queuedBy, accountKey: cards[0], variant, delayMs, now });
       msg.queued = q.queued; msg.reason = q.queued ? null : q.reason; msg.outboxKey = q.key;
     }
